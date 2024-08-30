@@ -75,7 +75,7 @@ async fn main() {
         aptos_event_notifications::EventSubscriptionService::new(Arc::new(RwLock::new(db.clone())));
     let network_configs = extract_network_configs(&node_config);
 
-    node_config.storage.dir = PathBuf::from(current_dir.clone() + "/gravity_consensus/test_data/data");
+    node_config.storage.dir = PathBuf::from(current_dir.clone() + "/test_data/data");
     let network_config = network_configs.get(0).unwrap();
     let mut network_builder = NetworkBuilder::create(
         chain_id,
