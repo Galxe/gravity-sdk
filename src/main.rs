@@ -62,7 +62,7 @@ async fn main() {
             current_dir.clone() + "/test_data/waypoint.txt",
         )),
     };
-    let secure_backend_path = PathBuf::from(current_dir.clone() + "/gravity_consensus/test_data");
+    let secure_backend_path = PathBuf::from(current_dir.clone() + "/test_data");
     let mut on_disk_storage_config = OnDiskStorageConfig::default();
     on_disk_storage_config.set_data_dir(secure_backend_path);
     node_config.consensus.safety_rules.backend =
