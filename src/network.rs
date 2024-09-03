@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{alloc::System, collections::HashMap, sync::Arc, time::{SystemTime, UNIX_EPOCH}};
 
 use aptos_channels::{aptos_channel, message_queues::QueueStyle};
 use aptos_config::{config::{NetworkConfig, NodeConfig}, network_id::NetworkId};
@@ -69,25 +69,28 @@ pub fn mempool_network_configuration(node_config: &NodeConfig) -> NetworkApplica
 }
 
 pub async fn mock_mempool_client_sender(mut mc_sender: aptos_mempool::MempoolClientSender) {
+    let addr = aptos_types::account_address::AccountAddress::random();
+    let mut seq_num = 0;
     loop {
         let txn: SignedTransaction = SignedTransaction::new(
             RawTransaction::new_script(
-                aptos_types::account_address::AccountAddress::random(),
-                0,
+                addr.clone(),
+                seq_num,
                 Script::new(vec![], vec![], vec![]),
                 0,
                 0,
-                0,
+                SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() + 60,
                 ChainId::test(),
             ),
             aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing().public_key(),
             aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap(),
         );
+        seq_num += 1;
         let (sender, receiver) = oneshot::channel();
         mc_sender
             .send(MempoolClientRequest::SubmitTransaction(txn, sender))
             .await;
-        tokio::time::sleep(tokio::time::Duration::from_secs(1));
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
 }
 

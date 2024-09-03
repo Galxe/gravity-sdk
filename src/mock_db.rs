@@ -1,8 +1,11 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::result;
-
+use std::str::FromStr;
+use std::sync::{Arc};
 use aptos_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH;
 use aptos_crypto::{bls12381, hash::HashValue};
+use aptos_infallible::Mutex;
 use aptos_storage_interface::{AptosDbError, DbReader, DbWriter};
 use aptos_types::contract_event::EventWithVersion;
 use aptos_types::epoch_change::EpochChangeProof;
@@ -31,7 +34,14 @@ pub struct MockStorage {
     inner: Inner,
 }
 
-pub struct Inner(HashMap<String, String>);
+
+pub struct Inner(Arc<Mutex<HashMap<String, String>>>);
+
+impl Default for Inner {
+    fn default() -> Self {
+        Self(Arc::from(Mutex::new(HashMap::default())))
+    }
+}
 
 impl DbReader for Inner {
     fn get_state_value_by_version(
@@ -47,7 +57,7 @@ impl DbReader for Inner {
 impl MockStorage {
     pub fn new() -> Self {
         Self {
-            inner: Inner(HashMap::new()),
+            inner: Inner::default(),
         }
     }
 }
@@ -72,6 +82,18 @@ impl DbReader for MockStorage {
             *ACCUMULATOR_PLACEHOLDER_HASH,
             ValidatorSet::empty(),
         ))
+    }
+
+    fn get_sequence_num(&self, addr: AccountAddress) -> anyhow::Result<u64> {
+        let account_string = addr.to_standard_string();
+        let mut guard = self.inner.0.lock();
+        let seq_string = guard.entry(account_string.clone()).or_insert("0".to_string());
+        println!("addr is {:?}, seq string is {}", &account_string, seq_string);
+        let res = seq_string.parse::<u64>().unwrap();
+        seq_string.clear();
+        seq_string.push_str((res + 1).to_string().as_str());
+        Ok(res)
+
     }
 
     fn get_state_proof(&self, known_version: u64) -> Result<StateProof> {

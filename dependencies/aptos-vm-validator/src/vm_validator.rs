@@ -2,7 +2,7 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::Result;
+use anyhow::{Ok, Result};
 use aptos_logger::info;
 use aptos_storage_interface::{
     cached_state_view::CachedDbStateView,
@@ -19,7 +19,7 @@ use aptos_vm::AptosVM;
 use fail::fail_point;
 use rand::{thread_rng, Rng};
 use std::sync::{Arc, Mutex};
-
+use aptos_types::state_store::TStateView;
 
 pub trait TransactionValidation: Send + Sync + Clone {
     type ValidationInstance: aptos_vm::VMValidator;
@@ -93,16 +93,18 @@ pub fn get_account_sequence_number(
     state_view: &DbStateView,
     address: AccountAddress,
 ) -> Result<u64> {
-    fail_point!("vm_validator::get_account_sequence_number", |_| {
-        Err(anyhow::anyhow!(
-            "Injected error in get_account_sequence_number"
-        ))
-    });
+    // fail_point!("vm_validator::get_account_sequence_number", |_| {
+    //     Err(anyhow::anyhow!(
+    //         "Injected error in get_account_sequence_number"
+    //     ))
+    // });
+    //
+    // match AccountResource::fetch_move_resource(state_view, &address)? {
+    //     Some(account_resource) => Ok(account_resource.sequence_number()),
+    //     None => Ok(0),
+    // }
 
-    match AccountResource::fetch_move_resource(state_view, &address)? {
-        Some(account_resource) => Ok(account_resource.sequence_number()),
-        None => Ok(0),
-    }
+    state_view.get_db_reader().get_sequence_num(address)
 }
 
 // A pool of VMValidators that can be used to validate transactions concurrently. This is done because
@@ -132,7 +134,8 @@ impl TransactionValidation for PooledVMValidator {
     type ValidationInstance = AptosVM;
 
     fn validate_transaction(&self, txn: SignedTransaction) -> Result<VMValidatorResult> {
-        self.get_next_vm().lock().unwrap().validate_transaction(txn)
+        // TODO(gravity_alex_yue)
+        Ok(VMValidatorResult::new(None, 100))
     }
 
     fn restart(&mut self) -> Result<()> {

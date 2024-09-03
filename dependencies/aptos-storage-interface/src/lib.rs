@@ -479,6 +479,10 @@ pub trait DbReader: Send + Sync {
         })
     }
 
+    fn get_sequence_num(&self, addr: AccountAddress) -> anyhow::Result<u64> {
+        panic!("should implement this function in the struct")
+    }
+
     /// Returns the latest committed version, error on on non-bootstrapped/empty DB.
     /// N.b. different from `get_synced_version()`.
     fn get_latest_ledger_info_version(&self) -> Result<Version> {

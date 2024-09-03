@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 type Result<T, E = StateviewError> = std::result::Result<T, E>;
 
+// todo(Gravity_byteyue): 以后都用reth的逻辑
 pub struct DbStateView {
     db: Arc<dyn DbReader>,
     version: Option<Version>,
@@ -42,6 +43,10 @@ impl DbStateView {
         } else {
             Ok(None)
         }
+    }
+
+    pub fn get_db_reader(&self) -> &dyn DbReader {
+        self.db.as_ref()
     }
 }
 

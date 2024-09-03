@@ -599,6 +599,7 @@ impl TransactionStore {
 
     /// Removes transaction from all indexes. Only call after removing from main transactions DS.
     fn index_remove(&mut self, txn: &MempoolTransaction) {
+        // panic!("index remove");
         counters::CORE_MEMPOOL_REMOVED_TXNS.inc();
         self.system_ttl_index.remove(txn);
         self.expiration_time_index.remove(txn);
@@ -891,7 +892,7 @@ impl TransactionStore {
         self.parking_lot_index.size()
     }
 
-    #[cfg(test)]
+    // #[cfg(test)]
     pub(crate) fn get_transactions(&self) -> &HashMap<AccountAddress, AccountTransactions> {
         &self.transactions
     }

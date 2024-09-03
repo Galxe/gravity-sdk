@@ -130,6 +130,7 @@ pub trait MoveResourceExt: MoveResource {
         state_view: &dyn StateView,
         address: &AccountAddress,
     ) -> Result<Option<Self>> {
+        panic!("should never call this function in gravity since it's for MOVE lang");
         let state_key = StateKey::resource_typed::<Self>(address)?;
         Ok(state_view
             .get_state_value_bytes(&state_key)?
