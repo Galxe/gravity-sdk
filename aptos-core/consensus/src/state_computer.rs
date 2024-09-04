@@ -451,14 +451,14 @@ async fn test_commit_sync_race() {
             Ok(())
         }
 
-        fn execute_block(
-            &self,
-            _block: ExecutableBlock,
-            _parent_block_id: HashValue,
-            _onchain_config: BlockExecutorConfigFromOnchain,
-        ) -> ExecutorResult<StateComputeResult> {
-            Ok(StateComputeResult::new_dummy())
-        }
+        // fn execute_block(
+        //     &self,
+        //     _block: ExecutableBlock,
+        //     _parent_block_id: HashValue,
+        //     _onchain_config: BlockExecutorConfigFromOnchain,
+        // ) -> ExecutorResult<StateComputeResult> {
+        //     Ok(StateComputeResult::new_dummy())
+        // }
 
         fn execute_and_state_checkpoint(
             &self,

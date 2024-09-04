@@ -11,11 +11,11 @@ pub mod block_executor {
     use aptos_types::{
         block_executor::{config::{BlockExecutorConfig, BlockExecutorConfigFromOnchain}, partitioner::ExecutableBlock}, executable::Executable, ledger_info::LedgerInfoWithSignatures, state_store::TStateView, transaction::BlockExecutableTransaction as Transaction
     };
-    use rayon::ThreadPool;
 
     pub struct BlockExecutor<V> {
         pub db: DbReaderWriter,
-        inner: RwLock<Option<BlockExecutorInner<V>>>,
+        _p: PhantomData<V>,
+        commit_ids: RwLock<Vec<HashValue>>,
     }
 
     impl<V> BlockExecutor<V>
@@ -23,7 +23,8 @@ pub mod block_executor {
         pub fn new(db: DbReaderWriter) -> Self {
             Self {
                 db,
-                inner: RwLock::new(None),
+                _p: PhantomData,
+                commit_ids: RwLock::new(vec![HashValue::zero()]),
             }
         }
     }
@@ -31,11 +32,11 @@ pub mod block_executor {
     impl<V: Send + Sync> BlockExecutorTrait for BlockExecutor<V>
 {
     fn committed_block_id(&self) -> HashValue {
-        todo!()
+        self.commit_ids.read().unwrap().last().cloned().unwrap_or_default()
     }
 
     fn reset(&self) -> Result<()> {
-        todo!()
+        Ok(())
     }
 
     fn execute_and_state_checkpoint(
@@ -61,20 +62,12 @@ pub mod block_executor {
         block_ids: Vec<HashValue>,
         ledger_info_with_sigs: LedgerInfoWithSignatures,
     ) -> ExecutorResult<()> {
-        todo!()
+        self.commit_ids.write().unwrap().extend(block_ids);
+        Ok(())
     }
 
-    fn finish(&self) {
-        todo!()
+    fn finish(&self) { 
+
     }
-    
-    fn execute_block(
-            &self,
-            block: aptos_types::block_executor::partitioner::ExecutableBlock,
-            parent_block_id: HashValue,
-            onchain_config: aptos_types::block_executor::config::BlockExecutorConfigFromOnchain,
-        ) -> aptos_executor_types::ExecutorResult<aptos_executor_types::StateComputeResult> {
-            todo!()
-        }
 }
 }

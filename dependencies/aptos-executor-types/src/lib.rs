@@ -75,20 +75,6 @@ pub trait BlockExecutorTrait: Send + Sync {
     /// Reset the internal state including cache with newly fetched latest committed block from storage.
     fn reset(&self) -> anyhow::Result<()>;
 
-    /// Executes a block - TBD, this API will be removed in favor of `execute_and_state_checkpoint`, followed
-    /// by `ledger_update` once we have ledger update as a separate pipeline phase.
-    fn execute_block(
-        &self,
-        block: ExecutableBlock,
-        parent_block_id: HashValue,
-        onchain_config: BlockExecutorConfigFromOnchain,
-    ) -> ExecutorResult<StateComputeResult> {
-        let block_id = block.block_id;
-        let state_checkpoint_output =
-            self.execute_and_state_checkpoint(block, parent_block_id, onchain_config)?;
-        self.ledger_update(block_id, parent_block_id, state_checkpoint_output)
-    }
-
     /// Executes a block and returns the state checkpoint output.
     fn execute_and_state_checkpoint(
         &self,
