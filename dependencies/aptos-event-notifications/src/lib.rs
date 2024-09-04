@@ -399,6 +399,8 @@ impl OnChainConfigProvider for DbBackedOnChainConfig {
             .reader
             .get_state_value_by_version(&StateKey::on_chain_config::<T>()?, self.version)?
             .ok_or_else(|| {
+                println!("no config {} found in aptos root account state",
+                    T::CONFIG_ID);
                 anyhow!(
                     "no config {} found in aptos root account state",
                     T::CONFIG_ID

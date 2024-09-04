@@ -472,6 +472,7 @@ impl ProposalGenerator {
                 )
                 .await
                 .context("Fail to retrieve payload")?;
+            println!("has pulled payload");
 
             if !payload.is_direct()
                 && max_txns_from_block_to_execute.is_some()

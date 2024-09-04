@@ -412,6 +412,7 @@ impl RoundManager {
                 .await?;
             }
         };
+        println!("try to broadcast proposal msg");
         network.broadcast_proposal(proposal_msg).await;
         counters::PROPOSALS_COUNT.inc();
         Ok(())
@@ -522,6 +523,7 @@ impl RoundManager {
         let proposal = proposal_generator
             .generate_proposal(new_round_event.round, proposer_election, callback)
             .await?;
+        println!("generate one new proposal");
         let signature = safety_rules.lock().sign_proposal(&proposal)?;
         let signed_proposal =
             Block::new_proposal_from_block_data_and_signature(proposal, signature);

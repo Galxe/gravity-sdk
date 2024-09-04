@@ -1,14 +1,16 @@
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::result;
-use std::str::FromStr;
-use std::sync::Arc;
 use aptos_crypto::bls12381::PublicKey;
 use aptos_crypto::{PrivateKey, Uniform};
 use lazy_static::lazy_static;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::result;
+use std::str::FromStr;
+use std::sync::Arc;
 
 use rand::{thread_rng, Rng};
 
+use aptos_config::config::ConsensusConfig;
 use aptos_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH;
 use aptos_crypto::{bls12381, hash::HashValue};
 use aptos_infallible::Mutex;
@@ -17,8 +19,9 @@ use aptos_types::account_address::AccountAddress;
 use aptos_types::contract_event::EventWithVersion;
 use aptos_types::epoch_change::EpochChangeProof;
 use aptos_types::ledger_info::LedgerInfoWithSignatures;
-use aptos_types::network_address::{self, NetworkAddress};
+use aptos_types::network_address::NetworkAddress;
 use aptos_types::on_chain_config::ValidatorSet;
+use aptos_types::on_chain_config::{ConsensusAlgorithmConfig, ProposerElectionType};
 use aptos_types::proof::accumulator::InMemoryTransactionAccumulator;
 use aptos_types::proof::TransactionAccumulatorSummary;
 use aptos_types::state_proof::StateProof;
@@ -40,7 +43,6 @@ pub struct MockStorage {
     network_address: String,
     inner: Inner,
 }
-
 
 pub struct Inner(Arc<Mutex<HashMap<String, String>>>);
 
@@ -128,11 +130,17 @@ lazy_static! {
         let mut network_map: HashMap<String, Vec<u8>> = HashMap::new();
         network_map.insert(
             "/ip4/127.0.0.1/tcp/6180".to_string(),
-            vec![216, 118, 84, 212, 149, 198, 180, 2, 202, 156, 156, 4, 36, 147, 105, 53, 109, 67, 55, 132, 99, 179, 89, 203, 171, 83, 142, 101, 166, 170, 9, 118],
+            vec![
+                216, 118, 84, 212, 149, 198, 180, 2, 202, 156, 156, 4, 36, 147, 105, 53, 109, 67,
+                55, 132, 99, 179, 89, 203, 171, 83, 142, 101, 166, 170, 9, 118,
+            ],
         );
         network_map.insert(
             "/ip4/127.0.0.1/tcp/2024".to_string(),
-            vec![32, 9, 18, 160, 136, 89, 128, 20, 184, 140, 209, 251, 145, 219, 223, 45, 241, 139, 53, 33, 132, 167, 39, 192, 118, 240, 124, 253, 20, 95, 162, 103],
+            vec![
+                32, 9, 18, 160, 136, 89, 128, 20, 184, 140, 209, 251, 145, 219, 223, 45, 241, 139,
+                53, 33, 132, 167, 39, 192, 118, 240, 124, 253, 20, 95, 162, 103,
+            ],
         );
         network_map
     };
@@ -148,7 +156,6 @@ lazy_static! {
         );
         network_pub_map
     };
-
     pub static ref TRUSTED_PEERS_MAP: HashMap<String, Vec<String>> = {
         let mut trusted_peers_map: HashMap<String, Vec<String>> = HashMap::new();
         trusted_peers_map.insert(
@@ -174,9 +181,13 @@ impl MockStorage {
     fn mock_validators(&self) -> Vec<ValidatorInfo> {
         let mut result = vec![];
         let address = ACCOUNT_ADDRESS_MAP.get(&self.network_address).unwrap();
-        let private_key: bls12381::PrivateKey =
-            bls12381::PrivateKey::try_from(CONSENSUS_PRI_MAP.get(&self.network_address).unwrap().as_slice())
-                .unwrap();
+        let private_key: bls12381::PrivateKey = bls12381::PrivateKey::try_from(
+            CONSENSUS_PRI_MAP
+                .get(&self.network_address)
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
         let addr: NetworkAddress = VALIDATOR_MAP.get(&self.network_address).unwrap()[0]
             .parse()
             .unwrap();
@@ -193,7 +204,7 @@ impl MockStorage {
 
 impl DbReader for MockStorage {
     fn get_read_delegatee(&self) -> &dyn DbReader {
-        &self.inner
+        self
     }
 
     fn get_latest_ledger_info(&self) -> Result<LedgerInfoWithSignatures> {
@@ -203,15 +214,21 @@ impl DbReader for MockStorage {
         ))
     }
 
+    // todo(gravity_byteyue): 应该是commit的时候才增加这个sequence number
     fn get_sequence_num(&self, addr: AccountAddress) -> anyhow::Result<u64> {
         let account_string = addr.to_standard_string();
         let mut guard = self.inner.0.lock();
-        let seq_string = guard.entry(account_string.clone()).or_insert("0".to_string());
+        let seq_string = guard
+            .entry(account_string.clone())
+            .or_insert("0".to_string());
+        println!(
+            "addr is {:?}, seq string is {}",
+            &account_string, seq_string
+        );
         let res = seq_string.parse::<u64>().unwrap();
         seq_string.clear();
         seq_string.push_str((res + 1).to_string().as_str());
         Ok(res)
-
     }
 
     fn get_state_proof(&self, known_version: u64) -> Result<StateProof> {
@@ -242,8 +259,39 @@ impl DbReader for MockStorage {
         let bytes = {
             match key {
                 StateKeyInner::AccessPath(p) => {
-                    if p.path.contains(&('V' as u8)) {
+                    let path = p.to_string();
+                    if path.contains("Validator") {
                         bcs::to_bytes(&ValidatorSet::new(self.mock_validators()))?
+                    } else if path.contains("consensus") {
+                        let mut consensus_conf = OnChainConsensusConfig::default();
+                        // todo(gravity_byteyue): 这里让quorum_store_enabled=false, 保证不会走quorumstorebuilder
+                        match &mut consensus_conf {
+                            OnChainConsensusConfig::V1(_) => {}
+                            OnChainConsensusConfig::V2(_) => {}
+                            OnChainConsensusConfig::V3 { alg, vtxn } => match alg {
+                                ConsensusAlgorithmConfig::Jolteon {
+                                    main,
+                                    quorum_store_enabled,
+                                } => {
+                                    main.proposer_election_type =
+                                        ProposerElectionType::FixedProposer(1);
+                                    *quorum_store_enabled = false;
+                                }
+                                ConsensusAlgorithmConfig::DAG(_) => {}
+                                ConsensusAlgorithmConfig::JolteonV2 {
+                                    main,
+                                    quorum_store_enabled,
+                                    order_vote_enabled,
+                                } => {
+                                    println!("fuck aptos");
+                                    main.proposer_election_type =
+                                        ProposerElectionType::FixedProposer(1);
+                                    *quorum_store_enabled = false;
+                                    *order_vote_enabled = false;
+                                }
+                            },
+                        }
+                        bcs::to_bytes(&bcs::to_bytes(&consensus_conf)?)?
                     } else {
                         bcs::to_bytes(&ConfigurationResource::default())?
                     }

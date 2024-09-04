@@ -571,12 +571,14 @@ pub(crate) fn process_quorum_store_request<NetworkClient, TransactionValidator>(
     };
     // Send back to callback
     let result = if callback.send(Ok(resp)).is_err() {
+        println!("send get batch response failed");
         error!(LogSchema::event_log(
             LogEntry::QuorumStore,
             LogEvent::CallbackFail
         ));
         counters::REQUEST_FAIL_LABEL
     } else {
+        println!("send get batch response succeed");
         counters::REQUEST_SUCCESS_LABEL
     };
     let latency = start_time.elapsed();

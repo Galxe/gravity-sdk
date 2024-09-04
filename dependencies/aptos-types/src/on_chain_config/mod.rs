@@ -162,7 +162,10 @@ pub trait OnChainConfig: Send + Sync + DeserializeOwned {
     // in its override - this will just refer to the override implementation itself
     fn deserialize_default_impl(bytes: &[u8]) -> Result<Self> {
         bcs::from_bytes::<Self>(bytes)
-            .map_err(|e| format_err!("[on-chain config] Failed to deserialize into config: {}", e))
+            .map_err(|e| {
+                println!("[on-chain config] Failed to deserialize into config: {:?}, on chain config mod rs", e);
+                format_err!("[on-chain config] Failed to deserialize into config: {}", e)
+            })
     }
 
     // Function for deserializing bytes to `Self`

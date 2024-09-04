@@ -39,6 +39,7 @@ use network::{
     extract_network_configs, extract_network_ids, mempool_network_configuration,
 };
 use tokio::time::sleep;
+use aptos_types::PeerId;
 
 pub struct ApplicationNetworkInterfaces<T> {
     pub network_client: NetworkClient<T>,
@@ -173,8 +174,15 @@ async fn main() {
     // 在其中构造了 consensus_to_mempool_sender 和 consensus_to_mempool_receiver
     // 并返回了sender
     let (mempool_client_sender, mempool_client_receiver) = mpsc::channel(1);
-    tokio::spawn(async move {
-        network::mock_mempool_client_sender(mempool_client_sender).await;
+    
+    // tokio::spawn(async move {
+    //     network::mock_mempool_client_sender(mempool_client_sender.clone()).await;
+    // });
+    (0..5).for_each(|_| {
+        let s = mempool_client_sender.clone();
+        tokio::spawn(async move {
+            network::mock_mempool_client_sender(s).await;
+        });
     });
     let (consensus_to_mempool_sender, consensus_to_mempool_receiver) = mpsc::channel(1);
     let (notification_sender, notification_receiver) = mpsc::channel(1);
