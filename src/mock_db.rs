@@ -2,15 +2,12 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::result;
 use std::str::FromStr;
-use std::sync::{Arc};
+use std::sync::Arc;
 use aptos_crypto::bls12381::PublicKey;
 use aptos_crypto::{PrivateKey, Uniform};
 use lazy_static::lazy_static;
 
 use rand::{thread_rng, Rng};
-use std::collections::HashMap;
-use std::result;
-use std::str::FromStr;
 
 use aptos_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH;
 use aptos_crypto::{bls12381, hash::HashValue};
@@ -170,7 +167,7 @@ impl MockStorage {
     pub fn new(network_address: String) -> Self {
         Self {
             network_address: network_address,
-            inner: Inner(HashMap::new()),
+            inner: Inner(Arc::new(Mutex::new(HashMap::new()))),
         }
     }
 
