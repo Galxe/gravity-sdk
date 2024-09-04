@@ -309,11 +309,8 @@ impl From<anyhow::Error> for ExecutorError {
 pub mod state_checkpoint_output {
     use std::marker::PhantomData;
 
-    use aptos_types::transaction::BlockEndInfo;
-
     #[derive(Default)]
     pub struct StateCheckpointOutput {
-        block_end_info: Option<BlockEndInfo>,
     }
 
     pub struct BlockExecutorInner<V> {
