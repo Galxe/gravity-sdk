@@ -96,6 +96,9 @@ futures = { workspace = true }
 aptos-validator-transaction-pool = { workspace = true }
 bcs = { workspace = true }
 anyhow = "1.0.86"
+clap = { workspace = true }
+lazy_static = { workspace = true }
+rand = { workspace = true }
 
 [workspace.dependencies]
 

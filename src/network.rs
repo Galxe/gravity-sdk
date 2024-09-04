@@ -9,6 +9,7 @@ use aptos_network_builder::builder::NetworkBuilder;
 use aptos_types::{chain_id::ChainId, transaction::{RawTransaction, Script, SignedTransaction}};
 use futures::{channel::oneshot, SinkExt};
 use serde::{Deserialize, Serialize};
+use tokio::runtime::Runtime;
 
 use crate::ApplicationNetworkInterfaces;
 
@@ -181,4 +182,16 @@ where
         application_config,
         peers_and_metadata.clone(),
     )
+}
+
+/// Creates a network runtime for the given network config
+pub fn create_network_runtime(network_config: &NetworkConfig) -> Runtime {
+    let network_id = network_config.network_id;
+
+    // Create the runtime
+    let thread_name = format!(
+        "network-{}",
+        network_id.as_str().chars().take(3).collect::<String>()
+    );
+    aptos_runtimes::spawn_named_runtime(thread_name, network_config.runtime_threads)
 }

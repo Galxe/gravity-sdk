@@ -39,7 +39,6 @@ impl Stream for FileStream {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // Wait for delay, or add the delay for next call
         futures::ready!(self.interval.as_mut().poll_next(cx));
-
         Poll::Ready(Some(match load_file(self.file_path.as_path()) {
             Ok(peers) => Ok(peers),
             Err(error) => Err(error),

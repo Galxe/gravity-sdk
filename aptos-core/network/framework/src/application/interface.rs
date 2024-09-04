@@ -182,7 +182,6 @@ impl<Message: NetworkMessageTrait + Clone> NetworkClient<Message> {
                 )
             );
         }
-
         peers_per_protocol
     }
 }
@@ -232,7 +231,6 @@ impl<Message: NetworkMessageTrait> NetworkClientInterface<Message> for NetworkCl
 
     fn send_to_peers(&self, message: Message, peers: Vec<PeerNetworkId>) -> Result<(), Error> {
         let peers_per_protocol = self.group_peers_by_protocol(peers);
-
         // Send to all peers in each protocol group and network
         for (protocol_id, peers) in peers_per_protocol {
             for (network_id, peers) in &peers

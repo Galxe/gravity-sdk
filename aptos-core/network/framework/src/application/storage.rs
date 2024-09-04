@@ -160,13 +160,17 @@ impl PeersAndMetadata {
         let network_id = peer_network_id.network_id();
         let peer_metadata_for_network = cached_peers_and_metadata
             .get(&network_id)
-            .ok_or_else(|| missing_network_metadata_error(&network_id))?;
-
+            .ok_or_else(|| {
+                missing_network_metadata_error(&network_id)
+            }
+        )?;
         // Get the metadata for the peer
         peer_metadata_for_network
             .get(&peer_network_id.peer_id())
             .cloned()
-            .ok_or_else(|| missing_peer_metadata_error(&peer_network_id))
+            .ok_or_else(|| {
+                missing_peer_metadata_error(&peer_network_id)
+            })
     }
 
     /// Returns the networks currently held in the container

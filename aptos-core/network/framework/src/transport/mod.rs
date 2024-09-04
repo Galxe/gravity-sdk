@@ -455,7 +455,7 @@ where
         supported_protocols.insert(SUPPORTED_MESSAGING_PROTOCOL, application_protocols);
 
         let identity_pubkey = identity_key.public_key();
-
+        
         let upgrade_context = UpgradeContext::new(
             NoiseUpgrader::new(network_context, identity_key, auth_mode),
             handshake_version,

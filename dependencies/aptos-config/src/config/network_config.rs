@@ -10,7 +10,7 @@ use crate::{
     network_id::NetworkId,
     utils,
 };
-use aptos_crypto::{x25519, Uniform};
+use aptos_crypto::{x25519, Uniform, ValidCryptoMaterial};
 use aptos_secure_storage::{CryptoStorage, KVStorage, Storage};
 use aptos_short_hex_str::AsShortHexStr;
 use aptos_types::{
@@ -174,6 +174,12 @@ impl NetworkConfig {
         config.prepare_identity();
 
         config
+    }
+
+    pub fn reset_listen_address_and_prepare_identity(&mut self, addr: NetworkAddress) {
+        self.listen_address = addr;
+        // Prepare the identity
+        self.prepare_identity();
     }
 
     /// Configures the number of parallel deserialization tasks

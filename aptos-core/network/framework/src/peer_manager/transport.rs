@@ -351,7 +351,6 @@ where
 
         counters::connection_upgrade_time(&self.network_context, metadata.origin, SUCCEEDED_LABEL)
             .observe(elapsed_time);
-
         // Send the new connection to PeerManager
         let event = TransportNotification::NewConnection(connection);
         if let Err(err) = self.transport_notifs_tx.send(event).await {

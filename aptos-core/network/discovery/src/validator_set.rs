@@ -78,7 +78,7 @@ impl<P: OnChainConfigProvider> ValidatorSetStream<P> {
         self.find_key_mismatches(
             peer_set
                 .get(&self.network_context.peer_id())
-                .map(|peer| &peer.keys),
+            .map(|peer| &peer.keys),
         );
 
         inc_by_with_context(

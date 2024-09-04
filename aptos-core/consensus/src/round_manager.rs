@@ -23,7 +23,7 @@ use crate::{
     logging::{LogEvent, LogSchema},
     metrics_safety_rules::MetricsSafetyRules,
     monitor,
-    network::NetworkSender,
+    network::{NetworkSender, QuorumStoreSender},
     network_interface::ConsensusMsg,
     pending_order_votes::{OrderVoteReceptionResult, PendingOrderVotes},
     pending_votes::VoteReceptionResult,
