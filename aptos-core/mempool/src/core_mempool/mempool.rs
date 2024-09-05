@@ -513,7 +513,6 @@ impl Mempool {
             self.log_consensus_pulled_latency(transaction.sender(), transaction.sequence_number());
         }
         // panic!("core");
-        println!("block size {}", block.len());
         block
     }
 

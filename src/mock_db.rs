@@ -207,7 +207,6 @@ impl DbReader for MockStorage {
         let account_string = addr.to_standard_string();
         let mut guard = self.inner.0.lock();
         let seq_string = guard.entry(account_string.clone()).or_insert("0".to_string());
-        println!("addr is {:?}, seq string is {}", &account_string, seq_string);
         let res = seq_string.parse::<u64>().unwrap();
         seq_string.clear();
         seq_string.push_str((res + 1).to_string().as_str());

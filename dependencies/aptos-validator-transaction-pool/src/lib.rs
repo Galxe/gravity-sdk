@@ -29,7 +29,7 @@ impl PoolStateInner {
         mut max_bytes: u64,
         filter: TransactionFilter,
     ) -> Vec<ValidatorTransaction> {
-        todo!()
+        vec![]
     }
 }
 

@@ -193,6 +193,7 @@ where
     }
 
     pub async fn start(mut self) {
+        println!("peer {} start", self.network_context.peer_id());
         let remote_peer_id = self.remote_peer_id();
         trace!(
             NetworkSchema::new(&self.network_context)

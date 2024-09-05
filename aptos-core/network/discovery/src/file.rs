@@ -48,6 +48,7 @@ impl Stream for FileStream {
 
 /// Loads a YAML configuration file
 fn load_file(path: &Path) -> Result<PeerSet, DiscoveryError> {
+    println!("load_file");
     let contents = std::fs::read_to_string(path).map_err(DiscoveryError::IO)?;
     serde_yaml::from_str(&contents).map_err(|err| DiscoveryError::Parsing(err.to_string()))
 }
