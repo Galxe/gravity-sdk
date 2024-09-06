@@ -373,7 +373,7 @@ impl RoundManager {
                 )
                 .await
                 {
-                    warn!("Error generating and sending proposal: {}", e);
+                    println!("Error generating and sending proposal: {}", e);
                 }
             });
         }
@@ -913,6 +913,7 @@ impl RoundManager {
         &mut self,
         proposal: Block,
     ) -> anyhow::Result<()> {
+        println!("check_backpressure_and_process_proposal");
         let author = proposal
             .author()
             .expect("Proposal should be verified having an author");
@@ -1465,6 +1466,7 @@ impl RoundManager {
                     }
                 },
                 proposal = buffered_proposal_rx.select_next_some() => {
+                    println!("receive proposal");
                     let mut proposals = vec![proposal];
                     while let Some(Some(proposal)) = buffered_proposal_rx.next().now_or_never() {
                         proposals.push(proposal);

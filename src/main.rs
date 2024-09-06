@@ -61,7 +61,7 @@ struct Cli {
     data_path: String,
     #[clap(long, default_value = "127.0.0.1")]
     ip: String,
-    #[clap(long, default_value = "6180")]
+    #[clap(long, default_value = "2024")]
     port: String,
     #[clap(long, default_value = "")]
     discovery_path: String,

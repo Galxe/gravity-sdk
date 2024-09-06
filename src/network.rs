@@ -91,7 +91,7 @@ pub async fn mock_mempool_client_sender(mut mc_sender: aptos_mempool::MempoolCli
         mc_sender
             .send(MempoolClientRequest::SubmitTransaction(txn, sender))
             .await;
-        tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
 }
 

@@ -68,6 +68,11 @@ impl Waypoint {
             ledger_info.version()
         );
         let converter = Ledger2WaypointConverter::new(ledger_info);
+        if converter.hash().to_hex().contains("c159") {
+            println!("{:?}", ledger_info);
+            println!("xxx");
+        }
+        println!("Waypoint waypoint value = {}, given value = {}, ledger info is {:?}",self.value().to_hex(), converter.hash().to_hex(), ledger_info);
         ensure!(
             converter.hash() == self.value(),
             format!(

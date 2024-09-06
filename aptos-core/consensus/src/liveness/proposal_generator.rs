@@ -491,6 +491,7 @@ impl ProposalGenerator {
             proposer_election,
         );
 
+        // todo(gravity_byteyue): 下面的round对不上
         let block = if self.vtxn_config.enabled() {
             BlockData::new_proposal_ext(
                 validator_txns,

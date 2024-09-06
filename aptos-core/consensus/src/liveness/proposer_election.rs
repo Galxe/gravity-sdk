@@ -13,6 +13,7 @@ pub trait ProposerElection {
     /// otherwise return None.
     /// Note that this function is synchronous.
     fn is_valid_proposer(&self, author: Author, round: Round) -> bool {
+        println!("leader:{} self:{}",self.get_valid_proposer(round), author);
         self.get_valid_proposer(round) == author
     }
 

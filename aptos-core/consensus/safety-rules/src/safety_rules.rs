@@ -304,6 +304,10 @@ impl SafetyRules {
 
         let author = self.persistent_storage.author()?;
         let expected_key = epoch_state.verifier.get_public_key(&author);
+        println!("author is {}, expected key {}", hex::encode(author.as_slice()).as_str(), expected_key.as_ref().unwrap().to_string());
+        for x in epoch_state.verifier.address_to_validator_index() {
+            println!("account is {}", hex::encode(x.0.as_slice()).as_str());
+        }
         let initialize_result = match expected_key {
             None => Err(Error::ValidatorNotInSet(author.to_string())),
             Some(expected_key) => {
@@ -353,6 +357,11 @@ impl SafetyRules {
         self.verify_epoch(block_data.epoch(), &safety_data)?;
 
         if block_data.round() <= safety_data.last_voted_round {
+            println!(
+                "Proposed round {} is not higher than last voted round {}",
+                block_data.round(),
+                safety_data.last_voted_round
+            );
             return Err(Error::InvalidProposal(format!(
                 "Proposed round {} is not higher than last voted round {}",
                 block_data.round(),

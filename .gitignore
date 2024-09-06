@@ -80,3 +80,6 @@ __pycache__
 *.log
 
 ./data
+
+node*/data/*_db/*
+node*/data/*DB/*

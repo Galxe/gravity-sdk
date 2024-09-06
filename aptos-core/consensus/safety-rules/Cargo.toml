@@ -31,6 +31,7 @@ rand = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+hex = {workspace = true}
 
 [dev-dependencies]
 aptos-config = { workspace = true, features = ["fuzzing"] }
