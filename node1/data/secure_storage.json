@@ -15,8 +15,8 @@
     "value": {
       "epoch": 1,
       "last_voted_round": 0,
-      "preferred_round": 7,
-      "one_chain_round": 8,
+      "preferred_round": 0,
+      "one_chain_round": 0,
       "last_vote": {
         "vote_data": {
           "proposed": {
