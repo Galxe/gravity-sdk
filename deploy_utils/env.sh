@@ -1,1 +1,1 @@
-export ROOT_PATH=
+export ROOT_PATH=..

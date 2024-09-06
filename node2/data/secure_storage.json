@@ -1,1 +1,65 @@
-{"consensus":{"data":"GetResponse","last_update":1725443400,"value":"0x08f4f119547f55b86f8700963323585afc91e346f55d7a4bcfd928f3386834b8"},"safety_data":{"data":"GetResponse","last_update":1725607276,"value":{"epoch":1,"last_voted_round":9,"preferred_round":7,"one_chain_round":8,"last_vote":{"vote_data":{"proposed":{"epoch":1,"round":9,"id":"168ba17d3a43d376d9e0fa8f632c33260d73a4d919e0a3d96cc69172a752100f","executed_state_id":"414343554d554c41544f525f504c414345484f4c4445525f4841534800000000","version":0,"timestamp_usecs":1725607276209480,"next_epoch_state":null},"parent":{"epoch":1,"round":8,"id":"9d07d6625ce2b55a62b5b0fb7b38cf0d6f5b42db28377841f255a2c87fd9d1fa","executed_state_id":"414343554d554c41544f525f504c414345484f4c4445525f4841534800000000","version":0,"timestamp_usecs":1725607276098668,"next_epoch_state":null}},"author":"7682dbbb2efe6a3e005b7fa13872e99f21165874b20cb9c8c877f8a0a0c5b779","ledger_info":{"commit_info":{"epoch":1,"round":8,"id":"9d07d6625ce2b55a62b5b0fb7b38cf0d6f5b42db28377841f255a2c87fd9d1fa","executed_state_id":"414343554d554c41544f525f504c414345484f4c4445525f4841534800000000","version":0,"timestamp_usecs":1725607276098668,"next_epoch_state":null},"consensus_data_hash":"7a13b62e2b400bd3ef63fb0c05ca6ebfbb531986eb84b5a1099eab0829d71ea9"},"signature":"0x97e10ef055d03db8e8d8f16b02ea7d639b0a35513f16681b1f3071a86fa22c93a26b7acd7e08b3446ffce071dfd19ae117830ae324140c56da36e0dbb6c69db6c0483ee788288bdf32231bd7d2475f6a4d82360931eef9e60ec2bf3625b89b55","two_chain_timeout":null},"highest_timeout_round":1}},"owner_account":{"data":"GetResponse","last_update":1725443400,"value":"7682dbbb2efe6a3e005b7fa13872e99f21165874b20cb9c8c877f8a0a0c5b779"},"waypoint":{"data":"GetResponse","last_update":1725443400,"value":"0:c15911ad02597607e78e67b5b2ebdd0cefb5fae4d28769a7b8a783524d93bb0f"}}
+{
+    "consensus": {
+        "data": "GetResponse",
+        "last_update": 1725443400,
+        "value": "0x08f4f119547f55b86f8700963323585afc91e346f55d7a4bcfd928f3386834b8"
+    },
+    "safety_data": {
+        "data": "GetResponse",
+        "last_update": 1725607276,
+        "value": {
+            "epoch": 1,
+            "last_voted_round": 9,
+            "preferred_round": 7,
+            "one_chain_round": 8,
+            "last_vote": {
+                "vote_data": {
+                    "proposed": {
+                        "epoch": 1,
+                        "round": 9,
+                        "id": "168ba17d3a43d376d9e0fa8f632c33260d73a4d919e0a3d96cc69172a752100f",
+                        "executed_state_id": "414343554d554c41544f525f504c414345484f4c4445525f4841534800000000",
+                        "version": 0,
+                        "timestamp_usecs": 1725607276209480,
+                        "next_epoch_state": null
+                    },
+                    "parent": {
+                        "epoch": 1,
+                        "round": 8,
+                        "id": "9d07d6625ce2b55a62b5b0fb7b38cf0d6f5b42db28377841f255a2c87fd9d1fa",
+                        "executed_state_id": "414343554d554c41544f525f504c414345484f4c4445525f4841534800000000",
+                        "version": 0,
+                        "timestamp_usecs": 1725607276098668,
+                        "next_epoch_state": null
+                    }
+                },
+                "author": "7682dbbb2efe6a3e005b7fa13872e99f21165874b20cb9c8c877f8a0a0c5b779",
+                "ledger_info": {
+                    "commit_info": {
+                        "epoch": 1,
+                        "round": 8,
+                        "id": "9d07d6625ce2b55a62b5b0fb7b38cf0d6f5b42db28377841f255a2c87fd9d1fa",
+                        "executed_state_id": "414343554d554c41544f525f504c414345484f4c4445525f4841534800000000",
+                        "version": 0,
+                        "timestamp_usecs": 1725607276098668,
+                        "next_epoch_state": null
+                    },
+                    "consensus_data_hash": "7a13b62e2b400bd3ef63fb0c05ca6ebfbb531986eb84b5a1099eab0829d71ea9"
+                },
+                "signature": "0x97e10ef055d03db8e8d8f16b02ea7d639b0a35513f16681b1f3071a86fa22c93a26b7acd7e08b3446ffce071dfd19ae117830ae324140c56da36e0dbb6c69db6c0483ee788288bdf32231bd7d2475f6a4d82360931eef9e60ec2bf3625b89b55",
+                "two_chain_timeout": null
+            },
+            "highest_timeout_round": 1
+        }
+    },
+    "owner_account": {
+        "data": "GetResponse",
+        "last_update": 1725443400,
+        "value": "7682dbbb2efe6a3e005b7fa13872e99f21165874b20cb9c8c877f8a0a0c5b779"
+    },
+    "waypoint": {
+        "data": "GetResponse",
+        "last_update": 1725443400,
+        "value": "0:c15911ad02597607e78e67b5b2ebdd0cefb5fae4d28769a7b8a783524d93bb0f"
+    }
+}
