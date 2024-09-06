@@ -2,14 +2,16 @@ use aptos_crypto::bls12381::PublicKey;
 use aptos_crypto::{PrivateKey, Uniform};
 use aptos_types::account_config::resources;
 use lazy_static::lazy_static;
+use rand::{thread_rng, Rng};
+use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
+use std::path::Path;
 use std::result;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use rand::{thread_rng, Rng};
 
 use aptos_config::config::ConsensusConfig;
 use aptos_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH;
@@ -17,8 +19,11 @@ use aptos_crypto::{bls12381, hash::HashValue};
 use aptos_infallible::Mutex;
 use aptos_storage_interface::{AptosDbError, DbReader, DbWriter};
 use aptos_types::account_address::AccountAddress;
+use aptos_types::aggregate_signature::AggregateSignature;
+use aptos_types::block_info::{BlockInfo, Round};
 use aptos_types::contract_event::EventWithVersion;
 use aptos_types::epoch_change::EpochChangeProof;
+use aptos_types::epoch_state::EpochState;
 use aptos_types::ledger_info::{LedgerInfo, LedgerInfoWithSignatures};
 use aptos_types::network_address::NetworkAddress;
 use aptos_types::on_chain_config::ValidatorSet;
@@ -27,8 +32,10 @@ use aptos_types::proof::accumulator::InMemoryTransactionAccumulator;
 use aptos_types::proof::TransactionAccumulatorSummary;
 use aptos_types::state_proof::StateProof;
 use aptos_types::state_store::state_key::inner::StateKeyInner;
+use aptos_types::timestamp::Timestamp;
 use aptos_types::validator_config::ValidatorConfig;
 use aptos_types::validator_info::ValidatorInfo;
+use aptos_types::validator_verifier::{ValidatorConsensusInfo, ValidatorVerifier};
 use aptos_types::{
     access_path::AccessPath,
     account_config::AccountResource,
@@ -38,15 +45,11 @@ use aptos_types::{
     transaction::Version,
     PeerId,
 };
-use aptos_types::aggregate_signature::AggregateSignature;
-use aptos_types::block_info::{BlockInfo, Round};
-use aptos_types::epoch_state::EpochState;
-use aptos_types::timestamp::Timestamp;
-use aptos_types::validator_verifier::{ValidatorConsensusInfo, ValidatorVerifier};
 
 pub type Result<T, E = AptosDbError> = std::result::Result<T, E>;
 pub struct MockStorage {
     network_address: String,
+    pub node_config_set: GravityNodeConfigSet,
     inner: Inner,
 }
 
@@ -69,156 +72,108 @@ impl DbReader for Inner {
     }
 }
 
-lazy_static! {
-    static ref VALIDATOR_MAP: BTreeMap<String, Vec<String>> = {
-        let mut validator_map: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        validator_map.insert(
-            "/ip4/127.0.0.1/tcp/6180".to_string(),
-            vec!["/ip4/127.0.0.1/tcp/1234".to_string()],
-        );
-        validator_map.insert(
-            "/ip4/127.0.0.1/tcp/2024".to_string(),
-            vec!["/ip4/127.0.0.1/tcp/6180".to_string()],
-        );
-        validator_map
-    };
-    static ref CONSENSUS_PRI_MAP: BTreeMap<String, Vec<u8>> = {
-        let mut consensus_pri_map: BTreeMap<String, Vec<u8>> = BTreeMap::new();
-        consensus_pri_map.insert(
-            "/ip4/127.0.0.1/tcp/6180".to_string(),
-            vec![
-                0x8, 0xf4, 0xf1, 0x19, 0x54, 0x7f, 0x55, 0xb8, 0x6f, 0x87, 0x0, 0x96, 0x33, 0x23,
-                0x58, 0x5a, 0xfc, 0x91, 0xe3, 0x46, 0xf5, 0x5d, 0x7a, 0x4b, 0xcf, 0xd9, 0x28, 0xf3,
-                0x38, 0x68, 0x34, 0xb8,
-            ],
-        );
-        consensus_pri_map.insert(
-            "/ip4/127.0.0.1/tcp/2024".to_string(),
-            vec![
-                0x10, 0x85, 0x37, 0xf2, 0x61, 0xb7, 0x6a, 0xfe, 0x51, 0x16, 0xee, 0x10, 0xbc, 0xce,
-                0xb9, 0xcd, 0x11, 0x79, 0xf1, 0xaa, 0xfa, 0xc3, 0x90, 0x5, 0xd4, 0x34, 0x3a, 0x2f,
-                0x5b, 0xdd, 0x29, 0x8e,
-            ],
-        );
-        consensus_pri_map
-    };
-    static ref CONSENSUS_PUB_MAP: BTreeMap<String, String> = {
-        let mut consensus_pub_map: BTreeMap<String, String> = BTreeMap::new();
-        consensus_pub_map.insert(
-            "/ip4/127.0.0.1/tcp/6180".to_string(),
-            "958a9e1e0aef70cc5d99f22403c5cf9de35f8d818553f499b6f29a975aa3b70a95fcb45281f04070e516ad7acd9c7c99".to_string(),
-        );
-        consensus_pub_map.insert(
-            "/ip4/127.0.0.1/tcp/2024".to_string(),
-            "851d41932d866f5fabed6673898e15473e6a0adcf5033d2c93816c6b115c85ad3451e0bac61d570d5ed9f23e1e7f77c4".to_string(),
-        );
-        consensus_pub_map
-    };
-    pub static ref ACCOUNT_ADDRESS_MAP: BTreeMap<String, AccountAddress> = {
-        let mut account_address_map: BTreeMap<String, AccountAddress> = BTreeMap::new();
-        account_address_map.insert(
-            "/ip4/127.0.0.1/tcp/6180".to_string(),
-            AccountAddress::from_str(
-                "7682dbbb2efe6a3e005b7fa13872e99f21165874b20cb9c8c877f8a0a0c5b779",
-            )
-            .unwrap(),
-        );
-        account_address_map.insert(
-            "/ip4/127.0.0.1/tcp/2024".to_string(),
-            AccountAddress::from_str(
-                "2d86b40a1d692c0749a0a0426e2021ee24e2430da0f5bb9c2ae6c586bf3e0a0f",
-            )
-            .unwrap(),
-        );
-        account_address_map
-    };
-    pub static ref NETWORK_MAP: BTreeMap<String, Vec<u8>> = {
-        let mut network_map: BTreeMap<String, Vec<u8>> = BTreeMap::new();
-        network_map.insert(
-            "/ip4/127.0.0.1/tcp/6180".to_string(),
-            vec![
-                216, 118, 84, 212, 149, 198, 180, 2, 202, 156, 156, 4, 36, 147, 105, 53, 109, 67,
-                55, 132, 99, 179, 89, 203, 171, 83, 142, 101, 166, 170, 9, 118,
-            ],
-        );
-        network_map.insert(
-            "/ip4/127.0.0.1/tcp/2024".to_string(),
-            vec![
-                32, 9, 18, 160, 136, 89, 128, 20, 184, 140, 209, 251, 145, 219, 223, 45, 241, 139,
-                53, 33, 132, 167, 39, 192, 118, 240, 124, 253, 20, 95, 162, 103,
-            ],
-        );
-        network_map
-    };
-    pub static ref NETWORK_PUB_MAP: BTreeMap<String, String> = {
-        let mut network_pub_map: BTreeMap<String, String> = BTreeMap::new();
-        network_pub_map.insert(
-            "/ip4/127.0.0.1/tcp/6180".to_string(),
-            "7682dbbb2efe6a3e005b7fa13872e99f21165874b20cb9c8c877f8a0a0c5b779".to_string(),
-        );
-        network_pub_map.insert(
-            "/ip4/127.0.0.1/tcp/2024".to_string(),
-            "2d86b40a1d692c0749a0a0426e2021ee24e2430da0f5bb9c2ae6c586bf3e0a0f".to_string(),
-        );
-        network_pub_map
-    };
-    pub static ref TRUSTED_PEERS_MAP: BTreeMap<String, Vec<String>> = {
-        let mut trusted_peers_map: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        trusted_peers_map.insert(
-            "/ip4/127.0.0.1/tcp/6180".to_string(),
-            vec!["/ip4/127.0.0.1/tcp/2024".to_string()],
-        );
-        trusted_peers_map.insert(
-            "/ip4/127.0.0.1/tcp/2024".to_string(),
-            vec!["/ip4/127.0.0.1/tcp/6180".to_string()],
-        );
-        trusted_peers_map
-    };
+pub type GravityNodeConfigSet = BTreeMap<String, GravityNodeConfig>;
+
+#[derive(Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct GravityNodeConfig {
+    pub consensus_private_key: Vec<u8>,
+    pub consensus_public_key: String,
+    pub account_address: String,
+    pub network_private_key: Vec<u8>,
+    pub network_public_key: String,
+    pub trusted_peers_map: Vec<String>,
+}
+
+/// Loads a config configuration file
+fn load_file(path: &Path) -> GravityNodeConfigSet {
+    let contents = std::fs::read_to_string(path).unwrap();
+    serde_yaml::from_str(&contents).unwrap()
 }
 
 #[cfg(test)]
 mod test {
     use aptos_crypto::{bls12381, x25519, PrivateKey};
-    use crate::mock_db::CONSENSUS_PRI_MAP;
 
     #[test]
     fn gen_public_key() {
-        CONSENSUS_PRI_MAP.iter().for_each(|pri| {
-            let pri_k = bls12381::PrivateKey::try_from(pri.1.as_slice()).unwrap();
+        let current_dir = env!("CARGO_MANIFEST_DIR").to_string() + "/";
+        let path = current_dir.clone() + "nodes_config.json";
+        let node_config_set = load_file(Path::new(&path));
+        node_config_set.iter().for_each(|(addr, config)| {
+            let pri_k = bls12381::PrivateKey::try_from(config.consensus_private_key.as_slice()).unwrap();
             let pub_k = pri_k.public_key();
-            println!("{}: \n pub: {} pri: {}",pri.0, pub_k.to_string(), hex::encode(pri_k.to_bytes().as_slice()).as_str());
+            println!(
+                "{}: \n pub: {} pri: {:?}",
+                addr,
+                pub_k.to_string(),
+                hex::encode(pri_k.to_bytes().as_slice()).as_str()
+            );
         });
+    }
+
+    use aptos_crypto::{Uniform, ValidCryptoMaterial};
+    use aptos_types::account_address::from_identity_public_key;
+    use rand::thread_rng;
+    use std::os::unix::thread;
+    use std::path::Path;
+
+    use super::load_file;
+
+    #[test]
+    fn println_consensus_pri_key() {
+        for _ in 0..2 {
+            let mut rng = thread_rng();
+            let private_key = bls12381::PrivateKey::generate(&mut rng);
+            println!(
+                "consensus private key {:?}, public key {}",
+                private_key.to_bytes(),
+                private_key.public_key().to_string()
+            );
+        }
+    }
+
+    #[test]
+    fn println_network_pri_key() {
+        for _ in 0..2 {
+            let mut rng = thread_rng();
+            let private_key = x25519::PrivateKey::generate(&mut rng);
+            println!(
+                "network private key {:?}, public key {}",
+                private_key.to_bytes(),
+                private_key.public_key().to_string()
+            );
+        }
     }
 }
 
 impl MockStorage {
-    pub fn new(network_address: String) -> Self {
+    pub fn new(network_address: String, path: &Path) -> Self {
+        let config_set = load_file(path);
         Self {
             network_address: network_address,
+            node_config_set: config_set,
             inner: Inner(Arc::new(Mutex::new(HashMap::new()))),
         }
     }
 
     fn mock_validators(&self) -> Vec<ValidatorInfo> {
         let mut result = vec![];
-        for (i, (k, address)) in ACCOUNT_ADDRESS_MAP.iter().enumerate() {
-            let private_key: bls12381::PrivateKey = bls12381::PrivateKey::try_from(
-                CONSENSUS_PRI_MAP
-                    .get(k)
-                    .unwrap()
-                    .as_slice(),
-            )
-                .unwrap();
-            let addr: NetworkAddress = VALIDATOR_MAP.get(k).unwrap()[0]
-                .parse()
-                .unwrap();
+        for (i, (addr, node_config)) in self.node_config_set.iter().enumerate() {
+            let private_key: bls12381::PrivateKey =
+                bls12381::PrivateKey::try_from(node_config.consensus_private_key.as_slice())
+                    .unwrap();
             let config = ValidatorConfig::new(
                 (&private_key).into(),
                 bcs::to_bytes(&vec![addr.clone()]).unwrap(),
                 bcs::to_bytes(&vec![addr.clone()]).unwrap(),
                 i as u64,
             );
-            result.push(ValidatorInfo::new(address.clone(), 10, config));
+            result.push(ValidatorInfo::new(
+                AccountAddress::try_from(node_config.account_address.clone()).unwrap(),
+                10,
+                config,
+            ));
         }
         result
     }
@@ -257,10 +212,28 @@ impl DbReader for MockStorage {
 
     fn get_state_proof(&self, known_version: u64) -> Result<StateProof> {
         let now = SystemTime::now().elapsed().unwrap().as_secs();
-        let infos = self.mock_validators().iter().map(|v| ValidatorConsensusInfo::new(v.account_address, v.consensus_public_key().clone(), v.consensus_voting_power())).collect();
+        let infos = self
+            .mock_validators()
+            .iter()
+            .map(|v| {
+                ValidatorConsensusInfo::new(
+                    v.account_address,
+                    v.consensus_public_key().clone(),
+                    v.consensus_voting_power(),
+                )
+            })
+            .collect();
         let verifier = ValidatorVerifier::new(infos);
         let epoch_state = EpochState::new(1, verifier);
-        let block_info = BlockInfo::new(1, 0, HashValue::zero(), HashValue::zero(), 0, 0, Some(epoch_state));
+        let block_info = BlockInfo::new(
+            1,
+            0,
+            HashValue::zero(),
+            HashValue::zero(),
+            0,
+            0,
+            Some(epoch_state),
+        );
         let ledger_info = LedgerInfo::new(block_info, HashValue::zero());
         Ok(StateProof::new(
             LedgerInfoWithSignatures::genesis(
@@ -268,7 +241,13 @@ impl DbReader for MockStorage {
                 ValidatorSet::new(self.mock_validators()),
             ),
             // 传递不能为空
-            EpochChangeProof::new(vec![LedgerInfoWithSignatures::new(ledger_info, AggregateSignature::empty())], false),
+            EpochChangeProof::new(
+                vec![LedgerInfoWithSignatures::new(
+                    ledger_info,
+                    AggregateSignature::empty(),
+                )],
+                false,
+            ),
         ))
     }
 

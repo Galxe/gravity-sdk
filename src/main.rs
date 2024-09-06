@@ -2,15 +2,21 @@ mod mock_db;
 mod network;
 mod services;
 use std::{
-    borrow::Borrow, collections::{HashMap, HashSet}, env, path::PathBuf, sync::{
+    borrow::Borrow,
+    collections::{HashMap, HashSet},
+    env,
+    path::{Path, PathBuf},
+    sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
-    }, thread
+    },
+    thread,
 };
 
 use aptos_config::{
     config::{
-        DiscoveryMethod, FileDiscovery, Identity, InitialSafetyRulesConfig, NetworkConfig, NodeConfig, OnDiskStorageConfig, Peer, PeerRole, SecureBackend, WaypointConfig
+        DiscoveryMethod, FileDiscovery, Identity, InitialSafetyRulesConfig, NetworkConfig,
+        NodeConfig, OnDiskStorageConfig, Peer, PeerRole, SecureBackend, WaypointConfig,
     },
     network_id::{NetworkId, PeerNetworkId},
 };
@@ -32,14 +38,14 @@ use aptos_storage_interface::DbReaderWriter;
 use aptos_types::chain_id::ChainId;
 use aptos_validator_transaction_pool::VTxnPoolState;
 
+use aptos_types::account_address::AccountAddress;
+use aptos_types::PeerId;
 use futures::{channel::mpsc, StreamExt};
-use mock_db::{ACCOUNT_ADDRESS_MAP, NETWORK_MAP, NETWORK_PUB_MAP, TRUSTED_PEERS_MAP};
 use network::{
     build_network_interfaces, consensus_network_configuration, create_network_runtime,
     extract_network_configs, extract_network_ids, mempool_network_configuration,
 };
 use tokio::time::sleep;
-use aptos_types::PeerId;
 
 pub struct ApplicationNetworkInterfaces<T> {
     pub network_client: NetworkClient<T>,
@@ -63,23 +69,29 @@ struct Cli {
     ip: String,
     #[clap(long, default_value = "2024")]
     port: String,
-    #[clap(long, default_value = "")]
+    #[clap(long, default_value = "discovery")]
     discovery_path: String,
+    #[clap(long, default_value = "nodes_config.json")]
+    nodes_config: String,
 }
 
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
-    let current_dir = env!("CARGO_MANIFEST_DIR").to_string();
-    let config_path = current_dir.clone() + "/" + &cli.config_path;
-    let data_path = current_dir.clone() + "/" + &cli.data_path;
+    let current_dir = env!("CARGO_MANIFEST_DIR").to_string() + "/";
+    let config_path = current_dir.clone() +  &cli.config_path;
+    let data_path = current_dir.clone() + &cli.data_path;
     let listen_address = format!("/ip4/{}/tcp/{}", &cli.ip, &cli.port);
 
+    let nodes_config_path = current_dir.clone() + &cli.nodes_config;
+    let path = Path::new(&nodes_config_path);
+    let db = mock_db::MockStorage::new(listen_address.clone(), path);
+    let gravity_node_config = db.node_config_set.get(&listen_address).unwrap();
     let mut node_config = aptos_config::config::NodeConfig::default();
     node_config.validator_network = Some(NetworkConfig::network_with_id(NetworkId::Validator));
     node_config.validator_network.as_mut().unwrap().identity = Identity::from_config(
-        x25519::PrivateKey::try_from(mock_db::NETWORK_MAP.get(&listen_address).unwrap().as_slice()).unwrap(),
-        *mock_db::ACCOUNT_ADDRESS_MAP.get(&listen_address).unwrap(),
+        x25519::PrivateKey::try_from(gravity_node_config.network_private_key.as_slice()).unwrap(),
+        AccountAddress::try_from(gravity_node_config.account_address.clone()).unwrap(),
     );
     node_config
         .validator_network
@@ -110,18 +122,27 @@ async fn main() {
         SecureBackend::OnDiskStorage(on_disk_storage_config);
     let backend = &node_config.consensus.safety_rules.backend;
     let chain_id = ChainId::test();
-    let db: DbReaderWriter = DbReaderWriter::new(mock_db::MockStorage::new(listen_address.clone()));
     let peers_and_metadata = create_peers_and_metadata(&node_config);
     let mut peer_set = HashMap::new();
-    for trusted_peer in TRUSTED_PEERS_MAP.get(&listen_address).unwrap() {
+    for trusted_peer in &gravity_node_config.trusted_peers_map {
+        let trusted_peer_config = db.node_config_set.get(trusted_peer).unwrap();
         let mut set = HashSet::new();
-        let trusted_peer_private_key = x25519::PrivateKey::try_from(NETWORK_MAP.get(trusted_peer).unwrap().as_slice()).unwrap();
+        let trusted_peer_private_key =
+            x25519::PrivateKey::try_from(trusted_peer_config.network_private_key.as_slice())
+                .unwrap();
         set.insert(x25519::PublicKey::try_from(&trusted_peer_private_key).unwrap());
-        let trust_peer = Peer::new(vec![trusted_peer.parse().unwrap()],
-        set, PeerRole::Validator);
-        peer_set.insert(*ACCOUNT_ADDRESS_MAP.get(trusted_peer).unwrap(), trust_peer);
+        let trust_peer = Peer::new(
+            vec![trusted_peer.parse().unwrap()],
+            set,
+            PeerRole::Validator,
+        );
+        peer_set.insert(
+            AccountAddress::try_from(trusted_peer_config.account_address.clone()).unwrap(),
+            trust_peer,
+        );
     }
     peers_and_metadata.set_trusted_peers(&NetworkId::Validator, peer_set);
+    let db: DbReaderWriter = DbReaderWriter::new(db);
     let mut event_subscription_service =
         aptos_event_notifications::EventSubscriptionService::new(Arc::new(RwLock::new(db.clone())));
     let network_configs = extract_network_configs(&node_config);
@@ -174,7 +195,7 @@ async fn main() {
     // 在其中构造了 consensus_to_mempool_sender 和 consensus_to_mempool_receiver
     // 并返回了sender
     let (mempool_client_sender, mempool_client_receiver) = mpsc::channel(1);
-    
+
     // tokio::spawn(async move {
     //     network::mock_mempool_client_sender(mempool_client_sender.clone()).await;
     // });

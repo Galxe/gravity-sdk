@@ -1,7 +1,0 @@
----
-7682dbbb2efe6a3e005b7fa13872e99f21165874b20cb9c8c877f8a0a0c5b779:
-  addresses:
-    - /ip4/127.0.0.1/tcp/6180/noise-ik/7682dbbb2efe6a3e005b7fa13872e99f21165874b20cb9c8c877f8a0a0c5b779/handshake/0
-  keys:
-    - "7682dbbb2efe6a3e005b7fa13872e99f21165874b20cb9c8c877f8a0a0c5b779"
-  role: Validator
