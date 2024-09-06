@@ -79,7 +79,7 @@ __pycache__
 *.bytecode
 *.log
 
-./data
+data
 
 node*/data/*_db/*
 node*/data/*DB/*
