@@ -1,0 +1,1 @@
+export ROOT_PATH=/Users/jingyue/projects/gravity-sdk
