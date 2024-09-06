@@ -107,6 +107,7 @@ impl LedgerRecoveryData {
 
         // We start from the block that storage's latest ledger info, if storage has end-epoch
         // LedgerInfo, we generate the virtual genesis block
+        println!("storage ledger info: {:?}", self.storage_ledger);
         let (root_id, latest_ledger_info_sig) = if self.storage_ledger.ledger_info().ends_epoch() {
             let genesis =
                 Block::make_genesis_block_from_ledger_info(self.storage_ledger.ledger_info());
@@ -228,6 +229,8 @@ impl RecoveryData {
         highest_2chain_timeout_cert: Option<TwoChainTimeoutCertificate>,
         order_vote_enabled: bool,
     ) -> Result<Self> {
+        println!("blocks in db: {:?}", blocks);
+        println!("quorum certs in db: {:?}", quorum_certs);
         let root = ledger_recovery_data
             .find_root(&mut blocks, &mut quorum_certs, order_vote_enabled)
             .with_context(|| {
@@ -249,7 +252,7 @@ impl RecoveryData {
                         .concat(),
                 )
             })?;
-
+        println!("root info: {:?}", root);
         let blocks_to_prune = Some(Self::find_blocks_to_prune(
             root.0.id(),
             &mut blocks,
@@ -405,6 +408,7 @@ impl PersistentLivenessStorage for StorageWriteProxy {
             .aptos_db
             .get_latest_ledger_info()
             .expect("Failed to get latest ledger info.");
+        println!("latest ledger info: {:?}", latest_ledger_info);
         let accumulator_summary = self
             .aptos_db
             .get_accumulator_summary(latest_ledger_info.ledger_info().version())
@@ -434,6 +438,12 @@ impl PersistentLivenessStorage for StorageWriteProxy {
                         .delete_highest_2chain_timeout_certificate()
                         .expect("unable to cleanup highest 2-chain timeout cert");
                 }
+                println!(
+                    "Starting up the consensus state machine with recovery data - [root block {:?}] [last_vote {}], [highest timeout certificate: {}]",
+                    initial_data.root_block(),
+                    initial_data.last_vote.as_ref().map_or("None".to_string(), |v| v.to_string()),
+                    initial_data.highest_2chain_timeout_certificate().as_ref().map_or("None".to_string(), |v| v.to_string()),
+                );
                 info!(
                     "Starting up the consensus state machine with recovery data - [last_vote {}], [highest timeout certificate: {}]",
                     initial_data.last_vote.as_ref().map_or("None".to_string(), |v| v.to_string()),

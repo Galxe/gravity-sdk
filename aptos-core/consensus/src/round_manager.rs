@@ -79,7 +79,7 @@ use tokio::{
     time::{sleep, Instant},
 };
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 pub enum UnverifiedEvent {
     ProposalMsg(Box<ProposalMsg>),
     VoteMsg(Box<VoteMsg>),
@@ -1237,6 +1237,7 @@ impl RoundManager {
         let round = vote.vote_data().proposed().round();
         match result {
             VoteReceptionResult::NewQuorumCertificate(qc) => {
+                println!("NewQuorumCertificate");
                 if !vote.is_timeout() {
                     observe_block(
                         qc.certified_block().timestamp_usecs(),
@@ -1521,6 +1522,7 @@ impl RoundManager {
                     };
                 },
                 (peer_id, event) = event_rx.select_next_some() => {
+                    println!("receive event {:?} : {:?}", peer_id, event);
                     let result = match event {
                         VerifiedEvent::VoteMsg(vote_msg) => {
                             monitor!("process_vote", self.process_vote_msg(*vote_msg).await)

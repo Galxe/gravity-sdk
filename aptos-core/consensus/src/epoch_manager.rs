@@ -841,7 +841,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             onchain_consensus_config.order_vote_enabled(),
             self.pending_blocks.clone(),
         ));
-
+        println!("round maanger start with epoch {}", epoch);
         info!(epoch = epoch, "Create ProposalGenerator");
         // txn manager is required both by proposal generator (to pull the proposers)
         // and by event processor (to update their status).
@@ -1172,7 +1172,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         );
 
         self.rand_manager_msg_tx = Some(rand_msg_tx);
-
         if consensus_config.is_dag_enabled() {
             self.start_new_epoch_with_dag(
                 epoch_state,
@@ -1253,6 +1252,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         match self.storage.start(consensus_config.order_vote_enabled()) {
             LivenessStorageData::FullRecoveryData(initial_data) => {
                 self.recovery_mode = false;
+                println!("init data {:?}", initial_data.root_block());
                 self.start_round_manager(
                     initial_data,
                     epoch_state,
@@ -1402,7 +1402,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         }
         // we can't verify signatures from a different epoch
         let maybe_unverified_event = self.check_epoch(peer_id, consensus_msg).await?;
-
+        
         if let Some(unverified_event) = maybe_unverified_event {
             // filter out quorum store messages if quorum store has not been enabled
             match self.filter_quorum_store_events(peer_id, &unverified_event) {
@@ -1483,6 +1483,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             | ConsensusMsg::SignedBatchInfo(_)
             | ConsensusMsg::ProofOfStoreMsg(_) => {
                 let event: UnverifiedEvent = msg.into();
+                println!("event epoch: {:?} and self epoch {:?}", event.epoch(), self.epoch());
                 if event.epoch()? == self.epoch() {
                     return Ok(Some(event));
                 } else {
@@ -1709,6 +1710,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         loop {
             tokio::select! {
                 (peer, msg) = network_receivers.consensus_messages.select_next_some() => {
+                    println!("consensus message peer {:?} msg {:?}", peer, msg);
                     monitor!("epoch_manager_process_consensus_messages",
                     if let Err(e) = self.process_message(peer, msg).await {
                         error!(epoch = self.epoch(), error = ?e, kind = error_kind(&e));

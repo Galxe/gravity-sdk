@@ -226,7 +226,7 @@ pub fn struct_tag_for_config(config_id: ConfigID) -> StructTag {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ConfigurationResource {
-    epoch: u64,
+    pub epoch: u64,
     last_reconfiguration_time: u64,
     events: EventHandle,
 }

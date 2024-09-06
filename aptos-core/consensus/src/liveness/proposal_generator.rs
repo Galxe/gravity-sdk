@@ -484,6 +484,7 @@ impl ProposalGenerator {
         };
 
         let quorum_cert = hqc.as_ref().clone();
+        println!("has quorum cert {:?}", quorum_cert);
         let failed_authors = self.compute_failed_authors(
             round,
             quorum_cert.certified_block().round(),

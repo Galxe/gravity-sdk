@@ -107,6 +107,7 @@ impl BlockTree {
         );
         let root_id = root.id();
 
+        println!("root_commit_cert {:?}", root_commit_cert);
         let mut id_to_block = HashMap::new();
         id_to_block.insert(root_id, LinkableBlock::new(root));
         counters::NUM_BLOCKS_IN_TREE.set(1);

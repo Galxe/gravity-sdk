@@ -1,5 +1,6 @@
 use aptos_crypto::bls12381::PublicKey;
 use aptos_crypto::{PrivateKey, Uniform};
+use aptos_types::account_config::resources;
 use lazy_static::lazy_static;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
@@ -229,10 +230,12 @@ impl DbReader for MockStorage {
     }
 
     fn get_latest_ledger_info(&self) -> Result<LedgerInfoWithSignatures> {
-        Ok(LedgerInfoWithSignatures::genesis(
+        let genesis = LedgerInfoWithSignatures::genesis(
             *ACCUMULATOR_PLACEHOLDER_HASH,
             ValidatorSet::new(self.mock_validators()),
-        ))
+        );
+        println!("genesis is {:?}", genesis);
+        Ok(genesis)
     }
 
     // todo(gravity_byteyue): 应该是commit的时候才增加这个sequence number
@@ -320,7 +323,9 @@ impl DbReader for MockStorage {
                         }
                         bcs::to_bytes(&bcs::to_bytes(&consensus_conf)?)?
                     } else {
-                        bcs::to_bytes(&ConfigurationResource::default())?
+                        let mut resources = ConfigurationResource::default();
+                        resources.epoch = 1;
+                        bcs::to_bytes(&resources)?
                     }
                 }
                 StateKeyInner::TableItem { .. } => panic!(),
