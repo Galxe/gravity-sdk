@@ -2,12 +2,14 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::cmp::max;
 use std::fmt::Display;
 use aptos_crypto::hash::{HashValue, TransactionAccumulatorHasher, ACCUMULATOR_PLACEHOLDER_HASH};
 use aptos_types::block_executor::config::BlockExecutorConfigFromOnchain;
 use aptos_types::block_executor::partitioner::ExecutableBlock;
 use aptos_types::epoch_state::EpochState;
 use aptos_types::ledger_info::LedgerInfoWithSignatures;
+use aptos_types::transaction::{BlockEpiloguePayload, ExecutionStatus};
 use aptos_types::transaction::{Transaction, TransactionStatus, block_epilogue::BlockEndInfo};
 use aptos_types::contract_event::ContractEvent;
 use aptos_types::proof::AccumulatorExtensionProof;
@@ -53,7 +55,9 @@ pub type Version = u64;
 
 impl ExecutorError {
     pub fn internal_err<E: Display>(e: E) -> Self {
-        todo!()
+        Self::InternalError {
+            error: format!("{}", e),
+        }
     }
 }
 
@@ -218,7 +222,8 @@ impl StateComputeResult {
             parent_num_leaves: 0,
             epoch_state: None,
             compute_status_for_input_txns: vec![
-                todo!()
+                TransactionStatus::Keep(ExecutionStatus::Success);
+                num_txns
             ],
             transaction_info_hashes: vec![],
             subscribable_events: vec![],
@@ -233,7 +238,9 @@ impl StateComputeResult {
     
 
     pub fn version(&self) -> Version {
-        0
+        max(self.num_leaves, 1)
+            .checked_sub(1)
+            .expect("Integer overflow occurred")
     }
 
     pub fn root_hash(&self) -> HashValue {
@@ -260,7 +267,49 @@ impl StateComputeResult {
         input_txns: Vec<Transaction>,
         block_id: HashValue,
     ) -> Vec<Transaction> {
-        todo!()
+        assert_eq!(
+            input_txns.len(),
+            self.compute_status_for_input_txns().len(),
+            "{:?} != {:?}",
+            input_txns.iter().map(|t| t.type_name()).collect::<Vec<_>>(),
+            self.compute_status_for_input_txns()
+        );
+        let output = itertools::zip_eq(input_txns, self.compute_status_for_input_txns())
+            .filter_map(|(txn, status)| {
+                assert!(
+                    !txn.is_non_reconfig_block_ending(),
+                    "{:?}: {:?}",
+                    txn,
+                    status
+                );
+                match status {
+                    TransactionStatus::Keep(_) => Some(txn),
+                    _ => None,
+                }
+            })
+            .chain(
+                (!self.has_reconfiguration()).then_some(self.block_end_info.clone().map_or(
+                    Transaction::StateCheckpoint(block_id),
+                    |block_end_info| {
+                        Transaction::BlockEpilogue(BlockEpiloguePayload::V0 {
+                            block_id,
+                            block_end_info,
+                        })
+                    },
+                )),
+            )
+            .collect::<Vec<_>>();
+
+        assert!(
+            self.has_reconfiguration()
+                || output
+                    .last()
+                    .map_or(false, Transaction::is_non_reconfig_block_ending),
+            "{:?}",
+            output.last()
+        );
+
+        output
     }
 
     pub fn epoch_state(&self) -> &Option<EpochState> {
@@ -302,7 +351,9 @@ impl StateComputeResult {
 
 impl From<anyhow::Error> for ExecutorError {
     fn from(error: anyhow::Error) -> Self {
-        todo!()
+        Self::InternalError {
+            error: format!("{}", error),
+        }
     }
 }
 
