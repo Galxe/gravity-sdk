@@ -62,4 +62,7 @@ pub trait ConsensusProcessEngineInterface {
     /// Parameters:
     /// - `block_ids`: A vector of block IDs that have been finalized
     fn polling_commit_block_ids();
+
+    /// Return the commit ids, the consensus can delete these transactions after submitting.
+    fn submit_commit_block_ids();
 }
