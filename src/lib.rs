@@ -1,10 +1,10 @@
 
-/// CPEI: Consensus Process Engine Interface
+/// GCEI: Gravity Consensus Engine Interface
 ///
 /// This trait defines the interface for a consensus process engine.
 /// It outlines the key operations that any consensus engine should implement
 /// to participate in the blockchain consensus process.
-pub trait ConsensusProcessEngineInterface {
+pub trait GravityConsensusEngineInterface {
     /// Initialize the consensus engine.
     ///
     /// This function should be called when the consensus engine starts up.
@@ -53,7 +53,7 @@ pub trait ConsensusProcessEngineInterface {
     /// - `result`: The computation result to be submitted
     fn submit_block_head();
 
-    /// Commit finalized block IDs.
+    /// Commit batch finalized block IDs.
     ///
     /// This function is called when a block is finalized. It should:
     /// - Mark the specified blocks as finalized in the local state
