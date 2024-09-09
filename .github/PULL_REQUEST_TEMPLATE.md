@@ -1,7 +1,8 @@
 ## PR Description
 [Briefly describe your changes]
-Issue Number: close #xxx
+Issue Number: closes #xxx
 
 ## Tested?
-[ ] Yes
-[ ] No
+
+- [ ] Yes
+- [ ] No
