@@ -93,22 +93,53 @@ fn load_file(path: &Path) -> GravityNodeConfigSet {
 
 #[cfg(test)]
 mod test {
+    use aptos_crypto::ed25519::Ed25519PrivateKey;
+    use aptos_crypto::ed25519::Ed25519PublicKey;
+    use aptos_crypto::test_utils::KeyPair;
     use aptos_crypto::{bls12381, x25519, PrivateKey};
 
     #[test]
-    fn gen_public_key() {
+    fn print_key_hex() {
         let current_dir = env!("CARGO_MANIFEST_DIR").to_string() + "/";
         let path = current_dir.clone() + "nodes_config.json";
         let node_config_set = load_file(Path::new(&path));
         node_config_set.iter().for_each(|(addr, config)| {
-            let pri_k = bls12381::PrivateKey::try_from(config.consensus_private_key.as_slice()).unwrap();
+            let pri_k =
+                bls12381::PrivateKey::try_from(config.consensus_private_key.as_slice()).unwrap();
             let pub_k = pri_k.public_key();
             println!(
-                "{}: \n pub: {} pri: {:?}",
+                "consensus key {}: \n pub: {} pri: {:?}",
                 addr,
                 pub_k.to_string(),
                 hex::encode(pri_k.to_bytes().as_slice()).as_str()
             );
+
+            let pri_k =
+                x25519::PrivateKey::try_from(config.network_private_key.as_slice()).unwrap();
+            let pub_k = pri_k.public_key();
+            println!(
+                "network key {}: \n pub: {} pri: {:?}",
+                addr,
+                pub_k.to_string(),
+                hex::encode(pri_k.to_bytes().as_slice()).as_str()
+            );
+        });
+    }
+
+    #[test]
+    fn gen_account_private_key() {
+        let current_dir = env!("CARGO_MANIFEST_DIR").to_string() + "/";
+        let path = current_dir.clone() + "nodes_config.json";
+        let node_config_set = load_file(Path::new(&path));
+        node_config_set.iter().for_each(|(addr, config)| {
+            let mut rng = thread_rng();
+            let kp = KeyPair::<Ed25519PrivateKey, Ed25519PublicKey>::generate(&mut rng);
+            println!(
+                "{} private key {}, public key {}",
+                addr,
+                hex::encode(kp.private_key.to_bytes().as_slice()).as_str(),
+                kp.public_key.to_string()
+            )
         });
     }
 

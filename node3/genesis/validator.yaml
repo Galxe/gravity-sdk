@@ -1,0 +1,28 @@
+base:
+  role: "validator"
+  data_dir: "/Users/lightman/repos/gravity-sdk/node3/data"
+  waypoint:
+    from_file: "/Users/lightman/repos/gravity-sdk/node3/genesis/waypoint.txt"
+
+consensus:
+  safety_rules:
+    backend:
+      type: "on_disk_storage"
+      path: /Users/lightman/repos/gravity-sdk/node3/data/secure_storage.json
+    initial_safety_rules_config:
+      from_file:
+        waypoint:
+          from_file: /Users/lightman/repos/gravity-sdk/node3/genesis/waypoint.txt
+        identity_blob_path: /Users/lightman/repos/gravity-sdk/node3/genesis/validator-identity.yaml
+
+validator_network:
+  network_id: validator
+  listen_address: "/ip4/127.0.0.1/tcp/2025"
+  discovery_method: 
+    file:
+      path: "/Users/lightman/repos/gravity-sdk/discovery"
+      interval_secs: 3600
+  mutual_authentication: true
+  identity:
+    type: "from_file"
+    path: /Users/lightman/repos/gravity-sdk/node3/genesis/validator-identity.yaml
