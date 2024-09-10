@@ -1,0 +1,25 @@
+[package]
+name = "gravity-reth"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+futures-util = "0.3.30"
+clap = { version = "4.5.17", features = ["derive", "env"] }
+futures = "0.3.30"
+dirs = "5.0.1"
+tokio = "1.40.0"
+tokio-stream = "0.1.16"
+
+reth-node-builder = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-builder" }
+reth-node-ethereum = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-ethereum" }
+reth-provider = { git = "https://github.com/paradigmxyz/reth", package = "reth-provider" }
+reth-db = { git = "https://github.com/paradigmxyz/reth", package = "reth-db" }
+reth-tasks = { git = "https://github.com/paradigmxyz/reth", package = "reth-tasks" }
+
