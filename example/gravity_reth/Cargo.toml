@@ -19,7 +19,23 @@ tokio-stream = "0.1.16"
 
 reth-node-builder = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-builder" }
 reth-node-ethereum = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-ethereum" }
+reth-node-core = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-core" }
 reth-provider = { git = "https://github.com/paradigmxyz/reth", package = "reth-provider" }
 reth-db = { git = "https://github.com/paradigmxyz/reth", package = "reth-db" }
 reth-tasks = { git = "https://github.com/paradigmxyz/reth", package = "reth-tasks" }
+reth-cli-runner = { git = "https://github.com/paradigmxyz/reth", package = "reth-cli-runner" }
+reth-cli = { git = "https://github.com/paradigmxyz/reth", package = "reth-cli" }
+reth-cli-util = { git = "https://github.com/paradigmxyz/reth", package = "reth-cli-util" }
+reth-chainspec = { git = "https://github.com/paradigmxyz/reth", package = "reth-chainspec" }
+reth-tracing = { git = "https://github.com/paradigmxyz/reth", package = "reth-tracing" }
+eyre = "0.6.12"
+tracing = "0.1.40"
+tempfile = "3.12.0"
+
+
+
+[dependencies.reth-cli-commands]
+git = "https://github.com/paradigmxyz/reth"
+package = "reth-cli-commands"
+features = ["dev"]
 

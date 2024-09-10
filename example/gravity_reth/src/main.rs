@@ -1,34 +1,54 @@
-use std::sync::Arc;
+mod cli;
 
-use reth_db::init_db;
-use reth_db::mdbx::DatabaseArguments;
-use reth_node_builder::{EngineNodeLauncher, NodeBuilder, NodeConfig};
+use clap::Parser;
+use reth_node_builder::EngineNodeLauncher;
+use reth_node_core::args::utils::DefaultChainSpecParser;
 use reth_node_ethereum::EthereumNode;
 use reth_node_ethereum::node::EthereumAddOns;
 use reth_provider::providers::BlockchainProvider2;
-use reth_tasks::{TaskManager};
+use crate::cli::Cli;
+use clap::Args;
 
-pub fn tokio_runtime() -> Result<tokio::runtime::Runtime, std::io::Error> {
-    tokio::runtime::Builder::new_multi_thread().enable_all().build()
+#[derive(Debug, Clone, Args, PartialEq, Eq, Default)]
+#[command(next_help_heading = "Engine")]
+pub struct EngineArgs {
+    /// Enable the engine2 experimental features on reth binary
+    #[arg(long = "engine.experimental", default_value = "false")]
+    pub experimental: bool,
 }
 
-#[tokio::main]
-async fn main() {
-    let node_config = NodeConfig::default();
-    let data_dir = node_config.datadir();
-    let db_path = data_dir.db();
-    let tokio_runtime = tokio_runtime().unwrap();
-    let task_manager = TaskManager::new(tokio_runtime.handle().clone());
-    let task_executor = task_manager.executor();
-    let db_args = DatabaseArguments::default();
-    let database = Arc::new(init_db(db_path.clone(), db_args).unwrap().with_metrics());
-
-    let builder = NodeBuilder::new(node_config)
-        .with_database(database)
-        .with_launch_context(task_executor);
-
-
-    let handle = builder.launch_node(EthereumNode::default()).await.unwrap();
-    handle.node_exit_future.await.unwrap();
-    return;
+fn main() {
+    reth_cli_util::sigsegv_handler::install();
+    if std::env::var_os("RUST_BACKTRACE").is_none() {
+        std::env::set_var("RUST_BACKTRACE", "1");
+    }
+    if let Err(err) =
+        Cli::<DefaultChainSpecParser, EngineArgs>::parse().run(|builder, engine_args| async move {
+            let enable_engine2 = engine_args.experimental;
+            match enable_engine2 {
+                true => {
+                    let handle = builder
+                        .with_types_and_provider::<EthereumNode, BlockchainProvider2<_>>()
+                        .with_components(EthereumNode::components())
+                        .with_add_ons::<EthereumAddOns>()
+                        .launch_with_fn(|builder| {
+                            let launcher = EngineNodeLauncher::new(
+                                builder.task_executor().clone(),
+                                builder.config().datadir(),
+                            );
+                            builder.launch_with(launcher)
+                        })
+                        .await?;
+                    handle.node_exit_future.await
+                }
+                false => {
+                    let handle = builder.launch_node(EthereumNode::default()).await?;
+                    handle.node_exit_future.await
+                }
+            }
+        })
+    {
+        eprintln!("Error: {err:?}");
+        std::process::exit(1);
+    }
 }
