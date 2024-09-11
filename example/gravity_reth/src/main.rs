@@ -1,10 +1,11 @@
 mod cli;
+mod gravity_node;
 
 use clap::Parser;
 use reth_node_builder::EngineNodeLauncher;
 use reth_node_core::args::utils::DefaultChainSpecParser;
-use reth_node_ethereum::EthereumNode;
-use reth_node_ethereum::node::EthereumAddOns;
+use crate::gravity_node::node::EthereumNode;
+use crate::gravity_node::node::EthereumAddOns;
 use reth_provider::providers::BlockchainProvider2;
 use crate::cli::Cli;
 use clap::Args;

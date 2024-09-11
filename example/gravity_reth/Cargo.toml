@@ -28,6 +28,18 @@ reth-cli = { git = "https://github.com/paradigmxyz/reth", package = "reth-cli" }
 reth-cli-util = { git = "https://github.com/paradigmxyz/reth", package = "reth-cli-util" }
 reth-chainspec = { git = "https://github.com/paradigmxyz/reth", package = "reth-chainspec" }
 reth-tracing = { git = "https://github.com/paradigmxyz/reth", package = "reth-tracing" }
+reth-auto-seal-consensus = { git = "https://github.com/paradigmxyz/reth", package = "reth-auto-seal-consensus" }
+reth-basic-payload-builder = { git = "https://github.com/paradigmxyz/reth", package = "reth-basic-payload-builder" }
+reth-beacon-consensus = { git = "https://github.com/paradigmxyz/reth", package = "reth-beacon-consensus" }
+reth-ethereum-engine-primitives = { git = "https://github.com/paradigmxyz/reth", package = "reth-ethereum-engine-primitives" }
+reth-evm-ethereum = { git = "https://github.com/paradigmxyz/reth", package = "reth-evm-ethereum" }
+reth-network = { git = "https://github.com/paradigmxyz/reth", package = "reth-network" }
+reth-node-api = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-api" }
+reth-payload-builder = { git = "https://github.com/paradigmxyz/reth", package = "reth-payload-builder" }
+reth-rpc = { git = "https://github.com/paradigmxyz/reth", package = "reth-rpc" }
+reth-transaction-pool = { git = "https://github.com/paradigmxyz/reth", package = "reth-transaction-pool" }
+reth-consensus = { git = "https://github.com/paradigmxyz/reth", package = "reth-consensus" }
+reth-ethereum-payload-builder = { git = "https://github.com/paradigmxyz/reth", package = "reth-ethereum-payload-builder" }
 eyre = "0.6.12"
 tracing = "0.1.40"
 tempfile = "3.12.0"
