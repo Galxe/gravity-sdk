@@ -30,13 +30,14 @@ use reth_transaction_pool::{
 };
 use reth_ethereum_engine_primitives::EthEngineTypes;
 use reth_evm_ethereum::EthEvmConfig;
+use crate::gravity_node::gravity_consensus_adaptor::GravityConsensusAdaptor;
 
 /// Type configuration for a regular Ethereum node.
 #[derive(Debug, Default, Clone, Copy)]
 #[non_exhaustive]
-pub struct EthereumNode;
+pub struct GravityNode;
 
-impl EthereumNode {
+impl GravityNode {
     /// Returns a [`ComponentsBuilder`] configured for a regular Ethereum node.
     pub fn components<Node>() -> ComponentsBuilder<
         Node,
@@ -64,12 +65,12 @@ impl EthereumNode {
     }
 }
 
-impl NodeTypes for EthereumNode {
+impl NodeTypes for GravityNode {
     type Primitives = ();
     type ChainSpec = ChainSpec;
 }
 
-impl NodeTypesWithEngine for EthereumNode {
+impl NodeTypesWithEngine for GravityNode {
     type Engine = EthEngineTypes;
 }
 
@@ -81,7 +82,7 @@ impl<N: FullNodeComponents> NodeAddOns<N> for EthereumAddOns {
     type EthApi = EthApi<N::Provider, N::Pool, NetworkHandle, N::Evm>;
 }
 
-impl<Types, N> Node<N> for EthereumNode
+impl<Types, N> Node<N> for GravityNode
 where
     Types: NodeTypesWithEngine<Engine = EthEngineTypes, ChainSpec = ChainSpec>,
     N: FullNodeTypes<Types = Types>,
@@ -296,10 +297,7 @@ where
     type Consensus = Arc<dyn reth_consensus::Consensus>;
 
     async fn build_consensus(self, ctx: &BuilderContext<Node>) -> eyre::Result<Self::Consensus> {
-        if ctx.is_dev() {
-            Ok(Arc::new(AutoSealConsensus::new(ctx.chain_spec())))
-        } else {
-            Ok(Arc::new(EthBeaconConsensus::new(ctx.chain_spec())))
-        }
+        let consensus = Arc::new(GravityConsensusAdaptor::default());
+        Ok(consensus)
     }
 }

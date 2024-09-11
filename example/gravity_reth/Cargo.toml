@@ -43,7 +43,7 @@ reth-ethereum-payload-builder = { git = "https://github.com/paradigmxyz/reth", p
 eyre = "0.6.12"
 tracing = "0.1.40"
 tempfile = "3.12.0"
-
+gravity-sdk = { path = "../../" }
 
 
 [dependencies.reth-cli-commands]

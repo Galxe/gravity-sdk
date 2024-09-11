@@ -4,7 +4,7 @@ mod gravity_node;
 use clap::Parser;
 use reth_node_builder::EngineNodeLauncher;
 use reth_node_core::args::utils::DefaultChainSpecParser;
-use crate::gravity_node::node::EthereumNode;
+use crate::gravity_node::node::GravityNode;
 use crate::gravity_node::node::EthereumAddOns;
 use reth_provider::providers::BlockchainProvider2;
 use crate::cli::Cli;
@@ -29,8 +29,8 @@ fn main() {
             match enable_engine2 {
                 true => {
                     let handle = builder
-                        .with_types_and_provider::<EthereumNode, BlockchainProvider2<_>>()
-                        .with_components(EthereumNode::components())
+                        .with_types_and_provider::<GravityNode, BlockchainProvider2<_>>()
+                        .with_components(GravityNode::components())
                         .with_add_ons::<EthereumAddOns>()
                         .launch_with_fn(|builder| {
                             let launcher = EngineNodeLauncher::new(
@@ -43,7 +43,7 @@ fn main() {
                     handle.node_exit_future.await
                 }
                 false => {
-                    let handle = builder.launch_node(EthereumNode::default()).await?;
+                    let handle = builder.launch_node(GravityNode::default()).await?;
                     handle.node_exit_future.await
                 }
             }
