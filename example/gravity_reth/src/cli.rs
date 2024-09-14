@@ -135,7 +135,7 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
         let runner = CliRunner::default();
         match self.command {
             Commands::Node(command) => {
-                println!("Running node command");
+                println!("Running node command, {:?}", command.dev);
                 runner.run_command_until_exit(|ctx| command.execute(ctx, launcher))
             }
             Commands::Init(command) => {

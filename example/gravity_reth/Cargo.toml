@@ -37,13 +37,20 @@ reth-network = { git = "https://github.com/paradigmxyz/reth", package = "reth-ne
 reth-node-api = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-api" }
 reth-payload-builder = { git = "https://github.com/paradigmxyz/reth", package = "reth-payload-builder" }
 reth-rpc = { git = "https://github.com/paradigmxyz/reth", package = "reth-rpc" }
+reth-rpc-api = { git = "https://github.com/paradigmxyz/reth", package = "reth-rpc-api" }
 reth-transaction-pool = { git = "https://github.com/paradigmxyz/reth", package = "reth-transaction-pool" }
 reth-consensus = { git = "https://github.com/paradigmxyz/reth", package = "reth-consensus" }
 reth-ethereum-payload-builder = { git = "https://github.com/paradigmxyz/reth", package = "reth-ethereum-payload-builder" }
+reth-primitives = { git = "https://github.com/paradigmxyz/reth", package = "reth-primitives" }
 eyre = "0.6.12"
 tracing = "0.1.40"
 tempfile = "3.12.0"
 gravity-sdk = { path = "../../" }
+jsonrpsee = "=0.24.4"
+hex = "0.4.3"
+serde_json = "1.0.128"
+time = "0.3.36"
+anyhow = "1.0.87"
 
 
 [dependencies.reth-cli-commands]
