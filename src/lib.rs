@@ -25,7 +25,7 @@ pub struct ApplicationNetworkInterfaces<T> {
 /// This trait defines the interface for a consensus process engine.
 /// It outlines the key operations that any consensus engine should implement
 /// to participate in the blockchain consensus process.
-pub trait GravityConsensusEngineInterface {
+pub trait GravityConsensusEngineInterface: Send + Sync {
     /// Initialize the consensus engine.
     ///
     /// This function should be called when the consensus engine starts up.
