@@ -8,12 +8,22 @@ node3 的端口是 2025
 
 node4 的端口是 2026
 
-启动之前需要修改下面配置文件的参数路径
+启动之前需要修改下面配置文件中的所有数据路径为自己的路径
 
 1. node1/genesis/validator.yaml
 2. node2/genesis/validator.yaml
 3. node3/genesis/validator.yaml
 4. node4/genesis/validator.yaml
+
+例如
+```
+base:
+  role: "validator"
+  data_dir: "/Users/lightman/repos/gravity-sdk/node1/data"
+  waypoint:
+    from_file: "/Users/lightman/repos/gravity-sdk/node1/genesis/waypoint.txt"
+```
+
 
 启动命令
 
