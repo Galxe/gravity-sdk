@@ -18,7 +18,7 @@ pub struct EngineArgs {
 }
 
 use clap::Parser;
-use reth_node_core::{args::utils::DefaultChainSpecParser};
+use reth_node_core::{args::utils::DefaultChainSpecParser, rpc::types::optimism::genesis};
 use reth_node_builder::EngineNodeLauncher;
 use reth_node_core::rpc::types::engine::ForkchoiceState;
 use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
@@ -47,10 +47,12 @@ fn run_server() {
                 })
                 .await?;
             let client = handle.node.engine_http_client();
+            let genesis_hash = handle.node.chain_spec().genesis_hash();
             let _ = thread::spawn(
-                || {
+                move || {
                     let mock_eth_consensus_layer = mock_eth_consensus_layer::MockEthConsensusLayer::new(client);
-                    tokio::runtime::Runtime::new().unwrap().block_on(mock_eth_consensus_layer.run_round(ForkchoiceState::default())).expect("Failed to run round");
+                    
+                    tokio::runtime::Runtime::new().unwrap().block_on(mock_eth_consensus_layer.start_round(genesis_hash)).expect("Failed to run round");
                 }
             );
             handle.node_exit_future.await

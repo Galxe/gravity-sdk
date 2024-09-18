@@ -1,11 +1,8 @@
-use reth_ethereum_engine_primitives::{EthEngineTypes, EthPayloadAttributes, EthPayloadBuilderAttributes};
+use reth_ethereum_engine_primitives::{EthEngineTypes, EthPayloadAttributes};
 use reth_node_core::rpc::types::engine::{ExecutionPayloadInputV2, ForkchoiceState, PayloadId, PayloadStatus, PayloadStatusEnum};
 use reth_rpc_api::{EngineApiClient, EngineEthApiClient};
 use eyre::{Context, Result};
-use reth_node_api::{PayloadAttributes, PayloadTypes};
-use reth_node_builder::EngineTypes;
 use reth_node_core::primitives::{Address, B256};
-use reth_node_core::rpc::types::ExecutionPayloadV2;
 
 pub struct MockEthConsensusLayer<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> {
     engine_api_client: T,
@@ -18,9 +15,19 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> MockEthConsensusLayer<
         }
     }
 
-    pub async fn run_round(&self, mut fork_choice_state: ForkchoiceState) -> Result<()> {
+    pub async fn start_round(&self, genesis_hash: B256) -> Result<()> {
+        let fork_choice_state = ForkchoiceState {
+            head_block_hash: genesis_hash,
+            safe_block_hash: genesis_hash,
+            finalized_block_hash: genesis_hash,
+        };
+
         // 创建 PayloadAttributes
         let payload_attributes = Self::create_payload_attributes();
+        self.run_round(fork_choice_state, payload_attributes).await
+    }
+
+    pub async fn run_round(&self, mut fork_choice_state: ForkchoiceState, payload_attributes: EthPayloadAttributes) -> Result<()> {
         loop {
             // 更新 ForkchoiceState 并获取 payload_id
             let payload_id = self
@@ -49,13 +56,14 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> MockEthConsensusLayer<
 
     /// 创建 PayloadAttributes 的辅助函数
     fn create_payload_attributes() -> EthPayloadAttributes {
-        EthPayloadAttributes {
-            timestamp: 0,
-            prev_randao: B256::ZERO,
-            suggested_fee_recipient: Address::ZERO,
-            withdrawals: Some(vec![]),
-            parent_beacon_block_root: Some(B256::ZERO),
-        }
+        // EthPayloadAttributes {
+        //     timestamp: 0,
+        //     prev_randao: B256::ZERO,
+        //     suggested_fee_recipient: Address::ZERO,
+        //     withdrawals: Some(vec![]),
+        //     parent_beacon_block_root: Some(B256::ZERO),
+        // }
+        EthPayloadAttributes::default()
     }
 
     /// 更新 ForkchoiceState 并获取 payload_id
