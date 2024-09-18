@@ -1,7 +1,7 @@
 
 # Gravity Consensus Engine Interface (GCEI)
 
-Gravity-sdk is a high-performance, modular consensus engine interface designed to provide a standardized approach for integrating consensus mechanisms into blockchain projects. By encapsulating the Aptos consensus module and exposing a generic interface, GCEI offers a flexible solution for various blockchain initiatives. The launch script is in 
+Gravity-sdk is a high-performance, modular consensus engine interface designed to provide a standardized approach for integrating consensus mechanisms into blockchain projects. By encapsulating the Aptos consensus module and exposing a generic interface, GCEI offers a flexible solution for various blockchain initiatives. 
 
 ## 🌟 Features
 
