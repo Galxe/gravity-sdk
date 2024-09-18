@@ -1,5 +1,5 @@
 use clap::Parser;
-use gravity_consensus::GravityNodeArgs;
+use gravity_sdk::GravityNodeArgs;
 
 #[tokio::main]
 async fn main() {
