@@ -454,6 +454,13 @@ impl WriteSetPayload {
     }
 }
 
+#[derive(Default, Eq, Serialize, Deserialize, Clone, PartialEq)]
+pub struct GravityExtension {
+    block_id: HashValue,
+    txn_index_in_block: u32,
+    txn_count_in_block: u32,
+}
+
 /// A transaction that has been signed.
 ///
 /// A `SignedTransaction` is a single transaction that can be atomically executed. Clients submit
@@ -483,6 +490,8 @@ pub struct SignedTransaction {
     /// A cached hash of the transaction.
     #[serde(skip)]
     committed_hash: OnceCell<HashValue>,
+
+    g_ext : GravityExtension
 }
 
 /// PartialEq ignores the cached OnceCell fields that may or may not be initialized.
@@ -542,6 +551,7 @@ impl SignedTransaction {
             raw_txn_size: OnceCell::new(),
             authenticator_size: OnceCell::new(),
             committed_hash: OnceCell::new(),
+            g_ext: Default::default(),
         }
     }
 
@@ -557,6 +567,7 @@ impl SignedTransaction {
             raw_txn_size: OnceCell::new(),
             authenticator_size: OnceCell::new(),
             committed_hash: OnceCell::new(),
+            g_ext: Default::default(),
         }
     }
 

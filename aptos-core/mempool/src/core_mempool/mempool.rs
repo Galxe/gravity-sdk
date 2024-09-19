@@ -512,7 +512,7 @@ impl Mempool {
         for transaction in &block {
             self.log_consensus_pulled_latency(transaction.sender(), transaction.sequence_number());
         }
-        // panic!("core");
+        // TODO(gravity_byteyue): sort using Txn's index
         block
     }
 

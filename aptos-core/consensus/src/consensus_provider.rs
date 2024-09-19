@@ -39,6 +39,7 @@ use futures::channel::mpsc;
 use move_core_types::account_address::AccountAddress;
 use std::{collections::HashMap, sync::Arc};
 use tokio::runtime::Runtime;
+use crate::gravity_state_computer::{ConsensusAdapterArgs, GravityBlockExecutor, GravityExecutionProxy};
 
 /// Helper function to start consensus based on configuration and return the runtime
 #[allow(clippy::unwrap_used)]
@@ -52,6 +53,7 @@ pub fn start_consensus(
     reconfig_events: ReconfigNotificationListener<DbBackedOnChainConfig>,
     vtxn_pool: VTxnPoolState,
     consensus_publisher: Option<Arc<ConsensusPublisher>>,
+    gravity_args: ConsensusAdapterArgs
 ) -> (Runtime, Arc<StorageWriteProxy>, Arc<QuorumStoreDB>) {
     let runtime = aptos_runtimes::spawn_named_runtime("consensus".into(), None);
     let storage = Arc::new(StorageWriteProxy::new(node_config, aptos_db.reader.clone()));
@@ -62,13 +64,16 @@ pub fn start_consensus(
         node_config.consensus.mempool_executed_txn_timeout_ms,
     ));
 
+    let g_executor = GravityBlockExecutor::<AptosVM>::new(BlockExecutor::<AptosVM>::new(aptos_db), gravity_args.committed_blocks_sender.clone());
+    // 修改成gravity版
     let execution_proxy = ExecutionProxy::new(
-        Arc::new(BlockExecutor::<AptosVM>::new(aptos_db)),
+        Arc::new(g_executor),
         txn_notifier,
         state_sync_notifier,
         runtime.handle(),
         TransactionFilter::new(node_config.execution.transaction_filter.clone()),
     );
+    let execution_proxy = Arc::new(GravityExecutionProxy::new(Arc::new(execution_proxy), &gravity_args));
 
     let time_service = Arc::new(ClockTimeService::new(runtime.handle().clone()));
 
@@ -85,7 +90,7 @@ pub fn start_consensus(
 
     let execution_client = Arc::new(ExecutionProxyClient::new(
         node_config.consensus.clone(),
-        Arc::new(execution_proxy),
+        execution_proxy,
         node_config.validator_network.as_ref().unwrap().peer_id(),
         self_sender.clone(),
         consensus_network_client.clone(),

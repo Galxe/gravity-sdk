@@ -1,5 +1,4 @@
-use std::{alloc::System, collections::HashMap, sync::Arc, time::{SystemTime, UNIX_EPOCH}};
-
+use std::{collections::HashMap, sync::Arc, time::{SystemTime, UNIX_EPOCH}};
 use aptos_channels::{aptos_channel, message_queues::QueueStyle};
 use aptos_config::{config::{NetworkConfig, NodeConfig}, network_id::NetworkId};
 use aptos_crypto::{PrivateKey, Uniform};
@@ -12,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use tokio::runtime::Runtime;
 
 use crate::ApplicationNetworkInterfaces;
+use crate::consensus_execution_adapter::ConsensusExecutionAdapter;
 
 /// Extracts all network configs from the given node config
 pub fn extract_network_configs(node_config: &NodeConfig) -> Vec<NetworkConfig> {
@@ -91,6 +91,29 @@ pub async fn mock_mempool_client_sender(mut mc_sender: aptos_mempool::MempoolCli
         mc_sender
             .send(MempoolClientRequest::SubmitTransaction(txn, sender))
             .await;
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    }
+}
+
+pub async fn mock_execution_txn_submitter(adapter: ConsensusExecutionAdapter) {
+    let addr = aptos_types::account_address::AccountAddress::random();
+    let mut seq_num = 0;
+    loop {
+        let txn: SignedTransaction = SignedTransaction::new(
+            RawTransaction::new_script(
+                addr.clone(),
+                seq_num,
+                Script::new(vec![], vec![], vec![]),
+                0,
+                0,
+                SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() + 60,
+                ChainId::test(),
+            ),
+            aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing().public_key(),
+            aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap(),
+        );
+        seq_num += 1;
+        adapter.send_valid_transactions(vec![txn]).await.expect("ok");
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
 }

@@ -200,9 +200,11 @@ impl MockStorage {
                 bcs::to_bytes(&vec![addr.clone()]).unwrap(),
                 i as u64,
             );
+            // TODO(gravity_byteyue): remove this
+            let power = match i { 0 => 30, _ => 1 };
             result.push(ValidatorInfo::new(
                 AccountAddress::try_from(node_config.account_address.clone()).unwrap(),
-                10,
+                power,
                 config,
             ));
         }

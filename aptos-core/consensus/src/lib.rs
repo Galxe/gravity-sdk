@@ -63,6 +63,7 @@ mod transaction_deduper;
 mod transaction_filter;
 mod transaction_shuffler;
 mod txn_hash_and_authenticator_deduper;
+pub mod gravity_state_computer;
 
 use aptos_metrics_core::IntGauge;
 pub use consensusdb::create_checkpoint;

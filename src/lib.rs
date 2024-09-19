@@ -1,10 +1,11 @@
 mod mock_db;
 mod network;
+mod consensus_execution_adapter;
 
 use std::{collections::{HashMap, HashSet}, path::PathBuf, sync::Arc, thread};
-
+use std::str::Bytes;
 use aptos_config::{config::{NodeConfig, Peer, PeerRole}, network_id::NetworkId};
-use aptos_crypto::x25519;
+use aptos_crypto::{x25519, HashValue};
 use aptos_event_notifications::EventNotificationSender;
 use aptos_infallible::RwLock;
 use aptos_network::application::{interface::{NetworkClient, NetworkServiceEvents}, storage::PeersAndMetadata};
@@ -14,12 +15,41 @@ use aptos_types::{account_address::AccountAddress, chain_id::ChainId};
 use aptos_validator_transaction_pool::VTxnPoolState;
 use clap::Parser;
 use futures::channel::mpsc;
+use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
+use aptos_consensus_types::block::Block;
 use network::{build_network_interfaces, consensus_network_configuration, create_network_runtime, extract_network_configs, extract_network_ids, mempool_network_configuration};
+use crate::consensus_execution_adapter::ConsensusExecutionAdapter;
 
 pub struct ApplicationNetworkInterfaces<T> {
     pub network_client: NetworkClient<T>,
     pub network_service_events: NetworkServiceEvents<T>,
 }
+
+pub struct GTxn {
+    sequence_number : u64,
+    /// Maximal total gas to spend for this transaction.
+    max_gas_amount: u64,
+    /// Price to be paid per gas unit.
+    gas_unit_price: u64,
+    /// Expiration timestamp for this transaction, represented
+    /// as seconds from the Unix Epoch. If the current blockchain timestamp
+    /// is greater than or equal to this time, then the transaction has
+    /// expired and will be discarded. This can be set to a large value far
+    /// in the future to indicate that a transaction does not expire.
+    expiration_timestamp_secs: u64,
+    /// Chain ID of the Aptos network this transaction is intended for.
+    chain_id: u8,
+    /// The transaction payload, e.g., a script to execute.
+    txn_bytes: Vec<u8>,
+    public_key: [u8; 32],
+    signature: [u8; 64],
+}
+
+#[derive(Debug)]
+pub enum GCEIError {
+    ConsensusError,
+}
+
 /// GCEI: Gravity Consensus Engine Interface
 ///
 /// This trait defines the interface for a consensus process engine.
@@ -41,7 +71,7 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     /// - Accepting incoming transactions from the network or mempool
     /// - Validating the transactions
     /// - Adding valid transactions to the local transaction pool
-    fn submit_valid_transactions();
+    fn send_valid_transactions(block_id : [u8; 32], txns: Vec<GTxn>) -> anyhow::Result<(), GCEIError>;
 
     /// Poll for ordered blocks.
     ///
@@ -52,7 +82,7 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     ///
     /// TODO(gravity_xiejian): use txn id rather than total txn in block
     /// Returns: Option<Block> - The next ordered block, if available
-    fn polling_ordered_block();
+    fn receive_ordered_block() -> anyhow::Result<([u8; 32], Vec<GTxn>), GCEIError>;
 
     /// Submit computation results.
     ///
@@ -62,7 +92,7 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     ///
     /// Parameters:
     /// - `result`: The computation result to be submitted
-    fn submit_compute_res();
+    fn send_compute_res(block_id: [u8; 32], res: [u8; 32]) -> anyhow::Result<(), GCEIError>;
 
     /// Submit Block head.
     ///
@@ -72,7 +102,7 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     ///
     /// Parameters:
     /// - `result`: The computation result to be submitted
-    fn submit_block_head();
+    fn send_block_head(block_id: [u8; 32], res: [u8; 32]) -> anyhow::Result<(), GCEIError>;
 
     /// Commit batch finalized block IDs.
     ///
@@ -82,10 +112,10 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     ///
     /// Parameters:
     /// - `block_ids`: A vector of block IDs that have been finalized
-    fn polling_commit_block_ids();
+    fn receive_commit_block_ids() -> anyhow::Result<Vec<[u8; 32]>, GCEIError>;
 
     /// Return the commit ids, the consensus can delete these transactions after submitting.
-    fn submit_commit_block_ids();
+    fn send_persistent_block_id(block_id : [u8; 32]) -> anyhow::Result<(), GCEIError>;
 }
 
 /// Runs an Gravity validator or fullnode
@@ -100,7 +130,7 @@ pub struct GravityNodeArgs {
 }
 
 impl GravityNodeArgs {
-    pub fn run(self) {
+    pub fn run(mut self) {
         // Get the config file path
         let config_path = self.node_config_path.expect("Config is required to launch node");
         if !config_path.exists() {
@@ -245,6 +275,8 @@ pub fn start(
         .subscribe_to_reconfigurations()
         .expect("Consensus must subscribe to reconfigurations");
     let vtxn_pool = VTxnPoolState::default();
+    let mut arg = ConsensusAdapterArgs::new(mempool_client_sender);
+    let adapter = ConsensusExecutionAdapter::new(&mut arg);
     let _consensus = aptos_consensus::consensus_provider::start_consensus(
         &node_config,
         consensus_network_interfaces.network_client,
@@ -255,8 +287,13 @@ pub fn start(
         consensus_reconfig_subscription,
         vtxn_pool,
         None,
+        arg,
     );
+
     let _ = event_subscription_service.notify_initial_configs(1_u64);
+    tokio::spawn(async move {
+        network::mock_execution_txn_submitter(adapter).await;
+    });
     loop {
         thread::park();
     }

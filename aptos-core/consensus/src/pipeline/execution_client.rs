@@ -143,7 +143,7 @@ impl BufferManagerHandle {
 
 pub struct ExecutionProxyClient {
     consensus_config: ConsensusConfig,
-    execution_proxy: Arc<ExecutionProxy>,
+    execution_proxy: Arc<dyn StateComputer>,
     author: Author,
     self_sender: aptos_channels::UnboundedSender<Event<ConsensusMsg>>,
     network_sender: ConsensusNetworkClient<NetworkClient<ConsensusMsg>>,
@@ -158,7 +158,7 @@ pub struct ExecutionProxyClient {
 impl ExecutionProxyClient {
     pub fn new(
         consensus_config: ConsensusConfig,
-        execution_proxy: Arc<ExecutionProxy>,
+        execution_proxy: Arc<dyn StateComputer>,
         author: Author,
         self_sender: aptos_channels::UnboundedSender<Event<ConsensusMsg>>,
         network_sender: ConsensusNetworkClient<NetworkClient<ConsensusMsg>>,
