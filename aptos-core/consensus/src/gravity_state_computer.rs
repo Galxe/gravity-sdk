@@ -13,7 +13,7 @@ use aptos_types::{
     ledger_info::LedgerInfoWithSignatures,
     randomness::Randomness,
 };
-use futures::{SinkExt, StreamExt};
+use futures::{FutureExt, SinkExt, StreamExt};
 use std::{boxed::Box, sync::Arc};
 use std::time::Duration;
 use futures_channel::{mpsc, oneshot};
@@ -171,6 +171,7 @@ impl<V: Send + Sync> BlockExecutorTrait for GravityBlockExecutor<V>
         ledger_info_with_sigs: LedgerInfoWithSignatures,
     ) -> ExecutorResult<()> {
         // let (sender, receiver) = mpsc::channel(1);
+        self.inner.db.writer.commit_ledger(0, Some(&ledger_info_with_sigs), None);
         tokio::runtime::Runtime::new().unwrap().block_on(
             self.committed_blocks_sender.clone().send(block_ids)
         ).map_err(|e| aptos_executor_types::ExecutorError::InternalError { error: "ken➗".parse().unwrap() })

@@ -26,3 +26,6 @@ validator_network:
   identity:
     type: "from_file"
     path: /tmp/node3/genesis/validator-identity.yaml
+
+storage:
+  dir: "/tmp/node3/data"

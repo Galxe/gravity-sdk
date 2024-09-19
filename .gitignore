@@ -83,4 +83,4 @@ __pycache__
 
 node*/data/*_db/*
 node*/data/*DB/*
-node*/config
+node*/genesis/*

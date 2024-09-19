@@ -296,7 +296,12 @@ pub trait DbReader: Send + Sync {
         fn get_latest_ledger_info_option(&self) -> Result<Option<LedgerInfoWithSignatures>>;
 
         /// Returns the latest "synced" transaction version, potentially not "committed" yet.
-        fn get_synced_version(&self) -> Result<Version>;
+        fn get_synced_version(&self) -> Result<Option<Version>>;
+
+        /// Returns the latest "pre-committed" transaction version, which includes those written to
+        /// the DB but yet to be certified by consensus or a verified LedgerInfo from a state sync
+        /// peer.
+        fn get_pre_committed_version(&self) -> Result<Option<Version>>;
 
         /// Returns the latest state checkpoint version if any.
         fn get_latest_state_checkpoint_version(&self) -> Result<Option<Version>>;
@@ -552,6 +557,36 @@ pub trait DbWriter: Send + Sync {
         latest_in_memory_state: StateDelta,
         state_updates_until_last_checkpoint: Option<ShardedStateUpdates>,
         sharded_state_cache: Option<&ShardedStateCache>,
+    ) -> Result<()> {
+        unimplemented!()
+    }
+
+    /// Optimistically persist transactions to the ledger.
+    ///
+    /// Called by consensus to pre-commit blocks before execution result is agreed on by the
+    /// validators.
+    ///
+    ///   If these blocks are later confirmed to be included in the ledger, commit_ledger should be
+    ///       called with a `LedgerInfoWithSignatures`.
+    ///   If not, the consensus needs to panic, resulting in a reboot of the node where the DB will
+    ///       truncate the unconfirmed data.
+    fn pre_commit_ledger(
+        &self,
+        txns_to_commit: &[TransactionToCommit],
+        first_version: Version,
+    ) -> Result<()> {
+        unimplemented!()
+    }
+
+    /// Commit pre-committed transactions to the ledger.
+    ///
+    /// If a LedgerInfoWithSigs is provided, both the "synced version" and "committed version" will
+    /// advance, otherwise only the synced version will advance.
+    fn commit_ledger(
+        &self,
+        version: Version,
+        ledger_info_with_sigs: Option<&LedgerInfoWithSignatures>,
+        txns_to_commit: Option<&[TransactionToCommit]>,
     ) -> Result<()> {
         unimplemented!()
     }

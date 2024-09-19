@@ -1,9 +1,10 @@
 mod mock_db;
 mod network;
+mod storage;
 mod consensus_execution_adapter;
 
-use std::{collections::{HashMap, HashSet}, path::PathBuf, sync::Arc, thread};
-use aptos_config::{config::{NodeConfig, Peer, PeerRole}, network_id::NetworkId};
+use std::{collections::{HashMap, HashSet}, fs, path::PathBuf, sync::Arc, thread};
+use aptos_config::{config::{NodeConfig, Peer, PeerRole, RocksdbConfigs, StorageDirPaths}, network_id::NetworkId};
 use aptos_crypto::{x25519, HashValue};
 use aptos_event_notifications::EventNotificationSender;
 use aptos_infallible::RwLock;
@@ -157,17 +158,38 @@ pub fn create_peers_and_metadata(node_config: &NodeConfig) -> Arc<PeersAndMetada
 }
 
 // Start an Gravity node
-pub fn start(
-    node_config: NodeConfig,
-    mockdb_config_path: Option<PathBuf>,
-) -> anyhow::Result<()> {
-    let listen_address = node_config.validator_network.as_ref().unwrap().listen_address.to_string();
-    let db = mock_db::MockStorage::new(listen_address.clone(), mockdb_config_path.unwrap().as_path());
-    let gravity_node_config = db.node_config_set.get(&listen_address).unwrap();
+pub fn start(node_config: NodeConfig, mockdb_config_path: Option<PathBuf>) -> anyhow::Result<()> {
+    let listen_address = node_config
+        .validator_network
+        .as_ref()
+        .unwrap()
+        .listen_address
+        .to_string();
+    let mut db_paths = node_config.storage.dir();
+    db_paths.push("gravity_db");
+    let _ = fs::create_dir(&db_paths);
+    let db_paths = StorageDirPaths::from_path(db_paths);
+    let gravity_db = storage::db::GravityDB::open(
+        &db_paths,
+        RocksdbConfigs::default(),
+        listen_address.clone(),
+        mockdb_config_path.unwrap().as_path(),
+    )
+    .unwrap();
+    // let db = mock_db::MockStorage::new(listen_address.clone(), mockdb_config_path.unwrap().as_path());
+    let gravity_node_config = gravity_db
+        .mock_db
+        .node_config_set
+        .get(&listen_address)
+        .unwrap();
     let peers_and_metadata = create_peers_and_metadata(&node_config);
     let mut peer_set = HashMap::new();
     for trusted_peer in &gravity_node_config.trusted_peers_map {
-        let trusted_peer_config = db.node_config_set.get(trusted_peer).unwrap();
+        let trusted_peer_config = gravity_db
+            .mock_db
+            .node_config_set
+            .get(trusted_peer)
+            .unwrap();
         let mut set = HashSet::new();
         let trusted_peer_private_key =
             x25519::PrivateKey::try_from(trusted_peer_config.network_private_key.as_slice())
@@ -184,7 +206,7 @@ pub fn start(
         );
     }
     let _ = peers_and_metadata.set_trusted_peers(&NetworkId::Validator, peer_set);
-    let db: DbReaderWriter = DbReaderWriter::new(db);
+    let db: DbReaderWriter = DbReaderWriter::new(gravity_db);
     let mut event_subscription_service =
         aptos_event_notifications::EventSubscriptionService::new(Arc::new(RwLock::new(db.clone())));
     let network_configs = extract_network_configs(&node_config);

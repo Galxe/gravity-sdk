@@ -61,17 +61,6 @@ impl Default for Inner {
     }
 }
 
-impl DbReader for Inner {
-    fn get_state_value_by_version(
-        &self,
-        state_key: &StateKey,
-        version: Version,
-    ) -> Result<Option<StateValue>> {
-        let bytes = bcs::to_bytes(&ConfigurationResource::default())?;
-        Ok(Some(StateValue::new_legacy(bytes.into())))
-    }
-}
-
 pub type GravityNodeConfigSet = BTreeMap<String, GravityNodeConfig>;
 
 #[derive(Default, Deserialize, Serialize)]
@@ -188,7 +177,7 @@ impl MockStorage {
         }
     }
 
-    fn mock_validators(&self) -> Vec<ValidatorInfo> {
+    pub fn mock_validators(&self) -> Vec<ValidatorInfo> {
         let mut result = vec![];
         for (i, (addr, node_config)) in self.node_config_set.iter().enumerate() {
             let private_key: bls12381::PrivateKey =
@@ -244,7 +233,6 @@ impl DbReader for MockStorage {
     }
 
     fn get_state_proof(&self, known_version: u64) -> Result<StateProof> {
-        let now = SystemTime::now().elapsed().unwrap().as_secs();
         let infos = self
             .mock_validators()
             .iter()
