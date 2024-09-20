@@ -19,9 +19,9 @@ node4 的端口是 2026
 ```
 base:
   role: "validator"
-  data_dir: "/Users/lightman/repos/gravity-sdk/node1/data"
+  data_dir: "/tmp/node1/data"
   waypoint:
-    from_file: "/Users/lightman/repos/gravity-sdk/node1/genesis/waypoint.txt"
+    from_file: "/tmp/node1/genesis/waypoint.txt"
 ```
 
 
