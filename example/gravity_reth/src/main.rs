@@ -1,7 +1,8 @@
 #![allow(missing_docs)]
-mod engine_api_adaptor;
+pub mod mock_gpei;
 mod cli;
 mod mock_eth_consensus_layer;
+
 
 use std::thread;
 /// clap [Args] for Engine related arguments.
@@ -19,7 +20,7 @@ pub struct EngineArgs {
 
 use clap::Parser;
 use reth_node_core::{args::utils::DefaultChainSpecParser, rpc::types::optimism::genesis};
-use reth_node_builder::EngineNodeLauncher;
+use reth_node_builder::{engine_tree_config, EngineNodeLauncher};
 use reth_node_core::rpc::types::engine::ForkchoiceState;
 use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
 use reth_provider::providers::BlockchainProvider2;
@@ -42,6 +43,7 @@ fn run_server() {
                     let launcher = EngineNodeLauncher::new(
                         builder.task_executor().clone(),
                         builder.config().datadir(),
+                        engine_tree_config::TreeConfig::default(),
                     );
                     builder.launch_with(launcher)
                 })
