@@ -1,28 +1,28 @@
 base:
   role: "validator"
-  data_dir: "/Users/jingyue/projects/gravity-sdk/node1/data"
+  data_dir: "/tmp/node1/data"
   waypoint:
-    from_file: "/Users/jingyue/projects/gravity-sdk/node1/genesis/waypoint.txt"
+    from_file: "/tmp/node1/genesis/waypoint.txt"
 
 consensus:
   safety_rules:
     backend:
       type: "on_disk_storage"
-      path: /Users/jingyue/projects/gravity-sdk/node1/data/secure_storage.json
+      path: /tmp/node1/data/secure_storage.json
     initial_safety_rules_config:
       from_file:
         waypoint:
-          from_file: /Users/jingyue/projects/gravity-sdk/node1/genesis/waypoint.txt
-        identity_blob_path: /Users/jingyue/projects/gravity-sdk/node1/genesis/validator-identity.yaml
+          from_file: /tmp/node1/genesis/waypoint.txt
+        identity_blob_path: /tmp/node1/genesis/validator-identity.yaml
 
 validator_network:
   network_id: validator
   listen_address: "/ip4/127.0.0.1/tcp/2024"
   discovery_method: 
     file:
-      path: "/Users/jingyue/projects/gravity-sdk/discovery"
+      path: "/tmp/discovery"
       interval_secs: 3600
   mutual_authentication: true
   identity:
     type: "from_file"
-    path: /Users/jingyue/projects/gravity-sdk/node1/genesis/validator-identity.yaml
+    path: /tmp/node1/genesis/validator-identity.yaml
