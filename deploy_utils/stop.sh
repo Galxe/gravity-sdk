@@ -1,9 +1,7 @@
-node_arg=$1
+#!/bin/bash
 
-if [ -z ${node_arg} ]; then
-    cat *.pid | xargs kill -9
-    rm *.pid
-else
-    cat ${node_arg}.pid | xargs kill -9
-    rm ${node_arg}.pid
-fi
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+WORKSPACE=$SCRIPT_DIR/..
+
+cat ${WORKSPACE}/script/node.pid | xargs kill -9
+rm ${WORKSPACE}/script/node.pid

@@ -17,7 +17,7 @@ consensus:
 
 validator_network:
   network_id: validator
-  listen_address: "/ip4/127.0.0.1/tcp/2026"
+  listen_address: "/ip4/127.0.0.1/tcp/6180"
   discovery_method: 
     file:
       path: "/tmp/discovery"
