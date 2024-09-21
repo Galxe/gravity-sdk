@@ -10,7 +10,7 @@ use futures::{channel::oneshot, SinkExt};
 use serde::{Deserialize, Serialize};
 use tokio::runtime::Runtime;
 
-use crate::ApplicationNetworkInterfaces;
+use crate::{ApplicationNetworkInterfaces, GTxn, GravityConsensusEngineInterface};
 use crate::consensus_execution_adapter::ConsensusExecutionAdapter;
 
 /// Extracts all network configs from the given node config
@@ -96,24 +96,22 @@ pub async fn mock_mempool_client_sender(mut mc_sender: aptos_mempool::MempoolCli
 }
 
 pub async fn mock_execution_txn_submitter(adapter: ConsensusExecutionAdapter) {
-    let addr = aptos_types::account_address::AccountAddress::random();
+    // let addr = aptos_types::account_address::AccountAddress::random();
     let mut seq_num = 0;
     loop {
-        let txn: SignedTransaction = SignedTransaction::new(
-            RawTransaction::new_script(
-                addr.clone(),
-                seq_num,
-                Script::new(vec![], vec![], vec![]),
-                0,
-                0,
-                SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() + 60,
-                ChainId::test(),
-            ),
-            aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing().public_key(),
-            aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap(),
-        );
+        let txn = GTxn {
+            sequence_number: seq_num,
+            max_gas_amount: 0,
+            gas_unit_price: 0,
+            expiration_timestamp_secs: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() + 60,
+            chain_id: ChainId::test().to_u8(),
+            txn_bytes: vec![],
+            public_key: aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing().public_key().to_bytes(),
+            signature: aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap().to_bytes(),
+        };
         seq_num += 1;
-        adapter.send_valid_transactions(vec![txn]).await.expect("ok");
+        let mock_block_id: [u8; 32] = [0; 32];
+        adapter.send_valid_transactions(mock_block_id, vec![txn]).await.expect("ok");
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
 }

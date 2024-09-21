@@ -55,6 +55,7 @@ pub enum GCEIError {
 /// This trait defines the interface for a consensus process engine.
 /// It outlines the key operations that any consensus engine should implement
 /// to participate in the blockchain consensus process.
+#[async_trait::async_trait]
 pub trait GravityConsensusEngineInterface: Send + Sync {
     /// Initialize the consensus engine.
     ///
@@ -63,7 +64,7 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     /// - Setting up initial state
     /// - Connecting to the network
     /// - Loading configuration
-    fn init();
+    fn init(&mut self);
 
     /// Receive and process valid transactions.
     ///
@@ -71,7 +72,7 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     /// - Accepting incoming transactions from the network or mempool
     /// - Validating the transactions
     /// - Adding valid transactions to the local transaction pool
-    fn send_valid_transactions(block_id : [u8; 32], txns: Vec<GTxn>) -> anyhow::Result<(), GCEIError>;
+    async fn send_valid_transactions(&self, block_id : [u8; 32], txns: Vec<GTxn>) -> anyhow::Result<(), GCEIError>;
 
     /// Poll for ordered blocks.
     ///
@@ -82,7 +83,7 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     ///
     /// TODO(gravity_xiejian): use txn id rather than total txn in block
     /// Returns: Option<Block> - The next ordered block, if available
-    fn receive_ordered_block() -> anyhow::Result<([u8; 32], Vec<GTxn>), GCEIError>;
+    async fn receive_ordered_block(&mut self) -> anyhow::Result<([u8; 32], Vec<GTxn>), GCEIError>;
 
     /// Submit computation results.
     ///
@@ -92,7 +93,7 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     ///
     /// Parameters:
     /// - `result`: The computation result to be submitted
-    fn send_compute_res(block_id: [u8; 32], res: [u8; 32]) -> anyhow::Result<(), GCEIError>;
+    async fn send_compute_res(&self, block_id: [u8; 32], res: [u8; 32]) -> anyhow::Result<(), GCEIError>;
 
     /// Submit Block head.
     ///
@@ -102,7 +103,7 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     ///
     /// Parameters:
     /// - `result`: The computation result to be submitted
-    fn send_block_head(block_id: [u8; 32], res: [u8; 32]) -> anyhow::Result<(), GCEIError>;
+    async fn send_block_head(&self, block_id: [u8; 32], res: [u8; 32]) -> anyhow::Result<(), GCEIError>;
 
     /// Commit batch finalized block IDs.
     ///
@@ -112,10 +113,10 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     ///
     /// Parameters:
     /// - `block_ids`: A vector of block IDs that have been finalized
-    fn receive_commit_block_ids() -> anyhow::Result<Vec<[u8; 32]>, GCEIError>;
+    async fn receive_commit_block_ids(&self) -> anyhow::Result<Vec<[u8; 32]>, GCEIError>;
 
     /// Return the commit ids, the consensus can delete these transactions after submitting.
-    fn send_persistent_block_id(block_id : [u8; 32]) -> anyhow::Result<(), GCEIError>;
+    async fn send_persistent_block_id(&self, block_id : [u8; 32]) -> anyhow::Result<(), GCEIError>;
 }
 
 /// Runs an Gravity validator or fullnode

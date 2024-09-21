@@ -40,7 +40,7 @@ impl UseCaseAwareTransaction for SignedTransaction {
         use UseCaseKey::*;
 
         match self.payload() {
-            Script(_) | ModuleBundle(_) | Multisig(_) => Others,
+            Script(_) | ModuleBundle(_) | Multisig(_) | GTxnBytes(_) => Others,
             EntryFunction(entry_fun) => {
                 let module_id = entry_fun.module();
                 if module_id.address().is_special() {

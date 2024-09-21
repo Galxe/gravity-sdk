@@ -420,6 +420,7 @@ pub enum TransactionPayload {
     /// A multisig transaction that allows an owner of a multisig account to execute a pre-approved
     /// transaction as the multisig account.
     Multisig(Multisig),
+    GTxnBytes(Vec<u8>),
 }
 
 impl TransactionPayload {
@@ -459,6 +460,19 @@ pub struct GravityExtension {
     block_id: HashValue,
     txn_index_in_block: u32,
     txn_count_in_block: u32,
+}
+
+impl GravityExtension {
+    pub fn new(block_id: HashValue,
+               txn_index_in_block: u32,
+               txn_count_in_block: u32,
+    ) -> Self {
+        Self {
+            block_id,
+            txn_index_in_block,
+            txn_count_in_block,
+        }
+    }
 }
 
 /// A transaction that has been signed.
@@ -555,6 +569,21 @@ impl SignedTransaction {
         }
     }
 
+    pub fn new_gtxn_signed_transaction(
+        raw_txn: RawTransaction,
+        authenticator: TransactionAuthenticator,
+        g_ext: GravityExtension,
+    ) -> SignedTransaction {
+        SignedTransaction {
+            raw_txn,
+            authenticator,
+            raw_txn_size: OnceCell::new(),
+            authenticator_size: OnceCell::new(),
+            committed_hash: OnceCell::new(),
+            g_ext,
+        }
+    }
+
     pub fn new(
         raw_txn: RawTransaction,
         public_key: Ed25519PublicKey,
@@ -568,6 +597,23 @@ impl SignedTransaction {
             authenticator_size: OnceCell::new(),
             committed_hash: OnceCell::new(),
             g_ext: Default::default(),
+        }
+    }
+
+    pub fn new_with_gtxn(
+        raw_txn: RawTransaction,
+        public_key: Ed25519PublicKey,
+        signature: Ed25519Signature,
+        g_ext: GravityExtension,
+    ) -> SignedTransaction {
+        let authenticator = TransactionAuthenticator::ed25519(public_key, signature);
+        SignedTransaction {
+            raw_txn,
+            authenticator,
+            raw_txn_size: OnceCell::new(),
+            authenticator_size: OnceCell::new(),
+            committed_hash: OnceCell::new(),
+            g_ext,
         }
     }
 

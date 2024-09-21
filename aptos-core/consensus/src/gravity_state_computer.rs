@@ -18,24 +18,24 @@ use std::{boxed::Box, sync::Arc};
 use std::time::Duration;
 use futures_channel::{mpsc, oneshot};
 use futures_channel::mpsc::UnboundedReceiver;
-use futures_channel::oneshot::Sender;
 use aptos_executor::block_executor::BlockExecutor;
 use aptos_mempool::MempoolClientRequest;
 use aptos_types::block_executor::partitioner::ExecutableBlock;
+use aptos_types::transaction::SignedTransaction;
 use crate::state_computer::{ExecutionProxy, PipelineExecutionResult, StateComputeResultFut};
 
 pub struct ConsensusAdapterArgs {
     pub mempool_sender: mpsc::Sender<MempoolClientRequest>,
     pub pipeline_block_sender:
-        mpsc::UnboundedSender<(HashValue, Block, oneshot::Sender<HashValue>)>,
+        mpsc::UnboundedSender<(HashValue, HashValue, Vec<SignedTransaction>, oneshot::Sender<HashValue>)>,
     pub pipeline_block_receiver:
-        Option<mpsc::UnboundedReceiver<(HashValue, Block, oneshot::Sender<HashValue>)>>,
+        Option<mpsc::UnboundedReceiver<(HashValue, HashValue, Vec<SignedTransaction>, oneshot::Sender<HashValue>)>>,
     pub committed_blocks_sender: mpsc::Sender<Vec<HashValue>>,
     pub committed_blocks_receiver: mpsc::Receiver<Vec<HashValue>>,
 }
 
 impl ConsensusAdapterArgs {
-    pub fn pipeline_block_receiver(&mut self) -> Option<UnboundedReceiver<(HashValue, Block, Sender<HashValue>)>> {
+    pub fn pipeline_block_receiver(&mut self) -> Option<UnboundedReceiver<(HashValue, HashValue, Vec<SignedTransaction>, oneshot::Sender<HashValue>)>> {
         self.pipeline_block_receiver.take()
     }
     pub fn new(mempool_sender: mpsc::Sender<MempoolClientRequest>) -> Self {
@@ -56,7 +56,7 @@ impl ConsensusAdapterArgs {
 pub struct GravityExecutionProxy {
     pub aptos_state_computer: Arc<ExecutionProxy>,
     pipeline_block_sender:
-        mpsc::UnboundedSender<(HashValue, Block, oneshot::Sender<HashValue>)>,
+        mpsc::UnboundedSender<(HashValue, HashValue, Vec<SignedTransaction>, oneshot::Sender<HashValue>)>,
 }
 
 impl GravityExecutionProxy {
@@ -92,8 +92,9 @@ impl StateComputer for GravityExecutionProxy {
         parent_block_id: HashValue,
         randomness: Option<Randomness>,
     ) -> StateComputeResultFut {
+        let txns = self.aptos_state_computer.get_block_txns(block).await;
         let (block_result_sender, block_result_receiver) = oneshot::channel();
-        self.pipeline_block_sender.clone().send((parent_block_id, block.clone(), block_result_sender)).await.expect("what the fuck");
+        self.pipeline_block_sender.clone().send((parent_block_id, block.id(), txns, block_result_sender)).await.expect("what happened");
 
         Box::pin(async move {
             let res = block_result_receiver.await;

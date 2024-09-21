@@ -35,6 +35,7 @@ use aptos_types::{
 use fail::fail_point;
 use futures::{future::BoxFuture, SinkExt, StreamExt};
 use std::{boxed::Box, sync::Arc, time::Duration};
+use std::os::macos::raw::stat;
 use tokio::sync::Mutex as AsyncMutex;
 
 pub type StateComputeResultFut = BoxFuture<'static, ExecutorResult<PipelineExecutionResult>>;
@@ -102,6 +103,23 @@ pub struct ExecutionProxy {
 }
 
 impl ExecutionProxy {
+    pub async fn get_block_txns(&self, block: &Block) -> Vec<SignedTransaction> {
+        let MutableState {
+            validators,
+            payload_manager,
+            transaction_shuffler,
+            block_executor_onchain_config,
+            transaction_deduper,
+            is_randomness_enabled,
+        } = self
+            .state
+            .read()
+            .as_ref()
+            .cloned()
+            .expect("must be set within an epoch");
+        let (txns, _) = payload_manager.get_transactions(block).await.unwrap();
+        txns
+    }
     pub fn new(
         executor: Arc<dyn BlockExecutorTrait>,
         txn_notifier: Arc<dyn TxnNotifier>,

@@ -95,6 +95,10 @@ impl ChainId {
             false
         }
     }
+
+    pub fn to_u8(&self) -> u8 {
+        self.0
+    }
 }
 
 pub fn deserialize_config_chain_id<'de, D>(
