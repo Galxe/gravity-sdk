@@ -523,7 +523,7 @@ impl RoundManager {
         let proposal = proposal_generator
             .generate_proposal(new_round_event.round, proposer_election, callback)
             .await?;
-        println!("generate one new proposal");
+        println!("generate block size is {:?}", proposal.payload().as_ref().unwrap().len());
         let signature = safety_rules.lock().sign_proposal(&proposal)?;
         let signed_proposal =
             Block::new_proposal_from_block_data_and_signature(proposal, signature);
@@ -734,6 +734,7 @@ impl RoundManager {
             },
         };
 
+        println!("the timeout_vote is timeous {:?}", timeout_vote.is_timeout());
         if !timeout_vote.is_timeout() {
             let timeout = timeout_vote
                 .generate_2chain_timeout(self.block_store.highest_quorum_cert().as_ref().clone());
@@ -1467,7 +1468,7 @@ impl RoundManager {
                     }
                 },
                 proposal = buffered_proposal_rx.select_next_some() => {
-                    println!("receive proposal");
+                    println!("receive proposal {:?}", proposal);
                     let mut proposals = vec![proposal];
                     while let Some(Some(proposal)) = buffered_proposal_rx.next().now_or_never() {
                         proposals.push(proposal);

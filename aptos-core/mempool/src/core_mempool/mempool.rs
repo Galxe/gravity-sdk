@@ -107,6 +107,7 @@ impl Mempool {
         hash: &HashValue,
         reason: &DiscardedVMStatus,
     ) {
+        println!("process reject transaction");
         if *reason == DiscardedVMStatus::SEQUENCE_NUMBER_TOO_NEW {
             self.log_reject_transaction(sender, sequence_number, counters::COMMIT_IGNORED_LABEL);
             // Do not remove the transaction from mempool
@@ -315,6 +316,7 @@ impl Mempool {
         );
 
         let submitted_by_label = txn_info.insertion_info.submitted_by_label();
+        println!("insert one transaction");
         let status = self.transactions.insert(txn_info);
         let now = aptos_infallible::duration_since_epoch().as_millis() as u64;
 
@@ -383,6 +385,7 @@ impl Mempool {
         return_non_full: bool,
         exclude_transactions: BTreeMap<TransactionSummary, TransactionInProgress>,
     ) -> Vec<SignedTransaction> {
+        println!("enter mempool get_batch self transaction store {:?}", self.transactions.get_transactions().len());
         let start_time = Instant::now();
         let exclude_size = exclude_transactions.len();
         let mut inserted = HashSet::new();
@@ -409,6 +412,7 @@ impl Mempool {
                 continue;
             }
             let tx_seq = txn.sequence_number.transaction_sequence_number;
+            println!("the check txn is {:?}", txn);
             let txn_in_sequence = tx_seq > 0
                 && Self::txn_was_chosen(txn.address, tx_seq - 1, &inserted, &exclude_transactions);
             let account_sequence_number = self.transactions.get_sequence_number(&txn.address);
@@ -433,6 +437,7 @@ impl Mempool {
                     skipped_txn = (skipped_txn.0, skipped_txn.1 + 1);
                 }
             } else {
+                println!("skipped txn, addr {:?}, tx_seq is {:?}", txn.address, tx_seq);
                 skipped.insert((txn.address, tx_seq));
             }
         }
@@ -504,6 +509,7 @@ impl Mempool {
         }
 
         if !return_non_full && !full_bytes && (block.len() as u64) < max_txns {
+            println!("block clear, return_non_full {:?}, full_bytes {:?}, block len {:?}", return_non_full, full_bytes, block.len());
             block.clear();
         }
 
@@ -511,6 +517,9 @@ impl Mempool {
         counters::MEMPOOL_SERVICE_BYTES_GET_BLOCK.observe(total_bytes as f64);
         for transaction in &block {
             self.log_consensus_pulled_latency(transaction.sender(), transaction.sequence_number());
+        }
+        if block.len() >= 1 {
+            println!("get batch with id {:?} return block size is {:?}", block[0].g_ext().block_id,  block.len());
         }
         // TODO(gravity_byteyue): sort using Txn's index
         block

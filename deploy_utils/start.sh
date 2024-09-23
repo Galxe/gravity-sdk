@@ -20,7 +20,7 @@ function start_node() {
 node_arg=$1
 
 if [ -e ${WORKSPACE}/script/node.pid ]; then
-    pid=cat ${WORKSPACE}/script/node.pid
+    pid=$(cat ${WORKSPACE}/script/node.pid)
     if [ -d "/proc/$pid" ]; then
         echo ${node_arg} is started
         exit 1

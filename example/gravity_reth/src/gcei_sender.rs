@@ -2,12 +2,13 @@ use alloy::consensus::{Transaction, TxEnvelope};
 use alloy::eips::eip2718::Decodable2718;
 use alloy::primitives::B256;
 use anyhow::Ok;
-use gravity_sdk::{GTxn, GravityConsensusEngineInterface};
+use gravity_sdk::{GTxn, GravityConsensusEngineInterface, NodeConfig};
 use reth_ethereum_engine_primitives::EthEngineTypes;
 use reth_node_api::EngineTypes;
 use reth_payload_builder::PayloadId;
 use reth_primitives::Bytes;
 use std::collections::HashSet;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct GCEISender<T: GravityConsensusEngineInterface> {
     curret_block_id: Option<PayloadId>,
@@ -17,9 +18,10 @@ pub struct GCEISender<T: GravityConsensusEngineInterface> {
 
 impl<T: GravityConsensusEngineInterface> GCEISender<T> {
     pub fn new(chain_id: u64) -> Self {
+        let node_config = NodeConfig::load_from_path("/Users/jingyue/projects/gravity-sdk/node1/genesis/validator.yaml").unwrap();
         Self {
             curret_block_id: None,
-            gcei_sender: T::init(),
+            gcei_sender: T::init(node_config),
             chain_id: chain_id,
         }
     }
@@ -71,9 +73,10 @@ impl<T: GravityConsensusEngineInterface> GCEISender<T> {
             .transactions;
         let mut gtxns = Vec::new();
         bytes.into_iter().enumerate().for_each(|(idx, bytes)| {
+            let secs = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() + 60 * 60 * 24;
             if eth_txns.is_empty() {
                 // when eth txns is empty, we need mock a txn
-                let gtxn = GTxn::new(0, 0, 0, 24 * 60 * 60, self.chain_id, bytes);
+                let gtxn = GTxn::new(0, 0, 0, secs, self.chain_id, bytes);
                 gtxns.push(gtxn);
                 return;
             }
@@ -88,13 +91,14 @@ impl<T: GravityConsensusEngineInterface> GCEISender<T> {
                 tx_envelope.nonce(),
                 tx_envelope.gas_limit() as u64,
                 tx_envelope.gas_price().map(|x| x as u64).unwrap_or(0),
-                60 * 60 * 24, // hardcode 1day
+                secs, // hardcode 1day
                 tx_envelope.chain_id().map(|x| x).unwrap_or(0),
                 bytes,
             );
+            println!("expiration time second is {:?}", secs);
             gtxns.push(gtxn);
         });
-        println!("Submit valid transactions: {:?}", gtxns.len());
+        println!("Submit valid transactions: {:?}, block id {:?}, payload is {:?}", gtxns.len(), self.payload_id_to_slice(&payload_id), payload_id);
         self.curret_block_id = Some(payload_id.clone());
         self.gcei_sender
             .send_valid_block_transactions(self.payload_id_to_slice(&payload_id), gtxns)
@@ -127,6 +131,7 @@ impl<T: GravityConsensusEngineInterface> GCEISender<T> {
             .await
             .map_err(|e| anyhow::anyhow!(e))?;
         let payload_id = self.slice_to_payload_id(&res.0);
+        println!("verify the polling_order_block payload_id {:?}, curret_block_id is {:?}, is same {:?}", payload_id, self.curret_block_id, Some(payload_id) == self.curret_block_id);
         if self.curret_block_id == Some(payload_id) {
             let mut payload: <EthEngineTypes as EngineTypes>::ExecutionPayloadV3 =
                 serde_json::from_slice(res.1[0].get_bytes()).map_err(|e| anyhow::anyhow!(e))?;
@@ -151,7 +156,9 @@ impl<T: GravityConsensusEngineInterface> GCEISender<T> {
         if self.curret_block_id.is_none() {
             return Err(anyhow::anyhow!("Block id is none"));
         }
+        println!("current block id is not none");
         let block_id = self.payload_id_to_slice(&self.curret_block_id.unwrap());
+        println!("submit compute res block id is {:?}", block_id);
 
         let mut compute_res_bytes = [0u8; 32];
         compute_res_bytes.copy_from_slice(&compute_res.as_slice());
@@ -166,10 +173,11 @@ impl<T: GravityConsensusEngineInterface> GCEISender<T> {
             .receive_commit_block_ids()
             .await
             .map_err(|e| anyhow::anyhow!(e))?;
-        let payload: HashSet<PayloadId> = payload_id_bytes
+        let payload: HashSet<PayloadId> = payload_id_bytes.clone()
             .into_iter()
             .map(|x| self.slice_to_payload_id(&x))
             .collect();
+        println!("the polling submit blocks payload is {:?}, current is {:?}, block ids {:?}", payload, self.curret_block_id, payload_id_bytes);
         if self.curret_block_id.is_some() && payload.contains(&self.curret_block_id.unwrap()) {
             return Ok(());
         }

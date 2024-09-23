@@ -71,7 +71,7 @@ fn update_counters_for_ordered_blocks(ordered_blocks: &[Arc<PipelinedBlock>]) {
 ///             ├--------> C2
 ///             ╰--------------> D3
 pub struct BlockStore {
-    inner: Arc<RwLock<BlockTree>>,
+    pub inner: Arc<RwLock<BlockTree>>,
     execution_client: Arc<dyn TExecutionClient>,
     /// The persistent storage backing up the in-memory data structure, every write should go
     /// through this before in-memory tree.

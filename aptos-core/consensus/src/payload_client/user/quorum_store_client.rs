@@ -82,7 +82,10 @@ impl QuorumStoreClient {
                 Err(anyhow::anyhow!("[consensus] did not receive GetBlockResponse on time").into())
             },
             Ok(resp) => match resp.map_err(anyhow::Error::from)?? {
-                GetPayloadResponse::GetPayloadResponse(payload) => Ok(payload),
+                GetPayloadResponse::GetPayloadResponse(payload) => {
+                    println!("the quorum store client payload is {:?}", payload);
+                    Ok(payload)
+                },
             },
         }
     }

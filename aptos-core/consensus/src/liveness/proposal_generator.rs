@@ -4,7 +4,7 @@
 
 use super::proposer_election::ProposerElection;
 use crate::{
-    block_storage::BlockReader,
+    block_storage::{BlockReader, BlockStore},
     counters::{
         CHAIN_HEALTH_BACKOFF_TRIGGERED, EXECUTION_BACKPRESSURE_ON_PROPOSAL_TRIGGERED,
         PIPELINE_BACKPRESSURE_ON_PROPOSAL_TRIGGERED, PROPOSER_DELAY_PROPOSAL,
@@ -235,7 +235,7 @@ pub struct ProposalGenerator {
     author: Author,
     // Block store is queried both for finding the branch to extend and for generating the
     // proposed block.
-    block_store: Arc<dyn BlockReader + Send + Sync>,
+    block_store: Arc<BlockStore>,
     // ProofOfStore manager is delivering the ProofOfStores.
     payload_client: Arc<dyn PayloadClient>,
     // Transaction manager is delivering the transactions.
@@ -276,7 +276,7 @@ impl ProposalGenerator {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         author: Author,
-        block_store: Arc<dyn BlockReader + Send + Sync>,
+        block_store: Arc<BlockStore>,
         payload_client: Arc<dyn PayloadClient>,
         time_service: Arc<dyn TimeService>,
         quorum_store_poll_time: Duration,
@@ -363,6 +363,7 @@ impl ProposalGenerator {
 
         let hqc = self.ensure_highest_quorum_cert(round)?;
 
+        println!("the block store is {}", self.block_store.inner.read());
         let (validator_txns, payload, timestamp) = if hqc.certified_block().has_reconfiguration() {
             // Reconfiguration rule - we propose empty blocks with parents' timestamp
             // after reconfiguration until it's committed
@@ -384,6 +385,7 @@ impl ProposalGenerator {
             // Avoid txn manager long poll if the root block has txns, so that the leader can
             // deliver the commit proof to others without delay.
             pending_blocks.push(self.block_store.commit_root());
+            println!("the pending blocks is {:?}", pending_blocks);
 
             // Exclude all the pending transactions: these are all the ancestors of
             // parent (including) up to the root (including).
@@ -472,8 +474,13 @@ impl ProposalGenerator {
                 )
                 .await
                 .context("Fail to retrieve payload")?;
-            println!("has pulled payload");
-
+            println!("has pulled payload, size is {:?}", payload.len());
+            // TODO(gravity_byteyue): Consensus under reth should not produce empty block. Maybe we should leave one comment here
+            // if validator_txns.is_empty() || payload.len() == 0 {
+            //     println!("generate one empty proposal");
+            //     tokio::time::sleep(Duration::from_millis(100)).await;
+            //     return Err(anyhow::anyhow!("ignore empty block"));
+            // }
             if !payload.is_direct()
                 && max_txns_from_block_to_execute.is_some()
                 && max_txns_from_block_to_execute.map_or(false, |v| payload.len() as u64 > v)
@@ -492,7 +499,6 @@ impl ProposalGenerator {
             proposer_election,
         );
 
-        // todo(gravity_byteyue): 下面的round对不上
         let block = if self.vtxn_config.enabled() {
             BlockData::new_proposal_ext(
                 validator_txns,

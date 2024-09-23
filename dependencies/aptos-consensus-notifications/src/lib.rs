@@ -95,6 +95,7 @@ impl ConsensusNotificationSender for ConsensusNotifier {
         transactions: Vec<Transaction>,
         subscribable_events: Vec<ContractEvent>,
     ) -> Result<(), Error> {
+        println!("called consensus notify new commit with txns {:?}", transactions);
         // Only send a notification if transactions have been committed
         if transactions.is_empty() {
             return Ok(());
@@ -126,11 +127,13 @@ impl ConsensusNotificationSender for ConsensusNotifier {
         if let Ok(response) =
             timeout(Duration::from_millis(self.timeout_ms), callback_receiver).await
         {
+            println!("the consensus commit notification send response is {:?}", response);
             match response {
                 Ok(consensus_notification_response) => consensus_notification_response.result,
                 Err(error) => Err(Error::UnexpectedErrorEncountered(format!("{:?}", error))),
             }
         } else {
+            println!("the consensus commit notification send timeout");
             Err(Error::TimeoutWaitingForStateSync)
         }
     }

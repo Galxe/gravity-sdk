@@ -246,6 +246,7 @@ impl TransactionStore {
                             .to_string(),
                     );
                 } else if current_version.get_gas_price() < txn.get_gas_price() {
+                    println!("remove because gas fee");
                     // Update txn if gas unit price is a larger value than before
                     if let Some(txn) = txns.remove(&txn_seq_num) {
                         self.index_remove(&txn);
@@ -295,10 +296,13 @@ impl TransactionStore {
                 .insert(txn.get_committed_hash(), (txn.get_sender(), txn_seq_num));
             self.sequence_numbers.insert(txn.get_sender(), acc_seq_num);
             self.size_bytes += txn.get_estimated_bytes();
+            println!("insert txn_seq_num {:?} into txns with addr {:?}", txn_seq_num, address);
             txns.insert(txn_seq_num, txn);
             self.track_indices();
         }
+        println!("before process_ready_transactions, size is {:?}", self.transactions.len());
         self.process_ready_transactions(&address, acc_seq_num);
+        println!("after process_ready_transactions, size is {:?}, whole {:?}", self.transactions.len(), self.transactions);
         MempoolStatus::new(MempoolStatusCode::Accepted)
     }
 
@@ -582,6 +586,7 @@ impl TransactionStore {
         }
         if let Some(txn_to_remove) = txn_to_remove {
             if let Some(txns) = self.transactions.get_mut(account) {
+                println!("remove one transaction in reject transaction");
                 txns.remove(&sequence_number);
             }
             self.index_remove(&txn_to_remove);
@@ -622,6 +627,7 @@ impl TransactionStore {
         let address = &txn.get_sender();
         if let Some(txns) = self.transactions.get(address) {
             if txns.is_empty() {
+                println!("remove at index_remove, addr {:?}", address);
                 self.transactions.remove(address);
                 self.sequence_numbers.remove(address);
             }
@@ -828,6 +834,7 @@ impl TransactionStore {
                     }
                 }
                 if let Some(txn) = txns.remove(&key.sequence_number) {
+                    println!("remove txn during gc, addr {:?}", &key.address);
                     let is_active = self.priority_index.contains(&txn);
                     let status = if is_active {
                         counters::GC_ACTIVE_TXN_LABEL

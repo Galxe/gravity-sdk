@@ -82,7 +82,7 @@ impl DirectMempoolQuorumStore {
             },
             Ok(resp) => match resp.map_err(anyhow::Error::from)?? {
                 QuorumStoreResponse::GetBatchResponse(txns) => {
-                    println!("pull internal received ok");
+                    println!("pull internal received ok, txn size is {:?}", txns.len());
                     Ok(txns)
                 },
                 _ => {
@@ -122,6 +122,7 @@ impl DirectMempoolQuorumStore {
             },
             Ok(txns) => (txns, counters::REQUEST_SUCCESS_LABEL),
         };
+        println!("handle_block_request get txn size is {:?}", txns.len());
         counters::quorum_store_service_latency(
             counters::GET_BATCH_LABEL,
             result,

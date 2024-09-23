@@ -29,3 +29,5 @@ validator_network:
 
 storage:
   dir: "/tmp/node1/data"
+
+mock_db_path: "/tmp/node1/genesis/nodes_config.json"

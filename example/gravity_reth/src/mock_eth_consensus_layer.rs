@@ -1,4 +1,4 @@
-use gravity_sdk::simple_consensus_engine::SimpleConsensusEngine;
+use gravity_sdk::{consensus_engine::GravityConsensusEngine, simple_consensus_engine::SimpleConsensusEngine};
 use reth_ethereum_engine_primitives::{EthEngineTypes, EthPayloadAttributes};
 use reth_node_core::rpc::types::engine::{ForkchoiceState, PayloadId, PayloadStatus, PayloadStatusEnum};
 use reth_rpc_api::{EngineApiClient, EngineEthApiClient};
@@ -11,7 +11,7 @@ use crate::gcei_sender::GCEISender;
 
 pub struct MockEthConsensusLayer<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> {
     engine_api_client: T,
-    gcei: GCEISender<SimpleConsensusEngine>,
+    gcei: GCEISender<GravityConsensusEngine>,
 }
 
 impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> MockEthConsensusLayer<T> {
@@ -23,7 +23,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> MockEthConsensusLayer<
     }
 
     pub(crate) async fn start_round(&mut self, genesis_hash: B256) -> Result<()> {
-        let hex_string = "0x1b7178ddc6982bb501c3785246cad6f5c62ab8db169674f08250d73b8ad2bfde";
+        let hex_string = "0x2f980576711e3617a5e4d83dd539548ec0f7792007d505a3d2e9674833af2d7c";
         let byte_array: [u8; 32] = <[u8; 32]>::from_hex(hex_string).expect("Invalid hex string");
         let fork_choice_state = ForkchoiceState {
             head_block_hash: B256::new(byte_array),
@@ -107,14 +107,19 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> MockEthConsensusLayer<
                     .context("Failed to submit payload")?;
                 // 3. submit compute res
                 if payload_status.latest_valid_hash.is_none() {
+                    println!("payload status latest valid hash is none");
                     continue;
                 }
+                println!("try to submit_compute_res");
                 self.gcei.submit_compute_res(payload_status.latest_valid_hash.unwrap()).await.expect("TODO: panic message");
                 // 4. polling submit blocks
                 if self.gcei.polling_submit_blocks().await.is_ok() {
+                    println!("return from polling_submit_blocks");
                     fork_choice_state = self.handle_payload_status(fork_choice_state, payload_status)?;
                     // 5. submit max persistence block id
                     self.gcei.submit_max_persistence_block_id().await;
+                } else {
+                    println!("failed to polling_submit_blocks");
                 }
             }
 

@@ -160,6 +160,7 @@ impl TTLIndex {
         let ttl_transactions = self.data.iter().cloned().collect();
         self.data.clear();
         self.data.append(&mut active);
+        println!("the ttl_transactions are {:?}", ttl_transactions);
         ttl_transactions
     }
 

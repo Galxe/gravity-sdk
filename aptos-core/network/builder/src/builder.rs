@@ -221,7 +221,6 @@ impl NetworkBuilder {
 
         network_builder.discovery_listeners = Some(Vec::new());
         network_builder.setup_discovery(config, reconfig_subscription_service);
-
         // Ensure there are no duplicate source types
         let set: HashSet<_> = network_builder
             .discovery_listeners

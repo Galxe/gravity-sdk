@@ -18,8 +18,7 @@ use aptos_logger::prelude::*;
 use aptos_types::{block_info::BlockInfo, ledger_info::LedgerInfoWithSignatures};
 use mirai_annotations::{checked_verify_eq, precondition};
 use std::{
-    collections::{vec_deque::VecDeque, HashMap, HashSet},
-    sync::Arc,
+    collections::{vec_deque::VecDeque, HashMap, HashSet}, fmt::{self, Display}, sync::Arc
 };
 
 /// This structure is a wrapper of [`ExecutedBlock`](aptos_consensus_types::pipelined_block::PipelinedBlock)
@@ -89,6 +88,53 @@ pub struct BlockTree {
     pruned_block_ids: VecDeque<HashValue>,
     /// Num pruned blocks to keep in memory.
     max_pruned_blocks_in_mem: usize,
+}
+
+impl BlockTree {
+    pub fn to_string(&self) -> String {
+        let mut result = String::new();
+        result.push_str("BlockTree Information:\n");
+        result.push_str(&format!("HighCommitQC:     {:?}\n", self.highest_commit_cert));
+        result.push_str(&format!("HighOrderQC:      {:?}\n", self.highest_ordered_cert));
+        result.push_str(&format!("HighQC:           {:?}\n", self.highest_quorum_cert));
+        result.push_str(&format!("High2Chain:       {:?}\n", self.highest_2chain_timeout_cert));
+        result.push_str(&format!("OrderRoot:        {:?}\n", self.ordered_root_id));
+        result.push_str(&format!("CommitRoot:       {:?}\n", self.commit_root_id));
+        result.push_str("\nTree Structure:\n");
+        // 递归构建树结构
+        self.build_tree_string(&self.ordered_root_id, &mut result, "", true);
+        result
+    }
+    fn build_node_string(&self, block_id: &HashValue) -> String {
+        let block = self.id_to_block.get(block_id).unwrap();
+        let transactions = block.executed_block.input_transactions();
+        format!("input {:?}\n, payload is {:?}", transactions, block.executed_block.payload())
+    }
+    fn build_tree_string(&self, block_id: &HashValue, result: &mut String, prefix: &str, is_last: bool) {
+        if let Some(block) = self.id_to_block.get(block_id) {
+            // 添加当前区块信息
+            let node_info = self.build_node_string(block_id);
+            result.push_str(&format!("{}{}── Block ID: {:?}\n", prefix, if is_last { "└" } else { "├" }, block_id));
+            // 为交易信息添加缩进
+            let transaction_prefix = format!("{}{}   ", prefix, if is_last { " " } else { "│" });
+            for line in node_info.lines() {
+                result.push_str(&format!("{}│  {}\n", transaction_prefix, line));
+            }
+            // 为子节点准备新的前缀
+            let new_prefix = format!("{}{}   ", prefix, if is_last { " " } else { "│" });
+            // 递归添加子节点
+            let children: Vec<_> = block.children.iter().collect();
+            for (i, child_id) in children.iter().enumerate() {
+                let is_last_child = i == children.len() - 1;
+                self.build_tree_string(child_id, result, &new_prefix, is_last_child);
+            }
+        }
+    }
+}
+impl Display for BlockTree {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.to_string())
+    }
 }
 
 impl BlockTree {
@@ -227,6 +273,7 @@ impl BlockTree {
         block: PipelinedBlock,
     ) -> anyhow::Result<Arc<PipelinedBlock>> {
         let block_id = block.id();
+        println!("insert block with block id {:?}", block_id);
         if let Some(existing_block) = self.get_block(&block_id) {
             debug!("Already had block {:?} for id {:?} when trying to add another block {:?} for the same id",
                        existing_block,

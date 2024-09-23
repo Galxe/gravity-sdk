@@ -4,13 +4,15 @@ mod mock_db;
 mod network;
 mod storage;
 pub mod simple_consensus_engine;
+pub mod utils;
 
-use aptos_config::config::NodeConfig;
+pub use aptos_config::config::NodeConfig;
 use bootstrap::{check_bootstrap_config, start};
 use clap::Parser;
-use std::path::PathBuf;
 use std::fmt::Display;
+use std::path::PathBuf;
 
+#[derive(Clone, Default)]
 pub struct GTxn {
     sequence_number: u64,
     /// Maximal total gas to spend for this transaction.
@@ -78,7 +80,7 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     /// - Setting up initial state
     /// - Connecting to the network
     /// - Loading configuration
-    fn init() -> Self;
+    fn init(node_config: NodeConfig) -> Self;
 
     /// Receive and process valid transactions.
     ///
@@ -144,8 +146,6 @@ pub struct GravityNodeArgs {
     #[clap(short = 'f', long)]
     /// Path to node configuration file (or template for local test mode).
     node_config_path: Option<PathBuf>,
-    #[clap(long)]
-    mockdb_config_path: Option<PathBuf>,
 }
 
 impl GravityNodeArgs {
@@ -153,7 +153,6 @@ impl GravityNodeArgs {
         // Start the node
         start(
             check_bootstrap_config(self.node_config_path),
-            self.mockdb_config_path,
         )
         .expect("Node should start correctly");
     }

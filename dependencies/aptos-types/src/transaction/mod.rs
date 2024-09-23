@@ -83,7 +83,7 @@ pub type AtomicVersion = AtomicU64;
 
 /// RawTransaction is the portion of a transaction that a client signs.
 #[derive(
-    Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize, CryptoHasher, BCSCryptoHash,
+    Clone, Hash, Eq, PartialEq, Serialize, Deserialize, CryptoHasher, BCSCryptoHash,
 )]
 pub struct RawTransaction {
     /// Sender's address.
@@ -111,6 +111,12 @@ pub struct RawTransaction {
 
     /// Chain ID of the Aptos network this transaction is intended for.
     chain_id: ChainId,
+}
+
+impl fmt::Debug for RawTransaction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RawTransaction").field("sender", &self.sender).field("sequence_number", &self.sequence_number).field("max_gas_amount", &self.max_gas_amount).field("gas_unit_price", &self.gas_unit_price).field("expiration_timestamp_secs", &self.expiration_timestamp_secs).field("chain_id", &self.chain_id).finish()
+    }
 }
 
 impl RawTransaction {
@@ -455,11 +461,11 @@ impl WriteSetPayload {
     }
 }
 
-#[derive(Default, Eq, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Default, Eq, Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct GravityExtension {
-    block_id: HashValue,
-    txn_index_in_block: u32,
-    txn_count_in_block: u32,
+    pub block_id: HashValue,
+    pub txn_index_in_block: u32,
+    pub txn_count_in_block: u32,
 }
 
 impl GravityExtension {
@@ -547,9 +553,10 @@ impl Debug for SignedTransaction {
             "SignedTransaction {{ \n \
              {{ raw_txn: {:#?}, \n \
              authenticator: {:#?}, \n \
+             gext: {:#?}, \n \
              }} \n \
              }}",
-            self.raw_txn, self.authenticator
+            self.raw_txn, self.authenticator, self.g_ext
         )
     }
 }
@@ -615,6 +622,10 @@ impl SignedTransaction {
             committed_hash: OnceCell::new(),
             g_ext,
         }
+    }
+
+    pub fn g_ext(&self) -> &GravityExtension {
+        &self.g_ext
     }
 
     pub fn new_fee_payer(

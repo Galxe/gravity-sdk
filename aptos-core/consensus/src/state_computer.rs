@@ -34,7 +34,7 @@ use aptos_types::{
 };
 use fail::fail_point;
 use futures::{future::BoxFuture, SinkExt, StreamExt};
-use std::{boxed::Box, sync::Arc, time::Duration};
+use std::{boxed::Box, f64::consts::E, sync::Arc, time::Duration};
 use std::os::macos::raw::stat;
 use tokio::sync::Mutex as AsyncMutex;
 
@@ -178,10 +178,12 @@ impl ExecutionProxy {
 
         let input_txns = Block::combine_to_input_transactions(validator_txns, user_txns, metadata);
 
+        // TODO(gravity_byteyue): 下面的逻辑看一下
         // Adds StateCheckpoint/BlockEpilogue transaction if needed.
-        executed_block
-            .compute_result()
-            .transactions_to_commit(input_txns, executed_block.id())
+        // executed_block
+        //     .compute_result()
+        //     .transactions_to_commit(input_txns, executed_block.id())
+        input_txns
     }
 }
 
@@ -314,16 +316,25 @@ impl StateComputer for ExecutionProxy {
             .as_ref()
             .cloned()
             .expect("must be set within an epoch");
+        let mut committed_block_ids = vec![];
         for block in blocks {
             block_ids.push(block.id());
 
             if let Some(payload) = block.block().payload() {
                 payloads.push(payload.clone());
             }
+            if !block.input_transactions().is_empty() {
+                committed_block_ids.push(block.id());
+            }
+            println!("block id {:?} has input txns {:?}", block.id(), !block.input_transactions().is_empty());
 
-            txns.extend(self.transactions_to_commit(block, &validators, is_randomness_enabled));
+            let commit_transactions = self.transactions_to_commit(block, &validators, is_randomness_enabled);
+            if !commit_transactions.is_empty() {
+                txns.extend(commit_transactions);
+            }
             subscribable_txn_events.extend(block.subscribable_events());
         }
+        println!("the commit blocks is {:?}, txns are {:?}", committed_block_ids, txns);
 
         let executor = self.executor.clone();
         let proof = finality_proof.clone();
@@ -331,7 +342,7 @@ impl StateComputer for ExecutionProxy {
             "commit_block",
             tokio::task::spawn_blocking(move || {
                 executor
-                    .commit_blocks(block_ids, proof)
+                    .commit_blocks(committed_block_ids, proof)
                     .expect("Failed to commit blocks");
             })
             .await

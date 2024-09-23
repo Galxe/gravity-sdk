@@ -1,4 +1,5 @@
 node_arg=$1
+rm -rf /tmp/$node_arg
 
 mkdir -p /tmp/$node_arg
 mkdir -p /tmp/$node_arg/genesis

@@ -1,6 +1,8 @@
 use std::cell::RefCell;
 
 
+use aptos_config::config::NodeConfig;
+use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
 use aptos_infallible::Mutex;
 
 use crate::{GCEIError, GTxn, GravityConsensusEngineInterface};
@@ -13,7 +15,7 @@ pub struct SimpleConsensusEngine {
 
 #[async_trait::async_trait]
 impl GravityConsensusEngineInterface for SimpleConsensusEngine {
-    fn init() -> Self {
+    fn init(args: NodeConfig) -> Self {
         SimpleConsensusEngine {
             txns: Mutex::new(Vec::new()),
             block_id: Mutex::new([0; 32]),

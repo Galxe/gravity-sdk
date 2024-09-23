@@ -39,9 +39,7 @@ use aptos_vm_validator::vm_validator::{get_account_sequence_number, TransactionV
 use futures::{channel::oneshot, stream::FuturesUnordered};
 use rayon::prelude::*;
 use std::{
-    cmp,
-    sync::Arc,
-    time::{Duration, Instant},
+    cmp, sync::Arc, thread::sleep, time::{Duration, Instant}
 };
 use tokio::runtime::Handle;
 
@@ -519,7 +517,7 @@ pub(crate) fn process_quorum_store_request<NetworkClient, TransactionValidator>(
             exclude_transactions,
             callback,
         ) => {
-            let txns;
+            let mut txns;
             {
                 let lock_timer = counters::mempool_service_start_latency_timer(
                     counters::GET_BLOCK_LOCK_LABEL,
@@ -546,6 +544,7 @@ pub(crate) fn process_quorum_store_request<NetworkClient, TransactionValidator>(
                 );
                 txns =
                     mempool.get_batch(max_txns, max_bytes, return_non_full, exclude_transactions);
+                println!("process_quorum_store_request get batch txn size is {:?}", txns.len());
             }
 
             // mempool_service_transactions is logged inside get_batch
