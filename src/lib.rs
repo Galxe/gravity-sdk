@@ -3,7 +3,7 @@ mod network;
 mod storage;
 mod consensus_execution_adapter;
 
-use std::{collections::{HashMap, HashSet}, path::PathBuf, sync::Arc, thread};
+use std::{collections::{HashMap, HashSet}, fmt::Display, path::{Display, PathBuf}, sync::Arc, thread};
 use aptos_config::{config::{NodeConfig, Peer, PeerRole}, network_id::NetworkId};
 use aptos_crypto::{x25519};
 use aptos_event_notifications::EventNotificationSender;
@@ -45,6 +45,64 @@ pub struct GTxn {
 #[derive(Debug)]
 pub enum GCEIError {
     ConsensusError,
+}
+
+impl Display for GCEIError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Consensus Error")
+    }
+}
+
+impl GTxn {
+    pub fn new(
+        sequence_number: u64,
+        max_gas_amount: u64,
+        gas_unit_price: u64,
+        expiration_timestamp_secs: u64,
+        chain_id: u8,
+        txn_bytes: Vec<u8>,
+    ) -> Self {
+        Self {
+            sequence_number,
+            max_gas_amount,
+            gas_unit_price,
+            expiration_timestamp_secs,
+            chain_id,
+            txn_bytes,
+        }
+    }
+}
+
+pub struct GravityConsensusEngine;
+
+impl GravityConsensusEngineInterface for GravityConsensusEngine {
+    fn init() -> Self {
+        todo!()
+    }
+
+    fn send_valid_transactions(&self, block_id: [u8; 32], txns: Vec<GTxn>) -> anyhow::Result<(), GCEIError> {
+        todo!()
+    }
+
+    fn receive_ordered_block(&self, ) -> anyhow::Result<([u8; 32], Vec<GTxn>), GCEIError> {
+        todo!()
+    }
+
+    fn send_compute_res(&self, block_id: [u8; 32], res: [u8; 32]) -> anyhow::Result<(), GCEIError> {
+        todo!()
+    }
+
+    fn send_block_head(&self, block_id: [u8; 32], res: [u8; 32]) -> anyhow::Result<(), GCEIError> {
+        todo!()
+    }
+
+    fn receive_commit_block_ids(&self) -> anyhow::Result<Vec<[u8; 32]>, GCEIError> {
+        todo!()
+    }
+
+    fn send_persistent_block_id(&self, block_id: [u8; 32]) -> anyhow::Result<(), GCEIError> {
+        todo!()
+    }
 }
 
 /// GCEI: Gravity Consensus Engine Interface

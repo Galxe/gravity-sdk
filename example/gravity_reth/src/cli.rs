@@ -1,6 +1,5 @@
-//! CLI definition and entrypoint to executable
-
 use clap::{value_parser, Parser, Subcommand};
+use reth::cli::Commands;
 use reth_chainspec::ChainSpec;
 use reth_cli::chainspec::ChainSpecParser;
 use reth_cli_commands::{
@@ -8,11 +7,9 @@ use reth_cli_commands::{
     node::{self, NoArgs},
     p2p, prune, recover, stage,
 };
-
-
-use reth_node_core::args::LogArgs;
 use reth_cli_runner::CliRunner;
 use reth_db::DatabaseEnv;
+use reth_node_core::args::LogArgs;
 use reth_node_builder::{NodeBuilder, WithLaunchContext};
 use reth_node_core::args::utils::DefaultChainSpecParser;
 use reth_node_ethereum::{EthExecutorProvider, EthereumNode};
@@ -20,12 +17,13 @@ use reth_tracing::FileWorkerGuard;
 use std::{ffi::OsString, fmt, future::Future, sync::Arc};
 use tracing::info;
 
+
 /// The main reth cli interface.
 ///
 /// This is the entrypoint to the executable.
 #[derive(Debug, Parser)]
-#[command(author)]
-pub struct Cli<C: ChainSpecParser = DefaultChainSpecParser, Ext: clap::Args + fmt::Debug = NoArgs> {
+#[command(author, about = "Reth", long_about = None)]
+pub(crate) struct Cli<C: ChainSpecParser = DefaultChainSpecParser, Ext: clap::Args + fmt::Debug = NoArgs> {
     /// The command to run
     #[command(subcommand)]
     command: Commands<C, Ext>,
@@ -122,7 +120,7 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
     ///     })
     ///     .unwrap();
     /// ````
-    pub fn run<L, Fut>(mut self, launcher: L) -> eyre::Result<()>
+    pub(crate) fn run<L, Fut>(mut self, launcher: L) -> eyre::Result<()>
     where
         L: FnOnce(WithLaunchContext<NodeBuilder<Arc<DatabaseEnv>, C::ChainSpec>>, Ext) -> Fut,
         Fut: Future<Output = eyre::Result<()>>,
@@ -137,9 +135,11 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
         let runner = CliRunner::default();
         match self.command {
             Commands::Node(command) => {
+                println!("Running node command, {:?}", command.dev);
                 runner.run_command_until_exit(|ctx| command.execute(ctx, launcher))
             }
             Commands::Init(command) => {
+                println!("Running init command");
                 runner.run_blocking_until_ctrl_c(command.execute::<EthereumNode>())
             }
             Commands::InitState(command) => {
@@ -163,6 +163,7 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
                 runner.run_command_until_exit(|ctx| command.execute::<EthereumNode>(ctx))
             }
             Commands::Prune(command) => runner.run_until_ctrl_c(command.execute::<EthereumNode>()),
+            Commands::Debug(command) => {todo!()},
         }
     }
 
@@ -174,45 +175,4 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
         let guard = self.logs.init_tracing()?;
         Ok(guard)
     }
-}
-
-/// Commands to be executed
-#[derive(Debug, Subcommand)]
-pub enum Commands<C: ChainSpecParser, Ext: clap::Args + fmt::Debug> {
-    /// Start the node
-    #[command(name = "node")]
-    Node(Box<node::NodeCommand<C, Ext>>),
-    /// Initialize the database from a genesis file.
-    #[command(name = "init")]
-    Init(init_cmd::InitCommand<C>),
-    /// Initialize the database from a state dump file.
-    #[command(name = "init-state")]
-    InitState(init_state::InitStateCommand<C>),
-    /// This syncs RLP encoded blocks from a file.
-    #[command(name = "import")]
-    Import(import::ImportCommand<C>),
-    /// Dumps genesis block JSON configuration to stdout.
-    DumpGenesis(dump_genesis::DumpGenesisCommand<C>),
-    /// Database debugging utilities
-    #[command(name = "db")]
-    Db(db::Command<C>),
-    /// Manipulate individual stages.
-    #[command(name = "stage")]
-    Stage(stage::Command<C>),
-    /// P2P Debugging utilities
-    #[command(name = "p2p")]
-    P2P(p2p::Command<C>),
-    /// Generate Test Vectors
-    #[cfg(feature = "dev")]
-    #[command(name = "test-vectors")]
-    TestVectors(reth_cli_commands::test_vectors::Command),
-    /// Write config to stdout
-    #[command(name = "config")]
-    Config(config_cmd::Command),
-    /// Scripts for node recovery
-    #[command(name = "recover")]
-    Recover(recover::Command<C>),
-    /// Prune according to the configuration without any limits
-    #[command(name = "prune")]
-    Prune(prune::PruneCommand<C>),
 }

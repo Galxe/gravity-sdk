@@ -10,18 +10,19 @@ use reth_node_core::rpc::types::ExecutionPayloadV3;
 use reth_primitives::hex::FromHex;
 use reth_rpc_types::engine::{payload, ForkchoiceUpdated, PayloadAttributes};
 use reth_rpc_types::{ExecutionPayloadV2, Transaction};
-use crate::mock_gpei::MockGPEI;
+use crate::gcei_sender::GCEISender;
+
 
 pub struct MockEthConsensusLayer<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> {
     engine_api_client: T,
-    gpei: MockGPEI,
+    gcei: GCEISender<T>,
 }
 
 impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> MockEthConsensusLayer<T> {
     pub(crate) fn new(client: T) -> Self {  // <1>
         Self {
             engine_api_client: client,
-            gpei: MockGPEI::new(),
+            gcei: GCEISender::<T>::new(),
         }
     }
 
@@ -82,18 +83,15 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> MockEthConsensusLayer<
                 .await
                 .context("Failed to get payload")?;
             
-            let txns: Vec<_> = payload.execution_payload.payload_inner.payload_inner.transactions.iter().map(|txn_bytes| {
-                self.deserialization_txn(txn_bytes)
-            }).collect();
-
+            
             // 1. submit valid transactions
-            self.gpei.submit_valid_transactions(txns);
+            self.gcei.submit_valid_transactions(&payload_id, &payload.execution_payload);
             println!("Got payload: {:?}", payload);
             // submit payload
 
 
             // 2. polling order blocks
-            if self.gpei.polling_order_blocks().is_ok() {
+            if self.gcei.polling_order_blocks().is_ok() {
                 let payload_status = <T as EngineApiClient<EthEngineTypes>>::new_payload_v3(&self.engine_api_client, payload.execution_payload, Vec::new(),
                                                                                             parent_beacon_block_root)
                     .await
@@ -102,25 +100,19 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> MockEthConsensusLayer<
                 if payload_status.latest_valid_hash.is_none() {
                     continue;
                 }
-                self.gpei.submit_compute_res(payload_status.latest_valid_hash.unwrap());
+                self.gcei.submit_compute_res(payload_status.latest_valid_hash.unwrap());
                 // 4. polling submit blocks
-                if self.gpei.polling_submit_blocks().is_ok() {
+                if self.gcei.polling_submit_blocks().is_ok() {
                     // 根据 payload 的状态更新 ForkchoiceState
                     fork_choice_state = self.handle_payload_status(fork_choice_state, payload_status)?;
                     // 5. submit max persistence block id
-                    self.gpei.submit_max_persistence_block_id();
+                    self.gcei.submit_max_persistence_block_id();
                 }
             }
 
         }
     }
 
-    fn deserialization_txn(&self, bytes: &Bytes) -> TxEnvelope {
-        let bytes: Vec<u8> = bytes.to_vec();
-        let txn = TxEnvelope::decode_2718(&mut bytes.as_ref()).unwrap();
-        println!("Got tx: {:?}", txn);
-        txn
-    }
 
     /// 创建 PayloadAttributes 的辅助函数
     fn create_payload_attributes(parent_beacon_block_root: B256) -> EthPayloadAttributes {

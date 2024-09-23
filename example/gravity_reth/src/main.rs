@@ -1,14 +1,13 @@
 #![allow(missing_docs)]
-pub mod mock_gpei;
+// mod engine_api_adaptor;
 mod cli;
 mod mock_eth_consensus_layer;
-
-
+mod gcei_sender;
 use std::thread;
 /// clap [Args] for Engine related arguments.
 use clap::Args;
-use crate::cli::Cli;
 
+use crate::cli::Cli;
 /// Parameters for configuring the engine
 #[derive(Debug, Clone, Args, PartialEq, Eq, Default)]
 #[command(next_help_heading = "Engine")]
@@ -19,9 +18,9 @@ pub struct EngineArgs {
 }
 
 use clap::Parser;
-use reth_node_core::{args::utils::DefaultChainSpecParser, rpc::types::optimism::genesis};
-use reth_node_builder::{engine_tree_config, EngineNodeLauncher};
-use reth_node_core::rpc::types::engine::ForkchoiceState;
+use reth_node_builder::engine_tree_config;
+use reth_node_core::args::utils::DefaultChainSpecParser;
+use reth_node_builder::EngineNodeLauncher;
 use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
 use reth_provider::providers::BlockchainProvider2;
 
@@ -53,7 +52,7 @@ fn run_server() {
             let _ = thread::spawn(
                 move || {
                     let mock_eth_consensus_layer = mock_eth_consensus_layer::MockEthConsensusLayer::new(client);
-                    
+
                     tokio::runtime::Runtime::new().unwrap().block_on(mock_eth_consensus_layer.start_round(genesis_hash)).expect("Failed to run round");
                 }
             );
