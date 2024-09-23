@@ -1,7 +1,8 @@
 mod mock_db;
 mod network;
 mod storage;
-pub mod consensus_execution_adapter;
+pub mod consensus_engine;
+pub mod simple_consensus_engine;
 
 use std::{collections::{HashMap, HashSet}, fmt::Display, fs, path::PathBuf, sync::Arc, thread};
 use aptos_config::{config::{NodeConfig, Peer, PeerRole, RocksdbConfigs, StorageDirPaths}, network_id::NetworkId};
@@ -17,7 +18,7 @@ use clap::Parser;
 use futures::channel::mpsc;
 use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
 use network::{build_network_interfaces, consensus_network_configuration, create_network_runtime, extract_network_configs, extract_network_ids, mempool_network_configuration};
-use crate::consensus_execution_adapter::GravityConsensusEngine;
+use crate::consensus_engine::GravityConsensusEngine;
 
 pub struct ApplicationNetworkInterfaces<T> {
     pub network_client: NetworkClient<T>,
