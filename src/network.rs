@@ -106,12 +106,12 @@ pub async fn mock_execution_txn_submitter(adapter: ConsensusExecutionAdapter) {
             expiration_timestamp_secs: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() + 60,
             chain_id: ChainId::test().to_u8(),
             txn_bytes: vec![],
-            public_key: aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing().public_key().to_bytes(),
-            signature: aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap().to_bytes(),
+            // public_key: aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing().public_key().to_bytes(),
+            // signature: aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap().to_bytes(),
         };
         seq_num += 1;
         let mock_block_id: [u8; 32] = [0; 32];
-        adapter.send_valid_transactions(mock_block_id, vec![txn]).await.expect("ok");
+        adapter.send_valid_block_transactions(mock_block_id, vec![txn]).await.expect("ok");
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
 }

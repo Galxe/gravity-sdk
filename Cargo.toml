@@ -53,7 +53,7 @@ members = [
     "dependencies/move-bytecode-verifier",
     "dependencies/move-table-extension",
     "dependencies/move-vm-runtime",
-    "dependencies/move-vm-types", "example/gravity_reth",
+    "dependencies/move-vm-types",
 ]
 
 
@@ -66,7 +66,7 @@ homepage = "https://aptoslabs.com"
 license = "Apache-2.0"
 publish = false
 repository = "https://github.com/aptos-labs/aptos-core"
-rust-version = "1.78.0"
+rust-version = "1.81.0"
 
 
 [dependencies]
@@ -106,7 +106,7 @@ lazy_static = { workspace = true }
 rand = { workspace = true }
 hex.workspace = true
 serde_yaml = { workspace = true }
-async-trait = "0.1.82"
+async-trait.workspace = true
 
 [workspace.dependencies]
 

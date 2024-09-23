@@ -3,7 +3,6 @@ mod network;
 mod consensus_execution_adapter;
 
 use std::{collections::{HashMap, HashSet}, path::PathBuf, sync::Arc, thread};
-use std::str::Bytes;
 use aptos_config::{config::{NodeConfig, Peer, PeerRole}, network_id::NetworkId};
 use aptos_crypto::{x25519, HashValue};
 use aptos_event_notifications::EventNotificationSender;
@@ -16,7 +15,6 @@ use aptos_validator_transaction_pool::VTxnPoolState;
 use clap::Parser;
 use futures::channel::mpsc;
 use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
-use aptos_consensus_types::block::Block;
 use network::{build_network_interfaces, consensus_network_configuration, create_network_runtime, extract_network_configs, extract_network_ids, mempool_network_configuration};
 use crate::consensus_execution_adapter::ConsensusExecutionAdapter;
 
@@ -41,8 +39,6 @@ pub struct GTxn {
     chain_id: u8,
     /// The transaction payload, e.g., a script to execute.
     txn_bytes: Vec<u8>,
-    public_key: [u8; 32],
-    signature: [u8; 64],
 }
 
 #[derive(Debug)]
@@ -72,7 +68,7 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     /// - Accepting incoming transactions from the network or mempool
     /// - Validating the transactions
     /// - Adding valid transactions to the local transaction pool
-    async fn send_valid_transactions(&self, block_id : [u8; 32], txns: Vec<GTxn>) -> anyhow::Result<(), GCEIError>;
+    async fn send_valid_block_transactions(&self, block_id : [u8; 32], txns: Vec<GTxn>) -> Result<(), GCEIError>;
 
     /// Poll for ordered blocks.
     ///
@@ -83,7 +79,7 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     ///
     /// TODO(gravity_xiejian): use txn id rather than total txn in block
     /// Returns: Option<Block> - The next ordered block, if available
-    async fn receive_ordered_block(&mut self) -> anyhow::Result<([u8; 32], Vec<GTxn>), GCEIError>;
+    async fn receive_ordered_block(&mut self) -> Result<([u8; 32], Vec<GTxn>), GCEIError>;
 
     /// Submit computation results.
     ///
@@ -93,7 +89,7 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     ///
     /// Parameters:
     /// - `result`: The computation result to be submitted
-    async fn send_compute_res(&self, block_id: [u8; 32], res: [u8; 32]) -> anyhow::Result<(), GCEIError>;
+    async fn send_compute_res(&self, block_id: [u8; 32], res: [u8; 32]) -> Result<(), GCEIError>;
 
     /// Submit Block head.
     ///
@@ -103,7 +99,7 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     ///
     /// Parameters:
     /// - `result`: The computation result to be submitted
-    async fn send_block_head(&self, block_id: [u8; 32], res: [u8; 32]) -> anyhow::Result<(), GCEIError>;
+    async fn send_block_head(&self, block_id: [u8; 32], res: [u8; 32]) -> Result<(), GCEIError>;
 
     /// Commit batch finalized block IDs.
     ///
@@ -113,10 +109,10 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     ///
     /// Parameters:
     /// - `block_ids`: A vector of block IDs that have been finalized
-    async fn receive_commit_block_ids(&self) -> anyhow::Result<Vec<[u8; 32]>, GCEIError>;
+    async fn receive_commit_block_ids(&mut self) -> Result<Vec<[u8; 32]>, GCEIError>;
 
     /// Return the commit ids, the consensus can delete these transactions after submitting.
-    async fn send_persistent_block_id(&self, block_id : [u8; 32]) -> anyhow::Result<(), GCEIError>;
+    async fn send_persistent_block_id(&self, block_id : [u8; 32]) -> Result<(), GCEIError>;
 }
 
 /// Runs an Gravity validator or fullnode
