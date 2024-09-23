@@ -1,49 +1,33 @@
-use aptos_crypto::bls12381::PublicKey;
-use aptos_crypto::{PrivateKey, Uniform};
-use aptos_types::account_config::resources;
-use lazy_static::lazy_static;
-use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
-use std::fmt::Debug;
 use std::path::Path;
-use std::result;
-use std::str::FromStr;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::{SystemTime};
 
-use aptos_config::config::ConsensusConfig;
 use aptos_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH;
 use aptos_crypto::{bls12381, hash::HashValue};
 use aptos_infallible::Mutex;
 use aptos_storage_interface::{AptosDbError, DbReader, DbWriter};
 use aptos_types::account_address::AccountAddress;
 use aptos_types::aggregate_signature::AggregateSignature;
-use aptos_types::block_info::{BlockInfo, Round};
+use aptos_types::block_info::{BlockInfo};
 use aptos_types::contract_event::EventWithVersion;
 use aptos_types::epoch_change::EpochChangeProof;
 use aptos_types::epoch_state::EpochState;
 use aptos_types::ledger_info::{LedgerInfo, LedgerInfoWithSignatures};
-use aptos_types::network_address::NetworkAddress;
 use aptos_types::on_chain_config::ValidatorSet;
 use aptos_types::on_chain_config::{ConsensusAlgorithmConfig, ProposerElectionType};
 use aptos_types::proof::accumulator::InMemoryTransactionAccumulator;
 use aptos_types::proof::TransactionAccumulatorSummary;
 use aptos_types::state_proof::StateProof;
 use aptos_types::state_store::state_key::inner::StateKeyInner;
-use aptos_types::timestamp::Timestamp;
 use aptos_types::validator_config::ValidatorConfig;
 use aptos_types::validator_info::ValidatorInfo;
 use aptos_types::validator_verifier::{ValidatorConsensusInfo, ValidatorVerifier};
 use aptos_types::{
-    access_path::AccessPath,
-    account_config::AccountResource,
-    event::{EventHandle, EventKey},
-    on_chain_config::{ConfigurationResource, OnChainConfig, OnChainConsensusConfig},
+    on_chain_config::{ConfigurationResource, OnChainConsensusConfig},
     state_store::{state_key::StateKey, state_value::StateValue},
     transaction::Version,
-    PeerId,
 };
 
 pub type Result<T, E = AptosDbError> = std::result::Result<T, E>;

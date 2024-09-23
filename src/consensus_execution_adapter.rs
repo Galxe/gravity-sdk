@@ -69,7 +69,7 @@ impl ConsensusExecutionAdapter {
 
 #[async_trait::async_trait]
 impl GravityConsensusEngineInterface for ConsensusExecutionAdapter {
-    fn init(&mut self) {
+    fn init() -> Self {
         todo!()
     }
 

@@ -3,9 +3,9 @@ mod network;
 mod storage;
 mod consensus_execution_adapter;
 
-use std::{collections::{HashMap, HashSet}, fs, path::PathBuf, sync::Arc, thread};
-use aptos_config::{config::{NodeConfig, Peer, PeerRole, RocksdbConfigs, StorageDirPaths}, network_id::NetworkId};
-use aptos_crypto::{x25519, HashValue};
+use std::{collections::{HashMap, HashSet}, path::PathBuf, sync::Arc, thread};
+use aptos_config::{config::{NodeConfig, Peer, PeerRole}, network_id::NetworkId};
+use aptos_crypto::{x25519};
 use aptos_event_notifications::EventNotificationSender;
 use aptos_infallible::RwLock;
 use aptos_network::application::{interface::{NetworkClient, NetworkServiceEvents}, storage::PeersAndMetadata};
@@ -61,7 +61,7 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     /// - Setting up initial state
     /// - Connecting to the network
     /// - Loading configuration
-    fn init(&mut self);
+    fn init() -> Self;
 
     /// Receive and process valid transactions.
     ///
@@ -128,7 +128,7 @@ pub struct GravityNodeArgs {
 }
 
 impl GravityNodeArgs {
-    pub fn run(mut self) {
+    pub fn run(self) {
         // Get the config file path
         let config_path = self.node_config_path.expect("Config is required to launch node");
         if !config_path.exists() {
