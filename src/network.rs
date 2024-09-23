@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use tokio::runtime::Runtime;
 
 use crate::{ApplicationNetworkInterfaces, GTxn, GravityConsensusEngineInterface};
-use crate::consensus_execution_adapter::ConsensusExecutionAdapter;
+use crate::consensus_execution_adapter::GravityConsensusEngine;
 
 /// Extracts all network configs from the given node config
 pub fn extract_network_configs(node_config: &NodeConfig) -> Vec<NetworkConfig> {
@@ -95,7 +95,7 @@ pub async fn mock_mempool_client_sender(mut mc_sender: aptos_mempool::MempoolCli
     }
 }
 
-pub async fn mock_execution_txn_submitter(adapter: ConsensusExecutionAdapter) {
+pub async fn mock_execution_txn_submitter(adapter: GravityConsensusEngine) {
     // let addr = aptos_types::account_address::AccountAddress::random();
     let mut seq_num = 0;
     loop {

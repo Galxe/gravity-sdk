@@ -3,8 +3,8 @@ mod network;
 mod storage;
 mod consensus_execution_adapter;
 
-use std::{collections::{HashMap, HashSet}, fmt::Display, path::{Display, PathBuf}, sync::Arc, thread};
-use aptos_config::{config::{NodeConfig, Peer, PeerRole}, network_id::NetworkId};
+use std::{collections::{HashMap, HashSet}, fmt::Display, fs, path::PathBuf, sync::Arc, thread};
+use aptos_config::{config::{NodeConfig, Peer, PeerRole, RocksdbConfigs, StorageDirPaths}, network_id::NetworkId};
 use aptos_crypto::{x25519};
 use aptos_event_notifications::EventNotificationSender;
 use aptos_infallible::RwLock;
@@ -17,7 +17,7 @@ use clap::Parser;
 use futures::channel::mpsc;
 use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
 use network::{build_network_interfaces, consensus_network_configuration, create_network_runtime, extract_network_configs, extract_network_ids, mempool_network_configuration};
-use crate::consensus_execution_adapter::ConsensusExecutionAdapter;
+use crate::consensus_execution_adapter::GravityConsensusEngine;
 
 pub struct ApplicationNetworkInterfaces<T> {
     pub network_client: NetworkClient<T>,
@@ -70,38 +70,6 @@ impl GTxn {
             chain_id,
             txn_bytes,
         }
-    }
-}
-
-pub struct GravityConsensusEngine;
-
-impl GravityConsensusEngineInterface for GravityConsensusEngine {
-    fn init() -> Self {
-        todo!()
-    }
-
-    fn send_valid_transactions(&self, block_id: [u8; 32], txns: Vec<GTxn>) -> anyhow::Result<(), GCEIError> {
-        todo!()
-    }
-
-    fn receive_ordered_block(&self, ) -> anyhow::Result<([u8; 32], Vec<GTxn>), GCEIError> {
-        todo!()
-    }
-
-    fn send_compute_res(&self, block_id: [u8; 32], res: [u8; 32]) -> anyhow::Result<(), GCEIError> {
-        todo!()
-    }
-
-    fn send_block_head(&self, block_id: [u8; 32], res: [u8; 32]) -> anyhow::Result<(), GCEIError> {
-        todo!()
-    }
-
-    fn receive_commit_block_ids(&self) -> anyhow::Result<Vec<[u8; 32]>, GCEIError> {
-        todo!()
-    }
-
-    fn send_persistent_block_id(&self, block_id: [u8; 32]) -> anyhow::Result<(), GCEIError> {
-        todo!()
     }
 }
 
@@ -353,7 +321,7 @@ pub fn start(node_config: NodeConfig, mockdb_config_path: Option<PathBuf>) -> an
         .expect("Consensus must subscribe to reconfigurations");
     let vtxn_pool = VTxnPoolState::default();
     let mut arg = ConsensusAdapterArgs::new(mempool_client_sender);
-    let adapter = ConsensusExecutionAdapter::new(&mut arg);
+    let adapter = GravityConsensusEngine::new(&mut arg);
     let _consensus = aptos_consensus::consensus_provider::start_consensus(
         &node_config,
         consensus_network_interfaces.network_client,

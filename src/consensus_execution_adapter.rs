@@ -18,7 +18,7 @@ use futures::{
 use std::collections::HashMap;
 use tokio::sync::{Mutex, RwLock};
 
-pub struct ConsensusExecutionAdapter {
+pub struct GravityConsensusEngine {
     mempool_sender: mpsc::Sender<MempoolClientRequest>,
     pipeline_block_receiver: Option<
         mpsc::UnboundedReceiver<(
@@ -34,7 +34,7 @@ pub struct ConsensusExecutionAdapter {
     persist_result_receiver: Mutex<Option<oneshot::Sender<()>>>,
 }
 
-impl ConsensusExecutionAdapter {
+impl GravityConsensusEngine {
     pub fn new(args: &mut ConsensusAdapterArgs) -> Self {
         Self {
             mempool_sender: args.mempool_sender.clone(),
@@ -68,7 +68,7 @@ impl ConsensusExecutionAdapter {
 }
 
 #[async_trait::async_trait]
-impl GravityConsensusEngineInterface for ConsensusExecutionAdapter {
+impl GravityConsensusEngineInterface for GravityConsensusEngine {
     fn init() -> Self {
         todo!()
     }
