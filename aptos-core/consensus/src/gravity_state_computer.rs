@@ -2,51 +2,90 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{error::StateSyncError, payload_manager::TPayloadManager, state_replication::{StateComputer, StateComputerCommitCallBackType}, transaction_deduper::TransactionDeduper, transaction_shuffler::TransactionShuffler};
-use anyhow::{Result};
+use crate::state_computer::{ExecutionProxy, PipelineExecutionResult, StateComputeResultFut};
+use crate::{
+    error::StateSyncError,
+    payload_manager::TPayloadManager,
+    state_replication::{StateComputer, StateComputerCommitCallBackType},
+    transaction_deduper::TransactionDeduper,
+    transaction_shuffler::TransactionShuffler,
+};
+use anyhow::Result;
 use aptos_consensus_types::{block::Block, pipelined_block::PipelinedBlock};
 use aptos_crypto::HashValue;
-use aptos_executor_types::{BlockExecutorTrait, ExecutorResult, StateCheckpointOutput, StateComputeResult};
-use aptos_types::{
-    block_executor::config::BlockExecutorConfigFromOnchain,
-    epoch_state::EpochState,
-    ledger_info::LedgerInfoWithSignatures,
-    randomness::Randomness,
-};
-use futures::{FutureExt, SinkExt, StreamExt};
-use std::{boxed::Box, sync::Arc};
-use std::time::Duration;
-use futures_channel::{mpsc, oneshot};
-use futures_channel::mpsc::UnboundedReceiver;
 use aptos_executor::block_executor::BlockExecutor;
+use aptos_executor_types::{
+    BlockExecutorTrait, ExecutorError, ExecutorResult, StateCheckpointOutput, StateComputeResult
+};
 use aptos_mempool::MempoolClientRequest;
 use aptos_types::block_executor::partitioner::ExecutableBlock;
 use aptos_types::transaction::SignedTransaction;
-use crate::state_computer::{ExecutionProxy, PipelineExecutionResult, StateComputeResultFut};
+use aptos_types::{
+    block_executor::config::BlockExecutorConfigFromOnchain, epoch_state::EpochState,
+    ledger_info::LedgerInfoWithSignatures, randomness::Randomness,
+};
+use futures::{FutureExt, SinkExt, StreamExt};
+use futures_channel::mpsc::UnboundedReceiver;
+use futures_channel::{mpsc, oneshot};
+use std::time::Duration;
+use std::{boxed::Box, sync::Arc};
 
 pub struct ConsensusAdapterArgs {
     pub mempool_sender: mpsc::Sender<MempoolClientRequest>,
-    pub pipeline_block_sender:
-        mpsc::UnboundedSender<(HashValue, HashValue, Vec<SignedTransaction>, oneshot::Sender<HashValue>)>,
-    pub pipeline_block_receiver:
-        Option<mpsc::UnboundedReceiver<(HashValue, HashValue, Vec<SignedTransaction>, oneshot::Sender<HashValue>)>>,
-    pub committed_blocks_sender: mpsc::Sender<Vec<HashValue>>,
-    pub committed_blocks_receiver: mpsc::Receiver<Vec<HashValue>>,
-}
+    pub pipeline_block_sender: mpsc::UnboundedSender<(
+        HashValue,
+        HashValue,
+        Vec<SignedTransaction>,
+        oneshot::Sender<HashValue>,
+    )>,
+    pub pipeline_block_receiver: Option<
+        mpsc::UnboundedReceiver<(
+            HashValue,
+            HashValue,
+            Vec<SignedTransaction>,
+            oneshot::Sender<HashValue>,
+        )>,
+    >,
+    pub committed_block_ids_sender: mpsc::UnboundedSender<(Vec<[u8; 32]>, oneshot::Sender<()>)>,
+    pub committed_block_ids_receiver:
+        Option<mpsc::UnboundedReceiver<(Vec<[u8; 32]>, oneshot::Sender<()>)>>,
+} 
 
 impl ConsensusAdapterArgs {
-    pub fn pipeline_block_receiver(&mut self) -> Option<UnboundedReceiver<(HashValue, HashValue, Vec<SignedTransaction>, oneshot::Sender<HashValue>)>> {
+    pub fn pipeline_block_receiver(
+        &mut self,
+    ) -> Option<
+        UnboundedReceiver<(
+            HashValue,
+            HashValue,
+            Vec<SignedTransaction>,
+            oneshot::Sender<HashValue>,
+        )>,
+    > {
         self.pipeline_block_receiver.take()
     }
     pub fn new(mempool_sender: mpsc::Sender<MempoolClientRequest>) -> Self {
         let (pipeline_block_sender, pipeline_block_receiver) = mpsc::unbounded();
-        let (committed_blocks_sender, committed_blocks_receiver) = mpsc::channel(1);
+        let (committed_block_ids_sender, committed_block_ids_receiver) = mpsc::unbounded();
         Self {
             mempool_sender,
             pipeline_block_sender,
             pipeline_block_receiver: Some(pipeline_block_receiver),
-            committed_blocks_sender,
-            committed_blocks_receiver,
+            committed_block_ids_sender,
+            committed_block_ids_receiver: Some(committed_block_ids_receiver),
+        }
+    }
+
+    pub fn dummy() -> Self {
+        let (mempool_sender, _mempool_receiver) = mpsc::channel(1);
+        let (pipeline_block_sender, pipeline_block_receiver) = mpsc::unbounded();
+        let (committed_block_ids_sender, committed_block_ids_receiver) = mpsc::unbounded();
+        Self {
+            mempool_sender,
+            pipeline_block_sender,
+            pipeline_block_receiver: Some(pipeline_block_receiver),
+            committed_block_ids_sender,
+            committed_block_ids_receiver: Some(committed_block_ids_receiver),
         }
     }
 }
@@ -55,8 +94,12 @@ impl ConsensusAdapterArgs {
 /// implements StateComputer traits.
 pub struct GravityExecutionProxy {
     pub aptos_state_computer: Arc<ExecutionProxy>,
-    pipeline_block_sender:
-        mpsc::UnboundedSender<(HashValue, HashValue, Vec<SignedTransaction>, oneshot::Sender<HashValue>)>,
+    pipeline_block_sender: mpsc::UnboundedSender<(
+        HashValue,
+        HashValue,
+        Vec<SignedTransaction>,
+        oneshot::Sender<HashValue>,
+    )>,
 }
 
 impl GravityExecutionProxy {
@@ -70,11 +113,14 @@ impl GravityExecutionProxy {
 
 pub struct GravityBlockExecutor<V> {
     inner: BlockExecutor<V>,
-    committed_blocks_sender: mpsc::Sender<Vec<HashValue>>,
+    committed_blocks_sender: mpsc::UnboundedSender<(Vec<[u8; 32]>, oneshot::Sender<()>)>,
 }
 
 impl<V> GravityBlockExecutor<V> {
-    pub(crate) fn new(inner: BlockExecutor<V>, committed_blocks_sender: mpsc::Sender<Vec<HashValue>>) -> Self {
+    pub(crate) fn new(
+        inner: BlockExecutor<V>,
+        committed_blocks_sender: mpsc::UnboundedSender<(Vec<[u8; 32]>, oneshot::Sender<()>)>,
+    ) -> Self {
         Self {
             inner,
             committed_blocks_sender,
@@ -94,7 +140,11 @@ impl StateComputer for GravityExecutionProxy {
     ) -> StateComputeResultFut {
         let txns = self.aptos_state_computer.get_block_txns(block).await;
         let (block_result_sender, block_result_receiver) = oneshot::channel();
-        self.pipeline_block_sender.clone().send((parent_block_id, block.id(), txns, block_result_sender)).await.expect("what happened");
+        self.pipeline_block_sender
+            .clone()
+            .send((parent_block_id, block.id(), txns, block_result_sender))
+            .await
+            .expect("what happened");
 
         Box::pin(async move {
             let res = block_result_receiver.await;
@@ -110,7 +160,9 @@ impl StateComputer for GravityExecutionProxy {
         finality_proof: LedgerInfoWithSignatures,
         callback: StateComputerCommitCallBackType,
     ) -> ExecutorResult<()> {
-        self.aptos_state_computer.commit(blocks, finality_proof, callback).await
+        self.aptos_state_computer
+            .commit(blocks, finality_proof, callback)
+            .await
     }
 
     /// Synchronize to a commit that not present locally.
@@ -127,7 +179,14 @@ impl StateComputer for GravityExecutionProxy {
         transaction_deduper: Arc<dyn TransactionDeduper>,
         randomness_enabled: bool,
     ) {
-        self.aptos_state_computer.new_epoch(epoch_state, payload_manager, transaction_shuffler, block_executor_onchain_config, transaction_deduper, randomness_enabled)
+        self.aptos_state_computer.new_epoch(
+            epoch_state,
+            payload_manager,
+            transaction_shuffler,
+            block_executor_onchain_config,
+            transaction_deduper,
+            randomness_enabled,
+        )
     }
 
     // Clears the epoch-specific state. Only a sync_to call is expected before calling new_epoch
@@ -137,8 +196,7 @@ impl StateComputer for GravityExecutionProxy {
     }
 }
 
-impl<V: Send + Sync> BlockExecutorTrait for GravityBlockExecutor<V>
-{
+impl<V: Send + Sync> BlockExecutorTrait for GravityBlockExecutor<V> {
     fn committed_block_id(&self) -> HashValue {
         self.inner.committed_block_id()
     }
@@ -153,7 +211,8 @@ impl<V: Send + Sync> BlockExecutorTrait for GravityBlockExecutor<V>
         parent_block_id: HashValue,
         onchain_config: BlockExecutorConfigFromOnchain,
     ) -> ExecutorResult<StateCheckpointOutput> {
-        self.inner.execute_and_state_checkpoint(block, parent_block_id, onchain_config)
+        self.inner
+            .execute_and_state_checkpoint(block, parent_block_id, onchain_config)
     }
 
     fn ledger_update(
@@ -162,7 +221,8 @@ impl<V: Send + Sync> BlockExecutorTrait for GravityBlockExecutor<V>
         parent_block_id: HashValue,
         state_checkpoint_output: StateCheckpointOutput,
     ) -> ExecutorResult<StateComputeResult> {
-        self.inner.ledger_update(block_id, parent_block_id, state_checkpoint_output)
+        self.inner
+            .ledger_update(block_id, parent_block_id, state_checkpoint_output)
     }
 
     fn commit_blocks(
@@ -170,11 +230,43 @@ impl<V: Send + Sync> BlockExecutorTrait for GravityBlockExecutor<V>
         block_ids: Vec<HashValue>,
         ledger_info_with_sigs: LedgerInfoWithSignatures,
     ) -> ExecutorResult<()> {
-        // let (sender, receiver) = mpsc::channel(1);
-        self.inner.db.writer.commit_ledger(0, Some(&ledger_info_with_sigs), None);
-        tokio::runtime::Runtime::new().unwrap().block_on(
-            self.committed_blocks_sender.clone().send(block_ids)
-        ).map_err(|e| aptos_executor_types::ExecutorError::InternalError { error: "ken➗".parse().unwrap() })
+        let (send, recerver) = oneshot::channel();
+        let r = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on({
+                let encode_ids = block_ids
+                    .iter()
+                    .map(|id| {
+                        let mut bytes = [0; 32];
+                        bytes.copy_from_slice(id.as_slice());
+                        bytes
+                    })
+                    .collect();
+
+                self.committed_blocks_sender
+                    .clone()
+                    .send((encode_ids, send))
+            })
+            .map_err(|e| aptos_executor_types::ExecutorError::InternalError {
+                error: "send commit ids failed".parse().unwrap(),
+            });
+        if let Err(e) = r {
+            return Err(e);
+        }
+        let r = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(async move { recerver.await })
+            .map_err(|e| aptos_executor_types::ExecutorError::InternalError {
+                error: "receive commit successful id failed".parse().unwrap(),
+            });
+        if let Err(e) = r {
+                return Err(e);
+            }
+        self.inner
+            .db
+            .writer
+            .commit_ledger(0, Some(&ledger_info_with_sigs), None);
+        Ok(())
     }
 
     fn finish(&self) {

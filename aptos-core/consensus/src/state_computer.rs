@@ -178,10 +178,12 @@ impl ExecutionProxy {
 
         let input_txns = Block::combine_to_input_transactions(validator_txns, user_txns, metadata);
 
+        // TODO(gravity_byteyue): 下面的逻辑看一下
         // Adds StateCheckpoint/BlockEpilogue transaction if needed.
-        executed_block
-            .compute_result()
-            .transactions_to_commit(input_txns, executed_block.id())
+        // executed_block
+        //     .compute_result()
+        //     .transactions_to_commit(input_txns, executed_block.id())
+        input_txns
     }
 }
 

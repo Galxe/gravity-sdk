@@ -68,6 +68,7 @@ impl StatelessPipeline for PersistingPhase {
             callback,
         } = req;
 
+        println!("try to commit block");
         self.persisting_handle
             .commit(&blocks, commit_ledger_info, callback)
             .await

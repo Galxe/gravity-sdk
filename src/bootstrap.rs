@@ -30,7 +30,7 @@ use aptos_types::{account_address::AccountAddress, chain_id::ChainId};
 use aptos_validator_transaction_pool::VTxnPoolState;
 use futures::channel::mpsc::{self, Receiver, Sender};
 use serde::{Deserialize, Serialize};
-use tokio::runtime::Runtime;
+use tokio::{runtime::Runtime, sync::Mutex};
 
 use crate::{
     consensus_engine::GravityConsensusEngine,
@@ -39,7 +39,7 @@ use crate::{
         self, build_network_interfaces, consensus_network_configuration, create_network_runtime,
         extract_network_configs, extract_network_ids, mempool_network_configuration,
     },
-    storage::{self, db::GravityDB},
+    storage::{self, db::GravityDB}, GravityConsensusEngineInterface,
 };
 pub struct ApplicationNetworkInterfaces<T> {
     pub network_client: NetworkClient<T>,
@@ -149,7 +149,8 @@ pub fn start(node_config: NodeConfig, mockdb_config_path: Option<PathBuf>) -> an
         peers_and_metadata,
     );
     let mut arg = ConsensusAdapterArgs::new(mempool_client_sender);
-    let adapter = GravityConsensusEngine::new(&mut arg);
+    let adapter = GravityConsensusEngine::init(mempool_client_sender);
+    let adapter_mutex = Arc::new(Mutex::new(adapter));
     start_consensus(
         &node_config,
         &mut event_subscription_service,
@@ -160,8 +161,12 @@ pub fn start(node_config: NodeConfig, mockdb_config_path: Option<PathBuf>) -> an
         arg,
     );
     let _ = event_subscription_service.notify_initial_configs(1_u64);
+    let submitter_mutex = adapter_mutex.clone();
     tokio::spawn(async move {
-        network::mock_execution_txn_submitter(adapter).await;
+        network::mock_execution_txn_submitter(submitter_mutex.clone()).await;
+    });
+    tokio::spawn(async move {
+        network::mock_execution_receive_block(adapter_mutex.clone()).await;
     });
     loop {
         thread::park();
@@ -237,12 +242,12 @@ pub fn init_mempool(
     mempool_listener: MempoolNotificationListener,
     peers_and_metadata: Arc<PeersAndMetadata>,
 ) -> Runtime {
-    (0..5).for_each(|_| {
-        let s = mempool_client_sender.clone();
-        tokio::spawn(async move {
-            network::mock_mempool_client_sender(s).await;
-        });
-    });
+    // (0..5).for_each(|_| {
+    //     let s = mempool_client_sender.clone();
+    //     tokio::spawn(async move {
+    //         network::mock_mempool_client_sender(s).await;
+    //     });
+    // });
 
     let mempool_reconfig_subscription = event_subscription_service
         .subscribe_to_reconfigurations()

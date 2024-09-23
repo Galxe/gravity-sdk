@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc, time::{SystemTime, UNIX_EPOCH}};
+use std::{borrow::Borrow, collections::HashMap, sync::Arc, time::{SystemTime, UNIX_EPOCH}};
 use aptos_channels::{aptos_channel, message_queues::QueueStyle};
 use aptos_config::{config::{NetworkConfig, NodeConfig}, network_id::NetworkId};
 use aptos_crypto::{PrivateKey, Uniform};
@@ -8,7 +8,7 @@ use aptos_network_builder::builder::NetworkBuilder;
 use aptos_types::{chain_id::ChainId, transaction::{RawTransaction, Script, SignedTransaction}};
 use futures::{channel::oneshot, SinkExt};
 use serde::{Deserialize, Serialize};
-use tokio::runtime::Runtime;
+use tokio::{runtime::Runtime, sync::Mutex};
 
 use crate::{bootstrap::ApplicationNetworkInterfaces, GTxn, GravityConsensusEngineInterface};
 use crate::consensus_engine::GravityConsensusEngine;
@@ -95,7 +95,7 @@ pub async fn mock_mempool_client_sender(mut mc_sender: aptos_mempool::MempoolCli
     }
 }
 
-pub async fn mock_execution_txn_submitter(adapter: GravityConsensusEngine) {
+pub async fn mock_execution_txn_submitter(adapter: Arc<Mutex<GravityConsensusEngine>>) {
     // let addr = aptos_types::account_address::AccountAddress::random();
     let mut seq_num = 0;
     loop {
@@ -111,8 +111,44 @@ pub async fn mock_execution_txn_submitter(adapter: GravityConsensusEngine) {
         };
         seq_num += 1;
         let mock_block_id: [u8; 32] = [0; 32];
-        adapter.send_valid_block_transactions(mock_block_id, vec![txn]).await.expect("ok");
+        println!("try to send_valid_block_transactions");
+        let caller = adapter.lock().await;
+        caller.send_valid_block_transactions(mock_block_id, vec![txn]).await.expect("ok");
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
+}
+
+pub async fn mock_execution_receive_block(adapter: Arc<Mutex<GravityConsensusEngine>>) {
+    loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        println!("try to receive_ordered_block");
+        let mut caller = adapter.as_ref().lock().await;
+        let result = caller.receive_ordered_block().await;
+        if let Err(_) = result {
+            println!("receive ordered block error");
+            continue;
+        }
+        let value = result.unwrap();
+        println!("try to submit compute res, block is {:?}", value.0);
+        let result = caller.send_compute_res(value.0, [0; 32]).await;
+        if let Err(_) = result {
+            println!("send_compute_res error");
+            continue;
+        }
+        println!("try to receive_commit_block_ids");
+        let result = caller.receive_commit_block_ids().await;
+        if let Err(_) = result {
+            println!("receive_commit_block_ids error");
+            continue;
+        }
+        let ids = result.unwrap();
+        println!("the commit block id is {:?}", ids);
+        println!("try to send_persistent_block_id");
+        let result = caller.send_persistent_block_id(*ids.last().unwrap()).await;
+        if let Err(_) = result {
+            println!("send_persistent_block_id failed");
+        }
+        println!("succeed to send persistent block id {:?}", ids.last().unwrap());
     }
 }
 

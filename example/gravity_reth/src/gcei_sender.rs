@@ -26,7 +26,7 @@ impl<T: GravityConsensusEngineInterface> GCEISender<T> {
     pub fn new(chain_id: u64) -> Self {
         Self {
             curret_block_id: None,
-            gcei_sender: T::init(),
+            gcei_sender: T::init(ConsensusAdapterArgs::dummu()),
             chain_id: chain_id
         }
     }

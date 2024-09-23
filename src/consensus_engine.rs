@@ -11,6 +11,7 @@ use aptos_types::transaction::{
     GravityExtension, RawTransaction, SignedTransaction, TransactionPayload,
 };
 use aptos_types::vm_status::StatusCode;
+use futures::StreamExt;
 use futures::{
     channel::{mpsc, oneshot},
     SinkExt,
@@ -28,26 +29,21 @@ pub struct GravityConsensusEngine {
             oneshot::Sender<HashValue>,
         )>,
     >,
-    committed_block_ids_receiver: Option<mpsc::UnboundedReceiver<(Vec<[u8; 32]>, oneshot::Sender<()>)>>,
+    committed_block_ids_receiver:
+        Option<mpsc::UnboundedReceiver<(Vec<[u8; 32]>, oneshot::Sender<()>)>>,
 
     execute_result_receivers: RwLock<HashMap<HashValue, oneshot::Sender<HashValue>>>,
     persist_result_receiver: Mutex<Option<oneshot::Sender<()>>>,
 }
 
 impl GravityConsensusEngine {
-    pub fn new(args: &mut ConsensusAdapterArgs) -> Self {
-        Self {
-            mempool_sender: args.mempool_sender.clone(),
-            pipeline_block_receiver: args.pipeline_block_receiver.take(),
-            execute_result_receivers: RwLock::new(HashMap::new()),
-            committed_block_ids_receiver: todo!(),
-            persist_result_receiver: Mutex::new(None),
-        }
-    }
-
-    async fn submit_transaction(&self, txn: SignedTransaction) -> Result<(MempoolStatus, Option<StatusCode>), GCEIError> {
+    async fn submit_transaction(
+        &self,
+        txn: SignedTransaction,
+    ) -> Result<(MempoolStatus, Option<StatusCode>), GCEIError> {
         let (req_sender, callback) = oneshot::channel();
-        let ret = self.mempool_sender
+        let ret = self
+            .mempool_sender
             .clone()
             .send(MempoolClientRequest::SubmitTransaction(txn, req_sender))
             .await;
@@ -56,21 +52,25 @@ impl GravityConsensusEngine {
         }
         let send_ret = callback.await;
         match send_ret {
-            Ok(status) => {
-                match status {
-                    Ok(value) => Ok(value),
-                    Err(_) => Err(GCEIError::ConsensusError)
-                }
-            }
-            Err(_) => Err(GCEIError::ConsensusError)
+            Ok(status) => match status {
+                Ok(value) => Ok(value),
+                Err(_) => Err(GCEIError::ConsensusError),
+            },
+            Err(_) => Err(GCEIError::ConsensusError),
         }
     }
 }
 
 #[async_trait::async_trait]
 impl GravityConsensusEngineInterface for GravityConsensusEngine {
-    fn init() -> Self {
-        todo!()
+    fn init(args: &mut ConsensusAdapterArgs) -> Self {
+        Self {
+            mempool_sender: args.mempool_sender.clone(),
+            pipeline_block_receiver: args.pipeline_block_receiver.take(),
+            execute_result_receivers: RwLock::new(HashMap::new()),
+            committed_block_ids_receiver: args.committed_block_ids_receiver.take(),
+            persist_result_receiver: Mutex::new(None),
+        }
     }
 
     async fn send_valid_block_transactions(
@@ -78,6 +78,7 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
         block_id: [u8; 32],
         txns: Vec<GTxn>,
     ) -> Result<(), GCEIError> {
+        println!("send send_valid_block_transactions");
         let len = txns.len();
         for (i, txn) in txns.into_iter().enumerate() {
             let raw_txn = RawTransaction::new(
@@ -107,13 +108,12 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
     }
 
     async fn receive_ordered_block(&mut self) -> Result<([u8; 32], Vec<GTxn>), GCEIError> {
-        let (parent_id, block_id, txns, callback) = self
-            .pipeline_block_receiver
-            .as_mut()
-            .unwrap()
-            .try_next()
-            .unwrap()
-            .unwrap();
+        println!("start to receive_ordered_block");
+        let receive_result = self.pipeline_block_receiver.as_mut().unwrap().next().await;
+
+        println!("succeed to receive_ordered_block");
+
+        let (parent_id, block_id, txns, callback) = receive_result.unwrap();
         let gtxns = txns
             .iter()
             .map(|txn| {
@@ -123,15 +123,15 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
                         todo!()
                     }
                 };
-                let (pkey, sig) = match txn.authenticator() {
-                    TransactionAuthenticator::Ed25519 {
-                        public_key,
-                        signature,
-                    } => (public_key, signature),
-                    _ => {
-                        todo!()
-                    }
-                };
+                // let (pkey, sig) = match txn.authenticator() {
+                //     TransactionAuthenticator::Ed25519 {
+                //         public_key,
+                //         signature,
+                //     } => (public_key, signature),
+                //     _ => {
+                //         todo!()
+                //     }
+                // };
                 GTxn {
                     sequence_number: txn.sequence_number(),
                     max_gas_amount: txn.max_gas_amount(),
@@ -151,6 +151,7 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
     }
 
     async fn send_compute_res(&self, id: [u8; 32], res: [u8; 32]) -> Result<(), GCEIError> {
+        println!("start to send_compute_res");
         match self
             .execute_result_receivers
             .write()
@@ -167,26 +168,28 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
     }
 
     async fn receive_commit_block_ids(&mut self) -> Result<Vec<[u8; 32]>, GCEIError> {
-        let (ids, sender) = self
+        println!("start to receive_commit_block_ids");
+        let receive_result = self
             .committed_block_ids_receiver
             .as_mut()
             .unwrap()
-            .try_next()
-            .unwrap()
-            .unwrap();
+            .next()
+            .await;
+        let (ids, sender) = receive_result.unwrap();
         let mut locked = self.persist_result_receiver.lock().await;
         *locked = Some(sender);
         Ok(ids)
     }
 
     async fn send_persistent_block_id(&self, id: [u8; 32]) -> Result<(), GCEIError> {
+        println!("start to send_persistent_block_id");
         let mut locked = self.persist_result_receiver.lock().await;
         match locked.take() {
             Some(sender) => {
                 sender.send(());
                 Ok(())
             }
-            None => todo!()
+            None => todo!(),
         }
     }
 }

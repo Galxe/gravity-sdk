@@ -5,6 +5,7 @@ mod network;
 mod storage;
 
 use aptos_config::config::NodeConfig;
+use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
 use bootstrap::{check_bootstrap_config, start};
 use clap::Parser;
 use std::path::PathBuf;
@@ -77,7 +78,7 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     /// - Setting up initial state
     /// - Connecting to the network
     /// - Loading configuration
-    fn init() -> Self;
+    fn init(args: &mut ConsensusAdapterArgs) -> Self;
 
     /// Receive and process valid transactions.
     ///
