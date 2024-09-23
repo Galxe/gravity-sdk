@@ -1,7 +1,7 @@
 mod mock_db;
 mod network;
 mod storage;
-mod consensus_execution_adapter;
+pub mod consensus_execution_adapter;
 
 use std::{collections::{HashMap, HashSet}, fmt::Display, fs, path::PathBuf, sync::Arc, thread};
 use aptos_config::{config::{NodeConfig, Peer, PeerRole, RocksdbConfigs, StorageDirPaths}, network_id::NetworkId};
@@ -70,6 +70,10 @@ impl GTxn {
             chain_id,
             txn_bytes,
         }
+    }
+
+    pub fn get_bytes(&self) -> &Vec<u8> {
+        &self.txn_bytes
     }
 }
 

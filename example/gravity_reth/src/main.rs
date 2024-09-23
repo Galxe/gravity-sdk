@@ -51,7 +51,7 @@ fn run_server() {
             let genesis_hash = handle.node.chain_spec().genesis_hash();
             let _ = thread::spawn(
                 move || {
-                    let mock_eth_consensus_layer = mock_eth_consensus_layer::MockEthConsensusLayer::new(client);
+                    let mut mock_eth_consensus_layer = mock_eth_consensus_layer::MockEthConsensusLayer::new(client);
 
                     tokio::runtime::Runtime::new().unwrap().block_on(mock_eth_consensus_layer.start_round(genesis_hash)).expect("Failed to run round");
                 }
