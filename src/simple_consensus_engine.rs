@@ -36,7 +36,7 @@ impl GravityConsensusEngineInterface for SimpleConsensusEngine {
         let mut txns = self.txns.lock();
         let block_id = self.block_id.lock();
         let txns = std::mem::replace(&mut *txns, Vec::new());
-        Ok((txns, *block_id))
+        Ok((*block_id, txns))
     }
 
     async fn send_compute_res(&self, block_id: [u8; 32], res: [u8; 32]) -> Result<(), GCEIError> {

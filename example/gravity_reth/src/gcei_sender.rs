@@ -2,7 +2,7 @@ use alloy::consensus::{Transaction, TxEnvelope};
 use alloy::eips::eip2718::Decodable2718;
 use alloy::primitives::B256;
 use anyhow::Ok;
-use gravity_sdk::consensus_execution_adapter::GravityConsensusEngine;
+use gravity_sdk::consensus_engine::GravityConsensusEngine;
 use gravity_sdk::{GTxn, GravityConsensusEngineInterface};
 use jsonrpsee::core::Serialize;
 use reth::payload;
@@ -16,16 +16,16 @@ use std::collections::HashSet;
 use std::marker::PhantomData;
 use tracing::instrument::WithSubscriber;
 
-pub struct GCEISender {
+pub struct GCEISender<T: GravityConsensusEngineInterface> {
     curret_block_id: Option<PayloadId>,
-    gcei_sender: GravityConsensusEngine,
+    gcei_sender: T,
 }
 
-impl GCEISender {
+impl<T: GravityConsensusEngineInterface> GCEISender<T> {
     pub fn new() -> Self {
         Self {
             curret_block_id: None,
-            gcei_sender: GravityConsensusEngine::init(),
+            gcei_sender: T::init(),
         }
     }
 

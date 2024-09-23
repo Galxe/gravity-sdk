@@ -1,4 +1,5 @@
 use alloy::consensus::TxEnvelope;
+use gravity_sdk::simple_consensus_engine::SimpleConsensusEngine;
 use reth_ethereum_engine_primitives::{EthEngineTypes, EthPayloadAttributes};
 use reth_node_core::rpc::types::engine::{ForkchoiceState, PayloadId, PayloadStatus, PayloadStatusEnum};
 use reth_rpc_api::{EngineApiClient, EngineEthApiClient};
@@ -15,7 +16,7 @@ use crate::gcei_sender::GCEISender;
 
 pub struct MockEthConsensusLayer<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> {
     engine_api_client: T,
-    gcei: GCEISender,
+    gcei: GCEISender<SimpleConsensusEngine>,
 }
 
 impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> MockEthConsensusLayer<T> {
