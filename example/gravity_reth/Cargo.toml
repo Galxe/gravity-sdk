@@ -55,5 +55,4 @@ serde_json = "1.0.128"
 time = "0.3.36"
 anyhow = "1.0.87"
 alloy = {version =  "0.3.6", features = ["eip712", "consensus", "rlp", "eips"] }
-bincode = "1.3"
 

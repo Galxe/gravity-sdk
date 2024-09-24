@@ -19,13 +19,15 @@ use tracing::instrument::WithSubscriber;
 pub struct GCEISender<T: GravityConsensusEngineInterface> {
     curret_block_id: Option<PayloadId>,
     gcei_sender: T,
+    chain_id: u64
 }
 
 impl<T: GravityConsensusEngineInterface> GCEISender<T> {
-    pub fn new() -> Self {
+    pub fn new(chain_id: u64) -> Self {
         Self {
             curret_block_id: None,
             gcei_sender: T::init(),
+            chain_id: chain_id
         }
     }
 
@@ -40,16 +42,18 @@ impl<T: GravityConsensusEngineInterface> GCEISender<T> {
     ) -> Vec<Vec<u8>> {
         let mut bytes: Vec<Vec<u8>> = Vec::new();
         let mut payload = payload.clone();
-        payload
-            .execution_payload
-            .payload_inner
-            .payload_inner
-            .transactions
-            .drain(1..)
-            .for_each(|txn_bytes| {
-                bytes.push(txn_bytes.to_vec());
-            });
-        bytes.insert(0, bincode::serialize(&payload).unwrap());
+        if payload.execution_payload.payload_inner.payload_inner.transactions.len() > 1 {
+            payload
+                .execution_payload
+                .payload_inner
+                .payload_inner
+                .transactions
+                .drain(1..)
+                .for_each(|txn_bytes| {
+                    bytes.push(txn_bytes.to_vec());
+                });
+        }
+        bytes.insert(0, serde_json::to_vec(&payload).unwrap());
         bytes
     }
 
@@ -60,38 +64,61 @@ impl<T: GravityConsensusEngineInterface> GCEISender<T> {
     ) {
         let payload = payload.clone();
         let bytes = self.construct_bytes(&payload);
-
-        let txns: Vec<GTxn> = payload
-            .execution_payload
-            .payload_inner
-            .payload_inner
-            .transactions
-            .iter()
-            .zip(bytes.into_iter())
-            .map(|(txn_bytes, bytes)| {
+        let eth_txns = payload.execution_payload.payload_inner.payload_inner.transactions;
+        let mut gtxns = Vec::new();
+        bytes.into_iter().enumerate()
+            .for_each(|(idx, bytes)| {
+                if eth_txns.is_empty() {
+                    // when eth txns is empty, we need mock a txn
+                    let gtxn = GTxn::new(
+                        0,
+                        0,
+                        0,
+                        24 * 60 * 60,
+                        self.chain_id,
+                        bytes,
+                    );
+                    gtxns.push(gtxn);
+                    return;
+                }
+                let txn_bytes = eth_txns[idx].clone();
                 let tx_envelope = self.deserialization_txn(txn_bytes.to_vec());
                 tx_envelope.access_list();
                 let x = tx_envelope.signature_hash().as_slice();
                 let mut signature = [0u8; 64];
 
                 signature[0..64].copy_from_slice(tx_envelope.signature_hash().as_slice());
-                GTxn::new(
+                let gtxn = GTxn::new(
                     tx_envelope.nonce(),
                     tx_envelope.gas_limit() as u64,
                     tx_envelope.gas_price().map(|x| x as u64).unwrap_or(0),
                     60 * 60 * 24, // hardcode 1day
-                    tx_envelope.chain_id().map(|x| x).unwrap_or(0) as u8,
+                    tx_envelope.chain_id().map(|x| x).unwrap_or(0),
                     bytes,
-                )
-            })
-            .collect();
-
-        let mut block_id = [0u8; 32];
-        block_id.copy_from_slice(&payload_id.0.as_slice());
+                );
+                gtxns.push(gtxn);
+            });
+        println!("Submit valid transactions: {:?}", gtxns.len());
         self.curret_block_id = Some(payload_id.clone());
         self.gcei_sender
-            .send_valid_block_transactions(block_id, txns)
-            .await;
+            .send_valid_block_transactions(self.payload_id_to_slice(&payload_id), gtxns)
+            .await.expect("TODO: panic message");
+    }
+
+    fn payload_id_to_slice(&self, payload_id: &PayloadId) -> [u8; 32] {
+        let mut block_id = [0u8; 32];
+        for (id, byte) in payload_id.0.iter().enumerate() {
+            block_id[id] = *byte;
+        }
+        block_id
+    }
+
+    fn slice_to_payload_id(&self, block_id: &[u8; 32]) -> PayloadId {
+        let mut bytes = [0u8; 8];
+        for i in 0..8 {
+            bytes[i] = block_id[i];
+        }
+        PayloadId::new(bytes)
     }
 
     pub async fn polling_order_blocks_v3(
@@ -102,22 +129,22 @@ impl<T: GravityConsensusEngineInterface> GCEISender<T> {
             .receive_ordered_block()
             .await
             .map_err(|e| anyhow::anyhow!(e))?;
-        let mut bytes = [0u8; 8];
-        bytes.copy_from_slice(&res.0);
-        let payload_id = PayloadId::new(bytes);
+        let payload_id = self.slice_to_payload_id(&res.0);
         if self.curret_block_id == Some(payload_id) {
             let mut payload: <EthEngineTypes as EngineTypes>::ExecutionPayloadV3 =
-                bincode::deserialize(res.1[0].get_bytes()).map_err(|e| anyhow::anyhow!(e))?;
-            res.1.drain(1..).for_each(|gtxn| {
-                let txn_bytes = gtxn.get_bytes();
-                let bytes: Bytes = Bytes::from(txn_bytes.clone());
-                payload
-                    .execution_payload
-                    .payload_inner
-                    .payload_inner
-                    .transactions
-                    .push(bytes);
-            });
+                serde_json::from_slice(res.1[0].get_bytes()).map_err(|e| anyhow::anyhow!(e))?;
+            if res.1.len() > 1 {
+                res.1.drain(1..).for_each(|gtxn| {
+                    let txn_bytes = gtxn.get_bytes();
+                    let bytes: Bytes = Bytes::from(txn_bytes.clone());
+                    payload
+                        .execution_payload
+                        .payload_inner
+                        .payload_inner
+                        .transactions
+                        .push(bytes);
+                });
+            }
             return Ok(payload);
         }
         Err(anyhow::anyhow!("Block id is not equal"))
@@ -127,8 +154,7 @@ impl<T: GravityConsensusEngineInterface> GCEISender<T> {
         if self.curret_block_id.is_none() {
             return Err(anyhow::anyhow!("Block id is none"));
         }
-        let mut block_id = [0u8; 32];
-        block_id.copy_from_slice(&self.curret_block_id.unwrap().0.as_slice());
+        let mut block_id = self.payload_id_to_slice(&self.curret_block_id.unwrap());
 
         let mut compute_res_bytes = [0u8; 32];
         compute_res_bytes.copy_from_slice(&compute_res.as_slice());
@@ -141,9 +167,7 @@ impl<T: GravityConsensusEngineInterface> GCEISender<T> {
     pub async fn polling_submit_blocks(&mut self) -> anyhow::Result<()> {
         let payload_id_bytes = self.gcei_sender.receive_commit_block_ids().await.map_err(|e| anyhow::anyhow!(e))?;
         let payload: HashSet<PayloadId> = payload_id_bytes.into_iter().map(|x| {
-            let mut bytes = [0u8; 8];
-            bytes.copy_from_slice(&x);
-            PayloadId::new(bytes)
+            self.slice_to_payload_id(&x)
         }).collect();
         if self.curret_block_id.is_some() && payload.contains(&self.curret_block_id.unwrap()) {
             return Ok(());
@@ -151,9 +175,8 @@ impl<T: GravityConsensusEngineInterface> GCEISender<T> {
         Err(anyhow::anyhow!("Block id is not equal"))
     }
 
-    pub fn submit_max_persistence_block_id(&self) {
-        let mut block_id = [0u8; 32];
-        block_id.copy_from_slice(&self.curret_block_id.unwrap().0.as_slice());
-        self.gcei_sender.send_persistent_block_id(block_id);
+    pub async fn submit_max_persistence_block_id(&self) {
+        let block_id = self.payload_id_to_slice(&self.curret_block_id.unwrap());
+        self.gcei_sender.send_persistent_block_id(block_id).await;
     }
 }

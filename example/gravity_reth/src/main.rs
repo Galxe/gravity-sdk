@@ -18,6 +18,8 @@ pub struct EngineArgs {
 }
 
 use clap::Parser;
+use reth::chainspec::ChainKind;
+use reth_chainspec::Chain;
 use reth_node_builder::engine_tree_config;
 use reth_node_core::args::utils::DefaultChainSpecParser;
 use reth_node_builder::EngineNodeLauncher;
@@ -49,10 +51,10 @@ fn run_server() {
                 .await?;
             let client = handle.node.engine_http_client();
             let genesis_hash = handle.node.chain_spec().genesis_hash();
+            let id = handle.node.chain_spec().chain().id();
             let _ = thread::spawn(
                 move || {
-                    let mut mock_eth_consensus_layer = mock_eth_consensus_layer::MockEthConsensusLayer::new(client);
-
+                    let mut mock_eth_consensus_layer = mock_eth_consensus_layer::MockEthConsensusLayer::new(client, id);
                     tokio::runtime::Runtime::new().unwrap().block_on(mock_eth_consensus_layer.start_round(genesis_hash)).expect("Failed to run round");
                 }
             );

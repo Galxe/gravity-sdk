@@ -17,18 +17,20 @@ use crate::gcei_sender::GCEISender;
 pub struct MockEthConsensusLayer<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> {
     engine_api_client: T,
     gcei: GCEISender<SimpleConsensusEngine>,
+    chain_id: u64,
 }
 
 impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> MockEthConsensusLayer<T> {
-    pub(crate) fn new(client: T) -> Self {  // <1>
+    pub(crate) fn new(client: T, chain_id: u64) -> Self {  // <1>
         Self {
+            chain_id,
             engine_api_client: client,
-            gcei: GCEISender::new(),
+            gcei: GCEISender::new(chain_id),
         }
     }
 
     pub(crate) async fn start_round(&mut self, genesis_hash: B256) -> Result<()> {
-        let hex_string = "0x5e7d2b733eafebe9f5c3db5fda98eef2157c115e73d7adbe0e6663ae5c602eec";
+        let hex_string = "0x1b7178ddc6982bb501c3785246cad6f5c62ab8db169674f08250d73b8ad2bfde";
         let byte_array: [u8; 32] = <[u8; 32]>::from_hex(hex_string).expect("Invalid hex string");
         let fork_choice_state = ForkchoiceState {
             head_block_hash: B256::new(byte_array),
@@ -83,8 +85,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> MockEthConsensusLayer<
             let payload = <T as EngineApiClient<EthEngineTypes>>::get_payload_v3(&self.engine_api_client, payload_id)
                 .await
                 .context("Failed to get payload")?;
-            
-            
+
             // 1. submit valid transactions
             self.gcei.submit_valid_transactions_v3(&payload_id, &payload).await;
             println!("Got payload: {:?}", payload);
@@ -101,10 +102,9 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> MockEthConsensusLayer<
                 if payload_status.latest_valid_hash.is_none() {
                     continue;
                 }
-                self.gcei.submit_compute_res(payload_status.latest_valid_hash.unwrap());
+                self.gcei.submit_compute_res(payload_status.latest_valid_hash.unwrap()).await.expect("TODO: panic message");
                 // 4. polling submit blocks
                 if self.gcei.polling_submit_blocks().await.is_ok() {
-                    // 根据 payload 的状态更新 ForkchoiceState
                     fork_choice_state = self.handle_payload_status(fork_choice_state, payload_status)?;
                     // 5. submit max persistence block id
                     self.gcei.submit_max_persistence_block_id();
