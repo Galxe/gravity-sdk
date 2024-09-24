@@ -104,7 +104,7 @@ pub async fn mock_execution_txn_submitter(adapter: GravityConsensusEngine) {
             max_gas_amount: 0,
             gas_unit_price: 0,
             expiration_timestamp_secs: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() + 60,
-            chain_id: ChainId::test().to_u8(),
+            chain_id: ChainId::test().to_u8() as u64,
             txn_bytes: vec![],
             // public_key: aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing().public_key().to_bytes(),
             // signature: aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap().to_bytes(),

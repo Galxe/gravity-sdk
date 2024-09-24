@@ -1,5 +1,5 @@
 mod bootstrap;
-mod consensus_engine;
+pub mod consensus_engine;
 mod mock_db;
 mod network;
 mod storage;
@@ -23,7 +23,7 @@ pub struct GTxn {
     /// in the future to indicate that a transaction does not expire.
     expiration_timestamp_secs: u64,
     /// Chain ID of the Aptos network this transaction is intended for.
-    chain_id: u8,
+    chain_id: u64,
     /// The transaction payload, e.g., a script to execute.
     txn_bytes: Vec<u8>,
 }
@@ -45,7 +45,7 @@ impl GTxn {
         max_gas_amount: u64,
         gas_unit_price: u64,
         expiration_timestamp_secs: u64,
-        chain_id: u8,
+        chain_id: u64,
         txn_bytes: Vec<u8>,
     ) -> Self {
         Self {
