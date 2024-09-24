@@ -68,99 +68,9 @@ pub fn check_bootstrap_config(node_config_path: Option<PathBuf>) -> NodeConfig {
 
 // Start an Gravity node
 pub fn start(node_config: NodeConfig, mockdb_config_path: Option<PathBuf>) -> anyhow::Result<()> {
-    let listen_address = node_config
-        .validator_network
-        .as_ref()
-        .unwrap()
-        .listen_address
-        .to_string();
-    let db_paths = node_config.storage.dir();
-    let gravity_db = init_gravity_db(listen_address.clone(), db_paths, mockdb_config_path);
-    let gravity_node_config = gravity_db
-        .mock_db
-        .node_config_set
-        .get(&listen_address)
-        .unwrap();
-    let peers_and_metadata =
-        init_peers_and_metadata(&node_config, &gravity_db, &gravity_node_config);
-    let db: DbReaderWriter = DbReaderWriter::new(gravity_db);
-    let mut event_subscription_service =
-        aptos_event_notifications::EventSubscriptionService::new(Arc::new(RwLock::new(db.clone())));
-    let network_configs = extract_network_configs(&node_config);
-
-    let network_config = network_configs.get(0).unwrap();
-    let chain_id = ChainId::test();
-    let mut network_builder = NetworkBuilder::create(
-        chain_id,
-        node_config.base.role,
-        &network_config,
-        aptos_time_service::TimeService::real(),
-        Some(&mut event_subscription_service),
-        peers_and_metadata.clone(),
-    );
-    let network_id: NetworkId = network_config.network_id;
-    let (consensus_network_interfaces, mempool_interfaces) = init_network_interfaces(
-        &mut network_builder,
-        network_id,
-        &network_config,
-        &node_config,
-        peers_and_metadata.clone(),
-    );
-    let state_sync_config = node_config.state_sync;
-    let (consensus_notifier, consensus_listener) =
-        aptos_consensus_notifications::new_consensus_notifier_listener_pair(
-            state_sync_config
-                .state_sync_driver
-                .commit_notification_timeout_ms,
-        );
-    let mut network_runtimes = vec![];
-    // Create a network runtime for the config
-    let runtime = create_network_runtime(&network_config);
-    // Build and start the network on the runtime
-    network_builder.build(runtime.handle().clone());
-    network_builder.start();
-    network_runtimes.push(runtime);
-
-    // TODO(Gravity_byteyue): delete the following comment
-    // 这里要看aptos代码的setup_environment_and_start_node函数下的start_mempool_runtime_and_get_consensus_sender的逻辑，不然这里channel好像对不上都
-    // start consensus确实是用consensus_to_mempool_receiver，但是在setup_environment_and_start_node才有Receiver<MempoolClientRequest>
-    // setup_environment_and_start_node 调用了 bootstrap_api_and_indexer ，在其中构造了 mempool_client_sender 和 mempool_client_receiver, 然后 bootstrap_api_and_indexer
-    // 返回了 receiver, 接下来 setup_environment_and_start_node 把 receiver 传递给 start_mempool_runtime_and_get_consensus_sender ,
-    // 在其中构造了 consensus_to_mempool_sender 和 consensus_to_mempool_receiver
-    // 并返回了sender
-    let (mempool_client_sender, mempool_client_receiver) = mpsc::channel(1);
-
-    let (consensus_to_mempool_sender, consensus_to_mempool_receiver) = mpsc::channel(1);
-    let (notification_sender, notification_receiver) = mpsc::channel(1);
-
-    let _mempool_notifier = aptos_mempool_notifications::MempoolNotifier::new(notification_sender);
-    let mempool_listener =
-        aptos_mempool_notifications::MempoolNotificationListener::new(notification_receiver);
-
-    init_mempool(
-        &node_config,
-        &db,
-        &mut event_subscription_service,
-        mempool_client_sender.clone(),
-        mempool_interfaces,
-        mempool_client_receiver,
-        consensus_to_mempool_receiver,
-        mempool_listener,
-        peers_and_metadata,
-    );
-    let mut arg = ConsensusAdapterArgs::new(mempool_client_sender);
-    let adapter = GravityConsensusEngine::init(mempool_client_sender);
+    let gravity_db = init_gravity_db(&node_config, mockdb_config_path);
+    let adapter = GravityConsensusEngine::init(node_config, gravity_db);
     let adapter_mutex = Arc::new(Mutex::new(adapter));
-    start_consensus(
-        &node_config,
-        &mut event_subscription_service,
-        consensus_network_interfaces,
-        consensus_notifier,
-        consensus_to_mempool_sender,
-        db,
-        arg,
-    );
-    let _ = event_subscription_service.notify_initial_configs(1_u64);
     let submitter_mutex = adapter_mutex.clone();
     tokio::spawn(async move {
         network::mock_execution_txn_submitter(submitter_mutex.clone()).await;
@@ -211,7 +121,7 @@ pub fn start_consensus(
     consensus_notifier: ConsensusNotifier,
     consensus_to_mempool_sender: Sender<QuorumStoreRequest>,
     db: DbReaderWriter,
-    arg: ConsensusAdapterArgs,
+    arg: &ConsensusAdapterArgs,
 ) -> (Runtime, Arc<StorageWriteProxy>, Arc<QuorumStoreDB>) {
     let consensus_reconfig_subscription = event_subscription_service
         .subscribe_to_reconfigurations()
@@ -268,8 +178,18 @@ pub fn init_mempool(
 pub fn init_peers_and_metadata(
     node_config: &NodeConfig,
     gravity_db: &GravityDB,
-    gravity_node_config: &GravityNodeConfig,
 ) -> Arc<PeersAndMetadata> {
+    let listen_address = node_config
+        .validator_network
+        .as_ref()
+        .unwrap()
+        .listen_address
+        .to_string();
+    let gravity_node_config  = gravity_db
+    .mock_db
+    .node_config_set
+    .get(&listen_address)
+    .unwrap();
     let network_ids = extract_network_ids(node_config);
     let peers_and_metadata = PeersAndMetadata::new(&network_ids);
     let mut peer_set = HashMap::new();
@@ -299,10 +219,16 @@ pub fn init_peers_and_metadata(
 }
 
 pub fn init_gravity_db(
-    listen_address: String,
-    mut db_paths: PathBuf,
+    node_config: &NodeConfig,
     mockdb_config_path: Option<PathBuf>,
 ) -> GravityDB {
+    let listen_address = node_config
+        .validator_network
+        .as_ref()
+        .unwrap()
+        .listen_address
+        .to_string();
+    let mut db_paths = node_config.storage.dir();
     db_paths.push("gravity_db");
     let _ = fs::create_dir(&db_paths);
     let db_paths = StorageDirPaths::from_path(db_paths);
