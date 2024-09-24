@@ -87,7 +87,7 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
                 txn.max_gas_amount,
                 txn.gas_unit_price,
                 txn.expiration_timestamp_secs,
-                ChainId::new(txn.chain_id),
+                ChainId::new(txn.chain_id as u8),
             );
             let sign_txn = SignedTransaction::new_with_gtxn(
                 raw_txn,
