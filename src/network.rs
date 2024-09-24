@@ -10,7 +10,7 @@ use futures::{channel::oneshot, SinkExt};
 use serde::{Deserialize, Serialize};
 use tokio::runtime::Runtime;
 
-use crate::{ApplicationNetworkInterfaces, GTxn, GravityConsensusEngineInterface};
+use crate::{bootstrap::ApplicationNetworkInterfaces, GTxn, GravityConsensusEngineInterface};
 use crate::consensus_engine::GravityConsensusEngine;
 
 /// Extracts all network configs from the given node config
