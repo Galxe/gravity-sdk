@@ -6,8 +6,8 @@ edition = "2021"
 
 [workspace]
 members = [
+    "example/gravity_reth",
     "aptos-core/consensus",
-     "example/gravity_reth",
     "dependencies/aptos-bitvec",
     "dependencies/aptos-bounded-executor",
     "dependencies/aptos-cached-packages",
@@ -47,13 +47,7 @@ members = [
     "dependencies/aptos-vm",
     "dependencies/aptos-vm-validator",
     "dependencies/aptos-log-derive",
-
     "dependencies/move-core-types",
-    "dependencies/move-binary-format",
-    "dependencies/move-bytecode-verifier",
-    "dependencies/move-table-extension",
-    "dependencies/move-vm-runtime",
-    "dependencies/move-vm-types",
 ]
 
 
@@ -82,7 +76,6 @@ aptos-mempool-notifications = { path = "./dependencies/mempool-notifications" }
 aptos-logger = { path = "./dependencies/aptos-logger" }
 aptos-netcore = { path = "./aptos-core/network/netcore" }
 aptos-network = { path = "./aptos-core/network/framework" }
-aptos-network-benchmark = { path = "./aptos-core/network/benchmark" }
 aptos-network-builder = { path = "./aptos-core/network/builder" }
 aptos-network-discovery = { path = "./aptos-core/network/discovery" }
 aptos-event-notifications = { path = "./dependencies/aptos-event-notifications" }
@@ -167,11 +160,6 @@ aptos-vm-validator = { path = "./dependencies/aptos-vm-validator" }
 aptos-log-derive = { path = "./dependencies/aptos-log-derive" }
 aptos-rest-client = { path = "./dependencies/aptos-rest-client" }
 move-core-types = { path = "./dependencies/move-core-types" }
-move-binary-format = { path = "./dependencies/move-binary-format" }
-move-bytecode-verifier = { path = "./dependencies/move-bytecode-verifier" }
-move-table-extension = { path = "./dependencies/move-table-extension" }
-move-vm-runtime = { path = "./dependencies/move-vm-runtime" }
-move-vm-types = { path = "./dependencies/move-vm-types" }
 aptos-proxy = { path = "./dependencies/proxy" }
 aptos-num-variants = { path = "./dependencies/num-variants" }
 
@@ -186,7 +174,6 @@ aptos-safety-rules = { path = "./aptos-core/consensus/safety-rules", features = 
 ] }
 aptos-netcore = { path = "./aptos-core/network/netcore" }
 aptos-network = { path = "./aptos-core/network/framework" }
-aptos-network-benchmark = { path = "./aptos-core/network/benchmark" }
 aptos-network-builder = { path = "./aptos-core/network/builder" }
 aptos-network-discovery = { path = "./aptos-core/network/discovery" }
 # from aptos =======================
