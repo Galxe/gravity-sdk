@@ -18,8 +18,6 @@ pub struct EngineArgs {
 }
 
 use clap::Parser;
-use reth::chainspec::ChainKind;
-use reth_chainspec::Chain;
 use reth_node_builder::engine_tree_config;
 use reth_node_core::args::utils::DefaultChainSpecParser;
 use reth_node_builder::EngineNodeLauncher;

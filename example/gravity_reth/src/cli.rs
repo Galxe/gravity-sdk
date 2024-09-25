@@ -1,12 +1,8 @@
-use clap::{value_parser, Parser, Subcommand};
+use clap::{value_parser, Parser};
 use reth::cli::Commands;
 use reth_chainspec::ChainSpec;
 use reth_cli::chainspec::ChainSpecParser;
-use reth_cli_commands::{
-    config_cmd, db, dump_genesis, import, init_cmd, init_state,
-    node::{self, NoArgs},
-    p2p, prune, recover, stage,
-};
+use reth_cli_commands::node::NoArgs;
 use reth_cli_runner::CliRunner;
 use reth_db::DatabaseEnv;
 use reth_node_core::args::LogArgs;

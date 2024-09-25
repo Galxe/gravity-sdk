@@ -3,6 +3,7 @@ pub mod consensus_engine;
 mod mock_db;
 mod network;
 mod storage;
+pub mod simple_consensus_engine;
 
 use aptos_config::config::NodeConfig;
 use bootstrap::{check_bootstrap_config, start};

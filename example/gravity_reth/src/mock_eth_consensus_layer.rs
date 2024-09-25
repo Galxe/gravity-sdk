@@ -1,29 +1,22 @@
-use alloy::consensus::TxEnvelope;
 use gravity_sdk::simple_consensus_engine::SimpleConsensusEngine;
 use reth_ethereum_engine_primitives::{EthEngineTypes, EthPayloadAttributes};
 use reth_node_core::rpc::types::engine::{ForkchoiceState, PayloadId, PayloadStatus, PayloadStatusEnum};
 use reth_rpc_api::{EngineApiClient, EngineEthApiClient};
 use eyre::{Context, Result};
-use alloy::rlp::Bytes;
-use alloy::eips::eip2718::Decodable2718;
 use reth_node_core::primitives::{Address, B256};
-use reth_node_core::rpc::types::ExecutionPayloadV3;
 use reth_primitives::hex::FromHex;
-use reth_rpc_types::engine::{payload, ForkchoiceUpdated, PayloadAttributes};
-use reth_rpc_types::{ExecutionPayloadV2};
+use reth_rpc_types::engine::{ForkchoiceUpdated, PayloadAttributes};
 use crate::gcei_sender::GCEISender;
 
 
 pub struct MockEthConsensusLayer<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> {
     engine_api_client: T,
     gcei: GCEISender<SimpleConsensusEngine>,
-    chain_id: u64,
 }
 
 impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> MockEthConsensusLayer<T> {
     pub(crate) fn new(client: T, chain_id: u64) -> Self {  // <1>
         Self {
-            chain_id,
             engine_api_client: client,
             gcei: GCEISender::new(chain_id),
         }
@@ -107,7 +100,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> MockEthConsensusLayer<
                 if self.gcei.polling_submit_blocks().await.is_ok() {
                     fork_choice_state = self.handle_payload_status(fork_choice_state, payload_status)?;
                     // 5. submit max persistence block id
-                    self.gcei.submit_max_persistence_block_id();
+                    self.gcei.submit_max_persistence_block_id().await;
                 }
             }
 
@@ -169,14 +162,11 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> MockEthConsensusLayer<
                 Ok(fork_choice_state)
             }
             PayloadStatusEnum::Invalid { validation_error } => {
-                // 记录错误并根据需要采取进一步措施
                 eprintln!("Invalid payload: {}", validation_error);
-                // 在这里可以选择返回错误或者继续
                 Err(eyre::anyhow!("Invalid payload: {}", validation_error))
             }
             PayloadStatusEnum::Syncing => {
                 eprintln!("Syncing, awaiting data...");
-                // 根据需要选择是否返回错误或等待
                 Err(eyre::anyhow!("Syncing, awaiting data"))
             }
         }
