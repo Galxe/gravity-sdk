@@ -137,7 +137,7 @@ pub fn start(node_config: NodeConfig, mockdb_config_path: Option<PathBuf>) -> an
     let mempool_listener =
         aptos_mempool_notifications::MempoolNotificationListener::new(notification_receiver);
 
-    init_mempool(
+    let _runtime = init_mempool(
         &node_config,
         &db,
         &mut event_subscription_service,
@@ -150,7 +150,7 @@ pub fn start(node_config: NodeConfig, mockdb_config_path: Option<PathBuf>) -> an
     );
     let mut arg = ConsensusAdapterArgs::new(mempool_client_sender);
     let adapter = GravityConsensusEngine::new(&mut arg);
-    start_consensus(
+    let _consensus = start_consensus(
         &node_config,
         &mut event_subscription_service,
         consensus_network_interfaces,

@@ -40,7 +40,7 @@ impl GravityConsensusEngine {
             mempool_sender: args.mempool_sender.clone(),
             pipeline_block_receiver: args.pipeline_block_receiver.take(),
             execute_result_receivers: RwLock::new(HashMap::new()),
-            committed_block_ids_receiver: todo!(),
+            committed_block_ids_receiver: None,
             persist_result_receiver: Mutex::new(None),
         }
     }
