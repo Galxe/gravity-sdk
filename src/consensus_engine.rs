@@ -147,7 +147,7 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
             .await
             .insert(parent_id, callback);
 
-        Ok((*parent_id, gtxns))
+        Ok((*block_id, gtxns))
     }
 
     async fn send_compute_res(&self, id: [u8; 32], res: [u8; 32]) -> Result<(), GCEIError> {

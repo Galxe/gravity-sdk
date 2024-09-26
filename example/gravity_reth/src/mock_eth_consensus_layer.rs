@@ -59,6 +59,29 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> MockEthConsensusLayer<
         }
     }
 
+    pub fn is_leader(&self) -> bool {
+        true
+    }
+
+    pub async fn construct_payload(&mut self, fork_choice_state: &mut ForkchoiceState) -> anyhow::Result<bool> {
+        let parent_beacon_block_root = fork_choice_state.head_block_hash;
+        let payload_attributes = Self::create_payload_attributes(parent_beacon_block_root);
+        // update ForkchoiceState and get payload_id
+        let payload_id = match self.get_new_payload_id(fork_choice_state, &payload_attributes).await {
+            Some(payload_id) => payload_id,
+            None => return Ok(false),
+        };
+        // try to get payload
+        let payload = <T as EngineApiClient<EthEngineTypes>>::get_payload_v3(&self.engine_api_client, payload_id)
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+
+        // 1. submit valid transactions
+        self.gcei.submit_valid_transactions_v3(&payload_id, &payload).await;
+        println!("Got payload: {:?}", payload);
+        return Ok(true);
+    }
+
     pub(crate) async fn run_round(&mut self, mut fork_choice_state: ForkchoiceState) -> Result<()> {
         let mut round = 0;
         loop {
@@ -66,29 +89,20 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> MockEthConsensusLayer<
             round += 1;
             println!("Round {}", round);
             println!("Cli ForkchoiceState: {:?}", fork_choice_state);
-            let parent_beacon_block_root = fork_choice_state.head_block_hash;
-            let payload_attributes = Self::create_payload_attributes(parent_beacon_block_root);
-            // update ForkchoiceState and get payload_id
-            let payload_id = match self.get_new_payload_id(&mut fork_choice_state, &payload_attributes).await {
-                Some(payload_id) => payload_id,
-                None => continue,
-            };
-
-            // try to get payload
-            let payload = <T as EngineApiClient<EthEngineTypes>>::get_payload_v3(&self.engine_api_client, payload_id)
-                .await
-                .context("Failed to get payload")?;
-
-            // 1. submit valid transactions
-            self.gcei.submit_valid_transactions_v3(&payload_id, &payload).await;
-            println!("Got payload: {:?}", payload);
-            // submit payload
-
-
+            // submit valid transactions for leader
+            if self.is_leader() {
+                let res = self.construct_payload(&mut fork_choice_state).await;
+                if res.is_err() || !res.unwrap() { 
+                    continue;
+                }
+            }
+            
             // 2. polling order blocks
-            if self.gcei.polling_order_blocks_v3().await.is_ok() {
+            let payload = self.gcei.polling_order_blocks_v3().await;
+            if let Ok(payload) = payload {
+                let parent_hash = payload.execution_payload.payload_inner.payload_inner.parent_hash;
                 let payload_status = <T as EngineApiClient<EthEngineTypes>>::new_payload_v3(&self.engine_api_client, payload.execution_payload, Vec::new(),
-                                                                                            parent_beacon_block_root)
+                                                                                            parent_hash)
                     .await
                     .context("Failed to submit payload")?;
                 // 3. submit compute res
