@@ -68,15 +68,18 @@ pub fn check_bootstrap_config(node_config_path: Option<PathBuf>) -> NodeConfig {
 
 // Start an Gravity node
 pub fn start(node_config: NodeConfig) -> anyhow::Result<()> {
+    let test_mode = node_config.test_mode;
     let adapter = GravityConsensusEngine::init(node_config);
     let adapter_mutex = Arc::new(Mutex::new(adapter));
     let submitter_mutex = adapter_mutex.clone();
-    tokio::spawn(async move {
-        network::mock_execution_txn_submitter(submitter_mutex.clone()).await;
-    });
-    tokio::spawn(async move {
-        network::mock_execution_receive_block(adapter_mutex.clone()).await;
-    });
+    if test_mode {
+        tokio::spawn(async move {
+            network::mock_execution_txn_submitter(submitter_mutex.clone()).await;
+        });
+        tokio::spawn(async move {
+            network::mock_execution_receive_block(adapter_mutex.clone()).await;
+        });
+    }
     loop {
         thread::park();
     }

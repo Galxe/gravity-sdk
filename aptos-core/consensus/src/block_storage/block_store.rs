@@ -71,7 +71,7 @@ fn update_counters_for_ordered_blocks(ordered_blocks: &[Arc<PipelinedBlock>]) {
 ///             ├--------> C2
 ///             ╰--------------> D3
 pub struct BlockStore {
-    pub inner: Arc<RwLock<BlockTree>>,
+    inner: Arc<RwLock<BlockTree>>,
     execution_client: Arc<dyn TExecutionClient>,
     /// The persistent storage backing up the in-memory data structure, every write should go
     /// through this before in-memory tree.
@@ -119,6 +119,10 @@ impl BlockStore {
         ));
         block_on(block_store.try_send_for_execution());
         block_store
+    }
+
+    pub fn get_block_tree(&self) -> Arc<RwLock<BlockTree>> {
+        self.inner.clone()
     }
 
     async fn try_send_for_execution(&self) {
