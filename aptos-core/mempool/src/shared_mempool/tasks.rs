@@ -544,7 +544,6 @@ pub(crate) fn process_quorum_store_request<NetworkClient, TransactionValidator>(
                 );
                 txns =
                     mempool.get_batch(max_txns, max_bytes, return_non_full, exclude_transactions);
-                println!("process_quorum_store_request get batch txn size is {:?}", txns.len());
             }
 
             // mempool_service_transactions is logged inside get_batch
@@ -570,14 +569,12 @@ pub(crate) fn process_quorum_store_request<NetworkClient, TransactionValidator>(
     };
     // Send back to callback
     let result = if callback.send(Ok(resp)).is_err() {
-        println!("send get batch response failed");
         error!(LogSchema::event_log(
             LogEntry::QuorumStore,
             LogEvent::CallbackFail
         ));
         counters::REQUEST_FAIL_LABEL
     } else {
-        println!("send get batch response succeed");
         counters::REQUEST_SUCCESS_LABEL
     };
     let latency = start_time.elapsed();

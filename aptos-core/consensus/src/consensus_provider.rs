@@ -70,7 +70,6 @@ pub fn start_consensus(
         BlockExecutor::<AptosVM>::new(aptos_db),
         gravity_args.committed_block_ids_sender.clone(),
     );
-    // 修改成gravity版
     let execution_proxy = ExecutionProxy::new(
         Arc::new(g_executor),
         txn_notifier,

@@ -72,7 +72,6 @@ impl PayloadClient for MockPayloadManager {
         _block_timestamp: Duration,
     ) -> Result<(Vec<ValidatorTransaction>, Payload), QuorumStoreError> {
         // generate 1k txn is too slow with coverage instrumentation
-        println!("enter mock payload manager");
         Ok((
             vec![ValidatorTransaction::dummy(vec![0xFF; 1])],
             random_payload(10),

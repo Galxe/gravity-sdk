@@ -412,7 +412,6 @@ impl RoundManager {
                 .await?;
             }
         };
-        println!("try to broadcast proposal msg");
         network.broadcast_proposal(proposal_msg).await;
         counters::PROPOSALS_COUNT.inc();
         Ok(())
@@ -523,7 +522,6 @@ impl RoundManager {
         let proposal = proposal_generator
             .generate_proposal(new_round_event.round, proposer_election, callback)
             .await?;
-        println!("generate block size is {:?}", proposal.payload().as_ref().unwrap().len());
         let signature = safety_rules.lock().sign_proposal(&proposal)?;
         let signed_proposal =
             Block::new_proposal_from_block_data_and_signature(proposal, signature);
@@ -734,7 +732,6 @@ impl RoundManager {
             },
         };
 
-        println!("the timeout_vote is timeous {:?}", timeout_vote.is_timeout());
         if !timeout_vote.is_timeout() {
             let timeout = timeout_vote
                 .generate_2chain_timeout(self.block_store.highest_quorum_cert().as_ref().clone());
@@ -914,7 +911,6 @@ impl RoundManager {
         &mut self,
         proposal: Block,
     ) -> anyhow::Result<()> {
-        println!("check_backpressure_and_process_proposal");
         let author = proposal
             .author()
             .expect("Proposal should be verified having an author");
@@ -1238,7 +1234,6 @@ impl RoundManager {
         let round = vote.vote_data().proposed().round();
         match result {
             VoteReceptionResult::NewQuorumCertificate(qc) => {
-                println!("NewQuorumCertificate");
                 if !vote.is_timeout() {
                     observe_block(
                         qc.certified_block().timestamp_usecs(),
@@ -1468,7 +1463,6 @@ impl RoundManager {
                     }
                 },
                 proposal = buffered_proposal_rx.select_next_some() => {
-                    println!("receive proposal {:?}", proposal);
                     let mut proposals = vec![proposal];
                     while let Some(Some(proposal)) = buffered_proposal_rx.next().now_or_never() {
                         proposals.push(proposal);
@@ -1523,7 +1517,6 @@ impl RoundManager {
                     };
                 },
                 (peer_id, event) = event_rx.select_next_some() => {
-                    println!("receive event {:?} : {:?}", peer_id, event);
                     let result = match event {
                         VerifiedEvent::VoteMsg(vote_msg) => {
                             monitor!("process_vote", self.process_vote_msg(*vote_msg).await)

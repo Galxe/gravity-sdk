@@ -75,18 +75,15 @@ impl DirectMempoolQuorumStore {
             .await
         ) {
             Err(_) => {
-                println!("pull internal received timeout, time out {}", self.mempool_txn_pull_timeout_ms);
                 Err(anyhow::anyhow!(
                     "[direct_mempool_quorum_store] did not receive GetBatchResponse on time"
                 ))
             },
             Ok(resp) => match resp.map_err(anyhow::Error::from)?? {
                 QuorumStoreResponse::GetBatchResponse(txns) => {
-                    println!("pull internal received ok, txn size is {:?}", txns.len());
                     Ok(txns)
                 },
                 _ => {
-                    println!("pull internal received error");
                     Err(anyhow::anyhow!(
                         "[direct_mempool_quorum_store] did not receive expected GetBatchResponse"
                     ))
@@ -122,7 +119,6 @@ impl DirectMempoolQuorumStore {
             },
             Ok(txns) => (txns, counters::REQUEST_SUCCESS_LABEL),
         };
-        println!("handle_block_request get txn size is {:?}", txns.len());
         counters::quorum_store_service_latency(
             counters::GET_BATCH_LABEL,
             result,

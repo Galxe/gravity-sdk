@@ -101,7 +101,6 @@ impl BlockTree {
         result.push_str(&format!("OrderRoot:        {:?}\n", self.ordered_root_id));
         result.push_str(&format!("CommitRoot:       {:?}\n", self.commit_root_id));
         result.push_str("\nTree Structure:\n");
-        // 递归构建树结构
         self.build_tree_string(&self.ordered_root_id, &mut result, "", true);
         result
     }
@@ -112,17 +111,13 @@ impl BlockTree {
     }
     fn build_tree_string(&self, block_id: &HashValue, result: &mut String, prefix: &str, is_last: bool) {
         if let Some(block) = self.id_to_block.get(block_id) {
-            // 添加当前区块信息
             let node_info = self.build_node_string(block_id);
             result.push_str(&format!("{}{}── Block ID: {:?}\n", prefix, if is_last { "└" } else { "├" }, block_id));
-            // 为交易信息添加缩进
             let transaction_prefix = format!("{}{}   ", prefix, if is_last { " " } else { "│" });
             for line in node_info.lines() {
                 result.push_str(&format!("{}│  {}\n", transaction_prefix, line));
             }
-            // 为子节点准备新的前缀
             let new_prefix = format!("{}{}   ", prefix, if is_last { " " } else { "│" });
-            // 递归添加子节点
             let children: Vec<_> = block.children.iter().collect();
             for (i, child_id) in children.iter().enumerate() {
                 let is_last_child = i == children.len() - 1;
@@ -153,7 +148,6 @@ impl BlockTree {
         );
         let root_id = root.id();
 
-        println!("root_commit_cert {:?}", root_commit_cert);
         let mut id_to_block = HashMap::new();
         id_to_block.insert(root_id, LinkableBlock::new(root));
         counters::NUM_BLOCKS_IN_TREE.set(1);
@@ -273,7 +267,6 @@ impl BlockTree {
         block: PipelinedBlock,
     ) -> anyhow::Result<Arc<PipelinedBlock>> {
         let block_id = block.id();
-        println!("insert block with block id {:?}", block_id);
         if let Some(existing_block) = self.get_block(&block_id) {
             debug!("Already had block {:?} for id {:?} when trying to add another block {:?} for the same id",
                        existing_block,

@@ -178,7 +178,7 @@ impl ExecutionProxy {
 
         let input_txns = Block::combine_to_input_transactions(validator_txns, user_txns, metadata);
 
-        // TODO(gravity_byteyue): 下面的逻辑看一下
+        // TODO(gravity_byteyue): Should gravity do the same thing?
         // Adds StateCheckpoint/BlockEpilogue transaction if needed.
         // executed_block
         //     .compute_result()
@@ -317,6 +317,7 @@ impl StateComputer for ExecutionProxy {
             .cloned()
             .expect("must be set within an epoch");
         let mut committed_block_ids = vec![];
+        // TODO(gravity_byteyue): We should handle it using one elegant way
         for block in blocks {
             block_ids.push(block.id());
 
@@ -326,7 +327,6 @@ impl StateComputer for ExecutionProxy {
             if !block.input_transactions().is_empty() {
                 committed_block_ids.push(block.id());
             }
-            println!("block id {:?} has input txns {:?}", block.id(), !block.input_transactions().is_empty());
 
             let commit_transactions = self.transactions_to_commit(block, &validators, is_randomness_enabled);
             if !commit_transactions.is_empty() {
@@ -334,7 +334,6 @@ impl StateComputer for ExecutionProxy {
             }
             subscribable_txn_events.extend(block.subscribable_events());
         }
-        println!("the commit blocks is {:?}, txns are {:?}", committed_block_ids, txns);
 
         let executor = self.executor.clone();
         let proof = finality_proof.clone();

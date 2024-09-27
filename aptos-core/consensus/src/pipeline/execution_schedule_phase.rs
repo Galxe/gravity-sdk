@@ -76,7 +76,6 @@ impl StatelessPipeline for ExecutionSchedulePhase {
             },
         };
 
-        println!("call to schedule_compute");
         // Call schedule_compute() for each block here (not in the fut being returned) to
         // make sure they are scheduled in order.
         let mut futs = vec![];

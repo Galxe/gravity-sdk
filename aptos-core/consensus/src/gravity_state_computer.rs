@@ -140,28 +140,16 @@ impl StateComputer for GravityExecutionProxy {
     ) -> StateComputeResultFut {
         let txns = self.aptos_state_computer.get_block_txns(block).await;
         let empty_block = txns.is_empty();
-        // if txns.is_empty() {
-        //     println!("gravity_state_computer skip empty transaction block {:?}", block);
-        //     return Box::pin(async move {
-        //         let result = StateComputeResult::new_dummy();
-        //         Ok(PipelineExecutionResult::new(vec![], result, Duration::ZERO))
-        //     });
-        // }
 
         let block_id = block.id();
         let (block_result_sender, block_result_receiver) = oneshot::channel();
+        // We would export the empty block detail to the outside GCEI caller
         if empty_block {
-            println!("the block {:?} is one empty one", block.id());
             let compute_res_bytes = [0u8; 32];
             block_result_sender
                 .send(HashValue::new(compute_res_bytes))
                 .expect("send failed");
         } else {
-            println!(
-                "the gravity_state_computer schedule_compute block id is {:?}, the id is {:?}, block is {:?}",
-                block.id(), txns.first().as_ref().unwrap().g_ext().block_id, block
-            );
-
             self.pipeline_block_sender
                 .clone()
                 .send((parent_block_id, block.id(), txns.clone(), block_result_sender))
@@ -253,10 +241,6 @@ impl<V: Send + Sync> BlockExecutorTrait for GravityBlockExecutor<V> {
         block_ids: Vec<HashValue>,
         ledger_info_with_sigs: LedgerInfoWithSignatures,
     ) -> ExecutorResult<()> {
-        println!(
-            "the gravity_state_computer commit_blocks block id is {:?}",
-            block_ids
-        );
         if !block_ids.is_empty() {
             let (send, recerver) = oneshot::channel();
             let r = tokio::runtime::Runtime::new()

@@ -474,13 +474,7 @@ impl ProposalGenerator {
                 )
                 .await
                 .context("Fail to retrieve payload")?;
-            println!("has pulled payload, size is {:?}", payload.len());
-            // TODO(gravity_byteyue): Consensus under reth should not produce empty block. Maybe we should leave one comment here
-            // if validator_txns.is_empty() || payload.len() == 0 {
-            //     println!("generate one empty proposal");
-            //     tokio::time::sleep(Duration::from_millis(100)).await;
-            //     return Err(anyhow::anyhow!("ignore empty block"));
-            // }
+            // TODO(gravity_byteyue): Consider how to process the validator transaction
             if !payload.is_direct()
                 && max_txns_from_block_to_execute.is_some()
                 && max_txns_from_block_to_execute.map_or(false, |v| payload.len() as u64 > v)
