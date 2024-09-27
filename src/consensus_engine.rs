@@ -1,9 +1,10 @@
 use crate::bootstrap::{
-    init_gravity_db, init_mempool, init_network_interfaces, init_peers_and_metadata, start_consensus
+    init_gravity_db, init_mempool, init_network_interfaces, init_peers_and_metadata,
+    start_consensus,
 };
+use crate::consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler};
 use crate::network::{create_network_runtime, extract_network_configs};
-use crate::storage::db::GravityDB;
-use crate::utils::{ConsensusToMempoolHandler, MempoolNotificationHandler};
+use crate::utils::bimap::BiMap;
 use crate::{GCEIError, GTxn, GravityConsensusEngineInterface};
 use aptos_config::config::NodeConfig;
 use aptos_config::network_id::NetworkId;
@@ -17,7 +18,6 @@ use aptos_storage_interface::DbReaderWriter;
 use aptos_types::account_address::AccountAddress;
 use aptos_types::chain_id::ChainId;
 use aptos_types::mempool_status::{MempoolStatus, MempoolStatusCode};
-use aptos_types::transaction::authenticator::TransactionAuthenticator;
 use aptos_types::transaction::{
     GravityExtension, RawTransaction, SignedTransaction, TransactionPayload,
 };
@@ -27,41 +27,10 @@ use futures::{
     channel::{mpsc, oneshot},
     SinkExt,
 };
-use hex::ToHex;
-use itertools::Itertools;
-use tokio::runtime::Runtime;
-use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::runtime::Runtime;
 use tokio::sync::{Mutex, RwLock};
-
-#[derive(Debug)]
-struct BiMap {
-    payload_to_block: HashMap<[u8; 32], HashValue>,
-    block_to_payload: HashMap<HashValue, [u8; 32]>,
-}
-impl BiMap {
-    fn new() -> Self {
-        BiMap {
-            payload_to_block: HashMap::new(),
-            block_to_payload: HashMap::new(),
-        }
-    }
-    fn insert(&mut self, payload_id: [u8; 32], block_id: HashValue) {
-        self.payload_to_block.insert(payload_id, block_id);
-        self.block_to_payload.insert(block_id, payload_id);
-    }
-    fn get_block_id(&self, payload_id: &[u8; 32]) -> Option<&HashValue> {
-        self.payload_to_block.get(payload_id)
-    }
-    fn get_payload_id(&self, block_id: &HashValue) -> Option<&[u8; 32]> {
-        self.block_to_payload.get(block_id)
-    }
-    fn remove(&mut self, payload_id: &[u8; 32], block_id: &HashValue) {
-        self.payload_to_block.remove(payload_id);
-        self.block_to_payload.remove(block_id);
-    }
-}
 
 pub struct GravityConsensusEngine {
     mempool_sender: mpsc::Sender<MempoolClientRequest>,
@@ -173,7 +142,8 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
         let mempool_notifier =
             aptos_mempool_notifications::MempoolNotifier::new(notification_sender);
         let mempool_notification_handler = MempoolNotificationHandler::new(mempool_notifier);
-        let mut consensus_mempool_handler = ConsensusToMempoolHandler::new(mempool_notification_handler, consensus_listener);
+        let mut consensus_mempool_handler =
+            ConsensusToMempoolHandler::new(mempool_notification_handler, consensus_listener);
         let runtime = aptos_runtimes::spawn_named_runtime("Con2Mempool".into(), None);
         runtime.spawn(async move {
             consensus_mempool_handler.start().await;
@@ -223,7 +193,11 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
         txns: Vec<GTxn>,
     ) -> Result<(), GCEIError> {
         let len = txns.len();
-        println!("send send_valid_block_transactions, block_is {:?}, size {:?}", HashValue::new(block_id), len);
+        println!(
+            "send send_valid_block_transactions, block_is {:?}, size {:?}",
+            HashValue::new(block_id),
+            len
+        );
         for (i, txn) in txns.into_iter().enumerate() {
             let addr = AccountAddress::random();
             let raw_txn = RawTransaction::new(
@@ -235,7 +209,10 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
                 txn.expiration_timestamp_secs,
                 ChainId::new(txn.chain_id as u8),
             );
-            println!("txn addr is {:?}, expiration time second {:?}", addr, txn.expiration_timestamp_secs);
+            println!(
+                "txn addr is {:?}, expiration time second {:?}",
+                addr, txn.expiration_timestamp_secs
+            );
             let sign_txn = SignedTransaction::new_with_gtxn(
                 raw_txn,
                 aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing().public_key(),
@@ -265,7 +242,10 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
         let (parent_id, block_id, txns, callback) = receive_result.unwrap();
         println!("the txns size is {:?}, block_is {:?}", txns.len(), block_id);
         let return_payload_id = txns.first().unwrap().g_ext().block_id;
-        self.id_index.write().await.insert(*return_payload_id, block_id);
+        self.id_index
+            .write()
+            .await
+            .insert(*return_payload_id, block_id);
         let g_ext_size = txns.first().unwrap().g_ext().txn_count_in_block;
         assert_eq!(g_ext_size as usize, txns.len());
         let mut return_txns = vec![GTxn::default(); txns.len()];
@@ -300,8 +280,14 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
             .write()
             .await
             .insert(return_payload_id, callback);
-        println!("send payload id {:?} it with block id {:?}", return_payload_id, block_id);
-        println!("return receive_ordered_block, the index map is {:?}", self.id_index.read().await);
+        println!(
+            "send payload id {:?} it with block id {:?}",
+            return_payload_id, block_id
+        );
+        println!(
+            "return receive_ordered_block, the index map is {:?}",
+            self.id_index.read().await
+        );
 
         Ok((*return_payload_id, return_txns))
     }
