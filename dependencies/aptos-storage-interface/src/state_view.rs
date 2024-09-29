@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 type Result<T, E = StateviewError> = std::result::Result<T, E>;
 
-// todo(Gravity_byteyue): 以后都用reth的逻辑
+// todo(Gravity_byteyue): seems only works for aptos logic
 pub struct DbStateView {
     db: Arc<dyn DbReader>,
     version: Option<Version>,

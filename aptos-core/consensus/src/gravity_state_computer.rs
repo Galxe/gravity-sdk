@@ -46,9 +46,9 @@ pub struct ConsensusAdapterArgs {
             oneshot::Sender<HashValue>,
         )>,
     >,
-    pub committed_block_ids_sender: mpsc::UnboundedSender<(Vec<[u8; 32]>, oneshot::Sender<()>)>,
+    pub committed_block_ids_sender: mpsc::UnboundedSender<(Vec<[u8; 32]>, oneshot::Sender<HashValue>)>,
     pub committed_block_ids_receiver:
-        Option<mpsc::UnboundedReceiver<(Vec<[u8; 32]>, oneshot::Sender<()>)>>,
+        Option<mpsc::UnboundedReceiver<(Vec<[u8; 32]>, oneshot::Sender<HashValue>)>>,
 }
 
 impl ConsensusAdapterArgs {
@@ -113,13 +113,13 @@ impl GravityExecutionProxy {
 
 pub struct GravityBlockExecutor<V> {
     inner: BlockExecutor<V>,
-    committed_blocks_sender: mpsc::UnboundedSender<(Vec<[u8; 32]>, oneshot::Sender<()>)>,
+    committed_blocks_sender: mpsc::UnboundedSender<(Vec<[u8; 32]>, oneshot::Sender<HashValue>)>,
 }
 
 impl<V> GravityBlockExecutor<V> {
     pub(crate) fn new(
         inner: BlockExecutor<V>,
-        committed_blocks_sender: mpsc::UnboundedSender<(Vec<[u8; 32]>, oneshot::Sender<()>)>,
+        committed_blocks_sender: mpsc::UnboundedSender<(Vec<[u8; 32]>, oneshot::Sender<HashValue>)>,
     ) -> Self {
         Self {
             inner,
@@ -242,7 +242,7 @@ impl<V: Send + Sync> BlockExecutorTrait for GravityBlockExecutor<V> {
         ledger_info_with_sigs: LedgerInfoWithSignatures,
     ) -> ExecutorResult<()> {
         if !block_ids.is_empty() {
-            let (send, recerver) = oneshot::channel();
+            let (send, receiver) = oneshot::channel::<HashValue>();
             let r = tokio::runtime::Runtime::new()
                 .unwrap()
                 .block_on({
@@ -265,14 +265,19 @@ impl<V: Send + Sync> BlockExecutorTrait for GravityBlockExecutor<V> {
             if let Err(e) = r {
                 return Err(e);
             }
+            let max_committed_block_id = block_ids.last().unwrap();
             let r = tokio::runtime::Runtime::new()
                 .unwrap()
-                .block_on(async move { recerver.await })
+                .block_on(async move { receiver.await })
                 .map_err(|e| aptos_executor_types::ExecutorError::InternalError {
                     error: "receive commit successful id failed".parse().unwrap(),
                 });
             if let Err(e) = r {
                 return Err(e);
+            }
+            let persistent_id = r.unwrap();
+            if persistent_id != *max_committed_block_id {
+                panic!("Persisten id not match");
             }
         }
         self.inner

@@ -28,6 +28,7 @@ use futures::{
     SinkExt,
 };
 use std::collections::HashMap;
+use std::ops::DerefMut;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::{Mutex, RwLock};
@@ -43,10 +44,10 @@ pub struct GravityConsensusEngine {
         )>,
     >,
     committed_block_ids_receiver:
-        Option<mpsc::UnboundedReceiver<(Vec<[u8; 32]>, oneshot::Sender<()>)>>,
+        Option<mpsc::UnboundedReceiver<(Vec<[u8; 32]>, oneshot::Sender<HashValue>)>>,
 
     execute_result_receivers: RwLock<HashMap<HashValue, oneshot::Sender<HashValue>>>,
-    persist_result_receiver: Mutex<Option<oneshot::Sender<()>>>,
+    persist_result_receiver: Mutex<Option<oneshot::Sender<HashValue>>>,
     runtime_vec: Vec<Runtime>,
     id_index: RwLock<BiMap>,
 }
@@ -253,18 +254,9 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
             let txn_bytes = match txn.payload() {
                 TransactionPayload::GTxnBytes(bytes) => bytes,
                 _ => {
-                    todo!()
+                    panic!("should never consists other payload type");
                 }
             };
-            // let (pkey, sig) = match txn.authenticator() {
-            //     TransactionAuthenticator::Ed25519 {
-            //         public_key,
-            //         signature,
-            //     } => (public_key, signature),
-            //     _ => {
-            //         todo!()
-            //     }
-            // };
             let gtxn = GTxn {
                 sequence_number: txn.sequence_number(),
                 max_gas_amount: txn.max_gas_amount(),
@@ -275,7 +267,6 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
             };
             return_txns[txn.g_ext().txn_index_in_block as usize] = gtxn;
         });
-        // TODO(gravity_byteyue): Consider return the parent id together
         self.execute_result_receivers
             .write()
             .await
@@ -301,7 +292,9 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
             .remove(&HashValue::new(id))
         {
             Some(callback) => Ok(callback.send(HashValue::new(res)).unwrap()),
-            None => todo!(),
+            None => {
+                panic!("return non-existent block's res");
+            },
         }
     }
 
@@ -335,10 +328,13 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
         let mut locked = self.persist_result_receiver.lock().await;
         match locked.take() {
             Some(sender) => {
-                sender.send(());
+                let mut index_guard = self.id_index.write().await;
+                let payload_id = index_guard.deref_mut().get_block_id(&id).unwrap().clone();
+                index_guard.remove(&id, &payload_id);
+                sender.send(payload_id).expect("send persisten id error");
                 Ok(())
             }
-            None => todo!(),
+            None => panic!("send wrong persistent id"),
         }
     }
 }

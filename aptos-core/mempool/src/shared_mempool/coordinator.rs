@@ -104,7 +104,6 @@ pub(crate) async fn coordinator<NetworkClient, TransactionValidator, ConfigProvi
     loop {
         let _timer = counters::MAIN_LOOP.start_timer();
         ::futures::select! {
-            // TODO(Gravity_byteyue): mock handle_network_event and handle_client_request
             msg = client_events.select_next_some() => {
                 handle_client_request(&mut smp, &bounded_executor, msg).await;
             },
