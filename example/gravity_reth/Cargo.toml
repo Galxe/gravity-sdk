@@ -17,7 +17,6 @@ dirs = "5.0.1"
 tokio = "1.40.0"
 tokio-stream = "0.1.16"
 
-reth = { git = "https://github.com/paradigmxyz/reth", tag = "v1.0.7" }
 reth-node-builder = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-builder", tag = "v1.0.7" }
 reth-node-ethereum = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-ethereum", tag = "v1.0.7" }
 reth-node-core = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-core", tag = "v1.0.7" }
@@ -39,12 +38,12 @@ reth-node-api = { git = "https://github.com/paradigmxyz/reth", package = "reth-n
 reth-payload-builder = { git = "https://github.com/paradigmxyz/reth", package = "reth-payload-builder", tag = "v1.0.7" }
 reth-rpc = { git = "https://github.com/paradigmxyz/reth", package = "reth-rpc", tag = "v1.0.7" }
 reth-rpc-api = { git = "https://github.com/paradigmxyz/reth", package = "reth-rpc-api", tag = "v1.0.7", features = ["client"] }
-reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", package = "reth-rpc-types" }
+reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", package = "reth-rpc-types", tag = "v1.0.7"}
 reth-transaction-pool = { git = "https://github.com/paradigmxyz/reth", package = "reth-transaction-pool", tag = "v1.0.7" }
 reth-consensus = { git = "https://github.com/paradigmxyz/reth", package = "reth-consensus", tag = "v1.0.7" }
 reth-ethereum-payload-builder = { git = "https://github.com/paradigmxyz/reth", package = "reth-ethereum-payload-builder", tag = "v1.0.7" }
 reth-primitives = { git = "https://github.com/paradigmxyz/reth", package = "reth-primitives", tag = "v1.0.7" }
-reth-cli-commands = { git = "https://github.com/paradigmxyz/reth", package = "reth-cli-commands", features = ["dev"] }
+reth-cli-commands = { git = "https://github.com/paradigmxyz/reth", package = "reth-cli-commands", features = ["dev"], tag = "v1.0.7" }
 eyre = "0.6.12"
 tracing = "0.1.40"
 tempfile = "3.12.0"
