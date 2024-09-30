@@ -174,7 +174,7 @@ impl MockStorage {
                 i as u64,
             );
             // TODO(gravity_byteyue): remove this
-            let power = match i { 0 => 30, _ => 1 };
+            let power = match i { 0 => 1, _ => 1 };
             result.push(ValidatorInfo::new(
                 AccountAddress::try_from(node_config.account_address.clone()).unwrap(),
                 power,

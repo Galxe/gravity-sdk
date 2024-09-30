@@ -58,4 +58,8 @@ impl GravityConsensusEngineInterface for SimpleConsensusEngine {
     async fn send_persistent_block_id(&self, id: [u8; 32]) -> Result<(), GCEIError> {
         Ok(())
     }
+
+    fn is_leader(&self) -> bool {
+        true
+    }
 }

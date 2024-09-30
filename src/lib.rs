@@ -8,7 +8,7 @@ mod consensus_mempool_handler;
 mod utils;
 
 pub use aptos_config::config::NodeConfig;
-use bootstrap::{check_bootstrap_config, start};
+pub use bootstrap::{check_bootstrap_config, start};
 use clap::Parser;
 use std::fmt::Display;
 use std::path::PathBuf;
@@ -138,15 +138,18 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
 
     /// Return the commit ids, the consensus can delete these transactions after submitting.
     async fn send_persistent_block_id(&self, block_id: [u8; 32]) -> Result<(), GCEIError>;
+    
+    /// TODO(gravity_lightman): remove it later
+    fn is_leader(&self) -> bool;
 }
 
 /// Runs an Gravity validator or fullnode
 #[derive(Clone, Debug, Parser)]
-#[clap(name = "Gravity Node", author, version)]
+#[command(name = "Gravity Node", author, version)]
 pub struct GravityNodeArgs {
-    #[clap(short = 'f', long)]
+    #[arg(long = "gravity_node_config", value_name = "CONFIG", global = true)]
     /// Path to node configuration file (or template for local test mode).
-    node_config_path: Option<PathBuf>,
+    pub node_config_path: Option<PathBuf>,
 }
 
 impl GravityNodeArgs {

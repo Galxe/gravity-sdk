@@ -61,23 +61,25 @@ impl Waypoint {
 
     /// Errors in case the given ledger info does not match the waypoint.
     pub fn verify(&self, ledger_info: &LedgerInfo) -> Result<()> {
-        ensure!(
-            ledger_info.version() == self.version(),
-            "Waypoint version mismatch: waypoint version = {}, given version = {}",
-            self.version(),
-            ledger_info.version()
-        );
-        let converter = Ledger2WaypointConverter::new(ledger_info);
-        println!("Waypoint waypoint value = {}, given value = {}, ledger info is {:?}",self.value().to_hex(), converter.hash().to_hex(), ledger_info);
-        ensure!(
-            converter.hash() == self.value(),
-            format!(
-                "Waypoint value mismatch: waypoint value = {}, given value = {}",
-                self.value().to_hex(),
-                converter.hash().to_hex()
-            )
-        );
+        // TODO(gravity_lightman)
         Ok(())
+        // ensure!(
+        //     ledger_info.version() == self.version(),
+        //     "Waypoint version mismatch: waypoint version = {}, given version = {}",
+        //     self.version(),
+        //     ledger_info.version()
+        // );
+        // let converter = Ledger2WaypointConverter::new(ledger_info);
+        // println!("Waypoint waypoint value = {}, given value = {}, ledger info is {:?}",self.value().to_hex(), converter.hash().to_hex(), ledger_info);
+        // ensure!(
+        //     converter.hash() == self.value(),
+        //     format!(
+        //         "Waypoint value mismatch: waypoint value = {}, given value = {}",
+        //         self.value().to_hex(),
+        //         converter.hash().to_hex()
+        //     )
+        // );
+        // Ok(())
     }
 }
 

@@ -1,4 +1,5 @@
 use clap::{value_parser, Parser};
+use gravity_sdk::GravityNodeArgs;
 use reth::cli::Commands;
 use reth_chainspec::ChainSpec;
 use reth_cli::chainspec::ChainSpecParser;
@@ -10,7 +11,7 @@ use reth_node_builder::{NodeBuilder, WithLaunchContext};
 use reth_node_core::args::utils::DefaultChainSpecParser;
 use reth_node_ethereum::{EthExecutorProvider, EthereumNode};
 use reth_tracing::FileWorkerGuard;
-use std::{ffi::OsString, fmt, future::Future, sync::Arc};
+use std::{ffi::OsString, fmt::{self, Pointer}, future::Future, path::PathBuf, sync::Arc};
 use tracing::info;
 
 
@@ -55,6 +56,9 @@ pub(crate) struct Cli<C: ChainSpecParser = DefaultChainSpecParser, Ext: clap::Ar
 
     #[command(flatten)]
     logs: LogArgs,
+
+    #[command(flatten)]
+    pub gravity_node_config: GravityNodeArgs,
 }
 
 impl Cli {

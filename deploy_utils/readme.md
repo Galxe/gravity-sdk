@@ -1,4 +1,4 @@
-# Node Startup Documentation [中文版](https://github.com/Galxe/gravity-sdk/deploy_utils/readme_cn.md)
+# Node Startup Documentation
 ## Node Configuration
 
 This system consists of 4 nodes with corresponding ports as follows:
@@ -49,7 +49,7 @@ Deploy to the /tmp directory by default:
 
 ```
 cd /tmp/node1
-./script/start.sh
+./script/start.sh node1
 ```
 
 ### Stop Node
@@ -73,7 +73,7 @@ Execute the following command to start node2:
 
 cd /tmp/node2
 
-./script/start.sh
+./script/start.sh node2
 ./script/stop.sh
 ```
 

@@ -1,11 +1,12 @@
 #![allow(missing_docs)]
 // mod engine_api_adaptor;
 mod cli;
-mod mock_eth_consensus_layer;
 mod gcei_sender;
-use std::thread;
+mod mock_eth_consensus_layer;
 /// clap [Args] for Engine related arguments.
 use clap::Args;
+use gravity_sdk::check_bootstrap_config;
+use std::thread;
 
 use crate::cli::Cli;
 /// Parameters for configuring the engine
@@ -19,8 +20,8 @@ pub struct EngineArgs {
 
 use clap::Parser;
 use reth_node_builder::engine_tree_config;
-use reth_node_core::args::utils::DefaultChainSpecParser;
 use reth_node_builder::EngineNodeLauncher;
+use reth_node_core::args::utils::DefaultChainSpecParser;
 use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
 use reth_provider::providers::BlockchainProvider2;
 
@@ -32,8 +33,10 @@ fn run_server() {
         std::env::set_var("RUST_BACKTRACE", "1");
     }
 
-    if let Err(err) =
-        Cli::<DefaultChainSpecParser, EngineArgs>::parse().run(|builder, engine_args| async move {
+    if let Err(err) = {
+        let cli = Cli::<DefaultChainSpecParser, EngineArgs>::parse();
+        let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
+        cli.run(|builder, engine_args| async move {
             let handle = builder
                 .with_types_and_provider::<EthereumNode, BlockchainProvider2<_>>()
                 .with_components(EthereumNode::components())
@@ -50,15 +53,17 @@ fn run_server() {
             let client = handle.node.engine_http_client();
             let genesis_hash = handle.node.chain_spec().genesis_hash();
             let id = handle.node.chain_spec().chain().id();
-            let _ = thread::spawn(
-                move || {
-                    let mut mock_eth_consensus_layer = mock_eth_consensus_layer::MockEthConsensusLayer::new(client, id);
-                    tokio::runtime::Runtime::new().unwrap().block_on(mock_eth_consensus_layer.start_round(genesis_hash)).expect("Failed to run round");
-                }
-            );
+            let _ = thread::spawn(move || {
+                let mut mock_eth_consensus_layer =
+                    mock_eth_consensus_layer::MockEthConsensusLayer::new(client, id, gcei_config);
+                tokio::runtime::Runtime::new()
+                    .unwrap()
+                    .block_on(mock_eth_consensus_layer.start_round(genesis_hash))
+                    .expect("Failed to run round");
+            });
             handle.node_exit_future.await
         })
-    {
+    } {
         eprintln!("Error: {err:?}");
         std::process::exit(1);
     }

@@ -12,6 +12,6 @@ cp -r $node_arg/genesis /tmp/$node_arg
 cp -r nodes_config.json /tmp/$node_arg/genesis/
 cp -r discovery /tmp/$node_arg/genesis
 
-cp target/debug/gravity-sdk /tmp/$node_arg/bin
+cp target/debug/gravity-reth /tmp/$node_arg/bin
 cp deploy_utils/start.sh /tmp/$node_arg/script
 cp deploy_utils/stop.sh /tmp/$node_arg/script

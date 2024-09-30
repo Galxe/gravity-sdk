@@ -2,9 +2,11 @@ use alloy::consensus::{Transaction, TxEnvelope};
 use alloy::eips::eip2718::Decodable2718;
 use alloy::primitives::B256;
 use anyhow::Ok;
-use gravity_sdk::{GTxn, GravityConsensusEngineInterface, NodeConfig};
+use clap::Parser;
+use gravity_sdk::{check_bootstrap_config, GTxn, GravityConsensusEngineInterface, GravityNodeArgs, NodeConfig};
 use reth_ethereum_engine_primitives::EthEngineTypes;
 use reth_node_api::EngineTypes;
+use reth_node_builder::Node;
 use reth_payload_builder::PayloadId;
 use reth_primitives::Bytes;
 use std::collections::HashSet;
@@ -17,11 +19,10 @@ pub struct GCEISender<T: GravityConsensusEngineInterface> {
 }
 
 impl<T: GravityConsensusEngineInterface> GCEISender<T> {
-    pub fn new(chain_id: u64) -> Self {
-        let node_config = NodeConfig::load_from_path("/Users/jingyue/projects/gravity-sdk/node1/genesis/validator.yaml").unwrap();
+    pub fn new(chain_id: u64, gcei_config: NodeConfig) -> Self {
         Self {
             curret_block_id: None,
-            gcei_sender: T::init(node_config),
+            gcei_sender: T::init(gcei_config),
             chain_id: chain_id,
         }
     }
@@ -187,5 +188,9 @@ impl<T: GravityConsensusEngineInterface> GCEISender<T> {
     pub async fn submit_max_persistence_block_id(&self) {
         let block_id = self.payload_id_to_slice(&self.curret_block_id.unwrap());
         self.gcei_sender.send_persistent_block_id(block_id).await.expect("send max persistence block id failed");
+    }
+
+    pub fn is_leader(&self) -> bool {
+        self.gcei_sender.is_leader()
     }
 }

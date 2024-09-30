@@ -280,10 +280,10 @@ impl<V: Send + Sync> BlockExecutorTrait for GravityBlockExecutor<V> {
                 panic!("Persisten id not match");
             }
         }
-        self.inner
-            .db
-            .writer
-            .commit_ledger(0, Some(&ledger_info_with_sigs), None);
+        // self.inner
+        //     .db
+        //     .writer
+        //     .commit_ledger(0, Some(&ledger_info_with_sigs), None);
         Ok(())
     }
 

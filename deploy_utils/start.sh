@@ -7,13 +7,18 @@ log_suffix=$(date +"%Y-%d-%m:%H:%M:%S")
 
 function start_node() {
     export RUST_BACKTRACE=1
-    cur_node_path=$1
+    reth_rpc_port=$1
+    authrpc_port=$2
+    http_port=$3
     rm -rf $node_path/data/quorumstoreDB
     rm -rf $node_path/data/consensus_db
     rm -rf $node_path/data/rand_db
     # temporarily set these two round to zero
     jq 'walk(if type == "object" and (.last_voted_round? // .highest_timeout_round? // .preferred_round? // .one_chain_round?) then .last_voted_round |= 0 | .preferred_round |= 0 | .one_chain_round |= 0 | .highest_timeout_round |= 0 else . end)' ${WORKSPACE}/data/secure_storage.json > ${WORKSPACE}/data/secure_storage.json
-    pid=$(${WORKSPACE}/bin/gravity-sdk --node-config-path ${WORKSPACE}/genesis/validator.yaml --mockdb-config-path ${WORKSPACE}/genesis/nodes_config.json > ${WORKSPACE}/logs/debug.log & echo $!)
+    
+    echo ${WORKSPACE}
+    
+    pid=$(${WORKSPACE}/bin/gravity-reth node --http.port ${http_port} --port ${reth_rpc_port} --authrpc.port ${authrpc_port} --dev --datadir ${WORKSPACE}/data/reth --datadir.static-files ${WORKSPACE}/data/reth --gravity_node_config ${WORKSPACE}/genesis/validator.yaml > ${WORKSPACE}/logs/debug.log & echo $!)
     echo $pid > ${WORKSPACE}/script/node.pid
 }
 
@@ -27,4 +32,25 @@ if [ -e ${WORKSPACE}/script/node.pid ]; then
     fi
 fi
 
-start_node ${node_arg}
+port1=""
+port2=""
+port3=""
+if [ $node_arg = "node1" ]; then
+    port1="12024"
+    port2="8551"
+    port3="8545"
+elif [ $node_arg = "node2" ]; then
+    port1="12025"
+    port2="8552"
+    port3="8546"
+elif [ $node_arg = "node3" ]; then
+    port1="12026"
+    port2="8553"
+    port3="8547"
+else
+    port1="16180"
+    port2="8554"
+    port3="8548"
+fi
+
+start_node ${port1} ${port2} ${port3}

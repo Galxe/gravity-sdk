@@ -34,6 +34,7 @@ use tokio::runtime::Runtime;
 use tokio::sync::{Mutex, RwLock};
 
 pub struct GravityConsensusEngine {
+    address: String,
     mempool_sender: mpsc::Sender<MempoolClientRequest>,
     pipeline_block_receiver: Option<
         mpsc::UnboundedReceiver<(
@@ -178,6 +179,12 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
         network_runtimes.push(consensus_runtime);
         let _ = event_subscription_service.notify_initial_configs(1_u64);
         Self {
+            address: node_config
+                .validator_network
+                .as_ref()
+                .unwrap()
+                .listen_address
+                .to_string(),
             mempool_sender: args.mempool_sender.clone(),
             pipeline_block_receiver: args.pipeline_block_receiver.take(),
             execute_result_receivers: RwLock::new(HashMap::new()),
@@ -336,5 +343,9 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
             }
             None => panic!("send wrong persistent id"),
         }
+    }
+
+    fn is_leader(&self) -> bool {
+        self.address == "/ip4/127.0.0.1/tcp/2024"
     }
 }

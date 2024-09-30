@@ -1,4 +1,4 @@
-use gravity_sdk::{consensus_engine::GravityConsensusEngine, simple_consensus_engine::SimpleConsensusEngine};
+use gravity_sdk::{consensus_engine::GravityConsensusEngine, simple_consensus_engine::SimpleConsensusEngine, GravityConsensusEngineInterface, GravityNodeArgs, NodeConfig};
 use reth_ethereum_engine_primitives::{EthEngineTypes, EthPayloadAttributes};
 use reth_node_core::rpc::types::engine::{ForkchoiceState, PayloadId, PayloadStatus, PayloadStatusEnum};
 use reth_rpc_api::{EngineApiClient, EngineEthApiClient};
@@ -15,18 +15,18 @@ pub struct MockEthConsensusLayer<T: EngineEthApiClient<EthEngineTypes> + Send + 
 }
 
 impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> MockEthConsensusLayer<T> {
-    pub(crate) fn new(client: T, chain_id: u64) -> Self {  // <1>
+    pub(crate) fn new(client: T, chain_id: u64, gcei_config: NodeConfig) -> Self {  // <1>
         Self {
             engine_api_client: client,
-            gcei: GCEISender::new(chain_id),
+            gcei: GCEISender::new(chain_id, gcei_config),
         }
     }
 
     pub(crate) async fn start_round(&mut self, genesis_hash: B256) -> Result<()> {
-        let hex_string = "0x2f980576711e3617a5e4d83dd539548ec0f7792007d505a3d2e9674833af2d7c";
+        let hex_string = "0x61391467fa2cdce26b9824ece88ccff7d428d0fbf29d9fdc0f7f125979293a3b";
         let byte_array: [u8; 32] = <[u8; 32]>::from_hex(hex_string).expect("Invalid hex string");
         let fork_choice_state = ForkchoiceState {
-            head_block_hash: B256::new(byte_array),
+            head_block_hash: genesis_hash,
             safe_block_hash: genesis_hash,
             finalized_block_hash: genesis_hash,
         };
@@ -60,7 +60,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> MockEthConsensusLayer<
     }
 
     pub fn is_leader(&self) -> bool {
-        true
+        self.gcei.is_leader()
     }
 
     pub async fn construct_payload(&mut self, fork_choice_state: &mut ForkchoiceState) -> anyhow::Result<bool> {
