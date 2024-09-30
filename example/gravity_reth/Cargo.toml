@@ -17,6 +17,7 @@ dirs = "5.0.1"
 tokio = "1.40.0"
 tokio-stream = "0.1.16"
 
+reth = { git = "https://github.com/paradigmxyz/reth", tag = "v1.0.7" }
 reth-node-builder = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-builder", tag = "v1.0.7" }
 reth-node-ethereum = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-ethereum", tag = "v1.0.7" }
 reth-node-core = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-core", tag = "v1.0.7" }
