@@ -6,6 +6,7 @@ mod storage;
 pub mod simple_consensus_engine;
 mod consensus_mempool_handler;
 mod utils;
+mod logger;
 
 pub use aptos_config::config::NodeConfig;
 pub use bootstrap::{check_bootstrap_config, start};

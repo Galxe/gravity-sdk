@@ -205,7 +205,7 @@ impl LogEntry {
         let hostname = HOSTNAME.as_deref();
         let namespace = NAMESPACE.as_deref();
        
-        panic!("peer_id and chain_id are not implemented");
+        // panic!("peer_id and chain_id are not implemented");
         let peer_id = Some("");
         let chain_id = Some(0);
         let backtrace = if enable_backtrace && matches!(metadata.level(), Level::Error) {

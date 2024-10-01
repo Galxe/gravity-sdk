@@ -31,3 +31,5 @@ storage:
   dir: "/tmp/node3/data"
 
 mock_db_path: "/tmp/node3/genesis/nodes_config.json"
+
+log_file_path: "/tmp/node3/consensus_log"

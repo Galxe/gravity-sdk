@@ -5,7 +5,7 @@ use crate::bootstrap::{
 use crate::consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler};
 use crate::network::{create_network_runtime, extract_network_configs};
 use crate::utils::bimap::BiMap;
-use crate::{GCEIError, GTxn, GravityConsensusEngineInterface};
+use crate::{logger, GCEIError, GTxn, GravityConsensusEngineInterface};
 use aptos_config::config::NodeConfig;
 use aptos_config::network_id::NetworkId;
 use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
@@ -29,6 +29,7 @@ use futures::{
 };
 use std::collections::HashMap;
 use std::ops::DerefMut;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::{Mutex, RwLock};
@@ -83,6 +84,7 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
     fn init(node_config: NodeConfig) -> Self {
         let gravity_db = init_gravity_db(&node_config);
         let peers_and_metadata = init_peers_and_metadata(&node_config, &gravity_db);
+        let (_remote_log_receiver, _logger_filter_update) = logger::create_logger(&node_config, Some(node_config.log_file_path.clone()));
         let db: DbReaderWriter = DbReaderWriter::new(gravity_db);
         let mut event_subscription_service =
             aptos_event_notifications::EventSubscriptionService::new(Arc::new(

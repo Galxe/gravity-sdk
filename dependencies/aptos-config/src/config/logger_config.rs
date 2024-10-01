@@ -45,8 +45,8 @@ impl Default for LoggerConfig {
             enable_backtrace: false,
             is_async: true,
             level: Level::Info,
-            enable_telemetry_remote_log: true,
-            enable_telemetry_flush: true,
+            enable_telemetry_remote_log: false,
+            enable_telemetry_flush: false,
             telemetry_level: Level::Error,
 
             // This is the default port used by tokio-console.

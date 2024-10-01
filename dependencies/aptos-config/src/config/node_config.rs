@@ -90,6 +90,8 @@ pub struct NodeConfig {
     pub mock_db_path: PathBuf,
     #[serde(default)]
     pub test_mode: bool,
+    #[serde(default)]
+    pub log_file_path: PathBuf,
 }
 
 impl NodeConfig {
