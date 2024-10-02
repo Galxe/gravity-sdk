@@ -95,3 +95,9 @@ If you encounter startup issues, please check:
 3. System firewall settings
 
 For further assistance, please check the log files or contact technical support.
+
+### Where can you find the logs
+
+The log consists of two parts: `consensus_log` and `execution_logs`. The former one includes all the logs from aptos component. While the reth details are in the latter one.
+You can set the aptos log by modifying the `log_file_path` in the corresponding `validator.yaml` file of the node.
+As for the execution_logs, you can set it by passing the log file config in the cli just using `--log.file.directory ${you_directory}`.
