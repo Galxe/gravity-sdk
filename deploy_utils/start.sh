@@ -18,7 +18,7 @@ function start_node() {
     
     echo ${WORKSPACE}
     
-    pid=$(${WORKSPACE}/bin/gravity-reth node --http.port ${http_port} --port ${reth_rpc_port} --authrpc.port ${authrpc_port} --dev --datadir ${WORKSPACE}/data/reth --datadir.static-files ${WORKSPACE}/data/reth --gravity_node_config ${WORKSPACE}/genesis/validator.yaml > ${WORKSPACE}/logs/debug.log & echo $!)
+    pid=$(${WORKSPACE}/bin/gravity-reth node --http.port ${http_port} --port ${reth_rpc_port} --authrpc.port ${authrpc_port} --dev --datadir ${WORKSPACE}/data/reth --datadir.static-files ${WORKSPACE}/data/reth --gravity_node_config ${WORKSPACE}/genesis/validator.yaml --log.file.directory ${WORKSPACE}/execution_logs/ > ${WORKSPACE}/logs/debug.log & echo $!)
     echo $pid > ${WORKSPACE}/script/node.pid
 }
 
