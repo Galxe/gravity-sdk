@@ -2,6 +2,9 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+#[cfg(target_os = "macos")]
+use std::os::macos::raw::stat;
+
 use crate::{
     block_preparer::BlockPreparer,
     block_storage::tracing::{observe_block, BlockStage},
@@ -35,7 +38,6 @@ use aptos_types::{
 use fail::fail_point;
 use futures::{future::BoxFuture, SinkExt, StreamExt};
 use std::{boxed::Box, f64::consts::E, sync::Arc, time::Duration};
-use std::os::macos::raw::stat;
 use tokio::sync::Mutex as AsyncMutex;
 
 pub type StateComputeResultFut = BoxFuture<'static, ExecutorResult<PipelineExecutionResult>>;
