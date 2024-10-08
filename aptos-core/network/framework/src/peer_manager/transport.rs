@@ -101,22 +101,22 @@ where
             futures::select! {
                 dial_request = self.transport_reqs_rx.select_next_some() => {
                     if let Some(fut) = self.dial_peer(dial_request) {
-                        println!("pending_outbound_connections");
+                        info!("?pending_outbound_connections?pending_outbound_connections");
                         pending_outbound_connections.push(fut);
                     }
                 },
                 inbound_connection = self.listener.select_next_some() => {
                     if let Some(fut) = self.upgrade_inbound_connection(inbound_connection) {
-                        println!("pending_inbound_connections");
+                        info!("pending_inbound_connections");
                         pending_inbound_connections.push(fut);
                     }
                 },
                 (upgrade, addr, peer_id, start_time, response_tx) = pending_outbound_connections.select_next_some() => {
-                    println!("handle_completed_outbound_upgrade");
+                    info!("?handle_completed_outbound_upgrade");
                     self.handle_completed_outbound_upgrade(upgrade, addr, peer_id, start_time, response_tx).await;
                 },
                 (upgrade, addr, start_time) = pending_inbound_connections.select_next_some() => {
-                    println!("handle_completed_inbound_upgrade");
+                    info!("handle_completed_inbound_upgrade");
                     self.handle_completed_inbound_upgrade(upgrade, addr, start_time).await;
                 },
                 complete => break,
@@ -308,12 +308,12 @@ where
         let elapsed_time = (self.time_service.now() - start_time).as_secs_f64();
         match upgrade {
             Ok(connection) => {
-                println!("send_connection_to_peer_manager");
+                info!("send_connection_to_peer_manager");
                 self.send_connection_to_peer_manager(connection, &addr, elapsed_time)
                     .await;
             },
             Err(err) => {
-                println!("handle_completed_inbound_upgrade {:?}", err);
+                info!("handle_completed_inbound_upgrade {:?}", err);
                 warn!(
                     NetworkSchema::new(&self.network_context)
                         .network_address(&addr),

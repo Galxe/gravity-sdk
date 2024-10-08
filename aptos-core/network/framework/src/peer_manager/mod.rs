@@ -271,7 +271,7 @@ where
         self.sample_connected_peers();
         match event {
             TransportNotification::NewConnection(conn) => {
-                println!("handle_new_connection_event");
+                info!("handle_new_connection_event");
                 self.handle_new_connection_event(conn);
             },
             TransportNotification::Disconnected(lost_conn_metadata, reason) => {
@@ -592,7 +592,7 @@ where
     }
 
     fn add_peer(&mut self, connection: Connection<TSocket>) -> Result<(), Error> {
-        println!("add_peer into peerManager");
+        info!("add_peer into peerManager");
         let conn_meta = connection.metadata.clone();
         let peer_id = conn_meta.remote_peer_id;
 

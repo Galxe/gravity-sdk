@@ -4,6 +4,7 @@
 
 use crate::DiscoveryError;
 use aptos_config::config::PeerSet;
+use aptos_logger::info;
 #[cfg(test)]
 use aptos_logger::spawn_named;
 use aptos_time_service::{Interval, TimeService, TimeServiceTrait};
@@ -40,7 +41,10 @@ impl Stream for FileStream {
         // Wait for delay, or add the delay for next call
         futures::ready!(self.interval.as_mut().poll_next(cx));
         Poll::Ready(Some(match load_file(self.file_path.as_path()) {
-            Ok(peers) => Ok(peers),
+            Ok(peers) => {
+                info!("Get {} peers", peers.len());
+                Ok(peers)
+            },
             Err(error) => Err(error),
         }))
     }
@@ -48,7 +52,7 @@ impl Stream for FileStream {
 
 /// Loads a YAML configuration file
 fn load_file(path: &Path) -> Result<PeerSet, DiscoveryError> {
-    println!("load_file");
+    info!("load_file {}", path.to_str().unwrap());
     let contents = std::fs::read_to_string(path).map_err(DiscoveryError::IO)?;
     serde_yaml::from_str(&contents).map_err(|err| DiscoveryError::Parsing(err.to_string()))
 }
