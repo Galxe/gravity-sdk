@@ -2,11 +2,11 @@ use alloy::consensus::{Transaction, TxEnvelope};
 use alloy::eips::eip2718::Decodable2718;
 use alloy::primitives::B256;
 use anyhow::Ok;
-use clap::Parser;
-use gravity_sdk::{check_bootstrap_config, GTxn, GravityConsensusEngineInterface, GravityNodeArgs, NodeConfig};
+use gravity_sdk::{
+    GTxn, GravityConsensusEngineInterface, NodeConfig,
+};
 use reth_ethereum_engine_primitives::EthEngineTypes;
 use reth_node_api::EngineTypes;
-use reth_node_builder::Node;
 use reth_payload_builder::PayloadId;
 use reth_primitives::Bytes;
 use std::collections::HashSet;
@@ -132,25 +132,27 @@ impl<T: GravityConsensusEngineInterface> GCEISender<T> {
             .await
             .map_err(|e| anyhow::anyhow!(e))?;
         let payload_id = self.slice_to_payload_id(&res.0);
-        println!("verify the polling_order_block payload_id {:?}, curret_block_id is {:?}, is same {:?}", payload_id, self.curret_block_id, Some(payload_id) == self.curret_block_id);
-        if self.curret_block_id == Some(payload_id) {
-            let mut payload: <EthEngineTypes as EngineTypes>::ExecutionPayloadV3 =
-                serde_json::from_slice(res.1[0].get_bytes()).map_err(|e| anyhow::anyhow!(e))?;
-            if res.1.len() > 1 {
-                res.1.drain(1..).for_each(|gtxn| {
-                    let txn_bytes = gtxn.get_bytes();
-                    let bytes: Bytes = Bytes::from(txn_bytes.clone());
-                    payload
-                        .execution_payload
-                        .payload_inner
-                        .payload_inner
-                        .transactions
-                        .push(bytes);
-                });
-            }
-            return Ok(payload);
+        println!(
+            "verify the polling_order_block payload_id {:?}, curret_block_id is {:?}, is same {:?}",
+            payload_id,
+            self.curret_block_id,
+            Some(payload_id) == self.curret_block_id
+        );
+        let mut payload: <EthEngineTypes as EngineTypes>::ExecutionPayloadV3 =
+            serde_json::from_slice(res.1[0].get_bytes()).map_err(|e| anyhow::anyhow!(e))?;
+        if res.1.len() > 1 {
+            res.1.drain(1..).for_each(|gtxn| {
+                let txn_bytes = gtxn.get_bytes();
+                let bytes: Bytes = Bytes::from(txn_bytes.clone());
+                payload
+                    .execution_payload
+                    .payload_inner
+                    .payload_inner
+                    .transactions
+                    .push(bytes);
+            });
         }
-        Err(anyhow::anyhow!("Block id is not equal"))
+        return Ok(payload);
     }
 
     pub async fn submit_compute_res(&self, compute_res: B256) -> anyhow::Result<()> {
