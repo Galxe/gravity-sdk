@@ -138,6 +138,7 @@ impl<T: GravityConsensusEngineInterface> GCEISender<T> {
             self.curret_block_id,
             Some(payload_id) == self.curret_block_id
         );
+        self.curret_block_id = Some(payload_id);
         let mut payload: <EthEngineTypes as EngineTypes>::ExecutionPayloadV3 =
             serde_json::from_slice(res.1[0].get_bytes()).map_err(|e| anyhow::anyhow!(e))?;
         if res.1.len() > 1 {

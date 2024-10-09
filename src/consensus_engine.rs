@@ -12,6 +12,7 @@ use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
 use aptos_crypto::hash::HashValue;
 use aptos_crypto::{PrivateKey, Uniform};
 use aptos_event_notifications::EventNotificationSender;
+use aptos_logger::info;
 use aptos_mempool::MempoolClientRequest;
 use aptos_network_builder::builder::NetworkBuilder;
 use aptos_storage_interface::DbReaderWriter;
@@ -203,7 +204,7 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
         txns: Vec<GTxn>,
     ) -> Result<(), GCEIError> {
         let len = txns.len();
-        println!(
+        info!(
             "send send_valid_block_transactions, block_is {:?}, size {:?}",
             HashValue::new(block_id),
             len
@@ -219,7 +220,7 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
                 txn.expiration_timestamp_secs,
                 ChainId::new(txn.chain_id as u8),
             );
-            println!(
+            info!(
                 "txn addr is {:?}, expiration time second {:?}",
                 addr, txn.expiration_timestamp_secs
             );
@@ -232,10 +233,10 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
             let (mempool_status, _vm_status_opt) = self.submit_transaction(sign_txn).await.unwrap();
             match mempool_status.code {
                 MempoolStatusCode::Accepted => {
-                    println!("Submit txn success");
+                    info!("Submit txn success");
                 }
                 _ => {
-                    println!("Submit txn failed {:?}", mempool_status);
+                    info!("Submit txn failed {:?}", mempool_status);
                     return Err(GCEIError::ConsensusError);
                 }
             }
@@ -244,14 +245,14 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
     }
 
     async fn receive_ordered_block(&mut self) -> Result<([u8; 32], Vec<GTxn>), GCEIError> {
-        println!("start to receive_ordered_block");
+        info!("start to receive_ordered_block");
         let receive_result = self.pipeline_block_receiver.as_mut().unwrap().next().await;
 
-        println!("succeed to receive_ordered_block");
+        info!("succeed to receive_ordered_block");
 
         let (parent_id, block_id, txns, callback) = receive_result.unwrap();
-        println!("the txns size is {:?}, block_is {:?}", txns.len(), block_id);
         let return_payload_id = txns.first().unwrap().g_ext().block_id;
+        info!("the txns size is {:?}, block_is {:?}, return payload id is {:?}", txns.len(), block_id, return_payload_id);
         self.id_index
             .write()
             .await
@@ -280,11 +281,11 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
             .write()
             .await
             .insert(return_payload_id, callback);
-        println!(
+        info!(
             "send payload id {:?} it with block id {:?}",
             return_payload_id, block_id
         );
-        println!(
+        info!(
             "return receive_ordered_block, the index map is {:?}",
             self.id_index.read().await
         );
@@ -293,7 +294,10 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
     }
 
     async fn send_compute_res(&self, id: [u8; 32], res: [u8; 32]) -> Result<(), GCEIError> {
-        println!("start to send_compute_res");
+        let mut index_guard = self.id_index.write().await;
+        let block_id = index_guard.deref_mut().get_block_id(&id).unwrap().clone();
+        // index_guard.remove(&id, &block_id);
+        info!("start to send_compute_res for payload id {:?}, block id {:?}", HashValue::new(id), block_id);
         match self
             .execute_result_receivers
             .write()
@@ -312,14 +316,14 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
     }
 
     async fn receive_commit_block_ids(&mut self) -> Result<Vec<[u8; 32]>, GCEIError> {
-        println!("start to receive_commit_block_ids");
+        info!("start to receive_commit_block_ids");
         let receive_result = self
             .committed_block_ids_receiver
             .as_mut()
             .unwrap()
             .next()
             .await;
-        println!("succeed to receive_commit_block_ids");
+        info!("succeed to receive_commit_block_ids");
         let (ids, sender) = receive_result.unwrap();
         let mut payload_ids = vec![];
         for id in ids {
@@ -328,19 +332,19 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
         }
         let mut locked = self.persist_result_receiver.lock().await;
         *locked = Some(sender);
-        println!("the index map is {:?}", self.id_index.read().await);
+        info!("the index map is {:?}", self.id_index.read().await);
         Ok(payload_ids)
     }
 
     async fn send_persistent_block_id(&self, id: [u8; 32]) -> Result<(), GCEIError> {
-        println!("start to send_persistent_block_id");
+        info!("start to send_persistent_block_id");
         let mut locked = self.persist_result_receiver.lock().await;
         match locked.take() {
             Some(sender) => {
                 let mut index_guard = self.id_index.write().await;
-                let payload_id = index_guard.deref_mut().get_block_id(&id).unwrap().clone();
-                index_guard.remove(&id, &payload_id);
-                sender.send(payload_id).expect("send persisten id error");
+                let block_id = index_guard.deref_mut().get_block_id(&id).unwrap().clone();
+                index_guard.remove(&id, &block_id);
+                sender.send(block_id).expect("send persisten id error");
                 Ok(())
             }
             None => panic!("send wrong persistent id"),

@@ -158,7 +158,6 @@ impl StateComputer for GravityExecutionProxy {
         }
         Box::pin(async move {
             let res = block_result_receiver.await;
-            println!("block id {:?} received result", block_id);
             let result = StateComputeResult::new_dummy_with_root_hash(res.unwrap());
             Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
         })
