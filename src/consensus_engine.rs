@@ -296,7 +296,6 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
     async fn send_compute_res(&self, id: [u8; 32], res: [u8; 32]) -> Result<(), GCEIError> {
         let mut index_guard = self.id_index.write().await;
         let block_id = index_guard.deref_mut().get_block_id(&id).unwrap().clone();
-        // index_guard.remove(&id, &block_id);
         info!("start to send_compute_res for payload id {:?}, block id {:?}", HashValue::new(id), block_id);
         match self
             .execute_result_receivers
