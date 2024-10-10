@@ -91,7 +91,7 @@ pub struct BlockTree {
 }
 
 impl BlockTree {
-    pub fn to_string(&self) -> String {
+    pub fn debug_string(&self) -> String {
         let mut result = String::new();
         result.push_str("BlockTree Information:\n");
         result.push_str(&format!("HighCommitQC:     {:?}\n", self.highest_commit_cert));
@@ -105,7 +105,7 @@ impl BlockTree {
         result
     }
     fn build_node_string(&self, block_id: &HashValue) -> String {
-        let block = self.id_to_block.get(block_id).unwrap();
+        let block = self.id_to_block.get(block_id).expect(&format!("failed to get block for id {:?}", block_id));
         let transactions = block.executed_block.input_transactions();
         format!("input {:?}\n, payload is {:?}", transactions, block.executed_block.payload())
     }
@@ -128,7 +128,7 @@ impl BlockTree {
 }
 impl Display for BlockTree {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.to_string())
+        f.write_str(&self.debug_string())
     }
 }
 

@@ -24,7 +24,7 @@ use aptos_types::{
     block_executor::config::BlockExecutorConfigFromOnchain, epoch_state::EpochState,
     ledger_info::LedgerInfoWithSignatures, randomness::Randomness,
 };
-use futures::{FutureExt, SinkExt, StreamExt};
+use futures::SinkExt;
 use futures_channel::mpsc::UnboundedReceiver;
 use futures_channel::{mpsc, oneshot};
 use std::time::Duration;
@@ -46,7 +46,8 @@ pub struct ConsensusAdapterArgs {
             oneshot::Sender<HashValue>,
         )>,
     >,
-    pub committed_block_ids_sender: mpsc::UnboundedSender<(Vec<[u8; 32]>, oneshot::Sender<HashValue>)>,
+    pub committed_block_ids_sender:
+        mpsc::UnboundedSender<(Vec<[u8; 32]>, oneshot::Sender<HashValue>)>,
     pub committed_block_ids_receiver:
         Option<mpsc::UnboundedReceiver<(Vec<[u8; 32]>, oneshot::Sender<HashValue>)>>,
 }
@@ -104,10 +105,7 @@ pub struct GravityExecutionProxy {
 
 impl GravityExecutionProxy {
     pub fn new(aptos_state_computer: Arc<ExecutionProxy>, args: &ConsensusAdapterArgs) -> Self {
-        Self {
-            aptos_state_computer,
-            pipeline_block_sender: args.pipeline_block_sender.clone(),
-        }
+        Self { aptos_state_computer, pipeline_block_sender: args.pipeline_block_sender.clone() }
     }
 }
 
@@ -121,10 +119,7 @@ impl<V> GravityBlockExecutor<V> {
         inner: BlockExecutor<V>,
         committed_blocks_sender: mpsc::UnboundedSender<(Vec<[u8; 32]>, oneshot::Sender<HashValue>)>,
     ) -> Self {
-        Self {
-            inner,
-            committed_blocks_sender,
-        }
+        Self { inner, committed_blocks_sender }
     }
 }
 
@@ -141,14 +136,11 @@ impl StateComputer for GravityExecutionProxy {
         let txns = self.aptos_state_computer.get_block_txns(block).await;
         let empty_block = txns.is_empty();
 
-        let block_id = block.id();
         let (block_result_sender, block_result_receiver) = oneshot::channel();
         // We would export the empty block detail to the outside GCEI caller
         if empty_block {
             let compute_res_bytes = [0u8; 32];
-            block_result_sender
-                .send(HashValue::new(compute_res_bytes))
-                .expect("send failed");
+            block_result_sender.send(HashValue::new(compute_res_bytes)).expect("send failed");
         } else {
             self.pipeline_block_sender
                 .clone()
@@ -157,9 +149,13 @@ impl StateComputer for GravityExecutionProxy {
                 .expect("what happened");
         }
         Box::pin(async move {
-            let res = block_result_receiver.await;
-            let result = StateComputeResult::new_dummy_with_root_hash(res.unwrap());
-            Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
+            match block_result_receiver.await {
+                Ok(res) => {
+                    let result = StateComputeResult::new_dummy_with_root_hash(res);
+                    Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
+                }
+                Err(e) => Err(ExecutorError::InternalError { error: e.to_string() }),
+            }
         })
     }
 
@@ -170,9 +166,7 @@ impl StateComputer for GravityExecutionProxy {
         finality_proof: LedgerInfoWithSignatures,
         callback: StateComputerCommitCallBackType,
     ) -> ExecutorResult<()> {
-        self.aptos_state_computer
-            .commit(blocks, finality_proof, callback)
-            .await
+        self.aptos_state_computer.commit(blocks, finality_proof, callback).await
     }
 
     /// Synchronize to a commit that not present locally.
@@ -221,8 +215,7 @@ impl<V: Send + Sync> BlockExecutorTrait for GravityBlockExecutor<V> {
         parent_block_id: HashValue,
         onchain_config: BlockExecutorConfigFromOnchain,
     ) -> ExecutorResult<StateCheckpointOutput> {
-        self.inner
-            .execute_and_state_checkpoint(block, parent_block_id, onchain_config)
+        self.inner.execute_and_state_checkpoint(block, parent_block_id, onchain_config)
     }
 
     fn ledger_update(
@@ -231,8 +224,7 @@ impl<V: Send + Sync> BlockExecutorTrait for GravityBlockExecutor<V> {
         parent_block_id: HashValue,
         state_checkpoint_output: StateCheckpointOutput,
     ) -> ExecutorResult<StateComputeResult> {
-        self.inner
-            .ledger_update(block_id, parent_block_id, state_checkpoint_output)
+        self.inner.ledger_update(block_id, parent_block_id, state_checkpoint_output)
     }
 
     fn commit_blocks(
@@ -242,8 +234,9 @@ impl<V: Send + Sync> BlockExecutorTrait for GravityBlockExecutor<V> {
     ) -> ExecutorResult<()> {
         if !block_ids.is_empty() {
             let (send, receiver) = oneshot::channel::<HashValue>();
-            let r = tokio::runtime::Runtime::new()
-                .unwrap()
+            // todo(gravity_byteyue): don't spawn runtime each time
+            let runtime = aptos_runtimes::spawn_named_runtime("tmp".into(), None);
+            let r = runtime
                 .block_on({
                     let encode_ids = block_ids
                         .iter()
@@ -254,9 +247,7 @@ impl<V: Send + Sync> BlockExecutorTrait for GravityBlockExecutor<V> {
                         })
                         .collect();
 
-                    self.committed_blocks_sender
-                        .clone()
-                        .send((encode_ids, send))
+                    self.committed_blocks_sender.clone().send((encode_ids, send))
                 })
                 .map_err(|e| aptos_executor_types::ExecutorError::InternalError {
                     error: "send commit ids failed".parse().unwrap(),
@@ -264,21 +255,31 @@ impl<V: Send + Sync> BlockExecutorTrait for GravityBlockExecutor<V> {
             if let Err(e) = r {
                 return Err(e);
             }
-            let max_committed_block_id = block_ids.last().unwrap();
-            let r = tokio::runtime::Runtime::new()
-                .unwrap()
-                .block_on(async move { receiver.await })
-                .map_err(|e| aptos_executor_types::ExecutorError::InternalError {
-                    error: "receive commit successful id failed".parse().unwrap(),
-                });
-            if let Err(e) = r {
-                return Err(e);
+            let last_block = block_ids.last();
+            let max_committed_block_id;
+            match last_block {
+                Some(id) => {
+                    max_committed_block_id = id;
+                }
+                None => {
+                    return Err(ExecutorError::InternalError { error: format!("empty blocks") })
+                }
             }
-            let persistent_id = r.unwrap();
-            if persistent_id != *max_committed_block_id {
-                panic!("Persisten id not match");
+            let r = runtime.block_on(async move { receiver.await }).map_err(|e| {
+                aptos_executor_types::ExecutorError::InternalError {
+                    error: "receive commit successful id failed".parse().unwrap(),
+                }
+            });
+            match r {
+                Ok(persistent_id) => {
+                    if persistent_id != *max_committed_block_id {
+                        panic!("Persisten id not match");
+                    }
+                }
+                Err(e) => return Err(e),
             }
         }
+        // todo(gravity_lightman): handle the following logic
         // self.inner
         //     .db
         //     .writer

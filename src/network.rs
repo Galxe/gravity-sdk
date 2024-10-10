@@ -1,17 +1,38 @@
-use std::{borrow::Borrow, collections::HashMap, sync::Arc, time::{SystemTime, UNIX_EPOCH}};
 use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_config::{config::{NetworkConfig, NodeConfig}, network_id::NetworkId};
+use aptos_config::{
+    config::{NetworkConfig, NodeConfig},
+    network_id::NetworkId,
+};
 use aptos_crypto::{PrivateKey, Uniform};
+use aptos_logger::info;
 use aptos_mempool::MempoolClientRequest;
-use aptos_network::{application::{interface::{NetworkClient, NetworkServiceEvents}, storage::PeersAndMetadata}, protocols::network::{NetworkApplicationConfig, NetworkClientConfig, NetworkEvents, NetworkSender, NetworkServiceConfig}, ProtocolId};
+use aptos_network::{
+    application::{
+        interface::{NetworkClient, NetworkServiceEvents},
+        storage::PeersAndMetadata,
+    },
+    protocols::network::{
+        NetworkApplicationConfig, NetworkClientConfig, NetworkEvents, NetworkSender,
+        NetworkServiceConfig,
+    },
+    ProtocolId,
+};
 use aptos_network_builder::builder::NetworkBuilder;
-use aptos_types::{chain_id::ChainId, transaction::{RawTransaction, Script, SignedTransaction}};
+use aptos_types::{
+    chain_id::ChainId,
+    transaction::{RawTransaction, Script, SignedTransaction},
+};
 use futures::{channel::oneshot, SinkExt};
 use serde::{Deserialize, Serialize};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use tokio::{runtime::Runtime, sync::Mutex};
 
-use crate::{bootstrap::ApplicationNetworkInterfaces, GTxn, GravityConsensusEngineInterface};
 use crate::consensus_engine::GravityConsensusEngine;
+use crate::{bootstrap::ApplicationNetworkInterfaces, GTxn, GravityConsensusEngineInterface};
 
 /// Extracts all network configs from the given node config
 pub fn extract_network_configs(node_config: &NodeConfig) -> Vec<NetworkConfig> {
@@ -69,6 +90,7 @@ pub fn mempool_network_configuration(node_config: &NodeConfig) -> NetworkApplica
     NetworkApplicationConfig::new(network_client_config, network_service_config)
 }
 
+// used for UT
 pub async fn mock_mempool_client_sender(mut mc_sender: aptos_mempool::MempoolClientSender) {
     let addr = aptos_types::account_address::AccountAddress::random();
     let mut seq_num = 0;
@@ -88,13 +110,12 @@ pub async fn mock_mempool_client_sender(mut mc_sender: aptos_mempool::MempoolCli
         );
         seq_num += 1;
         let (sender, receiver) = oneshot::channel();
-        mc_sender
-            .send(MempoolClientRequest::SubmitTransaction(txn, sender))
-            .await;
+        mc_sender.send(MempoolClientRequest::SubmitTransaction(txn, sender)).await;
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
 }
 
+// used for UT
 pub async fn mock_execution_txn_submitter(adapter: Arc<Mutex<GravityConsensusEngine>>) {
     // let addr = aptos_types::account_address::AccountAddress::random();
     let mut seq_num = 0;
@@ -103,7 +124,11 @@ pub async fn mock_execution_txn_submitter(adapter: Arc<Mutex<GravityConsensusEng
             sequence_number: seq_num,
             max_gas_amount: 0,
             gas_unit_price: 0,
-            expiration_timestamp_secs: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() + 60,
+            expiration_timestamp_secs: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+                + 60,
             chain_id: ChainId::test().to_u8() as u64,
             txn_bytes: vec![],
             // public_key: aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing().public_key().to_bytes(),
@@ -111,7 +136,7 @@ pub async fn mock_execution_txn_submitter(adapter: Arc<Mutex<GravityConsensusEng
         };
         seq_num += 1;
         let mock_block_id: [u8; 32] = [0; 32];
-        println!("try to send_valid_block_transactions");
+        info!("try to send_valid_block_transactions");
         let caller = adapter.lock().await;
         caller.send_valid_block_transactions(mock_block_id, vec![txn]).await.expect("ok");
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -121,34 +146,34 @@ pub async fn mock_execution_txn_submitter(adapter: Arc<Mutex<GravityConsensusEng
 pub async fn mock_execution_receive_block(adapter: Arc<Mutex<GravityConsensusEngine>>) {
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-        println!("try to receive_ordered_block");
+        info!("try to receive_ordered_block");
         let mut caller = adapter.as_ref().lock().await;
         let result = caller.receive_ordered_block().await;
         if let Err(_) = result {
-            println!("receive ordered block error");
+            info!("receive ordered block error");
             continue;
         }
         let value = result.unwrap();
-        println!("try to submit compute res, block is {:?}", value.0);
+        info!("try to submit compute res, block is {:?}", value.0);
         let result = caller.send_compute_res(value.0, [0; 32]).await;
         if let Err(_) = result {
-            println!("send_compute_res error");
+            info!("send_compute_res error");
             continue;
         }
-        println!("try to receive_commit_block_ids");
+        info!("try to receive_commit_block_ids");
         let result = caller.receive_commit_block_ids().await;
         if let Err(_) = result {
-            println!("receive_commit_block_ids error");
+            info!("receive_commit_block_ids error");
             continue;
         }
         let ids = result.unwrap();
-        println!("the commit block id is {:?}", ids);
-        println!("try to send_persistent_block_id");
+        info!("the commit block id is {:?}", ids);
+        info!("try to send_persistent_block_id");
         let result = caller.send_persistent_block_id(*ids.last().unwrap()).await;
         if let Err(_) = result {
-            println!("send_persistent_block_id failed");
+            info!("send_persistent_block_id failed");
         }
-        println!("succeed to send persistent block id {:?}", ids.last().unwrap());
+        info!("succeed to send persistent block id {:?}", ids.last().unwrap());
     }
 }
 
@@ -189,10 +214,7 @@ fn create_network_interfaces<
     let network_service_events = NetworkServiceEvents::new(network_and_events);
 
     // Create and return the new network interfaces
-    ApplicationNetworkInterfaces {
-        network_client,
-        network_service_events,
-    }
+    ApplicationNetworkInterfaces { network_client, network_service_events }
 }
 
 /// Registers a new application client and service with the network
@@ -210,11 +232,7 @@ fn register_client_and_service_with_network<
         network_config.max_parallel_deserialization_tasks,
         allow_out_of_order_delivery,
     );
-    ApplicationNetworkHandle {
-        network_id,
-        network_sender,
-        network_events,
-    }
+    ApplicationNetworkHandle { network_id, network_sender, network_events }
 }
 
 pub fn build_network_interfaces<T>(
@@ -246,9 +264,7 @@ pub fn create_network_runtime(network_config: &NetworkConfig) -> Runtime {
     let network_id = network_config.network_id;
 
     // Create the runtime
-    let thread_name = format!(
-        "network-{}",
-        network_id.as_str().chars().take(3).collect::<String>()
-    );
+    let thread_name =
+        format!("network-{}", network_id.as_str().chars().take(3).collect::<String>());
     aptos_runtimes::spawn_named_runtime(thread_name, network_config.runtime_threads)
 }

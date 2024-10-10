@@ -12,7 +12,7 @@ use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
 use aptos_crypto::hash::HashValue;
 use aptos_crypto::{PrivateKey, Uniform};
 use aptos_event_notifications::EventNotificationSender;
-use aptos_logger::info;
+use aptos_logger::{error, info};
 use aptos_mempool::MempoolClientRequest;
 use aptos_network_builder::builder::NetworkBuilder;
 use aptos_storage_interface::DbReaderWriter;
@@ -30,7 +30,6 @@ use futures::{
 };
 use std::collections::HashMap;
 use std::ops::DerefMut;
-use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::{Mutex, RwLock};
@@ -85,7 +84,8 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
     fn init(node_config: NodeConfig) -> Self {
         let gravity_db = init_gravity_db(&node_config);
         let peers_and_metadata = init_peers_and_metadata(&node_config, &gravity_db);
-        let (_remote_log_receiver, _logger_filter_update) = logger::create_logger(&node_config, Some(node_config.log_file_path.clone()));
+        let (_remote_log_receiver, _logger_filter_update) =
+            logger::create_logger(&node_config, Some(node_config.log_file_path.clone()));
         let db: DbReaderWriter = DbReaderWriter::new(gravity_db);
         let mut event_subscription_service =
             aptos_event_notifications::EventSubscriptionService::new(Arc::new(
@@ -121,22 +121,13 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
         // And then send NotifyCommit request to mempool which is named consensus_to_mempool_sender in Gravity
         let (consensus_notifier, consensus_listener) =
             aptos_consensus_notifications::new_consensus_notifier_listener_pair(
-                state_sync_config
-                    .state_sync_driver
-                    .commit_notification_timeout_ms,
+                state_sync_config.state_sync_driver.commit_notification_timeout_ms,
             );
         // Build and start the network on the runtime
         network_builder.build(runtime.handle().clone());
         network_builder.start();
         network_runtimes.push(runtime);
 
-        // TODO(Gravity_byteyue): delete the following comment
-        // 这里要看aptos代码的setup_environment_and_start_node函数下的start_mempool_runtime_and_get_consensus_sender的逻辑，不然这里channel好像对不上都
-        // start consensus确实是用consensus_to_mempool_receiver，但是在setup_environment_and_start_node才有Receiver<MempoolClientRequest>
-        // setup_environment_and_start_node 调用了 bootstrap_api_and_indexer ，在其中构造了 mempool_client_sender 和 mempool_client_receiver, 然后 bootstrap_api_and_indexer
-        // 返回了 receiver, 接下来 setup_environment_and_start_node 把 receiver 传递给 start_mempool_runtime_and_get_consensus_sender ,
-        // 在其中构造了 consensus_to_mempool_sender 和 consensus_to_mempool_receiver
-        // 并返回了sender
         let (mempool_client_sender, mempool_client_receiver) = mpsc::channel(1);
 
         let (consensus_to_mempool_sender, consensus_to_mempool_receiver) = mpsc::channel(1);
@@ -161,7 +152,6 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
             &node_config,
             &db,
             &mut event_subscription_service,
-            mempool_client_sender.clone(),
             mempool_interfaces,
             mempool_client_receiver,
             consensus_to_mempool_receiver,
@@ -182,12 +172,7 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
         network_runtimes.push(consensus_runtime);
         let _ = event_subscription_service.notify_initial_configs(1_u64);
         Self {
-            address: node_config
-                .validator_network
-                .as_ref()
-                .unwrap()
-                .listen_address
-                .to_string(),
+            address: node_config.validator_network.as_ref().unwrap().listen_address.to_string(),
             mempool_sender: args.mempool_sender.clone(),
             pipeline_block_receiver: args.pipeline_block_receiver.take(),
             execute_result_receivers: RwLock::new(HashMap::new()),
@@ -220,10 +205,6 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
                 txn.expiration_timestamp_secs,
                 ChainId::new(txn.chain_id as u8),
             );
-            info!(
-                "txn addr is {:?}, expiration time second {:?}",
-                addr, txn.expiration_timestamp_secs
-            );
             let sign_txn = SignedTransaction::new_with_gtxn(
                 raw_txn,
                 aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing().public_key(),
@@ -236,7 +217,7 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
                     info!("Submit txn success");
                 }
                 _ => {
-                    info!("Submit txn failed {:?}", mempool_status);
+                    error!("Submit txn failed {:?}", mempool_status);
                     return Err(GCEIError::ConsensusError);
                 }
             }
@@ -245,18 +226,17 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
     }
 
     async fn receive_ordered_block(&mut self) -> Result<([u8; 32], Vec<GTxn>), GCEIError> {
-        info!("start to receive_ordered_block");
         let receive_result = self.pipeline_block_receiver.as_mut().unwrap().next().await;
-
-        info!("succeed to receive_ordered_block");
 
         let (parent_id, block_id, txns, callback) = receive_result.unwrap();
         let return_payload_id = txns.first().unwrap().g_ext().block_id;
-        info!("the txns size is {:?}, block_is {:?}, return payload id is {:?}", txns.len(), block_id, return_payload_id);
-        self.id_index
-            .write()
-            .await
-            .insert(*return_payload_id, block_id);
+        info!(
+            "the txns size is {:?}, block_is {:?}, return payload id is {:?}",
+            txns.len(),
+            block_id,
+            return_payload_id
+        );
+        self.id_index.write().await.insert(*return_payload_id, block_id);
         let g_ext_size = txns.first().unwrap().g_ext().txn_count_in_block;
         assert_eq!(g_ext_size as usize, txns.len());
         let mut return_txns = vec![GTxn::default(); txns.len()];
@@ -277,18 +257,8 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
             };
             return_txns[txn.g_ext().txn_index_in_block as usize] = gtxn;
         });
-        self.execute_result_receivers
-            .write()
-            .await
-            .insert(return_payload_id, callback);
-        info!(
-            "send payload id {:?} it with block id {:?}",
-            return_payload_id, block_id
-        );
-        info!(
-            "return receive_ordered_block, the index map is {:?}",
-            self.id_index.read().await
-        );
+        self.execute_result_receivers.write().await.insert(return_payload_id, callback);
+        info!("send payload id {:?} it with block id {:?}", return_payload_id, block_id);
 
         Ok((*return_payload_id, return_txns))
     }
@@ -296,17 +266,16 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
     async fn send_compute_res(&self, id: [u8; 32], res: [u8; 32]) -> Result<(), GCEIError> {
         let mut index_guard = self.id_index.write().await;
         let block_id = index_guard.deref_mut().get_block_id(&id).unwrap().clone();
-        info!("start to send_compute_res for payload id {:?}, block id {:?}", HashValue::new(id), block_id);
-        match self
-            .execute_result_receivers
-            .write()
-            .await
-            .remove(&HashValue::new(id))
-        {
+        info!(
+            "start to send_compute_res for payload id {:?}, block id {:?}",
+            HashValue::new(id),
+            block_id
+        );
+        match self.execute_result_receivers.write().await.remove(&HashValue::new(id)) {
             Some(callback) => Ok(callback.send(HashValue::new(res)).unwrap()),
             None => {
                 panic!("return non-existent block's res");
-            },
+            }
         }
     }
 
@@ -315,14 +284,7 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
     }
 
     async fn receive_commit_block_ids(&mut self) -> Result<Vec<[u8; 32]>, GCEIError> {
-        info!("start to receive_commit_block_ids");
-        let receive_result = self
-            .committed_block_ids_receiver
-            .as_mut()
-            .unwrap()
-            .next()
-            .await;
-        info!("succeed to receive_commit_block_ids");
+        let receive_result = self.committed_block_ids_receiver.as_mut().unwrap().next().await;
         let (ids, sender) = receive_result.unwrap();
         let mut payload_ids = vec![];
         for id in ids {
@@ -331,12 +293,10 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
         }
         let mut locked = self.persist_result_receiver.lock().await;
         *locked = Some(sender);
-        info!("the index map is {:?}", self.id_index.read().await);
         Ok(payload_ids)
     }
 
     async fn send_persistent_block_id(&self, id: [u8; 32]) -> Result<(), GCEIError> {
-        info!("start to send_persistent_block_id");
         let mut locked = self.persist_result_receiver.lock().await;
         match locked.take() {
             Some(sender) => {

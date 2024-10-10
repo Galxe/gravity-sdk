@@ -16,8 +16,7 @@ use aptos_consensus::{
 };
 use aptos_consensus_notifications::ConsensusNotifier;
 use aptos_crypto::x25519;
-use aptos_event_notifications::{EventNotificationSender, EventSubscriptionService};
-use aptos_infallible::RwLock;
+use aptos_event_notifications::EventSubscriptionService;
 use aptos_mempool::{MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest};
 use aptos_mempool_notifications::MempoolNotificationListener;
 use aptos_network::application::{
@@ -26,20 +25,20 @@ use aptos_network::application::{
 };
 use aptos_network_builder::builder::NetworkBuilder;
 use aptos_storage_interface::DbReaderWriter;
-use aptos_types::{account_address::AccountAddress, chain_id::ChainId};
+use aptos_types::account_address::AccountAddress;
 use aptos_validator_transaction_pool::VTxnPoolState;
-use futures::channel::mpsc::{self, Receiver, Sender};
+use futures::channel::mpsc::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
 use tokio::{runtime::Runtime, sync::Mutex};
 
 use crate::{
     consensus_engine::GravityConsensusEngine,
-    mock_db::GravityNodeConfig,
     network::{
-        self, build_network_interfaces, consensus_network_configuration, create_network_runtime,
-        extract_network_configs, extract_network_ids, mempool_network_configuration,
+        self, build_network_interfaces, consensus_network_configuration, extract_network_ids,
+        mempool_network_configuration,
     },
-    storage::{self, db::GravityDB}, GravityConsensusEngineInterface,
+    storage::{self, db::GravityDB},
+    GravityConsensusEngineInterface,
 };
 pub struct ApplicationNetworkInterfaces<T> {
     pub network_client: NetworkClient<T>,
@@ -91,10 +90,7 @@ pub fn init_network_interfaces<T, E>(
     network_config: &NetworkConfig,
     node_config: &NodeConfig,
     peers_and_metadata: Arc<PeersAndMetadata>,
-) -> (
-    ApplicationNetworkInterfaces<T>,
-    ApplicationNetworkInterfaces<E>,
-)
+) -> (ApplicationNetworkInterfaces<T>, ApplicationNetworkInterfaces<E>)
 where
     T: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
     E: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
@@ -143,25 +139,16 @@ pub fn start_consensus(
     )
 }
 
-// TODO(gravity_byteyue): what about the mempool_client_sender
 pub fn init_mempool(
     node_config: &NodeConfig,
     db: &DbReaderWriter,
     event_subscription_service: &mut EventSubscriptionService,
-    mempool_client_sender: Sender<MempoolClientRequest>,
     mempool_interfaces: ApplicationNetworkInterfaces<MempoolSyncMsg>,
     mempool_client_receiver: Receiver<MempoolClientRequest>,
     consensus_to_mempool_receiver: Receiver<QuorumStoreRequest>,
     mempool_listener: MempoolNotificationListener,
     peers_and_metadata: Arc<PeersAndMetadata>,
 ) -> Runtime {
-    // (0..5).for_each(|_| {
-    //     let s = mempool_client_sender.clone();
-    //     tokio::spawn(async move {
-    //         network::mock_mempool_client_sender(s).await;
-    //     });
-    // });
-
     let mempool_reconfig_subscription = event_subscription_service
         .subscribe_to_reconfigurations()
         .expect("Mempool must subscribe to reconfigurations");
@@ -182,36 +169,19 @@ pub fn init_peers_and_metadata(
     node_config: &NodeConfig,
     gravity_db: &GravityDB,
 ) -> Arc<PeersAndMetadata> {
-    let listen_address = node_config
-        .validator_network
-        .as_ref()
-        .unwrap()
-        .listen_address
-        .to_string();
-    let gravity_node_config  = gravity_db
-    .mock_db
-    .node_config_set
-    .get(&listen_address)
-    .unwrap();
+    let listen_address = node_config.validator_network.as_ref().unwrap().listen_address.to_string();
+    let gravity_node_config = gravity_db.mock_db.node_config_set.get(&listen_address).unwrap();
     let network_ids = extract_network_ids(node_config);
     let peers_and_metadata = PeersAndMetadata::new(&network_ids);
     let mut peer_set = HashMap::new();
     for trusted_peer in &gravity_node_config.trusted_peers_map {
-        let trusted_peer_config = gravity_db
-            .mock_db
-            .node_config_set
-            .get(trusted_peer)
-            .unwrap();
+        let trusted_peer_config = gravity_db.mock_db.node_config_set.get(trusted_peer).unwrap();
         let mut set = HashSet::new();
         let trusted_peer_private_key =
             x25519::PrivateKey::try_from(trusted_peer_config.network_private_key.as_slice())
                 .unwrap();
-        set.insert(x25519::PublicKey::try_from(&trusted_peer_private_key).unwrap());
-        let trust_peer = Peer::new(
-            vec![trusted_peer.parse().unwrap()],
-            set,
-            PeerRole::Validator,
-        );
+        set.insert(x25519::PublicKey::from(&trusted_peer_private_key));
+        let trust_peer = Peer::new(vec![trusted_peer.parse().unwrap()], set, PeerRole::Validator);
         peer_set.insert(
             AccountAddress::try_from(trusted_peer_config.account_address.clone()).unwrap(),
             trust_peer,
@@ -221,15 +191,8 @@ pub fn init_peers_and_metadata(
     peers_and_metadata
 }
 
-pub fn init_gravity_db(
-    node_config: &NodeConfig,
-) -> GravityDB {
-    let listen_address = node_config
-        .validator_network
-        .as_ref()
-        .unwrap()
-        .listen_address
-        .to_string();
+pub fn init_gravity_db(node_config: &NodeConfig) -> GravityDB {
+    let listen_address = node_config.validator_network.as_ref().unwrap().listen_address.to_string();
     let mut db_paths = node_config.storage.dir();
     db_paths.push("gravity_db");
     let _ = fs::create_dir(&db_paths);

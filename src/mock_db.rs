@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{SystemTime};
 
 use aptos_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH;
 use aptos_crypto::{bls12381, hash::HashValue};
@@ -10,7 +9,7 @@ use aptos_infallible::Mutex;
 use aptos_storage_interface::{AptosDbError, DbReader, DbWriter};
 use aptos_types::account_address::AccountAddress;
 use aptos_types::aggregate_signature::AggregateSignature;
-use aptos_types::block_info::{BlockInfo};
+use aptos_types::block_info::BlockInfo;
 use aptos_types::contract_event::EventWithVersion;
 use aptos_types::epoch_change::EpochChangeProof;
 use aptos_types::epoch_state::EpochState;
@@ -117,9 +116,7 @@ mod test {
     }
 
     use aptos_crypto::{Uniform, ValidCryptoMaterial};
-    use aptos_types::account_address::from_identity_public_key;
     use rand::thread_rng;
-    use std::os::unix::thread;
     use std::path::Path;
 
     use super::load_file;
@@ -155,7 +152,7 @@ impl MockStorage {
     pub fn new(network_address: String, path: &Path) -> Self {
         let config_set = load_file(path);
         Self {
-            network_address: network_address,
+            network_address,
             node_config_set: config_set,
             inner: Inner(Arc::new(Mutex::new(HashMap::new()))),
         }
@@ -174,7 +171,10 @@ impl MockStorage {
                 i as u64,
             );
             // TODO(gravity_byteyue): remove this
-            let power = match i { 0 => 1, _ => 1 };
+            let power = match i {
+                0 => 1,
+                _ => 1,
+            };
             result.push(ValidatorInfo::new(
                 AccountAddress::try_from(node_config.account_address.clone()).unwrap(),
                 power,
@@ -199,17 +199,12 @@ impl DbReader for MockStorage {
         Ok(genesis)
     }
 
-    // todo(gravity_byteyue): 应该是commit的时候才增加这个sequence number
+    // Only for test
     fn get_sequence_num(&self, addr: AccountAddress) -> anyhow::Result<u64> {
         let account_string = addr.to_standard_string();
         let mut guard = self.inner.0.lock();
-        let seq_string = guard
-            .entry(account_string.clone())
-            .or_insert("0".to_string());
-        println!(
-            "addr is {:?}, seq string is {}",
-            &account_string, seq_string
-        );
+        let seq_string = guard.entry(account_string.clone()).or_insert("0".to_string());
+        println!("addr is {:?}, seq string is {}", &account_string, seq_string);
         let res = seq_string.parse::<u64>().unwrap();
         seq_string.clear();
         seq_string.push_str((res + 1).to_string().as_str());
@@ -230,27 +225,16 @@ impl DbReader for MockStorage {
             .collect();
         let verifier = ValidatorVerifier::new(infos);
         let epoch_state = EpochState::new(1, verifier);
-        let block_info = BlockInfo::new(
-            1,
-            0,
-            HashValue::zero(),
-            HashValue::zero(),
-            0,
-            0,
-            Some(epoch_state),
-        );
+        let block_info =
+            BlockInfo::new(1, 0, HashValue::zero(), HashValue::zero(), 0, 0, Some(epoch_state));
         let ledger_info = LedgerInfo::new(block_info, HashValue::zero());
         Ok(StateProof::new(
             LedgerInfoWithSignatures::genesis(
                 *ACCUMULATOR_PLACEHOLDER_HASH,
                 ValidatorSet::new(self.mock_validators()),
             ),
-            // 传递不能为空
             EpochChangeProof::new(
-                vec![LedgerInfoWithSignatures::new(
-                    ledger_info,
-                    AggregateSignature::empty(),
-                )],
+                vec![LedgerInfoWithSignatures::new(ledger_info, AggregateSignature::empty())],
                 false,
             ),
         ))
@@ -279,7 +263,7 @@ impl DbReader for MockStorage {
                         bcs::to_bytes(&ValidatorSet::new(self.mock_validators()))?
                     } else if path.contains("consensus") {
                         let mut consensus_conf = OnChainConsensusConfig::default();
-                        // todo(gravity_byteyue): 这里让quorum_store_enabled=false, 保证不会走quorumstorebuilder
+                        // todo(gravity_byteyue): currently we set quorum_store_enabled=false
                         match &mut consensus_conf {
                             OnChainConsensusConfig::V1(_) => {}
                             OnChainConsensusConfig::V2(_) => {}

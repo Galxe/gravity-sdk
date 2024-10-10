@@ -6,21 +6,29 @@ use reth_cli::chainspec::ChainSpecParser;
 use reth_cli_commands::node::NoArgs;
 use reth_cli_runner::CliRunner;
 use reth_db::DatabaseEnv;
-use reth_node_core::args::LogArgs;
 use reth_node_builder::{NodeBuilder, WithLaunchContext};
 use reth_node_core::args::utils::DefaultChainSpecParser;
+use reth_node_core::args::LogArgs;
 use reth_node_ethereum::{EthExecutorProvider, EthereumNode};
 use reth_tracing::FileWorkerGuard;
-use std::{ffi::OsString, fmt::{self, Pointer}, future::Future, path::PathBuf, sync::Arc};
+use std::{
+    ffi::OsString,
+    fmt::{self, Pointer},
+    future::Future,
+    path::PathBuf,
+    sync::Arc,
+};
 use tracing::info;
-
 
 /// The main reth cli interface.
 ///
 /// This is the entrypoint to the executable.
 #[derive(Debug, Parser)]
 #[command(author, about = "Reth", long_about = None)]
-pub(crate) struct Cli<C: ChainSpecParser = DefaultChainSpecParser, Ext: clap::Args + fmt::Debug = NoArgs> {
+pub(crate) struct Cli<
+    C: ChainSpecParser = DefaultChainSpecParser,
+    Ext: clap::Args + fmt::Debug = NoArgs,
+> {
     /// The command to run
     #[command(subcommand)]
     command: Commands<C, Ext>,
@@ -163,7 +171,9 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
                 runner.run_command_until_exit(|ctx| command.execute::<EthereumNode>(ctx))
             }
             Commands::Prune(command) => runner.run_until_ctrl_c(command.execute::<EthereumNode>()),
-            Commands::Debug(command) => {todo!()},
+            Commands::Debug(command) => {
+                todo!()
+            }
         }
     }
 

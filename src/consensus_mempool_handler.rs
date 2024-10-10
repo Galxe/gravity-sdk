@@ -1,17 +1,11 @@
-use std::{
-    collections::HashMap,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use aptos_consensus_notifications::{
     ConsensusCommitNotification, ConsensusNotification, ConsensusNotificationListener,
 };
-use aptos_crypto::HashValue;
 use aptos_mempool_notifications::MempoolNotificationSender;
 use aptos_types::transaction::Transaction;
 use futures::StreamExt;
-
-
 
 /// A simple handler for sending notifications to mempool
 #[derive(Clone)]
@@ -21,9 +15,7 @@ pub struct MempoolNotificationHandler<M: MempoolNotificationSender> {
 
 impl<M: MempoolNotificationSender> MempoolNotificationHandler<M> {
     pub fn new(mempool_notification_sender: M) -> Self {
-        Self {
-            mempool_notification_sender,
-        }
+        Self { mempool_notification_sender }
     }
 
     /// Notifies mempool that transactions have been committed.
@@ -38,11 +30,6 @@ impl<M: MempoolNotificationSender> MempoolNotificationHandler<M> {
             .await;
 
         if let Err(error) = result {
-            // let error = Error::NotifyMempoolError(format!("{:?}", error));
-            // error!(LogSchema::new(LogEntry::NotificationHandler)
-            //     .error(&error)
-            //     .message("Failed to notify mempool of committed transactions!"));
-            // Err(error)
             todo!()
         } else {
             Ok(())
@@ -60,10 +47,7 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
         mempool_notification_handler: MempoolNotificationHandler<M>,
         consensus_notification_listener: ConsensusNotificationListener,
     ) -> Self {
-        Self {
-            mempool_notification_handler,
-            consensus_notification_listener,
-        }
+        Self { mempool_notification_handler, consensus_notification_listener }
     }
 
     /// Handles a commit notification sent by consensus
@@ -78,10 +62,7 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
         self.mempool_notification_handler
             .notify_mempool_of_committed_transactions(
                 committed_transactions,
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
+                SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
             )
             .await?;
 
@@ -93,8 +74,7 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
         println!("receive consensus commit notification {:?}", notification);
         let result = match notification {
             ConsensusNotification::NotifyCommit(commit_notification) => {
-                self.handle_consensus_commit_notification(commit_notification)
-                    .await
+                self.handle_consensus_commit_notification(commit_notification).await
             }
             ConsensusNotification::SyncToTarget(sync_notification) => {
                 todo!()

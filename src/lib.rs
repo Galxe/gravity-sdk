@@ -1,12 +1,12 @@
 mod bootstrap;
 pub mod consensus_engine;
+mod consensus_mempool_handler;
+mod logger;
 mod mock_db;
 mod network;
-mod storage;
 pub mod simple_consensus_engine;
-mod consensus_mempool_handler;
+mod storage;
 mod utils;
-mod logger;
 
 pub use aptos_config::config::NodeConfig;
 pub use bootstrap::{check_bootstrap_config, start};
@@ -139,7 +139,7 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
 
     /// Return the commit ids, the consensus can delete these transactions after submitting.
     async fn send_persistent_block_id(&self, block_id: [u8; 32]) -> Result<(), GCEIError>;
-    
+
     /// TODO(gravity_lightman): remove it later
     fn is_leader(&self) -> bool;
 }
@@ -156,9 +156,6 @@ pub struct GravityNodeArgs {
 impl GravityNodeArgs {
     pub fn run(mut self) {
         // Start the node
-        start(
-            check_bootstrap_config(self.node_config_path),
-        )
-        .expect("Node should start correctly");
+        start(check_bootstrap_config(self.node_config_path)).expect("Node should start correctly");
     }
 }

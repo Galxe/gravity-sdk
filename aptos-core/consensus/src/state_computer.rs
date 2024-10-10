@@ -119,7 +119,15 @@ impl ExecutionProxy {
             .as_ref()
             .cloned()
             .expect("must be set within an epoch");
-        let (txns, _) = payload_manager.get_transactions(block).await.unwrap();
+        let mut txns = vec![];
+        match payload_manager.get_transactions(block).await {
+            Ok((transactions, _)) => {
+                txns.extend(transactions);
+            },
+            Err(e) => {
+                warn!("failed to get transactions from block {:?}, error {:?}", block, e);
+            },
+        }
         txns
     }
     pub fn new(
@@ -319,13 +327,14 @@ impl StateComputer for ExecutionProxy {
             .cloned()
             .expect("must be set within an epoch");
         let mut committed_block_ids = vec![];
-        // TODO(gravity_byteyue): We should handle it using one elegant way
         for block in blocks {
             block_ids.push(block.id());
 
             if let Some(payload) = block.block().payload() {
                 payloads.push(payload.clone());
             }
+
+            // TODO(gravity_byteyue): how to handle metadata transaction
             if !block.input_transactions().is_empty() {
                 committed_block_ids.push(block.id());
             }

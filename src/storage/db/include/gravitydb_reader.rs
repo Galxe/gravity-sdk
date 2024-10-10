@@ -117,7 +117,7 @@ impl DbReader for GravityDB {
         Ok(vec![])
     }
 
-    // todo(gravity_byteyue): 应该是commit的时候才增加这个sequence number
+    // only for test
     fn get_sequence_num(&self, addr: AccountAddress) -> anyhow::Result<u64> {
         self.mock_db.get_sequence_num(addr)
     }
