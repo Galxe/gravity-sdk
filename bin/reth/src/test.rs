@@ -32,7 +32,7 @@ struct TestConsensusLayer<T> {
     reth_cli: RethCli<T>
 }
 
-impl<T: EngineEthApiClient<EthEngineTypes>> TestConsensusLayer<T> {
+impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> TestConsensusLayer<T> {
     fn new(reth_cli: RethCli<T>, safe_hash: B256, head_hash: B256) -> Self {
         let mut safe_slice = [0u8; 32];
         safe_slice.copy_from_slice(safe_hash.as_slice());

@@ -1,7 +1,11 @@
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+use alloy_consensus::{Transaction, TxEnvelope};
+use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::{Address, B256};
-use alloy_rpc_types_engine::{ForkchoiceState, PayloadAttributes, PayloadId};
+use alloy_rpc_types_engine::{ForkchoiceState, ForkchoiceUpdated, PayloadAttributes, PayloadId};
 use anyhow::Context;
+use jsonrpsee::core::async_trait;
 use reth::api::EngineTypes;
 use reth_ethereum_engine_primitives::{EthEngineTypes, EthPayloadAttributes};
 use reth_rpc_api::{EngineApiClient, EngineEthApiClient};
@@ -28,6 +32,27 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
             block_hash_channel_sender,
             block_hash_channel_receiver,
         }
+    }
+
+    async fn update_fork_choice(
+        &self,
+        fork_choice_state: ForkchoiceState,
+        payload_attributes: EthPayloadAttributes,
+    ) -> anyhow::Result<ForkchoiceUpdated> {
+        let response = <T as EngineApiClient<EthEngineTypes>>::fork_choice_updated_v3(
+            &self.engine_api_client,
+            fork_choice_state,
+            Some(payload_attributes),
+        )
+            .await
+            .context("Failed to update fork choice")?;
+        info!("Got response: {:?}", response);
+        Ok(response)
+    }
+
+    fn deserialization_txn(&self, bytes: Vec<u8>) -> TxEnvelope {
+        let txn = TxEnvelope::decode_2718(&mut bytes.as_ref()).unwrap();
+        txn
     }
 
     fn payload_id_to_slice(&self, payload_id: &PayloadId) -> [u8; 32] {
@@ -105,7 +130,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
 
     async fn get_new_payload_id(
         &self,
-        fork_choice_state: &mut ForkchoiceState,
+        fork_choice_state: ForkchoiceState,
         payload_attributes: &PayloadAttributes,
     ) -> Option<PayloadId> {
         let updated_res =
@@ -115,10 +140,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
             Ok(updated) => {
                 if updated.payload_id.is_none() {
                     error!("Payload ID is none");
-                    if let Some(latest_valid_hash) = updated.payload_status.latest_valid_hash {
-                        fork_choice_state.safe_block_hash = latest_valid_hash;
-                        fork_choice_state.head_block_hash = latest_valid_hash;
-                    }
+
                     return None;
                 }
                 Some(updated.payload_id.unwrap())
@@ -131,8 +153,8 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
     }
 
     pub async fn construct_payload(
-        &mut self,
-        fork_choice_state: &mut ForkchoiceState,
+        &self,
+        fork_choice_state: ForkchoiceState,
     ) -> anyhow::Result<Vec<GTxn>> {
         let parent_beacon_block_root = fork_choice_state.head_block_hash;
         let payload_attributes = Self::create_payload_attributes(parent_beacon_block_root);
@@ -169,18 +191,19 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
     }
 }
 
-impl<T: EngineEthApiClient<EthEngineTypes>> ExecutionApi for RethCli<T> {
+#[async_trait]
+impl<T: EngineEthApiClient<EthEngineTypes > + Send + Sync> ExecutionApi for RethCli<T> {
     async fn request_transactions(&self, safe_block_hash: [u8; 32], head_block_hash: [u8; 32]) -> Vec<GTxn> {
         let fork_choice_state = ForkchoiceState {
             head_block_hash: B256::new(safe_block_hash),
             safe_block_hash: B256::new(safe_block_hash),
             finalized_block_hash: B256::new(head_block_hash),
         };
-        let payload_attr = self.create_payload_attributes(fork_choice_state.head_block_hash);
+        let payload_attr = Self::create_payload_attributes(fork_choice_state.head_block_hash);
         let payload_id = match self.get_new_payload_id(fork_choice_state, &payload_attr).await
         {
             Some(payload_id) => payload_id,
-            None => return Err(anyhow::anyhow!("Failed to get payload id")),
+            None => panic!("Failed to get payload id"),
         };
         // try to get payload
         let payload = <T as EngineApiClient<EthEngineTypes>>::get_payload_v3(
@@ -188,16 +211,16 @@ impl<T: EngineEthApiClient<EthEngineTypes>> ExecutionApi for RethCli<T> {
             payload_id,
         )
             .await
-            .map_err(|e| anyhow::anyhow!(e))?;
+            .expect("Failed to get payload");
         info!("Got payload: {:?}", payload);
         self.payload_to_txns(payload_id, payload)
     }
 
     async fn send_ordered_block(&self, txns: Vec<GTxn>) {
         let mut payload: <EthEngineTypes as EngineTypes>::ExecutionPayloadV3 =
-            serde_json::from_slice(txns[0].get_bytes()).map_err(|e| anyhow::anyhow!(e))?;
+            serde_json::from_slice(txns[0].get_bytes()).expect("Failed to deserialize payload");
         if txns.len() > 1 {
-            txns[1..].for_each(|gtxn| {
+            txns.iter().skip(1).for_each(|gtxn| {
                 let txn_bytes = gtxn.get_bytes();
                 let bytes: Bytes = Bytes::from(txn_bytes.clone());
                 payload.execution_payload.payload_inner.payload_inner.transactions.push(bytes);
@@ -221,11 +244,12 @@ impl<T: EngineEthApiClient<EthEngineTypes>> ExecutionApi for RethCli<T> {
         self.block_hash_channel_sender.send(hash).expect("send block hash failed");
     }
 
-    async fn recv_executed_block_hash(&mut self) -> [u8; 32] {
-        self.block_hash_channel_receiver.recv().await.expect("recv block hash failed")
+    async fn recv_executed_block_hash(&self) -> [u8; 32] {
+        todo!()
+        // self.block_hash_channel_receiver.recv().await.expect("recv block hash failed")
     }
 
-    async fn commit_block_hash(&self, block_ids: Vec<[u8; 32]>) {
+    async fn commit_block_hash(&self, _block_ids: Vec<[u8; 32]>) {
         // do nothing for reth
     }
 }
