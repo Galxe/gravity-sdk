@@ -92,20 +92,6 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
     /// [`NodeCommand`](node::NodeCommand).
     ///
     ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use reth::cli::Cli;
-    /// use reth_node_ethereum::EthereumNode;
-    ///
-    /// Cli::parse_args()
-    ///     .run(|builder, _| async move {
-    ///         let handle = builder.launch_node(EthereumNode::default()).await?;
-    ///
-    ///         handle.wait_for_node_exit().await
-    ///     })
-    ///     .unwrap();
-    /// ```
     ///
     /// # Example
     ///

@@ -1,6 +1,7 @@
 #![allow(missing_docs)]
 
 use clap::Args;
+use reth_provider::BlockReaderIdExt;
 use std::thread;
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use crate::cli::Cli;
@@ -32,7 +33,7 @@ struct TestConsensusLayer<T> {
 }
 
 impl<T: EngineEthApiClient<EthEngineTypes>> TestConsensusLayer<T> {
-    fn new(reth_cli: RethCli<T>, safe_hash: B256, head_hash: B256) -> Self<T> {
+    fn new(reth_cli: RethCli<T>, safe_hash: B256, head_hash: B256) -> Self {
         let mut safe_slice = [0u8; 32];
         safe_slice.copy_from_slice(safe_hash.as_slice());
         let mut head_slice = [0u8; 32];
@@ -83,8 +84,8 @@ fn run_server() {
                 })
                 .await?;
             let client = handle.node.engine_http_client();
-            let head_hash = handle.node.provider.block_hash_for_id(BlockId::Number(BlockNumberOrTag::Latest)).unwrap().unwrap();
-            let safe_hash = handle.node.provider.safe_block_hash().unwrap().unwrap();
+            let head_hash = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Latest)).unwrap().unwrap().hash_slow();
+            let safe_hash = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Safe)).unwrap().unwrap().hash_slow();
             let id = handle.node.chain_spec().chain().id();
             let _ = thread::spawn(move || {
                 let mut cl =
