@@ -13,13 +13,14 @@ use tracing::info;
 use gravity_sdk::{ExecutionApi, GTxn};
 use reth_primitives::Bytes;
 use tokio::sync::mpsc::{Receiver, Sender, UnboundedReceiver, UnboundedSender};
+use tokio::sync::Mutex;
 use tracing::log::error;
 
 pub(crate) struct RethCli<T> {
     engine_api_client: T,
     chain_id: u64,
     block_hash_channel_sender: UnboundedSender<[u8; 32]>,
-    block_hash_channel_receiver: UnboundedReceiver<[u8; 32]>,
+    block_hash_channel_receiver: Mutex<UnboundedReceiver<[u8; 32]>>,
 }
 
 
@@ -30,7 +31,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
             engine_api_client: client,
             chain_id,
             block_hash_channel_sender,
-            block_hash_channel_receiver,
+            block_hash_channel_receiver: Mutex::new(block_hash_channel_receiver),
         }
     }
 
@@ -245,8 +246,9 @@ impl<T: EngineEthApiClient<EthEngineTypes > + Send + Sync> ExecutionApi for Reth
     }
 
     async fn recv_executed_block_hash(&self) -> [u8; 32] {
-        todo!()
-        // self.block_hash_channel_receiver.recv().await.expect("recv block hash failed")
+        let mut receiver = self.block_hash_channel_receiver.lock().await;
+        let block_hash = receiver.recv().await.expect("recv block hash failed");
+        block_hash
     }
 
     async fn commit_block_hash(&self, _block_ids: Vec<[u8; 32]>) {

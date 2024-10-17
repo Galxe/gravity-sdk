@@ -1,5 +1,9 @@
 #![allow(missing_docs)]
 
+mod cli;
+mod reth_client;
+
+
 use clap::Args;
 use reth_provider::BlockReaderIdExt;
 use std::thread;
@@ -102,7 +106,6 @@ fn run_server() {
     }
 }
 
-#[test]
-fn test() {
+fn main() {
     run_server();
 }
