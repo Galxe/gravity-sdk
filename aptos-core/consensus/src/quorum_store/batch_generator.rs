@@ -332,6 +332,7 @@ impl BatchGenerator {
             self.txns_in_progress_sorted.len()
         );
 
+        // let mut pulled_txns = self.batch_client.pull();
         let mut pulled_txns = self
             .mempool_proxy
             .pull_internal(

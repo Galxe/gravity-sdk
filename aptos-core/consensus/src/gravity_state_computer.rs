@@ -2,6 +2,7 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::payload_client::user::quorum_store_client::QuorumStoreClient;
 use crate::state_computer::{ExecutionProxy, PipelineExecutionResult, StateComputeResultFut};
 use crate::{
     error::StateSyncError,
@@ -50,6 +51,7 @@ pub struct ConsensusAdapterArgs {
         mpsc::UnboundedSender<(Vec<[u8; 32]>, oneshot::Sender<HashValue>)>,
     pub committed_block_ids_receiver:
         Option<mpsc::UnboundedReceiver<(Vec<[u8; 32]>, oneshot::Sender<HashValue>)>>,
+    pub quorum_store_client: Option<QuorumStoreClient>,
 }
 
 impl ConsensusAdapterArgs {
@@ -74,7 +76,12 @@ impl ConsensusAdapterArgs {
             pipeline_block_receiver: Some(pipeline_block_receiver),
             committed_block_ids_sender,
             committed_block_ids_receiver: Some(committed_block_ids_receiver),
+            quorum_store_client: None,
         }
+    }
+
+    pub fn set_quorum_store_client(&mut self, quorum_store_client: Option<QuorumStoreClient>) {
+        self.quorum_store_client = quorum_store_client;
     }
 
     pub fn dummy() -> Self {
@@ -87,6 +94,7 @@ impl ConsensusAdapterArgs {
             pipeline_block_receiver: Some(pipeline_block_receiver),
             committed_block_ids_sender,
             committed_block_ids_receiver: Some(committed_block_ids_receiver),
+            quorum_store_client: todo!(),
         }
     }
 }

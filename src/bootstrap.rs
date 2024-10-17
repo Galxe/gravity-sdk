@@ -69,14 +69,13 @@ pub fn check_bootstrap_config(node_config_path: Option<PathBuf>) -> NodeConfig {
 pub fn start(node_config: NodeConfig) -> anyhow::Result<()> {
     let test_mode = node_config.test_mode;
     let adapter = GravityConsensusEngine::init(node_config);
-    let adapter_mutex = Arc::new(Mutex::new(adapter));
-    let submitter_mutex = adapter_mutex.clone();
+    let submitter_mutex = adapter.clone();
     if test_mode {
         tokio::spawn(async move {
-            network::mock_execution_txn_submitter(submitter_mutex.clone()).await;
+            network::mock_execution_txn_submitter(submitter_mutex).await;
         });
         tokio::spawn(async move {
-            network::mock_execution_receive_block(adapter_mutex.clone()).await;
+            network::mock_execution_receive_block(adapter).await;
         });
     }
     loop {
@@ -119,12 +118,13 @@ pub fn start_consensus(
     consensus_notifier: ConsensusNotifier,
     consensus_to_mempool_sender: Sender<QuorumStoreRequest>,
     db: DbReaderWriter,
-    arg: &ConsensusAdapterArgs,
+    arg: &mut ConsensusAdapterArgs,
 ) -> (Runtime, Arc<StorageWriteProxy>, Arc<QuorumStoreDB>) {
     let consensus_reconfig_subscription = event_subscription_service
         .subscribe_to_reconfigurations()
         .expect("Consensus must subscribe to reconfigurations");
     let vtxn_pool = VTxnPoolState::default();
+    // TODO(gravity_byteyue: return quorum store client also)
     aptos_consensus::consensus_provider::start_consensus(
         &node_config,
         consensus_network_interfaces.network_client,

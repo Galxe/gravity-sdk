@@ -8,6 +8,7 @@ pub mod simple_consensus_engine;
 mod storage;
 mod utils;
 mod execution_api;
+pub mod consensus_api;
 
 pub use execution_api::ExecutionApi;
 pub use aptos_config::config::NodeConfig;
@@ -15,6 +16,7 @@ pub use bootstrap::{check_bootstrap_config, start};
 use clap::Parser;
 use std::fmt::Display;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Clone, Default)]
 pub struct GTxn {
@@ -84,7 +86,7 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     /// - Setting up initial state
     /// - Connecting to the network
     /// - Loading configuration
-    fn init(node_config: NodeConfig) -> Self;
+    fn init(node_config: NodeConfig) -> Arc<Self>;
 
     /// Receive and process valid transactions.
     ///
@@ -107,7 +109,7 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     ///
     /// TODO(gravity_xiejian): use txn id rather than total txn in block
     /// Returns: Option<Block> - The next ordered block, if available
-    async fn receive_ordered_block(&mut self) -> Result<([u8; 32], Vec<GTxn>), GCEIError>;
+    async fn receive_ordered_block(&self) -> Result<([u8; 32], Vec<GTxn>), GCEIError>;
 
     /// Submit computation results.
     ///
@@ -137,7 +139,7 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     ///
     /// Parameters:
     /// - `block_ids`: A vector of block IDs that have been finalized
-    async fn receive_commit_block_ids(&mut self) -> Result<Vec<[u8; 32]>, GCEIError>;
+    async fn receive_commit_block_ids(&self) -> Result<Vec<[u8; 32]>, GCEIError>;
 
     /// Return the commit ids, the consensus can delete these transactions after submitting.
     async fn send_persistent_block_id(&self, block_id: [u8; 32]) -> Result<(), GCEIError>;

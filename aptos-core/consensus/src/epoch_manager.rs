@@ -64,7 +64,7 @@ use aptos_consensus_types::{
     common::{Author, Round},
     delayed_qc_msg::DelayedQcMsg,
     epoch_retrieval::EpochRetrievalRequest,
-    proof_of_store::ProofCache,
+    proof_of_store::ProofCache, request_response::GetPayloadCommand,
 };
 use aptos_crypto::bls12381;
 use aptos_dkg::{
@@ -104,6 +104,7 @@ use futures::{
     },
     SinkExt, StreamExt,
 };
+use futures_channel::mpsc::Receiver;
 use itertools::Itertools;
 use mini_moka::sync::Cache;
 use rand::{prelude::StdRng, thread_rng, SeedableRng};
@@ -177,6 +178,9 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     proof_cache: ProofCache,
     consensus_publisher: Option<Arc<ConsensusPublisher>>,
     pending_blocks: Arc<Mutex<PendingBlocks>>,
+    // TODO(gravity_byteyue): export this field
+    quorum_store_client: Option<QuorumStoreClient>,
+    consensus_to_quorum_store_rx: Option<Receiver<GetPayloadCommand>>,
 }
 
 impl<P: OnChainConfigProvider> EpochManager<P> {
@@ -204,6 +208,15 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         let dag_config = node_config.dag_consensus.clone();
         let sr_config = &node_config.consensus.safety_rules;
         let safety_rules_manager = SafetyRulesManager::new(sr_config);
+
+        let (consensus_to_quorum_store_tx, consensus_to_quorum_store_rx) =
+            mpsc::channel(config.intra_consensus_channel_buffer_size);
+        let quorum_store_client = QuorumStoreClient::new(
+            consensus_to_quorum_store_tx,
+            config.quorum_store_pull_timeout_ms,
+            config.wait_for_full_blocks_above_recent_fill_threshold,
+            config.wait_for_full_blocks_above_pending_blocks,
+        );
         Self {
             author,
             config,
@@ -246,13 +259,17 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 .build(),
             consensus_publisher,
             pending_blocks: Arc::new(Mutex::new(PendingBlocks::new())),
+            quorum_store_client: Some(quorum_store_client),
+            consensus_to_quorum_store_rx: Some(consensus_to_quorum_store_rx),
         }
     }
 
+    pub fn get_quorum_store_client(&self) -> Option<QuorumStoreClient> {
+        return self.quorum_store_client.clone();
+    }
+
     fn epoch_state(&self) -> &EpochState {
-        self.epoch_state
-            .as_ref()
-            .expect("EpochManager not started yet")
+        self.epoch_state.as_ref().expect("EpochManager not started yet")
     }
 
     fn epoch(&self) -> u64 {
@@ -651,11 +668,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         epoch_state: Arc<EpochState>,
         network_sender: Arc<NetworkSender>,
     ) {
-        let (recovery_manager_tx, recovery_manager_rx) = aptos_channel::new(
-            QueueStyle::KLAST,
-            10,
-            Some(&counters::ROUND_MANAGER_CHANNEL_MSGS),
-        );
+        let (recovery_manager_tx, recovery_manager_rx) =
+            aptos_channel::new(QueueStyle::KLAST, 10, Some(&counters::ROUND_MANAGER_CHANNEL_MSGS));
         self.round_manager_tx = Some(recovery_manager_tx);
         let (close_tx, close_rx) = oneshot::channel();
         self.round_manager_close_tx = Some(close_tx);
@@ -679,15 +693,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         epoch_state: &EpochState,
         network_sender: NetworkSender,
         consensus_config: &OnChainConsensusConfig,
-    ) -> (
-        Arc<dyn TPayloadManager>,
-        QuorumStoreClient,
-        QuorumStoreBuilder,
-    ) {
+    ) -> (Arc<dyn TPayloadManager>, QuorumStoreClient, QuorumStoreBuilder) {
         // Start QuorumStore
-        let (consensus_to_quorum_store_tx, consensus_to_quorum_store_rx) =
-            mpsc::channel(self.config.intra_consensus_channel_buffer_size);
-
         let quorum_store_config = if consensus_config.is_dag_enabled() {
             self.dag_config.quorum_store.clone()
         } else {
@@ -701,7 +708,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 self.author,
                 epoch_state.verifier.len() as u64,
                 quorum_store_config,
-                consensus_to_quorum_store_rx,
+                self.consensus_to_quorum_store_rx.take().unwrap(),
                 self.quorum_store_to_mempool_sender.clone(),
                 self.config.mempool_txn_pull_timeout_ms,
                 self.storage.aptos_db().clone(),
@@ -715,7 +722,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         } else {
             info!("Building DirectMempool");
             QuorumStoreBuilder::DirectMempool(DirectMempoolInnerBuilder::new(
-                consensus_to_quorum_store_rx,
+                self.consensus_to_quorum_store_rx.take().unwrap(),
                 self.quorum_store_to_mempool_sender.clone(),
                 self.config.mempool_txn_pull_timeout_ms,
             ))
@@ -726,13 +733,11 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         self.quorum_store_msg_tx = quorum_store_msg_tx;
         self.payload_manager = payload_manager.clone();
 
-        let payload_client = QuorumStoreClient::new(
-            consensus_to_quorum_store_tx,
-            self.config.quorum_store_pull_timeout_ms,
-            self.config.wait_for_full_blocks_above_recent_fill_threshold,
-            self.config.wait_for_full_blocks_above_pending_blocks,
-        );
-        (payload_manager, payload_client, quorum_store_builder)
+        let quorum_store_client = match &self.quorum_store_client {
+            Some(qs_client) => qs_client.clone(),
+            None => panic!(),
+        };
+        (payload_manager, quorum_store_client, quorum_store_builder)
     }
 
     fn set_epoch_start_metrics(&self, epoch_state: &EpochState) {
@@ -911,6 +916,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             delayed_qc_rx,
             close_rx,
         ));
+        self.quorum_store_client.clone().unwrap().set_block_store(block_store.clone());
 
         self.spawn_block_retrieval_task(epoch, block_store, max_blocks_allowed);
     }

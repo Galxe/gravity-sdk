@@ -55,7 +55,7 @@ pub fn start_consensus(
     reconfig_events: ReconfigNotificationListener<DbBackedOnChainConfig>,
     vtxn_pool: VTxnPoolState,
     consensus_publisher: Option<Arc<ConsensusPublisher>>,
-    gravity_args: &ConsensusAdapterArgs,
+    gravity_args: &mut ConsensusAdapterArgs,
 ) -> (Runtime, Arc<StorageWriteProxy>, Arc<QuorumStoreDB>) {
     let runtime = aptos_runtimes::spawn_named_runtime("consensus".into(), None);
     let storage = Arc::new(StorageWriteProxy::new(node_config, aptos_db.reader.clone()));
@@ -124,6 +124,7 @@ pub fn start_consensus(
         rand_storage,
         consensus_publisher,
     );
+    gravity_args.set_quorum_store_client(epoch_mgr.get_quorum_store_client());
 
     let (network_task, network_receiver) = NetworkTask::new(network_service_events, self_receiver);
 

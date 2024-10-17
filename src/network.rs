@@ -116,7 +116,7 @@ pub async fn mock_mempool_client_sender(mut mc_sender: aptos_mempool::MempoolCli
 }
 
 // used for UT
-pub async fn mock_execution_txn_submitter(adapter: Arc<Mutex<GravityConsensusEngine>>) {
+pub async fn mock_execution_txn_submitter(adapter: Arc<GravityConsensusEngine>) {
     // let addr = aptos_types::account_address::AccountAddress::random();
     let mut seq_num = 0;
     loop {
@@ -137,31 +137,29 @@ pub async fn mock_execution_txn_submitter(adapter: Arc<Mutex<GravityConsensusEng
         seq_num += 1;
         let mock_block_id: [u8; 32] = [0; 32];
         info!("try to send_valid_block_transactions");
-        let caller = adapter.lock().await;
-        caller.send_valid_block_transactions(mock_block_id, vec![txn]).await.expect("ok");
+        adapter.send_valid_block_transactions(mock_block_id, vec![txn]).await.expect("ok");
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 }
 
-pub async fn mock_execution_receive_block(adapter: Arc<Mutex<GravityConsensusEngine>>) {
+pub async fn mock_execution_receive_block(adapter: Arc<GravityConsensusEngine>) {
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         info!("try to receive_ordered_block");
-        let mut caller = adapter.as_ref().lock().await;
-        let result = caller.receive_ordered_block().await;
+        let result = adapter.receive_ordered_block().await;
         if let Err(_) = result {
             info!("receive ordered block error");
             continue;
         }
         let value = result.unwrap();
         info!("try to submit compute res, block is {:?}", value.0);
-        let result = caller.send_compute_res(value.0, [0; 32]).await;
+        let result = adapter.send_compute_res(value.0, [0; 32]).await;
         if let Err(_) = result {
             info!("send_compute_res error");
             continue;
         }
         info!("try to receive_commit_block_ids");
-        let result = caller.receive_commit_block_ids().await;
+        let result = adapter.receive_commit_block_ids().await;
         if let Err(_) = result {
             info!("receive_commit_block_ids error");
             continue;
@@ -169,7 +167,7 @@ pub async fn mock_execution_receive_block(adapter: Arc<Mutex<GravityConsensusEng
         let ids = result.unwrap();
         info!("the commit block id is {:?}", ids);
         info!("try to send_persistent_block_id");
-        let result = caller.send_persistent_block_id(*ids.last().unwrap()).await;
+        let result = adapter.send_persistent_block_id(*ids.last().unwrap()).await;
         if let Err(_) = result {
             info!("send_persistent_block_id failed");
         }

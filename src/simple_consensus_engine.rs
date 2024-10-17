@@ -1,5 +1,7 @@
+use std::sync::Arc;
+
 use aptos_config::config::NodeConfig;
-use aptos_infallible::Mutex;
+use tokio::sync::Mutex;
 
 use crate::{GCEIError, GTxn, GravityConsensusEngineInterface};
 
@@ -10,8 +12,8 @@ pub struct SimpleConsensusEngine {
 
 #[async_trait::async_trait]
 impl GravityConsensusEngineInterface for SimpleConsensusEngine {
-    fn init(args: NodeConfig) -> Self {
-        SimpleConsensusEngine { txns: Mutex::new(Vec::new()), block_id: Mutex::new([0; 32]) }
+    fn init(args: NodeConfig) -> Arc<SimpleConsensusEngine> {
+        Arc::new(SimpleConsensusEngine { txns: Mutex::new(Vec::new()), block_id: Mutex::new([0; 32]) })
     }
 
     async fn send_valid_block_transactions(
@@ -19,16 +21,16 @@ impl GravityConsensusEngineInterface for SimpleConsensusEngine {
         new_block_id: [u8; 32],
         new_txns: Vec<GTxn>,
     ) -> Result<(), GCEIError> {
-        let mut txns = self.txns.lock();
-        let mut block_id = self.block_id.lock();
+        let mut txns = self.txns.lock().await;
+        let mut block_id = self.block_id.lock().await;
         *txns = new_txns;
         *block_id = new_block_id;
         Ok(())
     }
 
-    async fn receive_ordered_block(&mut self) -> Result<([u8; 32], Vec<GTxn>), GCEIError> {
-        let mut txns = self.txns.lock();
-        let block_id = self.block_id.lock();
+    async fn receive_ordered_block(&self) -> Result<([u8; 32], Vec<GTxn>), GCEIError> {
+        let mut txns = self.txns.lock().await;
+        let block_id = self.block_id.lock().await;
         let txns = std::mem::replace(&mut *txns, Vec::new());
         Ok((*block_id, txns))
     }
@@ -41,9 +43,9 @@ impl GravityConsensusEngineInterface for SimpleConsensusEngine {
         Ok(())
     }
 
-    async fn receive_commit_block_ids(&mut self) -> Result<Vec<[u8; 32]>, GCEIError> {
+    async fn receive_commit_block_ids(&self) -> Result<Vec<[u8; 32]>, GCEIError> {
         let mut res = Vec::new();
-        res.push(*self.block_id.lock());
+        res.push(*self.block_id.lock().await);
         Ok(res)
     }
 

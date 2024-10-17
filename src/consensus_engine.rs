@@ -38,15 +38,17 @@ pub struct GravityConsensusEngine {
     address: String,
     mempool_sender: mpsc::Sender<MempoolClientRequest>,
     pipeline_block_receiver: Option<
-        mpsc::UnboundedReceiver<(
-            HashValue,
-            HashValue,
-            Vec<SignedTransaction>,
-            oneshot::Sender<HashValue>,
-        )>,
+        Mutex<
+            mpsc::UnboundedReceiver<(
+                HashValue,
+                HashValue,
+                Vec<SignedTransaction>,
+                oneshot::Sender<HashValue>,
+            )>,
+        >,
     >,
     committed_block_ids_receiver:
-        Option<mpsc::UnboundedReceiver<(Vec<[u8; 32]>, oneshot::Sender<HashValue>)>>,
+        Option<Mutex<mpsc::UnboundedReceiver<(Vec<[u8; 32]>, oneshot::Sender<HashValue>)>>>,
 
     execute_result_receivers: RwLock<HashMap<HashValue, oneshot::Sender<HashValue>>>,
     persist_result_receiver: Mutex<Option<oneshot::Sender<HashValue>>>,
@@ -81,7 +83,7 @@ impl GravityConsensusEngine {
 
 #[async_trait::async_trait]
 impl GravityConsensusEngineInterface for GravityConsensusEngine {
-    fn init(node_config: NodeConfig) -> Self {
+    fn init(node_config: NodeConfig) -> Arc<Self> {
         let gravity_db = init_gravity_db(&node_config);
         let peers_and_metadata = init_peers_and_metadata(&node_config, &gravity_db);
         let (_remote_log_receiver, _logger_filter_update) =
@@ -167,20 +169,21 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
             consensus_notifier,
             consensus_to_mempool_sender,
             db,
-            &args,
+            &mut args,
         );
         network_runtimes.push(consensus_runtime);
         let _ = event_subscription_service.notify_initial_configs(1_u64);
-        Self {
+        let a = Self {
             address: node_config.validator_network.as_ref().unwrap().listen_address.to_string(),
             mempool_sender: args.mempool_sender.clone(),
-            pipeline_block_receiver: args.pipeline_block_receiver.take(),
+            pipeline_block_receiver: Some(Mutex::new(args.pipeline_block_receiver.unwrap())),
             execute_result_receivers: RwLock::new(HashMap::new()),
-            committed_block_ids_receiver: args.committed_block_ids_receiver.take(),
+            committed_block_ids_receiver: Some(Mutex::new(args.committed_block_ids_receiver.unwrap())),
             persist_result_receiver: Mutex::new(None),
             runtime_vec: network_runtimes,
             id_index: RwLock::new(BiMap::new()),
-        }
+        };
+        return Arc::new(a);
     }
 
     async fn send_valid_block_transactions(
@@ -225,8 +228,9 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
         Ok(())
     }
 
-    async fn receive_ordered_block(&mut self) -> Result<([u8; 32], Vec<GTxn>), GCEIError> {
-        let receive_result = self.pipeline_block_receiver.as_mut().unwrap().next().await;
+    async fn receive_ordered_block(&self) -> Result<([u8; 32], Vec<GTxn>), GCEIError> {
+        let receive_result =
+            self.pipeline_block_receiver.as_ref().unwrap().lock().await.next().await;
 
         let (parent_id, block_id, txns, callback) = receive_result.unwrap();
         let return_payload_id = txns.first().unwrap().g_ext().block_id;
@@ -283,8 +287,9 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
         todo!()
     }
 
-    async fn receive_commit_block_ids(&mut self) -> Result<Vec<[u8; 32]>, GCEIError> {
-        let receive_result = self.committed_block_ids_receiver.as_mut().unwrap().next().await;
+    async fn receive_commit_block_ids(&self) -> Result<Vec<[u8; 32]>, GCEIError> {
+        let receive_result =
+            self.committed_block_ids_receiver.as_ref().unwrap().lock().await.next().await;
         let (ids, sender) = receive_result.unwrap();
         let mut payload_ids = vec![];
         for id in ids {

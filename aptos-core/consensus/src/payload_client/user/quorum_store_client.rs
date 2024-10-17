@@ -2,21 +2,47 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    counters::WAIT_FOR_FULL_BLOCKS_TRIGGERED, error::QuorumStoreError, monitor,
-    payload_client::user::UserPayloadClient,
+    block_storage::BlockStore, counters::WAIT_FOR_FULL_BLOCKS_TRIGGERED, error::QuorumStoreError,
+    monitor, payload_client::user::UserPayloadClient,
 };
 use aptos_consensus_types::{
     common::{Payload, PayloadFilter},
     request_response::{GetPayloadCommand, GetPayloadResponse},
 };
 use aptos_logger::info;
+use aptos_types::transaction::SignedTransaction;
 use fail::fail_point;
 use futures::future::BoxFuture;
 use futures_channel::{mpsc, oneshot};
-use std::time::{Duration, Instant};
-use tokio::time::{sleep, timeout};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
+use tokio::{
+    sync::Mutex,
+    time::{sleep, timeout},
+};
 
 const NO_TXN_DELAY: u64 = 30;
+
+pub struct BatchClient {
+    pending_payloads: Mutex<Vec<Vec<SignedTransaction>>>,
+}
+
+impl BatchClient {
+    pub fn new() -> Self {
+        Self { pending_payloads: Mutex::new(vec![]) }
+    }
+
+    pub fn submit(&self, txns: Vec<SignedTransaction>) {
+        self.pending_payloads.blocking_lock().push(txns);
+    }
+
+    pub fn pull(&self) -> Vec<Vec<SignedTransaction>> {
+        let mut payloads = self.pending_payloads.blocking_lock();
+        std::mem::take(&mut *payloads)
+    }
+}
 
 /// Client that pulls blocks from Quorum Store
 #[derive(Clone)]
@@ -26,6 +52,9 @@ pub struct QuorumStoreClient {
     pull_timeout_ms: u64,
     wait_for_full_blocks_above_recent_fill_threshold: f32,
     wait_for_full_blocks_above_pending_blocks: usize,
+    block_store: Option<Arc<BlockStore>>,
+    batch_client: Arc<BatchClient>,
+    consensus_api_tx: Option<mpsc::Sender<(GetPayloadCommand, [u8; 32], [u8; 32])>>,
 }
 
 impl QuorumStoreClient {
@@ -40,7 +69,26 @@ impl QuorumStoreClient {
             pull_timeout_ms,
             wait_for_full_blocks_above_recent_fill_threshold,
             wait_for_full_blocks_above_pending_blocks,
+            block_store: None,
+            batch_client: Arc::new(BatchClient::new()),
+            consensus_api_tx: None,
         }
+    }
+
+    pub fn get_consensus_to_quorum_store_sender(&self) -> mpsc::Sender<GetPayloadCommand> {
+        self.consensus_to_quorum_store_sender.clone()
+    }
+
+    pub fn get_batch_client(&self) -> Arc<BatchClient> {
+        self.batch_client.clone()
+    }
+
+    pub fn set_consensus_api_tx(&mut self, consensus_api_tx: Option<mpsc::Sender<(GetPayloadCommand, [u8; 32], [u8; 32])>>) {
+        self.consensus_api_tx = consensus_api_tx;
+    }
+
+    pub fn set_block_store(&mut self, block_store: Arc<BlockStore>) {
+        self.block_store = Some(block_store);
     }
 
     async fn pull_internal(
@@ -69,10 +117,10 @@ impl QuorumStoreClient {
             block_timestamp,
         );
         // send to shared mempool
-        self.consensus_to_quorum_store_sender
-            .clone()
-            .try_send(req)
-            .map_err(anyhow::Error::from)?;
+        // gcei.request_payload(request, id, id).await
+        // 直接callback_rcv.recv即可，正常处理的时候已经通过sender发出去了
+        // self.consensus_api_tx.clone().try_send((req, id, id)).map_err(anyhow::Error::from)?:
+        self.consensus_to_quorum_store_sender.clone().try_send(req).map_err(anyhow::Error::from)?;
         // wait for response
         match monitor!(
             "pull_payload",
@@ -80,7 +128,7 @@ impl QuorumStoreClient {
         ) {
             Err(_) => {
                 Err(anyhow::anyhow!("[consensus] did not receive GetBlockResponse on time").into())
-            },
+            }
             Ok(resp) => match resp.map_err(anyhow::Error::from)?? {
                 GetPayloadResponse::GetPayloadResponse(payload) => Ok(payload),
             },

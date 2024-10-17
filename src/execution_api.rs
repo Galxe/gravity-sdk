@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use crate::GTxn;
 
 #[async_trait]
-pub trait ExecutionApi {
+pub trait ExecutionApi: Send + Sync {
     // Request transactions from execution engine
     // safe block id is the last block id that has been committed in block tree
     // head block id is the last block id that received by the execution engine in block tree
