@@ -7,6 +7,7 @@ mod network;
 pub mod simple_consensus_engine;
 mod storage;
 mod utils;
+mod execution_api;
 
 pub use aptos_config::config::NodeConfig;
 pub use bootstrap::{check_bootstrap_config, start};
