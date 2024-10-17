@@ -1,13 +1,8 @@
 #![allow(missing_docs)]
-// mod engine_api_adaptor;
-mod cli;
-mod gcei_sender;
-mod mock_eth_consensus_layer;
-/// clap [Args] for Engine related arguments.
-use clap::Args;
-use gravity_sdk::check_bootstrap_config;
-use std::thread;
 
+use clap::Args;
+use std::thread;
+use alloy_eips::{BlockId, BlockNumberOrTag};
 use crate::cli::Cli;
 /// Parameters for configuring the engine
 #[derive(Debug, Clone, Args, PartialEq, Eq, Default)]
@@ -19,11 +14,48 @@ pub struct EngineArgs {
 }
 
 use clap::Parser;
+use reth_ethereum_engine_primitives::EthEngineTypes;
 use reth_node_builder::engine_tree_config;
 use reth_node_builder::EngineNodeLauncher;
 use reth_node_core::args::utils::DefaultChainSpecParser;
 use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
+use reth_primitives::B256;
 use reth_provider::providers::BlockchainProvider2;
+use reth_rpc_api::EngineEthApiClient;
+use gravity_sdk::{check_bootstrap_config, ExecutionApi};
+use crate::reth_client::RethCli;
+
+struct TestConsensusLayer<T> {
+    safe_hash: [u8; 32],
+    head_hash: [u8; 32],
+    reth_cli: RethCli<T>
+}
+
+impl<T: EngineEthApiClient<EthEngineTypes>> TestConsensusLayer<T> {
+    fn new(reth_cli: RethCli<T>, safe_hash: B256, head_hash: B256) -> Self<T> {
+        let mut safe_slice = [0u8; 32];
+        safe_slice.copy_from_slice(safe_hash.as_slice());
+        let mut head_slice = [0u8; 32];
+        head_slice.copy_from_slice(head_hash.as_slice());
+        Self {
+            safe_hash: safe_slice,
+            head_hash: head_slice,
+            reth_cli
+        }
+    }
+
+    async fn run(mut self) {
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            let txns = self.reth_cli.request_transactions(self.safe_hash, self.head_hash).await;
+            self.reth_cli.send_ordered_block(txns).await;
+            let hash = self.reth_cli.recv_executed_block_hash().await;
+            self.reth_cli.commit_block_hash(vec![hash]).await;
+            self.safe_hash = hash;
+            self.head_hash = hash;
+        }
+    }
+}
 
 fn run_server() {
     reth_cli_util::sigsegv_handler::install();
@@ -51,15 +83,15 @@ fn run_server() {
                 })
                 .await?;
             let client = handle.node.engine_http_client();
-            let genesis_hash = handle.node.chain_spec().genesis_hash();
+            let head_hash = handle.node.provider.block_hash_for_id(BlockId::Number(BlockNumberOrTag::Latest)).unwrap().unwrap();
+            let safe_hash = handle.node.provider.safe_block_hash().unwrap().unwrap();
             let id = handle.node.chain_spec().chain().id();
             let _ = thread::spawn(move || {
-                let mut mock_eth_consensus_layer =
-                    mock_eth_consensus_layer::MockEthConsensusLayer::new(client, id, gcei_config);
+                let mut cl =
+                    TestConsensusLayer::new(RethCli::new(client, id), safe_hash, head_hash);
                 tokio::runtime::Runtime::new()
                     .unwrap()
-                    .block_on(mock_eth_consensus_layer.start_round(genesis_hash))
-                    .expect("Failed to run round");
+                    .block_on(cl.run());
             });
             handle.node_exit_future.await
         })
@@ -69,6 +101,7 @@ fn run_server() {
     }
 }
 
-fn main() {
+#[test]
+fn test() {
     run_server();
 }

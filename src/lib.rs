@@ -9,6 +9,7 @@ mod storage;
 mod utils;
 mod execution_api;
 
+pub use execution_api::ExecutionApi;
 pub use aptos_config::config::NodeConfig;
 pub use bootstrap::{check_bootstrap_config, start};
 use clap::Parser;

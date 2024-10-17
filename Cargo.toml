@@ -6,7 +6,7 @@ edition = "2021"
 
 [workspace]
 members = [
-    "example/gravity_reth",
+    "bin/reth",
     "aptos-core/consensus",
     "dependencies/aptos-bitvec",
     "dependencies/aptos-bounded-executor",

@@ -60,7 +60,7 @@ revm-inspectors = {version = "=0.7"}
 revm-primitives = { version = "=9.0.2", features = [
     "std",
 ], default-features = false }
- alloy-chains = "=0.1.32"
+alloy-chains = "=0.1.32"
 alloy-dyn-abi = "=0.8.3"
 alloy-primitives = { version = "=0.8.3", default-features = false }
 alloy-rlp = "=0.3.4"
