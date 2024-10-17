@@ -72,7 +72,7 @@ fn run_server() {
 
     if let Err(err) = {
         let cli = Cli::<DefaultChainSpecParser, EngineArgs>::parse();
-        let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
+        // let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
         cli.run(|builder, engine_args| async move {
             let handle = builder
                 .with_types_and_provider::<EthereumNode, BlockchainProvider2<_>>()
@@ -88,8 +88,9 @@ fn run_server() {
                 })
                 .await?;
             let client = handle.node.engine_http_client();
+            let genesis = handle.node.chain_spec().genesis();
             let head_hash = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Latest)).unwrap().unwrap().hash_slow();
-            let safe_hash = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Safe)).unwrap().unwrap().hash_slow();
+            let safe_hash = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Finalized)).unwrap().unwrap().hash_slow();
             let id = handle.node.chain_spec().chain().id();
             let _ = thread::spawn(move || {
                 let mut cl =
