@@ -1,14 +1,30 @@
 use std::sync::Arc;
 
-use crate::{bootstrap::{init_gravity_db, init_mempool, init_network_interfaces, init_peers_and_metadata, start_consensus}, consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler}, execution_api::ExecutionApi, logger, network::{create_network_runtime, extract_network_configs}, GTxn};
+use crate::{ 
+    bootstrap::{
+        init_gravity_db, init_mempool, init_network_interfaces, init_peers_and_metadata,
+        start_consensus,
+    },
+    consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler},
+    logger,
+    network::{create_network_runtime, extract_network_configs},
+};
+use api_types::{ConsensusApi, ConsensusEngine, ExecutionApi, GTxn};
 use aptos_config::{config::NodeConfig, network_id::NetworkId};
-use aptos_consensus::{gravity_state_computer::ConsensusAdapterArgs, payload_client::user::quorum_store_client::{BatchClient, QuorumStoreClient}};
+use aptos_consensus::{
+    gravity_state_computer::ConsensusAdapterArgs,
+    payload_client::user::quorum_store_client::QuorumStoreClient,
+};
+use api_types::BatchClient;
 use aptos_consensus_types::{common::Payload, request_response::GetPayloadCommand};
 use aptos_event_notifications::EventNotificationSender;
 use aptos_network_builder::builder::NetworkBuilder;
 use aptos_storage_interface::DbReaderWriter;
 use async_trait::async_trait;
-use futures::{channel::mpsc::{Receiver, Sender}, SinkExt, StreamExt};
+use futures::{
+    channel::mpsc::{Receiver, SendError, Sender},
+    SinkExt, StreamExt,
+};
 
 use aptos_crypto::{HashValue, PrivateKey, Uniform};
 use aptos_logger::info;
@@ -17,55 +33,42 @@ use aptos_types::{
     transaction::{GravityExtension, RawTransaction, SignedTransaction, TransactionPayload},
 };
 use futures::channel::{mpsc, oneshot};
+use std::future::Future;
 use tokio::{runtime::Runtime, sync::Mutex};
 
-#[async_trait]
-pub trait ConsensusApi {
-    fn init(node_config: NodeConfig, execution_api: Arc<dyn ExecutionApi>) -> Arc<Self>;
-
-    async fn request_payload(
-        &self,
-        request: GetPayloadCommand,
-        safe_block_hash: [u8; 32],
-        head_block_hash: [u8; 32],
-    );
-
-    async fn send_order_block(&self, txns: Vec<SignedTransaction>);
-
-    async fn recv_executed_block_hash(&self) -> [u8; 32];
-
-    async fn commit_block_hash(&self, block_ids: Vec<[u8; 32]>);
-}
-
-pub struct ConsensusEngine {
-    address: String,
-    execution_api: Arc<dyn ExecutionApi>,
-    batch_client: Arc<BatchClient>,
-    consensus_to_quorum_store_tx: Sender<GetPayloadCommand>,
-    runtime_vec: Vec<Runtime>,
-}
+// pub struct ConsensusEngine {
+//     address: String,
+//     execution_api: Arc<dyn ExecutionApi>,
+//     batch_client: Arc<BatchClient>,
+//     // consensus_to_quorum_store_tx: Sender<GetPayloadCommand>,
+//     runtime_vec: Vec<Runtime>,
+// }
 
 impl ConsensusEngine {
-    async fn handle_get_payload_command(&self, mut consensus_api_rx: Receiver<(GetPayloadCommand, [u8; 32], [u8; 32])>) {
+    async fn handle_get_payload_command(
+        &self,
+        mut consensus_api_rx: Receiver<(GetPayloadCommand, [u8; 32], [u8; 32])>,
+    ) {
         loop {
             match consensus_api_rx.try_next() {
-                Ok(req_option) => {
-                    match req_option {
-                        Some((req, safe_block_hash, head_block_hash)) => {
-                            self.request_payload(req, safe_block_hash, head_block_hash).await;
-                        },
-                        None => todo!(),
+                Ok(req_option) => match req_option {
+                    Some((req, safe_block_hash, head_block_hash)) => {
+                        let mut sender = self.consensus_to_quorum_store_tx.clone();
+                        self.request_payload(
+                            || async move { sender.send(req).await },
+                            safe_block_hash,
+                            head_block_hash,
+                        )
+                        .await;
+                        //self.request_payload(req, safe_block_hash, head_block_hash).await;
                     }
+                    None => todo!(),
                 },
                 Err(_) => todo!(),
             }
-
         }
     }
-}
 
-#[async_trait]
-impl ConsensusApi for ConsensusEngine {
     fn init(node_config: NodeConfig, execution_api: Arc<dyn ExecutionApi>) -> Arc<Self> {
         let gravity_db = init_gravity_db(&node_config);
         let peers_and_metadata = init_peers_and_metadata(&node_config, &gravity_db);
@@ -155,7 +158,8 @@ impl ConsensusApi for ConsensusEngine {
             &mut args,
         );
         network_runtimes.push(consensus_runtime);
-        let quorum_store_client : &mut QuorumStoreClient = args.quorum_store_client.as_mut().unwrap();
+        let quorum_store_client: &mut QuorumStoreClient =
+            args.quorum_store_client.as_mut().unwrap();
         let _ = event_subscription_service.notify_initial_configs(1_u64);
         let (consensus_api_tx, consensus_api_rx) = mpsc::channel(10);
         quorum_store_client.set_consensus_api_tx(Some(consensus_api_tx));
@@ -164,7 +168,6 @@ impl ConsensusApi for ConsensusEngine {
             execution_api,
             batch_client: quorum_store_client.get_batch_client(),
             runtime_vec: network_runtimes,
-            consensus_to_quorum_store_tx: quorum_store_client.get_consensus_to_quorum_store_sender(),
         };
         let r = Arc::new(a);
         let r_c = r.clone();
@@ -173,13 +176,20 @@ impl ConsensusApi for ConsensusEngine {
         });
         return r;
     }
+}
 
-    async fn request_payload(
+#[async_trait]
+impl ConsensusApi for ConsensusEngine {
+    async fn request_payload<F, R>(
         &self,
-        request: GetPayloadCommand,
+        closure: F,
         safe_block_hash: [u8; 32],
         head_block_hash: [u8; 32],
-    ) {
+    ) -> R::Output
+    where
+        F: FnOnce() -> R + Send + 'static,
+        R: Future<Output = Result<(), SendError>> + Send + 'static,
+    {
         let txns = self.execution_api.request_transactions(safe_block_hash, head_block_hash).await;
         let len = txns.len();
         let signed_txns: Vec<SignedTransaction> = txns
@@ -205,30 +215,31 @@ impl ConsensusApi for ConsensusEngine {
             })
             .collect();
         self.batch_client.submit(signed_txns);
-        self.consensus_to_quorum_store_tx.clone().send(request).await;
+        closure().await
+        // self.consensus_to_quorum_store_tx.clone().send(request).await;
         // payload是通过callback发回去的 这里似乎不需要返回payload
     }
 
-    async fn send_order_block(&self, txns: Vec<SignedTransaction>) {
-        let mut return_txns = vec![GTxn::default(); txns.len()];
-        txns.iter().for_each(|txn| {
-            let txn_bytes = match txn.payload() {
-                TransactionPayload::GTxnBytes(bytes) => bytes,
-                _ => {
-                    panic!("should never consists other payload type");
-                }
-            };
-            let gtxn = GTxn {
-                sequence_number: txn.sequence_number(),
-                max_gas_amount: txn.max_gas_amount(),
-                gas_unit_price: txn.gas_unit_price(),
-                expiration_timestamp_secs: txn.expiration_timestamp_secs(),
-                chain_id: txn.chain_id().to_u8() as u64,
-                txn_bytes: (*txn_bytes.clone()).to_owned(),
-            };
-            return_txns[txn.g_ext().txn_index_in_block as usize] = gtxn;
-        });
-        self.execution_api.send_ordered_block(return_txns).await
+    async fn send_order_block(&self, txns: Vec<GTxn>) {
+        // let mut return_txns = vec![GTxn::default(); txns.len()];
+        // txns.iter().for_each(|txn| {
+        //     let txn_bytes = match txn.payload() {
+        //         TransactionPayload::GTxnBytes(bytes) => bytes,
+        //         _ => {
+        //             panic!("should never consists other payload type");
+        //         }
+        //     };
+        //     let gtxn = GTxn {
+        //         sequence_number: txn.sequence_number(),
+        //         max_gas_amount: txn.max_gas_amount(),
+        //         gas_unit_price: txn.gas_unit_price(),
+        //         expiration_timestamp_secs: txn.expiration_timestamp_secs(),
+        //         chain_id: txn.chain_id().to_u8() as u64,
+        //         txn_bytes: (*txn_bytes.clone()).to_owned(),
+        //     };
+        //     return_txns[txn.g_ext().txn_index_in_block as usize] = gtxn;
+        // });
+        self.execution_api.send_ordered_block(txns).await
     }
 
     async fn recv_executed_block_hash(&self) -> [u8; 32] {

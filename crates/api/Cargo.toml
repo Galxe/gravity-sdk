@@ -50,4 +50,5 @@ arc-swap = { workspace = true }
 byteorder = { workspace = true }
 rocksdb = { workspace = true }
 itertools = { workspace = true }
+api-types = { workspace = true }
 

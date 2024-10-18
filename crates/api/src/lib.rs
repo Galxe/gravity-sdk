@@ -10,67 +10,13 @@ mod utils;
 mod execution_api;
 pub mod consensus_api;
 
-pub use execution_api::ExecutionApi;
+use api_types::{GCEIError, GTxn};
+pub use api_types::ExecutionApi;
 pub use aptos_config::config::NodeConfig;
 pub use bootstrap::{check_bootstrap_config, start};
 use clap::Parser;
-use std::fmt::Display;
 use std::path::PathBuf;
 use std::sync::Arc;
-
-#[derive(Clone, Default)]
-pub struct GTxn {
-    sequence_number: u64,
-    /// Maximal total gas to spend for this transaction.
-    max_gas_amount: u64,
-    /// Price to be paid per gas unit.
-    gas_unit_price: u64,
-    /// Expiration timestamp for this transaction, represented
-    /// as seconds from the Unix Epoch. If the current blockchain timestamp
-    /// is greater than or equal to this time, then the transaction has
-    /// expired and will be discarded. This can be set to a large value far
-    /// in the future to indicate that a transaction does not expire.
-    expiration_timestamp_secs: u64,
-    /// Chain ID of the Aptos network this transaction is intended for.
-    chain_id: u64,
-    /// The transaction payload, e.g., a script to execute.
-    txn_bytes: Vec<u8>,
-}
-
-#[derive(Debug)]
-pub enum GCEIError {
-    ConsensusError,
-}
-
-impl Display for GCEIError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Consensus Error")
-    }
-}
-
-impl GTxn {
-    pub fn new(
-        sequence_number: u64,
-        max_gas_amount: u64,
-        gas_unit_price: u64,
-        expiration_timestamp_secs: u64,
-        chain_id: u64,
-        txn_bytes: Vec<u8>,
-    ) -> Self {
-        Self {
-            sequence_number,
-            max_gas_amount,
-            gas_unit_price,
-            expiration_timestamp_secs,
-            chain_id,
-            txn_bytes,
-        }
-    }
-
-    pub fn get_bytes(&self) -> &Vec<u8> {
-        &self.txn_bytes
-    }
-}
 
 /// GCEI: Gravity Consensus Engine Interface
 ///

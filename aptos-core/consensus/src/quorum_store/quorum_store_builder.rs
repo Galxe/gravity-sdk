@@ -3,7 +3,7 @@
 
 use super::quorum_store_db::QuorumStoreStorage;
 use crate::{
-    consensus_observer::publisher::ConsensusPublisher, error::error_kind, network::{IncomingBatchRetrievalRequest, NetworkSender}, network_interface::ConsensusMsg, payload_client::user::quorum_store_client::BatchClient, payload_manager::{DirectMempoolPayloadManager, QuorumStorePayloadManager, TPayloadManager}, quorum_store::{
+    consensus_observer::publisher::ConsensusPublisher, error::error_kind, network::{IncomingBatchRetrievalRequest, NetworkSender}, network_interface::ConsensusMsg, payload_manager::{DirectMempoolPayloadManager, QuorumStorePayloadManager, TPayloadManager}, quorum_store::{
         batch_coordinator::{BatchCoordinator, BatchCoordinatorCommand},
         batch_generator::{BackPressure, BatchGenerator, BatchGeneratorCommand},
         batch_requester::BatchRequester,
@@ -17,6 +17,7 @@ use crate::{
         types::{Batch, BatchResponse},
     }, round_manager::VerifiedEvent
 };
+use api_types::BatchClient;
 use aptos_channels::{aptos_channel, message_queues::QueueStyle};
 use aptos_config::config::{QuorumStoreConfig, SecureBackend};
 use aptos_consensus_types::{

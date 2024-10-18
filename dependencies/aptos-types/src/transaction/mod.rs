@@ -23,13 +23,9 @@ use crate::{
 };
 use anyhow::{ensure, format_err, Context, Error, Result};
 use aptos_crypto::{
-    ed25519::*,
-    hash::CryptoHash,
-    multi_ed25519::{MultiEd25519PublicKey, MultiEd25519Signature},
-    secp256k1_ecdsa,
-    traits::{signing_message, SigningKey},
-    CryptoMaterialError, HashValue,
+    ed25519::*, hash::CryptoHash, multi_ed25519::{MultiEd25519PublicKey, MultiEd25519Signature}, secp256k1_ecdsa, traits::{signing_message, SigningKey}, CryptoMaterialError, HashValue, PrivateKey, Uniform
 };
+use api_types::GTxn;
 use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest_derive::Arbitrary;
@@ -512,6 +508,46 @@ pub struct SignedTransaction {
     committed_hash: OnceCell<HashValue>,
 
     g_ext : GravityExtension
+}
+
+impl Into<GTxn> for SignedTransaction {
+    fn into(self) -> GTxn {
+        let txn_bytes = match self.payload() {
+            TransactionPayload::GTxnBytes(bytes) => bytes,
+            _ => {
+                panic!("should never consists other payload type");
+            }
+        };
+        GTxn {
+            sequence_number: self.sequence_number(),
+            max_gas_amount: self.max_gas_amount(),
+            gas_unit_price: self.gas_unit_price(),
+            expiration_timestamp_secs: self.expiration_timestamp_secs(),
+            chain_id: self.chain_id().to_u8() as u64,
+            txn_bytes: (*txn_bytes.clone()).to_owned(),
+        }
+    }
+}
+
+impl From<GTxn> for SignedTransaction {
+    fn from(txn: GTxn) -> Self {
+        let addr = AccountAddress::random();
+        let raw_txn = RawTransaction::new(
+            addr,
+            txn.sequence_number,
+            TransactionPayload::GTxnBytes(txn.txn_bytes),
+            txn.max_gas_amount,
+            txn.gas_unit_price,
+            txn.expiration_timestamp_secs,
+            ChainId::new(txn.chain_id as u8),
+        );
+        SignedTransaction::new(
+            raw_txn,
+            aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing().public_key(),
+            aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap(),
+            //GravityExtension::new(HashValue::new(block_id), i as u32, len as u32),
+        )
+    }
 }
 
 /// PartialEq ignores the cached OnceCell fields that may or may not be initialized.

@@ -5,7 +5,8 @@ use crate::bootstrap::{
 use crate::consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler};
 use crate::network::{create_network_runtime, extract_network_configs};
 use crate::utils::bimap::BiMap;
-use crate::{logger, GCEIError, GTxn, GravityConsensusEngineInterface};
+use crate::{logger, GravityConsensusEngineInterface};
+use api_types::{GCEIError, GTxn};
 use aptos_config::config::NodeConfig;
 use aptos_config::network_id::NetworkId;
 use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;

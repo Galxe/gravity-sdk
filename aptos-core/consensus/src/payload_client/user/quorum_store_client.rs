@@ -5,6 +5,8 @@ use crate::{
     block_storage::BlockStore, counters::WAIT_FOR_FULL_BLOCKS_TRIGGERED, error::QuorumStoreError,
     monitor, payload_client::user::UserPayloadClient,
 };
+
+use api_types::{BatchClient, ConsensusApi, ConsensusEngine};
 use aptos_consensus_types::{
     common::{Payload, PayloadFilter},
     request_response::{GetPayloadCommand, GetPayloadResponse},
@@ -12,7 +14,7 @@ use aptos_consensus_types::{
 use aptos_logger::info;
 use aptos_types::transaction::SignedTransaction;
 use fail::fail_point;
-use futures::future::BoxFuture;
+use futures::{future::BoxFuture, SinkExt};
 use futures_channel::{mpsc, oneshot};
 use std::{
     sync::Arc,
@@ -25,25 +27,6 @@ use tokio::{
 
 const NO_TXN_DELAY: u64 = 30;
 
-pub struct BatchClient {
-    pending_payloads: Mutex<Vec<Vec<SignedTransaction>>>,
-}
-
-impl BatchClient {
-    pub fn new() -> Self {
-        Self { pending_payloads: Mutex::new(vec![]) }
-    }
-
-    pub fn submit(&self, txns: Vec<SignedTransaction>) {
-        self.pending_payloads.blocking_lock().push(txns);
-    }
-
-    pub fn pull(&self) -> Vec<Vec<SignedTransaction>> {
-        let mut payloads = self.pending_payloads.blocking_lock();
-        std::mem::take(&mut *payloads)
-    }
-}
-
 /// Client that pulls blocks from Quorum Store
 #[derive(Clone)]
 pub struct QuorumStoreClient {
@@ -55,6 +38,7 @@ pub struct QuorumStoreClient {
     block_store: Option<Arc<BlockStore>>,
     batch_client: Arc<BatchClient>,
     consensus_api_tx: Option<mpsc::Sender<(GetPayloadCommand, [u8; 32], [u8; 32])>>,
+    consensus_engine: Arc<ConsensusEngine>,
 }
 
 impl QuorumStoreClient {
@@ -72,6 +56,7 @@ impl QuorumStoreClient {
             block_store: None,
             batch_client: Arc::new(BatchClient::new()),
             consensus_api_tx: None,
+            consensus_engine: todo!(),
         }
     }
 
@@ -120,6 +105,12 @@ impl QuorumStoreClient {
         // gcei.request_payload(request, id, id).await
         // 直接callback_rcv.recv即可，正常处理的时候已经通过sender发出去了
         // self.consensus_api_tx.clone().try_send((req, id, id)).map_err(anyhow::Error::from)?:
+        // let mut sender_capture = self.consensus_to_quorum_store_sender.clone();
+        // let req_closure = || async move {
+        //     sender_capture.send(req).await;
+        // };
+        // gcei.request_payload(req_closure, id, id).await
+
         self.consensus_to_quorum_store_sender.clone().try_send(req).map_err(anyhow::Error::from)?;
         // wait for response
         match monitor!(

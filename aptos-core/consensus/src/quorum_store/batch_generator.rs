@@ -1,7 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 use crate::{
-    monitor, network::{NetworkSender, QuorumStoreSender}, payload_client::user::quorum_store_client::BatchClient, quorum_store::{
+    monitor, network::{NetworkSender, QuorumStoreSender}, quorum_store::{
         batch_store::BatchWriter,
         counters,
         quorum_store_db::QuorumStoreStorage,
@@ -9,6 +9,7 @@ use crate::{
         utils::{MempoolProxy, TimeExpirations},
     }
 };
+use api_types::BatchClient;
 use aptos_config::config::QuorumStoreConfig;
 use aptos_consensus_types::{
     common::{TransactionInProgress, TransactionSummary},
@@ -335,6 +336,7 @@ impl BatchGenerator {
 
         let mut pulled_txns: Vec<SignedTransaction> = self.batch_client.pull().into_iter()
         .flat_map(|s| s.into_iter())
+        .map(|f| f.into())
         .collect();
         // let mut pulled_txns = self
         //     .mempool_proxy

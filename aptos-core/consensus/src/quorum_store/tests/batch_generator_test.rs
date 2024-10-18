@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    payload_client::user::quorum_store_client::BatchClient, quorum_store::{
+    quorum_store::{
         batch_coordinator::BatchCoordinatorCommand, batch_generator::BatchGenerator,
         batch_store::BatchWriter, quorum_store_db::MockQuorumStoreDB, types::PersistedValue,
     }, test_utils::{
@@ -10,6 +10,7 @@ use crate::{
         create_vec_signed_transactions_with_gas,
     }
 };
+use api_types::BatchClient;
 use aptos_config::config::QuorumStoreConfig;
 use aptos_consensus_types::{
     common::{TransactionInProgress, TransactionSummary},

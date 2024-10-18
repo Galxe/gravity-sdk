@@ -48,7 +48,7 @@ members = [
     "dependencies/aptos-vm-validator",
     "dependencies/aptos-log-derive",
     "dependencies/move-core-types",
-    "crates/api",
+    "crates/api", "crates/api-types",
 ]
 
 
@@ -147,6 +147,7 @@ aptos-schemadb = { path = "./dependencies/aptos-schemadb", features = [
     "fuzzing",
 ] }
 api = {path = "./crates/api"}
+api-types = { path = "./crates/api-types" }
 aptos-secure-net = { path = "./dependencies/aptos-secure-net" }
 aptos-secure-storage = { path = "./dependencies/aptos-secure-storage" }
 aptos-short-hex-str = { path = "./dependencies/aptos-short-hex-str" }
