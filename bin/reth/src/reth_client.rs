@@ -196,7 +196,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
 impl<T: EngineEthApiClient<EthEngineTypes > + Send + Sync> ExecutionApi for RethCli<T> {
     async fn request_transactions(&self, safe_block_hash: [u8; 32], head_block_hash: [u8; 32]) -> Vec<GTxn> {
         let fork_choice_state = ForkchoiceState {
-            head_block_hash: B256::new(safe_block_hash),
+            head_block_hash: B256::new(head_block_hash),
             safe_block_hash: B256::new(safe_block_hash),
             finalized_block_hash: B256::new(head_block_hash),
         };
