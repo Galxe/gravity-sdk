@@ -1,15 +1,13 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 use crate::{
-    monitor,
-    network::{NetworkSender, QuorumStoreSender},
-    quorum_store::{
+    monitor, network::{NetworkSender, QuorumStoreSender}, payload_client::user::quorum_store_client::BatchClient, quorum_store::{
         batch_store::BatchWriter,
         counters,
         quorum_store_db::QuorumStoreStorage,
         types::Batch,
         utils::{MempoolProxy, TimeExpirations},
-    },
+    }
 };
 use aptos_config::config::QuorumStoreConfig;
 use aptos_consensus_types::{
@@ -72,6 +70,7 @@ pub struct BatchGenerator {
     last_end_batch_time: Instant,
     // quorum store back pressure, get updated from proof manager
     back_pressure: BackPressure,
+    batch_client: Arc<BatchClient>,
 }
 
 impl BatchGenerator {
@@ -83,6 +82,7 @@ impl BatchGenerator {
         batch_writer: Arc<dyn BatchWriter>,
         mempool_tx: Sender<QuorumStoreRequest>,
         mempool_txn_pull_timeout_ms: u64,
+        batch_client: Arc<BatchClient>,
     ) -> Self {
         let batch_id = if let Some(mut id) = db
             .clean_and_get_batch_id(epoch)
@@ -117,6 +117,7 @@ impl BatchGenerator {
                 txn_count: false,
                 proof_count: false,
             },
+            batch_client,
         }
     }
 
@@ -332,16 +333,16 @@ impl BatchGenerator {
             self.txns_in_progress_sorted.len()
         );
 
-        // let mut pulled_txns = self.batch_client.pull();
-        let mut pulled_txns = self
-            .mempool_proxy
-            .pull_internal(
-                max_count,
-                self.config.sender_max_total_bytes as u64,
-                self.txns_in_progress_sorted.clone(),
-            )
-            .await
-            .unwrap_or_default();
+        let mut pulled_txns = self.batch_client.pull();
+        // let mut pulled_txns = self
+        //     .mempool_proxy
+        //     .pull_internal(
+        //         max_count,
+        //         self.config.sender_max_total_bytes as u64,
+        //         self.txns_in_progress_sorted.clone(),
+        //     )
+        //     .await
+        //     .unwrap_or_default();
 
         trace!("QS: pulled_txns len: {:?}", pulled_txns.len());
 

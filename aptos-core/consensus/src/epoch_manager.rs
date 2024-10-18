@@ -109,12 +109,7 @@ use itertools::Itertools;
 use mini_moka::sync::Cache;
 use rand::{prelude::StdRng, thread_rng, SeedableRng};
 use std::{
-    cmp::Ordering,
-    collections::HashMap,
-    hash::Hash,
-    mem::{discriminant, Discriminant},
-    sync::Arc,
-    time::Duration,
+    borrow::Borrow, cmp::Ordering, collections::HashMap, hash::Hash, mem::{discriminant, Discriminant}, sync::Arc, time::Duration
 };
 
 /// Range of rounds (window) that we might be calling proposer election
@@ -718,6 +713,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 self.config.safety_rules.backend.clone(),
                 self.quorum_store_storage.clone(),
                 !consensus_config.is_dag_enabled(),
+                self.quorum_store_client.as_ref().expect("QuorumStoreClient not set").borrow().get_batch_client().clone(),
             ))
         } else {
             info!("Building DirectMempool");

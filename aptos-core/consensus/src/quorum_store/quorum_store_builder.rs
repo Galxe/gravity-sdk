@@ -3,12 +3,7 @@
 
 use super::quorum_store_db::QuorumStoreStorage;
 use crate::{
-    consensus_observer::publisher::ConsensusPublisher,
-    error::error_kind,
-    network::{IncomingBatchRetrievalRequest, NetworkSender},
-    network_interface::ConsensusMsg,
-    payload_manager::{DirectMempoolPayloadManager, QuorumStorePayloadManager, TPayloadManager},
-    quorum_store::{
+    consensus_observer::publisher::ConsensusPublisher, error::error_kind, network::{IncomingBatchRetrievalRequest, NetworkSender}, network_interface::ConsensusMsg, payload_client::user::quorum_store_client::BatchClient, payload_manager::{DirectMempoolPayloadManager, QuorumStorePayloadManager, TPayloadManager}, quorum_store::{
         batch_coordinator::{BatchCoordinator, BatchCoordinatorCommand},
         batch_generator::{BackPressure, BatchGenerator, BatchGeneratorCommand},
         batch_requester::BatchRequester,
@@ -20,8 +15,7 @@ use crate::{
         proof_manager::{ProofManager, ProofManagerCommand},
         quorum_store_coordinator::{CoordinatorCommand, QuorumStoreCoordinator},
         types::{Batch, BatchResponse},
-    },
-    round_manager::VerifiedEvent,
+    }, round_manager::VerifiedEvent
 };
 use aptos_channels::{aptos_channel, message_queues::QueueStyle};
 use aptos_config::config::{QuorumStoreConfig, SecureBackend};
@@ -148,6 +142,7 @@ pub struct InnerBuilder {
     batch_store: Option<Arc<BatchStore>>,
     batch_reader: Option<Arc<dyn BatchReader>>,
     broadcast_proofs: bool,
+    batch_client: Arc<BatchClient>,
 }
 
 impl InnerBuilder {
@@ -166,6 +161,7 @@ impl InnerBuilder {
         backend: SecureBackend,
         quorum_store_storage: Arc<dyn QuorumStoreStorage>,
         broadcast_proofs: bool,
+        batch_client: Arc<BatchClient>,
     ) -> Self {
         let (coordinator_tx, coordinator_rx) = futures_channel::mpsc::channel(config.channel_size);
         let (batch_generator_cmd_tx, batch_generator_cmd_rx) =
@@ -221,6 +217,7 @@ impl InnerBuilder {
             batch_store: None,
             batch_reader: None,
             broadcast_proofs,
+            batch_client,
         }
     }
 
@@ -305,6 +302,7 @@ impl InnerBuilder {
             self.batch_store.clone().unwrap(),
             self.quorum_store_to_mempool_sender,
             self.mempool_txn_pull_timeout_ms,
+            self.batch_client,
         );
         spawn_named!(
             "batch_generator",
