@@ -27,7 +27,7 @@ use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
 use reth_primitives::B256;
 use reth_provider::providers::BlockchainProvider2;
 use reth_rpc_api::EngineEthApiClient;
-use gravity_sdk::{check_bootstrap_config, ExecutionApi};
+use api::{check_bootstrap_config, ExecutionApi};
 use crate::reth_client::RethCli;
 
 struct TestConsensusLayer<T> {
