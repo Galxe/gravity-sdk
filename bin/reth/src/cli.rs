@@ -1,5 +1,5 @@
 use clap::{value_parser, Parser};
-use gravity_sdk::GravityNodeArgs;
+use api::GravityNodeArgs;
 use reth::cli::Commands;
 use reth_chainspec::ChainSpec;
 use reth_cli::chainspec::ChainSpecParser;
