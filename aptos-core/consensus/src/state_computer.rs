@@ -2,8 +2,6 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-#[cfg(target_os = "macos")]
-use std::os::macos::raw::stat;
 
 use crate::{
     block_preparer::BlockPreparer,
