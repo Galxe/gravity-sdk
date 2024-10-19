@@ -13,17 +13,14 @@ use api_types::{ConsensusApi, ExecutionApi, GTxn};
 use aptos_config::{config::NodeConfig, network_id::NetworkId};
 use aptos_consensus::{
     gravity_state_computer::ConsensusAdapterArgs,
-    payload_client::user::quorum_store_client::QuorumStoreClient,
 };
 use api_types::BatchClient;
-use aptos_consensus_types::request_response::GetPayloadCommand;
 use aptos_event_notifications::EventNotificationSender;
 use aptos_network_builder::builder::NetworkBuilder;
 use aptos_storage_interface::DbReaderWriter;
 use async_trait::async_trait;
 use futures::{
-    channel::mpsc::{Receiver, SendError, Sender},
-    SinkExt, StreamExt,
+    channel::mpsc::SendError,
 };
 
 use aptos_crypto::{HashValue, PrivateKey, Uniform};
@@ -39,40 +36,11 @@ pub struct ConsensusEngine {
     address: String,
     execution_api: Arc<dyn ExecutionApi>,
     batch_client: Arc<BatchClient>,
-    consensus_to_quorum_store_tx: Sender<GetPayloadCommand>,
     runtime_vec: Vec<Runtime>,
 }
 
 
 impl ConsensusEngine {
-    async fn handle_get_payload_command(
-        &self,
-        mut consensus_api_rx: Receiver<(GetPayloadCommand, [u8; 32], [u8; 32])>,
-    ) {
-        loop {
-            match consensus_api_rx.try_next() {
-                Ok(req_option) => match req_option {
-                    Some((req, safe_block_hash, head_block_hash)) => {
-                        let mut sender = self.consensus_to_quorum_store_tx.clone();
-                        let req_closure: BoxFuture<'static, Result<(), SendError>> =
-                            async move {
-                                sender.send(req).await
-                            }.boxed();
-                        self.request_payload(
-                            req_closure,
-                            safe_block_hash,
-                            head_block_hash,
-                        )
-                            .await.expect("TODO: panic message");
-                        //self.request_payload(req, safe_block_hash, head_block_hash).await;
-                    }
-                    None => todo!(),
-                },
-                Err(_) => todo!(),
-            }
-        }
-    }
-
     fn init(node_config: NodeConfig, execution_api: Arc<dyn ExecutionApi>) -> Arc<Self> {
         let gravity_db = init_gravity_db(&node_config);
         let peers_and_metadata = init_peers_and_metadata(&node_config, &gravity_db);
@@ -162,24 +130,17 @@ impl ConsensusEngine {
             &mut args,
         );
         network_runtimes.push(consensus_runtime);
-        let quorum_store_client: &mut QuorumStoreClient =
+        let quorum_store_client =
             args.quorum_store_client.as_mut().unwrap();
         let _ = event_subscription_service.notify_initial_configs(1_u64);
-        let (consensus_api_tx, consensus_api_rx) = mpsc::channel(10);
-        quorum_store_client.set_consensus_api_tx(Some(consensus_api_tx));
-        let a = Self {
+        let arc_self = Arc::new(Self {
             address: node_config.validator_network.as_ref().unwrap().listen_address.to_string(),
             execution_api,
             batch_client: quorum_store_client.get_batch_client(),
-            consensus_to_quorum_store_tx: todo!(),
             runtime_vec: network_runtimes,
-        };
-        let r = Arc::new(a);
-        let r_c = r.clone();
-        tokio::spawn(async move {
-            r_c.handle_get_payload_command(consensus_api_rx).await;
         });
-        return r;
+        quorum_store_client.set_consensus_api(arc_self.clone());
+        arc_self
     }
 }
 

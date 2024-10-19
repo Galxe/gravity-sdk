@@ -174,7 +174,7 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     consensus_publisher: Option<Arc<ConsensusPublisher>>,
     pending_blocks: Arc<Mutex<PendingBlocks>>,
     // TODO(gravity_byteyue): export this field
-    quorum_store_client: Option<QuorumStoreClient>,
+    quorum_store_client: Option<Arc<QuorumStoreClient>>,
     consensus_to_quorum_store_rx: Option<Receiver<GetPayloadCommand>>,
 }
 
@@ -254,13 +254,13 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 .build(),
             consensus_publisher,
             pending_blocks: Arc::new(Mutex::new(PendingBlocks::new())),
-            quorum_store_client: Some(quorum_store_client),
+            quorum_store_client: Some(Arc::new(quorum_store_client)),
             consensus_to_quorum_store_rx: Some(consensus_to_quorum_store_rx),
         }
     }
 
-    pub fn get_quorum_store_client(&self) -> Option<QuorumStoreClient> {
-        return self.quorum_store_client.clone();
+    pub fn get_quorum_store_client(&self) -> Option<Arc<QuorumStoreClient>> {
+        self.quorum_store_client.clone()
     }
 
     fn epoch_state(&self) -> &EpochState {
@@ -688,7 +688,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         epoch_state: &EpochState,
         network_sender: NetworkSender,
         consensus_config: &OnChainConsensusConfig,
-    ) -> (Arc<dyn TPayloadManager>, QuorumStoreClient, QuorumStoreBuilder) {
+    ) -> (Arc<dyn TPayloadManager>, Arc<QuorumStoreClient>, QuorumStoreBuilder) {
         // Start QuorumStore
         let quorum_store_config = if consensus_config.is_dag_enabled() {
             self.dag_config.quorum_store.clone()
@@ -713,7 +713,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 self.config.safety_rules.backend.clone(),
                 self.quorum_store_storage.clone(),
                 !consensus_config.is_dag_enabled(),
-                self.quorum_store_client.as_ref().expect("QuorumStoreClient not set").borrow().get_batch_client().clone(),
+                self.quorum_store_client.as_ref().expect("QuorumStoreClient not set").get_batch_client().clone(),
             ))
         } else {
             info!("Building DirectMempool");
@@ -912,7 +912,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             delayed_qc_rx,
             close_rx,
         ));
-        self.quorum_store_client.clone().unwrap().set_block_store(block_store.clone());
+        self.quorum_store_client.as_ref().expect("QuorumStoreClient not set").set_block_store(block_store.clone());
 
         self.spawn_block_retrieval_task(epoch, block_store, max_blocks_allowed);
     }
@@ -1226,7 +1226,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         let mixed_payload_client = MixedPayloadClient::new(
             effective_vtxn_config,
             Arc::new(self.vtxn_pool.clone()),
-            Arc::new(quorum_store_client),
+            quorum_store_client,
         );
         self.start_quorum_store(quorum_store_builder);
         (

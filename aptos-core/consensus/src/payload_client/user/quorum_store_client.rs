@@ -22,6 +22,7 @@ use std::{
 };
 use std::ops::Deref;
 use futures_channel::mpsc::SendError;
+use once_cell::sync::OnceCell;
 use tokio::{
     sync::Mutex,
     time::{sleep, timeout},
@@ -37,7 +38,7 @@ pub struct QuorumStoreClient {
     pull_timeout_ms: u64,
     wait_for_full_blocks_above_recent_fill_threshold: f32,
     wait_for_full_blocks_above_pending_blocks: usize,
-    block_store: Option<Arc<BlockStore>>,
+    block_store: OnceCell<Option<Arc<BlockStore>>>,
     batch_client: Arc<BatchClient>,
     consensus_engine: Arc<dyn ConsensusApi>,
 }
@@ -54,7 +55,7 @@ impl QuorumStoreClient {
             pull_timeout_ms,
             wait_for_full_blocks_above_recent_fill_threshold,
             wait_for_full_blocks_above_pending_blocks,
-            block_store: None,
+            block_store: OnceCell::new(),
             batch_client: Arc::new(BatchClient::new()),
             consensus_engine: todo!(),
         }
@@ -72,8 +73,13 @@ impl QuorumStoreClient {
         self.consensus_engine = consensus_api;
     }
 
-    pub fn set_block_store(&mut self, block_store: Arc<BlockStore>) {
-        self.block_store = Some(block_store);
+    pub fn set_block_store(&self, block_store: Arc<BlockStore>) {
+        match self.block_store.set(Some(block_store)) {
+            Ok(_) => {}
+            Err(_) => {
+                panic!("failed to set block store to quorum store client")
+            }
+        }
     }
 
     async fn pull_internal(
@@ -102,7 +108,6 @@ impl QuorumStoreClient {
             block_timestamp,
         );
         // send to shared mempool
-        // 直接callback_rcv.recv即可，正常处理的时候已经通过sender发出去了
         let mut sender_capture = self.consensus_to_quorum_store_sender.clone();
         let req_closure: BoxFuture<'static, Result<(), SendError>> =
             async move {

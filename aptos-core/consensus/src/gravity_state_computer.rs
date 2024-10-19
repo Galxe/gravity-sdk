@@ -51,7 +51,7 @@ pub struct ConsensusAdapterArgs {
         mpsc::UnboundedSender<(Vec<[u8; 32]>, oneshot::Sender<HashValue>)>,
     pub committed_block_ids_receiver:
         Option<mpsc::UnboundedReceiver<(Vec<[u8; 32]>, oneshot::Sender<HashValue>)>>,
-    pub quorum_store_client: Option<QuorumStoreClient>,
+    pub quorum_store_client: Option<Arc<QuorumStoreClient>>,
 }
 
 impl ConsensusAdapterArgs {
@@ -80,7 +80,7 @@ impl ConsensusAdapterArgs {
         }
     }
 
-    pub fn set_quorum_store_client(&mut self, quorum_store_client: Option<QuorumStoreClient>) {
+    pub fn set_quorum_store_client(&mut self, quorum_store_client: Option<Arc<QuorumStoreClient>>) {
         self.quorum_store_client = quorum_store_client;
     }
 
