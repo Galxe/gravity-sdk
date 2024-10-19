@@ -20,66 +20,27 @@ use aptos_executor_types::{
 };
 use aptos_mempool::MempoolClientRequest;
 use aptos_types::block_executor::partitioner::ExecutableBlock;
-use aptos_types::transaction::SignedTransaction;
 use aptos_types::{
     block_executor::config::BlockExecutorConfigFromOnchain, epoch_state::EpochState,
     ledger_info::LedgerInfoWithSignatures, randomness::Randomness,
 };
 use futures::SinkExt;
-use futures_channel::mpsc::UnboundedReceiver;
 use futures_channel::{mpsc, oneshot};
 use std::time::Duration;
 use std::{boxed::Box, sync::Arc};
-use std::sync::Once;
 use once_cell::sync::OnceCell;
 use api_types::ConsensusApi;
 use aptos_vm::AptosVM;
 
 pub struct ConsensusAdapterArgs {
     pub mempool_sender: mpsc::Sender<MempoolClientRequest>,
-    pub pipeline_block_sender: mpsc::UnboundedSender<(
-        HashValue,
-        HashValue,
-        Vec<SignedTransaction>,
-        oneshot::Sender<HashValue>,
-    )>,
-    pub pipeline_block_receiver: Option<
-        mpsc::UnboundedReceiver<(
-            HashValue,
-            HashValue,
-            Vec<SignedTransaction>,
-            oneshot::Sender<HashValue>,
-        )>,
-    >,
-    pub committed_block_ids_sender:
-        mpsc::UnboundedSender<(Vec<[u8; 32]>, oneshot::Sender<HashValue>)>,
-    pub committed_block_ids_receiver:
-        Option<mpsc::UnboundedReceiver<(Vec<[u8; 32]>, oneshot::Sender<HashValue>)>>,
     pub quorum_store_client: Option<Arc<QuorumStoreClient>>,
 }
 
 impl ConsensusAdapterArgs {
-    pub fn pipeline_block_receiver(
-        &mut self,
-    ) -> Option<
-        UnboundedReceiver<(
-            HashValue,
-            HashValue,
-            Vec<SignedTransaction>,
-            oneshot::Sender<HashValue>,
-        )>,
-    > {
-        self.pipeline_block_receiver.take()
-    }
     pub fn new(mempool_sender: mpsc::Sender<MempoolClientRequest>) -> Self {
-        let (pipeline_block_sender, pipeline_block_receiver) = mpsc::unbounded();
-        let (committed_block_ids_sender, committed_block_ids_receiver) = mpsc::unbounded();
         Self {
             mempool_sender,
-            pipeline_block_sender,
-            pipeline_block_receiver: Some(pipeline_block_receiver),
-            committed_block_ids_sender,
-            committed_block_ids_receiver: Some(committed_block_ids_receiver),
             quorum_store_client: None,
         }
     }
@@ -90,14 +51,8 @@ impl ConsensusAdapterArgs {
 
     pub fn dummy() -> Self {
         let (mempool_sender, _mempool_receiver) = mpsc::channel(1);
-        let (pipeline_block_sender, pipeline_block_receiver) = mpsc::unbounded();
-        let (committed_block_ids_sender, committed_block_ids_receiver) = mpsc::unbounded();
         Self {
             mempool_sender,
-            pipeline_block_sender,
-            pipeline_block_receiver: Some(pipeline_block_receiver),
-            committed_block_ids_sender,
-            committed_block_ids_receiver: Some(committed_block_ids_receiver),
             quorum_store_client: None,
         }
     }
@@ -107,19 +62,13 @@ impl ConsensusAdapterArgs {
 /// implements StateComputer traits.
 pub struct GravityExecutionProxy {
     pub aptos_state_computer: Arc<ExecutionProxy>,
-    pipeline_block_sender: mpsc::UnboundedSender<(
-        HashValue,
-        HashValue,
-        Vec<SignedTransaction>,
-        oneshot::Sender<HashValue>,
-    )>,
     consensus_engine: OnceCell<Arc<dyn ConsensusApi>>,
     inner_executor: Arc<GravityBlockExecutor::<AptosVM>>,
 }
 
 impl GravityExecutionProxy {
-    pub fn new(aptos_state_computer: Arc<ExecutionProxy>, args: &ConsensusAdapterArgs, inner_executor: Arc<GravityBlockExecutor::<AptosVM>>) -> Self {
-        Self { aptos_state_computer, pipeline_block_sender: args.pipeline_block_sender.clone(), consensus_engine: OnceCell::new(), inner_executor }
+    pub fn new(aptos_state_computer: Arc<ExecutionProxy>, inner_executor: Arc<GravityBlockExecutor::<AptosVM>>) -> Self {
+        Self { aptos_state_computer, consensus_engine: OnceCell::new(), inner_executor }
     }
 
     pub fn set_consensus_engine(&self, consensus_engine: Arc<dyn ConsensusApi>) {
@@ -134,16 +83,14 @@ impl GravityExecutionProxy {
 
 pub struct GravityBlockExecutor<V> {
     inner: BlockExecutor<V>,
-    committed_blocks_sender: mpsc::UnboundedSender<(Vec<[u8; 32]>, oneshot::Sender<HashValue>)>,
     consensus_engine: OnceCell<Arc<dyn ConsensusApi>>,
 }
 
 impl<V> GravityBlockExecutor<V> {
     pub(crate) fn new(
         inner: BlockExecutor<V>,
-        committed_blocks_sender: mpsc::UnboundedSender<(Vec<[u8; 32]>, oneshot::Sender<HashValue>)>,
     ) -> Self {
-        Self { inner, committed_blocks_sender, consensus_engine: OnceCell::new() }
+        Self { inner, consensus_engine: OnceCell::new() }
     }
 
     pub fn set_consensus_engine(&self, consensus_engine: Arc<dyn ConsensusApi>) {

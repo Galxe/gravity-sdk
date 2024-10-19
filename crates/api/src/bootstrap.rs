@@ -30,16 +30,18 @@ use aptos_validator_transaction_pool::VTxnPoolState;
 use futures::channel::mpsc::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
 use tokio::runtime::Runtime;
+use api_types::ExecutionApi;
 use aptos_consensus::gravity_state_computer::GravityExecutionProxy;
 use crate::{
-    consensus_engine::GravityConsensusEngine,
     network::{
-        self, build_network_interfaces, consensus_network_configuration, extract_network_ids,
+        build_network_interfaces, consensus_network_configuration, extract_network_ids,
         mempool_network_configuration,
     },
     storage::{self, db::GravityDB},
     GravityConsensusEngineInterface,
 };
+use crate::consensus_api::ConsensusEngine;
+
 pub struct ApplicationNetworkInterfaces<T> {
     pub network_client: NetworkClient<T>,
     pub network_service_events: NetworkServiceEvents<T>,
@@ -66,18 +68,18 @@ pub fn check_bootstrap_config(node_config_path: Option<PathBuf>) -> NodeConfig {
 }
 
 // Start an Gravity node
-pub fn start(node_config: NodeConfig) -> anyhow::Result<()> {
-    let test_mode = node_config.test_mode;
-    let adapter = GravityConsensusEngine::init(node_config);
-    let submitter_mutex = adapter.clone();
-    if test_mode {
-        tokio::spawn(async move {
-            network::mock_execution_txn_submitter(submitter_mutex).await;
-        });
-        tokio::spawn(async move {
-            network::mock_execution_receive_block(adapter).await;
-        });
-    }
+pub fn start(node_config: NodeConfig, execution_api: Arc<dyn ExecutionApi>) -> anyhow::Result<()> {
+    let _test_mode = node_config.test_mode;
+    let _adapter = ConsensusEngine::init(node_config, execution_api);
+    // let submitter_mutex = adapter.clone();
+    // if test_mode {
+    //     tokio::spawn(async move {
+    //         network::mock_execution_txn_submitter(submitter_mutex).await;
+    //     });
+    //     tokio::spawn(async move {
+    //         network::mock_execution_receive_block(adapter).await;
+    //     });
+    // }
     loop {
         thread::park();
     }

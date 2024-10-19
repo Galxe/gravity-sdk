@@ -68,7 +68,6 @@ pub fn start_consensus(
 
     let g_executor = GravityBlockExecutor::<AptosVM>::new(
         BlockExecutor::<AptosVM>::new(aptos_db),
-        gravity_args.committed_block_ids_sender.clone(),
     );
     let executor = Arc::new(g_executor);
     let execution_proxy = ExecutionProxy::new(
@@ -80,7 +79,6 @@ pub fn start_consensus(
     );
     let execution_proxy = Arc::new(GravityExecutionProxy::new(
         Arc::new(execution_proxy),
-        &gravity_args,
         executor.clone(),
     ));
 
