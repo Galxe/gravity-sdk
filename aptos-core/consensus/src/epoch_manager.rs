@@ -173,7 +173,6 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     proof_cache: ProofCache,
     consensus_publisher: Option<Arc<ConsensusPublisher>>,
     pending_blocks: Arc<Mutex<PendingBlocks>>,
-    // TODO(gravity_byteyue): export this field
     quorum_store_client: Option<Arc<QuorumStoreClient>>,
     consensus_to_quorum_store_rx: Option<Receiver<GetPayloadCommand>>,
 }

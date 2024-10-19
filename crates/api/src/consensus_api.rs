@@ -155,30 +155,30 @@ impl ConsensusApi for ConsensusEngine {
     ) -> Result<(), SendError>
     {
         let txns = self.execution_api.request_transactions(safe_block_hash, head_block_hash).await;
-        let len = txns.len();
-        let signed_txns: Vec<SignedTransaction> = txns
-            .into_iter()
-            .enumerate()
-            .map(|(i, txn)| {
-                let addr = aptos_types::account_address::AccountAddress::random();
-                let raw_txn = RawTransaction::new(
-                    addr,
-                    txn.sequence_number,
-                    TransactionPayload::GTxnBytes(txn.txn_bytes),
-                    txn.max_gas_amount,
-                    txn.gas_unit_price,
-                    txn.expiration_timestamp_secs,
-                    ChainId::new(txn.chain_id as u8),
-                );
-                SignedTransaction::new_with_gtxn(
-                    raw_txn,
-                    aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing().public_key(),
-                    aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap(),
-                    GravityExtension::new(HashValue::new(safe_block_hash), i as u32, len as u32),
-                )
-            })
-            .collect();
-        // self.batch_client.submit(signed_txns);
+        // let len = txns.len();
+        // let signed_txns: Vec<SignedTransaction> = txns
+        //     .into_iter()
+        //     .enumerate()
+        //     .map(|(i, txn)| {
+        //         let addr = aptos_types::account_address::AccountAddress::random();
+        //         let raw_txn = RawTransaction::new(
+        //             addr,
+        //             txn.sequence_number,
+        //             TransactionPayload::GTxnBytes(txn.txn_bytes),
+        //             txn.max_gas_amount,
+        //             txn.gas_unit_price,
+        //             txn.expiration_timestamp_secs,
+        //             ChainId::new(txn.chain_id as u8),
+        //         );
+        //         SignedTransaction::new_with_gtxn(
+        //             raw_txn,
+        //             aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing().public_key(),
+        //             aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap(),
+        //             GravityExtension::new(HashValue::new(safe_block_hash), i as u32, len as u32),
+        //         )
+        //     })
+        //     .collect();
+        self.batch_client.submit(txns);
         closure.await
         // self.consensus_to_quorum_store_tx.clone().send(request).await;
         // payload是通过callback发回去的 这里似乎不需要返回payload
