@@ -9,14 +9,14 @@ use crate::{
     logger,
     network::{create_network_runtime, extract_network_configs},
 };
-use api_types::{ConsensusApi, ConsensusEngine, ExecutionApi, GTxn};
+use api_types::{ConsensusApi, ExecutionApi, GTxn};
 use aptos_config::{config::NodeConfig, network_id::NetworkId};
 use aptos_consensus::{
     gravity_state_computer::ConsensusAdapterArgs,
     payload_client::user::quorum_store_client::QuorumStoreClient,
 };
 use api_types::BatchClient;
-use aptos_consensus_types::{common::Payload, request_response::GetPayloadCommand};
+use aptos_consensus_types::request_response::GetPayloadCommand;
 use aptos_event_notifications::EventNotificationSender;
 use aptos_network_builder::builder::NetworkBuilder;
 use aptos_storage_interface::DbReaderWriter;
@@ -27,22 +27,22 @@ use futures::{
 };
 
 use aptos_crypto::{HashValue, PrivateKey, Uniform};
-use aptos_logger::info;
 use aptos_types::{
     chain_id::ChainId,
     transaction::{GravityExtension, RawTransaction, SignedTransaction, TransactionPayload},
 };
-use futures::channel::{mpsc, oneshot};
-use std::future::Future;
-use tokio::{runtime::Runtime, sync::Mutex};
+use futures::channel::mpsc;
+use futures::future::BoxFuture;
+use tokio::runtime::Runtime;
 
-// pub struct ConsensusEngine {
-//     address: String,
-//     execution_api: Arc<dyn ExecutionApi>,
-//     batch_client: Arc<BatchClient>,
-//     // consensus_to_quorum_store_tx: Sender<GetPayloadCommand>,
-//     runtime_vec: Vec<Runtime>,
-// }
+pub struct ConsensusEngine {
+    address: String,
+    execution_api: Arc<dyn ExecutionApi>,
+    batch_client: Arc<BatchClient>,
+    consensus_to_quorum_store_tx: Sender<GetPayloadCommand>,
+    runtime_vec: Vec<Runtime>,
+}
+
 
 impl ConsensusEngine {
     async fn handle_get_payload_command(
@@ -54,12 +54,16 @@ impl ConsensusEngine {
                 Ok(req_option) => match req_option {
                     Some((req, safe_block_hash, head_block_hash)) => {
                         let mut sender = self.consensus_to_quorum_store_tx.clone();
+                        let req_closure: BoxFuture<'static, Result<(), SendError>> =
+                            async move {
+                                sender.send(req).await
+                            }.boxed();
                         self.request_payload(
-                            || async move { sender.send(req).await },
+                            req_closure,
                             safe_block_hash,
                             head_block_hash,
                         )
-                        .await;
+                            .await.expect("TODO: panic message");
                         //self.request_payload(req, safe_block_hash, head_block_hash).await;
                     }
                     None => todo!(),
@@ -167,6 +171,7 @@ impl ConsensusEngine {
             address: node_config.validator_network.as_ref().unwrap().listen_address.to_string(),
             execution_api,
             batch_client: quorum_store_client.get_batch_client(),
+            consensus_to_quorum_store_tx: todo!(),
             runtime_vec: network_runtimes,
         };
         let r = Arc::new(a);
@@ -180,15 +185,12 @@ impl ConsensusEngine {
 
 #[async_trait]
 impl ConsensusApi for ConsensusEngine {
-    async fn request_payload<F, R>(
+    async fn request_payload(
         &self,
-        closure: F,
+        closure: BoxFuture<Result<(), SendError>>,
         safe_block_hash: [u8; 32],
         head_block_hash: [u8; 32],
-    ) -> R::Output
-    where
-        F: FnOnce() -> R + Send + 'static,
-        R: Future<Output = Result<(), SendError>> + Send + 'static,
+    ) -> Result<(), SendError>
     {
         let txns = self.execution_api.request_transactions(safe_block_hash, head_block_hash).await;
         let len = txns.len();
@@ -214,8 +216,8 @@ impl ConsensusApi for ConsensusEngine {
                 )
             })
             .collect();
-        self.batch_client.submit(signed_txns);
-        closure().await
+        // self.batch_client.submit(signed_txns);
+        closure.await
         // self.consensus_to_quorum_store_tx.clone().send(request).await;
         // payload是通过callback发回去的 这里似乎不需要返回payload
     }

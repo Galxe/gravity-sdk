@@ -29,7 +29,7 @@ use aptos_types::account_address::AccountAddress;
 use aptos_validator_transaction_pool::VTxnPoolState;
 use futures::channel::mpsc::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
-use tokio::{runtime::Runtime, sync::Mutex};
+use tokio::runtime::Runtime;
 
 use crate::{
     consensus_engine::GravityConsensusEngine,

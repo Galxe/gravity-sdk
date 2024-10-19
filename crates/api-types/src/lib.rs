@@ -3,14 +3,14 @@ use std::{fmt::Display, sync::Arc};
 use async_trait::async_trait;
 use futures::channel::mpsc::SendError;
 use std::future::Future;
-
+use futures::future::BoxFuture;
 use tokio::{runtime::Runtime, sync::Mutex};
 
 #[async_trait]
-pub trait ConsensusApi {
+pub trait ConsensusApi: Send + Sync {
     async fn request_payload(
         &self,
-        closure: impl FnOnce() -> (dyn Future<Output = Result<(), SendError>> + Send + 'static),
+        closure: BoxFuture<Result<(), SendError>>,
         safe_block_hash: [u8; 32],
         head_block_hash: [u8; 32],
     ) -> Result<(), SendError>;
@@ -36,14 +36,6 @@ pub trait ExecutionApi: Send + Sync {
 
     // this function is called by the execution layer commit the block hash
     async fn commit_block_hash(&self, block_ids: Vec<[u8; 32]>);
-}
-
-pub struct ConsensusEngine {
-    address: String,
-    execution_api: Arc<dyn ExecutionApi>,
-    batch_client: Arc<BatchClient>,
-    // consensus_to_quorum_store_tx: Sender<GetPayloadCommand>,
-    runtime_vec: Vec<Runtime>,
 }
 
 #[derive(Clone, Default)]
