@@ -163,7 +163,7 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
         );
         network_runtimes.push(mempool_runtime);
         let mut args = ConsensusAdapterArgs::new(mempool_client_sender);
-        let (consensus_runtime, _, _) = start_consensus(
+        let (consensus_runtime, _, _, _) = start_consensus(
             &node_config,
             &mut event_subscription_service,
             consensus_network_interfaces,
@@ -184,7 +184,7 @@ impl GravityConsensusEngineInterface for GravityConsensusEngine {
             runtime_vec: network_runtimes,
             id_index: RwLock::new(BiMap::new()),
         };
-        return Arc::new(a);
+        Arc::new(a)
     }
 
     async fn send_valid_block_transactions(

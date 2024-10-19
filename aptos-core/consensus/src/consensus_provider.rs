@@ -56,7 +56,7 @@ pub fn start_consensus(
     vtxn_pool: VTxnPoolState,
     consensus_publisher: Option<Arc<ConsensusPublisher>>,
     gravity_args: &mut ConsensusAdapterArgs,
-) -> (Runtime, Arc<StorageWriteProxy>, Arc<QuorumStoreDB>) {
+) -> (Runtime, Arc<StorageWriteProxy>, Arc<QuorumStoreDB>, Arc<GravityExecutionProxy>) {
     let runtime = aptos_runtimes::spawn_named_runtime("consensus".into(), None);
     let storage = Arc::new(StorageWriteProxy::new(node_config, aptos_db.reader.clone()));
     let quorum_store_db = Arc::new(QuorumStoreDB::new(node_config.storage.dir()));
@@ -70,8 +70,9 @@ pub fn start_consensus(
         BlockExecutor::<AptosVM>::new(aptos_db),
         gravity_args.committed_block_ids_sender.clone(),
     );
+    let executor = Arc::new(g_executor);
     let execution_proxy = ExecutionProxy::new(
-        Arc::new(g_executor),
+        executor.clone(),
         txn_notifier,
         state_sync_notifier,
         runtime.handle(),
@@ -80,6 +81,7 @@ pub fn start_consensus(
     let execution_proxy = Arc::new(GravityExecutionProxy::new(
         Arc::new(execution_proxy),
         &gravity_args,
+        executor.clone(),
     ));
 
     let time_service = Arc::new(ClockTimeService::new(runtime.handle().clone()));
@@ -97,7 +99,7 @@ pub fn start_consensus(
 
     let execution_client = Arc::new(ExecutionProxyClient::new(
         node_config.consensus.clone(),
-        execution_proxy,
+        execution_proxy.clone(),
         node_config.validator_network.as_ref().unwrap().peer_id(),
         self_sender.clone(),
         consensus_network_client.clone(),
@@ -132,7 +134,7 @@ pub fn start_consensus(
     runtime.spawn(epoch_mgr.start(timeout_receiver, network_receiver));
 
     debug!("Consensus started.");
-    (runtime, storage, quorum_store_db)
+    (runtime, storage, quorum_store_db, execution_proxy)
 }
 
 /// A helper function to start the consensus observer

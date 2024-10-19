@@ -120,7 +120,7 @@ impl ConsensusEngine {
         );
         network_runtimes.push(mempool_runtime);
         let mut args = ConsensusAdapterArgs::new(mempool_client_sender);
-        let (consensus_runtime, _, _) = start_consensus(
+        let (consensus_runtime, _, _, execution_proxy) = start_consensus(
             &node_config,
             &mut event_subscription_service,
             consensus_network_interfaces,
@@ -140,6 +140,7 @@ impl ConsensusEngine {
             runtime_vec: network_runtimes,
         });
         quorum_store_client.set_consensus_api(arc_self.clone());
+        execution_proxy.set_consensus_engine(arc_self.clone());
         arc_self
     }
 }

@@ -30,7 +30,7 @@ use aptos_validator_transaction_pool::VTxnPoolState;
 use futures::channel::mpsc::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
 use tokio::runtime::Runtime;
-
+use aptos_consensus::gravity_state_computer::GravityExecutionProxy;
 use crate::{
     consensus_engine::GravityConsensusEngine,
     network::{
@@ -119,7 +119,7 @@ pub fn start_consensus(
     consensus_to_mempool_sender: Sender<QuorumStoreRequest>,
     db: DbReaderWriter,
     arg: &mut ConsensusAdapterArgs,
-) -> (Runtime, Arc<StorageWriteProxy>, Arc<QuorumStoreDB>) {
+) -> (Runtime, Arc<StorageWriteProxy>, Arc<QuorumStoreDB>, Arc<GravityExecutionProxy>) {
     let consensus_reconfig_subscription = event_subscription_service
         .subscribe_to_reconfigurations()
         .expect("Consensus must subscribe to reconfigurations");

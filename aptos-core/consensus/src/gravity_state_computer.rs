@@ -30,6 +30,10 @@ use futures_channel::mpsc::UnboundedReceiver;
 use futures_channel::{mpsc, oneshot};
 use std::time::Duration;
 use std::{boxed::Box, sync::Arc};
+use std::sync::Once;
+use once_cell::sync::OnceCell;
+use api_types::ConsensusApi;
+use aptos_vm::AptosVM;
 
 pub struct ConsensusAdapterArgs {
     pub mempool_sender: mpsc::Sender<MempoolClientRequest>,
@@ -94,7 +98,7 @@ impl ConsensusAdapterArgs {
             pipeline_block_receiver: Some(pipeline_block_receiver),
             committed_block_ids_sender,
             committed_block_ids_receiver: Some(committed_block_ids_receiver),
-            quorum_store_client: todo!(),
+            quorum_store_client: None,
         }
     }
 }
@@ -109,17 +113,29 @@ pub struct GravityExecutionProxy {
         Vec<SignedTransaction>,
         oneshot::Sender<HashValue>,
     )>,
+    consensus_engine: OnceCell<Arc<dyn ConsensusApi>>,
+    inner_executor: Arc<GravityBlockExecutor::<AptosVM>>,
 }
 
 impl GravityExecutionProxy {
-    pub fn new(aptos_state_computer: Arc<ExecutionProxy>, args: &ConsensusAdapterArgs) -> Self {
-        Self { aptos_state_computer, pipeline_block_sender: args.pipeline_block_sender.clone() }
+    pub fn new(aptos_state_computer: Arc<ExecutionProxy>, args: &ConsensusAdapterArgs, inner_executor: Arc<GravityBlockExecutor::<AptosVM>>) -> Self {
+        Self { aptos_state_computer, pipeline_block_sender: args.pipeline_block_sender.clone(), consensus_engine: OnceCell::new(), inner_executor }
+    }
+
+    pub fn set_consensus_engine(&self, consensus_engine: Arc<dyn ConsensusApi>) {
+        match self.consensus_engine.set(consensus_engine) {
+            Ok(_) => {
+                self.inner_executor.set_consensus_engine(self.consensus_engine.get().expect("consensus engine").clone());
+            }
+            Err(_) => { panic!("failed to set consensus engine") }
+        }
     }
 }
 
 pub struct GravityBlockExecutor<V> {
     inner: BlockExecutor<V>,
     committed_blocks_sender: mpsc::UnboundedSender<(Vec<[u8; 32]>, oneshot::Sender<HashValue>)>,
+    consensus_engine: OnceCell<Arc<dyn ConsensusApi>>,
 }
 
 impl<V> GravityBlockExecutor<V> {
@@ -127,7 +143,14 @@ impl<V> GravityBlockExecutor<V> {
         inner: BlockExecutor<V>,
         committed_blocks_sender: mpsc::UnboundedSender<(Vec<[u8; 32]>, oneshot::Sender<HashValue>)>,
     ) -> Self {
-        Self { inner, committed_blocks_sender }
+        Self { inner, committed_blocks_sender, consensus_engine: OnceCell::new() }
+    }
+
+    pub fn set_consensus_engine(&self, consensus_engine: Arc<dyn ConsensusApi>) {
+        match self.consensus_engine.set(consensus_engine) {
+            Ok(_) => {}
+            Err(_) => { panic!("failed to set consensus engine") }
+        }
     }
 }
 
@@ -150,19 +173,26 @@ impl StateComputer for GravityExecutionProxy {
             let compute_res_bytes = [0u8; 32];
             block_result_sender.send(HashValue::new(compute_res_bytes)).expect("send failed");
         } else {
-            self.pipeline_block_sender
-                .clone()
-                .send((parent_block_id, block.id(), txns.clone(), block_result_sender))
-                .await
-                .expect("what happened");
+            // TODO(gravity_byteyue): don't do memory copy
+            let gtxns = txns.iter().map(|txn| { txn.clone().into() }).collect();
+            self.consensus_engine.get().expect("ConsensusEngine").send_order_block(gtxns).await;
         }
+        let engine = Some(self.consensus_engine.clone());
         Box::pin(async move {
-            match block_result_receiver.await {
-                Ok(res) => {
-                    let result = StateComputeResult::new_dummy_with_root_hash(res);
+            match engine {
+                Some(e) => {
+                    let result = StateComputeResult::new_dummy_with_root_hash(HashValue::new(e.get().expect("consensus engine").recv_executed_block_hash().await));
                     Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
                 }
-                Err(e) => Err(ExecutorError::InternalError { error: e.to_string() }),
+                None => {
+                    match block_result_receiver.await {
+                        Ok(res) => {
+                            let result = StateComputeResult::new_dummy_with_root_hash(res);
+                            Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
+                        }
+                        Err(e) => Err(ExecutorError::InternalError { error: e.to_string() }),
+                    }
+                }
             }
         })
     }
@@ -244,8 +274,8 @@ impl<V: Send + Sync> BlockExecutorTrait for GravityBlockExecutor<V> {
             let (send, receiver) = oneshot::channel::<HashValue>();
             // todo(gravity_byteyue): don't spawn runtime each time
             let runtime = aptos_runtimes::spawn_named_runtime("tmp".into(), None);
-            let r = runtime
-                .block_on({
+            let _ = runtime
+                .block_on(async move {
                     let encode_ids = block_ids
                         .iter()
                         .map(|id| {
@@ -254,38 +284,34 @@ impl<V: Send + Sync> BlockExecutorTrait for GravityBlockExecutor<V> {
                             bytes
                         })
                         .collect();
-
-                    self.committed_blocks_sender.clone().send((encode_ids, send))
-                })
-                .map_err(|e| aptos_executor_types::ExecutorError::InternalError {
-                    error: "send commit ids failed".parse().unwrap(),
+                    self.consensus_engine.get().expect("consensus engine").commit_block_hash(encode_ids).await;
                 });
-            if let Err(e) = r {
-                return Err(e);
-            }
-            let last_block = block_ids.last();
-            let max_committed_block_id;
-            match last_block {
-                Some(id) => {
-                    max_committed_block_id = id;
-                }
-                None => {
-                    return Err(ExecutorError::InternalError { error: format!("empty blocks") })
-                }
-            }
-            let r = runtime.block_on(async move { receiver.await }).map_err(|e| {
-                aptos_executor_types::ExecutorError::InternalError {
-                    error: "receive commit successful id failed".parse().unwrap(),
-                }
-            });
-            match r {
-                Ok(persistent_id) => {
-                    if persistent_id != *max_committed_block_id {
-                        panic!("Persisten id not match");
-                    }
-                }
-                Err(e) => return Err(e),
-            }
+            // if let Err(e) = r {
+            //     return Err(e);
+            // }
+            // let last_block = block_ids.last();
+            // let max_committed_block_id;
+            // match last_block {
+            //     Some(id) => {
+            //         max_committed_block_id = id;
+            //     }
+            //     None => {
+            //         return Err(ExecutorError::InternalError { error: format!("empty blocks") })
+            //     }
+            // }
+            // let r = runtime.block_on(async move { receiver.await }).map_err(|e| {
+            //     aptos_executor_types::ExecutorError::InternalError {
+            //         error: "receive commit successful id failed".parse().unwrap(),
+            //     }
+            // });
+            // match r {
+            //     Ok(persistent_id) => {
+            //         if persistent_id != *max_committed_block_id {
+            //             panic!("Persisten id not match");
+            //         }
+            //     }
+            //     Err(e) => return Err(e),
+            // }
         }
         // todo(gravity_lightman): handle the following logic
         // self.inner
