@@ -152,11 +152,13 @@ impl ConsensusApi for ConsensusEngine {
         closure: BoxFuture<'b, Result<(), SendError>>,
         safe_block_hash: [u8; 32],
         head_block_hash: [u8; 32],
-    ) -> Result<(), SendError>
+    ) -> Result<Vec<GTxn>, SendError>
     {
-        let txns = self.execution_api.request_transactions(safe_block_hash, head_block_hash).await;
-        self.batch_client.submit(txns);
-        closure.await
+        // let txns = self.execution_api.request_transactions(safe_block_hash, head_block_hash).await;
+        // self.batch_client.submit(txns);
+        // closure.await
+
+        Ok(self.execution_api.request_transactions(safe_block_hash, head_block_hash).await)
     }
 
     async fn send_order_block(&self, txns: Vec<GTxn>) {

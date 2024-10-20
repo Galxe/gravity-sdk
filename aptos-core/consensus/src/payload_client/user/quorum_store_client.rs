@@ -15,14 +15,14 @@ use aptos_logger::info;
 use aptos_types::transaction::SignedTransaction;
 use fail::fail_point;
 use futures::{future::BoxFuture, FutureExt, SinkExt};
+use futures_channel::mpsc::SendError;
 use futures_channel::{mpsc, oneshot};
+use once_cell::sync::OnceCell;
+use std::ops::Deref;
 use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use std::ops::Deref;
-use futures_channel::mpsc::SendError;
-use once_cell::sync::OnceCell;
 use tokio::{
     sync::Mutex,
     time::{sleep, timeout},
@@ -115,24 +115,42 @@ impl QuorumStoreClient {
         // send to shared mempool
         let mut sender_capture = self.consensus_to_quorum_store_sender.clone();
         let req_closure: BoxFuture<'static, Result<(), SendError>> =
-            async move {
-                sender_capture.send(req).await
-            }.boxed();
-        self.consensus_engine.get().expect("consensus engine not set").as_ref().expect("consensus engine not set").request_payload(req_closure, [0; 32], [0; 32]).await.expect("TODO: panic message");
+            async move { sender_capture.send(req).await }.boxed();
+        let block_tree = self
+            .block_store
+            .get()
+            .expect("block store not set")
+            .as_ref()
+            .expect("block store not set")
+            .get_block_tree();
+        
+        let gtxns = self
+            .consensus_engine
+            .get()
+            .expect("consensus engine not set")
+            .as_ref()
+            .expect("consensus engine not set")
+            .request_payload(req_closure, [0; 32], [0; 32])
+            .await
+            .expect("TODO: panic message");
+
+        // TODO(gravity_byteyue: use the following commentted code when qs is ready)
+        let txns: Vec<SignedTransaction> = gtxns.iter().map(|gtxn| gtxn.clone().into()).collect();
+        Ok(Payload::DirectMempool(txns))
 
         // self.consensus_to_quorum_store_sender.clone().try_send(req).map_err(anyhow::Error::from)?;
         // wait for response
-        match monitor!(
-            "pull_payload",
-            timeout(Duration::from_millis(self.pull_timeout_ms), callback_rcv).await
-        ) {
-            Err(_) => {
-                Err(anyhow::anyhow!("[consensus] did not receive GetBlockResponse on time").into())
-            }
-            Ok(resp) => match resp.map_err(anyhow::Error::from)?? {
-                GetPayloadResponse::GetPayloadResponse(payload) => Ok(payload),
-            },
-        }
+        // match monitor!(
+        //     "pull_payload",
+        //     timeout(Duration::from_millis(self.pull_timeout_ms), callback_rcv).await
+        // ) {
+        //     Err(_) => {
+        //         Err(anyhow::anyhow!("[consensus] did not receive GetBlockResponse on time").into())
+        //     }
+        //     Ok(resp) => match resp.map_err(anyhow::Error::from)?? {
+        //         GetPayloadResponse::GetPayloadResponse(payload) => Ok(payload),
+        //     },
+        // }
     }
 }
 

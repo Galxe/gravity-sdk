@@ -176,6 +176,10 @@ impl BlockTree {
         }
     }
 
+    pub fn safe_block_hash(&self) -> HashValue {
+        todo!()
+    }
+
     // This method will only be used in this module.
     fn get_linkable_block(&self, block_id: &HashValue) -> Option<&LinkableBlock> {
         self.id_to_block.get(block_id)

@@ -1,20 +1,20 @@
-use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 use alloy_consensus::{Transaction, TxEnvelope};
 use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::{Address, B256};
 use alloy_rpc_types_engine::{ForkchoiceState, ForkchoiceUpdated, PayloadAttributes, PayloadId};
 use anyhow::Context;
+use api::ExecutionApi;
+use api_types::GTxn;
 use jsonrpsee::core::async_trait;
 use reth::api::EngineTypes;
 use reth_ethereum_engine_primitives::{EthEngineTypes, EthPayloadAttributes};
-use reth_rpc_api::{EngineApiClient, EngineEthApiClient};
-use tracing::info;
-use api::ExecutionApi;
-use api_types::GTxn;
 use reth_primitives::Bytes;
+use reth_rpc_api::{EngineApiClient, EngineEthApiClient};
+use std::sync::Arc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::{Receiver, Sender, UnboundedReceiver, UnboundedSender};
 use tokio::sync::Mutex;
+use tracing::info;
 use tracing::log::error;
 
 pub(crate) struct RethCli<T> {
@@ -24,10 +24,10 @@ pub(crate) struct RethCli<T> {
     block_hash_channel_receiver: Mutex<UnboundedReceiver<[u8; 32]>>,
 }
 
-
 impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
     pub(crate) fn new(client: T, chain_id: u64) -> Self {
-        let (block_hash_channel_sender, block_hash_channel_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (block_hash_channel_sender, block_hash_channel_receiver) =
+            tokio::sync::mpsc::unbounded_channel();
         Self {
             engine_api_client: client,
             chain_id,
@@ -46,8 +46,8 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
             fork_choice_state,
             Some(payload_attributes),
         )
-            .await
-            .context("Failed to update fork choice")?;
+        .await
+        .context("Failed to update fork choice")?;
         info!("Got response: {:?}", response);
         Ok(response)
     }
@@ -90,7 +90,11 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
         bytes
     }
 
-    fn payload_to_txns(&self, payload_id: PayloadId, payload: <EthEngineTypes as EngineTypes>::ExecutionPayloadV3) -> Vec<GTxn> {
+    fn payload_to_txns(
+        &self,
+        payload_id: PayloadId,
+        payload: <EthEngineTypes as EngineTypes>::ExecutionPayloadV3,
+    ) -> Vec<GTxn> {
         let bytes = self.construct_bytes(&payload);
         let eth_txns = payload.execution_payload.payload_inner.payload_inner.transactions;
         let mut gtxns = Vec::new();
@@ -161,19 +165,26 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
         let parent_beacon_block_root = fork_choice_state.head_block_hash;
         let payload_attributes = Self::create_payload_attributes(parent_beacon_block_root);
         // update ForkchoiceState and get payload_id
-        let payload_id = match self.get_new_payload_id(fork_choice_state, &payload_attributes).await
-        {
-            Some(payload_id) => payload_id,
-            None => panic!("Failed to get payload id"),
-        };
+        let mut payload_id = PayloadId::new([0; 8]);
+        loop {
+            match self.get_new_payload_id(fork_choice_state, &payload_attributes).await {
+                Some(pid) => {
+                    payload_id = pid;
+                    break;
+                }
+                None => {
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                    continue;
+                }
+            };
+        }
         // try to get payload
         let payload = <T as EngineApiClient<EthEngineTypes>>::get_payload_v3(
             &self.engine_api_client,
             payload_id,
         )
-            .await
-            .map_err(|e| anyhow::anyhow!(e))?;
-
+        .await
+        .map_err(|e| anyhow::anyhow!(e))?;
 
         info!("Got payload: {:?}", payload);
         Ok(self.payload_to_txns(payload_id, payload))
@@ -194,26 +205,38 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
 }
 
 #[async_trait]
-impl<T: EngineEthApiClient<EthEngineTypes > + Send + Sync> ExecutionApi for RethCli<T> {
-    async fn request_transactions(&self, safe_block_hash: [u8; 32], head_block_hash: [u8; 32]) -> Vec<GTxn> {
+impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethCli<T> {
+    async fn request_transactions(
+        &self,
+        safe_block_hash: [u8; 32],
+        head_block_hash: [u8; 32],
+    ) -> Vec<GTxn> {
         let fork_choice_state = ForkchoiceState {
             head_block_hash: B256::new(head_block_hash),
             safe_block_hash: B256::new(safe_block_hash),
-            finalized_block_hash: B256::new(head_block_hash),
+            finalized_block_hash: B256::new(safe_block_hash),
         };
         let payload_attr = Self::create_payload_attributes(fork_choice_state.head_block_hash);
-        let payload_id = match self.get_new_payload_id(fork_choice_state, &payload_attr).await
-        {
-            Some(payload_id) => payload_id,
-            None => panic!("Failed to get payload id"),
-        };
+        let mut payload_id = PayloadId::new([0; 8]);
+        loop {
+            match self.get_new_payload_id(fork_choice_state, &payload_attr).await {
+                Some(pid) => {
+                    payload_id = pid;
+                    break;
+                }
+                None => {
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                    continue;
+                }
+            };
+        }
         // try to get payload
         let payload = <T as EngineApiClient<EthEngineTypes>>::get_payload_v3(
             &self.engine_api_client,
             payload_id,
         )
-            .await
-            .expect("Failed to get payload");
+        .await
+        .expect("Failed to get payload");
         info!("Got payload: {:?}", payload);
         self.payload_to_txns(payload_id, payload)
     }
@@ -235,8 +258,8 @@ impl<T: EngineEthApiClient<EthEngineTypes > + Send + Sync> ExecutionApi for Reth
             Vec::new(),
             parent_hash,
         )
-            .await
-            .expect("Failed to submit payload");
+        .await
+        .expect("Failed to submit payload");
         // 3. submit compute res
         if payload_status.latest_valid_hash.is_none() {
             panic!("payload status latest valid hash is none");

@@ -8,12 +8,13 @@ use tokio::{runtime::Runtime, sync::Mutex};
 
 #[async_trait]
 pub trait ConsensusApi: Send + Sync {
+    // TODO(gravity_byteyue: change to return () when qs is ready)
     async fn request_payload<'a, 'b>(
         &'a self,
         closure: BoxFuture<'b, Result<(), SendError>>,
         safe_block_hash: [u8; 32],
         head_block_hash: [u8; 32],
-    ) -> Result<(), SendError>;
+    ) -> Result<Vec<GTxn>, SendError>;
 
     async fn send_order_block(&self, txns: Vec<GTxn>);
 

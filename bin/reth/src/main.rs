@@ -57,12 +57,12 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync + 'static> TestConsensu
     async fn run(mut self) {
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            let txns = self.reth_cli.request_transactions(self.safe_hash, self.head_hash).await;
-            self.reth_cli.send_ordered_block(txns).await;
-            let hash = self.reth_cli.recv_executed_block_hash().await;
-            self.reth_cli.commit_block_hash(vec![hash]).await;
-            self.safe_hash = hash;
-            self.head_hash = hash;
+            // let txns = self.reth_cli.request_transactions(self.safe_hash, self.head_hash).await;
+            // self.reth_cli.send_ordered_block(txns).await;
+            // let hash = self.reth_cli.recv_executed_block_hash().await;
+            // self.reth_cli.commit_block_hash(vec![hash]).await;
+            // self.safe_hash = hash;
+            // self.head_hash = hash;
         }
     }
 }
@@ -93,9 +93,9 @@ fn run_server() {
                 })
                 .await?;
             let client = handle.node.engine_http_client();
-            let genesis = handle.node.chain_spec().genesis();
+            let genesis = handle.node.chain_spec().genesis().clone();
             let head_hash = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Latest)).unwrap().unwrap().hash_slow();
-            let safe_hash = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Finalized)).unwrap().unwrap().hash_slow();
+            let safe_hash = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Safe)).unwrap().unwrap().hash_slow();
             let id = handle.node.chain_spec().chain().id();
             let _ = thread::spawn(move || {
                 let mut cl =
