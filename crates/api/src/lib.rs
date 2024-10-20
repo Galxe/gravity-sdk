@@ -104,8 +104,8 @@ pub struct GravityNodeArgs {
 }
 
 impl GravityNodeArgs {
-    pub fn run(mut self) {
+    pub fn run(mut self, execution_api: Arc<dyn ExecutionApi>) {
         // Start the node
-        start(check_bootstrap_config(self.node_config_path)).expect("Node should start correctly");
+        start(check_bootstrap_config(self.node_config_path), execution_api).expect("Node should start correctly");
     }
 }

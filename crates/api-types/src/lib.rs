@@ -8,9 +8,9 @@ use tokio::{runtime::Runtime, sync::Mutex};
 
 #[async_trait]
 pub trait ConsensusApi: Send + Sync {
-    async fn request_payload(
-        &self,
-        closure: BoxFuture<Result<(), SendError>>,
+    async fn request_payload<'a, 'b>(
+        &'a self,
+        closure: BoxFuture<'b, Result<(), SendError>>,
         safe_block_hash: [u8; 32],
         head_block_hash: [u8; 32],
     ) -> Result<(), SendError>;

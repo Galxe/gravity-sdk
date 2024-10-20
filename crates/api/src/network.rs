@@ -31,7 +31,6 @@ use std::{
 };
 use tokio::{runtime::Runtime, sync::Mutex};
 
-use crate::consensus_engine::GravityConsensusEngine;
 use crate::{bootstrap::ApplicationNetworkInterfaces, GTxn, GravityConsensusEngineInterface};
 
 /// Extracts all network configs from the given node config
@@ -116,64 +115,64 @@ pub async fn mock_mempool_client_sender(mut mc_sender: aptos_mempool::MempoolCli
 }
 
 // used for UT
-pub async fn mock_execution_txn_submitter(adapter: Arc<GravityConsensusEngine>) {
-    // let addr = aptos_types::account_address::AccountAddress::random();
-    let mut seq_num = 0;
-    loop {
-        let txn = GTxn {
-            sequence_number: seq_num,
-            max_gas_amount: 0,
-            gas_unit_price: 0,
-            expiration_timestamp_secs: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs()
-                + 60,
-            chain_id: ChainId::test().to_u8() as u64,
-            txn_bytes: vec![],
-            // public_key: aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing().public_key().to_bytes(),
-            // signature: aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap().to_bytes(),
-        };
-        seq_num += 1;
-        let mock_block_id: [u8; 32] = [0; 32];
-        info!("try to send_valid_block_transactions");
-        adapter.send_valid_block_transactions(mock_block_id, vec![txn]).await.expect("ok");
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    }
-}
+// pub async fn mock_execution_txn_submitter(adapter: Arc<GravityConsensusEngine>) {
+//     // let addr = aptos_types::account_address::AccountAddress::random();
+//     let mut seq_num = 0;
+//     loop {
+//         let txn = GTxn {
+//             sequence_number: seq_num,
+//             max_gas_amount: 0,
+//             gas_unit_price: 0,
+//             expiration_timestamp_secs: SystemTime::now()
+//                 .duration_since(UNIX_EPOCH)
+//                 .unwrap()
+//                 .as_secs()
+//                 + 60,
+//             chain_id: ChainId::test().to_u8() as u64,
+//             txn_bytes: vec![],
+//             // public_key: aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing().public_key().to_bytes(),
+//             // signature: aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap().to_bytes(),
+//         };
+//         seq_num += 1;
+//         let mock_block_id: [u8; 32] = [0; 32];
+//         info!("try to send_valid_block_transactions");
+//         adapter.send_valid_block_transactions(mock_block_id, vec![txn]).await.expect("ok");
+//         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+//     }
+// }
 
-pub async fn mock_execution_receive_block(adapter: Arc<GravityConsensusEngine>) {
-    loop {
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-        info!("try to receive_ordered_block");
-        let result = adapter.receive_ordered_block().await;
-        if let Err(_) = result {
-            info!("receive ordered block error");
-            continue;
-        }
-        let value = result.unwrap();
-        info!("try to submit compute res, block is {:?}", value.0);
-        let result = adapter.send_compute_res(value.0, [0; 32]).await;
-        if let Err(_) = result {
-            info!("send_compute_res error");
-            continue;
-        }
-        info!("try to receive_commit_block_ids");
-        let result = adapter.receive_commit_block_ids().await;
-        if let Err(_) = result {
-            info!("receive_commit_block_ids error");
-            continue;
-        }
-        let ids = result.unwrap();
-        info!("the commit block id is {:?}", ids);
-        info!("try to send_persistent_block_id");
-        let result = adapter.send_persistent_block_id(*ids.last().unwrap()).await;
-        if let Err(_) = result {
-            info!("send_persistent_block_id failed");
-        }
-        info!("succeed to send persistent block id {:?}", ids.last().unwrap());
-    }
-}
+// pub async fn mock_execution_receive_block(adapter: Arc<GravityConsensusEngine>) {
+//     loop {
+//         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+//         info!("try to receive_ordered_block");
+//         let result = adapter.receive_ordered_block().await;
+//         if let Err(_) = result {
+//             info!("receive ordered block error");
+//             continue;
+//         }
+//         let value = result.unwrap();
+//         info!("try to submit compute res, block is {:?}", value.0);
+//         let result = adapter.send_compute_res(value.0, [0; 32]).await;
+//         if let Err(_) = result {
+//             info!("send_compute_res error");
+//             continue;
+//         }
+//         info!("try to receive_commit_block_ids");
+//         let result = adapter.receive_commit_block_ids().await;
+//         if let Err(_) = result {
+//             info!("receive_commit_block_ids error");
+//             continue;
+//         }
+//         let ids = result.unwrap();
+//         info!("the commit block id is {:?}", ids);
+//         info!("try to send_persistent_block_id");
+//         let result = adapter.send_persistent_block_id(*ids.last().unwrap()).await;
+//         if let Err(_) = result {
+//             info!("send_persistent_block_id failed");
+//         }
+//         info!("succeed to send persistent block id {:?}", ids.last().unwrap());
+//     }
+// }
 
 struct ApplicationNetworkHandle<T> {
     pub network_id: NetworkId,

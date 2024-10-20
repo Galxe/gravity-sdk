@@ -40,7 +40,7 @@ pub struct QuorumStoreClient {
     wait_for_full_blocks_above_pending_blocks: usize,
     block_store: OnceCell<Option<Arc<BlockStore>>>,
     batch_client: Arc<BatchClient>,
-    consensus_engine: Option<Arc<dyn ConsensusApi>>,
+    consensus_engine: OnceCell<Option<Arc<dyn ConsensusApi>>>,
 }
 
 impl QuorumStoreClient {
@@ -57,7 +57,7 @@ impl QuorumStoreClient {
             wait_for_full_blocks_above_pending_blocks,
             block_store: OnceCell::new(),
             batch_client: Arc::new(BatchClient::new()),
-            consensus_engine: None,
+            consensus_engine: OnceCell::new(),
         }
     }
 
@@ -69,8 +69,13 @@ impl QuorumStoreClient {
         self.batch_client.clone()
     }
 
-    pub fn set_consensus_api(&mut self, consensus_api: Arc<dyn ConsensusApi>) {
-        self.consensus_engine = Some(consensus_api);
+    pub fn set_consensus_api(&self, consensus_api: Arc<dyn ConsensusApi>) {
+        match self.consensus_engine.set(Some(consensus_api)) {
+            Ok(_) => {}
+            Err(_) => {
+                panic!("failed to set consensus api to quorum store client")
+            }
+        }
     }
 
     pub fn set_block_store(&self, block_store: Arc<BlockStore>) {
@@ -113,7 +118,7 @@ impl QuorumStoreClient {
             async move {
                 sender_capture.send(req).await
             }.boxed();
-        self.consensus_engine.as_ref().expect("consensus engine not set").request_payload(req_closure, [0; 32], [0; 32]).await.expect("TODO: panic message");
+        self.consensus_engine.get().expect("consensus engine not set").as_ref().expect("consensus engine not set").request_payload(req_closure, [0; 32], [0; 32]).await.expect("TODO: panic message");
 
         // self.consensus_to_quorum_store_sender.clone().try_send(req).map_err(anyhow::Error::from)?;
         // wait for response
