@@ -168,6 +168,11 @@ impl PipelinedBlock {
     pub fn set_insertion_time(&self) {
         assert!(self.pipeline_insertion_time.set(Instant::now()).is_ok());
     }
+
+    pub fn set_block_num(&mut self, block_number: u64) {
+        assert!(self.block.block_number() == 0);
+        self.block.set_block_num(block_number);
+    }
 }
 
 impl Debug for PipelinedBlock {
