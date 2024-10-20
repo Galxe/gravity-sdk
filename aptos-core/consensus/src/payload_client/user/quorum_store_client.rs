@@ -38,9 +38,9 @@ pub struct QuorumStoreClient {
     pull_timeout_ms: u64,
     wait_for_full_blocks_above_recent_fill_threshold: f32,
     wait_for_full_blocks_above_pending_blocks: usize,
-    block_store: OnceCell<Option<Arc<BlockStore>>>,
+    block_store: OnceCell<Arc<BlockStore>>,
     batch_client: Arc<BatchClient>,
-    consensus_engine: OnceCell<Option<Arc<dyn ConsensusApi>>>,
+    consensus_engine: OnceCell<Arc<dyn ConsensusApi>>,
 }
 
 impl QuorumStoreClient {
@@ -70,7 +70,7 @@ impl QuorumStoreClient {
     }
 
     pub fn set_consensus_api(&self, consensus_api: Arc<dyn ConsensusApi>) {
-        match self.consensus_engine.set(Some(consensus_api)) {
+        match self.consensus_engine.set(consensus_api) {
             Ok(_) => {}
             Err(_) => {
                 panic!("failed to set consensus api to quorum store client")
@@ -79,7 +79,7 @@ impl QuorumStoreClient {
     }
 
     pub fn set_block_store(&self, block_store: Arc<BlockStore>) {
-        match self.block_store.set(Some(block_store)) {
+        match self.block_store.set(block_store) {
             Ok(_) => {}
             Err(_) => {
                 panic!("failed to set block store to quorum store client")
@@ -121,7 +121,6 @@ impl QuorumStoreClient {
             .get()
             .expect("block store not set")
             .as_ref()
-            .expect("block store not set")
             .get_block_tree();
 
         let gtxns = self
@@ -129,7 +128,6 @@ impl QuorumStoreClient {
             .get()
             .expect("consensus engine not set")
             .as_ref()
-            .expect("consensus engine not set")
             .request_payload(req_closure, [0; 32], [0; 32])
             .await
             .expect("TODO: panic message");
