@@ -70,7 +70,7 @@ pub fn check_bootstrap_config(node_config_path: Option<PathBuf>) -> NodeConfig {
 // Start an Gravity node
 pub fn start(node_config: NodeConfig, execution_api: Arc<dyn ExecutionApi>) -> anyhow::Result<()> {
     let _test_mode = node_config.test_mode;
-    let _adapter = ConsensusEngine::init(node_config, execution_api);
+    let _adapter = ConsensusEngine::init(node_config, execution_api, [0; 32], [0; 32]);
     // let submitter_mutex = adapter.clone();
     // if test_mode {
     //     tokio::spawn(async move {

@@ -123,7 +123,7 @@ impl QuorumStoreClient {
             .as_ref()
             .expect("block store not set")
             .get_block_tree();
-        
+
         let gtxns = self
             .consensus_engine
             .get()

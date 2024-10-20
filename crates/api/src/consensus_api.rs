@@ -41,7 +41,7 @@ pub struct ConsensusEngine {
 
 
 impl ConsensusEngine {
-    pub fn init(node_config: NodeConfig, execution_api: Arc<dyn ExecutionApi>) -> Arc<Self> {
+    pub fn init(node_config: NodeConfig, execution_api: Arc<dyn ExecutionApi>, safe_hash: [u8; 32], head_hash: [u8; 32]) -> Arc<Self> {
         let gravity_db = init_gravity_db(&node_config);
         let peers_and_metadata = init_peers_and_metadata(&node_config, &gravity_db);
         let (_remote_log_receiver, _logger_filter_update) =

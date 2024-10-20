@@ -40,7 +40,7 @@ struct TestConsensusLayer<T> {
 }
 
 impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync + 'static> TestConsensusLayer<T> {
-    fn new(reth_cli: RethCli<T>, node_config: NodeConfig, safe_hash: B256, head_hash: B256) -> Self {
+    fn new(reth_cli: RethCli<T>, node_config: NodeConfig, safe_hash: [u8; 32], head_hash: [u8; 32]) -> Self {
         let mut safe_slice = [0u8; 32];
         safe_slice.copy_from_slice(safe_hash.as_slice());
         let mut head_slice = [0u8; 32];
@@ -50,7 +50,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync + 'static> TestConsensu
             safe_hash: safe_slice,
             head_hash: head_slice,
             reth_cli: reth_cli.clone(),
-            consensus_engine: ConsensusEngine::init(node_config, reth_cli),
+            consensus_engine: ConsensusEngine::init(node_config, reth_cli, safe_hash, head_hash),
         }
     }
 
@@ -99,7 +99,7 @@ fn run_server() {
             let id = handle.node.chain_spec().chain().id();
             let _ = thread::spawn(move || {
                 let mut cl =
-                    TestConsensusLayer::new(RethCli::new(client, id), gcei_config, safe_hash, head_hash);
+                    TestConsensusLayer::new(RethCli::new(client, id), gcei_config, safe_hash.into(), head_hash.into());
                 tokio::runtime::Runtime::new()
                     .unwrap()
                     .block_on(cl.run());
