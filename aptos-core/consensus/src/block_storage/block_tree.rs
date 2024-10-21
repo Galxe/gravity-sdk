@@ -20,6 +20,7 @@ use mirai_annotations::{checked_verify_eq, precondition};
 use std::{
     collections::{vec_deque::VecDeque, HashMap, HashSet}, fmt::{self, Display}, sync::Arc
 };
+use aptos_consensus_types::common::Payload;
 
 /// This structure is a wrapper of [`ExecutedBlock`](aptos_consensus_types::pipelined_block::PipelinedBlock)
 /// that adds `children` field to know the parent-child relationship between blocks.
@@ -67,13 +68,15 @@ impl LinkableBlock {
 pub struct BlockTree {
     /// All the blocks known to this replica (with parent links)
     id_to_block: HashMap<HashValue, LinkableBlock>,
+    /// A map from block id to reth hash
+    id_to_reth_hash: HashMap<HashValue, HashValue>,
     /// Root of the tree. This is the root of ordering phase
     ordered_root_id: HashValue,
     /// Commit Root id: this is the root of commit phase
     commit_root_id: HashValue,
     /// A certified block id with highest round
     highest_certified_block_id: HashValue,
-
+    highest_block_id: HashValue,
     /// The quorum certificate of highest_certified_block
     highest_quorum_cert: Arc<QuorumCert>,
     /// The highest 2-chain timeout certificate (if any).
@@ -104,6 +107,12 @@ impl BlockTree {
         self.build_tree_string(&self.ordered_root_id, &mut result, "", true);
         result
     }
+
+    pub fn set_init_reth_hash(&mut self, safe_hash: [u8; 32], head_hash: [u8; 32]) {
+        self.id_to_reth_hash.insert(self.commit_root_id, HashValue::new(head_hash));
+        self.id_to_reth_hash.insert(self.highest_block_id, HashValue::new(safe_hash));
+    }
+
     fn build_node_string(&self, block_id: &HashValue) -> String {
         let block = self.id_to_block.get(block_id).expect(&format!("failed to get block for id {:?}", block_id));
         let transactions = block.executed_block.input_transactions();
@@ -173,6 +182,8 @@ impl BlockTree {
             pruned_block_ids,
             max_pruned_blocks_in_mem,
             highest_2chain_timeout_cert,
+            highest_block_id: root_id,
+            id_to_reth_hash: HashMap::new(),
         }
     }
 
@@ -271,6 +282,7 @@ impl BlockTree {
         block: PipelinedBlock,
     ) -> anyhow::Result<Arc<PipelinedBlock>> {
         let block_id = block.id();
+        self.highest_block_id = block_id;
         if let Some(existing_block) = self.get_block(&block_id) {
             debug!("Already had block {:?} for id {:?} when trying to add another block {:?} for the same id",
                        existing_block,
@@ -461,6 +473,39 @@ impl BlockTree {
         self.path_from_root_to_block(block_id, self.commit_root_id, self.commit_root().round())
     }
 
+    fn get_block_reth_hash(&self, block_id: HashValue) -> HashValue {
+        let block = self.id_to_block.get(&block_id);
+        match block {
+            Some(hash) => {
+                match hash.executed_block.payload().expect(" payload not found") {
+                    Payload::DirectMempool((id, _txns)) => {
+                        id.clone()
+                    },
+                    _ => {
+                        unreachable!("unexpected payload type")
+                    }
+                }
+            },
+            None => panic!("block not found")
+        }
+    }
+
+    pub fn get_safe_block_hash(&self) -> HashValue {
+        let safe_hash = self.id_to_reth_hash.get(&self.highest_block_id);
+        match safe_hash {
+            Some(hash) => hash.clone(),
+            None => self.get_block_reth_hash(self.commit_root_id)
+        }
+    }
+
+    pub fn get_head_block_hash(&self) -> HashValue {
+        let head_hash = self.id_to_reth_hash.get(&self.highest_block_id);
+        match head_hash {
+            Some(hash) => hash.clone(),
+            None => self.get_block_reth_hash(self.highest_block_id)
+        }
+    }
+
     pub(super) fn max_pruned_blocks_in_mem(&self) -> usize {
         self.max_pruned_blocks_in_mem
     }
@@ -476,7 +521,6 @@ impl BlockTree {
         let commit_proof = finality_proof
             .create_merged_with_executed_state(commit_decision)
             .expect("Inconsistent commit proof and evaluation decision, cannot commit block");
-
         let block_to_commit = blocks_to_commit.last().expect("pipeline is empty").clone();
         update_counters_for_committed_blocks(blocks_to_commit);
         let current_round = self.commit_root().round();
@@ -496,6 +540,7 @@ impl BlockTree {
         }
         self.process_pruned_blocks(ids_to_remove);
         self.update_highest_commit_cert(commit_proof);
+        self.id_to_reth_hash.insert(self.commit_root_id, block_to_commit.compute_result().block_hash().expect("block hash not found"));
     }
 }
 

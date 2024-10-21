@@ -261,9 +261,9 @@ pub fn random_payload(count: usize) -> Payload {
     let address = AccountAddress::random();
     let private_key = Ed25519PrivateKey::generate_for_testing();
     let public_key = private_key.public_key();
-    Payload::DirectMempool(
+    Payload::DirectMempool((HashValue::random(),
         (0..count)
             .map(|i| get_test_signed_txn(address, i as u64, &private_key, public_key.clone(), None))
-            .collect(),
+            .collect(),)
     )
 }

@@ -9,7 +9,7 @@ use crate::{
     logger,
     network::{create_network_runtime, extract_network_configs},
 };
-use api_types::{ConsensusApi, ExecutionApi, GTxn};
+use api_types::{BlockBatch, ConsensusApi, ExecutionApi, GTxn};
 use aptos_config::{config::NodeConfig, network_id::NetworkId};
 use aptos_consensus::{
     gravity_state_computer::ConsensusAdapterArgs,
@@ -140,6 +140,7 @@ impl ConsensusEngine {
             runtime_vec: network_runtimes,
         });
         quorum_store_client.set_consensus_api(arc_self.clone());
+        quorum_store_client.get_block_store().set_init_reth_hash(safe_hash, head_hash);
         execution_proxy.set_consensus_engine(arc_self.clone());
         arc_self
     }
@@ -152,13 +153,13 @@ impl ConsensusApi for ConsensusEngine {
         closure: BoxFuture<'b, Result<(), SendError>>,
         safe_block_hash: [u8; 32],
         head_block_hash: [u8; 32],
-    ) -> Result<Vec<GTxn>, SendError>
+    ) -> Result<BlockBatch, SendError>
     {
         // let txns = self.execution_api.request_transactions(safe_block_hash, head_block_hash).await;
         // self.batch_client.submit(txns);
         // closure.await
 
-        Ok(self.execution_api.request_transactions(safe_block_hash, head_block_hash).await)
+        Ok(self.execution_api.request_block_batch(safe_block_hash, head_block_hash).await)
     }
 
     async fn send_order_block(&self, txns: Vec<GTxn>) {

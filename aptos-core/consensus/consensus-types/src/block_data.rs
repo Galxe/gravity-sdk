@@ -415,7 +415,7 @@ fn test_dag_block_no_deserialize() {
     let fake = FakeBlockType::DAG {
         author: Author::ZERO,
         failed_authors: vec![],
-        payload: Payload::DirectMempool(vec![]),
+        payload: Payload::DirectMempool((HashValue::zero(), vec![])),
         node_digests: vec![],
     };
     let bytes = bcs::to_bytes(&fake).unwrap();

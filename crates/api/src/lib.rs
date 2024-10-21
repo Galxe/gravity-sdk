@@ -53,7 +53,7 @@ pub trait GravityConsensusEngineInterface: Send + Sync {
     /// - Retrieve the ordered blocks
     /// - Prepare them for processing
     ///
-    /// TODO(gravity_xiejian): use txn id rather than total txn in block
+    /// TODO(gravity_jan): use txn id rather than total txn in block
     /// Returns: Option<Block> - The next ordered block, if available
     async fn receive_ordered_block(&self) -> Result<([u8; 32], Vec<GTxn>), GCEIError>;
 
