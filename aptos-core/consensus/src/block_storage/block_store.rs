@@ -125,6 +125,14 @@ impl BlockStore {
         self.inner.clone()
     }
 
+    pub fn get_safe_block_hash(&self) -> HashValue {
+        self.inner.read().get_safe_block_hash()
+    }
+
+    pub fn get_head_block_hash(&self) -> HashValue {
+        self.inner.read().get_head_block_hash()
+    }
+
     async fn try_send_for_execution(&self) {
         // reproduce the same batches (important for the commit phase)
         let mut certs = self.inner.read().get_all_quorum_certs_with_commit_info();
@@ -259,17 +267,6 @@ impl BlockStore {
             .unwrap_or_default();
 
         assert!(!blocks_to_commit.is_empty());
-        let blocks = vec![];
-        for p_block in blocks_to_commit {
-            if p_block.block().block_number() != 0 {
-                continue;
-            }
-            p_block.set_block_num(self.storage.fetch_next_block_number());
-            blocks.push(p_block.into());
-        }
-        if blocks.len() != 0 {
-            self.storage.save_tree(blocks, vec![]);
-        }
         let block_tree = self.inner.clone();
         let storage = self.storage.clone();
         let finality_proof_clone = finality_proof.clone();
@@ -473,6 +470,10 @@ impl BlockStore {
         wlock.update_commit_root(next_root_id);
         wlock.process_pruned_blocks(id_to_remove.clone());
         id_to_remove
+    }
+
+    pub fn set_init_reth_hash(&self, safe_hash: HashValue, head_hash: HashValue) {
+        self.inner.write().set_init_reth_hash(safe_hash, head_hash);
     }
 
     #[cfg(any(test, feature = "fuzzing"))]

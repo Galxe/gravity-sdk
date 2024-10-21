@@ -85,7 +85,7 @@ impl TPayloadManager for DirectMempoolPayloadManager {
         };
 
         match payload {
-            Payload::DirectMempool(txns) => Ok((txns.clone(), None)),
+            Payload::DirectMempool((_, txns)) => Ok((txns.clone(), None)),
             _ => unreachable!(
                 "DirectMempoolPayloadManager: Unacceptable payload type {}. Epoch: {}, Round: {}, Block: {}",
                 payload,

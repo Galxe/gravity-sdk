@@ -68,8 +68,9 @@ impl LinkableBlock {
 pub struct BlockTree {
     /// All the blocks known to this replica (with parent links)
     id_to_block: HashMap<HashValue, LinkableBlock>,
-    /// A map from block id to reth hash
-    id_to_reth_hash: HashMap<HashValue, HashValue>,
+    // TODO:(jan): remove this after syncing
+    /// A map from block id to reth hash, you need to remove it after syncing
+    init_id_to_reth_hash: HashMap<HashValue, HashValue>,
     /// Root of the tree. This is the root of ordering phase
     ordered_root_id: HashValue,
     /// Commit Root id: this is the root of commit phase
@@ -108,9 +109,9 @@ impl BlockTree {
         result
     }
 
-    pub fn set_init_reth_hash(&mut self, safe_hash: [u8; 32], head_hash: [u8; 32]) {
-        self.id_to_reth_hash.insert(self.commit_root_id, HashValue::new(head_hash));
-        self.id_to_reth_hash.insert(self.highest_block_id, HashValue::new(safe_hash));
+    pub fn set_init_reth_hash(&mut self, safe_hash: HashValue, head_hash: HashValue) {
+        self.init_id_to_reth_hash.insert(self.commit_root_id, safe_hash);
+        self.init_id_to_reth_hash.insert(self.highest_block_id, head_hash);
     }
 
     fn build_node_string(&self, block_id: &HashValue) -> String {
@@ -183,7 +184,7 @@ impl BlockTree {
             max_pruned_blocks_in_mem,
             highest_2chain_timeout_cert,
             highest_block_id: root_id,
-            id_to_reth_hash: HashMap::new(),
+            init_id_to_reth_hash: HashMap::new(),
         }
     }
 
@@ -491,7 +492,7 @@ impl BlockTree {
     }
 
     pub fn get_safe_block_hash(&self) -> HashValue {
-        let safe_hash = self.id_to_reth_hash.get(&self.highest_block_id);
+        let safe_hash = self.init_id_to_reth_hash.get(&self.highest_block_id);
         match safe_hash {
             Some(hash) => hash.clone(),
             None => self.get_block_reth_hash(self.commit_root_id)
@@ -499,7 +500,7 @@ impl BlockTree {
     }
 
     pub fn get_head_block_hash(&self) -> HashValue {
-        let head_hash = self.id_to_reth_hash.get(&self.highest_block_id);
+        let head_hash = self.init_id_to_reth_hash.get(&self.highest_block_id);
         match head_hash {
             Some(hash) => hash.clone(),
             None => self.get_block_reth_hash(self.highest_block_id)
@@ -540,7 +541,6 @@ impl BlockTree {
         }
         self.process_pruned_blocks(ids_to_remove);
         self.update_highest_commit_cert(commit_proof);
-        self.id_to_reth_hash.insert(self.commit_root_id, block_to_commit.compute_result().block_hash().expect("block hash not found"));
     }
 }
 

@@ -140,7 +140,7 @@ impl ConsensusEngine {
             runtime_vec: network_runtimes,
         });
         quorum_store_client.set_consensus_api(arc_self.clone());
-        quorum_store_client.get_block_store().set_init_reth_hash(safe_hash, head_hash);
+        quorum_store_client.get_block_store().set_init_reth_hash(HashValue::new(safe_hash), HashValue::new(head_hash));
         execution_proxy.set_consensus_engine(arc_self.clone());
         arc_self
     }

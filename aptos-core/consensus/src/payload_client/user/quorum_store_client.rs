@@ -92,11 +92,11 @@ impl QuorumStoreClient {
         }
     }
 
-    fn get_safe_block_hash(&self) -> [u8; 32] {
+    fn get_safe_block_hash(&self) -> HashValue {
         self.block_store.get().expect("block store not set").get_safe_block_hash()
     }
 
-    fn get_head_block_hash(&self) -> [u8; 32] {
+    fn get_head_block_hash(&self) -> HashValue {
         self.block_store.get().expect("block store not set").get_head_block_hash()
     }
 
@@ -136,12 +136,16 @@ impl QuorumStoreClient {
             .as_ref()
             .get_block_tree();
 
+        let mut safe_hash = [0u8; 32];
+        safe_hash.copy_from_slice(self.get_safe_block_hash().as_ref());
+        let mut head_hash = [0u8; 32];
+        head_hash.copy_from_slice(self.get_head_block_hash().as_ref());
         let block_batch = self
             .consensus_engine
             .get()
             .expect("consensus engine not set")
             .as_ref()
-            .request_payload(req_closure, self.get_safe_block_hash(), self.get_head_block_hash())
+            .request_payload(req_closure, safe_hash, head_hash)
             .await
             .expect("TODO: panic message");
 
