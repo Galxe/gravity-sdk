@@ -4,7 +4,7 @@ use alloy_primitives::{Address, B256};
 use alloy_rpc_types_engine::{ForkchoiceState, ForkchoiceUpdated, PayloadAttributes, PayloadId};
 use anyhow::Context;
 use api::ExecutionApi;
-use api_types::GTxn;
+use api_types::{BlockBatch, GTxn};
 use jsonrpsee::core::async_trait;
 use reth::api::EngineTypes;
 use reth_ethereum_engine_primitives::{EthEngineTypes, EthPayloadAttributes};
@@ -206,11 +206,11 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
 
 #[async_trait]
 impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethCli<T> {
-    async fn request_transactions(
+    async fn request_block_batch(
         &self,
         safe_block_hash: [u8; 32],
         head_block_hash: [u8; 32],
-    ) -> Vec<GTxn> {
+    ) -> BlockBatch {
         let fork_choice_state = ForkchoiceState {
             head_block_hash: B256::new(head_block_hash),
             safe_block_hash: B256::new(safe_block_hash),
@@ -238,7 +238,12 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
         .await
         .expect("Failed to get payload");
         info!("Got payload: {:?}", payload);
-        self.payload_to_txns(payload_id, payload)
+        let hash = payload.execution_payload.payload_inner.payload_inner.block_hash;
+        let mut bytes = [0u8; 32];
+        bytes.copy_from_slice(hash.as_slice());
+        let txns = self.payload_to_txns(payload_id, payload);
+        let hash = bytes;
+        BlockBatch { txns, block_hash: hash }
     }
 
     async fn send_ordered_block(&self, txns: Vec<GTxn>) {
