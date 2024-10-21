@@ -3,6 +3,7 @@
 
 use crate::error::QuorumStoreError;
 use aptos_consensus_types::common::{Payload, PayloadFilter};
+use aptos_crypto::HashValue;
 #[cfg(test)]
 use aptos_types::transaction::SignedTransaction;
 use futures::future::BoxFuture;
@@ -87,7 +88,7 @@ impl UserPayloadClient for DummyClient {
             nxt_txn_idx += 1;
             txns.push(txn);
         }
-        Ok(Payload::DirectMempool(txns))
+        Ok(Payload::DirectMempool((HashValue::zero(), txns)))
     }
 }
 

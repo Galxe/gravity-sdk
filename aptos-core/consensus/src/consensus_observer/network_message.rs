@@ -759,7 +759,7 @@ mod test {
         let transaction_payload = BlockTransactionPayload::new_in_quorum_store(vec![], vec![]);
 
         // Create a direct mempool payload
-        let ordered_payload = Payload::DirectMempool(vec![]);
+        let ordered_payload = Payload::DirectMempool((HashValue::zero(), vec![]));
 
         // Verify the transaction payload and ensure it fails (mempool payloads are not supported)
         let error = transaction_payload
@@ -1292,7 +1292,7 @@ mod test {
             author: Author::random(),
             failed_authors: vec![],
             validator_txns: vec![],
-            payload: Payload::DirectMempool(vec![]),
+            payload: Payload::DirectMempool((HashValue::zero(), vec![])),
             node_digests: vec![],
             parent_block_id,
             parents_bitvec: BitVec::with_num_bits(0),
