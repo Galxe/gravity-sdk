@@ -3,7 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    block_data::{BlockData, BlockType}, common::{Author, Payload, Round}, pipelined_block::PipelinedBlock, quorum_cert::QuorumCert
+    block_data::{BlockData, BlockType},
+    common::{Author, Payload, Round},
+    quorum_cert::QuorumCert,
 };
 use anyhow::{bail, ensure, format_err};
 use aptos_bitvec::BitVec;
@@ -50,8 +52,6 @@ pub struct Block {
     /// Signature that the hash of this block has been authored by the owner of the private key,
     /// this is only set within Proposal blocks
     signature: Option<bls12381::Signature>,
-
-    block_number: u64,
 }
 
 impl fmt::Debug for Block {
@@ -181,7 +181,6 @@ impl Block {
             id: block_data.hash(),
             block_data,
             signature: None,
-            block_number: 0
         }
     }
 
@@ -196,7 +195,6 @@ impl Block {
             id,
             block_data,
             signature,
-            block_number: 0
         }
     }
 
@@ -213,7 +211,6 @@ impl Block {
             id: block_data.hash(),
             block_data,
             signature: None,
-            block_number: 0
         }
     }
 
@@ -245,7 +242,6 @@ impl Block {
             id: block_data.hash(),
             block_data,
             signature: None,
-            block_number: 0
         }
     }
 
@@ -309,7 +305,6 @@ impl Block {
             id: block_data.hash(),
             block_data,
             signature: Some(signature),
-            block_number: 0
         }
     }
 
@@ -506,14 +501,6 @@ impl Block {
             .map(|index| u32::try_from(index).expect("Index is out of bounds for u32"))
             .collect()
     }
-
-    pub fn block_number(&self) -> u64 {
-        return self.block_number;
-    }
-
-    pub fn set_block_num(&mut self, block_number: u64) {
-        self.block_number = block_number
-    }
 }
 
 impl<'de> Deserialize<'de> for Block {
@@ -526,26 +513,17 @@ impl<'de> Deserialize<'de> for Block {
         struct BlockWithoutId {
             block_data: BlockData,
             signature: Option<bls12381::Signature>,
-            block_number: u64,
         }
 
         let BlockWithoutId {
             block_data,
             signature,
-            block_number
         } = BlockWithoutId::deserialize(deserializer)?;
 
         Ok(Block {
             id: block_data.hash(),
             block_data,
             signature,
-            block_number,
         })
-    }
-}
-
-impl From<PipelinedBlock> for Block {
-    fn from(value: PipelinedBlock) -> Self {
-        value.block().clone()
     }
 }

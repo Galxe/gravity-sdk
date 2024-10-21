@@ -259,17 +259,7 @@ impl BlockStore {
             .unwrap_or_default();
 
         assert!(!blocks_to_commit.is_empty());
-        let blocks = vec![];
-        for p_block in blocks_to_commit {
-            if p_block.block().block_number() != 0 {
-                continue;
-            }
-            p_block.set_block_num(self.storage.fetch_next_block_number());
-            blocks.push(p_block.into());
-        }
-        if blocks.len() != 0 {
-            self.storage.save_tree(blocks, vec![]);
-        }
+
         let block_tree = self.inner.clone();
         let storage = self.storage.clone();
         let finality_proof_clone = finality_proof.clone();

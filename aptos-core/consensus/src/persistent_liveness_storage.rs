@@ -16,7 +16,7 @@ use aptos_types::{
     block_info::Round, epoch_change::EpochChangeProof, ledger_info::LedgerInfoWithSignatures,
     proof::TransactionAccumulatorSummary, transaction::Version,
 };
-use std::{cmp::max, collections::HashSet, fmt::Debug, sync::{atomic::AtomicU64, Arc}};
+use std::{cmp::max, collections::HashSet, fmt::Debug, sync::Arc};
 
 /// PersistentLivenessStorage is essential for maintaining liveness when a node crashes.  Specifically,
 /// upon a restart, a correct node will recover.  Even if all nodes crash, liveness is
@@ -37,7 +37,7 @@ pub trait PersistentLivenessStorage: Send + Sync {
     fn recover_from_ledger(&self) -> LedgerRecoveryData;
 
     /// Construct necessary data to start consensus.
-    fn start(&mut self, order_vote_enabled: bool) -> LivenessStorageData;
+    fn start(&self, order_vote_enabled: bool) -> LivenessStorageData;
 
     /// Persist the highest 2chain timeout certificate for improved liveness - proof for other replicas
     /// to jump to this round
@@ -55,8 +55,6 @@ pub trait PersistentLivenessStorage: Send + Sync {
 
     // Returns a handle of the consensus db
     fn consensus_db(&self) -> Arc<ConsensusDB>;
-
-    fn fetch_next_block_number(&mut self) -> u64;
 }
 
 #[derive(Clone)]
@@ -340,31 +338,12 @@ impl RecoveryData {
 pub struct StorageWriteProxy {
     db: Arc<ConsensusDB>,
     aptos_db: Arc<dyn DbReader>,
-    next_block_number: AtomicU64,
 }
 
 impl StorageWriteProxy {
     pub fn new(config: &NodeConfig, aptos_db: Arc<dyn DbReader>) -> Self {
         let db = Arc::new(ConsensusDB::new(config.storage.dir()));
-        StorageWriteProxy { db, aptos_db, next_block_number: AtomicU64::new(0)}
-    }
-}
-
-impl StorageWriteProxy {
-    pub fn init_next_block_number(&mut self, blocks: Vec<Block>) {
-        if blocks.len() == 0 {
-            return
-        };
-
-        let mut max_block_number = 0;
-        for block in &blocks {
-            max_block_number = max_block_number.max(block.block_num());
-        }
-        if max_block_number == 0 {
-            self.next_block_number.store(0, Ordering::SeqCst);
-        } else {
-            self.next_block_number.store(max_block_number + 1, Ordering::SeqCst);
-        }
+        StorageWriteProxy { db, aptos_db }
     }
 }
 
@@ -395,7 +374,7 @@ impl PersistentLivenessStorage for StorageWriteProxy {
         LedgerRecoveryData::new(latest_ledger_info)
     }
 
-    fn start(&mut self, order_vote_enabled: bool) -> LivenessStorageData {
+    fn start(&self, order_vote_enabled: bool) -> LivenessStorageData {
         info!("Start consensus recovery.");
         let raw_data = self
             .db
@@ -410,7 +389,6 @@ impl PersistentLivenessStorage for StorageWriteProxy {
             bcs::from_bytes(&b).expect("unable to deserialize highest 2-chain timeout cert")
         });
         let blocks = raw_data.2;
-        self.init_next_block_number(blocks);
         let quorum_certs: Vec<_> = raw_data.3;
         let blocks_repr: Vec<String> = blocks.iter().map(|b| format!("\n\t{}", b)).collect();
         info!(
@@ -505,11 +483,5 @@ impl PersistentLivenessStorage for StorageWriteProxy {
 
     fn consensus_db(&self) -> Arc<ConsensusDB> {
         self.db.clone()
-    }
-
-    fn fetch_next_block_number(&mut self) -> u64 {
-        let next_block_number = self.next_block_number.load(Ordering::SeqCst);
-        self.next_block_number.fetch_add(1, Ordering::SeqCst);
-        next_block_number
     }
 }
