@@ -3,9 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    block_data::{BlockData, BlockType},
-    common::{Author, Payload, Round},
-    quorum_cert::QuorumCert,
+    block_data::{BlockData, BlockType}, common::{Author, Payload, Round}, pipelined_block::PipelinedBlock, quorum_cert::QuorumCert
 };
 use anyhow::{bail, ensure, format_err};
 use aptos_bitvec::BitVec;
@@ -25,7 +23,8 @@ use aptos_types::{
     validator_verifier::ValidatorVerifier,
 };
 use mirai_annotations::debug_checked_verify_eq;
-use serde::{Deserialize, Deserializer, Serialize};
+use once_cell::sync::OnceCell;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{
     convert::TryFrom,
     fmt::{self, Display, Formatter},
@@ -40,18 +39,19 @@ pub mod block_test_utils;
 #[path = "block_test.rs"]
 pub mod block_test;
 
-#[derive(Serialize, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 /// Block has the core data of a consensus block that should be persistent when necessary.
 /// Each block must know the id of its parent and keep the QuorurmCertificate to that parent.
 pub struct Block {
     /// This block's id as a hash value, it is generated at call time
-    #[serde(skip)]
     id: HashValue,
     /// The container for the actual block
     block_data: BlockData,
     /// Signature that the hash of this block has been authored by the owner of the private key,
     /// this is only set within Proposal blocks
     signature: Option<bls12381::Signature>,
+
+    block_number: OnceCell<u64>,
 }
 
 impl fmt::Debug for Block {
@@ -123,6 +123,10 @@ impl Block {
         }
     }
 
+    pub fn block_number(&self) -> Option<u64> {
+        self.block_number.get().copied()
+    }
+
     pub fn quorum_cert(&self) -> &QuorumCert {
         self.block_data.quorum_cert()
     }
@@ -181,6 +185,7 @@ impl Block {
             id: block_data.hash(),
             block_data,
             signature: None,
+            block_number: OnceCell::new(),
         }
     }
 
@@ -195,6 +200,7 @@ impl Block {
             id,
             block_data,
             signature,
+            block_number: OnceCell::new(),
         }
     }
 
@@ -211,6 +217,7 @@ impl Block {
             id: block_data.hash(),
             block_data,
             signature: None,
+            block_number: OnceCell::new(),
         }
     }
 
@@ -242,6 +249,7 @@ impl Block {
             id: block_data.hash(),
             block_data,
             signature: None,
+            block_number: OnceCell::new(),
         }
     }
 
@@ -305,6 +313,7 @@ impl Block {
             id: block_data.hash(),
             block_data,
             signature: Some(signature),
+            block_number: OnceCell::new(),
         }
     }
 
@@ -501,6 +510,32 @@ impl Block {
             .map(|index| u32::try_from(index).expect("Index is out of bounds for u32"))
             .collect()
     }
+
+    pub fn set_block_number(&self, block_number: u64) {
+        assert!(self.block_number.set(block_number).is_ok());
+    }
+}
+
+impl Serialize for Block {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        #[derive(Serialize)]
+        #[serde(rename = "Block")]
+        struct BlockWithoutId<'a> {
+            block_data: &'a BlockData,
+            signature: &'a Option<bls12381::Signature>,
+            block_number: Option<&'a u64>,
+        }
+
+        let serialized = BlockWithoutId {
+            block_data: &self.block_data,
+            signature: &self.signature,
+            block_number: self.block_number.get(),
+        };
+        serialized.serialize(serializer)
+    }
 }
 
 impl<'de> Deserialize<'de> for Block {
@@ -513,17 +548,31 @@ impl<'de> Deserialize<'de> for Block {
         struct BlockWithoutId {
             block_data: BlockData,
             signature: Option<bls12381::Signature>,
+            block_number: Option<u64>,
         }
 
         let BlockWithoutId {
             block_data,
             signature,
+            block_number
         } = BlockWithoutId::deserialize(deserializer)?;
 
-        Ok(Block {
+        let block = Block {
             id: block_data.hash(),
             block_data,
             signature,
-        })
+            block_number: OnceCell::new(),
+        };
+
+        if let Some(block_number) = block_number {
+            block.set_block_number(block_number)
+        }
+        Ok(block)
+    }
+}
+
+impl From<&PipelinedBlock> for Block {
+    fn from(value: &PipelinedBlock) -> Self {
+        value.block().clone()
     }
 }

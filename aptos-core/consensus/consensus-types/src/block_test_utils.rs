@@ -23,6 +23,7 @@ use aptos_types::{
     test_helpers::transaction_test_helpers::get_test_signed_txn,
     validator_signer::{proptests, ValidatorSigner},
 };
+use once_cell::sync::OnceCell;
 use proptest::prelude::*;
 
 type LinearizedBlockForest = Vec<Block>;
@@ -96,6 +97,7 @@ prop_compose! {
                     block.quorum_cert().clone(),
                 ),
                 signature: Some(block.signature().unwrap().clone()),
+                block_number: OnceCell::new(),
             }
         }
 }
