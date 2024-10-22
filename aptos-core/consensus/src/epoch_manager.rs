@@ -841,7 +841,9 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             onchain_consensus_config.order_vote_enabled(),
             self.pending_blocks.clone(),
         ));
-        println!("round maanger start with epoch {}", epoch);
+        // We'd better set block store here before we construct any following struct
+        // Since the round_manager.init might trigger new round event to produce proposal
+        self.quorum_store_client.as_ref().expect("QuorumStoreClient not set").set_block_store(block_store.clone());
         info!(epoch = epoch, "Create ProposalGenerator");
         // txn manager is required both by proposal generator (to pull the proposers)
         // and by event processor (to update their status).
@@ -911,7 +913,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             delayed_qc_rx,
             close_rx,
         ));
-        self.quorum_store_client.as_ref().expect("QuorumStoreClient not set").set_block_store(block_store.clone());
 
         self.spawn_block_retrieval_task(epoch, block_store, max_blocks_allowed);
     }

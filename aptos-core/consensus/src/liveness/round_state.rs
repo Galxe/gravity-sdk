@@ -212,7 +212,8 @@ impl RoundState {
             time_interval,
             highest_ordered_round: 0,
             current_round: 0,
-            current_round_deadline: time_service.get_current_timestamp(),
+            // current_round_deadline: time_service.get_current_timestamp(),
+            current_round_deadline: Duration::from_secs(u64::MAX),
             time_service,
             timeout_sender,
             pending_votes,
@@ -327,7 +328,9 @@ impl RoundState {
     /// Setup the timeout task and return the duration of the current timeout
     fn setup_timeout(&mut self, multiplier: u32) -> Duration {
         let timeout_sender = self.timeout_sender.clone();
-        let timeout = self.setup_deadline(multiplier);
+        // let timeout = self.setup_deadline(multiplier);
+        // TODO(gravity_byteyue): Currently we don't allow local timeout, would allow this when refactoring
+        let timeout = Duration::from_secs(u64::MAX);
         trace!(
             "Scheduling timeout of {} ms for round {}",
             timeout.as_millis(),

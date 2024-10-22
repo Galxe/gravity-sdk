@@ -42,6 +42,7 @@ pub struct QuorumStoreClient {
     block_store: OnceCell<Arc<BlockStore>>,
     batch_client: Arc<BatchClient>,
     consensus_engine: OnceCell<Arc<dyn ConsensusApi>>,
+    init_hash: Arc<Mutex<Option<(HashValue, HashValue)>>>
 }
 
 impl QuorumStoreClient {
@@ -59,6 +60,7 @@ impl QuorumStoreClient {
             block_store: OnceCell::new(),
             batch_client: Arc::new(BatchClient::new()),
             consensus_engine: OnceCell::new(),
+            init_hash: Arc::new(Mutex::new(None))
         }
     }
 
@@ -81,6 +83,11 @@ impl QuorumStoreClient {
 
     pub fn get_block_store(&self) -> Arc<BlockStore> {
         self.block_store.get().expect("block store not set").clone()
+    }
+
+    pub fn set_init_reth_hash(&self, safe_hash: HashValue, head_hash: HashValue) {
+        let mut hash = self.init_hash.blocking_lock();
+        *hash = Some((safe_hash, head_hash));
     }
 
     pub fn set_block_store(&self, block_store: Arc<BlockStore>) {
@@ -136,10 +143,43 @@ impl QuorumStoreClient {
             .as_ref()
             .get_block_tree();
 
+
         let mut safe_hash = [0u8; 32];
-        safe_hash.copy_from_slice(self.get_safe_block_hash().as_ref());
         let mut head_hash = [0u8; 32];
-        head_hash.copy_from_slice(self.get_head_block_hash().as_ref());
+        {
+            let init_hash = self.init_hash.lock().await;
+
+            if self.block_store.get().is_none() {
+                info!("request payload from init hash without block store");
+                safe_hash.copy_from_slice(init_hash.unwrap().0.as_slice());
+                head_hash.copy_from_slice(init_hash.unwrap().1.as_slice());
+            } else {
+                let block_store = self.block_store.get().unwrap();
+                loop {
+                    info!("wait last block qc");
+                    if block_store.get_block_tree().read().is_last_block_qc() {
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_secs(1)).await
+
+                }
+                if block_store.get_block_tree().read().block_size() <= 1 {
+                    info!("request payload from init hash with only genesis, init hash {:?}", init_hash);
+                    safe_hash.copy_from_slice(init_hash.unwrap().0.as_slice());
+                    head_hash.copy_from_slice(init_hash.unwrap().1.as_slice());
+                    info!("request payload, init hash {:?}, safe {:?}, head {:?}", init_hash, safe_hash, head_hash);
+                } else if block_store.get_block_tree().read().block_size() == 2 {
+                    info!("request payload from init hash with one valid block");
+                    safe_hash.copy_from_slice(init_hash.unwrap().0.as_slice());
+                    head_hash.copy_from_slice(self.get_head_block_hash().as_ref());
+                } else {
+                    info!("request payload from block store with two or more valid block");
+                    safe_hash.copy_from_slice(self.get_safe_block_hash().as_ref());
+                    head_hash.copy_from_slice(self.get_head_block_hash().as_ref());
+                }
+            }
+        }
+
         let block_batch = self
             .consensus_engine
             .get()

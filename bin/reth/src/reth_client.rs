@@ -216,7 +216,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
             safe_block_hash: B256::new(safe_block_hash),
             finalized_block_hash: B256::new(safe_block_hash),
         };
-        let payload_attr = Self::create_payload_attributes(fork_choice_state.head_block_hash);
+        let payload_attr = Self::create_payload_attributes(fork_choice_state.safe_block_hash);
         let mut payload_id = PayloadId::new([0; 8]);
         loop {
             match self.get_new_payload_id(fork_choice_state, &payload_attr).await {

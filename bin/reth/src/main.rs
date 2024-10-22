@@ -5,9 +5,8 @@ mod reth_client;
 
 use std::sync::Arc;
 use clap::Args;
-use reth_provider::BlockReaderIdExt;
+use tracing::info;
 use std::thread;
-use alloy_eips::{BlockId, BlockNumberOrTag};
 use crate::cli::Cli;
 /// Parameters for configuring the engine
 #[derive(Debug, Clone, Args, PartialEq, Eq, Default)]
@@ -24,10 +23,9 @@ use reth_node_builder::engine_tree_config;
 use reth_node_builder::EngineNodeLauncher;
 use reth_node_core::args::utils::DefaultChainSpecParser;
 use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
-use reth_primitives::B256;
 use reth_provider::providers::BlockchainProvider2;
 use reth_rpc_api::EngineEthApiClient;
-use api::{check_bootstrap_config, ExecutionApi, NodeConfig};
+use api::{check_bootstrap_config, NodeConfig};
 use api::consensus_api::ConsensusEngine;
 use api_types::ConsensusApi;
 use crate::reth_client::RethCli;
@@ -93,9 +91,12 @@ fn run_server() {
                 })
                 .await?;
             let client = handle.node.engine_http_client();
-            let genesis = handle.node.chain_spec().genesis().clone();
-            let head_hash = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Latest)).unwrap().unwrap().hash_slow();
-            let safe_hash = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Safe)).unwrap().unwrap().hash_slow();
+            let genesis = handle.node.chain_spec().genesis_hash();
+            let safe_hash = genesis;
+            let head_hash = genesis;
+            // let head_hash = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Latest)).unwrap().unwrap().hash_slow();
+            // let safe_hash = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Safe)).unwrap().unwrap().hash_slow();
+            info!("init hash head{:?} safe {:?}", head_hash, safe_hash);
             let id = handle.node.chain_spec().chain().id();
             let _ = thread::spawn(move || {
                 let mut cl =

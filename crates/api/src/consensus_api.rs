@@ -1,4 +1,4 @@
-use std::{future::IntoFuture, sync::Arc};
+use std::{future::IntoFuture, sync::Arc, time::Duration};
 
 use crate::{ 
     bootstrap::{
@@ -16,6 +16,7 @@ use aptos_consensus::{
 };
 use api_types::BatchClient;
 use aptos_event_notifications::EventNotificationSender;
+use aptos_logger::info;
 use aptos_network_builder::builder::NetworkBuilder;
 use aptos_storage_interface::DbReaderWriter;
 use async_trait::async_trait;
@@ -132,7 +133,7 @@ impl ConsensusEngine {
         network_runtimes.push(consensus_runtime);
         let quorum_store_client =
             args.quorum_store_client.as_mut().unwrap();
-        let _ = event_subscription_service.notify_initial_configs(1_u64);
+        // trigger this to make epoch manager invoke new epoch
         let arc_self = Arc::new(Self {
             address: node_config.validator_network.as_ref().unwrap().listen_address.to_string(),
             execution_api,
@@ -140,7 +141,11 @@ impl ConsensusEngine {
             runtime_vec: network_runtimes,
         });
         quorum_store_client.set_consensus_api(arc_self.clone());
-        quorum_store_client.get_block_store().set_init_reth_hash(HashValue::new(safe_hash), HashValue::new(head_hash));
+        // sleep
+        quorum_store_client.set_init_reth_hash(HashValue::new(safe_hash), HashValue::new(head_hash));
+        // process new round should be after init reth hash
+        let _ = event_subscription_service.notify_initial_configs(1_u64);
+
         execution_proxy.set_consensus_engine(arc_self.clone());
         arc_self
     }

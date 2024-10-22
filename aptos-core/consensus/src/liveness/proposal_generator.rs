@@ -385,7 +385,6 @@ impl ProposalGenerator {
             // Avoid txn manager long poll if the root block has txns, so that the leader can
             // deliver the commit proof to others without delay.
             pending_blocks.push(self.block_store.commit_root());
-            println!("the pending blocks is {:?}", pending_blocks);
 
             // Exclude all the pending transactions: these are all the ancestors of
             // parent (including) up to the root (including).
@@ -485,7 +484,6 @@ impl ProposalGenerator {
         };
 
         let quorum_cert = hqc.as_ref().clone();
-        println!("has quorum cert {:?}", quorum_cert);
         let failed_authors = self.compute_failed_authors(
             round,
             quorum_cert.certified_block().round(),

@@ -483,10 +483,6 @@ impl BlockStore {
         id_to_remove
     }
 
-    pub fn set_init_reth_hash(&self, safe_hash: HashValue, head_hash: HashValue) {
-        self.inner.write().set_init_reth_hash(safe_hash, head_hash);
-    }
-
     #[cfg(any(test, feature = "fuzzing"))]
     pub fn set_back_pressure_for_test(&self, back_pressure: bool) {
         self.back_pressure_for_test
