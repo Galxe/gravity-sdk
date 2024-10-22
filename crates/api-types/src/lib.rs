@@ -12,6 +12,7 @@ pub trait ConsensusApi: Send + Sync {
     async fn request_payload<'a, 'b>(
         &'a self,
         closure: BoxFuture<'b, Result<(), SendError>>,
+        finalized_block_hash: [u8; 32],
         safe_block_hash: [u8; 32],
         head_block_hash: [u8; 32],
     ) -> Result<BlockBatch, SendError>;
@@ -33,7 +34,7 @@ pub trait ExecutionApi: Send + Sync {
     // Request transactions from execution engine
     // safe block id is the last block id that has been committed in block tree
     // head block id is the last block id that received by the execution engine in block tree
-    async fn request_block_batch(&self, safe_block_hash: [u8; 32], head_block_hash: [u8; 32]) -> BlockBatch;
+    async fn request_block_batch(&self, finalized_block_hash: [u8; 32], safe_block_hash: [u8; 32], head_block_hash: [u8; 32]) -> BlockBatch;
 
     async fn send_ordered_block(&self, txns: Vec<GTxn>);
 

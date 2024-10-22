@@ -41,6 +41,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
         fork_choice_state: ForkchoiceState,
         payload_attributes: EthPayloadAttributes,
     ) -> anyhow::Result<ForkchoiceUpdated> {
+        info!("update_fork_choice with payload attributes {:?}", payload_attributes);
         let response = <T as EngineApiClient<EthEngineTypes>>::fork_choice_updated_v3(
             &self.engine_api_client,
             fork_choice_state,
@@ -166,18 +167,17 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
         let payload_attributes = Self::create_payload_attributes(parent_beacon_block_root);
         // update ForkchoiceState and get payload_id
         let mut payload_id = PayloadId::new([0; 8]);
-        loop {
+        // loop {
             match self.get_new_payload_id(fork_choice_state, &payload_attributes).await {
                 Some(pid) => {
                     payload_id = pid;
-                    break;
+                    // break;
                 }
                 None => {
-                    tokio::time::sleep(Duration::from_secs(5)).await;
-                    continue;
+                    panic!("get None payload id");
                 }
             };
-        }
+        // }
         // try to get payload
         let payload = <T as EngineApiClient<EthEngineTypes>>::get_payload_v3(
             &self.engine_api_client,
@@ -208,28 +208,28 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
 impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethCli<T> {
     async fn request_block_batch(
         &self,
+        finalized_block_hash: [u8; 32],
         safe_block_hash: [u8; 32],
         head_block_hash: [u8; 32],
     ) -> BlockBatch {
         let fork_choice_state = ForkchoiceState {
             head_block_hash: B256::new(head_block_hash),
             safe_block_hash: B256::new(safe_block_hash),
-            finalized_block_hash: B256::new(safe_block_hash),
+            finalized_block_hash: B256::new(finalized_block_hash),
         };
-        let payload_attr = Self::create_payload_attributes(fork_choice_state.safe_block_hash);
         let mut payload_id = PayloadId::new([0; 8]);
-        loop {
+        // loop {
+            let payload_attr = Self::create_payload_attributes(fork_choice_state.head_block_hash);
             match self.get_new_payload_id(fork_choice_state, &payload_attr).await {
                 Some(pid) => {
                     payload_id = pid;
-                    break;
+                    
                 }
                 None => {
-                    tokio::time::sleep(Duration::from_secs(5)).await;
-                    continue;
+                    panic!("payload id is none");
                 }
             };
-        }
+        // }
         // try to get payload
         let payload = <T as EngineApiClient<EthEngineTypes>>::get_payload_v3(
             &self.engine_api_client,
@@ -238,12 +238,13 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
         .await
         .expect("Failed to get payload");
         info!("Got payload: {:?}", payload);
-        let hash = payload.execution_payload.payload_inner.payload_inner.block_hash;
-        let mut bytes = [0u8; 32];
-        bytes.copy_from_slice(hash.as_slice());
+        let _ = tokio::time::sleep(Duration::from_secs(5)).await;
+        let block_bytes = payload.execution_payload.payload_inner.payload_inner.block_hash;
+        let mut block_hash = [0u8; 32];
+        block_hash.copy_from_slice(block_bytes.as_slice());
         let txns = self.payload_to_txns(payload_id, payload);
-        let hash = bytes;
-        BlockBatch { txns, block_hash: hash }
+        info!("send block batch with hash {:?}", block_bytes);
+        BlockBatch { txns, block_hash }
     }
 
     async fn send_ordered_block(&self, txns: Vec<GTxn>) {
@@ -269,6 +270,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
         if payload_status.latest_valid_hash.is_none() {
             panic!("payload status latest valid hash is none");
         }
+        info!("get block hash in payload statue{:?}", payload_status);
         let mut hash = [0u8; 32];
         hash.copy_from_slice(payload_status.latest_valid_hash.unwrap().as_slice());
         self.block_hash_channel_sender.send(hash).expect("send block hash failed");

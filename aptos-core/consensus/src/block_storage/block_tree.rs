@@ -493,12 +493,16 @@ impl BlockTree {
     }
 
     pub fn get_safe_block_hash(&self) -> HashValue {
-        self.get_block_reth_hash(self.commit_root_id)
+        self.get_block_reth_hash(self.highest_certified_block_id)
     }
 
     pub fn get_head_block_hash(&self) -> HashValue {
            self.get_block_reth_hash(self.highest_block_id)
     }
+
+    pub fn get_finalize_block_hash(&self) -> HashValue {
+        self.get_block_reth_hash(self.commit_root_id)
+ }
 
     pub(super) fn max_pruned_blocks_in_mem(&self) -> usize {
         self.max_pruned_blocks_in_mem

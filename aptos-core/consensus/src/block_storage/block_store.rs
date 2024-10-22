@@ -133,6 +133,10 @@ impl BlockStore {
         self.inner.read().get_head_block_hash()
     }
 
+    pub fn get_finalize_hash(&self) -> HashValue {
+        self.inner.read().get_finalize_block_hash()
+    }
+
     async fn try_send_for_execution(&self) {
         // reproduce the same batches (important for the commit phase)
         let mut certs = self.inner.read().get_all_quorum_certs_with_commit_info();

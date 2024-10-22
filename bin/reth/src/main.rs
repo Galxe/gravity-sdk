@@ -5,8 +5,10 @@ mod reth_client;
 
 use std::sync::Arc;
 use clap::Args;
+use reth_provider::BlockReaderIdExt;
 use tracing::info;
 use std::thread;
+use alloy_eips::{BlockId, BlockNumberOrTag};
 use crate::cli::Cli;
 /// Parameters for configuring the engine
 #[derive(Debug, Clone, Args, PartialEq, Eq, Default)]
@@ -38,7 +40,7 @@ struct TestConsensusLayer<T> {
 }
 
 impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync + 'static> TestConsensusLayer<T> {
-    fn new(reth_cli: RethCli<T>, node_config: NodeConfig, safe_hash: [u8; 32], head_hash: [u8; 32]) -> Self {
+    fn new(reth_cli: RethCli<T>, node_config: NodeConfig, finalize_hash: [u8; 32], safe_hash: [u8; 32], head_hash: [u8; 32]) -> Self {
         let mut safe_slice = [0u8; 32];
         safe_slice.copy_from_slice(safe_hash.as_slice());
         let mut head_slice = [0u8; 32];
@@ -48,7 +50,10 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync + 'static> TestConsensu
             safe_hash: safe_slice,
             head_hash: head_slice,
             reth_cli: reth_cli.clone(),
-            consensus_engine: ConsensusEngine::init(node_config, reth_cli, safe_hash, head_hash),
+            consensus_engine: ConsensusEngine::init(node_config, reth_cli,
+                finalize_hash,
+                 safe_hash,
+                  head_hash),
         }
     }
 
@@ -91,16 +96,36 @@ fn run_server() {
                 })
                 .await?;
             let client = handle.node.engine_http_client();
-            let genesis = handle.node.chain_spec().genesis_hash();
-            let safe_hash = genesis;
-            let head_hash = genesis;
+            let genesis_hash = handle.node.chain_spec().genesis_hash();
+            let mut head_hash = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Latest)).unwrap().unwrap().hash_slow();
+            let mut safe_hash = {
+                let res = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Safe));
+                if let Ok(Some(block)) = res {
+                    block.hash_slow()
+                } else {
+                    // None safe block, use genesis
+                    head_hash = genesis_hash;
+                    genesis_hash
+                }
+            };
+            let finalized_hash = {
+                let res = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Finalized));
+                if let Ok(Some(block)) = res {
+                    block.hash_slow()
+                } else {
+                    // None safe block, use genesis
+                    safe_hash = genesis_hash;
+                    head_hash = genesis_hash;
+                    genesis_hash
+                }
+            };
             // let head_hash = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Latest)).unwrap().unwrap().hash_slow();
             // let safe_hash = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Safe)).unwrap().unwrap().hash_slow();
             info!("init hash head{:?} safe {:?}", head_hash, safe_hash);
             let id = handle.node.chain_spec().chain().id();
             let _ = thread::spawn(move || {
                 let mut cl =
-                    TestConsensusLayer::new(RethCli::new(client, id), gcei_config, safe_hash.into(), head_hash.into());
+                    TestConsensusLayer::new(RethCli::new(client, id), gcei_config, finalized_hash.into(), safe_hash.into(), head_hash.into());
                 tokio::runtime::Runtime::new()
                     .unwrap()
                     .block_on(cl.run());
