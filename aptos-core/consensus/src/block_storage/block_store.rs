@@ -134,7 +134,7 @@ impl BlockStore {
     }
 
     pub fn get_finalize_hash(&self) -> HashValue {
-        self.inner.read().get_finalize_block_hash()
+        self.inner.read().get_finalized_block_hash()
     }
 
     async fn try_send_for_execution(&self) {

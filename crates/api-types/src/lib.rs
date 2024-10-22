@@ -6,15 +6,20 @@ use std::future::Future;
 use futures::future::BoxFuture;
 use tokio::{runtime::Runtime, sync::Mutex};
 
+#[derive(Clone, Copy)]
+pub struct BlockHashState {
+    pub safe_hash: [u8; 32],
+    pub head_hash: [u8; 32],
+    pub finalized_hash: [u8; 32]
+}
+
 #[async_trait]
 pub trait ConsensusApi: Send + Sync {
     // TODO(gravity_byteyue: change to return () when qs is ready)
     async fn request_payload<'a, 'b>(
         &'a self,
         closure: BoxFuture<'b, Result<(), SendError>>,
-        finalized_block_hash: [u8; 32],
-        safe_block_hash: [u8; 32],
-        head_block_hash: [u8; 32],
+        state_block_hash: BlockHashState,
     ) -> Result<BlockBatch, SendError>;
 
     async fn send_order_block(&self, txns: Vec<GTxn>);
@@ -34,7 +39,7 @@ pub trait ExecutionApi: Send + Sync {
     // Request transactions from execution engine
     // safe block id is the last block id that has been committed in block tree
     // head block id is the last block id that received by the execution engine in block tree
-    async fn request_block_batch(&self, finalized_block_hash: [u8; 32], safe_block_hash: [u8; 32], head_block_hash: [u8; 32]) -> BlockBatch;
+    async fn request_block_batch(&self, state_block_hash: BlockHashState) -> BlockBatch;
 
     async fn send_ordered_block(&self, txns: Vec<GTxn>);
 

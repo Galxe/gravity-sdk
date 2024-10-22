@@ -4,7 +4,7 @@ use alloy_primitives::{Address, B256};
 use alloy_rpc_types_engine::{ForkchoiceState, ForkchoiceUpdated, PayloadAttributes, PayloadId};
 use anyhow::Context;
 use api::ExecutionApi;
-use api_types::{BlockBatch, GTxn};
+use api_types::{BlockBatch, BlockHashState, GTxn};
 use jsonrpsee::core::async_trait;
 use reth::api::EngineTypes;
 use reth_ethereum_engine_primitives::{EthEngineTypes, EthPayloadAttributes};
@@ -208,14 +208,12 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
 impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethCli<T> {
     async fn request_block_batch(
         &self,
-        finalized_block_hash: [u8; 32],
-        safe_block_hash: [u8; 32],
-        head_block_hash: [u8; 32],
+        state_block_hash: BlockHashState,
     ) -> BlockBatch {
         let fork_choice_state = ForkchoiceState {
-            head_block_hash: B256::new(head_block_hash),
-            safe_block_hash: B256::new(safe_block_hash),
-            finalized_block_hash: B256::new(finalized_block_hash),
+            head_block_hash: B256::new(state_block_hash.head_hash),
+            safe_block_hash: B256::new(state_block_hash.safe_hash),
+            finalized_block_hash: B256::new(state_block_hash.finalized_hash),
         };
         let mut payload_id = PayloadId::new([0; 8]);
         // loop {

@@ -9,7 +9,7 @@ use crate::{
     logger,
     network::{create_network_runtime, extract_network_configs},
 };
-use api_types::{BlockBatch, ConsensusApi, ExecutionApi, GTxn};
+use api_types::{BlockBatch, BlockHashState, ConsensusApi, ExecutionApi, GTxn};
 use aptos_config::{config::NodeConfig, network_id::NetworkId};
 use aptos_consensus::{
     gravity_state_computer::ConsensusAdapterArgs,
@@ -156,16 +156,14 @@ impl ConsensusApi for ConsensusEngine {
     async fn request_payload<'a, 'b>(
         &'a self,
         closure: BoxFuture<'b, Result<(), SendError>>,
-        finalized_block_hash: [u8; 32],
-        safe_block_hash: [u8; 32],
-        head_block_hash: [u8; 32],
+        state_block_hash: BlockHashState,
     ) -> Result<BlockBatch, SendError>
     {
         // let txns = self.execution_api.request_transactions(safe_block_hash, head_block_hash).await;
         // self.batch_client.submit(txns);
         // closure.await
 
-        Ok(self.execution_api.request_block_batch(finalized_block_hash, safe_block_hash, head_block_hash).await)
+        Ok(self.execution_api.request_block_batch(state_block_hash).await)
     }
 
     async fn send_order_block(&self, txns: Vec<GTxn>) {

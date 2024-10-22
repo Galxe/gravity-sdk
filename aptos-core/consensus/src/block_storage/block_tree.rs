@@ -500,7 +500,7 @@ impl BlockTree {
            self.get_block_reth_hash(self.highest_block_id)
     }
 
-    pub fn get_finalize_block_hash(&self) -> HashValue {
+    pub fn get_finalized_block_hash(&self) -> HashValue {
         self.get_block_reth_hash(self.commit_root_id)
  }
 
