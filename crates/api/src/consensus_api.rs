@@ -42,7 +42,7 @@ pub struct ConsensusEngine {
 
 
 impl ConsensusEngine {
-    pub fn init(node_config: NodeConfig, execution_api: Arc<dyn ExecutionApi>, finalize_hash: [u8; 32], safe_hash: [u8; 32], head_hash: [u8; 32]) -> Arc<Self> {
+    pub fn init(node_config: NodeConfig, execution_api: Arc<dyn ExecutionApi>, block_hash_state: BlockHashState) -> Arc<Self> {
         let gravity_db = init_gravity_db(&node_config);
         let peers_and_metadata = init_peers_and_metadata(&node_config, &gravity_db);
         let (_remote_log_receiver, _logger_filter_update) =
@@ -142,7 +142,7 @@ impl ConsensusEngine {
         });
         quorum_store_client.set_consensus_api(arc_self.clone());
         // sleep
-        quorum_store_client.set_init_reth_hash(HashValue::new(finalize_hash), HashValue::new(safe_hash), HashValue::new(head_hash));
+        quorum_store_client.set_init_reth_hash(block_hash_state);
         // process new round should be after init reth hash
         let _ = event_subscription_service.notify_initial_configs(1_u64);
 

@@ -3,13 +3,14 @@
 mod cli;
 mod reth_client;
 
-use std::sync::Arc;
+use crate::cli::Cli;
+use alloy_eips::{BlockId, BlockNumberOrTag};
+use api_types::BlockHashState;
 use clap::Args;
 use reth_provider::BlockReaderIdExt;
-use tracing::info;
+use std::sync::Arc;
 use std::thread;
-use alloy_eips::{BlockId, BlockNumberOrTag};
-use crate::cli::Cli;
+use tracing::info;
 /// Parameters for configuring the engine
 #[derive(Debug, Clone, Args, PartialEq, Eq, Default)]
 #[command(next_help_heading = "Engine")]
@@ -19,6 +20,10 @@ pub struct EngineArgs {
     pub experimental: bool,
 }
 
+use crate::reth_client::RethCli;
+use api::consensus_api::ConsensusEngine;
+use api::{check_bootstrap_config, NodeConfig};
+use api_types::ConsensusApi;
 use clap::Parser;
 use reth_ethereum_engine_primitives::EthEngineTypes;
 use reth_node_builder::engine_tree_config;
@@ -27,10 +32,6 @@ use reth_node_core::args::utils::DefaultChainSpecParser;
 use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
 use reth_provider::providers::BlockchainProvider2;
 use reth_rpc_api::EngineEthApiClient;
-use api::{check_bootstrap_config, NodeConfig};
-use api::consensus_api::ConsensusEngine;
-use api_types::ConsensusApi;
-use crate::reth_client::RethCli;
 
 struct TestConsensusLayer<T> {
     safe_hash: [u8; 32],
@@ -40,20 +41,21 @@ struct TestConsensusLayer<T> {
 }
 
 impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync + 'static> TestConsensusLayer<T> {
-    fn new(reth_cli: RethCli<T>, node_config: NodeConfig, finalize_hash: [u8; 32], safe_hash: [u8; 32], head_hash: [u8; 32]) -> Self {
+    fn new(
+        reth_cli: RethCli<T>,
+        node_config: NodeConfig,
+        block_hash_state: BlockHashState,
+    ) -> Self {
         let mut safe_slice = [0u8; 32];
-        safe_slice.copy_from_slice(safe_hash.as_slice());
+        safe_slice.copy_from_slice(block_hash_state.safe_hash.as_slice());
         let mut head_slice = [0u8; 32];
-        head_slice.copy_from_slice(head_hash.as_slice());
+        head_slice.copy_from_slice(block_hash_state.head_hash.as_slice());
         let reth_cli = Arc::new(reth_cli);
         Self {
             safe_hash: safe_slice,
             head_hash: head_slice,
             reth_cli: reth_cli.clone(),
-            consensus_engine: ConsensusEngine::init(node_config, reth_cli,
-                finalize_hash,
-                 safe_hash,
-                  head_hash),
+            consensus_engine: ConsensusEngine::init(node_config, reth_cli, block_hash_state),
         }
     }
 
@@ -97,7 +99,13 @@ fn run_server() {
                 .await?;
             let client = handle.node.engine_http_client();
             let genesis_hash = handle.node.chain_spec().genesis_hash();
-            let mut head_hash = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Latest)).unwrap().unwrap().hash_slow();
+            let mut head_hash = handle
+                .node
+                .provider
+                .block_by_id(BlockId::Number(BlockNumberOrTag::Latest))
+                .unwrap()
+                .unwrap()
+                .hash_slow();
             let mut safe_hash = {
                 let res = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Safe));
                 if let Ok(Some(block)) = res {
@@ -109,7 +117,8 @@ fn run_server() {
                 }
             };
             let finalized_hash = {
-                let res = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Finalized));
+                let res =
+                    handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Finalized));
                 if let Ok(Some(block)) = res {
                     block.hash_slow()
                 } else {
@@ -124,11 +133,16 @@ fn run_server() {
             info!("init hash head{:?} safe {:?}", head_hash, safe_hash);
             let id = handle.node.chain_spec().chain().id();
             let _ = thread::spawn(move || {
-                let mut cl =
-                    TestConsensusLayer::new(RethCli::new(client, id), gcei_config, finalized_hash.into(), safe_hash.into(), head_hash.into());
-                tokio::runtime::Runtime::new()
-                    .unwrap()
-                    .block_on(cl.run());
+                let mut cl = TestConsensusLayer::new(
+                    RethCli::new(client, id),
+                    gcei_config,
+                    BlockHashState {
+                        safe_hash: *safe_hash,
+                        head_hash: *head_hash,
+                        finalized_hash: *finalized_hash,
+                    },
+                );
+                tokio::runtime::Runtime::new().unwrap().block_on(cl.run());
             });
             handle.node_exit_future.await
         })

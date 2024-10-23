@@ -35,15 +35,15 @@ fi
 port1=""
 port2=""
 port3=""
-if [ $node_arg = "node1" ]; then
+if [ "$node_arg" == "node1" ]; then
     port1="12024"
     port2="8551"
     port3="8545"
-elif [ $node_arg = "node2" ]; then
+elif [ "$node_arg" == "node2" ]; then
     port1="12025"
     port2="8552"
     port3="8546"
-elif [ $node_arg = "node3" ]; then
+elif [ "$node_arg" == "node3" ]; then
     port1="12026"
     port2="8553"
     port3="8547"
@@ -53,4 +53,5 @@ else
     port3="8548"
 fi
 
+echo "start $node_arg ${port1} ${port2} ${port3}"
 start_node ${port1} ${port2} ${port3}

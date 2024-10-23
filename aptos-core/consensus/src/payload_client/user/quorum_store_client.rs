@@ -103,16 +103,10 @@ impl QuorumStoreClient {
 
     pub fn set_init_reth_hash(
         &self,
-        finalized_hash: HashValue,
-        safe_hash: HashValue,
-        head_hash: HashValue,
+        block_hash_state: BlockHashState,
     ) {
         let mut hash = self.init_hash.blocking_lock();
-        *hash = Some(BlockHashState {
-            safe_hash: *safe_hash,
-            head_hash: *head_hash,
-            finalized_hash: *finalized_hash,
-        });
+        *hash = Some(block_hash_state);
     }
 
     pub fn set_block_store(&self, block_store: Arc<BlockStore>) {
