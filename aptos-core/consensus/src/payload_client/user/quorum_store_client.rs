@@ -31,13 +31,6 @@ use tokio::{
 
 const NO_TXN_DELAY: u64 = 30;
 
-// #[derive(Debug, Clone, Copy)]
-// struct InitHash {
-//     safe_hash: HashValue,
-//     head_hash: HashValue,
-//     finalize_hash: HashValue
-// }
-
 pub fn debug_block_hash_state(state: &BlockHashState) -> String {
     format!(
         "safe_hash: {:?}, head_hash: {:?}, finalized_hash: {:?}",

@@ -167,17 +167,14 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
         let payload_attributes = Self::create_payload_attributes(parent_beacon_block_root);
         // update ForkchoiceState and get payload_id
         let mut payload_id = PayloadId::new([0; 8]);
-        // loop {
-            match self.get_new_payload_id(fork_choice_state, &payload_attributes).await {
-                Some(pid) => {
-                    payload_id = pid;
-                    // break;
-                }
-                None => {
-                    panic!("get None payload id");
-                }
-            };
-        // }
+        match self.get_new_payload_id(fork_choice_state, &payload_attributes).await {
+            Some(pid) => {
+                payload_id = pid;
+            }
+            None => {
+                panic!("get None payload id");
+            }
+        };
         // try to get payload
         let payload = <T as EngineApiClient<EthEngineTypes>>::get_payload_v3(
             &self.engine_api_client,
@@ -206,28 +203,22 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
 
 #[async_trait]
 impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethCli<T> {
-    async fn request_block_batch(
-        &self,
-        state_block_hash: BlockHashState,
-    ) -> BlockBatch {
+    async fn request_block_batch(&self, state_block_hash: BlockHashState) -> BlockBatch {
         let fork_choice_state = ForkchoiceState {
             head_block_hash: B256::new(state_block_hash.head_hash),
             safe_block_hash: B256::new(state_block_hash.safe_hash),
             finalized_block_hash: B256::new(state_block_hash.finalized_hash),
         };
         let mut payload_id = PayloadId::new([0; 8]);
-        // loop {
-            let payload_attr = Self::create_payload_attributes(fork_choice_state.head_block_hash);
-            match self.get_new_payload_id(fork_choice_state, &payload_attr).await {
-                Some(pid) => {
-                    payload_id = pid;
-                    
-                }
-                None => {
-                    panic!("payload id is none");
-                }
-            };
-        // }
+        let payload_attr = Self::create_payload_attributes(fork_choice_state.head_block_hash);
+        match self.get_new_payload_id(fork_choice_state, &payload_attr).await {
+            Some(pid) => {
+                payload_id = pid;
+            }
+            None => {
+                panic!("payload id is none");
+            }
+        };
         // try to get payload
         let payload = <T as EngineApiClient<EthEngineTypes>>::get_payload_v3(
             &self.engine_api_client,
