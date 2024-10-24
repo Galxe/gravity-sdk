@@ -141,6 +141,10 @@ impl ConsensusEngine {
         quorum_store_client.set_consensus_api(arc_self.clone());
         // sleep
         quorum_store_client.set_init_reth_hash(block_hash_state);
+        // Wait for the network to be done
+        arc_self.runtime_vec.last().as_ref().expect("msg").block_on(async move {
+            tokio::time::sleep(Duration::from_secs(10)).await;
+        });
         // process new round should be after init reth hash
         let _ = event_subscription_service.notify_initial_configs(1_u64);
 

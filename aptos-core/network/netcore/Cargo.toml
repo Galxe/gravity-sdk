@@ -16,6 +16,7 @@ rust-version = { workspace = true }
 aptos-memsocket = { workspace = true }
 aptos-proxy = { workspace = true }
 aptos-types = { workspace = true }
+aptos-logger = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
 pin-project = { workspace = true }

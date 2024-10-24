@@ -1517,6 +1517,7 @@ impl RoundManager {
                     };
                 },
                 (peer_id, event) = event_rx.select_next_some() => {
+                    debug!("receive event {:?}", event);
                     let result = match event {
                         VerifiedEvent::VoteMsg(vote_msg) => {
                             monitor!("process_vote", self.process_vote_msg(*vote_msg).await)
