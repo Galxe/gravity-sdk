@@ -330,7 +330,7 @@ impl RoundState {
         let timeout_sender = self.timeout_sender.clone();
         // let timeout = self.setup_deadline(multiplier);
         // TODO(gravity_byteyue): Currently we don't allow local timeout, would allow this when refactoring
-        let timeout = Duration::from_secs(u64::MAX);
+        let timeout = Duration::from_secs(1);
         trace!(
             "Scheduling timeout of {} ms for round {}",
             timeout.as_millis(),

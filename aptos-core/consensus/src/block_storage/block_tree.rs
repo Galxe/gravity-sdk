@@ -74,7 +74,11 @@ pub struct BlockTree {
     commit_root_id: HashValue,
     /// A certified block id with highest round
     highest_certified_block_id: HashValue,
-    highest_block_id: HashValue,
+    // used in reth
+    head_block_id: HashValue,
+    safe_block_id: HashValue,
+    finalized_block_id: HashValue,
+
     /// The quorum certificate of highest_certified_block
     highest_quorum_cert: Arc<QuorumCert>,
     /// The highest 2-chain timeout certificate (if any).
@@ -111,7 +115,7 @@ impl BlockTree {
     }
 
     pub fn is_last_block_qc(&self) -> bool {
-        self.highest_certified_block_id == self.highest_block_id
+        self.highest_certified_block_id == self.head_block_id
     }
 
     fn build_node_string(&self, block_id: &HashValue) -> String {
@@ -183,7 +187,9 @@ impl BlockTree {
             pruned_block_ids,
             max_pruned_blocks_in_mem,
             highest_2chain_timeout_cert,
-            highest_block_id: root_id,
+            head_block_id: root_id,
+            safe_block_id: root_id,
+            finalized_block_id: root_id,
         }
     }
 
@@ -283,7 +289,7 @@ impl BlockTree {
     ) -> anyhow::Result<Arc<PipelinedBlock>> {
         let block_id = block.id();
         if !block.block().is_nil_block() {
-            self.highest_block_id = block_id;
+            self.head_block_id = block_id;
         }
         if let Some(existing_block) = self.get_block(&block_id) {
             debug!("Already had block {:?} for id {:?} when trying to add another block {:?} for the same id",
@@ -308,7 +314,7 @@ impl BlockTree {
     fn update_highest_commit_cert(&mut self, new_commit_cert: WrappedLedgerInfo) {
         if new_commit_cert.commit_info().round() > self.highest_commit_cert.commit_info().round() {
             self.highest_commit_cert = Arc::new(new_commit_cert);
-            self.update_commit_root(self.highest_commit_cert.commit_info().id());
+            self.update_commit_and_finalized_root(self.highest_commit_cert.commit_info().id());
         }
     }
 
@@ -333,6 +339,9 @@ impl BlockTree {
             Some(block) => {
                 if block.round() > self.highest_certified_block().round() {
                     self.highest_certified_block_id = block.id();
+                    if !block.block().is_nil_block() {
+                        self.safe_block_id = block.id();
+                    }
                     self.highest_quorum_cert = Arc::clone(&qc);
                 }
             },
@@ -399,8 +408,12 @@ impl BlockTree {
         self.ordered_root_id = root_id;
     }
 
-    pub(super) fn update_commit_root(&mut self, root_id: HashValue) {
+    pub(super) fn update_commit_and_finalized_root(&mut self, root_id: HashValue) {
         assert!(self.block_exists(&root_id));
+        let block = self.get_block(&root_id).expect("Block must exist");
+        if !block.block().is_nil_block() {
+            self.finalized_block_id = root_id;
+        }
         self.commit_root_id = root_id;
     }
 
@@ -497,7 +510,7 @@ impl BlockTree {
     }
 
     pub fn get_head_block_hash(&self) -> HashValue {
-           self.get_block_reth_hash(self.highest_block_id)
+           self.get_block_reth_hash(self.head_block_id)
     }
 
     pub fn get_finalized_block_hash(&self) -> HashValue {
