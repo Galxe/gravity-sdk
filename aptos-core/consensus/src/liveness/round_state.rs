@@ -333,7 +333,7 @@ impl RoundState {
     /// Setup the timeout task and return the duration of the current timeout
     fn setup_timeout(&mut self, multiplier: u32) -> Duration {
         let timeout_sender = self.timeout_sender.clone();
-        let timeout = self.setup_deadline(multiplier);
+        let timeout = self.setup_deadline(multiplier * 2);
         trace!(
             "Scheduling timeout of {} ms for round {}",
             timeout.as_millis(),

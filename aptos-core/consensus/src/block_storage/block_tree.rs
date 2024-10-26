@@ -114,7 +114,7 @@ impl BlockTree {
         self.id_to_block.len()
     }
 
-    pub fn is_safe_block_nil(&self) -> bool {
+    pub fn is_safe_block_payload_none(&self) -> bool {
         // Genesis block is a nil block.
         // And when the safe block is nil, it means it is genesis.
         self.get_block(&self.safe_block_id)
@@ -124,7 +124,7 @@ impl BlockTree {
             .is_none()
     }
 
-    pub fn is_finalized_block_nil(&self) -> bool {
+    pub fn is_finalized_block_payload_none(&self) -> bool {
         // Genesis block is a nil block.
         // And when the finalized block is nil, it means it is genesis.
         self.get_block(&self.finalized_block_id)
@@ -134,7 +134,7 @@ impl BlockTree {
             .is_none()
     }
 
-    pub fn is_head_block_nil(&self) -> bool {
+    pub fn is_head_block_payload_none(&self) -> bool {
         // Genesis block is a nil block.
         // And when the head block is nil, it means it is genesis.
         self.get_block(&self.head_block_id)
@@ -539,7 +539,7 @@ impl BlockTree {
     }
 
     pub fn get_safe_block_hash(&self) -> HashValue {
-        self.get_block_reth_hash(self.highest_certified_block_id)
+        self.get_block_reth_hash(self.safe_block_id)
     }
 
     pub fn get_head_block_hash(&self) -> HashValue {

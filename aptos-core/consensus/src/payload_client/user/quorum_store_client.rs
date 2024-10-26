@@ -178,28 +178,28 @@ impl QuorumStoreClient {
                         }
                     }
                 }
-                let is_head_nil = block_store.get_block_tree().read().is_head_block_nil();
-                let is_safe_nil = block_store.get_block_tree().read().is_safe_block_nil();
-                let is_finalized_nil = block_store.get_block_tree().read().is_finalized_block_nil();
+                let is_head_invalid = block_store.get_block_tree().read().is_head_block_payload_none();
+                let is_safe_invalid = block_store.get_block_tree().read().is_safe_block_payload_none();
+                let is_finalized_invalid = block_store.get_block_tree().read().is_finalized_block_payload_none();
                 info!(
                         "request payload, head nil: {}, safe nil: {}, finalized nil: {}",
-                        is_head_nil, is_safe_nil, is_finalized_nil
+                        is_head_invalid, is_safe_invalid, is_finalized_invalid
                     );
-                if is_head_nil && is_safe_nil && is_finalized_nil {
+                if is_head_invalid && is_safe_invalid && is_finalized_invalid {
                     finalized_hash.copy_from_slice(init_hash.unwrap().finalized_hash.as_slice());
                     safe_hash.copy_from_slice(init_hash.unwrap().safe_hash.as_slice());
                     head_hash.copy_from_slice(init_hash.unwrap().head_hash.as_slice());
-                } else if is_finalized_nil && !is_safe_nil && !is_head_nil {
+                } else if is_finalized_invalid && !is_safe_invalid && !is_head_invalid {
                     // head block qc means the safe block qc, too
                     finalized_hash.copy_from_slice(init_hash.unwrap().finalized_hash.as_slice());
                     safe_hash.copy_from_slice(self.get_safe_block_hash().as_ref());
                     head_hash.copy_from_slice(self.get_head_block_hash().as_ref());
-                } else if !is_finalized_nil && !is_safe_nil && !is_head_nil {
+                } else if !is_finalized_invalid && !is_safe_invalid && !is_head_invalid {
                     finalized_hash.copy_from_slice(self.get_finalized_block_hash().as_ref());
                     safe_hash.copy_from_slice(self.get_safe_block_hash().as_ref());
                     head_hash.copy_from_slice(self.get_head_block_hash().as_ref());
                 } else {
-                    panic!("invalid block state with head nil: {}, safe nil: {}, finalized nil: {}", is_head_nil, is_safe_nil, is_finalized_nil);
+                    panic!("invalid block state with head nil: {}, safe nil: {}, finalized nil: {}", is_head_invalid, is_safe_invalid, is_finalized_invalid);
                 }
             }
         }
