@@ -1232,7 +1232,6 @@ impl RoundManager {
         result: VoteReceptionResult,
     ) -> anyhow::Result<()> {
         let round = vote.vote_data().proposed().round();
-        info!("Processing vote reception result: {:?}", result);
         match result {
             VoteReceptionResult::NewQuorumCertificate(qc) => {
                 if !vote.is_timeout() {

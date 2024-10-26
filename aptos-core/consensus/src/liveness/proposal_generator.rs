@@ -451,7 +451,6 @@ impl ProposalGenerator {
                 .collect();
             let validator_txn_filter =
                 vtxn_pool::TransactionFilter::PendingTxnHashSet(pending_validator_txn_hashes);
-            info!("call pull payload in generate_proposal");
             let (validator_txns, mut payload) = self
                 .payload_client
                 .pull_payload(

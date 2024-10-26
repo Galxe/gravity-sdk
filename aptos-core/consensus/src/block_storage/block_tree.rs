@@ -551,7 +551,6 @@ impl BlockTree {
     }
 
     pub fn get_finalized_block_hash(&self) -> HashValue {
-        info!("get_finalized_block_hash {:?}", self.get_block(&self.finalized_block_id));
         self.get_block_reth_hash(self.finalized_block_id)
  }
 
