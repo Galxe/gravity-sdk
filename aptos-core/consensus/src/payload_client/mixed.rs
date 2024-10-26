@@ -81,7 +81,6 @@ impl PayloadClient for MixedPayloadClient {
         recent_max_fill_fraction: f32,
         block_timestamp: Duration,
     ) -> anyhow::Result<(Vec<ValidatorTransaction>, Payload), QuorumStoreError> {
-        info!("MixedPayloadClient::pull_payload");
         // Pull validator txns first.
         let validator_txn_pull_timer = Instant::now();
         let mut validator_txns = self

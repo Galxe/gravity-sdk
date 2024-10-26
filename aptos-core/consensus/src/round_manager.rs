@@ -732,9 +732,6 @@ impl RoundManager {
             },
         };
         if !timeout_vote.is_timeout() {
-            info!(
-                "!timeout_vote.is_timeout()"
-            );
             let timeout = timeout_vote
                 .generate_2chain_timeout(self.block_store.highest_quorum_cert().as_ref().clone());
             let signature = self
