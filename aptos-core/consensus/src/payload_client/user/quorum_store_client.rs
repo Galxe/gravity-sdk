@@ -252,7 +252,6 @@ impl UserPayloadClient for QuorumStoreClient {
         recent_max_fill_fraction: f32,
         block_timestamp: Duration,
     ) -> anyhow::Result<Payload, QuorumStoreError> {
-        info!("User pull payload");
         let return_non_full = recent_max_fill_fraction
             < self.wait_for_full_blocks_above_recent_fill_threshold
             && pending_uncommitted_blocks < self.wait_for_full_blocks_above_pending_blocks;
