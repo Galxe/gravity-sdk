@@ -114,8 +114,41 @@ impl BlockTree {
         self.id_to_block.len()
     }
 
-    pub fn is_last_block_qc(&self) -> bool {
-        self.highest_certified_block_id == self.head_block_id
+    pub fn is_safe_block_nil(&self) -> bool {
+        // Genesis block is a nil block.
+        // And when the safe block is nil, it means it is genesis.
+        self.get_block(&self.safe_block_id)
+            .expect("Highest certified block must exist")
+            .block()
+            .payload()
+            .is_none()
+    }
+
+    pub fn is_finalized_block_nil(&self) -> bool {
+        // Genesis block is a nil block.
+        // And when the finalized block is nil, it means it is genesis.
+        self.get_block(&self.finalized_block_id)
+            .expect("Highest certified block must exist")
+            .block()
+            .payload()
+            .is_none()
+    }
+
+    pub fn is_head_block_nil(&self) -> bool {
+        // Genesis block is a nil block.
+        // And when the head block is nil, it means it is genesis.
+        self.get_block(&self.head_block_id)
+            .expect("Highest certified block must exist")
+            .block()
+            .payload()
+            .is_none()
+    }
+
+    pub fn is_head_block_qc(&self) -> bool {
+        info!("is_last_block_qc {:?}", self.id_to_quorum_cert.get(&self.head_block_id));
+        self.id_to_quorum_cert
+            .get(&self.head_block_id)
+            .is_some()
     }
 
     fn build_node_string(&self, block_id: &HashValue) -> String {
@@ -513,8 +546,13 @@ impl BlockTree {
            self.get_block_reth_hash(self.head_block_id)
     }
 
+    pub fn get_head_block(&self) -> Arc<PipelinedBlock> {
+        self.get_block(&self.head_block_id).expect("Head block must exist")
+    }
+
     pub fn get_finalized_block_hash(&self) -> HashValue {
-        self.get_block_reth_hash(self.commit_root_id)
+        info!("get_finalized_block_hash {:?}", self.get_block(&self.finalized_block_id));
+        self.get_block_reth_hash(self.finalized_block_id)
  }
 
     pub(super) fn max_pruned_blocks_in_mem(&self) -> usize {

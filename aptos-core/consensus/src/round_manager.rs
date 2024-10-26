@@ -1232,6 +1232,7 @@ impl RoundManager {
         result: VoteReceptionResult,
     ) -> anyhow::Result<()> {
         let round = vote.vote_data().proposed().round();
+        info!("Processing vote reception result: {:?}", result);
         match result {
             VoteReceptionResult::NewQuorumCertificate(qc) => {
                 if !vote.is_timeout() {
@@ -1517,7 +1518,7 @@ impl RoundManager {
                     };
                 },
                 (peer_id, event) = event_rx.select_next_some() => {
-                    debug!("receive event {:?}", event);
+                    info!("receive event {:?}", event);
                     let result = match event {
                         VerifiedEvent::VoteMsg(vote_msg) => {
                             monitor!("process_vote", self.process_vote_msg(*vote_msg).await)

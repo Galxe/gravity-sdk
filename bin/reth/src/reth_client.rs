@@ -227,7 +227,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
         .await
         .expect("Failed to get payload");
         info!("Got payload: {:?}", payload);
-        let _ = tokio::time::sleep(Duration::from_secs(5)).await;
+        let _ = tokio::time::sleep(Duration::from_secs(2)).await;
         let block_bytes = payload.execution_payload.payload_inner.payload_inner.block_hash;
         let mut block_hash = [0u8; 32];
         block_hash.copy_from_slice(block_bytes.as_slice());

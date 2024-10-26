@@ -257,6 +257,11 @@ impl RoundState {
         if sync_info.highest_ordered_round() > self.highest_ordered_round {
             self.highest_ordered_round = sync_info.highest_ordered_round();
         }
+        info!(
+            round = self.current_round,
+            highest_ordered_round = self.highest_ordered_round,
+            "Processing certificates With SyncInfo",
+        );
         let new_round = sync_info.highest_round() + 1;
         if new_round > self.current_round {
             let (prev_round_votes, prev_round_timeout_votes) = self.pending_votes.drain_votes();
@@ -328,9 +333,7 @@ impl RoundState {
     /// Setup the timeout task and return the duration of the current timeout
     fn setup_timeout(&mut self, multiplier: u32) -> Duration {
         let timeout_sender = self.timeout_sender.clone();
-        // let timeout = self.setup_deadline(multiplier);
-        // TODO(gravity_byteyue): Currently we don't allow local timeout, would allow this when refactoring
-        let timeout = Duration::from_secs(1);
+        let timeout = self.setup_deadline(multiplier);
         trace!(
             "Scheduling timeout of {} ms for round {}",
             timeout.as_millis(),
