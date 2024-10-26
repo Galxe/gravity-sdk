@@ -85,7 +85,6 @@ tokio = { workspace = true }
 tokio-retry = { workspace = true }
 tokio-stream = { workspace = true }
 api-types.workspace = true
-log = "0.4.22"
 
 [dev-dependencies]
 aptos-cached-packages = { workspace = true }
