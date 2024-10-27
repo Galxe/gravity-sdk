@@ -31,7 +31,7 @@ if [[ "$bin_name" != "gravity-reth" && "$bin_name" != "bench" ]]; then
     exit 1
 fi
 
-if [[ "$bin_version" != "release" && "$bin_name" != "debug" ]]; then
+if [[ "$bin_version" != "release" && "$bin_version" != "debug" ]]; then
     echo "Error: bin_version must be either 'release' or 'debug'."
     exit 1
 fi

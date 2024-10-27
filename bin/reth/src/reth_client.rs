@@ -19,6 +19,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::{Receiver, Sender, UnboundedReceiver, UnboundedSender};
 use tokio::sync::Mutex;
+use tokio::time::sleep;
 use tracing::info;
 use tracing::log::error;
 
@@ -126,8 +127,8 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
                 tx_envelope.nonce(),
                 tx_envelope.gas_limit() as u64,
                 U256::from(tx_envelope.gas_price().map(|x| x as u64).unwrap_or(0)),
-                secs, // hardcode 1day
-                tx_envelope.chain_id().map(|x| x).unwrap_or(114),// 0 is not allowed and would trigger crash
+                secs,                                             // hardcode 1day
+                tx_envelope.chain_id().map(|x| x).unwrap_or(114), // 0 is not allowed and would trigger crash
                 bytes,
             );
             info!("expiration time second is {:?}", secs);
@@ -296,6 +297,13 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
         }
     }
 
+    fn latest_block_number(&self) -> u64 {
+        match self.provider.block_by_number_or_tag(BlockNumberOrTag::Latest).unwrap() {
+            Some(block) => block.number, // The genesis block has a number of zero;
+            None => 0,
+        }
+    }
+
     async fn recover_ordered_block(&self, txns: Vec<GTxn>, res: [u8; 32]) {
         let mut payload: <EthEngineTypes as EngineTypes>::ExecutionPayloadV3 =
             serde_json::from_slice(txns[0].get_bytes()).expect("Failed to deserialize payload");
@@ -320,7 +328,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
                 if payload_status.latest_valid_hash.is_none() {
                     panic!("payload status latest valid hash is none");
                 }
-                info!("get block hash in payload statue{:?}", payload_status);
+                info!("recover success {:?}", payload_status);
                 let mut hash = [0u8; 32];
                 hash.copy_from_slice(payload_status.latest_valid_hash.unwrap().as_slice());
                 assert!(res == hash);

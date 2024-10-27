@@ -12,7 +12,7 @@ use crate::{
 use aptos_consensus_types::pipelined_block::PipelinedBlock;
 use aptos_crypto::HashValue;
 use aptos_executor_types::{ExecutorError, ExecutorResult};
-use aptos_logger::debug;
+use aptos_logger::{debug, info};
 use async_trait::async_trait;
 use futures::TryFutureExt;
 use std::{
@@ -61,6 +61,7 @@ impl StatelessPipeline for ExecutionSchedulePhase {
     const NAME: &'static str = "execution_schedule";
 
     async fn process(&self, req: ExecutionRequest) -> ExecutionWaitRequest {
+        info!("ExecutionSchedulePhase ???");
         let ExecutionRequest {
             ordered_blocks,
             lifetime_guard,

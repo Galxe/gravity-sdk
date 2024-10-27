@@ -110,7 +110,7 @@ use itertools::Itertools;
 use mini_moka::sync::Cache;
 use rand::{prelude::StdRng, thread_rng, SeedableRng};
 use std::{
-    borrow::Borrow, cmp::Ordering, collections::HashMap, hash::Hash, mem::{discriminant, Discriminant}, sync::Arc, time::Duration
+    borrow::Borrow, cmp::Ordering, collections::HashMap, hash::Hash, mem::{discriminant, Discriminant}, sync::Arc, thread::sleep, time::Duration
 };
 
 /// Range of rounds (window) that we might be calling proposer election
@@ -834,7 +834,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         info!(epoch = epoch, "Create BlockStore");
         // Read the last vote, before "moving" `recovery_data`
         let last_vote = recovery_data.last_vote();
-        let block_store = Arc::new(BlockStore::new(
+        let block_store = Arc::new(BlockStore::async_new(
             Arc::clone(&self.storage),
             recovery_data,
             self.execution_client.clone(),
@@ -845,7 +845,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             onchain_consensus_config.order_vote_enabled(),
             self.pending_blocks.clone(),
             self.execution_api.clone(),
-        ));
+        ).await);
+
         // We'd better set block store here before we construct any following struct
         // Since the round_manager.init might trigger new round event to produce proposal
         self.quorum_store_client.as_ref().expect("QuorumStoreClient not set").set_block_store(block_store.clone());

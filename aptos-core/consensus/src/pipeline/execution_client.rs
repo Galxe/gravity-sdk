@@ -284,6 +284,7 @@ impl ExecutionProxyClient {
         tokio::spawn(execution_wait_phase.start());
         tokio::spawn(signing_phase.start());
         tokio::spawn(persisting_phase.start());
+        info!("buffer_manager.start");
         tokio::spawn(buffer_manager.start());
     }
 }
@@ -357,7 +358,7 @@ impl TExecutionClient for ExecutionProxyClient {
         for block in blocks {
             block.set_insertion_time();
         }
-
+        info!("finalize_order");
         if execute_tx
             .send(OrderedBlocks {
                 ordered_blocks: blocks

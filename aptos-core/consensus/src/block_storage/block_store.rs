@@ -19,6 +19,7 @@ use crate::{
 };
 use anyhow::{bail, ensure, format_err, Context};
 use api_types::ExecutionApi;
+use aptos_consensus_types::common::Payload::DirectMempool;
 use aptos_consensus_types::{
     block::Block,
     common::Round,
@@ -35,6 +36,8 @@ use aptos_logger::prelude::*;
 use aptos_types::ledger_info::LedgerInfoWithSignatures;
 use aptos_consensus_types::common::Payload::DirectMempool;
 use futures::executor::block_on;
+use tokio::runtime::Runtime;
+
 #[cfg(test)]
 use std::collections::VecDeque;
 #[cfg(any(test, feature = "fuzzing"))]
@@ -125,6 +128,40 @@ impl BlockStore {
         block_store
     }
 
+    pub async fn async_new(
+        storage: Arc<dyn PersistentLivenessStorage>,
+        initial_data: RecoveryData,
+        execution_client: Arc<dyn TExecutionClient>,
+        max_pruned_blocks_in_mem: usize,
+        time_service: Arc<dyn TimeService>,
+        vote_back_pressure_limit: Round,
+        payload_manager: Arc<dyn TPayloadManager>,
+        order_vote_enabled: bool,
+        pending_blocks: Arc<Mutex<PendingBlocks>>,
+        execution_api: Option<Arc<dyn ExecutionApi>>,
+    ) -> Self {
+        let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
+        let (root, blocks, quorum_certs) = initial_data.take();
+        info!("async_new root {:?}", root);
+        let block_store = Self::build(
+            root,
+            blocks,
+            quorum_certs,
+            highest_2chain_tc,
+            execution_client,
+            storage,
+            max_pruned_blocks_in_mem,
+            time_service,
+            vote_back_pressure_limit,
+            payload_manager,
+            order_vote_enabled,
+            pending_blocks,
+            execution_api,
+        ).await;
+        block_store.try_send_for_execution().await;
+        block_store
+    }
+
     pub fn get_block_tree(&self) -> Arc<RwLock<BlockTree>> {
         self.inner.clone()
     }
@@ -178,11 +215,7 @@ impl BlockStore {
         let RootInfo(root_block, root_qc, root_ordered_cert, root_commit_cert) = root;
 
         // TODO(gravity_lightman)
-        let result = StateComputeResult::new(
-            root_block.id(),
-            None,
-            None,
-        );
+        let result = StateComputeResult::new(root_block.id(), None, None);
 
         let pipelined_root_block = PipelinedBlock::new(
             *root_block,
