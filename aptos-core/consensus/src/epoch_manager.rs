@@ -54,6 +54,7 @@ use crate::{
     util::time_service::TimeService,
 };
 use anyhow::{anyhow, bail, ensure, Context};
+use api_types::ExecutionApi;
 use aptos_bounded_executor::BoundedExecutor;
 use aptos_channels::{aptos_channel, message_queues::QueueStyle};
 use aptos_config::config::{
@@ -175,6 +176,7 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     pending_blocks: Arc<Mutex<PendingBlocks>>,
     quorum_store_client: Option<Arc<QuorumStoreClient>>,
     consensus_to_quorum_store_rx: Option<Receiver<GetPayloadCommand>>,
+    execution_api: Option<Arc<dyn ExecutionApi>>,
 }
 
 impl<P: OnChainConfigProvider> EpochManager<P> {
@@ -195,6 +197,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         vtxn_pool: VTxnPoolState,
         rand_storage: Arc<dyn RandStorage<AugmentedData>>,
         consensus_publisher: Option<Arc<ConsensusPublisher>>,
+        execution_api: Option<Arc<dyn ExecutionApi>>,
     ) -> Self {
         let author = node_config.validator_network.as_ref().unwrap().peer_id();
         let config = node_config.consensus.clone();
@@ -255,6 +258,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             pending_blocks: Arc::new(Mutex::new(PendingBlocks::new())),
             quorum_store_client: Some(Arc::new(quorum_store_client)),
             consensus_to_quorum_store_rx: Some(consensus_to_quorum_store_rx),
+            execution_api,
         }
     }
 
@@ -840,6 +844,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             payload_manager,
             onchain_consensus_config.order_vote_enabled(),
             self.pending_blocks.clone(),
+            self.execution_api.clone(),
         ));
         // We'd better set block store here before we construct any following struct
         // Since the round_manager.init might trigger new round event to produce proposal

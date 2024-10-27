@@ -30,17 +30,20 @@ use std::time::Duration;
 use std::{boxed::Box, sync::Arc};
 use once_cell::sync::OnceCell;
 use api_types::ConsensusApi;
+use api_types::ExecutionApi;
 
 pub struct ConsensusAdapterArgs {
     pub mempool_sender: mpsc::Sender<MempoolClientRequest>,
     pub quorum_store_client: Option<Arc<QuorumStoreClient>>,
+    pub execution_api: Option<Arc<dyn ExecutionApi>>,
 }
 
 impl ConsensusAdapterArgs {
-    pub fn new(mempool_sender: mpsc::Sender<MempoolClientRequest>) -> Self {
+    pub fn new(mempool_sender: mpsc::Sender<MempoolClientRequest>, execution_api: Arc<dyn ExecutionApi>) -> Self {
         Self {
             mempool_sender,
             quorum_store_client: None,
+            execution_api: Some(execution_api),
         }
     }
 
@@ -53,6 +56,7 @@ impl ConsensusAdapterArgs {
         Self {
             mempool_sender,
             quorum_store_client: None,
+            execution_api: None,
         }
     }
 }

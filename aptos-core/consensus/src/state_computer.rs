@@ -4,18 +4,7 @@
 
 
 use crate::{
-    block_preparer::BlockPreparer,
-    block_storage::tracing::{observe_block, BlockStage},
-    counters,
-    error::StateSyncError,
-    execution_pipeline::ExecutionPipeline,
-    monitor,
-    payload_manager::TPayloadManager,
-    state_replication::{StateComputer, StateComputerCommitCallBackType},
-    transaction_deduper::TransactionDeduper,
-    transaction_filter::TransactionFilter,
-    transaction_shuffler::TransactionShuffler,
-    txn_notifier::TxnNotifier,
+    block_preparer::BlockPreparer, block_storage::tracing::{observe_block, BlockStage}, counters, error::StateSyncError, execution_pipeline::ExecutionPipeline, monitor, payload_manager::TPayloadManager, persistent_liveness_storage::StorageWriteProxy, state_replication::{StateComputer, StateComputerCommitCallBackType}, transaction_deduper::TransactionDeduper, transaction_filter::TransactionFilter, transaction_shuffler::TransactionShuffler, txn_notifier::TxnNotifier
 };
 use anyhow::Result;
 use aptos_consensus_notifications::ConsensusNotificationSender;
@@ -37,6 +26,7 @@ use fail::fail_point;
 use futures::{future::BoxFuture, SinkExt, StreamExt};
 use std::{boxed::Box, f64::consts::E, sync::Arc, time::Duration};
 use tokio::sync::Mutex as AsyncMutex;
+use crate::persistent_liveness_storage::PersistentLivenessStorage;
 
 pub type StateComputeResultFut = BoxFuture<'static, ExecutorResult<PipelineExecutionResult>>;
 
@@ -259,6 +249,7 @@ impl StateComputer for ExecutionProxy {
 
         let executor = self.executor.clone();
         let proof = finality_proof.clone();
+
         monitor!(
             "commit_block",
             tokio::task::spawn_blocking(move || {

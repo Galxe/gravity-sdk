@@ -68,13 +68,14 @@ impl Display for Block {
             .unwrap_or_else(|| "(NIL)".to_string());
         write!(
             f,
-            "[id: {}, author: {}, epoch: {}, round: {:02}, parent_id: {}, timestamp: {}]",
+            "[id: {}, author: {}, epoch: {}, round: {:02}, parent_id: {}, timestamp: {}, block_number: {:?}]",
             self.id,
             author,
             self.epoch(),
             self.round(),
             self.parent_id(),
             self.timestamp_usecs(),
+            self.block_number(),
         )
     }
 }
@@ -554,7 +555,7 @@ impl<'de> Deserialize<'de> for Block {
         let BlockWithoutId {
             block_data,
             signature,
-            block_number
+            block_number,
         } = BlockWithoutId::deserialize(deserializer)?;
 
         let block = Block {
@@ -565,8 +566,9 @@ impl<'de> Deserialize<'de> for Block {
         };
 
         if let Some(block_number) = block_number {
-            block.set_block_number(block_number)
+            block.set_block_number(block_number);
         }
+    
         Ok(block)
     }
 }

@@ -57,7 +57,7 @@ pub fn start_consensus(
     gravity_args: &mut ConsensusAdapterArgs,
 ) -> (Runtime, Arc<StorageWriteProxy>, Arc<QuorumStoreDB>, Arc<GravityExecutionProxy>) {
     let runtime = aptos_runtimes::spawn_named_runtime("consensus".into(), None);
-    let storage = Arc::new(StorageWriteProxy::new(node_config, aptos_db.reader.clone()));
+    let storage = Arc::new(StorageWriteProxy::new(node_config, aptos_db.reader.clone(), gravity_args.execution_api.clone()));
     let quorum_store_db = Arc::new(QuorumStoreDB::new(node_config.storage.dir()));
 
     let txn_notifier = Arc::new(MempoolNotifier::new(
@@ -122,6 +122,7 @@ pub fn start_consensus(
         vtxn_pool,
         rand_storage,
         consensus_publisher,
+        gravity_args.execution_api.clone(),
     );
     gravity_args.set_quorum_store_client(epoch_mgr.get_quorum_store_client());
 

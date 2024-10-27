@@ -530,6 +530,25 @@ impl Into<GTxn> for SignedTransaction {
     }
 }
 
+impl Into<GTxn> for &SignedTransaction {
+    fn into(self) -> GTxn {
+        let txn_bytes = match self.payload() {
+            TransactionPayload::GTxnBytes(bytes) => bytes,
+            _ => {
+                panic!("should never consists other payload type");
+            }
+        };
+        GTxn {
+            sequence_number: self.sequence_number(),
+            max_gas_amount: self.max_gas_amount(),
+            gas_unit_price: self.gas_unit_price(),
+            expiration_timestamp_secs: self.expiration_timestamp_secs(),
+            chain_id: self.chain_id().to_u8() as u64,
+            txn_bytes: (*txn_bytes.clone()).to_owned(),
+        }
+    }
+}
+
 impl From<GTxn> for SignedTransaction {
     fn from(txn: GTxn) -> Self {
         let addr = AccountAddress::random();
