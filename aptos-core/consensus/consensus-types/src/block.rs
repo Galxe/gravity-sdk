@@ -554,7 +554,7 @@ impl<'de> Deserialize<'de> for Block {
         let BlockWithoutId {
             block_data,
             signature,
-            block_number
+            block_number,
         } = BlockWithoutId::deserialize(deserializer)?;
 
         let block = Block {
@@ -565,8 +565,9 @@ impl<'de> Deserialize<'de> for Block {
         };
 
         if let Some(block_number) = block_number {
-            block.set_block_number(block_number)
+            block.set_block_number(block_number);
         }
+    
         Ok(block)
     }
 }

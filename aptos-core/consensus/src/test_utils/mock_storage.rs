@@ -99,40 +99,40 @@ impl MockStorage {
             AggregateSignature::empty(),
         ))
     }
-
-    pub fn try_start(&self, order_vote_enabled: bool) -> Result<RecoveryData> {
-        let ledger_recovery_data = self.get_ledger_recovery_data();
-        let mut blocks: Vec<_> = self
-            .shared_storage
-            .block
-            .lock()
-            .clone()
-            .into_values()
-            .collect();
-        let quorum_certs = self
-            .shared_storage
-            .qc
-            .lock()
-            .clone()
-            .into_values()
-            .collect();
-        blocks.sort_by_key(Block::round);
-        let last_vote = self.shared_storage.last_vote.lock().clone();
-        let qc = self
-            .shared_storage
-            .highest_2chain_timeout_certificate
-            .lock()
-            .clone();
-        RecoveryData::new(
-            last_vote,
-            ledger_recovery_data,
-            blocks,
-            RootMetadata::new_empty(),
-            quorum_certs,
-            qc,
-            order_vote_enabled,
-        )
-    }
+    // TODO(gravity_lightman)
+    // pub fn try_start(&self, order_vote_enabled: bool) -> Result<RecoveryData> {
+    //     let ledger_recovery_data = self.get_ledger_recovery_data();
+    //     let mut blocks: Vec<_> = self
+    //         .shared_storage
+    //         .block
+    //         .lock()
+    //         .clone()
+    //         .into_values()
+    //         .collect();
+    //     let quorum_certs = self
+    //         .shared_storage
+    //         .qc
+    //         .lock()
+    //         .clone()
+    //         .into_values()
+    //         .collect();
+    //     blocks.sort_by_key(Block::round);
+    //     let last_vote = self.shared_storage.last_vote.lock().clone();
+    //     let qc = self
+    //         .shared_storage
+    //         .highest_2chain_timeout_certificate
+    //         .lock()
+    //         .clone();
+    //     RecoveryData::new(
+    //         last_vote,
+    //         ledger_recovery_data,
+    //         blocks,
+    //         RootMetadata::new_empty(),
+    //         quorum_certs,
+    //         qc,
+    //         order_vote_enabled,
+    //     )
+    // }
 
     pub fn verify_consistency(&self) -> Result<()> {
         // TODO: Also test by setting order_vote_enabled to true
@@ -283,23 +283,23 @@ impl PersistentLivenessStorage for EmptyStorage {
         ))
     }
 
-    fn start(&self, order_vote_enabled: bool) -> LivenessStorageData {
-        match RecoveryData::new(
-            None,
-            self.recover_from_ledger(),
-            vec![],
-            RootMetadata::new_empty(),
-            vec![],
-            None,
-            order_vote_enabled,
-        ) {
-            Ok(recovery_data) => LivenessStorageData::FullRecoveryData(recovery_data),
-            Err(e) => {
-                eprintln!("{}", e);
-                panic!("Construct recovery data during genesis should never fail");
-            },
-        }
-    }
+    // fn start(&self, order_vote_enabled: bool) -> LivenessStorageData {
+    //     match RecoveryData::new(
+    //         None,
+    //         self.recover_from_ledger(),
+    //         vec![],
+    //         RootMetadata::new_empty(),
+    //         vec![],
+    //         None,
+    //         order_vote_enabled,
+    //     ) {
+    //         Ok(recovery_data) => LivenessStorageData::FullRecoveryData(recovery_data),
+    //         Err(e) => {
+    //             eprintln!("{}", e);
+    //             panic!("Construct recovery data during genesis should never fail");
+    //         },
+    //     }
+    // }
 
     fn save_highest_2chain_timeout_cert(&self, _: &TwoChainTimeoutCertificate) -> Result<()> {
         Ok(())

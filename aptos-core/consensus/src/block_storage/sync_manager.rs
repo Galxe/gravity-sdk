@@ -162,7 +162,7 @@ impl BlockStore {
         }
         if self.ordered_root().round() < qc.commit_info().round() {
             SUCCESSFUL_EXECUTED_WITH_REGULAR_QC.inc();
-            self.send_for_execution(qc.into_wrapped_ledger_info())
+            self.send_for_execution(qc.into_wrapped_ledger_info(), false)
                 .await?;
             if qc.ends_epoch() {
                 retriever
@@ -193,7 +193,7 @@ impl BlockStore {
                     );
                 }
                 SUCCESSFUL_EXECUTED_WITH_ORDER_VOTE_QC.inc();
-                self.send_for_execution(ordered_cert.clone()).await?;
+                self.send_for_execution(ordered_cert.clone(), false).await?;
             } else {
                 bail!("Ordered block not found in block store when inserting ordered cert");
             }
@@ -258,7 +258,7 @@ impl BlockStore {
         if !self.need_sync_for_ledger_info(highest_commit_cert.ledger_info()) {
             return Ok(());
         }
-        let (root, root_metadata, blocks, quorum_certs) = Self::fast_forward_sync(
+        let (root, blocks, quorum_certs) = Self::fast_forward_sync(
             &highest_quorum_cert,
             &highest_commit_cert,
             retriever,
@@ -274,7 +274,7 @@ impl BlockStore {
             committed_round = root.0.round(),
             block_id = root.0.id(),
         );
-        self.rebuild(root, root_metadata, blocks, quorum_certs)
+        self.rebuild(root, blocks, quorum_certs)
             .await;
 
         if highest_commit_cert.ledger_info().ledger_info().ends_epoch() {
@@ -429,10 +429,6 @@ impl BlockStore {
             })?;
 
         storage.save_tree(blocks.clone(), quorum_certs.clone())?;
-
-        execution_client
-            .sync_to(highest_commit_cert.ledger_info().clone())
-            .await?;
 
         // we do not need to update block_tree.highest_commit_decision_ledger_info here
         // because the block_tree is going to rebuild itself.

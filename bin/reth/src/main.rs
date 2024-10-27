@@ -7,6 +7,7 @@ use crate::cli::Cli;
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use api_types::BlockHashState;
 use clap::Args;
+use reth_node_core::node_config;
 use reth_provider::BlockReaderIdExt;
 use std::sync::Arc;
 use std::thread;
@@ -134,7 +135,7 @@ fn run_server() {
             let id = handle.node.chain_spec().chain().id();
             let _ = thread::spawn(move || {
                 let mut cl = TestConsensusLayer::new(
-                    RethCli::new(client, id),
+                    RethCli::new(client, id, handle.node.provider),
                     gcei_config,
                     BlockHashState {
                         safe_hash: *safe_hash,
