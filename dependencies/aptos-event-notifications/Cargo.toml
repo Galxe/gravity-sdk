@@ -27,7 +27,6 @@ thiserror = { workspace = true }
 aptos-crypto = { workspace = true }
 aptos-executor-test-helpers = { workspace = true }
 aptos-temppath = { workspace = true }
-#aptos-vm = { workspace = true }
 bcs = { workspace = true }
 claims = { workspace = true }
 move-core-types = { workspace = true }
