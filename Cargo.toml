@@ -46,7 +46,7 @@ members = [
     "dependencies/aptos-vault-client",
     "dependencies/aptos-log-derive",
     "dependencies/move-core-types",
-    "crates/api", "crates/api-types",
+    "crates/api", "crates/api-types", "bin/bench",
 ]
 
 

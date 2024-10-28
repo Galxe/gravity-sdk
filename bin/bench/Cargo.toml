@@ -1,0 +1,112 @@
+[package]
+name = "bench"
+version = "0.1.0"
+rust-version = "1.81.0"
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+futures-util = "0.3.30"
+clap = { version = "4.5.17", features = ["derive", "env"] }
+futures = "0.3.30"
+dirs = "5.0.1"
+tokio = "1.40.0"
+tokio-stream = "0.1.16"
+
+reth = { git = "https://github.com/paradigmxyz/reth", tag = "v1.0.7" }
+reth-node-builder = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-builder", tag = "v1.0.7" }
+reth-node-ethereum = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-ethereum", tag = "v1.0.7" }
+reth-node-core = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-core", tag = "v1.0.7" }
+reth-provider = { git = "https://github.com/paradigmxyz/reth", package = "reth-provider", tag = "v1.0.7" }
+reth-db = { git = "https://github.com/paradigmxyz/reth", package = "reth-db", tag = "v1.0.7" }
+reth-tasks = { git = "https://github.com/paradigmxyz/reth", package = "reth-tasks", tag = "v1.0.7" }
+reth-cli-runner = { git = "https://github.com/paradigmxyz/reth", package = "reth-cli-runner", tag = "v1.0.7" }
+reth-cli = { git = "https://github.com/paradigmxyz/reth", package = "reth-cli", tag = "v1.0.7" }
+reth-cli-util = { git = "https://github.com/paradigmxyz/reth", package = "reth-cli-util", tag = "v1.0.7" }
+reth-chainspec = { git = "https://github.com/paradigmxyz/reth", package = "reth-chainspec", tag = "v1.0.7" }
+reth-tracing = { git = "https://github.com/paradigmxyz/reth", package = "reth-tracing", tag = "v1.0.7" }
+reth-auto-seal-consensus = { git = "https://github.com/paradigmxyz/reth", package = "reth-auto-seal-consensus", tag = "v1.0.7" }
+reth-basic-payload-builder = { git = "https://github.com/paradigmxyz/reth", package = "reth-basic-payload-builder", tag = "v1.0.7" }
+reth-beacon-consensus = { git = "https://github.com/paradigmxyz/reth", package = "reth-beacon-consensus", tag = "v1.0.7" }
+reth-ethereum-engine-primitives = { git = "https://github.com/paradigmxyz/reth", package = "reth-ethereum-engine-primitives", tag = "v1.0.7" }
+reth-evm-ethereum = { git = "https://github.com/paradigmxyz/reth", package = "reth-evm-ethereum", tag = "v1.0.7" }
+reth-network = { git = "https://github.com/paradigmxyz/reth", package = "reth-network", tag = "v1.0.7" }
+reth-node-api = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-api", tag = "v1.0.7" }
+reth-payload-builder = { git = "https://github.com/paradigmxyz/reth", package = "reth-payload-builder", tag = "v1.0.7" }
+reth-rpc = { git = "https://github.com/paradigmxyz/reth", package = "reth-rpc", tag = "v1.0.7" }
+reth-rpc-api = { git = "https://github.com/paradigmxyz/reth", package = "reth-rpc-api", tag = "v1.0.7", features = ["client"] }
+reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", package = "reth-rpc-types", tag = "v1.0.7"}
+reth-transaction-pool = { git = "https://github.com/paradigmxyz/reth", package = "reth-transaction-pool", tag = "v1.0.7" }
+reth-consensus = { git = "https://github.com/paradigmxyz/reth", package = "reth-consensus", tag = "v1.0.7" }
+reth-ethereum-payload-builder = { git = "https://github.com/paradigmxyz/reth", package = "reth-ethereum-payload-builder", tag = "v1.0.7" }
+reth-primitives = { git = "https://github.com/paradigmxyz/reth", package = "reth-primitives", tag = "v1.0.7" }
+reth-cli-commands = { git = "https://github.com/paradigmxyz/reth", package = "reth-cli-commands", features = ["dev"], tag = "v1.0.7" }
+eyre = "0.6.12"
+tracing = "0.1.40"
+tempfile = "3.12.0"
+api.workspace = true
+api-types.workspace = true
+jsonrpsee = "=0.24.4"
+hex = "0.4.3"
+serde_json = "1.0.128"
+time = "0.3.36"
+anyhow = "1.0.87"
+alloy = {version =  "0.3.6", features = ["eip712", "consensus", "rlp", "eips"] }
+revm = { version = "=14.0.2" }
+revm-inspectors = {version = "=0.7"}
+revm-primitives = { version = "=9.0.2", features = [
+    "std",
+], default-features = false }
+alloy-chains = "=0.1.32"
+alloy-dyn-abi = "=0.8.3"
+alloy-primitives = { version = "=0.8.3", default-features = false }
+alloy-rlp = "=0.3.4"
+alloy-sol-types = "=0.8.3"
+alloy-trie = { version = "=0.5", default-features = false }
+alloy-sol-macro = { version = "=0.8.3" }
+alloy-consensus = { version = "=0.3.6", default-features = false }
+alloy-eips = { version = "=0.3.6", default-features = false }
+alloy-genesis = { version = "=0.3.6", default-features = false }
+alloy-json-rpc = { version = "=0.3.6", default-features = false }
+alloy-network = { version = "=0.3.6", default-features = false }
+alloy-network-primitives = { version = "=0.3.6", default-features = false }
+alloy-node-bindings = { version = "=0.3.6", default-features = false }
+alloy-provider = { version = "=0.3.6", features = [
+    "reqwest",
+], default-features = false }
+alloy-sol-macro-expander = { version = "=0.8.3" }
+alloy-sol-macro-input = { version = "=0.8.3" }
+alloy-pubsub = { version = "=0.3.6", default-features = false }
+alloy-rpc-client = { version = "=0.3.6", default-features = false }
+alloy-rpc-types = { version = "=0.3.6", features = [
+    "eth",
+], default-features = false }
+alloy-sol-type-parser = { version = "=0.8.3" }
+alloy-rpc-types-admin = { version = "=0.3.6", default-features = false }
+alloy-rpc-types-anvil = { version = "=0.3.6", default-features = false }
+alloy-rpc-types-beacon = { version = "=0.3.6", default-features = false }
+alloy-rpc-types-debug = { version = "=0.3.6", default-features = false }
+alloy-rpc-types-engine = { version = "=0.3.6", default-features = false }
+alloy-rpc-types-eth = { version = "=0.3.6", default-features = false }
+alloy-rpc-types-mev = { version = "=0.3.6", default-features = false }
+alloy-rpc-types-trace = { version = "=0.3.6", default-features = false }
+alloy-rpc-types-txpool = { version = "=0.3.6", default-features = false }
+alloy-serde = { version = "=0.3.6", default-features = false }
+alloy-signer = { version = "=0.3.6", default-features = false }
+alloy-signer-local = { version = "=0.3.6", default-features = false }
+alloy-transport = { version = "=0.3.6" }
+alloy-transport-http = { version = "=0.3.6", features = [
+    "reqwest-rustls-tls",
+], default-features = false }
+alloy-transport-ipc = { version = "=0.3.6", default-features = false }
+alloy-transport-ws = { version = "=0.3.6", default-features = false }
+
+# op
+op-alloy-rpc-types = "0.2.12"
+op-alloy-rpc-types-engine = "0.2.12"
+op-alloy-network = "0.2.12"
+op-alloy-consensus = "0.2.12"
