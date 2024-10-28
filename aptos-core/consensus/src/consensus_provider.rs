@@ -37,7 +37,6 @@ use aptos_network::application::interface::{
 use aptos_storage_interface::DbReaderWriter;
 use aptos_time_service::TimeService;
 use aptos_validator_transaction_pool::VTxnPoolState;
-use aptos_vm::AptosVM;
 use futures::channel::mpsc;
 use move_core_types::account_address::AccountAddress;
 use std::{collections::HashMap, sync::Arc};
@@ -66,8 +65,8 @@ pub fn start_consensus(
         node_config.consensus.mempool_executed_txn_timeout_ms,
     ));
 
-    let g_executor = GravityBlockExecutor::<AptosVM>::new(
-        BlockExecutor::<AptosVM>::new(aptos_db),
+    let g_executor = GravityBlockExecutor::new(
+        BlockExecutor::new(aptos_db),
     );
     let executor = Arc::new(g_executor);
     let execution_proxy = ExecutionProxy::new(
@@ -183,7 +182,7 @@ pub fn start_consensus_observer(
             node_config.consensus.mempool_executed_txn_timeout_ms,
         ));
         let execution_proxy = ExecutionProxy::new(
-            Arc::new(BlockExecutor::<AptosVM>::new(aptos_db.clone())),
+            Arc::new(BlockExecutor::new(aptos_db.clone())),
             txn_notifier,
             state_sync_notifier,
             runtime.handle(),

@@ -30,7 +30,6 @@ use std::time::Duration;
 use std::{boxed::Box, sync::Arc};
 use once_cell::sync::OnceCell;
 use api_types::ConsensusApi;
-use aptos_vm::AptosVM;
 
 pub struct ConsensusAdapterArgs {
     pub mempool_sender: mpsc::Sender<MempoolClientRequest>,
@@ -63,11 +62,11 @@ impl ConsensusAdapterArgs {
 pub struct GravityExecutionProxy {
     pub aptos_state_computer: Arc<ExecutionProxy>,
     consensus_engine: OnceCell<Arc<dyn ConsensusApi>>,
-    inner_executor: Arc<GravityBlockExecutor::<AptosVM>>,
+    inner_executor: Arc<GravityBlockExecutor>,
 }
 
 impl GravityExecutionProxy {
-    pub fn new(aptos_state_computer: Arc<ExecutionProxy>, inner_executor: Arc<GravityBlockExecutor::<AptosVM>>) -> Self {
+    pub fn new(aptos_state_computer: Arc<ExecutionProxy>, inner_executor: Arc<GravityBlockExecutor>) -> Self {
         Self { aptos_state_computer, consensus_engine: OnceCell::new(), inner_executor }
     }
 
@@ -81,14 +80,14 @@ impl GravityExecutionProxy {
     }
 }
 
-pub struct GravityBlockExecutor<V> {
-    inner: BlockExecutor<V>,
+pub struct GravityBlockExecutor {
+    inner: BlockExecutor,
     consensus_engine: OnceCell<Arc<dyn ConsensusApi>>,
 }
 
-impl<V> GravityBlockExecutor<V> {
+impl GravityBlockExecutor {
     pub(crate) fn new(
-        inner: BlockExecutor<V>,
+        inner: BlockExecutor,
     ) -> Self {
         Self { inner, consensus_engine: OnceCell::new() }
     }
@@ -185,7 +184,7 @@ impl StateComputer for GravityExecutionProxy {
     }
 }
 
-impl<V: Send + Sync> BlockExecutorTrait for GravityBlockExecutor<V> {
+impl BlockExecutorTrait for GravityBlockExecutor {
     fn committed_block_id(&self) -> HashValue {
         self.inner.committed_block_id()
     }

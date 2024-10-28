@@ -32,7 +32,7 @@ aptos-short-hex-str = { workspace = true }
 aptos-storage-interface = { workspace = true }
 aptos-time-service = { workspace = true }
 aptos-types = { workspace = true }
-aptos-vm-validator = { workspace = true }
+#aptos-vm-validator = { workspace = true }
 bcs = { workspace = true }
 fail = { workspace = true }
 futures = { workspace = true }
@@ -60,6 +60,6 @@ proptest = { workspace = true }
 
 [features]
 default = []
-failpoints = ["fail/failpoints", "aptos-vm-validator/failpoints"]
+failpoints = ["fail/failpoints"]
 fuzzing = ["proptest", "aptos-types/fuzzing", "aptos-storage-interface/fuzzing", "aptos-config/fuzzing"]
 consensus-only-perf-test = []

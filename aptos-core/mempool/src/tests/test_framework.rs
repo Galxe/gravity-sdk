@@ -51,7 +51,7 @@ use aptos_types::{
     on_chain_config::{InMemoryOnChainConfig, OnChainConfigPayload},
     transaction::SignedTransaction,
 };
-use aptos_vm_validator::mocks::mock_vm_validator::MockVMValidator;
+// use aptos_vm_validator::mocks::mock_vm_validator::MockVMValidator;
 use futures::{channel::oneshot, SinkExt};
 use maplit::btreemap;
 use std::{collections::HashMap, hash::Hash, sync::Arc};
@@ -630,52 +630,53 @@ fn setup_mempool(
     MempoolNotifier,
     Arc<Mutex<CoreMempool>>,
 ) {
-    let (sender, _subscriber) = futures::channel::mpsc::unbounded();
-    let (ac_endpoint_sender, ac_endpoint_receiver) = mpsc_channel();
-    let (quorum_store_sender, quorum_store_receiver) = mpsc_channel();
+    // let (sender, _subscriber) = futures::channel::mpsc::unbounded();
+    // let (ac_endpoint_sender, ac_endpoint_receiver) = mpsc_channel();
+    // let (quorum_store_sender, quorum_store_receiver) = mpsc_channel();
     let (mempool_notifier, mempool_listener) =
         aptos_mempool_notifications::new_mempool_notifier_listener_pair(100);
 
     let mempool = Arc::new(Mutex::new(CoreMempool::new(&config)));
-    let vm_validator = Arc::new(RwLock::new(MockVMValidator));
-    let db_ro = Arc::new(MockDbReaderWriter);
+    // let vm_validator = Arc::new(RwLock::new(MockVMValidator));
+    // let db_ro = Arc::new(MockDbReaderWriter);
 
-    let (reconfig_sender, reconfig_events) = aptos_channel::new(QueueStyle::LIFO, 1, None);
-    let reconfig_event_subscriber = ReconfigNotificationListener {
-        notification_receiver: reconfig_events,
-    };
-    reconfig_sender
-        .push((), ReconfigNotification {
-            version: 1,
-            on_chain_configs: OnChainConfigPayload::new(
-                1,
-                InMemoryOnChainConfig::new(HashMap::new()),
-            ),
-        })
-        .unwrap();
+    // let (reconfig_sender, reconfig_events) = aptos_channel::new(QueueStyle::LIFO, 1, None);
+    // let reconfig_event_subscriber = ReconfigNotificationListener {
+    //     notification_receiver: reconfig_events,
+    // };
+    // reconfig_sender
+    //     .push((), ReconfigNotification {
+    //         version: 1,
+    //         on_chain_configs: OnChainConfigPayload::new(
+    //             1,
+    //             InMemoryOnChainConfig::new(HashMap::new()),
+    //         ),
+    //     })
+    //     .unwrap();
 
-    start_shared_mempool(
-        &Handle::current(),
-        &config,
-        mempool.clone(),
-        network_client,
-        network_service_events,
-        ac_endpoint_receiver,
-        quorum_store_receiver,
-        mempool_listener,
-        reconfig_event_subscriber,
-        db_ro,
-        vm_validator,
-        vec![sender],
-        peers_and_metadata,
-    );
+    // start_shared_mempool(
+    //     &Handle::current(),
+    //     &config,
+    //     mempool.clone(),
+    //     network_client,
+    //     network_service_events,
+    //     ac_endpoint_receiver,
+    //     quorum_store_receiver,
+    //     mempool_listener,
+    //     reconfig_event_subscriber,
+    //     db_ro,
+    //     vm_validator,
+    //     vec![sender],
+    //     peers_and_metadata,
+    // );
 
-    (
-        ac_endpoint_sender,
-        quorum_store_sender,
-        mempool_notifier,
-        mempool,
-    )
+    // (
+    //     ac_endpoint_sender,
+    //     quorum_store_sender,
+    //     mempool_notifier,
+    //     mempool,
+    // )
+    todo!()
 }
 
 fn mpsc_channel<T>() -> (

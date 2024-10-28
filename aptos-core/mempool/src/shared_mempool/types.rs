@@ -23,7 +23,7 @@ use aptos_storage_interface::DbReader;
 use aptos_types::{
     mempool_status::MempoolStatus, transaction::SignedTransaction, vm_status::DiscardedVMStatus,
 };
-use aptos_vm_validator::vm_validator::TransactionValidation;
+// use aptos_vm_validator::vm_validator::TransactionValidation;
 use futures::{
     channel::{mpsc, mpsc::UnboundedSender, oneshot},
     future::Future,
@@ -59,7 +59,7 @@ pub(crate) struct SharedMempool<NetworkClient, TransactionValidator> {
 
 impl<
         NetworkClient: NetworkClientInterface<MempoolSyncMsg>,
-        TransactionValidator: TransactionValidation + 'static,
+        TransactionValidator,
     > SharedMempool<NetworkClient, TransactionValidator>
 {
     pub fn new(

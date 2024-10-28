@@ -20,7 +20,7 @@ aptos-logger = { workspace = true }
 aptos-metrics-core = { workspace = true }
 aptos-secure-net = { workspace = true }
 aptos-types = { workspace = true }
-aptos-vm = { workspace = true }
+#aptos-vm = { workspace = true }
 bcs = { workspace = true }
 crossbeam-channel = { workspace = true }
 dashmap = { workspace = true }

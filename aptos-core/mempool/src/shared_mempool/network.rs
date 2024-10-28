@@ -29,7 +29,7 @@ use aptos_network::{
 };
 use aptos_time_service::TimeService;
 use aptos_types::transaction::SignedTransaction;
-use aptos_vm_validator::vm_validator::TransactionValidation;
+// use aptos_vm_validator::vm_validator::TransactionValidation;
 use fail::fail_point;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -340,7 +340,7 @@ impl<NetworkClient: NetworkClientInterface<MempoolSyncMsg>> MempoolNetworkInterf
     /// * Expired -> This timed out waiting for a response and needs to be resent
     /// * Retry -> This received a response telling it to retry later
     /// * New -> There are no Expired or Retry broadcasts currently waiting
-    fn determine_broadcast_batch<TransactionValidator: TransactionValidation>(
+    fn determine_broadcast_batch<TransactionValidator>(
         &self,
         peer: PeerNetworkId,
         scheduled_backoff: bool,
@@ -608,7 +608,7 @@ impl<NetworkClient: NetworkClientInterface<MempoolSyncMsg>> MempoolNetworkInterf
         Ok(state.broadcast_info.sent_messages.len())
     }
 
-    pub async fn execute_broadcast<TransactionValidator: TransactionValidation>(
+    pub async fn execute_broadcast<TransactionValidator>(
         &self,
         peer: PeerNetworkId,
         scheduled_backoff: bool,

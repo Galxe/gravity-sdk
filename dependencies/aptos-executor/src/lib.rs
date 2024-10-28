@@ -16,24 +16,22 @@ pub mod block_executor {
 
     use crate::mock_block_tree::MockBlockTree;
 
-    pub struct BlockExecutor<V> {
+    pub struct BlockExecutor {
         pub db: DbReaderWriter,
-        _p: PhantomData<V>,
         block_tree: RwLock<MockBlockTree>,
     }
 
-    impl<V> BlockExecutor<V>
+    impl BlockExecutor
     {
         pub fn new(db: DbReaderWriter) -> Self {
             Self {
                 db,
-                _p: PhantomData,
                 block_tree: RwLock::new(MockBlockTree::new()),
             }
         }
     }
 
-    impl<V: Send + Sync> BlockExecutorTrait for BlockExecutor<V>
+    impl BlockExecutorTrait for BlockExecutor
 {
     fn committed_block_id(&self) -> HashValue {
         self.block_tree.read().unwrap().commited_blocks.last().cloned().unwrap_or_default()

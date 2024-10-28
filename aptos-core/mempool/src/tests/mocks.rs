@@ -34,9 +34,9 @@ use aptos_types::{
     on_chain_config::{InMemoryOnChainConfig, OnChainConfigPayload},
     transaction::SignedTransaction,
 };
-use aptos_vm_validator::{
-    mocks::mock_vm_validator::MockVMValidator, vm_validator::TransactionValidation,
-};
+// use aptos_vm_validator::{
+//     mocks::mock_vm_validator::MockVMValidator, vm_validator::TransactionValidation,
+// };
 use futures::channel::mpsc;
 use maplit::hashmap;
 use std::{
@@ -61,19 +61,20 @@ impl MockSharedMempool {
     /// and the channel through which shared mempool receives client events.
     pub fn new() -> Self {
         // Create the shared mempool
-        let (ac_client, mempool, quorum_store_sender, mempool_notifier) = Self::start(
-            &Handle::current(),
-            &DbReaderWriter::new(MockDbReaderWriter),
-            MockVMValidator,
-        );
-        Self {
-            _runtime: Some(Handle::current()),
-            _handle: None,
-            ac_client,
-            mempool,
-            consensus_to_mempool_sender: quorum_store_sender,
-            mempool_notifier,
-        }
+        // let (ac_client, mempool, quorum_store_sender, mempool_notifier) = Self::start(
+        //     &Handle::current(),
+        //     &DbReaderWriter::new(MockDbReaderWriter),
+        //     MockVMValidator,
+        // );
+        // Self {
+        //     _runtime: Some(Handle::current()),
+        //     _handle: None,
+        //     ac_client,
+        //     mempool,
+        //     consensus_to_mempool_sender: quorum_store_sender,
+        //     mempool_notifier,
+        // }
+        todo!()
     }
 
     /// Creates a mock shared mempool and runtime
@@ -88,7 +89,7 @@ impl MockSharedMempool {
 
     /// Creates a mock of a running instance of shared mempool inside a tokio runtime;
     /// Holds a runtime handle instead.
-    pub fn new_in_runtime<V: TransactionValidation + 'static>(
+    pub fn new_in_runtime<V>(
         db: &DbReaderWriter,
         validator: V,
     ) -> Self {
@@ -105,7 +106,7 @@ impl MockSharedMempool {
         }
     }
 
-    pub fn start<V: TransactionValidation + 'static>(
+    pub fn start<V>(
         handle: &Handle,
         db: &DbReaderWriter,
         validator: V,

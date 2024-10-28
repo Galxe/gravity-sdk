@@ -44,8 +44,6 @@ members = [
     "dependencies/aptos-types",
     "dependencies/aptos-validator-transaction-pool",
     "dependencies/aptos-vault-client",
-    "dependencies/aptos-vm",
-    "dependencies/aptos-vm-validator",
     "dependencies/aptos-log-derive",
     "dependencies/move-core-types",
     "crates/api", "crates/api-types",
@@ -159,8 +157,6 @@ aptos-time-service = { path = "./dependencies/aptos-time-service", features = [
 aptos-types = { path = "./dependencies/aptos-types" }
 aptos-validator-transaction-pool = { path = "./dependencies/aptos-validator-transaction-pool" }
 aptos-vault-client = { path = "./dependencies/aptos-vault-client" }
-aptos-vm = { path = "./dependencies/aptos-vm", features = ["fuzzing"] }
-aptos-vm-validator = { path = "./dependencies/aptos-vm-validator" }
 aptos-log-derive = { path = "./dependencies/aptos-log-derive" }
 aptos-rest-client = { path = "./dependencies/aptos-rest-client" }
 move-core-types = { path = "./dependencies/move-core-types" }
