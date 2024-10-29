@@ -111,16 +111,12 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
             let txn_bytes = eth_txns[idx].clone();
             let tx_envelope = self.deserialization_txn(txn_bytes.to_vec());
             tx_envelope.access_list();
-            let x = tx_envelope.signature_hash().as_slice();
-            let mut signature = [0u8; 64];
-
-            signature[0..64].copy_from_slice(tx_envelope.signature_hash().as_slice());
             let gtxn = GTxn::new(
                 tx_envelope.nonce(),
                 tx_envelope.gas_limit() as u64,
                 tx_envelope.gas_price().map(|x| x as u64).unwrap_or(0),
                 secs, // hardcode 1day
-                tx_envelope.chain_id().map(|x| x).unwrap_or(0),
+                tx_envelope.chain_id().map(|x| x).unwrap_or(114),// 0 is not allowed and would trigger crash
                 bytes,
             );
             info!("expiration time second is {:?}", secs);

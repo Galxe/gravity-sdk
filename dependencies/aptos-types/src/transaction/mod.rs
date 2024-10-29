@@ -523,7 +523,7 @@ impl Into<GTxn> for SignedTransaction {
             max_gas_amount: self.max_gas_amount(),
             gas_unit_price: self.gas_unit_price(),
             expiration_timestamp_secs: self.expiration_timestamp_secs(),
-            chain_id: self.chain_id().to_u8() as u64,
+            chain_id: self.chain_id().into(),
             txn_bytes: (*txn_bytes.clone()).to_owned(),
         }
     }
@@ -539,7 +539,7 @@ impl From<GTxn> for SignedTransaction {
             txn.max_gas_amount,
             txn.gas_unit_price,
             txn.expiration_timestamp_secs,
-            ChainId::new(txn.chain_id as u8),
+            ChainId::new(txn.chain_id),
         );
         SignedTransaction::new(
             raw_txn,

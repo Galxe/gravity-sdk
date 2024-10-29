@@ -9,7 +9,7 @@ use std::{convert::TryFrom, fmt, str::FromStr};
 /// Its main purpose is to improve human readability of reserved chain IDs in config files and CLI
 /// When signing transactions for such chains, the numerical chain ID should still be used
 /// (e.g. MAINNET has numeric chain ID 1, TESTNET has chain ID 2, etc)
-#[repr(u8)]
+#[repr(u64)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum NamedChain {
     /// Users might accidentally initialize the ChainId field to 0, hence reserving ChainId 0 for accidental
@@ -36,8 +36,8 @@ impl NamedChain {
         Ok(ChainId::new(named_chain.id()))
     }
 
-    pub fn id(&self) -> u8 {
-        *self as u8
+    pub fn id(&self) -> u64 {
+        *self as u64
     }
 
     pub fn from_chain_id(chain_id: &ChainId) -> Result<NamedChain, String> {
@@ -74,7 +74,7 @@ impl FromStr for NamedChain {
 /// Note: u7 in a u8 is uleb-compatible, and any usage of this should be aware
 /// that this field maybe updated to be uleb64 in the future
 #[derive(Clone, Copy, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub struct ChainId(u8);
+pub struct ChainId(u64);
 
 impl ChainId {
     /// Returns true iff the chain ID matches testnet
@@ -95,8 +95,16 @@ impl ChainId {
             false
         }
     }
+}
 
-    pub fn to_u8(&self) -> u8 {
+impl From<u64> for ChainId {
+    fn from(value: u64) -> Self {
+        ChainId(value)
+    }
+}
+
+impl Into<u64> for ChainId {
+    fn into(self) -> u64 {
         self.0
     }
 }
@@ -128,7 +136,7 @@ where
             E: serde::de::Error,
         {
             Ok(ChainId::new(
-                u8::try_from(value).map_err(serde::de::Error::custom)?,
+                u64::try_from(value).map_err(serde::de::Error::custom)?,
             ))
         }
     }
@@ -177,7 +185,7 @@ impl FromStr for ChainId {
     fn from_str(s: &str) -> Result<Self> {
         ensure!(!s.is_empty(), "Cannot create chain ID from empty string");
         NamedChain::str_to_chain_id(s).or_else(|_err| {
-            let value = s.parse::<u8>()?;
+            let value = s.parse::<u64>()?;
             ensure!(value > 0, "cannot have chain ID with 0");
             Ok(ChainId::new(value))
         })
@@ -185,12 +193,12 @@ impl FromStr for ChainId {
 }
 
 impl ChainId {
-    pub fn new(id: u8) -> Self {
+    pub fn new(id: u64) -> Self {
         assert!(id > 0, "cannot have chain ID with 0");
         Self(id)
     }
 
-    pub fn id(&self) -> u8 {
+    pub fn id(&self) -> u64 {
         self.0
     }
 

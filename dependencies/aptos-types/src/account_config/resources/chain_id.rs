@@ -12,7 +12,7 @@ use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct ChainIdResource {
-    chain_id: u8,
+    chain_id: u64,
 }
 
 impl ChainIdResource {
