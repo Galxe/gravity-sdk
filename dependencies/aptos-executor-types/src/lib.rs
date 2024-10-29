@@ -133,6 +133,11 @@ impl StateComputeResult {
         }
     }
 
+    pub fn version(&self) -> Version {
+        // TODO(gravity_byteyue): this is a placeholder, we should return the real version
+        Version::from(0u8)
+    }
+
     pub fn new_dummy() -> Self {
         StateComputeResult::new_dummy_with_root_hash(*ACCUMULATOR_PLACEHOLDER_HASH)
     }
