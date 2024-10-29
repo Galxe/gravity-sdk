@@ -56,7 +56,8 @@ impl MockCli {
         let num_eoa = std::env::var("NUM_EOA").map(|s| s.parse().unwrap()).unwrap_or(0);
         let hot_ratio = std::env::var("HOT_RATIO").map(|s| s.parse().unwrap()).unwrap_or(0.0);
         let hot_start_idx = START_ADDRESS + (num_eoa as f64 * 0.9) as usize;
-        (0..1000)
+        let txn_nums = std::env::var("BLOCK_TXN_NUMS").map(|s| s.parse().unwrap()).unwrap_or(1000);
+        (0..txn_nums)
             .map(|_| {
                 let from = Address::from(U160::from(
                     START_ADDRESS + get_account_idx(num_eoa, hot_start_idx, hot_ratio),
@@ -90,6 +91,10 @@ impl MockCli {
                 txn_bytes: bincode::serialize(txn).expect("failed to serialize"),
             })
             .collect::<Vec<_>>()
+    }
+
+    fn transform_to_reth_txn(gtxn: GTxn) -> TxEnv {
+        bincode::deserialize::<TxEnv>(&gtxn.txn_bytes).expect("failed to deserialize")
     }
 
     fn deserialization_txn(&self, bytes: Vec<u8>) -> TxEnvelope {
@@ -206,11 +211,14 @@ impl ExecutionApi for MockCli {
     }
 
     async fn send_ordered_block(&self, txns: Vec<GTxn>) {
-        todo!()
+        let _reth_txns = txns
+            .iter()
+            .map(|gtxn| MockCli::transform_to_reth_txn(gtxn.clone()))
+            .collect::<Vec<_>>();
     }
 
     async fn recv_executed_block_hash(&self) -> [u8; 32] {
-        todo!()
+        [0; 32]
     }
 
     async fn commit_block_hash(&self, _block_ids: Vec<[u8; 32]>) {
