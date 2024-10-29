@@ -69,7 +69,7 @@ impl ConsensusEngine {
             peers_and_metadata.clone(),
         );
         let network_id: NetworkId = network_config.network_id;
-        let (consensus_network_interfaces, mempool_interfaces) = init_network_interfaces(
+        let consensus_network_interfaces = init_network_interfaces(
             &mut network_builder,
             network_id,
             &network_config,
@@ -91,34 +91,8 @@ impl ConsensusEngine {
         let (mempool_client_sender, mempool_client_receiver) = mpsc::channel(1);
 
         let (consensus_to_mempool_sender, consensus_to_mempool_receiver) = mpsc::channel(1);
-        let (notification_sender, notification_receiver) = mpsc::channel(1);
-
         // Create notification senders and listeners for mempool, consensus and the storage service
         // For Gravity we only use it to notify the mempool for the committed txn gc logic
-        let mempool_notifier =
-            aptos_mempool_notifications::MempoolNotifier::new(notification_sender);
-        let mempool_notification_handler = MempoolNotificationHandler::new(mempool_notifier);
-        let mut consensus_mempool_handler =
-            ConsensusToMempoolHandler::new(mempool_notification_handler, consensus_listener);
-        let runtime = aptos_runtimes::spawn_named_runtime("Con2Mempool".into(), None);
-        runtime.spawn(async move {
-            consensus_mempool_handler.start().await;
-        });
-        network_runtimes.push(runtime);
-        let mempool_listener =
-            aptos_mempool_notifications::MempoolNotificationListener::new(notification_receiver);
-
-        let mempool_runtime = init_mempool(
-            &node_config,
-            &db,
-            &mut event_subscription_service,
-            mempool_interfaces,
-            mempool_client_receiver,
-            consensus_to_mempool_receiver,
-            mempool_listener,
-            peers_and_metadata,
-        );
-        network_runtimes.push(mempool_runtime);
         let mut args = ConsensusAdapterArgs::new(mempool_client_sender);
         let (consensus_runtime, _, _, execution_proxy) = start_consensus(
             &node_config,

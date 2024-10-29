@@ -86,16 +86,15 @@ pub fn start(node_config: NodeConfig, execution_api: Arc<dyn ExecutionApi>) -> a
     }
 }
 
-pub fn init_network_interfaces<T, E>(
+pub fn init_network_interfaces<T>(
     network_builder: &mut NetworkBuilder,
     network_id: NetworkId,
     network_config: &NetworkConfig,
     node_config: &NodeConfig,
     peers_and_metadata: Arc<PeersAndMetadata>,
-) -> (ApplicationNetworkInterfaces<T>, ApplicationNetworkInterfaces<E>)
+) -> ApplicationNetworkInterfaces<T>
 where
     T: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
-    E: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
 {
     let consensus_network_interfaces = build_network_interfaces::<T>(
         network_builder,
@@ -104,14 +103,7 @@ where
         consensus_network_configuration(node_config),
         peers_and_metadata.clone(),
     );
-    let mempool_interfaces = build_network_interfaces::<E>(
-        network_builder,
-        network_id,
-        &network_config,
-        mempool_network_configuration(node_config),
-        peers_and_metadata.clone(),
-    );
-    (consensus_network_interfaces, mempool_interfaces)
+    consensus_network_interfaces
 }
 
 pub fn start_consensus(
