@@ -30,8 +30,7 @@ use std::time::Duration;
 use std::{boxed::Box, sync::Arc};
 use once_cell::sync::OnceCell;
 use api_types::ConsensusApi;
-use api_types::{ConsensusApi, ExecutionApi};
-use aptos_vm::AptosVM;
+use api_types::ExecutionApi;
 
 pub struct ConsensusAdapterArgs {
     pub mempool_sender: mpsc::Sender<MempoolClientRequest>,
