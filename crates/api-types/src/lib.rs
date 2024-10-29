@@ -2,6 +2,7 @@ use std::{fmt::Display, sync::Arc};
 
 use async_trait::async_trait;
 use futures::channel::mpsc::SendError;
+use ruint::aliases::U256;
 use std::future::Future;
 use futures::future::BoxFuture;
 use tokio::{runtime::Runtime, sync::Mutex};
@@ -56,7 +57,7 @@ pub struct GTxn {
     /// Maximal total gas to spend for this transaction.
     pub max_gas_amount: u64,
     /// Price to be paid per gas unit.
-    pub gas_unit_price: u64,
+    pub gas_unit_price: U256,
     /// Expiration timestamp for this transaction, represented
     /// as seconds from the Unix Epoch. If the current blockchain timestamp
     /// is greater than or equal to this time, then the transaction has
@@ -103,7 +104,7 @@ impl GTxn {
     pub fn new(
         sequence_number: u64,
         max_gas_amount: u64,
-        gas_unit_price: u64,
+        gas_unit_price: U256,
         expiration_timestamp_secs: u64,
         chain_id: u64,
         txn_bytes: Vec<u8>,

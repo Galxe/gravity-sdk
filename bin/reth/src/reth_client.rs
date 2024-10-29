@@ -10,6 +10,7 @@ use reth::api::EngineTypes;
 use reth_ethereum_engine_primitives::{EthEngineTypes, EthPayloadAttributes};
 use reth_primitives::Bytes;
 use reth_rpc_api::{EngineApiClient, EngineEthApiClient};
+use revm_primitives::ruint::aliases::U256;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::{Receiver, Sender, UnboundedReceiver, UnboundedSender};
@@ -104,7 +105,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
                 SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() + 60 * 60 * 24;
             if eth_txns.is_empty() {
                 // when eth txns is empty, we need mock a txn
-                let gtxn = GTxn::new(0, 0, 0, secs, self.chain_id, bytes);
+                let gtxn = GTxn::new(0, 0, U256::from(0), secs, self.chain_id, bytes);
                 gtxns.push(gtxn);
                 return;
             }
@@ -114,7 +115,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
             let gtxn = GTxn::new(
                 tx_envelope.nonce(),
                 tx_envelope.gas_limit() as u64,
-                tx_envelope.gas_price().map(|x| x as u64).unwrap_or(0),
+                U256::from(tx_envelope.gas_price().map(|x| x as u64).unwrap_or(0)),
                 secs, // hardcode 1day
                 tx_envelope.chain_id().map(|x| x).unwrap_or(114),// 0 is not allowed and would trigger crash
                 bytes,

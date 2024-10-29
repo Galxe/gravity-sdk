@@ -30,6 +30,7 @@ use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest_derive::Arbitrary;
 use rayon::prelude::*;
+use ruint::aliases::U256;
 use serde::{Deserialize, Serialize};
 use std::{
     convert::TryFrom,
@@ -521,7 +522,7 @@ impl Into<GTxn> for SignedTransaction {
         GTxn {
             sequence_number: self.sequence_number(),
             max_gas_amount: self.max_gas_amount(),
-            gas_unit_price: self.gas_unit_price(),
+            gas_unit_price: U256::from(self.gas_unit_price()),
             expiration_timestamp_secs: self.expiration_timestamp_secs(),
             chain_id: self.chain_id().into(),
             txn_bytes: (*txn_bytes.clone()).to_owned(),
@@ -537,7 +538,7 @@ impl From<GTxn> for SignedTransaction {
             txn.sequence_number,
             TransactionPayload::GTxnBytes(txn.txn_bytes),
             txn.max_gas_amount,
-            txn.gas_unit_price,
+            txn.gas_unit_price.try_into().expect("out of range for u64"),
             txn.expiration_timestamp_secs,
             ChainId::new(txn.chain_id),
         );

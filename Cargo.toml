@@ -530,6 +530,7 @@ which = "4.2.5"
 whoami = "1.5.0"
 x25519-dalek = "1.2.0"
 z3tracer = "0.8.0"
+ruint = "1.12.3"
 
 [profile.release]
 debug = true
