@@ -98,36 +98,31 @@ pub fn prepare_executed_blocks_with_ledger_info(
 
     let compute_result = StateComputeResult::new(
         executed_hash,
-        vec![], // dummy subtree
-        0,
-        vec![],
-        0,
         None,
-        vec![],
-        vec![],
-        vec![],
-        None, // block end info
+        None,
     );
 
-    let li = LedgerInfo::new(
-        proposals.last().unwrap().block().gen_block_info(
-            compute_result.root_hash(),
-            compute_result.version(),
-            compute_result.epoch_state().clone(),
-        ),
-        consensus_hash,
-    );
+    unimplemented!()
 
-    let li_sig = generate_ledger_info_with_sig(&[signer.clone()], li);
+    // let li = LedgerInfo::new(
+    //     proposals.last().unwrap().block().gen_block_info(
+    //         compute_result.root_hash(),
+    //         compute_result.version(),
+    //         compute_result.epoch_state().clone(),
+    //     ),
+    //     consensus_hash,
+    // );
 
-    let executed_blocks: Vec<PipelinedBlock> = proposals
-        .iter()
-        .map(|proposal| {
-            PipelinedBlock::new(proposal.block().clone(), vec![], compute_result.clone())
-        })
-        .collect();
+    // let li_sig = generate_ledger_info_with_sig(&[signer.clone()], li);
 
-    (executed_blocks, li_sig, proposals)
+    // let executed_blocks: Vec<PipelinedBlock> = proposals
+    //     .iter()
+    //     .map(|proposal| {
+    //         PipelinedBlock::new(proposal.block().clone(), vec![], compute_result.clone())
+    //     })
+    //     .collect();
+
+    // (executed_blocks, li_sig, proposals)
 }
 
 pub fn prepare_executed_blocks_with_executed_ledger_info(

@@ -16,9 +16,6 @@ use std::fmt::{Display, Formatter};
 /// evaluate a proposal / block for correctness / safety and to produce a Vote.
 #[derive(Clone, Debug, CryptoHasher, Deserialize, BCSCryptoHash, Serialize)]
 pub struct VoteProposal {
-    /// Contains the data necessary to construct the parent's execution output state
-    /// and the childs in a verifiable way
-    accumulator_extension_proof: AccumulatorExtensionProof<TransactionAccumulatorHasher>,
     /// The block / proposal to evaluate
     #[serde(bound(deserialize = "Block: Deserialize<'de>"))]
     block: Block,
@@ -30,23 +27,15 @@ pub struct VoteProposal {
 
 impl VoteProposal {
     pub fn new(
-        accumulator_extension_proof: AccumulatorExtensionProof<TransactionAccumulatorHasher>,
         block: Block,
         next_epoch_state: Option<EpochState>,
         decoupled_execution: bool,
     ) -> Self {
         Self {
-            accumulator_extension_proof,
             block,
             next_epoch_state,
             decoupled_execution,
         }
-    }
-
-    pub fn accumulator_extension_proof(
-        &self,
-    ) -> &AccumulatorExtensionProof<TransactionAccumulatorHasher> {
-        &self.accumulator_extension_proof
     }
 
     pub fn block(&self) -> &Block {
@@ -90,14 +79,7 @@ impl VoteProposal {
         if self.decoupled_execution {
             Ok(self.vote_data_ordering_only())
         } else {
-            let proposed_block = self.block();
-            let new_tree = self.accumulator_extension_proof().verify(
-                proposed_block
-                    .quorum_cert()
-                    .certified_block()
-                    .executed_state_id(),
-            )?;
-            Ok(self.vote_data_with_extension_proof(&new_tree))
+            panic!("decoupled_execution must be true")
         }
     }
 }

@@ -130,7 +130,7 @@ prop_compose! {
         block in arb_block(),
         next_epoch_state in arb_epoch_state(),
     ) -> VoteProposal {
-        VoteProposal::new(accumulator_extension_proof, block, next_epoch_state, false)
+        VoteProposal::new(block, next_epoch_state, false)
     }
 }
 

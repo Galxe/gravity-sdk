@@ -193,15 +193,8 @@ impl BlockStore {
 
         let result = StateComputeResult::new(
             root_metadata.accu_hash,
-            root_metadata.frozen_root_hashes,
-            root_metadata.num_leaves, /* num_leaves */
-            vec![],                   /* parent_root_hashes */
-            0,                        /* parent_num_leaves */
-            None,                     /* epoch_state */
-            vec![],                   /* compute_status */
-            vec![],                   /* txn_infos */
-            vec![],                   /* reconfig_events */
-            None,                     // block end info
+            None,
+            None,
         );
 
         let pipelined_root_block = PipelinedBlock::new(

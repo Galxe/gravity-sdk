@@ -202,55 +202,55 @@ async fn commit_should_discover_validator_txns() {
         ]),
         None,
     );
-
+    unimplemented!()
     // Eventually 3 txns: block metadata, validator txn 0, validator txn 1.
-    let state_compute_result = StateComputeResult::new_dummy_with_compute_status(vec![
-            TransactionStatus::Keep(
-                ExecutionStatus::Success
-            );
-            3
-        ]);
+    // let state_compute_result = StateComputeResult::new_dummy_with_compute_status(vec![
+    //         TransactionStatus::Keep(
+    //             ExecutionStatus::Success
+    //         );
+    //         3
+    //     ]);
 
-    let blocks = vec![Arc::new(PipelinedBlock::new(
-        block,
-        vec![],
-        state_compute_result,
-    ))];
-    let epoch_state = EpochState::empty();
+    // let blocks = vec![Arc::new(PipelinedBlock::new(
+    //     block,
+    //     vec![],
+    //     state_compute_result,
+    // ))];
+    // let epoch_state = EpochState::empty();
 
-    execution_policy.new_epoch(
-        &epoch_state,
-        Arc::new(DirectMempoolPayloadManager::new()),
-        Arc::new(NoOpShuffler {}),
-        BlockExecutorConfigFromOnchain::new_no_block_limit(),
-        Arc::new(NoOpDeduper {}),
-        false,
-    );
+    // execution_policy.new_epoch(
+    //     &epoch_state,
+    //     Arc::new(DirectMempoolPayloadManager::new()),
+    //     Arc::new(NoOpShuffler {}),
+    //     BlockExecutorConfigFromOnchain::new_no_block_limit(),
+    //     Arc::new(NoOpDeduper {}),
+    //     false,
+    // );
 
-    let (tx, rx) = oneshot::channel::<()>();
+    // let (tx, rx) = oneshot::channel::<()>();
 
-    let callback = Box::new(
-        move |_a: &[Arc<PipelinedBlock>], _b: LedgerInfoWithSignatures| {
-            tx.send(()).unwrap();
-        },
-    );
+    // let callback = Box::new(
+    //     move |_a: &[Arc<PipelinedBlock>], _b: LedgerInfoWithSignatures| {
+    //         tx.send(()).unwrap();
+    //     },
+    // );
 
-    let _ = execution_policy
-        .commit(
-            blocks.as_slice(),
-            LedgerInfoWithSignatures::new(LedgerInfo::dummy(), AggregateSignature::empty()),
-            callback,
-        )
-        .await;
+    // let _ = execution_policy
+    //     .commit(
+    //         blocks.as_slice(),
+    //         LedgerInfoWithSignatures::new(LedgerInfo::dummy(), AggregateSignature::empty()),
+    //         callback,
+    //     )
+    //     .await;
 
-    // Wait until state sync is notified.
-    let _ = rx.await;
+    // // Wait until state sync is notified.
+    // let _ = rx.await;
 
-    // Get all txns that state sync was notified with.
-    let (txns, _) = state_sync_notifier.invocations.lock()[0].clone();
+    // // Get all txns that state sync was notified with.
+    // let (txns, _) = state_sync_notifier.invocations.lock()[0].clone();
 
-    let supposed_validator_txn_0 = txns[1].try_as_validator_txn().unwrap();
-    let supposed_validator_txn_1 = txns[2].try_as_validator_txn().unwrap();
-    assert_eq!(&validator_txn_0, supposed_validator_txn_0);
-    assert_eq!(&validator_txn_1, supposed_validator_txn_1);
+    // let supposed_validator_txn_0 = txns[1].try_as_validator_txn().unwrap();
+    // let supposed_validator_txn_1 = txns[2].try_as_validator_txn().unwrap();
+    // assert_eq!(&validator_txn_0, supposed_validator_txn_0);
+    // assert_eq!(&validator_txn_1, supposed_validator_txn_1);
 }

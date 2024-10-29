@@ -273,7 +273,6 @@ impl PipelinedBlock {
 
     pub fn vote_proposal(&self) -> VoteProposal {
         VoteProposal::new(
-            self.compute_result().extension_proof(),
             self.block.clone(),
             self.compute_result().epoch_state().clone(),
             true,
@@ -286,10 +285,7 @@ impl PipelinedBlock {
 
     pub fn subscribable_events(&self) -> Vec<ContractEvent> {
         // reconfiguration suffix don't count, the state compute result is carried over from parents
-        if self.is_reconfiguration_suffix() {
-            return vec![];
-        }
-        self.state_compute_result.subscribable_events().to_vec()
+        unimplemented!("subscribable_events")
     }
 
     /// The block is suffix of a reconfiguration block if the state result carries over the epoch state
