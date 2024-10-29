@@ -127,13 +127,13 @@ impl StateComputer for GravityExecutionProxy {
         Box::pin(async move {
             match engine {
                 Some(e) => {
-                    let result = StateComputeResult::new_dummy_with_root_hash(HashValue::new(e.get().expect("consensus engine").recv_executed_block_hash().await));
+                    let result = StateComputeResult::with_root_hash(HashValue::new(e.get().expect("consensus engine").recv_executed_block_hash().await));
                     Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
                 }
                 None => {
                     match block_result_receiver.await {
                         Ok(res) => {
-                            let result = StateComputeResult::new_dummy_with_root_hash(res);
+                            let result = StateComputeResult::with_root_hash(res);
                             Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
                         }
                         Err(e) => Err(ExecutorError::InternalError { error: e.to_string() }),

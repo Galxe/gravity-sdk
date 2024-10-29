@@ -113,7 +113,7 @@ impl StateComputer for RandomComputeResultStateComputer {
         let res = if parent_block_id == self.random_compute_result_root_hash {
             Err(ExecutorError::BlockNotFound(parent_block_id))
         } else {
-            Ok(StateComputeResult::new_dummy_with_root_hash(
+            Ok(StateComputeResult::with_root_hash(
                 self.random_compute_result_root_hash,
             ))
         };

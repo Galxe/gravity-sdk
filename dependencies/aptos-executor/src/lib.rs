@@ -57,7 +57,7 @@ pub mod block_executor {
         parent_block_id: HashValue,
         state_checkpoint_output: StateCheckpointOutput,
     ) -> ExecutorResult<StateComputeResult> {
-        let res = StateComputeResult::new_dummy_with_root_hash(block_id);
+        let res = StateComputeResult::with_root_hash(block_id);
         ExecutorResult::Ok(res)
     }
 

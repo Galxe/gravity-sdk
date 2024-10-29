@@ -139,13 +139,13 @@ impl StateComputeResult {
     }
 
     pub fn new_dummy() -> Self {
-        StateComputeResult::new_dummy_with_root_hash(*ACCUMULATOR_PLACEHOLDER_HASH)
+        StateComputeResult::with_root_hash(*ACCUMULATOR_PLACEHOLDER_HASH)
     }
 
     /// generate a new dummy state compute result with a given root hash.
     /// this function is used in RandomComputeResultStateComputer to assert that the compute
     /// function is really called.
-    pub fn new_dummy_with_root_hash(root_hash: HashValue) -> Self {
+    pub fn with_root_hash(root_hash: HashValue) -> Self {
         Self {
             root_hash,
             epoch_state: None,
