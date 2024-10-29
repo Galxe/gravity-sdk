@@ -112,53 +112,54 @@ impl PipelinedBlock {
         result: StateComputeResult,
         execution_time: Duration,
     ) -> Self {
-        self.state_compute_result = result;
-        self.input_transactions = input_transactions;
+        // self.state_compute_result = result;
+        // self.input_transactions = input_transactions;
 
-        let mut to_commit = 0;
-        let mut to_retry = 0;
-        for txn in self.state_compute_result.compute_status_for_input_txns() {
-            match txn {
-                TransactionStatus::Keep(_) => to_commit += 1,
-                TransactionStatus::Retry => to_retry += 1,
-                _ => {},
-            }
-        }
+        // let mut to_commit = 0;
+        // let mut to_retry = 0;
+        // for txn in self.state_compute_result.compute_status_for_input_txns() {
+        //     match txn {
+        //         TransactionStatus::Keep(_) => to_commit += 1,
+        //         TransactionStatus::Retry => to_retry += 1,
+        //         _ => {},
+        //     }
+        // }
 
-        let execution_summary = ExecutionSummary {
-            payload_len: self
-                .block
-                .payload()
-                .map_or(0, |payload| payload.len_for_execution()),
-            to_commit,
-            to_retry,
-            execution_time,
-            root_hash: self.state_compute_result.root_hash(),
-        };
+        // let execution_summary = ExecutionSummary {
+        //     payload_len: self
+        //         .block
+        //         .payload()
+        //         .map_or(0, |payload| payload.len_for_execution()),
+        //     to_commit,
+        //     to_retry,
+        //     execution_time,
+        //     root_hash: self.state_compute_result.root_hash(),
+        // };
 
-        // We might be retrying execution, so it might have already been set.
-        // Because we use this for statistics, it's ok that we drop the newer value.
-        if let Some(previous) = self.execution_summary.get() {
-            if previous.root_hash == execution_summary.root_hash
-                || previous.root_hash == *ACCUMULATOR_PLACEHOLDER_HASH
-            {
-                warn!(
-                    "Skipping re-inserting execution result, from {:?} to {:?}",
-                    previous, execution_summary
-                );
-            } else {
-                error!(
-                    "Re-inserting execution result with different root hash: from {:?} to {:?}",
-                    previous, execution_summary
-                );
-            }
-        } else {
-            self.execution_summary
-                .set(execution_summary)
-                .expect("inserting into empty execution summary");
-        }
+        // // We might be retrying execution, so it might have already been set.
+        // // Because we use this for statistics, it's ok that we drop the newer value.
+        // if let Some(previous) = self.execution_summary.get() {
+        //     if previous.root_hash == execution_summary.root_hash
+        //         || previous.root_hash == *ACCUMULATOR_PLACEHOLDER_HASH
+        //     {
+        //         warn!(
+        //             "Skipping re-inserting execution result, from {:?} to {:?}",
+        //             previous, execution_summary
+        //         );
+        //     } else {
+        //         error!(
+        //             "Re-inserting execution result with different root hash: from {:?} to {:?}",
+        //             previous, execution_summary
+        //         );
+        //     }
+        // } else {
+        //     self.execution_summary
+        //         .set(execution_summary)
+        //         .expect("inserting into empty execution summary");
+        // }
 
-        self
+        // self
+        unimplemented!("set_execution_result")
     }
 
     pub fn set_randomness(&self, randomness: Randomness) {
@@ -262,11 +263,12 @@ impl PipelinedBlock {
     }
 
     pub fn block_info(&self) -> BlockInfo {
-        self.block().gen_block_info(
-            self.compute_result().root_hash(),
-            self.compute_result().version(),
-            self.compute_result().epoch_state().clone(),
-        )
+        // self.block().gen_block_info(
+        //     self.compute_result().root_hash(),
+        //     self.compute_result().version(),
+        //     self.compute_result().epoch_state().clone(),
+        // )
+        unimplemented!("block_info")
     }
 
     pub fn vote_proposal(&self) -> VoteProposal {
@@ -293,11 +295,12 @@ impl PipelinedBlock {
     /// The block is suffix of a reconfiguration block if the state result carries over the epoch state
     /// from parent but has no transaction.
     pub fn is_reconfiguration_suffix(&self) -> bool {
-        self.state_compute_result.has_reconfiguration()
-            && self
-                .state_compute_result
-                .compute_status_for_input_txns()
-                .is_empty()
+        // self.state_compute_result.has_reconfiguration()
+        //     && self
+        //         .state_compute_result
+        //         .compute_status_for_input_txns()
+        //         .is_empty()
+        unimplemented!("is_reconfiguration_suffix")
     }
 
     pub fn elapsed_in_pipeline(&self) -> Option<Duration> {
