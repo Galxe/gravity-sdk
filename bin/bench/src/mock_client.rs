@@ -33,8 +33,8 @@ impl CounterTimer {
             let now = Instant::now();
             let duration = now.duration_since(self.last_time);
             info!(
-                "Time taken for the last 10 blocks to be produced: {:?}, txn num in block {:?}",
-                duration, self.txn_num_in_block
+                "Time taken for the last {:?} blocks to be produced: {:?}, txn num in block {:?}",
+                self.count_round, duration, self.txn_num_in_block
             );
 
             self.call_count = 0;
@@ -66,14 +66,11 @@ fn get_account_idx(num_eoa: usize, hot_start_idx: usize, hot_ratio: f64) -> usiz
 
 impl MockCli {
     pub(crate) fn new(chain_id: u64) -> Self {
-        Self {
-            chain_id,
-            count_timer: Mutex::new(CounterTimer::new()),
-        }
+        Self { chain_id, count_timer: Mutex::new(CounterTimer::new()) }
     }
 
     fn construct_reth_txn(&self) -> Vec<TxEnv> {
-        let num_eoa = std::env::var("NUM_EOA").map(|s| s.parse().unwrap()).unwrap_or(0);
+        let num_eoa = std::env::var("NUM_EOA").map(|s| s.parse().unwrap()).unwrap_or(1500);
         let hot_ratio = std::env::var("HOT_RATIO").map(|s| s.parse().unwrap()).unwrap_or(0.0);
         let hot_start_idx = START_ADDRESS + (num_eoa as f64 * 0.9) as usize;
         let txn_nums = std::env::var("BLOCK_TXN_NUMS").map(|s| s.parse().unwrap()).unwrap_or(1000);
@@ -91,6 +88,7 @@ impl MockCli {
                     value: U256::from(1),
                     gas_limit: TRANSFER_GAS_LIMIT,
                     gas_price: U256::from(1),
+                    chain_id: Some(114),
                     ..TxEnv::default()
                 }
             })
@@ -136,6 +134,6 @@ impl ExecutionApi for MockCli {
     }
 
     async fn commit_block_hash(&self, _block_ids: Vec<[u8; 32]>) {
-        self.count_timer.blocking_lock().count();
+        self.count_timer.lock().await.count();
     }
 }
