@@ -5,6 +5,17 @@ WORKSPACE=$SCRIPT_DIR/..
 
 log_suffix=$(date +"%Y-%d-%m:%H:%M:%S")
 
+node_arg=$1
+bin_name=$2
+
+if [ -e ${WORKSPACE}/script/node.pid ]; then
+    pid=$(cat ${WORKSPACE}/script/node.pid)
+    if [ -d "/proc/$pid" ]; then
+        echo ${node_arg} is started
+        exit 1
+    fi
+fi
+
 function start_node() {
     export RUST_BACKTRACE=1
     reth_rpc_port=$1
@@ -36,7 +47,7 @@ function start_node() {
     echo ${WORKSPACE}
 
     pid=$(
-        ${WORKSPACE}/bin/gravity-reth node \
+        ${WORKSPACE}/bin/${bin_name} node \
             --http.port ${http_port} \
             --port ${reth_rpc_port} \
             --authrpc.port ${authrpc_port} \
@@ -51,16 +62,6 @@ function start_node() {
     )
     echo $pid >${WORKSPACE}/script/node.pid
 }
-
-node_arg=$1
-
-if [ -e ${WORKSPACE}/script/node.pid ]; then
-    pid=$(cat ${WORKSPACE}/script/node.pid)
-    if [ -d "/proc/$pid" ]; then
-        echo ${node_arg} is started
-        exit 1
-    fi
-fi
 
 port1=""
 port2=""
@@ -88,5 +89,5 @@ else
     port4="9004"
 fi
 
-echo "start $node_arg ${port1} ${port2} ${port3} ${port4}"
+echo "start $node_arg ${port1} ${port2} ${port3} ${port4} ${bin_name}"
 start_node ${port1} ${port2} ${port3} ${port4}
