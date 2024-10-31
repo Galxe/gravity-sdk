@@ -541,9 +541,9 @@ impl Into<GTxn> for &SignedTransaction {
         GTxn {
             sequence_number: self.sequence_number(),
             max_gas_amount: self.max_gas_amount(),
-            gas_unit_price: self.gas_unit_price(),
+            gas_unit_price: U256::from(self.gas_unit_price()),
             expiration_timestamp_secs: self.expiration_timestamp_secs(),
-            chain_id: self.chain_id().to_u8() as u64,
+            chain_id: self.chain_id().into(),
             txn_bytes: (*txn_bytes.clone()).to_owned(),
         }
     }

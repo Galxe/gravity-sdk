@@ -5,7 +5,6 @@ use futures::channel::mpsc::SendError;
 use ruint::aliases::U256;
 use std::future::Future;
 use futures::future::BoxFuture;
-use std::future::Future;
 use tokio::{runtime::Runtime, sync::Mutex};
 
 #[derive(Clone, Copy)]

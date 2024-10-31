@@ -307,11 +307,6 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
             });
         }
         let parent_hash = payload.execution_payload.payload_inner.payload_inner.parent_hash;
-        info!(
-            "recover_ordered_block latest block_hash {} payload parent_hash {}",
-            block.hash_slow(),
-            parent_hash
-        );
         let payload_status = <T as EngineApiClient<EthEngineTypes>>::new_payload_v3(
             &self.engine_api_client,
             payload.execution_payload,
