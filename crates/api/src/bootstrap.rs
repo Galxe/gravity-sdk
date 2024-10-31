@@ -106,6 +106,17 @@ where
     consensus_network_interfaces
 }
 
+/// Spawns a new thread for the node inspection service
+pub fn start_node_inspection_service(
+    node_config: &NodeConfig,
+    peers_and_metadata: Arc<PeersAndMetadata>,
+) {
+    aptos_inspection_service::start_inspection_service(
+        node_config.clone(),
+        peers_and_metadata,
+    )
+}
+
 pub fn start_consensus(
     node_config: &NodeConfig,
     event_subscription_service: &mut EventSubscriptionService,

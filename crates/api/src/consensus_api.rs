@@ -3,7 +3,7 @@ use std::{future::IntoFuture, hash::Hash, sync::Arc, time::Duration};
 use crate::{
     bootstrap::{
         init_gravity_db, init_mempool, init_network_interfaces, init_peers_and_metadata,
-        start_consensus,
+        start_consensus, start_node_inspection_service,
     },
     consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler},
     logger,
@@ -87,6 +87,12 @@ impl ConsensusEngine {
         network_builder.build(runtime.handle().clone());
         network_builder.start();
         network_runtimes.push(runtime);
+
+        // Start the node inspection service
+        start_node_inspection_service(
+            &node_config,
+            peers_and_metadata.clone(),
+        );
 
         let (mempool_client_sender, mempool_client_receiver) = mpsc::channel(1);
 

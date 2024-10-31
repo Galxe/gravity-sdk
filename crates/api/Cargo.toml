@@ -32,6 +32,7 @@ aptos-secure-storage = { workspace = true }
 aptos-consensus-notifications = { workspace = true }
 aptos-time-service = { workspace = true }
 aptos-infallible = { workspace = true }
+aptos-inspection-service = { workspace = true }
 aptos-schemadb = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }

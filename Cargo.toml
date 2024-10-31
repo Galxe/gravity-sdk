@@ -27,6 +27,7 @@ members = [
     "dependencies/aptos-fallible",
     "dependencies/aptos-global-constants",
     "dependencies/aptos-infallible",
+    "dependencies/aptos-inspection-service",
     "dependencies/aptos-keygen",
     "dependencies/aptos-logger",
     "dependencies/aptos-metrics-core",
@@ -87,6 +88,7 @@ aptos-secure-storage = { workspace = true }
 aptos-consensus-notifications = { workspace = true }
 aptos-time-service = { workspace = true }
 aptos-infallible = { workspace = true }
+aptos-inspection-service = { workspace = true }
 aptos-schemadb = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
@@ -134,6 +136,7 @@ aptos-experimental-runtimes = { path = "./dependencies/aptos-experimental-runtim
 aptos-fallible = { path = "./dependencies/aptos-fallible" }
 aptos-global-constants = { path = "./dependencies/aptos-global-constants" }
 aptos-infallible = { path = "./dependencies/aptos-infallible" }
+aptos-inspection-service = { path = "./dependencies/aptos-inspection-service" }
 aptos-keygen = { path = "./dependencies/aptos-keygen" }
 aptos-logger = { path = "./dependencies/aptos-logger" }
 aptos-mempool-notifications = { path = "./dependencies/mempool-notifications" }
