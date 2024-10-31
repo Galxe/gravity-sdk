@@ -9,6 +9,7 @@ members = [
     "bin/reth",
     "aptos-core/consensus",
     "dependencies/aptos-bitvec",
+    "dependencies/aptos-build-info",
     "dependencies/aptos-bounded-executor",
     "dependencies/aptos-cached-packages",
     "dependencies/aptos-channels",
@@ -89,6 +90,7 @@ aptos-consensus-notifications = { workspace = true }
 aptos-time-service = { workspace = true }
 aptos-infallible = { workspace = true }
 aptos-inspection-service = { workspace = true }
+aptos-build-info = { workspace = true }
 aptos-schemadb = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
@@ -137,6 +139,7 @@ aptos-fallible = { path = "./dependencies/aptos-fallible" }
 aptos-global-constants = { path = "./dependencies/aptos-global-constants" }
 aptos-infallible = { path = "./dependencies/aptos-infallible" }
 aptos-inspection-service = { path = "./dependencies/aptos-inspection-service" }
+aptos-build-info = { path = "./dependencies/aptos-build-info" }
 aptos-keygen = { path = "./dependencies/aptos-keygen" }
 aptos-logger = { path = "./dependencies/aptos-logger" }
 aptos-mempool-notifications = { path = "./dependencies/mempool-notifications" }
