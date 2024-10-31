@@ -35,5 +35,5 @@ mock_db_path: "/tmp/node4/genesis/nodes_config.json"
 log_file_path: "/tmp/node4/consensus_log"
 
 inspection_service:
-  port: 1003
+  port: 10003
   address: 127.0.0.1
