@@ -1,6 +1,6 @@
 use alloy_consensus::{Transaction, TxEnvelope};
 use alloy_eips::eip2718::Decodable2718;
-use alloy_eips::BlockNumberOrTag;
+use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::{Address, B256};
 use alloy_rpc_types_engine::{ForkchoiceState, ForkchoiceUpdated, PayloadAttributes, PayloadId};
 use anyhow::Context;
@@ -236,10 +236,13 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
         info!("Got payload: {:?}", payload);
         let _ = tokio::time::sleep(Duration::from_secs(2)).await;
         let block_bytes = payload.execution_payload.payload_inner.payload_inner.block_hash;
+        info!(
+            "send block batch with hash {:?}, block number {}",
+            block_bytes, payload.execution_payload.payload_inner.payload_inner.block_number
+        );
         let mut block_hash = [0u8; 32];
         block_hash.copy_from_slice(block_bytes.as_slice());
         let txns = self.payload_to_txns(payload_id, payload);
-        info!("send block batch with hash {:?}", block_bytes);
         BlockBatch { txns, block_hash }
     }
 
@@ -254,6 +257,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
             });
         }
         let parent_hash = payload.execution_payload.payload_inner.payload_inner.parent_hash;
+        let block_number = payload.execution_payload.payload_inner.payload_inner.block_number;
         let payload_status = <T as EngineApiClient<EthEngineTypes>>::new_payload_v3(
             &self.engine_api_client,
             payload.execution_payload,
@@ -266,7 +270,10 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
         if payload_status.latest_valid_hash.is_none() {
             panic!("payload status latest valid hash is none");
         }
-        info!("get block hash in payload statue{:?}", payload_status);
+        info!(
+            "get block hash in payload statue {:?}, block number {}",
+            payload_status, block_number
+        );
         let mut hash = [0u8; 32];
         hash.copy_from_slice(payload_status.latest_valid_hash.unwrap().as_slice());
         self.block_hash_channel_sender.send(hash).expect("send block hash failed");
@@ -282,18 +289,14 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
         // do nothing for reth
     }
 
-    async fn latest_block_number(&self) -> u64 {
+    fn latest_block_number(&self) -> u64 {
         match self.provider.block_by_number_or_tag(BlockNumberOrTag::Latest).unwrap() {
-            Some(block) => block.number,
+            Some(block) => block.number, // The genesis block has a number of zero;
             None => 0,
         }
     }
 
-    async fn recover_ordered_block(
-        &self,
-        txns: Vec<GTxn>,
-        res: [u8; 32],
-    ) {
+    async fn recover_ordered_block(&self, txns: Vec<GTxn>, res: [u8; 32]) {
         let mut payload: <EthEngineTypes as EngineTypes>::ExecutionPayloadV3 =
             serde_json::from_slice(txns[0].get_bytes()).expect("Failed to deserialize payload");
         if txns.len() > 1 {
@@ -304,21 +307,30 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
             });
         }
         let parent_hash = payload.execution_payload.payload_inner.payload_inner.parent_hash;
+        info!(
+            "recover_ordered_block latest block_hash {} payload parent_hash {}",
+            block.hash_slow(),
+            parent_hash
+        );
         let payload_status = <T as EngineApiClient<EthEngineTypes>>::new_payload_v3(
             &self.engine_api_client,
             payload.execution_payload,
             Vec::new(),
             parent_hash,
         )
-        .await
-        .expect("Failed to submit payload");
-        // 3. submit compute res
-        if payload_status.latest_valid_hash.is_none() {
-            panic!("payload status latest valid hash is none");
+        .await;
+        match payload_status {
+            Ok(payload_status) => {
+                // 3. submit compute res
+                if payload_status.latest_valid_hash.is_none() {
+                    panic!("payload status latest valid hash is none");
+                }
+                info!("get block hash in payload statue{:?}", payload_status);
+                let mut hash = [0u8; 32];
+                hash.copy_from_slice(payload_status.latest_valid_hash.unwrap().as_slice());
+                assert!(res == hash);
+            }
+            Err(e) => panic!("new payload error {}", e),
         }
-        info!("get block hash in payload statue{:?}", payload_status);
-        let mut hash = [0u8; 32];
-        hash.copy_from_slice(payload_status.latest_valid_hash.unwrap().as_slice());
-        assert!(res == hash);
     }
 }

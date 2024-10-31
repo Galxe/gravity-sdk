@@ -15,9 +15,18 @@ use aptos_logger::prelude::*;
 use aptos_storage_interface::DbReader;
 use aptos_types::{
     block_info::Round, epoch_change::EpochChangeProof, ledger_info::LedgerInfoWithSignatures,
-    proof::TransactionAccumulatorSummary, transaction::Version,
+    proof::TransactionAccumulatorSummary, test_helpers::transaction_test_helpers::block,
+    transaction::Version,
 };
-use std::{cmp::max, collections::HashSet, fmt::Debug, sync::{atomic::{AtomicU64, Ordering}, Arc}};
+use std::{
+    cmp::max,
+    collections::HashSet,
+    fmt::Debug,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+};
 
 /// PersistentLivenessStorage is essential for maintaining liveness when a node crashes.  Specifically,
 /// upon a restart, a correct node will recover.  Even if all nodes crash, liveness is
@@ -206,18 +215,12 @@ pub struct RecoveryData {
 }
 
 impl RecoveryData {
-    pub fn new(
-        last_vote: Option<Vote>,
-        // ledger_recovery_data: LedgerRecoveryData,
+    pub fn find_root_by_block_number(
         execution_latest_block_num: u64,
-        mut blocks: Vec<Block>,
-        mut quorum_certs: Vec<QuorumCert>,
-        highest_2chain_timeout_cert: Option<TwoChainTimeoutCertificate>,
+        blocks: &mut Vec<Block>,
+        quorum_certs: &mut Vec<QuorumCert>,
         order_vote_enabled: bool,
-    ) -> Result<Self> {
-        println!("blocks in db: {:?}", blocks);
-        println!("quorum certs in db: {:?}", quorum_certs);
-
+    ) -> Result<RootInfo> {
         // sort by (epoch, round) to guarantee the topological order of parent <- child
         blocks.sort_by_key(|b| (b.epoch(), b.round()));
         let root_idx = blocks
@@ -226,7 +229,9 @@ impl RecoveryData {
                 Some(block_number) => block_number == execution_latest_block_num,
                 None => false,
             })
-            .ok_or_else(|| format_err!("unable to find block_number: {}", execution_latest_block_num))?;
+            .ok_or_else(|| {
+                format_err!("unable to find block_number: {}", execution_latest_block_num)
+            })?;
         let root_block = blocks.remove(root_idx);
         let root_quorum_cert = quorum_certs
             .iter()
@@ -248,12 +253,36 @@ impl RecoveryData {
                 .clone()
                 .into_wrapped_ledger_info();
             let root_commit_cert = root_ordered_cert
-                .create_merged_with_executed_state(root_quorum_cert.ledger_info().clone())
+                .create_merged_with_executed_state(root_ordered_cert.ledger_info().clone())
                 .expect("Inconsistent commit proof and evaluation decision, cannot commit block");
             (root_ordered_cert, root_commit_cert)
         };
         info!("Consensus root block is {}", root_block);
-        let root = RootInfo(Box::new(root_block), root_quorum_cert, root_ordered_cert, root_commit_cert);
+        Ok(RootInfo(Box::new(root_block), root_quorum_cert, root_ordered_cert, root_commit_cert))
+    }
+
+    pub fn new(
+        last_vote: Option<Vote>,
+        ledger_recovery_data: LedgerRecoveryData,
+        execution_latest_block_num: u64,
+        mut blocks: Vec<Block>,
+        mut quorum_certs: Vec<QuorumCert>,
+        highest_2chain_timeout_cert: Option<TwoChainTimeoutCertificate>,
+        order_vote_enabled: bool,
+    ) -> Result<Self> {
+        info!("blocks in db: {:?}", blocks.len());
+        info!("quorum certs in db: {:?}", quorum_certs.len());
+        let root;
+        if !blocks.is_empty() {
+            root = Self::find_root_by_block_number(
+                execution_latest_block_num,
+                &mut blocks,
+                &mut quorum_certs,
+                order_vote_enabled,
+            )?;
+        } else {
+            root = ledger_recovery_data.find_root(&mut blocks, &mut quorum_certs, order_vote_enabled)?;
+        }
         println!("root info: {:?}", root);
         let blocks_to_prune =
             Some(Self::find_blocks_to_prune(root.0.id(), &mut blocks, &mut quorum_certs));
@@ -330,22 +359,22 @@ pub struct StorageWriteProxy {
     db: Arc<ConsensusDB>,
     aptos_db: Arc<dyn DbReader>,
     next_block_number: AtomicU64,
-    execution_api: Option<Arc<dyn ExecutionApi>>
+    execution_api: Option<Arc<dyn ExecutionApi>>,
 }
 
-impl StorageWriteProxy {  
-    pub fn new(config: &NodeConfig, aptos_db: Arc<dyn DbReader>, execution_api: Option<Arc<dyn ExecutionApi>>) -> Self {
+impl StorageWriteProxy {
+    pub fn new(
+        config: &NodeConfig,
+        aptos_db: Arc<dyn DbReader>,
+        execution_api: Option<Arc<dyn ExecutionApi>>,
+    ) -> Self {
         let db = Arc::new(ConsensusDB::new(config.storage.dir()));
-        StorageWriteProxy {
-            db,
-            aptos_db,
-            next_block_number: AtomicU64::new(0),
-            execution_api: execution_api,
-        }
+        StorageWriteProxy { db, aptos_db, next_block_number: AtomicU64::new(0), execution_api }
     }
 
     pub fn init_next_block_number(&self, blocks: &Vec<Block>) {
         if blocks.len() == 0 {
+            self.next_block_number.store(1, Ordering::SeqCst);
             return;
         };
 
@@ -355,11 +384,7 @@ impl StorageWriteProxy {
                 max_block_number = max_block_number.max(bn);
             }
         }
-        if max_block_number == 0 {
-            self.next_block_number.store(0, Ordering::SeqCst);
-        } else {
-            self.next_block_number.store(max_block_number + 1, Ordering::SeqCst);
-        }
+        self.next_block_number.store(max_block_number + 1, Ordering::SeqCst);
     }
 }
 
@@ -404,13 +429,17 @@ impl PersistentLivenessStorage for StorageWriteProxy {
         info!("The following blocks were restored from ConsensusDB : {}", blocks_repr.concat());
         let qc_repr: Vec<String> = quorum_certs.iter().map(|qc| format!("\n\t{}", qc)).collect();
         info!("The following quorum certs were restored from ConsensusDB: {}", qc_repr.concat());
-        let runtime = aptos_runtimes::spawn_named_runtime("tmp".into(), None);
-        let execution_latest_block_num = runtime.block_on(async move {
-            self.execution_api.as_ref().unwrap().latest_block_number().await
-        });
+        let latest_block_number = self.execution_api.as_ref().unwrap().latest_block_number();
+        info!("The execution_latest_block_number is {}", latest_block_number);
+        let latest_ledger_info = self
+            .aptos_db
+            .get_latest_ledger_info()
+            .expect("Failed to get latest ledger info.");
+        let ledger_recovery_data = LedgerRecoveryData::new(latest_ledger_info);
         match RecoveryData::new(
             last_vote,
-            execution_latest_block_num,
+            ledger_recovery_data,
+            latest_block_number,
             blocks,
             quorum_certs,
             highest_2chain_timeout_cert,
@@ -445,7 +474,7 @@ impl PersistentLivenessStorage for StorageWriteProxy {
             Err(e) => {
                 error!(error = ?e, "Failed to construct recovery data");
                 panic!(""); // TODO(gravity_lightman)
-                // LivenessStorageData::PartialRecoveryData(ledger_recovery_data)
+                            // LivenessStorageData::PartialRecoveryData(ledger_recovery_data)
             }
         }
     }
@@ -470,7 +499,7 @@ impl PersistentLivenessStorage for StorageWriteProxy {
     fn consensus_db(&self) -> Arc<ConsensusDB> {
         self.db.clone()
     }
-    
+
     fn fetch_next_block_number(&self) -> u64 {
         let next_block_number = self.next_block_number.load(Ordering::SeqCst);
         self.next_block_number.fetch_add(1, Ordering::SeqCst);

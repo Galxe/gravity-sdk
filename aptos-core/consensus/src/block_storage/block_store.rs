@@ -33,6 +33,7 @@ use aptos_executor_types::StateComputeResult;
 use aptos_infallible::{Mutex, RwLock};
 use aptos_logger::prelude::*;
 use aptos_types::ledger_info::LedgerInfoWithSignatures;
+use aptos_consensus_types::common::Payload::DirectMempool;
 use futures::executor::block_on;
 #[cfg(test)]
 use std::collections::VecDeque;
@@ -254,12 +255,15 @@ impl BlockStore {
         self.pending_blocks.lock().gc(finality_proof.commit_info().round());
         if recovery {
             for p_block in &blocks_to_commit {
-                let g_txns = p_block.input_transactions().iter().map(|txn| txn.into()).collect();
-                self.execution_api
-                    .as_ref()
-                    .unwrap()
-                    .recover_ordered_block(g_txns, *p_block.block().id())
-                    .await;
+                if let DirectMempool((block_hash, txns)) = p_block.block().payload().unwrap() {
+                    info!("recover block {} block_hash {}", p_block.block(), block_hash);
+                    let g_txns = txns.iter().map(|txn| txn.into()).collect();
+                    self.execution_api
+                        .as_ref()
+                        .unwrap()
+                        .recover_ordered_block(g_txns, **block_hash)
+                        .await;
+                    }
             }
             let commit_decision = finality_proof.ledger_info().clone();
             block_tree.write().commit_callback(

@@ -578,8 +578,9 @@ impl BlockTree {
             committed_round = committed_round,
             block_id = block_to_commit.id(),
         );
-
-        let ids_to_remove = self.find_blocks_to_prune(block_to_commit.id());
+        let prune_block_id = blocks_to_commit.first().expect("pipeline is empty").clone().parent_id();
+        info!("the prune block id {}", prune_block_id);
+        let ids_to_remove = self.find_blocks_to_prune(prune_block_id);
         if let Err(e) = storage.prune_tree(ids_to_remove.clone().into_iter().collect()) {
             // it's fine to fail here, as long as the commit succeeds, the next restart will clean
             // up dangling blocks, and we need to prune the tree to keep the root consistent with

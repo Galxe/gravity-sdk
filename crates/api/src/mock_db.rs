@@ -172,7 +172,7 @@ impl MockStorage {
             );
             // TODO(gravity_byteyue): remove this
             let power = match i {
-                0 => 1,
+                0 => 31,
                 _ => 1,
             };
             result.push(ValidatorInfo::new(

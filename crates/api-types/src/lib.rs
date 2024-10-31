@@ -51,7 +51,7 @@ pub trait ExecutionApi: Send + Sync {
     // this function is called by the execution layer commit the block hash
     async fn commit_block_hash(&self, block_ids: Vec<[u8; 32]>);
 
-    async fn latest_block_number(&self) -> u64;
+    fn latest_block_number(&self) -> u64;
 
     async fn recover_ordered_block(
         &self,

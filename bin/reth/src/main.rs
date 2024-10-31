@@ -100,34 +100,16 @@ fn run_server() {
                 .await?;
             let client = handle.node.engine_http_client();
             let genesis_hash = handle.node.chain_spec().genesis_hash();
-            let mut head_hash = handle
+            let head_block = handle
                 .node
                 .provider
                 .block_by_id(BlockId::Number(BlockNumberOrTag::Latest))
                 .unwrap()
-                .unwrap()
-                .hash_slow();
-            let mut safe_hash = {
-                let res = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Safe));
-                if let Ok(Some(block)) = res {
-                    block.hash_slow()
-                } else {
-                    // None safe block, use genesis
-                    head_hash = genesis_hash;
-                    genesis_hash
-                }
-            };
-            let finalized_hash = {
-                let res =
-                    handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Finalized));
-                if let Ok(Some(block)) = res {
-                    block.hash_slow()
-                } else {
-                    // None safe block, use genesis
-                    safe_hash = genesis_hash;
-                    head_hash = genesis_hash;
-                    genesis_hash
-                }
+                .unwrap();
+            let (head_hash, safe_hash, finalized_hash) = if head_block.number == 0 {
+                (genesis_hash, genesis_hash, genesis_hash)
+            } else {
+                (head_block.hash_slow(), head_block.hash_slow(), head_block.hash_slow())
             };
             // let head_hash = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Latest)).unwrap().unwrap().hash_slow();
             // let safe_hash = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Safe)).unwrap().unwrap().hash_slow();
