@@ -33,3 +33,6 @@ storage:
 mock_db_path: "/tmp/node2/genesis/nodes_config.json"
 
 log_file_path: "/tmp/node2/consensus_log"
+
+inspection_service:
+  port: 1001
