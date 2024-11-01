@@ -6,6 +6,15 @@ import time
 from web3 import Web3
 from eth_account import Account
 
+parser = argparse.ArgumentParser(description='Process account path.')
+parser.add_argument('--account_path', type=str, default='genesis_accounts.json',
+                    help='Path to the account file (default: genesis_accounts.json)')
+parser.add_argument('--rpc_port', type=str, default='http://127.0.0.1:8545',
+                    help='RPC port (default: http://127.0.0.1:8545)')
+parser.add_argument('--chain_id', type=str, default='114',
+                    help='RPC port (default: 114')
+args = parser.parse_args()
+
 class Account:
     def __init__(self, address, private_key, nonce: 0):
         self.address = address
@@ -32,7 +41,7 @@ def load_accounts_from_json(file_path):
     for account in accounts_data:
         addr = account['address']
         priv_key = account['private_key']
-        accounts.append(Account(addr, priv_key))
+        accounts.append(Account(addr, priv_key, 0))
     
     return accounts
 
@@ -42,12 +51,19 @@ def init_nonce_for_accounts(w3, accounts):
         account.set_nonce(nonce)
 
 def single_transaction_request(w3, tx, private_key):
-    print('sign transaction')
-    signed_tx = w3.eth.account.sign_transaction(tx, private_key)
+    try:
+        print('Signing transaction...')
+        signed_tx = w3.eth.account.sign_transaction(tx, private_key)
 
-    tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
-    print('Transaction hash:', tx_hash.hex())
-    w3.eth.wait_for_transaction_receipt(tx_hash)
+        print('Sending transaction...')
+        tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+        print('Transaction hash:', tx_hash.hex())
+
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+        print('Transaction receipt:', receipt.hex())
+
+    except Exception as e:
+        print('An error occurred:', str(e))
 
 def generate_batch_task(w3, accounts):
     pairs = []
@@ -64,7 +80,7 @@ def generate_batch_task(w3, accounts):
             'value': value,
             'gas': 21000,
             'gasPrice': w3.to_wei(1, 'gwei'),
-            'chainId': 1,
+            'chainId': args.chain_id,
         }
         pairs.append((tx, private_key))
     return pairs
@@ -85,17 +101,9 @@ def request_process(accounts, addr):
                 print(result)
 
 def main():
-    parser = argparse.ArgumentParser(description='Process account path.')
-    parser.add_argument('--account_path', type=str, default='genesis_accounts.json',
-                        help='Path to the account file (default: genesis_accounts.json)')
-    parser.add_argument('--rpc_port', type=str, default='http://127.0.0.1:8545',
-                        help='RPC port (default: http://127.0.0.1:8545)')
-
-    args = parser.parse_args()
     print(f'Using account path: {args.account_path}')
     accounts = load_accounts_from_json(args.account_path)
     request_process(accounts, args.rpc_port)
-
 
 if __name__ == "__main__":
     main()
