@@ -33,15 +33,13 @@ use api_types::ConsensusApi;
 use api_types::ExecutionApi;
 
 pub struct ConsensusAdapterArgs {
-    pub mempool_sender: mpsc::Sender<MempoolClientRequest>,
     pub quorum_store_client: Option<Arc<QuorumStoreClient>>,
     pub execution_api: Option<Arc<dyn ExecutionApi>>,
 }
 
 impl ConsensusAdapterArgs {
-    pub fn new(mempool_sender: mpsc::Sender<MempoolClientRequest>, execution_api: Arc<dyn ExecutionApi>) -> Self {
+    pub fn new(execution_api: Arc<dyn ExecutionApi>) -> Self {
         Self {
-            mempool_sender,
             quorum_store_client: None,
             execution_api: Some(execution_api),
         }
@@ -52,9 +50,7 @@ impl ConsensusAdapterArgs {
     }
 
     pub fn dummy() -> Self {
-        let (mempool_sender, _mempool_receiver) = mpsc::channel(1);
         Self {
-            mempool_sender,
             quorum_store_client: None,
             execution_api: None,
         }

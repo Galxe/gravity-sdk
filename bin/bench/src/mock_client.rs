@@ -136,4 +136,16 @@ impl ExecutionApi for MockCli {
     async fn commit_block_hash(&self, _block_ids: Vec<[u8; 32]>) {
         self.count_timer.lock().await.count();
     }
+
+    fn latest_block_number(&self) -> u64 {
+        0
+    }
+
+    async fn recover_ordered_block(
+        &self,
+        block: Vec<GTxn>,
+        res: [u8; 32],
+    ) {
+        unimplemented!("No need for bench mode")
+    }
 }
