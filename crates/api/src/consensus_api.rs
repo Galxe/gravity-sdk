@@ -94,8 +94,6 @@ impl ConsensusEngine {
             peers_and_metadata.clone(),
         );
 
-        let (mempool_client_sender, mempool_client_receiver) = mpsc::channel(1);
-
         let (consensus_to_mempool_sender, consensus_to_mempool_receiver) = mpsc::channel(1);
         // Create notification senders and listeners for mempool, consensus and the storage service
         // For Gravity we only use it to notify the mempool for the committed txn gc logic

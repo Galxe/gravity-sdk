@@ -1,5 +1,4 @@
 mod bootstrap;
-pub mod consensus_engine;
 mod consensus_mempool_handler;
 mod logger;
 mod mock_db;
