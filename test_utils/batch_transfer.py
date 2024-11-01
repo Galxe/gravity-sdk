@@ -40,7 +40,7 @@ def single_transaction_request(w3, tx, private_key):
     print('Transaction hash:', tx_hash.hex())
     w3.eth.wait_for_transaction_receipt(tx_hash)
 
-def generate_batch_task(accounts):
+def generate_batch_task(w3, accounts):
     pairs = []
     for from_account, to_account in combinations(accounts, 2):
         private_key = from_account.private_key
@@ -62,7 +62,7 @@ def generate_batch_task(accounts):
 def request_process(accounts, addr):
     w3 = Web3(Web3.HTTPProvider(addr))
     while True:
-        tasks = generate_batch_task(accounts)
+        tasks = generate_batch_task(w3, accounts)
         
         with concurrent.futures.ProcessPoolExecutor() as executor:
             futures = [executor.submit(single_transaction_request, w3, tx, private_key) for tx, private_key in tasks]
@@ -84,5 +84,5 @@ def main():
     request_process(accounts, args.rpc_port)
 
 
-if __name__ == "main":
+if __name__ == "__main__":
     main()
