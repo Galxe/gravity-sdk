@@ -7,19 +7,22 @@ from web3 import Web3
 from eth_account import Account
 
 class Account:
-    def __init__(self, address, private_key):
+    def __init__(self, address, private_key, nonce: 0):
         self.address = address
         self.private_key = private_key
         self.balance = 100000
-        self.nonce = 0
+        self.nonce = nonce
 
     def __repr__(self):
         return f"Account(address={self.address}, private_key={self.private_key}, balance={self.balance}, nonce={self.nonce})"
     
+    def set_nonce(self, nonce):
+        self.nonce = nonce
+
     def inc_nonce(self):
         nonce = self.nonce
         self.nonce = nonce + 1
-        return 
+        return nonce
 
 def load_accounts_from_json(file_path):
     with open(file_path, 'r') as file:
@@ -33,7 +36,13 @@ def load_accounts_from_json(file_path):
     
     return accounts
 
+def init_nonce_for_accounts(w3, accounts):
+    for account in accounts:
+        nonce = w3.eth.get_transaction_count(account.address)
+        account.set_nonce(nonce)
+
 def single_transaction_request(w3, tx, private_key):
+    print('sign transaction')
     signed_tx = w3.eth.account.sign_transaction(tx, private_key)
 
     tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
@@ -46,6 +55,7 @@ def generate_batch_task(w3, accounts):
         private_key = from_account.private_key
         value = w3.to_wei(0.1, 'ether')
         from_nonce = from_account.inc_nonce()
+        print(f"{from_account.address} to {to_account.address}, nonce {from_nonce}")
 
         tx = {
             'from': from_account.address,
@@ -61,11 +71,14 @@ def generate_batch_task(w3, accounts):
 
 def request_process(accounts, addr):
     w3 = Web3(Web3.HTTPProvider(addr))
+    init_nonce_for_accounts(w3, accounts)
     while True:
         tasks = generate_batch_task(w3, accounts)
+        print(f"Going to process {len(tasks)} request")
         
-        with concurrent.futures.ProcessPoolExecutor() as executor:
-            futures = [executor.submit(single_transaction_request, w3, tx, private_key) for tx, private_key in tasks]
+        with concurrent.futures.ThreadPoolExecutor() as executor:  # 使用线程池
+            futures = [executor.submit(single_transaction_request, w3, tx, private_key) 
+                      for tx, private_key in tasks]
 
             for future in concurrent.futures.as_completed(futures):
                 result = future.result()
