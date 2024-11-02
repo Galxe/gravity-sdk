@@ -11,8 +11,8 @@ parser.add_argument('--account_path', type=str, default='genesis_accounts.json',
                     help='Path to the account file (default: genesis_accounts.json)')
 parser.add_argument('--rpc_port', type=str, default='http://127.0.0.1:8545',
                     help='RPC port (default: http://127.0.0.1:8545)')
-parser.add_argument('--chain_id', type=str, default='114',
-                    help='RPC port (default: 114')
+parser.add_argument('--chain_id', type=str, default='1',
+                    help='Chain id (default: 1(Mainnet)')
 args = parser.parse_args()
 
 class Account:
@@ -92,7 +92,7 @@ def request_process(accounts, addr):
         tasks = generate_batch_task(w3, accounts)
         print(f"Going to process {len(tasks)} request")
         
-        with concurrent.futures.ThreadPoolExecutor() as executor:  # 使用线程池
+        with concurrent.futures.ThreadPoolExecutor() as executor:
             futures = [executor.submit(single_transaction_request, w3, tx, private_key) 
                       for tx, private_key in tasks]
 

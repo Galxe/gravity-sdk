@@ -41,6 +41,7 @@ impl ConsensusEngine {
         node_config: NodeConfig,
         execution_api: Arc<dyn ExecutionApi>,
         block_hash_state: BlockHashState,
+        chain_id: u64,
     ) -> Arc<Self> {
         let gravity_db = init_gravity_db(&node_config);
         let peers_and_metadata = init_peers_and_metadata(&node_config, &gravity_db);
@@ -59,7 +60,7 @@ impl ConsensusEngine {
         let runtime = create_network_runtime(&network_config);
         // Entering gives us a runtime to instantiate all the pieces of the builder
         let _enter = runtime.enter();
-        let chain_id = ChainId::test();
+        let chain_id = ChainId::from(chain_id);
         let mut network_builder = NetworkBuilder::create(
             chain_id,
             node_config.base.role,

@@ -46,6 +46,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync + 'static> TestConsensu
         reth_cli: RethCli<T>,
         node_config: NodeConfig,
         block_hash_state: BlockHashState,
+        chain_id: u64,
     ) -> Self {
         let mut safe_slice = [0u8; 32];
         safe_slice.copy_from_slice(block_hash_state.safe_hash.as_slice());
@@ -56,7 +57,12 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync + 'static> TestConsensu
             safe_hash: safe_slice,
             head_hash: head_slice,
             reth_cli: reth_cli.clone(),
-            consensus_engine: ConsensusEngine::init(node_config, reth_cli, block_hash_state),
+            consensus_engine: ConsensusEngine::init(
+                node_config,
+                reth_cli,
+                block_hash_state,
+                chain_id,
+            ),
         }
     }
 
@@ -124,6 +130,7 @@ fn run_server() {
                         head_hash: *head_hash,
                         finalized_hash: *finalized_hash,
                     },
+                    id,
                 );
                 tokio::runtime::Runtime::new().unwrap().block_on(cl.run());
             });
