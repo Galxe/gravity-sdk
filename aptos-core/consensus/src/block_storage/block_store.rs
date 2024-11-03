@@ -34,7 +34,6 @@ use aptos_executor_types::StateComputeResult;
 use aptos_infallible::{Mutex, RwLock};
 use aptos_logger::prelude::*;
 use aptos_types::ledger_info::LedgerInfoWithSignatures;
-use aptos_consensus_types::common::Payload::DirectMempool;
 use futures::executor::block_on;
 use tokio::runtime::Runtime;
 

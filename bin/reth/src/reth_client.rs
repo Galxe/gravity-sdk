@@ -297,13 +297,6 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
         }
     }
 
-    fn latest_block_number(&self) -> u64 {
-        match self.provider.block_by_number_or_tag(BlockNumberOrTag::Latest).unwrap() {
-            Some(block) => block.number, // The genesis block has a number of zero;
-            None => 0,
-        }
-    }
-
     async fn recover_ordered_block(&self, txns: Vec<GTxn>, res: [u8; 32]) {
         let mut payload: <EthEngineTypes as EngineTypes>::ExecutionPayloadV3 =
             serde_json::from_slice(txns[0].get_bytes()).expect("Failed to deserialize payload");
