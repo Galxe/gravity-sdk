@@ -287,7 +287,7 @@ impl BlockStore {
         self.pending_blocks.lock().gc(finality_proof.commit_info().round());
         if recovery {
             for p_block in &blocks_to_commit {
-                if let DirectMempool((block_hash, txns)) = p_block.block().payload().unwrap() {
+                if let Some(DirectMempool((block_hash, txns))) = p_block.block().payload() {
                     info!("recover block {} block_hash {}", p_block.block(), block_hash);
                     let g_txns = txns.iter().map(|txn| txn.into()).collect();
                     self.execution_api
@@ -295,7 +295,7 @@ impl BlockStore {
                         .unwrap()
                         .recover_ordered_block(g_txns, **block_hash)
                         .await;
-                    }
+                }
             }
             let commit_decision = finality_proof.ledger_info().clone();
             block_tree.write().commit_callback(
