@@ -8,6 +8,7 @@ edition = "2021"
 members = [
     "bin/reth",
     "aptos-core/consensus",
+    "dependencies/aptos-api",
     "dependencies/aptos-bitvec",
     "dependencies/aptos-build-info",
     "dependencies/aptos-bounded-executor",
@@ -152,6 +153,7 @@ aptos-schemadb = { path = "./dependencies/aptos-schemadb", features = [
 ] }
 api = {path = "./crates/api"}
 api-types = { path = "./crates/api-types" }
+aptos-api = { path = "./dependencies/aptos-api" }
 aptos-secure-net = { path = "./dependencies/aptos-secure-net" }
 aptos-secure-storage = { path = "./dependencies/aptos-secure-storage" }
 aptos-short-hex-str = { path = "./dependencies/aptos-short-hex-str" }
