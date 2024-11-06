@@ -4,58 +4,62 @@
 [Readme](./readme.md) 
 | [GravitySDKBook](docs/GravitySDKBook.md)
 
-## What is Gravity-SDK?
+Introduction
+Gravity-SDK is a high-performance, modular consensus algorithm component designed as an alternative to Tendermint. It integrates the Aptos-BFT consensus algorithm, offering a highly customizable and scalable framework for blockchain systems. Its design enables efficient, secure, and fault-tolerant consensus processes, making it suitable for various blockchain ecosystems.
 
-Gravity-SDK is a consensus algorithm component designed as an alternative to Tendermint, aimed at providing a high-performance and modular consensus solution for blockchain systems. It leverages the Aptos-BFT consensus algorithm, offering a highly customizable and scalable framework that enables efficient blockchain consensus processes.
+Why Use Gravity-SDK?
+Gravity-SDK is built to address the performance and flexibility demands of modern blockchain systems. With a focus on modularity and efficiency, it provides blockchain developers with a robust solution for consensus, while ensuring compatibility with widely-used blockchain protocols like Ethereum.
 
-## 🌟 Features
-
-Gravity-SDK provides the following key features for the consensus module within a blockchain:
-
-Consensus on Receiving Batches: Processes and receives transaction batches, which then enter the consensus process.
-Consensus on Execution Results: Submits execution results to the consensus layer to reach agreement.
-With its modular architecture, Gravity-SDK offers a flexible consensus mechanism suitable for various blockchain scenarios.
-
-## Key Advantages
-
-Efficient Aptos-BFT Consensus Algorithm:
-Gravity-SDK employs the Aptos-BFT consensus algorithm for highly efficient fault-tolerant consensus.
+Key Advantages
+Efficient Consensus:
+Utilizes the Aptos-BFT algorithm, which provides high efficiency and fault tolerance, ensuring consensus is reached even in the event of node failures.
 Modular Architecture:
-The SDK is designed with a modular structure, making it easy to integrate into different blockchain systems.
-Optimized Pipeline Consensus:
-The SDK divides the consensus process into two separate pipelines: one for batch consensus and another for result consensus, optimizing the flow and improving performance.
-Unified Interface:
-Gravity-SDK uses the GCEI protocol for a unified external interface, allowing seamless integration into a variety of blockchain architectures.
-Compatibility with ETH Engine API:
-Gravity-SDK is compatible with Ethereum's Engine API, facilitating interoperability with the Ethereum ecosystem.
+The SDK is designed to be easily integrated into different blockchain platforms. The modular components allow developers to customize and extend functionality based on specific requirements.
+Pipeline Optimization:
+By separating the consensus process into two distinct pipelines—one for transaction batch consensus and another for execution result consensus—Gravity-SDK optimizes workflow and improves overall performance.
+Unified External Interface:
+The SDK adopts the GCEI Protocol to provide a unified interface, simplifying communication between consensus and execution layers and ensuring seamless integration into various blockchain architectures.
+Ethereum Compatibility:
+Gravity-SDK is fully compatible with Ethereum's Engine API, making it interoperable with the Ethereum ecosystem and ensuring flexibility for multi-chain projects.
+Core Features
+Gravity-SDK offers several key features that make it a powerful tool for blockchain developers:
 
-## GCEI Protocol
+Batch Consensus:
+The SDK processes batches of transactions and submits them for consensus. This feature is crucial for blockchains that prioritize high throughput and efficient batch processing.
+Execution Result Consensus:
+After transaction execution, results are submitted to the consensus layer to reach agreement. This ensures that both transaction data and execution outcomes are securely agreed upon by the network.
+Architecture and Protocols
+GCEI Protocol
+The GCEI (Gravity Consensus Execution Interface) protocol is the communication bridge between the consensus and execution modules in Gravity-SDK. It standardizes the interaction between the two layers, ensuring that consensus and execution processes are properly synchronized.
 
-Gravity-SDK uses the GCEI protocol as the communication bridge between its consensus and execution modules. The GCEI protocol is divided into two main parts: the Execution Layer API and the Consensus Layer API.
-
-Core-API
 Execution Layer API
-request_batch: Requests a batch of transactions from the execution engine.
-send_orderblock: Sends the ordered block to the execution engine.
-commit: Submits the execution results to the consensus layer.
+request_batch: Requests a batch of transactions from the execution engine for processing.
+send_orderblock: Sends the ordered block to the execution engine for execution.
+commit: Submits execution results to the consensus layer for final agreement.
 Consensus Layer API
-recv_batch: Receives a batch of transactions from the consensus layer.
-recv_compute_res: Receives the execution result from the execution layer.
+recv_batch: Receives a transaction batch from the consensus layer.
+recv_compute_res: Receives the execution result from the execution engine.
+Optimized Pipeline Design
+Gravity-SDK divides the consensus process into two pipelines:
 
-## 🚀 Quick Start
+Batch Consensus Pipeline: Handles the consensus on incoming transaction batches.
+Result Consensus Pipeline: Handles the consensus on the results of the executed transactions.
+This separation optimizes the overall workflow by reducing bottlenecks and ensuring that both transaction batches and execution results are processed efficiently.
 
-To lauch mutilpe nodes, please refer to the documentation listed below:
+Getting Started
+To help you get started with Gravity-SDK, we provide detailed instructions for deploying and running nodes.
+
+Prerequisites
+Ensure you have the necessary development environment set up, including the required dependencies for compiling and running the SDK.
+Familiarity with blockchain concepts, especially consensus algorithms and execution layers, is recommended.
+Quick Start Guide
+For step-by-step instructions on how to deploy a network of multiple nodes, refer to the following guide:
+
 - [Deploy 4 nodes](deploy_utils/readme.md)
 
+This guide provides a comprehensive walkthrough of setting up a four-node network
 
-t each method of the trait according to your specific consensus requirements.
+## Contributing
 
-## 🤝 Contributing
-
-We welcome contributions to the gravity-sdk project! Please see our [Contributing Guidelines](CONTRIBUTING.md) for more information on how to get involved.
-
----
-
-gravity-sdk - Empowering blockchain projects with flexible, efficient consensus mechanisms.
-
+We encourage contributions to the Gravity-SDK project. Whether you want to report an issue, suggest a new feature, or submit a pull request, we welcome your input! Please see our [Contributing Guidelines](CONTRIBUTING.md) for more information on how to get involved.
 
