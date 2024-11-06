@@ -176,9 +176,12 @@ pub fn init_peers_and_metadata(
     gravity_db: &GravityDB,
 ) -> Arc<PeersAndMetadata> {
     let listen_address = node_config.validator_network.as_ref().unwrap().listen_address.to_string();
-    let gravity_node_config = gravity_db.mock_db.node_config_set.get(&listen_address).unwrap();
+    gravity_db.mock_db.node_config_set.iter().for_each(|f| {
+        println!("addr is {:?}", f.0);
+    });
+    let gravity_node_config = gravity_db.mock_db.node_config_set.get(&listen_address).expect(&format!("addr {:?} has no config", listen_address));
     let network_ids = extract_network_ids(node_config);
-    let peers_and_metadata = PeersAndMetadata::new(&network_ids);
+    let peers_and_metadata: Arc<PeersAndMetadata> = PeersAndMetadata::new(&network_ids);
     let mut peer_set = HashMap::new();
     for trusted_peer in &gravity_node_config.trusted_peers_map {
         let trusted_peer_config = gravity_db.mock_db.node_config_set.get(trusted_peer).unwrap();
