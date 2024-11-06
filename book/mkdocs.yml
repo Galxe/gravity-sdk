@@ -1,0 +1,13 @@
+site_name: GravitySDKBook
+theme:
+  name: mkdocs
+  language: zh
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+
+nav:
+  - 主页: index.md
