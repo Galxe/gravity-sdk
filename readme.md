@@ -1,62 +1,54 @@
 
-# Gravity Consensus Engine Interface (GCEI)
+## Gravity-SDK
 
-Gravity-sdk is a high-performance, modular consensus engine interface designed to provide a standardized approach for integrating consensus mechanisms into blockchain projects. By encapsulating the Aptos consensus module and exposing a generic interface, GCEI offers a flexible solution for various blockchain initiatives. 
+[Readme](./readme.md) 
+| [GravitySDKBook](docs/GravitySDKBook.md)
+
+## What is Gravity-SDK?
+
+Gravity-SDK is a consensus algorithm component designed as an alternative to Tendermint, aimed at providing a high-performance and modular consensus solution for blockchain systems. It leverages the Aptos-BFT consensus algorithm, offering a highly customizable and scalable framework that enables efficient blockchain consensus processes.
 
 ## 🌟 Features
 
-- **Modular Design**: Easily integrate with different blockchain architectures.
-- **High Performance**: Optimized for efficient consensus operations.
-- **Flexible**: Adaptable to various consensus algorithms and blockchain structures.
-- **Standardized Interface**: Consistent API for simplified integration and maintenance.
+Gravity-SDK provides the following key features for the consensus module within a blockchain:
+
+Consensus on Receiving Batches: Processes and receives transaction batches, which then enter the consensus process.
+Consensus on Execution Results: Submits execution results to the consensus layer to reach agreement.
+With its modular architecture, Gravity-SDK offers a flexible consensus mechanism suitable for various blockchain scenarios.
+
+## Key Advantages
+
+Efficient Aptos-BFT Consensus Algorithm:
+Gravity-SDK employs the Aptos-BFT consensus algorithm for highly efficient fault-tolerant consensus.
+Modular Architecture:
+The SDK is designed with a modular structure, making it easy to integrate into different blockchain systems.
+Optimized Pipeline Consensus:
+The SDK divides the consensus process into two separate pipelines: one for batch consensus and another for result consensus, optimizing the flow and improving performance.
+Unified Interface:
+Gravity-SDK uses the GCEI protocol for a unified external interface, allowing seamless integration into a variety of blockchain architectures.
+Compatibility with ETH Engine API:
+Gravity-SDK is compatible with Ethereum's Engine API, facilitating interoperability with the Ethereum ecosystem.
+
+## GCEI Protocol
+
+Gravity-SDK uses the GCEI protocol as the communication bridge between its consensus and execution modules. The GCEI protocol is divided into two main parts: the Execution Layer API and the Consensus Layer API.
+
+Core-API
+Execution Layer API
+request_batch: Requests a batch of transactions from the execution engine.
+send_orderblock: Sends the ordered block to the execution engine.
+commit: Submits the execution results to the consensus layer.
+Consensus Layer API
+recv_batch: Receives a batch of transactions from the consensus layer.
+recv_compute_res: Receives the execution result from the execution layer.
 
 ## 🚀 Quick Start
 
 To lauch mutilpe nodes, please refer to the documentation listed below:
 - [Deploy 4 nodes](deploy_utils/readme.md)
 
-To use gravity-sdk in your project, implement the `GravityConsensusEngineInterface` trait:
 
-```rust
-pub trait GravityConsensusEngineInterface {
-    fn init();
-    fn submit_valid_transactions();
-    fn polling_ordered_block();
-    fn submit_compute_res();
-    fn submit_block_head();
-    fn polling_commit_block_ids();
-    fn submit_commit_block_ids();
-}
-```
-
-## 📘 API Reference
-
-### `init()`
-Initialize the consensus engine. Sets up initial state, network connections, and configurations.
-
-### `submit_valid_transactions()`
-Process incoming validated transactions, adding them to the local transaction pool.
-
-### `polling_ordered_block()`
-Retrieve and prepare newly ordered blocks for processing.
-
-### `submit_compute_res()` / `submit_block_head()`
-Submit computation results / block head back to the consensus mechanism after processing a block.
-
-
-### `polling_commit_block_ids()`
-Mark specified blocks as finalized and trigger related events such as persisting.
-
-### `submit_persistent_block_ids()`
-Return persistent IDs of execution layer for transaction cleanup by the consensus mechanism.
-
-## 🛠 Implementation
-
-To implement gravity-sdk in your project:
-
-1. Import the gravity-sdk module.
-2. Create a struct that implements the `GravityConsensusEngineInterface` trait.
-3. Implement each method of the trait according to your specific consensus requirements.
+t each method of the trait according to your specific consensus requirements.
 
 ## 🤝 Contributing
 
