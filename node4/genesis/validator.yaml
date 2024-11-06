@@ -17,7 +17,7 @@ consensus:
 
 validator_network:
   network_id: validator
-  listen_address: "/ip4/127.0.0.1/tcp/6180"
+  listen_address: "/ip4/35.203.131.111/tcp/6180"
   discovery_method: 
     file:
       path: "/tmp/node4/discovery"
@@ -36,4 +36,4 @@ log_file_path: "/tmp/node4/consensus_log"
 
 inspection_service:
   port: 10003
-  address: 127.0.0.1
+  address: 35.203.131.111
