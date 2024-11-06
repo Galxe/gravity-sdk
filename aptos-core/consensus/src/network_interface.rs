@@ -21,6 +21,7 @@ use aptos_consensus_types::{
     sync_info::SyncInfo,
     vote_msg::VoteMsg,
 };
+use aptos_logger::info;
 use aptos_network::{
     application::{error::Error, interface::NetworkClientInterface},
     ProtocolId,

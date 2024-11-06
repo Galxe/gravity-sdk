@@ -4,7 +4,7 @@
 
 use crate::block::Block;
 use anyhow::ensure;
-use aptos_crypto::hash::HashValue;
+use aptos_crypto::hash::{HashValue, GENESIS_BLOCK_ID};
 use aptos_short_hex_str::AsShortHexStr;
 use aptos_types::validator_verifier::ValidatorVerifier;
 use serde::{Deserialize, Serialize};
@@ -120,7 +120,13 @@ impl BlockRetrievalResponse {
                 || self
                     .blocks
                     .last()
-                    .map_or(false, |block| retrieval_request.match_target_id(block.id())),
+                    .map_or(false, |block| {
+                        if retrieval_request.match_target_id(*GENESIS_BLOCK_ID) {
+                            retrieval_request.match_target_id(block.parent_id())
+                        } else {
+                            retrieval_request.match_target_id(block.id())
+                        }
+                    }),
             "target not found in blocks returned, expect {:?}",
             retrieval_request.target_block_id(),
         );

@@ -180,7 +180,7 @@ impl TreeInserter {
 
     pub fn insert_qc_for_block(&self, block: &PipelinedBlock, committed_block: Option<BlockInfo>) {
         self.block_store
-            .insert_single_quorum_cert(self.create_qc_for_block(block, committed_block))
+            .insert_single_quorum_cert(self.create_qc_for_block(block, committed_block), false)
             .unwrap()
     }
 

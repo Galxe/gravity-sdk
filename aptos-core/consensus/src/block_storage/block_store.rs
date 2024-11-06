@@ -247,12 +247,12 @@ impl BlockStore {
         };
 
         for block in blocks {
-            block_store.insert_block(block).await.unwrap_or_else(|e| {
+            block_store.insert_block(block, true).await.unwrap_or_else(|e| {
                 panic!("[BlockStore] failed to insert block during build {:?}", e)
             });
         }
         for qc in quorum_certs {
-            block_store.insert_single_quorum_cert(qc).unwrap_or_else(|e| {
+            block_store.insert_single_quorum_cert(qc, true).unwrap_or_else(|e| {
                 panic!("[BlockStore] failed to insert quorum during build{:?}", e)
             });
         }
@@ -386,11 +386,14 @@ impl BlockStore {
     /// Duplicate inserts will return the previously inserted block (
     /// note that it is considered a valid non-error case, for example, it can happen if a validator
     /// receives a certificate for a block that is currently being added).
-    pub async fn insert_block(&self, block: Block) -> anyhow::Result<Arc<PipelinedBlock>> {
+    pub async fn insert_block(&self, block: Block, rebuild: bool) -> anyhow::Result<Arc<PipelinedBlock>> {
         if let Some(existing_block) = self.get_block(block.id()) {
             return Ok(existing_block);
         }
-        ensure!(self.inner.read().ordered_root().round() < block.round(), "Block with old round");
+        info!("insert block {}", block);
+        if !rebuild {
+            ensure!(self.inner.read().ordered_root().round() < block.round(), "Block with old round");
+        }
 
         let pipelined_block = PipelinedBlock::new_ordered(block.clone());
         // ensure local time past the block time
@@ -406,14 +409,16 @@ impl BlockStore {
             self.payload_manager
                 .prefetch_payload_data(payload, pipelined_block.block().timestamp_usecs());
         }
-        self.storage
-            .save_tree(vec![pipelined_block.block().clone()], vec![])
-            .context("Insert block failed when saving block")?;
+        if !rebuild {
+            self.storage
+                .save_tree(vec![pipelined_block.block().clone()], vec![])
+                .context("Insert block failed when saving block")?;
+        }
         self.inner.write().insert_block(pipelined_block)
     }
 
     /// Validates quorum certificates and inserts it into block tree assuming dependencies exist.
-    pub fn insert_single_quorum_cert(&self, qc: QuorumCert) -> anyhow::Result<()> {
+    pub fn insert_single_quorum_cert(&self, qc: QuorumCert, rebuild: bool) -> anyhow::Result<()> {
         // If the parent block is not the root block (i.e not None), ensure the executed state
         // of a block is consistent with its QuorumCert, otherwise persist the QuorumCert's
         // state and on restart, a new execution will agree with it.  A new execution will match
@@ -433,10 +438,11 @@ impl BlockStore {
             }
             None => bail!("Insert {} without having the block in store first", qc),
         };
-
-        self.storage
-            .save_tree(vec![], vec![qc.clone()])
-            .context("Insert block failed when saving quorum")?;
+        if !rebuild {
+            self.storage
+                .save_tree(vec![], vec![qc.clone()])
+                .context("Insert block failed when saving quorum")?;
+        }
         self.inner.write().insert_quorum_cert(qc)
     }
 
@@ -695,10 +701,10 @@ impl BlockStore {
 
     /// Helper function to insert the block with the qc together
     pub async fn insert_block_with_qc(&self, block: Block) -> anyhow::Result<Arc<PipelinedBlock>> {
-        self.insert_single_quorum_cert(block.quorum_cert().clone())?;
+        self.insert_single_quorum_cert(block.quorum_cert().clone(), false)?;
         if self.ordered_root().round() < block.quorum_cert().commit_info().round() {
             self.send_for_execution(block.quorum_cert().into_wrapped_ledger_info(), false).await?;
         }
-        self.insert_block(block).await
+        self.insert_block(block, false).await
     }
 }

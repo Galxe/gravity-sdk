@@ -7,8 +7,9 @@ use crate::{
 };
 use anyhow::{bail, ensure, format_err};
 use aptos_bitvec::BitVec;
-use aptos_crypto::{bls12381, hash::CryptoHash, HashValue};
+use aptos_crypto::{bls12381, hash::{CryptoHash, GENESIS_BLOCK_ID}, HashValue};
 use aptos_infallible::duration_since_epoch;
+use aptos_logger::info;
 use aptos_types::{
     account_address::AccountAddress,
     block_info::BlockInfo,
@@ -182,6 +183,7 @@ impl Block {
     /// We carry over most fields except round and block id
     pub fn make_genesis_block_from_ledger_info(ledger_info: &LedgerInfo) -> Self {
         let block_data = BlockData::new_genesis_from_ledger_info(ledger_info);
+        assert!(*GENESIS_BLOCK_ID == block_data.hash(), "The GENESIS_BLOCK_ID must be equal to block_data.hash()");
         Block {
             id: block_data.hash(),
             block_data,

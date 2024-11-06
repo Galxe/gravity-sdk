@@ -13,7 +13,7 @@ use aptos_consensus_types::{
     pipelined_block::PipelinedBlock, quorum_cert::QuorumCert,
     timeout_2chain::TwoChainTimeoutCertificate, wrapped_ledger_info::WrappedLedgerInfo,
 };
-use aptos_crypto::HashValue;
+use aptos_crypto::{hash::GENESIS_BLOCK_ID, HashValue};
 use aptos_logger::prelude::*;
 use aptos_types::{block_info::BlockInfo, ledger_info::LedgerInfoWithSignatures};
 use mirai_annotations::{checked_verify_eq, precondition};
@@ -194,7 +194,7 @@ impl BlockTree {
             "inconsistent root and ledger info"
         );
         let root_id = root.id();
-
+        info!("insert root block id {}", root_id);
         let mut id_to_block = HashMap::new();
         id_to_block.insert(root_id, LinkableBlock::new(root));
         counters::NUM_BLOCKS_IN_TREE.set(1);
@@ -334,7 +334,11 @@ impl BlockTree {
         } else {
             match self.get_linkable_block_mut(&block.parent_id()) {
                 Some(parent_block) => parent_block.add_child(block_id),
-                None => bail!("Parent block {} not found", block.parent_id()),
+                None => {
+                    if block.parent_id() != *GENESIS_BLOCK_ID {
+                        bail!("Parent block {} not found", block.parent_id())
+                    }
+                },
             };
             let linkable_block = LinkableBlock::new(block);
             let arc_block = Arc::clone(linkable_block.executed_block());
@@ -578,16 +582,18 @@ impl BlockTree {
             committed_round = committed_round,
             block_id = block_to_commit.id(),
         );
-        let prune_block_id = blocks_to_commit.first().expect("pipeline is empty").clone().parent_id();
-        info!("the prune block id {}", prune_block_id);
-        let ids_to_remove = self.find_blocks_to_prune(prune_block_id);
-        if let Err(e) = storage.prune_tree(ids_to_remove.clone().into_iter().collect()) {
-            // it's fine to fail here, as long as the commit succeeds, the next restart will clean
-            // up dangling blocks, and we need to prune the tree to keep the root consistent with
-            // executor.
-            warn!(error = ?e, "fail to delete block");
-        }
-        self.process_pruned_blocks(ids_to_remove);
+        // TODO(gravity_lightman)
+        // let prune_block_id = blocks_to_commit.first().expect("pipeline is empty").clone().parent_id();
+        // info!("the prune block id {}", prune_block_id);
+        // let ids_to_remove = self.find_blocks_to_prune(prune_block_id);
+        // if let Err(e) = storage.prune_tree(ids_to_remove.clone().into_iter().collect()) {
+        //     // it's fine to fail here, as long as the commit succeeds, the next restart will clean
+        //     // up dangling blocks, and we need to prune the tree to keep the root consistent with
+        //     // executor.
+        //     warn!(error = ?e, "fail to delete block");
+        // }
+        // self.process_pruned_blocks(ids_to_remove);
+
         self.update_highest_commit_cert(commit_proof);
     }
 }

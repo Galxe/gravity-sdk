@@ -130,7 +130,7 @@ proptest! {
                 let known_parent = block_store.block_exists(block.parent_id());
                 let certified_parent = block.quorum_cert().certified_block().id() == block.parent_id();
                 let verify_res = block.verify_well_formed();
-                let res = timed_block_on(&runtime, block_store.insert_block(block.clone()));
+                let res = timed_block_on(&runtime, block_store.insert_block(block.clone(), false));
                 if !certified_parent {
                     prop_assert!(verify_res.is_err());
                 } else if !known_parent {

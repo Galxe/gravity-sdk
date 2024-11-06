@@ -338,10 +338,10 @@ impl Default for ConsensusConfig {
 
             qc_aggregator_type: QcAggregatorType::default(),
             // This needs to fit into the network message size, so with quorum store it can be much bigger
-            max_blocks_per_sending_request: 10,
+            max_blocks_per_sending_request: 100,
             // TODO: this is for release compatibility, after release we can configure it to match the receiving max
-            max_blocks_per_sending_request_quorum_store_override: 10,
-            max_blocks_per_receiving_request: 10,
+            max_blocks_per_sending_request_quorum_store_override: 100,
+            max_blocks_per_receiving_request: 100,
             max_blocks_per_receiving_request_quorum_store_override: 100,
             broadcast_vote: true,
             proof_cache_capacity: 10_000,

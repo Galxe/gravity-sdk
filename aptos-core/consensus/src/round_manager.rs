@@ -926,7 +926,7 @@ impl RoundManager {
             // tries to add the same block again, which is okay as `execute_and_insert_block` call
             // is idempotent.
             self.block_store
-                .insert_block(proposal.clone())
+                .insert_block(proposal.clone(), false)
                 .await
                 .context("[RoundManager] Failed to execute_and_insert the block")?;
             Self::resend_verified_proposal_to_self(
@@ -1029,7 +1029,7 @@ impl RoundManager {
     async fn vote_block(&mut self, proposed_block: Block) -> anyhow::Result<Vote> {
         let block_arc = self
             .block_store
-            .insert_block(proposed_block)
+            .insert_block(proposed_block, false)
             .await
             .context("[RoundManager] Failed to execute_and_insert the block")?;
 
@@ -1516,7 +1516,6 @@ impl RoundManager {
                     };
                 },
                 (peer_id, event) = event_rx.select_next_some() => {
-                    info!("receive event {:?}", event);
                     let result = match event {
                         VerifiedEvent::VoteMsg(vote_msg) => {
                             monitor!("process_vote", self.process_vote_msg(*vote_msg).await)

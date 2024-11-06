@@ -594,6 +594,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         let task = async move {
             info!(epoch = epoch, "Block retrieval task starts");
             while let Some(request) = request_rx.next().await {
+                info!("receive a block retrieval req. block id is {}", request.req.block_id());
                 if request.req.num_blocks() > max_blocks_allowed {
                     warn!(
                         "Ignore block retrieval with too many blocks: {}",

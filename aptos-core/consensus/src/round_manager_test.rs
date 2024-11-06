@@ -990,7 +990,7 @@ fn sync_info_carried_on_timeout_vote() {
             None,
         );
         node.block_store
-            .insert_single_quorum_cert(block_0_quorum_cert.clone())
+            .insert_single_quorum_cert(block_0_quorum_cert.clone(), false)
             .unwrap();
 
         node.round_manager

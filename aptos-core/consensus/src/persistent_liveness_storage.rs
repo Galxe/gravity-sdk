@@ -111,7 +111,6 @@ impl LedgerRecoveryData {
 
         // We start from the block that storage's latest ledger info, if storage has end-epoch
         // LedgerInfo, we generate the virtual genesis block
-        println!("storage ledger info: {:?}", self.storage_ledger);
         let (root_id, latest_ledger_info_sig) = if self.storage_ledger.ledger_info().ends_epoch() {
             let genesis =
                 Block::make_genesis_block_from_ledger_info(self.storage_ledger.ledger_info());
@@ -273,7 +272,7 @@ impl RecoveryData {
         info!("blocks in db: {:?}", blocks.len());
         info!("quorum certs in db: {:?}", quorum_certs.len());
         let root;
-        if !blocks.is_empty() {
+        if !blocks.is_empty() && execution_latest_block_num != 0{
             root = Self::find_root_by_block_number(
                 execution_latest_block_num,
                 &mut blocks,
@@ -284,8 +283,7 @@ impl RecoveryData {
             root = ledger_recovery_data.find_root(&mut blocks, &mut quorum_certs, order_vote_enabled)?;
         }
         println!("root info: {:?}", root);
-        let blocks_to_prune =
-            Some(Self::find_blocks_to_prune(root.0.id(), &mut blocks, &mut quorum_certs));
+        let blocks_to_prune = Some(vec![]);
         let epoch = root.0.epoch();
         Ok(RecoveryData {
             last_vote: match last_vote {
@@ -394,6 +392,7 @@ impl PersistentLivenessStorage for StorageWriteProxy {
     }
 
     fn prune_tree(&self, block_ids: Vec<HashValue>) -> Result<()> {
+        panic!("Can't delete blocks");
         if !block_ids.is_empty() {
             // quorum certs that certified the block_ids will get removed
             self.db.delete_blocks_and_quorum_certificates(block_ids)?;
@@ -446,9 +445,9 @@ impl PersistentLivenessStorage for StorageWriteProxy {
             order_vote_enabled,
         ) {
             Ok(mut initial_data) => {
-                (self as &dyn PersistentLivenessStorage)
-                    .prune_tree(initial_data.take_blocks_to_prune())
-                    .expect("unable to prune dangling blocks during restart");
+                // (self as &dyn PersistentLivenessStorage)
+                //     .prune_tree(initial_data.take_blocks_to_prune())
+                //     .expect("unable to prune dangling blocks during restart");
                 if initial_data.last_vote.is_none() {
                     self.db.delete_last_vote_msg().expect("unable to cleanup last vote");
                 }

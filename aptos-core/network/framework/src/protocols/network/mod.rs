@@ -437,7 +437,6 @@ impl<TMessage: Message + Send + 'static> NetworkSender<TMessage> {
         let req_data = tokio::task::spawn_blocking(move || protocol.to_bytes(&req_msg))
             .await??
             .into();
-
         // Send the request and wait for the response
         self.send_rpc_raw(recipient, protocol, req_data, timeout)
             .await

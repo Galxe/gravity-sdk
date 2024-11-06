@@ -2,7 +2,7 @@
 
 bin_name="gravity-reth"
 node_arg=""
-bin_version="release"
+bin_version="debug"
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
@@ -15,9 +15,9 @@ while [[ "$#" -gt 0 ]]; do
         shift
         ;;
     --bin_version)
-	bin_version="$2"
-	shift
-	;;
+        bin_version="$2"
+        shift
+        ;;
     *)
         echo "Unknown parameter: $1"
         exit 1

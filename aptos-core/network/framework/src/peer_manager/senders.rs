@@ -11,6 +11,7 @@ use crate::{
     ProtocolId,
 };
 use aptos_channels::{self, aptos_channel};
+use aptos_logger::info;
 use aptos_types::{network_address::NetworkAddress, PeerId};
 use bytes::Bytes;
 use futures::channel::oneshot;

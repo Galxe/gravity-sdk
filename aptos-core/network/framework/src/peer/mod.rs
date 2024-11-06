@@ -587,7 +587,9 @@ where
         };
 
         match message {
-            MultiplexMessage::Message(message) => self.handle_inbound_network_message(message),
+            MultiplexMessage::Message(message) => {
+                self.handle_inbound_network_message(message)
+            },    
             MultiplexMessage::Stream(message) => self.handle_inbound_stream_message(message),
         }
     }

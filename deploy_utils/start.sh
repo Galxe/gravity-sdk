@@ -5,8 +5,36 @@ WORKSPACE=$SCRIPT_DIR/..
 
 log_suffix=$(date +"%Y-%d-%m:%H:%M:%S")
 
-node_arg=$1
-bin_name=$2
+bin_name="gravity-reth"
+node_arg=""
+
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+    --bin_name)
+        bin_name="$2"
+        shift
+        ;;
+    --node)
+        node_arg="$2"
+        shift
+        ;;
+    *)
+        echo "Unknown parameter: $1"
+        exit 1
+        ;;
+    esac
+    shift
+done
+
+if [[ "$bin_name" != "gravity-reth" && "$bin_name" != "bench" ]]; then
+    echo "Error: bin_name must be either 'gravity-reth' or 'bench'."
+    exit 1
+fi
+
+if [[ -z "$node_arg" ]]; then
+    echo "Error: --node parameter is required."
+    exit 1
+fi
 
 if [ -e ${WORKSPACE}/script/node.pid ]; then
     pid=$(cat ${WORKSPACE}/script/node.pid)
@@ -82,11 +110,14 @@ elif [ "$node_arg" == "node3" ]; then
     port2="8553"
     port3="8547"
     port4="9003"
-else
+elif [ "$node_arg" == "node4" ]; then
     port1="16180"
     port2="8554"
     port3="8548"
     port4="9004"
+else
+    echo "Error: --node parameter ranges in [node1, node2, node3, node4]."
+    exit 1
 fi
 
 echo "start $node_arg ${port1} ${port2} ${port3} ${port4} ${bin_name}"
