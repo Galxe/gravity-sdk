@@ -6,14 +6,11 @@ use std::{
     thread,
 };
 
-use crate::consensus_api::ConsensusEngine;
 use crate::{
     network::{
         build_network_interfaces, consensus_network_configuration, extract_network_ids,
-        mempool_network_configuration,
     },
     storage::{self, db::GravityDB},
-    GravityConsensusEngineInterface,
 };
 use api_types::ExecutionApi;
 use aptos_config::{
@@ -173,16 +170,13 @@ pub fn init_peers_and_metadata(
     gravity_db: &GravityDB,
 ) -> Arc<PeersAndMetadata> {
     let listen_address = node_config.validator_network.as_ref().unwrap().listen_address.to_string();
-    gravity_db.mock_db.node_config_set.iter().for_each(|f| {
-        println!("addr is {:?}", f.0);
-    });
     let gravity_node_config = gravity_db
         .mock_db
         .node_config_set
         .get(&listen_address)
         .expect(&format!("addr {:?} has no config", listen_address));
     let network_ids = extract_network_ids(node_config);
-    let peers_and_metadata: Arc<PeersAndMetadata> = PeersAndMetadata::new(&network_ids);
+    let peers_and_metadata = PeersAndMetadata::new(&network_ids);
     let mut peer_set = HashMap::new();
     for trusted_peer in &gravity_node_config.trusted_peers_map {
         let trusted_peer_config = gravity_db
@@ -198,7 +192,6 @@ pub fn init_peers_and_metadata(
                     .find(|config| config.public_ip_address == *trusted_peer)
             })
             .expect(&format!("NodeConfig for {:?} not found", trusted_peer));
-        // let trusted_peer_config = gravity_db.mock_db.node_config_set.get(trusted_peer).unwrap();
         let mut set = HashSet::new();
         let trusted_peer_private_key =
             x25519::PrivateKey::try_from(trusted_peer_config.network_private_key.as_slice())
