@@ -55,6 +55,7 @@ pub struct GravityNodeConfig {
     pub network_private_key: Vec<u8>,
     pub network_public_key: String,
     pub trusted_peers_map: Vec<String>,
+    pub public_ip_address: String,
 }
 
 /// Loads a config configuration file
