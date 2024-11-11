@@ -1,12 +1,12 @@
 # Node Startup Documentation
 ## Node Configuration
 
-This system consists of 4 nodes with corresponding ports as follows:
+The system consists of 4 nodes with corresponding ports as follows:
 
-- node1: 2024
-- node2: 2025
-- node3: 2026
-- node4: 6180
+- Node1: 2024
+- Node2: 2025
+- Node3: 2026
+- Node4: 6180
 
 ## Prerequisites
 
@@ -29,9 +29,15 @@ base:
 
 ## Compilation
 
-Execute the following command in the project root directory to compile:
+In the bin directory, enter either the `bench` or `reth` directory to compile.
+
+example:
 
 ```
+cd bin/bench
+cargo build
+
+cd bin/reth
 cargo build
 ```
 
@@ -39,17 +45,17 @@ cargo build
 
 ### Deploy Node
 
-Deploy to the /tmp directory by default:
+Deploy to /tmp directory by default:
 
 ```
-./deploy_utils/test_deploy.sh node1
+./deploy_utils/deploy.sh --mode single --node node1
 ```
 
 ### Start Node
 
 ```
 cd /tmp/node1
-./script/start.sh node1
+./script/start.sh --node node1
 ```
 
 ### Stop Node
@@ -58,28 +64,39 @@ cd /tmp/node1
 ./script/stop.sh
 ```
 
+In single node deployment mode, only node1 can be started by default. If you need to start other nodes, you need to modify configurations like `deploy_utils/single_node_config.json` and `deploy_utils/single_node_discovery`.
+
 ## Multi-Node Cluster Deployment
 
 ### Start node1
 
-Follow the single node cluster process to start node1.
+Execute the following command to start node1:
+
+```
+./deploy_utils/test_deploy.sh --mode cluster --node node1
+
+cd /tmp/node1
+./script/start.sh --node node1
+./script/stop.sh
+```
 
 ### Start node2
 
 Execute the following command to start node2:
 
 ```
-./deploy_utils/test_deploy.sh node2
+./deploy_utils/test_deploy.sh --mode cluster --node node2
 
 cd /tmp/node2
-
-./script/start.sh node2
+./script/start.sh --node node2
 ./script/stop.sh
 ```
 
+Just change the `--node` parameter to corresponding `nodeX`.
+
 ### Start node3 and node4
 
-The startup process for node3 and node4 is the same as node1.
+The startup process for node3 and node4 is the same as node1/2.
 
 ## Important Notes
 
@@ -96,8 +113,8 @@ If you encounter startup issues, please check:
 
 For further assistance, please check the log files or contact technical support.
 
-### Where can you find the logs
+### Log Locations
 
-The log consists of two parts: `consensus_log` and `execution_logs`. The former one includes all the logs from aptos component. While the reth details are in the latter one.
-You can set the aptos log by modifying the `log_file_path` in the corresponding `validator.yaml` file of the node.
-As for the execution_logs, you can set it by passing the log file config in the cli just using `--log.file.directory ${you_directory}`.
+The logs consist of two parts: `consensus_log` and `execution_logs`. The former includes all logs from the Aptos component, while the latter contains Reth details.
+You can set the Aptos log by modifying the `log_file_path` in the corresponding node's `validator.yaml` file.
+For execution_logs, you can set the log file configuration by using the `--log.file.directory ${your_directory}` parameter in the command line.

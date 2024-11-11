@@ -76,7 +76,8 @@
             "/ip4/127.0.0.1/tcp/2025",
             "/ip4/127.0.0.1/tcp/2026"
         ],
-        "public_ip_address": "/ip4/127.0.0.1/tcp/2024"
+        "public_ip_address": "/ip4/127.0.0.1/tcp/2024",
+        "voting_power": 1
     },
     "/ip4/127.0.0.1/tcp/2025": {
         "consensus_private_key": [
@@ -155,7 +156,8 @@
             "/ip4/127.0.0.1/tcp/6180",
             "/ip4/127.0.0.1/tcp/2026"
         ],
-        "public_ip_address": "/ip4/127.0.0.1/tcp/2025"
+        "public_ip_address": "/ip4/127.0.0.1/tcp/2025",
+        "voting_power": 1
     },
     "/ip4/127.0.0.1/tcp/2026": {
         "consensus_private_key": [
@@ -234,7 +236,8 @@
             "/ip4/127.0.0.1/tcp/2025",
             "/ip4/127.0.0.1/tcp/6180"
         ],
-        "public_ip_address": "/ip4/127.0.0.1/tcp/2026"
+        "public_ip_address": "/ip4/127.0.0.1/tcp/2026",
+        "voting_power": 1
     },
     "/ip4/127.0.0.1/tcp/6180": {
         "consensus_private_key": [
@@ -313,6 +316,7 @@
             "/ip4/127.0.0.1/tcp/2025",
             "/ip4/127.0.0.1/tcp/2026"
         ],
-        "public_ip_address": "/ip4/127.0.0.1/tcp/6180"
+        "public_ip_address": "/ip4/127.0.0.1/tcp/6180",
+        "voting_power": 1
     }
 }

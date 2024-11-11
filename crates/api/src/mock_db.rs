@@ -56,6 +56,7 @@ pub struct GravityNodeConfig {
     pub network_public_key: String,
     pub trusted_peers_map: Vec<String>,
     pub public_ip_address: String,
+    pub voting_power: u64,
 }
 
 /// Loads a config configuration file
@@ -171,14 +172,9 @@ impl MockStorage {
                 bcs::to_bytes(&vec![addr.clone()]).unwrap(),
                 i as u64,
             );
-            // TODO(gravity_byteyue): remove this
-            let power = match i {
-                0 => 1,
-                _ => 1,
-            };
             result.push(ValidatorInfo::new(
                 AccountAddress::try_from(node_config.account_address.clone()).unwrap(),
-                power,
+                node_config.voting_power,
                 config,
             ));
         }

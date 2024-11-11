@@ -3,6 +3,7 @@
 bin_name="gravity-reth"
 node_arg=""
 bin_version="debug"
+mode="cluster"
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
@@ -16,6 +17,10 @@ while [[ "$#" -gt 0 ]]; do
         ;;
     --bin_version)
         bin_version="$2"
+        shift
+        ;;
+    --mode)
+        mode="$2"
         shift
         ;;
     *)
@@ -41,6 +46,10 @@ if [[ -z "$node_arg" ]]; then
     exit 1
 fi
 
+if [[ "$mode" != "cluster" && "$mode" != "single" ]]; then
+    echo "Error: mode must be either 'cluster' or 'single'."
+    exit 1
+fi
 
 mkdir -p /tmp/$node_arg
 mkdir -p /tmp/$node_arg/genesis
@@ -50,8 +59,18 @@ mkdir -p /tmp/$node_arg/logs
 mkdir -p /tmp/$node_arg/script
 
 cp -r $node_arg/genesis /tmp/$node_arg
-cp -r nodes_config.json /tmp/$node_arg/genesis/
-cp -r discovery /tmp/$node_arg
+if [[ "$mode" == "cluster" ]]; then
+    cp -r deploy_utils/four_nodes_config.json /tmp/$node_arg/genesis/nodes_config.json
+    cp -r deploy_utils/four_nodes_discovery /tmp/$node_arg/discovery
+else
+    if [[ "$node_arg" != "node1" ]]; then
+        echo "Error: if 'mode' is 'single', 'node' must be 'node1'."
+        exit
+    fi
+    cp -r deploy_utils/single_node_config.json /tmp/$node_arg/genesis/nodes_config.json
+    cp -r deploy_utils/single_node_discovery /tmp/$node_arg/discovery
+fi
+
 cp target/$bin_version/$bin_name /tmp/$node_arg/bin
 cp deploy_utils/start.sh /tmp/$node_arg/script
 cp deploy_utils/stop.sh /tmp/$node_arg/script
