@@ -73,7 +73,7 @@ In single node deployment mode, only node1 can be started by default. If you nee
 Execute the following command to start node1:
 
 ```
-./deploy_utils/test_deploy.sh --mode cluster --node node1
+./deploy_utils/deploy.sh --mode cluster --node node1
 
 cd /tmp/node1
 ./script/start.sh --node node1
@@ -85,7 +85,7 @@ cd /tmp/node1
 Execute the following command to start node2:
 
 ```
-./deploy_utils/test_deploy.sh --mode cluster --node node2
+./deploy_utils/deploy.sh --mode cluster --node node2
 
 cd /tmp/node2
 ./script/start.sh --node node2
