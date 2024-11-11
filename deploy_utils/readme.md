@@ -68,6 +68,17 @@ In single node deployment mode, only node1 can be started by default. If you nee
 
 ## Multi-Node Cluster Deployment
 
+### Warning
+
+If you want to switch from single-node cluster mode to multi-node cluster mode, you need to clean up the single-node cluster first to avoid conflicts.
+
+```
+cd /tmp/node1
+./script/stop.sh
+cd ../
+rm -rf node1
+```
+
 ### Start node1
 
 Execute the following command to start node1:
