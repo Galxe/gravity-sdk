@@ -157,8 +157,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
         match updated_res {
             Ok(updated) => {
                 if updated.payload_id.is_none() {
-                    error!("Payload ID is none");
-
+                    error!("Payload ID is none, fork_choice_state {:?}", fork_choice_state);
                     return None;
                 }
                 Some(updated.payload_id.unwrap())
@@ -355,6 +354,9 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
         .await;
         match payload_status {
             Ok(payload_status) => {
+                if payload_status.status != PayloadStatusEnum::Valid {
+                    panic!("payload status status is {}", payload_status.status);
+                }
                 // 3. submit compute res
                 if payload_status.latest_valid_hash.is_none() {
                     panic!("payload status latest valid hash is none");

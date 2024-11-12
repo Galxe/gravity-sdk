@@ -123,7 +123,7 @@ impl BlockStore {
             pending_blocks,
             execution_api,
         ));
-        block_on(block_store.try_send_for_execution());
+        block_on(block_store.recover_blocks());
         block_store
     }
 
@@ -157,7 +157,7 @@ impl BlockStore {
             pending_blocks,
             execution_api,
         ).await;
-        block_store.try_send_for_execution().await;
+        block_store.recover_blocks().await;
         block_store
     }
 
@@ -177,18 +177,37 @@ impl BlockStore {
         self.inner.read().get_finalized_block_hash()
     }
 
-    async fn try_send_for_execution(&self) {
+    async fn recover_blocks(&self) {
         // reproduce the same batches (important for the commit phase)
         let mut certs = self.inner.read().get_all_quorum_certs_with_commit_info();
         certs.sort_unstable_by_key(|qc| qc.commit_info().round());
         for qc in certs {
-            if qc.commit_info().round() > self.commit_root().round() {
+            if qc.vote_data().proposed().round() > self.commit_root().round() {
                 info!(
-                    "trying to commit to round {} with ledger info {}",
-                    qc.commit_info().round(),
+                    "trying to recover to round {} with ledger info {}",
+                    qc.vote_data().proposed().round(),
                     qc.ledger_info()
                 );
-
+                let block_id_to_recover = qc.vote_data().proposed().id();
+                let block_to_recover = self.get_block(block_id_to_recover);
+                assert!(block_to_recover.is_some());
+                let block_to_recover = block_to_recover.unwrap();
+                if let Some(DirectMempool((block_hash, txns))) = block_to_recover.block().payload() {
+                    info!("recover block {} block_hash {}", block_to_recover.block(), block_hash);
+                    let g_txns = txns.iter().map(|txn| txn.into()).collect();
+                    self.execution_api
+                        .as_ref()
+                        .unwrap()
+                        .recover_ordered_block(g_txns, **block_hash)
+                        .await;
+                }
+                if qc.commit_info().round() <= self.commit_root().round() {
+                    continue;
+                }
+                info!(
+                    "trying to execute to round {}",
+                    qc.commit_info().round(),
+                );
                 if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info(), true).await {
                     error!("Error in try-committing blocks. {}", e.to_string());
                 }
@@ -287,13 +306,12 @@ impl BlockStore {
         self.pending_blocks.lock().gc(finality_proof.commit_info().round());
         if recovery {
             for p_block in &blocks_to_commit {
-                if let Some(DirectMempool((block_hash, txns))) = p_block.block().payload() {
-                    info!("recover block {} block_hash {}", p_block.block(), block_hash);
-                    let g_txns = txns.iter().map(|txn| txn.into()).collect();
+                if let Some(DirectMempool((block_hash, _))) = p_block.block().payload() {
+                    info!("recover commit block {} block_hash {}", p_block.block(), block_hash);
                     self.execution_api
                         .as_ref()
                         .unwrap()
-                        .recover_ordered_block(g_txns, **block_hash)
+                        .commit_block_hash(vec![**block_hash])
                         .await;
                 }
             }
@@ -375,7 +393,7 @@ impl BlockStore {
         *self.inner.write() = Arc::try_unwrap(inner)
             .unwrap_or_else(|_| panic!("New block tree is not shared"))
             .into_inner();
-        self.try_send_for_execution().await;
+        self.recover_blocks().await;
     }
 
     /// Insert a block if it passes all validation tests.
