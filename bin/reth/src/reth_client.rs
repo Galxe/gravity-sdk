@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use alloy_consensus::{Transaction, TxEnvelope};
 use alloy_eips::eip2718::Decodable2718;
 use alloy_eips::{BlockId, BlockNumberOrTag};
@@ -26,6 +27,7 @@ use tracing::log::error;
 pub(crate) struct RethCli<T> {
     engine_api_client: T,
     chain_id: u64,
+    head_block: Mutex<Option<B256>>,
     block_hash_channel_sender: UnboundedSender<[u8; 32]>,
     block_hash_channel_receiver: Mutex<UnboundedReceiver<[u8; 32]>>,
     provider: Provider,
@@ -42,6 +44,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
         Self {
             engine_api_client: client,
             chain_id,
+            head_block: Mutex::new(None),
             block_hash_channel_sender,
             block_hash_channel_receiver: Mutex::new(block_hash_channel_receiver),
             provider,
@@ -51,13 +54,13 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
     async fn update_fork_choice(
         &self,
         fork_choice_state: ForkchoiceState,
-        payload_attributes: EthPayloadAttributes,
+        payload_attributes: Option<EthPayloadAttributes>,
     ) -> anyhow::Result<ForkchoiceUpdated> {
         info!("update_fork_choice with payload attributes {:?}", payload_attributes);
         let response = <T as EngineApiClient<EthEngineTypes>>::fork_choice_updated_v3(
             &self.engine_api_client,
             fork_choice_state,
-            Some(payload_attributes),
+            payload_attributes,
         )
         .await
         .context("Failed to update fork choice")?;
@@ -149,7 +152,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
         payload_attributes: &PayloadAttributes,
     ) -> Option<PayloadId> {
         let updated_res =
-            self.update_fork_choice(fork_choice_state.clone(), payload_attributes.clone()).await;
+            self.update_fork_choice(fork_choice_state.clone(), Some(payload_attributes.clone())).await;
         info!("Got update res: {:?}", updated_res);
         match updated_res {
             Ok(updated) => {
@@ -174,7 +177,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
         let parent_beacon_block_root = fork_choice_state.head_block_hash;
         let payload_attributes = Self::create_payload_attributes(parent_beacon_block_root);
         // update ForkchoiceState and get payload_id
-        let mut payload_id = PayloadId::new([0; 8]);
+        let mut payload_id;
         match self.get_new_payload_id(fork_choice_state, &payload_attributes).await {
             Some(pid) => {
                 payload_id = pid;
@@ -235,6 +238,9 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
         .await
         .expect("Failed to get payload");
         info!("Got payload: {:?}", payload);
+        let mut mut_ref = self.head_block.lock().await;
+        *mut_ref = Some(payload.execution_payload.payload_inner.payload_inner.block_hash);
+
         let _ = tokio::time::sleep(Duration::from_secs(2)).await;
         let block_bytes = payload.execution_payload.payload_inner.payload_inner.block_hash;
         info!(
@@ -257,6 +263,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
                 payload.execution_payload.payload_inner.payload_inner.transactions.push(bytes);
             });
         }
+
         let parent_hash = payload.execution_payload.payload_inner.payload_inner.parent_hash;
         let block_number = payload.execution_payload.payload_inner.payload_inner.block_number;
         let payload_status = <T as EngineApiClient<EthEngineTypes>>::new_payload_v3(
@@ -286,8 +293,24 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
         block_hash
     }
 
-    async fn commit_block_hash(&self, _block_ids: Vec<[u8; 32]>) {
-        // do nothing for reth
+    async fn commit_block_hash(&self, block_ids: Vec<[u8; 32]>) {
+        for block_id in block_ids {
+            let commit_id = B256::new(block_id);
+            let head_id = match self.head_block.lock().await.as_ref() {
+                Some(head) => head.clone(),
+                None => {
+                    commit_id
+                }
+            };
+            let fork_choice_state = ForkchoiceState {
+                head_block_hash: head_id,
+                safe_block_hash: head_id,
+                finalized_block_hash: commit_id,
+            };
+            self.update_fork_choice(fork_choice_state, None)
+                .await
+                .expect("Failed to update fork choice");
+        }
     }
 
     fn latest_block_number(&self) -> u64 {
