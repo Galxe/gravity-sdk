@@ -3,7 +3,7 @@ use alloy_consensus::{Transaction, TxEnvelope};
 use alloy_eips::eip2718::Decodable2718;
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::{Address, B256};
-use alloy_rpc_types_engine::{ForkchoiceState, ForkchoiceUpdated, PayloadAttributes, PayloadId};
+use alloy_rpc_types_engine::{ForkchoiceState, ForkchoiceUpdated, PayloadAttributes, PayloadId, PayloadStatus, PayloadStatusEnum};
 use anyhow::Context;
 use api::ExecutionApi;
 use api_types::{BlockBatch, BlockHashState, GTxn};
@@ -294,9 +294,10 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
     }
 
     async fn commit_block_hash(&self, block_ids: Vec<[u8; 32]>) {
+        let head_id = self.head_block.lock().await.take();
         for block_id in block_ids {
             let commit_id = B256::new(block_id);
-            let head_id = match self.head_block.lock().await.as_ref() {
+            let head_id = match head_id {
                 Some(head) => head.clone(),
                 None => {
                     commit_id
@@ -307,9 +308,23 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
                 safe_block_hash: head_id,
                 finalized_block_hash: commit_id,
             };
-            self.update_fork_choice(fork_choice_state, None)
+            let res = self.update_fork_choice(fork_choice_state, None)
                 .await
                 .expect("Failed to update fork choice");
+            match res.payload_status.status {
+                PayloadStatusEnum::Valid => {
+                    info!("commit success {:?}", res);
+                }
+                PayloadStatusEnum::Invalid { .. } => {
+                    panic!("commit invalid {:?}", res);
+                }
+                PayloadStatusEnum::Syncing => {
+                    panic!("commit syncing {:?}", res);
+                }
+                PayloadStatusEnum::Accepted => {
+                    panic!("commit accepted {:?}", res);
+                }
+            }
         }
     }
 
