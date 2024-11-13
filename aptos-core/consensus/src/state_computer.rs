@@ -26,6 +26,7 @@ use fail::fail_point;
 use futures::{future::BoxFuture, SinkExt, StreamExt};
 use std::{boxed::Box, f64::consts::E, sync::Arc, time::Duration};
 use tokio::sync::Mutex as AsyncMutex;
+use aptos_consensus_types::common::Payload;
 use crate::persistent_liveness_storage::PersistentLivenessStorage;
 
 pub type StateComputeResultFut = BoxFuture<'static, ExecutorResult<PipelineExecutionResult>>;
@@ -228,6 +229,7 @@ impl StateComputer for ExecutionProxy {
             .cloned()
             .expect("must be set within an epoch");
         let mut committed_block_ids = vec![];
+        let mut committed_block_hash = vec![];
         for block in blocks {
             block_ids.push(block.id());
 
@@ -238,6 +240,23 @@ impl StateComputer for ExecutionProxy {
             // TODO(gravity_byteyue): how to handle metadata transaction
             if !block.input_transactions().is_empty() {
                 committed_block_ids.push(block.id());
+            }
+            match block.payload() {
+                Some(payload) => {
+                    let block_hash = match payload {
+                        Payload::DirectMempool((block_hash, _)) => {
+                            block_hash.clone()
+                        }
+                        _ => {
+                            warn!("Unexpected payload type: {:?}", payload);
+                            continue;
+                        }
+                    };
+                    committed_block_hash.push(block_hash);
+                },
+                None => {
+                    warn!("Missing payload for block {:?}", block.id());
+                },
             }
 
             let commit_transactions = self.transactions_to_commit(block, &validators, is_randomness_enabled);
@@ -254,7 +273,7 @@ impl StateComputer for ExecutionProxy {
             "commit_block",
             tokio::task::spawn_blocking(move || {
                 executor
-                    .commit_blocks(committed_block_ids, proof)
+                    .commit_blocks(committed_block_hash, proof)
                     .expect("Failed to commit blocks");
             })
             .await

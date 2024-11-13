@@ -293,35 +293,34 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
     }
 
     async fn commit_block_hash(&self, block_ids: Vec<[u8; 32]>) {
+
         let head_id = self.head_block.lock().await.take();
+        if head_id.is_some() {
+            // Don't commit for leader
+            return;
+        }
         for block_id in block_ids {
             let commit_id = B256::new(block_id);
-            let head_id = match head_id {
-                Some(head) => head.clone(),
-                None => {
-                    commit_id
-                }
-            };
             let fork_choice_state = ForkchoiceState {
-                head_block_hash: head_id,
-                safe_block_hash: head_id,
+                head_block_hash: commit_id,
+                safe_block_hash: commit_id,
                 finalized_block_hash: commit_id,
             };
             let res = self.update_fork_choice(fork_choice_state, None)
-                .await
-                .expect("Failed to update fork choice");
-            match res.payload_status.status {
+                .await;
+            info!("commit block hash {:?} with res {:?}", block_id, res);
+            match res.as_ref().unwrap().payload_status.status {
                 PayloadStatusEnum::Valid => {
                     info!("commit success {:?}", res);
                 }
                 PayloadStatusEnum::Invalid { .. } => {
-                    panic!("commit invalid {:?}", res);
+                    info!("commit invalid {:?}", res);
                 }
                 PayloadStatusEnum::Syncing => {
-                    panic!("commit syncing {:?}", res);
+                    info!("commit syncing {:?}", res);
                 }
                 PayloadStatusEnum::Accepted => {
-                    panic!("commit accepted {:?}", res);
+                    info!("commit accepted {:?}", res);
                 }
             }
         }
