@@ -1,9 +1,10 @@
-use std::cell::RefCell;
 use alloy_consensus::{Transaction, TxEnvelope};
 use alloy_eips::eip2718::Decodable2718;
-use alloy_eips::{BlockId, BlockNumberOrTag};
+use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::{Address, B256};
-use alloy_rpc_types_engine::{ForkchoiceState, ForkchoiceUpdated, PayloadAttributes, PayloadId, PayloadStatus, PayloadStatusEnum};
+use alloy_rpc_types_engine::{
+    ForkchoiceState, ForkchoiceUpdated, PayloadAttributes, PayloadId, PayloadStatusEnum,
+};
 use anyhow::Context;
 use api::ExecutionApi;
 use api_types::{BlockBatch, BlockHashState, GTxn};
@@ -13,14 +14,13 @@ use reth_ethereum_engine_primitives::{EthEngineTypes, EthPayloadAttributes};
 use reth_node_ethereum::EthereumNode;
 use reth_primitives::Bytes;
 use reth_provider::providers::BlockchainProvider2;
-use reth_provider::{BlockReader, BlockReaderIdExt};
+use reth_provider::BlockReaderIdExt;
 use reth_rpc_api::{EngineApiClient, EngineEthApiClient};
 use revm_primitives::ruint::aliases::U256;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::sync::mpsc::{Receiver, Sender, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Mutex;
-use tokio::time::sleep;
 use tracing::info;
 use tracing::log::error;
 
@@ -81,20 +81,16 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
         block_id
     }
 
-    fn slice_to_payload_id(&self, block_id: &[u8; 32]) -> PayloadId {
-        let mut bytes = [0u8; 8];
-        for i in 0..8 {
-            bytes[i] = block_id[i];
-        }
-        PayloadId::new(bytes)
-    }
-
     fn construct_bytes(
         &self,
         payload: &<EthEngineTypes as EngineTypes>::ExecutionPayloadV3,
     ) -> Vec<Vec<u8>> {
         let mut bytes: Vec<Vec<u8>> = Vec::new();
         let mut payload = payload.clone();
+        info!(
+            "Transaction num returned by reth is {:?}",
+            payload.execution_payload.payload_inner.payload_inner.transactions.len()
+        );
         if payload.execution_payload.payload_inner.payload_inner.transactions.len() > 1 {
             payload.execution_payload.payload_inner.payload_inner.transactions.drain(1..).for_each(
                 |txn_bytes| {
@@ -151,8 +147,9 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
         fork_choice_state: ForkchoiceState,
         payload_attributes: &PayloadAttributes,
     ) -> Option<PayloadId> {
-        let updated_res =
-            self.update_fork_choice(fork_choice_state.clone(), Some(payload_attributes.clone())).await;
+        let updated_res = self
+            .update_fork_choice(fork_choice_state.clone(), Some(payload_attributes.clone()))
+            .await;
         info!("Got update res: {:?}", updated_res);
         match updated_res {
             Ok(updated) => {
@@ -167,34 +164,6 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
                 None
             }
         }
-    }
-
-    pub async fn construct_payload(
-        &self,
-        fork_choice_state: ForkchoiceState,
-    ) -> anyhow::Result<Vec<GTxn>> {
-        let parent_beacon_block_root = fork_choice_state.head_block_hash;
-        let payload_attributes = Self::create_payload_attributes(parent_beacon_block_root);
-        // update ForkchoiceState and get payload_id
-        let mut payload_id;
-        match self.get_new_payload_id(fork_choice_state, &payload_attributes).await {
-            Some(pid) => {
-                payload_id = pid;
-            }
-            None => {
-                panic!("get None payload id");
-            }
-        };
-        // try to get payload
-        let payload = <T as EngineApiClient<EthEngineTypes>>::get_payload_v3(
-            &self.engine_api_client,
-            payload_id,
-        )
-        .await
-        .map_err(|e| anyhow::anyhow!(e))?;
-
-        info!("Got payload: {:?}", payload);
-        Ok(self.payload_to_txns(payload_id, payload))
     }
 
     fn create_payload_attributes(parent_beacon_block_root: B256) -> EthPayloadAttributes {
@@ -229,6 +198,9 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
                 panic!("payload id is none");
             }
         };
+        let get_payload_sleep_seconds =
+            std::env::var("GET_PAYLOAD_SLEEP_SECOND").map(|s| s.parse().unwrap()).unwrap_or(1);
+        let _ = tokio::time::sleep(Duration::from_secs(get_payload_sleep_seconds)).await;
         // try to get payload
         let payload = <T as EngineApiClient<EthEngineTypes>>::get_payload_v3(
             &self.engine_api_client,
@@ -240,7 +212,6 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
         let mut mut_ref = self.head_block.lock().await;
         *mut_ref = Some(payload.execution_payload.payload_inner.payload_inner.block_hash);
 
-        let _ = tokio::time::sleep(Duration::from_secs(2)).await;
         let block_bytes = payload.execution_payload.payload_inner.payload_inner.block_hash;
         info!(
             "send block batch with hash {:?}, block number {}",
@@ -293,7 +264,6 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
     }
 
     async fn commit_block_hash(&self, block_ids: Vec<[u8; 32]>) {
-
         let head_id = self.head_block.lock().await.take();
         if head_id.is_some() {
             // Don't commit for leader
@@ -306,8 +276,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
                 safe_block_hash: commit_id,
                 finalized_block_hash: commit_id,
             };
-            let res = self.update_fork_choice(fork_choice_state, None)
-                .await;
+            let res = self.update_fork_choice(fork_choice_state, None).await;
             info!("commit block hash {:?} with res {:?}", block_id, res);
             match res.as_ref().unwrap().payload_status.status {
                 PayloadStatusEnum::Valid => {
