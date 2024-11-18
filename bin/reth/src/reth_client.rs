@@ -2,9 +2,11 @@ use alloy_consensus::{Transaction, TxEnvelope};
 use alloy_eips::eip2718::Decodable2718;
 use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::{Address, B256};
+use alloy_rlp::Encodable;
 use alloy_rpc_types_engine::{
-    ForkchoiceState, ForkchoiceUpdated, PayloadAttributes, PayloadId, PayloadStatusEnum,
+    ExecutionPayloadEnvelopeV3, ForkchoiceState, ForkchoiceUpdated, PayloadAttributes, PayloadId, PayloadStatusEnum
 };
+use alloy_signer::k256::sha2;
 use anyhow::Context;
 use api::ExecutionApi;
 use api_types::{BlockBatch, BlockHashState, GTxn};
@@ -12,9 +14,10 @@ use jsonrpsee::core::async_trait;
 use reth::api::EngineTypes;
 use reth_ethereum_engine_primitives::{EthEngineTypes, EthPayloadAttributes};
 use reth_node_ethereum::EthereumNode;
-use reth_primitives::Bytes;
+use reth_payload_builder::EthBuiltPayload;
+use reth_primitives::{Block, Bytes};
 use reth_provider::providers::BlockchainProvider2;
-use reth_provider::BlockReaderIdExt;
+use reth_provider::{BlockNumReader, BlockReaderIdExt, DatabaseProviderFactory};
 use reth_rpc_api::{EngineApiClient, EngineEthApiClient};
 use revm_primitives::ruint::aliases::U256;
 use std::sync::Arc;
@@ -36,6 +39,30 @@ pub(crate) struct RethCli<T> {
 type Provider = BlockchainProvider2<
     reth_node_api::NodeTypesWithDBAdapter<EthereumNode, Arc<reth_db::DatabaseEnv>>,
 >;
+
+/// Generates the payload id for the configured payload from the [`PayloadAttributes`].
+///
+/// Returns an 8-byte identifier by hashing the payload components with sha256 hash.
+fn payload_id(parent: &B256, attributes: &PayloadAttributes) -> PayloadId {
+    use sha2::Digest;
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(parent.as_slice());
+    hasher.update(&attributes.timestamp.to_be_bytes()[..]);
+    hasher.update(attributes.prev_randao.as_slice());
+    hasher.update(attributes.suggested_fee_recipient.as_slice());
+    if let Some(withdrawals) = &attributes.withdrawals {
+        let mut buf = Vec::new();
+        withdrawals.encode(&mut buf);
+        hasher.update(buf);
+    }
+
+    if let Some(parent_beacon_block) = attributes.parent_beacon_block_root {
+        hasher.update(parent_beacon_block);
+    }
+
+    let out = hasher.finalize();
+    PayloadId::new(out.as_slice()[..8].try_into().expect("sufficient length"))
+}
 
 impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> RethCli<T> {
     pub(crate) fn new(client: T, chain_id: u64, provider: Provider) -> Self {
@@ -193,6 +220,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
         match self.get_new_payload_id(fork_choice_state, &payload_attr).await {
             Some(pid) => {
                 payload_id = pid;
+                info!("get new payload id {}", payload_id);
             }
             None => {
                 panic!("payload id is none");
@@ -302,7 +330,20 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
         }
     }
 
-    async fn recover_ordered_block(&self, txns: Vec<GTxn>, res: [u8; 32]) {
+    fn finalized_block_number(&self) -> u64 {
+        match self.provider.database_provider_ro().unwrap().last_block_number() {
+            Ok(block_number) => {
+                return block_number;
+            },
+            Err(e) => {
+                error!("finalized_block_number error {}", e);
+                return 0;
+            } 
+        }
+    }
+
+    async fn recover_ordered_block(&self, block_batch: BlockBatch) {
+        let txns = &block_batch.txns;
         let mut payload: <EthEngineTypes as EngineTypes>::ExecutionPayloadV3 =
             serde_json::from_slice(txns[0].get_bytes()).expect("Failed to deserialize payload");
         if txns.len() > 1 {
@@ -332,9 +373,72 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
                 info!("recover success {:?}", payload_status);
                 let mut hash = [0u8; 32];
                 hash.copy_from_slice(payload_status.latest_valid_hash.unwrap().as_slice());
-                assert!(res == hash);
+                assert!(block_batch.block_hash == hash);
             }
             Err(e) => panic!("new payload error {}", e),
         }
+    }
+
+    async fn recover_execution_blocks(&self, blocks: Vec<Block>) {
+        for block in blocks {   
+            let withdrawals = match block.withdrawals.clone() {
+                Some(withdrawals) => Some(withdrawals.into_inner()),
+                None => None,
+            };
+            let payload_attr = PayloadAttributes {
+                timestamp: block.header.timestamp,
+                prev_randao: block.header.mix_hash,
+                suggested_fee_recipient: block.header.beneficiary,
+                withdrawals,
+                parent_beacon_block_root: block.header.parent_beacon_block_root.clone(),
+            };
+            let payload_id = payload_id(&block.header.parent_hash, &payload_attr);
+            info!("recover execution block payload id {}", payload_id);
+            assert!(block.header.base_fee_per_gas.is_some());
+            let base_fee_per_gas = block.header.base_fee_per_gas.unwrap();
+            let total_fees = U256::from(base_fee_per_gas) * U256::from(block.header.gas_used);
+            let payload_builder = EthBuiltPayload::new(payload_id, block.seal_slow(), total_fees, None);
+            let payload: ExecutionPayloadEnvelopeV3 = payload_builder.into();
+            let parent_hash = payload.execution_payload.payload_inner.payload_inner.parent_hash;
+            let payload_status = <T as EngineApiClient<EthEngineTypes>>::new_payload_v3(
+                &self.engine_api_client,
+                payload.execution_payload,
+                Vec::new(),
+                parent_hash,
+            )
+            .await;
+            match payload_status {
+                Ok(payload_status) => {
+                    if payload_status.status != PayloadStatusEnum::Valid {
+                        panic!("payload status status is {}", payload_status.status);
+                    }
+                    // 3. submit compute res
+                    if payload_status.latest_valid_hash.is_none() {
+                        panic!("payload status latest valid hash is none");
+                    }
+                    info!("recover reth block success {:?}", payload_status);
+                }
+                Err(e) => panic!("new payload error {}", e),
+            }
+        }
+    }
+
+    fn get_blocks_by_range(
+        &self,
+        start_block_number: u64,
+        end_block_number: u64,
+    ) -> Vec<Block> {
+        let mut blocks = vec![];
+        for block_number in start_block_number..end_block_number {
+            match self.provider.block_by_number_or_tag(BlockNumberOrTag::Number(block_number)) {
+                Ok(block) => {
+                    assert!(block.is_some());
+                    let block = block.unwrap();
+                    blocks.push(block);
+                }
+                Err(e) => panic!("get_blocks_by_range error {}", e),
+            }
+        }
+        blocks
     }
 }

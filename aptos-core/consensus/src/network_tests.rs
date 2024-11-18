@@ -535,7 +535,7 @@ mod tests {
     };
     use aptos_config::network_id::{NetworkId, PeerNetworkId};
     use aptos_consensus_types::{
-        block_retrieval::{BlockRetrievalRequest, BlockRetrievalResponse, BlockRetrievalStatus},
+        block_retrieval::{BlockRetrievalRequest, BlockRetrievalResponse, BlockRetrievalStatus, SyncBlocks},
         common::Payload,
     };
     use aptos_crypto::HashValue;
@@ -819,7 +819,7 @@ mod tests {
                     .wait_for_messages(2, NetworkPlayground::votes_only)
                     .await;
                 let response =
-                    BlockRetrievalResponse::new(BlockRetrievalStatus::IdNotFound, vec![]);
+                    BlockRetrievalResponse::new(BlockRetrievalStatus::IdNotFound, SyncBlocks::ConsensusBlock(vec![]));
                 let response = ConsensusMsg::BlockRetrievalResponse(Box::new(response));
                 let bytes = Bytes::from(serde_json::to_vec(&response).unwrap());
                 match request {

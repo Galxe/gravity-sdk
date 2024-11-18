@@ -13,6 +13,7 @@ use crate::{
     round_manager::VerifiedEvent,
 };
 use anyhow::{anyhow, ensure, Context, Result};
+use api_types::ExecutionApi;
 use aptos_channels::aptos_channel;
 use aptos_consensus_types::{
     common::Author, proposal_msg::ProposalMsg, sync_info::SyncInfo, vote_msg::VoteMsg,
@@ -36,6 +37,7 @@ pub struct RecoveryManager {
     payload_manager: Arc<dyn TPayloadManager>,
     order_vote_enabled: bool,
     pending_blocks: Arc<Mutex<PendingBlocks>>,
+    execution_api: Option<Arc<dyn ExecutionApi>>,
 }
 
 impl RecoveryManager {
@@ -49,6 +51,7 @@ impl RecoveryManager {
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
+        execution_api: Option<Arc<dyn ExecutionApi>>,
     ) -> Self {
         RecoveryManager {
             epoch_state,
@@ -60,6 +63,7 @@ impl RecoveryManager {
             payload_manager,
             order_vote_enabled,
             pending_blocks,
+            execution_api,
         }
     }
 
@@ -91,13 +95,15 @@ impl RecoveryManager {
         let mut retriever = BlockRetriever::new(
             self.network.clone(),
             peer,
-            self.epoch_state
-                .verifier
-                .get_ordered_account_addresses_iter()
-                .collect(),
+            self.epoch_state.verifier.get_ordered_account_addresses_iter().collect(),
             self.max_blocks_to_request,
             self.pending_blocks.clone(),
         );
+        BlockStore::fast_forward_sync_by_block_number(
+            &mut retriever,
+            self.execution_api.as_ref().unwrap().clone(),
+            self.storage.latest_block_number() + 1,
+        ).await?;
         let recovery_data = BlockStore::fast_forward_sync(
             sync_info.highest_quorum_cert(),
             sync_info.highest_commit_cert(),

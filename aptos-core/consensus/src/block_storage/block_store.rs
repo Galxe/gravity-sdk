@@ -18,7 +18,7 @@ use crate::{
     util::time_service::TimeService,
 };
 use anyhow::{bail, ensure, format_err, Context};
-use api_types::ExecutionApi;
+use api_types::{BlockBatch, ExecutionApi};
 use aptos_consensus_types::common::Payload::DirectMempool;
 use aptos_consensus_types::{
     block::Block,
@@ -156,7 +156,8 @@ impl BlockStore {
             order_vote_enabled,
             pending_blocks,
             execution_api,
-        ).await;
+        )
+        .await;
         block_store.recover_blocks().await;
         block_store
     }
@@ -182,32 +183,28 @@ impl BlockStore {
         let mut certs = self.inner.read().get_all_quorum_certs_with_commit_info();
         certs.sort_unstable_by_key(|qc| qc.commit_info().round());
         for qc in certs {
-            if qc.vote_data().proposed().round() > self.commit_root().round() {
+            if qc.certified_block().round() > self.commit_root().round() {
                 info!(
                     "trying to recover to round {} with ledger info {}",
-                    qc.vote_data().proposed().round(),
+                    qc.certified_block().round(),
                     qc.ledger_info()
                 );
-                let block_id_to_recover = qc.vote_data().proposed().id();
+                let block_id_to_recover = qc.certified_block().id();
                 let block_to_recover = self.get_block(block_id_to_recover);
                 assert!(block_to_recover.is_some());
                 let block_to_recover = block_to_recover.unwrap();
-                if let Some(DirectMempool((block_hash, txns))) = block_to_recover.block().payload() {
+                self.init_block_number(&vec![block_to_recover.clone()]);
+                if let Some(DirectMempool((block_hash, txns))) = block_to_recover.block().payload()
+                {
                     info!("recover block {} block_hash {}", block_to_recover.block(), block_hash);
                     let g_txns = txns.iter().map(|txn| txn.into()).collect();
-                    self.execution_api
-                        .as_ref()
-                        .unwrap()
-                        .recover_ordered_block(g_txns, **block_hash)
-                        .await;
+                    let block_batch = BlockBatch { txns: g_txns, block_hash: **block_hash };
+                    self.execution_api.as_ref().unwrap().recover_ordered_block(block_batch).await;
                 }
                 if qc.commit_info().round() <= self.commit_root().round() {
                     continue;
                 }
-                info!(
-                    "trying to execute to round {}",
-                    qc.commit_info().round(),
-                );
+                info!("trying to execute to round {}", qc.commit_info().round(),);
                 if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info(), true).await {
                     error!("Error in try-committing blocks. {}", e.to_string());
                 }
@@ -280,6 +277,23 @@ impl BlockStore {
         block_store
     }
 
+    pub fn init_block_number(&self, ordered_blocks: &Vec<Arc<PipelinedBlock>>) {
+        let mut blocks = vec![];
+        for p_block in ordered_blocks {
+            if let Some(_) = p_block.block().block_number() {
+                continue;
+            }
+            p_block.block().set_block_number(self.storage.fetch_next_block_number());
+            self.inner
+                .write()
+                .insert_block_number(p_block.block().block_number().unwrap(), p_block.block().id());
+            blocks.push(p_block.as_ref().into());
+        }
+        if blocks.len() != 0 {
+            self.storage.save_tree(blocks, vec![]);
+        }
+    }
+
     /// Send an ordered block id with the proof for execution, returns () on success or error
     pub async fn send_for_execution(
         &self,
@@ -298,7 +312,7 @@ impl BlockStore {
         );
 
         let blocks_to_commit = self.path_from_ordered_root(block_id_to_commit).unwrap_or_default();
-
+        let finalized_block_number = self.execution_api.as_ref().unwrap().finalized_block_number();
         assert!(!blocks_to_commit.is_empty());
         let block_tree = self.inner.clone();
         let storage = self.storage.clone();
@@ -321,19 +335,10 @@ impl BlockStore {
                 &blocks_to_commit,
                 finality_proof,
                 commit_decision,
+                finalized_block_number,
             );
         } else {
-            let mut blocks = vec![];
-            for p_block in &blocks_to_commit {
-                if let Some(_) = p_block.block().block_number() {
-                    continue;
-                }
-                p_block.block().set_block_number(self.storage.fetch_next_block_number());
-                blocks.push(p_block.as_ref().into());
-            }
-            if blocks.len() != 0 {
-                self.storage.save_tree(blocks, vec![]);
-            }
+            self.init_block_number(&blocks_to_commit);
             // This callback is invoked synchronously with and could be used for multiple batches of blocks.
             self.execution_client
                 .finalize_order(
@@ -347,6 +352,7 @@ impl BlockStore {
                                 committed_blocks,
                                 finality_proof,
                                 commit_decision,
+                                finalized_block_number,
                             );
                         },
                     ),
@@ -404,13 +410,20 @@ impl BlockStore {
     /// Duplicate inserts will return the previously inserted block (
     /// note that it is considered a valid non-error case, for example, it can happen if a validator
     /// receives a certificate for a block that is currently being added).
-    pub async fn insert_block(&self, block: Block, rebuild: bool) -> anyhow::Result<Arc<PipelinedBlock>> {
+    pub async fn insert_block(
+        &self,
+        block: Block,
+        rebuild: bool,
+    ) -> anyhow::Result<Arc<PipelinedBlock>> {
         if let Some(existing_block) = self.get_block(block.id()) {
             return Ok(existing_block);
         }
         info!("insert block {}", block);
         if !rebuild {
-            ensure!(self.inner.read().ordered_root().round() < block.round(), "Block with old round");
+            ensure!(
+                self.inner.read().ordered_root().round() < block.round(),
+                "Block with old round"
+            );
         }
 
         let pipelined_block = PipelinedBlock::new_ordered(block.clone());

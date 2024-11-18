@@ -259,7 +259,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             //     Err(e) => return Err(e),
             // }
         }
-        // todo(gravity_lightman): handle the following logic
+        // TODO(gravity_lightman): handle the following logic
         // self.inner
         //     .db
         //     .writer

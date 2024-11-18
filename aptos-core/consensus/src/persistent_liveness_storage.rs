@@ -67,6 +67,8 @@ pub trait PersistentLivenessStorage: Send + Sync {
     fn consensus_db(&self) -> Arc<ConsensusDB>;
 
     fn fetch_next_block_number(&self) -> u64;
+
+    fn latest_block_number(&self) -> u64;
 }
 
 #[derive(Clone)]
@@ -272,7 +274,7 @@ impl RecoveryData {
         info!("blocks in db: {:?}", blocks.len());
         info!("quorum certs in db: {:?}", quorum_certs.len());
         let root;
-        if !blocks.is_empty() && execution_latest_block_num != 0{
+        if !blocks.is_empty() && execution_latest_block_num != 0 {
             root = Self::find_root_by_block_number(
                 execution_latest_block_num,
                 &mut blocks,
@@ -283,7 +285,11 @@ impl RecoveryData {
             root = ledger_recovery_data.find_root(&mut blocks, &mut quorum_certs, order_vote_enabled)?;
         }
         println!("root info: {:?}", root);
-        let blocks_to_prune = Some(vec![]);
+        let blocks_to_prune = Some(Self::find_blocks_to_prune(
+            root.0.id(),
+            &mut blocks,
+            &mut quorum_certs,
+        ));
         let epoch = root.0.epoch();
         Ok(RecoveryData {
             last_vote: match last_vote {
@@ -392,7 +398,6 @@ impl PersistentLivenessStorage for StorageWriteProxy {
     }
 
     fn prune_tree(&self, block_ids: Vec<HashValue>) -> Result<()> {
-        panic!("Can't delete blocks");
         if !block_ids.is_empty() {
             // quorum certs that certified the block_ids will get removed
             self.db.delete_blocks_and_quorum_certificates(block_ids)?;
@@ -437,7 +442,7 @@ impl PersistentLivenessStorage for StorageWriteProxy {
         let ledger_recovery_data = LedgerRecoveryData::new(latest_ledger_info);
         match RecoveryData::new(
             last_vote,
-            ledger_recovery_data,
+            ledger_recovery_data.clone(),
             latest_block_number,
             blocks,
             quorum_certs,
@@ -445,9 +450,9 @@ impl PersistentLivenessStorage for StorageWriteProxy {
             order_vote_enabled,
         ) {
             Ok(mut initial_data) => {
-                // (self as &dyn PersistentLivenessStorage)
-                //     .prune_tree(initial_data.take_blocks_to_prune())
-                //     .expect("unable to prune dangling blocks during restart");
+                (self as &dyn PersistentLivenessStorage)
+                    .prune_tree(initial_data.take_blocks_to_prune())
+                    .expect("unable to prune dangling blocks during restart");
                 if initial_data.last_vote.is_none() {
                     self.db.delete_last_vote_msg().expect("unable to cleanup last vote");
                 }
@@ -467,13 +472,12 @@ impl PersistentLivenessStorage for StorageWriteProxy {
                     initial_data.last_vote.as_ref().map_or("None".to_string(), |v| v.to_string()),
                     initial_data.highest_2chain_timeout_certificate().as_ref().map_or("None".to_string(), |v| v.to_string()),
                 );
-
                 LivenessStorageData::FullRecoveryData(initial_data)
             }
             Err(e) => {
+                panic!("");
                 error!(error = ?e, "Failed to construct recovery data");
-                panic!(""); // TODO(gravity_lightman)
-                            // LivenessStorageData::PartialRecoveryData(ledger_recovery_data)
+                LivenessStorageData::PartialRecoveryData(ledger_recovery_data)
             }
         }
     }
@@ -503,5 +507,9 @@ impl PersistentLivenessStorage for StorageWriteProxy {
         let next_block_number = self.next_block_number.load(Ordering::SeqCst);
         self.next_block_number.fetch_add(1, Ordering::SeqCst);
         next_block_number
+    }
+
+    fn latest_block_number(&self) -> u64 {
+        self.execution_api.as_ref().unwrap().latest_block_number()
     }
 }

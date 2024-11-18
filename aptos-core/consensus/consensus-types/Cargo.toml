@@ -34,6 +34,7 @@ rand = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
+reth-primitives = { git = "https://github.com/paradigmxyz/reth", package = "reth-primitives", tag = "v1.0.7" }
 
 [dev-dependencies]
 aptos-types = { workspace = true, features = ["fuzzing"] }

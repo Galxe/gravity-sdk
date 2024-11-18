@@ -2,7 +2,7 @@ use alloy_primitives::Address;
 use api_types::{BlockBatch, BlockHashState, ExecutionApi, GTxn};
 use jsonrpsee::core::async_trait;
 use rand::Rng;
-use reth_primitives::ChainId;
+use reth_primitives::{Block, ChainId};
 use revm::primitives::{alloy_primitives::U160, TransactTo, TxEnv, U256};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
@@ -140,12 +140,28 @@ impl ExecutionApi for MockCli {
     fn latest_block_number(&self) -> u64 {
         0
     }
+    
+    fn finalized_block_number(&self) -> u64 {
+        0
+    }
 
     async fn recover_ordered_block(
         &self,
-        block: Vec<GTxn>,
-        res: [u8; 32],
+        block_batch: BlockBatch,
     ) {
         unimplemented!("No need for bench mode")
     }
+
+    fn get_blocks_by_range(
+        &self,
+        start_block_number: u64,
+        end_block_number: u64,
+    ) -> Vec<Block> {
+        unimplemented!("No need for bench mode")
+    }
+
+    async fn recover_execution_blocks(&self, block: Vec<Block>) {
+        unimplemented!("No need for bench mode")
+    }
+
 }

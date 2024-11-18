@@ -367,7 +367,7 @@ async fn test_illegal_timestamp() {
         Vec::new(),
     )
     .unwrap();
-    let result = block_store.insert_block(block_with_illegal_timestamp).await;
+    let result = block_store.insert_block(block_with_illegal_timestamp, false).await;
     assert!(result.is_err());
 }
 

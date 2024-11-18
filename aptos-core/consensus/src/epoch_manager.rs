@@ -666,6 +666,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         onchain_consensus_config: OnChainConsensusConfig,
         epoch_state: Arc<EpochState>,
         network_sender: Arc<NetworkSender>,
+        execution_api: Option<Arc<dyn ExecutionApi>>,
     ) {
         let (recovery_manager_tx, recovery_manager_rx) =
             aptos_channel::new(QueueStyle::KLAST, 10, Some(&counters::ROUND_MANAGER_CHANNEL_MSGS));
@@ -683,6 +684,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             self.payload_manager.clone(),
             onchain_consensus_config.order_vote_enabled(),
             self.pending_blocks.clone(),
+            execution_api,
         );
         tokio::spawn(recovery_manager.start(recovery_manager_rx, close_rx));
     }
@@ -1284,6 +1286,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     consensus_config,
                     epoch_state,
                     Arc::new(network_sender),
+                    self.execution_api.clone(),
                 )
                 .await
             },

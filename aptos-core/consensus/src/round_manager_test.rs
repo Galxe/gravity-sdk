@@ -1317,7 +1317,7 @@ fn response_on_block_retrieval() {
                     _ => panic!("block retrieval failure"),
                 };
                 assert_eq!(response.status(), BlockRetrievalStatus::Succeeded);
-                assert_eq!(response.blocks().first().unwrap().id(), block_id);
+                assert_eq!(response.consensus_blocks().first().unwrap().id(), block_id);
             },
             _ => panic!("block retrieval failure"),
         }
@@ -1341,7 +1341,7 @@ fn response_on_block_retrieval() {
                     _ => panic!("block retrieval failure"),
                 };
                 assert_eq!(response.status(), BlockRetrievalStatus::IdNotFound);
-                assert!(response.blocks().is_empty());
+                assert!(response.consensus_blocks().is_empty());
             },
             _ => panic!("block retrieval failure"),
         }
@@ -1364,10 +1364,10 @@ fn response_on_block_retrieval() {
                     _ => panic!("block retrieval failure"),
                 };
                 assert_eq!(response.status(), BlockRetrievalStatus::NotEnoughBlocks);
-                assert_eq!(block_id, response.blocks().first().unwrap().id());
+                assert_eq!(block_id, response.consensus_blocks().first().unwrap().id());
                 assert_eq!(
                     node.block_store.ordered_root().id(),
-                    response.blocks().get(1).unwrap().id()
+                    response.consensus_blocks().get(1).unwrap().id()
                 );
             },
             _ => panic!("block retrieval failure"),

@@ -16,10 +16,7 @@ use aptos_crypto::HashValue;
 use aptos_infallible::Mutex;
 use aptos_storage_interface::DbReader;
 use aptos_types::{
-    aggregate_signature::AggregateSignature,
-    epoch_change::EpochChangeProof,
-    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
-    on_chain_config::ValidatorSet,
+    aggregate_signature::AggregateSignature, epoch_change::EpochChangeProof, error::not_implemented, ledger_info::{LedgerInfo, LedgerInfoWithSignatures}, on_chain_config::ValidatorSet
 };
 use std::{collections::HashMap, sync::Arc};
 
@@ -153,6 +150,10 @@ impl MockStorage {
 
 // A impl that always start from genesis.
 impl PersistentLivenessStorage for MockStorage {
+    fn latest_block_number(&self) -> u64 {
+        unimplemented!("")
+    }
+
     fn save_tree(&self, blocks: Vec<Block>, quorum_certs: Vec<QuorumCert>) -> Result<()> {
         // When the shared storage is empty, we are expected to not able to construct an block tree
         // from it. During test we will intentionally clear shared_storage to simulate the situation
@@ -263,6 +264,10 @@ impl EmptyStorage {
 }
 
 impl PersistentLivenessStorage for EmptyStorage {
+    fn latest_block_number(&self) -> u64 {
+        unimplemented!("")
+    }
+
     fn save_tree(&self, _: Vec<Block>, _: Vec<QuorumCert>) -> Result<()> {
         Ok(())
     }

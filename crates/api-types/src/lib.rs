@@ -2,9 +2,10 @@ use std::{fmt::Display, sync::Arc};
 
 use async_trait::async_trait;
 use futures::channel::mpsc::SendError;
+use futures::future::BoxFuture;
+use reth_primitives::Block;
 use ruint::aliases::U256;
 use std::future::Future;
-use futures::future::BoxFuture;
 use tokio::{runtime::Runtime, sync::Mutex};
 
 #[derive(Clone, Copy)]
@@ -52,11 +53,17 @@ pub trait ExecutionApi: Send + Sync {
 
     fn latest_block_number(&self) -> u64;
 
-    async fn recover_ordered_block(
+    fn finalized_block_number(&self) -> u64;
+
+    async fn recover_ordered_block(&self, block_batch: BlockBatch);
+
+    async fn recover_execution_blocks(&self, block: Vec<Block>);
+
+    fn get_blocks_by_range(
         &self,
-        block: Vec<GTxn>,
-        res: [u8; 32],
-    );
+        start_block_number: u64,
+        end_block_number: u64,
+    ) -> Vec<Block>;
 }
 
 #[derive(Clone, Default)]
