@@ -151,7 +151,7 @@ impl ConsensusApi for ConsensusEngine {
         Ok(self.execution_api.request_block_batch(state_block_hash).await)
     }
 
-    async fn send_order_block(&self, txns: Vec<GTxn>) {
+    async fn send_order_block(&self, block: BlockBatch) {
         // let mut return_txns = vec![GTxn::default(); txns.len()];
         // txns.iter().for_each(|txn| {
         //     let txn_bytes = match txn.payload() {
@@ -171,7 +171,7 @@ impl ConsensusApi for ConsensusEngine {
         //     return_txns[txn.g_ext().txn_index_in_block as usize] = gtxn;
         // });
         info!("send_order_block");
-        self.execution_api.send_ordered_block(txns).await
+        self.execution_api.send_ordered_block(block).await
     }
 
     async fn recv_executed_block_hash(&self) -> [u8; 32] {

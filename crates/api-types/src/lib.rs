@@ -23,7 +23,7 @@ pub trait ConsensusApi: Send + Sync {
         state_block_hash: BlockHashState,
     ) -> Result<BlockBatch, SendError>;
 
-    async fn send_order_block(&self, txns: Vec<GTxn>);
+    async fn send_order_block(&self, block: BlockBatch);
 
     async fn recv_executed_block_hash(&self) -> [u8; 32];
 
@@ -42,7 +42,7 @@ pub trait ExecutionApi: Send + Sync {
     // head block id is the last block id that received by the execution engine in block tree
     async fn request_block_batch(&self, state_block_hash: BlockHashState) -> BlockBatch;
 
-    async fn send_ordered_block(&self, txns: Vec<GTxn>);
+    async fn send_ordered_block(&self, block: BlockBatch);
 
     // the block hash is the hash of the block that has been executed, which is passed by the send_ordered_block
     async fn recv_executed_block_hash(&self) -> [u8; 32];
