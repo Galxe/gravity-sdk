@@ -485,7 +485,7 @@ impl BlockStore {
             assert!(self.commit_root().block().block_number().is_some());
             let mut status = BlockRetrievalStatus::Succeeded;
             let target_block_number = self
-                .get_block(self.highest_commit_cert().certified_block(false).unwrap().id())
+                .get_block(self.highest_commit_cert().commit_info().id())
                 .unwrap()
                 .block()
                 .block_number()
