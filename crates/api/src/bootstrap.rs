@@ -7,9 +7,7 @@ use std::{
 };
 
 use crate::{
-    network::{
-        build_network_interfaces, consensus_network_configuration, extract_network_ids,
-    },
+    network::{build_network_interfaces, consensus_network_configuration, extract_network_ids},
     storage::{self, db::GravityDB},
 };
 use api_types::ExecutionApi;
@@ -17,7 +15,7 @@ use aptos_config::{
     config::{NetworkConfig, NodeConfig, Peer, PeerRole, RocksdbConfigs, StorageDirPaths},
     network_id::NetworkId,
 };
-use aptos_consensus::gravity_state_computer::GravityExecutionProxy;
+use aptos_consensus::{consensusdb::ConsensusDB, gravity_state_computer::GravityExecutionProxy};
 use aptos_consensus::{
     gravity_state_computer::ConsensusAdapterArgs, network_interface::ConsensusMsg,
     persistent_liveness_storage::StorageWriteProxy, quorum_store::quorum_store_db::QuorumStoreDB,
@@ -25,6 +23,7 @@ use aptos_consensus::{
 use aptos_consensus_notifications::ConsensusNotifier;
 use aptos_crypto::x25519;
 use aptos_event_notifications::EventSubscriptionService;
+use aptos_logger::info;
 use aptos_mempool::{MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest};
 use aptos_mempool_notifications::MempoolNotificationListener;
 use aptos_network::application::{
@@ -167,11 +166,10 @@ pub fn init_mempool(
 
 pub fn init_peers_and_metadata(
     node_config: &NodeConfig,
-    gravity_db: &GravityDB,
+    consensus_db: &Arc<ConsensusDB>,
 ) -> Arc<PeersAndMetadata> {
     let listen_address = node_config.validator_network.as_ref().unwrap().listen_address.to_string();
-    let gravity_node_config = gravity_db
-        .mock_db
+    let gravity_node_config = consensus_db
         .node_config_set
         .get(&listen_address)
         .expect(&format!("addr {:?} has no config", listen_address));
@@ -179,13 +177,11 @@ pub fn init_peers_and_metadata(
     let peers_and_metadata = PeersAndMetadata::new(&network_ids);
     let mut peer_set = HashMap::new();
     for trusted_peer in &gravity_node_config.trusted_peers_map {
-        let trusted_peer_config = gravity_db
-            .mock_db
+        let trusted_peer_config = consensus_db
             .node_config_set
             .get(trusted_peer)
             .or_else(|| {
-                gravity_db
-                    .mock_db
+                consensus_db
                     .node_config_set
                     .iter()
                     .map(|(_, config)| config)
@@ -193,10 +189,10 @@ pub fn init_peers_and_metadata(
             })
             .expect(&format!("NodeConfig for {:?} not found", trusted_peer));
         let mut set = HashSet::new();
-        let trusted_peer_private_key =
-            x25519::PrivateKey::try_from(trusted_peer_config.network_private_key.as_slice())
-                .unwrap();
-        set.insert(x25519::PublicKey::from(&trusted_peer_private_key));
+        let public_key = x25519::PublicKey::try_from(
+            hex::decode(trusted_peer_config.network_public_key.as_bytes()).unwrap().as_slice(),
+        ).unwrap();
+        set.insert(public_key);
         let trust_peer = Peer::new(vec![trusted_peer.parse().unwrap()], set, PeerRole::Validator);
         peer_set.insert(
             AccountAddress::try_from(trusted_peer_config.account_address.clone()).unwrap(),
@@ -208,7 +204,6 @@ pub fn init_peers_and_metadata(
 }
 
 pub fn init_gravity_db(node_config: &NodeConfig) -> GravityDB {
-    let listen_address = node_config.validator_network.as_ref().unwrap().listen_address.to_string();
     let mut db_paths = node_config.storage.dir();
     db_paths.push("gravity_db");
     let _ = fs::create_dir(&db_paths);
@@ -216,8 +211,7 @@ pub fn init_gravity_db(node_config: &NodeConfig) -> GravityDB {
     storage::db::GravityDB::open(
         &db_paths,
         RocksdbConfigs::default(),
-        listen_address,
-        &node_config.mock_db_path.as_path(),
+        &node_config.node_config_path.as_path(),
     )
     .unwrap()
 }

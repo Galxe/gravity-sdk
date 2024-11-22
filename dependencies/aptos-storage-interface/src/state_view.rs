@@ -69,13 +69,7 @@ pub trait LatestDbStateCheckpointView {
 
 impl LatestDbStateCheckpointView for Arc<dyn DbReader> {
     fn latest_state_checkpoint_view(&self) -> Result<DbStateView> {
-        Ok(DbStateView {
-            db: self.clone(),
-            version: self
-                .get_latest_state_checkpoint_version()
-                .map_err(Into::<StateviewError>::into)?,
-            maybe_verify_against_state_root_hash: None,
-        })
+        unimplemented!("")
     }
 }
 

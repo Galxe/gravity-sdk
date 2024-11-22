@@ -30,7 +30,7 @@ validator_network:
 storage:
   dir: "/tmp/node4/data"
 
-mock_db_path: "/tmp/node4/genesis/nodes_config.json"
+node_config_path: "/tmp/node4/genesis/nodes_config.json"
 
 log_file_path: "/tmp/node4/consensus_log"
 

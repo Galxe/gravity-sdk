@@ -93,33 +93,12 @@ impl DbReader for GravityDB {
         }
     }
 
-    // TODO(Gravity_lightman): mock method
-    fn get_accumulator_summary(
-        &self,
-        ledger_version: Version,
-    ) -> Result<TransactionAccumulatorSummary> {
-        self.mock_db.get_accumulator_summary(ledger_version)
-    }
-
     fn get_state_value_by_version(
         &self,
         state_key: &StateKey,
         version: Version,
     ) -> Result<Option<StateValue>> {
         self.mock_db.get_state_value_by_version(state_key, version)
-    }
-
-    fn get_latest_state_checkpoint_version(&self) -> Result<Option<Version>> {
-        Ok(Some(0))
-    }
-
-    fn get_latest_block_events(&self, num_events: usize) -> Result<Vec<EventWithVersion>> {
-        Ok(vec![])
-    }
-
-    // only for test
-    fn get_sequence_num(&self, addr: AccountAddress) -> anyhow::Result<u64> {
-        self.mock_db.get_sequence_num(addr)
     }
 }
 

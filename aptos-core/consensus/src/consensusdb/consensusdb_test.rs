@@ -17,7 +17,7 @@ use std::{collections::HashMap, hash::Hash};
 #[test]
 fn test_put_get() {
     let tmp_dir = TempPath::new();
-    let db = ConsensusDB::new(&tmp_dir);
+    let db = ConsensusDB::new(&tmp_dir, &PathBuf::new());
 
     let block = Block::make_genesis_block();
     let blocks = vec![block];
@@ -57,7 +57,7 @@ fn test_put_get() {
 #[test]
 fn test_delete_block_and_qc() {
     let tmp_dir = TempPath::new();
-    let db = ConsensusDB::new(&tmp_dir);
+    let db = ConsensusDB::new(&tmp_dir, &PathBuf::new());
 
     assert_eq!(db.get_all::<BlockSchema>().unwrap().len(), 0);
     assert_eq!(db.get_all::<QCSchema>().unwrap().len(), 0);
@@ -92,7 +92,7 @@ fn test_dag_type<S: Schema<Key = K>, K: Eq + Hash>(key: S::Key, value: S::Value,
 #[test]
 fn test_dag() {
     let tmp_dir = TempPath::new();
-    let db = ConsensusDB::new(&tmp_dir);
+    let db = ConsensusDB::new(&tmp_dir, &PathBuf::new());
 
     let node = Node::new(
         1,

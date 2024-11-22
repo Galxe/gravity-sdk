@@ -303,8 +303,6 @@ pub trait DbReader: Send + Sync {
         /// peer.
         fn get_pre_committed_version(&self) -> Result<Option<Version>>;
 
-        /// Returns the latest state checkpoint version if any.
-        fn get_latest_state_checkpoint_version(&self) -> Result<Option<Version>>;
 
         /// Returns the latest state snapshot strictly before `next_version` if any.
         fn get_state_snapshot_before(
@@ -428,16 +426,6 @@ pub trait DbReader: Send + Sync {
             _ledger_version: Version,
         ) -> Result<AccumulatorConsistencyProof>;
 
-        /// A convenience function for building a [`TransactionAccumulatorSummary`]
-        /// at the given `ledger_version`.
-        ///
-        /// Note: this is roughly equivalent to calling
-        /// `DbReader::get_accumulator_consistency_proof(None, ledger_version)`.
-        fn get_accumulator_summary(
-            &self,
-            ledger_version: Version,
-        ) -> Result<TransactionAccumulatorSummary>;
-
         /// Returns total number of state items in state store at given version.
         fn get_state_item_count(&self, version: Version) -> Result<usize>;
 
@@ -482,10 +470,6 @@ pub trait DbReader: Send + Sync {
         self.get_latest_ledger_info_option().and_then(|opt| {
             opt.ok_or_else(|| AptosDbError::Other("Latest LedgerInfo not found.".to_string()))
         })
-    }
-
-    fn get_sequence_num(&self, addr: AccountAddress) -> anyhow::Result<u64> {
-        panic!("should implement this function in the struct")
     }
 
     /// Returns the latest committed version, error on on non-bootstrapped/empty DB.
@@ -599,8 +583,8 @@ pub struct DbReaderWriter {
 }
 
 impl DbReaderWriter {
-    pub fn new<D: 'static + DbReader + DbWriter>(db: D) -> Self {
-        let reader = Arc::new(db);
+    pub fn new<D: 'static + DbReader + DbWriter>(db: Arc<D>) -> Self {
+        let reader = db;
         let writer = Arc::clone(&reader);
 
         Self { reader, writer }

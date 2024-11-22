@@ -13,6 +13,7 @@ use api_types::BatchClient;
 use api_types::{BlockBatch, BlockHashState, ConsensusApi, ExecutionApi, GTxn};
 use aptos_config::{config::NodeConfig, network_id::NetworkId};
 use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
+use aptos_consensus::consensusdb::ConsensusDB;
 use aptos_event_notifications::EventNotificationSender;
 use aptos_logger::info;
 use aptos_network_builder::builder::NetworkBuilder;
@@ -43,11 +44,12 @@ impl ConsensusEngine {
         block_hash_state: BlockHashState,
         chain_id: u64,
     ) -> Arc<Self> {
-        let gravity_db = init_gravity_db(&node_config);
-        let peers_and_metadata = init_peers_and_metadata(&node_config, &gravity_db);
+        let consensus_db =
+            Arc::new(ConsensusDB::new(node_config.storage.dir(), &node_config.node_config_path));
+        let peers_and_metadata = init_peers_and_metadata(&node_config, &consensus_db);
         let (_remote_log_receiver, _logger_filter_update) =
             logger::create_logger(&node_config, Some(node_config.log_file_path.clone()));
-        let db: DbReaderWriter = DbReaderWriter::new(gravity_db);
+        let db: DbReaderWriter = DbReaderWriter::new(consensus_db.clone());
         let mut event_subscription_service =
             aptos_event_notifications::EventSubscriptionService::new(Arc::new(
                 aptos_infallible::RwLock::new(db.clone()),
@@ -90,15 +92,12 @@ impl ConsensusEngine {
         network_runtimes.push(runtime);
 
         // Start the node inspection service
-        start_node_inspection_service(
-            &node_config,
-            peers_and_metadata.clone(),
-        );
+        start_node_inspection_service(&node_config, peers_and_metadata.clone());
 
         let (consensus_to_mempool_sender, consensus_to_mempool_receiver) = mpsc::channel(1);
         // Create notification senders and listeners for mempool, consensus and the storage service
         // For Gravity we only use it to notify the mempool for the committed txn gc logic
-        let mut args = ConsensusAdapterArgs::new(execution_api.clone());
+        let mut args = ConsensusAdapterArgs::new(execution_api.clone(), consensus_db);
         let (consensus_runtime, _, _, execution_proxy) = start_consensus(
             &node_config,
             &mut event_subscription_service,

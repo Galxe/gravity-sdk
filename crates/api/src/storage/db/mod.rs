@@ -17,11 +17,10 @@ impl GravityDB {
     pub fn open(
         db_paths: &StorageDirPaths,
         rocksdb_configs: RocksdbConfigs,
-        network_address: String,
         path: &Path,
     ) -> Result<Self> {
         let ledger_db = Self::open_dbs(db_paths, rocksdb_configs)?;
-        let mock_db = MockStorage::new(network_address, path);
+        let mock_db = MockStorage::new(path);
         let myself = Self::new_with_dbs(ledger_db, mock_db);
 
         Ok(myself)

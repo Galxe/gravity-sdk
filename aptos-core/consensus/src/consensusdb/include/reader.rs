@@ -1,23 +1,14 @@
-use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
-use std::path::Path;
-use std::sync::Arc;
-
+use aptos_crypto::bls12381;
 use aptos_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH;
-use aptos_crypto::{bls12381, hash::HashValue};
-use aptos_infallible::Mutex;
-use aptos_storage_interface::{AptosDbError, DbReader, DbWriter};
+use aptos_storage_interface::{DbReader, DbWriter};
 use aptos_types::account_address::AccountAddress;
 use aptos_types::aggregate_signature::AggregateSignature;
 use aptos_types::block_info::BlockInfo;
-use aptos_types::contract_event::EventWithVersion;
 use aptos_types::epoch_change::EpochChangeProof;
 use aptos_types::epoch_state::EpochState;
 use aptos_types::ledger_info::{LedgerInfo, LedgerInfoWithSignatures};
 use aptos_types::on_chain_config::ValidatorSet;
 use aptos_types::on_chain_config::{ConsensusAlgorithmConfig, ProposerElectionType};
-use aptos_types::proof::accumulator::InMemoryTransactionAccumulator;
-use aptos_types::proof::TransactionAccumulatorSummary;
 use aptos_types::state_proof::StateProof;
 use aptos_types::state_store::state_key::inner::StateKeyInner;
 use aptos_types::validator_config::ValidatorConfig;
@@ -29,58 +20,18 @@ use aptos_types::{
     transaction::Version,
 };
 
-pub type Result<T, E = AptosDbError> = std::result::Result<T, E>;
-pub struct MockStorage {
-    pub node_config_set: GravityNodeConfigSet,
-    inner: Inner,
-}
-
-pub struct Inner(Arc<Mutex<HashMap<String, String>>>);
-
-impl Default for Inner {
-    fn default() -> Self {
-        Self(Arc::from(Mutex::new(HashMap::default())))
-    }
-}
-
-pub type GravityNodeConfigSet = BTreeMap<String, GravityNodeConfig>;
-
-#[derive(Default, Deserialize, Serialize)]
-#[serde(default)]
-pub struct GravityNodeConfig {
-    pub consensus_private_key: Vec<u8>,
-    pub consensus_public_key: String,
-    pub account_address: String,
-    pub network_private_key: Vec<u8>,
-    pub network_public_key: String,
-    pub trusted_peers_map: Vec<String>,
-    pub public_ip_address: String,
-    pub voting_power: u64,
-}
-
-/// Loads a config configuration file
-fn load_file(path: &Path) -> GravityNodeConfigSet {
-    let contents = std::fs::read_to_string(path).unwrap();
-    serde_yaml::from_str(&contents).unwrap()
-}
-
-impl MockStorage {
-    pub fn new(path: &Path) -> Self {
-        let config_set = load_file(path);
-        Self {
-            node_config_set: config_set,
-            inner: Inner(Arc::new(Mutex::new(HashMap::new()))),
-        }
-    }
-
+impl ConsensusDB {
     pub fn mock_validators(&self) -> Vec<ValidatorInfo> {
         let mut result = vec![];
         for (i, (addr, node_config)) in self.node_config_set.iter().enumerate() {
-            let private_key: bls12381::PrivateKey =
-                bls12381::PrivateKey::try_from(node_config.consensus_private_key.as_slice())
-                    .unwrap();
+            // let x = hex::decode(node_config.consensus_public_key.as_bytes()).unwrap();
+            let public_key = bls12381::PublicKey::try_from(
+                hex::decode(node_config.consensus_public_key.as_bytes()).unwrap().as_slice()
+            )
+            .unwrap();
+            info!("lightman1122 consensus_key {} {}", addr, public_key);
             let config = ValidatorConfig::new(
-                (&private_key).into(),
+                public_key,
                 bcs::to_bytes(&vec![addr.clone()]).unwrap(),
                 bcs::to_bytes(&vec![addr.clone()]).unwrap(),
                 i as u64,
@@ -95,12 +46,12 @@ impl MockStorage {
     }
 }
 
-impl DbReader for MockStorage {
+impl DbReader for ConsensusDB {
     fn get_read_delegatee(&self) -> &dyn DbReader {
         self
     }
 
-    fn get_latest_ledger_info(&self) -> Result<LedgerInfoWithSignatures> {
+    fn get_latest_ledger_info(&self) -> Result<LedgerInfoWithSignatures, AptosDbError> {
         let genesis = LedgerInfoWithSignatures::genesis(
             *ACCUMULATOR_PLACEHOLDER_HASH,
             ValidatorSet::new(self.mock_validators()),
@@ -109,7 +60,7 @@ impl DbReader for MockStorage {
         Ok(genesis)
     }
 
-    fn get_state_proof(&self, known_version: u64) -> Result<StateProof> {
+    fn get_state_proof(&self, known_version: u64) -> Result<StateProof, AptosDbError> {
         let infos = self
             .mock_validators()
             .iter()
@@ -142,7 +93,7 @@ impl DbReader for MockStorage {
         &self,
         state_key: &StateKey,
         version: Version,
-    ) -> Result<Option<StateValue>> {
+    ) -> Result<Option<StateValue>, AptosDbError> {
         let key = state_key.inner();
         let bytes = {
             match key {
@@ -193,4 +144,4 @@ impl DbReader for MockStorage {
     }
 }
 
-impl DbWriter for MockStorage {}
+impl DbWriter for ConsensusDB {}

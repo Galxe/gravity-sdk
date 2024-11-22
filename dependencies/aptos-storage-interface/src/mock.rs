@@ -18,11 +18,6 @@ use aptos_types::{
 pub struct MockDbReaderWriter;
 
 impl DbReader for MockDbReaderWriter {
-    fn get_latest_state_checkpoint_version(&self) -> Result<Option<Version>> {
-        // return a dummy version for tests
-        Ok(Some(1))
-    }
-
     fn get_state_proof_by_version_ext(
         &self,
         _state_key: &StateKey,

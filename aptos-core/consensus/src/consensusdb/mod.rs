@@ -23,7 +23,13 @@ use schema::{
     BLOCK_CF_NAME, CERTIFIED_NODE_CF_NAME, DAG_VOTE_CF_NAME, NODE_CF_NAME, QC_CF_NAME,
     SINGLE_ENTRY_CF_NAME,
 };
-use std::{iter::Iterator, path::Path, time::Instant};
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::BTreeMap,
+    iter::Iterator,
+    path::{Path, PathBuf},
+    time::Instant,
+};
 
 /// The name of the consensus db file
 pub const CONSENSUS_DB_NAME: &str = "consensus_db";
@@ -33,9 +39,7 @@ pub fn create_checkpoint<P: AsRef<Path> + Clone>(db_path: P, checkpoint_path: P)
     let start = Instant::now();
     let consensus_db_checkpoint_path = checkpoint_path.as_ref().join(CONSENSUS_DB_NAME);
     std::fs::remove_dir_all(&consensus_db_checkpoint_path).unwrap_or(());
-    ConsensusDB::new(db_path)
-        .db
-        .create_checkpoint(&consensus_db_checkpoint_path)?;
+    ConsensusDB::new(db_path, &PathBuf::new()).db.create_checkpoint(&consensus_db_checkpoint_path)?;
     info!(
         path = consensus_db_checkpoint_path,
         time_ms = %start.elapsed().as_millis(),
@@ -44,12 +48,32 @@ pub fn create_checkpoint<P: AsRef<Path> + Clone>(db_path: P, checkpoint_path: P)
     Ok(())
 }
 
+#[derive(Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct GravityNodeConfig {
+    pub consensus_public_key: String,
+    pub account_address: String,
+    pub network_public_key: String,
+    pub trusted_peers_map: Vec<String>,
+    pub public_ip_address: String,
+    pub voting_power: u64,
+}
+
+pub type GravityNodeConfigSet = BTreeMap<String, GravityNodeConfig>;
+
+/// Loads a config configuration file
+fn load_file(path: &Path) -> GravityNodeConfigSet {
+    let contents = std::fs::read_to_string(path).unwrap();
+    serde_yaml::from_str(&contents).unwrap()
+}
+
 pub struct ConsensusDB {
     db: DB,
+    pub node_config_set: GravityNodeConfigSet,
 }
 
 impl ConsensusDB {
-    pub fn new<P: AsRef<Path> + Clone>(db_root_path: P) -> Self {
+    pub fn new<P: AsRef<Path> + Clone>(db_root_path: P, node_config_path: &PathBuf) -> Self {
         let column_families = vec![
             /* UNUSED CF = */ DEFAULT_COLUMN_FAMILY_NAME,
             BLOCK_CF_NAME,
@@ -70,43 +94,26 @@ impl ConsensusDB {
         let db = DB::open(path.clone(), "consensus", column_families, &opts)
             .expect("ConsensusDB open failed; unable to continue");
 
-        info!(
-            "Opened ConsensusDB at {:?} in {} ms",
-            path,
-            instant.elapsed().as_millis()
-        );
+        info!("Opened ConsensusDB at {:?} in {} ms", path, instant.elapsed().as_millis());
+        let mut node_config_set = BTreeMap::new();
+        if node_config_path.to_str().is_some() && !node_config_path.to_str().unwrap().is_empty() {
+            node_config_set = load_file(node_config_path.as_path());
+        }
 
-        Self { db }
+        Self { db, node_config_set }
     }
 
     pub fn get_data(
         &self,
-    ) -> Result<(
-        Option<Vec<u8>>,
-        Option<Vec<u8>>,
-        Vec<Block>,
-        Vec<QuorumCert>,
-    )> {
+    ) -> Result<(Option<Vec<u8>>, Option<Vec<u8>>, Vec<Block>, Vec<QuorumCert>)> {
         let last_vote = self.get_last_vote()?;
         let highest_2chain_timeout_certificate = self.get_highest_2chain_timeout_certificate()?;
-        let consensus_blocks = self
-            .get_all::<BlockSchema>()?
-            .into_iter()
-            .map(|(_, block)| block)
-            .collect();
-        let consensus_qcs = self
-            .get_all::<QCSchema>()?
-            .into_iter()
-            .map(|(_, qc)| qc)
-            .collect();
+        let consensus_blocks =
+            self.get_all::<BlockSchema>()?.into_iter().map(|(_, block)| block).collect();
+        let consensus_qcs = self.get_all::<QCSchema>()?.into_iter().map(|(_, qc)| qc).collect();
 
         println!("qcs : {:?}", consensus_qcs);
-        Ok((
-            last_vote,
-            highest_2chain_timeout_certificate,
-            consensus_blocks,
-            consensus_qcs,
-        ))
+        Ok((last_vote, highest_2chain_timeout_certificate, consensus_blocks, consensus_qcs))
     }
 
     pub fn save_highest_2chain_timeout_certificate(&self, tc: Vec<u8>) -> Result<(), DbError> {
@@ -132,12 +139,8 @@ impl ConsensusDB {
         }
         let batch = SchemaBatch::new();
         // TODO(gravity_lightman): block_id key -> round/block_number
-        block_data
-            .iter()
-            .try_for_each(|block| batch.put::<BlockSchema>(&block.id(), block))?;
-        qc_data
-            .iter()
-            .try_for_each(|qc| batch.put::<QCSchema>(&qc.certified_block().id(), qc))?;
+        block_data.iter().try_for_each(|block| batch.put::<BlockSchema>(&block.id(), block))?;
+        qc_data.iter().try_for_each(|qc| batch.put::<QCSchema>(&qc.certified_block().id(), qc))?;
         self.commit(batch)
     }
 
@@ -165,9 +168,7 @@ impl ConsensusDB {
 
     /// Get latest timeout certificates (we only store the latest highest timeout certificates).
     fn get_highest_2chain_timeout_certificate(&self) -> Result<Option<Vec<u8>>, DbError> {
-        Ok(self
-            .db
-            .get::<SingleEntrySchema>(&SingleEntryKey::Highest2ChainTimeoutCert)?)
+        Ok(self.db.get::<SingleEntrySchema>(&SingleEntryKey::Highest2ChainTimeoutCert)?)
     }
 
     pub fn delete_highest_2chain_timeout_certificate(&self) -> Result<(), DbError> {
@@ -178,9 +179,7 @@ impl ConsensusDB {
 
     /// Get serialized latest vote (if available)
     fn get_last_vote(&self) -> Result<Option<Vec<u8>>, DbError> {
-        Ok(self
-            .db
-            .get::<SingleEntrySchema>(&SingleEntryKey::LastVote)?)
+        Ok(self.db.get::<SingleEntrySchema>(&SingleEntryKey::LastVote)?)
     }
 
     pub fn delete_last_vote_msg(&self) -> Result<(), DbError> {
@@ -211,5 +210,64 @@ impl ConsensusDB {
 
     pub fn get<S: Schema>(&self, key: &S::Key) -> Result<Option<S::Value>, DbError> {
         Ok(self.db.get::<S>(key)?)
+    }
+}
+
+include!("include/reader.rs");
+
+#[cfg(test)]
+mod test {
+    use aptos_crypto::ed25519::Ed25519PrivateKey;
+    use aptos_crypto::ed25519::Ed25519PublicKey;
+    use aptos_crypto::test_utils::KeyPair;
+    use aptos_crypto::{bls12381, x25519, PrivateKey};
+
+    #[test]
+    fn gen_account_private_key() {
+        let current_dir = env!("CARGO_MANIFEST_DIR").to_string() + "/";
+        let path = current_dir.clone() + "nodes_config.json";
+        let node_config_set = load_file(Path::new(&path));
+        node_config_set.iter().for_each(|(addr, config)| {
+            let mut rng = thread_rng();
+            let kp = KeyPair::<Ed25519PrivateKey, Ed25519PublicKey>::generate(&mut rng);
+            println!(
+                "{} private key {}, public key {}",
+                addr,
+                hex::encode(kp.private_key.to_bytes().as_slice()).as_str(),
+                kp.public_key.to_string()
+            )
+        });
+    }
+
+    use aptos_crypto::{Uniform, ValidCryptoMaterial};
+    use rand::thread_rng;
+    use std::path::Path;
+
+    use super::load_file;
+
+    #[test]
+    fn println_consensus_pri_key() {
+        for _ in 0..2 {
+            let mut rng = thread_rng();
+            let private_key = bls12381::PrivateKey::generate(&mut rng);
+            println!(
+                "consensus private key {:?}, public key {}",
+                private_key.to_bytes(),
+                private_key.public_key().to_string()
+            );
+        }
+    }
+
+    #[test]
+    fn println_network_pri_key() {
+        for _ in 0..2 {
+            let mut rng = thread_rng();
+            let private_key = x25519::PrivateKey::generate(&mut rng);
+            println!(
+                "network private key {:?}, public key {}",
+                private_key.to_bytes(),
+                private_key.public_key().to_string()
+            );
+        }
     }
 }

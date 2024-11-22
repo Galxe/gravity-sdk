@@ -57,7 +57,11 @@ pub fn start_consensus(
     gravity_args: &mut ConsensusAdapterArgs,
 ) -> (Runtime, Arc<StorageWriteProxy>, Arc<QuorumStoreDB>, Arc<GravityExecutionProxy>) {
     let runtime = aptos_runtimes::spawn_named_runtime("consensus".into(), None);
-    let storage = Arc::new(StorageWriteProxy::new(node_config, aptos_db.reader.clone(), gravity_args.execution_api.clone()));
+    let storage = Arc::new(StorageWriteProxy::new(
+        gravity_args.consensus_db.as_ref().unwrap().clone(),
+        aptos_db.reader.clone(),
+        gravity_args.execution_api.clone(),
+    ));
     let quorum_store_db = Arc::new(QuorumStoreDB::new(node_config.storage.dir()));
 
     let txn_notifier = Arc::new(MempoolNotifier::new(
@@ -65,9 +69,7 @@ pub fn start_consensus(
         node_config.consensus.mempool_executed_txn_timeout_ms,
     ));
 
-    let g_executor = GravityBlockExecutor::new(
-        BlockExecutor::new(aptos_db),
-    );
+    let g_executor = GravityBlockExecutor::new(BlockExecutor::new(aptos_db));
     let executor = Arc::new(g_executor);
     let execution_proxy = ExecutionProxy::new(
         executor.clone(),
@@ -76,10 +78,8 @@ pub fn start_consensus(
         runtime.handle(),
         TransactionFilter::new(node_config.execution.transaction_filter.clone()),
     );
-    let execution_proxy = Arc::new(GravityExecutionProxy::new(
-        Arc::new(execution_proxy),
-        executor.clone(),
-    ));
+    let execution_proxy =
+        Arc::new(GravityExecutionProxy::new(Arc::new(execution_proxy), executor.clone()));
 
     let time_service = Arc::new(ClockTimeService::new(runtime.handle().clone()));
 
@@ -155,9 +155,7 @@ pub fn start_consensus_observer(
         consensus_publisher.get_consensus_observer_client()
     } else {
         // Otherwise, create a new client (the publisher is not enabled)
-        Arc::new(ConsensusObserverClient::new(
-            observer_network_client.clone(),
-        ))
+        Arc::new(ConsensusObserverClient::new(observer_network_client.clone()))
     };
 
     // Create the consensus observer network events

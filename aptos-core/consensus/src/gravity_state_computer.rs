@@ -2,6 +2,7 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::consensusdb::ConsensusDB;
 use crate::payload_client::user::quorum_store_client::QuorumStoreClient;
 use crate::state_computer::{ExecutionProxy, PipelineExecutionResult, StateComputeResultFut};
 use crate::{
@@ -35,13 +36,15 @@ use api_types::ExecutionApi;
 pub struct ConsensusAdapterArgs {
     pub quorum_store_client: Option<Arc<QuorumStoreClient>>,
     pub execution_api: Option<Arc<dyn ExecutionApi>>,
+    pub consensus_db: Option<Arc<ConsensusDB>>,
 }
 
 impl ConsensusAdapterArgs {
-    pub fn new(execution_api: Arc<dyn ExecutionApi>) -> Self {
+    pub fn new(execution_api: Arc<dyn ExecutionApi>, consensus_db: Arc<ConsensusDB>) -> Self {
         Self {
             quorum_store_client: None,
             execution_api: Some(execution_api),
+            consensus_db: Some(consensus_db),
         }
     }
 
@@ -53,6 +56,7 @@ impl ConsensusAdapterArgs {
         Self {
             quorum_store_client: None,
             execution_api: None,
+            consensus_db: None,
         }
     }
 }

@@ -18,7 +18,7 @@ extern crate scopeguard;
 extern crate core;
 
 mod block_storage;
-mod consensusdb;
+pub mod consensusdb;
 mod dag;
 mod epoch_manager;
 mod error;

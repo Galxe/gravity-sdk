@@ -368,11 +368,11 @@ pub struct StorageWriteProxy {
 
 impl StorageWriteProxy {
     pub fn new(
-        config: &NodeConfig,
+        db: Arc<ConsensusDB>,
         aptos_db: Arc<dyn DbReader>,
         execution_api: Option<Arc<dyn ExecutionApi>>,
     ) -> Self {
-        let db = Arc::new(ConsensusDB::new(config.storage.dir()));
+        // let db = Arc::new(ConsensusDB::new(config.storage.dir()));
         StorageWriteProxy { db, aptos_db, next_block_number: AtomicU64::new(0), execution_api }
     }
 

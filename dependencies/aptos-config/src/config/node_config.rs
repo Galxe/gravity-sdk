@@ -87,7 +87,7 @@ pub struct NodeConfig {
     #[serde(default)]
     pub indexer_db_config: InternalIndexerDBConfig,
     #[serde(default)]
-    pub mock_db_path: PathBuf,
+    pub node_config_path: PathBuf,
     #[serde(default)]
     pub test_mode: bool,
     #[serde(default)]
