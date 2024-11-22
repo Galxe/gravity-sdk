@@ -4,7 +4,6 @@ mod logger;
 mod mock_db;
 mod network;
 pub mod simple_consensus_engine;
-mod storage;
 mod utils;
 mod execution_api;
 pub mod consensus_api;

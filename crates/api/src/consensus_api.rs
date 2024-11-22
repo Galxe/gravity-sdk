@@ -2,7 +2,7 @@ use std::{future::IntoFuture, hash::Hash, sync::Arc, time::Duration};
 
 use crate::{
     bootstrap::{
-        init_gravity_db, init_mempool, init_network_interfaces, init_peers_and_metadata,
+        init_mempool, init_network_interfaces, init_peers_and_metadata,
         start_consensus, start_node_inspection_service,
     },
     consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler},

@@ -6,10 +6,7 @@ use std::{
     thread,
 };
 
-use crate::{
-    network::{build_network_interfaces, consensus_network_configuration, extract_network_ids},
-    storage::{self, db::GravityDB},
-};
+use crate::network::{build_network_interfaces, consensus_network_configuration, extract_network_ids};
 use api_types::ExecutionApi;
 use aptos_config::{
     config::{NetworkConfig, NodeConfig, Peer, PeerRole, RocksdbConfigs, StorageDirPaths},
@@ -201,17 +198,4 @@ pub fn init_peers_and_metadata(
     }
     let _ = peers_and_metadata.set_trusted_peers(&NetworkId::Validator, peer_set);
     peers_and_metadata
-}
-
-pub fn init_gravity_db(node_config: &NodeConfig) -> GravityDB {
-    let mut db_paths = node_config.storage.dir();
-    db_paths.push("gravity_db");
-    let _ = fs::create_dir(&db_paths);
-    let db_paths = StorageDirPaths::from_path(db_paths);
-    storage::db::GravityDB::open(
-        &db_paths,
-        RocksdbConfigs::default(),
-        &node_config.node_config_path.as_path(),
-    )
-    .unwrap()
 }
