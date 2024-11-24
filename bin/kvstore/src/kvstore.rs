@@ -75,7 +75,7 @@ impl KvStore {
 
     pub async fn commit_block(&self, block_id: HashValue) {
         let mut batch_manager = self.batch_manager.lock().await;
-        batch_manager.commit_batch(block_id);
+        batch_manager.commit_batch(block_id).await;
     }
 
     pub async fn append_set(&self, req: SetRequest) {
@@ -87,12 +87,12 @@ impl KvStore {
         let _ = callback_rcv.await;
     }
 
-    pub async fn get_value(&self, req: GetRequest) {
+    pub async fn get_value(&self, req: GetRequest) -> Option<String> {
         let db = self.db.lock().await;
         let option = ReadOptions::new();
         match (*db).get(option, StringKey::new_from_vec(req.key)) {
-            Ok(value) => todo!(),
-            Err(err) => todo!(),
+            Ok(value) => Some(String::from_utf8(value.expect("Failed")).unwrap()),
+            Err(_) => None,
         }
     }
 }

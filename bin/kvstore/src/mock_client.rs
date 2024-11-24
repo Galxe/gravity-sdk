@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use api::ExecutionApi;
 use api_types::{BlockBatch, BlockHashState, GTxn};
 use async_trait::async_trait;
@@ -6,14 +8,14 @@ use tokio::sync::Mutex;
 
 use crate::{batch_manager::HashValue, kvstore::KvStore};
 
-struct MockClient {
-    kv_store: KvStore,
+pub struct MockClient {
+    kv_store: Arc<KvStore>,
     block_hash_channel_sender: UnboundedSender<HashValue>,
     block_hash_channel_receiver: Mutex<UnboundedReceiver<HashValue>>,
 }
 
 impl MockClient {
-    pub fn new(kv_store: KvStore) -> Self {
+    pub fn new(kv_store: Arc<KvStore>) -> Self {
         let (block_hash_channel_sender, block_hash_channel_receiver) =
             tokio::sync::mpsc::unbounded_channel();
         Self {

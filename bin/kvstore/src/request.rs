@@ -1,4 +1,3 @@
-use db_key::Key;
 use leveldb::batch::Writebatch;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -28,20 +27,10 @@ pub struct SerializableWriteBatch {
 }
 
 impl SerializableWriteBatch {
-    pub fn new() -> Self {
-        Self {
-            operations: Some(Vec::new()),
-        }
-    }
-
     pub fn new_from_batch(operations: Vec<SetRequest>) -> Self {
         Self {
             operations: Some(operations),
         }
-    }
-
-    pub fn append(&mut self, req: SetRequest) {
-        self.operations.as_mut().unwrap().push(req);
     }
 
     pub fn calculate_hash(&self) -> [u8; 32] {
