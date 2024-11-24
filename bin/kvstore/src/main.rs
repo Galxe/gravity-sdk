@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, thread};
 
 use api::{check_bootstrap_config, consensus_api::ConsensusEngine, ExecutionApi, NodeConfig};
 use api_types::{BlockHashState, ConsensusApi};
@@ -35,6 +35,12 @@ impl TestConsensusLayer {
             ),
         }
     }
+
+    async fn run(mut self) {
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        }
+    }
 }
 
 #[tokio::main]
@@ -54,7 +60,12 @@ async fn main() {
             // Create the KvStore which includes a BatchManager
             let kv_store = Arc::new(KvStore::new(db, 1337));
             let execution_client = Arc::new(MockClient::new(kv_store.clone()));
-            let consensus = TestConsensusLayer::new(gcei_config, execution_client);
+
+            let _ = thread::spawn(move || {
+                let mut cl = TestConsensusLayer::new(gcei_config, execution_client);
+                tokio::runtime::Runtime::new().unwrap().block_on(cl.run());
+            });
+
             let server = Server::new(kv_store);
             // Start the server
             server.start(&listen_url).await.unwrap();
