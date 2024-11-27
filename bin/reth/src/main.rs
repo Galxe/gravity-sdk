@@ -1,5 +1,117 @@
 #![allow(missing_docs)]
+#[cfg(feature = "grevm")]
+use greth as reth;
+#[cfg(feature = "grevm")]
+use greth_node_builder as reth_node_builder;
+#[cfg(feature = "grevm")]
+use greth_node_ethereum as reth_node_ethereum;
+#[cfg(feature = "grevm")]
+use greth_node_core as reth_node_core;
+#[cfg(feature = "grevm")]
+use greth_provider as reth_provider;
+#[cfg(feature = "grevm")]
+use greth_db as reth_db;
+#[cfg(feature = "grevm")]
+use greth_tasks as reth_tasks;
+#[cfg(feature = "grevm")]
+use greth_cli_runner as reth_cli_runner;
+#[cfg(feature = "grevm")]
+use greth_cli as reth_cli;
+#[cfg(feature = "grevm")]
+use greth_cli_util as reth_cli_util;
+#[cfg(feature = "grevm")]
+use greth_chainspec as reth_chainspec;
+#[cfg(feature = "grevm")]
+use greth_tracing as reth_tracing;
+#[cfg(feature = "grevm")]
+use greth_auto_seal_consensus as reth_auto_seal_consensus;
+#[cfg(feature = "grevm")]
+use greth_basic_payload_builder as reth_basic_payload_builder;
+#[cfg(feature = "grevm")]
+use greth_beacon_consensus as reth_beacon_consensus;
+#[cfg(feature = "grevm")]
+use greth_ethereum_engine_primitives as reth_ethereum_engine_primitives;
+#[cfg(feature = "grevm")]
+use greth_evm_ethereum as reth_evm_ethereum;
+#[cfg(feature = "grevm")]
+use greth_network as reth_network;
+#[cfg(feature = "grevm")]
+use greth_node_api as reth_node_api;
+#[cfg(feature = "grevm")]
+use greth_payload_builder as reth_payload_builder;
+#[cfg(feature = "grevm")]
+use greth_rpc as reth_rpc;
+#[cfg(feature = "grevm")]
+use greth_rpc_api as reth_rpc_api;
+#[cfg(feature = "grevm")]
+use greth_rpc_types as reth_rpc_types;
+#[cfg(feature = "grevm")]
+use greth_transaction_pool as reth_transaction_pool;
+#[cfg(feature = "grevm")]
+use greth_consensus as reth_consensus;
+#[cfg(feature = "grevm")]
+use greth_ethereum_payload_builder as reth_ethereum_payload_builder;
+#[cfg(feature = "grevm")]
+use greth_primitives as reth_primitives;
+#[cfg(feature = "grevm")]
+use greth_cli_commands as reth_cli_commands;
 
+#[cfg(feature = "preth")]
+use reth as reth;
+#[cfg(feature = "preth")]
+use reth_node_builder as reth_node_builder;
+#[cfg(feature = "preth")]
+use reth_node_ethereum as reth_node_ethereum;
+#[cfg(feature = "preth")]
+use reth_node_core as reth_node_core;
+#[cfg(feature = "preth")]
+use reth_provider as reth_provider;
+#[cfg(feature = "preth")]
+use reth_db as reth_db;
+#[cfg(feature = "preth")]
+use reth_tasks as reth_tasks;
+#[cfg(feature = "preth")]
+use reth_cli_runner as reth_cli_runner;
+#[cfg(feature = "preth")]
+use reth_cli as reth_cli;
+#[cfg(feature = "preth")]
+use reth_cli_util as reth_cli_util;
+#[cfg(feature = "preth")]
+use reth_chainspec as reth_chainspec;
+#[cfg(feature = "preth")]
+use reth_tracing as reth_tracing;
+#[cfg(feature = "preth")]
+use reth_auto_seal_consensus as reth_auto_seal_consensus;
+#[cfg(feature = "preth")]
+use reth_basic_payload_builder as reth_basic_payload_builder;
+#[cfg(feature = "preth")]
+use reth_beacon_consensus as reth_beacon_consensus;
+#[cfg(feature = "preth")]
+use reth_ethereum_engine_primitives as reth_ethereum_engine_primitives;
+#[cfg(feature = "preth")]
+use reth_evm_ethereum as reth_evm_ethereum;
+#[cfg(feature = "preth")]
+use reth_network as reth_network;
+#[cfg(feature = "preth")]
+use reth_node_api as reth_node_api;
+#[cfg(feature = "preth")]
+use reth_payload_builder as reth_payload_builder;
+#[cfg(feature = "preth")]
+use reth_rpc as reth_rpc;
+#[cfg(feature = "preth")]
+use reth_rpc_api as reth_rpc_api;
+#[cfg(feature = "preth")]
+use reth_rpc_types as reth_rpc_types;
+#[cfg(feature = "preth")]
+use reth_transaction_pool as reth_transaction_pool;
+#[cfg(feature = "preth")]
+use reth_consensus as reth_consensus;
+#[cfg(feature = "preth")]
+use reth_ethereum_payload_builder as reth_ethereum_payload_builder;
+#[cfg(feature = "preth")]
+use reth_primitives as reth_primitives;
+#[cfg(feature = "preth")]
+use reth_cli_commands as reth_cli_commands;
 mod cli;
 mod reth_client;
 
