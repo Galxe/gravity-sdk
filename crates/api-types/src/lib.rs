@@ -1,10 +1,10 @@
-use std::{fmt::Display, sync::Arc};
+use std::{cell::RefCell, fmt::Display, sync::Arc};
 
 use async_trait::async_trait;
 use futures::channel::mpsc::SendError;
 use futures::future::BoxFuture;
-use reth_primitives::Block;
 use ruint::aliases::U256;
+use serde::{Deserialize, Serialize};
 use std::future::Future;
 use tokio::{runtime::Runtime, sync::Mutex};
 
@@ -35,6 +35,12 @@ pub struct BlockBatch {
     pub txns: Vec<GTxn>,
     pub block_hash: [u8; 32],
 }
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct ExecutionBlocks {
+    pub latest_block_hash: [u8; 32],
+    pub latest_block_number: u64,
+    pub blocks: Vec<Vec<u8>>,
+}
 
 #[async_trait]
 pub trait ExecutionApi: Send + Sync {
@@ -57,13 +63,13 @@ pub trait ExecutionApi: Send + Sync {
 
     async fn recover_ordered_block(&self, block_batch: BlockBatch);
 
-    async fn recover_execution_blocks(&self, block: Vec<Block>);
+    async fn recover_execution_blocks(&self, blocks: ExecutionBlocks);
 
     fn get_blocks_by_range(
         &self,
         start_block_number: u64,
         end_block_number: u64,
-    ) -> Vec<Block>;
+    ) -> ExecutionBlocks;
 }
 
 #[derive(Clone, Default)]

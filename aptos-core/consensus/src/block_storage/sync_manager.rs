@@ -25,7 +25,7 @@ use crate::{
     pipeline::execution_client::TExecutionClient,
 };
 use anyhow::{anyhow, bail, Context};
-use api_types::ExecutionApi;
+use api_types::{ExecutionApi, ExecutionBlocks};
 use aptos_consensus_types::{
     block::Block,
     block_retrieval::{
@@ -286,13 +286,13 @@ impl BlockStore {
             "Start block sync from start_block_number {}", start_block_number,
         );
 
-        let blocks = retriever
+        let blocks_batch = retriever
             .retrieve_block_by_block_number(retriever.validator_addresses(), start_block_number)
             .await?;
-        if !blocks.is_empty() {
-            let commit_block_number = blocks.last().unwrap().hash_slow();
+        for blocks in blocks_batch {
+            let commit_block_hash = blocks.latest_block_hash;
             execution_api.recover_execution_blocks(blocks).await;
-            execution_api.commit_block_hash(vec![*commit_block_number]).await;
+            execution_api.commit_block_hash(vec![commit_block_hash]).await;
         }
         Ok(())
     }
@@ -505,7 +505,7 @@ impl BlockStore {
                 status = BlockRetrievalStatus::SucceededWithTarget;
             }
             let response =
-                Box::new(BlockRetrievalResponse::new(status, SyncBlocks::RethBlock(blocks)));
+                Box::new(BlockRetrievalResponse::new(status, SyncBlocks::Execution(blocks)));
             response_bytes =
                 request.protocol.to_bytes(&ConsensusMsg::BlockRetrievalResponse(response))?;
         } else {
@@ -546,7 +546,7 @@ impl BlockStore {
             }
             info!("process block retrieval done. status={:?}, block size={}", status, blocks.len());
             let response =
-                Box::new(BlockRetrievalResponse::new(status, SyncBlocks::ConsensusBlock(blocks)));
+                Box::new(BlockRetrievalResponse::new(status, SyncBlocks::Consensus(blocks)));
             response_bytes =
                 request.protocol.to_bytes(&ConsensusMsg::BlockRetrievalResponse(response))?;
         }
@@ -610,7 +610,7 @@ impl BlockRetriever {
                         let response = match timeout(rpc_timeout, rx).await {
                             Ok(Ok(block)) => Ok(BlockRetrievalResponse::new(
                                 BlockRetrievalStatus::SucceededWithTarget,
-                                SyncBlocks::ConsensusBlock(vec![block]),
+                                SyncBlocks::Consensus(vec![block]),
                             )),
                             Ok(Err(_)) => Err(anyhow!("self retrieval cancelled")),
                             Err(_) => Err(anyhow!("self retrieval timeout")),
@@ -697,7 +697,7 @@ impl BlockRetriever {
         &mut self,
         peers: Vec<AccountAddress>,
         start_block_number: u64,
-    ) -> anyhow::Result<Vec<reth_primitives::Block>> {
+    ) -> anyhow::Result<Vec<ExecutionBlocks>> {
         let mut start_block_number = start_block_number;
         info!("Retrieving blocks starting from {}", start_block_number);
         let mut result_blocks = vec![];
@@ -717,17 +717,16 @@ impl BlockRetriever {
             match response {
                 Ok(result) if matches!(result.status(), BlockRetrievalStatus::Succeeded) => {
                     // extend the result blocks
-                    let batch = result.reth_blocks().clone();
-                    start_block_number =
-                        batch.last().expect("Batch should not be empty").header.number + 1;
-                    result_blocks.extend(batch);
+                    let batch = result.execution_blocks().clone();
+                    start_block_number = batch.latest_block_number + 1;
+                    result_blocks.push(batch);
                 }
                 Ok(result)
                     if matches!(result.status(), BlockRetrievalStatus::SucceededWithTarget) =>
                 {
                     // if we found the target, end the loop
-                    let batch = result.reth_blocks().clone();
-                    result_blocks.extend(batch);
+                    let batch = result.execution_blocks().clone();
+                    result_blocks.push(batch);
                     break;
                 }
                 _e => {

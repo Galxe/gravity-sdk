@@ -4,6 +4,7 @@
 
 use crate::block::Block;
 use anyhow::ensure;
+use api_types::ExecutionBlocks;
 use aptos_crypto::hash::{HashValue, GENESIS_BLOCK_ID};
 use aptos_short_hex_str::AsShortHexStr;
 use aptos_types::validator_verifier::ValidatorVerifier;
@@ -17,8 +18,8 @@ pub const RPC_TIMEOUT_MSEC: u64 = 5000;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum SyncBlocks {
-    ConsensusBlock(Vec<Block>),
-    RethBlock(Vec<reth_primitives::Block>),
+    Consensus(Vec<Block>),
+    Execution(ExecutionBlocks),
 }
 
 /// RPC to get a chain of block of the given length starting from the given block id.
@@ -122,17 +123,17 @@ impl BlockRetrievalResponse {
     }
 
     pub fn consensus_blocks(&self) -> &Vec<Block> {
-        if let SyncBlocks::ConsensusBlock(blocks) = &self.blocks {
+        if let SyncBlocks::Consensus(blocks) = &self.blocks {
             return blocks;
         }
         panic!("The sync block type is not consensus blocks");
     }
 
-    pub fn reth_blocks(&self) -> &Vec<reth_primitives::Block> {
-        if let SyncBlocks::RethBlock(blocks) = &self.blocks {
-            return blocks;
+    pub fn execution_blocks(&self) -> ExecutionBlocks {
+        if let SyncBlocks::Execution(blocks) = &self.blocks {
+            return blocks.clone();
         }
-        panic!("The sync block type is not reth block")
+        panic!("The sync block type is consensus block")
     }
 
     pub fn verify(
@@ -140,7 +141,7 @@ impl BlockRetrievalResponse {
         retrieval_request: BlockRetrievalRequest,
         sig_verifier: &ValidatorVerifier,
     ) -> anyhow::Result<()> {
-        if let SyncBlocks::RethBlock(_) = &self.blocks {
+        if let SyncBlocks::Execution(_) = &self.blocks {
             return Ok(());
         }
         let blocks = self.consensus_blocks();
@@ -184,7 +185,7 @@ impl BlockRetrievalResponse {
 
 impl fmt::Display for BlockRetrievalResponse {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let SyncBlocks::ConsensusBlock(blocks) = &self.blocks {
+        if let SyncBlocks::Consensus(blocks) = &self.blocks {
             match self.status() {
                 BlockRetrievalStatus::Succeeded | BlockRetrievalStatus::SucceededWithTarget => {
                     write!(

@@ -406,7 +406,43 @@ impl BlockTree {
         }
     }
 
-    pub(super) fn find_blocks_to_prune(&self, prune_block_number: u64) -> VecDeque<(u64, HashValue)> {
+    /// Find the blocks to prune up to next_root_id (keep next_root_id's block). Any branches not
+    /// part of the next_root_id's tree should be removed as well.
+    ///
+    /// For example, root = B0
+    /// B0--> B1--> B2
+    ///        ╰--> B3--> B4
+    ///
+    /// prune_tree(B_3) should be left with
+    /// B3--> B4, root = B3
+    ///
+    /// Note this function is read-only, use with process_pruned_blocks to do the actual prune.
+    pub(super) fn find_blocks_to_prune(&self, next_root_id: HashValue) -> VecDeque<HashValue> {
+        // Nothing to do if this is the commit root
+        if next_root_id == self.commit_root_id {
+            return VecDeque::new();
+        }
+        let mut blocks_pruned = VecDeque::new();
+        let mut blocks_to_be_pruned = vec![self.linkable_root()];
+        while let Some(block_to_remove) = blocks_to_be_pruned.pop() {
+            // Add the children to the blocks to be pruned (if any), but stop when it reaches the
+            // new root
+            for child_id in block_to_remove.children() {
+                if next_root_id == *child_id {
+                    continue;
+                }
+                blocks_to_be_pruned.push(
+                    self.get_linkable_block(child_id)
+                        .expect("Child must exist in the tree"),
+                );
+            }
+            // Track all the block ids removed
+            blocks_pruned.push_back(block_to_remove.id());
+        }
+        blocks_pruned
+    }
+
+    pub(super) fn find_blocks_to_prune_by_block_number(&self, prune_block_number: u64) -> VecDeque<(u64, HashValue)> {
         let mut blocks_pruned = VecDeque::new();
         for (block_number, block_id) in &self.block_number_to_id {
             if *block_number < prune_block_number {
@@ -561,7 +597,7 @@ impl BlockTree {
         );
         // TODO(gravity_lightman)
         info!("the prune block block number {}", prune_block_number);
-        let ids_to_remove = self.find_blocks_to_prune(prune_block_number);
+        let ids_to_remove = self.find_blocks_to_prune_by_block_number(prune_block_number);
         if let Err(e) = storage.prune_tree(ids_to_remove.clone().into_iter().map(
             |(_, id)| id
         ).collect()) {

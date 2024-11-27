@@ -14,4 +14,4 @@ async-trait = { workspace = true }
 futures = { workspace = true }
 tokio = { workspace = true }
 ruint = { workspace = true }
-reth-primitives = { git = "https://github.com/paradigmxyz/reth", package = "reth-primitives", tag = "v1.0.7" }
+serde = { workspace = true }

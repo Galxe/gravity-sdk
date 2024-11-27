@@ -514,12 +514,12 @@ impl BlockStore {
             // executor.
             warn!(error = ?e, "fail to delete block");
         }
-
+        let id_to_remove_ = id_to_remove.iter().map(|id| (0u64, *id)).collect();
         // synchronously update both root_id and commit_root_id
         let mut wlock = self.inner.write();
         wlock.update_ordered_root(next_root_id);
         wlock.update_commit_and_finalized_root(next_root_id);
-        wlock.process_pruned_blocks(id_to_remove.clone());
+        wlock.process_pruned_blocks(id_to_remove_);
         id_to_remove
     }
 
