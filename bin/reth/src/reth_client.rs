@@ -9,8 +9,8 @@ use alloy_rpc_types_engine::{
 use alloy_signer::k256::sha2;
 use anyhow::Context;
 use api::ExecutionApi;
-use api_types::{BlockBatch, BlockHashState, GTxn};
-use jsonrpsee::core::async_trait;
+use api_types::{BlockBatch, BlockHashState, ExecutionBlocks, GTxn};
+use jsonrpsee::core::{async_trait, Serialize};
 use reth::api::EngineTypes;
 use reth_ethereum_engine_primitives::{EthEngineTypes, EthPayloadAttributes};
 use reth_node_ethereum::EthereumNode;
@@ -379,8 +379,9 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
         }
     }
 
-    async fn recover_execution_blocks(&self, blocks: Vec<Block>) {
-        for block in blocks {   
+    async fn recover_execution_blocks(&self, blocks: ExecutionBlocks) {
+        for block in blocks.blocks {
+            let block: Block = bincode::deserialize(&block).unwrap();   
             let withdrawals = match block.withdrawals.clone() {
                 Some(withdrawals) => Some(withdrawals.into_inner()),
                 None => None,
@@ -427,18 +428,22 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
         &self,
         start_block_number: u64,
         end_block_number: u64,
-    ) -> Vec<Block> {
-        let mut blocks = vec![];
+    ) -> ExecutionBlocks {
+        let result = ExecutionBlocks{ latest_block_hash: todo!(), latest_block_number: todo!(), blocks: vec![] };
         for block_number in start_block_number..end_block_number {
             match self.provider.block_by_number_or_tag(BlockNumberOrTag::Number(block_number)) {
                 Ok(block) => {
                     assert!(block.is_some());
                     let block = block.unwrap();
-                    blocks.push(block);
+                    if block_number == end_block_number - 1 {
+                        result.latest_block_hash = *block.hash_slow();
+                        result.latest_block_number = block_number;
+                    }
+                    result.blocks.push(bincode::serialize(&block).unwrap());
                 }
                 Err(e) => panic!("get_blocks_by_range error {}", e),
             }
         }
-        blocks
+        result
     }
 }

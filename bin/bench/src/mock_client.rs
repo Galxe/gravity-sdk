@@ -1,5 +1,5 @@
 use alloy_primitives::Address;
-use api_types::{BlockBatch, BlockHashState, ExecutionApi, GTxn};
+use api_types::{BlockBatch, BlockHashState, ExecutionApi, ExecutionBlocks, GTxn};
 use jsonrpsee::core::async_trait;
 use rand::Rng;
 use reth_primitives::{Block, ChainId};
@@ -156,11 +156,11 @@ impl ExecutionApi for MockCli {
         &self,
         start_block_number: u64,
         end_block_number: u64,
-    ) -> Vec<Block> {
+    ) -> ExecutionBlocks {
         unimplemented!("No need for bench mode")
     }
 
-    async fn recover_execution_blocks(&self, block: Vec<Block>) {
+    async fn recover_execution_blocks(&self, block: ExecutionBlocks) {
         unimplemented!("No need for bench mode")
     }
 

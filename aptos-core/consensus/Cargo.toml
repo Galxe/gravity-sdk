@@ -84,7 +84,6 @@ tokio = { workspace = true }
 tokio-retry = { workspace = true }
 tokio-stream = { workspace = true }
 api-types.workspace = true
-reth-primitives = { git = "https://github.com/paradigmxyz/reth", package = "reth-primitives", tag = "v1.0.7" }
 
 [dev-dependencies]
 aptos-cached-packages = { workspace = true }
