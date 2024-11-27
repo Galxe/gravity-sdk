@@ -1,4 +1,34 @@
 #![allow(missing_docs)]
+#[cfg(feature = "grevm")]
+use greth_node_builder as reth_node_builder;
+#[cfg(feature = "grevm")]
+use greth_node_ethereum as reth_node_ethereum;
+#[cfg(feature = "grevm")]
+use greth_node_core as reth_node_core;
+#[cfg(feature = "grevm")]
+use greth_provider as reth_provider;
+#[cfg(feature = "grevm")]
+use greth_cli_util as reth_cli_util;
+#[cfg(feature = "grevm")]
+use greth_ethereum_engine_primitives as reth_ethereum_engine_primitives;
+#[cfg(feature = "grevm")]
+use greth_rpc_api as reth_rpc_api;
+
+#[cfg(feature = "preth")]
+use reth_node_builder as reth_node_builder;
+#[cfg(feature = "preth")]
+use reth_node_ethereum as reth_node_ethereum;
+#[cfg(feature = "preth")]
+use reth_node_core as reth_node_core;
+#[cfg(feature = "preth")]
+use reth_provider as reth_provider;
+#[cfg(feature = "preth")]
+#[cfg(feature = "preth")]
+use reth_cli_util as reth_cli_util;
+#[cfg(feature = "preth")]
+use reth_ethereum_engine_primitives as reth_ethereum_engine_primitives;
+#[cfg(feature = "preth")]
+use reth_rpc_api as reth_rpc_api;
 
 mod cli;
 mod mock_client;
@@ -25,13 +55,11 @@ use api::consensus_api::ConsensusEngine;
 use api::{check_bootstrap_config, ExecutionApi, NodeConfig};
 use api_types::ConsensusApi;
 use clap::Parser;
-use reth_ethereum_engine_primitives::EthEngineTypes;
 use reth_node_builder::engine_tree_config;
 use reth_node_builder::EngineNodeLauncher;
 use reth_node_core::args::utils::DefaultChainSpecParser;
 use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
 use reth_provider::providers::BlockchainProvider2;
-use reth_rpc_api::EngineEthApiClient;
 
 struct TestConsensusLayer {
     block_hash_state: BlockHashState,

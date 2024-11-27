@@ -1,3 +1,40 @@
+#[cfg(feature = "grevm")]
+use greth as reth;
+#[cfg(feature = "grevm")]
+use greth_node_ethereum as reth_node_ethereum;
+#[cfg(feature = "grevm")]
+use greth_provider as reth_provider;
+#[cfg(feature = "grevm")]
+use greth_db as reth_db;
+#[cfg(feature = "grevm")]
+use greth_ethereum_engine_primitives as reth_ethereum_engine_primitives;
+#[cfg(feature = "grevm")]
+use greth_node_api as reth_node_api;
+#[cfg(feature = "grevm")]
+use greth_payload_builder as reth_payload_builder;
+#[cfg(feature = "grevm")]
+use greth_rpc_api as reth_rpc_api;
+#[cfg(feature = "grevm")]
+use greth_primitives as reth_primitives;
+
+#[cfg(feature = "preth")]
+use reth as reth;
+#[cfg(feature = "preth")]
+use reth_node_ethereum as reth_node_ethereum;
+#[cfg(feature = "preth")]
+use reth_provider as reth_provider;
+#[cfg(feature = "preth")]
+use reth_db as reth_db;
+#[cfg(feature = "preth")]
+use reth_ethereum_engine_primitives as reth_ethereum_engine_primitives;
+#[cfg(feature = "preth")]
+use reth_node_api as reth_node_api;
+#[cfg(feature = "preth")]
+use reth_payload_builder as reth_payload_builder;
+#[cfg(feature = "preth")]
+use reth_rpc_api as reth_rpc_api;
+#[cfg(feature = "preth")]
+use reth_primitives as reth_primitives;
 use alloy_consensus::{Transaction, TxEnvelope};
 use alloy_eips::eip2718::Decodable2718;
 use alloy_eips::BlockNumberOrTag;

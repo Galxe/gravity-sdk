@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use api::ExecutionApi;
-use api_types::{BlockBatch, BlockHashState, GTxn};
+use api_types::{BlockBatch, BlockHashState, ExecutionBlocks, GTxn};
 use async_trait::async_trait;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Mutex;
@@ -33,9 +33,7 @@ impl ExecutionApi for MockClient {
     }
 
     async fn send_ordered_block(&self, txns: Vec<GTxn>) {
-        self.block_hash_channel_sender
-            .send(self.kv_store.process_block(txns).await)
-            .expect("Fail");
+        self.block_hash_channel_sender.send(self.kv_store.process_block(txns).await).expect("Fail");
     }
 
     async fn recv_executed_block_hash(&self) -> [u8; 32] {
@@ -54,7 +52,23 @@ impl ExecutionApi for MockClient {
         0
     }
 
-    async fn recover_ordered_block(&self, block: Vec<GTxn>, res: [u8; 32]) {
-        unimplemented!("No need for bench mode")
+    fn finalized_block_number(&self) -> u64 {
+        0
+    }
+
+    async fn recover_ordered_block(&self, block_batch: BlockBatch) {
+        unimplemented!("No need for kvstore")
+    }
+
+    async fn recover_execution_blocks(&self, blocks: ExecutionBlocks) {
+        unimplemented!("No need for kvstore")
+    }
+
+    fn get_blocks_by_range(
+        &self,
+        start_block_number: u64,
+        end_block_number: u64,
+    ) -> ExecutionBlocks {
+        unimplemented!("No need for kvstore")
     }
 }

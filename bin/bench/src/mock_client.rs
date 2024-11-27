@@ -1,3 +1,8 @@
+#[cfg(feature = "grevm")]
+use greth_primitives as reth_primitives;
+
+#[cfg(feature = "preth")]
+use reth_primitives as reth_primitives;
 use alloy_primitives::Address;
 use api_types::{BlockBatch, BlockHashState, ExecutionApi, ExecutionBlocks, GTxn};
 use jsonrpsee::core::async_trait;
@@ -106,7 +111,7 @@ impl MockCli {
                 gas_unit_price: txn.gas_price,
                 expiration_timestamp_secs: secs,
                 chain_id: txn.chain_id.unwrap(),
-                txn_bytes: bincode::serialize(txn).expect("failed to serialize"),
+                txn_bytes: bincode::serialize(&txn.clone()).expect("failed to serialize"),
             })
             .collect::<Vec<_>>()
     }
