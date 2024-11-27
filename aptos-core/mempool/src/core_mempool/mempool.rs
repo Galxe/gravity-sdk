@@ -303,18 +303,14 @@ impl Mempool {
             aptos_infallible::duration_since_epoch_at(&now) + self.system_transaction_timeout;
 
         let sender = txn.sender();
-        let txn_info = MempoolTransaction::new(
-            txn.clone(),
-            expiration_time,
-            ranking_score,
-            timeline_state,
-            db_sequence_number,
-            now,
-            client_submitted,
-            priority.clone(),
-        );
 
-        let submitted_by_label = txn_info.insertion_info.submitted_by_label();
+        // TODO: add bytes to the transaction
+        let txn_info: MempoolTransaction = {
+            // construct txn from the input txn
+            todo!()
+        };
+
+        let submitted_by_label = txn_info.insertion_info().submitted_by_label();
         let status = self.transactions.insert(txn_info);
         let now = aptos_infallible::duration_since_epoch().as_millis() as u64;
 
@@ -408,7 +404,7 @@ impl Mempool {
             if exclude_transactions.contains_key(&txn_ptr) {
                 continue;
             }
-            let tx_seq = txn.sequence_number.transaction_sequence_number;
+            let tx_seq = txn.get_sequence_number();
             let txn_in_sequence = tx_seq > 0
                 && Self::txn_was_chosen(txn.address, tx_seq - 1, &inserted, &exclude_transactions);
             let account_sequence_number = self.transactions.get_sequence_number(&txn.address);
@@ -515,19 +511,6 @@ impl Mempool {
         block
     }
 
-    /// Periodic core mempool garbage collection.
-    /// Removes all expired transactions and clears expired entries in metrics
-    /// cache and sequence number cache.
-    pub(crate) fn gc(&mut self) {
-        let now = aptos_infallible::duration_since_epoch();
-        self.transactions.gc_by_system_ttl(now);
-    }
-
-    /// Garbage collection based on client-specified expiration time.
-    pub(crate) fn gc_by_expiration_time(&mut self, block_time: Duration) {
-        self.transactions.gc_by_expiration_time(block_time);
-    }
-
     /// Returns block of transactions and new last_timeline_id. For each transaction, the output includes
     /// the transaction ready time in millis since epoch
     pub(crate) fn read_timeline(
@@ -574,17 +557,12 @@ impl Mempool {
             .collect()
     }
 
-    pub fn gen_snapshot(&self) -> TxnsLog {
-        self.transactions.gen_snapshot()
-    }
-
-    #[cfg(test)]
-    pub fn get_parking_lot_size(&self) -> usize {
-        self.transactions.get_parking_lot_size()
-    }
-
     #[cfg(test)]
     pub fn get_transaction_store(&self) -> &TransactionStore {
         &self.transactions
+    }
+
+    pub fn gen_snapshot(&self) -> Vec<SignedTransaction> {
+        todo!()
     }
 }

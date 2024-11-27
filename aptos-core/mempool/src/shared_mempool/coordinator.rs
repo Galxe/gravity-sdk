@@ -439,7 +439,6 @@ pub(crate) async fn gc_coordinator(mempool: Arc<Mutex<CoreMempool>>, gc_interval
             SampleRate::Duration(Duration::from_secs(60)),
             debug!(LogSchema::event_log(LogEntry::GCRuntime, LogEvent::Live))
         );
-        mempool.lock().gc();
     }
 
     error!(LogSchema::event_log(
@@ -455,6 +454,5 @@ pub(crate) async fn snapshot_job(mempool: Arc<Mutex<CoreMempool>>, snapshot_inte
     let mut interval = IntervalStream::new(interval(Duration::from_secs(snapshot_interval_secs)));
     while let Some(_interval) = interval.next().await {
         let snapshot = mempool.lock().gen_snapshot();
-        trace!(LogSchema::new(LogEntry::MempoolSnapshot).txns(snapshot));
     }
 }

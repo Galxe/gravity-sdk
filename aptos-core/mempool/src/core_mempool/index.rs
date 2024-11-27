@@ -58,12 +58,9 @@ impl PriorityIndex {
 
     fn make_key(&self, txn: &MempoolTransaction) -> OrderedQueueKey {
         OrderedQueueKey {
-            gas_ranking_score: txn.ranking_score,
-            expiration_time: txn.expiration_time,
-            insertion_time: txn.insertion_info.insertion_time,
             address: txn.get_sender(),
-            sequence_number: txn.sequence_info,
-            hash: txn.get_committed_hash(),
+            sequence_number: txn.get_sequence_number(),
+            hash: txn.get_hash(),
         }
     }
 
@@ -78,12 +75,15 @@ impl PriorityIndex {
 
 #[derive(Eq, PartialEq, Clone, Debug, Hash)]
 pub struct OrderedQueueKey {
-    pub gas_ranking_score: u64,
-    pub expiration_time: Duration,
-    pub insertion_time: SystemTime,
     pub address: AccountAddress,
-    pub sequence_number: SequenceInfo,
+    pub sequence_number: u64,
     pub hash: HashValue,
+}
+
+impl OrderedQueueKey {
+    pub fn get_sequence_number(&self) -> u64 {
+        self.sequence_number
+    }
 }
 
 impl PartialOrd for OrderedQueueKey {
@@ -94,22 +94,13 @@ impl PartialOrd for OrderedQueueKey {
 
 impl Ord for OrderedQueueKey {
     fn cmp(&self, other: &OrderedQueueKey) -> Ordering {
-        match self.gas_ranking_score.cmp(&other.gas_ranking_score) {
-            Ordering::Equal => {},
-            ordering => return ordering,
-        }
-        match self.insertion_time.cmp(&other.insertion_time).reverse() {
-            Ordering::Equal => {},
-            ordering => return ordering,
-        }
         match self.address.cmp(&other.address) {
             Ordering::Equal => {},
             ordering => return ordering,
         }
         match self
             .sequence_number
-            .transaction_sequence_number
-            .cmp(&other.sequence_number.transaction_sequence_number)
+            .cmp(&other.sequence_number)
             .reverse()
         {
             Ordering::Equal => {},
@@ -167,7 +158,7 @@ impl TTLIndex {
         TTLOrderingKey {
             expiration_time: (self.get_expiration_time)(txn),
             address: txn.get_sender(),
-            sequence_number: txn.sequence_info.transaction_sequence_number,
+            sequence_number: txn.get_sequence_number(),
         }
     }
 
@@ -262,7 +253,7 @@ impl TimelineIndex {
             self.timeline_id,
             (
                 txn.get_sender(),
-                txn.sequence_info.transaction_sequence_number,
+                txn.get_sequence_number(),
                 Instant::now(),
             ),
         );
@@ -278,6 +269,30 @@ impl TimelineIndex {
 
     pub(crate) fn size(&self) -> usize {
         self.timeline.len()
+    }
+}
+
+/// Logical pointer to `MempoolTransaction`.
+/// Includes Account's address and transaction sequence number.
+pub type TxnPointer = TransactionSummary;
+
+impl From<&MempoolTransaction> for TxnPointer {
+    fn from(txn: &MempoolTransaction) -> Self {
+        Self {
+            sender: txn.get_sender(),
+            sequence_number: txn.get_sequence_number(),
+            hash: txn.get_hash(),
+        }
+    }
+}
+
+impl From<&OrderedQueueKey> for TxnPointer {
+    fn from(key: &OrderedQueueKey) -> Self {
+        Self {
+            sender: key.address,
+            sequence_number: key.sequence_number,
+            hash: key.hash,
+        }
     }
 }
 
@@ -376,11 +391,11 @@ impl MultiBucketTimelineIndex {
     }
 
     pub(crate) fn insert(&mut self, txn: &mut MempoolTransaction) {
-        self.get_timeline(txn.ranking_score).insert(txn);
+        self.get_timeline(txn.ranking_score()).insert(txn);
     }
 
     pub(crate) fn remove(&mut self, txn: &MempoolTransaction) {
-        self.get_timeline(txn.ranking_score).remove(txn);
+        self.get_timeline(txn.ranking_score()).remove(txn);
     }
 
     pub(crate) fn size(&self) -> usize {
@@ -406,135 +421,5 @@ impl MultiBucketTimelineIndex {
             .binary_search(&ranking_score)
             .unwrap_or_else(|i| i - 1);
         self.bucket_mins_to_string[index].as_str()
-    }
-}
-
-/// ParkingLotIndex keeps track of "not_ready" transactions, e.g., transactions that
-/// can't be included in the next block because their sequence number is too high.
-/// We keep a separate index to be able to efficiently evict them when Mempool is full.
-pub struct ParkingLotIndex {
-    // DS invariants:
-    // 1. for each entry (account, txns) in `data`, `txns` is never empty
-    // 2. for all accounts, data.get(account_indices.get(`account`)) == (account, sequence numbers of account's txns)
-    data: Vec<(AccountAddress, BTreeSet<(u64, HashValue)>)>,
-    account_indices: HashMap<AccountAddress, usize>,
-    size: usize,
-}
-
-impl ParkingLotIndex {
-    pub(crate) fn new() -> Self {
-        Self {
-            data: vec![],
-            account_indices: HashMap::new(),
-            size: 0,
-        }
-    }
-
-    pub(crate) fn insert(&mut self, txn: &mut MempoolTransaction) {
-        if txn.insertion_info.park_time.is_none() {
-            txn.insertion_info.park_time = Some(SystemTime::now());
-        }
-        txn.was_parked = true;
-
-        let sender = &txn.txn.sender();
-        let sequence_number = txn.txn.sequence_number();
-        let hash = txn.get_committed_hash();
-        let is_new_entry = match self.account_indices.get(sender) {
-            Some(index) => {
-                if let Some((_account, seq_nums)) = self.data.get_mut(*index) {
-                    seq_nums.insert((sequence_number, hash))
-                } else {
-                    counters::CORE_MEMPOOL_INVARIANT_VIOLATION_COUNT.inc();
-                    error!(
-                        LogSchema::new(LogEntry::InvariantViolated),
-                        "Parking lot invariant violated: for account {}, account index exists but missing entry in data",
-                        sender
-                    );
-                    return;
-                }
-            },
-            None => {
-                let entry = [(sequence_number, hash)]
-                    .iter()
-                    .cloned()
-                    .collect::<BTreeSet<_>>();
-                self.data.push((*sender, entry));
-                self.account_indices.insert(*sender, self.data.len() - 1);
-                true
-            },
-        };
-        if is_new_entry {
-            self.size += 1;
-        }
-    }
-
-    pub(crate) fn remove(&mut self, txn: &MempoolTransaction) {
-        let sender = &txn.txn.sender();
-        if let Some(index) = self.account_indices.get(sender).cloned() {
-            if let Some((_account, txns)) = self.data.get_mut(index) {
-                if txns.remove(&(txn.txn.sequence_number(), txn.get_committed_hash())) {
-                    self.size -= 1;
-                }
-
-                // maintain DS invariant
-                if txns.is_empty() {
-                    // remove account with no more txns
-                    self.data.swap_remove(index);
-                    self.account_indices.remove(sender);
-
-                    // update DS for account that was swapped in `swap_remove`
-                    if let Some((swapped_account, _)) = self.data.get(index) {
-                        self.account_indices.insert(*swapped_account, index);
-                    }
-                }
-            }
-        }
-    }
-
-    pub(crate) fn contains(&self, account: &AccountAddress, seq_num: u64, hash: HashValue) -> bool {
-        self.account_indices
-            .get(account)
-            .and_then(|idx| self.data.get(*idx))
-            .map_or(false, |(_account, txns)| txns.contains(&(seq_num, hash)))
-    }
-
-    /// Returns a random "non-ready" transaction (with highest sequence number for that account).
-    pub(crate) fn get_poppable(&self) -> Option<TxnPointer> {
-        let mut rng = rand::thread_rng();
-        self.data.choose(&mut rng).and_then(|(sender, txns)| {
-            txns.iter().next_back().map(|(seq_num, hash)| TxnPointer {
-                sender: *sender,
-                sequence_number: *seq_num,
-                hash: *hash,
-            })
-        })
-    }
-
-    pub(crate) fn size(&self) -> usize {
-        self.size
-    }
-}
-
-/// Logical pointer to `MempoolTransaction`.
-/// Includes Account's address and transaction sequence number.
-pub type TxnPointer = TransactionSummary;
-
-impl From<&MempoolTransaction> for TxnPointer {
-    fn from(txn: &MempoolTransaction) -> Self {
-        Self {
-            sender: txn.get_sender(),
-            sequence_number: txn.sequence_info.transaction_sequence_number,
-            hash: txn.get_committed_hash(),
-        }
-    }
-}
-
-impl From<&OrderedQueueKey> for TxnPointer {
-    fn from(key: &OrderedQueueKey) -> Self {
-        Self {
-            sender: key.address,
-            sequence_number: key.sequence_number.transaction_sequence_number,
-            hash: key.hash,
-        }
     }
 }
