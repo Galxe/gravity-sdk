@@ -3,10 +3,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{core_mempool::TXN_INDEX_ESTIMATED_BYTES, counters, network::BroadcastPeerPriority};
-use aptos_crypto::HashValue;
-use aptos_types::{account_address::AccountAddress, transaction::SignedTransaction};
+use aptos_crypto::{ed25519::PrivateKey, HashValue, Uniform};
+use aptos_types::{
+    account_address::AccountAddress,
+    account_config::account,
+    chain_id::{self, ChainId},
+    transaction::{RawTransaction, SignedTransaction, TransactionPayload},
+};
 use serde::{Deserialize, Serialize};
-use tokio::sync::broadcast;
 use std::{
     mem::size_of,
     sync::{atomic::AtomicUsize, Arc},
@@ -16,39 +20,119 @@ use std::{
 /// Estimated per-txn size minus the raw transaction
 pub const TXN_FIXED_ESTIMATED_BYTES: usize = size_of::<MempoolTransaction>();
 
+#[derive(Clone, Debug)]
+pub struct VerifiedTxn {
+    bytes: Vec<u8>,
+    sender: AccountAddress,
+    sequence_number: u64,
+    chain_id: chain_id::ChainId,
+}
 
+impl From<&SignedTransaction> for VerifiedTxn {
+    fn from(signed_txn: &SignedTransaction) -> Self {
+        let raw_txn = signed_txn.payload();
+        let bytes = match raw_txn {
+            TransactionPayload::GTxnBytes(bytes) => bytes.clone(),
+            _ => panic!("Unexpected TransactionPayload type"),
+        };
+        Self {
+            bytes,
+            sender: signed_txn.sender(),
+            sequence_number: signed_txn.sequence_number(),
+            chain_id: signed_txn.chain_id(),
+        }
+    }
+}
+
+impl Into<SignedTransaction> for &VerifiedTxn {
+    fn into(self) -> SignedTransaction {
+        let raw_txn = RawTransaction::new(
+            self.sender,
+            self.sequence_number,
+            TransactionPayload::GTxnBytes(self.bytes.clone()),
+            u64::MAX,
+            0,
+            u64::MAX,
+            self.chain_id,
+        );
+        SignedTransaction::new(
+            raw_txn,
+            aptos_crypto::PrivateKey::public_key(
+                &aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing(),
+            ),
+            aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap(),
+        )
+    }
+}
+
+impl VerifiedTxn {
+    pub fn new(
+        bytes: Vec<u8>,
+        sender: AccountAddress,
+        sequence_number: u64,
+        chain_id: ChainId,
+    ) -> Self {
+        Self { bytes, sender, sequence_number, chain_id }
+    }
+
+    pub fn bytes(&self) -> &Vec<u8> {
+        &self.bytes
+    }
+
+    pub fn sender(&self) -> AccountAddress {
+        self.sender
+    }
+
+    pub fn sequence_number(&self) -> u64 {
+        self.sequence_number
+    }
+
+    pub(crate) fn get_hash(&self) -> HashValue {
+        HashValue::sha3_256_of(&self.bytes)
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct SequenceInfo {
+    pub transaction_sequence_number: u64,
+    pub account_sequence_number: u64,
+}
 
 #[derive(Clone, Debug)]
 pub struct MempoolTransaction {
-    pub txn_bytes: Vec<u8>,
-    pub account: AccountAddress,
+    verified_txn: VerifiedTxn,
     pub timeline_state: TimelineState,
-    pub seq_number: u64,
     insertion_info: InsertionInfo,
-    priority_of_sender: Option<BroadcastPeerPriority>
+    ranking_score: u64,
+    priority_of_sender: Option<BroadcastPeerPriority>,
+    sequence_info: SequenceInfo,
 }
 
 impl MempoolTransaction {
     pub(crate) fn new(
-        txn_bytes: Vec<u8>,
-        account: AccountAddress,
-        seq_number: u64,
+        verified_txn: VerifiedTxn,
         timeline_state: TimelineState,
         insertion_info: InsertionInfo,
         priority_of_sender: Option<BroadcastPeerPriority>,
+        ranking_score: u64,
+        account_sequence_number: u64,
     ) -> Self {
+        let txn_sequence_number = verified_txn.sequence_number;
         Self {
-            txn_bytes,
-            account,
+            verified_txn,
             timeline_state,
-            seq_number,
             insertion_info,
             priority_of_sender,
+            ranking_score,
+            sequence_info: SequenceInfo {
+                transaction_sequence_number: txn_sequence_number,
+                account_sequence_number,
+            },
         }
     }
 
-    pub(crate) fn txn(&self) -> &[u8] {
-        &self.txn_bytes
+    pub fn account_sequence_number(&self) -> u64 {
+        self.sequence_info.account_sequence_number
     }
 
     pub(crate) fn priority_of_sender(&self) -> &Option<BroadcastPeerPriority> {
@@ -56,24 +140,19 @@ impl MempoolTransaction {
     }
 
     pub(crate) fn get_hash(&self) -> HashValue {
-        HashValue::sha3_256_of(&self.txn_bytes)
-    }
-
-    pub(crate) fn get_sender(&self) -> AccountAddress {
-        self.account
+        HashValue::sha3_256_of(&self.verified_txn.bytes)
     }
 
     pub(crate) fn get_estimated_bytes(&self) -> usize {
-        TXN_FIXED_ESTIMATED_BYTES + self.txn_bytes.len()
-    }
-
-    pub(crate) fn get_sequence_number(&self) -> u64 {
-        self.seq_number
+        TXN_FIXED_ESTIMATED_BYTES + self.verified_txn.bytes.len()
     }
 
     pub(crate) fn ranking_score(&self) -> u64 {
-        // diff from sequence number of the account to current txn sequence number
-        todo!()
+        self.ranking_score
+    }
+
+    pub(crate) fn verified_txn(&self) -> &VerifiedTxn {
+        &self.verified_txn
     }
 
     pub(crate) fn insertion_info(&self) -> &InsertionInfo {
@@ -95,12 +174,6 @@ pub enum TimelineState {
     // Transaction will never be qualified for broadcasting.
     // Currently we don't broadcast transactions originated on other peers.
     NonQualified,
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct SequenceInfo {
-    pub transaction_sequence_number: u64,
-    pub account_sequence_number: u64,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]

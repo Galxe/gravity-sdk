@@ -377,8 +377,7 @@ impl Node {
         for txn in txns {
             let transaction = txn.make_signed_transaction_with_max_gas_amount(5);
             mempool.add_txn(
-                transaction.clone(),
-                transaction.gas_unit_price(),
+                (&transaction).into(),
                 0,
                 TimelineState::NotReady,
                 false,

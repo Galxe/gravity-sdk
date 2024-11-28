@@ -120,8 +120,7 @@ impl TransactionStore {
         sequence_number: u64,
     ) -> Option<SignedTransaction> {
         if let Some(txn) = self.get_mempool_txn(address, sequence_number) {
-            // TODO: constructed signed txn from raw txn bytes
-            todo!()
+            return  Some(txn.verified_txn().into());
         }
         None
     }
@@ -134,7 +133,7 @@ impl TransactionStore {
     ) -> Option<(SignedTransaction, u64)> {
         if let Some(txn) = self.get_mempool_txn(address, sequence_number) {
             // TODO: constructed signed txn from raw txn bytes
-            todo!()
+            return Some((txn.verified_txn().into(), txn.ranking_score()));
         }
         None
     }
@@ -192,24 +191,26 @@ impl TransactionStore {
 
     /// Insert transaction into TransactionStore. Performs validation checks and updates indexes.
     pub(crate) fn insert(&mut self, txn: MempoolTransaction) -> MempoolStatus {
-        let address = txn.get_sender();
-        let txn_seq_num = txn.get_sequence_number();
-        let acc_seq_num = todo!();
+        let address = txn.verified_txn().sender();
+        let txn_seq_num = txn.verified_txn().sequence_number();
 
-        // If the transaction is already in Mempool, we only allow the user to
-        // increase the gas unit price to speed up a transaction, but not the max gas.
-        //
-        // Transactions with all the same inputs (but possibly signed differently) are idempotent
-        // since the raw transaction is the same
+        // If the transaction is already in Mempool, we just reject
+        // TODO: how to replace the old txn with the new one?
         if let Some(txns) = self.transactions.get_mut(&address) {
             // check if txn is already in mempool
-            todo!()
+            return MempoolStatus::new(MempoolStatusCode::InvalidSeqNumber).with_message(
+                format!(
+                    "Transaction with account and sequence number already exists in mempool: {}:{}",
+                    address, txn_seq_num,
+                ),
+            );
         }
 
+        let acc_seq_num = txn.account_sequence_number();
         if self.check_is_full_after_eviction(&txn, acc_seq_num) {
             return MempoolStatus::new(MempoolStatusCode::MempoolIsFull).with_message(format!(
                 "Mempool is full. Mempool size: {}, Capacity: {}",
-                todo!(),
+                self.size_bytes,
                 self.capacity,
             ));
         }
@@ -232,8 +233,8 @@ impl TransactionStore {
 
             // insert into storage and other indexes
             self.hash_index
-                .insert(txn.get_hash(), (txn.get_sender(), txn_seq_num));
-            self.sequence_numbers.insert(txn.get_sender(), acc_seq_num);
+                .insert(txn.get_hash(), (txn.verified_txn().sender(), txn_seq_num));
+            self.sequence_numbers.insert(txn.verified_txn().sender(), acc_seq_num);
             self.size_bytes += txn.get_estimated_bytes();
             txns.insert(txn_seq_num, txn);
             self.track_indices();
@@ -297,7 +298,7 @@ impl TransactionStore {
     /// previous txn is committed).
     /// 2. The txn before this is ready for broadcast but not yet committed.
     fn check_txn_ready(&self, txn: &MempoolTransaction, curr_sequence_number: u64) -> bool {
-        let tx_sequence_number = txn.get_sequence_number();
+        let tx_sequence_number = txn.verified_txn().sequence_number();
         if tx_sequence_number == curr_sequence_number {
             return true;
         } else if tx_sequence_number == 0 {
@@ -306,7 +307,7 @@ impl TransactionStore {
         }
 
         // check previous txn in sequence is ready
-        if let Some(account_txns) = self.transactions.get(&txn.get_sender()) {
+        if let Some(account_txns) = self.transactions.get(&txn.verified_txn().sender()) {
             if let Some(prev_txn) = account_txns.get(&(tx_sequence_number - 1)) {
                 if let TimelineState::Ready(_) = prev_txn.timeline_state {
                     return true;
@@ -452,8 +453,8 @@ impl TransactionStore {
             };
             for transaction in txns_for_removal.values() {
                 rm_txns.add(
-                    transaction.get_sender(),
-                    transaction.get_sequence_number(),
+                    transaction.verified_txn().sender(),
+                    transaction.verified_txn().sequence_number(),
                 );
                 self.index_remove(transaction);
             }
@@ -498,8 +499,8 @@ impl TransactionStore {
             if aptos_logger::enabled!(Level::Trace) {
                 let mut txns_log = TxnsLog::new();
                 txns_log.add(
-                    txn_to_remove.get_sender(),
-                    txn_to_remove.get_sequence_number(),
+                    txn_to_remove.verified_txn().sender(),
+                    txn_to_remove.verified_txn().sequence_number(),
                 );
                 trace!(LogSchema::new(LogEntry::CleanRejectedTxn).txns(txns_log));
             }
@@ -511,7 +512,7 @@ impl TransactionStore {
         // panic!("index remove");
         counters::CORE_MEMPOOL_REMOVED_TXNS.inc();
         self.priority_index.remove(txn);
-        let sender_bucket = sender_bucket(&txn.get_sender(), self.num_sender_buckets);
+        let sender_bucket = sender_bucket(&txn.verified_txn().sender(), self.num_sender_buckets);
         self.timeline_index
             .get_mut(&sender_bucket)
             .unwrap_or_else(|| {
@@ -524,7 +525,7 @@ impl TransactionStore {
         self.size_bytes -= txn.get_estimated_bytes();
 
         // Remove account datastructures if there are no more transactions for the account.
-        let address = &txn.get_sender();
+        let address = &txn.verified_txn().sender();
         if let Some(txns) = self.transactions.get(address) {
             if txns.is_empty() {
                 self.transactions.remove(address);
@@ -569,36 +570,35 @@ impl TransactionStore {
         {
             for (address, sequence_number) in bucket {
                 if let Some(txn) = self.get_mempool_txn(address, *sequence_number) {
-                    let transaction_bytes = txn.txn().len() as u64;
+                    let transaction_bytes = txn.get_estimated_bytes() as u64;
                     if batch_total_bytes.saturating_add(transaction_bytes) > self.max_batch_bytes {
                         break; // The batch is full
                     } else {
                         // reconstruct signed transaction from raw transaction bytes
-                        todo!()
-                        // batch.push((
-                        //     txn.txn.clone(),
-                        //     aptos_infallible::duration_since_epoch_at(
-                        //         &txn.insertion_info.ready_time,
-                        //     )
-                        //     .as_millis() as u64,
-                        // ));
-                        // batch_total_bytes = batch_total_bytes.saturating_add(transaction_bytes);
-                        // if let TimelineState::Ready(timeline_id) = txn.timeline_state {
-                        //     last_timeline_id[i] = timeline_id;
-                        // }
-                        // let bucket = self.get_bucket(txn.ranking_score, &txn.get_sender());
-                        // Mempool::log_txn_latency(
-                        //     &txn.insertion_info,
-                        //     bucket.as_str(),
-                        //     BROADCAST_BATCHED_LABEL,
-                        //     priority_of_receiver.to_string().as_str(),
-                        // );
-                        // counters::core_mempool_txn_ranking_score(
-                        //     BROADCAST_BATCHED_LABEL,
-                        //     BROADCAST_BATCHED_LABEL,
-                        //     bucket.as_str(),
-                        //     txn.ranking_score,
-                        // );
+                        batch.push((
+                            (txn.verified_txn().into()),
+                            aptos_infallible::duration_since_epoch_at(
+                                &txn.insertion_info().ready_time,
+                            )
+                            .as_millis() as u64,
+                        ));
+                        batch_total_bytes = batch_total_bytes.saturating_add(transaction_bytes);
+                        if let TimelineState::Ready(timeline_id) = txn.timeline_state {
+                            last_timeline_id[i] = timeline_id;
+                        }
+                        let bucket = self.get_bucket(txn.ranking_score(), &txn.verified_txn().sender());
+                        Mempool::log_txn_latency(
+                            &txn.insertion_info(),
+                            bucket.as_str(),
+                            BROADCAST_BATCHED_LABEL,
+                            priority_of_receiver.to_string().as_str(),
+                        );
+                        counters::core_mempool_txn_ranking_score(
+                            BROADCAST_BATCHED_LABEL,
+                            BROADCAST_BATCHED_LABEL,
+                            bucket.as_str(),
+                            txn.ranking_score(),
+                        );
                     }
                 }
             }
@@ -628,7 +628,7 @@ impl TransactionStore {
                     .and_then(|txns| txns.get(sequence_number))
                     .map(|txn| {
                         (
-                            SignedTransaction::new(todo!(), todo!(), todo!()),
+                            txn.verified_txn().into(),
                             aptos_infallible::duration_since_epoch_at(
                                 &txn.insertion_info().ready_time,
                             )

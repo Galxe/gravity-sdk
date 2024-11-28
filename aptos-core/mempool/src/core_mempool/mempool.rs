@@ -33,20 +33,17 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
+use super::transaction::VerifiedTxn;
+
 pub struct Mempool {
     // Stores the metadata of all transactions in mempool (of all states).
     transactions: TransactionStore,
-
-    pub system_transaction_timeout: Duration,
 }
 
 impl Mempool {
     pub fn new(config: &NodeConfig) -> Self {
         Mempool {
             transactions: TransactionStore::new(&config.mempool),
-            system_transaction_timeout: Duration::from_secs(
-                config.mempool.system_transaction_timeout_secs,
-            ),
         }
     }
 
@@ -272,8 +269,7 @@ impl Mempool {
     /// Performs basic validation: checks account's sequence number.
     pub(crate) fn add_txn(
         &mut self,
-        txn: SignedTransaction,
-        ranking_score: u64,
+        txn: VerifiedTxn,
         db_sequence_number: u64,
         timeline_state: TimelineState,
         client_submitted: bool,
@@ -286,9 +282,11 @@ impl Mempool {
         trace!(
             LogSchema::new(LogEntry::AddTxn)
                 .txns(TxnsLog::new_txn(txn.sender(), txn.sequence_number())),
-            committed_seq_number = db_sequence_number
         );
-
+        let sender = txn.sender();
+        const ZERO_RANKING_SCORE: u64 = 10;
+        // we use sequence number as ranking score, the smaller the sequence number, the higher the ranking score
+        let ranking_score = ZERO_RANKING_SCORE;
         // don't accept old transactions (e.g. seq is less than account's current seq_number)
         if txn.sequence_number() < db_sequence_number {
             return MempoolStatus::new(MempoolStatusCode::InvalidSeqNumber).with_message(format!(
@@ -299,16 +297,17 @@ impl Mempool {
         }
 
         let now = SystemTime::now();
-        let expiration_time =
-            aptos_infallible::duration_since_epoch_at(&now) + self.system_transaction_timeout;
-
-        let sender = txn.sender();
+        let insertion_info = InsertionInfo::new(now, client_submitted, timeline_state);
 
         // TODO: add bytes to the transaction
-        let txn_info: MempoolTransaction = {
-            // construct txn from the input txn
-            todo!()
-        };
+        let txn_info: MempoolTransaction = MempoolTransaction::new(
+            txn,
+            timeline_state, 
+            insertion_info, 
+            priority.clone(),
+            db_sequence_number,
+        ranking_score);
+
 
         let submitted_by_label = txn_info.insertion_info().submitted_by_label();
         let status = self.transactions.insert(txn_info);

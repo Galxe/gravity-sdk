@@ -58,8 +58,8 @@ impl PriorityIndex {
 
     fn make_key(&self, txn: &MempoolTransaction) -> OrderedQueueKey {
         OrderedQueueKey {
-            address: txn.get_sender(),
-            sequence_number: txn.get_sequence_number(),
+            address: txn.verified_txn().sender(),
+            sequence_number: txn.verified_txn().sequence_number(),
             hash: txn.get_hash(),
         }
     }
@@ -157,8 +157,8 @@ impl TTLIndex {
     fn make_key(&self, txn: &MempoolTransaction) -> TTLOrderingKey {
         TTLOrderingKey {
             expiration_time: (self.get_expiration_time)(txn),
-            address: txn.get_sender(),
-            sequence_number: txn.get_sequence_number(),
+            address: txn.verified_txn().sender(),
+            sequence_number: txn.verified_txn().sequence_number(),
         }
     }
 
@@ -252,8 +252,8 @@ impl TimelineIndex {
         self.timeline.insert(
             self.timeline_id,
             (
-                txn.get_sender(),
-                txn.get_sequence_number(),
+                txn.verified_txn().sender(),
+                txn.verified_txn().sequence_number(),
                 Instant::now(),
             ),
         );
@@ -279,8 +279,8 @@ pub type TxnPointer = TransactionSummary;
 impl From<&MempoolTransaction> for TxnPointer {
     fn from(txn: &MempoolTransaction) -> Self {
         Self {
-            sender: txn.get_sender(),
-            sequence_number: txn.get_sequence_number(),
+            sender: txn.verified_txn().sender(),
+            sequence_number: txn.verified_txn().sequence_number(),
             hash: txn.get_hash(),
         }
     }

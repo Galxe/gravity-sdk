@@ -181,8 +181,7 @@ impl MockSharedMempool {
             for txn in txns {
                 if pool
                     .add_txn(
-                        txn.clone(),
-                        txn.gas_unit_price(),
+                        (&txn).into(),
                         0,
                         TimelineState::NotReady,
                         false,
