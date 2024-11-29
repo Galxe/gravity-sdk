@@ -3,6 +3,7 @@ mod consensus_mempool_handler;
 mod logger;
 mod mock_db;
 mod network;
+mod https;
 pub mod simple_consensus_engine;
 mod utils;
 mod execution_api;

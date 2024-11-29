@@ -37,3 +37,7 @@ log_file_path: "/tmp/node1/consensus_log"
 inspection_service:
   port: 10000
   address: 127.0.0.1
+
+https_server_address: "127.0.0.1:1998"
+https_cert_pem_path: "/Users/lightman/.cert/cert.pem"
+https_key_pem_path: "/Users/lightman/.cert/key.pem"

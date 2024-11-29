@@ -4,10 +4,7 @@ use crate::{
     bootstrap::{
         init_mempool, init_network_interfaces, init_peers_and_metadata,
         start_consensus, start_node_inspection_service,
-    },
-    consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler},
-    logger,
-    network::{create_network_runtime, extract_network_configs},
+    }, consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler}, https::{https_server, HttpsServerArgs}, logger, network::{create_network_runtime, extract_network_configs}
 };
 use api_types::BatchClient;
 use api_types::{BlockBatch, BlockHashState, ConsensusApi, ExecutionApi, GTxn};
@@ -112,7 +109,7 @@ impl ConsensusEngine {
         // trigger this to make epoch manager invoke new epoch
         let arc_self = Arc::new(Self {
             address: node_config.validator_network.as_ref().unwrap().listen_address.to_string(),
-            execution_api,
+            execution_api: execution_api.clone(),
             batch_client: quorum_store_client.get_batch_client(),
             runtime_vec: network_runtimes,
         });
@@ -127,6 +124,16 @@ impl ConsensusEngine {
         let _ = event_subscription_service.notify_initial_configs(1_u64);
 
         execution_proxy.set_consensus_engine(arc_self.clone());
+        if !node_config.https_cert_pem_path.to_str().unwrap().is_empty()
+                && !node_config.https_key_pem_path.to_str().unwrap().is_empty() {
+            let args = HttpsServerArgs {
+                address: node_config.https_server_address,
+                execution_api: Some(execution_api.clone()),
+                cert_pem: node_config.https_cert_pem_path,
+                key_pem: node_config.https_key_pem_path,
+            };
+            tokio::spawn(https_server(args));
+        }
         arc_self
     }
 }

@@ -375,7 +375,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
             Err(e) => {
                 error!("finalized_block_number error {}", e);
                 return 0;
-            } 
+            }
         }
     }
 

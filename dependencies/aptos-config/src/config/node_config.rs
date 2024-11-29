@@ -22,9 +22,7 @@ use aptos_types::account_address::AccountAddress as PeerId;
 use rand::{prelude::StdRng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
-    fmt::Debug,
-    path::{Path, PathBuf},
+    collections::HashMap, fmt::Debug, os::unix::net::SocketAddr, path::{Path, PathBuf}
 };
 
 /// The node configuration defines the configuration for a single Aptos
@@ -92,6 +90,12 @@ pub struct NodeConfig {
     pub test_mode: bool,
     #[serde(default)]
     pub log_file_path: PathBuf,
+    #[serde(default)]
+    pub https_server_address: String,
+    #[serde(default)]
+    pub https_cert_pem_path: PathBuf,
+    #[serde(default)]
+    pub https_key_pem_path: PathBuf,
 }
 
 impl NodeConfig {

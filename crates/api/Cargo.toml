@@ -52,4 +52,11 @@ byteorder = { workspace = true }
 rocksdb = { workspace = true }
 itertools = { workspace = true }
 api-types = { workspace = true }
-
+axum="0.7.9"
+axum-server = { version = "0.7", features = ["tls-rustls"] }
+tokio-rustls = "0.24"
+rustls = "0.23.19"
+rustls-pemfile = "1.0"
+rcgen = "0.9"
+tokio-test = "*"
+reqwest = { version = "0.12.9", features = ["rustls-tls", "json"] }
