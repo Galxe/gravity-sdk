@@ -1,11 +1,17 @@
 - name: Deploy and start Reth on servers
   hosts: reth_servers
+  vars:
+    log_collection: []
   tasks:
     - name: Compile Reth with custom options
       shell: |
         bash -c ". "$HOME/.cargo/env" && make {{ reth_compile_options }}"
       args:
         chdir: "{{ reth_root_dir }}"
+      register: compile_log
+    - name: Append compile logs to collection
+      set_fact:
+        log_collection: "{{ log_collection + [compile_log] }}"
 
     - name: Start Reth service using script
       shell: |
@@ -14,3 +20,13 @@
       poll: 0
       args:
         chdir: "{{ reth_root_dir }}"
+      register: start_service_log
+    - name: Append service start logs to collection
+      set_fact:
+        log_collection: "{{ log_collection + [start_service_log] }}"
+    
+
+    - name: Output collected logs
+      debug:
+        msg: "{{ item.stdout | default('') }}"
+      with_items: "{{ log_collection }}"
