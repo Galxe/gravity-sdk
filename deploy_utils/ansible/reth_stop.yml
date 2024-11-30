@@ -3,6 +3,6 @@
   tasks:
     - name: Stop Reth service using script
       shell: |
-        bash stop_reth.sh
+        bash stop.sh
       args:
-        chdir: "/tmp/{{ reth_node_arg }}/script"
+        chdir: "/tmp/{{ reth_node_id }}/script"

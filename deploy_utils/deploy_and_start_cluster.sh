@@ -45,4 +45,6 @@ rm -rf /tmp/$node_arg
 
 ./deploy_utils/deploy.sh --mode cluster --node $node_arg --bin_version $bin_version
 
-bash /tmp/$node_arg/script/start.sh --node $node_arg
+cd bash /tmp/$node_arg/script/
+bash start.sh --node $node_arg
+cd -
