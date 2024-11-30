@@ -1,0 +1,3 @@
+reth_compile_options: ""
+reth_node_arg: "--node node1"
+reth_root_dir: "/home/jingyue/projects/gravity-sdk/"

@@ -1,0 +1,16 @@
+- name: Deploy and start Reth on servers
+  hosts: reth_servers
+  tasks:
+    - name: Compile Reth with custom options
+      shell: |
+        bash -c ". "$HOME/.cargo/env" && make {{ reth_compile_options }}"
+      args:
+        chdir: "{{ reth_root_dir }}"
+
+    - name: Start Reth service using script
+      shell: |
+        bash deploy_utils/deploy_and_start_cluster.sh {{ reth_node_arg }}
+      async: 300
+      poll: 0
+      args:
+        chdir: "{{ reth_root_dir }}"

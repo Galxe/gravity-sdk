@@ -1,0 +1,8 @@
+- name: Stop all Reth instances
+  hosts: reth_servers
+  tasks:
+    - name: Stop Reth service using script
+      shell: |
+        bash stop_reth.sh
+      args:
+        chdir: "/tmp/{{ reth_node_arg }}/script"
