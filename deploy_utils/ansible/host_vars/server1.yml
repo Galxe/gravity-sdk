@@ -1,4 +1,4 @@
 reth_compile_options: "FEATURE=preth"
 reth_node_arg: "--node node1"
-reth_root_dir: "/home/jingyue/projects/gravity-sdk/"
+reth_root_dir: "/home/${USER}/projects/gravity-sdk/"
 reth_node_id: "node1"

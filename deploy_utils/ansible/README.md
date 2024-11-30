@@ -42,7 +42,7 @@ The inventory file defines the servers managed by Ansible. Below is an example c
 
 ```ini
 [reth_servers]
-server1 ansible_host=34.19.64.87 ansible_user=jingyue
+server1 ansible_host=${HOST} ansible_user=${USER}
 ```
 
 ### Adding New Servers
@@ -55,8 +55,8 @@ To add new servers, follow these rules:
 For example, to add another server:
 ```ini
 [reth_servers]
-server1 ansible_host=34.19.64.87 ansible_user=jingyue
-server2 ansible_host=192.168.1.100 ansible_user=admin
+server1 ansible_host=${HOST} ansible_user=${USER}
+server2 ansible_host=${HOST} ansible_user=${USER}
 ```
 
 ### Server-Specific Variables
@@ -66,7 +66,7 @@ Each server can have its own variables. These are defined in `host_vars/<server_
 ```yaml
 reth_compile_options: "--release --features=grevm"
 reth_node_arg: "--cluster"
-reth_root_dir: "/home/jingyue/projects/reth"
+reth_root_dir: "/home/${USER}/projects/reth"
 ```
 
 ---

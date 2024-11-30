@@ -1,5 +1,5 @@
 reth_compile_options: "FEATURE=grevm"
 reth_node_arg: "--node node4"
 reth_env: "export EVM_DISABLE_GREVM=1"
-reth_root_dir: "/home/jingyue/projects/gravity-sdk/"
+reth_root_dir: "/home/${USER}/projects/gravity-sdk/"
 reth_node_id: "node4"
