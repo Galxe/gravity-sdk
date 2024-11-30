@@ -2,7 +2,7 @@
 
 bin_name="gravity-reth"
 node_arg=""
-bin_version="debug"
+bin_version="release"
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
