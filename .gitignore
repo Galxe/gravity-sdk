@@ -87,3 +87,5 @@ node*/data/*_db/*
 node*/data/*DB/*
 site/*
 book/site/*
+
+deploy_utils/ansible/server_confs

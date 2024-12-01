@@ -1,4 +1,4 @@
 reth_compile_options: "FEATURE=grevm"
-reth_node_arg: "--node node2"
+reth_node_arg: "--mode cluster --node node2 --bin_version release"
 reth_root_dir: "/home/${USER}/projects/gravity-sdk/"
 reth_node_id: "node2"
