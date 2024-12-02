@@ -110,6 +110,10 @@ This structured configuration allows each server to have its customized settings
   ansible-playbook -i inventory.ini reth_deploy.yml
   ```
 
+### Config reth node
+
+**Attention**, reth currently doesn't support specify some config like `rpc.max_connection` using config file, you should directly specify it as command line args instead. So you could sepcify your customized conf in the `start.sh` and then ansible would copy this file to remote server.
+
 ### Stop Reth Service
 
 - To **stop the Reth service on a single server** (e.g., `server1`):
