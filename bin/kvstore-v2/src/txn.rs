@@ -30,7 +30,7 @@ impl RawTxn {
     }
 
     pub fn into_verified(self) -> VerifiedTxn {
-        VerifiedTxn::new(self.to_bytes(), self.account, self.sequence_number, ExternalChainId(0))
+        VerifiedTxn::new(self.to_bytes(), self.account, self.sequence_number, ExternalChainId::new(0))
     }
 
     pub fn account(&self) -> ExternalAccountAddress {

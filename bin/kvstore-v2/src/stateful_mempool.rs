@@ -34,7 +34,7 @@ impl Mempool {
         }
     }
 
-    pub async fn remove_txn(&self, verified_txn: VerifiedTxn) {
+    pub async fn remove_txn(&self, verified_txn: &VerifiedTxn) {
         let sender = verified_txn.sender();
         let seq = verified_txn.seq_number();
         let mut pool = self.mempool.lock().await;
@@ -58,12 +58,12 @@ impl Mempool {
         let mut mempool = self.mempool.lock().await;
         let mut water_mark = self.water_mark.lock().await;
         let account_mempool = mempool.get_mut(&account).unwrap();
-        let mut sequence_number = water_mark.get_mut(&account).unwrap();
+        let sequence_number = water_mark.get_mut(&account).unwrap();
         for txn in account_mempool.values_mut() {
             if txn.raw_txn.sequence_number() == *sequence_number + 1 {
                 *sequence_number += 1;
                 txn.status = TxnStatus::Pending;
-                self.pending_send.send(txn.raw_txn().into_verified()).await.unwrap();
+                self.pending_send.send(txn.raw_txn.clone().into_verified()).await.unwrap();
             }
         }
     }

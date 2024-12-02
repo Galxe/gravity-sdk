@@ -75,6 +75,7 @@ pub trait ExecutionApi: Send + Sync {
     ) -> ExecutionBlocks;
 }
 
+#[derive(Hash, PartialEq, Eq)]
 pub struct ExternalPayloadAttr {
     // ms since epoch
     ts: u64,
@@ -93,6 +94,12 @@ pub struct ExternalBlock {
 }
 
 pub struct ComputeRes([u8; 32]);
+
+impl ComputeRes {
+    pub fn new(res: [u8; 32]) -> Self {
+        Self(res)
+    }
+}
 
 pub enum ExecError {
 

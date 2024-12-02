@@ -5,6 +5,7 @@ use tokio::sync::Mutex;
 use api_types::{BlockBatch, ComputeRes, ExecError, ExecutionApiV2, ExecutionBlocks, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, GTxn, VerifiedTxn};
 use crate::stateful_mempool::Mempool;
 use crate::txn::RawTxn;
+use async_trait::async_trait;
 
 #[derive(Default)]
 struct BlockStatus {
@@ -31,8 +32,9 @@ impl KvStore {
         }
     }
 
-    pub fn get(&self, key: &String) -> Option<&String> {
-        self.store.get(key)
+    pub async fn get(&self, key: &str) -> Option<String> {
+        let data = self.store.lock().await;
+        data.get(key).cloned()
     }
 
     pub async fn set(&self, key: String, val: String) {
@@ -46,9 +48,11 @@ impl KvStore {
     }
 }
 
+#[async_trait]
 impl ExecutionApiV2 for KvStore {
-    async fn add_txn(&self, bytes: Vec<u8>) {
+    async fn add_txn(&self, bytes: Vec<u8>) -> Result<(), ExecError> {
         self.mempool.add_txn(bytes).await;
+        Ok(())
     }
 
     async fn check_block_txns(&self, payload_attr: ExternalPayloadAttr, txns: Vec<VerifiedTxn>) -> Result<bool, ExecError> {
@@ -73,7 +77,7 @@ impl ExecutionApiV2 for KvStore {
         for txn in &ordered_block.txns {
             let raw_txn = RawTxn::from_bytes(txn.bytes().to_vec());
             self.set(raw_txn.key().clone(), raw_txn.val().clone()).await;
-            let val = self.get(raw_txn.key());
+            let val = self.get(raw_txn.key()).await;
             res.push(val);
         }
         let mut hasher = DefaultHasher::new();
@@ -84,7 +88,7 @@ impl ExecutionApiV2 for KvStore {
         v[0..8].copy_from_slice(&bytes);
 
         let (send, recv) = tokio::sync::mpsc::channel::<ComputeRes>(1);
-        send.send(ComputeRes(v)).await.unwrap();
+        send.send(ComputeRes::new(v)).await.unwrap();
         let mut r = self.compute_res_recv.lock().await;
         r.insert(ordered_block.block_meta.clone(), recv);
 
@@ -95,14 +99,19 @@ impl ExecutionApiV2 for KvStore {
     }
 
     async fn recv_executed_block_hash(&self, head: ExternalBlockMeta) -> Result<ComputeRes, ExecError> {
-        let r = self.compute_res_recv.lock().await;
-        r.get(&head).unwrap().recv()
+        let mut r = self.compute_res_recv.lock().await;
+        let receiver = r.get_mut(&head).expect("Failed to get receiver");
+        let res = receiver.recv().await;
+        match res {
+            Some(r) => Ok(r),
+            None => todo!(),
+        }
     }
 
     async fn commit_block(&self, head: ExternalBlockMeta) -> Result<(), ExecError> {
         let block = self.ordered_block.lock().await;
-        for txn in block.get(&head).unwrap().txns {
-            self.mempool.remove_txn(txn)
+        for txn in &block.get(&head).unwrap().txns {
+            self.mempool.remove_txn(txn).await
         }
         Ok(())
     }
