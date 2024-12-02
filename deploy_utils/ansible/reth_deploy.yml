@@ -41,6 +41,11 @@
       copy:
         src: "./server_confs/{{ reth_node_id }}/genesis/validator.yaml"
         dest: "/tmp/{{ reth_node_id }}/genesis/validator.yaml"
+    
+    - name: Copy start bash to remote
+      copy:
+        src: "../start.sh"
+        dest: "/tmp/{{ reth_node_id }}/script"
 
     - name: Start Reth service using script
       shell: |
