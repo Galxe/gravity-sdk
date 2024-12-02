@@ -29,6 +29,8 @@ use reth_ethereum_engine_primitives as reth_ethereum_engine_primitives;
 #[cfg(feature = "preth")]
 use reth_rpc_api as reth_rpc_api;
 mod cli;
+mod reth_cli;
+mod exec_layer;
 
 use crate::cli::Cli;
 use alloy_eips::{BlockId, BlockNumberOrTag};
@@ -58,9 +60,10 @@ use reth_node_core::args::utils::DefaultChainSpecParser;
 use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
 use reth_provider::providers::BlockchainProvider2;
 use reth_rpc_api::EngineEthApiClient;
+use crate::exec_layer::ExecLayer;
+use crate::reth_cli::RethCli;
 
-
-fn run_server() {
+fn run_reth() {
     reth_cli_util::sigsegv_handler::install();
 
     // Enable backtraces unless a RUST_BACKTRACE value has already been explicitly provided.
@@ -93,5 +96,14 @@ fn run_server() {
 }
 
 fn main() {
-    run_server();
+    thread::spawn(|| {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            let client = RethCli::new("/tmp/reth.ipc").await;
+            info!("created reth_cli with ipc");
+            let exec_layer = ExecLayer::new(client);
+            exec_layer.run().await;
+        });
+    });
+    run_reth();
 }
