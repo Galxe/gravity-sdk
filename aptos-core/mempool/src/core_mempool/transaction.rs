@@ -20,14 +20,6 @@ use std::{
 /// Estimated per-txn size minus the raw transaction
 pub const TXN_FIXED_ESTIMATED_BYTES: usize = size_of::<MempoolTransaction>();
 
-#[derive(Clone, Debug)]
-pub struct VerifiedTxn {
-    bytes: Vec<u8>,
-    sender: AccountAddress,
-    sequence_number: u64,
-    chain_id: chain_id::ChainId,
-}
-
 impl From<&SignedTransaction> for VerifiedTxn {
     fn from(signed_txn: &SignedTransaction) -> Self {
         let raw_txn = signed_txn.payload();
@@ -96,6 +88,14 @@ impl VerifiedTxn {
 pub struct SequenceInfo {
     pub transaction_sequence_number: u64,
     pub account_sequence_number: u64,
+}
+
+#[derive(Clone, Debug)]
+pub struct VerifiedTxn {
+    bytes: Vec<u8>,
+    sender: AccountAddress,
+    sequence_number: u64,
+    chain_id: chain_id::ChainId,
 }
 
 #[derive(Clone, Debug)]

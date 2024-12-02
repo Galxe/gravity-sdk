@@ -165,6 +165,7 @@ impl QuorumStoreClient {
                 head_hash.copy_from_slice(init_hash.unwrap().head_hash.as_slice());
             } else {
                 let block_store = self.block_store.get().unwrap();
+                // finalized bloc safe bloc head bloc
                 // TODO(gravity_byteyue): avoid clone here
                 if !block_store.get_block_tree().read().is_head_block_qc() {
                     info!("reuse payload from block store if the last block qc is not ready");

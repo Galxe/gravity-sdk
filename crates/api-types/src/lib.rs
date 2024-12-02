@@ -1,3 +1,5 @@
+pub mod account;
+
 use std::{cell::RefCell, fmt::Display, sync::Arc};
 
 use async_trait::async_trait;
@@ -7,6 +9,7 @@ use ruint::aliases::U256;
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 use tokio::{runtime::Runtime, sync::Mutex};
+use crate::account::{ExternalAccountAddress, ExternalChainId};
 
 #[derive(Clone, Copy)]
 pub struct BlockHashState {
@@ -70,6 +73,77 @@ pub trait ExecutionApi: Send + Sync {
         start_block_number: u64,
         end_block_number: u64,
     ) -> ExecutionBlocks;
+}
+
+pub struct ExternalPayloadAttr {
+    // ms since epoch
+    ts: u64,
+}
+
+#[derive(Hash, Eq, PartialEq, Clone)]
+pub struct ExternalBlockMeta {
+    pub block_id: [u8; 32],
+    pub block_number: u64,
+}
+
+
+pub struct ExternalBlock {
+    pub block_meta: ExternalBlockMeta,
+    pub txns: Vec<VerifiedTxn>,
+}
+
+pub struct ComputeRes([u8; 32]);
+
+pub enum ExecError {
+
+}
+
+#[async_trait]
+pub trait ExecutionApiV2: Send + Sync {
+    async fn add_txn(&self, bytes: Vec<u8>) -> Result<(), ExecError>;
+
+    async fn check_block_txns(&self, payload_attr: ExternalPayloadAttr, txns: Vec<VerifiedTxn>) -> Result<bool, ExecError>;
+
+    async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxn>, ExecError>;
+
+    async fn send_ordered_block(&self, ordered_block: ExternalBlock) -> Result<(), ExecError>;
+
+    // the block hash is the hash of the block that has been executed, which is passed by the send_ordered_block
+    async fn recv_executed_block_hash(&self, head: ExternalBlockMeta) -> Result<ComputeRes, ExecError>;
+
+    // this function is called by the execution layer commit the block hash
+    async fn commit_block(&self, head: ExternalBlockMeta) -> Result<(), ExecError>;
+}
+
+#[derive(Clone, Debug)]
+pub struct VerifiedTxn {
+    bytes: Vec<u8>,
+    sender: ExternalAccountAddress,
+    sequence_number: u64,
+    chain_id: ExternalChainId,
+}
+
+impl VerifiedTxn {
+    pub fn new(bytes: Vec<u8>, sender: ExternalAccountAddress, sequence_number: u64, chain_id: ExternalChainId) -> Self {
+        Self {
+            bytes,
+            sender,
+            sequence_number,
+            chain_id,
+        }
+    }
+
+    pub fn bytes(&self) -> &Vec<u8> {
+        &self.bytes
+    }
+
+    pub fn sender(&self) -> &ExternalAccountAddress {
+        &self.sender
+    }
+
+    pub fn seq_number(&self) -> u64 {
+        self.sequence_number
+    }
 }
 
 #[derive(Clone, Default)]

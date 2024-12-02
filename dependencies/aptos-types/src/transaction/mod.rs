@@ -412,6 +412,8 @@ pub enum TransactionPayload {
     /// A multisig transaction that allows an owner of a multisig account to execute a pre-approved
     /// transaction as the multisig account.
     Multisig(Multisig),
+
+    // TODO(xj): serialize performance
     GTxnBytes(Vec<u8>),
 }
 

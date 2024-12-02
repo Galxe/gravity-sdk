@@ -35,6 +35,7 @@ use std::{
 
 use super::transaction::VerifiedTxn;
 
+
 pub struct Mempool {
     // Stores the metadata of all transactions in mempool (of all states).
     transactions: TransactionStore,
