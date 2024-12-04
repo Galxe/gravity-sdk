@@ -124,7 +124,7 @@ pub fn start_consensus(
         consensus_publisher,
         gravity_args.execution_api.clone(),
     );
-    gravity_args.set_quorum_store_client(epoch_mgr.get_quorum_store_client());
+    // gravity_args.set_quorum_store_client(epoch_mgr.get_quorum_store_client());
 
     let (network_task, network_receiver) = NetworkTask::new(network_service_events, self_receiver);
 

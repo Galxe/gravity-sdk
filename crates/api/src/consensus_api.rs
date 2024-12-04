@@ -6,7 +6,6 @@ use crate::{
         start_consensus, start_node_inspection_service,
     }, consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler}, https::{https_server, HttpsServerArgs}, logger, network::{create_network_runtime, extract_network_configs}
 };
-use api_types::BatchClient;
 use api_types::{BlockBatch, BlockHashState, ConsensusApi, ExecutionApi, GTxn};
 use aptos_config::{config::NodeConfig, network_id::NetworkId};
 use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
@@ -30,7 +29,6 @@ use tokio::runtime::Runtime;
 pub struct ConsensusEngine {
     address: String,
     execution_api: Arc<dyn ExecutionApi>,
-    batch_client: Arc<BatchClient>,
     runtime_vec: Vec<Runtime>,
 }
 
@@ -105,21 +103,12 @@ impl ConsensusEngine {
             &mut args,
         );
         network_runtimes.push(consensus_runtime);
-        let quorum_store_client = args.quorum_store_client.as_mut().unwrap();
         // trigger this to make epoch manager invoke new epoch
         let arc_self = Arc::new(Self {
             address: node_config.validator_network.as_ref().unwrap().listen_address.to_string(),
             execution_api: execution_api.clone(),
-            batch_client: quorum_store_client.get_batch_client(),
             runtime_vec: network_runtimes,
         });
-        quorum_store_client.set_consensus_api(arc_self.clone());
-        // sleep
-        quorum_store_client.set_init_reth_hash(block_hash_state);
-        // Wait for the network to be done
-        // arc_self.runtime_vec.last().as_ref().expect("msg").block_on(async move {
-        //     tokio::time::sleep(Duration::from_secs(10)).await;
-        // });
         // process new round should be after init reth hash
         let _ = event_subscription_service.notify_initial_configs(1_u64);
 
