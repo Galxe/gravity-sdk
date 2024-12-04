@@ -6,7 +6,7 @@ use std::{
     thread,
 };
 
-use crate::network::{build_network_interfaces, consensus_network_configuration, extract_network_ids};
+use crate::network::{build_network_interfaces, consensus_network_configuration, extract_network_ids, mempool_network_configuration};
 use api_types::ExecutionApi;
 use aptos_config::{
     config::{NetworkConfig, NodeConfig, Peer, PeerRole, RocksdbConfigs, StorageDirPaths},
@@ -148,7 +148,7 @@ pub fn init_mempool(
     db: &DbReaderWriter,
     event_subscription_service: &mut EventSubscriptionService,
     mempool_interfaces: ApplicationNetworkInterfaces<MempoolSyncMsg>,
-    mempool_client_receiver: Receiver<MempoolClientRequest>,
+    _mempool_client_receiver: Receiver<MempoolClientRequest>,
     consensus_to_mempool_receiver: Receiver<QuorumStoreRequest>,
     mempool_listener: MempoolNotificationListener,
     peers_and_metadata: Arc<PeersAndMetadata>,
@@ -161,7 +161,7 @@ pub fn init_mempool(
         Arc::clone(&db.reader),
         mempool_interfaces.network_client,
         mempool_interfaces.network_service_events,
-        mempool_client_receiver,
+        _mempool_client_receiver,
         consensus_to_mempool_receiver,
         mempool_listener,
         mempool_reconfig_subscription,
