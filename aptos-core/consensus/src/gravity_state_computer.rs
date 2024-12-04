@@ -13,6 +13,8 @@ use crate::{
     transaction_shuffler::TransactionShuffler,
 };
 use anyhow::Result;
+use api_types::ConsensusApi;
+use api_types::ExecutionApi;
 use aptos_consensus_types::{block::Block, pipelined_block::PipelinedBlock};
 use aptos_crypto::HashValue;
 use aptos_executor::block_executor::BlockExecutor;
@@ -27,11 +29,9 @@ use aptos_types::{
 };
 use futures::SinkExt;
 use futures_channel::{mpsc, oneshot};
+use once_cell::sync::OnceCell;
 use std::time::Duration;
 use std::{boxed::Box, sync::Arc};
-use once_cell::sync::OnceCell;
-use api_types::ConsensusApi;
-use api_types::ExecutionApi;
 
 pub struct ConsensusAdapterArgs {
     pub quorum_store_client: Option<Arc<QuorumStoreClient>>,
@@ -40,7 +40,10 @@ pub struct ConsensusAdapterArgs {
 }
 
 impl ConsensusAdapterArgs {
-    pub fn new(execution_api: Arc<dyn ExecutionApi>, consensus_db: Arc<ConsensusDB>) -> Self {
+    pub fn new(
+        execution_api: Arc<dyn ExecutionApi>,
+        consensus_db: Arc<ConsensusDB>,
+    ) -> Self {
         Self {
             quorum_store_client: None,
             execution_api: Some(execution_api),
@@ -70,16 +73,23 @@ pub struct GravityExecutionProxy {
 }
 
 impl GravityExecutionProxy {
-    pub fn new(aptos_state_computer: Arc<ExecutionProxy>, inner_executor: Arc<GravityBlockExecutor>) -> Self {
+    pub fn new(
+        aptos_state_computer: Arc<ExecutionProxy>,
+        inner_executor: Arc<GravityBlockExecutor>,
+    ) -> Self {
         Self { aptos_state_computer, consensus_engine: OnceCell::new(), inner_executor }
     }
 
     pub fn set_consensus_engine(&self, consensus_engine: Arc<dyn ConsensusApi>) {
         match self.consensus_engine.set(consensus_engine) {
             Ok(_) => {
-                self.inner_executor.set_consensus_engine(self.consensus_engine.get().expect("consensus engine").clone());
+                self.inner_executor.set_consensus_engine(
+                    self.consensus_engine.get().expect("consensus engine").clone(),
+                );
             }
-            Err(_) => { panic!("failed to set consensus engine") }
+            Err(_) => {
+                panic!("failed to set consensus engine")
+            }
         }
     }
 }
@@ -90,16 +100,16 @@ pub struct GravityBlockExecutor {
 }
 
 impl GravityBlockExecutor {
-    pub(crate) fn new(
-        inner: BlockExecutor,
-    ) -> Self {
+    pub(crate) fn new(inner: BlockExecutor) -> Self {
         Self { inner, consensus_engine: OnceCell::new() }
     }
 
     pub fn set_consensus_engine(&self, consensus_engine: Arc<dyn ConsensusApi>) {
         match self.consensus_engine.set(consensus_engine) {
             Ok(_) => {}
-            Err(_) => { panic!("failed to set consensus engine") }
+            Err(_) => {
+                panic!("failed to set consensus engine")
+            }
         }
     }
 }
@@ -124,25 +134,25 @@ impl StateComputer for GravityExecutionProxy {
             block_result_sender.send(HashValue::new(compute_res_bytes)).expect("send failed");
         } else {
             // TODO(gravity_byteyue): don't do memory copy
-            let gtxns = txns.iter().map(|txn| { txn.clone().into() }).collect();
+            let gtxns = txns.iter().map(|txn| txn.clone().into()).collect();
             self.consensus_engine.get().expect("ConsensusEngine").send_order_block(gtxns).await;
         }
         let engine = Some(self.consensus_engine.clone());
         Box::pin(async move {
             match engine {
                 Some(e) => {
-                    let result = StateComputeResult::with_root_hash(HashValue::new(e.get().expect("consensus engine").recv_executed_block_hash().await));
+                    let result = StateComputeResult::with_root_hash(HashValue::new(
+                        e.get().expect("consensus engine").recv_executed_block_hash().await,
+                    ));
                     Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
                 }
-                None => {
-                    match block_result_receiver.await {
-                        Ok(res) => {
-                            let result = StateComputeResult::with_root_hash(res);
-                            Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
-                        }
-                        Err(e) => Err(ExecutorError::InternalError { error: e.to_string() }),
+                None => match block_result_receiver.await {
+                    Ok(res) => {
+                        let result = StateComputeResult::with_root_hash(res);
+                        Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
                     }
-                }
+                    Err(e) => Err(ExecutorError::InternalError { error: e.to_string() }),
+                },
             }
         })
     }
@@ -224,18 +234,21 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             let (send, receiver) = oneshot::channel::<HashValue>();
             // todo(gravity_byteyue): don't spawn runtime each time
             let runtime = aptos_runtimes::spawn_named_runtime("tmp".into(), None);
-            let _ = runtime
-                .block_on(async move {
-                    let encode_ids = block_ids
-                        .iter()
-                        .map(|id| {
-                            let mut bytes = [0; 32];
-                            bytes.copy_from_slice(id.as_slice());
-                            bytes
-                        })
-                        .collect();
-                    self.consensus_engine.get().expect("consensus engine").commit_block_hash(encode_ids).await;
-                });
+            let _ = runtime.block_on(async move {
+                let encode_ids = block_ids
+                    .iter()
+                    .map(|id| {
+                        let mut bytes = [0; 32];
+                        bytes.copy_from_slice(id.as_slice());
+                        bytes
+                    })
+                    .collect();
+                self.consensus_engine
+                    .get()
+                    .expect("consensus engine")
+                    .commit_block_hash(encode_ids)
+                    .await;
+            });
             // if let Err(e) = r {
             //     return Err(e);
             // }
