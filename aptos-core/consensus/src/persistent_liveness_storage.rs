@@ -504,7 +504,9 @@ impl PersistentLivenessStorage for StorageWriteProxy {
     }
 
     fn fetch_next_block_number(&self) -> u64 {
+        let latest_block_number = self.latest_block_number();
         let next_block_number = self.next_block_number.load(Ordering::SeqCst);
+        assert_eq!(latest_block_number + 1, next_block_number);
         self.next_block_number.fetch_add(1, Ordering::SeqCst);
         next_block_number
     }

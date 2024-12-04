@@ -280,8 +280,8 @@ impl BlockStore {
     pub fn init_block_number(&self, ordered_blocks: &Vec<Arc<PipelinedBlock>>) {
         let mut blocks = vec![];
         for p_block in ordered_blocks {
-            if let Some(_) = p_block.block().block_number() {
-                continue;
+            if let None = p_block.block().block_number() {
+                p_block.block().set_block_number(self.storage.fetch_next_block_number());
             }
             p_block.block().set_block_number(self.storage.fetch_next_block_number());
             self.inner
@@ -290,7 +290,7 @@ impl BlockStore {
             blocks.push(p_block.as_ref().into());
         }
         if blocks.len() != 0 {
-            self.storage.save_tree(blocks, vec![]);
+            self.storage.save_tree(blocks, vec![]).unwrap();
         }
     }
 

@@ -204,6 +204,10 @@ impl BlockTree {
         );
         let root_id = root.id();
         info!("insert root block id {}", root_id);
+        let mut block_number_to_id = BTreeMap::new();
+        if let Some(block_number) = root.block().block_number() {
+            block_number_to_id.insert(block_number, root_id);
+        }
         let mut id_to_block = HashMap::new();
         id_to_block.insert(root_id, LinkableBlock::new(root));
         counters::NUM_BLOCKS_IN_TREE.set(1);
@@ -280,6 +284,15 @@ impl BlockTree {
         self.get_linkable_block(block_id).map(|lb| lb.executed_block().clone())
     }
 
+    pub(super) fn get_block_by_block_number(&self, block_number: u64) -> Option<Arc<PipelinedBlock>> {
+        match self.block_number_to_id.get(&block_number) {
+            Some(block_id) => {
+                self.get_block(block_id)
+            },
+            None => None,
+        }
+    }
+
     pub(super) fn ordered_root(&self) -> Arc<PipelinedBlock> {
         self.get_block(&self.ordered_root_id).expect("Root must exist")
     }
@@ -345,6 +358,9 @@ impl BlockTree {
                     }
                 }
             };
+            if let Some(block_number) = block.block().block_number() {
+                assert!(self.block_number_to_id.insert(block_number, block_id).is_none());
+            }
             let linkable_block = LinkableBlock::new(block);
             let arc_block = Arc::clone(linkable_block.executed_block());
             assert!(self.id_to_block.insert(block_id, linkable_block).is_none());
