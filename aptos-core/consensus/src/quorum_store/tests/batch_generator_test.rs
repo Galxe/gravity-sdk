@@ -10,7 +10,6 @@ use crate::{
         create_vec_signed_transactions_with_gas,
     }
 };
-use api_types::BatchClient;
 use aptos_config::config::QuorumStoreConfig;
 use aptos_consensus_types::{
     common::{TransactionInProgress, TransactionSummary},
@@ -102,7 +101,6 @@ async fn test_batch_creation() {
         Arc::new(MockBatchWriter::new()),
         quorum_store_to_mempool_tx,
         1000,
-        Arc::new(BatchClient::new()),
     );
 
     let join_handle = tokio::spawn(async move {
@@ -213,7 +211,6 @@ async fn test_bucketed_batch_creation() {
         Arc::new(MockBatchWriter::new()),
         quorum_store_to_mempool_tx,
         1000,
-        Arc::new(BatchClient::new()),
     );
 
     let mut num_txns = 0;
@@ -346,7 +343,6 @@ async fn test_max_batch_txns() {
         Arc::new(MockBatchWriter::new()),
         quorum_store_to_mempool_tx,
         1000,
-        Arc::new(BatchClient::new()),
     );
 
     let join_handle = tokio::spawn(async move {
@@ -409,7 +405,6 @@ async fn test_max_batch_bytes() {
         Arc::new(MockBatchWriter::new()),
         quorum_store_to_mempool_tx,
         1000,
-        Arc::new(BatchClient::new()),
     );
 
     let join_handle = tokio::spawn(async move {
@@ -469,7 +464,6 @@ async fn test_max_num_batches() {
         Arc::new(MockBatchWriter::new()),
         quorum_store_to_mempool_tx,
         1000,
-        Arc::new(BatchClient::new()),
     );
 
     let join_handle = tokio::spawn(async move {
@@ -527,7 +521,6 @@ async fn test_last_bucketed_batch() {
         Arc::new(MockBatchWriter::new()),
         quorum_store_to_mempool_tx,
         1000,
-        Arc::new(BatchClient::new()),
     );
 
     let join_handle = tokio::spawn(async move {
@@ -592,7 +585,6 @@ async fn test_sender_max_num_batches_single_bucket() {
         Arc::new(MockBatchWriter::new()),
         quorum_store_to_mempool_tx,
         1000,
-        Arc::new(BatchClient::new()),
     );
 
     let join_handle = tokio::spawn(async move {
@@ -652,7 +644,6 @@ async fn test_sender_max_num_batches_multi_buckets() {
         Arc::new(MockBatchWriter::new()),
         quorum_store_to_mempool_tx,
         1000,
-        Arc::new(BatchClient::new()),
     );
 
     let join_handle = tokio::spawn(async move {
@@ -711,7 +702,6 @@ async fn test_batches_in_progress_same_txn_across_batches() {
         Arc::new(MockBatchWriter::new()),
         quorum_store_to_mempool_tx,
         1000,
-        Arc::new(BatchClient::new()),
     );
 
     let join_handle = tokio::spawn(async move {
@@ -768,7 +758,6 @@ async fn test_remote_batches_in_progress() {
         Arc::new(MockBatchWriter::new()),
         quorum_store_to_mempool_tx,
         1000,
-        Arc::new(BatchClient::new()),
     );
 
     let signed_txns = create_vec_signed_transactions(3);

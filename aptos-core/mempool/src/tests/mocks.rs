@@ -116,63 +116,64 @@ impl MockSharedMempool {
         mpsc::Sender<QuorumStoreRequest>,
         MempoolNotifier,
     ) {
-        let mut config = NodeConfig::generate_random_config();
-        config.validator_network = Some(NetworkConfig::network_with_id(NetworkId::Validator));
+        todo!()
+        // let mut config = NodeConfig::generate_random_config();
+        // config.validator_network = Some(NetworkConfig::network_with_id(NetworkId::Validator));
 
-        let mempool = Arc::new(Mutex::new(CoreMempool::new(&config)));
-        let (network_reqs_tx, _network_reqs_rx) = aptos_channel::new(QueueStyle::FIFO, 8, None);
-        let (connection_reqs_tx, _) = aptos_channel::new(QueueStyle::FIFO, 8, None);
-        let (_network_notifs_tx, network_notifs_rx) = aptos_channel::new(QueueStyle::FIFO, 8, None);
-        let network_sender = NetworkSender::new(
-            PeerManagerRequestSender::new(network_reqs_tx),
-            ConnectionRequestSender::new(connection_reqs_tx),
-        );
-        let network_events = NetworkEvents::new(network_notifs_rx, None, true);
-        let (ac_client, client_events) = mpsc::channel(1_024);
-        let (quorum_store_sender, quorum_store_receiver) = mpsc::channel(1_024);
-        let (mempool_notifier, mempool_listener) =
-            aptos_mempool_notifications::new_mempool_notifier_listener_pair(100);
-        let (reconfig_sender, reconfig_events) = aptos_channel::new(QueueStyle::LIFO, 1, None);
-        let reconfig_event_subscriber = ReconfigNotificationListener {
-            notification_receiver: reconfig_events,
-        };
-        reconfig_sender
-            .push((), ReconfigNotification {
-                version: 1,
-                on_chain_configs: OnChainConfigPayload::new(
-                    1,
-                    InMemoryOnChainConfig::new(HashMap::new()),
-                ),
-            })
-            .unwrap();
-        let peers_and_metadata = PeersAndMetadata::new(&[NetworkId::Validator]);
-        let network_senders = hashmap! {NetworkId::Validator => network_sender};
-        let network_client = NetworkClient::new(
-            vec![MempoolDirectSend],
-            vec![],
-            network_senders,
-            peers_and_metadata.clone(),
-        );
-        let network_and_events = hashmap! {NetworkId::Validator => network_events};
-        let network_service_events = NetworkServiceEvents::new(network_and_events);
+        // let mempool = Arc::new(Mutex::new(CoreMempool::new(&config)));
+        // let (network_reqs_tx, _network_reqs_rx) = aptos_channel::new(QueueStyle::FIFO, 8, None);
+        // let (connection_reqs_tx, _) = aptos_channel::new(QueueStyle::FIFO, 8, None);
+        // let (_network_notifs_tx, network_notifs_rx) = aptos_channel::new(QueueStyle::FIFO, 8, None);
+        // let network_sender = NetworkSender::new(
+        //     PeerManagerRequestSender::new(network_reqs_tx),
+        //     ConnectionRequestSender::new(connection_reqs_tx),
+        // );
+        // let network_events = NetworkEvents::new(network_notifs_rx, None, true);
+        // let (ac_client, client_events) = mpsc::channel(1_024);
+        // let (quorum_store_sender, quorum_store_receiver) = mpsc::channel(1_024);
+        // let (mempool_notifier, mempool_listener) =
+        //     aptos_mempool_notifications::new_mempool_notifier_listener_pair(100);
+        // let (reconfig_sender, reconfig_events) = aptos_channel::new(QueueStyle::LIFO, 1, None);
+        // let reconfig_event_subscriber = ReconfigNotificationListener {
+        //     notification_receiver: reconfig_events,
+        // };
+        // reconfig_sender
+        //     .push((), ReconfigNotification {
+        //         version: 1,
+        //         on_chain_configs: OnChainConfigPayload::new(
+        //             1,
+        //             InMemoryOnChainConfig::new(HashMap::new()),
+        //         ),
+        //     })
+        //     .unwrap();
+        // let peers_and_metadata = PeersAndMetadata::new(&[NetworkId::Validator]);
+        // let network_senders = hashmap! {NetworkId::Validator => network_sender};
+        // let network_client = NetworkClient::new(
+        //     vec![MempoolDirectSend],
+        //     vec![],
+        //     network_senders,
+        //     peers_and_metadata.clone(),
+        // );
+        // let network_and_events = hashmap! {NetworkId::Validator => network_events};
+        // let network_service_events = NetworkServiceEvents::new(network_and_events);
 
-        start_shared_mempool(
-            handle,
-            &config,
-            mempool.clone(),
-            network_client,
-            network_service_events,
-            client_events,
-            quorum_store_receiver,
-            mempool_listener,
-            reconfig_event_subscriber,
-            db.reader.clone(),
-            Arc::new(RwLock::new(validator)),
-            vec![],
-            peers_and_metadata,
-        );
+        // start_shared_mempool(
+        //     handle,
+        //     &config,
+        //     mempool.clone(),
+        //     network_client,
+        //     network_service_events,
+        //     client_events,
+        //     quorum_store_receiver,
+        //     mempool_listener,
+        //     reconfig_event_subscriber,
+        //     db.reader.clone(),
+        //     Arc::new(RwLock::new(validator)),
+        //     vec![],
+        //     peers_and_metadata,
+        // );
 
-        (ac_client, mempool, quorum_store_sender, mempool_notifier)
+        // (ac_client, mempool, quorum_store_sender, mempool_notifier)
     }
 
     pub fn add_txns(&self, txns: Vec<SignedTransaction>) -> Result<()> {
