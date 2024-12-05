@@ -18,7 +18,7 @@ use crate::{
     util::time_service::TimeService,
 };
 use anyhow::{bail, ensure, format_err, Context};
-use api_types::{BlockBatch, ExecutionApi};
+use api_types::{BlockBatch, ExecutionApiV2, ExternalBlockMeta};
 use aptos_consensus_types::common::Payload::DirectMempool;
 use aptos_consensus_types::{
     block::Block,
@@ -89,7 +89,7 @@ pub struct BlockStore {
     back_pressure_for_test: AtomicBool,
     order_vote_enabled: bool,
     pending_blocks: Arc<Mutex<PendingBlocks>>,
-    execution_api: Option<Arc<dyn ExecutionApi>>,
+    execution_api: Option<Arc<dyn ExecutionApiV2>>,
 }
 
 impl BlockStore {
@@ -103,7 +103,7 @@ impl BlockStore {
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
-        execution_api: Option<Arc<dyn ExecutionApi>>,
+        execution_api: Option<Arc<dyn ExecutionApiV2>>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -137,7 +137,7 @@ impl BlockStore {
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
-        execution_api: Option<Arc<dyn ExecutionApi>>,
+        execution_api: Option<Arc<dyn ExecutionApiV2>>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -225,7 +225,7 @@ impl BlockStore {
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
-        execution_api: Option<Arc<dyn ExecutionApi>>,
+        execution_api: Option<Arc<dyn ExecutionApiV2>>,
     ) -> Self {
         let RootInfo(root_block, root_qc, root_ordered_cert, root_commit_cert) = root;
 
@@ -322,10 +322,17 @@ impl BlockStore {
             for p_block in &blocks_to_commit {
                 if let Some(DirectMempool((block_hash, _))) = p_block.block().payload() {
                     info!("recover commit block {} block_hash {}", p_block.block(), block_hash);
+                    // TODO(gravity_lightman): Error handle
                     self.execution_api
                         .as_ref()
                         .unwrap()
-                        .commit_block_hash(vec![**block_hash])
+                        .commit_block(ExternalBlockMeta {
+                            block_id: **block_hash,
+                            block_number: p_block
+                                .block()
+                                .block_number()
+                                .expect("No block number set"),
+                        })
                         .await;
                 }
             }

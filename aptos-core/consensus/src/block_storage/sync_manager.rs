@@ -25,7 +25,7 @@ use crate::{
     pipeline::execution_client::TExecutionClient,
 };
 use anyhow::{anyhow, bail, Context};
-use api_types::{ExecutionApi, ExecutionBlocks};
+use api_types::{ExecutionApiV2, ExecutionBlocks, ExternalBlockMeta};
 use aptos_consensus_types::{
     block::Block,
     block_retrieval::{
@@ -278,7 +278,7 @@ impl BlockStore {
 
     pub async fn fast_forward_sync_by_block_number<'a>(
         retriever: &'a mut BlockRetriever,
-        execution_api: Arc<dyn ExecutionApi>,
+        execution_api: Arc<dyn ExecutionApiV2>,
         start_block_number: u64,
     ) -> anyhow::Result<()> {
         info!(
@@ -291,8 +291,15 @@ impl BlockStore {
             .await?;
         for blocks in blocks_batch {
             let commit_block_hash = blocks.latest_block_hash;
+            let commit_block_number = blocks.latest_block_number;
             execution_api.recover_execution_blocks(blocks).await;
-            execution_api.commit_block_hash(vec![commit_block_hash]).await;
+            // TODO(gravity_lightman): error handle
+            execution_api
+                .commit_block(ExternalBlockMeta {
+                    block_id: commit_block_hash,
+                    block_number: commit_block_number,
+                })
+                .await;
         }
         Ok(())
     }

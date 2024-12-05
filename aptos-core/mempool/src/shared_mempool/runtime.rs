@@ -1,9 +1,8 @@
 // Copyright © Aptos Foundation
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
-use anyhow::Result;
 use crate::{
-    core_mempool::CoreMempool,
+    core_mempool::{transaction::VerifiedTxn, CoreMempool, TimelineState},
     network::MempoolSyncMsg,
     shared_mempool::{
         coordinator::{coordinator, gc_coordinator, snapshot_job},
@@ -11,17 +10,22 @@ use crate::{
     },
     QuorumStoreRequest,
 };
+use aptos_types::account_address::AccountAddress;
+use anyhow::Result;
+use api_types::ExecutionApiV2;
 use aptos_config::config::{NodeConfig, NodeType};
 use aptos_event_notifications::{DbBackedOnChainConfig, ReconfigNotificationListener};
 use aptos_infallible::{Mutex, RwLock};
-use aptos_logger::Level;
+use aptos_logger::{warn, Level};
 use aptos_mempool_notifications::MempoolNotificationListener;
 use aptos_network::application::{
     interface::{NetworkClient, NetworkServiceEvents},
     storage::PeersAndMetadata,
 };
 use aptos_storage_interface::DbReader;
-use aptos_types::{on_chain_config::OnChainConfigProvider, transaction::{SignedTransaction, VMValidatorResult}};
+use aptos_types::{
+    account_address::AccountAddressWithChecks, on_chain_config::OnChainConfigProvider, transaction::{SignedTransaction, VMValidatorResult}, PeerId
+};
 // use aptos_vm_validator::vm_validator::{PooledVMValidator, TransactionValidation};
 use futures::channel::mpsc::{Receiver, UnboundedSender};
 use std::sync::Arc;
@@ -46,6 +50,7 @@ pub(crate) fn start_shared_mempool<TransactionValidator, ConfigProvider>(
     validator: Arc<RwLock<TransactionValidator>>,
     subscribers: Vec<UnboundedSender<SharedMempoolNotification>>,
     peers_and_metadata: Arc<PeersAndMetadata>,
+    execution_api: Arc<dyn ExecutionApiV2>,
 ) where
     TransactionValidator: TransactionValidation + 'static,
     ConfigProvider: OnChainConfigProvider,
@@ -74,24 +79,46 @@ pub(crate) fn start_shared_mempool<TransactionValidator, ConfigProvider>(
         peers_and_metadata,
     ));
 
-    executor.spawn(gc_coordinator(
-        mempool.clone(),
-        config.mempool.system_transaction_gc_interval_ms,
-    ));
+    executor
+        .spawn(gc_coordinator(mempool.clone(), config.mempool.system_transaction_gc_interval_ms));
+
+    executor.spawn(retrieve_from_execution_routine(mempool.clone(), execution_api));
 
     if aptos_logger::enabled!(Level::Trace) {
-        executor.spawn(snapshot_job(
-            mempool,
-            config.mempool.mempool_snapshot_interval_secs,
-        ));
+        executor.spawn(snapshot_job(mempool, config.mempool.mempool_snapshot_interval_secs));
+    }
+}
+
+async fn retrieve_from_execution_routine(
+    mempool: Arc<Mutex<CoreMempool>>,
+    execution_api: Arc<dyn ExecutionApiV2>,
+) {
+    loop {
+        let txns = execution_api.recv_pending_txns().await;
+        match txns {
+            Ok(txns) => {
+                txns.into_iter().for_each(|txn| {
+                    let _r = mempool.lock().add_txn(VerifiedTxn {
+                        bytes: txn.bytes,
+                        sender: AccountAddress::from(txn.sender.bytes()),
+                        sequence_number: txn.sequence_number,
+                        chain_id: txn.chain_id.into_u64().into(),
+                    }, 0, TimelineState::Ready(0), false, None, None);
+                    // TODO(gravity_byteyue): handle error msg
+                });
+            }
+            Err(e) => {
+                warn!("Error when recv peding txns {:?}", e);
+                continue;
+            }
+        }
     }
 }
 
 // A pool of VMValidators that can be used to validate transactions concurrently. This is done because
 // the VM is not thread safe today. This is a temporary solution until the VM is made thread safe.
 #[derive(Clone)]
-pub struct PooledVMValidator {
-}
+pub struct PooledVMValidator {}
 
 impl PooledVMValidator {
     pub fn new() -> Self {
@@ -111,7 +138,6 @@ pub trait TransactionValidation: Send + Sync + Clone {
 }
 
 impl TransactionValidation for PooledVMValidator {
-
     fn validate_transaction(&self, txn: SignedTransaction) -> Result<VMValidatorResult> {
         Ok(VMValidatorResult::new(None, 0))
     }
@@ -120,10 +146,8 @@ impl TransactionValidation for PooledVMValidator {
         Ok(())
     }
 
-    fn notify_commit(&mut self) {
-    }
+    fn notify_commit(&mut self) {}
 }
-
 
 pub fn bootstrap(
     config: &NodeConfig,
@@ -135,11 +159,11 @@ pub fn bootstrap(
     mempool_listener: MempoolNotificationListener,
     mempool_reconfig_events: ReconfigNotificationListener<DbBackedOnChainConfig>,
     peers_and_metadata: Arc<PeersAndMetadata>,
+    execution_api: Arc<dyn ExecutionApiV2>,
 ) -> Runtime {
     let runtime = aptos_runtimes::spawn_named_runtime("shared-mem".into(), None);
     let mempool = Arc::new(Mutex::new(CoreMempool::new(config)));
-    let vm_validator = Arc::new(RwLock::new(
-        PooledVMValidator::new()));
+    let vm_validator = Arc::new(RwLock::new(PooledVMValidator::new()));
     start_shared_mempool(
         runtime.handle(),
         config,
@@ -154,6 +178,7 @@ pub fn bootstrap(
         vm_validator,
         vec![],
         peers_and_metadata,
+        execution_api,
     );
     runtime
 }

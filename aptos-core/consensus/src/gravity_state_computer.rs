@@ -13,8 +13,7 @@ use crate::{
     transaction_shuffler::TransactionShuffler,
 };
 use anyhow::Result;
-use api_types::ConsensusApi;
-use api_types::ExecutionApi;
+use api_types::{ConsensusApi, ExecutionApiV2};
 use aptos_consensus_types::{block::Block, pipelined_block::PipelinedBlock};
 use aptos_crypto::HashValue;
 use aptos_executor::block_executor::BlockExecutor;
@@ -35,13 +34,13 @@ use std::{boxed::Box, sync::Arc};
 
 pub struct ConsensusAdapterArgs {
     pub quorum_store_client: Option<Arc<QuorumStoreClient>>,
-    pub execution_api: Option<Arc<dyn ExecutionApi>>,
+    pub execution_api: Option<Arc<dyn ExecutionApiV2>>,
     pub consensus_db: Option<Arc<ConsensusDB>>,
 }
 
 impl ConsensusAdapterArgs {
     pub fn new(
-        execution_api: Arc<dyn ExecutionApi>,
+        execution_api: Arc<dyn ExecutionApiV2>,
         consensus_db: Arc<ConsensusDB>,
     ) -> Self {
         Self {

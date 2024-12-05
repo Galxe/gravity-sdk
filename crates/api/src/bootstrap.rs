@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::network::{build_network_interfaces, consensus_network_configuration, extract_network_ids, mempool_network_configuration};
-use api_types::ExecutionApi;
+use api_types::{ExecutionApi, ExecutionApiV2};
 use aptos_config::{
     config::{NetworkConfig, NodeConfig, Peer, PeerRole, RocksdbConfigs, StorageDirPaths},
     network_id::NetworkId,
@@ -152,6 +152,7 @@ pub fn init_mempool(
     consensus_to_mempool_receiver: Receiver<QuorumStoreRequest>,
     mempool_listener: MempoolNotificationListener,
     peers_and_metadata: Arc<PeersAndMetadata>,
+    execution_api: Arc<dyn ExecutionApiV2>,
 ) -> Runtime {
     let mempool_reconfig_subscription = event_subscription_service
         .subscribe_to_reconfigurations()
@@ -166,6 +167,7 @@ pub fn init_mempool(
         mempool_listener,
         mempool_reconfig_subscription,
         peers_and_metadata,
+        execution_api,
     )
 }
 

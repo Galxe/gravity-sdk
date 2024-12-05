@@ -101,8 +101,9 @@ impl ComputeRes {
     }
 }
 
+#[derive(Debug)]
 pub enum ExecError {
-
+    InternalError,
 }
 
 #[async_trait]
@@ -120,14 +121,29 @@ pub trait ExecutionApiV2: Send + Sync {
 
     // this function is called by the execution layer commit the block hash
     async fn commit_block(&self, head: ExternalBlockMeta) -> Result<(), ExecError>;
+
+    fn latest_block_number(&self) -> u64;
+
+    fn finalized_block_number(&self) -> u64;
+
+    async fn recover_ordered_block(&self, block_batch: BlockBatch);
+
+    async fn recover_execution_blocks(&self, blocks: ExecutionBlocks);
+
+    fn get_blocks_by_range(
+        &self,
+        start_block_number: u64,
+        end_block_number: u64,
+    ) -> ExecutionBlocks;
 }
+
 
 #[derive(Clone, Debug)]
 pub struct VerifiedTxn {
-    bytes: Vec<u8>,
-    sender: ExternalAccountAddress,
-    sequence_number: u64,
-    chain_id: ExternalChainId,
+    pub bytes: Vec<u8>,
+    pub sender: ExternalAccountAddress,
+    pub sequence_number: u64,
+    pub chain_id: ExternalChainId,
 }
 
 impl VerifiedTxn {
@@ -170,25 +186,6 @@ pub struct GTxn {
     pub chain_id: u64,
     /// The transaction payload, e.g., a script to execute.
     pub txn_bytes: Vec<u8>,
-}
-
-pub struct BatchClient {
-    pending_payloads: Mutex<Vec<Vec<GTxn>>>,
-}
-
-impl BatchClient {
-    pub fn new() -> Self {
-        Self { pending_payloads: Mutex::new(vec![]) }
-    }
-
-    pub fn submit(&self, txns: Vec<GTxn>) {
-        self.pending_payloads.blocking_lock().push(txns);
-    }
-
-    pub fn pull(&self) -> Vec<Vec<GTxn>> {
-        let mut payloads = self.pending_payloads.blocking_lock();
-        std::mem::take(&mut *payloads)
-    }
 }
 
 #[derive(Debug)]
