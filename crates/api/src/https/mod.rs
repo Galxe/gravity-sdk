@@ -1,7 +1,7 @@
 mod tx;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
-use api_types::ExecutionApi;
+use api_types::ExecutionApiV2;
 use aptos_crypto::HashValue;
 use aptos_logger::info;
 use axum::{
@@ -14,7 +14,7 @@ use tx::{get_tx_by_hash, submit_tx, TxRequest};
 
 pub struct HttpsServerArgs {
     pub address: String,
-    pub execution_api: Option<Arc<dyn ExecutionApi>>,
+    pub execution_api: Option<Arc<dyn ExecutionApiV2>>,
     pub cert_pem: PathBuf,
     pub key_pem: PathBuf,
 }

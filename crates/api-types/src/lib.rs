@@ -21,17 +21,17 @@ pub struct BlockHashState {
 #[async_trait]
 pub trait ConsensusApi: Send + Sync {
     // TODO(gravity_byteyue: change to return () when qs is ready)
-    async fn request_payload<'a, 'b>(
-        &'a self,
-        closure: BoxFuture<'b, Result<(), SendError>>,
-        state_block_hash: BlockHashState,
-    ) -> Result<BlockBatch, SendError>;
+    // async fn request_payload<'a, 'b>(
+    //     &'a self,
+    //     closure: BoxFuture<'b, Result<(), SendError>>,
+    //     state_block_hash: BlockHashState,
+    // ) -> Result<BlockBatch, SendError>;
 
-    async fn send_order_block(&self, txns: Vec<GTxn>);
+    async fn send_ordered_block(&self, ordered_block: ExternalBlock);
 
-    async fn recv_executed_block_hash(&self) -> [u8; 32];
+    async fn recv_executed_block_hash(&self, head: ExternalBlockMeta) -> ComputeRes;
 
-    async fn commit_block_hash(&self, block_ids: Vec<[u8; 32]>);
+    async fn commit_block_hash(&self, head: ExternalBlockMeta);
 }
 
 pub struct BlockBatch {
@@ -81,13 +81,14 @@ pub struct ExternalPayloadAttr {
     ts: u64,
 }
 
-#[derive(Hash, Eq, PartialEq, Clone)]
+#[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub struct ExternalBlockMeta {
+    // Unique identifier for block: hash of block body
     pub block_id: [u8; 32],
     pub block_number: u64,
 }
 
-
+#[derive(Debug)]
 pub struct ExternalBlock {
     pub block_meta: ExternalBlockMeta,
     pub txns: Vec<VerifiedTxn>,
@@ -99,10 +100,15 @@ impl ComputeRes {
     pub fn new(res: [u8; 32]) -> Self {
         Self(res)
     }
+
+    pub fn bytes(&self) -> [u8; 32] {
+        self.0.clone()
+    }
 }
 
+#[derive(Debug)]
 pub enum ExecError {
-
+    InternalError,
 }
 
 #[async_trait]
@@ -113,6 +119,9 @@ pub trait ExecutionApiV2: Send + Sync {
 
     async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxn>, ExecError>;
 
+    // parent的: reth的hash -> 这个得等yuxuan重构reth
+    // 当前block的: txns, 自己的block_number(aptos和reth一样)
+    // async fn send_ordered_block(&self, ordered_block: Vec<Txns>, block_number: BlockNumber, parent_mata_data: ExternalBlockMeta) -> Result<(), ExecError>;
     async fn send_ordered_block(&self, ordered_block: ExternalBlock) -> Result<(), ExecError>;
 
     // the block hash is the hash of the block that has been executed, which is passed by the send_ordered_block
@@ -120,14 +129,29 @@ pub trait ExecutionApiV2: Send + Sync {
 
     // this function is called by the execution layer commit the block hash
     async fn commit_block(&self, head: ExternalBlockMeta) -> Result<(), ExecError>;
+
+    fn latest_block_number(&self) -> u64;
+
+    fn finalized_block_number(&self) -> u64;
+
+    async fn recover_ordered_block(&self, block_batch: BlockBatch);
+
+    async fn recover_execution_blocks(&self, blocks: ExecutionBlocks);
+
+    fn get_blocks_by_range(
+        &self,
+        start_block_number: u64,
+        end_block_number: u64,
+    ) -> ExecutionBlocks;
 }
+
 
 #[derive(Clone, Debug)]
 pub struct VerifiedTxn {
-    bytes: Vec<u8>,
-    sender: ExternalAccountAddress,
-    sequence_number: u64,
-    chain_id: ExternalChainId,
+    pub bytes: Vec<u8>,
+    pub sender: ExternalAccountAddress,
+    pub sequence_number: u64,
+    pub chain_id: ExternalChainId,
 }
 
 impl VerifiedTxn {
@@ -170,25 +194,6 @@ pub struct GTxn {
     pub chain_id: u64,
     /// The transaction payload, e.g., a script to execute.
     pub txn_bytes: Vec<u8>,
-}
-
-pub struct BatchClient {
-    pending_payloads: Mutex<Vec<Vec<GTxn>>>,
-}
-
-impl BatchClient {
-    pub fn new() -> Self {
-        Self { pending_payloads: Mutex::new(vec![]) }
-    }
-
-    pub fn submit(&self, txns: Vec<GTxn>) {
-        self.pending_payloads.blocking_lock().push(txns);
-    }
-
-    pub fn pull(&self) -> Vec<Vec<GTxn>> {
-        let mut payloads = self.pending_payloads.blocking_lock();
-        std::mem::take(&mut *payloads)
-    }
 }
 
 #[derive(Debug)]

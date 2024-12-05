@@ -6,8 +6,8 @@ use std::{
     thread,
 };
 
-use crate::network::{build_network_interfaces, consensus_network_configuration, extract_network_ids};
-use api_types::ExecutionApi;
+use crate::network::{build_network_interfaces, consensus_network_configuration, extract_network_ids, mempool_network_configuration};
+use api_types::{ExecutionApi, ExecutionApiV2};
 use aptos_config::{
     config::{NetworkConfig, NodeConfig, Peer, PeerRole, RocksdbConfigs, StorageDirPaths},
     network_id::NetworkId,
@@ -79,15 +79,16 @@ pub fn start(node_config: NodeConfig, execution_api: Arc<dyn ExecutionApi>) -> a
     }
 }
 
-pub fn init_network_interfaces<T>(
+pub fn init_network_interfaces<T, E>(
     network_builder: &mut NetworkBuilder,
     network_id: NetworkId,
     network_config: &NetworkConfig,
     node_config: &NodeConfig,
     peers_and_metadata: Arc<PeersAndMetadata>,
-) -> ApplicationNetworkInterfaces<T>
+) -> (ApplicationNetworkInterfaces<T>, ApplicationNetworkInterfaces<E>)
 where
     T: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
+    E: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
 {
     let consensus_network_interfaces = build_network_interfaces::<T>(
         network_builder,
@@ -96,7 +97,14 @@ where
         consensus_network_configuration(node_config),
         peers_and_metadata.clone(),
     );
-    consensus_network_interfaces
+    let mempool_interfaces = build_network_interfaces::<E>(
+        network_builder,
+        network_id,
+        &network_config,
+        mempool_network_configuration(node_config),
+        peers_and_metadata.clone(),
+    );
+    (consensus_network_interfaces, mempool_interfaces)
 }
 
 /// Spawns a new thread for the node inspection service
@@ -140,10 +148,11 @@ pub fn init_mempool(
     db: &DbReaderWriter,
     event_subscription_service: &mut EventSubscriptionService,
     mempool_interfaces: ApplicationNetworkInterfaces<MempoolSyncMsg>,
-    mempool_client_receiver: Receiver<MempoolClientRequest>,
+    _mempool_client_receiver: Receiver<MempoolClientRequest>,
     consensus_to_mempool_receiver: Receiver<QuorumStoreRequest>,
     mempool_listener: MempoolNotificationListener,
     peers_and_metadata: Arc<PeersAndMetadata>,
+    execution_api: Arc<dyn ExecutionApiV2>,
 ) -> Runtime {
     let mempool_reconfig_subscription = event_subscription_service
         .subscribe_to_reconfigurations()
@@ -153,11 +162,12 @@ pub fn init_mempool(
         Arc::clone(&db.reader),
         mempool_interfaces.network_client,
         mempool_interfaces.network_service_events,
-        mempool_client_receiver,
+        _mempool_client_receiver,
         consensus_to_mempool_receiver,
         mempool_listener,
         mempool_reconfig_subscription,
         peers_and_metadata,
+        execution_api,
     )
 }
 

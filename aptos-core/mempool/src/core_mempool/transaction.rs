@@ -79,6 +79,10 @@ impl VerifiedTxn {
         self.sequence_number
     }
 
+    pub fn chain_id(&self) -> ChainId {
+        self.chain_id
+    }
+
     pub(crate) fn get_hash(&self) -> HashValue {
         HashValue::sha3_256_of(&self.bytes)
     }
@@ -92,10 +96,10 @@ pub struct SequenceInfo {
 
 #[derive(Clone, Debug)]
 pub struct VerifiedTxn {
-    bytes: Vec<u8>,
-    sender: AccountAddress,
-    sequence_number: u64,
-    chain_id: chain_id::ChainId,
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) sender: AccountAddress,
+    pub(crate) sequence_number: u64,
+    pub(crate) chain_id: chain_id::ChainId,
 }
 
 #[derive(Clone, Debug)]

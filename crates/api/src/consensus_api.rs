@@ -6,8 +6,7 @@ use crate::{
         start_consensus, start_node_inspection_service,
     }, consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler}, https::{https_server, HttpsServerArgs}, logger, network::{create_network_runtime, extract_network_configs}
 };
-use api_types::BatchClient;
-use api_types::{BlockBatch, BlockHashState, ConsensusApi, ExecutionApi, GTxn};
+use api_types::{BlockBatch, BlockHashState, ComputeRes, ConsensusApi, ExecutionApi, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, GTxn};
 use aptos_config::{config::NodeConfig, network_id::NetworkId};
 use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
 use aptos_consensus::consensusdb::ConsensusDB;
@@ -29,15 +28,14 @@ use tokio::runtime::Runtime;
 
 pub struct ConsensusEngine {
     address: String,
-    execution_api: Arc<dyn ExecutionApi>,
-    batch_client: Arc<BatchClient>,
+    execution_api: Arc<dyn ExecutionApiV2>,
     runtime_vec: Vec<Runtime>,
 }
 
 impl ConsensusEngine {
     pub fn init(
         node_config: NodeConfig,
-        execution_api: Arc<dyn ExecutionApi>,
+        execution_api: Arc<dyn ExecutionApiV2>,
         block_hash_state: BlockHashState,
         chain_id: u64,
     ) -> Arc<Self> {
@@ -69,7 +67,7 @@ impl ConsensusEngine {
             peers_and_metadata.clone(),
         );
         let network_id: NetworkId = network_config.network_id;
-        let consensus_network_interfaces = init_network_interfaces(
+        let (consensus_network_interfaces, mempool_interfaces) = init_network_interfaces(
             &mut network_builder,
             network_id,
             &network_config,
@@ -92,8 +90,36 @@ impl ConsensusEngine {
         start_node_inspection_service(&node_config, peers_and_metadata.clone());
 
         let (consensus_to_mempool_sender, consensus_to_mempool_receiver) = mpsc::channel(1);
+        let (notification_sender, notification_receiver) = mpsc::channel(1);
+
         // Create notification senders and listeners for mempool, consensus and the storage service
         // For Gravity we only use it to notify the mempool for the committed txn gc logic
+        let mempool_notifier =
+            aptos_mempool_notifications::MempoolNotifier::new(notification_sender);
+        let mempool_notification_handler = MempoolNotificationHandler::new(mempool_notifier);
+        let mut consensus_mempool_handler =
+            ConsensusToMempoolHandler::new(mempool_notification_handler, consensus_listener);
+        let runtime = aptos_runtimes::spawn_named_runtime("Con2Mempool".into(), None);
+        runtime.spawn(async move {
+            consensus_mempool_handler.start().await;
+        });
+        network_runtimes.push(runtime);
+        let mempool_listener =
+            aptos_mempool_notifications::MempoolNotificationListener::new(notification_receiver);
+
+        let (_mempool_client_sender, _mempool_client_receiver) = mpsc::channel(1);
+        let mempool_runtime = init_mempool(
+            &node_config,
+            &db,
+            &mut event_subscription_service,
+            mempool_interfaces,
+            _mempool_client_receiver,
+            consensus_to_mempool_receiver,
+            mempool_listener,
+            peers_and_metadata,
+            execution_api.clone(),
+        );
+        network_runtimes.push(mempool_runtime);
         let mut args = ConsensusAdapterArgs::new(execution_api.clone(), consensus_db);
         let (consensus_runtime, _, _, execution_proxy) = start_consensus(
             &node_config,
@@ -105,21 +131,12 @@ impl ConsensusEngine {
             &mut args,
         );
         network_runtimes.push(consensus_runtime);
-        let quorum_store_client = args.quorum_store_client.as_mut().unwrap();
         // trigger this to make epoch manager invoke new epoch
         let arc_self = Arc::new(Self {
             address: node_config.validator_network.as_ref().unwrap().listen_address.to_string(),
             execution_api: execution_api.clone(),
-            batch_client: quorum_store_client.get_batch_client(),
             runtime_vec: network_runtimes,
         });
-        quorum_store_client.set_consensus_api(arc_self.clone());
-        // sleep
-        quorum_store_client.set_init_reth_hash(block_hash_state);
-        // Wait for the network to be done
-        // arc_self.runtime_vec.last().as_ref().expect("msg").block_on(async move {
-        //     tokio::time::sleep(Duration::from_secs(10)).await;
-        // });
         // process new round should be after init reth hash
         let _ = event_subscription_service.notify_initial_configs(1_u64);
 
@@ -140,56 +157,30 @@ impl ConsensusEngine {
 
 #[async_trait]
 impl ConsensusApi for ConsensusEngine {
-    async fn request_payload<'a, 'b>(
-        &'a self,
-        closure: BoxFuture<'b, Result<(), SendError>>,
-        state_block_hash: BlockHashState,
-    ) -> Result<BlockBatch, SendError> {
-        // let txns = self.execution_api.request_transactions(safe_block_hash, head_block_hash).await;
-        // self.batch_client.submit(txns);
-        // closure.await
-        info!(
-            "request_payload, safe {:?}, head {:?}, finalized {:?}",
-            HashValue::new(state_block_hash.safe_hash),
-            HashValue::new(state_block_hash.head_hash),
-            HashValue::new(state_block_hash.finalized_hash)
-        );
-        Ok(self.execution_api.request_block_batch(state_block_hash).await)
+    async fn send_ordered_block(&self, ordered_block: ExternalBlock) {
+        info!("send_order_block {:?}", ordered_block);
+        match self.execution_api.send_ordered_block(ordered_block).await {
+            Ok(_) => {
+            },
+            Err(_) => panic!("send_ordered_block should not fail"),
+        }
     }
 
-    async fn send_order_block(&self, txns: Vec<GTxn>) {
-        // let mut return_txns = vec![GTxn::default(); txns.len()];
-        // txns.iter().for_each(|txn| {
-        //     let txn_bytes = match txn.payload() {
-        //         TransactionPayload::GTxnBytes(bytes) => bytes,
-        //         _ => {
-        //             panic!("should never consists other payload type");
-        //         }
-        //     };
-        //     let gtxn = GTxn {
-        //         sequence_number: txn.sequence_number(),
-        //         max_gas_amount: txn.max_gas_amount(),
-        //         gas_unit_price: txn.gas_unit_price(),
-        //         expiration_timestamp_secs: txn.expiration_timestamp_secs(),
-        //         chain_id: txn.chain_id().to_u8() as u64,
-        //         txn_bytes: (*txn_bytes.clone()).to_owned(),
-        //     };
-        //     return_txns[txn.g_ext().txn_index_in_block as usize] = gtxn;
-        // });
-        info!("send_order_block");
-        self.execution_api.send_ordered_block(txns).await
-    }
-
-    async fn recv_executed_block_hash(&self) -> [u8; 32] {
+    async fn recv_executed_block_hash(&self, head: ExternalBlockMeta) -> ComputeRes {
         info!("recv_executed_block_hash");
-        self.execution_api.recv_executed_block_hash().await
+        let res = match self.execution_api.recv_executed_block_hash(head).await {
+            Ok(r) => r,
+            Err(_) => panic!("send_ordered_block should not fail"),
+        };
+        res
     }
 
-    async fn commit_block_hash(&self, block_ids: Vec<[u8; 32]>) {
-        info!(
-            "commit_block_hash {:?}",
-            block_ids.iter().map(|id| { HashValue::new(*id) }).collect::<Vec<_>>()
-        );
-        self.execution_api.commit_block_hash(block_ids).await
+    async fn commit_block_hash(&self, head: ExternalBlockMeta) {
+        match self.execution_api.commit_block(head).await {
+            Ok(_) => {
+
+            },
+            Err(_) => panic!("commit_block_hash should not fail"),
+        }
     }
 }
