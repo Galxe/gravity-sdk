@@ -79,6 +79,10 @@ impl VerifiedTxn {
         self.sequence_number
     }
 
+    pub fn chain_id(&self) -> ChainId {
+        self.chain_id
+    }
+
     pub(crate) fn get_hash(&self) -> HashValue {
         HashValue::sha3_256_of(&self.bytes)
     }

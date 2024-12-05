@@ -6,7 +6,7 @@ use crate::{
         start_consensus, start_node_inspection_service,
     }, consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler}, https::{https_server, HttpsServerArgs}, logger, network::{create_network_runtime, extract_network_configs}
 };
-use api_types::{BlockBatch, BlockHashState, ConsensusApi, ExecutionApi, GTxn};
+use api_types::{BlockBatch, BlockHashState, ComputeRes, ConsensusApi, ExecutionApi, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, GTxn};
 use aptos_config::{config::NodeConfig, network_id::NetworkId};
 use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
 use aptos_consensus::consensusdb::ConsensusDB;
@@ -28,14 +28,14 @@ use tokio::runtime::Runtime;
 
 pub struct ConsensusEngine {
     address: String,
-    execution_api: Arc<dyn ExecutionApi>,
+    execution_api: Arc<dyn ExecutionApiV2>,
     runtime_vec: Vec<Runtime>,
 }
 
 impl ConsensusEngine {
     pub fn init(
         node_config: NodeConfig,
-        execution_api: Arc<dyn ExecutionApi>,
+        execution_api: Arc<dyn ExecutionApiV2>,
         block_hash_state: BlockHashState,
         chain_id: u64,
     ) -> Arc<Self> {
@@ -117,6 +117,7 @@ impl ConsensusEngine {
             consensus_to_mempool_receiver,
             mempool_listener,
             peers_and_metadata,
+            execution_api.clone(),
         );
         network_runtimes.push(mempool_runtime);
         let mut args = ConsensusAdapterArgs::new(execution_api.clone(), consensus_db);
@@ -156,56 +157,30 @@ impl ConsensusEngine {
 
 #[async_trait]
 impl ConsensusApi for ConsensusEngine {
-    async fn request_payload<'a, 'b>(
-        &'a self,
-        closure: BoxFuture<'b, Result<(), SendError>>,
-        state_block_hash: BlockHashState,
-    ) -> Result<BlockBatch, SendError> {
-        // let txns = self.execution_api.request_transactions(safe_block_hash, head_block_hash).await;
-        // self.batch_client.submit(txns);
-        // closure.await
-        info!(
-            "request_payload, safe {:?}, head {:?}, finalized {:?}",
-            HashValue::new(state_block_hash.safe_hash),
-            HashValue::new(state_block_hash.head_hash),
-            HashValue::new(state_block_hash.finalized_hash)
-        );
-        Ok(self.execution_api.request_block_batch(state_block_hash).await)
+    async fn send_ordered_block(&self, ordered_block: ExternalBlock) {
+        info!("send_order_block {:?}", ordered_block);
+        match self.execution_api.send_ordered_block(ordered_block).await {
+            Ok(_) => {
+            },
+            Err(_) => panic!("send_ordered_block should not fail"),
+        }
     }
 
-    async fn send_order_block(&self, txns: Vec<GTxn>) {
-        // let mut return_txns = vec![GTxn::default(); txns.len()];
-        // txns.iter().for_each(|txn| {
-        //     let txn_bytes = match txn.payload() {
-        //         TransactionPayload::GTxnBytes(bytes) => bytes,
-        //         _ => {
-        //             panic!("should never consists other payload type");
-        //         }
-        //     };
-        //     let gtxn = GTxn {
-        //         sequence_number: txn.sequence_number(),
-        //         max_gas_amount: txn.max_gas_amount(),
-        //         gas_unit_price: txn.gas_unit_price(),
-        //         expiration_timestamp_secs: txn.expiration_timestamp_secs(),
-        //         chain_id: txn.chain_id().to_u8() as u64,
-        //         txn_bytes: (*txn_bytes.clone()).to_owned(),
-        //     };
-        //     return_txns[txn.g_ext().txn_index_in_block as usize] = gtxn;
-        // });
-        info!("send_order_block");
-        self.execution_api.send_ordered_block(txns).await
-    }
-
-    async fn recv_executed_block_hash(&self) -> [u8; 32] {
+    async fn recv_executed_block_hash(&self, head: ExternalBlockMeta) -> ComputeRes {
         info!("recv_executed_block_hash");
-        self.execution_api.recv_executed_block_hash().await
+        let res = match self.execution_api.recv_executed_block_hash(head).await {
+            Ok(r) => r,
+            Err(_) => panic!("send_ordered_block should not fail"),
+        };
+        res
     }
 
-    async fn commit_block_hash(&self, block_ids: Vec<[u8; 32]>) {
-        info!(
-            "commit_block_hash {:?}",
-            block_ids.iter().map(|id| { HashValue::new(*id) }).collect::<Vec<_>>()
-        );
-        self.execution_api.commit_block_hash(block_ids).await
+    async fn commit_block_hash(&self, head: ExternalBlockMeta) {
+        match self.execution_api.commit_block(head).await {
+            Ok(_) => {
+
+            },
+            Err(_) => panic!("commit_block_hash should not fail"),
+        }
     }
 }

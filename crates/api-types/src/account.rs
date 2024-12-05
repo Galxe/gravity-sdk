@@ -6,6 +6,9 @@ use serde::{Deserialize, Serialize};
 pub struct ExternalAccountAddress([u8; 32]);
 
 impl ExternalAccountAddress {
+    pub fn new(address: [u8; 32]) -> Self {
+        Self(address)
+    }
     pub fn bytes(&self) -> [u8; 32] {
         self.0.clone()
     }

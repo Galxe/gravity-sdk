@@ -293,7 +293,7 @@ impl BlockStore {
             let commit_block_hash = blocks.latest_block_hash;
             let commit_block_number = blocks.latest_block_number;
             execution_api.recover_execution_blocks(blocks).await;
-            // TODO(gravity_lightman): error handle
+            // TODO(gravity_lightman): error handle, block id is unique for reth or aptos?
             execution_api
                 .commit_block(ExternalBlockMeta {
                     block_id: commit_block_hash,

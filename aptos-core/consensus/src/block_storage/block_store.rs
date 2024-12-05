@@ -320,21 +320,19 @@ impl BlockStore {
         self.pending_blocks.lock().gc(finality_proof.commit_info().round());
         if recovery {
             for p_block in &blocks_to_commit {
-                if let Some(DirectMempool((block_hash, _))) = p_block.block().payload() {
-                    info!("recover commit block {} block_hash {}", p_block.block(), block_hash);
-                    // TODO(gravity_lightman): Error handle
-                    self.execution_api
-                        .as_ref()
-                        .unwrap()
-                        .commit_block(ExternalBlockMeta {
-                            block_id: **block_hash,
-                            block_number: p_block
-                                .block()
-                                .block_number()
-                                .expect("No block number set"),
-                        })
-                        .await;
-                }
+                info!("recover commit block {}", p_block.block());
+                // TODO(gravity_lightman): Error handle
+                self.execution_api
+                    .as_ref()
+                    .unwrap()
+                    .commit_block(ExternalBlockMeta {
+                        block_id: *p_block.block().id(),
+                        block_number: p_block
+                            .block()
+                            .block_number()
+                            .expect("No block number set"),
+                    })
+                    .await;
             }
             let commit_decision = finality_proof.ledger_info().clone();
             block_tree.write().commit_callback(

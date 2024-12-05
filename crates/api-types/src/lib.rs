@@ -21,17 +21,17 @@ pub struct BlockHashState {
 #[async_trait]
 pub trait ConsensusApi: Send + Sync {
     // TODO(gravity_byteyue: change to return () when qs is ready)
-    async fn request_payload<'a, 'b>(
-        &'a self,
-        closure: BoxFuture<'b, Result<(), SendError>>,
-        state_block_hash: BlockHashState,
-    ) -> Result<BlockBatch, SendError>;
+    // async fn request_payload<'a, 'b>(
+    //     &'a self,
+    //     closure: BoxFuture<'b, Result<(), SendError>>,
+    //     state_block_hash: BlockHashState,
+    // ) -> Result<BlockBatch, SendError>;
 
-    async fn send_order_block(&self, txns: Vec<GTxn>);
+    async fn send_ordered_block(&self, ordered_block: ExternalBlock);
 
-    async fn recv_executed_block_hash(&self) -> [u8; 32];
+    async fn recv_executed_block_hash(&self, head: ExternalBlockMeta) -> ComputeRes;
 
-    async fn commit_block_hash(&self, block_ids: Vec<[u8; 32]>);
+    async fn commit_block_hash(&self, head: ExternalBlockMeta);
 }
 
 pub struct BlockBatch {
@@ -81,13 +81,14 @@ pub struct ExternalPayloadAttr {
     ts: u64,
 }
 
-#[derive(Hash, Eq, PartialEq, Clone)]
+#[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub struct ExternalBlockMeta {
+    // Unique identifier for block: hash of block body
     pub block_id: [u8; 32],
     pub block_number: u64,
 }
 
-
+#[derive(Debug)]
 pub struct ExternalBlock {
     pub block_meta: ExternalBlockMeta,
     pub txns: Vec<VerifiedTxn>,
@@ -98,6 +99,10 @@ pub struct ComputeRes([u8; 32]);
 impl ComputeRes {
     pub fn new(res: [u8; 32]) -> Self {
         Self(res)
+    }
+
+    pub fn bytes(&self) -> [u8; 32] {
+        self.0.clone()
     }
 }
 
@@ -114,6 +119,9 @@ pub trait ExecutionApiV2: Send + Sync {
 
     async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxn>, ExecError>;
 
+    // parent的: reth的hash -> 这个得等yuxuan重构reth
+    // 当前block的: txns, 自己的block_number(aptos和reth一样)
+    // async fn send_ordered_block(&self, ordered_block: Vec<Txns>, block_number: BlockNumber, parent_mata_data: ExternalBlockMeta) -> Result<(), ExecError>;
     async fn send_ordered_block(&self, ordered_block: ExternalBlock) -> Result<(), ExecError>;
 
     // the block hash is the hash of the block that has been executed, which is passed by the send_ordered_block

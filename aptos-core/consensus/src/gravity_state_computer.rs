@@ -13,14 +13,15 @@ use crate::{
     transaction_shuffler::TransactionShuffler,
 };
 use anyhow::Result;
-use api_types::{ConsensusApi, ExecutionApiV2};
+use api_types::account::{ExternalAccountAddress, ExternalChainId};
+use api_types::{ConsensusApi, ExecutionApiV2, ExternalBlock, ExternalBlockMeta};
 use aptos_consensus_types::{block::Block, pipelined_block::PipelinedBlock};
 use aptos_crypto::HashValue;
 use aptos_executor::block_executor::BlockExecutor;
 use aptos_executor_types::{
     BlockExecutorTrait, ExecutorError, ExecutorResult, StateCheckpointOutput, StateComputeResult,
 };
-use aptos_mempool::MempoolClientRequest;
+use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 use aptos_types::block_executor::partitioner::ExecutableBlock;
 use aptos_types::{
     block_executor::config::BlockExecutorConfigFromOnchain, epoch_state::EpochState,
@@ -39,10 +40,7 @@ pub struct ConsensusAdapterArgs {
 }
 
 impl ConsensusAdapterArgs {
-    pub fn new(
-        execution_api: Arc<dyn ExecutionApiV2>,
-        consensus_db: Arc<ConsensusDB>,
-    ) -> Self {
+    pub fn new(execution_api: Arc<dyn ExecutionApiV2>, consensus_db: Arc<ConsensusDB>) -> Self {
         Self {
             quorum_store_client: None,
             execution_api: Some(execution_api),
@@ -55,11 +53,7 @@ impl ConsensusAdapterArgs {
     }
 
     pub fn dummy() -> Self {
-        Self {
-            quorum_store_client: None,
-            execution_api: None,
-            consensus_db: None,
-        }
+        Self { quorum_store_client: None, execution_api: None, consensus_db: None }
     }
 }
 
@@ -123,8 +117,13 @@ impl StateComputer for GravityExecutionProxy {
         parent_block_id: HashValue,
         randomness: Option<Randomness>,
     ) -> StateComputeResultFut {
+        assert!(block.block_number().is_some());
         let txns = self.aptos_state_computer.get_block_txns(block).await;
         let empty_block = txns.is_empty();
+        let meta_data = ExternalBlockMeta {
+            block_id: *block.parent_id(),
+            block_number: block.block_number().expect("No block number"),
+        };
 
         let (block_result_sender, block_result_receiver) = oneshot::channel();
         // We would export the empty block detail to the outside GCEI caller
@@ -132,16 +131,34 @@ impl StateComputer for GravityExecutionProxy {
             let compute_res_bytes = [0u8; 32];
             block_result_sender.send(HashValue::new(compute_res_bytes)).expect("send failed");
         } else {
-            // TODO(gravity_byteyue): don't do memory copy
-            let gtxns = txns.iter().map(|txn| txn.clone().into()).collect();
-            self.consensus_engine.get().expect("ConsensusEngine").send_order_block(gtxns).await;
+            let vtxns: Vec<VerifiedTxn> =
+                txns.iter().map(|txn| Into::<VerifiedTxn>::into(&txn.clone())).collect();
+            let real_txns = vtxns
+                .into_iter()
+                .map(|txn| api_types::VerifiedTxn {
+                    bytes: txn.bytes().to_vec(),
+                    sender: ExternalAccountAddress::new(txn.sender().into_bytes()),
+                    sequence_number: txn.sequence_number(),
+                    chain_id: ExternalChainId::new(txn.chain_id().id()),
+                })
+                .collect();
+            let external_block = ExternalBlock { block_meta: meta_data.clone(), txns: real_txns };
+            self.consensus_engine
+                .get()
+                .expect("ConsensusEngine")
+                .send_ordered_block(external_block)
+                .await;
         }
         let engine = Some(self.consensus_engine.clone());
         Box::pin(async move {
             match engine {
                 Some(e) => {
                     let result = StateComputeResult::with_root_hash(HashValue::new(
-                        e.get().expect("consensus engine").recv_executed_block_hash().await,
+                        e.get()
+                            .expect("consensus engine")
+                            .recv_executed_block_hash(meta_data)
+                            .await
+                            .bytes(),
                     ));
                     Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
                 }
@@ -234,19 +251,14 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             // todo(gravity_byteyue): don't spawn runtime each time
             let runtime = aptos_runtimes::spawn_named_runtime("tmp".into(), None);
             let _ = runtime.block_on(async move {
-                let encode_ids = block_ids
-                    .iter()
-                    .map(|id| {
-                        let mut bytes = [0; 32];
-                        bytes.copy_from_slice(id.as_slice());
-                        bytes
-                    })
-                    .collect();
-                self.consensus_engine
-                    .get()
-                    .expect("consensus engine")
-                    .commit_block_hash(encode_ids)
-                    .await;
+                for block_id in block_ids {
+                    let meta = ExternalBlockMeta { block_id: *block_id, block_number: 0 };
+                    self.consensus_engine
+                        .get()
+                        .expect("consensus engine")
+                        .commit_block_hash(meta)
+                        .await;
+                }
             });
             // if let Err(e) = r {
             //     return Err(e);
