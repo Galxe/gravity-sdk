@@ -16,14 +16,6 @@ pub(crate) struct Cli {
 
     #[command(flatten)]
     pub gravity_node_config: GravityNodeArgs,
-
-    /// Path to the configuration file
-    #[arg(long)]
-    pub listen_url: String,
-
-    /// Path to the configuration file
-    #[arg(long)]
-    pub db_path: String,
 }
 
 impl Cli {
