@@ -156,7 +156,7 @@ async fn mixed_payload_client_should_prioritize_validator_txns() {
         user_payload_client: Arc::new(user::DummyClient::new(all_user_txns.clone())),
     };
 
-    let (pulled_validator_txns, Payload::DirectMempool((_hash_value, pulled_user_txns))) = client
+    let (pulled_validator_txns, Payload::DirectMempool(pulled_user_txns)) = client
         .pull_payload(
             Duration::from_secs(1), // max_poll_time
             120,                    // max_items
@@ -182,7 +182,7 @@ async fn mixed_payload_client_should_prioritize_validator_txns() {
     assert_eq!(3, pulled_validator_txns.len());
     assert_eq!(10, pulled_user_txns.len());
 
-    let (pulled_validator_txns, Payload::DirectMempool((_, _pulled_user_txns))) = client
+    let (pulled_validator_txns, Payload::DirectMempool(_pulled_user_txns)) = client
         .pull_payload(
             Duration::from_micros(500), // max_poll_time
             120,                        // max_items
@@ -208,7 +208,7 @@ async fn mixed_payload_client_should_prioritize_validator_txns() {
     assert_eq!(1, pulled_validator_txns.len());
     assert_eq!(0, pulled_user_txns.len());
 
-    let (pulled_validator_txns, Payload::DirectMempool((_, pulled_user_txns))) = client
+    let (pulled_validator_txns, Payload::DirectMempool(pulled_user_txns)) = client
         .pull_payload(
             Duration::from_secs(1), // max_poll_time
             2,                      // max_items
@@ -234,7 +234,7 @@ async fn mixed_payload_client_should_prioritize_validator_txns() {
     assert_eq!(2, pulled_validator_txns.len());
     assert_eq!(0, pulled_user_txns.len());
 
-    let (pulled_validator_txns, Payload::DirectMempool((_, pulled_user_txns))) = client
+    let (pulled_validator_txns, Payload::DirectMempool(pulled_user_txns)) = client
         .pull_payload(
             Duration::from_secs(1), // max_poll_time
             120,                    // max_items
@@ -278,7 +278,7 @@ async fn mixed_payload_client_should_respect_validator_txn_feature_flag() {
         user_payload_client: Arc::new(user::DummyClient::new(all_user_txns.clone())),
     };
 
-    let (pulled_validator_txns, Payload::DirectMempool((_, pulled_user_txns))) = client
+    let (pulled_validator_txns, Payload::DirectMempool(pulled_user_txns)) = client
         .pull_payload(
             Duration::from_millis(50), // max_poll_time
             120,                       // max_items

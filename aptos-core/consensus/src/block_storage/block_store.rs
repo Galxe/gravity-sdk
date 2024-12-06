@@ -166,18 +166,6 @@ impl BlockStore {
         self.inner.clone()
     }
 
-    pub fn get_safe_block_hash(&self) -> HashValue {
-        self.inner.read().get_safe_block_hash()
-    }
-
-    pub fn get_head_block_hash(&self) -> HashValue {
-        self.inner.read().get_head_block_hash()
-    }
-
-    pub fn get_finalize_hash(&self) -> HashValue {
-        self.inner.read().get_finalized_block_hash()
-    }
-
     async fn recover_blocks(&self) {
         // reproduce the same batches (important for the commit phase)
         let mut certs = self.inner.read().get_all_quorum_certs_with_commit_info();
@@ -194,11 +182,11 @@ impl BlockStore {
                 assert!(block_to_recover.is_some());
                 let block_to_recover = block_to_recover.unwrap();
                 self.init_block_number(&vec![block_to_recover.clone()]);
-                if let Some(DirectMempool((block_hash, txns))) = block_to_recover.block().payload()
+                if let Some(DirectMempool(txns)) = block_to_recover.block().payload()
                 {
-                    info!("recover block {} block_hash {}", block_to_recover.block(), block_hash);
+                    info!("recover block {}", block_to_recover.block());
                     let g_txns = txns.iter().map(|txn| txn.into()).collect();
-                    let block_batch = BlockBatch { txns: g_txns, block_hash: **block_hash };
+                    let block_batch = BlockBatch { txns: g_txns };
                     self.execution_api.as_ref().unwrap().recover_ordered_block(block_batch).await;
                 }
                 if qc.commit_info().round() <= self.commit_root().round() {

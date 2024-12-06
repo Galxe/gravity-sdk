@@ -252,7 +252,7 @@ fn sum_max_txns_to_execute(m1: Option<u64>, m2: Option<u64>) -> Option<u64> {
 /// The payload in block.
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
 pub enum Payload {
-    DirectMempool((HashValue, Vec<SignedTransaction>)),
+    DirectMempool(Vec<SignedTransaction>),
     InQuorumStore(ProofWithData),
     InQuorumStoreWithLimit(ProofWithDataWithTxnLimit),
     QuorumStoreInlineHybrid(
@@ -296,13 +296,13 @@ impl Payload {
                 Payload::InQuorumStore(ProofWithData::new(Vec::new()))
             }
         } else {
-            Payload::DirectMempool((HashValue::zero(), Vec::new()))
+            Payload::DirectMempool(Vec::new())
         }
     }
 
     pub fn len(&self) -> usize {
         match self {
-            Payload::DirectMempool((_, txns)) => txns.len(),
+            Payload::DirectMempool(txns) => txns.len(),
             Payload::InQuorumStore(proof_with_status) => proof_with_status.len(),
             Payload::InQuorumStoreWithLimit(proof_with_status) => {
                 // here we return the actual length of the payload; limit is considered at the stage
@@ -322,7 +322,7 @@ impl Payload {
 
     pub fn len_for_execution(&self) -> u64 {
         match self {
-            Payload::DirectMempool((_, txns)) => txns.len() as u64,
+            Payload::DirectMempool(txns) => txns.len() as u64,
             Payload::InQuorumStore(proof_with_status) => proof_with_status.len() as u64,
             Payload::InQuorumStoreWithLimit(proof_with_status) => {
                 // here we return the actual length of the payload; limit is considered at the stage
@@ -348,7 +348,7 @@ impl Payload {
 
     pub fn is_empty(&self) -> bool {
         match self {
-            Payload::DirectMempool((_, txns)) => txns.is_empty(),
+            Payload::DirectMempool(txns) => txns.is_empty(),
             Payload::InQuorumStore(proof_with_status) => proof_with_status.proofs.is_empty(),
             Payload::InQuorumStoreWithLimit(proof_with_status) => {
                 proof_with_status.proof_with_data.proofs.is_empty()
@@ -362,12 +362,10 @@ impl Payload {
 
     pub fn extend(self, other: Payload) -> Self {
         match (self, other) {
-            (Payload::DirectMempool((_, v1)), Payload::DirectMempool((_, v2))) => {
+            (Payload::DirectMempool(v1), Payload::DirectMempool(v2)) => {
                 let mut v3 = v1;
                 v3.extend(v2);
-                /// TODO(gravity_jan): DirectMempool Payload should not be merged
-                panic!("DirectMempool Payload should not be merged");
-                Payload::DirectMempool((HashValue::zero(), v3))
+                Payload::DirectMempool(v3)
             },
             (Payload::InQuorumStore(p1), Payload::InQuorumStore(p2)) => {
                 let mut p3 = p1;
@@ -435,7 +433,7 @@ impl Payload {
     /// This is potentially computationally expensive
     pub fn size(&self) -> usize {
         match self {
-            Payload::DirectMempool((_, txns)) => txns
+            Payload::DirectMempool(txns) => txns
                 .par_iter()
                 .with_min_len(100)
                 .map(|txn| txn.raw_txn_bytes_len())
@@ -522,7 +520,7 @@ impl Payload {
 impl fmt::Display for Payload {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Payload::DirectMempool((_, txns)) => {
+            Payload::DirectMempool(txns) => {
                 write!(f, "InMemory txns: {}", txns.len())
             },
             Payload::InQuorumStore(proof_with_status) => {
@@ -623,7 +621,7 @@ impl From<&Vec<&Payload>> for PayloadFilter {
         if direct_mode {
             let mut exclude_txns = Vec::new();
             for payload in exclude_payloads {
-                if let Payload::DirectMempool((_, txns)) = payload {
+                if let Payload::DirectMempool(txns) = payload {
                     for txn in txns {
                         exclude_txns.push(TransactionSummary {
                             sender: txn.sender(),

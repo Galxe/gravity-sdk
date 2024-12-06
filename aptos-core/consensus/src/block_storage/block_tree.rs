@@ -549,35 +549,6 @@ impl BlockTree {
         self.path_from_root_to_block(block_id, self.commit_root_id, self.commit_root().round())
     }
 
-    fn get_block_reth_hash(&self, block_id: HashValue) -> HashValue {
-        let block = self.id_to_block.get(&block_id);
-        match block {
-            Some(hash) => match hash.executed_block.payload().expect(" payload not found") {
-                Payload::DirectMempool((id, _txns)) => id.clone(),
-                _ => {
-                    unreachable!("unexpected payload type")
-                }
-            },
-            None => panic!("block not found"),
-        }
-    }
-
-    pub fn get_safe_block_hash(&self) -> HashValue {
-        self.get_block_reth_hash(self.safe_block_id)
-    }
-
-    pub fn get_head_block_hash(&self) -> HashValue {
-        self.get_block_reth_hash(self.head_block_id)
-    }
-
-    pub fn get_head_block(&self) -> Arc<PipelinedBlock> {
-        self.get_block(&self.head_block_id).expect("Head block must exist")
-    }
-
-    pub fn get_finalized_block_hash(&self) -> HashValue {
-        self.get_block_reth_hash(self.finalized_block_id)
-    }
-
     pub fn insert_block_number(&mut self, block_number: u64, block_id: HashValue) {
         self.block_number_to_id.insert(block_number, block_id);
     }
