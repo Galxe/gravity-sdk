@@ -60,7 +60,7 @@ impl Mempool {
         let mut mempool = self.mempool.lock().await;
         let mut water_mark = self.water_mark.lock().await;
         let account_mempool = mempool.get_mut(&account).unwrap();
-        let sequence_number = water_mark.get_mut(&account).unwrap();
+        let sequence_number = water_mark.entry(account).or_insert(0);
         for txn in account_mempool.values_mut() {
             if txn.raw_txn.sequence_number() == *sequence_number + 1 {
                 *sequence_number += 1;
