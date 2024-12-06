@@ -154,11 +154,12 @@ impl StateComputer for GravityExecutionProxy {
         }
         let engine = Some(self.consensus_engine.clone());
         Box::pin(async move {
-            match engine {
-                Some(e) => {
+            match empty_block {
+                false => {
                     info!("send order block, number {:?}, empty {:?}, block id {:?}", meta_data.block_number, empty_block, id);
                     let result = StateComputeResult::with_root_hash(HashValue::new(
-                        e.get()
+                        engine.expect("No consensus api")
+                            .get()
                             .expect("consensus engine")
                             .recv_executed_block_hash(meta_data)
                             .await
@@ -166,7 +167,7 @@ impl StateComputer for GravityExecutionProxy {
                     ));
                     Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
                 }
-                None => match block_result_receiver.await {
+                true => match block_result_receiver.await {
                     Ok(res) => {
                         let result = StateComputeResult::with_root_hash(res);
                         Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
