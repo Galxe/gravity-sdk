@@ -68,13 +68,16 @@ impl Mempool {
                 self.pending_send.send(txn.raw_txn.clone().into_verified()).await.unwrap();
             }
         }
+        println!("send pending_txns to channel");
     }
 
     pub async fn pending_txns(&self) -> Vec<VerifiedTxn> {
+        println!("call into pending_txns");
         let mut txns = Vec::new();
         while let Some(txn) = self.pending_recv.lock().await.recv().await {
             txns.push(txn);
         }
+        println!("return pending_txns");
         txns
     }
 }
