@@ -50,7 +50,9 @@ impl Mempool {
             raw_txn,
             status,
         };
-        self.mempool.lock().await.entry(account.clone()).or_insert(BTreeMap::new()).insert(sequence_number, txn);
+        {
+            self.mempool.lock().await.entry(account.clone()).or_insert(BTreeMap::new()).insert(sequence_number, txn);
+        }
         self.process_txn(account).await;
     }
 
