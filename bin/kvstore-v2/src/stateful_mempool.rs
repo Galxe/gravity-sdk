@@ -57,10 +57,15 @@ impl Mempool {
     }
 
     pub async fn process_txn(&self, account: ExternalAccountAddress) {
+        println!("start process_txn mempool lock");
         let mut mempool = self.mempool.lock().await;
+        println!("start process_txn water_mark lock");
         let mut water_mark = self.water_mark.lock().await;
+        println!("start process_txn account mempool");
         let account_mempool = mempool.get_mut(&account).unwrap();
+        println!("start process_txn account mempool size {:?}", account_mempool.len());
         let sequence_number = water_mark.entry(account).or_insert(0);
+        println!("start process_txn sequence_number is {:?}", sequence_number);
         for txn in account_mempool.values_mut() {
             if txn.raw_txn.sequence_number() == *sequence_number + 1 {
                 *sequence_number += 1;
