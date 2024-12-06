@@ -16,7 +16,7 @@ use api_types::ExecutionApiV2;
 use aptos_config::config::{NodeConfig, NodeType};
 use aptos_event_notifications::{DbBackedOnChainConfig, ReconfigNotificationListener};
 use aptos_infallible::{Mutex, RwLock};
-use aptos_logger::{warn, Level};
+use aptos_logger::{info, warn, Level};
 use aptos_mempool_notifications::MempoolNotificationListener;
 use aptos_network::application::{
     interface::{NetworkClient, NetworkServiceEvents},
@@ -104,6 +104,7 @@ async fn retrieve_from_execution_routine(
                         sequence_number: txn.sequence_number,
                         chain_id: txn.chain_id.into_u64().into(),
                     }, 0, TimelineState::Ready(0), false, None, None);
+                    info!("add_txn result is {:?}", _r);
                     // TODO(gravity_byteyue): handle error msg
                 });
             }
