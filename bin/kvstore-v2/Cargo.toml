@@ -20,3 +20,7 @@ clap = { version = "4.3.9", features = ["derive", "env", "unstable-styles"] }
 clap-verbosity-flag = "2.1.1"
 clap_complete = "4.4.1"
 clap_derive = "4.5.18"
+futures-channel = "0.3.29"
+ruint = "1.12.3"
+tokio-stream = "0.1.16"
+rand = "0.8"

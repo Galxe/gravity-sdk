@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap};
 use tokio::sync::Mutex;
 use api_types::account::ExternalAccountAddress;
 use api_types::VerifiedTxn;

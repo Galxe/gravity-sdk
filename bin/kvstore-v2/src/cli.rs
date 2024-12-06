@@ -2,7 +2,6 @@ use api::GravityNodeArgs;
 use clap::Parser;
 use std::{
     ffi::OsString,
-    future::Future,
 };
 
 
@@ -10,12 +9,12 @@ use std::{
 #[derive(Debug, Parser)]
 #[command(name = "KVStore", version, about = "An example of running gravity-sdk")]
 pub(crate) struct Cli {
-    // /// The command to run
-    // #[command(subcommand)]
-    // command: Commands<C, Ext>,
-
     #[command(flatten)]
     pub gravity_node_config: GravityNodeArgs,
+
+    /// Path to the configuration file
+    #[arg(long)]
+    pub listen_url: String,
 }
 
 impl Cli {

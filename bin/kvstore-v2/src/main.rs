@@ -2,6 +2,7 @@ mod kv;
 mod stateful_mempool;
 mod txn;
 mod cli;
+mod server;
 
 use std::{sync::Arc, thread};
 
@@ -10,6 +11,7 @@ use api_types::{BlockHashState, ConsensusApi, ExecutionApiV2};
 use clap::Parser;
 use cli::Cli;
 use kv::KvStore;
+use server::Server;
 
 struct TestConsensusLayer {
     consensus_engine: Arc<dyn ConsensusApi>,
@@ -42,19 +44,20 @@ impl TestConsensusLayer {
 async fn main() {
     let cli = Cli::parse();
     let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
+    let listen_url = cli.listen_url.clone();
 
     // Run the server logic
     cli.run(|| {
         tokio::spawn(async move {
-            let execution_client = Arc::new(KvStore::new());
+            let kv_store = Arc::new(KvStore::new());
 
+            let server = Server::new(kv_store.clone());
             let _ = thread::spawn(move || {
-                let mut cl = TestConsensusLayer::new(gcei_config, execution_client);
+                let cl = TestConsensusLayer::new(gcei_config, kv_store);
                 tokio::runtime::Runtime::new().unwrap().block_on(cl.run());
             });
-            loop {
-                tokio::time::sleep(tokio::time::Duration::from_secs(300)).await;
-            }
+
+            server.start(&listen_url).await.unwrap();
         })
     })
     .await;
