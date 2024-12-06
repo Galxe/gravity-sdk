@@ -21,6 +21,7 @@ use aptos_executor::block_executor::BlockExecutor;
 use aptos_executor_types::{
     BlockExecutorTrait, ExecutorError, ExecutorResult, StateCheckpointOutput, StateComputeResult,
 };
+use aptos_logger::info;
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 use aptos_types::block_executor::partitioner::ExecutableBlock;
 use aptos_types::{
@@ -124,6 +125,8 @@ impl StateComputer for GravityExecutionProxy {
             block_id: *block.parent_id(),
             block_number: block.block_number().expect("No block number"),
         };
+        let id = HashValue::from(block.parent_id());
+        info!("send order block, number {:?}, empty {:?}, block id {:?}", meta_data.block_number, empty_block, id);
 
         let (block_result_sender, block_result_receiver) = oneshot::channel();
         // We would export the empty block detail to the outside GCEI caller
@@ -153,6 +156,7 @@ impl StateComputer for GravityExecutionProxy {
         Box::pin(async move {
             match engine {
                 Some(e) => {
+                    info!("send order block, number {:?}, empty {:?}, block id {:?}", meta_data.block_number, empty_block, id);
                     let result = StateComputeResult::with_root_hash(HashValue::new(
                         e.get()
                             .expect("consensus engine")
