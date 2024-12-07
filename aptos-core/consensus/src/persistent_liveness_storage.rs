@@ -284,7 +284,7 @@ impl RecoveryData {
         } else {
             root = ledger_recovery_data.find_root(&mut blocks, &mut quorum_certs, order_vote_enabled)?;
         }
-        println!("root info: {:?}", root);
+        info!("root info: {:?}", root);
         let blocks_to_prune = Some(Self::find_blocks_to_prune(
             root.0.id(),
             &mut blocks,

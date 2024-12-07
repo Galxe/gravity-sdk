@@ -107,7 +107,7 @@ impl BlockStore {
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
-        println!("root {:?}", root);
+        info!("root {:?}", root);
         let block_store = block_on(Self::build(
             root,
             blocks,

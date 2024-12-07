@@ -373,7 +373,7 @@ impl RoundManager {
                 )
                 .await
                 {
-                    println!("Error generating and sending proposal: {}", e);
+                    info!("Error generating and sending proposal: {}", e);
                 }
             });
         }
