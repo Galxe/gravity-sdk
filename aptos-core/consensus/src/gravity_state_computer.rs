@@ -125,7 +125,7 @@ impl StateComputer for GravityExecutionProxy {
             block_id: *block.parent_id(),
             block_number: block.block_number().expect("No block number"),
         };
-        let id = HashValue::from(block.parent_id());
+        let id = HashValue::from(block.id());
         info!("send order block, number {:?}, empty {:?}, block id {:?}", meta_data.block_number, empty_block, id);
 
         let (block_result_sender, block_result_receiver) = oneshot::channel();
