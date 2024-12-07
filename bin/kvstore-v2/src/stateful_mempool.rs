@@ -67,7 +67,9 @@ impl Mempool {
         let sequence_number = water_mark.entry(account).or_insert(0);
         println!("start process_txn sequence_number is {:?}", sequence_number);
         for txn in account_mempool.values_mut() {
+            println!("start process_txn txn sequence number {:?}", txn.raw_txn.sequence_number());
             if txn.raw_txn.sequence_number() == *sequence_number + 1 {
+                println!("start process_txn send txn to channel");
                 *sequence_number += 1;
                 txn.status = TxnStatus::Pending;
                 self.pending_send.send(txn.raw_txn.clone().into_verified()).await.unwrap();
