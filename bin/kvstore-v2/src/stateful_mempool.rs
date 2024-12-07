@@ -58,29 +58,20 @@ impl Mempool {
     }
 
     pub async fn process_txn(&self, account: ExternalAccountAddress) {
-        println!("start process_txn mempool lock");
         let mut mempool = self.mempool.lock().await;
-        println!("start process_txn water_mark lock");
         let mut water_mark = self.water_mark.lock().await;
-        println!("start process_txn account mempool");
         let account_mempool = mempool.get_mut(&account).unwrap();
-        println!("start process_txn account mempool size {:?}", account_mempool.len());
         let sequence_number = water_mark.entry(account).or_insert(0);
-        println!("start process_txn sequence_number is {:?}", sequence_number);
         for txn in account_mempool.values_mut() {
-            println!("start process_txn txn sequence number {:?}", txn.raw_txn.sequence_number());
             if txn.raw_txn.sequence_number() == *sequence_number + 1 {
-                println!("start process_txn send txn to channel");
                 *sequence_number += 1;
                 txn.status = TxnStatus::Pending;
                 self.pending_send.send(txn.raw_txn.clone().into_verified()).await.unwrap();
             }
         }
-        println!("send pending_txns to channel");
     }
 
     pub async fn pending_txns(&self) -> Vec<VerifiedTxn> {
-        println!("call into pending_txns");
         let mut txns = Vec::new();
         
         while let Some(result) = {
@@ -90,16 +81,13 @@ impl Mempool {
             match result {
                 Ok(txn) => txns.push(txn),
                 Err(TryRecvError::Empty) => {
-                    println!("No more messages available, breaking the loop.");
                     break;
                 }
                 Err(TryRecvError::Disconnected) => {
-                    println!("Channel disconnected, exiting loop.");
                     break;
                 }
             }
         }
-        println!("return pending_txns");
         txns
     }
 }
