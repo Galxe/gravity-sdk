@@ -7,6 +7,7 @@ edition = "2021"
 [workspace]
 members = [
     "bin/reth",
+    "bin/reth_v2",
     "aptos-core/consensus",
     "dependencies/aptos-bitvec",
     "dependencies/aptos-build-info",

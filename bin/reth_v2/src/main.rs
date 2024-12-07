@@ -31,6 +31,7 @@ use reth_rpc_api as reth_rpc_api;
 mod cli;
 mod reth_cli;
 mod exec_layer;
+mod reth_coordinator;
 
 use crate::cli::Cli;
 use alloy_eips::{BlockId, BlockNumberOrTag};
