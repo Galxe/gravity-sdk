@@ -55,6 +55,7 @@ pub(crate) fn start_shared_mempool<TransactionValidator, ConfigProvider>(
     TransactionValidator: TransactionValidation + 'static,
     ConfigProvider: OnChainConfigProvider,
 {
+    info!("try to start_shared_mempool");
     let node_type = NodeType::extract_from_config(config);
     let smp: SharedMempool<NetworkClient<MempoolSyncMsg>, TransactionValidator> =
         SharedMempool::new(
@@ -93,6 +94,7 @@ async fn retrieve_from_execution_routine(
     mempool: Arc<Mutex<CoreMempool>>,
     execution_api: Arc<dyn ExecutionApiV2>,
 ) {
+    info!("start retrieve_from_execution_routine");
     loop {
         let txns = execution_api.recv_pending_txns().await;
         match txns {
