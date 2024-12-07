@@ -143,6 +143,7 @@ greth-consensus = { git = "https://github.com/Galxe/grevm-reth", package = "reth
 greth-ethereum-payload-builder = { git = "https://github.com/Galxe/grevm-reth", package = "reth-ethereum-payload-builder", branch = "v1.0.7-gravity", optional = true }
 greth-primitives = { git = "https://github.com/Galxe/grevm-reth", package = "reth-primitives", branch = "v1.0.7-gravity", optional = true }
 greth-cli-commands = { git = "https://github.com/Galxe/grevm-reth", package = "reth-cli-commands", features = ["dev"], branch = "v1.0.7-gravity", optional = true }
+coex-bridge.workspace = true
 
 [features]
 preth = ["reth", "reth-node-builder", "reth-node-ethereum", "reth-node-core", "reth-provider", "reth-db", "reth-tasks", "reth-cli-runner", "reth-cli", "reth-cli-util", "reth-chainspec", "reth-tracing", "reth-auto-seal-consensus", "reth-basic-payload-builder", "reth-beacon-consensus", "reth-ethereum-engine-primitives", "reth-evm-ethereum", "reth-network", "reth-node-api", "reth-payload-builder", "reth-rpc", "reth-rpc-api", "reth-rpc-types", "reth-transaction-pool", "reth-consensus", "reth-ethereum-payload-builder", "reth-primitives", "reth-cli-commands"]

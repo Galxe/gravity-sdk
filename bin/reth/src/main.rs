@@ -60,6 +60,7 @@ use reth_node_core::args::utils::DefaultChainSpecParser;
 use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
 use reth_provider::providers::BlockchainProvider2;
 use reth_rpc_api::EngineEthApiClient;
+use coex_bridge::{get_coex_bridge, Func};
 
 struct TestConsensusLayer<T> {
     safe_hash: [u8; 32],
@@ -80,6 +81,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync + 'static> TestConsensu
         let mut head_slice = [0u8; 32];
         head_slice.copy_from_slice(block_hash_state.head_hash.as_slice());
         let reth_cli = Arc::new(reth_cli);
+        get_coex_bridge().register("add_txn".to_string(), Func::AddTxn(Call::)));
         Self {
             safe_hash: safe_slice,
             head_hash: head_slice,

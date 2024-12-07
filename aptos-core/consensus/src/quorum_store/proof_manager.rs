@@ -26,6 +26,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use coex_bridge::get_coex_bridge;
 
 #[derive(Debug)]
 pub enum ProofManagerCommand {
@@ -92,6 +93,8 @@ impl BatchQueue {
         for (_, batches) in self.author_to_batches.iter() {
             iters.push(batches.iter().rev());
         }
+        let bridge = get_coex_bridge();
+        bridge.take_func("AddTxn").unwrap();
         while !iters.is_empty() {
             iters.shuffle(&mut thread_rng());
             iters.retain_mut(|iter| {
