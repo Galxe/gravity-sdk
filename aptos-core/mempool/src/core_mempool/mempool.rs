@@ -463,6 +463,9 @@ impl Mempool {
                 );
             }
         }
+        if txn_walked != 0 {
+            info!("mempool get batch txn_walked is {:?}", txn_walked);
+        }
         let block_end_time = start_time.elapsed();
         let block_time = block_end_time.saturating_sub(result_end_time);
 
