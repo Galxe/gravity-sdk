@@ -16,6 +16,8 @@ pub use bootstrap::{check_bootstrap_config, start};
 use clap::Parser;
 use std::path::PathBuf;
 use std::sync::Arc;
+use lazy_static::lazy_static;
+use coex_bridge::CoExBridge;
 
 /// GCEI: Gravity Consensus Engine Interface
 ///
