@@ -239,6 +239,7 @@ impl TransactionStore {
             txns.insert(txn_seq_num, txn);
             self.track_indices();
         }
+        info!("the account sequence num for ready txn is {:?}, txn seq num is {:?}", acc_seq_num, txn_seq_num);
         self.process_ready_transactions(&address, acc_seq_num);
         MempoolStatus::new(MempoolStatusCode::Accepted)
     }
