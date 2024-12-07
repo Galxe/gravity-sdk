@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
+use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::Mutex;
 use api_types::account::ExternalAccountAddress;
 use api_types::VerifiedTxn;
@@ -81,8 +82,22 @@ impl Mempool {
     pub async fn pending_txns(&self) -> Vec<VerifiedTxn> {
         println!("call into pending_txns");
         let mut txns = Vec::new();
-        while let Some(txn) = self.pending_recv.lock().await.recv().await {
-            txns.push(txn);
+        
+        while let Some(result) = {
+            let mut receiver = self.pending_recv.lock().await;
+            Some(receiver.try_recv())
+        } {
+            match result {
+                Ok(txn) => txns.push(txn),
+                Err(TryRecvError::Empty) => {
+                    println!("No more messages available, breaking the loop.");
+                    break;
+                }
+                Err(TryRecvError::Disconnected) => {
+                    println!("Channel disconnected, exiting loop.");
+                    break;
+                }
+            }
         }
         println!("return pending_txns");
         txns
