@@ -29,11 +29,10 @@ use aptos_types::{
     ledger_info::LedgerInfoWithSignatures, randomness::Randomness,
 };
 use futures::SinkExt;
-use futures_channel::{mpsc, oneshot};
+use futures_channel::oneshot;
 use once_cell::sync::OnceCell;
 use std::time::Duration;
 use std::{boxed::Box, sync::Arc};
-use aptos_logger::info;
 use coex_bridge::{get_coex_bridge, Func};
 
 pub struct ConsensusAdapterArgs {

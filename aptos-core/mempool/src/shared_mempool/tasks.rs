@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Tasks that are executed by coordinators (short-lived compared to coordinators)
-use super::types::MempoolMessageId;
+use super::{runtime::TransactionValidation, types::MempoolMessageId};
 use crate::{
     core_mempool::{CoreMempool, TimelineState},
     counters,
@@ -56,7 +56,7 @@ pub(crate) async fn execute_broadcast<NetworkClient, TransactionValidator>(
     executor: Handle,
 ) where
     NetworkClient: NetworkClientInterface<MempoolSyncMsg>,
-    // TransactionValidator: TransactionValidation,
+    TransactionValidator: TransactionValidation,
 {
     let network_interface = &smp.network_interface.clone();
     // If there's no connection, don't bother to broadcast
@@ -118,7 +118,7 @@ pub(crate) async fn process_client_transaction_submission<NetworkClient, Transac
     timer: HistogramTimer,
 ) where
     NetworkClient: NetworkClientInterface<MempoolSyncMsg>,
-    // TransactionValidator: TransactionValidation + 'static,
+    TransactionValidator: TransactionValidation + 'static,
 {
     timer.stop_and_record();
     let _timer = counters::process_txn_submit_latency_timer_client();
@@ -157,7 +157,7 @@ pub(crate) async fn process_client_get_transaction<NetworkClient, TransactionVal
     timer: HistogramTimer,
 ) where
     NetworkClient: NetworkClientInterface<MempoolSyncMsg>,
-    // TransactionValidator: TransactionValidation,
+    TransactionValidator: TransactionValidation,
 {
     timer.stop_and_record();
     let _timer = counters::process_get_txn_latency_timer_client();
@@ -189,7 +189,7 @@ pub(crate) async fn process_transaction_broadcast<NetworkClient, TransactionVali
     timer: HistogramTimer,
 ) where
     NetworkClient: NetworkClientInterface<MempoolSyncMsg>,
-    // TransactionValidator: TransactionValidation,
+    TransactionValidator: TransactionValidation,
 {
     timer.stop_and_record();
     let _timer = counters::process_txn_submit_latency_timer(peer.network_id());
@@ -279,75 +279,80 @@ pub(crate) fn process_incoming_transactions<NetworkClient, TransactionValidator>
 ) -> Vec<SubmissionStatusBundle>
 where
     NetworkClient: NetworkClientInterface<MempoolSyncMsg>,
-    // TransactionValidator: TransactionValidation,
+    TransactionValidator: TransactionValidation,
 {
-    // let mut statuses = vec![];
+    let mut statuses = vec![];
 
-    // let start_storage_read = Instant::now();
+    let start_storage_read = Instant::now();
     // let state_view = smp
     //     .db
     //     .latest_state_checkpoint_view()
     //     .expect("Failed to get latest state checkpoint view.");
 
-    // // Track latency: fetching seq number
-    // let seq_numbers = IO_POOL.install(|| {
-    //     transactions
-    //         .par_iter()
-    //         .map(|(t, _, _)| {
-    //             get_account_sequence_number(&state_view, t.sender()).map_err(|e| {
-    //                 error!(LogSchema::new(LogEntry::DBError).error(&e));
-    //                 counters::DB_ERROR.inc();
-    //                 e
-    //             })
-    //         })
-    //         .collect::<Vec<_>>()
-    // });
-    // // Track latency for storage read fetching sequence number
-    // let storage_read_latency = start_storage_read.elapsed();
-    // counters::PROCESS_TXN_BREAKDOWN_LATENCY
-    //     .with_label_values(&[counters::FETCH_SEQ_NUM_LABEL])
-    //     .observe(storage_read_latency.as_secs_f64() / transactions.len() as f64);
+    // Track latency: fetching seq number
+    let seq_numbers = IO_POOL.install(|| {
+        transactions
+            .par_iter()
+            .map(|(t, _, _)| {
+                // TODO(gravity_lightman): Figure out how to get the account view
+                // get_account_sequence_number(&state_view, t.sender()).map_err(|e| {
+                //     error!(LogSchema::new(LogEntry::DBError).error(&e));
+                //     counters::DB_ERROR.inc();
+                //     e
+                // })
+                Ok(1).map_err(|e| {
+                    error!(LogSchema::new(LogEntry::DBError).error(&e));
+                    counters::DB_ERROR.inc();
+                    e
+                })
+            })
+            .collect::<Vec<_>>()
+    });
+    // Track latency for storage read fetching sequence number
+    let storage_read_latency = start_storage_read.elapsed();
+    counters::PROCESS_TXN_BREAKDOWN_LATENCY
+        .with_label_values(&[counters::FETCH_SEQ_NUM_LABEL])
+        .observe(storage_read_latency.as_secs_f64() / transactions.len() as f64);
 
-    // let transactions: Vec<_> = transactions
-    //     .into_iter()
-    //     .enumerate()
-    //     .filter_map(|(idx, (t, ready_time_at_sender, priority))| {
-    //         if let Ok(sequence_num) = seq_numbers[idx] {
-    //             if t.sequence_number() >= sequence_num {
-    //                 return Some((t, sequence_num, ready_time_at_sender, priority));
-    //             } else {
-    //                 statuses.push((
-    //                     t,
-    //                     (
-    //                         MempoolStatus::new(MempoolStatusCode::VmError),
-    //                         Some(DiscardedVMStatus::SEQUENCE_NUMBER_TOO_OLD),
-    //                     ),
-    //                 ));
-    //             }
-    //         } else {
-    //             // Failed to get transaction
-    //             statuses.push((
-    //                 t,
-    //                 (
-    //                     MempoolStatus::new(MempoolStatusCode::VmError),
-    //                     Some(DiscardedVMStatus::RESOURCE_DOES_NOT_EXIST),
-    //                 ),
-    //             ));
-    //         }
-    //         None
-    //     })
-    //     .collect();
+    let transactions: Vec<_> = transactions
+        .into_iter()
+        .enumerate()
+        .filter_map(|(idx, (t, ready_time_at_sender, priority))| {
+            if let Ok(sequence_num) = seq_numbers[idx] {
+                if t.sequence_number() >= sequence_num {
+                    return Some((t, sequence_num, ready_time_at_sender, priority));
+                } else {
+                    statuses.push((
+                        t,
+                        (
+                            MempoolStatus::new(MempoolStatusCode::VmError),
+                            Some(DiscardedVMStatus::SEQUENCE_NUMBER_TOO_OLD),
+                        ),
+                    ));
+                }
+            } else {
+                // Failed to get transaction
+                statuses.push((
+                    t,
+                    (
+                        MempoolStatus::new(MempoolStatusCode::VmError),
+                        Some(DiscardedVMStatus::RESOURCE_DOES_NOT_EXIST),
+                    ),
+                ));
+            }
+            None
+        })
+        .collect();
 
-    // validate_and_add_transactions(
-    //     transactions,
-    //     smp,
-    //     timeline_state,
-    //     &mut statuses,
-    //     client_submitted,
-    // );
-    // notify_subscribers(SharedMempoolNotification::NewTransactions, &smp.subscribers);
-    // statuses
-    todo!()
+    validate_and_add_transactions(
+        transactions,
+        smp,
+        timeline_state,
+        &mut statuses,
+        client_submitted,
+    );
+    notify_subscribers(SharedMempoolNotification::NewTransactions, &smp.subscribers);
+    statuses
 }
 
 /// Perfoms VM validation on the transactions and inserts those that passes
@@ -366,59 +371,57 @@ fn validate_and_add_transactions<NetworkClient, TransactionValidator>(
     client_submitted: bool,
 ) where
     NetworkClient: NetworkClientInterface<MempoolSyncMsg>,
-    // TransactionValidator: TransactionValidation,
+    TransactionValidator: TransactionValidation,
 {
     // Track latency: VM validation
-    // let vm_validation_timer = counters::PROCESS_TXN_BREAKDOWN_LATENCY
-    //     .with_label_values(&[counters::VM_VALIDATION_LABEL])
-    //     .start_timer();
-    // let validation_results = transactions
-    //     .par_iter()
-    //     .map(|t| smp.validator.read().validate_transaction(t.0.clone()))
-    //     .collect::<Vec<_>>();
-    // vm_validation_timer.stop_and_record();
-    // {
-    //     let mut mempool = smp.mempool.lock();
-    //     for (idx, (transaction, sequence_info, ready_time_at_sender, priority)) in
-    //         transactions.into_iter().enumerate()
-    //     {
-    //         if let Ok(validation_result) = &validation_results[idx] {
-    //             match validation_result.status() {
-    //                 None => {
-    //                     let ranking_score = validation_result.score();
-    //                     let mempool_status = mempool.add_txn(
-    //                         transaction.clone(),
-    //                         ranking_score,
-    //                         sequence_info,
-    //                         timeline_state,
-    //                         client_submitted,
-    //                         ready_time_at_sender,
-    //                         priority.clone(),
-    //                     );
-    //                     statuses.push((transaction, (mempool_status, None)));
-    //                 },
-    //                 Some(validation_status) => {
-    //                     statuses.push((
-    //                         transaction.clone(),
-    //                         (
-    //                             MempoolStatus::new(MempoolStatusCode::VmError),
-    //                             Some(validation_status),
-    //                         ),
-    //                     ));
-    //                 },
-    //             }
-    //         } else {
-    //             statuses.push((
-    //                 transaction.clone(),
-    //                 (
-    //                     MempoolStatus::new(MempoolStatusCode::VmError),
-    //                     Some(DiscardedVMStatus::UNKNOWN_STATUS),
-    //                 ),
-    //             ));
-    //         }
-    //     }
-    // }
-    todo!()
+    let vm_validation_timer = counters::PROCESS_TXN_BREAKDOWN_LATENCY
+        .with_label_values(&[counters::VM_VALIDATION_LABEL])
+        .start_timer();
+    let validation_results = transactions
+        .par_iter()
+        .map(|t| smp.validator.read().validate_transaction(t.0.clone()))
+        .collect::<Vec<_>>();
+    vm_validation_timer.stop_and_record();
+    {
+        let mut mempool = smp.mempool.lock();
+        for (idx, (transaction, sequence_info, ready_time_at_sender, priority)) in
+            transactions.into_iter().enumerate()
+        {
+            if let Ok(validation_result) = &validation_results[idx] {
+                match validation_result.status() {
+                    None => {
+                        let _ranking_score = validation_result.score();
+                        let mempool_status = mempool.add_txn(
+                            (&transaction).into(),
+                            sequence_info,
+                            timeline_state,
+                            client_submitted,
+                            ready_time_at_sender,
+                            priority.clone(),
+                        );
+                        statuses.push((transaction, (mempool_status, None)));
+                    },
+                    Some(validation_status) => {
+                        statuses.push((
+                            transaction.clone(),
+                            (
+                                MempoolStatus::new(MempoolStatusCode::VmError),
+                                Some(validation_status),
+                            ),
+                        ));
+                    },
+                }
+            } else {
+                statuses.push((
+                    transaction.clone(),
+                    (
+                        MempoolStatus::new(MempoolStatusCode::VmError),
+                        Some(DiscardedVMStatus::UNKNOWN_STATUS),
+                    ),
+                ));
+            }
+        }
+    }
 }
 
 /// In consensus-only mode, insert transactions into the mempool directly
@@ -506,7 +509,7 @@ pub(crate) fn process_quorum_store_request<NetworkClient, TransactionValidator>(
     req: QuorumStoreRequest,
 ) where
     NetworkClient: NetworkClientInterface<MempoolSyncMsg>,
-    // TransactionValidator: TransactionValidation,
+    TransactionValidator: TransactionValidation,
 {
     // Start latency timer
     let start_time = Instant::now();

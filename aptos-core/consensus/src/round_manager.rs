@@ -540,6 +540,7 @@ impl RoundManager {
         fail_point!("consensus::process_proposal_msg", |_| {
             Err(anyhow::anyhow!("Injected error in process_proposal_msg"))
         });
+        debug!("process proposal msg {:?}", proposal_msg.proposal().block_data());
 
         observe_block(
             proposal_msg.proposal().timestamp_usecs(),
@@ -1516,6 +1517,7 @@ impl RoundManager {
                     };
                 },
                 (peer_id, event) = event_rx.select_next_some() => {
+                    debug!("received one event {:?}", event);
                     let result = match event {
                         VerifiedEvent::VoteMsg(vote_msg) => {
                             monitor!("process_vote", self.process_vote_msg(*vote_msg).await)

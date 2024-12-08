@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use api_types::{account::ExternalAccountAddress, ExecutionApiV2};
+use api_types::{account::ExternalAccountAddress, ExecTxn, ExecutionApiV2};
 use rand::Rng;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -60,8 +60,10 @@ impl Server {
                         key,
                         val,
                     };
-                    kv_store.add_txn(raw_txn.to_bytes()).await;
-                    reader.get_mut().write_all(b"OK\n").await?;
+                    match kv_store.add_txn(ExecTxn::RawTxn(raw_txn.to_bytes())).await {
+                        Ok(_) => reader.get_mut().write_all(b"OK\n").await?,
+                        Err(_) => reader.get_mut().write_all(b"FAILED TO SET\n").await?,
+                    }
                 }
                 Some("GET") => {
                     let key = parts.next().unwrap_or("").to_string();
