@@ -122,8 +122,9 @@ impl StateComputer for GravityExecutionProxy {
         let txns = self.aptos_state_computer.get_block_txns(block).await;
         let empty_block = txns.is_empty();
         let meta_data = ExternalBlockMeta {
-            block_id: *block.parent_id(),
-            block_number: block.block_number().expect("No block number"),
+            block_id: *block.id(),
+            // TODO(gravity_lightman): we can't have block number when committing the block
+            block_number: 0,
         };
         let id = HashValue::from(block.id());
         info!("send order block, number {:?}, block round {:?}, empty {:?}, block id {:?}", meta_data.block_number, block.round(), empty_block, id);
