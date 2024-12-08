@@ -285,7 +285,7 @@ impl<T: EngineEthApiClient<EthEngineTypes> + Send + Sync> ExecutionApi for RethC
         let mut block_hash = [0u8; 32];
         block_hash.copy_from_slice(block_bytes.as_slice());
         let txns = self.payload_to_txns(payload_id, payload);
-        BlockBatch { txns, block_hash }
+        BlockBatch { txns }
     }
 
     async fn send_ordered_block(&self, txns: Vec<GTxn>) {

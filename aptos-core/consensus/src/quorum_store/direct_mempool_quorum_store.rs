@@ -126,21 +126,20 @@ impl DirectMempoolQuorumStore {
         );
 
         let get_block_response_start_time = Instant::now();
-        // let payload = Payload::DirectMempool(txns);
+        let payload = Payload::DirectMempool(txns);
         // TODO(gravity_byteyue): remove all codes
-        unreachable!("DirectMempoolQuorumStore::handle_block_request");
-        // let result = match callback.send(Ok(GetPayloadResponse::GetPayloadResponse(payload))) {
-        //     Err(_) => {
-        //         error!("Callback failed");
-        //         counters::CALLBACK_FAIL_LABEL
-        //     },
-        //     Ok(_) => counters::CALLBACK_SUCCESS_LABEL,
-        // };
-        // counters::quorum_store_service_latency(
-        //     counters::GET_BLOCK_RESPONSE_LABEL,
-        //     result,
-        //     get_block_response_start_time.elapsed(),
-        // );
+        let result = match callback.send(Ok(GetPayloadResponse::GetPayloadResponse(payload))) {
+            Err(_) => {
+                error!("Callback failed");
+                counters::CALLBACK_FAIL_LABEL
+            },
+            Ok(_) => counters::CALLBACK_SUCCESS_LABEL,
+        };
+        counters::quorum_store_service_latency(
+            counters::GET_BLOCK_RESPONSE_LABEL,
+            result,
+            get_block_response_start_time.elapsed(),
+        );
     }
 
     async fn handle_consensus_request(&self, req: GetPayloadCommand) {

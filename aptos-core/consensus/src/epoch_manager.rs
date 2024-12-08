@@ -1259,7 +1259,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         match self.storage.start(consensus_config.order_vote_enabled()) {
             LivenessStorageData::FullRecoveryData(initial_data) => {
                 self.recovery_mode = false;
-                println!("init data {:?}", initial_data.root_block());
+                info!("init data {:?}", initial_data.root_block());
                 self.start_round_manager(
                     initial_data,
                     epoch_state,

@@ -228,7 +228,7 @@ impl InnerBuilder {
             .get(CONSENSUS_KEY)
             .map(|v| v.value)
             .expect("Unable to get private key");
-        println!("private_key {:?}", private_key);
+        info!("private_key {:?}", private_key);
         let signer = ValidatorSigner::new(self.author, private_key);
 
         let latest_ledger_info_with_sigs = self

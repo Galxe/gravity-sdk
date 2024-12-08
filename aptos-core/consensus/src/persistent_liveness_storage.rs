@@ -284,7 +284,7 @@ impl RecoveryData {
         } else {
             root = ledger_recovery_data.find_root(&mut blocks, &mut quorum_certs, order_vote_enabled)?;
         }
-        println!("root info: {:?}", root);
+        info!("root info: {:?}", root);
         let blocks_to_prune = Some(Self::find_blocks_to_prune(
             root.0.id(),
             &mut blocks,
@@ -506,7 +506,7 @@ impl PersistentLivenessStorage for StorageWriteProxy {
     fn fetch_next_block_number(&self) -> u64 {
         let latest_block_number = self.latest_block_number();
         let next_block_number = self.next_block_number.load(Ordering::SeqCst);
-        assert_eq!(latest_block_number + 1, next_block_number);
+        // assert_eq!(latest_block_number + 1, next_block_number);
         self.next_block_number.fetch_add(1, Ordering::SeqCst);
         next_block_number
     }

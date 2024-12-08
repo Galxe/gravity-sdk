@@ -306,8 +306,8 @@ impl Mempool {
             timeline_state, 
             insertion_info, 
             priority.clone(),
-            db_sequence_number,
-        ranking_score);
+            ranking_score,
+            db_sequence_number);
 
 
         let submitted_by_label = txn_info.insertion_info().submitted_by_label();
@@ -463,6 +463,7 @@ impl Mempool {
                 );
             }
         }
+
         let block_end_time = start_time.elapsed();
         let block_time = block_end_time.saturating_sub(result_end_time);
 

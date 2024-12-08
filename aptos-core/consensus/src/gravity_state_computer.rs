@@ -21,6 +21,7 @@ use aptos_executor::block_executor::BlockExecutor;
 use aptos_executor_types::{
     BlockExecutorTrait, ExecutorError, ExecutorResult, StateCheckpointOutput, StateComputeResult,
 };
+use aptos_logger::info;
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 use aptos_types::block_executor::partitioner::ExecutableBlock;
 use aptos_types::{
@@ -123,9 +124,11 @@ impl StateComputer for GravityExecutionProxy {
         let txns = self.aptos_state_computer.get_block_txns(block).await;
         let empty_block = txns.is_empty();
         let meta_data = ExternalBlockMeta {
-            block_id: *block.parent_id(),
-            block_number: block.block_number().expect("No block number"),
+            block_id: *block.id(),
+            // TODO(gravity_lightman): we can't have block number when committing the block
+            block_number: 0,
         };
+        let id = HashValue::from(block.id());
 
         let (block_result_sender, block_result_receiver) = oneshot::channel();
         // We would export the empty block detail to the outside GCEI caller
@@ -152,11 +155,13 @@ impl StateComputer for GravityExecutionProxy {
                 .await;
         }
         let engine = Some(self.consensus_engine.clone());
+        let round = block.round();
         Box::pin(async move {
-            match engine {
-                Some(e) => {
+            match empty_block {
+                false => {
                     let result = StateComputeResult::with_root_hash(HashValue::new(
-                        e.get()
+                        engine.expect("No consensus api")
+                            .get()
                             .expect("consensus engine")
                             .recv_executed_block_hash(meta_data)
                             .await
@@ -164,7 +169,7 @@ impl StateComputer for GravityExecutionProxy {
                     ));
                     Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
                 }
-                None => match block_result_receiver.await {
+                true => match block_result_receiver.await {
                     Ok(res) => {
                         let result = StateComputeResult::with_root_hash(res);
                         Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
