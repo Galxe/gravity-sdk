@@ -284,10 +284,10 @@ where
     let mut statuses = vec![];
 
     let start_storage_read = Instant::now();
-    let state_view = smp
-        .db
-        .latest_state_checkpoint_view()
-        .expect("Failed to get latest state checkpoint view.");
+    // let state_view = smp
+    //     .db
+    //     .latest_state_checkpoint_view()
+    //     .expect("Failed to get latest state checkpoint view.");
 
     // Track latency: fetching seq number
     let seq_numbers = IO_POOL.install(|| {
