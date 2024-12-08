@@ -39,7 +39,14 @@ impl Mempool {
         let sender = verified_txn.sender();
         let seq = verified_txn.seq_number();
         let mut pool = self.mempool.lock().await;
-        pool.get_mut(sender).unwrap().remove(&seq);
+        match pool.get_mut(sender) {
+            Some(sender_txns) => {
+                sender_txns.remove(&seq);
+            },
+            None => {
+                println!("might be follower");
+            },
+        }
     }
 
     pub async fn add_txn(&self, bytes: Vec<u8>) {
