@@ -1,4 +1,5 @@
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap};
+use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::Mutex;
 use api_types::account::ExternalAccountAddress;
 use api_types::VerifiedTxn;
@@ -50,7 +51,9 @@ impl Mempool {
             raw_txn,
             status,
         };
-        self.mempool.lock().await.entry(account.clone()).or_insert(BTreeMap::new()).insert(sequence_number, txn);
+        {
+            self.mempool.lock().await.entry(account.clone()).or_insert(BTreeMap::new()).insert(sequence_number, txn);
+        }
         self.process_txn(account).await;
     }
 
@@ -58,7 +61,7 @@ impl Mempool {
         let mut mempool = self.mempool.lock().await;
         let mut water_mark = self.water_mark.lock().await;
         let account_mempool = mempool.get_mut(&account).unwrap();
-        let sequence_number = water_mark.get_mut(&account).unwrap();
+        let sequence_number = water_mark.entry(account).or_insert(0);
         for txn in account_mempool.values_mut() {
             if txn.raw_txn.sequence_number() == *sequence_number + 1 {
                 *sequence_number += 1;
@@ -70,8 +73,20 @@ impl Mempool {
 
     pub async fn pending_txns(&self) -> Vec<VerifiedTxn> {
         let mut txns = Vec::new();
-        while let Some(txn) = self.pending_recv.lock().await.recv().await {
-            txns.push(txn);
+        
+        while let Some(result) = {
+            let mut receiver = self.pending_recv.lock().await;
+            Some(receiver.try_recv())
+        } {
+            match result {
+                Ok(txn) => txns.push(txn),
+                Err(TryRecvError::Empty) => {
+                    break;
+                }
+                Err(TryRecvError::Disconnected) => {
+                    break;
+                }
+            }
         }
         txns
     }

@@ -4,10 +4,10 @@ use api_types::VerifiedTxn;
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct RawTxn {
-    account: ExternalAccountAddress,
-    sequence_number: u64,
-    key: String,
-    val: String
+    pub(crate) account: ExternalAccountAddress,
+    pub(crate) sequence_number: u64,
+    pub(crate) key: String,
+    pub(crate) val: String
 }
 
 

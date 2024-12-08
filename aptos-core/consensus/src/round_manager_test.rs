@@ -2351,7 +2351,7 @@ fn no_vote_on_proposal_ext_when_receiving_limit_exceeded() {
 
     let block_too_many_txns = Block::new_proposal_ext(
         vec![],
-        Payload::DirectMempool((HashValue::zero(), create_vec_signed_transactions(11))),
+        Payload::DirectMempool(create_vec_signed_transactions(11)),
         1,
         1,
         genesis_qc.clone(),
@@ -2362,7 +2362,7 @@ fn no_vote_on_proposal_ext_when_receiving_limit_exceeded() {
 
     let block_too_many_vtxns = Block::new_proposal_ext(
         vec![ValidatorTransaction::dummy(vec![0xFF; 20]); 6],
-        Payload::DirectMempool((HashValue::zero(), create_vec_signed_transactions(4))),
+        Payload::DirectMempool(create_vec_signed_transactions(4)),
         1,
         1,
         genesis_qc.clone(),
@@ -2373,7 +2373,7 @@ fn no_vote_on_proposal_ext_when_receiving_limit_exceeded() {
 
     let block_too_large = Block::new_proposal_ext(
         vec![ValidatorTransaction::dummy(vec![0xFF; 200]); 1], // total_bytes >= 200 * 1 = 200
-        Payload::DirectMempool((HashValue::zero(), create_vec_signed_transactions(9))), // = total_bytes >= 69 * 9 = 621
+        Payload::DirectMempool(create_vec_signed_transactions(9)), // = total_bytes >= 69 * 9 = 621
         1,
         1,
         genesis_qc.clone(),
@@ -2395,7 +2395,7 @@ fn no_vote_on_proposal_ext_when_receiving_limit_exceeded() {
 
     let valid_block = Block::new_proposal_ext(
         vec![ValidatorTransaction::dummy(vec![0xFF; 20]); 5], // total_bytes >= 60 * 5 = 300
-        Payload::DirectMempool((HashValue::zero(), create_vec_signed_transactions(5))), // total_bytes >= 69 * 5 = 345
+        Payload::DirectMempool(create_vec_signed_transactions(5)), // total_bytes >= 69 * 5 = 345
         1,
         1,
         genesis_qc.clone(),

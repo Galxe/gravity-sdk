@@ -626,29 +626,23 @@ pub(crate) async fn process_config_update<V, P>(
     // V: TransactionValidation,
     P: OnChainConfigProvider,
 {
-    // info!(LogSchema::event_log(
-    //     LogEntry::ReconfigUpdate,
-    //     LogEvent::Process
-    // ));
+    info!(LogSchema::event_log(
+        LogEntry::ReconfigUpdate,
+        LogEvent::Process
+    ));
 
-    // if let Err(e) = validator.write().restart() {
-    //     counters::VM_RECONFIG_UPDATE_FAIL_COUNT.inc();
-    //     error!(LogSchema::event_log(LogEntry::ReconfigUpdate, LogEvent::VMUpdateFail).error(&e));
-    // }
-
-    // let consensus_config: anyhow::Result<OnChainConsensusConfig> = config_update.get();
-    // match consensus_config {
-    //     Ok(consensus_config) => {
-    //         *broadcast_within_validator_network.write() =
-    //             !consensus_config.quorum_store_enabled() && !consensus_config.is_dag_enabled()
-    //     },
-    //     Err(e) => {
-    //         error!(
-    //             "Failed to read on-chain consensus config, keeping value broadcast_within_validator_network={}: {}",
-    //             *broadcast_within_validator_network.read(),
-    //             e
-    //         );
-    //     },
-    // }
-    todo!()
+    let consensus_config: anyhow::Result<OnChainConsensusConfig> = config_update.get();
+    match consensus_config {
+        Ok(consensus_config) => {
+            *broadcast_within_validator_network.write() =
+                !consensus_config.quorum_store_enabled() && !consensus_config.is_dag_enabled()
+        },
+        Err(e) => {
+            error!(
+                "Failed to read on-chain consensus config, keeping value broadcast_within_validator_network={}: {}",
+                *broadcast_within_validator_network.read(),
+                e
+            );
+        },
+    }
 }

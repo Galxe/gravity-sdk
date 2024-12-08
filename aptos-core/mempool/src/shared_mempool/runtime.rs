@@ -3,28 +3,31 @@
 // SPDX-License-Identifier: Apache-2.0
 use crate::{
     core_mempool::{transaction::VerifiedTxn, CoreMempool, TimelineState},
-    network::MempoolSyncMsg,
+    network::{BroadcastPeerPriority, MempoolSyncMsg},
     shared_mempool::{
         coordinator::{coordinator, gc_coordinator, snapshot_job},
         types::{MempoolEventsReceiver, SharedMempool, SharedMempoolNotification},
     },
     QuorumStoreRequest,
 };
-use aptos_types::account_address::AccountAddress;
 use anyhow::Result;
 use api_types::ExecutionApiV2;
 use aptos_config::config::{NodeConfig, NodeType};
 use aptos_event_notifications::{DbBackedOnChainConfig, ReconfigNotificationListener};
 use aptos_infallible::{Mutex, RwLock};
-use aptos_logger::{warn, Level};
+use aptos_logger::{info, warn, Level};
 use aptos_mempool_notifications::MempoolNotificationListener;
 use aptos_network::application::{
     interface::{NetworkClient, NetworkServiceEvents},
     storage::PeersAndMetadata,
 };
 use aptos_storage_interface::DbReader;
+use aptos_types::account_address::AccountAddress;
 use aptos_types::{
-    account_address::AccountAddressWithChecks, on_chain_config::OnChainConfigProvider, transaction::{SignedTransaction, VMValidatorResult}, PeerId
+    account_address::AccountAddressWithChecks,
+    on_chain_config::OnChainConfigProvider,
+    transaction::{SignedTransaction, VMValidatorResult},
+    PeerId,
 };
 // use aptos_vm_validator::vm_validator::{PooledVMValidator, TransactionValidation};
 use futures::channel::mpsc::{Receiver, UnboundedSender};
@@ -55,6 +58,7 @@ pub(crate) fn start_shared_mempool<TransactionValidator, ConfigProvider>(
     TransactionValidator: TransactionValidation + 'static,
     ConfigProvider: OnChainConfigProvider,
 {
+    info!("try to start_shared_mempool");
     let node_type = NodeType::extract_from_config(config);
     let smp: SharedMempool<NetworkClient<MempoolSyncMsg>, TransactionValidator> =
         SharedMempool::new(
@@ -93,17 +97,26 @@ async fn retrieve_from_execution_routine(
     mempool: Arc<Mutex<CoreMempool>>,
     execution_api: Arc<dyn ExecutionApiV2>,
 ) {
+    info!("start retrieve_from_execution_routine");
     loop {
         let txns = execution_api.recv_pending_txns().await;
         match txns {
             Ok(txns) => {
                 txns.into_iter().for_each(|txn| {
-                    let _r = mempool.lock().add_txn(VerifiedTxn {
-                        bytes: txn.bytes,
-                        sender: AccountAddress::from(txn.sender.bytes()),
-                        sequence_number: txn.sequence_number,
-                        chain_id: txn.chain_id.into_u64().into(),
-                    }, 0, TimelineState::Ready(0), false, None, None);
+                    let _r = mempool.lock().add_txn(
+                        VerifiedTxn {
+                            bytes: txn.bytes,
+                            sender: AccountAddress::from(txn.sender.bytes()),
+                            sequence_number: txn.sequence_number,
+                            chain_id: txn.chain_id.into_u64().into(),
+                        },
+                        1,
+                        TimelineState::NotReady,
+                        true,
+                        None,
+                        Some(BroadcastPeerPriority::Primary),
+                    );
+                    info!("add_txn result is {:?}", _r);
                     // TODO(gravity_byteyue): handle error msg
                 });
             }

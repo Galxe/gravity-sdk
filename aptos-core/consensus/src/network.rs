@@ -701,7 +701,7 @@ impl NetworkTask {
 
     pub async fn start(mut self) {
         while let Some(message) = self.all_events.next().await {
-            println!("NetworkTask received message {:?}", message);
+            info!("NetworkTask received message {:?}", message);
             monitor!("network_main_loop", match message {
                 Event::Message(peer_id, msg) => {
                     counters::CONSENSUS_RECEIVED_MSGS

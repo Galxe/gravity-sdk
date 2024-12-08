@@ -88,7 +88,7 @@ impl UserPayloadClient for DummyClient {
             nxt_txn_idx += 1;
             txns.push(txn);
         }
-        Ok(Payload::DirectMempool((HashValue::zero(), txns)))
+        Ok(Payload::DirectMempool(txns))
     }
 }
 
