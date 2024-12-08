@@ -217,7 +217,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             network_sender,
             timeout_sender,
             // This default value is updated at epoch start
-            quorum_store_enabled: false,
+            quorum_store_enabled: true,
             quorum_store_to_mempool_sender,
             execution_client,
             storage,
@@ -1222,7 +1222,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         Arc<dyn TPayloadManager>,
     ) {
         self.set_epoch_start_metrics(epoch_state);
-        self.quorum_store_enabled = self.enable_quorum_store(consensus_config);
+        // self.quorum_store_enabled = self.enable_quorum_store(consensus_config);
+        self.quorum_store_enabled = true;
         let network_sender = self.create_network_sender(epoch_state);
         let (payload_manager, quorum_store_client, quorum_store_builder) = self
             .init_payload_provider(epoch_state, network_sender.clone(), consensus_config)
