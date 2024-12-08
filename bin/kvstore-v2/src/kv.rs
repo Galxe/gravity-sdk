@@ -94,7 +94,6 @@ impl ExecutionApiV2 for KvStore {
 
 
         let mut block = self.ordered_block.lock().await;
-        println!("send ordered block meta {:?}", ordered_block.block_meta);
         block.insert(ordered_block.block_meta.clone(), ordered_block);
         Ok(())
     }

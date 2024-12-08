@@ -25,7 +25,6 @@ impl Server {
     /// Starts the TCP server
     pub async fn start(&self, addr: &str) -> tokio::io::Result<()> {
         let listener = TcpListener::bind(addr).await?;
-        println!("Server running on {}", addr);
 
         loop {
             let (stream, _) = listener.accept().await?;

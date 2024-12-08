@@ -127,7 +127,6 @@ impl StateComputer for GravityExecutionProxy {
             block_number: 0,
         };
         let id = HashValue::from(block.id());
-        info!("send order block, number {:?}, block round {:?}, empty {:?}, block id {:?}", meta_data.block_number, block.round(), empty_block, id);
 
         let (block_result_sender, block_result_receiver) = oneshot::channel();
         // We would export the empty block detail to the outside GCEI caller
@@ -158,7 +157,6 @@ impl StateComputer for GravityExecutionProxy {
         Box::pin(async move {
             match empty_block {
                 false => {
-                    info!("send order block, number {:?}, block round {:?}, block id {:?}", meta_data.block_number, round, id);
                     let result = StateComputeResult::with_root_hash(HashValue::new(
                         engine.expect("No consensus api")
                             .get()

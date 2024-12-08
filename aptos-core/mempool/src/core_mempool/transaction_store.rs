@@ -239,7 +239,6 @@ impl TransactionStore {
             txns.insert(txn_seq_num, txn);
             self.track_indices();
         }
-        info!("the account sequence num for ready txn is {:?}, txn seq num is {:?}", acc_seq_num, txn_seq_num);
         self.process_ready_transactions(&address, acc_seq_num);
         MempoolStatus::new(MempoolStatusCode::Accepted)
     }
@@ -383,12 +382,10 @@ impl TransactionStore {
             while let Some(txn) = txns.get_mut(&min_seq) {
                 let process_ready = !self.priority_index.contains(txn);
 
-                info!("insert into priority index");
                 self.priority_index.insert(txn);
 
                 let process_broadcast_ready = txn.timeline_state == TimelineState::NotReady;
                 if process_broadcast_ready {
-                    info!("going to insert into timeline index");
                     self.timeline_index
                         .get_mut(&sender_bucket)
                         .unwrap()
