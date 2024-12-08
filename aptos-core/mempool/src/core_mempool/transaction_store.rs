@@ -383,10 +383,12 @@ impl TransactionStore {
             while let Some(txn) = txns.get_mut(&min_seq) {
                 let process_ready = !self.priority_index.contains(txn);
 
+                info!("insert into priority index");
                 self.priority_index.insert(txn);
 
                 let process_broadcast_ready = txn.timeline_state == TimelineState::NotReady;
                 if process_broadcast_ready {
+                    info!("going to insert into timeline index");
                     self.timeline_index
                         .get_mut(&sender_bucket)
                         .unwrap()
