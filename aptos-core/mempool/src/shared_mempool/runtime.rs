@@ -110,7 +110,7 @@ async fn retrieve_from_execution_routine(
                             sequence_number: txn.sequence_number,
                             chain_id: txn.chain_id.into_u64().into(),
                         },
-                        0,
+                        1,
                         TimelineState::NotReady,
                         true,
                         None,
