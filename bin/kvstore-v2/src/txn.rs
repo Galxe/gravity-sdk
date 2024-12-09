@@ -11,6 +11,13 @@ pub struct RawTxn {
 }
 
 
+impl From<VerifiedTxn> for RawTxn {
+    fn from(value: VerifiedTxn) -> Self {
+        let txn: RawTxn = serde_json::from_slice(&value.bytes()).unwrap();
+        txn
+    }
+}
+
 impl RawTxn {
     pub fn from_bytes(bytes: Vec<u8>) -> Self {
         let txn: RawTxn = serde_json::from_slice(&bytes).unwrap();

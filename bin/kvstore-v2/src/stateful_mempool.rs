@@ -1,15 +1,15 @@
-use std::collections::{BTreeMap, HashMap, VecDeque};
-use tokio::sync::Mutex;
-use api_types::account::ExternalAccountAddress;
-use api_types::VerifiedTxn;
 use crate::txn::RawTxn;
+use api_types::account::{self, ExternalAccountAddress};
+use api_types::VerifiedTxn;
+use tokio::sync::mpsc::Sender;
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use tokio::sync::{broadcast, Mutex};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TxnStatus {
     Pending,
     Waiting,
 }
-
 
 pub struct MempoolTxn {
     raw_txn: RawTxn,
@@ -21,16 +21,21 @@ pub struct Mempool {
     mempool: tokio::sync::Mutex<HashMap<ExternalAccountAddress, BTreeMap<u64, MempoolTxn>>>,
     pending_recv: Mutex<tokio::sync::mpsc::Receiver<VerifiedTxn>>,
     pending_send: tokio::sync::mpsc::Sender<VerifiedTxn>,
+    broadcast_send: Sender<VerifiedTxn>,
+    broadcast_recv: Mutex<tokio::sync::mpsc::Receiver<VerifiedTxn>>,
 }
 
 impl Mempool {
     pub fn new() -> Self {
         let (send, recv) = tokio::sync::mpsc::channel::<VerifiedTxn>(1024);
+        let (broadcast_send, broadcast_recv) = tokio::sync::mpsc::channel::<VerifiedTxn>(1024);
         Mempool {
             water_mark: tokio::sync::Mutex::new(HashMap::new()),
             mempool: tokio::sync::Mutex::new(HashMap::new()),
             pending_recv: Mutex::new(recv),
             pending_send: send,
+            broadcast_send,
+            broadcast_recv: Mutex::new(broadcast_recv),
         }
     }
 
@@ -41,17 +46,44 @@ impl Mempool {
         pool.get_mut(sender).unwrap().remove(&seq);
     }
 
-    pub async fn add_txn(&self, bytes: Vec<u8>) {
+    pub async fn add_verified_txn(&self, txn: VerifiedTxn) {
+        let account = txn.sender().clone();
+        let sequence_number = txn.seq_number();
+        let status = TxnStatus::Waiting;
+        let mempool_txn = MempoolTxn {
+            raw_txn: txn.into(),
+            status: status,
+        };
+        self.mempool
+            .lock()
+            .await
+            .entry(account.clone())
+            .or_insert(BTreeMap::new())
+            .insert(sequence_number, mempool_txn);
+        self.process_txn(account).await;
+    }
+
+    pub async fn add_raw_txn(&self, bytes: Vec<u8>) {
         let raw_txn = RawTxn::from_bytes(bytes);
+        let _ = self.broadcast_send.send(raw_txn.clone().into_verified()).await;
         let sequence_number = raw_txn.sequence_number();
         let status = TxnStatus::Waiting;
         let account = raw_txn.account();
-        let txn = MempoolTxn {
-            raw_txn,
-            status,
-        };
-        self.mempool.lock().await.entry(account.clone()).or_insert(BTreeMap::new()).insert(sequence_number, txn);
+        let txn = MempoolTxn { raw_txn, status };
+        self.mempool
+            .lock()
+            .await
+            .entry(account.clone())
+            .or_insert(BTreeMap::new())
+            .insert(sequence_number, txn);
         self.process_txn(account).await;
+    }
+
+    pub async fn recv_unbroadcasted_txn(&self) -> Vec<VerifiedTxn> {
+        let mut recv = self.broadcast_recv.lock().await;
+        let mut buffer = Vec::new();
+        recv.recv_many(&mut buffer, 1024).await;
+        buffer
     }
 
     pub async fn process_txn(&self, account: ExternalAccountAddress) {

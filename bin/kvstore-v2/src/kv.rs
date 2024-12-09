@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::Mutex;
-use api_types::{BlockBatch, ComputeRes, ExecError, ExecutionApiV2, ExecutionBlocks, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, GTxn, VerifiedTxn};
+use api_types::{BlockBatch, ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExecutionBlocks, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, GTxn, VerifiedTxn};
 use crate::stateful_mempool::Mempool;
 use crate::txn::RawTxn;
 use async_trait::async_trait;
@@ -50,9 +50,16 @@ impl KvStore {
 
 #[async_trait]
 impl ExecutionApiV2 for KvStore {
-    async fn add_txn(&self, bytes: Vec<u8>) -> Result<(), ExecError> {
-        self.mempool.add_txn(bytes).await;
+    async fn add_txn(&self, txn: ExecTxn) -> Result<(), ExecError> {
+        match txn {
+            ExecTxn::RawTxn(bytes) => self.mempool.add_raw_txn(bytes).await,
+            ExecTxn::VerifiedTxn(verified_txn) => self.mempool.add_verified_txn(verified_txn).await
+        }
         Ok(())
+    }
+
+    async fn recv_unbroadcasted_txn(&self) -> Result<Vec<VerifiedTxn>, ExecError> {
+        Ok(self.mempool.recv_unbroadcasted_txn().await)
     }
 
     async fn check_block_txns(&self, payload_attr: ExternalPayloadAttr, txns: Vec<VerifiedTxn>) -> Result<bool, ExecError> {
