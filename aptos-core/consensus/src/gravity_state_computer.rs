@@ -32,6 +32,8 @@ use std::{boxed::Box, sync::Arc};
 use once_cell::sync::OnceCell;
 use api_types::ConsensusApi;
 use api_types::ExecutionApi;
+use aptos_logger::info;
+use coex_bridge::{get_coex_bridge, Func};
 
 pub struct ConsensusAdapterArgs {
     pub quorum_store_client: Option<Arc<QuorumStoreClient>>,
@@ -154,6 +156,16 @@ impl StateComputer for GravityExecutionProxy {
         finality_proof: LedgerInfoWithSignatures,
         callback: StateComputerCommitCallBackType,
     ) -> ExecutorResult<()> {
+        let call = get_coex_bridge().take_func("test_info");
+        match call {
+            Some(Func::TestInfo(call)) => {
+                info!("call test_info function");
+                call.call("commit in aptos".to_string()).unwrap();
+            }
+            _ => {
+                info!("no test_info function");
+            }
+        }
         self.aptos_state_computer.commit(blocks, finality_proof, callback).await
     }
 

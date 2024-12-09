@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use lazy_static::lazy_static;
 pub mod call;
 
 pub enum Func {
@@ -13,12 +12,13 @@ pub struct CoExBridge {
     call: Arc<Mutex<HashMap<String, Func>>>,
 }
 
-lazy_static!(
-    static ref coef_bridge: CoExBridge = CoExBridge::new();
-);
+
+use once_cell::sync::Lazy;
+
+pub static COEX_BRIDGE: Lazy<CoExBridge> = Lazy::new(|| CoExBridge::new());
 
 pub fn get_coex_bridge() -> &'static CoExBridge {
-    &coef_bridge
+    &COEX_BRIDGE
 }
 
 impl CoExBridge {
@@ -39,7 +39,7 @@ impl CoExBridge {
         }
     }
 
-    fn take_func(&mut self, name: &str) -> Option<Func> {
+    pub fn take_func(&self, name: &str) -> Option<Func> {
         if let Ok(mut call) = self.call.lock() {
             call.remove(name)
         } else {

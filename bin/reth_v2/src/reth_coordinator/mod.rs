@@ -1,8 +1,10 @@
 use api_types::{ComputeRes, ExecError, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn};
+use aysnc_trait::async_trait;
 
 pub struct RethCoordinator {
 }
 
+#[async_trait]
 impl ExecutionApiV2 for RethCoordinator {
     async fn add_txn(&self, bytes: Vec<u8>) -> Result<(), ExecError> {
         todo!()

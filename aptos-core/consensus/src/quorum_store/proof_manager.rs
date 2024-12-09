@@ -93,8 +93,6 @@ impl BatchQueue {
         for (_, batches) in self.author_to_batches.iter() {
             iters.push(batches.iter().rev());
         }
-        let bridge = get_coex_bridge();
-        bridge.take_func("AddTxn").unwrap();
         while !iters.is_empty() {
             iters.shuffle(&mut thread_rng());
             iters.retain_mut(|iter| {
