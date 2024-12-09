@@ -17,6 +17,9 @@ pub(crate) struct Cli {
     pub listen_url: String,
 
     #[arg(long)]
+    pub log_dir: String,
+
+    #[arg(long)]
     pub bench: bool,
 }
 

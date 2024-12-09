@@ -5,6 +5,7 @@ use api_types::{
     ExecutionBlocks, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn,
 };
 use async_trait::async_trait;
+use log::info;
 use rand::Rng;
 use tokio::{sync::Mutex, time::Instant};
 
@@ -40,7 +41,7 @@ impl CounterTimer {
         if self.call_count == self.count_round {
             let now = Instant::now();
             let duration = now.duration_since(self.last_time);
-            println!(
+            info!(
                 "Time taken for the last {:?} blocks to be produced: {:?}, txn num in block {:?}",
                 self.count_round, duration, self.txn_num_in_block
             );
@@ -147,6 +148,7 @@ impl IServer for BenchServer {
             .into_iter()
             .for_each(|txn| {
                 let store = self.kv_store.clone();
+                info!("start new add txn");
                 tokio::spawn(async move {
                     let _ = store.add_txn(txn).await;
                 });

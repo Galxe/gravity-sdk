@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use api_types::{account::ExternalAccountAddress, ExecTxn, ExecutionApiV2};
 use async_trait::async_trait;
+use log::warn;
 use rand::Rng;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -30,7 +31,7 @@ impl IServer for Server {
             let kv_store = self.kv_store.clone();
             tokio::spawn(async move {
                 if let Err(e) = Self::handle_client(kv_store, stream).await {
-                    eprintln!("Error handling client: {:?}", e);
+                    warn!("Error handling client: {:?}", e);
                 }
             });
         }

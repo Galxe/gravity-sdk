@@ -13,9 +13,9 @@ use api_types::{BlockHashState, ConsensusApi, ExecutionApiV2};
 use bench_server::BenchServer;
 use clap::Parser;
 use cli::Cli;
-use kv::KvStore;
 use server::Server;
 use server_trait::IServer;
+use flexi_logger::{FileSpec, Logger, WriteMode};
 
 struct TestConsensusLayer {
     consensus_engine: Arc<dyn ConsensusApi>,
@@ -50,6 +50,12 @@ async fn main() {
     let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
     let listen_url = cli.listen_url.clone();
     let use_bench = cli.bench;
+    Logger::try_with_str("info")
+        .unwrap()
+        .log_to_file(FileSpec::default().directory(cli.log_dir.clone()))
+        .write_mode(WriteMode::BufferAndFlush)
+        .start()
+        .unwrap();
 
     cli.run(move || {
         tokio::spawn(async move {

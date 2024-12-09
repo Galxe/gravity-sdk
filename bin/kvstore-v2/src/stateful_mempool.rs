@@ -1,3 +1,4 @@
+use log::warn;
 use tokio::sync::mpsc::error::TryRecvError;
 use crate::txn::RawTxn;
 use api_types::account::{self, ExternalAccountAddress};
@@ -49,7 +50,7 @@ impl Mempool {
                 sender_txns.remove(&seq);
             },
             None => {
-                println!("might be follower");
+                warn!("might be follower");
             },
         }
     }
