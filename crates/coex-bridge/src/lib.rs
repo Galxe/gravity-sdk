@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
-mod call;
+pub mod call;
 
 pub enum Func {
     AddTxn(call::Call<Vec<u8>, ()>),
+    TestInfo(call::Call<String, ()>),
 }
 
 
