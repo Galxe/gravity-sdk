@@ -136,6 +136,12 @@ pub struct BenchServer {
     kv_store: Arc<Mutex<Arc<InnerExecution>>>,
 }
 
+impl BenchServer {
+    async fn get_execution_client(&self) -> Arc<dyn ExecutionApiV2> {
+        self.kv_store.lock().await.inner.clone()
+    }
+}
+
 #[async_trait]
 impl IServer for BenchServer {
     /// Starts the TCP server
@@ -143,10 +149,7 @@ impl IServer for BenchServer {
         loop {
             let txn_num_in_block =
                 std::env::var("BLOCK_TXN_NUMS").map(|s| s.parse().unwrap()).unwrap_or(1000);
-            self.random_txns(txn_num_in_block)
-            .await
-            .into_iter()
-            .for_each(|txn| {
+            self.random_txns(txn_num_in_block).await.into_iter().for_each(|txn| {
                 let store = self.kv_store.clone();
                 info!("start new add txn");
                 tokio::spawn(async move {
@@ -158,13 +161,18 @@ impl IServer for BenchServer {
     }
 
     fn execution_client(&self) -> Arc<dyn ExecutionApiV2> {
-        self.kv_store.blocking_lock().inner.clone()
+        let r = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(async { self.get_execution_client().await } );
+        r
     }
 }
 
 impl BenchServer {
     pub fn new() -> Self {
-        Self { kv_store: Arc::new(Mutex::new(Arc::new(InnerExecution::new(Arc::new(KvStore::new()))))) }
+        Self {
+            kv_store: Arc::new(Mutex::new(Arc::new(InnerExecution::new(Arc::new(KvStore::new()))))),
+        }
     }
 
     async fn random_txns(&self, num: u64) -> Vec<ExecTxn> {
