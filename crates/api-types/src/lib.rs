@@ -105,9 +105,16 @@ pub enum ExecError {
 
 }
 
+pub enum ExecTxn {
+    RawTxn(Vec<u8>), // from client
+    VerifiedTxn(VerifiedTxn), // from peer
+}
+
 #[async_trait]
 pub trait ExecutionApiV2: Send + Sync {
-    async fn add_txn(&self, bytes: Vec<u8>) -> Result<(), ExecError>;
+    async fn add_txn(&self, bytes: ExecTxn) -> Result<(), ExecError>;
+
+    async fn recv_unbroadcasted_txn(&self) -> Result<Vec<VerifiedTxn>, ExecError>;
 
     async fn check_block_txns(&self, payload_attr: ExternalPayloadAttr, txns: Vec<VerifiedTxn>) -> Result<bool, ExecError>;
 

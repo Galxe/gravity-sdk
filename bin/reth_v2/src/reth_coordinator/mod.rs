@@ -6,7 +6,11 @@ pub struct RethCoordinator {
 
 #[async_trait]
 impl ExecutionApiV2 for RethCoordinator {
-    async fn add_txn(&self, bytes: Vec<u8>) -> Result<(), ExecError> {
+    async fn add_txn(&self, bytes: ExecTxn) -> Result<(), ExecError> {
+        todo!()
+    }
+
+    async fn recv_unbroadcasted_txn(&self) -> Result<Vec<VerifiedTxn>, ExecError> {
         todo!()
     }
 
