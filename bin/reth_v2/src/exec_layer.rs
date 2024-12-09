@@ -12,36 +12,7 @@ impl ExecLayer {
     }
 
     pub fn build_payload(&self, txns: Vec<Transaction>) -> ExecutionPayloadEnvelopeV3 {
-        println!("build_payload ExecLayer");
-        let payload = ExecutionPayloadEnvelopeV3 {
-            execution_payload: ExecutionPayloadV3 {
-                payload_inner: ExecutionPayloadV2 {
-                    payload_inner: ExecutionPayloadV1 {
-                        parent_hash: Default::default(),
-                        fee_recipient: Default::default(),
-                        state_root: Default::default(),
-                        receipts_root: Default::default(),
-                        logs_bloom: Default::default(),
-                        prev_randao: Default::default(),
-                        block_number: 0,
-                        gas_limit: 0,
-                        gas_used: 0,
-                        timestamp: 0,
-                        extra_data: Default::default(),
-                        base_fee_per_gas: Default::default(),
-                        block_hash: Default::default(),
-                        transactions: vec![],
-                    },
-                    withdrawals: vec![],
-                },
-                blob_gas_used: 0,
-                excess_blob_gas: 0,
-            },
-            block_value: Default::default(),
-            blobs_bundle: BlobsBundleV1 {},
-            should_override_builder: false,
-        };
-        payload
+        todo!()
     }
 
     pub async fn  run(&self) {
