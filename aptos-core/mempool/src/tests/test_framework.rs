@@ -382,7 +382,6 @@ impl MempoolNode {
         let mempool_message = common::decompress_and_deserialize(&data.to_vec());
         let message_id = match mempool_message {
             MempoolSyncMsg::BroadcastTransactionsRequest {
-                message_id,
                 transactions,
             } => {
                 if !block_only_contains_transactions(&transactions, expected_txns) {

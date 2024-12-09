@@ -2,10 +2,13 @@ pub mod account;
 
 use std::fmt::Display;
 
+use crate::account::{ExternalAccountAddress, ExternalChainId};
 use async_trait::async_trait;
 use ruint::aliases::U256;
 use serde::{Deserialize, Serialize};
 use crate::account::{ExternalAccountAddress, ExternalChainId};
+use std::future::Future;
+use tokio::{runtime::Runtime, sync::Mutex};
 
 #[derive(Clone, Copy)]
 pub struct BlockHashState {
@@ -59,7 +62,7 @@ pub trait ExecutionApi: Send + Sync {
 
     fn finalized_block_number(&self) -> u64;
 
-    async fn recover_ordered_block(&self, block_batch: BlockBatch);
+    async fn recover_ordered_block(&self, block_batch: ExternalBlock);
 
     async fn recover_execution_blocks(&self, blocks: ExecutionBlocks);
 
@@ -117,7 +120,11 @@ pub trait ExecutionApiV2: Send + Sync {
 
     async fn recv_unbroadcasted_txn(&self) -> Result<Vec<VerifiedTxn>, ExecError>;
 
-    async fn check_block_txns(&self, payload_attr: ExternalPayloadAttr, txns: Vec<VerifiedTxn>) -> Result<bool, ExecError>;
+    async fn check_block_txns(
+        &self,
+        payload_attr: ExternalPayloadAttr,
+        txns: Vec<VerifiedTxn>,
+    ) -> Result<bool, ExecError>;
 
     /// 
     /// # Returns
@@ -133,28 +140,41 @@ pub trait ExecutionApiV2: Send + Sync {
     async fn send_ordered_block(&self, ordered_block: ExternalBlock) -> Result<(), ExecError>;
 
     // the block hash is the hash of the block that has been executed, which is passed by the send_ordered_block
-    async fn recv_executed_block_hash(&self, head: ExternalBlockMeta) -> Result<ComputeRes, ExecError>;
+    async fn recv_executed_block_hash(
+        &self,
+        head: ExternalBlockMeta,
+    ) -> Result<ComputeRes, ExecError>;
 
     // this function is called by the execution layer commit the block hash
     async fn commit_block(&self, head: ExternalBlockMeta) -> Result<(), ExecError>;
 
-    fn latest_block_number(&self) -> u64;
+    fn latest_block_number(&self) -> u64 {
+        unimplemented!("")
+    }
 
-    fn finalized_block_number(&self) -> u64;
+    fn finalized_block_number(&self) -> u64 {
+        unimplemented!("")
+    }
 
-    async fn recover_ordered_block(&self, block_batch: BlockBatch);
+    async fn recover_ordered_block(&self, block: ExternalBlock) {
+        unimplemented!("")
+    }
 
-    async fn recover_execution_blocks(&self, blocks: ExecutionBlocks);
+    async fn recover_execution_blocks(&self, blocks: ExecutionBlocks) {
+        unimplemented!("")
+    }
 
     fn get_blocks_by_range(
         &self,
         start_block_number: u64,
         end_block_number: u64,
-    ) -> ExecutionBlocks;
+    ) -> ExecutionBlocks {
+        unimplemented!("")
+    }
 }
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VerifiedTxn {
     pub bytes: Vec<u8>,
     pub sender: ExternalAccountAddress,
@@ -163,13 +183,13 @@ pub struct VerifiedTxn {
 }
 
 impl VerifiedTxn {
-    pub fn new(bytes: Vec<u8>, sender: ExternalAccountAddress, sequence_number: u64, chain_id: ExternalChainId) -> Self {
-        Self {
-            bytes,
-            sender,
-            sequence_number,
-            chain_id,
-        }
+    pub fn new(
+        bytes: Vec<u8>,
+        sender: ExternalAccountAddress,
+        sequence_number: u64,
+        chain_id: ExternalChainId,
+    ) -> Self {
+        Self { bytes, sender, sequence_number, chain_id }
     }
 
     pub fn bytes(&self) -> &Vec<u8> {

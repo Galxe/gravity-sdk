@@ -18,7 +18,7 @@ use crate::{
     util::time_service::TimeService,
 };
 use anyhow::{bail, ensure, format_err, Context};
-use api_types::{BlockBatch, ExecutionApiV2, ExternalBlockMeta};
+use api_types::{ExecutionApiV2, ExternalBlock, ExternalBlockMeta};
 use aptos_consensus_types::common::Payload::DirectMempool;
 use aptos_consensus_types::{
     block::Block,
@@ -33,6 +33,7 @@ use aptos_crypto::{hash::ACCUMULATOR_PLACEHOLDER_HASH, HashValue};
 use aptos_executor_types::StateComputeResult;
 use aptos_infallible::{Mutex, RwLock};
 use aptos_logger::prelude::*;
+use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 use aptos_types::ledger_info::LedgerInfoWithSignatures;
 use futures::executor::block_on;
 use tokio::runtime::Runtime;
@@ -185,14 +186,18 @@ impl BlockStore {
                 if let Some(DirectMempool(txns)) = block_to_recover.block().payload()
                 {
                     info!("recover block {}", block_to_recover.block());
-                    let g_txns = txns.iter().map(|txn| txn.into()).collect();
-                    let block_batch = BlockBatch { txns: g_txns };
+                    let verified_txns: Vec<VerifiedTxn> = txns.iter().map(|txn| txn.into()).collect();
+                    let verified_txns = verified_txns.into_iter().map(|txn| txn.into()).collect();
+                    let block_batch = ExternalBlock { txns: verified_txns, block_meta: ExternalBlockMeta {
+                        block_id: *block_to_recover.block().id(),
+                        block_number: block_to_recover.block().block_number().unwrap(),
+                    } };
                     self.execution_api.as_ref().unwrap().recover_ordered_block(block_batch).await;
                 }
                 if qc.commit_info().round() <= self.commit_root().round() {
                     continue;
                 }
-                info!("trying to execute to round {}", qc.commit_info().round(),);
+                info!("trying to execute to round {}", qc.commit_info().round());
                 if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info(), true).await {
                     error!("Error in try-committing blocks. {}", e.to_string());
                 }

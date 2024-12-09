@@ -6,7 +6,7 @@ mod server_trait;
 mod stateful_mempool;
 mod txn;
 
-use std::{sync::Arc, thread};
+use std::{path::PathBuf, sync::Arc, thread};
 
 use api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
 use api_types::{BlockHashState, ConsensusApi, ExecutionApiV2};

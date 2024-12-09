@@ -1,6 +1,6 @@
 #!/bin/bash
 
-bin_name="gravity-reth"
+bin_name="kvstore-v2"
 node_arg=""
 bin_version="debug"
 mode="cluster"
@@ -31,7 +31,7 @@ while [[ "$#" -gt 0 ]]; do
     shift
 done
 
-if [[ "$bin_name" != "gravity-reth" && "$bin_name" != "bench" ]]; then
+if [[ "$bin_name" != "gravity-reth" && "$bin_name" != "bench" && "$bin_name" != "kvstore-v2" ]]; then
     echo "Error: bin_name must be either 'gravity-reth' or 'bench'."
     exit 1
 fi
@@ -49,6 +49,10 @@ fi
 if [[ "$mode" != "cluster" && "$mode" != "single" ]]; then
     echo "Error: mode must be either 'cluster' or 'single'."
     exit 1
+fi
+
+if [[ "$bin_name" != "gravity-reth" ]]; then
+    rm -rf /tmp/$node_arg
 fi
 
 mkdir -p /tmp/$node_arg

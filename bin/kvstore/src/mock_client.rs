@@ -56,7 +56,7 @@ impl ExecutionApi for MockClient {
         0
     }
 
-    async fn recover_ordered_block(&self, block_batch: BlockBatch) {
+    async fn recover_ordered_block(&self, block_batch: ExternalBlock) {
         unimplemented!("No need for kvstore")
     }
 

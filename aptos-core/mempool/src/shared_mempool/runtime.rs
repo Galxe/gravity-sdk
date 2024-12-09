@@ -36,46 +36,38 @@ use tokio::runtime::{Handle, Runtime};
 ///   - outbound_sync_task (task that periodically broadcasts transactions to peers).
 ///   - inbound_network_task (task that handles inbound mempool messages and network events).
 ///   - gc_task (task that performs GC of all expired transactions by SystemTTL).
-pub(crate) fn start_shared_mempool<TransactionValidator, ConfigProvider>(
+pub(crate) fn start_shared_mempool(
     executor: &Handle,
     config: &NodeConfig,
     mempool: Arc<Mutex<CoreMempool>>,
     network_client: NetworkClient<MempoolSyncMsg>,
     network_service_events: NetworkServiceEvents<MempoolSyncMsg>,
-    client_events: MempoolEventsReceiver,
     quorum_store_requests: Receiver<QuorumStoreRequest>,
     mempool_listener: MempoolNotificationListener,
-    mempool_reconfig_events: ReconfigNotificationListener<ConfigProvider>,
     db: Arc<dyn DbReader>,
-    validator: Arc<RwLock<TransactionValidator>>,
     subscribers: Vec<UnboundedSender<SharedMempoolNotification>>,
     peers_and_metadata: Arc<PeersAndMetadata>,
     execution_api: Arc<dyn ExecutionApiV2>,
-) where
-    TransactionValidator: TransactionValidation + 'static,
-    ConfigProvider: OnChainConfigProvider,
-{
+) {
     info!("try to start_shared_mempool");
     let node_type = NodeType::extract_from_config(config);
-    let smp: SharedMempool<NetworkClient<MempoolSyncMsg>, TransactionValidator> =
+    let smp: SharedMempool<NetworkClient<MempoolSyncMsg>> =
         SharedMempool::new(
             mempool.clone(),
             config.mempool.clone(),
             network_client,
             db,
-            validator,
             subscribers,
             node_type,
+            execution_api.clone(),
         );
 
     executor.spawn(coordinator(
         smp,
         executor.clone(),
         network_service_events,
-        client_events,
         quorum_store_requests,
         mempool_listener,
-        mempool_reconfig_events,
         config.mempool.shared_mempool_peer_update_interval_ms,
         peers_and_metadata,
     ));
@@ -126,67 +118,27 @@ async fn retrieve_from_execution_routine(
     }
 }
 
-// A pool of VMValidators that can be used to validate transactions concurrently. This is done because
-// the VM is not thread safe today. This is a temporary solution until the VM is made thread safe.
-#[derive(Clone)]
-pub struct PooledVMValidator {}
-
-impl PooledVMValidator {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-pub trait TransactionValidation: Send + Sync + Clone {
-    /// Validate a txn from client
-    fn validate_transaction(&self, _txn: SignedTransaction) -> Result<VMValidatorResult>;
-
-    /// Restart the transaction validation instance
-    fn restart(&mut self) -> Result<()>;
-
-    /// Notify about new commit
-    fn notify_commit(&mut self);
-}
-
-impl TransactionValidation for PooledVMValidator {
-    fn validate_transaction(&self, txn: SignedTransaction) -> Result<VMValidatorResult> {
-        Ok(VMValidatorResult::new(None, 0))
-    }
-
-    fn restart(&mut self) -> Result<()> {
-        Ok(())
-    }
-
-    fn notify_commit(&mut self) {}
-}
-
 pub fn bootstrap(
     config: &NodeConfig,
     db: Arc<dyn DbReader>,
     network_client: NetworkClient<MempoolSyncMsg>,
     network_service_events: NetworkServiceEvents<MempoolSyncMsg>,
-    client_events: MempoolEventsReceiver,
     quorum_store_requests: Receiver<QuorumStoreRequest>,
     mempool_listener: MempoolNotificationListener,
-    mempool_reconfig_events: ReconfigNotificationListener<DbBackedOnChainConfig>,
     peers_and_metadata: Arc<PeersAndMetadata>,
     execution_api: Arc<dyn ExecutionApiV2>,
 ) -> Runtime {
     let runtime = aptos_runtimes::spawn_named_runtime("shared-mem".into(), None);
     let mempool = Arc::new(Mutex::new(CoreMempool::new(config)));
-    let vm_validator = Arc::new(RwLock::new(PooledVMValidator::new()));
     start_shared_mempool(
         runtime.handle(),
         config,
         mempool,
         network_client,
         network_service_events,
-        client_events,
         quorum_store_requests,
         mempool_listener,
-        mempool_reconfig_events,
         db,
-        vm_validator,
         vec![],
         peers_and_metadata,
         execution_api,

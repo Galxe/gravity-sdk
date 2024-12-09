@@ -152,7 +152,7 @@ impl ExecutionApi for MockCli {
 
     async fn recover_ordered_block(
         &self,
-        block_batch: BlockBatch,
+        block_batch: ExternalBlock,
     ) {
         unimplemented!("No need for bench mode")
     }

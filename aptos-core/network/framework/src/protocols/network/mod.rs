@@ -25,7 +25,7 @@ use futures::{
 use futures_util::ready;
 use pin_project::pin_project;
 use serde::{de::DeserializeOwned, Serialize};
-use std::{cmp::min, fmt::Debug, future, marker::PhantomData, pin::Pin, sync::Arc, time::Duration};
+use std::{any::type_name, cmp::min, fmt::Debug, future, marker::PhantomData, pin::Pin, sync::Arc, time::Duration};
 
 pub trait Message: DeserializeOwned + Serialize {}
 impl<T: DeserializeOwned + Serialize> Message for T {}
@@ -213,7 +213,6 @@ impl<TMessage: Message + Send + Sync + 'static> NewNetworkEvents for NetworkEven
     ) -> Self {
         // Determine the number of parallel deserialization tasks to use
         let max_parallel_deserialization_tasks = max_parallel_deserialization_tasks.unwrap_or(1);
-
         let data_event_stream = peer_mgr_notifs_rx.map(|notification| {
             tokio::task::spawn_blocking(move || received_message_to_event(notification))
         });
@@ -233,7 +232,6 @@ impl<TMessage: Message + Send + Sync + 'static> NewNetworkEvents for NetworkEven
                     .filter_map(|res| future::ready(res.expect("JoinError from spawn blocking"))),
             )
         };
-
         Self {
             event_stream: data_event_stream,
             done: false,
@@ -305,7 +303,9 @@ fn request_to_network_event<TMessage: Message, Request: IncomingRequest>(
     request: &Request,
 ) -> Option<TMessage> {
     match request.to_message() {
-        Ok(msg) => Some(msg),
+        Ok(msg) => {
+            Some(msg)
+        },
         Err(err) => {
             let data = request.data();
             warn!(

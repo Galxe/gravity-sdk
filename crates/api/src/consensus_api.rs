@@ -111,13 +111,10 @@ impl ConsensusEngine {
         let mempool_listener =
             aptos_mempool_notifications::MempoolNotificationListener::new(notification_receiver);
 
-        let (_mempool_client_sender, _mempool_client_receiver) = mpsc::channel(1);
         let mempool_runtime = init_mempool(
             &node_config,
             &db,
-            &mut event_subscription_service,
             mempool_interfaces,
-            _mempool_client_receiver,
             consensus_to_mempool_receiver,
             mempool_listener,
             peers_and_metadata,

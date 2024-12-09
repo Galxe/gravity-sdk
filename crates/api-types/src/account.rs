@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
+use rand::{rngs::OsRng, Rng};
 
 #[derive(Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub struct ExternalAccountAddress([u8; 32]);
@@ -12,9 +13,16 @@ impl ExternalAccountAddress {
     pub fn bytes(&self) -> [u8; 32] {
         self.0.clone()
     }
+
+    /// Create a cryptographically random instance.
+    pub fn random() -> Self {
+        let mut rng = OsRng;
+        let hash: [u8; 32] = rng.gen();
+        Self(hash)
+    }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ExternalChainId(u64);
 
 impl ExternalChainId {

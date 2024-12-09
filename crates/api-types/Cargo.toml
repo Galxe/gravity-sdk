@@ -15,4 +15,5 @@ futures = { workspace = true }
 tokio = { workspace = true }
 ruint = { workspace = true }
 serde = { workspace = true }
+rand = { workspace = true }
 hex = "0.4.3"

@@ -29,7 +29,6 @@ impl ConsensusDB {
                 hex::decode(node_config.consensus_public_key.as_bytes()).unwrap().as_slice()
             )
             .unwrap();
-            info!("lightman1122 consensus_key {} {}", addr, public_key);
             let config = ValidatorConfig::new(
                 public_key,
                 bcs::to_bytes(&vec![addr.clone()]).unwrap(),

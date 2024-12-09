@@ -14,6 +14,7 @@ use crate::{
         },
     },
 };
+use api_types::VerifiedTxn;
 use aptos_config::{
     config::{NodeConfig, PeerRole},
     network_id::{NetworkId, PeerNetworkId},
@@ -301,7 +302,7 @@ impl TestHarness {
 
     fn handle_txns(
         &mut self,
-        transactions: Vec<SignedTransaction>,
+        transactions: Vec<VerifiedTxn>,
         sender_id: &NodeId,
         network_id: NetworkId,
         num_transactions_in_message: Option<usize>, // If specified, checks the number of txns in the message
@@ -311,7 +312,7 @@ impl TestHarness {
         drop_ack: bool,     // If true, drop ack from remote peer to this peer
         remote_peer_id: PeerId,
         msg: Message,
-    ) -> (Vec<SignedTransaction>, PeerId) {
+    ) -> (Vec<VerifiedTxn>, PeerId) {
         let sender = self.mut_node(sender_id);
         let sender_peer_id = sender.peer_id(network_id);
 
@@ -404,7 +405,6 @@ impl TestHarness {
                 match mempool_message {
                     MempoolSyncMsg::BroadcastTransactionsRequest {
                         transactions,
-                        message_id: _message_id,
                     } => self.handle_txns(
                         transactions,
                         sender_id,
@@ -418,7 +418,6 @@ impl TestHarness {
                         msg,
                     ),
                     MempoolSyncMsg::BroadcastTransactionsRequestWithReadyTime {
-                        message_id: _message_id,
                         transactions,
                     } => self.handle_txns(
                         transactions.into_iter().map(|(txn, _, _)| txn).collect(),

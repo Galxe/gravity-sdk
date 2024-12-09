@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use api_types::ExecutionApiV2;
+use api_types::{ExecTxn, ExecutionApiV2};
 use aptos_crypto::HashValue;
 use aptos_logger::info;
 use axum::{http::StatusCode, response::Json as JsonResponse};
@@ -25,7 +25,13 @@ pub async fn submit_tx(
     request: TxRequest,
     execution_api: Option<Arc<dyn ExecutionApiV2>>,
 ) -> Result<JsonResponse<()>, StatusCode> {
-    info!("recieve a submit transaction");
+    if let Some(execution_api) = execution_api {
+        let res = execution_api.add_txn(ExecTxn::RawTxn(request.tx)).await;
+        if let Err(e) = res {
+            info!("submit tx error {:?}", e);
+            return Err(StatusCode::from_u16(1).unwrap());
+        }
+    }
     Ok(JsonResponse(()))
 }
 

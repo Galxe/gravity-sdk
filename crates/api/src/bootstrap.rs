@@ -146,26 +146,19 @@ pub fn start_consensus(
 pub fn init_mempool(
     node_config: &NodeConfig,
     db: &DbReaderWriter,
-    event_subscription_service: &mut EventSubscriptionService,
     mempool_interfaces: ApplicationNetworkInterfaces<MempoolSyncMsg>,
-    _mempool_client_receiver: Receiver<MempoolClientRequest>,
     consensus_to_mempool_receiver: Receiver<QuorumStoreRequest>,
     mempool_listener: MempoolNotificationListener,
     peers_and_metadata: Arc<PeersAndMetadata>,
     execution_api: Arc<dyn ExecutionApiV2>,
 ) -> Runtime {
-    let mempool_reconfig_subscription = event_subscription_service
-        .subscribe_to_reconfigurations()
-        .expect("Mempool must subscribe to reconfigurations");
     aptos_mempool::bootstrap(
         &node_config,
         Arc::clone(&db.reader),
         mempool_interfaces.network_client,
         mempool_interfaces.network_service_events,
-        _mempool_client_receiver,
         consensus_to_mempool_receiver,
         mempool_listener,
-        mempool_reconfig_subscription,
         peers_and_metadata,
         execution_api,
     )

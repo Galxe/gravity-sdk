@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{core_mempool::TXN_INDEX_ESTIMATED_BYTES, counters, network::BroadcastPeerPriority};
+use api_types::account::{ExternalAccountAddress, ExternalChainId};
 use aptos_crypto::{ed25519::PrivateKey, HashValue, Uniform};
 use aptos_types::{
     account_address::AccountAddress,
@@ -100,6 +101,29 @@ pub struct VerifiedTxn {
     pub(crate) sender: AccountAddress,
     pub(crate) sequence_number: u64,
     pub(crate) chain_id: chain_id::ChainId,
+}
+
+impl From<api_types::VerifiedTxn> for VerifiedTxn {
+    fn from(value: api_types::VerifiedTxn) -> Self {
+        VerifiedTxn {
+            bytes: value.bytes,
+            sender: AccountAddress::new(value.sender.bytes()),
+            sequence_number: value.sequence_number,
+            chain_id: value.chain_id.into_u64().into(),
+            
+        }
+    }
+}
+
+impl From<VerifiedTxn> for api_types::VerifiedTxn {
+    fn from(value: VerifiedTxn) -> Self {
+        api_types::VerifiedTxn {
+            bytes: value.bytes,
+            sender: ExternalAccountAddress::new(value.sender.into_bytes()),
+            sequence_number: value.sequence_number,
+            chain_id: ExternalChainId::new(value.chain_id.into()),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

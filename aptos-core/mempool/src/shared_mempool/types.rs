@@ -9,6 +9,7 @@ use crate::{
     shared_mempool::use_case_history::UseCaseHistory,
 };
 use anyhow::Result;
+use api_types::ExecutionApiV2;
 use aptos_config::{
     config::{MempoolConfig, NodeType},
     network_id::PeerNetworkId,
@@ -46,30 +47,29 @@ pub type TimelineIndexIdentifier = u8;
 
 /// Struct that owns all dependencies required by shared mempool routines.
 #[derive(Clone)]
-pub(crate) struct SharedMempool<NetworkClient, TransactionValidator> {
+pub(crate) struct SharedMempool<NetworkClient> {
     pub mempool: Arc<Mutex<CoreMempool>>,
     pub config: MempoolConfig,
     pub network_interface: MempoolNetworkInterface<NetworkClient>,
     pub db: Arc<dyn DbReader>,
-    pub validator: Arc<RwLock<TransactionValidator>>,
     pub subscribers: Vec<UnboundedSender<SharedMempoolNotification>>,
     pub broadcast_within_validator_network: Arc<RwLock<bool>>,
     pub use_case_history: Arc<Mutex<UseCaseHistory>>,
+    pub execution_api: Arc<dyn ExecutionApiV2>,
 }
 
 impl<
         NetworkClient: NetworkClientInterface<MempoolSyncMsg>,
-        TransactionValidator,
-    > SharedMempool<NetworkClient, TransactionValidator>
+    > SharedMempool<NetworkClient>
 {
     pub fn new(
         mempool: Arc<Mutex<CoreMempool>>,
         config: MempoolConfig,
         network_client: NetworkClient,
         db: Arc<dyn DbReader>,
-        validator: Arc<RwLock<TransactionValidator>>,
         subscribers: Vec<UnboundedSender<SharedMempoolNotification>>,
         node_type: NodeType,
+        execution_api: Arc<dyn ExecutionApiV2>
     ) -> Self {
         let network_interface =
             MempoolNetworkInterface::new(network_client, node_type, config.clone());
@@ -82,10 +82,10 @@ impl<
             config,
             network_interface,
             db,
-            validator,
             subscribers,
             broadcast_within_validator_network: Arc::new(RwLock::new(true)),
             use_case_history: Arc::new(Mutex::new(use_case_history)),
+            execution_api: execution_api,
         }
     }
 
