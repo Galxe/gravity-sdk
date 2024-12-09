@@ -1,17 +1,21 @@
+mod bench_server;
+mod cli;
 mod kv;
+mod server;
+mod server_trait;
 mod stateful_mempool;
 mod txn;
-mod cli;
-mod server;
 
 use std::{sync::Arc, thread};
 
 use api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
 use api_types::{BlockHashState, ConsensusApi, ExecutionApiV2};
+use bench_server::BenchServer;
 use clap::Parser;
 use cli::Cli;
 use kv::KvStore;
 use server::Server;
+use server_trait::IServer;
 
 struct TestConsensusLayer {
     consensus_engine: Arc<dyn ConsensusApi>,
@@ -45,15 +49,17 @@ async fn main() {
     let cli = Cli::parse();
     let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
     let listen_url = cli.listen_url.clone();
+    let use_bench = cli.bench;
 
-    // Run the server logic
-    cli.run(|| {
+    cli.run(move || {
         tokio::spawn(async move {
-            let kv_store = Arc::new(KvStore::new());
-
-            let server = Server::new(kv_store.clone());
+            let server: Arc<dyn IServer> = match use_bench {
+                true => Arc::new(BenchServer::new()),
+                false => Arc::new(Server::new()),
+            };
+            let execution_api = server.execution_client();
             let _ = thread::spawn(move || {
-                let cl = TestConsensusLayer::new(gcei_config, kv_store);
+                let cl = TestConsensusLayer::new(gcei_config, execution_api);
                 tokio::runtime::Runtime::new().unwrap().block_on(cl.run());
             });
 
