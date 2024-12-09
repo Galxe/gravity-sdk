@@ -13,21 +13,6 @@ use greth_cli_util as reth_cli_util;
 use greth_ethereum_engine_primitives as reth_ethereum_engine_primitives;
 #[cfg(feature = "grevm")]
 use greth_rpc_api as reth_rpc_api;
-
-#[cfg(feature = "preth")]
-use reth_node_builder as reth_node_builder;
-#[cfg(feature = "preth")]
-use reth_node_ethereum as reth_node_ethereum;
-#[cfg(feature = "preth")]
-use reth_node_core as reth_node_core;
-#[cfg(feature = "preth")]
-use reth_provider as reth_provider;
-#[cfg(feature = "preth")]
-use reth_cli_util as reth_cli_util;
-#[cfg(feature = "preth")]
-use reth_ethereum_engine_primitives as reth_ethereum_engine_primitives;
-#[cfg(feature = "preth")]
-use reth_rpc_api as reth_rpc_api;
 mod cli;
 mod reth_cli;
 mod exec_layer;

@@ -89,34 +89,6 @@ op-alloy-network = "0.2.12"
 op-alloy-consensus = "0.2.12"
 serde = { version = "1.0.128", features = ["derive"] }
 web3 = "0.19.0"
-reth = { git = "https://github.com/paradigmxyz/reth", tag = "v1.0.7", optional = true }
-reth-node-builder = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-builder", tag = "v1.0.7", optional = true }
-reth-node-ethereum = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-ethereum", tag = "v1.0.7", optional = true }
-reth-node-core = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-core", tag = "v1.0.7", optional = true }
-reth-provider = { git = "https://github.com/paradigmxyz/reth", package = "reth-provider", tag = "v1.0.7", optional = true }
-reth-db = { git = "https://github.com/paradigmxyz/reth", package = "reth-db", tag = "v1.0.7", optional = true }
-reth-tasks = { git = "https://github.com/paradigmxyz/reth", package = "reth-tasks", tag = "v1.0.7", optional = true }
-reth-cli-runner = { git = "https://github.com/paradigmxyz/reth", package = "reth-cli-runner", tag = "v1.0.7", optional = true }
-reth-cli = { git = "https://github.com/paradigmxyz/reth", package = "reth-cli", tag = "v1.0.7", optional = true }
-reth-cli-util = { git = "https://github.com/paradigmxyz/reth", package = "reth-cli-util", tag = "v1.0.7", optional = true }
-reth-chainspec = { git = "https://github.com/paradigmxyz/reth", package = "reth-chainspec", tag = "v1.0.7", optional = true }
-reth-tracing = { git = "https://github.com/paradigmxyz/reth", package = "reth-tracing", tag = "v1.0.7", optional = true }
-reth-auto-seal-consensus = { git = "https://github.com/paradigmxyz/reth", package = "reth-auto-seal-consensus", tag = "v1.0.7", optional = true }
-reth-basic-payload-builder = { git = "https://github.com/paradigmxyz/reth", package = "reth-basic-payload-builder", tag = "v1.0.7", optional = true }
-reth-beacon-consensus = { git = "https://github.com/paradigmxyz/reth", package = "reth-beacon-consensus", tag = "v1.0.7", optional = true }
-reth-ethereum-engine-primitives = { git = "https://github.com/paradigmxyz/reth", package = "reth-ethereum-engine-primitives", tag = "v1.0.7", optional = true }
-reth-evm-ethereum = { git = "https://github.com/paradigmxyz/reth", package = "reth-evm-ethereum", tag = "v1.0.7", optional = true }
-reth-network = { git = "https://github.com/paradigmxyz/reth", package = "reth-network", tag = "v1.0.7", optional = true }
-reth-node-api = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-api", tag = "v1.0.7", optional = true }
-reth-payload-builder = { git = "https://github.com/paradigmxyz/reth", package = "reth-payload-builder", tag = "v1.0.7", optional = true }
-reth-rpc = { git = "https://github.com/paradigmxyz/reth", package = "reth-rpc", tag = "v1.0.7", optional = true }
-reth-rpc-api = { git = "https://github.com/paradigmxyz/reth", package = "reth-rpc-api", tag = "v1.0.7", features = ["client"], optional = true }
-reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", package = "reth-rpc-types", tag = "v1.0.7", optional = true}
-reth-transaction-pool = { git = "https://github.com/paradigmxyz/reth", package = "reth-transaction-pool", tag = "v1.0.7", optional = true }
-reth-consensus = { git = "https://github.com/paradigmxyz/reth", package = "reth-consensus", tag = "v1.0.7", optional = true }
-reth-ethereum-payload-builder = { git = "https://github.com/paradigmxyz/reth", package = "reth-ethereum-payload-builder", tag = "v1.0.7", optional = true }
-reth-primitives = { git = "https://github.com/paradigmxyz/reth", package = "reth-primitives", tag = "v1.0.7", optional = true }
-reth-cli-commands = { git = "https://github.com/paradigmxyz/reth", package = "reth-cli-commands", features = ["dev"], tag = "v1.0.7", optional = true }
 
 greth = { git = "https://github.com/Galxe/grevm-reth", package = "reth", branch = "v1.0.7-gravity", optional = true }
 greth-node-builder = { git = "https://github.com/Galxe/grevm-reth", package = "reth-node-builder", branch = "v1.0.7-gravity", optional = true }
@@ -150,6 +122,5 @@ reqwest = "0.12.9"
 async-trait.workspace = true
 
 [features]
-preth = ["reth", "reth-node-builder", "reth-node-ethereum", "reth-node-core", "reth-provider", "reth-db", "reth-tasks", "reth-cli-runner", "reth-cli", "reth-cli-util", "reth-chainspec", "reth-tracing", "reth-auto-seal-consensus", "reth-basic-payload-builder", "reth-beacon-consensus", "reth-ethereum-engine-primitives", "reth-evm-ethereum", "reth-network", "reth-node-api", "reth-payload-builder", "reth-rpc", "reth-rpc-api", "reth-rpc-types", "reth-transaction-pool", "reth-consensus", "reth-ethereum-payload-builder", "reth-primitives", "reth-cli-commands"]
 grevm = ["greth", "greth-node-builder", "greth-node-ethereum", "greth-node-core", "greth-provider", "greth-db", "greth-tasks", "greth-cli-runner", "greth-cli", "greth-cli-util", "greth-chainspec", "greth-tracing", "greth-auto-seal-consensus", "greth-basic-payload-builder", "greth-beacon-consensus", "greth-ethereum-engine-primitives", "greth-evm-ethereum", "greth-network", "greth-node-api", "greth-payload-builder", "greth-rpc", "greth-rpc-api", "greth-rpc-types", "greth-transaction-pool", "greth-consensus", "greth-ethereum-payload-builder", "greth-primitives", "greth-cli-commands"]
-default = ["preth"]
+default = ["grevm"]
