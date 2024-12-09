@@ -102,6 +102,7 @@ async fn retrieve_from_execution_routine(
         let txns = execution_api.recv_pending_txns().await;
         match txns {
             Ok(txns) => {
+                info!("the recv_pending_txns size is {:?}", txns.len());
                 txns.into_iter().for_each(|txn| {
                     let _r = mempool.lock().add_txn(
                         VerifiedTxn {

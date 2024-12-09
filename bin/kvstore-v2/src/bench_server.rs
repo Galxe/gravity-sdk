@@ -133,7 +133,7 @@ impl ExecutionApiV2 for InnerExecution {
 }
 
 pub struct BenchServer {
-    kv_store: Arc<InnerExecution>,
+    kv_store: Arc<Mutex<Arc<InnerExecution>>>,
 }
 
 #[async_trait]
@@ -150,7 +150,7 @@ impl IServer for BenchServer {
                 let store = self.kv_store.clone();
                 info!("start new add txn");
                 tokio::spawn(async move {
-                    let _ = store.add_txn(txn).await;
+                    let _ = store.lock().await.add_txn(txn).await;
                 });
             });
             tokio::time::sleep(tokio::time::Duration::from_secs(60)).await
@@ -158,13 +158,13 @@ impl IServer for BenchServer {
     }
 
     fn execution_client(&self) -> Arc<dyn ExecutionApiV2> {
-        self.kv_store.clone()
+        self.kv_store.blocking_lock().inner.clone()
     }
 }
 
 impl BenchServer {
     pub fn new() -> Self {
-        Self { kv_store: Arc::new(InnerExecution::new(Arc::new(KvStore::new()))) }
+        Self { kv_store: Arc::new(Mutex::new(Arc::new(InnerExecution::new(Arc::new(KvStore::new()))))) }
     }
 
     async fn random_txns(&self, num: u64) -> Vec<ExecTxn> {
