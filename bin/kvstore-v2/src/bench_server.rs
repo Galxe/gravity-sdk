@@ -88,7 +88,7 @@ impl ExecutionApiV2 for InnerExecution {
         let should_count = !ordered_block.txns.is_empty();
         let r = self.inner.send_ordered_block(ordered_block).await;
         if should_count {
-            self.counter.blocking_lock().count();
+            self.counter.lock().await.count();
         }
         r
     }
