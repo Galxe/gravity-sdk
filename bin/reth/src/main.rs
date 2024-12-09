@@ -171,5 +171,9 @@ fn run_server() {
 }
 
 fn main() {
+    get_coex_bridge().register("test_info".to_string(), Func::TestInfo(coex_bridge::call::Call::new(|mess| {
+        info!("test_info: {:?}", mess);
+        Ok(())
+    } )));
     run_server();
 }
