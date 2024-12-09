@@ -1,5 +1,5 @@
 use api_types::{ComputeRes, ExecError, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn};
-use aysnc_trait::async_trait;
+use async_trait::async_trait;
 
 pub struct RethCoordinator {
 }
