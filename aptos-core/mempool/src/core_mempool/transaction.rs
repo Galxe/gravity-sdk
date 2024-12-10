@@ -30,7 +30,6 @@ impl From<&SignedTransaction> for VerifiedTxn {
             bytes,
             sender: signed_txn.sender(),
             txn_sequence_number: signed_txn.sequence_number(),
-            // todo(Gravity_byteyue): where would this happen?
             account_latest_committed_sequence_number: None,
             chain_id: signed_txn.chain_id(),
         }
