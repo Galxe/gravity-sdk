@@ -83,11 +83,13 @@ impl ExecutionApiV2 for InnerExecution {
     }
 
     async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxn>, ExecError> {
+        println!("into inner recv_pending_txns");
         info!("into inner recv_pending_txns");
         self.inner.recv_pending_txns().await
     }
 
     async fn send_ordered_block(&self, ordered_block: ExternalBlock) -> Result<(), ExecError> {
+        info!("enter inner send_ordered_block");
         let should_count = !ordered_block.txns.is_empty();
         let r = self.inner.send_ordered_block(ordered_block).await;
         if should_count {
@@ -101,11 +103,13 @@ impl ExecutionApiV2 for InnerExecution {
         &self,
         head: ExternalBlockMeta,
     ) -> Result<ComputeRes, ExecError> {
+        info!("enter inner recv_executed_block_hash");
         self.inner.recv_executed_block_hash(head).await
     }
 
     // this function is called by the execution layer commit the block hash
     async fn commit_block(&self, head: ExternalBlockMeta) -> Result<(), ExecError> {
+        info!("enter inner commit_block");
         self.inner.commit_block(head).await
     }
 
