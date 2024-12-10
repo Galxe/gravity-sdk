@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
+use log::info;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Mutex;
 use api_types::{BlockBatch, ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExecutionBlocks, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, GTxn, VerifiedTxn};
@@ -75,6 +76,7 @@ impl ExecutionApiV2 for KvStore {
     }
 
     async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxn>, ExecError> {
+        info!("call into kv recv_pending_txns");
         Ok(self.mempool.pending_txns().await)
     }
 

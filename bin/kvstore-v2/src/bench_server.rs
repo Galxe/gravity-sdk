@@ -161,7 +161,7 @@ impl IServer for BenchServer {
     }
 
     async fn execution_client(&self) -> Arc<dyn ExecutionApiV2> {
-        self.kv_store.lock().await.inner.clone()
+        self.kv_store.lock().await.clone()
     }
 }
 

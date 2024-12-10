@@ -117,7 +117,7 @@ impl Mempool {
     }
 
     pub async fn pending_txns(&self) -> Vec<VerifiedTxn> {
-        info!("call into pending_txns");
+        info!("call into mempool pending_txns");
         let mut txns = Vec::new();
         
         while let Some(result) = {
