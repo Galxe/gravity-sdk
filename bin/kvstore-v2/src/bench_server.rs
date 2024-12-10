@@ -66,6 +66,7 @@ impl InnerExecution {
 #[async_trait]
 impl ExecutionApiV2 for InnerExecution {
     async fn add_txn(&self, bytes: ExecTxn) -> Result<(), ExecError> {
+        info!("called into execution api v2 add_txn");
         self.inner.add_txn(bytes).await
     }
 
@@ -150,7 +151,7 @@ impl IServer for BenchServer {
                     let _ = store.lock().await.add_txn(txn).await;
                 });
             });
-            tokio::time::sleep(tokio::time::Duration::from_secs(60)).await
+            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await
         }
     }
 

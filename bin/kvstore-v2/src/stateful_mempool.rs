@@ -1,4 +1,4 @@
-use log::warn;
+use log::{info, warn};
 use tokio::sync::mpsc::error::TryRecvError;
 use crate::txn::RawTxn;
 use api_types::account::{self, ExternalAccountAddress};
@@ -82,6 +82,7 @@ impl Mempool {
             raw_txn,
             status,
         };
+        info!("call into mempool add_raw_txn");
         {
             self.mempool.lock().await.entry(account.clone()).or_insert(BTreeMap::new()).insert(sequence_number, txn);
         }
@@ -96,6 +97,7 @@ impl Mempool {
     }
 
     pub async fn process_txn(&self, account: ExternalAccountAddress) {
+        info!("call into mempool process_txn");
         let mut mempool = self.mempool.lock().await;
         let mut water_mark = self.water_mark.lock().await;
         let account_mempool = mempool.get_mut(&account).unwrap();
