@@ -63,7 +63,7 @@ async fn main() {
                 true => Arc::new(BenchServer::new()),
                 false => Arc::new(Server::new()),
             };
-            let execution_api = server.execution_client();
+            let execution_api = server.execution_client().await;
             let _ = thread::spawn(move || {
                 let cl = TestConsensusLayer::new(gcei_config, execution_api);
                 tokio::runtime::Runtime::new().unwrap().block_on(cl.run());

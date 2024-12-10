@@ -136,12 +136,6 @@ pub struct BenchServer {
     kv_store: Arc<Mutex<Arc<InnerExecution>>>,
 }
 
-impl BenchServer {
-    async fn get_execution_client(&self) -> Arc<dyn ExecutionApiV2> {
-        self.kv_store.lock().await.inner.clone()
-    }
-}
-
 #[async_trait]
 impl IServer for BenchServer {
     /// Starts the TCP server
@@ -160,11 +154,8 @@ impl IServer for BenchServer {
         }
     }
 
-    fn execution_client(&self) -> Arc<dyn ExecutionApiV2> {
-        let r = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(async { self.get_execution_client().await } );
-        r
+    async fn execution_client(&self) -> Arc<dyn ExecutionApiV2> {
+        self.kv_store.lock().await.inner.clone()
     }
 }
 

@@ -37,7 +37,7 @@ impl IServer for Server {
         }
     }
 
-    fn execution_client(&self) -> Arc<dyn ExecutionApiV2> {
+    async fn execution_client(&self) -> Arc<dyn ExecutionApiV2> {
         self.kv_store.clone()
     }
 }
