@@ -82,7 +82,6 @@ impl Mempool {
             raw_txn,
             status,
         };
-        info!("call into mempool add_raw_txn");
         {
             self.mempool.lock().await.entry(account.clone()).or_insert(BTreeMap::new()).insert(sequence_number, txn);
         }
@@ -97,27 +96,20 @@ impl Mempool {
     }
 
     pub async fn process_txn(&self, account: ExternalAccountAddress) {
-        info!("call into mempool process_txn");
         let mut mempool = self.mempool.lock().await;
-        info!("call into mempool process_txn get mempool lock");
         let mut water_mark = self.water_mark.lock().await;
-        info!("call into mempool process_txn get water_mark lock");
         let account_mempool = mempool.get_mut(&account).unwrap();
         let sequence_number = water_mark.entry(account).or_insert(0);
-        info!("call into mempool process_txn get locks");
         for txn in account_mempool.values_mut() {
             if txn.raw_txn.sequence_number() == *sequence_number + 1 {
-                info!("call into mempool process_txn send to mempool");
                 *sequence_number += 1;
                 txn.status = TxnStatus::Pending;
                 self.pending_send.send(txn.raw_txn.clone().into_verified()).await.unwrap();
             }
         }
-        info!("call into mempool process_txn return");
     }
 
     pub async fn pending_txns(&self) -> Vec<VerifiedTxn> {
-        info!("call into mempool pending_txns");
         let mut txns = Vec::new();
         
         while let Some(result) = {
@@ -126,7 +118,6 @@ impl Mempool {
         } {
             match result {
                 Ok(txn) => {
-                    info!("add into pending txns");
                     txns.push(txn)
                 },
                 Err(TryRecvError::Empty) => {

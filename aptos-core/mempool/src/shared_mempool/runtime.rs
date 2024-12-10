@@ -117,7 +117,6 @@ async fn retrieve_from_execution_routine(
                         None,
                         Some(BroadcastPeerPriority::Primary),
                     );
-                    // info!("add_txn result is {:?}", _r);
                     // TODO(gravity_byteyue): handle error msg
                 });
             }

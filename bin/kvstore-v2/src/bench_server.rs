@@ -66,7 +66,6 @@ impl InnerExecution {
 #[async_trait]
 impl ExecutionApiV2 for InnerExecution {
     async fn add_txn(&self, bytes: ExecTxn) -> Result<(), ExecError> {
-        info!("called into execution api v2 add_txn");
         self.inner.add_txn(bytes).await
     }
 
@@ -83,13 +82,10 @@ impl ExecutionApiV2 for InnerExecution {
     }
 
     async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxn>, ExecError> {
-        println!("into inner recv_pending_txns");
-        info!("into inner recv_pending_txns");
         self.inner.recv_pending_txns().await
     }
 
     async fn send_ordered_block(&self, ordered_block: ExternalBlock) -> Result<(), ExecError> {
-        info!("enter inner send_ordered_block, is empty {:?}", ordered_block.txns.is_empty());
         let should_count = !ordered_block.txns.is_empty();
         let r = self.inner.send_ordered_block(ordered_block).await;
         if should_count {
@@ -103,13 +99,11 @@ impl ExecutionApiV2 for InnerExecution {
         &self,
         head: ExternalBlockMeta,
     ) -> Result<ComputeRes, ExecError> {
-        info!("enter inner recv_executed_block_hash");
         self.inner.recv_executed_block_hash(head).await
     }
 
     // this function is called by the execution layer commit the block hash
     async fn commit_block(&self, head: ExternalBlockMeta) -> Result<(), ExecError> {
-        info!("enter inner commit_block");
         self.inner.commit_block(head).await
     }
 
@@ -152,7 +146,6 @@ impl IServer for BenchServer {
                 std::env::var("BLOCK_TXN_NUMS").map(|s| s.parse().unwrap()).unwrap_or(1000);
             self.random_txns(txn_num_in_block).await.into_iter().for_each(|txn| {
                 let store = self.kv_store.clone();
-                // info!("start new add txn");
                 tokio::spawn(async move {
                     let _ = store.lock().await.add_txn(txn).await;
                 });

@@ -76,7 +76,6 @@ impl ExecutionApiV2 for KvStore {
     }
 
     async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxn>, ExecError> {
-        info!("call into kv recv_pending_txns");
         Ok(self.mempool.pending_txns().await)
     }
 
