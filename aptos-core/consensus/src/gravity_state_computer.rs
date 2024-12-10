@@ -28,7 +28,6 @@ use aptos_types::{
     block_executor::config::BlockExecutorConfigFromOnchain, epoch_state::EpochState,
     ledger_info::LedgerInfoWithSignatures, randomness::Randomness,
 };
-use futures::SinkExt;
 use futures_channel::oneshot;
 use once_cell::sync::OnceCell;
 use std::time::Duration;
@@ -142,7 +141,8 @@ impl StateComputer for GravityExecutionProxy {
                 .map(|txn| api_types::VerifiedTxn {
                     bytes: txn.bytes().to_vec(),
                     sender: ExternalAccountAddress::new(txn.sender().into_bytes()),
-                    sequence_number: txn.sequence_number(),
+                    txn_sequence_number: txn.sequence_number(),
+                    account_latest_committed_sequence_number: txn.account_latest_committed_sequence_number(),
                     chain_id: ExternalChainId::new(txn.chain_id().id()),
                 })
                 .collect();

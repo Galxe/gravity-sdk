@@ -24,12 +24,9 @@ use aptos_network::application::{
 use aptos_storage_interface::DbReader;
 use aptos_types::account_address::AccountAddress;
 use aptos_types::{
-    account_address::AccountAddressWithChecks,
     on_chain_config::OnChainConfigProvider,
     transaction::{SignedTransaction, VMValidatorResult},
-    PeerId,
 };
-// use aptos_vm_validator::vm_validator::{PooledVMValidator, TransactionValidation};
 use futures::channel::mpsc::{Receiver, UnboundedSender};
 use std::sync::Arc;
 use tokio::runtime::{Handle, Runtime};
@@ -108,10 +105,11 @@ async fn retrieve_from_execution_routine(
                         VerifiedTxn {
                             bytes: txn.bytes,
                             sender: AccountAddress::from(txn.sender.bytes()),
-                            sequence_number: txn.sequence_number,
+                            txn_sequence_number: txn.txn_sequence_number,
+                            account_latest_committed_sequence_number: txn.account_latest_committed_sequence_number,
                             chain_id: txn.chain_id.into_u64().into(),
                         },
-                        1,
+                        txn.account_latest_committed_sequence_number.expect("Must set account seq when add txn"),
                         TimelineState::NotReady,
                         true,
                         None,
