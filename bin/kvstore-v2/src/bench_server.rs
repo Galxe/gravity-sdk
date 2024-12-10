@@ -179,7 +179,7 @@ impl BenchServer {
             let key = format!("random_key_{}", i);
             let val = format!("random_value_{}", i);
             let raw_txn =
-                RawTxn { account: generate_random_address(), sequence_number: i + 1, key, val };
+                RawTxn { account: generate_random_address(), sequence_number: 1, key, val };
             let exec_txn = ExecTxn::RawTxn(raw_txn.to_bytes());
             txns.push(exec_txn);
         }
