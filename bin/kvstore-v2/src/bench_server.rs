@@ -83,6 +83,7 @@ impl ExecutionApiV2 for InnerExecution {
     }
 
     async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxn>, ExecError> {
+        info!("into inner recv_pending_txns");
         self.inner.recv_pending_txns().await
     }
 
