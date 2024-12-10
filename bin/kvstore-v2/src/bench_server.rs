@@ -89,7 +89,7 @@ impl ExecutionApiV2 for InnerExecution {
     }
 
     async fn send_ordered_block(&self, ordered_block: ExternalBlock) -> Result<(), ExecError> {
-        info!("enter inner send_ordered_block");
+        info!("enter inner send_ordered_block, is empty {:?}", ordered_block.txns.is_empty());
         let should_count = !ordered_block.txns.is_empty();
         let r = self.inner.send_ordered_block(ordered_block).await;
         if should_count {
@@ -151,12 +151,12 @@ impl IServer for BenchServer {
                 std::env::var("BLOCK_TXN_NUMS").map(|s| s.parse().unwrap()).unwrap_or(1000);
             self.random_txns(txn_num_in_block).await.into_iter().for_each(|txn| {
                 let store = self.kv_store.clone();
-                info!("start new add txn");
+                // info!("start new add txn");
                 tokio::spawn(async move {
                     let _ = store.lock().await.add_txn(txn).await;
                 });
             });
-            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await
         }
     }
 
