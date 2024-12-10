@@ -117,6 +117,7 @@ impl Mempool {
     }
 
     pub async fn pending_txns(&self) -> Vec<VerifiedTxn> {
+        info!("call into pending_txns");
         let mut txns = Vec::new();
         
         while let Some(result) = {
@@ -124,7 +125,10 @@ impl Mempool {
             Some(receiver.try_recv())
         } {
             match result {
-                Ok(txn) => txns.push(txn),
+                Ok(txn) => {
+                    info!("add into pending txns");
+                    txns.push(txn)
+                },
                 Err(TryRecvError::Empty) => {
                     break;
                 }

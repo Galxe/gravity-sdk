@@ -126,6 +126,7 @@ async fn retrieve_from_execution_routine(
                 continue;
             }
         }
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
 }
 
