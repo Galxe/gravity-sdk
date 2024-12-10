@@ -147,6 +147,7 @@ impl IServer for BenchServer {
     /// Starts the TCP server
     async fn start(&self, addr: &str) -> tokio::io::Result<()> {
         loop {
+            info!("start produce new txn");
             let txn_num_in_block =
                 std::env::var("BLOCK_TXN_NUMS").map(|s| s.parse().unwrap()).unwrap_or(1000);
             self.random_txns(txn_num_in_block).await.into_iter().for_each(|txn| {
