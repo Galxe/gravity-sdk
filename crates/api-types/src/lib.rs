@@ -159,7 +159,6 @@ pub struct VerifiedTxn {
     pub bytes: Vec<u8>,
     pub sender: ExternalAccountAddress,
     pub sequence_number: u64,
-    // TODO(): add account_latest_committed_sequence_number
     pub chain_id: ExternalChainId,
 }
 
