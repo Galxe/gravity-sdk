@@ -305,7 +305,7 @@ impl BlockStore {
         );
 
         let blocks_to_commit = self.path_from_ordered_root(block_id_to_commit).unwrap_or_default();
-        let finalized_block_number = self.execution_api.as_ref().unwrap().finalized_block_number();
+        let finalized_block_number = self.execution_api.as_ref().unwrap().finalized_block_number().await;
         assert!(!blocks_to_commit.is_empty());
         let block_tree = self.inner.clone();
         let storage = self.storage.clone();

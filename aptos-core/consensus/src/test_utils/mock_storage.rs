@@ -139,7 +139,7 @@ impl MockStorage {
         let shared_storage = Arc::new(MockSharedStorage::new(validator_set.clone()));
         let genesis_li = LedgerInfo::mock_genesis(Some(validator_set));
         let storage = Self::new_with_ledger_info(shared_storage, genesis_li);
-        let recovery_data = match storage.start(false) {
+        let recovery_data = match storage.start(false).await {
             LivenessStorageData::FullRecoveryData(recovery_data) => recovery_data,
             _ => panic!("Mock storage should never fail constructing recovery data"),
         };
@@ -149,8 +149,9 @@ impl MockStorage {
 }
 
 // A impl that always start from genesis.
+#[async_trait]
 impl PersistentLivenessStorage for MockStorage {
-    fn latest_block_number(&self) -> u64 {
+    async fn latest_block_number(&self) -> u64 {
         unimplemented!("")
     }
 
@@ -203,7 +204,7 @@ impl PersistentLivenessStorage for MockStorage {
         self.get_ledger_recovery_data()
     }
 
-    fn start(&self, order_vote_enabled: bool) -> LivenessStorageData {
+    async fn start(&self, order_vote_enabled: bool) -> LivenessStorageData {
         match self.try_start(order_vote_enabled) {
             Ok(recovery_data) => LivenessStorageData::FullRecoveryData(recovery_data),
             Err(_) => LivenessStorageData::PartialRecoveryData(self.recover_from_ledger()),
@@ -255,7 +256,7 @@ impl EmptyStorage {
 
     pub fn start_for_testing() -> (RecoveryData, Arc<Self>) {
         let storage = Arc::new(EmptyStorage::new());
-        let recovery_data = match storage.start(false) {
+        let recovery_data = match storage.start(false).await {
             LivenessStorageData::FullRecoveryData(recovery_data) => recovery_data,
             _ => panic!("Mock storage should never fail constructing recovery data"),
         };
@@ -263,8 +264,9 @@ impl EmptyStorage {
     }
 }
 
+#[async_trait]
 impl PersistentLivenessStorage for EmptyStorage {
-    fn latest_block_number(&self) -> u64 {
+    async fn latest_block_number(&self) -> u64 {
         unimplemented!("")
     }
 
@@ -287,7 +289,7 @@ impl PersistentLivenessStorage for EmptyStorage {
         ))
     }
 
-    fn start(&self, order_vote_enabled: bool) -> LivenessStorageData {
+    async fn start(&self, order_vote_enabled: bool) -> LivenessStorageData {
         match RecoveryData::new(
             None,
             self.recover_from_ledger(),

@@ -147,11 +147,11 @@ pub trait ExecutionApiV2: Send + Sync {
     // this function is called by the execution layer commit the block hash
     async fn commit_block(&self, head: ExternalBlockMeta) -> Result<(), ExecError>;
 
-    fn latest_block_number(&self) -> u64 {
+    async fn latest_block_number(&self) -> u64 {
         unimplemented!("")
     }
 
-    fn finalized_block_number(&self) -> u64 {
+    async fn finalized_block_number(&self) -> u64 {
         unimplemented!("")
     }
 
@@ -163,7 +163,7 @@ pub trait ExecutionApiV2: Send + Sync {
         unimplemented!("")
     }
 
-    fn get_blocks_by_range(
+    async fn get_blocks_by_range(
         &self,
         start_block_number: u64,
         end_block_number: u64,

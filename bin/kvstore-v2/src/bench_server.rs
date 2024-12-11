@@ -107,12 +107,12 @@ impl ExecutionApiV2 for InnerExecution {
         self.inner.commit_block(head).await
     }
 
-    fn latest_block_number(&self) -> u64 {
-        self.inner.latest_block_number()
+    async fn latest_block_number(&self) -> u64 {
+        self.inner.latest_block_number().await
     }
 
-    fn finalized_block_number(&self) -> u64 {
-        self.inner.finalized_block_number()
+    async fn finalized_block_number(&self) -> u64 {
+        self.inner.finalized_block_number().await
     }
 
     async fn recover_ordered_block(&self, block_batch: ExternalBlock) {
@@ -123,12 +123,12 @@ impl ExecutionApiV2 for InnerExecution {
         self.inner.recover_execution_blocks(blocks).await
     }
 
-    fn get_blocks_by_range(
+    async fn get_blocks_by_range(
         &self,
         start_block_number: u64,
         end_block_number: u64,
     ) -> ExecutionBlocks {
-        self.inner.get_blocks_by_range(start_block_number, end_block_number)
+        self.inner.get_blocks_by_range(start_block_number, end_block_number).await
     }
 }
 

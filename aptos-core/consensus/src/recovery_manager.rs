@@ -102,7 +102,7 @@ impl RecoveryManager {
         BlockStore::fast_forward_sync_by_block_number(
             &mut retriever,
             self.execution_api.as_ref().unwrap().clone(),
-            self.storage.latest_block_number() + 1,
+            self.storage.latest_block_number().await + 1,
         ).await?;
         let recovery_data = BlockStore::fast_forward_sync(
             sync_info.highest_quorum_cert(),

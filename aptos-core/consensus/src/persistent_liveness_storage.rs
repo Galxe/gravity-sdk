@@ -18,6 +18,7 @@ use aptos_types::{
     proof::TransactionAccumulatorSummary, test_helpers::transaction_test_helpers::block,
     transaction::Version,
 };
+use async_trait::async_trait;
 use std::{
     cmp::max,
     collections::HashSet,
@@ -33,6 +34,7 @@ use std::{
 /// guaranteed.
 /// Blocks persisted are proposed but not yet committed.  The committed state is persisted
 /// via StateComputer.
+#[async_trait]
 pub trait PersistentLivenessStorage: Send + Sync {
     /// Persist the blocks and quorum certs into storage atomically.
     fn save_tree(&self, blocks: Vec<Block>, quorum_certs: Vec<QuorumCert>) -> Result<()>;
@@ -47,7 +49,7 @@ pub trait PersistentLivenessStorage: Send + Sync {
     fn recover_from_ledger(&self) -> LedgerRecoveryData;
 
     /// Construct necessary data to start consensus.
-    fn start(&self, order_vote_enabled: bool) -> LivenessStorageData;
+    async fn start(&self, order_vote_enabled: bool) -> LivenessStorageData;
 
     /// Persist the highest 2chain timeout certificate for improved liveness - proof for other replicas
     /// to jump to this round
@@ -68,7 +70,7 @@ pub trait PersistentLivenessStorage: Send + Sync {
 
     fn fetch_next_block_number(&self) -> u64;
 
-    fn latest_block_number(&self) -> u64;
+    async fn latest_block_number(&self) -> u64;
 }
 
 #[derive(Clone)]
@@ -392,6 +394,7 @@ impl StorageWriteProxy {
     }
 }
 
+#[async_trait]
 impl PersistentLivenessStorage for StorageWriteProxy {
     fn save_tree(&self, blocks: Vec<Block>, quorum_certs: Vec<QuorumCert>) -> Result<()> {
         Ok(self.db.save_blocks_and_quorum_certificates(blocks, quorum_certs)?)
@@ -415,7 +418,7 @@ impl PersistentLivenessStorage for StorageWriteProxy {
         LedgerRecoveryData::new(latest_ledger_info)
     }
 
-    fn start(&self, order_vote_enabled: bool) -> LivenessStorageData {
+    async fn start(&self, order_vote_enabled: bool) -> LivenessStorageData {
         info!("Start consensus recovery.");
         let raw_data = self.db.get_data().expect("unable to recover consensus data");
 
@@ -433,7 +436,7 @@ impl PersistentLivenessStorage for StorageWriteProxy {
         info!("The following blocks were restored from ConsensusDB : {}", blocks_repr.concat());
         let qc_repr: Vec<String> = quorum_certs.iter().map(|qc| format!("\n\t{}", qc)).collect();
         info!("The following quorum certs were restored from ConsensusDB: {}", qc_repr.concat());
-        let latest_block_number = self.execution_api.as_ref().unwrap().latest_block_number();
+        let latest_block_number = self.latest_block_number().await;
         info!("The execution_latest_block_number is {}", latest_block_number);
         let latest_ledger_info = self
             .aptos_db
@@ -504,14 +507,12 @@ impl PersistentLivenessStorage for StorageWriteProxy {
     }
 
     fn fetch_next_block_number(&self) -> u64 {
-        let latest_block_number = self.latest_block_number();
         let next_block_number = self.next_block_number.load(Ordering::SeqCst);
-        // assert_eq!(latest_block_number + 1, next_block_number);
         self.next_block_number.fetch_add(1, Ordering::SeqCst);
         next_block_number
     }
 
-    fn latest_block_number(&self) -> u64 {
-        self.execution_api.as_ref().unwrap().latest_block_number()
+    async fn latest_block_number(&self) -> u64 {
+        self.execution_api.as_ref().unwrap().latest_block_number().await
     }
 }
