@@ -482,6 +482,10 @@ impl ProposalGenerator {
             (validator_txns, payload, timestamp.as_micros() as u64)
         };
 
+        if !payload.is_empty() {
+            info!("not empty proposal for round {:?}, size {:?}", round, payload.size());
+        }
+
         let quorum_cert = hqc.as_ref().clone();
         let failed_authors = self.compute_failed_authors(
             round,
