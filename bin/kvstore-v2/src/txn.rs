@@ -1,15 +1,15 @@
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
-use api_types::VerifiedTxn;
 use serde::{Deserialize, Serialize};
+use api_types::VerifiedTxn;
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct RawTxn {
     pub(crate) account: ExternalAccountAddress,
     pub(crate) sequence_number: u64,
-    pub(crate) latest_account_committed_sequence_number: u64,
     pub(crate) key: String,
-    pub(crate) val: String,
+    pub(crate) val: String
 }
+
 
 impl From<VerifiedTxn> for RawTxn {
     fn from(value: VerifiedTxn) -> Self {
@@ -37,13 +37,7 @@ impl RawTxn {
     }
 
     pub fn into_verified(self) -> VerifiedTxn {
-        VerifiedTxn::new(
-            self.to_bytes(),
-            self.account,
-            self.sequence_number,
-            Some(self.latest_account_committed_sequence_number),
-            ExternalChainId::new(0),
-        )
+        VerifiedTxn::new(self.to_bytes(), self.account, self.sequence_number, ExternalChainId::new(0))
     }
 
     pub fn account(&self) -> ExternalAccountAddress {

@@ -284,7 +284,6 @@ where
     let mut statuses = vec![];
 
     let start_storage_read = Instant::now();
-    // TODO(gravity_lightman): How to use the latest account committed seq number when broadcasting
     // let state_view = smp
     //     .db
     //     .latest_state_checkpoint_view()

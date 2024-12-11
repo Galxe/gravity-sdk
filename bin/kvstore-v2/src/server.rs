@@ -44,7 +44,7 @@ impl IServer for Server {
 
 impl Server {
     pub fn new() -> Self {
-        Self { kv_store: Arc::new(KvStore::new()) }
+        Self { kv_store: Arc::new(KvStore::new()), }
     }
 
     /// Handles a single client connection
@@ -64,13 +64,8 @@ impl Server {
                 Some("SET") => {
                     let key = parts.next().unwrap_or("").to_string();
                     let val = parts.next().unwrap_or("").to_string();
-                    let raw_txn = RawTxn {
-                        account: generate_random_address(),
-                        sequence_number: 1,
-                        latest_account_committed_sequence_number: 1,
-                        key,
-                        val,
-                    };
+                    let raw_txn =
+                        RawTxn { account: generate_random_address(), sequence_number: 1, key, val };
                     match kv_store.add_txn(ExecTxn::RawTxn(raw_txn.to_bytes())).await {
                         Ok(_) => reader.get_mut().write_all(b"OK\n").await?,
                         Err(_) => reader.get_mut().write_all(b"FAILED TO SET\n").await?,

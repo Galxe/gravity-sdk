@@ -2,10 +2,11 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{counters, network::BroadcastPeerPriority};
-use aptos_crypto::{HashValue, Uniform};
+use crate::{core_mempool::TXN_INDEX_ESTIMATED_BYTES, counters, network::BroadcastPeerPriority};
+use aptos_crypto::{ed25519::PrivateKey, HashValue, Uniform};
 use aptos_types::{
     account_address::AccountAddress,
+    account_config::account,
     chain_id::{self, ChainId},
     transaction::{RawTransaction, SignedTransaction, TransactionPayload},
 };
@@ -13,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     mem::size_of,
     sync::{atomic::AtomicUsize, Arc},
-    time::SystemTime,
+    time::{Duration, SystemTime},
 };
 
 /// Estimated per-txn size minus the raw transaction
@@ -29,8 +30,7 @@ impl From<&SignedTransaction> for VerifiedTxn {
         Self {
             bytes,
             sender: signed_txn.sender(),
-            txn_sequence_number: signed_txn.sequence_number(),
-            account_latest_committed_sequence_number: None,
+            sequence_number: signed_txn.sequence_number(),
             chain_id: signed_txn.chain_id(),
         }
     }
@@ -40,7 +40,7 @@ impl Into<SignedTransaction> for &VerifiedTxn {
     fn into(self) -> SignedTransaction {
         let raw_txn = RawTransaction::new(
             self.sender,
-            self.sequence_number(),
+            self.sequence_number,
             TransactionPayload::GTxnBytes(self.bytes.clone()),
             u64::MAX,
             0,
@@ -61,11 +61,10 @@ impl VerifiedTxn {
     pub fn new(
         bytes: Vec<u8>,
         sender: AccountAddress,
-        txn_sequence_number: u64,
-        account_latest_committed_sequence_number: Option<u64>,
+        sequence_number: u64,
         chain_id: ChainId,
     ) -> Self {
-        Self { bytes, sender, txn_sequence_number, account_latest_committed_sequence_number, chain_id }
+        Self { bytes, sender, sequence_number, chain_id }
     }
 
     pub fn bytes(&self) -> &Vec<u8> {
@@ -77,11 +76,7 @@ impl VerifiedTxn {
     }
 
     pub fn sequence_number(&self) -> u64 {
-        self.txn_sequence_number
-    }
-
-    pub fn account_latest_committed_sequence_number(&self) -> Option<u64> {
-        self.account_latest_committed_sequence_number
+        self.sequence_number
     }
 
     pub fn chain_id(&self) -> ChainId {
@@ -103,9 +98,7 @@ pub struct SequenceInfo {
 pub struct VerifiedTxn {
     pub(crate) bytes: Vec<u8>,
     pub(crate) sender: AccountAddress,
-    pub(crate) txn_sequence_number: u64,
-    // When converted from sign transaction, the following filed could be none
-    pub(crate) account_latest_committed_sequence_number: Option<u64>,
+    pub(crate) sequence_number: u64,
     pub(crate) chain_id: chain_id::ChainId,
 }
 
@@ -128,7 +121,7 @@ impl MempoolTransaction {
         ranking_score: u64,
         account_sequence_number: u64,
     ) -> Self {
-        let txn_sequence_number = verified_txn.txn_sequence_number;
+        let txn_sequence_number = verified_txn.sequence_number;
         Self {
             verified_txn,
             timeline_state,
