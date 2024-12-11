@@ -382,6 +382,7 @@ impl TransactionStore {
             while let Some(txn) = txns.get_mut(&min_seq) {
                 let process_ready = !self.priority_index.contains(txn);
 
+                info!("into priority_index");
                 self.priority_index.insert(txn);
 
                 let process_broadcast_ready = txn.timeline_state == TimelineState::NotReady;
