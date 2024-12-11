@@ -114,6 +114,7 @@ impl ExecutionApiV2 for KvStore {
         let mut res = vec![];
 
         if !ordered_block.txns.is_empty() {
+            info!("enter one execute");
             self.counter.lock().await.count();
         }
 
