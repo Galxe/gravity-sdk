@@ -6,7 +6,6 @@ use crate::account::{ExternalAccountAddress, ExternalChainId};
 use async_trait::async_trait;
 use ruint::aliases::U256;
 use serde::{Deserialize, Serialize};
-use crate::account::{ExternalAccountAddress, ExternalChainId};
 use std::future::Future;
 use tokio::{runtime::Runtime, sync::Mutex};
 
@@ -62,7 +61,7 @@ pub trait ExecutionApi: Send + Sync {
 
     fn finalized_block_number(&self) -> u64;
 
-    async fn recover_ordered_block(&self, block_batch: ExternalBlock);
+    async fn recover_ordered_block(&self, block_batch: BlockBatch);
 
     async fn recover_execution_blocks(&self, blocks: ExecutionBlocks);
 

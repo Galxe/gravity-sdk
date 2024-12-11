@@ -115,7 +115,7 @@ impl ExecutionApiV2 for InnerExecution {
         self.inner.finalized_block_number()
     }
 
-    async fn recover_ordered_block(&self, block_batch: BlockBatch) {
+    async fn recover_ordered_block(&self, block_batch: ExternalBlock) {
         self.inner.recover_ordered_block(block_batch).await
     }
 
