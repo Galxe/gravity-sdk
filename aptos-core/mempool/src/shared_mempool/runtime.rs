@@ -24,12 +24,9 @@ use aptos_network::application::{
 use aptos_storage_interface::DbReader;
 use aptos_types::account_address::AccountAddress;
 use aptos_types::{
-    account_address::AccountAddressWithChecks,
     on_chain_config::OnChainConfigProvider,
     transaction::{SignedTransaction, VMValidatorResult},
-    PeerId,
 };
-// use aptos_vm_validator::vm_validator::{PooledVMValidator, TransactionValidation};
 use futures::channel::mpsc::{Receiver, UnboundedSender};
 use std::sync::Arc;
 use tokio::runtime::{Handle, Runtime};
@@ -103,7 +100,7 @@ async fn retrieve_from_execution_routine(
         match txns {
             Ok(txns) => {
                 info!("the recv_pending_txns size is {:?}", txns.len());
-                txns.into_iter().for_each(|txn| {
+                txns.into_iter().for_each(|(txn, db_sequence_number)| {
                     let _r = mempool.lock().add_txn(
                         VerifiedTxn {
                             bytes: txn.bytes,
@@ -111,7 +108,7 @@ async fn retrieve_from_execution_routine(
                             sequence_number: txn.sequence_number,
                             chain_id: txn.chain_id.into_u64().into(),
                         },
-                        1,
+                        db_sequence_number,
                         TimelineState::NotReady,
                         true,
                         None,

@@ -18,7 +18,7 @@ impl ExecutionApiV2 for RethCoordinator {
         todo!()
     }
 
-    async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxn>, ExecError> {
+    async fn recv_pending_txns(&self) -> Result<Vec<(VerifiedTxn, u64)>, ExecError> {
         todo!()
     }
 

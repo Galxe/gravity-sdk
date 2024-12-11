@@ -81,7 +81,7 @@ impl ExecutionApiV2 for InnerExecution {
         self.inner.check_block_txns(payload_attr, txns).await
     }
 
-    async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxn>, ExecError> {
+    async fn recv_pending_txns(&self) -> Result<Vec<(VerifiedTxn, u64)>, ExecError> {
         self.inner.recv_pending_txns().await
     }
 

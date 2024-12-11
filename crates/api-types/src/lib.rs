@@ -1,14 +1,10 @@
 pub mod account;
 
-use std::{cell::RefCell, fmt::Display, sync::Arc};
+use std::fmt::Display;
 
 use async_trait::async_trait;
-use futures::channel::mpsc::SendError;
-use futures::future::BoxFuture;
 use ruint::aliases::U256;
 use serde::{Deserialize, Serialize};
-use std::future::Future;
-use tokio::{runtime::Runtime, sync::Mutex};
 use crate::account::{ExternalAccountAddress, ExternalChainId};
 
 #[derive(Clone, Copy)]
@@ -123,7 +119,13 @@ pub trait ExecutionApiV2: Send + Sync {
 
     async fn check_block_txns(&self, payload_attr: ExternalPayloadAttr, txns: Vec<VerifiedTxn>) -> Result<bool, ExecError>;
 
-    async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxn>, ExecError>;
+    /// 
+    /// # Returns
+    /// A `Vec` containing tuples, where each tuple consists of:
+    /// - `VerifiedTxn`: The transaction object.
+    /// - `sender_latest_committed_sequence_number`: The latest committed sequence number associated with the sender on the execution layer.
+    ///
+    async fn recv_pending_txns(&self) -> Result<Vec<(VerifiedTxn, u64)>, ExecError>;
 
     // parent的: reth的hash -> 这个得等yuxuan重构reth
     // 当前block的: txns, 自己的block_number(aptos和reth一样)

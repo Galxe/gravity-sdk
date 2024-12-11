@@ -1,11 +1,11 @@
-use log::{info, warn};
+use log::warn;
 use tokio::sync::mpsc::error::TryRecvError;
 use crate::txn::RawTxn;
-use api_types::account::{self, ExternalAccountAddress};
+use api_types::account::ExternalAccountAddress;
 use api_types::VerifiedTxn;
 use tokio::sync::mpsc::Sender;
-use std::collections::{BTreeMap, HashMap, VecDeque};
-use tokio::sync::{broadcast, Mutex};
+use std::collections::{BTreeMap, HashMap};
+use tokio::sync::Mutex;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TxnStatus {
@@ -109,7 +109,7 @@ impl Mempool {
         }
     }
 
-    pub async fn pending_txns(&self) -> Vec<VerifiedTxn> {
+    pub async fn pending_txns(&self) -> Vec<(VerifiedTxn, u64)> {
         let mut txns = Vec::new();
         
         while let Some(result) = {
@@ -118,7 +118,7 @@ impl Mempool {
         } {
             match result {
                 Ok(txn) => {
-                    txns.push(txn)
+                    txns.push((txn, 1))
                 },
                 Err(TryRecvError::Empty) => {
                     break;
