@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
+use log::info;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Mutex;
 use api_types::{ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExecutionBlocks, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn};
+use tokio::time::Instant;
 use crate::stateful_mempool::Mempool;
 use crate::txn::RawTxn;
 use async_trait::async_trait;
@@ -12,12 +14,46 @@ struct BlockStatus {
     txn_number: u64,
 }
 
+struct CounterTimer {
+    call_count: u32,
+    last_time: Instant,
+    txn_num_in_block: u32,
+    count_round: u32,
+}
+
+impl CounterTimer {
+    pub fn new() -> Self {
+        Self {
+            call_count: 0,
+            last_time: Instant::now(),
+            txn_num_in_block: std::env::var("BLOCK_TXN_NUMS")
+                .map(|s| s.parse().unwrap())
+                .unwrap_or(1000),
+            count_round: std::env::var("COUNT_ROUND").map(|s| s.parse().unwrap()).unwrap_or(10),
+        }
+    }
+    pub fn count(&mut self) {
+        self.call_count += 1;
+        if self.call_count == self.count_round {
+            let now = Instant::now();
+            let duration = now.duration_since(self.last_time);
+            info!(
+                "Time taken for the last {:?} blocks to be produced: {:?}, txn num in block {:?}",
+                self.count_round, duration, self.txn_num_in_block
+            );
+            self.call_count = 0;
+            self.last_time = now;
+        }
+    }
+}
+
 pub struct KvStore {
     store: Mutex<HashMap<String, String>>,
     mempool: Mempool,
     block_status: Mutex<HashMap<ExternalPayloadAttr, BlockStatus>>,
     compute_res_recv: Mutex<HashMap<ExternalBlockMeta, Receiver<ComputeRes>>>,
     ordered_block: Mutex<HashMap<ExternalBlockMeta, ExternalBlock>>,
+    counter: Mutex<CounterTimer>,
 }
 
 
@@ -28,7 +64,8 @@ impl KvStore {
             mempool: Mempool::new(),
             block_status: Mutex::new(HashMap::new()),
             compute_res_recv: Mutex::new(HashMap::new()),
-            ordered_block: Mutex::new(HashMap::new())
+            ordered_block: Mutex::new(HashMap::new()),
+            counter: Mutex::new(CounterTimer::new()),
         }
     }
 
@@ -75,6 +112,10 @@ impl ExecutionApiV2 for KvStore {
 
     async fn send_ordered_block(&self, ordered_block: ExternalBlock) -> Result<(), ExecError> {
         let mut res = vec![];
+
+        if !ordered_block.txns.is_empty() {
+            self.counter.lock().await.count();
+        }
 
         for txn in &ordered_block.txns {
             let raw_txn = RawTxn::from_bytes(txn.bytes().to_vec());
