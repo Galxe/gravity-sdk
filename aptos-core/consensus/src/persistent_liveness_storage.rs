@@ -453,9 +453,10 @@ impl PersistentLivenessStorage for StorageWriteProxy {
             order_vote_enabled,
         ) {
             Ok(mut initial_data) => {
-                (self as &dyn PersistentLivenessStorage)
-                    .prune_tree(initial_data.take_blocks_to_prune())
-                    .expect("unable to prune dangling blocks during restart");
+                // TODO(gravity_lightman)
+                // (self as &dyn PersistentLivenessStorage)
+                //     .prune_tree(initial_data.take_blocks_to_prune())
+                //     .expect("unable to prune dangling blocks during restart");
                 if initial_data.last_vote.is_none() {
                     self.db.delete_last_vote_msg().expect("unable to cleanup last vote");
                 }

@@ -578,17 +578,18 @@ impl BlockTree {
             committed_round = committed_round,
             block_id = block_to_commit.id(),
         );
-        // TODO(gravity_lightman)
+
         info!("the prune block block number {}", prune_block_number);
+        // TODO(gravity_lightman)
         let ids_to_remove = self.find_blocks_to_prune_by_block_number(prune_block_number);
-        if let Err(e) = storage.prune_tree(ids_to_remove.clone().into_iter().map(
-            |(_, id)| id
-        ).collect()) {
-            // it's fine to fail here, as long as the commit succeeds, the next restart will clean
-            // up dangling blocks, and we need to prune the tree to keep the root consistent with
-            // executor.
-            warn!(error = ?e, "fail to delete block");
-        }
+        // if let Err(e) = storage.prune_tree(ids_to_remove.clone().into_iter().map(
+        //     |(_, id)| id
+        // ).collect()) {
+        //     // it's fine to fail here, as long as the commit succeeds, the next restart will clean
+        //     // up dangling blocks, and we need to prune the tree to keep the root consistent with
+        //     // executor.
+        //     warn!(error = ?e, "fail to delete block");
+        // }
         self.process_pruned_blocks(ids_to_remove);
 
         self.update_highest_commit_cert(commit_proof);
