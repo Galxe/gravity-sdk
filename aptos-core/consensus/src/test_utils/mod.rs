@@ -51,7 +51,7 @@ use move_core_types::account_address::AccountAddress;
 pub const TEST_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub async fn build_simple_tree() -> (Vec<Arc<PipelinedBlock>>, Arc<BlockStore>) {
-    let mut inserter = TreeInserter::default();
+    let mut inserter = TreeInserter::default().await;
     let block_store = inserter.block_store();
     let genesis = block_store.ordered_root();
     let genesis_block_id = genesis.id();
@@ -84,8 +84,8 @@ pub async fn build_simple_tree() -> (Vec<Arc<PipelinedBlock>>, Arc<BlockStore>) 
     (vec![genesis_block, a1, a2, a3, b1, b2, c1], block_store)
 }
 
-pub fn build_empty_tree() -> Arc<BlockStore> {
-    let (initial_data, storage) = EmptyStorage::start_for_testing();
+pub async fn build_empty_tree() -> Arc<BlockStore> {
+    let (initial_data, storage) = EmptyStorage::start_for_testing().await;
     Arc::new(BlockStore::new(
         storage,
         initial_data,
@@ -106,12 +106,12 @@ pub struct TreeInserter {
 }
 
 impl TreeInserter {
-    pub fn default() -> Self {
-        Self::new(ValidatorSigner::random(None))
+    pub async fn default() -> Self {
+        Self::new(ValidatorSigner::random(None)).await
     }
 
-    pub fn new(signer: ValidatorSigner) -> Self {
-        let block_store = build_empty_tree();
+    pub async fn new(signer: ValidatorSigner) -> Self {
+        let block_store = build_empty_tree().await;
         Self {
             signer,
             block_store,

@@ -57,7 +57,7 @@ use maplit::hashmap;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 
-pub fn prepare_buffer_manager(
+pub async fn prepare_buffer_manager(
     bounded_executor: BoundedExecutor,
 ) -> (
     BufferManager,
@@ -92,7 +92,7 @@ pub fn prepare_buffer_manager(
         waypoint,
         true,
     );
-    let (_, storage) = MockStorage::start_for_testing((&validators).into());
+    let (_, storage) = MockStorage::start_for_testing((&validators).into()).await;
 
     let safety_rules_manager = SafetyRulesManager::new_local(safety_storage);
 
@@ -178,7 +178,7 @@ pub fn prepare_buffer_manager(
     )
 }
 
-pub fn launch_buffer_manager() -> (
+pub async fn launch_buffer_manager() -> (
     Sender<OrderedBlocks>,
     Sender<ResetRequest>,
     aptos_channel::Sender<AccountAddress, IncomingCommitRequest>,
@@ -206,7 +206,7 @@ pub fn launch_buffer_manager() -> (
         signers,
         result_rx,
         validators,
-    ) = prepare_buffer_manager(bounded_executor);
+    ) = prepare_buffer_manager(bounded_executor).await;
 
     runtime.spawn(execution_schedule_phase_pipeline.start());
     runtime.spawn(execution_wait_phase_pipeline.start());
@@ -276,8 +276,8 @@ async fn assert_results(
     }
 }
 
-#[test]
-fn buffer_manager_happy_path_test() {
+#[tokio::test]
+async fn buffer_manager_happy_path_test() {
     // happy path
     let (
         mut block_tx,
@@ -289,7 +289,7 @@ fn buffer_manager_happy_path_test() {
         signers,
         mut result_rx,
         verifier,
-    ) = launch_buffer_manager();
+    ) = launch_buffer_manager().await;
 
     let genesis_qc = certificate_for_genesis();
     let num_batches = 3;
@@ -341,8 +341,8 @@ fn buffer_manager_happy_path_test() {
     });
 }
 
-#[test]
-fn buffer_manager_sync_test() {
+#[tokio::test]
+async fn buffer_manager_sync_test() {
     // happy path
     let (
         mut block_tx,
@@ -354,7 +354,7 @@ fn buffer_manager_sync_test() {
         signers,
         mut result_rx,
         verifier,
-    ) = launch_buffer_manager();
+    ) = launch_buffer_manager().await;
 
     let genesis_qc = certificate_for_genesis();
     let num_batches = 100;

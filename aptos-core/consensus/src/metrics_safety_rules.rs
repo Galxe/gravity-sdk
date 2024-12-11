@@ -259,20 +259,20 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_perform_initialize_ok() {
+    #[tokio::test]
+    async fn test_perform_initialize_ok() {
         ::aptos_logger::Logger::init_for_testing();
-        let (_, mock_storage) = EmptyStorage::start_for_testing();
+        let (_, mock_storage) = EmptyStorage::start_for_testing().await;
         let mock_safety_rules = MockSafetyRules::new(0, 10, Ok(()));
         let mut metric_safety_rules =
             MetricsSafetyRules::new(Box::new(mock_safety_rules), mock_storage);
         assert_ok!(metric_safety_rules.perform_initialize());
     }
 
-    #[test]
-    fn test_perform_initialize_error() {
+    #[tokio::test]
+    async fn test_perform_initialize_error() {
         ::aptos_logger::Logger::init_for_testing();
-        let (_, mock_storage) = EmptyStorage::start_for_testing();
+        let (_, mock_storage) = EmptyStorage::start_for_testing().await;
         let mock_safety_rules = MockSafetyRules::new(
             0,
             10,

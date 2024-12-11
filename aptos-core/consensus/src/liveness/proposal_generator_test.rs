@@ -29,7 +29,7 @@ fn empty_callback() -> BoxFuture<'static, ()> {
 #[tokio::test]
 async fn test_proposal_generation_empty_tree() {
     let signer = ValidatorSigner::random(None);
-    let block_store = build_empty_tree();
+    let block_store = build_empty_tree().await;
     let proposal_generator = ProposalGenerator::new(
         signer.author(),
         block_store.clone(),
@@ -75,7 +75,7 @@ async fn test_proposal_generation_empty_tree() {
 
 #[tokio::test]
 async fn test_proposal_generation_parent() {
-    let mut inserter = TreeInserter::default();
+    let mut inserter = TreeInserter::default().await;
     let block_store = inserter.block_store();
     let proposal_generator = ProposalGenerator::new(
         inserter.signer().author(),
@@ -152,7 +152,7 @@ async fn test_proposal_generation_parent() {
 
 #[tokio::test]
 async fn test_old_proposal_generation() {
-    let mut inserter = TreeInserter::default();
+    let mut inserter = TreeInserter::default().await;
     let block_store = inserter.block_store();
     let proposal_generator = ProposalGenerator::new(
         inserter.signer().author(),
@@ -191,7 +191,7 @@ async fn test_old_proposal_generation() {
 
 #[tokio::test]
 async fn test_correct_failed_authors() {
-    let inserter = TreeInserter::default();
+    let inserter = TreeInserter::default().await;
     let author = inserter.signer().author();
     let peer1 = Author::random();
     let peer2 = Author::random();

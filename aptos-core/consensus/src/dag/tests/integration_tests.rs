@@ -172,12 +172,13 @@ fn create_network(
     (network, all_network_events)
 }
 
-fn bootstrap_nodes(
+async fn bootstrap_nodes(
     playground: &mut NetworkPlayground,
     signers: Vec<ValidatorSigner>,
     validators: ValidatorVerifier,
 ) -> (Vec<DagBootstrapUnit>, Vec<UnboundedReceiver<OrderedBlocks>>) {
     let peers_and_metadata = playground.peer_protocols();
+    let (_, storage) = MockStorage::start_for_testing((&validators).into()).await;
     let (nodes, ordered_node_receivers) = signers
         .iter()
         .enumerate()
@@ -194,7 +195,6 @@ fn bootstrap_nodes(
                 .insert_connection_metadata(peer_network_id, conn_meta)
                 .unwrap();
 
-            let (_, storage) = MockStorage::start_for_testing((&validators).into());
             let (network, network_events) =
                 create_network(playground, id, signer.author(), validators.clone());
 
@@ -202,7 +202,7 @@ fn bootstrap_nodes(
                 signer.author(),
                 1,
                 signer.clone(),
-                storage,
+                storage.clone(),
                 network,
                 aptos_time_service::TimeService::real(),
                 network_events,
@@ -220,7 +220,7 @@ async fn test_dag_e2e() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let (signers, validators) = random_validator_verifier(num_nodes, None, false);
-    let (nodes, mut ordered_node_receivers) = bootstrap_nodes(&mut playground, signers, validators);
+    let (nodes, mut ordered_node_receivers) = bootstrap_nodes(&mut playground, signers, validators).await;
     let tasks: Vec<_> = nodes
         .into_iter()
         .map(|node| runtime.spawn(node.start()))

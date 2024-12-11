@@ -136,7 +136,7 @@ impl NodeSetup {
         Arc::new(RotatingProposer::new(proposers, 1))
     }
 
-    fn create_nodes(
+    async fn create_nodes(
         playground: &mut NetworkPlayground,
         executor: Handle,
         num_nodes: usize,
@@ -193,7 +193,7 @@ impl NodeSetup {
                 .unwrap();
         }
         for (id, signer) in signers.iter().take(num_nodes).enumerate() {
-            let (initial_data, storage) = MockStorage::start_for_testing((&validators).into());
+            let (initial_data, storage) = MockStorage::start_for_testing((&validators).into()).await;
 
             let safety_storage = PersistentSafetyStorage::initialize(
                 Storage::from(aptos_secure_storage::InMemoryStorage::new()),
@@ -666,8 +666,8 @@ fn process_and_vote_on_proposal(
     }
 }
 
-#[test]
-fn new_round_on_quorum_cert() {
+#[tokio::test]
+async fn new_round_on_quorum_cert() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let mut nodes = NodeSetup::create_nodes(
@@ -679,7 +679,7 @@ fn new_round_on_quorum_cert() {
         None,
         None,
         None,
-    );
+    ).await;
     let node = &mut nodes[0];
     let genesis = node.block_store.ordered_root();
     timed_block_on(&runtime, async {
@@ -709,9 +709,9 @@ fn new_round_on_quorum_cert() {
     });
 }
 
-#[test]
+#[tokio::test]
 /// If the proposal is valid, a vote should be sent
-fn vote_on_successful_proposal() {
+async fn vote_on_successful_proposal() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     // In order to observe the votes we're going to check proposal processing on the non-proposer
@@ -725,7 +725,7 @@ fn vote_on_successful_proposal() {
         None,
         None,
         None,
-    );
+    ).await;
     let node = &mut nodes[0];
 
     let genesis_qc = certificate_for_genesis();
@@ -755,9 +755,9 @@ fn vote_on_successful_proposal() {
     });
 }
 
-#[test]
+#[tokio::test]
 /// In back pressure mode, verify that the proposals are processed after we get out of back pressure.
-fn delay_proposal_processing_in_sync_only() {
+async fn delay_proposal_processing_in_sync_only() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     // In order to observe the votes we're going to check proposal processing on the non-proposer
@@ -771,7 +771,7 @@ fn delay_proposal_processing_in_sync_only() {
         None,
         None,
         None,
-    );
+    ).await;
     let node = &mut nodes[0];
 
     let genesis_qc = certificate_for_genesis();
@@ -824,10 +824,10 @@ fn delay_proposal_processing_in_sync_only() {
     });
 }
 
-#[test]
+#[tokio::test]
 /// If the proposal does not pass voting rules,
 /// No votes are sent, but the block is still added to the block tree.
-fn no_vote_on_old_proposal() {
+async fn no_vote_on_old_proposal() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     // In order to observe the votes we're going to check proposal processing on the non-proposer
@@ -841,7 +841,7 @@ fn no_vote_on_old_proposal() {
         None,
         None,
         None,
-    );
+    ).await;
     let node = &mut nodes[0];
     let genesis_qc = certificate_for_genesis();
     let new_block = Block::new_proposal(
@@ -880,12 +880,12 @@ fn no_vote_on_old_proposal() {
     });
 }
 
-#[test]
+#[tokio::test]
 /// We don't vote for proposals that 'skips' rounds
 /// After that when we then receive proposal for correct round, we vote for it
 /// Basically it checks that adversary can not send proposal and skip rounds violating round_state
 /// rules
-fn no_vote_on_mismatch_round() {
+async fn no_vote_on_mismatch_round() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     // In order to observe the votes we're going to check proposal processing on the non-proposer
@@ -899,7 +899,7 @@ fn no_vote_on_mismatch_round() {
         None,
         None,
         None,
-    )
+    ).await
     .pop()
     .unwrap();
     let genesis_qc = certificate_for_genesis();
@@ -950,10 +950,10 @@ fn no_vote_on_mismatch_round() {
     });
 }
 
-#[test]
+#[tokio::test]
 /// Ensure that after the vote messages are broadcasted upon timeout, the receivers
 /// have the highest quorum certificate (carried by the SyncInfo of the vote message)
-fn sync_info_carried_on_timeout_vote() {
+async fn sync_info_carried_on_timeout_vote() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let mut nodes = NodeSetup::create_nodes(
@@ -965,7 +965,7 @@ fn sync_info_carried_on_timeout_vote() {
         None,
         None,
         None,
-    );
+    ).await;
     let mut node = nodes.pop().unwrap();
 
     timed_block_on(&runtime, async {
@@ -1013,9 +1013,9 @@ fn sync_info_carried_on_timeout_vote() {
     });
 }
 
-#[test]
+#[tokio::test]
 /// We don't vote for proposals that comes from proposers that are not valid proposers for round
-fn no_vote_on_invalid_proposer() {
+async fn no_vote_on_invalid_proposer() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     // In order to observe the votes we're going to check proposal processing on the non-proposer
@@ -1029,7 +1029,7 @@ fn no_vote_on_invalid_proposer() {
         None,
         None,
         None,
-    );
+    ).await;
     let incorrect_proposer = nodes.pop().unwrap();
     let mut node = nodes.pop().unwrap();
     let genesis_qc = certificate_for_genesis();
@@ -1081,9 +1081,9 @@ fn no_vote_on_invalid_proposer() {
     });
 }
 
-#[test]
+#[tokio::test]
 /// We allow to 'skip' round if proposal carries timeout certificate for next round
-fn new_round_on_timeout_certificate() {
+async fn new_round_on_timeout_certificate() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     // In order to observe the votes we're going to check proposal processing on the non-proposer
@@ -1097,7 +1097,7 @@ fn new_round_on_timeout_certificate() {
         None,
         None,
         None,
-    )
+    ).await
     .pop()
     .unwrap();
     let genesis_qc = certificate_for_genesis();
@@ -1157,9 +1157,9 @@ fn new_round_on_timeout_certificate() {
     });
 }
 
-#[test]
+#[tokio::test]
 /// We allow to 'skip' round if proposal carries timeout certificate for next round
-fn reject_invalid_failed_authors() {
+async fn reject_invalid_failed_authors() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     // In order to observe the votes we're going to check proposal processing on the non-proposer
@@ -1173,7 +1173,7 @@ fn reject_invalid_failed_authors() {
         None,
         None,
         None,
-    )
+    ).await
     .pop()
     .unwrap();
     let genesis_qc = certificate_for_genesis();
@@ -1256,8 +1256,8 @@ fn reject_invalid_failed_authors() {
     });
 }
 
-#[test]
-fn response_on_block_retrieval() {
+#[tokio::test]
+async fn response_on_block_retrieval() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let mut node = NodeSetup::create_nodes(
@@ -1269,7 +1269,7 @@ fn response_on_block_retrieval() {
         None,
         None,
         None,
-    )
+    ).await
     .pop()
     .unwrap();
 
@@ -1375,9 +1375,9 @@ fn response_on_block_retrieval() {
     });
 }
 
-#[test]
+#[tokio::test]
 /// rebuild a node from previous storage without violating safety guarantees.
-fn recover_on_restart() {
+async fn recover_on_restart() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let mut node = NodeSetup::create_nodes(
@@ -1389,7 +1389,7 @@ fn recover_on_restart() {
         None,
         None,
         None,
-    )
+    ).await
     .pop()
     .unwrap();
     let inserter = TreeInserter::new_with_store(node.signer.clone(), node.block_store.clone());
@@ -1452,9 +1452,9 @@ fn recover_on_restart() {
     }
 }
 
-#[test]
+#[tokio::test]
 /// Generate a NIL vote extending HQC upon timeout if no votes have been sent in the round.
-fn nil_vote_on_timeout() {
+async fn nil_vote_on_timeout() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let mut nodes = NodeSetup::create_nodes(
@@ -1466,7 +1466,7 @@ fn nil_vote_on_timeout() {
         None,
         None,
         None,
-    );
+    ).await;
     let node = &mut nodes[0];
     let genesis = node.block_store.ordered_root();
     timed_block_on(&runtime, async {
@@ -1495,9 +1495,9 @@ fn nil_vote_on_timeout() {
     });
 }
 
-#[test]
+#[tokio::test]
 /// If the node votes in a round, upon timeout the same vote is re-sent with a timeout signature.
-fn vote_resent_on_timeout() {
+async fn vote_resent_on_timeout() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let mut nodes = NodeSetup::create_nodes(
@@ -1509,7 +1509,7 @@ fn vote_resent_on_timeout() {
         None,
         None,
         None,
-    );
+    ).await;
     let node = &mut nodes[0];
     timed_block_on(&runtime, async {
         let proposal_msg = node.next_proposal().await;
@@ -1536,9 +1536,9 @@ fn vote_resent_on_timeout() {
     });
 }
 
-#[test]
+#[tokio::test]
 #[ignore] // TODO: this test needs to be fixed!
-fn sync_on_partial_newer_sync_info() {
+async fn sync_on_partial_newer_sync_info() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let mut nodes = NodeSetup::create_nodes(
@@ -1550,7 +1550,7 @@ fn sync_on_partial_newer_sync_info() {
         None,
         None,
         None,
-    );
+    ).await;
     let mut node = nodes.pop().unwrap();
     runtime.spawn(playground.start());
     timed_block_on(&runtime, async {
@@ -1602,8 +1602,8 @@ fn sync_on_partial_newer_sync_info() {
     });
 }
 
-#[test]
-fn safety_rules_crash() {
+#[tokio::test]
+async fn safety_rules_crash() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let mut nodes = NodeSetup::create_nodes(
@@ -1615,7 +1615,7 @@ fn safety_rules_crash() {
         None,
         None,
         None,
-    );
+    ).await;
     let mut node = nodes.pop().unwrap();
     runtime.spawn(playground.start());
 
@@ -1667,8 +1667,8 @@ fn safety_rules_crash() {
     });
 }
 
-#[test]
-fn echo_timeout() {
+#[tokio::test]
+async fn echo_timeout() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let mut nodes = NodeSetup::create_nodes(
@@ -1680,7 +1680,7 @@ fn echo_timeout() {
         None,
         None,
         None,
-    );
+    ).await;
     runtime.spawn(playground.start());
     timed_block_on(&runtime, async {
         // clear the message queue
@@ -1722,8 +1722,8 @@ fn echo_timeout() {
     });
 }
 
-#[test]
-fn no_next_test() {
+#[tokio::test]
+async fn no_next_test() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let mut nodes = NodeSetup::create_nodes(
@@ -1735,7 +1735,7 @@ fn no_next_test() {
         None,
         None,
         None,
-    );
+    ).await;
     runtime.spawn(playground.start());
 
     timed_block_on(&runtime, async {
@@ -1757,8 +1757,8 @@ fn no_next_test() {
     });
 }
 
-#[test]
-fn commit_pipeline_test() {
+#[tokio::test]
+async fn commit_pipeline_test() {
     let runtime = consensus_runtime();
     let proposers = vec![0, 0, 0, 0, 5];
 
@@ -1772,7 +1772,7 @@ fn commit_pipeline_test() {
         None,
         None,
         None,
-    );
+    ).await;
     runtime.spawn(playground.start());
     let behind_node = 6;
     for i in 0..10 {
@@ -1800,8 +1800,8 @@ fn commit_pipeline_test() {
     }
 }
 
-#[test]
-fn block_retrieval_test() {
+#[tokio::test]
+async fn block_retrieval_test() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let mut nodes = NodeSetup::create_nodes(
@@ -1813,7 +1813,7 @@ fn block_retrieval_test() {
         None,
         None,
         None,
-    );
+    ).await;
     runtime.spawn(playground.start());
 
     for i in 0..4 {
@@ -1856,8 +1856,8 @@ fn block_retrieval_test() {
     });
 }
 
-#[test]
-fn block_retrieval_timeout_test() {
+#[tokio::test]
+async fn block_retrieval_timeout_test() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let mut nodes = NodeSetup::create_nodes(
@@ -1869,7 +1869,7 @@ fn block_retrieval_timeout_test() {
         None,
         None,
         None,
-    );
+    ).await;
     let timeout_config = playground.timeout_config();
     runtime.spawn(playground.start());
 
@@ -1925,8 +1925,8 @@ fn block_retrieval_timeout_test() {
 }
 
 #[ignore] // TODO: turn this test back on once the flakes have resolved.
-#[test]
-pub fn forking_retrieval_test() {
+#[tokio::test]
+pub async fn forking_retrieval_test() {
     let runtime = consensus_runtime();
 
     let proposal_node = 0;
@@ -1952,7 +1952,7 @@ pub fn forking_retrieval_test() {
         None,
         None,
         None,
-    );
+    ).await;
     runtime.spawn(playground.start());
 
     info!("Propose vote and commit on first block");
@@ -2180,10 +2180,10 @@ pub fn forking_retrieval_test() {
     );
 }
 
-#[test]
+#[tokio::test]
 /// If ProposalExt feature is disabled, ProposalExt should be rejected
 /// No votes are sent, but the block is still added to the block tree.
-fn no_vote_on_proposal_ext_when_feature_disabled() {
+async fn no_vote_on_proposal_ext_when_feature_disabled() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     // In order to observe the votes we're going to check proposal processing on the non-proposer
@@ -2197,7 +2197,7 @@ fn no_vote_on_proposal_ext_when_feature_disabled() {
         None,
         None,
         None,
-    );
+    ).await;
     let node = &mut nodes[0];
     let genesis_qc = certificate_for_genesis();
 
@@ -2240,8 +2240,8 @@ fn no_vote_on_proposal_ext_when_feature_disabled() {
     });
 }
 
-#[test]
-fn no_vote_on_proposal_with_unexpected_vtxns() {
+#[tokio::test]
+async fn no_vote_on_proposal_with_unexpected_vtxns() {
     let vtxns = vec![ValidatorTransaction::ObservedJWKUpdate(
         QuorumCertifiedUpdate::dummy(),
     )];
@@ -2251,20 +2251,20 @@ fn no_vote_on_proposal_with_unexpected_vtxns() {
         Some(OnChainJWKConsensusConfig::default_disabled()),
         vtxns.clone(),
         false,
-    );
+    ).await;
 
     assert_process_proposal_result(
         None,
         Some(OnChainJWKConsensusConfig::default_enabled()),
         vtxns,
         true,
-    );
+    ).await;
 }
 
 /// Setup a node with default configs and an optional `Features` override.
 /// Create a block, fill it with the given vtxns, and process it with the `RoundManager` from the setup.
 /// Assert the processing result.
-fn assert_process_proposal_result(
+async fn assert_process_proposal_result(
     randomness_config: Option<OnChainRandomnessConfig>,
     jwk_consensus_config: Option<OnChainJWKConsensusConfig>,
     vtxns: Vec<ValidatorTransaction>,
@@ -2281,7 +2281,7 @@ fn assert_process_proposal_result(
         None,
         randomness_config,
         jwk_consensus_config,
-    );
+    ).await;
 
     let node = &mut nodes[0];
     let genesis_qc = certificate_for_genesis();
@@ -2310,9 +2310,9 @@ fn assert_process_proposal_result(
     });
 }
 
-#[test]
+#[tokio::test]
 /// If receiving txn num/block size limit is exceeded, ProposalExt should be rejected.
-fn no_vote_on_proposal_ext_when_receiving_limit_exceeded() {
+async fn no_vote_on_proposal_ext_when_receiving_limit_exceeded() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
 
@@ -2345,7 +2345,7 @@ fn no_vote_on_proposal_ext_when_receiving_limit_exceeded() {
         Some(local_config),
         Some(randomness_config),
         None,
-    );
+    ).await;
     let node = &mut nodes[0];
     let genesis_qc = certificate_for_genesis();
 

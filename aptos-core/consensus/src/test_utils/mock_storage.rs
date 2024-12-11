@@ -18,6 +18,7 @@ use aptos_storage_interface::DbReader;
 use aptos_types::{
     aggregate_signature::AggregateSignature, epoch_change::EpochChangeProof, error::not_implemented, ledger_info::{LedgerInfo, LedgerInfoWithSignatures}, on_chain_config::ValidatorSet
 };
+use async_trait::async_trait;
 use std::{collections::HashMap, sync::Arc};
 
 pub struct MockSharedStorage {
@@ -135,7 +136,7 @@ impl MockStorage {
         self.try_start(false).map(|_| ())
     }
 
-    pub fn start_for_testing(validator_set: ValidatorSet) -> (RecoveryData, Arc<Self>) {
+    pub async fn start_for_testing(validator_set: ValidatorSet) -> (RecoveryData, Arc<Self>) {
         let shared_storage = Arc::new(MockSharedStorage::new(validator_set.clone()));
         let genesis_li = LedgerInfo::mock_genesis(Some(validator_set));
         let storage = Self::new_with_ledger_info(shared_storage, genesis_li);
@@ -254,7 +255,7 @@ impl EmptyStorage {
         Self
     }
 
-    pub fn start_for_testing() -> (RecoveryData, Arc<Self>) {
+    pub async fn start_for_testing() -> (RecoveryData, Arc<Self>) {
         let storage = Arc::new(EmptyStorage::new());
         let recovery_data = match storage.start(false).await {
             LivenessStorageData::FullRecoveryData(recovery_data) => recovery_data,

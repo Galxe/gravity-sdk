@@ -121,11 +121,11 @@ fn add_signing_phase_test_cases(
     );
 }
 
-#[test]
-fn signing_phase_tests() {
+#[tokio::test]
+async fn signing_phase_tests() {
     let runtime = consensus_runtime();
 
-    let (safety_rule_handle, signers) = prepare_safety_rules();
+    let (safety_rule_handle, signers) = prepare_safety_rules().await;
 
     let signing_phase = SigningPhase::new(safety_rule_handle);
 
