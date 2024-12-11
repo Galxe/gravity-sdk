@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Mutex;
-use api_types::{ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn};
+use api_types::{ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExecutionBlocks, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn};
 use crate::stateful_mempool::Mempool;
 use crate::txn::RawTxn;
 use async_trait::async_trait;
@@ -112,5 +112,29 @@ impl ExecutionApiV2 for KvStore {
 
     async fn commit_block(&self, head: ExternalBlockMeta) -> Result<(), ExecError> {
         Ok(())
+    }
+
+    async fn latest_block_number(&self) -> u64 {
+        0
+    }
+
+    async fn finalized_block_number(&self) -> u64 {
+        0
+    }
+
+    async fn recover_ordered_block(&self, block: ExternalBlock) {
+        unimplemented!("")
+    }
+
+    async fn recover_execution_blocks(&self, blocks: ExecutionBlocks) {
+        unimplemented!("")
+    }
+
+    async fn get_blocks_by_range(
+        &self,
+        start_block_number: u64,
+        end_block_number: u64,
+    ) -> ExecutionBlocks {
+        unimplemented!("")
     }
 }
