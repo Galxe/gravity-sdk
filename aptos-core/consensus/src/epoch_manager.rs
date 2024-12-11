@@ -217,7 +217,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             network_sender,
             timeout_sender,
             // This default value is updated at epoch start
-            quorum_store_enabled: true,
+            quorum_store_enabled: false,
             quorum_store_to_mempool_sender,
             execution_client,
             storage,
@@ -1390,7 +1390,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
     fn enable_quorum_store(&mut self, onchain_config: &OnChainConsensusConfig) -> bool {
         fail_point!("consensus::start_new_epoch::disable_qs", |_| false);
-        true
+        false
         // onchain_config.quorum_store_enabled()
     }
 
