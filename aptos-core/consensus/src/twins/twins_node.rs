@@ -197,7 +197,7 @@ impl SMRNode {
     }
 
     /// Starts a given number of nodes and their twins
-    pub fn start_num_nodes_with_twins(
+    pub async fn start_num_nodes_with_twins(
         num_nodes: usize,
         num_twins: usize,
         playground: &mut NetworkPlayground,
@@ -266,7 +266,7 @@ impl SMRNode {
         let mut smr_nodes = vec![];
 
         for (smr_id, mut config) in node_configs.into_iter().enumerate() {
-            let (_, storage) = MockStorage::start_for_testing(validator_set.clone());
+            let (_, storage) = MockStorage::start_for_testing(validator_set.clone()).await;
 
             let waypoint = Waypoint::new_epoch_boundary(&storage.get_ledger_info())
                 .expect("Unable to produce waypoint with the provided LedgerInfo");

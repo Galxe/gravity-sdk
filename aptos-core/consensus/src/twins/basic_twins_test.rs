@@ -15,7 +15,7 @@ use aptos_types::on_chain_config::ProposerElectionType::{
 use futures::StreamExt;
 use std::collections::HashMap;
 
-#[test]
+#[tokio::test]
 /// This test checks that the first proposal has its parent and
 /// QC pointing to the genesis block.
 ///
@@ -25,7 +25,7 @@ use std::collections::HashMap;
 ///
 /// Run the test:
 /// cargo xtest -p consensus basic_start_test -- --nocapture
-fn basic_start_test() {
+async fn basic_start_test() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let num_nodes = 4;
@@ -36,7 +36,7 @@ fn basic_start_test() {
         &mut playground,
         RotatingProposer(2),
         None,
-    );
+    ).await;
     let genesis = Block::make_genesis_block_from_ledger_info(&nodes[0].storage.get_ledger_info());
     timed_block_on(&runtime, async {
         let msg = playground
@@ -58,7 +58,7 @@ fn basic_start_test() {
     });
 }
 
-#[test]
+#[tokio::test]
 /// This test checks that the split_network function works
 /// as expected, that is: nodes in a partition with less nodes
 /// than required for quorum do not commit anything.
@@ -77,7 +77,7 @@ fn basic_start_test() {
 /// Run the test:
 /// cargo xtest -p consensus drop_config_test -- --nocapture
 #[ignore] // TODO: https://github.com/aptos-labs/aptos-core/issues/8767
-fn drop_config_test() {
+async fn drop_config_test() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let num_nodes = 4;
@@ -88,7 +88,7 @@ fn drop_config_test() {
         &mut playground,
         FixedProposer(2),
         None,
-    );
+    ).await;
 
     // 4 honest nodes
     let n0_twin_id = nodes[0].id;
@@ -113,7 +113,7 @@ fn drop_config_test() {
     });
 }
 
-#[test]
+#[tokio::test]
 /// This test checks that the vote of a node and its twin
 /// should be counted as duplicate vote (because they have
 /// the same public keys)
@@ -133,7 +133,7 @@ fn drop_config_test() {
 ///
 /// Run the test:
 /// cargo xtest -p consensus twins_vote_dedup_test -- --nocapture
-fn twins_vote_dedup_test() {
+async fn twins_vote_dedup_test() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let num_nodes = 4;
@@ -144,7 +144,7 @@ fn twins_vote_dedup_test() {
         &mut playground,
         RotatingProposer(2),
         None,
-    );
+    ).await;
 
     // 4 honest nodes
     let n0_twin_id = nodes[0].id;
@@ -175,7 +175,7 @@ fn twins_vote_dedup_test() {
     });
 }
 
-#[test]
+#[tokio::test]
 /// This test checks that when a node becomes a proposer, its
 /// twin becomes one too.
 ///
@@ -193,7 +193,7 @@ fn twins_vote_dedup_test() {
 /// Run the test:
 /// cargo xtest -p consensus twins_proposer_test -- --nocapture
 #[ignore]
-fn twins_proposer_test() {
+async fn twins_proposer_test() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let num_nodes = 4;
@@ -213,7 +213,7 @@ fn twins_proposer_test() {
         &mut playground,
         RoundProposer(HashMap::new()),
         Some(round_proposers),
-    );
+    ).await;
 
     // 4 honest nodes
     let n0_twin_id = nodes[0].id;
@@ -257,7 +257,7 @@ fn twins_proposer_test() {
     });
 }
 
-#[test]
+#[tokio::test]
 #[ignore] // TODO: https://github.com/aptos-labs/aptos-core/issues/6615
 /// This test checks that when a node and its twin are both leaders
 /// for a round, only one of the two proposals gets committed
@@ -274,7 +274,7 @@ fn twins_proposer_test() {
 ///
 /// Run the test:
 /// cargo xtest -p consensus twins_commit_test -- --nocapture
-fn twins_commit_test() {
+async fn twins_commit_test() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let num_nodes = 4;
@@ -294,7 +294,7 @@ fn twins_commit_test() {
         &mut playground,
         RoundProposer(HashMap::new()),
         Some(round_proposers),
-    );
+    ).await;
     runtime.spawn(playground.start());
 
     timed_block_on(&runtime, async {
