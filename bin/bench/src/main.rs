@@ -1,188 +1,103 @@
-#![allow(missing_docs)]
-#[cfg(feature = "grevm")]
-use greth_node_builder as reth_node_builder;
-#[cfg(feature = "grevm")]
-use greth_node_ethereum as reth_node_ethereum;
-#[cfg(feature = "grevm")]
-use greth_node_core as reth_node_core;
-#[cfg(feature = "grevm")]
-use greth_provider as reth_provider;
-#[cfg(feature = "grevm")]
-use greth_cli_util as reth_cli_util;
-#[cfg(feature = "grevm")]
-use greth_ethereum_engine_primitives as reth_ethereum_engine_primitives;
-#[cfg(feature = "grevm")]
-use greth_rpc_api as reth_rpc_api;
-
-#[cfg(feature = "preth")]
-use reth_node_builder as reth_node_builder;
-#[cfg(feature = "preth")]
-use reth_node_ethereum as reth_node_ethereum;
-#[cfg(feature = "preth")]
-use reth_node_core as reth_node_core;
-#[cfg(feature = "preth")]
-use reth_provider as reth_provider;
-#[cfg(feature = "preth")]
-#[cfg(feature = "preth")]
-use reth_cli_util as reth_cli_util;
-#[cfg(feature = "preth")]
-use reth_ethereum_engine_primitives as reth_ethereum_engine_primitives;
-#[cfg(feature = "preth")]
-use reth_rpc_api as reth_rpc_api;
-
 mod cli;
-mod mock_client;
+mod kv;
+mod stateful_mempool;
+mod txn;
 
-use crate::cli::Cli;
-use alloy_eips::{BlockId, BlockNumberOrTag};
-use api_types::BlockHashState;
-use clap::Args;
-use mock_client::MockCli;
-use reth_provider::BlockReaderIdExt;
-use std::sync::Arc;
-use std::thread;
-use tracing::info;
-/// Parameters for configuring the engine
-#[derive(Debug, Clone, Args, PartialEq, Eq, Default)]
-#[command(next_help_heading = "Engine")]
-pub struct EngineArgs {
-    /// Enable the engine2 experimental features on reth binary
-    #[arg(long = "engine.experimental", default_value = "false")]
-    pub experimental: bool,
-}
+use std::{sync::Arc, thread};
 
-use api::consensus_api::ConsensusEngine;
-use api::{check_bootstrap_config, ExecutionApi, NodeConfig};
-use api_types::ConsensusApi;
+use api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
+use api_types::{
+    account::ExternalAccountAddress, BlockHashState, ConsensusApi, ExecTxn, ExecutionApiV2,
+};
 use clap::Parser;
-use reth_node_builder::engine_tree_config;
-use reth_node_builder::EngineNodeLauncher;
-use reth_node_core::args::utils::DefaultChainSpecParser;
-use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
-use reth_provider::providers::BlockchainProvider2;
+use cli::Cli;
+use flexi_logger::{FileSpec, Logger, WriteMode};
+use kv::KvStore;
+use log::info;
+use rand::Rng;
+use txn::RawTxn;
 
 struct TestConsensusLayer {
-    block_hash_state: BlockHashState,
-    reth_cli: Arc<dyn ExecutionApi>,
     consensus_engine: Arc<dyn ConsensusApi>,
+    execution_api: Arc<dyn ExecutionApiV2>,
 }
 
 impl TestConsensusLayer {
-    fn new(
-        reth_cli: MockCli,
-        node_config: NodeConfig,
-        block_hash_state: BlockHashState,
-        chain_id: u64,
-    ) -> Self {
-        let mut safe_slice = [0u8; 32];
-        safe_slice.copy_from_slice(block_hash_state.safe_hash.as_slice());
-        let mut head_slice = [0u8; 32];
-        head_slice.copy_from_slice(block_hash_state.head_hash.as_slice());
-        let reth_cli = Arc::new(reth_cli);
+    fn new(node_config: NodeConfig, execution_client: Arc<dyn ExecutionApiV2>) -> Self {
+        let safe_hash = [0u8; 32];
+        let head_hash = [0u8; 32];
+        let finalized_hash = [0u8; 32];
+        let block_hash_state = BlockHashState { safe_hash, head_hash, finalized_hash };
         Self {
-            reth_cli: reth_cli.clone(),
             consensus_engine: ConsensusEngine::init(
                 node_config,
-                reth_cli,
+                execution_client.clone(),
                 block_hash_state.clone(),
-                chain_id,
+                1337,
             ),
-            block_hash_state,
+            execution_api: execution_client,
         }
+    }
+
+    async fn random_txns(num: u64) -> Vec<ExecTxn> {
+        let mut txns = Vec::with_capacity(num as usize);
+        for i in 0..num {
+            let key = format!("random_key_{}", i);
+            let val = format!("random_value_{}", i);
+            let raw_txn =
+                RawTxn { account: generate_random_address(), sequence_number: 1, key, val };
+            let exec_txn = ExecTxn::RawTxn(raw_txn.to_bytes());
+            txns.push(exec_txn);
+        }
+        txns
     }
 
     async fn run(mut self) {
         loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            let txns = self.reth_cli.request_block_batch(self.block_hash_state).await;
-            self.reth_cli.send_ordered_block(txns.txns).await;
-            let hash = self.reth_cli.recv_executed_block_hash().await;
-            self.reth_cli.commit_block_hash(vec![hash]).await;
-            self.block_hash_state.safe_hash = hash;
-            self.block_hash_state.head_hash = hash;
+            info!("start produce new txn");
+            let txn_num_in_block =
+                std::env::var("BLOCK_TXN_NUMS").map(|s| s.parse().unwrap()).unwrap_or(1000);
+            TestConsensusLayer::random_txns(txn_num_in_block).await.into_iter().for_each(|txn| {
+                let execution = self.execution_api.clone();
+                tokio::spawn(async move {
+                    let _ = execution.add_txn(txn).await;
+                });
+            });
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await
         }
     }
 }
 
-fn run_server() {
-    reth_cli_util::sigsegv_handler::install();
-
-    // Enable backtraces unless a RUST_BACKTRACE value has already been explicitly provided.
-    if std::env::var_os("RUST_BACKTRACE").is_none() {
-        std::env::set_var("RUST_BACKTRACE", "1");
-    }
-
-    if let Err(err) = {
-        let cli = Cli::<DefaultChainSpecParser, EngineArgs>::parse();
-        let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
-        cli.run(|builder, engine_args| async move {
-            let handle = builder
-                .with_types_and_provider::<EthereumNode, BlockchainProvider2<_>>()
-                .with_components(EthereumNode::components())
-                .with_add_ons::<EthereumAddOns>()
-                .launch_with_fn(|builder| {
-                    let launcher = EngineNodeLauncher::new(
-                        builder.task_executor().clone(),
-                        builder.config().datadir(),
-                        engine_tree_config::TreeConfig::default(),
-                    );
-                    builder.launch_with(launcher)
-                })
-                .await?;
-            let client = handle.node.engine_http_client();
-            let genesis_hash = handle.node.chain_spec().genesis_hash();
-            let mut head_hash = handle
-                .node
-                .provider
-                .block_by_id(BlockId::Number(BlockNumberOrTag::Latest))
-                .unwrap()
-                .unwrap()
-                .hash_slow();
-            let mut safe_hash = {
-                let res = handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Safe));
-                if let Ok(Some(block)) = res {
-                    block.hash_slow()
-                } else {
-                    // None safe block, use genesis
-                    head_hash = genesis_hash;
-                    genesis_hash
-                }
-            };
-            let finalized_hash = {
-                let res =
-                    handle.node.provider.block_by_id(BlockId::Number(BlockNumberOrTag::Finalized));
-                if let Ok(Some(block)) = res {
-                    block.hash_slow()
-                } else {
-                    // None safe block, use genesis
-                    safe_hash = genesis_hash;
-                    head_hash = genesis_hash;
-                    genesis_hash
-                }
-            };
-            info!("init hash head{:?} safe {:?}", head_hash, safe_hash);
-            let id = handle.node.chain_spec().chain().id();
-            let _ = thread::spawn(move || {
-                let mut cl = TestConsensusLayer::new(
-                    MockCli::new(id),
-                    gcei_config,
-                    BlockHashState {
-                        safe_hash: *safe_hash,
-                        head_hash: *head_hash,
-                        finalized_hash: *finalized_hash,
-                    },
-                    id,
-                );
-                tokio::runtime::Runtime::new().unwrap().block_on(cl.run());
-            });
-            handle.node_exit_future.await
-        })
-    } {
-        eprintln!("Error: {err:?}");
-        std::process::exit(1);
-    }
+fn generate_random_address() -> ExternalAccountAddress {
+    let mut rng = rand::thread_rng();
+    let random_bytes: [u8; 32] = rng.gen();
+    ExternalAccountAddress::new(random_bytes)
 }
 
-fn main() {
-    run_server();
+#[tokio::main]
+async fn main() {
+    let cli = Cli::parse();
+    let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
+    Logger::try_with_str("info")
+        .unwrap()
+        .log_to_file(FileSpec::default().directory(cli.log_dir.clone()))
+        .write_mode(WriteMode::BufferAndFlush)
+        .start()
+        .unwrap();
+
+    cli.run(move || {
+        tokio::spawn(async move {
+            let execution_api = Arc::new(KvStore::new());
+            let execution = execution_api.clone();
+            let _ = thread::spawn(move || {
+                let cl = TestConsensusLayer::new(gcei_config, execution.clone());
+                tokio::runtime::Runtime::new().unwrap().block_on(cl.run());
+            });
+
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(60)).await
+            }
+        })
+    })
+    .await;
 }
