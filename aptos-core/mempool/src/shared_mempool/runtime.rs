@@ -88,18 +88,12 @@ async fn retrieve_from_execution_routine(
 ) {
     info!("start retrieve_from_execution_routine");
     loop {
-        let txns = execution_api.recv_pending_txns().await;
-        match txns {
+        match execution_api.recv_pending_txns().await {
             Ok(txns) => {
                 info!("the recv_pending_txns size is {:?}", txns.len());
                 txns.into_iter().for_each(|(txn, db_sequence_number)| {
                     let _r = mempool.lock().add_txn(
-                        VerifiedTxn {
-                            bytes: txn.bytes,
-                            sender: AccountAddress::from(txn.sender.bytes()),
-                            sequence_number: txn.sequence_number,
-                            chain_id: txn.chain_id.into_u64().into(),
-                        },
+                        txn.into(),
                         db_sequence_number,
                         TimelineState::NotReady,
                         true,

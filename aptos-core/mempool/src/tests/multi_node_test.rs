@@ -3,16 +3,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    network::MempoolSyncMsg,
-    shared_mempool::types::SharedMempoolNotification,
-    tests::{
-        common,
-        common::TestTransaction,
+    network::MempoolSyncMsg, shared_mempool::types::SharedMempoolNotification, tests::{
+        common::{self, TestTransaction},
         node::{
             public_full_node_config, validator_config, vfn_config, Node, NodeId, NodeInfo,
             NodeInfoTrait, NodeType,
         },
-    },
+    }
 };
 use api_types::VerifiedTxn;
 use aptos_config::{
@@ -364,7 +361,9 @@ impl TestHarness {
                 .mempool()
                 .get_batch(100, 102400, true, btreemap![]);
             for txn in transactions.iter() {
-                assert!(block.contains(txn));
+                let vtxn : crate::core_mempool::transaction::VerifiedTxn = txn.clone().into();
+                let stxn : SignedTransaction = (&vtxn).into();
+                assert!(block.contains(&stxn));
             }
         }
 
@@ -386,7 +385,7 @@ impl TestHarness {
         check_txns_in_mempool: bool, // Check whether all txns in this broadcast are accepted into recipient's mempool
         execute_send: bool, // If true, actually delivers msg to remote peer; else, drop the message (useful for testing unreliable msg delivery)
         drop_ack: bool,     // If true, drop ack from remote peer to this peer
-    ) -> (Vec<SignedTransaction>, PeerId) {
+    ) -> (Vec<VerifiedTxn>, PeerId) {
         // Await broadcast notification
         // Note: If there are other messages you're looking for, this could throw them away
         // Wait for the number of messages to be broadcasted on this node
@@ -560,7 +559,7 @@ fn test_max_broadcast_limit() {
         true,
         true,
     );
-    assert_eq!(0, txns.first().unwrap().sequence_number());
+    assert_eq!(0, txns.first().unwrap().seq_number());
 
     for seq_num in 1..3 {
         let (txns, _) = harness.broadcast_txns(
@@ -573,7 +572,7 @@ fn test_max_broadcast_limit() {
             false,
             false,
         );
-        assert_eq!(seq_num, txns.first().unwrap().sequence_number());
+        assert_eq!(seq_num, txns.first().unwrap().seq_number());
     }
 
     // Check that mempool doesn't broadcast more than max_broadcasts_per_peer, even
@@ -595,7 +594,7 @@ fn test_max_broadcast_limit() {
         true,
         true,
     );
-    assert_eq!(3, txns.first().unwrap().sequence_number());
+    assert_eq!(3, txns.first().unwrap().seq_number());
 
     // Check that mempool doesn't broadcast more than max_broadcasts_per_peer, even
     // if there are more txns in mempool.

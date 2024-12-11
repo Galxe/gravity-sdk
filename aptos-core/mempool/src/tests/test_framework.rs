@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    core_mempool::CoreMempool,
+    core_mempool::{self, transaction::VerifiedTxn, CoreMempool},
     shared_mempool::{
         start_shared_mempool,
         types::{MempoolMessageId, MempoolSenderBucket},
@@ -53,6 +53,7 @@ use aptos_types::{
 };
 // use aptos_vm_validator::mocks::mock_vm_validator::MockVMValidator;
 use futures::{channel::oneshot, SinkExt};
+use itertools::Itertools;
 use maplit::btreemap;
 use std::{collections::HashMap, hash::Hash, sync::Arc};
 use tokio::{runtime::Handle, time::Duration};
@@ -262,8 +263,10 @@ impl MempoolNode {
             (vec![1].into(), vec![10].into()),
         )]);
         let msg = MempoolSyncMsg::BroadcastTransactionsRequest {
-            message_id: message_id_in_request.clone(),
-            transactions: sign_transactions(txns),
+            transactions: {
+                let vtxns : Vec<core_mempool::transaction::VerifiedTxn> = sign_transactions(txns).into_iter().map(|stxn| (&stxn).into()).collect_vec();
+                vtxns.into_iter().map(|txn| txn.into() ).collect_vec()
+            },
         };
         let data = protocol_id.to_bytes(&msg).unwrap();
         let (notif, maybe_receiver) = match protocol_id {
@@ -384,55 +387,58 @@ impl MempoolNode {
             MempoolSyncMsg::BroadcastTransactionsRequest {
                 transactions,
             } => {
-                if !block_only_contains_transactions(&transactions, expected_txns) {
-                    let txns: Vec<_> = transactions
-                        .iter()
-                        .map(|txn| (txn.sender(), txn.sequence_number()))
-                        .collect();
-                    let expected_txns: Vec<_> = expected_txns
-                        .iter()
-                        .map(|txn| {
-                            (
-                                TestTransaction::get_address(txn.address),
-                                txn.sequence_number,
-                            )
-                        })
-                        .collect();
+                // TODO(gravity_lightman): fix this
+                todo!()
+                // if !block_only_contains_transactions(&transactions, expected_txns) {
+                //     let txns: Vec<_> = transactions
+                //         .iter()
+                //         .map(|txn| (txn.sender(), txn.seq_number()))
+                //         .collect();
+                //     let expected_txns: Vec<_> = expected_txns
+                //         .iter()
+                //         .map(|txn| {
+                //             (
+                //                 TestTransaction::get_address(txn.address),
+                //                 txn.sequence_number,
+                //             )
+                //         })
+                //         .collect();
 
-                    panic!(
-                        "Request doesn't match. Actual: {:?} Expected: {:?}",
-                        txns, expected_txns
-                    );
-                }
-                message_id
+                //     panic!(
+                //         "Request doesn't match. Actual: {:?} Expected: {:?}",
+                //         txns, expected_txns
+                //     );
+                // }
+                // message_id
             },
             MempoolSyncMsg::BroadcastTransactionsRequestWithReadyTime {
-                message_id,
                 transactions,
             } => {
-                let transactions: Vec<_> =
-                    transactions.iter().map(|(txn, _, _)| txn.clone()).collect();
-                if !block_only_contains_transactions(&transactions, expected_txns) {
-                    let txns: Vec<_> = transactions
-                        .iter()
-                        .map(|txn| (txn.sender(), txn.sequence_number()))
-                        .collect();
-                    let expected_txns: Vec<_> = expected_txns
-                        .iter()
-                        .map(|txn| {
-                            (
-                                TestTransaction::get_address(txn.address),
-                                txn.sequence_number,
-                            )
-                        })
-                        .collect();
+                // TODO(gravity_lightman): fix this
+                todo!()
+                // let transactions: Vec<_> =
+                //     transactions.iter().map(|(txn, _, _)| txn.clone().into).collect();
+                // if !block_only_contains_transactions(&transactions, expected_txns) {
+                //     let txns: Vec<_> = transactions
+                //         .iter()
+                //         .map(|txn| (txn.sender(), txn.seq_number()))
+                //         .collect();
+                //     let expected_txns: Vec<_> = expected_txns
+                //         .iter()
+                //         .map(|txn| {
+                //             (
+                //                 TestTransaction::get_address(txn.address),
+                //                 txn.sequence_number,
+                //             )
+                //         })
+                //         .collect();
 
-                    panic!(
-                        "Request doesn't match. Actual: {:?} Expected: {:?}",
-                        txns, expected_txns
-                    );
-                }
-                message_id
+                //     panic!(
+                //         "Request doesn't match. Actual: {:?} Expected: {:?}",
+                //         txns, expected_txns
+                //     );
+                // }
+                // message_id
             },
             MempoolSyncMsg::BroadcastTransactionsResponse { .. } => {
                 panic!("We aren't supposed to be getting as response here");

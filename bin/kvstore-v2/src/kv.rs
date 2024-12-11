@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Mutex;
-use api_types::{BlockBatch, ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExecutionBlocks, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, GTxn, VerifiedTxn};
+use api_types::{ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn};
 use crate::stateful_mempool::Mempool;
 use crate::txn::RawTxn;
 use async_trait::async_trait;

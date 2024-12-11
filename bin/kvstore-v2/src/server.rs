@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use api_types::{account::ExternalAccountAddress, ExecTxn, ExecutionApiV2};
-use async_trait::async_trait;
 use log::warn;
 use rand::Rng;
 use tokio::{
@@ -9,7 +8,7 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 
-use crate::{kv::KvStore, server_trait::IServer, txn::RawTxn};
+use crate::{kv::KvStore, txn::RawTxn};
 
 fn generate_random_address() -> ExternalAccountAddress {
     let mut rng = rand::thread_rng();
@@ -20,10 +19,14 @@ pub struct Server {
     kv_store: Arc<KvStore>,
 }
 
-#[async_trait]
-impl IServer for Server {
+
+impl Server {
+    pub fn new() -> Self {
+        Self { kv_store: Arc::new(KvStore::new()), }
+    }
+
     /// Starts the TCP server
-    async fn start(&self, addr: &str) -> tokio::io::Result<()> {
+    pub async fn start(&self, addr: &str) -> tokio::io::Result<()> {
         let listener = TcpListener::bind(addr).await?;
 
         loop {
@@ -37,14 +40,8 @@ impl IServer for Server {
         }
     }
 
-    async fn execution_client(&self) -> Arc<dyn ExecutionApiV2> {
+    pub async fn execution_client(&self) -> Arc<dyn ExecutionApiV2> {
         self.kv_store.clone()
-    }
-}
-
-impl Server {
-    pub fn new() -> Self {
-        Self { kv_store: Arc::new(KvStore::new()), }
     }
 
     /// Handles a single client connection

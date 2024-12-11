@@ -18,9 +18,6 @@ pub(crate) struct Cli {
 
     #[arg(long)]
     pub log_dir: String,
-
-    #[arg(long)]
-    pub bench: bool,
 }
 
 impl Cli {
