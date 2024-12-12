@@ -266,6 +266,10 @@ async fn handle_update_peers<NetworkClient>(
             notify_subscribers(SharedMempoolNotification::PeerStateChange, &smp.subscribers);
         }
         let transactions = smp.execution_api.as_ref().recv_unbroadcasted_txn().await.unwrap();
+        if transactions.is_empty() {
+            info!("No txns to broadcast");
+            return ;
+        }
         for peer in &newly_added_upstream {
             debug!(LogSchema::new(LogEntry::NewPeer).peer(peer));
             tasks::execute_broadcast(*peer, false, smp, executor.clone(), transactions.clone())
