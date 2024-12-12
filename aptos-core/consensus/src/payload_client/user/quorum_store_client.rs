@@ -37,7 +37,7 @@ impl QuorumStoreClient {
     ) -> Self {
         Self {
             consensus_to_quorum_store_sender,
-            pull_timeout_ms,
+            pull_timeout_ms: 700,
             wait_for_full_blocks_above_recent_fill_threshold,
             wait_for_full_blocks_above_pending_blocks,
         }
