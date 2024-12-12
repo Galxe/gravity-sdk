@@ -126,6 +126,7 @@ impl DirectMempoolQuorumStore {
         );
 
         let get_block_response_start_time = Instant::now();
+        info!("build one payload with {:?} txn", txns.len());
         let payload = Payload::DirectMempool(txns);
         // TODO(gravity_byteyue): remove all codes
         let result = match callback.send(Ok(GetPayloadResponse::GetPayloadResponse(payload))) {

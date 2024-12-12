@@ -139,6 +139,7 @@ impl UserPayloadClient for QuorumStoreClient {
                     block_timestamp,
                 )
                 .await?;
+            info!("the payload len is {:?}", payload.len());
             if payload.is_empty() && !return_empty && !done {
                 if let Some(callback) = callback_wrapper.take() {
                     callback.await;
