@@ -9,7 +9,7 @@ use aptos_consensus_types::{
     common::{Payload, PayloadFilter},
     request_response::{GetPayloadCommand, GetPayloadResponse},
 };
-use aptos_logger::info;
+use aptos_logger::{info, warn};
 use fail::fail_point;
 use futures::future::BoxFuture;
 use futures_channel::{mpsc, oneshot};
@@ -80,6 +80,7 @@ impl QuorumStoreClient {
             timeout(Duration::from_millis(self.pull_timeout_ms), callback_rcv).await
         ) {
             Err(_) => {
+                warn!("[consensus] did not receive GetBlockResponse on time");
                 Err(anyhow::anyhow!("[consensus] did not receive GetBlockResponse on time").into())
             },
             Ok(resp) => match resp.map_err(anyhow::Error::from)?? {
