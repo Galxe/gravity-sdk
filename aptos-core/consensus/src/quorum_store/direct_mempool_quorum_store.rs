@@ -119,14 +119,15 @@ impl DirectMempoolQuorumStore {
             },
             Ok(txns) => (txns, counters::REQUEST_SUCCESS_LABEL),
         };
+        let get_batch_duration = get_batch_start_time.elapsed();
         counters::quorum_store_service_latency(
             counters::GET_BATCH_LABEL,
             result,
-            get_batch_start_time.elapsed(),
+            get_batch_duration,
         );
 
         let get_block_response_start_time = Instant::now();
-        info!("build one payload with {:?} txn", txns.len());
+        let txn_len = txns.len();
         let payload = Payload::DirectMempool(txns);
         // TODO(gravity_byteyue): remove all codes
         let result = match callback.send(Ok(GetPayloadResponse::GetPayloadResponse(payload))) {
@@ -136,11 +137,13 @@ impl DirectMempoolQuorumStore {
             },
             Ok(_) => counters::CALLBACK_SUCCESS_LABEL,
         };
+        let get_block_response_start_time_duration = get_block_response_start_time.elapsed();
         counters::quorum_store_service_latency(
             counters::GET_BLOCK_RESPONSE_LABEL,
             result,
-            get_block_response_start_time.elapsed(),
+            get_block_response_start_time_duration,
         );
+        info!("build one payload with {:?} txn, duration {:?}", txn_len, get_batch_duration);
     }
 
     async fn handle_consensus_request(&self, req: GetPayloadCommand) {
