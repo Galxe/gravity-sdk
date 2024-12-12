@@ -460,7 +460,6 @@ where
                         let sender = self.connection_metadata.remote_peer_id;
                         let network_id = self.network_context.network_id();
                         let sender = PeerNetworkId::new(network_id, sender);
-                        let protocol_id_str = direct.protocol_id.as_str().to_string();
                         match handler.push(key, ReceivedMessage::new(message, sender)) {
                             Err(_err) => {
                                 // NOTE: aptos_channel never returns other than Ok(()), but we might switch to tokio::sync::mpsc and then this would work

@@ -4,19 +4,14 @@
 
 //! Processes that are directly spawned by shared mempool runtime initialization
 use crate::{
-    core_mempool::{CoreMempool, TimelineState},
-    counters,
-    logging::{LogEntry, LogEvent, LogSchema},
-    network::{BroadcastPeerPriority, MempoolSyncMsg},
-    shared_mempool::{
+    core_mempool::{CoreMempool, TimelineState}, counters, logging::{LogEntry, LogEvent, LogSchema}, network::{BroadcastPeerPriority, MempoolSyncMsg}, shared_mempool::{
         tasks::{self, process_committed_transactions},
         types::{
             notify_subscribers, MempoolMessageId, ScheduledBroadcast, SharedMempool,
             SharedMempoolNotification,
         },
         use_case_history::UseCaseHistory,
-    },
-    MempoolEventsReceiver, QuorumStoreRequest,
+    }, MempoolClientRequest, MempoolEventsReceiver, QuorumStoreRequest
 };
 use api_types::{ExecTxn, VerifiedTxn};
 use aptos_bounded_executor::BoundedExecutor;
@@ -50,17 +45,20 @@ use tokio::{runtime::Handle, time::interval};
 use tokio_stream::wrappers::IntervalStream;
 
 /// Coordinator that handles inbound network events and outbound txn broadcasts.
-pub(crate) async fn coordinator<NetworkClient>(
+pub(crate) async fn coordinator<NetworkClient, ConfigProvider>(
     mut smp: SharedMempool<NetworkClient>,
     executor: Handle,
     network_service_events: NetworkServiceEvents<MempoolSyncMsg>,
+    mut client_events: MempoolEventsReceiver,
     mut quorum_store_requests: mpsc::Receiver<QuorumStoreRequest>,
     mempool_listener: MempoolNotificationListener,
+    mut mempool_reconfig_events: ReconfigNotificationListener<ConfigProvider>,
     peer_update_interval_ms: u64,
     peers_and_metadata: Arc<PeersAndMetadata>,
 ) 
 where
     NetworkClient: NetworkClientInterface<MempoolSyncMsg> + 'static,
+    ConfigProvider: OnChainConfigProvider,
 {
     info!(LogSchema::event_log(
         LogEntry::CoordinatorRuntime,
@@ -85,11 +83,28 @@ where
     let workers_available = smp.config.shared_mempool_max_concurrent_inbound_syncs;
     let bounded_executor = BoundedExecutor::new(workers_available, executor.clone());
 
+    let initial_reconfig = mempool_reconfig_events
+        .next()
+        .await
+        .expect("Reconfig sender dropped, unable to start mempool");
+    handle_mempool_reconfig_event(
+        &mut smp,
+        &bounded_executor,
+        initial_reconfig.on_chain_configs,
+    )
+    .await;
+
     loop {
         let _timer = counters::MAIN_LOOP.start_timer();
         ::futures::select! {
+            msg = client_events.select_next_some() => {
+                handle_client_request(&mut smp, &bounded_executor, msg).await;
+            },
             msg = quorum_store_requests.select_next_some() => {
                 tasks::process_quorum_store_request(&smp, msg);
+            },
+            reconfig_notification = mempool_reconfig_events.select_next_some() => {
+                handle_mempool_reconfig_event(&mut smp, &bounded_executor, reconfig_notification.on_chain_configs).await;
             },
             (network_id, event) = events.select_next_some() => {
                 handle_network_event(&bounded_executor, &mut smp, network_id, event).await;
@@ -127,6 +142,62 @@ fn spawn_commit_notification_handler<NetworkClient>(
     });
 }
 
+/// Spawn a task for processing `MempoolClientRequest`s from a client such as API service
+async fn handle_client_request<NetworkClient>(
+    smp: &mut SharedMempool<NetworkClient>,
+    bounded_executor: &BoundedExecutor,
+    request: MempoolClientRequest,
+) where
+    NetworkClient: NetworkClientInterface<MempoolSyncMsg> + 'static,
+{
+    // match request {
+    //     MempoolClientRequest::SubmitTransaction(txn, callback) => {
+    //         // This timer measures how long it took for the bounded executor to *schedule* the
+    //         // task.
+    //         let _timer = counters::task_spawn_latency_timer(
+    //             counters::CLIENT_EVENT_LABEL,
+    //             counters::SPAWN_LABEL,
+    //         );
+    //         // This timer measures how long it took for the task to go from scheduled to started.
+    //         let task_start_timer = counters::task_spawn_latency_timer(
+    //             counters::CLIENT_EVENT_LABEL,
+    //             counters::START_LABEL,
+    //         );
+    //         smp.network_interface.num_txns_received_since_peers_updated += 1;
+    //         bounded_executor
+    //             .spawn(tasks::process_client_transaction_submission(
+    //                 smp.clone(),
+    //                 txn,
+    //                 callback,
+    //                 task_start_timer,
+    //             ))
+    //             .await;
+    //     },
+    //     MempoolClientRequest::GetTransactionByHash(hash, callback) => {
+    //         // This timer measures how long it took for the bounded executor to *schedule* the
+    //         // task.
+    //         let _timer = counters::task_spawn_latency_timer(
+    //             counters::CLIENT_EVENT_GET_TXN_LABEL,
+    //             counters::SPAWN_LABEL,
+    //         );
+    //         // This timer measures how long it took for the task to go from scheduled to started.
+    //         let task_start_timer = counters::task_spawn_latency_timer(
+    //             counters::CLIENT_EVENT_GET_TXN_LABEL,
+    //             counters::START_LABEL,
+    //         );
+    //         bounded_executor
+    //             .spawn(tasks::process_client_get_transaction(
+    //                 smp.clone(),
+    //                 hash,
+    //                 callback,
+    //                 task_start_timer,
+    //             ))
+    //             .await;
+    //     },
+    // }
+    todo!()
+}
+
 /// Handle removing committed transactions from local mempool immediately.  This should be done
 /// immediately to ensure broadcasts of committed transactions stop as soon as possible.
 fn handle_commit_notification(
@@ -159,6 +230,32 @@ fn handle_commit_notification(
         counters::REQUEST_SUCCESS_LABEL,
         latency,
     );
+}
+
+/// Spawn a task to restart the transaction validator with the new reconfig data.
+async fn handle_mempool_reconfig_event<NetworkClient, ConfigProvider>(
+    smp: &mut SharedMempool<NetworkClient>,
+    bounded_executor: &BoundedExecutor,
+    config_update: OnChainConfigPayload<ConfigProvider>,
+) where
+    NetworkClient: NetworkClientInterface<MempoolSyncMsg> + 'static,
+    ConfigProvider: OnChainConfigProvider,
+{
+    todo!("")
+    // info!(LogSchema::event_log(
+    //     LogEntry::ReconfigUpdate,
+    //     LogEvent::Received
+    // ));
+    // let _timer =
+    //     counters::task_spawn_latency_timer(counters::RECONFIG_EVENT_LABEL, counters::SPAWN_LABEL);
+
+    // bounded_executor
+    //     .spawn(tasks::process_config_update(
+    //         config_update,
+    //         smp.validator.clone(),
+    //         smp.broadcast_within_validator_network.clone(),
+    //     ))
+    //     .await;
 }
 
 async fn process_received_txns<NetworkClient>(

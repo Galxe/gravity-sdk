@@ -36,19 +36,23 @@ use tokio::runtime::{Handle, Runtime};
 ///   - outbound_sync_task (task that periodically broadcasts transactions to peers).
 ///   - inbound_network_task (task that handles inbound mempool messages and network events).
 ///   - gc_task (task that performs GC of all expired transactions by SystemTTL).
-pub(crate) fn start_shared_mempool(
+pub(crate) fn start_shared_mempool<ConfigProvider>(
     executor: &Handle,
     config: &NodeConfig,
     mempool: Arc<Mutex<CoreMempool>>,
     network_client: NetworkClient<MempoolSyncMsg>,
     network_service_events: NetworkServiceEvents<MempoolSyncMsg>,
+    client_events: MempoolEventsReceiver,
     quorum_store_requests: Receiver<QuorumStoreRequest>,
     mempool_listener: MempoolNotificationListener,
+    mempool_reconfig_events: ReconfigNotificationListener<ConfigProvider>,
     db: Arc<dyn DbReader>,
     subscribers: Vec<UnboundedSender<SharedMempoolNotification>>,
     peers_and_metadata: Arc<PeersAndMetadata>,
     execution_api: Arc<dyn ExecutionApiV2>,
-) {
+) where
+    ConfigProvider: OnChainConfigProvider,
+{
     info!("try to start_shared_mempool");
     let node_type = NodeType::extract_from_config(config);
     let smp: SharedMempool<NetworkClient<MempoolSyncMsg>> =
@@ -66,8 +70,10 @@ pub(crate) fn start_shared_mempool(
         smp,
         executor.clone(),
         network_service_events,
+        client_events,
         quorum_store_requests,
         mempool_listener,
+        mempool_reconfig_events,
         config.mempool.shared_mempool_peer_update_interval_ms,
         peers_and_metadata,
     ));
@@ -117,8 +123,10 @@ pub fn bootstrap(
     db: Arc<dyn DbReader>,
     network_client: NetworkClient<MempoolSyncMsg>,
     network_service_events: NetworkServiceEvents<MempoolSyncMsg>,
+    client_events: MempoolEventsReceiver,
     quorum_store_requests: Receiver<QuorumStoreRequest>,
     mempool_listener: MempoolNotificationListener,
+    mempool_reconfig_events: ReconfigNotificationListener<DbBackedOnChainConfig>,
     peers_and_metadata: Arc<PeersAndMetadata>,
     execution_api: Arc<dyn ExecutionApiV2>,
 ) -> Runtime {
@@ -130,8 +138,10 @@ pub fn bootstrap(
         mempool,
         network_client,
         network_service_events,
+        client_events,
         quorum_store_requests,
         mempool_listener,
+        mempool_reconfig_events,
         db,
         vec![],
         peers_and_metadata,

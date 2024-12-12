@@ -148,11 +148,11 @@ pub trait ExecutionApiV2: Send + Sync {
     async fn commit_block(&self, head: ExternalBlockMeta) -> Result<(), ExecError>;
 
     async fn latest_block_number(&self) -> u64 {
-        unimplemented!("")
+        0
     }
 
     async fn finalized_block_number(&self) -> u64 {
-        unimplemented!("")
+        0
     }
 
     async fn recover_ordered_block(&self, block: ExternalBlock) {
