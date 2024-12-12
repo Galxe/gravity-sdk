@@ -489,6 +489,9 @@ impl ProposalGenerator {
             false,
             proposer_election,
         );
+        if !payload.is_empty() {
+            info!("generate one not empty payload");
+        }
 
         let block = if self.vtxn_config.enabled() {
             BlockData::new_proposal_ext(

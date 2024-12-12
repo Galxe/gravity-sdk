@@ -432,6 +432,7 @@ impl Mempool {
                 skipped.insert((txn.address, tx_seq));
             }
         }
+        info!("txn_walked is {:?}", txn_walked);
         let result_size = result.len();
         let result_end_time = start_time.elapsed();
         let result_time = result_end_time.saturating_sub(gas_end_time);
@@ -503,6 +504,7 @@ impl Mempool {
         if !return_non_full && !full_bytes && (block.len() as u64) < max_txns {
             block.clear();
         }
+        info!("the get batch block is {:?}", block.len());
 
         counters::mempool_service_transactions(counters::GET_BLOCK_LABEL, block.len());
         counters::MEMPOOL_SERVICE_BYTES_GET_BLOCK.observe(total_bytes as f64);
