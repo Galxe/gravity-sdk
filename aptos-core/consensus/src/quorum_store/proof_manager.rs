@@ -20,6 +20,7 @@ use aptos_types::{transaction::SignedTransaction, PeerId};
 use futures::StreamExt;
 use futures_channel::mpsc::Receiver;
 use rand::{seq::SliceRandom, thread_rng};
+use tokio::time::Instant;
 use std::{
     cmp::min,
     collections::{BTreeMap, HashMap, HashSet},
@@ -224,6 +225,7 @@ impl ProofManager {
                     },
                     PayloadFilter::InQuorumStore(proofs) => proofs,
                 };
+                let get_proof_start_time = Instant::now();
 
                 let (proof_block, cur_unique_txns, proof_queue_fully_utilized) =
                     self.proofs_for_consensus.pull_proofs(
@@ -235,6 +237,8 @@ impl ProofManager {
                         return_non_full,
                         block_timestamp,
                     );
+                let get_proof_start_time_duration = get_proof_start_time.elapsed();
+                info!("the get_proof_start_time_duration is {:?}", get_proof_start_time_duration);
 
                 counters::NUM_BATCHES_WITHOUT_PROOF_OF_STORE.observe(self.batch_queue.len() as f64);
                 counters::PROOF_QUEUE_FULLY_UTILIZED

@@ -330,6 +330,7 @@ impl BatchGenerator {
             self.txns_in_progress_sorted.len()
         );
 
+        let mempool_proxy_pull_start = Instant::now();
         let mut pulled_txns = self
             .mempool_proxy
             .pull_internal(
@@ -339,6 +340,8 @@ impl BatchGenerator {
             )
             .await
             .unwrap_or_default();
+        let mempool_proxy_pull_start_duration = mempool_proxy_pull_start.elapsed();
+        info!("mempool proxy pull internal duration {:?}, txns {:?}", mempool_proxy_pull_start_duration, pulled_txns.len());
 
         trace!("QS: pulled_txns len: {:?}", pulled_txns.len());
 
@@ -364,8 +367,10 @@ impl BatchGenerator {
         let expiry_time = aptos_infallible::duration_since_epoch().as_micros() as u64
             + self.config.batch_expiry_gap_when_init_usecs;
         let batches = self.bucket_into_batches(&mut pulled_txns, expiry_time);
+        let bucket_compute_start_duration = bucket_compute_start.elapsed();
         self.last_end_batch_time = Instant::now();
-        counters::BATCH_CREATION_COMPUTE_LATENCY.observe_duration(bucket_compute_start.elapsed());
+        counters::BATCH_CREATION_COMPUTE_LATENCY.observe_duration(bucket_compute_start_duration);
+        info!("bucket_compute_start_duration is {:?}", bucket_compute_start_duration);
 
         batches
     }
