@@ -35,10 +35,25 @@ impl Mempool {
     }
 
     pub async fn recv_unbroadcasted_txn(&self) -> Vec<VerifiedTxn> {
-        let mut recv = self.broadcast_recv.lock().await;
-        let mut buffer = Vec::new();
-        recv.recv_many(&mut buffer, 1024).await;
-        buffer
+        let mut txns = Vec::new();
+        
+        while let Some(result) = {
+            let mut receiver = self.pending_recv.lock().await;
+            Some(receiver.try_recv())
+        } {
+            match result {
+                Ok(txn) => {
+                    txns.push(txn)
+                },
+                Err(TryRecvError::Empty) => {
+                    break;
+                }
+                Err(TryRecvError::Disconnected) => {
+                    break;
+                }
+            }
+        }
+        txns
     }
 
     pub async fn process_txn(&self, raw_txn: RawTxn) {
