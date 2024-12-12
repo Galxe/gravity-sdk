@@ -59,8 +59,8 @@ mod test {
         let txn = RawTxn {
             account: ExternalAccountAddress::random(),
             sequence_number: 1,
-            key: "G_King".to_string(),
-            val: "ByteYue".to_string(),
+            key: "aa".to_string(),
+            val: "bb".to_string(),
         };
         println!("curl -X POST -H \"Content-Type:application/json\" -d '{{\"tx\": {:?}}}' https://127.0.0.1:1998/tx/submit_tx", txn.to_bytes());
     }
