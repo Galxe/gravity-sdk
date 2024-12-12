@@ -454,9 +454,8 @@ pub(crate) fn process_rejected_transactions(
 }
 
 /// Processes on-chain reconfiguration notifications.  Restarts validator with the new info.
-pub(crate) async fn process_config_update<V, P>(
+pub(crate) async fn process_config_update<P>(
     config_update: OnChainConfigPayload<P>,
-    validator: Arc<RwLock<V>>,
     broadcast_within_validator_network: Arc<RwLock<bool>>,
 ) where
     // V: TransactionValidation,

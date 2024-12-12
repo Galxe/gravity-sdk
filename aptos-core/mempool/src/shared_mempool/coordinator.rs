@@ -241,21 +241,19 @@ async fn handle_mempool_reconfig_event<NetworkClient, ConfigProvider>(
     NetworkClient: NetworkClientInterface<MempoolSyncMsg> + 'static,
     ConfigProvider: OnChainConfigProvider,
 {
-    todo!("")
-    // info!(LogSchema::event_log(
-    //     LogEntry::ReconfigUpdate,
-    //     LogEvent::Received
-    // ));
-    // let _timer =
-    //     counters::task_spawn_latency_timer(counters::RECONFIG_EVENT_LABEL, counters::SPAWN_LABEL);
+    info!(LogSchema::event_log(
+        LogEntry::ReconfigUpdate,
+        LogEvent::Received
+    ));
+    let _timer =
+        counters::task_spawn_latency_timer(counters::RECONFIG_EVENT_LABEL, counters::SPAWN_LABEL);
 
-    // bounded_executor
-    //     .spawn(tasks::process_config_update(
-    //         config_update,
-    //         smp.validator.clone(),
-    //         smp.broadcast_within_validator_network.clone(),
-    //     ))
-    //     .await;
+    bounded_executor
+        .spawn(tasks::process_config_update(
+            config_update,
+            smp.broadcast_within_validator_network.clone(),
+        ))
+        .await;
 }
 
 async fn process_received_txns<NetworkClient>(
