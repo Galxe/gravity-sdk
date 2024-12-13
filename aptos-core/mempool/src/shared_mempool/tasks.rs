@@ -572,6 +572,7 @@ pub(crate) fn process_quorum_store_request<NetworkClient, TransactionValidator>(
         counters::REQUEST_SUCCESS_LABEL
     };
     let latency = start_time.elapsed();
+    info!("process_quorum_store_request latency is {:?}", latency);
     counters::mempool_service_latency(counter_label, result, latency);
 }
 
