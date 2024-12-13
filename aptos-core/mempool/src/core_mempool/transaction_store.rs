@@ -25,7 +25,6 @@ use aptos_types::{
     mempool_status::{MempoolStatus, MempoolStatusCode},
     transaction::SignedTransaction,
 };
-use tokio::time::Instant;
 use std::{
     cmp::max,
     collections::HashMap,
