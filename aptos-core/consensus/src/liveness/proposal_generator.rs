@@ -365,6 +365,7 @@ impl ProposalGenerator {
         let hqc = self.ensure_highest_quorum_cert(round)?;
         let generate_proposal_start = Instant::now();
 
+        let mut tmp = Duration::default();
         // println!("the block store is {}", self.block_store.get_block_tree().read());
         let (validator_txns, payload, timestamp) = if hqc.certified_block().has_reconfiguration() {
             // Reconfiguration rule - we propose empty blocks with parents' timestamp
@@ -378,6 +379,7 @@ impl ProposalGenerator {
                 hqc.certified_block().timestamp_usecs(),
             )
         } else {
+            let start = Instant::now();
             // One needs to hold the blocks with the references to the payloads while get_block is
             // being executed: pending blocks vector keeps all the pending ancestors of the extended branch.
             let mut pending_blocks = self
@@ -426,6 +428,7 @@ impl ProposalGenerator {
 
             PROPOSER_DELAY_PROPOSAL.observe(proposal_delay.as_secs_f64());
             if !proposal_delay.is_zero() {
+                info!("sleep for {:?}", proposal_delay);
                 tokio::time::sleep(proposal_delay).await;
             }
 
@@ -474,6 +477,9 @@ impl ProposalGenerator {
                 )
                 .await
                 .context("Fail to retrieve payload")?;
+            let start_duration = start.elapsed();
+            tmp = start_duration;
+            info!("retrieve payload cost {:?}, sleep for {:?}", start_duration, proposal_delay);
             // TODO(gravity_byteyue): Consider how to process the validator transaction
             if !payload.is_direct()
                 && max_txns_from_block_to_execute.is_some()
@@ -491,7 +497,7 @@ impl ProposalGenerator {
             false,
             proposer_election,
         );
-        info!("generate proposal, is empty {:?}, duration {:?}", payload.is_empty(), generate_proposal_start.elapsed());
+        info!("generate proposal, is empty {:?}, duration {:?}, actual pull time {:?}", payload.is_empty(), generate_proposal_start.elapsed(), tmp);
 
         let block = if self.vtxn_config.enabled() {
             BlockData::new_proposal_ext(
