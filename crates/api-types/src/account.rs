@@ -22,7 +22,7 @@ impl ExternalAccountAddress {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, Hash)]
 pub struct ExternalChainId(u64);
 
 impl ExternalChainId {

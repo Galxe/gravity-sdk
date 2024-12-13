@@ -12,6 +12,7 @@ mod cli;
 mod exec_layer;
 mod reth_cli;
 mod reth_coordinator;
+mod mock_consensus;
 
 use crate::cli::Cli;
 use alloy_eips::{BlockId, BlockNumberOrTag};

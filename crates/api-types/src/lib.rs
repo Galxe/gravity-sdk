@@ -71,10 +71,10 @@ pub trait ExecutionApi: Send + Sync {
     ) -> ExecutionBlocks;
 }
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Hash, PartialEq, Eq, Clone)]
 pub struct ExternalPayloadAttr {
     // s since epoch
-    ts: u64,
+    pub ts: u64,
 }
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
@@ -216,7 +216,7 @@ pub struct ExecutionLayer {
 =======
 >>>>>>> aef67a9 (fix ts)
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, Hash)]
 pub struct VerifiedTxn {
     pub bytes: Vec<u8>,
     pub sender: ExternalAccountAddress,
