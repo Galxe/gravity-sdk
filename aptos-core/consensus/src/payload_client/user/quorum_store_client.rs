@@ -68,7 +68,6 @@ impl QuorumStoreClient {
             callback,
             block_timestamp,
         );
-        info!("send quorum store request");
         // send to shared mempool
         self.consensus_to_quorum_store_sender
             .clone()
