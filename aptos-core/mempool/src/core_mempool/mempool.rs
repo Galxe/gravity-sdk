@@ -396,6 +396,8 @@ impl Mempool {
         let mut total_bytes = 0;
         let mut txn_walked = 0usize;
         // iterate over the queue of transactions based on gas price
+        let get_batch_start_time = Instant::now();
+        let priority_iter_start_time = Instant::now();
         'main: for txn in self.transactions.iter_queue() {
             txn_walked += 1;
             let txn_ptr = TxnPointer::from(txn);
@@ -432,6 +434,7 @@ impl Mempool {
                 skipped.insert((txn.address, tx_seq));
             }
         }
+        let priority_iter_start_time_duration = priority_iter_start_time.elapsed();
         info!("txn_walked is {:?}", txn_walked);
         let result_size = result.len();
         let result_end_time = start_time.elapsed();
@@ -439,6 +442,7 @@ impl Mempool {
 
         let mut block = Vec::with_capacity(result_size);
         let mut full_bytes = false;
+        let ranking_score_start = Instant::now();
         for (sender, sequence_number) in result {
             if let Some((txn, ranking_score)) = self
                 .transactions
@@ -464,6 +468,7 @@ impl Mempool {
                 );
             }
         }
+        let ranking_score_start_duration = ranking_score_start.elapsed();
 
         let block_end_time = start_time.elapsed();
         let block_time = block_end_time.saturating_sub(result_end_time);
@@ -504,7 +509,8 @@ impl Mempool {
         if !return_non_full && !full_bytes && (block.len() as u64) < max_txns {
             block.clear();
         }
-        info!("the get batch block is {:?}", block.len());
+        let get_batch_start_time_duration = get_batch_start_time.elapsed();
+        info!("the get batch block is {:?}, priority_iter_start_time_duration is {:?}, ranking_score_start_duration is {:?}, get_batch_start_time_duration is {:?}", block.len(), priority_iter_start_time_duration, ranking_score_start_duration, get_batch_start_time_duration);
 
         counters::mempool_service_transactions(counters::GET_BLOCK_LABEL, block.len());
         counters::MEMPOOL_SERVICE_BYTES_GET_BLOCK.observe(total_bytes as f64);
