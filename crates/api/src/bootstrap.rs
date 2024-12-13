@@ -153,7 +153,7 @@ pub fn init_mempool(
     mempool_listener: MempoolNotificationListener,
     peers_and_metadata: Arc<PeersAndMetadata>,
     execution_api: Arc<dyn ExecutionApiV2>,
-) -> Runtime {
+) -> Vec<Runtime> {
     let mempool_reconfig_subscription = event_subscription_service
         .subscribe_to_reconfigurations()
         .expect("Mempool must subscribe to reconfigurations");

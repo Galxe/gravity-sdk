@@ -50,7 +50,6 @@ pub(crate) fn start_shared_mempool<TransactionValidator, ConfigProvider>(
     validator: Arc<RwLock<TransactionValidator>>,
     subscribers: Vec<UnboundedSender<SharedMempoolNotification>>,
     peers_and_metadata: Arc<PeersAndMetadata>,
-    execution_api: Arc<dyn ExecutionApiV2>,
 ) where
     TransactionValidator: TransactionValidation + 'static,
     ConfigProvider: OnChainConfigProvider,
@@ -83,7 +82,8 @@ pub(crate) fn start_shared_mempool<TransactionValidator, ConfigProvider>(
     executor
         .spawn(gc_coordinator(mempool.clone(), config.mempool.system_transaction_gc_interval_ms));
 
-    executor.spawn(retrieve_from_execution_routine(mempool.clone(), execution_api));
+    // 在这里启动是不是不太对？好像占了mempool的runtime
+    // executor.spawn(retrieve_from_execution_routine(mempool.clone(), execution_api));
 
     if aptos_logger::enabled!(Level::Trace) {
         executor.spawn(snapshot_job(mempool, config.mempool.mempool_snapshot_interval_secs));
@@ -171,9 +171,12 @@ pub fn bootstrap(
     mempool_reconfig_events: ReconfigNotificationListener<DbBackedOnChainConfig>,
     peers_and_metadata: Arc<PeersAndMetadata>,
     execution_api: Arc<dyn ExecutionApiV2>,
-) -> Runtime {
+) -> Vec<Runtime> {
     let runtime = aptos_runtimes::spawn_named_runtime("shared-mem".into(), None);
+    let retrive_runtime = aptos_runtimes::spawn_named_runtime("shared-mem".into(), None);
     let mempool = Arc::new(Mutex::new(CoreMempool::new(config)));
+    // don't let the time consuming operation like recv_pending_txns stays inside the shared-mem executor
+    retrive_runtime.handle().spawn(retrieve_from_execution_routine(mempool.clone(), execution_api));
     let vm_validator = Arc::new(RwLock::new(PooledVMValidator::new()));
     start_shared_mempool(
         runtime.handle(),
@@ -189,7 +192,6 @@ pub fn bootstrap(
         vm_validator,
         vec![],
         peers_and_metadata,
-        execution_api,
     );
-    runtime
+    vec![runtime, retrive_runtime]
 }
