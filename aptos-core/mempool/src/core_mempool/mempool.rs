@@ -458,14 +458,14 @@ impl Mempool {
                 if total_bytes == max_bytes {
                     full_bytes = true;
                 }
-                // counters::core_mempool_txn_ranking_score(
-                //     counters::CONSENSUS_PULLED_LABEL,
-                //     counters::CONSENSUS_PULLED_LABEL,
-                //     self.transactions
-                //         .get_bucket(ranking_score, &sender)
-                //         .as_str(),
-                //     ranking_score,
-                // );
+                counters::core_mempool_txn_ranking_score(
+                    counters::CONSENSUS_PULLED_LABEL,
+                    counters::CONSENSUS_PULLED_LABEL,
+                    self.transactions
+                        .get_bucket(ranking_score, &sender)
+                        .as_str(),
+                    ranking_score,
+                );
             }
         }
         let ranking_score_start_duration = ranking_score_start.elapsed();
