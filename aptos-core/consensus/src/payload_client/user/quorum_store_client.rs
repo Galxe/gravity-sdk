@@ -68,7 +68,7 @@ impl QuorumStoreClient {
             callback,
             block_timestamp,
         );
-        info!("send to shared mempool, pull time out ms is {:?}", self.pull_timeout_ms);
+        let send_start = Instant::now();
         // send to shared mempool
         self.consensus_to_quorum_store_sender
             .clone()
@@ -84,7 +84,10 @@ impl QuorumStoreClient {
                 Err(anyhow::anyhow!("[consensus] did not receive GetBlockResponse on time").into())
             },
             Ok(resp) => match resp.map_err(anyhow::Error::from)?? {
-                GetPayloadResponse::GetPayloadResponse(payload) => Ok(payload),
+                GetPayloadResponse::GetPayloadResponse(payload) => {
+                    info!("the pull payload cost {:?}", send_start.elapsed());
+                    Ok(payload)
+                },
             },
         }
     }

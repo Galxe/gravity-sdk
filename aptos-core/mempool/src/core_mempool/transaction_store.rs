@@ -133,10 +133,7 @@ impl TransactionStore {
     ) -> Option<(SignedTransaction, u64)> {
         if let Some(txn) = self.get_mempool_txn(address, sequence_number) {
             // TODO: constructed signed txn from raw txn bytes
-            let start = Instant::now();
-            let s_txn = txn.verified_txn().into();
-            info!("the into cost {:?}", start.elapsed());
-            return Some((s_txn, txn.ranking_score()));
+            return Some((txn.verified_txn().into(), txn.ranking_score()));
         }
         None
     }
