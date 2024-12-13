@@ -6,8 +6,7 @@ edition = "2021"
 
 [workspace]
 members = [
-    "bin/reth",
-    "bin/reth_v2",
+    "bin/reth-v2",
     "aptos-core/consensus",
     "dependencies/aptos-bitvec",
     "dependencies/aptos-build-info",
@@ -49,7 +48,7 @@ members = [
     "dependencies/aptos-vault-client",
     "dependencies/aptos-log-derive",
     "dependencies/move-core-types",
-    "crates/api", "crates/api-types", "bin/bench", "bin/kvstore", "bin/kvstore-v2", "bin/reth_v2", "crates/coex-bridge",
+    "crates/api", "crates/api-types", "bin/bench", "bin/kvstore", "bin/kvstore-v2", "crates/coex-bridge",
 ]
 
 
@@ -376,7 +375,7 @@ num-integer = "0.1.42"
 num-traits = "0.2.15"
 once_cell = "1.10.0"
 ordered-float = "3.9.1"
-ouroboros = "0.15.6"
+ouroboros = "0.18"
 owo-colors = "3.5.0"
 p256 = { version = "0.13.2" }
 prettydiff = "0.6.2"
@@ -539,6 +538,7 @@ x25519-dalek = "1.2.0"
 z3tracer = "0.8.0"
 ruint = "1.12.3"
 coex-bridge = { path = "./crates/coex-bridge" }
+reth-v2 = { path = "bin/reth-v2" }
 
 [profile.release]
 debug = true
