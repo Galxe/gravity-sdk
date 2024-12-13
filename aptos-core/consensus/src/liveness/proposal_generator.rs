@@ -33,6 +33,7 @@ use aptos_types::{on_chain_config::ValidatorTxnConfig, validator_txn::ValidatorT
 use aptos_validator_transaction_pool as vtxn_pool;
 use futures::future::BoxFuture;
 use itertools::Itertools;
+use tokio::time::Instant;
 use std::{
     collections::{BTreeMap, HashSet},
     sync::Arc,
@@ -362,6 +363,7 @@ impl ProposalGenerator {
         }
 
         let hqc = self.ensure_highest_quorum_cert(round)?;
+        let generate_proposal_start = Instant::now();
 
         // println!("the block store is {}", self.block_store.get_block_tree().read());
         let (validator_txns, payload, timestamp) = if hqc.certified_block().has_reconfiguration() {
@@ -489,7 +491,7 @@ impl ProposalGenerator {
             false,
             proposer_election,
         );
-        info!("generate proposal, is empty {:?}", payload.is_empty());
+        info!("generate proposal, is empty {:?}, duration {:?}", payload.is_empty(), generate_proposal_start.elapsed());
 
         let block = if self.vtxn_config.enabled() {
             BlockData::new_proposal_ext(
