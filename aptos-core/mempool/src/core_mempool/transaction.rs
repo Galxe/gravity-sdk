@@ -2,23 +2,31 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{core_mempool::TXN_INDEX_ESTIMATED_BYTES, counters, network::BroadcastPeerPriority};
-use aptos_crypto::{ed25519::PrivateKey, HashValue, Uniform};
+use crate::{counters, network::BroadcastPeerPriority};
+use aptos_crypto::{HashValue, Uniform};
 use aptos_types::{
     account_address::AccountAddress,
-    account_config::account,
     chain_id::{self, ChainId},
     transaction::{RawTransaction, SignedTransaction, TransactionPayload},
 };
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::{
     mem::size_of,
     sync::{atomic::AtomicUsize, Arc},
-    time::{Duration, SystemTime},
+    time::SystemTime,
 };
 
 /// Estimated per-txn size minus the raw transaction
 pub const TXN_FIXED_ESTIMATED_BYTES: usize = size_of::<MempoolTransaction>();
+
+static GLOBAL_PUBLIC_KEY: Lazy<aptos_crypto::ed25519::Ed25519PublicKey> = Lazy::new(|| {
+    aptos_crypto::PrivateKey::public_key(&aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing())
+});
+
+static GLOBAL_SIGNATURE: Lazy<aptos_crypto::ed25519::Ed25519Signature> = Lazy::new(|| {
+    aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap()
+});
 
 impl From<&SignedTransaction> for VerifiedTxn {
     fn from(signed_txn: &SignedTransaction) -> Self {
@@ -49,10 +57,8 @@ impl Into<SignedTransaction> for &VerifiedTxn {
         );
         SignedTransaction::new(
             raw_txn,
-            aptos_crypto::PrivateKey::public_key(
-                &aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing(),
-            ),
-            aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap(),
+            GLOBAL_PUBLIC_KEY.clone(),
+            GLOBAL_SIGNATURE.clone(),
         )
     }
 }
