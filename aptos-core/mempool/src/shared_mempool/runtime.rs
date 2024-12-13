@@ -173,7 +173,7 @@ pub fn bootstrap(
     execution_api: Arc<dyn ExecutionApiV2>,
 ) -> Vec<Runtime> {
     let runtime = aptos_runtimes::spawn_named_runtime("shared-mem".into(), None);
-    let retrive_runtime = aptos_runtimes::spawn_named_runtime("shared-mem".into(), None);
+    let retrive_runtime = aptos_runtimes::spawn_named_runtime("retrive".into(), None);
     let mempool = Arc::new(Mutex::new(CoreMempool::new(config)));
     // don't let the time consuming operation like recv_pending_txns stays inside the shared-mem executor
     retrive_runtime.handle().spawn(retrieve_from_execution_routine(mempool.clone(), execution_api));
