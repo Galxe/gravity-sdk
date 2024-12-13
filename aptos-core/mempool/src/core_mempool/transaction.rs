@@ -64,11 +64,11 @@ impl VerifiedTxn {
         sequence_number: u64,
         chain_id: ChainId,
     ) -> Self {
-        Self { bytes, sender, sequence_number, chain_id }
+        Self { bytes: Arc::new(bytes), sender, sequence_number, chain_id }
     }
 
-    pub fn bytes(&self) -> &Vec<u8> {
-        &self.bytes
+    pub fn bytes(&self) -> Arc<Vec<u8>> {
+        self.bytes.clone()
     }
 
     pub fn sender(&self) -> AccountAddress {
@@ -96,7 +96,7 @@ pub struct SequenceInfo {
 
 #[derive(Clone, Debug)]
 pub struct VerifiedTxn {
-    pub(crate) bytes: Vec<u8>,
+    pub(crate) bytes: Arc<Vec<u8>>,
     pub(crate) sender: AccountAddress,
     pub(crate) sequence_number: u64,
     pub(crate) chain_id: chain_id::ChainId,

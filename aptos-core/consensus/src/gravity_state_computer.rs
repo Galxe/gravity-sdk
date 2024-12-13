@@ -140,7 +140,7 @@ impl StateComputer for GravityExecutionProxy {
             let real_txns = vtxns
                 .into_iter()
                 .map(|txn| api_types::VerifiedTxn {
-                    bytes: txn.bytes().to_vec(),
+                    bytes: txn.bytes(),
                     sender: ExternalAccountAddress::new(txn.sender().into_bytes()),
                     sequence_number: txn.sequence_number(),
                     chain_id: ExternalChainId::new(txn.chain_id().id()),

@@ -1,6 +1,6 @@
 pub mod account;
 
-use std::fmt::Display;
+use std::{fmt::Display, sync::Arc};
 
 use async_trait::async_trait;
 use ruint::aliases::U256;
@@ -156,7 +156,7 @@ pub trait ExecutionApiV2: Send + Sync {
 
 #[derive(Clone, Debug)]
 pub struct VerifiedTxn {
-    pub bytes: Vec<u8>,
+    pub bytes: Arc<Vec<u8>>,
     pub sender: ExternalAccountAddress,
     pub sequence_number: u64,
     pub chain_id: ExternalChainId,
@@ -165,7 +165,7 @@ pub struct VerifiedTxn {
 impl VerifiedTxn {
     pub fn new(bytes: Vec<u8>, sender: ExternalAccountAddress, sequence_number: u64, chain_id: ExternalChainId) -> Self {
         Self {
-            bytes,
+            bytes: Arc::new(bytes),
             sender,
             sequence_number,
             chain_id,

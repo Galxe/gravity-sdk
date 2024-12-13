@@ -23,7 +23,7 @@ use ruint::aliases::U256;
 use serde::{Deserialize, Serialize};
 use std::{
     convert::TryFrom,
-    fmt::{self, Debug, Display, Formatter},
+    fmt::{self, Debug, Display, Formatter}, sync::Arc,
 };
 
 pub mod analyzed_transaction;
@@ -414,7 +414,7 @@ pub enum TransactionPayload {
     Multisig(Multisig),
 
     // TODO(xj): serialize performance
-    GTxnBytes(Vec<u8>),
+    GTxnBytes(Arc<Vec<u8>>),
 }
 
 impl TransactionPayload {
@@ -546,7 +546,7 @@ impl From<GTxn> for SignedTransaction {
         let raw_txn = RawTransaction::new(
             addr,
             txn.sequence_number,
-            TransactionPayload::GTxnBytes(txn.txn_bytes),
+            TransactionPayload::GTxnBytes(Arc::new(txn.txn_bytes)),
             txn.max_gas_amount,
             txn.gas_unit_price.try_into().expect("out of range for u64"),
             txn.expiration_timestamp_secs,
