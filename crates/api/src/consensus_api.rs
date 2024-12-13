@@ -123,7 +123,8 @@ impl ConsensusEngine {
             peers_and_metadata,
             execution_api.clone(),
         );
-        network_runtimes.push(mempool_runtime);
+        network_runtimes.extend(mempool_runtime);
+        // network_runtimes.push(mempool_runtime);
         let mut args = ConsensusAdapterArgs::new(execution_api.clone(), consensus_db);
         let (consensus_runtime, _, _, execution_proxy) = start_consensus(
             &node_config,
