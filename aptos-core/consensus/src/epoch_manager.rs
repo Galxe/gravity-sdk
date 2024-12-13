@@ -1390,7 +1390,10 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
     fn enable_quorum_store(&mut self, onchain_config: &OnChainConsensusConfig) -> bool {
         fail_point!("consensus::start_new_epoch::disable_qs", |_| false);
-        true
+        // TODO(gravity_byteyue): Use onchain config in the future
+        std::env::var("ENABLE_QUORUM_STORE")
+                .map(|s| s.parse().unwrap())
+                .unwrap_or(true)
         // onchain_config.quorum_store_enabled()
     }
 
