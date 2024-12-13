@@ -31,6 +31,7 @@ use aptos_types::{
 use futures::SinkExt;
 use futures_channel::oneshot;
 use once_cell::sync::OnceCell;
+use tokio::time::Instant;
 use std::time::Duration;
 use std::{boxed::Box, sync::Arc};
 use coex_bridge::{get_coex_bridge, Func};
@@ -119,6 +120,7 @@ impl StateComputer for GravityExecutionProxy {
         parent_block_id: HashValue,
         randomness: Option<Randomness>,
     ) -> StateComputeResultFut {
+        let schedule_compute_start = Instant::now();
         assert!(block.block_number().is_some());
         let txns = self.aptos_state_computer.get_block_txns(block).await;
         let empty_block = txns.is_empty();
@@ -135,6 +137,7 @@ impl StateComputer for GravityExecutionProxy {
             let compute_res_bytes = [0u8; 32];
             block_result_sender.send(HashValue::new(compute_res_bytes)).expect("send failed");
         } else {
+            let transform_start = Instant::now();
             let vtxns: Vec<VerifiedTxn> =
                 txns.iter().map(|txn| Into::<VerifiedTxn>::into(&txn.clone())).collect();
             let real_txns = vtxns
@@ -147,6 +150,7 @@ impl StateComputer for GravityExecutionProxy {
                 })
                 .collect();
             let external_block = ExternalBlock { block_meta: meta_data.clone(), txns: real_txns };
+            info!("the transform_start duration is {:?}", transform_start.elapsed());
             self.consensus_engine
                 .get()
                 .expect("ConsensusEngine")
@@ -166,6 +170,7 @@ impl StateComputer for GravityExecutionProxy {
                             .await
                             .bytes(),
                     ));
+                    info!("schedule_compute recv result duration is {:?}", schedule_compute_start.elapsed());
                     Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
                 }
                 true => match block_result_receiver.await {
