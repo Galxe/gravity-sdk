@@ -147,10 +147,15 @@ impl StateComputer for GravityExecutionProxy {
                 })
                 .collect();
             let external_block = ExternalBlock { block_meta: meta_data.clone(), txns: real_txns };
+            let parent_meta = ExternalBlockMeta {
+                block_id: *parent_block_id,
+                // Todo(gravity_lightman): we can't have block number when committing the block
+                block_number: 0,
+            };
             self.consensus_engine
                 .get()
                 .expect("ConsensusEngine")
-                .send_ordered_block(external_block)
+                .send_ordered_block(parent_meta, external_block)
                 .await;
         }
         let engine = Some(self.consensus_engine.clone());

@@ -95,10 +95,10 @@ async fn retrieve_from_execution_routine(
         match execution_api.recv_pending_txns().await {
             Ok(txns) => {
                 info!("the recv_pending_txns size is {:?}", txns.len());
-                txns.into_iter().for_each(|(txn, db_sequence_number)| {
+                txns.into_iter().for_each(|txn_with_number| {
                     let _r = mempool.lock().add_txn(
-                        txn.into(),
-                        db_sequence_number,
+                        txn_with_number.txn.into(),
+                        txn_with_number.account_seq_num,
                         TimelineState::NotReady,
                         true,
                         None,

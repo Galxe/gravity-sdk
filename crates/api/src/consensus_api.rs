@@ -159,9 +159,9 @@ impl ConsensusEngine {
 
 #[async_trait]
 impl ConsensusApi for ConsensusEngine {
-    async fn send_ordered_block(&self, ordered_block: ExternalBlock) {
+    async fn send_ordered_block(&self, parent_meta: ExternalBlockMeta, ordered_block: ExternalBlock) {
         info!("send_order_block {:?}", ordered_block);
-        match self.execution_layer.execution_api.send_ordered_block(ordered_block).await {
+        match self.execution_api.send_ordered_block(parent_meta, ordered_block).await {
             Ok(_) => {
             },
             Err(_) => panic!("send_ordered_block should not fail"),

@@ -1,17 +1,26 @@
 use api_types::{ComputeRes, ExecError, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn};
 use async_trait::async_trait;
 
+use crate::reth_cli::RethCli;
+
 pub struct RethCoordinator {
+    reth_cli: RethCli,
+}
+
+impl RethCoordinator {
+    pub fn new(reth_cli: RethCli) -> Self {
+        Self { reth_cli }
+    }
 }
 
 #[async_trait]
 impl ExecutionApiV2 for RethCoordinator {
     async fn add_txn(&self, bytes: ExecTxn) -> Result<(), ExecError> {
-        todo!()
+        panic!("Reth Coordinator does not support add_txn");
     }
 
     async fn recv_unbroadcasted_txn(&self) -> Result<Vec<VerifiedTxn>, ExecError> {
-        todo!()
+        panic!("Reth Coordinator does not support recv_unbroadcasted_txn");
     }
 
     async fn check_block_txns(&self, payload_attr: ExternalPayloadAttr, txns: Vec<VerifiedTxn>) -> Result<bool, ExecError> {

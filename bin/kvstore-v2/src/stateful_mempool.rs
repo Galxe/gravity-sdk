@@ -1,7 +1,7 @@
 use log::warn;
 use tokio::sync::mpsc::error::TryRecvError;
 use crate::txn::RawTxn;
-use api_types::account::ExternalAccountAddress;
+use api_types::{account::ExternalAccountAddress, VerifiedTxnWithAccountSeqNum};
 use api_types::VerifiedTxn;
 use tokio::sync::mpsc::Sender;
 use std::collections::{BTreeMap, HashMap};
@@ -124,7 +124,7 @@ impl Mempool {
         }
     }
 
-    pub async fn pending_txns(&self) -> Vec<(VerifiedTxn, u64)> {
+    pub async fn pending_txns(&self) -> Vec<VerifiedTxnWithAccountSeqNum> {
         let mut txns = Vec::new();
         
         while let Some(result) = {
@@ -133,7 +133,10 @@ impl Mempool {
         } {
             match result {
                 Ok(txn) => {
-                    txns.push((txn, 1))
+                    txns.push(VerifiedTxnWithAccountSeqNum {
+                        txn,
+                        account_seq_num: 1,
+                    });
                 },
                 Err(TryRecvError::Empty) => {
                     break;

@@ -1,7 +1,6 @@
 pub mod account;
-
 use std::{fmt::Display, sync::Arc};
-
+use core::str;
 use crate::account::{ExternalAccountAddress, ExternalChainId};
 use async_trait::async_trait;
 use ruint::aliases::U256;
@@ -25,7 +24,7 @@ pub trait ConsensusApi: Send + Sync {
     //     state_block_hash: BlockHashState,
     // ) -> Result<BlockBatch, SendError>;
 
-    async fn send_ordered_block(&self, ordered_block: ExternalBlock);
+    async fn send_ordered_block(&self, parent_meta: ExternalBlockMeta, ordered_block: ExternalBlock);
 
     async fn recv_executed_block_hash(&self, head: ExternalBlockMeta) -> ComputeRes;
 
@@ -74,7 +73,7 @@ pub trait ExecutionApi: Send + Sync {
 
 #[derive(Hash, PartialEq, Eq)]
 pub struct ExternalPayloadAttr {
-    // ms since epoch
+    // s since epoch
     ts: u64,
 }
 
@@ -109,8 +108,13 @@ pub enum ExecError {
 }
 
 pub enum ExecTxn {
-    RawTxn(Vec<u8>), // from client
+    RawTxn(Vec<u8>),          // from client
     VerifiedTxn(VerifiedTxn), // from peer
+}
+
+pub struct VerifiedTxnWithAccountSeqNum {
+    pub txn: VerifiedTxn,
+    pub account_seq_num: u64,
 }
 
 #[async_trait]
@@ -125,18 +129,22 @@ pub trait ExecutionApiV2: Send + Sync {
         txns: Vec<VerifiedTxn>,
     ) -> Result<bool, ExecError>;
 
-    /// 
+    ///
     /// # Returns
     /// A `Vec` containing tuples, where each tuple consists of:
     /// - `VerifiedTxn`: The transaction object.
     /// - `sender_latest_committed_sequence_number`: The latest committed sequence number associated with the sender on the execution layer.
     ///
-    async fn recv_pending_txns(&self) -> Result<Vec<(VerifiedTxn, u64)>, ExecError>;
+    async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError>;
 
     // parent的: reth的hash -> 这个得等yuxuan重构reth
     // 当前block的: txns, 自己的block_number(aptos和reth一样)
     // async fn send_ordered_block(&self, ordered_block: Vec<Txns>, block_number: BlockNumber, parent_mata_data: ExternalBlockMeta) -> Result<(), ExecError>;
-    async fn send_ordered_block(&self, ordered_block: ExternalBlock) -> Result<(), ExecError>;
+    async fn send_ordered_block(
+        &self,
+        parent_meta: ExternalBlockMeta,
+        ordered_block: ExternalBlock,
+    ) -> Result<(), ExecError>;
 
     // the block hash is the hash of the block that has been executed, which is passed by the send_ordered_block
     async fn recv_executed_block_hash(
@@ -199,11 +207,14 @@ impl RecoveryApi for DefaultRecovery {
         Err(RecoveryError::UnimplementError)
     }
 }
+<<<<<<< HEAD
 #[derive(Clone)]
 pub struct ExecutionLayer {
     pub execution_api: Arc<dyn ExecutionApiV2>,
     pub recovery_api: Arc<dyn RecoveryApi>,
 }
+=======
+>>>>>>> aef67a9 (fix ts)
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VerifiedTxn {

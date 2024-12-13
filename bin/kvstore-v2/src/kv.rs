@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Mutex;
-use api_types::{ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn};
+use api_types::{ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 use crate::stateful_mempool::Mempool;
 use crate::txn::RawTxn;
 use async_trait::async_trait;
@@ -74,11 +74,11 @@ impl ExecutionApiV2 for KvStore {
         }
     }
 
-    async fn recv_pending_txns(&self) -> Result<Vec<(VerifiedTxn, u64)>, ExecError> {
+    async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
         Ok(self.mempool.pending_txns().await)
     }
 
-    async fn send_ordered_block(&self, ordered_block: ExternalBlock) -> Result<(), ExecError> {
+    async fn send_ordered_block(&self, _parent_meta: ExternalBlockMeta, ordered_block: ExternalBlock) -> Result<(), ExecError> {
         let mut res = vec![];
 
         for txn in &ordered_block.txns {
