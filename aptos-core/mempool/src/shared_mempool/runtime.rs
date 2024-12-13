@@ -81,8 +81,6 @@ pub(crate) fn start_shared_mempool<ConfigProvider>(
     executor
         .spawn(gc_coordinator(mempool.clone(), config.mempool.system_transaction_gc_interval_ms));
 
-    executor.spawn(retrieve_from_execution_routine(mempool.clone(), execution_api));
-
     if aptos_logger::enabled!(Level::Trace) {
         executor.spawn(snapshot_job(mempool, config.mempool.mempool_snapshot_interval_secs));
     }
@@ -129,9 +127,11 @@ pub fn bootstrap(
     mempool_reconfig_events: ReconfigNotificationListener<DbBackedOnChainConfig>,
     peers_and_metadata: Arc<PeersAndMetadata>,
     execution_api: Arc<dyn ExecutionApiV2>,
-) -> Runtime {
+) -> Vec<Runtime> {
     let runtime = aptos_runtimes::spawn_named_runtime("shared-mem".into(), None);
+    let retrive_runtime = aptos_runtimes::spawn_named_runtime("retrive".into(), None);
     let mempool = Arc::new(Mutex::new(CoreMempool::new(config)));
+    retrive_runtime.handle().spawn(retrieve_from_execution_routine(mempool.clone(), execution_api.clone()));
     start_shared_mempool(
         runtime.handle(),
         config,
@@ -147,5 +147,5 @@ pub fn bootstrap(
         peers_and_metadata,
         execution_api,
     );
-    runtime
+    vec![runtime, retrive_runtime]
 }
