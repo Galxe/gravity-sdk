@@ -50,10 +50,13 @@ impl DirectMempoolQuorumStore {
         exclude_txns: Vec<TransactionSummary>,
     ) -> Result<Vec<SignedTransaction>, anyhow::Error> {
         let (callback, callback_rcv) = oneshot::channel();
+        let construct_exclude_start = Instant::now();
+        let mempool_get_batch_start = Instant::now();
         let exclude_txns: BTreeMap<_, _> = exclude_txns
             .into_iter()
             .map(|txn| (txn, TransactionInProgress::new(0)))
             .collect();
+        info!("construct_exclude_start duration is {:?}, len {:?}", construct_exclude_start.elapsed(), exclude_txns.len());
         let msg = QuorumStoreRequest::GetBatchRequest(
             max_items,
             max_bytes,
@@ -81,6 +84,7 @@ impl DirectMempoolQuorumStore {
             },
             Ok(resp) => match resp.map_err(anyhow::Error::from)?? {
                 QuorumStoreResponse::GetBatchResponse(txns) => {
+                    info!("the mempool_get_batch_start duration is {:?}", mempool_get_batch_start.elapsed());
                     Ok(txns)
                 },
                 _ => {
