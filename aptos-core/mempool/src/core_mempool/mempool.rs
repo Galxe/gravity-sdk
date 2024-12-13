@@ -510,7 +510,7 @@ impl Mempool {
             block.clear();
         }
         let get_batch_start_time_duration = get_batch_start_time.elapsed();
-        info!("the get batch block is {:?}, priority_iter_start_time_duration is {:?}, ranking_score_start_duration is {:?}, get_batch_start_time_duration is {:?}", block.len(), priority_iter_start_time_duration, ranking_score_start_duration, get_batch_start_time_duration);
+        info!("the get batch block is {:?}, get_batch_start_time_duration is {:?}", block.len(), get_batch_start_time_duration);
 
         counters::mempool_service_transactions(counters::GET_BLOCK_LABEL, block.len());
         counters::MEMPOOL_SERVICE_BYTES_GET_BLOCK.observe(total_bytes as f64);
