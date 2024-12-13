@@ -110,8 +110,10 @@ impl PayloadClient for MixedPayloadClient {
             .iter()
             .map(|txn| txn.size_in_bytes())
             .sum::<usize>() as u64;
-        max_poll_time = max_poll_time.saturating_sub(validator_txn_pull_timer.elapsed());
+        let v_duration = validator_txn_pull_timer.elapsed();
+        max_poll_time = max_poll_time.saturating_sub(v_duration);
 
+        let u_start = Instant::now();
         // Pull user payload.
         let user_payload = self
             .user_payload_client
@@ -132,6 +134,8 @@ impl PayloadClient for MixedPayloadClient {
             )
             .await?;
 
+        let u_duration = u_start.elapsed();
+        info!("mixpayload client, user {:?}, v {:?}", u_duration, v_duration);
         Ok((validator_txns, user_payload))
     }
 }

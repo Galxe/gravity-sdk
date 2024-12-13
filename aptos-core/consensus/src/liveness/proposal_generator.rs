@@ -380,6 +380,7 @@ impl ProposalGenerator {
             )
         } else {
             let start = Instant::now();
+            let other = Instant::now();
             // One needs to hold the blocks with the references to the payloads while get_block is
             // being executed: pending blocks vector keeps all the pending ancestors of the extended branch.
             let mut pending_blocks = self
@@ -456,6 +457,7 @@ impl ProposalGenerator {
                 .collect();
             let validator_txn_filter =
                 vtxn_pool::TransactionFilter::PendingTxnHashSet(pending_validator_txn_hashes);
+            let other_duration = other.elapsed();
             let (validator_txns, mut payload) = self
                 .payload_client
                 .pull_payload(
@@ -479,7 +481,7 @@ impl ProposalGenerator {
                 .context("Fail to retrieve payload")?;
             let start_duration = start.elapsed();
             tmp = start_duration;
-            info!("retrieve payload cost {:?}, sleep for {:?}", start_duration, proposal_delay);
+            info!("retrieve payload cost {:?}, other for {:?}, sleep for {:?}", start_duration, other_duration, proposal_delay);
             // TODO(gravity_byteyue): Consider how to process the validator transaction
             if !payload.is_direct()
                 && max_txns_from_block_to_execute.is_some()

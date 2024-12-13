@@ -153,8 +153,9 @@ impl UserPayloadClient for QuorumStoreClient {
             }
             break payload;
         };
+        let e_time = start_time.elapsed().as_millis();
         info!(
-            elapsed_time_ms = start_time.elapsed().as_millis() as u64,
+            elapsed_time_ms = e_time as u64,
             max_poll_time_ms = max_poll_time.as_millis() as u64,
             payload_len = payload.len(),
             max_items = max_items,
@@ -169,6 +170,7 @@ impl UserPayloadClient for QuorumStoreClient {
             duration_ms = start_time.elapsed().as_millis() as u64,
             "Pull payloads from QuorumStore: proposal"
         );
+        info!("quorum store client pull cost {:?}", e_time);
 
         Ok(payload)
     }
