@@ -120,7 +120,7 @@ impl TransactionStore {
         sequence_number: u64,
     ) -> Option<SignedTransaction> {
         if let Some(txn) = self.get_mempool_txn(address, sequence_number) {
-            return  Some(txn.verified_txn().into());
+            return  Some(txn.verified_txn().clone());
         }
         None
     }
@@ -133,7 +133,7 @@ impl TransactionStore {
     ) -> Option<(SignedTransaction, u64)> {
         if let Some(txn) = self.get_mempool_txn(address, sequence_number) {
             // TODO: constructed signed txn from raw txn bytes
-            return Some((txn.verified_txn().into(), txn.ranking_score()));
+            return Some((txn.verified_txn().clone(), txn.ranking_score()));
         }
         None
     }
@@ -576,7 +576,7 @@ impl TransactionStore {
                     } else {
                         // reconstruct signed transaction from raw transaction bytes
                         batch.push((
-                            (txn.verified_txn().into()),
+                            (txn.verified_txn().clone()),
                             aptos_infallible::duration_since_epoch_at(
                                 &txn.insertion_info().ready_time,
                             )
@@ -628,7 +628,7 @@ impl TransactionStore {
                     .and_then(|txns| txns.get(sequence_number))
                     .map(|txn| {
                         (
-                            txn.verified_txn().into(),
+                            txn.verified_txn().clone(),
                             aptos_infallible::duration_since_epoch_at(
                                 &txn.insertion_info().ready_time,
                             )

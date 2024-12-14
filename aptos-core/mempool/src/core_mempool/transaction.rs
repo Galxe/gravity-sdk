@@ -110,7 +110,7 @@ pub struct VerifiedTxn {
 
 #[derive(Clone, Debug)]
 pub struct MempoolTransaction {
-    verified_txn: VerifiedTxn,
+    verified_txn: SignedTransaction,
     pub timeline_state: TimelineState,
     insertion_info: InsertionInfo,
     ranking_score: u64,
@@ -129,7 +129,7 @@ impl MempoolTransaction {
     ) -> Self {
         let txn_sequence_number = verified_txn.sequence_number;
         Self {
-            verified_txn,
+            verified_txn: (&verified_txn).into(),
             timeline_state,
             insertion_info,
             priority_of_sender,
@@ -150,18 +150,26 @@ impl MempoolTransaction {
     }
 
     pub(crate) fn get_hash(&self) -> HashValue {
-        HashValue::sha3_256_of(&self.verified_txn.bytes)
+        // HashValue::sha3_256_of(&self.verified_txn.bytes)
+        // TODO(gravity_byteyue&lk)
+        self.verified_txn.committed_hash()
     }
 
     pub(crate) fn get_estimated_bytes(&self) -> usize {
-        TXN_FIXED_ESTIMATED_BYTES + self.verified_txn.bytes.len()
+        // TXN_FIXED_ESTIMATED_BYTES + self.verified_txn.bytes.len()
+        TXN_FIXED_ESTIMATED_BYTES + {
+            match self.verified_txn.payload() {
+                TransactionPayload::GTxnBytes(b) => b.len(),
+                _ => panic!()
+            }
+        }
     }
 
     pub(crate) fn ranking_score(&self) -> u64 {
         self.ranking_score
     }
 
-    pub(crate) fn verified_txn(&self) -> &VerifiedTxn {
+    pub(crate) fn verified_txn(&self) -> &SignedTransaction {
         &self.verified_txn
     }
 
