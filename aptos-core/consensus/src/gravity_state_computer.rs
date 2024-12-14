@@ -157,6 +157,7 @@ impl StateComputer for GravityExecutionProxy {
                 .send_ordered_block(external_block)
                 .await;
         }
+        info!("block round {:?}, is empty block {:?}", block.round(), empty_block);
         let engine = Some(self.consensus_engine.clone());
         let round = block.round();
         Box::pin(async move {
