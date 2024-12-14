@@ -383,6 +383,7 @@ impl ProposalGenerator {
             let other = Instant::now();
             // One needs to hold the blocks with the references to the payloads while get_block is
             // being executed: pending blocks vector keeps all the pending ancestors of the extended branch.
+            let pending_blocks_start = Instant::now();
             let mut pending_blocks = self
                 .block_store
                 .path_from_commit_root(hqc.certified_block().id())
@@ -390,7 +391,9 @@ impl ProposalGenerator {
             // Avoid txn manager long poll if the root block has txns, so that the leader can
             // deliver the commit proof to others without delay.
             pending_blocks.push(self.block_store.commit_root());
+            let pending_blocks_start_duration = pending_blocks_start.elapsed();
 
+            let payload_filter_start = Instant::now();
             // Exclude all the pending transactions: these are all the ancestors of
             // parent (including) up to the root (including).
             let exclude_payload: Vec<_> = pending_blocks
@@ -398,6 +401,7 @@ impl ProposalGenerator {
                 .flat_map(|block| block.payload())
                 .collect();
             let payload_filter = PayloadFilter::from(&exclude_payload);
+            let payload_filter_start_duration = payload_filter_start.elapsed();
 
             let pending_ordering = self
                 .block_store
@@ -481,7 +485,7 @@ impl ProposalGenerator {
                 .context("Fail to retrieve payload")?;
             let start_duration = start.elapsed();
             tmp = start_duration;
-            info!("retrieve payload cost {:?}, other for {:?}, sleep for {:?}", start_duration, other_duration, proposal_delay);
+            info!("retrieve payload cost {:?}, other for {:?}, pending_blocks_start for {:?}, payload_filter_start for {:?}", start_duration, other_duration, pending_blocks_start_duration, payload_filter_start_duration);
             // TODO(gravity_byteyue): Consider how to process the validator transaction
             if !payload.is_direct()
                 && max_txns_from_block_to_execute.is_some()
