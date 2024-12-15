@@ -1,6 +1,6 @@
 pub mod account;
 
-use std::fmt::Display;
+use std::{fmt::Display, sync::Arc};
 
 use crate::account::{ExternalAccountAddress, ExternalChainId};
 use async_trait::async_trait;
@@ -146,7 +146,35 @@ pub trait ExecutionApiV2: Send + Sync {
 
     // this function is called by the execution layer commit the block hash
     async fn commit_block(&self, head: ExternalBlockMeta) -> Result<(), ExecError>;
+}
 
+#[derive(Debug)]
+pub enum RecoveryError {
+    InternalError(String),
+    UnimplementError,
+}
+
+#[async_trait]
+pub trait RecoveryApi: Send + Sync {
+    async fn latest_block_number(&self) -> u64;
+
+    async fn finalized_block_number(&self) -> u64;
+
+    async fn recover_ordered_block(&self, block: ExternalBlock);
+
+    async fn recover_execution_blocks(&self, blocks: ExecutionBlocks);
+
+    async fn get_blocks_by_range(
+        &self,
+        start_block_number: u64,
+        end_block_number: u64,
+    ) -> Result<ExecutionBlocks, RecoveryError>;
+}
+
+pub struct DefaultRecovery {}
+
+#[async_trait]
+impl RecoveryApi for DefaultRecovery {
     async fn latest_block_number(&self) -> u64 {
         0
     }
@@ -155,23 +183,27 @@ pub trait ExecutionApiV2: Send + Sync {
         0
     }
 
-    async fn recover_ordered_block(&self, block: ExternalBlock) {
-        unimplemented!("")
+    async fn recover_ordered_block(&self, _: ExternalBlock) {
+        ()
     }
 
-    async fn recover_execution_blocks(&self, blocks: ExecutionBlocks) {
-        unimplemented!("")
+    async fn recover_execution_blocks(&self, _: ExecutionBlocks) {
+        ()
     }
 
     async fn get_blocks_by_range(
         &self,
-        start_block_number: u64,
-        end_block_number: u64,
-    ) -> ExecutionBlocks {
-        unimplemented!("")
+        _: u64,
+        _: u64,
+    ) -> Result<ExecutionBlocks, RecoveryError> {
+        Err(RecoveryError::UnimplementError)
     }
 }
-
+#[derive(Clone)]
+pub struct ExecutionLayer {
+    pub execution_api: Arc<dyn ExecutionApiV2>,
+    pub recovery_api: Arc<dyn RecoveryApi>,
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VerifiedTxn {

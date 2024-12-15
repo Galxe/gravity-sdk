@@ -14,7 +14,7 @@ use crate::{
 };
 use anyhow::Result;
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
-use api_types::{ConsensusApi, ExecutionApiV2, ExternalBlock, ExternalBlockMeta};
+use api_types::{ConsensusApi, ExecutionApiV2, ExecutionLayer, ExternalBlock, ExternalBlockMeta};
 use aptos_consensus_types::{block::Block, pipelined_block::PipelinedBlock};
 use aptos_crypto::HashValue;
 use aptos_executor::block_executor::BlockExecutor;
@@ -37,15 +37,15 @@ use coex_bridge::{get_coex_bridge, Func};
 
 pub struct ConsensusAdapterArgs {
     pub quorum_store_client: Option<Arc<QuorumStoreClient>>,
-    pub execution_api: Option<Arc<dyn ExecutionApiV2>>,
+    pub execution_layer: Option<ExecutionLayer>,
     pub consensus_db: Option<Arc<ConsensusDB>>,
 }
 
 impl ConsensusAdapterArgs {
-    pub fn new(execution_api: Arc<dyn ExecutionApiV2>, consensus_db: Arc<ConsensusDB>) -> Self {
+    pub fn new(execution_layer: ExecutionLayer, consensus_db: Arc<ConsensusDB>) -> Self {
         Self {
             quorum_store_client: None,
-            execution_api: Some(execution_api),
+            execution_layer: Some(execution_layer),
             consensus_db: Some(consensus_db),
         }
     }
@@ -55,7 +55,7 @@ impl ConsensusAdapterArgs {
     }
 
     pub fn dummy() -> Self {
-        Self { quorum_store_client: None, execution_api: None, consensus_db: None }
+        Self { quorum_store_client: None, execution_layer: None, consensus_db: None }
     }
 }
 

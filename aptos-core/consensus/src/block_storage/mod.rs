@@ -28,6 +28,13 @@ pub trait BlockReader: Send + Sync {
     /// Try to get a block with the block_id, return an Arc of it if found.
     fn get_block(&self, block_id: HashValue) -> Option<Arc<PipelinedBlock>>;
 
+    fn get_block_by_block_number(&self, block_number: u64) -> Option<Arc<PipelinedBlock>>;
+    fn get_blocks_by_range(
+        &self,
+        start_block_number: u64,
+        end_block_number: u64,
+    ) -> Vec<Arc<PipelinedBlock>>;
+
     /// Get the current ordered root block of the BlockTree.
     fn ordered_root(&self) -> Arc<PipelinedBlock>;
 

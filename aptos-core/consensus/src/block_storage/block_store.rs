@@ -18,7 +18,7 @@ use crate::{
     util::time_service::TimeService,
 };
 use anyhow::{bail, ensure, format_err, Context};
-use api_types::{ExecutionApiV2, ExternalBlock, ExternalBlockMeta};
+use api_types::{ExecutionApiV2, ExecutionLayer, ExternalBlock, ExternalBlockMeta, RecoveryApi};
 use aptos_consensus_types::common::Payload::DirectMempool;
 use aptos_consensus_types::{
     block::Block,
@@ -90,7 +90,7 @@ pub struct BlockStore {
     back_pressure_for_test: AtomicBool,
     order_vote_enabled: bool,
     pending_blocks: Arc<Mutex<PendingBlocks>>,
-    execution_api: Option<Arc<dyn ExecutionApiV2>>,
+    execution_layer: Option<ExecutionLayer>,
 }
 
 impl BlockStore {
@@ -104,7 +104,7 @@ impl BlockStore {
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
-        execution_api: Option<Arc<dyn ExecutionApiV2>>,
+        execution_layer: Option<ExecutionLayer>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -122,7 +122,7 @@ impl BlockStore {
             payload_manager,
             order_vote_enabled,
             pending_blocks,
-            execution_api,
+            execution_layer,
         ));
         block_on(block_store.recover_blocks());
         block_store
@@ -138,7 +138,7 @@ impl BlockStore {
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
-        execution_api: Option<Arc<dyn ExecutionApiV2>>,
+        execution_layer: Option<ExecutionLayer>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -156,7 +156,7 @@ impl BlockStore {
             payload_manager,
             order_vote_enabled,
             pending_blocks,
-            execution_api,
+            execution_layer,
         )
         .await;
         block_store.recover_blocks().await;
@@ -183,16 +183,24 @@ impl BlockStore {
                 assert!(block_to_recover.is_some());
                 let block_to_recover = block_to_recover.unwrap();
                 self.init_block_number(&vec![block_to_recover.clone()]);
-                if let Some(DirectMempool(txns)) = block_to_recover.block().payload()
-                {
+                if let Some(DirectMempool(txns)) = block_to_recover.block().payload() {
                     info!("recover block {}", block_to_recover.block());
-                    let verified_txns: Vec<VerifiedTxn> = txns.iter().map(|txn| txn.into()).collect();
+                    let verified_txns: Vec<VerifiedTxn> =
+                        txns.iter().map(|txn| txn.into()).collect();
                     let verified_txns = verified_txns.into_iter().map(|txn| txn.into()).collect();
-                    let block_batch = ExternalBlock { txns: verified_txns, block_meta: ExternalBlockMeta {
-                        block_id: *block_to_recover.block().id(),
-                        block_number: block_to_recover.block().block_number().unwrap(),
-                    } };
-                    self.execution_api.as_ref().unwrap().recover_ordered_block(block_batch).await;
+                    let block_batch = ExternalBlock {
+                        txns: verified_txns,
+                        block_meta: ExternalBlockMeta {
+                            block_id: *block_to_recover.block().id(),
+                            block_number: block_to_recover.block().block_number().unwrap(),
+                        },
+                    };
+                    self.execution_layer
+                        .as_ref()
+                        .unwrap()
+                        .recovery_api
+                        .recover_ordered_block(block_batch)
+                        .await;
                 }
                 if qc.commit_info().round() <= self.commit_root().round() {
                     continue;
@@ -218,7 +226,7 @@ impl BlockStore {
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
-        execution_api: Option<Arc<dyn ExecutionApiV2>>,
+        execution_layer: Option<ExecutionLayer>,
     ) -> Self {
         let RootInfo(root_block, root_qc, root_ordered_cert, root_commit_cert) = root;
 
@@ -252,7 +260,7 @@ impl BlockStore {
             back_pressure_for_test: AtomicBool::new(false),
             order_vote_enabled,
             pending_blocks,
-            execution_api,
+            execution_layer,
         };
 
         for block in blocks {
@@ -305,7 +313,8 @@ impl BlockStore {
         );
 
         let blocks_to_commit = self.path_from_ordered_root(block_id_to_commit).unwrap_or_default();
-        let finalized_block_number = self.execution_api.as_ref().unwrap().finalized_block_number().await;
+        let finalized_block_number =
+            self.execution_layer.as_ref().unwrap().recovery_api.finalized_block_number().await;
         assert!(!blocks_to_commit.is_empty());
         let block_tree = self.inner.clone();
         let storage = self.storage.clone();
@@ -315,15 +324,13 @@ impl BlockStore {
             for p_block in &blocks_to_commit {
                 info!("recover commit block {}", p_block.block());
                 // TODO(gravity_lightman): Error handle
-                self.execution_api
+                self.execution_layer
                     .as_ref()
                     .unwrap()
+                    .execution_api
                     .commit_block(ExternalBlockMeta {
                         block_id: *p_block.block().id(),
-                        block_number: p_block
-                            .block()
-                            .block_number()
-                            .expect("No block number set"),
+                        block_number: p_block.block().block_number().expect("No block number set"),
                     })
                     .await;
             }
@@ -389,7 +396,7 @@ impl BlockStore {
             self.payload_manager.clone(),
             self.order_vote_enabled,
             self.pending_blocks.clone(),
-            self.execution_api.clone(),
+            self.execution_layer.clone(),
         )
         .await;
 
@@ -548,6 +555,18 @@ impl BlockReader for BlockStore {
 
     fn get_block(&self, block_id: HashValue) -> Option<Arc<PipelinedBlock>> {
         self.inner.read().get_block(&block_id)
+    }
+
+    fn get_block_by_block_number(&self, block_number: u64) -> Option<Arc<PipelinedBlock>> {
+        self.inner.read().get_block_by_block_number(block_number)
+    }
+
+    fn get_blocks_by_range(
+        &self,
+        start_block_number: u64,
+        end_block_number: u64,
+    ) -> Vec<Arc<PipelinedBlock>> {
+        self.inner.read().get_blocks_by_range(start_block_number, end_block_number)
     }
 
     fn ordered_root(&self) -> Arc<PipelinedBlock> {

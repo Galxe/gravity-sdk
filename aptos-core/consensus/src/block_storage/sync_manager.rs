@@ -25,7 +25,7 @@ use crate::{
     pipeline::execution_client::TExecutionClient,
 };
 use anyhow::{anyhow, bail, Context};
-use api_types::{ExecutionApiV2, ExecutionBlocks, ExternalBlockMeta};
+use api_types::{ExecutionApiV2, ExecutionBlocks, ExecutionLayer, ExternalBlockMeta, RecoveryApi};
 use aptos_consensus_types::{
     block::Block,
     block_retrieval::{
@@ -47,6 +47,7 @@ use aptos_types::{
 use fail::fail_point;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use futures_channel::oneshot;
+use num_traits::ToPrimitive;
 use rand::{prelude::*, Rng};
 use std::{clone::Clone, cmp::min, sync::Arc, time::Duration};
 use tokio::{time, time::timeout};
@@ -278,8 +279,10 @@ impl BlockStore {
 
     pub async fn fast_forward_sync_by_block_number<'a>(
         retriever: &'a mut BlockRetriever,
-        execution_api: Arc<dyn ExecutionApiV2>,
+        execution_layer: ExecutionLayer,
         start_block_number: u64,
+        payload_manager: Arc<dyn TPayloadManager>,
+        storage: Arc<dyn PersistentLivenessStorage>,
     ) -> anyhow::Result<()> {
         info!(
             LogSchema::new(LogEvent::StateSync).remote_peer(retriever.preferred_peer),
@@ -290,16 +293,32 @@ impl BlockStore {
             .retrieve_block_by_block_number(retriever.validator_addresses(), start_block_number)
             .await?;
         for blocks in blocks_batch {
-            let commit_block_hash = blocks.latest_block_hash;
-            let commit_block_number = blocks.latest_block_number;
-            execution_api.recover_execution_blocks(blocks).await;
-            // TODO(gravity_lightman): error handle, block id is unique for reth or aptos?
-            execution_api
-                .commit_block(ExternalBlockMeta {
-                    block_id: commit_block_hash,
-                    block_number: commit_block_number,
-                })
-                .await;
+            match blocks {
+                SyncBlocks::Consensus(blocks) => {
+                    let mut quorum_certs = vec![];
+                    quorum_certs
+                        .extend(blocks.iter().map(|block| block.quorum_cert().clone()));
+                     for (i, block) in blocks.iter().enumerate() {
+                        assert_eq!(block.id(), quorum_certs[i].certified_block().id());
+                        if let Some(payload) = block.payload() {
+                            payload_manager.prefetch_payload_data(payload, block.timestamp_usecs());
+                        }
+                    }
+                    storage.save_tree(blocks.clone(), quorum_certs.clone())?;
+                },
+                SyncBlocks::Execution(blocks) => {
+                    let commit_block_hash = blocks.latest_block_hash;
+                    let commit_block_number = blocks.latest_block_number;
+                    execution_layer.recovery_api.recover_execution_blocks(blocks).await;
+                    // TODO(gravity_lightman): error handle, block id is unique for reth or aptos?
+                    execution_layer.execution_api
+                        .commit_block(ExternalBlockMeta {
+                            block_id: commit_block_hash,
+                            block_number: commit_block_number,
+                        })
+                        .await;
+                }
+            }
         }
         Ok(())
     }
@@ -466,8 +485,10 @@ impl BlockStore {
             };
             return Self::fast_forward_sync_by_block_number(
                 retriever,
-                self.execution_api.as_ref().unwrap().clone(),
+                self.execution_layer.as_ref().unwrap().clone(),
                 start_block_number,
+                self.payload_manager.clone(),
+                self.storage.clone(),
             )
             .await;
         }
@@ -503,18 +524,34 @@ impl BlockStore {
                 "sync blocks by block number from {} to {}, target is {}",
                 start_block_number, end_block_number, target_block_number
             );
-            let blocks = self
-                .execution_api
-                .as_ref()
-                .unwrap()
-                .get_blocks_by_range(start_block_number, end_block_number).await;
-            if end_block_number == target_block_number {
-                status = BlockRetrievalStatus::SucceededWithTarget;
+            let blocks = self.get_blocks_by_range(start_block_number, end_block_number);
+            if blocks.len().to_u64().unwrap() != end_block_number - start_block_number {
+                let blocks = self
+                    .execution_layer
+                    .as_ref()
+                    .unwrap()
+                    .recovery_api
+                    .get_blocks_by_range(start_block_number, end_block_number).await.unwrap();
+                if end_block_number == target_block_number {
+                    status = BlockRetrievalStatus::SucceededWithTarget;
+                }
+                let response =
+                    Box::new(BlockRetrievalResponse::new(status, SyncBlocks::Execution(blocks)));
+                response_bytes =
+                    request.protocol.to_bytes(&ConsensusMsg::BlockRetrievalResponse(response))?;
+            } else {
+                assert!(blocks.len() == 0);
+                let blocks = blocks.into_iter().map(|p_block| {
+                    p_block.block().clone()
+                }).collect();
+                if end_block_number == target_block_number {
+                    status = BlockRetrievalStatus::SucceededWithTarget;
+                }
+                let response =
+                    Box::new(BlockRetrievalResponse::new(status, SyncBlocks::Consensus(blocks)));
+                response_bytes =
+                    request.protocol.to_bytes(&ConsensusMsg::BlockRetrievalResponse(response))?;
             }
-            let response =
-                Box::new(BlockRetrievalResponse::new(status, SyncBlocks::Execution(blocks)));
-            response_bytes =
-                request.protocol.to_bytes(&ConsensusMsg::BlockRetrievalResponse(response))?;
         } else {
             info!(
                 "process_block_retrieval origin_block_id {}, target_block_id {}",
@@ -704,7 +741,7 @@ impl BlockRetriever {
         &mut self,
         peers: Vec<AccountAddress>,
         start_block_number: u64,
-    ) -> anyhow::Result<Vec<ExecutionBlocks>> {
+    ) -> anyhow::Result<Vec<SyncBlocks>> {
         let mut start_block_number = start_block_number;
         info!("Retrieving blocks starting from {}", start_block_number);
         let mut result_blocks = vec![];
@@ -724,15 +761,15 @@ impl BlockRetriever {
             match response {
                 Ok(result) if matches!(result.status(), BlockRetrievalStatus::Succeeded) => {
                     // extend the result blocks
-                    let batch = result.execution_blocks().clone();
-                    start_block_number = batch.latest_block_number + 1;
+                    let batch = result.sync_blocks();
+                    start_block_number = batch.latest_block_number() + 1;
                     result_blocks.push(batch);
                 }
                 Ok(result)
                     if matches!(result.status(), BlockRetrievalStatus::SucceededWithTarget) =>
                 {
                     // if we found the target, end the loop
-                    let batch = result.execution_blocks().clone();
+                    let batch = result.sync_blocks();
                     result_blocks.push(batch);
                     break;
                 }

@@ -13,7 +13,7 @@ use crate::{
     round_manager::VerifiedEvent,
 };
 use anyhow::{anyhow, ensure, Context, Result};
-use api_types::ExecutionApiV2;
+use api_types::{ExecutionApiV2, ExecutionLayer};
 use aptos_channels::aptos_channel;
 use aptos_consensus_types::{
     common::Author, proposal_msg::ProposalMsg, sync_info::SyncInfo, vote_msg::VoteMsg,
@@ -37,7 +37,7 @@ pub struct RecoveryManager {
     payload_manager: Arc<dyn TPayloadManager>,
     order_vote_enabled: bool,
     pending_blocks: Arc<Mutex<PendingBlocks>>,
-    execution_api: Option<Arc<dyn ExecutionApiV2>>,
+    execution_layer: Option<ExecutionLayer>,
 }
 
 impl RecoveryManager {
@@ -51,7 +51,7 @@ impl RecoveryManager {
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
-        execution_api: Option<Arc<dyn ExecutionApiV2>>,
+        execution_layer: Option<ExecutionLayer>,
     ) -> Self {
         RecoveryManager {
             epoch_state,
@@ -63,7 +63,7 @@ impl RecoveryManager {
             payload_manager,
             order_vote_enabled,
             pending_blocks,
-            execution_api,
+            execution_layer,
         }
     }
 
@@ -101,8 +101,10 @@ impl RecoveryManager {
         );
         BlockStore::fast_forward_sync_by_block_number(
             &mut retriever,
-            self.execution_api.as_ref().unwrap().clone(),
+            self.execution_layer.as_ref().unwrap().clone(),
             self.storage.latest_block_number().await + 1,
+            self.payload_manager.clone(),
+            self.storage.clone()
         ).await?;
         let recovery_data = BlockStore::fast_forward_sync(
             sync_info.highest_quorum_cert(),

@@ -289,6 +289,19 @@ impl BlockTree {
         }
     }
 
+    pub(super) fn get_blocks_by_range(&self, start_block_number: u64, end_block_number: u64) -> Vec<Arc<PipelinedBlock>> {
+        let mut res = vec![];
+        for block_number in start_block_number..end_block_number {
+            match self.block_number_to_id.get(&block_number) {
+                Some(block_id) => {
+                    res.push(self.get_block(block_id).unwrap());
+                },
+                None => break,
+            }
+        }
+        res
+    }
+
     pub(super) fn ordered_root(&self) -> Arc<PipelinedBlock> {
         self.get_block(&self.ordered_root_id).expect("Root must exist")
     }

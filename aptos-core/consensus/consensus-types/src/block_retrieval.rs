@@ -22,6 +22,15 @@ pub enum SyncBlocks {
     Execution(ExecutionBlocks),
 }
 
+impl SyncBlocks {
+    pub fn latest_block_number(&self) -> u64 {
+        match self {
+            SyncBlocks::Consensus(blocks) => blocks.last().unwrap().block_number().unwrap(),
+            SyncBlocks::Execution(blocks) => blocks.latest_block_number,
+        }
+    }
+}
+
 /// RPC to get a chain of block of the given length starting from the given block id.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct BlockRetrievalRequest {
@@ -134,6 +143,10 @@ impl BlockRetrievalResponse {
             return blocks.clone();
         }
         panic!("The sync block type is consensus block")
+    }
+
+    pub fn sync_blocks(&self) -> SyncBlocks {
+        self.blocks.clone()
     }
 
     pub fn verify(

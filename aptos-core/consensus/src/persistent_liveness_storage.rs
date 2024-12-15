@@ -4,7 +4,7 @@
 
 use crate::{consensusdb::ConsensusDB, epoch_manager::LivenessStorageData, error::DbError};
 use anyhow::{format_err, Context, Result};
-use api_types::{ExecutionApiV2};
+use api_types::{ExecutionApiV2, RecoveryApi};
 use aptos_config::config::NodeConfig;
 use aptos_consensus_types::{
     block::Block, quorum_cert::QuorumCert, timeout_2chain::TwoChainTimeoutCertificate, vote::Vote,
@@ -365,17 +365,17 @@ pub struct StorageWriteProxy {
     db: Arc<ConsensusDB>,
     aptos_db: Arc<dyn DbReader>,
     next_block_number: AtomicU64,
-    execution_api: Option<Arc<dyn ExecutionApiV2>>,
+    recovery_api: Option<Arc<dyn RecoveryApi>>,
 }
 
 impl StorageWriteProxy {
     pub fn new(
         db: Arc<ConsensusDB>,
         aptos_db: Arc<dyn DbReader>,
-        execution_api: Option<Arc<dyn ExecutionApiV2>>,
+        recovery_api: Option<Arc<dyn RecoveryApi>>,
     ) -> Self {
         // let db = Arc::new(ConsensusDB::new(config.storage.dir()));
-        StorageWriteProxy { db, aptos_db, next_block_number: AtomicU64::new(0), execution_api }
+        StorageWriteProxy { db, aptos_db, next_block_number: AtomicU64::new(0), recovery_api }
     }
 
     pub fn init_next_block_number(&self, blocks: &Vec<Block>) {
@@ -514,6 +514,6 @@ impl PersistentLivenessStorage for StorageWriteProxy {
     }
 
     async fn latest_block_number(&self) -> u64 {
-        self.execution_api.as_ref().unwrap().latest_block_number().await
+        self.recovery_api.as_ref().unwrap().latest_block_number().await
     }
 }

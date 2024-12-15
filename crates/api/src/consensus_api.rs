@@ -6,7 +6,7 @@ use crate::{
         start_consensus, start_node_inspection_service,
     }, consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler}, https::{https_server, HttpsServerArgs}, logger, network::{create_network_runtime, extract_network_configs}
 };
-use api_types::{BlockBatch, BlockHashState, ComputeRes, ConsensusApi, ExecutionApi, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, GTxn};
+use api_types::{BlockBatch, BlockHashState, ComputeRes, ConsensusApi, ExecutionApi, ExecutionApiV2, ExecutionLayer, ExternalBlock, ExternalBlockMeta, GTxn};
 use aptos_config::{config::NodeConfig, network_id::NetworkId};
 use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
 use aptos_consensus::consensusdb::ConsensusDB;
@@ -30,16 +30,15 @@ use coex_bridge::CoExBridge;
 
 pub struct ConsensusEngine {
     address: String,
-    execution_api: Arc<dyn ExecutionApiV2>,
+    execution_layer: ExecutionLayer,
     runtime_vec: Vec<Runtime>,
 }
-
 
 
 impl ConsensusEngine {
     pub fn init(
         node_config: NodeConfig,
-        execution_api: Arc<dyn ExecutionApiV2>,
+        execution_layer: ExecutionLayer,
         block_hash_state: BlockHashState,
         chain_id: u64,
     ) -> Arc<Self> {
@@ -120,10 +119,10 @@ impl ConsensusEngine {
             consensus_to_mempool_receiver,
             mempool_listener,
             peers_and_metadata,
-            execution_api.clone(),
+            execution_layer.execution_api.clone(),
         );
         network_runtimes.extend(mempool_runtime);
-        let mut args = ConsensusAdapterArgs::new(execution_api.clone(), consensus_db);
+        let mut args = ConsensusAdapterArgs::new(execution_layer.clone(), consensus_db);
         let (consensus_runtime, _, _, execution_proxy) = start_consensus(
             &node_config,
             &mut event_subscription_service,
@@ -137,10 +136,10 @@ impl ConsensusEngine {
         // trigger this to make epoch manager invoke new epoch
         let arc_self = Arc::new(Self {
             address: node_config.validator_network.as_ref().unwrap().listen_address.to_string(),
-            execution_api: execution_api.clone(),
+            execution_layer: execution_layer.clone(),
             runtime_vec: network_runtimes,
         });
-        // process new round should be after init reth hash
+        // process new round should be after init retƒh hash
         let _ = event_subscription_service.notify_initial_configs(1_u64);
 
         execution_proxy.set_consensus_engine(arc_self.clone());
@@ -148,7 +147,7 @@ impl ConsensusEngine {
                 && !node_config.https_key_pem_path.to_str().unwrap().is_empty() {
             let args = HttpsServerArgs {
                 address: node_config.https_server_address,
-                execution_api: Some(execution_api.clone()),
+                execution_api: Some(execution_layer.execution_api.clone()),
                 cert_pem: node_config.https_cert_pem_path,
                 key_pem: node_config.https_key_pem_path,
             };
@@ -162,7 +161,7 @@ impl ConsensusEngine {
 impl ConsensusApi for ConsensusEngine {
     async fn send_ordered_block(&self, ordered_block: ExternalBlock) {
         info!("send_order_block {:?}", ordered_block);
-        match self.execution_api.send_ordered_block(ordered_block).await {
+        match self.execution_layer.execution_api.send_ordered_block(ordered_block).await {
             Ok(_) => {
             },
             Err(_) => panic!("send_ordered_block should not fail"),
@@ -171,7 +170,7 @@ impl ConsensusApi for ConsensusEngine {
 
     async fn recv_executed_block_hash(&self, head: ExternalBlockMeta) -> ComputeRes {
         info!("recv_executed_block_hash");
-        let res = match self.execution_api.recv_executed_block_hash(head).await {
+        let res = match self.execution_layer.execution_api.recv_executed_block_hash(head).await {
             Ok(r) => r,
             Err(_) => panic!("send_ordered_block should not fail"),
         };
@@ -179,7 +178,7 @@ impl ConsensusApi for ConsensusEngine {
     }
 
     async fn commit_block_hash(&self, head: ExternalBlockMeta) {
-        match self.execution_api.commit_block(head).await {
+        match self.execution_layer.execution_api.commit_block(head).await {
             Ok(_) => {
 
             },
