@@ -519,17 +519,24 @@ impl RoundManager {
         }
         .boxed();
 
+        let generate_proposal_begin_start = Instant::now();
         let proposal = proposal_generator
             .generate_proposal(new_round_event.round, proposer_election, callback)
             .await?;
+        let generate_proposal_begin_start_duration = generate_proposal_begin_start.elapsed();
+        let sign_proposal_start = Instant::now();
         let signature = safety_rules.lock().sign_proposal(&proposal)?;
+        let sign_proposal_start_duration = sign_proposal_start.elapsed();
+        let new_proposal_hash_begin = Instant::now();
         let signed_proposal =
             Block::new_proposal_from_block_data_and_signature(proposal, signature);
+        let new_proposal_hash_begin_duration = new_proposal_hash_begin.elapsed();
         observe_block(signed_proposal.timestamp_usecs(), BlockStage::SIGNED);
         info!(
             Self::new_log_with_round_epoch(LogEvent::Propose, new_round_event.round, epoch),
             "{}", signed_proposal
         );
+        info!("round {:?}, generate_proposal_begin_start_duration is {:?}, sign_proposal_start_duration is {:?}, new_proposal_hash_begin_duration is {:?}", new_round_event.round, generate_proposal_begin_start_duration, sign_proposal_start_duration, new_proposal_hash_begin_duration);
         Ok(ProposalMsg::new(signed_proposal, sync_info))
     }
 
