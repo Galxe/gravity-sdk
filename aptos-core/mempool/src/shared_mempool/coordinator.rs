@@ -338,6 +338,7 @@ async fn handle_network_event<NetworkClient, TransactionValidator>(
     NetworkClient: NetworkClientInterface<MempoolSyncMsg> + 'static,
     TransactionValidator: TransactionValidation + 'static,
 {
+    // 打日志
     match event {
         Event::Message(peer_id, msg) => {
             counters::shared_mempool_event_inc("message");
@@ -346,6 +347,8 @@ async fn handle_network_event<NetworkClient, TransactionValidator>(
                     message_id,
                     transactions,
                 } => {
+                    let start = Instant::now();
+                    let len = transactions.len();
                     process_received_txns(
                         bounded_executor,
                         smp,
@@ -355,11 +358,14 @@ async fn handle_network_event<NetworkClient, TransactionValidator>(
                         peer_id,
                     )
                     .await;
+                    info!("handle_network_event BroadcastTransactionsRequest takes {:?}, len {:?}", start.elapsed(), len);
                 },
                 MempoolSyncMsg::BroadcastTransactionsRequestWithReadyTime {
                     message_id,
                     transactions,
                 } => {
+                    let start = Instant::now();
+                    let len = transactions.len();
                     process_received_txns(
                         bounded_executor,
                         smp,
@@ -372,6 +378,7 @@ async fn handle_network_event<NetworkClient, TransactionValidator>(
                         peer_id,
                     )
                     .await;
+                    info!("handle_network_event BroadcastTransactionsRequestWithReadyTime takes {:?}, len {:?}", start.elapsed(), len);
                 },
                 MempoolSyncMsg::BroadcastTransactionsResponse {
                     message_id,

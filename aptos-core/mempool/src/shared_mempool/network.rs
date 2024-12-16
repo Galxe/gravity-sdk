@@ -635,6 +635,7 @@ impl<NetworkClient: NetworkClientInterface<MempoolSyncMsg>> MempoolNetworkInterf
                 .backpressure(scheduled_backoff)
                 .num_txns(num_txns)
         );
+        info!("broadcast task latency is {:?}", latency);
         let network_id = peer.network_id();
         counters::shared_mempool_broadcast_size(network_id, num_txns);
         // TODO: Rethink if this metric is useful
