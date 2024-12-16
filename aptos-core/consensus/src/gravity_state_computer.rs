@@ -14,7 +14,7 @@ use crate::{
 };
 use anyhow::Result;
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
-use api_types::{BlockId, ConsensusApi, ExecutionApiV2, ExternalBlock, ExternalBlockMeta};
+use api_types::{BlockId, ConsensusApi, ExecutionApiV2, ExecutionLayer, ExternalBlock, ExternalBlockMeta};
 use aptos_consensus_types::{block::Block, pipelined_block::PipelinedBlock};
 use aptos_crypto::HashValue;
 use aptos_executor::block_executor::BlockExecutor;

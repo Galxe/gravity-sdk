@@ -159,6 +159,7 @@ pub trait ExecutionApiV2: Send + Sync {
 
     // this function is called by the execution layer commit the block hash
     async fn commit_block(&self, block_id: BlockId) -> Result<(), ExecError>;
+}
 
 #[derive(Debug)]
 pub enum RecoveryError {

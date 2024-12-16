@@ -6,7 +6,7 @@ use crate::{
         start_consensus, start_node_inspection_service,
     }, consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler}, https::{https_server, HttpsServerArgs}, logger, network::{create_network_runtime, extract_network_configs}
 };
-use api_types::{BlockBatch, BlockHashState, BlockId, ComputeRes, ConsensusApi, ExecutionApi, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, GTxn};
+use api_types::{BlockBatch, BlockHashState, BlockId, ComputeRes, ConsensusApi, ExecutionApi, ExecutionApiV2, ExecutionLayer, ExternalBlock, ExternalBlockMeta, GTxn};
 use aptos_config::{config::NodeConfig, network_id::NetworkId};
 use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
 use aptos_consensus::consensusdb::ConsensusDB;
@@ -161,7 +161,7 @@ impl ConsensusEngine {
 impl ConsensusApi for ConsensusEngine {
     async fn send_ordered_block(&self, parent_id: [u8; 32], ordered_block: ExternalBlock) {
         info!("send_order_block {:?}", ordered_block);
-        match self.execution_api.send_ordered_block(BlockId(parent_id), ordered_block).await {
+        match self.execution_layer.execution_api.send_ordered_block(BlockId(parent_id), ordered_block).await {
             Ok(_) => {
             },
             Err(_) => panic!("send_ordered_block should not fail"),
@@ -178,7 +178,7 @@ impl ConsensusApi for ConsensusEngine {
     }
 
     async fn commit_block_hash(&self, head: [u8; 32]) {
-        match self.execution_api.commit_block(BlockId(head)).await {
+        match self.execution_layer.execution_api.commit_block(BlockId(head)).await {
             Ok(_) => {
 
             },

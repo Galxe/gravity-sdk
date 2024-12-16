@@ -25,7 +25,7 @@ use crate::{
     pipeline::execution_client::TExecutionClient,
 };
 use anyhow::{anyhow, bail, Context};
-use api_types::{ExecutionApiV2, ExecutionBlocks, ExecutionLayer, ExternalBlockMeta, RecoveryApi};
+use api_types::{BlockId, ExecutionApiV2, ExecutionBlocks, ExecutionLayer, ExternalBlockMeta, RecoveryApi};
 use aptos_consensus_types::{
     block::Block,
     block_retrieval::{
@@ -312,10 +312,7 @@ impl BlockStore {
                     execution_layer.recovery_api.recover_execution_blocks(blocks).await;
                     // TODO(gravity_lightman): error handle, block id is unique for reth or aptos?
                     execution_layer.execution_api
-                        .commit_block(ExternalBlockMeta {
-                            block_id: commit_block_hash,
-                            block_number: commit_block_number,
-                        })
+                        .commit_block(BlockId(commit_block_hash))
                         .await;
                 }
             }
