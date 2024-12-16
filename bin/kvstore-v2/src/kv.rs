@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Mutex;
-use api_types::{ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
+use api_types::{BlockId, ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 use crate::stateful_mempool::Mempool;
 use crate::txn::RawTxn;
 use async_trait::async_trait;
@@ -17,7 +17,7 @@ pub struct KvStore {
     mempool: Mempool,
     block_status: Mutex<HashMap<ExternalPayloadAttr, BlockStatus>>,
     compute_res_recv: Mutex<HashMap<ExternalBlockMeta, Receiver<ComputeRes>>>,
-    ordered_block: Mutex<HashMap<ExternalBlockMeta, ExternalBlock>>,
+    ordered_block: Mutex<HashMap<BlockId, ExternalBlock>>,
 }
 
 
@@ -78,7 +78,7 @@ impl ExecutionApiV2 for KvStore {
         Ok(self.mempool.pending_txns().await)
     }
 
-    async fn send_ordered_block(&self, _parent_meta: ExternalBlockMeta, ordered_block: ExternalBlock) -> Result<(), ExecError> {
+    async fn send_ordered_block(&self, _parent_id: BlockId, ordered_block: ExternalBlock) -> Result<(), ExecError> {
         let mut res = vec![];
 
         for txn in &ordered_block.txns {
@@ -101,7 +101,7 @@ impl ExecutionApiV2 for KvStore {
 
 
         let mut block = self.ordered_block.lock().await;
-        block.insert(ordered_block.block_meta.clone(), ordered_block);
+        block.insert(ordered_block.block_meta.block_id.clone(), ordered_block);
         Ok(())
     }
 
@@ -115,7 +115,7 @@ impl ExecutionApiV2 for KvStore {
         }
     }
 
-    async fn commit_block(&self, head: ExternalBlockMeta) -> Result<(), ExecError> {
+    async fn commit_block(&self, head: BlockId) -> Result<(), ExecError> {
         let block = self.ordered_block.lock().await;
         for txn in &block.get(&head).unwrap().txns {
             self.mempool.remove_txn(txn).await

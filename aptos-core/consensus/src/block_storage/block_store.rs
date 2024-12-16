@@ -18,7 +18,11 @@ use crate::{
     util::time_service::TimeService,
 };
 use anyhow::{bail, ensure, format_err, Context};
+<<<<<<< HEAD
 use api_types::{ExecutionApiV2, ExecutionLayer, ExternalBlock, ExternalBlockMeta, RecoveryApi};
+=======
+use api_types::{BlockId, ExecutionApiV2, ExternalBlock, ExternalBlockMeta};
+>>>>>>> 5f23545 (rename block id)
 use aptos_consensus_types::common::Payload::DirectMempool;
 use aptos_consensus_types::{
     block::Block,
@@ -188,6 +192,7 @@ impl BlockStore {
                     let verified_txns: Vec<VerifiedTxn> =
                         txns.iter().map(|txn| txn.into()).collect();
                     let verified_txns = verified_txns.into_iter().map(|txn| txn.into()).collect();
+<<<<<<< HEAD
                     let block_batch = ExternalBlock {
                         txns: verified_txns,
                         block_meta: ExternalBlockMeta {
@@ -201,6 +206,14 @@ impl BlockStore {
                         .recovery_api
                         .recover_ordered_block(block_batch)
                         .await;
+=======
+                    let block_batch = ExternalBlock { txns: verified_txns, block_meta: ExternalBlockMeta {
+                        block_id: BlockId(*block_to_recover.block().id()),
+                        block_number: block_to_recover.block().block_number().unwrap(),
+                        ts: qc.certified_block().timestamp_usecs(),
+                    } };
+                    self.execution_api.as_ref().unwrap().recover_ordered_block(block_batch).await;
+>>>>>>> 5f23545 (rename block id)
                 }
                 if qc.commit_info().round() <= self.commit_root().round() {
                     continue;
@@ -327,11 +340,15 @@ impl BlockStore {
                 self.execution_layer
                     .as_ref()
                     .unwrap()
+<<<<<<< HEAD
                     .execution_api
                     .commit_block(ExternalBlockMeta {
                         block_id: *p_block.block().id(),
                         block_number: p_block.block().block_number().expect("No block number set"),
                     })
+=======
+                    .commit_block(BlockId(*block_id_to_commit))
+>>>>>>> 5f23545 (rename block id)
                     .await;
             }
             let commit_decision = finality_proof.ledger_info().clone();

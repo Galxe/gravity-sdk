@@ -1,0 +1,47 @@
+
+use api_types::{BlockId, ExternalPayloadAttr};
+use reth_primitives::Block;
+use web3::types::Transaction;
+use reth::primitives::U256;
+
+pub struct BuildingState {
+    gas_used: u64,
+}
+
+pub struct State {
+    block_id_to_hash: std::collections::HashMap<BlockId, U256>,
+    block_hash_to_id: std::collections::HashMap<U256, BlockId>,
+    block_id_parent: std::collections::HashMap<BlockId, BlockId>,
+    building_block: std::collections::HashMap<ExternalPayloadAttr, BuildingState>,
+}
+
+impl State {
+    pub fn new() -> Self {
+        State {
+            block_id_to_hash: std::collections::HashMap::new(),
+            block_hash_to_id: std::collections::HashMap::new(),
+            block_id_parent: std::collections::HashMap::new(),
+            building_block: std::collections::HashMap::new(),
+        }
+    }
+
+    pub fn check_new_txn(&mut self, attr: &ExternalPayloadAttr, txn: Transaction) -> bool {
+        let building_state =
+            self.building_block.entry(attr.clone()).or_insert(BuildingState { gas_used: 0 });
+        building_state.gas_used += txn.gas.as_u64();
+        if building_state.gas_used > 1000000 {
+            return false;
+        }
+        true
+    }
+
+    pub fn insert_new_block(&mut self, block_id: BlockId, block_hash: U256) {
+        self.block_hash_to_id.insert(block_hash, block_id.clone());
+        self.block_id_to_hash.insert(block_id, block_hash);
+    }
+
+    pub fn get_block_hash(&self, block_id: BlockId) -> Option<U256> {
+        self.block_id_to_hash.get(&block_id).cloned()
+    }
+
+}

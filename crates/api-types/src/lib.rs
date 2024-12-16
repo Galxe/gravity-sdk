@@ -24,11 +24,11 @@ pub trait ConsensusApi: Send + Sync {
     //     state_block_hash: BlockHashState,
     // ) -> Result<BlockBatch, SendError>;
 
-    async fn send_ordered_block(&self, parent_meta: ExternalBlockMeta, ordered_block: ExternalBlock);
+    async fn send_ordered_block(&self, parent_id: [u8; 32], ordered_block: ExternalBlock);
 
     async fn recv_executed_block_hash(&self, head: ExternalBlockMeta) -> ComputeRes;
 
-    async fn commit_block_hash(&self, head: ExternalBlockMeta);
+    async fn commit_block_hash(&self, head: [u8; 32]);
 }
 
 pub struct BlockBatch {
@@ -38,6 +38,7 @@ pub struct BlockBatch {
 pub struct ExecutionBlocks {
     pub latest_block_hash: [u8; 32],
     pub latest_block_number: u64,
+    pub latest_ts: u64,
     pub blocks: Vec<Vec<u8>>,
 }
 
@@ -80,8 +81,9 @@ pub struct ExternalPayloadAttr {
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub struct ExternalBlockMeta {
     // Unique identifier for block: hash of block body
-    pub block_id: [u8; 32],
+    pub block_id: BlockId,
     pub block_number: u64,
+    pub ts: u64,
 }
 
 #[derive(Debug)]
@@ -117,6 +119,9 @@ pub struct VerifiedTxnWithAccountSeqNum {
     pub account_seq_num: u64,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
+pub struct BlockId(pub [u8; 32]);
+
 #[async_trait]
 pub trait ExecutionApiV2: Send + Sync {
     async fn add_txn(&self, bytes: ExecTxn) -> Result<(), ExecError>;
@@ -142,7 +147,7 @@ pub trait ExecutionApiV2: Send + Sync {
     // async fn send_ordered_block(&self, ordered_block: Vec<Txns>, block_number: BlockNumber, parent_mata_data: ExternalBlockMeta) -> Result<(), ExecError>;
     async fn send_ordered_block(
         &self,
-        parent_meta: ExternalBlockMeta,
+        parent_id: BlockId,
         ordered_block: ExternalBlock,
     ) -> Result<(), ExecError>;
 
@@ -153,8 +158,7 @@ pub trait ExecutionApiV2: Send + Sync {
     ) -> Result<ComputeRes, ExecError>;
 
     // this function is called by the execution layer commit the block hash
-    async fn commit_block(&self, head: ExternalBlockMeta) -> Result<(), ExecError>;
-}
+    async fn commit_block(&self, block_id: BlockId) -> Result<(), ExecError>;
 
 #[derive(Debug)]
 pub enum RecoveryError {
@@ -207,14 +211,11 @@ impl RecoveryApi for DefaultRecovery {
         Err(RecoveryError::UnimplementError)
     }
 }
-<<<<<<< HEAD
 #[derive(Clone)]
 pub struct ExecutionLayer {
     pub execution_api: Arc<dyn ExecutionApiV2>,
     pub recovery_api: Arc<dyn RecoveryApi>,
 }
-=======
->>>>>>> aef67a9 (fix ts)
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash)]
 pub struct VerifiedTxn {

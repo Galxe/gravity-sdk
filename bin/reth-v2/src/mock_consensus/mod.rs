@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, hash::{DefaultHasher, Hash, Hasher}, sync::Arc};
 
 use alloy_rpc_types_engine::PayloadAttributes;
-use api_types::{ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
+use api_types::{BlockId, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 
 pub struct MockConsensus {
     exec_api: Arc<dyn ExecutionApiV2>,
@@ -26,8 +26,9 @@ impl MockConsensus {
                     self.block_number_water_mark += 1;
                     return Some(ExternalBlock {
                         block_meta: ExternalBlockMeta {
-                            block_id: bytes,
+                            block_id: BlockId(bytes),
                             block_number: self.block_number_water_mark,
+                            ts: attr.ts,
                         },
                         txns: txns.drain(..).collect(),
                     });
@@ -48,11 +49,11 @@ impl MockConsensus {
             }
             if let Some(block) = self.construct_block(&mut block_txns, attr.clone()).await {
                 let head = block.block_meta.clone();
-                self.exec_api.send_ordered_block(self.parent_meta.clone(), block).await.unwrap();
+                self.exec_api.send_ordered_block(self.parent_meta.block_id, block).await.unwrap();
                 attr.ts += 1;
                 block_txns.clear();
                 let _ = self.exec_api.recv_executed_block_hash(head.clone()).await.unwrap();
-                self.exec_api.commit_block(head.clone()).await.unwrap();
+                self.exec_api.commit_block(head.block_id.clone()).await.unwrap();
                 self.parent_meta = head;
             }
 

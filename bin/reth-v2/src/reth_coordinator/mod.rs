@@ -1,52 +1,71 @@
-use std::sync::{Arc, Mutex};
+pub mod state;
+
+use std::sync::{Arc};
 
 use crate::reth_cli::RethCli;
+use alloy_trie::HashMap;
 use api_types::{
-    account::{ExternalAccountAddress, ExternalChainId}, ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum
+    account::{ExternalAccountAddress, ExternalChainId}, BlockId, ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum
 };
 use async_trait::async_trait;
+use reth::revm::db::components::block_hash;
+use tokio::sync::mpsc;
 use reth_ethereum_engine_primitives::{EthEngineTypes, EthPayloadAttributes};
+use reth_node_api::PayloadAttributes;
+use reth_payload_builder::PayloadId;
+use state::State;
+use tokio::sync::Mutex;
 use web3::types::H160;
+
+pub struct Buffer<T> {
+    sender: mpsc::Sender<T>,
+    receiver: Arc<Mutex<mpsc::Receiver<T>>>,
+}
+
+impl<T> Buffer<T> {
+    pub fn new(size: usize) -> Buffer<T> {
+        let (sender, receiver) = mpsc::channel(size);
+        Buffer { sender, receiver: Arc::new(Mutex::new(receiver)) }
+    }
+
+    pub async fn send(&self, item: T) {
+        self.sender.clone().send(item).await.unwrap();
+    }
+
+    pub async fn recv(&self) -> T {
+        let mut recv = self.receiver.lock().await;
+        recv.recv().await.unwrap()
+    }
+}
 
 pub struct RethCoordinator {
     reth_cli: RethCli,
     pending_buffer: Arc<Mutex<Vec<VerifiedTxnWithAccountSeqNum>>>,
+    state: Arc<Mutex<State>>,
+    pending_payload_id: Buffer<PayloadId>,
 }
 
-impl RethCoordinator
-{
+impl RethCoordinator {
     pub fn new(reth_cli: RethCli) -> Self {
-        Self { reth_cli, pending_buffer: Arc::new(Mutex::new(Vec::new())) }
-    }
-
-    fn covert_account(&self, acc: H160) -> ExternalAccountAddress {
-        let mut bytes = [0u8; 32];
-        bytes[12..].copy_from_slice(acc.as_bytes());
-        ExternalAccountAddress::new(bytes)
+        Self {
+            reth_cli,
+            pending_buffer: Arc::new(Mutex::new(Vec::new())),
+            state: Arc::new(Mutex::new(State::new())),
+            pending_payload_id: Buffer::new(1),
+        }
     }
 
     pub async fn run(&self) {
-        self.reth_cli.process_pending_transactions(|txn, account_seq_num| {
-            let nonce = txn.nonce.as_u64();
-            let bytes = serde_json::to_vec(&txn).unwrap();
-            self.pending_buffer.lock().unwrap().push(VerifiedTxnWithAccountSeqNum {
-                txn: VerifiedTxn {
-                    bytes,
-                    sender: self.covert_account(txn.from.unwrap()),
-                    sequence_number: nonce,
-                    chain_id: ExternalChainId::new(0),
-                },
-                account_seq_num,
-            });
-
-        });
+        self.reth_cli
+            .process_pending_transactions(self.pending_buffer.clone())
+            .await
+            .unwrap();
     }
 }
 
 #[async_trait]
-impl ExecutionApiV2 for RethCoordinator
-{
-    async fn add_txn(&self, bytes: ExecTxn) -> Result<(), ExecError> {
+impl ExecutionApiV2 for RethCoordinator {
+    async fn add_txn(&self, _bytes: ExecTxn) -> Result<(), ExecError> {
         panic!("Reth Coordinator does not support add_txn");
     }
 
@@ -59,31 +78,49 @@ impl ExecutionApiV2 for RethCoordinator
         payload_attr: ExternalPayloadAttr,
         txns: Vec<VerifiedTxn>,
     ) -> Result<bool, ExecError> {
-        unimplemented!()
+        for txn in txns {
+            let mut state = self.state.lock().await;
+            let txn = serde_json::from_slice(&txn.bytes).unwrap();
+            if !state.check_new_txn(&payload_attr, txn) {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
-        let mut buffer = self.pending_buffer.lock().unwrap();
+        let mut buffer = self.pending_buffer.lock().await;
         let res = buffer.drain(..).collect();
         Ok(res)
     }
 
     async fn send_ordered_block(
         &self,
-        parent_meta: ExternalBlockMeta,
+        parent_id: BlockId,
         ordered_block: ExternalBlock,
     ) -> Result<(), ExecError> {
-        todo!()
+        let mut state = self.state.lock().await;
+        let parent_hash = state.get_block_hash(parent_id).unwrap();
+        let payload_id =
+            self.reth_cli.push_ordered_block(ordered_block.block_meta.ts, parent_hash).await;
+        self.pending_payload_id.send(payload_id.unwrap()).await;
+        Ok(())
     }
 
     async fn recv_executed_block_hash(
         &self,
         head: ExternalBlockMeta,
     ) -> Result<ComputeRes, ExecError> {
-        todo!()
+        // TODO(gravity_jan): check head block hash
+        let payload_id = self.pending_payload_id.recv().await;
+        let block_hash = self.reth_cli.process_payload_id(payload_id).await;
+        self.state.lock().await.insert_new_block(head.block_id, block_hash.unwrap().into());
+        Ok(ComputeRes::new(block_hash.unwrap().into()))
     }
 
-    async fn commit_block(&self, head: ExternalBlockMeta) -> Result<(), ExecError> {
-        todo!()
+    async fn commit_block(&self, block_id: BlockId,) -> Result<(), ExecError> {
+        let block_hash = self.state.lock().await.get_block_hash(block_id).unwrap();
+        self.reth_cli.commit_block(block_hash.into()).await;
+        Ok(())
     }
 }

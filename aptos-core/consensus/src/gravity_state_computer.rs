@@ -14,7 +14,7 @@ use crate::{
 };
 use anyhow::Result;
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
-use api_types::{ConsensusApi, ExecutionApiV2, ExecutionLayer, ExternalBlock, ExternalBlockMeta};
+use api_types::{BlockId, ConsensusApi, ExecutionApiV2, ExternalBlock, ExternalBlockMeta};
 use aptos_consensus_types::{block::Block, pipelined_block::PipelinedBlock};
 use aptos_crypto::HashValue;
 use aptos_executor::block_executor::BlockExecutor;
@@ -123,9 +123,10 @@ impl StateComputer for GravityExecutionProxy {
         let txns = self.aptos_state_computer.get_block_txns(block).await;
         let empty_block = txns.is_empty();
         let meta_data = ExternalBlockMeta {
-            block_id: *block.id(),
+            block_id: BlockId(*block.id()),
             // TODO(gravity_lightman): we can't have block number when committing the block
             block_number: 0,
+            ts: block.timestamp_usecs(),
         };
         let id = HashValue::from(block.id());
 
@@ -147,15 +148,10 @@ impl StateComputer for GravityExecutionProxy {
                 })
                 .collect();
             let external_block = ExternalBlock { block_meta: meta_data.clone(), txns: real_txns };
-            let parent_meta = ExternalBlockMeta {
-                block_id: *parent_block_id,
-                // Todo(gravity_lightman): we can't have block number when committing the block
-                block_number: 0,
-            };
             self.consensus_engine
                 .get()
                 .expect("ConsensusEngine")
-                .send_ordered_block(parent_meta, external_block)
+                .send_ordered_block(*parent_block_id, external_block)
                 .await;
         }
         let engine = Some(self.consensus_engine.clone());
@@ -273,11 +269,10 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             let runtime = aptos_runtimes::spawn_named_runtime("tmp".into(), None);
             let _ = runtime.block_on(async move {
                 for block_id in block_ids {
-                    let meta = ExternalBlockMeta { block_id: *block_id, block_number: 0 };
                     self.consensus_engine
                         .get()
                         .expect("consensus engine")
-                        .commit_block_hash(meta)
+                        .commit_block_hash(*block_id)
                         .await;
                 }
             });
