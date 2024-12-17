@@ -48,7 +48,7 @@ members = [
     "dependencies/aptos-vault-client",
     "dependencies/aptos-log-derive",
     "dependencies/move-core-types",
-    "crates/api", "crates/api-types", "bin/bench", "bin/kvstore", "bin/kvstore-v2", "crates/coex-bridge",
+    "crates/api", "crates/api-types", "bin/kvstore", "bin/kvstore-v2", "crates/coex-bridge",
 ]
 
 

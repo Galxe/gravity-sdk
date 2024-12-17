@@ -2,15 +2,15 @@
 use api_types::{BlockId, ExternalPayloadAttr};
 use reth_primitives::Block;
 use web3::types::Transaction;
-use reth::primitives::U256;
+use reth::primitives::B256;
 
 pub struct BuildingState {
     gas_used: u64,
 }
 
 pub struct State {
-    block_id_to_hash: std::collections::HashMap<BlockId, U256>,
-    block_hash_to_id: std::collections::HashMap<U256, BlockId>,
+    block_id_to_hash: std::collections::HashMap<BlockId, B256>,
+    block_hash_to_id: std::collections::HashMap<B256, BlockId>,
     block_id_parent: std::collections::HashMap<BlockId, BlockId>,
     building_block: std::collections::HashMap<ExternalPayloadAttr, BuildingState>,
 }
@@ -35,12 +35,12 @@ impl State {
         true
     }
 
-    pub fn insert_new_block(&mut self, block_id: BlockId, block_hash: U256) {
+    pub fn insert_new_block(&mut self, block_id: BlockId, block_hash: B256) {
         self.block_hash_to_id.insert(block_hash, block_id.clone());
         self.block_id_to_hash.insert(block_id, block_hash);
     }
 
-    pub fn get_block_hash(&self, block_id: BlockId) -> Option<U256> {
+    pub fn get_block_hash(&self, block_id: BlockId) -> Option<B256> {
         self.block_id_to_hash.get(&block_id).cloned()
     }
 

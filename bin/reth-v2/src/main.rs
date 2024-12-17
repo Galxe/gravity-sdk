@@ -1,19 +1,19 @@
 use mock_consensus::MockConsensus;
 use reth::{consensus, rpc::builder::auth::AuthServerHandle};
-use reth_cli_util as reth_cli_util;
+use reth_cli_util;
 use reth_coordinator::RethCoordinator;
-use reth_ethereum_engine_primitives as reth_ethereum_engine_primitives;
-use reth_node_builder as reth_node_builder;
-use reth_node_core as reth_node_core;
-use reth_node_ethereum as reth_node_ethereum;
-use reth_provider as reth_provider;
-use reth_rpc_api as reth_rpc_api;
+use reth_ethereum_engine_primitives;
+use reth_node_builder;
+use reth_node_core;
+use reth_node_ethereum;
+use reth_provider;
+use reth_rpc_api;
 use tokio::sync::mpsc;
 mod cli;
 mod exec_layer;
+mod mock_consensus;
 mod reth_cli;
 mod reth_coordinator;
-mod mock_consensus;
 
 use crate::cli::Cli;
 use alloy_eips::{BlockId, BlockNumberOrTag};
@@ -25,11 +25,9 @@ use jsonrpsee::{
     server::{AlreadyStoppedError, RpcModule},
     Methods,
 };
+use reth_pipe_exec_layer_ext;
 use reth_provider::BlockReaderIdExt;
-use reth_rpc_layer::{
-    AuthClientLayer, AuthClientService, AuthLayer, JwtAuthValidator,
-    JwtSecret,
-};
+use reth_rpc_layer::{AuthClientLayer, AuthClientService, AuthLayer, JwtAuthValidator, JwtSecret};
 use std::sync::Arc;
 use std::thread;
 use tracing::info;
@@ -55,8 +53,7 @@ use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
 use reth_provider::providers::BlockchainProvider2;
 use reth_rpc_api::EngineEthApiClient;
 
-fn run_reth(tx: mpsc::Sender<AuthServerHandle>)
-{
+fn run_reth(tx: mpsc::Sender<AuthServerHandle>) {
     reth_cli_util::sigsegv_handler::install();
 
     if std::env::var_os("RUST_BACKTRACE").is_none() {
@@ -96,7 +93,7 @@ fn run_reth(tx: mpsc::Sender<AuthServerHandle>)
 fn main() {
     // 创建tokio通道
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-
+    let pipeline_cli = reth_pipe_exec_layer_ext::new_pipe_exec_layer_api();
     // 启动consensus线程
     thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -104,7 +101,7 @@ fn main() {
             // 等待engine_cli可用
             if let Some(engine_cli) = rx.recv().await {
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                let client = RethCli::new("/tmp/reth.ipc", engine_cli).await;
+                let client = RethCli::new("/tmp/reth.ipc", engine_cli, pipeline_cli).await;
                 info!("created reth_cli with ipc");
                 let gensis = client.get_latest_block_hash().await.unwrap();
                 let coordinator = Arc::new(RethCoordinator::new(client, gensis));

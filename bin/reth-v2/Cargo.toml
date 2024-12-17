@@ -121,5 +121,6 @@ reth-primitives = { git = "https://github.com/Galxe/grevm-reth", package = "reth
 reth-cli-commands = { git = "https://github.com/Galxe/grevm-reth", package = "reth-cli-commands", features = [
     "dev",
 ], branch = "v1.0.7-gravity" }
+reth-pipe-exec-layer-ext = { git = "https://github.com/Galxe/grevm-reth", package = "reth-pipe-exec-layer-ext", branch = "v1.0.7-gravity" }
 reqwest = "0.12.9"
 async-trait.workspace = true

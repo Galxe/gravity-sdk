@@ -1,13 +1,14 @@
-use alloy_consensus::TxEnvelope;
+use alloy_consensus::{TxEip1559, TxEip2930, TxEip4844, TxEip7702, TxEnvelope, TxLegacy};
 use alloy_eips::eip2718::Decodable2718;
 use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::{Address, B256};
 use alloy_rlp::Encodable;
 use alloy_rpc_types_engine::{
-    ExecutionPayloadEnvelopeV3, ForkchoiceState, ForkchoiceUpdated, PayloadAttributes, PayloadId,
+    ExecutionPayloadEnvelopeV3, ForkchoiceState, ForkchoiceUpdated, PayloadAttributes,
     PayloadStatusEnum,
 };
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
+use jsonrpsee::core::client::SubscriptionClientT;
 use reth_ethereum_engine_primitives::{EthEngineTypes, EthPayloadAttributes};
 use alloy_signer::k256::sha2;
 use anyhow::Context;
@@ -19,10 +20,14 @@ use jsonrpsee::http_client::HttpClient;
 use reth::revm::db::components::block_hash;
 use reth::rpc::builder::auth::AuthServerHandle;
 use reth_db::mdbx::tx;
-use reth_payload_builder::EthPayloadBuilderAttributes;
-use reth_primitives::U256;
+use reth_payload_builder::{EthPayloadBuilderAttributes, PayloadId};
+use reth_pipe_exec_layer_ext::{OrderedBlock, PipeExecLayerApi};
+use reth_primitives::{Bytes, Signature, TransactionSigned, TxKind, U256};
 use reth_rpc_api::{EngineApiClient, EngineEthApiClient};
 use reth_rpc_layer::AuthClientService;
+use reth_rpc_types::{AccessList, AccessListItem};
+use revm_primitives::bitvec::view::AsBits;
+use tracing::instrument::WithSubscriber;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -33,10 +38,13 @@ use tracing::log::error;
 use web3::transports::Ipc;
 use web3::types::{BlockId, Transaction, TransactionId, H160};
 use web3::Web3;
+use api_types::BlockId as ExternalBlockId;
 
 pub struct RethCli {
     ipc: Web3<Ipc>,
     auth: AuthServerHandle,
+    pipe_api: Mutex<PipeExecLayerApi>,
+    chain_id: u64,
 }
 
 pub fn covert_account(acc: H160) -> ExternalAccountAddress {
@@ -69,24 +77,131 @@ impl RethCli {
         }
     }
 
-    pub async fn new(ipc_url: &str, auth: AuthServerHandle) -> Self {
+    pub async fn new(ipc_url: &str, auth: AuthServerHandle, pipe_api: PipeExecLayerApi) -> Self {
         let transport = web3::transports::Ipc::new(ipc_url).await.unwrap();
         let ipc = web3::Web3::new(transport);
-        RethCli { ipc, auth }
+        let chain_id = ipc.eth().chain_id().await.unwrap();
+        RethCli { ipc, auth, pipe_api: Mutex::new(pipe_api), chain_id: chain_id.as_u64() }
+    }
+
+    fn block_id_to_b256(block_id: ExternalBlockId) -> B256 {
+        B256::new(block_id.0)
+    }
+
+    fn u64_4_to_u8_32(input: [u64; 4]) -> [u8; 32] {
+        let mut output = [0u8; 32];
+        for i in 0..4 {
+            let val = input[i];
+            let start = i * 8;
+            output[start..start + 8].copy_from_slice(&val.to_be_bytes());
+        }
+        output
+    }
+
+    fn construct_sig(txn: &Transaction) -> Signature {
+        let r = txn.r.unwrap();
+        let s = txn.s.unwrap();
+        let v = txn.v.unwrap();
+        let odd_y_parity = match v.as_u64() {
+            27 => false,
+            28 => true,
+            v => v % 2 == 1, // EIP-155 情况
+        };
+        Signature {
+            r: U256::from_be_bytes(Self::u64_4_to_u8_32(r.0)),
+            s: U256::from_be_bytes(Self::u64_4_to_u8_32(s.0)),
+            odd_y_parity,
+        }
+    }
+
+    fn to_tx_kind(address: Option<H160>) -> TxKind {
+        match address {
+            Some(address) => TxKind::Call(Address::from_slice(address.as_bytes())),
+            None => TxKind::Create,
+        }   
+    }
+
+    fn convert_accest_list(access_list: Option<Vec<web3::types::AccessListItem>>) -> AccessList {
+        AccessList(access_list.unwrap_or_default().iter().map(|x| AccessListItem {
+            address: Address::from_slice(x.address.as_bytes()),
+            storage_keys: x.storage_keys.iter().map(|x| B256::from_slice(x.as_bytes())).collect(),
+        }).collect())
+    }
+
+    fn convert_to_reth_transaction(tx: web3::types::Transaction, chain_id: u64) -> reth::primitives::Transaction {
+        match tx.transaction_type.map(|t| t.as_u64()) {
+            None => reth::primitives::Transaction::Legacy(TxLegacy {
+                chain_id: Some(chain_id),
+                nonce: tx.nonce.as_u64(),
+                gas_price: tx.gas_price.unwrap().as_u128(),
+                gas_limit: tx.gas.as_u128(),
+                to: Self::to_tx_kind(tx.to),
+                value: U256::from_be_bytes(Self::u64_4_to_u8_32(tx.value.0)),
+                input: Bytes::copy_from_slice(tx.input.0.as_slice()) ,
+            }),
+            Some(1) => reth::primitives::Transaction::Eip2930(TxEip2930 {
+                chain_id: chain_id,
+                nonce: tx.nonce.as_u64(),
+                gas_price: tx.gas_price.unwrap().as_u128(),
+                gas_limit: tx.gas.as_u128(),
+                to: Self::to_tx_kind(tx.to),
+                value: U256::from_be_bytes(Self::u64_4_to_u8_32(tx.value.0)),
+                access_list: Self::convert_accest_list(tx.access_list),
+                input: Bytes::copy_from_slice(tx.input.0.as_slice()) ,
+            }),
+            Some(2) => reth::primitives::Transaction::Eip1559(TxEip1559 {
+                chain_id: chain_id,
+                nonce: tx.nonce.as_u64(),
+                gas_limit: tx.gas.as_u128(),
+                to: Self::to_tx_kind(tx.to),
+                value: U256::from_be_bytes(Self::u64_4_to_u8_32(tx.value.0)),
+                access_list: Self::convert_accest_list(tx.access_list),
+                input: Bytes::copy_from_slice(tx.input.0.as_slice()) ,
+                max_fee_per_gas: tx.max_fee_per_gas.unwrap().as_u128(),
+                max_priority_fee_per_gas: tx.max_priority_fee_per_gas.unwrap().as_u128(),
+            }),
+            Some(_) => panic!("Unknown transaction type"),
+        }
+    }
+
+    fn txn_to_signed(bytes: &[u8], chain_id: u64) -> (Address ,TransactionSigned) {
+        let txn = serde_json::from_slice::<Transaction>(bytes).unwrap();
+        let address = txn.from.unwrap();
+        let address = Address::from_slice(address.as_bytes());
+        let hash = txn.hash;
+        let hash = B256::from_slice(hash.as_bytes());
+        (address, TransactionSigned {
+            hash,
+            signature: Self::construct_sig(&txn),
+            transaction: Self::convert_to_reth_transaction(txn, chain_id),
+        })
     }
 
     pub async fn push_ordered_block(
         &self,
-        ts: u64,
-        parent_hash: U256,
+        block: ExternalBlock,
+        parent_hash: B256,
     ) -> Result<PayloadId, String> {
-        let payload_attr = Self::create_payload_attributes(parent_hash.into(), ts);
+        let pipe_api = self.pipe_api.lock().await;
+        let payload_attr = Self::create_payload_attributes(parent_hash.into(), block.block_meta.ts);
         let fcu_state = ForkchoiceState {
             head_block_hash: parent_hash.into(),
             safe_block_hash: parent_hash.into(),
             finalized_block_hash: parent_hash.into(),
         };
         let engine_api = self.auth.http_client();
+        let mut senders = vec![];
+        let mut transactions = vec![];
+        for (sender, txn) in block.txns.iter().map(|txn| Self::txn_to_signed(&txn.bytes, self.chain_id)) {
+            senders.push(sender);
+            transactions.push(txn);
+        }   
+        pipe_api.push_ordered_block(OrderedBlock {
+            block_id: Self::block_id_to_b256(block.block_meta.block_id),
+            parent_hash: parent_hash.into(),
+            transactions,
+            senders,
+        });
         let res = <HttpClient<AuthClientService<HttpBackend>> as EngineApiClient<EthEngineTypes>>::fork_choice_updated_v3(
             &engine_api,
             fcu_state, 
@@ -104,37 +219,29 @@ impl RethCli {
         }
     }
 
-    pub async fn process_payload_id(&self, id: PayloadId) -> Result<B256, ()> {
-        let engine_api = self.auth.http_client();
-        let res = <HttpClient<AuthClientService<HttpBackend>> as EngineApiClient<EthEngineTypes>>::get_payload_v3(
-            &engine_api,
-            id
-        ).await;
-        match res {
-            Ok(res) => {
-                let block_hash = res.execution_payload.payload_inner.payload_inner.block_hash;
-                let parent_hash = res.execution_payload.payload_inner.payload_inner.parent_hash;
-                let res = <HttpClient<AuthClientService<HttpBackend>> as EngineApiClient<EthEngineTypes>>::new_payload_v3(
-                    &engine_api,
-                    res.execution_payload,
-                    vec![],
-                    parent_hash.into(),
-                ).await;
-                if res.is_err() {
-                    error!("Failed to process payload");
-                    return Err(());
-                }
-                Ok(block_hash)
-            },
-            Err(_) => {
-                error!("Failed to get payload");
-                Err(())
-            }
-        }
+    pub async fn process_payload_id(&self, block_id: B256, payload_id: PayloadId) -> Result<B256, ()> {
+        let mut pipe_api = self.pipe_api.lock().await;
+        let block_hash = pipe_api.pull_executed_block_hash(payload_id, block_id).await.unwrap();
+        Ok(block_hash)
     }
     
-    pub async fn commit_block(&self, block_hash: U256) -> Result<(), String> {
+    pub async fn commit_block(&self, parent_beacon_block_root: B256, payload_id: PayloadId, block_hash: B256) -> Result<(), String> {
+        let mut pipe_api = self.pipe_api.lock().await;
+        pipe_api.ready_to_get_payload(payload_id).await.unwrap();
         let engine_api = self.auth.http_client();
+        let payload = <HttpClient<AuthClientService<HttpBackend>> as EngineApiClient<EthEngineTypes>>::get_payload_v3(
+            &engine_api,
+            payload_id
+        ).await.unwrap();
+        assert_eq!(payload.execution_payload.payload_inner.payload_inner.block_hash, block_hash);
+        pipe_api.ready_to_new_payload(block_hash.into()).await.unwrap();
+        let res = <HttpClient<AuthClientService<HttpBackend>> as EngineApiClient<EthEngineTypes>>::new_payload_v3(
+            &engine_api,
+            payload.execution_payload,
+            vec![],
+            parent_beacon_block_root,
+        ).await;
+        info!("payload status {:?}", res);
         let res = <HttpClient<AuthClientService<HttpBackend>> as EngineApiClient<EthEngineTypes>>::fork_choice_updated_v3(
             &engine_api,
             ForkchoiceState {
