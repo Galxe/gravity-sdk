@@ -484,7 +484,7 @@ impl ProposalGenerator {
                 .context("Fail to retrieve payload")?;
             let start_duration = start.elapsed();
             tmp = start_duration;
-            info!("round {:?}, retrieve payload cost {:?}, other for {:?}, pending_blocks_start for {:?}, payload_filter_start for {:?}", round, start_duration, other_duration, pending_blocks_start_duration, payload_filter_start_duration);
+            info!("round {:?}, payload len {:?}, retrieve payload cost {:?}, other for {:?}, pending_blocks_start for {:?}, payload_filter_start for {:?}", round, payload.len(), start_duration, other_duration, pending_blocks_start_duration, payload_filter_start_duration);
             // TODO(gravity_byteyue): Consider how to process the validator transaction
             if !payload.is_direct()
                 && max_txns_from_block_to_execute.is_some()
