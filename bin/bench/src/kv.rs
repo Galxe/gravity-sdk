@@ -1,13 +1,16 @@
-use std::collections::HashMap;
-use std::hash::{DefaultHasher, Hash, Hasher};
-use log::info;
-use tokio::sync::mpsc::Receiver;
-use tokio::sync::Mutex;
-use api_types::{BlockBatch, ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExecutionBlocks, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn};
-use tokio::time::Instant;
 use crate::stateful_mempool::Mempool;
 use crate::txn::RawTxn;
+use api_types::{
+    BlockBatch, ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExecutionBlocks, ExternalBlock,
+    ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn,
+};
 use async_trait::async_trait;
+use log::info;
+use std::collections::HashMap;
+use std::hash::{DefaultHasher, Hash, Hasher};
+use tokio::sync::mpsc::Receiver;
+use tokio::sync::Mutex;
+use tokio::time::Instant;
 
 #[derive(Default)]
 struct BlockStatus {
@@ -56,7 +59,6 @@ pub struct KvStore {
     counter: Mutex<CounterTimer>,
 }
 
-
 impl KvStore {
     pub fn new() -> Self {
         KvStore {
@@ -85,7 +87,7 @@ impl ExecutionApiV2 for KvStore {
     async fn add_txn(&self, txn: ExecTxn) -> Result<(), ExecError> {
         match txn {
             ExecTxn::RawTxn(bytes) => self.mempool.add_raw_txn(bytes).await,
-            ExecTxn::VerifiedTxn(verified_txn) => self.mempool.add_verified_txn(verified_txn).await
+            ExecTxn::VerifiedTxn(verified_txn) => self.mempool.add_verified_txn(verified_txn).await,
         }
         Ok(())
     }
@@ -94,7 +96,11 @@ impl ExecutionApiV2 for KvStore {
         Ok(self.mempool.recv_unbroadcasted_txn().await)
     }
 
-    async fn check_block_txns(&self, payload_attr: ExternalPayloadAttr, txns: Vec<VerifiedTxn>) -> Result<bool, ExecError> {
+    async fn check_block_txns(
+        &self,
+        payload_attr: ExternalPayloadAttr,
+        txns: Vec<VerifiedTxn>,
+    ) -> Result<bool, ExecError> {
         let mut block = self.block_status.lock().await;
         let status = block.entry(payload_attr).or_insert(BlockStatus::default());
         let new_txn_number = status.txn_number + txns.len() as u64;
@@ -107,7 +113,10 @@ impl ExecutionApiV2 for KvStore {
     }
 
     async fn recv_pending_txns(&self) -> Result<Vec<(VerifiedTxn, u64)>, ExecError> {
-        Ok(self.mempool.pending_txns().await)
+        match std::env::var("PRODUCING_NEW_TXNS").map(|s| s.parse().unwrap()).unwrap_or(true) {
+            true => Ok(self.mempool.pending_txns().await),
+            false => Ok(vec![]),
+        }
     }
 
     async fn send_ordered_block(&self, ordered_block: ExternalBlock) -> Result<(), ExecError> {
@@ -136,13 +145,15 @@ impl ExecutionApiV2 for KvStore {
         let mut r = self.compute_res_recv.lock().await;
         r.insert(ordered_block.block_meta.clone(), recv);
 
-
         let mut block = self.ordered_block.lock().await;
         block.insert(ordered_block.block_meta.clone(), ordered_block);
         Ok(())
     }
 
-    async fn recv_executed_block_hash(&self, head: ExternalBlockMeta) -> Result<ComputeRes, ExecError> {
+    async fn recv_executed_block_hash(
+        &self,
+        head: ExternalBlockMeta,
+    ) -> Result<ComputeRes, ExecError> {
         let mut r = self.compute_res_recv.lock().await;
         let receiver = r.get_mut(&head).expect("Failed to get receiver");
         let res = receiver.recv().await;
