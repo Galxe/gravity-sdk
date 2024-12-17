@@ -115,7 +115,7 @@ async fn main() {
         panic!("Please also set port when enable leader");
     }
     IS_LEADER.set(cli.leader).expect("Failed to set is leader");
-    PRODUCE_TXN.set(RwLock::new(false)).expect("Failed to initialize PRODUCE_TXN");
+    PRODUCE_TXN.set(RwLock::new(true)).expect("Failed to initialize PRODUCE_TXN");
     let port = cli.port.clone();
 
     cli.run(move || {
