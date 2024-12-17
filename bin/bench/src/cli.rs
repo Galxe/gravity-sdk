@@ -14,6 +14,9 @@ pub(crate) struct Cli {
 
     #[arg(long)]
     pub leader: bool,
+
+    #[arg(long)]
+    pub port: Option<u16>,
 }
 
 impl Cli {
