@@ -7,7 +7,7 @@ use api_types::{
 };
 use async_trait::async_trait;
 use log::info;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Mutex;
@@ -58,6 +58,7 @@ pub struct KvStore {
     compute_res_recv: Mutex<HashMap<ExternalBlockMeta, Receiver<ComputeRes>>>,
     ordered_block: Mutex<HashMap<ExternalBlockMeta, ExternalBlock>>,
     counter: Mutex<CounterTimer>,
+    not_empty_sets: Mutex<HashSet<[u8; 32]>>,
 }
 
 impl KvStore {
@@ -69,6 +70,7 @@ impl KvStore {
             compute_res_recv: Mutex::new(HashMap::new()),
             ordered_block: Mutex::new(HashMap::new()),
             counter: Mutex::new(CounterTimer::new()),
+            not_empty_sets: Mutex::new(HashSet::new()),
         }
     }
 
@@ -124,8 +126,7 @@ impl ExecutionApiV2 for KvStore {
         let mut res = vec![];
 
         if !ordered_block.txns.is_empty() {
-            info!("enter one execute");
-            self.counter.lock().await.count();
+            self.not_empty_sets.lock().await.insert(ordered_block.block_meta.block_id);
         }
 
         for txn in &ordered_block.txns {
@@ -165,6 +166,12 @@ impl ExecutionApiV2 for KvStore {
     }
 
     async fn commit_block(&self, head: ExternalBlockMeta) -> Result<(), ExecError> {
+        let mut guard = self.not_empty_sets.lock().await;
+        if guard.contains(&head.block_id) {
+            info!("enter one execute");
+            self.counter.lock().await.count();
+            guard.remove(&head.block_id);
+        }
         Ok(())
     }
 
