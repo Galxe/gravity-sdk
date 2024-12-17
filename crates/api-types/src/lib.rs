@@ -119,7 +119,7 @@ pub struct VerifiedTxnWithAccountSeqNum {
     pub account_seq_num: u64,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq, Copy)]
 pub struct BlockId(pub [u8; 32]);
 
 #[async_trait]

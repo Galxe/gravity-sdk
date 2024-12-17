@@ -1,12 +1,12 @@
+use crate::should_produce_txn;
 use crate::stateful_mempool::Mempool;
 use crate::txn::RawTxn;
-use crate::{get_produce_txn, IS_LEADER};
 use api_types::{
     BlockBatch, BlockId, ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExecutionBlocks, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum
 };
 use async_trait::async_trait;
 use log::info;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Mutex;
@@ -41,8 +41,8 @@ impl CounterTimer {
             let now = Instant::now();
             let duration = now.duration_since(self.last_time);
             info!(
-                "Time taken for the last {:?} blocks to be produced: {:?}, txn num in block {:?}",
-                self.count_round, duration, self.txn_num_in_block
+                "Time taken for the last {:?} blocks to be produced: {:?}",
+                self.count_round, duration,
             );
             self.call_count = 0;
             self.last_time = now;
@@ -57,6 +57,7 @@ pub struct KvStore {
     compute_res_recv: Mutex<HashMap<ExternalBlockMeta, Receiver<ComputeRes>>>,
     ordered_block: Mutex<HashMap<ExternalBlockMeta, ExternalBlock>>,
     counter: Mutex<CounterTimer>,
+    not_empty_sets: Mutex<HashSet<BlockId>>,
 }
 
 impl KvStore {
@@ -68,6 +69,7 @@ impl KvStore {
             compute_res_recv: Mutex::new(HashMap::new()),
             ordered_block: Mutex::new(HashMap::new()),
             counter: Mutex::new(CounterTimer::new()),
+            not_empty_sets: Mutex::new(HashSet::new()),
         }
     }
 
@@ -113,9 +115,7 @@ impl ExecutionApiV2 for KvStore {
     }
 
     async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
-        let produce_txns = *IS_LEADER.get().expect("No is leader set")
-            && get_produce_txn().await;
-        match produce_txns {
+        match should_produce_txn().await {
             true => Ok(self.mempool.pending_txns().await),
             false => Ok(vec![]),
         }
@@ -129,8 +129,7 @@ impl ExecutionApiV2 for KvStore {
         let mut res = vec![];
 
         if !ordered_block.txns.is_empty() {
-            info!("enter one execute");
-            self.counter.lock().await.count();
+            self.not_empty_sets.lock().await.insert(ordered_block.block_meta.block_id);
         }
 
         for txn in &ordered_block.txns {
@@ -170,6 +169,12 @@ impl ExecutionApiV2 for KvStore {
     }
 
     async fn commit_block(&self, head: BlockId) -> Result<(), ExecError> {
+        let mut guard = self.not_empty_sets.lock().await;
+        if guard.contains(&head) {
+            info!("enter one execute");
+            self.counter.lock().await.count();
+            guard.remove(&head);
+        }
         Ok(())
     }
 }
