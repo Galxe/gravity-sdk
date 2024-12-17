@@ -31,7 +31,7 @@ use tokio_stream::StreamExt;
 use tracing::info;
 use tracing::log::error;
 use web3::transports::Ipc;
-use web3::types::{Transaction, TransactionId, H160};
+use web3::types::{BlockId, Transaction, TransactionId, H160};
 use web3::Web3;
 
 pub struct RethCli {
@@ -53,6 +53,19 @@ impl RethCli {
             suggested_fee_recipient: Address::ZERO,
             withdrawals: Some(Vec::new()),
             parent_beacon_block_root: Some(parent_beacon_block_root),
+        }
+    }
+
+    pub async fn get_latest_block_hash(&self) -> Result<[u8; 32], String> {
+        let block = self.ipc.eth().block(BlockId::Number(web3::types::BlockNumber::Latest)).await;
+                
+        match block {
+            Ok(Some(block)) => {
+                let mut bytes = [0u8; 32];
+                bytes[..].copy_from_slice(block.hash.unwrap().as_bytes());
+                Ok(bytes)
+            }
+            _ => Err("Failed to get block".to_string()),
         }
     }
 

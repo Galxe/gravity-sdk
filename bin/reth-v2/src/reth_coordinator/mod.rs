@@ -9,12 +9,14 @@ use api_types::{
 };
 use async_trait::async_trait;
 use reth::revm::db::components::block_hash;
+use reth_primitives::U256;
 use tokio::sync::mpsc;
 use reth_ethereum_engine_primitives::{EthEngineTypes, EthPayloadAttributes};
 use reth_node_api::PayloadAttributes;
 use reth_payload_builder::PayloadId;
 use state::State;
 use tokio::sync::Mutex;
+use tracing::info;
 use web3::types::H160;
 
 pub struct Buffer<T> {
@@ -46,11 +48,13 @@ pub struct RethCoordinator {
 }
 
 impl RethCoordinator {
-    pub fn new(reth_cli: RethCli) -> Self {
+    pub fn new(reth_cli: RethCli, gensis: [u8; 32]) -> Self {
+        let mut state = State::new();
+        state.insert_new_block(BlockId(gensis), U256::from_be_slice(&gensis));
         Self {
             reth_cli,
             pending_buffer: Arc::new(Mutex::new(Vec::new())),
-            state: Arc::new(Mutex::new(State::new())),
+            state: Arc::new(Mutex::new(state)),
             pending_payload_id: Buffer::new(1),
         }
     }
@@ -99,6 +103,7 @@ impl ExecutionApiV2 for RethCoordinator {
         parent_id: BlockId,
         ordered_block: ExternalBlock,
     ) -> Result<(), ExecError> {
+        info!("send_ordered_block with parent_id: {:?}", parent_id);
         let mut state = self.state.lock().await;
         let parent_hash = state.get_block_hash(parent_id).unwrap();
         let payload_id =

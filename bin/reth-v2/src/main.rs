@@ -1,4 +1,5 @@
-use reth::rpc::builder::auth::AuthServerHandle;
+use mock_consensus::MockConsensus;
+use reth::{consensus, rpc::builder::auth::AuthServerHandle};
 use reth_cli_util as reth_cli_util;
 use reth_coordinator::RethCoordinator;
 use reth_ethereum_engine_primitives as reth_ethereum_engine_primitives;
@@ -96,7 +97,7 @@ fn main() {
     // 创建tokio通道
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
 
-    // 启动client线程
+    // 启动consensus线程
     thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
@@ -105,16 +106,16 @@ fn main() {
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 let client = RethCli::new("/tmp/reth.ipc", engine_cli).await;
                 info!("created reth_cli with ipc");
-                let coordinator = RethCoordinator::new(client);
-                coordinator.run().await;
+                let gensis = client.get_latest_block_hash().await.unwrap();
+                let coordinator = Arc::new(RethCoordinator::new(client, gensis));
+                let consensus = MockConsensus::new(coordinator.clone(), gensis);
+                tokio::spawn(async move {
+                    coordinator.run().await;
+                });
+                consensus.run().await;
             }
         });
     });
 
-    // 主线程运行reth节点
-    thread::spawn(move || {
-        run_reth(tx);
-    })
-    .join()
-    .unwrap();
+    run_reth(tx);
 }
