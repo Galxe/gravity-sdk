@@ -1,6 +1,6 @@
 use crate::stateful_mempool::Mempool;
 use crate::txn::RawTxn;
-use crate::{get_produce_txn, IS_LEADER};
+use crate::should_produce_txn;
 use api_types::{
     BlockBatch, ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExecutionBlocks, ExternalBlock,
     ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn,
@@ -114,9 +114,7 @@ impl ExecutionApiV2 for KvStore {
     }
 
     async fn recv_pending_txns(&self) -> Result<Vec<(VerifiedTxn, u64)>, ExecError> {
-        let produce_txns = *IS_LEADER.get().expect("No is leader set")
-            && get_produce_txn().await;
-        match produce_txns {
+        match should_produce_txn().await {
             true => Ok(self.mempool.pending_txns().await),
             false => Ok(vec![]),
         }

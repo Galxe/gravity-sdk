@@ -57,15 +57,19 @@ impl TestConsensusLayer {
 
     async fn run(mut self) {
         loop {
-            info!("start produce new txn");
-            let txn_num_in_block =
-                std::env::var("BLOCK_TXN_NUMS").map(|s| s.parse().unwrap()).unwrap_or(1000);
-            TestConsensusLayer::random_txns(txn_num_in_block).await.into_iter().for_each(|txn| {
-                let execution = self.execution_api.clone();
-                tokio::spawn(async move {
-                    let _ = execution.add_txn(txn).await;
-                });
-            });
+            if should_produce_txn().await {
+                info!("start produce new txn");
+                let txn_num_in_block =
+                    std::env::var("BLOCK_TXN_NUMS").map(|s| s.parse().unwrap()).unwrap_or(1000);
+                TestConsensusLayer::random_txns(txn_num_in_block).await.into_iter().for_each(
+                    |txn| {
+                        let execution = self.execution_api.clone();
+                        tokio::spawn(async move {
+                            let _ = execution.add_txn(txn).await;
+                        });
+                    },
+                );
+            }
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await
         }
     }
@@ -88,10 +92,14 @@ async fn handle_produce_txn(query: ProduceTxnQuery) -> Result<impl warp::Reply, 
     Ok(format!("ProduceTxn updated to: {}", query.value))
 }
 
-pub async fn get_produce_txn() -> bool {
+async fn get_produce_txn() -> bool {
     let global_flag = PRODUCE_TXN.get().expect("PRODUCE_TXN is not initialized");
     let flag = global_flag.read().await;
     *flag
+}
+
+pub async fn should_produce_txn() -> bool {
+    *IS_LEADER.get().expect("No is leader set") && get_produce_txn().await
 }
 
 fn generate_random_address() -> ExternalAccountAddress {
@@ -129,8 +137,8 @@ async fn main() {
 
             if *IS_LEADER.get().expect("No is leader") {
                 let route = warp::path!("ProduceTxn")
-                .and(warp::query::<ProduceTxnQuery>())
-                .and_then(handle_produce_txn);
+                    .and(warp::query::<ProduceTxnQuery>())
+                    .and_then(handle_produce_txn);
 
                 warp::serve(route).run(([0, 0, 0, 0], port.expect("No port"))).await;
             } else {
