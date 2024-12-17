@@ -11,7 +11,8 @@ use api_types::{
 };
 use clap::Parser;
 use cli::Cli;
-use flexi_logger::{FileSpec, Logger, WriteMode};
+use flexi_logger::{Logger, FileSpec, WriteMode, DeferredNow, Record};
+use std::io::Write;
 use kv::KvStore;
 use log::info;
 use once_cell::sync::OnceCell;
@@ -108,6 +109,22 @@ fn generate_random_address() -> ExternalAccountAddress {
     ExternalAccountAddress::new(random_bytes)
 }
 
+fn custom_format(
+    writer: &mut dyn Write,
+    now: &mut DeferredNow,
+    record: &Record,
+) -> std::io::Result<()> {
+    use chrono::Local;
+    write!(
+        writer,
+        "{:?} [{}] {}: {}\n",
+        Local::now().format("%Y-%m-%d %H:%M:%S"),
+        record.module_path().unwrap_or("<unnamed>"),
+        record.level(),
+        &record.args()
+    )
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
@@ -115,6 +132,7 @@ async fn main() {
     Logger::try_with_str("info")
         .unwrap()
         .log_to_file(FileSpec::default().directory(cli.log_dir.clone()))
+        .format(custom_format)
         .write_mode(WriteMode::BufferAndFlush)
         .start()
         .unwrap();
