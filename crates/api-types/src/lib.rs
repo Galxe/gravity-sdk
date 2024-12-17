@@ -324,11 +324,15 @@ impl ExecutionApiV2 for MockExecutionApi {
         Ok(true)
     }
 
-    async fn recv_pending_txns(&self) -> Result<Vec<(VerifiedTxn, u64)>, ExecError> {
+    async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
         Ok(vec![])
     }
 
-    async fn send_ordered_block(&self, ordered_block: ExternalBlock) -> Result<(), ExecError> {
+    async fn send_ordered_block(
+        &self,
+        parent_id: BlockId,
+        ordered_block: ExternalBlock,
+    ) -> Result<(), ExecError> {
         Ok(())
     }
 
@@ -339,7 +343,7 @@ impl ExecutionApiV2 for MockExecutionApi {
         Ok(ComputeRes::new(*HashValue::random()))
     }
 
-    async fn commit_block(&self, head: ExternalBlockMeta) -> Result<(), ExecError> {
+    async fn commit_block(&self, head: BlockId) -> Result<(), ExecError> {
         Ok(())
     }
 }
