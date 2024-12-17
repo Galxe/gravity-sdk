@@ -14,6 +14,7 @@ use cli::Cli;
 use flexi_logger::{FileSpec, Logger, WriteMode};
 use kv::KvStore;
 use log::info;
+use once_cell::sync::OnceCell;
 use rand::Rng;
 use txn::RawTxn;
 
@@ -68,6 +69,8 @@ impl TestConsensusLayer {
     }
 }
 
+static IS_LEADER: OnceCell<bool> = OnceCell::new();
+
 fn generate_random_address() -> ExternalAccountAddress {
     let mut rng = rand::thread_rng();
     let random_bytes: [u8; 32] = rng.gen();
@@ -84,6 +87,7 @@ async fn main() {
         .write_mode(WriteMode::BufferAndFlush)
         .start()
         .unwrap();
+    IS_LEADER.set(cli.leader).expect("Failed to set is leader");
 
     cli.run(move || {
         tokio::spawn(async move {
