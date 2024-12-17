@@ -147,7 +147,6 @@ impl<P: OnChainConfigProvider> DiscoveryChangeListener<P> {
                     network_context,
                     update
                 );
-                println!("ConnectivityRequest::UpdateDiscoveredPeers");
                 let request = ConnectivityRequest::UpdateDiscoveredPeers(discovery_source, update);
                 if let Err(error) = update_channel.try_send(request) {
                     inc_by_with_context(&DISCOVERY_COUNTS, &network_context, "send_failure", 1);

@@ -366,7 +366,6 @@ impl ProposalGenerator {
         let generate_proposal_start = Instant::now();
 
         let mut tmp = Duration::default();
-        // println!("the block store is {}", self.block_store.get_block_tree().read());
         let (validator_txns, payload, timestamp) = if hqc.certified_block().has_reconfiguration() {
             // Reconfiguration rule - we propose empty blocks with parents' timestamp
             // after reconfiguration until it's committed

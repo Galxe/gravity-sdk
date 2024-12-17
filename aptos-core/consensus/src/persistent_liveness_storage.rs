@@ -461,12 +461,6 @@ impl PersistentLivenessStorage for StorageWriteProxy {
                         .delete_highest_2chain_timeout_certificate()
                         .expect("unable to cleanup highest 2-chain timeout cert");
                 }
-                println!(
-                    "Starting up the consensus state machine with recovery data - [root block {:?}] [last_vote {}], [highest timeout certificate: {}]",
-                    initial_data.root_block(),
-                    initial_data.last_vote.as_ref().map_or("None".to_string(), |v| v.to_string()),
-                    initial_data.highest_2chain_timeout_certificate().as_ref().map_or("None".to_string(), |v| v.to_string()),
-                );
                 info!(
                     "Starting up the consensus state machine with recovery data - [last_vote {}], [highest timeout certificate: {}]",
                     initial_data.last_vote.as_ref().map_or("None".to_string(), |v| v.to_string()),

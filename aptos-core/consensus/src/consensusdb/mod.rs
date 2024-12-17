@@ -112,7 +112,7 @@ impl ConsensusDB {
             self.get_all::<BlockSchema>()?.into_iter().map(|(_, block)| block).collect();
         let consensus_qcs = self.get_all::<QCSchema>()?.into_iter().map(|(_, qc)| qc).collect();
 
-        println!("qcs : {:?}", consensus_qcs);
+        info!("qcs : {:?}", consensus_qcs);
         Ok((last_vote, highest_2chain_timeout_certificate, consensus_blocks, consensus_qcs))
     }
 

@@ -797,7 +797,7 @@ where
             .write()
             .update_last_dial_time(&peer_id);
         self.dial_queue.insert(peer_id, cancel_tx);
-        println!("queue_dial_peer {}", self.discovered_peers.read().peer_set.len());
+        info!("queue_dial_peer {}", self.discovered_peers.read().peer_set.len());
     }
 
     // Note: We do not check that the connections to older incarnations of a node are broken, and
@@ -869,7 +869,6 @@ where
                     self.network_context,
                     src,
                 );
-                println!("handle_update_discovered_peers");
                 self.handle_update_discovered_peers(src, discovered_peers);
             },
             ConnectivityRequest::GetDialQueueSize(sender) => {
@@ -888,7 +887,6 @@ where
         src: DiscoverySource,
         new_discovered_peers: PeerSet,
     ) {
-        println!("new_discovered_peers {}", new_discovered_peers.len());
         // Log the update event
         info!(
             NetworkSchema::new(&self.network_context),
@@ -928,7 +926,6 @@ where
 
         // Make updates to the peers accordingly
         for (peer_id, discovered_peer) in new_discovered_peers {
-            println!("add peers {} {}", peer_id, self.network_context.peer_id());
             // Don't include ourselves, because we don't need to dial ourselves
             if peer_id == self.network_context.peer_id() {
                 continue;
@@ -940,7 +937,6 @@ where
                 .peer_set
                 .entry(peer_id)
                 .or_insert_with(|| DiscoveredPeer::new(discovered_peer.role));
-            println!("add peers {}", peer_id);
 
             // Update the peer's pubkeys
             let mut peer_updated = false;
@@ -1002,7 +998,7 @@ where
                 );
             }
         }
-        println!("self.discovered_peers11 {}", self.discovered_peers.read().peer_set.len());
+        info!("self.discovered_peers11 {}", self.discovered_peers.read().peer_set.len());
     }
 
     fn handle_control_notification(&mut self, notif: peer_manager::ConnectionNotification) {

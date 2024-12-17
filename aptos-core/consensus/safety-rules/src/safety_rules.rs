@@ -353,7 +353,7 @@ impl SafetyRules {
         self.verify_epoch(block_data.epoch(), &safety_data)?;
 
         if block_data.round() <= safety_data.last_voted_round {
-            println!(
+            warn!(
                 "Proposed round {} is not higher than last voted round {}",
                 block_data.round(),
                 safety_data.last_voted_round

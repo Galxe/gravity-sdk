@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use aptos_consensus_notifications::{
     ConsensusCommitNotification, ConsensusNotification, ConsensusNotificationListener,
 };
+use aptos_logger::info;
 use aptos_mempool_notifications::MempoolNotificationSender;
 use aptos_types::transaction::Transaction;
 use futures::StreamExt;
@@ -71,7 +72,7 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
 
     async fn handle_consensus_notification(&mut self, notification: ConsensusNotification) {
         // Handle the notification
-        println!("receive consensus commit notification {:?}", notification);
+        info!("receive consensus commit notification {:?}", notification);
         let result = match notification {
             ConsensusNotification::NotifyCommit(commit_notification) => {
                 self.handle_consensus_commit_notification(commit_notification).await

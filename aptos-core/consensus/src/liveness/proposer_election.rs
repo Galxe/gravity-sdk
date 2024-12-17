@@ -4,6 +4,7 @@
 
 use aptos_consensus_types::common::{Author, Round};
 use aptos_fallible::copy_from_slice::copy_slice_to_vec;
+use aptos_logger::info;
 use num_traits::CheckedAdd;
 use std::cmp::Ordering;
 
@@ -13,7 +14,7 @@ pub trait ProposerElection {
     /// otherwise return None.
     /// Note that this function is synchronous.
     fn is_valid_proposer(&self, author: Author, round: Round) -> bool {
-        println!("leader:{} self:{}",self.get_valid_proposer(round), author);
+        info!("leader:{} self:{}",self.get_valid_proposer(round), author);
         self.get_valid_proposer(round) == author
     }
 
