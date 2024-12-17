@@ -1,6 +1,6 @@
+use crate::should_produce_txn;
 use crate::stateful_mempool::Mempool;
 use crate::txn::RawTxn;
-use crate::should_produce_txn;
 use api_types::{
     BlockBatch, ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExecutionBlocks, ExternalBlock,
     ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn,
@@ -42,8 +42,8 @@ impl CounterTimer {
             let now = Instant::now();
             let duration = now.duration_since(self.last_time);
             info!(
-                "Time taken for the last {:?} blocks to be produced: {:?}, txn num in block {:?}",
-                self.count_round, duration, self.txn_num_in_block
+                "Time taken for the last {:?} blocks to be produced: {:?}",
+                self.count_round, duration,
             );
             self.call_count = 0;
             self.last_time = now;
