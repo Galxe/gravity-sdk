@@ -17,7 +17,7 @@ use aptos_consensus_types::{
     vote_data::VoteData,
     vote_proposal::VoteProposal,
 };
-use aptos_crypto::hash::{CryptoHash, TransactionAccumulatorHasher};
+use aptos_crypto::{hash::{CryptoHash, TransactionAccumulatorHasher}, HashValue};
 use aptos_secure_storage::{InMemoryStorage, Storage};
 use aptos_types::{
     aggregate_signature::{AggregateSignature, PartialSignatures},
@@ -54,7 +54,6 @@ pub fn make_genesis(signer: &ValidatorSigner) -> (EpochChangeProof, QuorumCert) 
 pub fn make_proposal_with_qc_and_proof(
     payload: Payload,
     round: Round,
-    proof: Proof,
     qc: QuorumCert,
     validator_signer: &ValidatorSigner,
 ) -> VoteProposal {
@@ -81,7 +80,6 @@ pub fn make_proposal_with_qc(
     make_proposal_with_qc_and_proof(
         Payload::empty(false, true),
         round,
-        empty_proof(),
         qc,
         validator_signer,
     )
@@ -96,93 +94,66 @@ pub fn make_proposal_with_parent_and_overrides(
     epoch: Option<u64>,
     next_epoch_state: Option<EpochState>,
 ) -> VoteProposal {
-    unimplemented!("make_proposal_with_parent_and_overrides");
-    // let block_epoch = match epoch {
-    //     Some(e) => e,
-    //     _ => parent.block().epoch(),
-    // };
-    //
-    // let parent_output = parent
-    //     .accumulator_extension_proof()
-    //     .verify(
-    //         parent
-    //             .block()
-    //             .quorum_cert()
-    //             .certified_block()
-    //             .executed_state_id(),
-    //     )
-    //     .unwrap();
-    //
-    // let proof = Proof::new(
-    //     parent_output.frozen_subtree_roots().clone(),
-    //     parent_output.num_leaves(),
-    //     vec![],
-    // );
-    //
-    // let proposed_block = BlockInfo::new(
-    //     block_epoch,
-    //     parent.block().round(),
-    //     parent.block().id(),
-    //     parent_output.root_hash(),
-    //     parent_output.version(),
-    //     parent.block().timestamp_usecs() + 1,
-    //     None,
-    // );
-    //
-    // let vote_data = VoteData::new(
-    //     proposed_block,
-    //     parent.block().quorum_cert().certified_block().clone(),
-    // );
-    //
-    // let ledger_info = match committed {
-    //     Some(committed) => {
-    //         let tree = committed
-    //             .accumulator_extension_proof()
-    //             .verify(
-    //                 committed
-    //                     .block()
-    //                     .quorum_cert()
-    //                     .certified_block()
-    //                     .executed_state_id(),
-    //             )
-    //             .unwrap();
-    //         let commit_block_info = BlockInfo::new(
-    //             committed.block().epoch(),
-    //             committed.block().round(),
-    //             committed.block().id(),
-    //             tree.root_hash(),
-    //             tree.version(),
-    //             committed.block().timestamp_usecs(),
-    //             next_epoch_state,
-    //         );
-    //         LedgerInfo::new(commit_block_info, vote_data.hash())
-    //     },
-    //     None => LedgerInfo::new(BlockInfo::empty(), vote_data.hash()),
-    // };
-    //
-    // let vote = Vote::new(
-    //     vote_data.clone(),
-    //     validator_signer.author(),
-    //     ledger_info,
-    //     validator_signer,
-    // )
-    // .unwrap();
-    //
-    // let mut ledger_info_with_signatures = LedgerInfoWithPartialSignatures::new(
-    //     vote.ledger_info().clone(),
-    //     PartialSignatures::empty(),
-    // );
-    //
-    // ledger_info_with_signatures.add_signature(vote.author(), vote.signature().clone());
-    //
-    // let qc = QuorumCert::new(
-    //     vote_data,
-    //     ledger_info_with_signatures
-    //         .aggregate_signatures(&generate_validator_verifier(&[validator_signer.clone()]))
-    //         .unwrap(),
-    // );
-    //
-    // make_proposal_with_qc_and_proof(payload, round, proof, qc, validator_signer)
+    let block_epoch = match epoch {
+        Some(e) => e,
+        _ => parent.block().epoch(),
+    };
+
+    let executed_state_id = HashValue::random();
+    let proposed_block = BlockInfo::new(
+        block_epoch,
+        parent.block().round(),
+        parent.block().id(),
+        executed_state_id,
+        0,
+        parent.block().timestamp_usecs() + 1,
+        None,
+    );
+    
+    let vote_data = VoteData::new(
+        proposed_block,
+        parent.block().quorum_cert().certified_block().clone(),
+    );
+    
+    let ledger_info = match committed {
+        Some(committed) => {
+            let commit_block_info = BlockInfo::new(
+                committed.block().epoch(),
+                committed.block().round(),
+                committed.block().id(),
+                executed_state_id,
+                0,
+                committed.block().timestamp_usecs(),
+                next_epoch_state,
+            );
+            LedgerInfo::new(commit_block_info, vote_data.hash())
+        },
+        None => LedgerInfo::new(BlockInfo::empty(), vote_data.hash()),
+    };
+    
+    let vote = Vote::new(
+        vote_data.clone(),
+        validator_signer.author(),
+        ledger_info,
+        validator_signer,
+    )
+    .unwrap();
+    
+    let mut ledger_info_with_signatures = LedgerInfoWithPartialSignatures::new(
+        vote.ledger_info().clone(),
+        PartialSignatures::empty(),
+    );
+    
+    ledger_info_with_signatures.add_signature(vote.author(), vote.signature().clone());
+    
+    let qc = QuorumCert::new(
+        vote_data,
+        ledger_info_with_signatures
+            .aggregate_signatures(&generate_validator_verifier(&[validator_signer.clone()]))
+            .unwrap(),
+    );
+    
+    make_proposal_with_qc_and_proof(payload, round, qc, validator_signer)
 }
 
 pub fn make_proposal_with_parent(

@@ -274,82 +274,81 @@ async fn test_path_from_root() {
 
 #[tokio::test]
 async fn test_insert_vote() {
-    // ::aptos_logger::Logger::init_for_testing();
-    // // Set up enough different authors to support different votes for the same block.
-    // let (signers, validator_verifier) = random_validator_verifier(11, Some(10), false);
-    // let my_signer = signers[10].clone();
-    // let mut inserter = TreeInserter::new(my_signer);
-    // let block_store = inserter.block_store();
-    // let genesis = block_store.ordered_root();
-    // let block = inserter
-    //     .insert_block_with_qc(certificate_for_genesis(), &genesis, 1)
-    //     .await;
-    // let time_service = Arc::new(SimulatedTimeService::new());
-    // let (delayed_qc_tx, _) = unbounded();
+    ::aptos_logger::Logger::init_for_testing();
+    // Set up enough different authors to support different votes for the same block.
+    let (signers, validator_verifier) = random_validator_verifier(11, Some(10), false);
+    let my_signer = signers[10].clone();
+    let mut inserter = TreeInserter::new(my_signer).await;
+    let block_store = inserter.block_store();
+    let genesis = block_store.ordered_root();
+    let block = inserter
+        .insert_block_with_qc(certificate_for_genesis(), &genesis, 1)
+        .await;
+    let time_service = Arc::new(SimulatedTimeService::new());
+    let (delayed_qc_tx, _) = unbounded();
 
-    // let mut pending_votes =
-    //     PendingVotes::new(time_service, delayed_qc_tx, QcAggregatorType::NoDelay);
+    let mut pending_votes =
+        PendingVotes::new(time_service, delayed_qc_tx, QcAggregatorType::NoDelay);
 
-    // assert!(block_store.get_quorum_cert_for_block(block.id()).is_none());
-    // for (i, voter) in signers.iter().enumerate().take(10).skip(1) {
-    //     let vote = Vote::new(
-    //         VoteData::new(
-    //             block.block().gen_block_info(
-    //                 block.compute_result().root_hash(),
-    //                 block.compute_result().version(),
-    //                 block.compute_result().epoch_state().clone(),
-    //             ),
-    //             block.quorum_cert().certified_block().clone(),
-    //         ),
-    //         voter.author(),
-    //         placeholder_ledger_info(),
-    //         voter,
-    //     )
-    //     .unwrap();
-    //     let vote_res = pending_votes.insert_vote(&vote, &validator_verifier);
+    assert!(block_store.get_quorum_cert_for_block(block.id()).is_none());
+    for (i, voter) in signers.iter().enumerate().take(10).skip(1) {
+        let vote = Vote::new(
+            VoteData::new(
+                block.block().gen_block_info(
+                    block.compute_result().root_hash(),
+                    block.compute_result().version(),
+                    block.compute_result().epoch_state().clone(),
+                ),
+                block.quorum_cert().certified_block().clone(),
+            ),
+            voter.author(),
+            placeholder_ledger_info(),
+            voter,
+        )
+        .unwrap();
+        let vote_res = pending_votes.insert_vote(&vote, &validator_verifier);
 
-    //     // first vote of an author is accepted
-    //     assert_eq!(vote_res, VoteReceptionResult::VoteAdded(i as u128));
-    //     // filter out duplicates
-    //     assert_eq!(
-    //         pending_votes.insert_vote(&vote, &validator_verifier),
-    //         VoteReceptionResult::DuplicateVote,
-    //     );
-    //     // qc is still not there
-    //     assert!(block_store.get_quorum_cert_for_block(block.id()).is_none());
-    // }
+        // first vote of an author is accepted
+        assert_eq!(vote_res, VoteReceptionResult::VoteAdded(i as u128));
+        // filter out duplicates
+        assert_eq!(
+            pending_votes.insert_vote(&vote, &validator_verifier),
+            VoteReceptionResult::DuplicateVote,
+        );
+        // qc is still not there
+        assert!(block_store.get_quorum_cert_for_block(block.id()).is_none());
+    }
 
-    // // Add the final vote to form a QC
-    // let final_voter = &signers[0];
-    // let vote = Vote::new(
-    //     VoteData::new(
-    //         block.block().gen_block_info(
-    //             block.compute_result().root_hash(),
-    //             block.compute_result().version(),
-    //             block.compute_result().epoch_state().clone(),
-    //         ),
-    //         block.quorum_cert().certified_block().clone(),
-    //     ),
-    //     final_voter.author(),
-    //     placeholder_ledger_info(),
-    //     final_voter,
-    // )
-    // .unwrap();
-    // match pending_votes.insert_vote(&vote, &validator_verifier) {
-    //     VoteReceptionResult::NewQuorumCertificate(qc) => {
-    //         assert_eq!(qc.certified_block().id(), block.id());
-    //         block_store
-    //             .insert_single_quorum_cert(qc.as_ref().clone())
-    //             .unwrap();
-    //     },
-    //     _ => {
-    //         panic!("QC not formed!");
-    //     },
-    // }
+    // Add the final vote to form a QC
+    let final_voter = &signers[0];
+    let vote = Vote::new(
+        VoteData::new(
+            block.block().gen_block_info(
+                block.compute_result().root_hash(),
+                block.compute_result().version(),
+                block.compute_result().epoch_state().clone(),
+            ),
+            block.quorum_cert().certified_block().clone(),
+        ),
+        final_voter.author(),
+        placeholder_ledger_info(),
+        final_voter,
+    )
+    .unwrap();
+    match pending_votes.insert_vote(&vote, &validator_verifier) {
+        VoteReceptionResult::NewQuorumCertificate(qc) => {
+            assert_eq!(qc.certified_block().id(), block.id());
+            block_store
+                .insert_single_quorum_cert(qc.as_ref().clone(), false)
+                .unwrap();
+        },
+        _ => {
+            panic!("QC not formed!");
+        },
+    }
 
-    // let block_qc = block_store.get_quorum_cert_for_block(block.id()).unwrap();
-    // assert_eq!(block_qc.certified_block().id(), block.id());
-    unimplemented!();
+    let block_qc = block_store.get_quorum_cert_for_block(block.id()).unwrap();
+    assert_eq!(block_qc.certified_block().id(), block.id());
 }
 
 #[tokio::test]

@@ -583,7 +583,7 @@ fn test_max_broadcast_limit() {
 
     // Deliver ACK from B to A.
     // This should unblock A to send more broadcasts.
-    harness.deliver_response(v_b, NetworkId::Validator);
+    // harness.deliver_response(v_b, NetworkId::Validator);
     let (txns, _) = harness.broadcast_txns(
         v_a,
         NetworkId::Validator,

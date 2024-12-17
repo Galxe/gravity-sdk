@@ -37,7 +37,6 @@ fn make_proposal_with_qc_and_proof(
     test_utils::make_proposal_with_qc_and_proof(
         Payload::empty(false, true),
         round,
-        proof,
         qc,
         signer,
     )

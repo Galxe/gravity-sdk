@@ -8,6 +8,7 @@ use crate::{
     shared_mempool::{start_shared_mempool, types::SharedMempoolNotification},
     tests::common::TestTransaction,
 };
+use api_types::{ExecutionApiV2, MockExecutionApi};
 use aptos_channels::{aptos_channel, message_queues::QueueStyle};
 use aptos_config::{
     config::{Identity, NodeConfig, PeerRole, RoleType},
@@ -567,9 +568,9 @@ fn start_node_mempool(
     UnboundedReceiver<SharedMempoolNotification>,
 ) {
     let mempool = Arc::new(Mutex::new(CoreMempool::new(&config)));
-    // let (sender, subscriber) = unbounded();
-    // let (_ac_endpoint_sender, ac_endpoint_receiver) = mpsc::channel(1_024);
-    // let (_quorum_store_sender, quorum_store_receiver) = mpsc::channel(1_024);
+    let (sender, subscriber) = unbounded();
+    let (_ac_endpoint_sender, ac_endpoint_receiver) = mpsc::channel(1_024);
+    let (_quorum_store_sender, quorum_store_receiver) = mpsc::channel(1_024);
     let (_mempool_notifier, mempool_listener) =
         aptos_mempool_notifications::new_mempool_notifier_listener_pair(100);
     let (reconfig_sender, reconfig_events) = aptos_channel::new(QueueStyle::LIFO, 1, None);
@@ -587,22 +588,21 @@ fn start_node_mempool(
         .unwrap();
 
     let runtime = aptos_runtimes::spawn_named_runtime("shared-mem".into(), None);
-    // start_shared_mempool(
-    //     runtime.handle(),
-    //     &config,
-    //     Arc::clone(&mempool),
-    //     network_client,
-    //     network_service_events,
-    //     ac_endpoint_receiver,
-    //     quorum_store_receiver,
-    //     mempool_listener,
-    //     reconfig_event_subscriber,
-    //     Arc::new(MockDbReaderWriter),
-    //     Arc::new(RwLock::new(MockVMValidator)),
-    //     vec![sender],
-    //     peers_and_metadata,
-    // );
+    start_shared_mempool(
+        runtime.handle(),
+        &config,
+        Arc::clone(&mempool),
+        network_client,
+        network_service_events,
+        ac_endpoint_receiver,
+        quorum_store_receiver,
+        mempool_listener,
+        reconfig_event_subscriber,
+        Arc::new(MockDbReaderWriter),
+        vec![sender],
+        peers_and_metadata,
+        Arc::new(MockExecutionApi {}),
+    );
 
-    // (mempool, runtime, subscriber)
-    todo!()
+    (mempool, runtime, subscriber)
 }

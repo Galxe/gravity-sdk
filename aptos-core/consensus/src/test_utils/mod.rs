@@ -7,6 +7,7 @@ use crate::{
     block_storage::{BlockReader, BlockStore},
     payload_manager::DirectMempoolPayloadManager,
 };
+use api_types::mock_execution_layer;
 use aptos_consensus_types::{
     block::{block_test_utils::certificate_for_genesis, Block},
     common::{Author, Round},
@@ -47,6 +48,7 @@ pub use mock_state_computer::EmptyStateComputer;
 pub use mock_state_computer::RandomComputeResultStateComputer;
 pub use mock_storage::{EmptyStorage, MockStorage};
 use move_core_types::account_address::AccountAddress;
+
 
 pub const TEST_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -96,7 +98,7 @@ pub async fn build_empty_tree() -> Arc<BlockStore> {
         Arc::from(DirectMempoolPayloadManager::new()),
         false,
         Arc::new(Mutex::new(PendingBlocks::new())),
-        None,
+        Some(mock_execution_layer()),
     ))
 }
 

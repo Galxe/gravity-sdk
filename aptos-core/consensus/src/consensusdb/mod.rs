@@ -224,8 +224,8 @@ mod test {
 
     #[test]
     fn gen_account_private_key() {
-        let current_dir = env!("CARGO_MANIFEST_DIR").to_string() + "/";
-        let path = current_dir.clone() + "nodes_config.json";
+        let current_dir = env!("CARGO_MANIFEST_DIR").to_string() + "/../../deploy_utils/";
+        let path = current_dir.clone() + "four_nodes_config.json";
         let node_config_set = load_file(Path::new(&path));
         node_config_set.iter().for_each(|(addr, config)| {
             let mut rng = thread_rng();

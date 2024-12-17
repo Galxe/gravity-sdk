@@ -17,3 +17,4 @@ ruint = { workspace = true }
 serde = { workspace = true }
 rand = { workspace = true }
 hex = "0.4.3"
+aptos-crypto = { workspace = true }

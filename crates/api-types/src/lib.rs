@@ -2,6 +2,7 @@ pub mod account;
 use std::{fmt::Display, sync::Arc};
 use core::str;
 use crate::account::{ExternalAccountAddress, ExternalChainId};
+use aptos_crypto::HashValue;
 use async_trait::async_trait;
 use ruint::aliases::U256;
 use serde::{Deserialize, Serialize};
@@ -300,5 +301,52 @@ impl GTxn {
 
     pub fn get_bytes(&self) -> &Vec<u8> {
         &self.txn_bytes
+    }
+}
+
+pub struct MockExecutionApi {}
+
+#[async_trait]
+impl ExecutionApiV2 for MockExecutionApi {
+    async fn add_txn(&self, bytes: ExecTxn) -> Result<(), ExecError> {
+        Ok(())
+    }
+
+    async fn recv_unbroadcasted_txn(&self) -> Result<Vec<VerifiedTxn>, ExecError> {
+        Ok(vec![])
+    }
+
+    async fn check_block_txns(
+        &self,
+        payload_attr: ExternalPayloadAttr,
+        txns: Vec<VerifiedTxn>,
+    ) -> Result<bool, ExecError> {
+        Ok(true)
+    }
+
+    async fn recv_pending_txns(&self) -> Result<Vec<(VerifiedTxn, u64)>, ExecError> {
+        Ok(vec![])
+    }
+
+    async fn send_ordered_block(&self, ordered_block: ExternalBlock) -> Result<(), ExecError> {
+        Ok(())
+    }
+
+    async fn recv_executed_block_hash(
+        &self,
+        head: ExternalBlockMeta,
+    ) -> Result<ComputeRes, ExecError> {
+        Ok(ComputeRes::new(*HashValue::random()))
+    }
+
+    async fn commit_block(&self, head: ExternalBlockMeta) -> Result<(), ExecError> {
+        Ok(())
+    }
+}
+
+pub fn mock_execution_layer() -> ExecutionLayer {
+    ExecutionLayer {
+        execution_api: Arc::new(MockExecutionApi {}),
+        recovery_api: Arc::new(DefaultRecovery {}),
     }
 }

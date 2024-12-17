@@ -15,7 +15,7 @@ use aptos_types::{
     account_address::AccountAddress,
     chain_id::ChainId,
     mempool_status::MempoolStatusCode,
-    transaction::{RawTransaction, Script, SignedTransaction},
+    transaction::{RawTransaction, Script, SignedTransaction, TransactionPayload},
 };
 use once_cell::sync::Lazy;
 use rand::{rngs::StdRng, SeedableRng};
@@ -86,10 +86,10 @@ impl TestTransaction {
         max_gas_amount: u64,
         exp_timestamp_secs: u64,
     ) -> SignedTransaction {
-        let raw_txn = RawTransaction::new_script(
+        let raw_txn = RawTransaction::new(
             TestTransaction::get_address(self.address),
             self.sequence_number,
-            Script::new(vec![], vec![], vec![]),
+            TransactionPayload::GTxnBytes(vec![]),
             max_gas_amount,
             self.gas_price,
             exp_timestamp_secs,

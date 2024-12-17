@@ -19,7 +19,7 @@ use aptos_types::{
     aggregate_signature::AggregateSignature, epoch_change::EpochChangeProof, error::not_implemented, ledger_info::{LedgerInfo, LedgerInfoWithSignatures}, on_chain_config::ValidatorSet
 };
 use async_trait::async_trait;
-use std::{collections::HashMap, sync::Arc};
+use std::{cell::Cell, collections::HashMap, sync::{atomic::{AtomicU64, Ordering}, Arc}};
 
 pub struct MockSharedStorage {
     // Safety state
@@ -248,11 +248,15 @@ impl PersistentLivenessStorage for MockStorage {
 }
 
 /// A storage that ignores any requests, used in the tests that don't care about the storage.
-pub struct EmptyStorage;
+pub struct EmptyStorage {
+    next_block_number: AtomicU64,
+}
 
 impl EmptyStorage {
     pub fn new() -> Self {
-        Self
+        Self {
+            next_block_number: AtomicU64::new(1),
+        }
     }
 
     pub async fn start_for_testing() -> (RecoveryData, Arc<Self>) {
@@ -325,6 +329,8 @@ impl PersistentLivenessStorage for EmptyStorage {
     }
     
     fn fetch_next_block_number(&self) -> u64 {
-        todo!()
+        let res = self.next_block_number.load(Ordering::SeqCst);
+        self.next_block_number.store(res + 1, Ordering::SeqCst);
+        res
     }
 }

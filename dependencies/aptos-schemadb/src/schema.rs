@@ -152,7 +152,16 @@ pub mod fuzzing {
     /// Helper used in tests to assert a (key, value) pair for a certain [`Schema`] is able to convert
     /// to bytes and convert back.
     pub fn assert_encode_decode<S: Schema>(key: &S::Key, value: &S::Value) {
-        todo!()
+        {
+            let encoded = key.encode_key().expect("Encoding key should work.");
+            let decoded = S::Key::decode_key(&encoded).expect("Decoding key should work.");
+            assert_eq!(*key, decoded);
+        }
+        {
+            let encoded = value.encode_value().expect("Encoding value should work.");
+            let decoded = S::Value::decode_value(&encoded).expect("Decoding value should work.");
+            assert_eq!(*value, decoded);
+        }
     }
 
     /// Helper used in tests and fuzzers to make sure a schema never panics when decoding random bytes.
