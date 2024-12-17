@@ -41,8 +41,8 @@ mod state_computer;
 #[cfg(test)]
 mod state_computer_tests;
 mod state_replication;
-#[cfg(any(test, feature = "fuzzing"))]
-mod test_utils;
+#[cfg(any(test))]
+pub mod test_utils;
 #[cfg(test)]
 mod twins;
 mod txn_notifier;

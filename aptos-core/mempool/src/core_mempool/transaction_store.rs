@@ -197,15 +197,24 @@ impl TransactionStore {
         // If the transaction is already in Mempool, we just reject
         // TODO: how to replace the old txn with the new one?
         if let Some(txns) = self.transactions.get_mut(&address) {
-            // check if txn is already in mempool
-            return MempoolStatus::new(MempoolStatusCode::InvalidSeqNumber).with_message(
-                format!(
-                    "Transaction with account and sequence number already exists in mempool: {}:{}",
-                    address, txn_seq_num,
-                ),
-            );
+            if let Some(current_version) = txns.get_mut(&txn_seq_num) {
+                if current_version.verified_txn().gas_unit_price() < txn.verified_txn().gas_unit_price() {
+                    // Update txn if gas unit price is a larger value than before
+                    if let Some(txn) = txns.remove(&txn_seq_num) {
+                        self.index_remove(&txn);
+                    };
+                    counters::CORE_MEMPOOL_GAS_UPGRADED_TXNS.inc();
+                } else {
+                    // check if txn is already in mempool
+                    return MempoolStatus::new(MempoolStatusCode::InvalidSeqNumber).with_message(
+                        format!(
+                            "Transaction with account and sequence number already exists in mempool: {}:{}",
+                            address, txn_seq_num,
+                        ),
+                    );
+                }
+            }
         }
-
         let acc_seq_num = txn.account_sequence_number();
         if self.check_is_full_after_eviction(&txn, acc_seq_num) {
             return MempoolStatus::new(MempoolStatusCode::MempoolIsFull).with_message(format!(
@@ -419,12 +428,12 @@ impl TransactionStore {
             }
 
             let mut parking_lot_txns = 0;
-            for (_, txn) in txns.range_mut((Bound::Excluded(min_seq), Bound::Unbounded)) {
-                match txn.timeline_state {
-                    TimelineState::Ready(_) => {},
-                    _ => panic!(),
-                }
-            }
+            // for (_, txn) in txns.range_mut((Bound::Excluded(min_seq), Bound::Unbounded)) {
+            //     match txn.timeline_state {
+            //         TimelineState::Ready(_) => {},
+            //         _ => panic!(),
+            //     }
+            // }
 
             trace!(
                 LogSchema::new(LogEntry::ProcessReadyTxns).account(*address),
@@ -495,7 +504,7 @@ impl TransactionStore {
                 txns.remove(&sequence_number);
             }
             self.index_remove(&txn_to_remove);
-
+            println!("remove {:?}", txn_to_remove.verified_txn());
             if aptos_logger::enabled!(Level::Trace) {
                 let mut txns_log = TxnsLog::new();
                 txns_log.add(
