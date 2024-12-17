@@ -11,6 +11,12 @@ pub(crate) struct Cli {
 
     #[arg(long)]
     pub log_dir: String,
+
+    #[arg(long)]
+    pub leader: bool,
+
+    #[arg(long)]
+    pub port: Option<u16>,
 }
 
 impl Cli {

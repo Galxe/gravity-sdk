@@ -7,15 +7,18 @@ use std::{sync::Arc, thread};
 
 use api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
 use api_types::{
-    account::ExternalAccountAddress, BlockHashState, ConsensusApi, ExecTxn, ExecutionApiV2,
+    account::ExternalAccountAddress, BlockHashState, ConsensusApi, DefaultRecovery, ExecTxn, ExecutionApiV2, ExecutionLayer
 };
 use clap::Parser;
 use cli::Cli;
 use flexi_logger::{FileSpec, Logger, WriteMode};
 use kv::KvStore;
 use log::info;
+use once_cell::sync::OnceCell;
 use rand::Rng;
+use tokio::sync::RwLock;
 use txn::RawTxn;
+use warp::Filter;
 
 struct TestConsensusLayer {
     consensus_engine: Arc<dyn ConsensusApi>,
@@ -31,7 +34,10 @@ impl TestConsensusLayer {
         Self {
             consensus_engine: ConsensusEngine::init(
                 node_config,
-                execution_client.clone(),
+                ExecutionLayer {
+                    execution_api: execution_client.clone(),
+                    recovery_api: Arc::new(DefaultRecovery {}),
+                },
                 block_hash_state.clone(),
                 1337,
             ),
@@ -68,6 +74,29 @@ impl TestConsensusLayer {
     }
 }
 
+static IS_LEADER: OnceCell<bool> = OnceCell::new();
+static PRODUCE_TXN: OnceCell<RwLock<bool>> = OnceCell::new();
+
+#[derive(Debug, serde::Deserialize)]
+struct ProduceTxnQuery {
+    value: bool,
+}
+
+async fn handle_produce_txn(query: ProduceTxnQuery) -> Result<impl warp::Reply, warp::Rejection> {
+    let global_flag = PRODUCE_TXN.get().expect("PRODUCE_TXN is not initialized");
+    {
+        let mut flag = global_flag.write().await;
+        *flag = query.value;
+    }
+    Ok(format!("ProduceTxn updated to: {}", query.value))
+}
+
+pub async fn get_produce_txn() -> bool {
+    let global_flag = PRODUCE_TXN.get().expect("PRODUCE_TXN is not initialized");
+    let flag = global_flag.read().await;
+    *flag
+}
+
 fn generate_random_address() -> ExternalAccountAddress {
     let mut rng = rand::thread_rng();
     let random_bytes: [u8; 32] = rng.gen();
@@ -84,6 +113,13 @@ async fn main() {
         .write_mode(WriteMode::BufferAndFlush)
         .start()
         .unwrap();
+    let is_leader = cli.leader;
+    if is_leader && cli.port.is_none() {
+        panic!("Please also set port when enable leader");
+    }
+    IS_LEADER.set(cli.leader).expect("Failed to set is leader");
+    PRODUCE_TXN.set(RwLock::new(false)).expect("Failed to initialize PRODUCE_TXN");
+    let port = cli.port.expect("No port");
 
     cli.run(move || {
         tokio::spawn(async move {
@@ -94,9 +130,11 @@ async fn main() {
                 tokio::runtime::Runtime::new().unwrap().block_on(cl.run());
             });
 
-            loop {
-                tokio::time::sleep(tokio::time::Duration::from_secs(60)).await
-            }
+            let route = warp::path!("ProduceTxn")
+                .and(warp::query::<ProduceTxnQuery>())
+                .and_then(handle_produce_txn);
+
+            warp::serve(route).run(([0, 0, 0, 0], port)).await;
         })
     })
     .await;

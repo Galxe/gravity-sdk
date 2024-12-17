@@ -16,6 +16,8 @@ tokio.workspace = true
 serde_json.workspace = true
 serde.workspace = true
 async-trait = { workspace = true }
+once_cell = { workspace = true }
+warp = { workspace = true }
 clap = { version = "4.3.9", features = ["derive", "env", "unstable-styles"] }
 clap-verbosity-flag = "2.1.1"
 clap_complete = "4.4.1"

@@ -1,9 +1,8 @@
-use tokio::sync::mpsc::error::TryRecvError;
 use crate::txn::RawTxn;
-use api_types::VerifiedTxn;
+use api_types::{VerifiedTxn, VerifiedTxnWithAccountSeqNum};
+use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
-
 
 pub struct Mempool {
     pending_recv: Mutex<tokio::sync::mpsc::Receiver<VerifiedTxn>>,
@@ -15,7 +14,8 @@ pub struct Mempool {
 impl Mempool {
     pub fn new() -> Self {
         let (send, recv) = tokio::sync::mpsc::channel::<VerifiedTxn>(1024 * 1024);
-        let (broadcast_send, broadcast_recv) = tokio::sync::mpsc::channel::<VerifiedTxn>(1024 * 1024);
+        let (broadcast_send, broadcast_recv) =
+            tokio::sync::mpsc::channel::<VerifiedTxn>(1024 * 1024);
         Mempool {
             pending_recv: Mutex::new(recv),
             pending_send: send,
@@ -36,15 +36,13 @@ impl Mempool {
 
     pub async fn recv_unbroadcasted_txn(&self) -> Vec<VerifiedTxn> {
         let mut txns = Vec::new();
-        
+
         while let Some(result) = {
             let mut receiver = self.pending_recv.lock().await;
             Some(receiver.try_recv())
         } {
             match result {
-                Ok(txn) => {
-                    txns.push(txn)
-                },
+                Ok(txn) => txns.push(txn),
                 Err(TryRecvError::Empty) => {
                     break;
                 }
@@ -60,17 +58,15 @@ impl Mempool {
         self.pending_send.send(raw_txn.clone().into_verified()).await.unwrap();
     }
 
-    pub async fn pending_txns(&self) -> Vec<(VerifiedTxn, u64)> {
+    pub async fn pending_txns(&self) -> Vec<VerifiedTxnWithAccountSeqNum> {
         let mut txns = Vec::new();
-        
+
         while let Some(result) = {
             let mut receiver = self.pending_recv.lock().await;
             Some(receiver.try_recv())
         } {
             match result {
-                Ok(txn) => {
-                    txns.push((txn, 1))
-                },
+                Ok(txn) => txns.push(VerifiedTxnWithAccountSeqNum { txn, account_seq_num: 1 }),
                 Err(TryRecvError::Empty) => {
                     break;
                 }
