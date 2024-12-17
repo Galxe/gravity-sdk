@@ -116,7 +116,7 @@ async fn main() {
     }
     IS_LEADER.set(cli.leader).expect("Failed to set is leader");
     PRODUCE_TXN.set(RwLock::new(false)).expect("Failed to initialize PRODUCE_TXN");
-    let port = cli.port.expect("No port");
+    let port = cli.port.clone();
 
     cli.run(move || {
         tokio::spawn(async move {
@@ -127,11 +127,17 @@ async fn main() {
                 tokio::runtime::Runtime::new().unwrap().block_on(cl.run());
             });
 
-            let route = warp::path!("ProduceTxn")
+            if *IS_LEADER.get().expect("No is leader") {
+                let route = warp::path!("ProduceTxn")
                 .and(warp::query::<ProduceTxnQuery>())
                 .and_then(handle_produce_txn);
 
-            warp::serve(route).run(([0, 0, 0, 0], port)).await;
+                warp::serve(route).run(([0, 0, 0, 0], port.expect("No port"))).await;
+            } else {
+                loop {
+                    tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+                }
+            }
         })
     })
     .await;
