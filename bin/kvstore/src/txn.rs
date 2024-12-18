@@ -50,9 +50,9 @@ impl RawTxn {
 }
 
 mod test {
-    use api_types::account::ExternalAccountAddress;
+    
 
-    use super::RawTxn;
+    
 
     #[test]
     fn print_txn_bytes() {
