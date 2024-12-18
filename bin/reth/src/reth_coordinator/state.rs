@@ -1,8 +1,6 @@
-
 use api_types::{BlockId, ExternalPayloadAttr};
-use reth_primitives::Block;
-use web3::types::Transaction;
 use reth::primitives::B256;
+use web3::types::Transaction;
 
 pub struct BuildingState {
     gas_used: u64,
@@ -43,5 +41,4 @@ impl State {
     pub fn get_block_hash(&self, block_id: BlockId) -> Option<B256> {
         self.block_id_to_hash.get(&block_id).cloned()
     }
-
 }

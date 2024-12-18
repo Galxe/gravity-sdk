@@ -1,13 +1,11 @@
 use mock_consensus::MockConsensus;
-use reth::{consensus, rpc::builder::auth::AuthServerHandle};
+use reth::rpc::builder::auth::AuthServerHandle;
 use reth_cli_util;
 use reth_coordinator::RethCoordinator;
-use reth_ethereum_engine_primitives;
 use reth_node_builder;
 use reth_node_core;
 use reth_node_ethereum;
 use reth_provider;
-use reth_rpc_api;
 use tokio::sync::mpsc;
 mod cli;
 mod exec_layer;
@@ -16,18 +14,8 @@ mod reth_cli;
 mod reth_coordinator;
 
 use crate::cli::Cli;
-use alloy_eips::{BlockId, BlockNumberOrTag};
-use api_types::BlockHashState;
 use clap::Args;
-use jsonrpsee::{
-    core::RegisterMethodError,
-    http_client::{transport::HttpBackend, HeaderMap},
-    server::{AlreadyStoppedError, RpcModule},
-    Methods,
-};
 use reth_pipe_exec_layer_ext;
-use reth_provider::BlockReaderIdExt;
-use reth_rpc_layer::{AuthClientLayer, AuthClientService, AuthLayer, JwtAuthValidator, JwtSecret};
 use std::sync::Arc;
 use std::thread;
 use tracing::info;
@@ -41,17 +29,12 @@ pub struct EngineArgs {
 }
 
 use crate::reth_cli::RethCli;
-use api::consensus_api::ConsensusEngine;
-use api::{check_bootstrap_config, NodeConfig};
-use api_types::ConsensusApi;
 use clap::Parser;
-use reth_ethereum_engine_primitives::EthEngineTypes;
 use reth_node_builder::engine_tree_config;
 use reth_node_builder::EngineNodeLauncher;
 use reth_node_core::args::utils::DefaultChainSpecParser;
 use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
 use reth_provider::providers::BlockchainProvider2;
-use reth_rpc_api::EngineEthApiClient;
 
 fn run_reth(tx: mpsc::Sender<AuthServerHandle>) {
     reth_cli_util::sigsegv_handler::install();

@@ -5,7 +5,6 @@ use std::{
     time::SystemTime,
 };
 
-use alloy_rpc_types_engine::PayloadAttributes;
 use api_types::{
     BlockId, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn,
     VerifiedTxnWithAccountSeqNum,
@@ -19,20 +18,15 @@ pub struct MockConsensus {
     gensis: [u8; 32],
 }
 
-
 impl MockConsensus {
     pub fn new(exec_api: Arc<dyn ExecutionApiV2>, gensis: [u8; 32]) -> Self {
-        let parent_meta = ExternalBlockMeta {
-            block_id: BlockId(gensis),
-            block_number: 0,
-            ts: 0,
-        };
+        let parent_meta = ExternalBlockMeta { block_id: BlockId(gensis), block_number: 0, ts: 0 };
         Self {
             exec_api,
             parent_meta,
             pending_txns: VecDeque::new(),
             block_number_water_mark: 0,
-            gensis: gensis,
+            gensis,
         }
     }
 
