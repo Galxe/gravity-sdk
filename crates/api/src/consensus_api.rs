@@ -134,6 +134,20 @@ impl ConsensusEngine {
         );
         network_runtimes.push(consensus_runtime);
         // trigger this to make epoch manager invoke new epoch
+        if !node_config.https_cert_pem_path.to_str().unwrap().is_empty()
+                && !node_config.https_key_pem_path.to_str().unwrap().is_empty() {
+            let args = HttpsServerArgs {
+                address: node_config.https_server_address,
+                execution_api: Some(execution_layer.execution_api.clone()),
+                cert_pem: node_config.https_cert_pem_path,
+                key_pem: node_config.https_key_pem_path,
+            };
+            let runtime = aptos_runtimes::spawn_named_runtime("Http".into(), None);
+            runtime.spawn(async move {
+                https_server(args)
+            });
+            network_runtimes.push(runtime);
+        }
         let arc_self = Arc::new(Self {
             address: node_config.validator_network.as_ref().unwrap().listen_address.to_string(),
             execution_layer: execution_layer.clone(),
@@ -143,16 +157,6 @@ impl ConsensusEngine {
         let _ = event_subscription_service.notify_initial_configs(1_u64);
 
         execution_proxy.set_consensus_engine(arc_self.clone());
-        if !node_config.https_cert_pem_path.to_str().unwrap().is_empty()
-                && !node_config.https_key_pem_path.to_str().unwrap().is_empty() {
-            let args = HttpsServerArgs {
-                address: node_config.https_server_address,
-                execution_api: Some(execution_layer.execution_api.clone()),
-                cert_pem: node_config.https_cert_pem_path,
-                key_pem: node_config.https_key_pem_path,
-            };
-            tokio::spawn(https_server(args));
-        }
         arc_self
     }
 }

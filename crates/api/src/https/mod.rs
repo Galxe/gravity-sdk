@@ -1,4 +1,5 @@
 mod tx;
+mod set_failpoints;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
 use api_types::ExecutionApiV2;
@@ -10,6 +11,7 @@ use axum::{
     Router,
 };
 use axum_server::tls_rustls::RustlsConfig;
+use set_failpoints::{set_failpoint, FailpointConf};
 use tx::{get_tx_by_hash, submit_tx, TxRequest};
 
 pub struct HttpsServerArgs {
@@ -29,10 +31,15 @@ pub async fn https_server(args: HttpsServerArgs) {
     let execution_api_clone = args.execution_api.clone();
     let get_tx_by_hash_lambda =
         |Path(request): Path<HashValue>| async move { get_tx_by_hash(request, execution_api_clone).await };
+    
+    let set_fail_point_lambda = |Json(request): Json<FailpointConf>| async move {
+        set_failpoint(request).await
+    };
 
     let app = Router::new()
         .route("/tx/submit_tx", post(submit_tx_lambda))
-        .route("/tx/get_tx_by_hash/:hash_value", get(get_tx_by_hash_lambda));
+        .route("/tx/get_tx_by_hash/:hash_value", get(get_tx_by_hash_lambda))
+        .route("/set_failpoint", post(set_fail_point_lambda));
     // configure certificate and private key used by https
     let config = RustlsConfig::from_pem_file(args.cert_pem, args.key_pem)
         .await
