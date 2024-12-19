@@ -5,11 +5,11 @@ use reth_payload_builder::error;
 use tracing::{info, warn};
 
 pub struct Mempool {
-    /// 账户交易存储: AccountAddress -> (sequence_number -> transaction)
+    /// AccountAddress -> (sequence_number -> transaction)
     txns: HashMap<ExternalAccountAddress, BTreeMap<u64, VerifiedTxnWithAccountSeqNum>>,
-    /// 账户当前序号跟踪: AccountAddress -> current_sequence_number
+    /// AccountAddress -> current_sequence_number
     current_sequence_numbers: HashMap<ExternalAccountAddress, u64>,
-    /// 已处理的交易: (account, sequence_number)
+    /// (account, sequence_number)
     processed_txns: HashSet<(ExternalAccountAddress, u64)>,
 }
 
@@ -50,7 +50,6 @@ impl Mempool {
                     .map(|txn| (account.clone(), txn.clone()))
             });
         
-        // 如果找到了交易，立即标记为已处理
         if let Some((account, txn)) = &next {
             self.processed_txns.insert((account.clone(), txn.txn.sequence_number));
         }
@@ -60,16 +59,12 @@ impl Mempool {
 
     pub fn commit(&mut self, account: &ExternalAccountAddress, sequence_number: u64) {
         if let Some(txns) = self.txns.get_mut(account) {
-            // 移除交易
             txns.remove(&sequence_number);
             
-            // 更新序号
             self.current_sequence_numbers.insert(account.clone(), sequence_number + 1);
-            
-            // 如果账户没有更多交易，清理存储
+
             if txns.is_empty() {
                 self.txns.remove(account);
-                // 清理已处理记录
                 self.processed_txns.retain(|(a, _)| a != account);
             }
         }
