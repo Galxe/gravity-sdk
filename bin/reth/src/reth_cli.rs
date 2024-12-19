@@ -127,7 +127,7 @@ impl RethCli {
         chain_id: u64,
     ) -> reth::primitives::Transaction {
         match tx.transaction_type.map(|t| t.as_u64()) {
-            None => reth::primitives::Transaction::Legacy(TxLegacy {
+            Some(0) => reth::primitives::Transaction::Legacy(TxLegacy {
                 chain_id: Some(chain_id),
                 nonce: tx.nonce.as_u64(),
                 gas_price: tx.gas_price.unwrap().as_u128(),
@@ -157,7 +157,7 @@ impl RethCli {
                 max_fee_per_gas: tx.max_fee_per_gas.unwrap().as_u128(),
                 max_priority_fee_per_gas: tx.max_priority_fee_per_gas.unwrap().as_u128(),
             }),
-            Some(_) => panic!("Unknown transaction type"),
+            _ => panic!("Unknown transaction type {:?}",  tx.transaction_type),
         }
     }
 
@@ -292,7 +292,7 @@ impl RethCli {
                     Ok(accout_nonce) => {
                         let mut buffer = buffer.lock().await;
                         let bytes = serde_json::to_vec(&txn).unwrap();
-                        let txn = VerifiedTxnWithAccountSeqNum {
+                        let vtxn = VerifiedTxnWithAccountSeqNum {
                             txn: VerifiedTxn {
                                 bytes,
                                 sender: covert_account(txn.from.unwrap()),
@@ -301,14 +301,16 @@ impl RethCli {
                             },
                             account_seq_num: accout_nonce.as_u64(),
                         };
-                        buffer.push(txn);
+                        println!("push txn nonce: {} acc_nonce: {}", txn.nonce, vtxn.account_seq_num);
+                        buffer.push(vtxn);
                     }
                     Err(e) => {
                         error!("Failed to get nonce for account {:?} with {:?}", account, e);
                     }
                 }
+            } else {
+                error!("Failed to get transaction {:?} {:?}", txn_hash, txn);
             }
-            error!("Failed to get transaction {:?}", txn_hash);
         }
         Ok(())
     }

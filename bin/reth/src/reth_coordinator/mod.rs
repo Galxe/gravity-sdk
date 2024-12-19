@@ -3,6 +3,7 @@ pub mod state;
 use std::sync::Arc;
 
 use crate::reth_cli::RethCli;
+use alloy_trie::HashMap;
 use api_types::{
     BlockId, ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExternalBlock, ExternalBlockMeta,
     ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
@@ -10,6 +11,7 @@ use api_types::{
 use async_trait::async_trait;
 use reth_payload_builder::PayloadId;
 use reth_primitives::B256;
+use revm_primitives::HashSet;
 use state::State;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;

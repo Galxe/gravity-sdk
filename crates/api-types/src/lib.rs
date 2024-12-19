@@ -87,7 +87,7 @@ pub struct ExternalBlockMeta {
     pub ts: u64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ExternalBlock {
     pub block_meta: ExternalBlockMeta,
     pub txns: Vec<VerifiedTxn>,
@@ -115,6 +115,8 @@ pub enum ExecTxn {
     VerifiedTxn(VerifiedTxn), // from peer
 }
 
+
+#[derive(Debug, Clone)]
 pub struct VerifiedTxnWithAccountSeqNum {
     pub txn: VerifiedTxn,
     pub account_seq_num: u64,

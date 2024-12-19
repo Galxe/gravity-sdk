@@ -49,7 +49,12 @@ impl RawTxn {
     }
 }
 
+#[cfg(test)]
 mod test {
+    use api_types::account::ExternalAccountAddress;
+
+    use crate::txn::RawTxn;
+
     
 
     
