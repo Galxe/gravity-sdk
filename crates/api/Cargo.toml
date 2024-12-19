@@ -52,6 +52,7 @@ byteorder = { workspace = true }
 rocksdb = { workspace = true }
 itertools = { workspace = true }
 api-types = { workspace = true }
+fail = { workspace = true }
 axum="0.7.9"
 axum-server = { version = "0.7", features = ["tls-rustls"] }
 tokio-rustls = "0.24"
@@ -61,3 +62,7 @@ rcgen = "0.9"
 tokio-test = "*"
 reqwest = { version = "0.12.9", features = ["rustls-tls", "json"] }
 coex-bridge = { path = "../coex-bridge" }
+
+[features]
+default = []
+failpoints = ["fail/failpoints", "aptos-consensus/failpoints", "aptos-mempool/failpoints", "aptos-config/failpoints"]
