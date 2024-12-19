@@ -1,5 +1,6 @@
 use alloy_consensus::{TxEip1559, TxEip2930, TxLegacy};
 use alloy_primitives::{Address, B256};
+use alloy_rpc_types::transaction;
 use alloy_rpc_types_engine::ForkchoiceState;
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
 use api_types::BlockId as ExternalBlockId;
@@ -15,6 +16,7 @@ use reth_primitives::{Bytes, Signature, TransactionSigned, TxKind, U256};
 use reth_rpc_api::{EngineApiClient, EngineEthApiClient};
 use reth_rpc_layer::AuthClientService;
 use reth_rpc_types::{AccessList, AccessListItem};
+use std::io::Read;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_stream::StreamExt;
@@ -72,16 +74,6 @@ impl RethCli {
         B256::new(block_id.0)
     }
 
-    fn u64_4_to_u8_32(input: [u64; 4]) -> [u8; 32] {
-        let mut output = [0u8; 32];
-        for i in 0..4 {
-            let val = input[i];
-            let start = i * 8;
-            output[start..start + 8].copy_from_slice(&val.to_be_bytes());
-        }
-        output
-    }
-
     fn construct_sig(txn: &Transaction) -> Signature {
         let r = txn.r.unwrap();
         let s = txn.s.unwrap();
@@ -91,16 +83,22 @@ impl RethCli {
             28 => true,
             v => v % 2 == 1, // EIP-155 情况
         };
+        let mut bytes = [0u8; 32];
+        r.to_big_endian(&mut bytes);
+        let r = U256::from_be_bytes(bytes);
+        let mut bytes = [0u8; 32];
+        s.to_big_endian(&mut bytes);
+        let s = U256::from_be_bytes(bytes);
         Signature {
-            r: U256::from_be_bytes(Self::u64_4_to_u8_32(r.0)),
-            s: U256::from_be_bytes(Self::u64_4_to_u8_32(s.0)),
+            r,
+            s,
             odd_y_parity,
         }
     }
 
     fn to_tx_kind(address: Option<H160>) -> TxKind {
         match address {
-            Some(address) => TxKind::Call(Address::from_slice(address.as_bytes())),
+            Some(address) => TxKind::Call(Address::new(address.0)),
             None => TxKind::Create,
         }
     }
@@ -133,7 +131,7 @@ impl RethCli {
                 gas_price: tx.gas_price.unwrap().as_u128(),
                 gas_limit: tx.gas.as_u128(),
                 to: Self::to_tx_kind(tx.to),
-                value: U256::from_be_bytes(Self::u64_4_to_u8_32(tx.value.0)),
+                value: U256::from(tx.value.as_u128()),
                 input: Bytes::copy_from_slice(tx.input.0.as_slice()),
             }),
             Some(1) => reth::primitives::Transaction::Eip2930(TxEip2930 {
@@ -142,7 +140,7 @@ impl RethCli {
                 gas_price: tx.gas_price.unwrap().as_u128(),
                 gas_limit: tx.gas.as_u128(),
                 to: Self::to_tx_kind(tx.to),
-                value: U256::from_be_bytes(Self::u64_4_to_u8_32(tx.value.0)),
+                value: U256::from(tx.value.as_u128()),
                 access_list: Self::convert_accest_list(tx.access_list),
                 input: Bytes::copy_from_slice(tx.input.0.as_slice()),
             }),
@@ -151,7 +149,7 @@ impl RethCli {
                 nonce: tx.nonce.as_u64(),
                 gas_limit: tx.gas.as_u128(),
                 to: Self::to_tx_kind(tx.to),
-                value: U256::from_be_bytes(Self::u64_4_to_u8_32(tx.value.0)),
+                value: U256::from(tx.value.as_u128()),
                 access_list: Self::convert_accest_list(tx.access_list),
                 input: Bytes::copy_from_slice(tx.input.0.as_slice()),
                 max_fee_per_gas: tx.max_fee_per_gas.unwrap().as_u128(),
@@ -164,15 +162,19 @@ impl RethCli {
     fn txn_to_signed(bytes: &[u8], chain_id: u64) -> (Address, TransactionSigned) {
         let txn = serde_json::from_slice::<Transaction>(bytes).unwrap();
         let address = txn.from.unwrap();
-        let address = Address::from_slice(address.as_bytes());
+        let address = Address::new(address.0);
         let hash = txn.hash;
         let hash = B256::from_slice(hash.as_bytes());
+        let signature = Self::construct_sig(&txn);
+        let transaction = Self::convert_to_reth_transaction(txn, chain_id);
+        info!("txn to signed {:?}", transaction);
+        info!("address {:?}", address);
         (
             address,
             TransactionSigned {
                 hash,
-                signature: Self::construct_sig(&txn),
-                transaction: Self::convert_to_reth_transaction(txn, chain_id),
+                signature,
+                transaction,
             },
         )
     }

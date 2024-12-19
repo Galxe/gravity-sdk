@@ -67,8 +67,9 @@ impl MockConsensus {
             if time_gap > 1 {
                 return self.construct_block(txns, attr);
             }
-            let txn: Option<VerifiedTxnWithAccountSeqNum> = self.pending_txns.iter_ready().next().cloned();
-            if let Some(txn) = txn {
+            let txn = self.pending_txns.get_next();
+            if let Some((_, txn)) = txn {
+                println!("txn is {:?}", txn);
                 let res = self
                     .exec_api
                     .check_block_txns(attr.clone(), vec![txn.txn.clone()])
