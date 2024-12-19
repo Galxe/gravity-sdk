@@ -7,7 +7,7 @@ use crate::{
 };
 use aptos_crypto::{x25519, Uniform};
 use aptos_infallible::RwLock;
-use aptos_rest_client::aptos_api_types::mime_types;
+// use aptos_rest_client::aptos_api_types::mime_types;
 use rand::SeedableRng;
 use reqwest::header::AUTHORIZATION;
 use serde_json::Value;
@@ -115,7 +115,7 @@ impl TestContext {
         let resp = self.reply(req).await;
 
         let headers = resp.headers();
-        assert_eq!(headers[CONTENT_TYPE], mime_types::JSON);
+        assert_eq!(headers[CONTENT_TYPE], "application/json");
 
         let body = serde_json::from_slice(resp.body()).expect("response body is JSON");
         assert_eq!(

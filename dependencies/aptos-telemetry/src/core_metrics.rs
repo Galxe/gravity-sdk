@@ -3,7 +3,7 @@
 
 use crate::{utils, utils::sum_all_histogram_counts};
 use aptos_config::config::NodeConfig;
-use aptos_state_sync_driver::metrics::StorageSynchronizerOperations;
+// use aptos_state_sync_driver::metrics::StorageSynchronizerOperations;
 use aptos_telemetry_service::types::telemetry::TelemetryEvent;
 use prometheus::core::Collector;
 use std::collections::BTreeMap;
@@ -96,9 +96,10 @@ fn collect_mempool_metrics(core_metrics: &mut BTreeMap<String, String>) {
 
 /// Collects the REST metrics and appends it to the given map
 fn collect_rest_metrics(core_metrics: &mut BTreeMap<String, String>) {
-    let rest_response_metrics = aptos_api::metrics::RESPONSE_STATUS.collect();
-    let rest_response_count = sum_all_histogram_counts(&rest_response_metrics);
-    core_metrics.insert(REST_RESPONSE_COUNT.into(), rest_response_count.to_string());
+    todo!();
+    // let rest_response_metrics = aptos_api::metrics::RESPONSE_STATUS.collect();
+    // let rest_response_count = sum_all_histogram_counts(&rest_response_metrics);
+    // core_metrics.insert(REST_RESPONSE_COUNT.into(), rest_response_count.to_string());
 }
 
 /// Collects the state sync metrics and appends it to the given map
@@ -111,20 +112,20 @@ fn collect_state_sync_metrics(
     // Get the state sync code version
     core_metrics.insert(STATE_SYNC_CODE_VERSION.into(), "2".into());
 
-    core_metrics.insert(
-        STATE_SYNC_SYNCED_EPOCH.into(),
-        aptos_state_sync_driver::metrics::STORAGE_SYNCHRONIZER_OPERATIONS
-            .with_label_values(&[StorageSynchronizerOperations::SyncedEpoch.get_label()])
-            .get()
-            .to_string(),
-    );
-    core_metrics.insert(
-        STATE_SYNC_SYNCED_VERSION.into(),
-        aptos_state_sync_driver::metrics::STORAGE_SYNCHRONIZER_OPERATIONS
-            .with_label_values(&[StorageSynchronizerOperations::Synced.get_label()])
-            .get()
-            .to_string(),
-    );
+    // core_metrics.insert(
+    //     STATE_SYNC_SYNCED_EPOCH.into(),
+    //     aptos_state_sync_driver::metrics::STORAGE_SYNCHRONIZER_OPERATIONS
+    //         .with_label_values(&[StorageSynchronizerOperations::SyncedEpoch.get_label()])
+    //         .get()
+    //         .to_string(),
+    // );
+    // core_metrics.insert(
+    //     STATE_SYNC_SYNCED_VERSION.into(),
+    //     aptos_state_sync_driver::metrics::STORAGE_SYNCHRONIZER_OPERATIONS
+    //         .with_label_values(&[StorageSynchronizerOperations::Synced.get_label()])
+    //         .get()
+    //         .to_string(),
+    // );
     core_metrics.insert(
         STATE_SYNC_BOOTSTRAP_MODE.into(),
         state_sync_driver_config
@@ -143,31 +144,32 @@ fn collect_state_sync_metrics(
 
 /// Collects the storage metrics and appends it to the given map
 fn collect_storage_metrics(core_metrics: &mut BTreeMap<String, String>) {
-    core_metrics.insert(
-        STORAGE_LEDGER_VERSION.into(),
-        aptos_db::metrics::LEDGER_VERSION.get().to_string(),
-    );
-    core_metrics.insert(
-        STORAGE_MIN_READABLE_LEDGER_VERSION.into(),
-        aptos_db::metrics::PRUNER_VERSIONS
-            .with_label_values(&["ledger_pruner", "min_readable"])
-            .get()
-            .to_string(),
-    );
-    core_metrics.insert(
-        STORAGE_MIN_READABLE_STATE_MERKLE_VERSION.into(),
-        aptos_db::metrics::PRUNER_VERSIONS
-            .with_label_values(&["state_merkle_pruner", "min_readable"])
-            .get()
-            .to_string(),
-    );
-    core_metrics.insert(
-        STORAGE_MIN_READABLE_STATE_KV_VERSION.into(),
-        aptos_db::metrics::PRUNER_VERSIONS
-            .with_label_values(&["state_kv_pruner", "min_readable"])
-            .get()
-            .to_string(),
-    );
+    todo!();
+    // core_metrics.insert(
+    //     STORAGE_LEDGER_VERSION.into(),
+    //     aptos_db::metrics::LEDGER_VERSION.get().to_string(),
+    // );
+    // core_metrics.insert(
+    //     STORAGE_MIN_READABLE_LEDGER_VERSION.into(),
+    //     aptos_db::metrics::PRUNER_VERSIONS
+    //         .with_label_values(&["ledger_pruner", "min_readable"])
+    //         .get()
+    //         .to_string(),
+    // );
+    // core_metrics.insert(
+    //     STORAGE_MIN_READABLE_STATE_MERKLE_VERSION.into(),
+    //     aptos_db::metrics::PRUNER_VERSIONS
+    //         .with_label_values(&["state_merkle_pruner", "min_readable"])
+    //         .get()
+    //         .to_string(),
+    // );
+    // core_metrics.insert(
+    //     STORAGE_MIN_READABLE_STATE_KV_VERSION.into(),
+    //     aptos_db::metrics::PRUNER_VERSIONS
+    //         .with_label_values(&["state_kv_pruner", "min_readable"])
+    //         .get()
+    //         .to_string(),
+    // );
     // TODO(joshlind): add storage latencies!
 }
 

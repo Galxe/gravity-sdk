@@ -47,6 +47,8 @@ members = [
     "dependencies/aptos-vault-client",
     "dependencies/aptos-log-derive",
     "dependencies/move-core-types",
+    "dependencies/aptos-telemetry",
+    "dependencies/aptos-telemetry-service",
     "crates/api", "crates/api-types", "bin/kvstore", "crates/coex-bridge", "bin/bench", "bin/reth"
 ]
 
@@ -167,6 +169,8 @@ aptos-rest-client = { path = "./dependencies/aptos-rest-client" }
 move-core-types = { path = "./dependencies/move-core-types" }
 aptos-proxy = { path = "./dependencies/proxy" }
 aptos-num-variants = { path = "./dependencies/num-variants" }
+aptos-telemetry = { path = "./dependencies/aptos-telemetry" }
+aptos-telemetry-service = { path = "./dependencies/aptos-telemetry-service" }
 
 # core ----
 aptos-consensus-types = { path = "./aptos-core/consensus/consensus-types", features = [

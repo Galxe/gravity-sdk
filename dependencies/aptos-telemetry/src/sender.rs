@@ -298,8 +298,8 @@ impl TelemetrySender {
         const CHAIN_ID_LENGTH: usize = 1;
         const ID_SIZE: usize = CHAIN_ID_LENGTH + PeerId::LENGTH;
         const PROLOGUE_SIZE: usize = CHAIN_ID_LENGTH + PeerId::LENGTH + x25519::PUBLIC_KEY_SIZE;
-        let mut prologue = [0; PROLOGUE_SIZE];
-        prologue[..CHAIN_ID_LENGTH].copy_from_slice(&[self.chain_id.id()]);
+        let mut prologue: [u8; 65] = [0; PROLOGUE_SIZE];
+        prologue[..CHAIN_ID_LENGTH].copy_from_slice(&[self.chain_id.id().try_into().unwrap()]);
         prologue[CHAIN_ID_LENGTH..ID_SIZE].copy_from_slice(self.peer_id.as_ref());
         prologue[ID_SIZE..PROLOGUE_SIZE].copy_from_slice(server_public_key.as_slice());
 

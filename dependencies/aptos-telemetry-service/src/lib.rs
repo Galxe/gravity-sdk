@@ -130,13 +130,14 @@ impl AptosTelemetryServiceArgs {
             peer_locations.clone(),
         );
 
-        PeerSetCacheUpdater::new(
-            validators,
-            validator_fullnodes,
-            config.trusted_full_node_addresses.clone(),
-            Duration::from_secs(config.update_interval),
-        )
-        .run();
+        // TODO(gravity_byteyue): should we add it back?
+        // PeerSetCacheUpdater::new(
+        //     validators,
+        //     validator_fullnodes,
+        //     config.trusted_full_node_addresses.clone(),
+        //     Duration::from_secs(config.update_interval),
+        // )
+        // .run();
 
         if let Err(err) =
             PeerLocationUpdater::new(bigquery_client.clone(), peer_locations.clone()).run()

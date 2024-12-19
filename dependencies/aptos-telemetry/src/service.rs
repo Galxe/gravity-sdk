@@ -104,9 +104,9 @@ pub fn start_telemetry_service(
     remote_log_rx: Option<mpsc::Receiver<TelemetryLog>>,
     logger_filter_update_job: Option<LoggerFilterUpdater>,
 ) -> Option<Runtime> {
-    if enable_prometheus_node_metrics() {
-        aptos_node_resource_metrics::register_node_metrics_collector();
-    }
+    // if enable_prometheus_node_metrics() {
+    //     aptos_node_resource_metrics::register_node_metrics_collector();
+    // }
 
     // Don't start the service if telemetry has been disabled
     if telemetry_is_disabled() {
