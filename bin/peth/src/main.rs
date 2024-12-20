@@ -8,8 +8,8 @@ use reth_node_ethereum;
 use reth_provider;
 use tokio::sync::mpsc;
 mod cli;
-mod exec_layer;
 mod consensus;
+mod exec_layer;
 mod reth_cli;
 mod reth_coordinator;
 

@@ -1,6 +1,5 @@
 use alloy_consensus::{TxEip1559, TxEip2930, TxLegacy};
 use alloy_primitives::{Address, B256};
-use alloy_rpc_types::transaction;
 use alloy_rpc_types_engine::ForkchoiceState;
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
 use api_types::BlockId as ExternalBlockId;
@@ -89,11 +88,7 @@ impl RethCli {
         let mut bytes = [0u8; 32];
         s.to_big_endian(&mut bytes);
         let s = U256::from_be_bytes(bytes);
-        Signature {
-            r,
-            s,
-            odd_y_parity,
-        }
+        Signature { r, s, odd_y_parity }
     }
 
     fn to_tx_kind(address: Option<H160>) -> TxKind {
@@ -155,7 +150,7 @@ impl RethCli {
                 max_fee_per_gas: tx.max_fee_per_gas.unwrap().as_u128(),
                 max_priority_fee_per_gas: tx.max_priority_fee_per_gas.unwrap().as_u128(),
             }),
-            _ => panic!("Unknown transaction type {:?}",  tx.transaction_type),
+            _ => panic!("Unknown transaction type {:?}", tx.transaction_type),
         }
     }
 
@@ -169,14 +164,7 @@ impl RethCli {
         let transaction = Self::convert_to_reth_transaction(txn, chain_id);
         info!("txn to signed {:?}", transaction);
         info!("address {:?}", address);
-        (
-            address,
-            TransactionSigned {
-                hash,
-                signature,
-                transaction,
-            },
-        )
+        (address, TransactionSigned { hash, signature, transaction })
     }
 
     pub async fn push_ordered_block(
@@ -303,7 +291,10 @@ impl RethCli {
                             },
                             account_seq_num: accout_nonce.as_u64(),
                         };
-                        println!("push txn nonce: {} acc_nonce: {}", txn.nonce, vtxn.account_seq_num);
+                        println!(
+                            "push txn nonce: {} acc_nonce: {}",
+                            txn.nonce, vtxn.account_seq_num
+                        );
                         buffer.push(vtxn);
                     }
                     Err(e) => {

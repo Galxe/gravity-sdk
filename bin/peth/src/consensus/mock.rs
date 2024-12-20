@@ -1,18 +1,15 @@
 use std::{
-    collections::VecDeque,
     hash::{DefaultHasher, Hash, Hasher},
     sync::Arc,
     time::SystemTime,
 };
 
+use super::mempool::Mempool;
 use api_types::{
     BlockId, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn,
-    VerifiedTxnWithAccountSeqNum,
 };
-use super::mempool::Mempool;
 
-use tracing::{info, warn};
-
+use tracing::info;
 
 pub struct MockConsensus {
     exec_api: Arc<dyn ExecutionApiV2>,
@@ -62,8 +59,9 @@ impl MockConsensus {
         attr: ExternalPayloadAttr,
     ) -> Option<ExternalBlock> {
         loop {
-            let time_gap = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()
-                - attr.ts;
+            let time_gap =
+                SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()
+                    - attr.ts;
             if time_gap > 1 {
                 return self.construct_block(txns, attr);
             }
@@ -103,7 +101,7 @@ impl MockConsensus {
                 self.exec_api.send_ordered_block(self.parent_meta.block_id, block).await.unwrap();
                 attr.ts =
                     SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
-                
+
                 block_txns.clear();
                 let _ = self.exec_api.recv_executed_block_hash(head.clone()).await.unwrap();
                 for txn in commit_txns {
