@@ -110,7 +110,8 @@ where
                 handle_network_event(&bounded_executor, &mut smp, network_id, event).await;
             },
             _ = update_peers_interval.tick().fuse() => {
-                handle_update_peers(peers_and_metadata.clone(), &mut smp, executor.clone()).await;
+                // TODO(gravity_lightman): This is a temporary solution to update peers.
+                // handle_update_peers(peers_and_metadata.clone(), &mut smp, executor.clone()).await;
             },
             complete => break,
         }

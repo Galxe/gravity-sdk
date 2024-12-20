@@ -5,7 +5,7 @@ WORKSPACE=$SCRIPT_DIR/..
 
 log_suffix=$(date +"%Y-%d-%m:%H:%M:%S")
 
-bin_name="kvstore-v2"
+bin_name="peth"
 node_arg=""
 
 while [[ "$#" -gt 0 ]]; do
@@ -26,10 +26,6 @@ while [[ "$#" -gt 0 ]]; do
     shift
 done
 
-if [[ "$bin_name" != "gravity-reth" && "$bin_name" != "bench" && "$bin_name" != "kvstore-v2" ]]; then
-    echo "Error: bin_name must be either 'gravity-reth' or 'bench'."
-    exit 1
-fi
 
 if [[ -z "$node_arg" ]]; then
     echo "Error: --node parameter is required."

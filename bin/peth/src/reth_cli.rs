@@ -49,14 +49,13 @@ impl RethCli {
         }
     }
 
-    pub async fn get_latest_block_hash(&self) -> Result<[u8; 32], String> {
+    pub async fn get_latest_block_hash(&self) -> Result<B256, String> {
         let block = self.ipc.eth().block(BlockId::Number(web3::types::BlockNumber::Latest)).await;
 
         match block {
             Ok(Some(block)) => {
-                let mut bytes = [0u8; 32];
-                bytes[..].copy_from_slice(block.hash.unwrap().as_bytes());
-                Ok(bytes)
+                let hash = B256::from_slice(block.hash.unwrap().as_bytes());
+                Ok(hash)
             }
             _ => Err("Failed to get block".to_string()),
         }

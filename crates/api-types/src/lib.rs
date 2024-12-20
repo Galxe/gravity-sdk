@@ -139,6 +139,7 @@ pub trait RecoveryApi: Send + Sync {
     ) -> Result<ExecutionBlocks, RecoveryError>;
 }
 
+#[derive(Default)]
 pub struct DefaultRecovery {}
 
 #[async_trait]

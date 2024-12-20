@@ -46,9 +46,9 @@ pub struct RethCoordinator {
 }
 
 impl RethCoordinator {
-    pub fn new(reth_cli: RethCli, gensis: [u8; 32]) -> Self {
+    pub fn new(reth_cli: RethCli, gensis_id: [u8; 32], gensis_hash: B256) -> Self {
         let mut state = State::new();
-        state.insert_new_block(BlockId(gensis), B256::from_slice(&gensis));
+        state.insert_new_block(BlockId(gensis_id), gensis_hash);
         Self {
             reth_cli,
             pending_buffer: Arc::new(Mutex::new(Vec::new())),
