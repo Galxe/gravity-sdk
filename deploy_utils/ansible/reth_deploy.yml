@@ -3,6 +3,18 @@
   vars:
     log_collection: []
   tasks:
+    - name: Pull and checkout code
+      shell: |
+        git pull && git checkout {{ tag_or_brach }}"
+      async: 600
+      poll: 30
+      args:
+        chdir: "{{ reth_root_dir }}"
+      register: git_log
+    - name: Append git logs to collection
+      set_fact:
+        log_collection: "{{ log_collection + [git_log] }}"
+
     - name: Compile Reth with custom options
       shell: |
         bash -c ". "$HOME/.cargo/env" && make {{ reth_compile_options }}"

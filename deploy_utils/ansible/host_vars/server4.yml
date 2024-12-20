@@ -1,4 +1,5 @@
-reth_compile_options: "FEATURE=grevm"
+reth_compile_options: ""
+tag_or_brach: "main"
 reth_node_arg: "--mode cluster --node node4 --bin_version release"
 reth_env: "EVM_DISABLE_GREVM=1"
 reth_root_dir: "/home/${USER}/projects/gravity-sdk/"
