@@ -13,7 +13,7 @@ members = [
     "aptos-core/consensus",
     "dependencies/aptos-bitvec",
     "dependencies/aptos-build-info",
-    "dependencies/aptos-bounded-execut我or",
+    "dependencies/aptos-bounded-executor",
     "dependencies/aptos-cached-packages",
     "dependencies/aptos-channels",
     "dependencies/aptos-collections",
