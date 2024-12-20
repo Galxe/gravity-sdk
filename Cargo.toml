@@ -6,13 +6,14 @@ license = "Apache-2.0"
 publish = false
 repository = "https://github.com/aptos-labs/aptos-core"
 rust-version = "1.81.0"
+resolver = "2"
 
 [workspace]
 members = [
     "aptos-core/consensus",
     "dependencies/aptos-bitvec",
     "dependencies/aptos-build-info",
-    "dependencies/aptos-bounded-executor",
+    "dependencies/aptos-bounded-execut我or",
     "dependencies/aptos-cached-packages",
     "dependencies/aptos-channels",
     "dependencies/aptos-collections",
