@@ -49,7 +49,12 @@ members = [
     "dependencies/move-core-types",
     "dependencies/aptos-telemetry",
     "dependencies/aptos-telemetry-service",
-    "crates/api", "crates/api-types", "bin/kvstore", "crates/coex-bridge", "bin/bench", "bin/reth"
+    "crates/api",
+    "crates/api-types",
+    "bin/kvstore",
+    "crates/coex-bridge",
+    "bin/bench",
+    "bin/peth",
 ]
 
 
@@ -112,7 +117,7 @@ rocksdb = { workspace = true }
 itertools = { workspace = true }
 
 [workspace.dependencies]
-aptos-consensus = {path = "./aptos-core/consensus"}
+aptos-consensus = { path = "./aptos-core/consensus" }
 
 #  from aptos =======================
 aptos-id-generator = { path = "./dependencies/aptos-id-generator" }
@@ -151,7 +156,7 @@ aptos-runtimes = { path = "./dependencies/aptos-runtimes" }
 aptos-schemadb = { path = "./dependencies/aptos-schemadb", features = [
     "fuzzing",
 ] }
-api = {path = "./crates/api"}
+api = { path = "./crates/api" }
 api-types = { path = "./crates/api-types" }
 aptos-secure-net = { path = "./dependencies/aptos-secure-net" }
 aptos-secure-storage = { path = "./dependencies/aptos-secure-storage" }

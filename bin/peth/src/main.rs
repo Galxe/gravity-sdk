@@ -1,4 +1,4 @@
-use mock_consensus::MockConsensus;
+use consensus::MockConsensus;
 use reth::rpc::builder::auth::AuthServerHandle;
 use reth_cli_util;
 use reth_coordinator::RethCoordinator;
@@ -9,7 +9,7 @@ use reth_provider;
 use tokio::sync::mpsc;
 mod cli;
 mod exec_layer;
-mod mock_consensus;
+mod consensus;
 mod reth_cli;
 mod reth_coordinator;
 
