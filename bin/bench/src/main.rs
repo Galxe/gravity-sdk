@@ -7,7 +7,7 @@ use std::{sync::Arc, thread};
 
 use api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
 use api_types::{
-    account::ExternalAccountAddress, BlockHashState, ConsensusApi, DefaultRecovery, ExecTxn, ExecutionApiV2, ExecutionLayer
+    account::ExternalAccountAddress, ConsensusApi, DefaultRecovery, ExecTxn, ExecutionApiV2, ExecutionLayer
 };
 use clap::Parser;
 use cli::Cli;
@@ -30,7 +30,6 @@ impl TestConsensusLayer {
         let safe_hash = [0u8; 32];
         let head_hash = [0u8; 32];
         let finalized_hash = [0u8; 32];
-        let block_hash_state = BlockHashState { safe_hash, head_hash, finalized_hash };
         Self {
             consensus_engine: ConsensusEngine::init(
                 node_config,
@@ -38,7 +37,6 @@ impl TestConsensusLayer {
                     execution_api: execution_client.clone(),
                     recovery_api: Arc::new(DefaultRecovery {}),
                 },
-                block_hash_state.clone(),
                 1337,
             ),
             execution_api: execution_client,

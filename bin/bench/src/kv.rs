@@ -2,7 +2,7 @@ use crate::should_produce_txn;
 use crate::stateful_mempool::Mempool;
 use crate::txn::RawTxn;
 use api_types::{
-    BlockBatch, BlockId, ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExecutionBlocks, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum
+    BlockId, ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum
 };
 use async_trait::async_trait;
 use log::info;

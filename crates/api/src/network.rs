@@ -4,7 +4,6 @@ use aptos_config::{
     network_id::NetworkId,
 };
 use aptos_crypto::{PrivateKey, Uniform};
-use aptos_logger::info;
 use aptos_mempool::MempoolClientRequest;
 use aptos_network::{
     application::{
@@ -29,9 +28,9 @@ use std::{
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
-use tokio::{runtime::Runtime, sync::Mutex};
+use tokio::runtime::Runtime;
 
-use crate::{bootstrap::ApplicationNetworkInterfaces, GTxn, GravityConsensusEngineInterface};
+use crate::bootstrap::ApplicationNetworkInterfaces;
 
 /// Extracts all network configs from the given node config
 pub fn extract_network_configs(node_config: &NodeConfig) -> Vec<NetworkConfig> {

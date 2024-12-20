@@ -1,4 +1,4 @@
-use std::{future::IntoFuture, hash::Hash, sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use crate::{
     bootstrap::{
@@ -6,7 +6,7 @@ use crate::{
         start_consensus, start_node_inspection_service,
     }, consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler}, https::{https_server, HttpsServerArgs}, logger, network::{create_network_runtime, extract_network_configs}
 };
-use api_types::{BlockBatch, BlockHashState, BlockId, ComputeRes, ConsensusApi, ExecutionApi, ExecutionApiV2, ExecutionLayer, ExternalBlock, ExternalBlockMeta, GTxn};
+use api_types::{BlockId, ComputeRes, ConsensusApi, ExecutionLayer, ExternalBlock, ExternalBlockMeta};
 use aptos_config::{config::NodeConfig, network_id::NetworkId};
 use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
 use aptos_consensus::consensusdb::ConsensusDB;
@@ -15,18 +15,10 @@ use aptos_logger::info;
 use aptos_network_builder::builder::NetworkBuilder;
 use aptos_storage_interface::DbReaderWriter;
 use async_trait::async_trait;
-use futures::channel::mpsc::SendError;
 
-use aptos_crypto::{HashValue, PrivateKey, Uniform};
-use aptos_types::{
-    chain_id::ChainId,
-    transaction::{GravityExtension, RawTransaction, SignedTransaction, TransactionPayload},
-};
+use aptos_types::chain_id::ChainId;
 use futures::channel::mpsc;
-use futures::future::BoxFuture;
-use lazy_static::lazy_static;
 use tokio::runtime::Runtime;
-use coex_bridge::CoExBridge;
 
 pub struct ConsensusEngine {
     address: String,
@@ -39,7 +31,6 @@ impl ConsensusEngine {
     pub fn init(
         node_config: NodeConfig,
         execution_layer: ExecutionLayer,
-        block_hash_state: BlockHashState,
         chain_id: u64,
     ) -> Arc<Self> {
         let consensus_db =

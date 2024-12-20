@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::network::{build_network_interfaces, consensus_network_configuration, extract_network_ids, mempool_network_configuration};
-use api_types::{ExecutionApi, ExecutionApiV2};
+use api_types::ExecutionApiV2;
 use aptos_config::{
     config::{NetworkConfig, NodeConfig, Peer, PeerRole, RocksdbConfigs, StorageDirPaths},
     network_id::NetworkId,
@@ -58,25 +58,6 @@ pub fn check_bootstrap_config(node_config_path: Option<PathBuf>) -> NodeConfig {
             error
         )
     })
-}
-
-// Start an Gravity node
-pub fn start(node_config: NodeConfig, execution_api: Arc<dyn ExecutionApi>) -> anyhow::Result<()> {
-    let _test_mode = node_config.test_mode;
-    unreachable!();
-    // let _adapter = ConsensusEngine::init(node_config, execution_api, [0; 32], [0; 32], [0; 32];
-    // let submitter_mutex = adapter.clone();
-    // if test_mode {
-    //     tokio::spawn(async move {
-    //         network::mock_execution_txn_submitter(submitter_mutex).await;
-    //     });
-    //     tokio::spawn(async move {
-    //         network::mock_execution_receive_block(adapter).await;
-    //     });
-    // }
-    loop {
-        thread::park();
-    }
 }
 
 pub fn init_network_interfaces<T, E>(
