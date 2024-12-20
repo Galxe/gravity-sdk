@@ -1,8 +1,11 @@
-[package]
-name = "gravity-sdk"
-version = "0.1.0"
+[workspace.package]
+authors = ["Aptos Labs <opensource@aptoslabs.com>"]
 edition = "2021"
-
+homepage = "https://aptoslabs.com"
+license = "Apache-2.0"
+publish = false
+repository = "https://github.com/aptos-labs/aptos-core"
+rust-version = "1.81.0"
 
 [workspace]
 members = [
@@ -58,63 +61,8 @@ members = [
 ]
 
 
-# All workspace members should inherit these keys
-# for package declarations.
-[workspace.package]
-authors = ["Aptos Labs <opensource@aptoslabs.com>"]
-edition = "2021"
-homepage = "https://aptoslabs.com"
-license = "Apache-2.0"
-publish = false
-repository = "https://github.com/aptos-labs/aptos-core"
-rust-version = "1.81.0"
 
 
-[dependencies]
-aptos-consensus = { path = "./aptos-core/consensus" }
-aptos-consensus-types = { path = "./aptos-core/consensus/consensus-types" }
-aptos-executor-types = { path = "./dependencies/aptos-executor-types", features = [
-    "fuzzing",
-] }
-aptos-config = { path = "./dependencies/aptos-config" }
-aptos-crypto = { workspace = true }
-aptos-mempool = { path = "./aptos-core/mempool" }
-aptos-mempool-notifications = { path = "./dependencies/mempool-notifications" }
-aptos-logger = { path = "./dependencies/aptos-logger" }
-aptos-netcore = { path = "./aptos-core/network/netcore" }
-aptos-network = { path = "./aptos-core/network/framework" }
-aptos-network-builder = { path = "./aptos-core/network/builder" }
-aptos-network-discovery = { path = "./aptos-core/network/discovery" }
-aptos-event-notifications = { path = "./dependencies/aptos-event-notifications" }
-aptos-types = { path = "./dependencies/aptos-types" }
-aptos-storage-interface = { path = "./dependencies/aptos-storage-interface" }
-aptos-runtimes = { path = "./dependencies/aptos-runtimes" }
-aptos-channels = { path = "./dependencies/aptos-channels" }
-aptos-peer-monitoring-service-types = { path = "./dependencies/aptos-peer-monitoring-service-types" }
-aptos-secure-storage = { workspace = true }
-aptos-consensus-notifications = { workspace = true }
-aptos-time-service = { workspace = true }
-aptos-infallible = { workspace = true }
-aptos-inspection-service = { workspace = true }
-aptos-build-info = { workspace = true }
-aptos-schemadb = { workspace = true }
-serde = { workspace = true }
-tokio = { workspace = true }
-futures = { workspace = true }
-aptos-validator-transaction-pool = { workspace = true }
-bcs = { workspace = true }
-anyhow = "1.0.86"
-clap = { workspace = true }
-lazy_static = { workspace = true }
-rand = { workspace = true }
-hex.workspace = true
-serde_yaml = { workspace = true }
-async-trait.workspace = true
-either = { workspace = true }
-arc-swap = { workspace = true }
-byteorder = { workspace = true }
-rocksdb = { workspace = true }
-itertools = { workspace = true }
 
 [workspace.dependencies]
 aptos-consensus = { path = "./aptos-core/consensus" }
