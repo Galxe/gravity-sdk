@@ -1,4 +1,4 @@
-use consensus::MockConsensus;
+use consensus::mock::MockConsensus;
 use reth::rpc::builder::auth::AuthServerHandle;
 use reth_cli_util;
 use reth_coordinator::RethCoordinator;
