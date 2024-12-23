@@ -41,15 +41,18 @@ pub async fn https_server(args: HttpsServerArgs) {
         .route("/tx/get_tx_by_hash/:hash_value", get(get_tx_by_hash_lambda))
         .route("/set_failpoint", post(set_fail_point_lambda));
     // configure certificate and private key used by https
-    let config = RustlsConfig::from_pem_file(args.cert_pem, args.key_pem)
+    let config = RustlsConfig::from_pem_file(args.cert_pem.clone(), args.key_pem.clone())
         .await
-        .unwrap();
+        .unwrap_or_else(|e| {
+            panic!("error {:?}, cert {:?}, key {:?} doesn't work", e, args.cert_pem, args.key_pem)
+        });
     let addr: SocketAddr = args.address.parse().unwrap();
     info!("https server listen address {}", addr);
     axum_server::bind_rustls(addr, config).serve(app.into_make_service()).await.unwrap();
 }
 
 mod test {
+    use fail::fail_point;
     use rcgen::generate_simple_self_signed;
     use reqwest::ClientBuilder;
     use std::{collections::HashMap, fs, path::PathBuf, thread::sleep};
@@ -58,29 +61,35 @@ mod test {
 
     use super::{https_server, HttpsServerArgs};
 
+    fn test_fail_point() -> Option<()> {
+        fail_point!("unit_test_fail_point", |_| {
+            None;
+        });
+        Some(())
+    }
+
     #[tokio::test]
     async fn work() {
         let subject_alt_names = vec!["127.0.0.1".to_string()];
         let cert = generate_simple_self_signed(subject_alt_names).unwrap();
 
-        // 获取 PEM 格式的证书和私钥
         let cert_pem = cert.serialize_pem().unwrap();
         let key_pem = cert.serialize_private_key_pem();
-        fs::create_dir("./src/https/test");
-        // 保存到文件
-        fs::write("./src/https/test/cert.pem", cert_pem);
-        fs::write("./src/https/test/key.pem", key_pem);
+        let dir = env!("CARGO_MANIFEST_DIR").to_owned();
+        fs::create_dir(dir.clone() + "/src/https/test");
+        fs::write(dir.clone() + "/src/https/test/cert.pem", cert_pem);
+        fs::write(dir.clone() + "/src/https/test/key.pem", key_pem);
 
         let args = HttpsServerArgs {
             address: "127.0.0.1:5425".to_owned(),
             execution_api: None,
-            cert_pem: PathBuf::from(env!("CARGO_MANIFEST_DIR").to_owned() + "/src/https/test/cert.pem"),
-            key_pem: PathBuf::from(env!("CARGO_MANIFEST_DIR").to_owned() + "/src/https/test/key.pem"),
+            cert_pem: PathBuf::from(dir.clone() + "/src/https/test/cert.pem"),
+            key_pem: PathBuf::from(dir.clone() + "/src/https/test/key.pem"),
         };
         tokio::spawn(https_server(args));
         sleep(std::time::Duration::from_secs(1));
         // read a local binary pem encoded certificate
-        let pem = std::fs::read("./src/https/test/cert.pem").unwrap();
+        let pem = std::fs::read(dir.clone() + "/src/https/test/cert.pem").unwrap();
         let cert = reqwest::Certificate::from_pem(&pem).unwrap();
 
         let client = ClientBuilder::new()
@@ -101,5 +110,17 @@ mod test {
             .send()
             .await.unwrap();
         assert!(res.status().is_success());
+
+        // test set_fail_point
+        assert!(test_fail_point().is_none());
+        let mut map = HashMap::new();
+        map.insert("name", "unit_test_fail_point");
+        map.insert("action", "return");
+        let res = client.post("https://127.0.0.1:5425/set_failpoint")
+            .json(&map)
+            .send()
+            .await.unwrap();
+        assert!(res.status().is_success());
+        assert!(test_fail_point().is_some());
     }
 }
