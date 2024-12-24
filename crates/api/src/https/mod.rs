@@ -38,10 +38,7 @@ pub async fn https_server(args: HttpsServerArgs) {
 
     let execution_api_clone = args.execution_api.clone();
     let get_tx_by_hash_lambda = |Path(request): Path<HashValue>| async move {
-        println!("fuck");
-        let r = get_tx_by_hash(request, execution_api_clone).await;
-        println!("fuck liangchu");
-        r
+        get_tx_by_hash(request, execution_api_clone).await
     };
 
     let set_fail_point_lambda =
