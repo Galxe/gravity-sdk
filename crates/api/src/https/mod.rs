@@ -68,6 +68,7 @@ pub async fn https_server(args: HttpsServerArgs) {
     );
 }
 
+#[cfg(test)]
 mod test {
     use fail::fail_point;
     use rcgen::generate_simple_self_signed;
