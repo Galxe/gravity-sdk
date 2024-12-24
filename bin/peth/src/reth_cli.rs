@@ -264,9 +264,11 @@ impl RethCli {
     ) -> Result<(), String> {
         let mut eth_sub =
             self.ipc.eth_subscribe().subscribe_new_pending_transactions().await.unwrap();
+        info!("start process pending transactions");
         while let Some(Ok(txn_hash)) = eth_sub.next().await {
+            info!("get txn hash {:?}", txn_hash);
             let txn = self.ipc.eth().transaction(TransactionId::Hash(txn_hash)).await;
-
+            info!("get txn {:?}", txn);
             if let Ok(Some(txn)) = txn {
                 let account = match txn.from {
                     Some(account) => account,
@@ -304,6 +306,7 @@ impl RethCli {
                 error!("Failed to get transaction {:?} {:?}", txn_hash, txn);
             }
         }
+        info!("end process pending transactions");
         Ok(())
     }
 }

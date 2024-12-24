@@ -121,7 +121,6 @@ impl StateComputer for GravityExecutionProxy {
     ) -> StateComputeResultFut {
         assert!(block.block_number().is_some());
         let txns = self.aptos_state_computer.get_block_txns(block).await;
-        let empty_block = txns.is_empty();
         let meta_data = ExternalBlockMeta {
             block_id: BlockId(*block.id()),
             // TODO(gravity_lightman): we can't have block number when committing the block
@@ -130,53 +129,37 @@ impl StateComputer for GravityExecutionProxy {
         };
         let id = HashValue::from(block.id());
 
-        let (block_result_sender, block_result_receiver) = oneshot::channel();
         // We would export the empty block detail to the outside GCEI caller
-        if empty_block {
-            let compute_res_bytes = [0u8; 32];
-            block_result_sender.send(HashValue::new(compute_res_bytes)).expect("send failed");
-        } else {
-            let vtxns: Vec<VerifiedTxn> =
-                txns.iter().map(|txn| Into::<VerifiedTxn>::into(&txn.clone())).collect();
-            let real_txns = vtxns
-                .into_iter()
-                .map(|txn| api_types::VerifiedTxn {
-                    bytes: txn.bytes().to_vec(),
-                    sender: ExternalAccountAddress::new(txn.sender().into_bytes()),
-                    sequence_number: txn.sequence_number(),
-                    chain_id: ExternalChainId::new(txn.chain_id().id()),
-                })
-                .collect();
-            let external_block = ExternalBlock { block_meta: meta_data.clone(), txns: real_txns };
-            self.consensus_engine
-                .get()
-                .expect("ConsensusEngine")
-                .send_ordered_block(*parent_block_id, external_block)
-                .await;
-        }
+        let vtxns: Vec<VerifiedTxn> =
+            txns.iter().map(|txn| Into::<VerifiedTxn>::into(&txn.clone())).collect();
+        let real_txns = vtxns
+            .into_iter()
+            .map(|txn| api_types::VerifiedTxn {
+                bytes: txn.bytes().to_vec(),
+                sender: ExternalAccountAddress::new(txn.sender().into_bytes()),
+                sequence_number: txn.sequence_number(),
+                chain_id: ExternalChainId::new(txn.chain_id().id()),
+            })
+            .collect();
+        let external_block = ExternalBlock { block_meta: meta_data.clone(), txns: real_txns };
+        self.consensus_engine
+            .get()
+            .expect("ConsensusEngine")
+            .send_ordered_block(*parent_block_id, external_block)
+            .await;
+        
         let engine = Some(self.consensus_engine.clone());
         let round = block.round();
         Box::pin(async move {
-            match empty_block {
-                false => {
-                    let result = StateComputeResult::with_root_hash(HashValue::new(
-                        engine.expect("No consensus api")
-                            .get()
-                            .expect("consensus engine")
-                            .recv_executed_block_hash(meta_data)
-                            .await
-                            .bytes(),
-                    ));
-                    Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
-                }
-                true => match block_result_receiver.await {
-                    Ok(res) => {
-                        let result = StateComputeResult::with_root_hash(res);
-                        Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
-                    }
-                    Err(e) => Err(ExecutorError::InternalError { error: e.to_string() }),
-                },
-            }
+            let result = StateComputeResult::with_root_hash(HashValue::new(
+                engine.expect("No consensus api")
+                    .get()
+                    .expect("consensus engine")
+                    .recv_executed_block_hash(meta_data)
+                    .await
+                    .bytes(),
+            ));
+            Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
         })
     }
 

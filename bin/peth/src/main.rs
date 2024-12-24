@@ -98,11 +98,16 @@ fn main() {
                 info!("created reth_cli with ipc");
                 let gensis = client.get_latest_block_hash().await.unwrap();
                 let coordinator = Arc::new(RethCoordinator::new(client, consensus_gensis, gensis));
-                let consensus = AptosConsensus::init(gcei_config, coordinator.clone());
+                let cloned = coordinator.clone();
                 tokio::spawn(async move {
-                    coordinator.run().await;
+                    cloned.run().await;
                 });
+                AptosConsensus::init(gcei_config, coordinator);
+
+                // block until the runtime is shutdown
+                tokio::signal::ctrl_c().await.unwrap();
             }
+
         });
     });
 
