@@ -5,15 +5,12 @@ mod mock_db;
 mod network;
 mod https;
 mod utils;
-mod execution_api;
 pub mod consensus_api;
 
-use api_types::GCEIError;
 pub use aptos_config::config::NodeConfig;
 pub use bootstrap::check_bootstrap_config;
 use clap::Parser;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 /// Runs an Gravity validator or fullnode
 #[derive(Clone, Debug, Parser)]

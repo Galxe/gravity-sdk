@@ -14,7 +14,7 @@ use crate::{
 };
 use anyhow::Result;
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
-use api_types::{BlockId, ConsensusApi, ExecutionApiV2, ExecutionLayer, ExternalBlock, ExternalBlockMeta};
+use api_types::{BlockId, ConsensusApi, ExecutionLayer, ExternalBlock, ExternalBlockMeta};
 use aptos_consensus_types::{block::Block, pipelined_block::PipelinedBlock};
 use aptos_crypto::HashValue;
 use aptos_executor::block_executor::BlockExecutor;
@@ -28,7 +28,6 @@ use aptos_types::{
     block_executor::config::BlockExecutorConfigFromOnchain, epoch_state::EpochState,
     ledger_info::LedgerInfoWithSignatures, randomness::Randomness,
 };
-use futures::SinkExt;
 use futures_channel::oneshot;
 use once_cell::sync::OnceCell;
 use std::time::Duration;

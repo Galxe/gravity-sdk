@@ -1,15 +1,13 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs,
     path::PathBuf,
     sync::Arc,
-    thread,
 };
 
 use crate::network::{build_network_interfaces, consensus_network_configuration, extract_network_ids, mempool_network_configuration};
 use api_types::ExecutionApiV2;
 use aptos_config::{
-    config::{NetworkConfig, NodeConfig, Peer, PeerRole, RocksdbConfigs, StorageDirPaths},
+    config::{NetworkConfig, NodeConfig, Peer, PeerRole},
     network_id::NetworkId,
 };
 use aptos_consensus::{consensusdb::ConsensusDB, gravity_state_computer::GravityExecutionProxy};
@@ -20,7 +18,6 @@ use aptos_consensus::{
 use aptos_consensus_notifications::ConsensusNotifier;
 use aptos_crypto::x25519;
 use aptos_event_notifications::EventSubscriptionService;
-use aptos_logger::info;
 use aptos_mempool::{MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest};
 use aptos_mempool_notifications::MempoolNotificationListener;
 use aptos_network::application::{

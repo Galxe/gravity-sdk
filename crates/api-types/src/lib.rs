@@ -4,7 +4,6 @@ use core::str;
 use crate::account::{ExternalAccountAddress, ExternalChainId};
 use aptos_crypto::HashValue;
 use async_trait::async_trait;
-use ruint::aliases::U256;
 use serde::{Deserialize, Serialize};
 
 #[async_trait]
