@@ -1,6 +1,6 @@
 #!/bin/bash
 
-bin_name="peth"
+bin_name="kvstore-v2"
 node_arg=""
 bin_version="debug"
 mode="cluster"
@@ -30,6 +30,11 @@ while [[ "$#" -gt 0 ]]; do
     esac
     shift
 done
+
+if [[ "$bin_name" != "gravity-reth" && "$bin_name" != "bench" && "$bin_name" != "kvstore-v2" ]]; then
+    echo "Error: bin_name must be either 'gravity-reth' or 'bench'."
+    exit 1
+fi
 
 if [[ "$bin_version" != "release" && "$bin_version" != "debug" ]]; then
     echo "Error: bin_version must be either 'release' or 'debug'."

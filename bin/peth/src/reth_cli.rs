@@ -49,13 +49,14 @@ impl RethCli {
         }
     }
 
-    pub async fn get_latest_block_hash(&self) -> Result<B256, String> {
+    pub async fn get_latest_block_hash(&self) -> Result<[u8; 32], String> {
         let block = self.ipc.eth().block(BlockId::Number(web3::types::BlockNumber::Latest)).await;
 
         match block {
             Ok(Some(block)) => {
-                let hash = B256::from_slice(block.hash.unwrap().as_bytes());
-                Ok(hash)
+                let mut bytes = [0u8; 32];
+                bytes[..].copy_from_slice(block.hash.unwrap().as_bytes());
+                Ok(bytes)
             }
             _ => Err("Failed to get block".to_string()),
         }
@@ -264,11 +265,9 @@ impl RethCli {
     ) -> Result<(), String> {
         let mut eth_sub =
             self.ipc.eth_subscribe().subscribe_new_pending_transactions().await.unwrap();
-        info!("start process pending transactions");
         while let Some(Ok(txn_hash)) = eth_sub.next().await {
-            info!("get txn hash {:?}", txn_hash);
             let txn = self.ipc.eth().transaction(TransactionId::Hash(txn_hash)).await;
-            info!("get txn {:?}", txn);
+
             if let Ok(Some(txn)) = txn {
                 let account = match txn.from {
                     Some(account) => account,
@@ -306,7 +305,6 @@ impl RethCli {
                 error!("Failed to get transaction {:?} {:?}", txn_hash, txn);
             }
         }
-        info!("end process pending transactions");
         Ok(())
     }
 }

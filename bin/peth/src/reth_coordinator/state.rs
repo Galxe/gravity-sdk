@@ -1,20 +1,12 @@
 use api_types::{BlockId, ExternalPayloadAttr};
 use reth::primitives::B256;
 use web3::types::Transaction;
-use tracing::info;
 
 pub struct BuildingState {
     gas_used: u64,
 }
 
-pub enum Status {
-    Executing, 
-    Executed,
-    Committed,
-}
-
 pub struct State {
-    status: Status,
     block_id_to_hash: std::collections::HashMap<BlockId, B256>,
     block_hash_to_id: std::collections::HashMap<B256, BlockId>,
     block_id_parent: std::collections::HashMap<BlockId, BlockId>,
@@ -24,7 +16,6 @@ pub struct State {
 impl State {
     pub fn new() -> Self {
         State {
-            status: Status::Executing,
             block_id_to_hash: std::collections::HashMap::new(),
             block_hash_to_id: std::collections::HashMap::new(),
             block_id_parent: std::collections::HashMap::new(),
@@ -43,7 +34,6 @@ impl State {
     }
 
     pub fn insert_new_block(&mut self, block_id: BlockId, block_hash: B256) {
-        info!("insert_new_block: {:?} {:?}", block_id, block_hash);
         self.block_hash_to_id.insert(block_hash, block_id.clone());
         self.block_id_to_hash.insert(block_id, block_hash);
     }

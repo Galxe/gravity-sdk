@@ -1,5 +1,5 @@
 pub mod account;
-use std::{fmt::{self, Debug, Display}, sync::Arc};
+use std::{fmt::Display, sync::Arc};
 use core::str;
 use crate::account::{ExternalAccountAddress, ExternalChainId};
 use aptos_crypto::HashValue;
@@ -25,7 +25,7 @@ pub struct ExecutionBlocks {
 }
 
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+#[derive(Hash, PartialEq, Eq, Clone)]
 pub struct ExternalPayloadAttr {
     // s since epoch
     pub ts: u64,
@@ -74,20 +74,8 @@ pub struct VerifiedTxnWithAccountSeqNum {
     pub account_seq_num: u64,
 }
 
-#[derive(Clone, Deserialize, Serialize, Hash, PartialEq, Eq, Copy)]
+#[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq, Copy)]
 pub struct BlockId(pub [u8; 32]);
-
-impl fmt::Display for BlockId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", hex::encode(&self.0))
-    }
-}
-
-impl Debug for BlockId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", hex::encode(&self.0))
-    }
-}
 
 #[async_trait]
 pub trait ExecutionApiV2: Send + Sync {
@@ -151,7 +139,6 @@ pub trait RecoveryApi: Send + Sync {
     ) -> Result<ExecutionBlocks, RecoveryError>;
 }
 
-#[derive(Default)]
 pub struct DefaultRecovery {}
 
 #[async_trait]
