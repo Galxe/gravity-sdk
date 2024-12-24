@@ -6,9 +6,7 @@ use api_types::ExecutionApiV2;
 use aptos_crypto::HashValue;
 use aptos_logger::info;
 use axum::{
-    extract::{Json, Path},
-    routing::{get, post},
-    Router,
+    body::Body, extract::Path, http::Request, middleware::{self, Next}, response::Response, routing::{get, post}, Json, Router
 };
 use axum_server::tls_rustls::RustlsConfig;
 use set_failpoints::{set_failpoint, FailpointConf};
@@ -19,6 +17,16 @@ pub struct HttpsServerArgs {
     pub execution_api: Option<Arc<dyn ExecutionApiV2>>,
     pub cert_pem: PathBuf,
     pub key_pem: PathBuf,
+}
+
+async fn ensure_https(req: Request<Body>, next: Next) -> Response {
+    if req.uri().scheme_str() != Some("https") {
+        return Response::builder()
+            .status(400)
+            .body("HTTPS required".into())
+            .unwrap();
+    }
+    next.run(req).await
 }
 
 pub async fn https_server(args: HttpsServerArgs) {
@@ -39,10 +47,15 @@ pub async fn https_server(args: HttpsServerArgs) {
     let set_fail_point_lambda =
         |Json(request): Json<FailpointConf>| async move { set_failpoint(request).await };
 
-    let app = Router::new()
+    let https_app = Router::new()
         .route("/tx/submit_tx", post(submit_tx_lambda))
         .route("/tx/get_tx_by_hash/:hash_value", get(get_tx_by_hash_lambda))
+        .layer(middleware::from_fn(ensure_https));
+    let http_app = Router::new()
         .route("/set_failpoint", post(set_fail_point_lambda));
+    let app = Router::new()
+        .merge(https_app)
+        .merge(http_app);
     // configure certificate and private key used by https
     let config = RustlsConfig::from_pem_file(args.cert_pem.clone(), args.key_pem.clone())
         .await
@@ -70,9 +83,10 @@ mod test {
 
     fn test_fail_point() -> Option<()> {
         fail_point!("unit_test_fail_point", |_| {
-            None;
+            println!("set test fail point");
+            Some(());
         });
-        Some(())
+        None
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -107,6 +121,16 @@ mod test {
             .build()
             .unwrap();
 
+        // test set_fail_point
+        assert!(test_fail_point().is_none());
+        let mut map = HashMap::new();
+        map.insert("name", "unit_test_fail_point");
+        map.insert("action", "return");
+        let res =
+            client.post("http://127.0.0.1:5425/set_failpoint").json(&map).send().await.unwrap();
+        assert!(res.status().is_success(), "res is {:?}", res);
+        assert!(test_fail_point().is_some());
+
         let body = client.get("https://127.0.0.1:5425/tx/get_tx_by_hash/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
             .send()
             .await
@@ -122,15 +146,5 @@ mod test {
         let res =
             client.post("https://127.0.0.1:5425/tx/submit_tx").json(&map).send().await.unwrap();
         assert!(res.status().is_success());
-
-        // test set_fail_point
-        assert!(test_fail_point().is_none());
-        let mut map = HashMap::new();
-        map.insert("name", "unit_test_fail_point");
-        map.insert("action", "return");
-        let res =
-            client.post("https://127.0.0.1:5425/set_failpoint").json(&map).send().await.unwrap();
-        assert!(res.status().is_success());
-        assert!(test_fail_point().is_some());
     }
 }
