@@ -191,7 +191,7 @@ impl BlockStore {
                     let block_batch = ExternalBlock { txns: verified_txns, block_meta: ExternalBlockMeta {
                         block_id: BlockId(*block_to_recover.block().id()),
                         block_number: block_to_recover.block().block_number().unwrap(),
-                        ts: block_to_recover.block().timestamp_usecs(),
+                        usecs: block_to_recover.block().timestamp_usecs(),
                     } };
                     self.execution_layer.as_ref().unwrap().recovery_api.recover_ordered_block(block_batch).await;
                 }

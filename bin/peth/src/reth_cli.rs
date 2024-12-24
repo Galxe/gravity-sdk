@@ -172,7 +172,7 @@ impl RethCli {
         parent_hash: B256,
     ) -> Result<PayloadId, String> {
         let pipe_api = self.pipe_api.lock().await;
-        let payload_attr = Self::create_payload_attributes(parent_hash.into(), block.block_meta.ts);
+        let payload_attr = Self::create_payload_attributes(parent_hash.into(), block.block_meta.usecs /  1000000 );
         let fcu_state = ForkchoiceState {
             head_block_hash: parent_hash.into(),
             safe_block_hash: parent_hash.into(),

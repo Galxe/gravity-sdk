@@ -206,6 +206,14 @@ impl StateComputer for ExecutionProxy {
         finality_proof: LedgerInfoWithSignatures,
         callback: StateComputerCommitCallBackType,
     ) -> ExecutorResult<()> {
+        info!(
+            "Received a commit request for blocks {:?} at round {}",
+            blocks
+                .iter()
+                .map(|block| block.id())
+                .collect::<Vec<_>>(),
+            finality_proof.ledger_info().round()
+        );
         let mut latest_logical_time = self.write_mutex.lock().await;
         let mut block_ids = Vec::new();
         let mut txns = Vec::new();
@@ -235,11 +243,7 @@ impl StateComputer for ExecutionProxy {
             if let Some(payload) = block.block().payload() {
                 payloads.push(payload.clone());
             }
-
-            // TODO(gravity_byteyue): how to handle metadata transaction
-            if !block.input_transactions().is_empty() {
-                committed_block_ids.push(block.id());
-            }
+            committed_block_ids.push(block.id());
 
             let commit_transactions = self.transactions_to_commit(block, &validators, is_randomness_enabled);
             if !commit_transactions.is_empty() {

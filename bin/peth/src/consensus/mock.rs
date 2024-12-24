@@ -21,7 +21,7 @@ pub struct MockConsensus {
 
 impl MockConsensus {
     pub fn new(exec_api: Arc<dyn ExecutionApiV2>, gensis: [u8; 32]) -> Self {
-        let parent_meta = ExternalBlockMeta { block_id: BlockId(gensis), block_number: 0, ts: 0 };
+        let parent_meta = ExternalBlockMeta { block_id: BlockId(gensis), block_number: 0, usecs: 0 };
         Self {
             exec_api,
             parent_meta,
@@ -47,7 +47,7 @@ impl MockConsensus {
             block_meta: ExternalBlockMeta {
                 block_id: BlockId(bytes),
                 block_number: self.block_number_water_mark,
-                ts: attr.ts,
+                usecs: attr.ts,
             },
             txns: txns.drain(..).collect(),
         });

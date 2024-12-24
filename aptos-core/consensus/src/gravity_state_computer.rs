@@ -125,7 +125,7 @@ impl StateComputer for GravityExecutionProxy {
             block_id: BlockId(*block.id()),
             // TODO(gravity_lightman): we can't have block number when committing the block
             block_number: 0,
-            ts: block.timestamp_usecs(),
+            usecs: block.timestamp_usecs(),
         };
         let id = HashValue::from(block.id());
 
@@ -246,6 +246,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         block_ids: Vec<HashValue>,
         ledger_info_with_sigs: LedgerInfoWithSignatures,
     ) -> ExecutorResult<()> {
+        info!("commit blocks: {:?}", block_ids);
         if !block_ids.is_empty() {
             let (send, receiver) = oneshot::channel::<HashValue>();
             // todo(gravity_byteyue): don't spawn runtime each time

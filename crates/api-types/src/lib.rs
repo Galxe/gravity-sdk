@@ -36,7 +36,7 @@ pub struct ExternalBlockMeta {
     // Unique identifier for block: hash of block body
     pub block_id: BlockId,
     pub block_number: u64,
-    pub ts: u64,
+    pub usecs: u64,
 }
 
 #[derive(Debug, Clone)]
