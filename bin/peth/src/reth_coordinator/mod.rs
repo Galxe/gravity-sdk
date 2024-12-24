@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::reth_cli::RethCli;
 use api_types::{
-    BlockId, ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExternalBlock, ExternalBlockMeta,
+    u256_define::BlockId, u256_define::ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExternalBlock, ExternalBlockMeta,
     ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
 };
 use async_trait::async_trait;

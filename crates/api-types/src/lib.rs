@@ -1,10 +1,14 @@
 pub mod account;
-use std::{fmt::{self, Debug, Display}, sync::Arc};
+pub mod u256_define;
+pub mod mock_execution_layer;
+pub mod default_recover;
+pub mod simple_hash;
+use std::{fmt::{Debug, Display}, sync::Arc};
 use core::str;
 use crate::account::{ExternalAccountAddress, ExternalChainId};
-use aptos_crypto::HashValue;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use u256_define::{BlockId, ComputeRes, TxnHash};
 
 #[async_trait]
 pub trait ConsensusApi: Send + Sync {
@@ -44,18 +48,6 @@ pub struct ExternalBlock {
     pub txns: Vec<VerifiedTxn>,
 }
 
-pub struct ComputeRes([u8; 32]);
-
-impl ComputeRes {
-    pub fn new(res: [u8; 32]) -> Self {
-        Self(res)
-    }
-
-    pub fn bytes(&self) -> [u8; 32] {
-        self.0.clone()
-    }
-}
-
 #[derive(Debug)]
 pub enum ExecError {
     InternalError,
@@ -66,26 +58,10 @@ pub enum ExecTxn {
     VerifiedTxn(VerifiedTxn), // from peer
 }
 
-
 #[derive(Debug, Clone)]
 pub struct VerifiedTxnWithAccountSeqNum {
     pub txn: VerifiedTxn,
     pub account_seq_num: u64,
-}
-
-#[derive(Clone, Deserialize, Serialize, Hash, PartialEq, Eq, Copy)]
-pub struct BlockId(pub [u8; 32]);
-
-impl fmt::Display for BlockId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", hex::encode(&self.0))
-    }
-}
-
-impl Debug for BlockId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", hex::encode(&self.0))
-    }
 }
 
 #[async_trait]
@@ -150,35 +126,6 @@ pub trait RecoveryApi: Send + Sync {
     ) -> Result<ExecutionBlocks, RecoveryError>;
 }
 
-#[derive(Default)]
-pub struct DefaultRecovery {}
-
-#[async_trait]
-impl RecoveryApi for DefaultRecovery {
-    async fn latest_block_number(&self) -> u64 {
-        0
-    }
-
-    async fn finalized_block_number(&self) -> u64 {
-        0
-    }
-
-    async fn recover_ordered_block(&self, _: ExternalBlock) {
-        ()
-    }
-
-    async fn recover_execution_blocks(&self, _: ExecutionBlocks) {
-        ()
-    }
-
-    async fn get_blocks_by_range(
-        &self,
-        _: u64,
-        _: u64,
-    ) -> Result<ExecutionBlocks, RecoveryError> {
-        Err(RecoveryError::UnimplementError)
-    }
-}
 #[derive(Clone)]
 pub struct ExecutionLayer {
     pub execution_api: Arc<dyn ExecutionApiV2>,
@@ -191,6 +138,7 @@ pub struct VerifiedTxn {
     pub sender: ExternalAccountAddress,
     pub sequence_number: u64,
     pub chain_id: ExternalChainId,
+    pub committed_hash: TxnHash,
 }
 
 impl VerifiedTxn {
@@ -199,8 +147,9 @@ impl VerifiedTxn {
         sender: ExternalAccountAddress,
         sequence_number: u64,
         chain_id: ExternalChainId,
+        committed_hash: TxnHash,
     ) -> Self {
-        Self { bytes, sender, sequence_number, chain_id }
+        Self { bytes, sender, sequence_number, chain_id, committed_hash }
     }
 
     pub fn bytes(&self) -> &Vec<u8> {
@@ -214,6 +163,10 @@ impl VerifiedTxn {
     pub fn seq_number(&self) -> u64 {
         self.sequence_number
     }
+
+    pub fn committed_hash(&self) -> [u8; 32] {
+        self.committed_hash.bytes()
+    }
 }
 
 #[derive(Debug)]
@@ -224,57 +177,5 @@ pub enum GCEIError {
 impl Display for GCEIError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Consensus Error")
-    }
-}
-
-
-pub struct MockExecutionApi {}
-
-#[async_trait]
-impl ExecutionApiV2 for MockExecutionApi {
-    async fn add_txn(&self, bytes: ExecTxn) -> Result<(), ExecError> {
-        Ok(())
-    }
-
-    async fn recv_unbroadcasted_txn(&self) -> Result<Vec<VerifiedTxn>, ExecError> {
-        Ok(vec![])
-    }
-
-    async fn check_block_txns(
-        &self,
-        payload_attr: ExternalPayloadAttr,
-        txns: Vec<VerifiedTxn>,
-    ) -> Result<bool, ExecError> {
-        Ok(true)
-    }
-
-    async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
-        Ok(vec![])
-    }
-
-    async fn send_ordered_block(
-        &self,
-        parent_id: BlockId,
-        ordered_block: ExternalBlock,
-    ) -> Result<(), ExecError> {
-        Ok(())
-    }
-
-    async fn recv_executed_block_hash(
-        &self,
-        head: ExternalBlockMeta,
-    ) -> Result<ComputeRes, ExecError> {
-        Ok(ComputeRes::new(*HashValue::random()))
-    }
-
-    async fn commit_block(&self, head: BlockId) -> Result<(), ExecError> {
-        Ok(())
-    }
-}
-
-pub fn mock_execution_layer() -> ExecutionLayer {
-    ExecutionLayer {
-        execution_api: Arc::new(MockExecutionApi {}),
-        recovery_api: Arc::new(DefaultRecovery {}),
     }
 }

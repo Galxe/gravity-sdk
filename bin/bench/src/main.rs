@@ -7,7 +7,7 @@ use std::{sync::Arc, thread};
 
 use api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
 use api_types::{
-    account::ExternalAccountAddress, ConsensusApi, DefaultRecovery, ExecTxn, ExecutionApiV2, ExecutionLayer
+    account::ExternalAccountAddress, default_recover::DefaultRecovery, ConsensusApi, ExecTxn, ExecutionApiV2, ExecutionLayer
 };
 use clap::Parser;
 use cli::Cli;

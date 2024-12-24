@@ -7,7 +7,7 @@ use crate::{
     block_storage::{BlockReader, BlockStore},
     payload_manager::DirectMempoolPayloadManager,
 };
-use api_types::mock_execution_layer;
+use api_types::mock_execution_layer::mock_execution_layer;
 use aptos_consensus_types::{
     block::{block_test_utils::certificate_for_genesis, Block},
     common::{Author, Round},

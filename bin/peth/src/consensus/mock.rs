@@ -6,7 +6,7 @@ use std::{
 
 use super::mempool::Mempool;
 use api_types::{
-    BlockId, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn,
+    u256_define::BlockId, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn,
 };
 
 use tracing::info;

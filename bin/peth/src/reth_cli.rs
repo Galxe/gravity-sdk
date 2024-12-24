@@ -2,8 +2,8 @@ use alloy_consensus::{TxEip1559, TxEip2930, TxLegacy};
 use alloy_primitives::{Address, B256};
 use alloy_rpc_types_engine::ForkchoiceState;
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
-use api_types::BlockId as ExternalBlockId;
-use api_types::{ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
+use api_types::u256_define::{BlockId as ExternalBlockId, TxnHash};
+use api_types::{simple_hash, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 use jsonrpsee::core::Serialize;
 use jsonrpsee::http_client::transport::HttpBackend;
 use jsonrpsee::http_client::HttpClient;
@@ -283,12 +283,14 @@ impl RethCli {
                     Ok(accout_nonce) => {
                         let mut buffer = buffer.lock().await;
                         let bytes = serde_json::to_vec(&txn).unwrap();
+                        let committed_hash = TxnHash::new(simple_hash::hash_to_fixed_array(&bytes));
                         let vtxn = VerifiedTxnWithAccountSeqNum {
                             txn: VerifiedTxn {
                                 bytes,
                                 sender: covert_account(txn.from.unwrap()),
                                 sequence_number: txn.nonce.as_u64(),
                                 chain_id: ExternalChainId::new(0),
+                                committed_hash,
                             },
                             account_seq_num: accout_nonce.as_u64(),
                         };

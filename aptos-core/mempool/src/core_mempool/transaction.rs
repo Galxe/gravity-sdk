@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{counters, network::BroadcastPeerPriority};
-use api_types::account::{ExternalAccountAddress, ExternalChainId};
+use api_types::{account::{ExternalAccountAddress, ExternalChainId}, u256_define::TxnHash};
 use aptos_crypto::{HashValue, Uniform};
 use aptos_types::{
     account_address::AccountAddress,
@@ -13,6 +13,7 @@ use aptos_types::{
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::{
+    hash::Hash,
     mem::size_of,
     sync::{atomic::AtomicUsize, Arc},
     time::SystemTime,
@@ -23,12 +24,13 @@ pub const TXN_FIXED_ESTIMATED_BYTES: usize = size_of::<MempoolTransaction>();
 
 // TODO(gravity_byteyue&gravity_jan): consider elegant way for verifiedTxn and signedTransaction
 static GLOBAL_PUBLIC_KEY: Lazy<aptos_crypto::ed25519::Ed25519PublicKey> = Lazy::new(|| {
-    aptos_crypto::PrivateKey::public_key(&aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing())
+    aptos_crypto::PrivateKey::public_key(
+        &aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing(),
+    )
 });
 
-static GLOBAL_SIGNATURE: Lazy<aptos_crypto::ed25519::Ed25519Signature> = Lazy::new(|| {
-    aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap()
-});
+static GLOBAL_SIGNATURE: Lazy<aptos_crypto::ed25519::Ed25519Signature> =
+    Lazy::new(|| aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap());
 
 impl From<&SignedTransaction> for VerifiedTxn {
     fn from(signed_txn: &SignedTransaction) -> Self {
@@ -42,6 +44,7 @@ impl From<&SignedTransaction> for VerifiedTxn {
             sender: signed_txn.sender(),
             sequence_number: signed_txn.sequence_number(),
             chain_id: signed_txn.chain_id(),
+            committed_hash: signed_txn.committed_hash(),
         }
     }
 }
@@ -57,11 +60,10 @@ impl Into<SignedTransaction> for &VerifiedTxn {
             u64::MAX,
             self.chain_id,
         );
-        SignedTransaction::new(
-            raw_txn,
-            GLOBAL_PUBLIC_KEY.clone(),
-            GLOBAL_SIGNATURE.clone(),
-        )
+        let mut r =
+            SignedTransaction::new(raw_txn, GLOBAL_PUBLIC_KEY.clone(), GLOBAL_SIGNATURE.clone());
+        r.set_committed_hash(self.committed_hash);
+        r
     }
 }
 
@@ -71,8 +73,9 @@ impl VerifiedTxn {
         sender: AccountAddress,
         sequence_number: u64,
         chain_id: ChainId,
+        committed_hash: HashValue,
     ) -> Self {
-        Self { bytes, sender, sequence_number, chain_id }
+        Self { bytes, sender, sequence_number, chain_id, committed_hash }
     }
 
     pub fn bytes(&self) -> &Vec<u8> {
@@ -91,8 +94,8 @@ impl VerifiedTxn {
         self.chain_id
     }
 
-    pub(crate) fn get_hash(&self) -> HashValue {
-        HashValue::sha3_256_of(&self.bytes)
+    pub fn get_hash(&self) -> HashValue {
+        self.committed_hash
     }
 }
 
@@ -108,16 +111,18 @@ pub struct VerifiedTxn {
     pub(crate) sender: AccountAddress,
     pub(crate) sequence_number: u64,
     pub(crate) chain_id: chain_id::ChainId,
+    pub(crate) committed_hash: HashValue,
 }
 
 impl From<api_types::VerifiedTxn> for VerifiedTxn {
     fn from(value: api_types::VerifiedTxn) -> Self {
+        let committed_hash = HashValue::new(value.committed_hash());
         VerifiedTxn {
             bytes: value.bytes,
             sender: AccountAddress::new(value.sender.bytes()),
             sequence_number: value.sequence_number,
             chain_id: value.chain_id.into_u64().into(),
-            
+            committed_hash,
         }
     }
 }
@@ -129,6 +134,7 @@ impl From<VerifiedTxn> for api_types::VerifiedTxn {
             sender: ExternalAccountAddress::new(value.sender.into_bytes()),
             sequence_number: value.sequence_number,
             chain_id: ExternalChainId::new(value.chain_id.into()),
+            committed_hash: TxnHash::new(*value.committed_hash),
         }
     }
 }
@@ -185,7 +191,7 @@ impl MempoolTransaction {
         TXN_FIXED_ESTIMATED_BYTES + {
             match self.verified_txn.payload() {
                 TransactionPayload::GTxnBytes(b) => b.len(),
-                _ => panic!()
+                _ => panic!(),
             }
         }
     }

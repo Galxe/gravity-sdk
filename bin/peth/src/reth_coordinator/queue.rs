@@ -1,4 +1,4 @@
-use api_types::BlockId;
+use api_types::u256_define::BlockId;
 use tokio::sync::{mpsc, Mutex};
 
 pub struct Queue {

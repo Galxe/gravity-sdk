@@ -7,7 +7,7 @@ mod txn;
 use std::{sync::Arc, thread};
 
 use api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
-use api_types::{ConsensusApi, DefaultRecovery, ExecutionApiV2, ExecutionLayer};
+use api_types::{default_recover::DefaultRecovery, ConsensusApi, ExecutionApiV2, ExecutionLayer};
 use clap::Parser;
 use cli::Cli;
 use server::Server;

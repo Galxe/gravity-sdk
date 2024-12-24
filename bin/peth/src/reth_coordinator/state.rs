@@ -1,4 +1,4 @@
-use api_types::{BlockId, ExternalPayloadAttr};
+use api_types::{u256_define::BlockId, ExternalPayloadAttr};
 use reth::primitives::B256;
 use web3::types::Transaction;
 use tracing::info;

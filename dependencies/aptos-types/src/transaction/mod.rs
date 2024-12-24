@@ -594,6 +594,10 @@ impl SignedTransaction {
         }
     }
 
+    pub fn set_committed_hash(&mut self, hash: HashValue) {
+        self.committed_hash.set(hash).unwrap_or_else(|e| { panic!("Failed to set hash"); })
+    }
+
     pub fn new_with_gtxn(
         raw_txn: RawTransaction,
         public_key: Ed25519PublicKey,

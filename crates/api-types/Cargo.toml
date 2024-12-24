@@ -18,3 +18,4 @@ serde = { workspace = true }
 rand = { workspace = true }
 hex = "0.4.3"
 aptos-crypto = { workspace = true }
+sha2 = { workspace = true }

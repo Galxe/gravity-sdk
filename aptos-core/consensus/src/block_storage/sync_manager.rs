@@ -25,7 +25,7 @@ use crate::{
     pipeline::execution_client::TExecutionClient,
 };
 use anyhow::{anyhow, bail, Context};
-use api_types::{BlockId, ExecutionApiV2, ExecutionBlocks, ExecutionLayer, ExternalBlockMeta, RecoveryApi};
+use api_types::{u256_define::BlockId, ExecutionApiV2, ExecutionBlocks, ExecutionLayer, ExternalBlockMeta, RecoveryApi};
 use aptos_consensus_types::{
     block::Block,
     block_retrieval::{

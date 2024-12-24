@@ -14,12 +14,13 @@ use crate::{
 };
 use anyhow::Result;
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
-use api_types::{BlockId, ConsensusApi, ExecutionLayer, ExternalBlock, ExternalBlockMeta};
+use api_types::u256_define::TxnHash;
+use api_types::{u256_define::BlockId, ConsensusApi, ExecutionLayer, ExternalBlock, ExternalBlockMeta};
 use aptos_consensus_types::{block::Block, pipelined_block::PipelinedBlock};
 use aptos_crypto::HashValue;
 use aptos_executor::block_executor::BlockExecutor;
 use aptos_executor_types::{
-    BlockExecutorTrait, ExecutorError, ExecutorResult, StateCheckpointOutput, StateComputeResult,
+    BlockExecutorTrait, ExecutorResult, StateCheckpointOutput, StateComputeResult,
 };
 use aptos_logger::info;
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
@@ -138,6 +139,7 @@ impl StateComputer for GravityExecutionProxy {
                 sender: ExternalAccountAddress::new(txn.sender().into_bytes()),
                 sequence_number: txn.sequence_number(),
                 chain_id: ExternalChainId::new(txn.chain_id().id()),
+                committed_hash: TxnHash::from_bytes(&txn.get_hash().to_vec()),
             })
             .collect();
         let external_block = ExternalBlock { block_meta: meta_data.clone(), txns: real_txns };

@@ -18,7 +18,7 @@ use crate::{
     util::time_service::TimeService,
 };
 use anyhow::{bail, ensure, format_err, Context};
-use api_types::{BlockId, ExecutionApiV2, ExecutionLayer, ExternalBlock, ExternalBlockMeta};
+use api_types::{u256_define::BlockId, ExecutionLayer, ExternalBlock, ExternalBlockMeta};
 use aptos_consensus_types::common::Payload::DirectMempool;
 use aptos_consensus_types::{
     block::Block,
