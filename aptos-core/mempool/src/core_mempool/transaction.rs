@@ -3,7 +3,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{counters, network::BroadcastPeerPriority};
-use api_types::{account::{ExternalAccountAddress, ExternalChainId}, u256_define::TxnHash};
+use api_types::{
+    account::{ExternalAccountAddress, ExternalChainId},
+    u256_define::TxnHash,
+};
 use aptos_crypto::{HashValue, Uniform};
 use aptos_types::{
     account_address::AccountAddress,
@@ -60,10 +63,12 @@ impl Into<SignedTransaction> for &VerifiedTxn {
             u64::MAX,
             self.chain_id,
         );
-        let mut r =
-            SignedTransaction::new(raw_txn, GLOBAL_PUBLIC_KEY.clone(), GLOBAL_SIGNATURE.clone());
-        r.set_committed_hash(self.committed_hash);
-        r
+        SignedTransaction::new_with_committed_hash(
+            raw_txn,
+            GLOBAL_PUBLIC_KEY.clone(),
+            GLOBAL_SIGNATURE.clone(),
+            self.committed_hash,
+        )
     }
 }
 

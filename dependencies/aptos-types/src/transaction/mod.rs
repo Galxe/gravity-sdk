@@ -594,8 +594,21 @@ impl SignedTransaction {
         }
     }
 
-    pub fn set_committed_hash(&mut self, hash: HashValue) {
-        self.committed_hash.set(hash).unwrap_or_else(|e| { panic!("Failed to set hash"); })
+    pub fn new_with_committed_hash(
+        raw_txn: RawTransaction,
+        public_key: Ed25519PublicKey,
+        signature: Ed25519Signature,
+        hash: HashValue,
+    ) -> SignedTransaction {
+        let authenticator = TransactionAuthenticator::ed25519(public_key, signature);
+        SignedTransaction {
+            raw_txn,
+            authenticator,
+            raw_txn_size: OnceCell::new(),
+            authenticator_size: OnceCell::new(),
+            committed_hash: hash.into(),
+            g_ext: Default::default(),
+        }
     }
 
     pub fn new_with_gtxn(
