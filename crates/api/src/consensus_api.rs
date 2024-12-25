@@ -129,7 +129,7 @@ impl ConsensusEngine {
                 && !node_config.https_key_pem_path.to_str().unwrap().is_empty() {
             let args = HttpsServerArgs {
                 address: node_config.https_server_address,
-                execution_api: Some(execution_layer.execution_api.clone()),
+                execution_api: execution_layer.execution_api.clone(),
                 cert_pem: node_config.https_cert_pem_path,
                 key_pem: node_config.https_key_pem_path,
             };

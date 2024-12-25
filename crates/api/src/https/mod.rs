@@ -20,7 +20,7 @@ use tx::{get_tx_by_hash, submit_tx, TxRequest};
 
 pub struct HttpsServerArgs {
     pub address: String,
-    pub execution_api: Option<Arc<dyn ExecutionApiV2>>,
+    pub execution_api: Arc<dyn ExecutionApiV2>,
     pub cert_pem: PathBuf,
     pub key_pem: PathBuf,
 }
@@ -70,10 +70,11 @@ pub async fn https_server(args: HttpsServerArgs) {
 
 #[cfg(test)]
 mod test {
+    use api_types::mock_execution_layer::MockExecutionApi;
     use fail::fail_point;
     use rcgen::generate_simple_self_signed;
     use reqwest::ClientBuilder;
-    use std::{collections::HashMap, fs, path::PathBuf, thread::sleep};
+    use std::{collections::HashMap, fs, path::PathBuf, sync::Arc, thread::sleep};
 
     use crate::https::tx::TxResponse;
 
@@ -101,7 +102,7 @@ mod test {
 
         let args = HttpsServerArgs {
             address: "127.0.0.1:5425".to_owned(),
-            execution_api: None,
+            execution_api: Arc::new(MockExecutionApi {}),
             cert_pem: PathBuf::from(dir.clone() + "/src/https/test/cert.pem"),
             key_pem: PathBuf::from(dir.clone() + "/src/https/test/key.pem"),
         };
