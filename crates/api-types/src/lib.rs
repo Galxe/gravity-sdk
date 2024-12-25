@@ -1,13 +1,15 @@
 pub mod account;
-pub mod u256_define;
-pub mod mock_execution_layer;
 pub mod default_recover;
+pub mod mock_execution_layer;
 pub mod simple_hash;
-use std::{fmt::{Debug, Display}, sync::Arc};
-use core::str;
+pub mod u256_define;
 use crate::account::{ExternalAccountAddress, ExternalChainId};
 use async_trait::async_trait;
+use core::str;
+use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
+use std::hash::Hash;
+use std::{fmt::Debug, hash::Hasher, sync::Arc};
 use u256_define::{BlockId, ComputeRes, TxnHash};
 
 #[async_trait]
@@ -26,7 +28,6 @@ pub struct ExecutionBlocks {
     pub latest_ts: u64,
     pub blocks: Vec<Vec<u8>>,
 }
-
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub struct ExternalPayloadAttr {
@@ -66,7 +67,13 @@ pub struct VerifiedTxnWithAccountSeqNum {
 
 #[async_trait]
 pub trait ExecutionApiV2: Send + Sync {
-    async fn add_txn(&self, bytes: ExecTxn) -> Result<(), ExecError>;
+    ///
+    /// # Returns
+    /// A `Vec` containing tuples, where each tuple consists of:
+    /// - `TxnHash`: The committed hash for the newly added txn(不论是raw还是verifiedtxn都应该重新计算一次,广播过来的verified txn也应该计算一次——aptos是这样).
+    /// - `sender_latest_committed_sequence_number`: The latest committed sequence number associated with the sender on the execution layer.
+    ///
+    async fn add_txn(&self, bytes: ExecTxn) -> Result<TxnHash, ExecError>;
 
     async fn recv_unbroadcasted_txn(&self) -> Result<Vec<VerifiedTxn>, ExecError>;
 
@@ -132,13 +139,23 @@ pub struct ExecutionLayer {
     pub recovery_api: Arc<dyn RecoveryApi>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Hash)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VerifiedTxn {
     pub bytes: Vec<u8>,
     pub sender: ExternalAccountAddress,
     pub sequence_number: u64,
     pub chain_id: ExternalChainId,
-    pub committed_hash: TxnHash,
+    #[serde(skip)]
+    pub committed_hash: OnceCell<TxnHash>,
+}
+
+impl Hash for VerifiedTxn {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.bytes.hash(state);
+        self.sender.hash(state);
+        self.sequence_number.hash(state);
+        self.chain_id.hash(state);
+    }
 }
 
 impl VerifiedTxn {
@@ -149,7 +166,7 @@ impl VerifiedTxn {
         chain_id: ExternalChainId,
         committed_hash: TxnHash,
     ) -> Self {
-        Self { bytes, sender, sequence_number, chain_id, committed_hash }
+        Self { bytes, sender, sequence_number, chain_id, committed_hash: committed_hash.into() }
     }
 
     pub fn bytes(&self) -> &Vec<u8> {
@@ -165,17 +182,10 @@ impl VerifiedTxn {
     }
 
     pub fn committed_hash(&self) -> [u8; 32] {
-        self.committed_hash.bytes()
-    }
-}
-
-#[derive(Debug)]
-pub enum GCEIError {
-    ConsensusError,
-}
-
-impl Display for GCEIError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Consensus Error")
+        self.committed_hash
+            .get_or_init(|| {
+                u256_define::TxnHash::new(simple_hash::hash_to_fixed_array(self.bytes()))
+            })
+            .bytes()
     }
 }

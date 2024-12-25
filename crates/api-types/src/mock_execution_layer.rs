@@ -4,14 +4,14 @@ use async_trait::async_trait;
 
 use rand::Rng;
 
-use crate::{default_recover::DefaultRecovery, u256_define::{BlockId, ComputeRes}, ExecError, ExecTxn, ExecutionApiV2, ExecutionLayer, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
+use crate::{default_recover::DefaultRecovery, u256_define::{BlockId, ComputeRes, TxnHash}, ExecError, ExecTxn, ExecutionApiV2, ExecutionLayer, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 
 pub struct MockExecutionApi {}
 
 #[async_trait]
 impl ExecutionApiV2 for MockExecutionApi {
-    async fn add_txn(&self, bytes: ExecTxn) -> Result<(), ExecError> {
-        Ok(())
+    async fn add_txn(&self, bytes: ExecTxn) -> Result<TxnHash, ExecError> {
+        Ok(TxnHash::random())
     }
 
     async fn recv_unbroadcasted_txn(&self) -> Result<Vec<VerifiedTxn>, ExecError> {

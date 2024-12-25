@@ -3,6 +3,7 @@ pub mod queue;
 use std::sync::Arc;
 
 use crate::reth_cli::RethCli;
+use api_types::u256_define::TxnHash;
 use api_types::{
     u256_define::BlockId, u256_define::ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExternalBlock, ExternalBlockMeta,
     ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
@@ -67,7 +68,7 @@ impl RethCoordinator {
 
 #[async_trait]
 impl ExecutionApiV2 for RethCoordinator {
-    async fn add_txn(&self, _bytes: ExecTxn) -> Result<(), ExecError> {
+    async fn add_txn(&self, _bytes: ExecTxn) -> Result<TxnHash, ExecError> {
         panic!("Reth Coordinator does not support add_txn");
     }
 

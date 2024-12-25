@@ -22,6 +22,13 @@ macro_rules! define_u256 {
                 Self(b)
             }
 
+            pub fn random() -> Self {
+                use rand::Rng;
+                let mut rng = rand::thread_rng();
+                let random_bytes: [u8; 32] = rng.gen();
+                Self(random_bytes)
+            }
+
             pub fn new(res: [u8; 32]) -> Self {
                 Self(res)
             }

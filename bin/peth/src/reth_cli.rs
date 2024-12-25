@@ -290,7 +290,7 @@ impl RethCli {
                                 sender: covert_account(txn.from.unwrap()),
                                 sequence_number: txn.nonce.as_u64(),
                                 chain_id: ExternalChainId::new(0),
-                                committed_hash,
+                                committed_hash: committed_hash.into(),
                             },
                             account_seq_num: accout_nonce.as_u64(),
                         };

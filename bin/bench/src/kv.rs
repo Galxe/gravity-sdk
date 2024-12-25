@@ -1,6 +1,7 @@
 use crate::should_produce_txn;
 use crate::stateful_mempool::Mempool;
 use crate::txn::RawTxn;
+use api_types::u256_define::TxnHash;
 use api_types::{
     u256_define::BlockId, u256_define::ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum
 };
@@ -86,12 +87,12 @@ impl KvStore {
 
 #[async_trait]
 impl ExecutionApiV2 for KvStore {
-    async fn add_txn(&self, txn: ExecTxn) -> Result<(), ExecError> {
+    async fn add_txn(&self, txn: ExecTxn) -> Result<TxnHash, ExecError> {
         match txn {
             ExecTxn::RawTxn(bytes) => self.mempool.add_raw_txn(bytes).await,
             ExecTxn::VerifiedTxn(verified_txn) => self.mempool.add_verified_txn(verified_txn).await,
         }
-        Ok(())
+        Ok(TxnHash::random())
     }
 
     async fn recv_unbroadcasted_txn(&self) -> Result<Vec<VerifiedTxn>, ExecError> {

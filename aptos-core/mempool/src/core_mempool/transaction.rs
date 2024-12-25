@@ -129,13 +129,13 @@ impl From<api_types::VerifiedTxn> for VerifiedTxn {
 
 impl From<VerifiedTxn> for api_types::VerifiedTxn {
     fn from(value: VerifiedTxn) -> Self {
-        api_types::VerifiedTxn {
-            bytes: value.bytes,
-            sender: ExternalAccountAddress::new(value.sender.into_bytes()),
-            sequence_number: value.sequence_number,
-            chain_id: ExternalChainId::new(value.chain_id.into()),
-            committed_hash: TxnHash::new(*value.committed_hash),
-        }
+        api_types::VerifiedTxn::new(
+            value.bytes,
+            ExternalAccountAddress::new(value.sender.into_bytes()),
+            value.sequence_number,
+            ExternalChainId::new(value.chain_id.into()),
+            TxnHash::new(*value.committed_hash),
+        )
     }
 }
 

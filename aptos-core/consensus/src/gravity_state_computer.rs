@@ -15,7 +15,9 @@ use crate::{
 use anyhow::Result;
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
 use api_types::u256_define::TxnHash;
-use api_types::{u256_define::BlockId, ConsensusApi, ExecutionLayer, ExternalBlock, ExternalBlockMeta};
+use api_types::{
+    u256_define::BlockId, ConsensusApi, ExecutionLayer, ExternalBlock, ExternalBlockMeta,
+};
 use aptos_consensus_types::{block::Block, pipelined_block::PipelinedBlock};
 use aptos_crypto::HashValue;
 use aptos_executor::block_executor::BlockExecutor;
@@ -29,11 +31,11 @@ use aptos_types::{
     block_executor::config::BlockExecutorConfigFromOnchain, epoch_state::EpochState,
     ledger_info::LedgerInfoWithSignatures, randomness::Randomness,
 };
+use coex_bridge::{get_coex_bridge, Func};
 use futures_channel::oneshot;
 use once_cell::sync::OnceCell;
 use std::time::Duration;
 use std::{boxed::Box, sync::Arc};
-use coex_bridge::{get_coex_bridge, Func};
 
 pub struct ConsensusAdapterArgs {
     pub quorum_store_client: Option<Arc<QuorumStoreClient>>,
@@ -134,12 +136,14 @@ impl StateComputer for GravityExecutionProxy {
             txns.iter().map(|txn| Into::<VerifiedTxn>::into(&txn.clone())).collect();
         let real_txns = vtxns
             .into_iter()
-            .map(|txn| api_types::VerifiedTxn {
-                bytes: txn.bytes().to_vec(),
-                sender: ExternalAccountAddress::new(txn.sender().into_bytes()),
-                sequence_number: txn.sequence_number(),
-                chain_id: ExternalChainId::new(txn.chain_id().id()),
-                committed_hash: TxnHash::from_bytes(&txn.get_hash().to_vec()),
+            .map(|txn| {
+                api_types::VerifiedTxn::new(
+                    txn.bytes().to_vec(),
+                    ExternalAccountAddress::new(txn.sender().into_bytes()),
+                    txn.sequence_number(),
+                    ExternalChainId::new(txn.chain_id().id()),
+                    TxnHash::from_bytes(&txn.get_hash().to_vec()),
+                )
             })
             .collect();
         let external_block = ExternalBlock { block_meta: meta_data.clone(), txns: real_txns };
@@ -148,12 +152,13 @@ impl StateComputer for GravityExecutionProxy {
             .expect("ConsensusEngine")
             .send_ordered_block(*parent_block_id, external_block)
             .await;
-        
+
         let engine = Some(self.consensus_engine.clone());
         let round = block.round();
         Box::pin(async move {
             let result = StateComputeResult::with_root_hash(HashValue::new(
-                engine.expect("No consensus api")
+                engine
+                    .expect("No consensus api")
                     .get()
                     .expect("consensus engine")
                     .recv_executed_block_hash(meta_data)
