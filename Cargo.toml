@@ -54,6 +54,7 @@ members = [
     "dependencies/move-core-types",
     "dependencies/aptos-telemetry",
     "dependencies/aptos-telemetry-service",
+    "dependencies/node-resource-metrics",
     "crates/api",
     "crates/api-types",
     "bin/kvstore",
@@ -107,6 +108,7 @@ aptos-runtimes = { path = "./dependencies/aptos-runtimes" }
 aptos-schemadb = { path = "./dependencies/aptos-schemadb", features = [
     "fuzzing",
 ] }
+aptos-node-resource-metrics = { path = "./dependencies/node-resource-metrics" }
 api = { path = "./crates/api" }
 api-types = { path = "./crates/api-types" }
 aptos-secure-net = { path = "./dependencies/aptos-secure-net" }
