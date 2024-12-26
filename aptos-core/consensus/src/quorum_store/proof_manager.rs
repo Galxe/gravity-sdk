@@ -23,7 +23,7 @@ use rand::{seq::SliceRandom, thread_rng};
 use std::{
     cmp::min,
     collections::{BTreeMap, HashMap, HashSet},
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 use coex_bridge::get_coex_bridge;
@@ -188,6 +188,10 @@ impl ProofManager {
         block_timestamp: u64,
         batches: Vec<BatchInfo>,
     ) {
+        info!(
+            "QS: got clean request from execution at block timestamp {}",
+            block_timestamp
+        );
         trace!(
             "QS: got clean request from execution at block timestamp {}",
             block_timestamp

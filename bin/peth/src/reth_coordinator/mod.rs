@@ -1,5 +1,5 @@
-pub mod state;
 pub mod queue;
+pub mod state;
 use std::sync::Arc;
 
 use crate::reth_cli::RethCli;
@@ -102,17 +102,21 @@ impl ExecutionApiV2 for RethCoordinator {
     async fn send_ordered_block(
         &self,
         parent_id: BlockId,
-        ordered_block: ExternalBlock,
+        mut ordered_block: ExternalBlock,
     ) -> Result<(), ExecError> {
         info!("send_ordered_block with parent_id: {:?}", parent_id);
         self.queue.send_exec(ordered_block.block_meta.block_id).await;
-        let state = self.state.lock().await;
-        let parent_hash = state
-        .get_block_hash(parent_id.clone());
+        let mut state = self.state.lock().await;
+        let parent_hash = state.get_block_hash(parent_id.clone());
         if parent_hash.is_none() {
             panic!("parent block not found {}", parent_id);
         }
         let parent_hash = parent_hash.unwrap();
+        ordered_block.txns = ordered_block
+            .txns
+            .into_iter()
+            .filter(|txn| state.update_account_seq_num(txn))
+            .collect();
         let payload_id = self.reth_cli.push_ordered_block(ordered_block, parent_hash).await;
         self.pending_payload_id.send(payload_id.clone().unwrap()).await;
         self.commit_buffer.send((payload_id.unwrap(), parent_hash)).await;
@@ -136,10 +140,10 @@ impl ExecutionApiV2 for RethCoordinator {
 
     async fn commit_block(&self, block_id: BlockId) -> Result<(), ExecError> {
         info!("commit_block with block_id: {:?}", block_id);
-        self.queue.recv_commit().await;
         let (payload_id, parent_hash) = self.commit_buffer.recv().await;
         let block_hash = self.state.lock().await.get_block_hash(block_id).unwrap();
         self.reth_cli.commit_block(parent_hash, payload_id, block_hash.into()).await.unwrap();
+        self.queue.recv_commit().await;
         Ok(())
     }
 }

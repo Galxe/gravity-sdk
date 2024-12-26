@@ -1,6 +1,4 @@
-
 use consensus::aptos::AptosConsensus;
-use consensus::mock::MockConsensus;
 use reth::rpc::builder::auth::AuthServerHandle;
 use reth_cli_util;
 use reth_coordinator::RethCoordinator;
@@ -31,13 +29,13 @@ pub struct EngineArgs {
 }
 
 use crate::reth_cli::RethCli;
+use api::check_bootstrap_config;
 use clap::Parser;
 use reth_node_builder::engine_tree_config;
 use reth_node_builder::EngineNodeLauncher;
 use reth_node_core::args::utils::DefaultChainSpecParser;
 use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
 use reth_provider::providers::BlockchainProvider2;
-use api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
 
 fn run_reth(tx: mpsc::Sender<AuthServerHandle>, cli: Cli<DefaultChainSpecParser, EngineArgs>) {
     reth_cli_util::sigsegv_handler::install();
@@ -74,7 +72,6 @@ fn run_reth(tx: mpsc::Sender<AuthServerHandle>, cli: Cli<DefaultChainSpecParser,
     }
 }
 
-
 fn main() {
     // 创建tokio通道
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
@@ -86,7 +83,7 @@ fn main() {
         0xea, 0x6e, 0x53, 0x06, 0x04, 0xeb, 0x3a, 0x76, 0xae, 0xbd, 0x9a, 0x6c, 0xd6, 0x45, 0xa6,
         0xe7, 0x7e,
     ];
-    
+
     // 启动consensus线程
     thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -107,7 +104,6 @@ fn main() {
                 // block until the runtime is shutdown
                 tokio::signal::ctrl_c().await.unwrap();
             }
-
         });
     });
 

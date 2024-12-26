@@ -275,7 +275,7 @@ impl StateComputer for ExecutionProxy {
             .send((Box::new(wrapped_callback), txns, subscribable_txn_events))
             .await
             .expect("Failed to send async state sync notification");
-
+        // tokio::time::sleep(Duration::from_millis(1)).await;
         *latest_logical_time = logical_time;
         payload_manager.notify_commit(block_timestamp, payloads);
         Ok(())

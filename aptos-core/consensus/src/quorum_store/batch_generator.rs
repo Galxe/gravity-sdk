@@ -300,6 +300,10 @@ impl BatchGenerator {
         match removed {
             Some(batch_in_progress) => {
                 for txn in batch_in_progress.txns {
+                    info!(
+                        "QS: removing txn from txns_in_progress_sorted: {:?}",
+                        txn
+                    );
                     if let Entry::Occupied(mut o) = self.txns_in_progress_sorted.entry(txn) {
                         let info = o.get_mut();
                         if info.decrement() == 0 {
