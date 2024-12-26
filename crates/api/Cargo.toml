@@ -13,6 +13,7 @@ rust-version.workspace = true
 aptos-build-info = { workspace = true }
 aptos-consensus = { workspace = true }
 aptos-consensus-types = { workspace = true }
+aptos-crash-handler = { workspace = true }
 aptos-executor-types = { workspace = true, features = ["fuzzing"] }
 aptos-config = { workspace = true }
 aptos-crypto = { workspace = true }

@@ -11,7 +11,7 @@ use aptos_config::{config::NodeConfig, network_id::NetworkId};
 use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
 use aptos_consensus::consensusdb::ConsensusDB;
 use aptos_event_notifications::EventNotificationSender;
-use aptos_logger::info;
+use aptos_logger::{info, warn};
 use aptos_network_builder::builder::NetworkBuilder;
 use aptos_storage_interface::DbReaderWriter;
 use async_trait::async_trait;
@@ -26,6 +26,27 @@ pub struct ConsensusEngine {
     runtime_vec: Vec<Runtime>,
 }
 
+fn fail_point_check(node_config: &NodeConfig) {
+    // Ensure failpoints are configured correctly
+    if fail::has_failpoints() {
+        warn!("Failpoints are enabled!");
+
+        // Set all of the failpoints
+        if let Some(failpoints) = &node_config.failpoints {
+            for (point, actions) in failpoints {
+                fail::cfg(point, actions).unwrap_or_else(|_| {
+                    panic!(
+                        "Failed to set actions for failpoint! Failpoint: {:?}, Actions: {:?}",
+                        point, actions
+                    )
+                });
+            }
+        }
+    } else if node_config.failpoints.is_some() {
+        warn!("Failpoints is set in the node config, but the binary didn't compile with this feature!");
+    }
+}
+
 
 impl ConsensusEngine {
     pub fn init(
@@ -33,6 +54,11 @@ impl ConsensusEngine {
         execution_layer: ExecutionLayer,
         chain_id: u64,
     ) -> Arc<Self> {
+        // Setup panic handler
+        aptos_crash_handler::setup_panic_handler();
+
+        fail_point_check(&node_config);
+
         let consensus_db =
             Arc::new(ConsensusDB::new(node_config.storage.dir(), &node_config.node_config_path));
         let peers_and_metadata = init_peers_and_metadata(&node_config, &consensus_db);

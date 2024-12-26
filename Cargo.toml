@@ -11,6 +11,7 @@ resolver = "2"
 [workspace]
 members = [
     "aptos-core/consensus",
+    "dependencies/crash-handler",
     "dependencies/aptos-bitvec",
     "dependencies/aptos-build-info",
     "dependencies/aptos-bounded-executor",
@@ -73,6 +74,7 @@ aptos-id-generator = { path = "./dependencies/aptos-id-generator" }
 aptos-compression = { path = "./dependencies/aptos-compression" }
 aptos-proptest-helpers = { path = "./dependencies/aptos-proptest-helpers" }
 aptos-bitvec = { path = "./dependencies/aptos-bitvec", features = ["fuzzing"] }
+aptos-crash-handler = { path = "./dependencies/crash-handler" }
 aptos-bounded-executor = { path = "./dependencies/aptos-bounded-executor" }
 aptos-cached-packages = { path = "./dependencies/aptos-cached-packages" }
 aptos-channels = { path = "./dependencies/aptos-channels" }
