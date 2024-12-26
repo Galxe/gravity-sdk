@@ -1,6 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+use aptos_build_info::build_information;
 use futures::channel::mpsc::Receiver;
 use aptos_config::config::NodeConfig;
 use aptos_logger::{
@@ -57,45 +58,45 @@ pub fn create_logger(
     let logger_filter_updater: LoggerFilterUpdater = LoggerFilterUpdater::new(logger, logger_builder);
 
     // Log the build information and the config
-    // log_config_and_build_information(node_config);
+    log_config_and_build_information(node_config);
 
     (remote_log_receiver, logger_filter_updater)
 }
 
-// /// Logs the node config and build information
-// fn log_config_and_build_information(node_config: &NodeConfig) {
-//     // Log the build information
-//     info!("Build information:");
-//     let build_info = build_information!();
-//     for (key, value) in build_info {
-//         info!("{}: {}", key, value);
-//     }
+/// Logs the node config and build information
+fn log_config_and_build_information(node_config: &NodeConfig) {
+    // Log the build information
+    info!("Build information:");
+    let build_info = build_information!();
+    for (key, value) in build_info {
+        info!("{}: {}", key, value);
+    }
 
-//     // Log the feature information. Note: this should be kept up-to-date
-//     // with the features defined in the aptos-node Cargo.toml file.
-//     info!("Feature information:");
-//     log_feature_info!(
-//         "assert-private-keys-not-cloneable",
-//         "check-vm-features",
-//         "consensus-only-perf-test",
-//         "default",
-//         "failpoints",
-//         "indexer",
-//         "tokio-console"
-//     );
+    // Log the feature information. Note: this should be kept up-to-date
+    // with the features defined in the aptos-node Cargo.toml file.
+    info!("Feature information:");
+    log_feature_info!(
+        // "assert-private-keys-not-cloneable",
+        // "check-vm-features",
+        // "consensus-only-perf-test",
+        "default",
+        "failpoints"
+        // "indexer",
+        // "tokio-console"
+    );
 
-//     // Log the node config
-//     let mut config = node_config;
-//     let mut masked_config;
-//     if let Some(u) = &node_config.indexer.postgres_uri {
-//         let mut parsed_url = url::Url::parse(u).expect("Invalid postgres uri");
-//         if parsed_url.password().is_some() {
-//             masked_config = node_config.clone();
-//             parsed_url.set_password(Some("*")).unwrap();
-//             masked_config.indexer.postgres_uri = Some(parsed_url.to_string());
-//             config = &masked_config;
-//         }
-//     }
+    // Log the node config
+    // let mut config = node_config;
+    // let mut masked_config;
+    // if let Some(u) = &node_config.indexer.postgres_uri {
+    //     let mut parsed_url = url::Url::parse(u).expect("Invalid postgres uri");
+    //     if parsed_url.password().is_some() {
+    //         masked_config = node_config.clone();
+    //         parsed_url.set_password(Some("*")).unwrap();
+    //         masked_config.indexer.postgres_uri = Some(parsed_url.to_string());
+    //         config = &masked_config;
+    //     }
+    // }
 
-//     info!("Loaded node config: {:?}", config);
-// }
+    info!("Loaded node config: {:?}", node_config);
+}
