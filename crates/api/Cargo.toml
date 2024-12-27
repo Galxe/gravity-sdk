@@ -32,6 +32,7 @@ aptos-channels = { workspace = true }
 aptos-peer-monitoring-service-types = { workspace = true }
 aptos-secure-storage = { workspace = true }
 aptos-consensus-notifications = { workspace = true }
+aptos-telemetry = { workspace = true }
 aptos-time-service = { workspace = true }
 aptos-infallible = { workspace = true }
 aptos-inspection-service = { workspace = true }
