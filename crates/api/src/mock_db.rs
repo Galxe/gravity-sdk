@@ -67,10 +67,7 @@ fn load_file(path: &Path) -> GravityNodeConfigSet {
 impl MockStorage {
     pub fn new(path: &Path) -> Self {
         let config_set = load_file(path);
-        Self {
-            node_config_set: config_set,
-            inner: Inner(Arc::new(Mutex::new(HashMap::new()))),
-        }
+        Self { node_config_set: config_set, inner: Inner(Arc::new(Mutex::new(HashMap::new()))) }
     }
 
     pub fn mock_validators(&self) -> Vec<ValidatorInfo> {
@@ -93,6 +90,20 @@ impl MockStorage {
         }
         result
     }
+}
+
+// TODO(gravity_byteyue): this is a temporary solution to enable quorum store
+// We should get the value from the storage instead of using env variable
+fn enable_quorum_store() -> bool {
+    std::env::var("ENABLE_QUORUM_STORE")
+        .map(|s| s.parse().unwrap())
+        .unwrap_or(true)
+}
+
+fn fixed_proposer() -> bool {
+    std::env::var("FIXED_PROPOSER")
+        .map(|s| s.parse().unwrap())
+        .unwrap_or(true)
 }
 
 impl DbReader for MockStorage {
@@ -162,8 +173,12 @@ impl DbReader for MockStorage {
                                     quorum_store_enabled,
                                 } => {
                                     main.proposer_election_type =
-                                        ProposerElectionType::FixedProposer(1);
-                                    *quorum_store_enabled = false;
+                                        match fixed_proposer()
+                                        {
+                                            true => ProposerElectionType::FixedProposer(1),
+                                            false => ProposerElectionType::RotatingProposer(1),
+                                        };
+                                    *quorum_store_enabled = enable_quorum_store();
                                 }
                                 ConsensusAlgorithmConfig::DAG(_) => {}
                                 ConsensusAlgorithmConfig::JolteonV2 {
@@ -172,8 +187,12 @@ impl DbReader for MockStorage {
                                     order_vote_enabled,
                                 } => {
                                     main.proposer_election_type =
-                                        ProposerElectionType::FixedProposer(1);
-                                    *quorum_store_enabled = false;
+                                        match fixed_proposer()
+                                        {
+                                            true => ProposerElectionType::FixedProposer(1),
+                                            false => ProposerElectionType::RotatingProposer(1),
+                                        };
+                                    *quorum_store_enabled = enable_quorum_store();
                                     *order_vote_enabled = false;
                                 }
                             },
