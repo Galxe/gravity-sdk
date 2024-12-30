@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     hash::Hash,
     mem::size_of,
-    sync::{atomic::AtomicUsize, Arc},
+    sync::{atomic::{AtomicU8, AtomicUsize}, Arc},
     time::SystemTime,
 };
 
@@ -144,6 +144,23 @@ impl From<VerifiedTxn> for api_types::VerifiedTxn {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct TxnStatus(Arc<AtomicU8>);
+
+impl TxnStatus {
+    pub fn pending() -> Self {
+        Self(Arc::new(AtomicU8::new(0)))
+    }
+
+    pub fn set_processing(&self) {
+        self.0.store(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn is_processing(&self) -> bool {
+        self.0.load(std::sync::atomic::Ordering::Relaxed) == 1
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct MempoolTransaction {
     verified_txn: SignedTransaction,
@@ -152,6 +169,7 @@ pub struct MempoolTransaction {
     ranking_score: u64,
     priority_of_sender: Option<BroadcastPeerPriority>,
     sequence_info: SequenceInfo,
+    status: TxnStatus,
 }
 
 impl MempoolTransaction {
@@ -174,11 +192,20 @@ impl MempoolTransaction {
                 transaction_sequence_number: txn_sequence_number,
                 account_sequence_number,
             },
+            status: TxnStatus::pending(),
         }
     }
 
     pub fn account_sequence_number(&self) -> u64 {
         self.sequence_info.account_sequence_number
+    }
+
+    pub fn is_processing(&self) -> bool {
+        self.status.is_processing()
+    }
+
+    pub fn set_processing(&self) {
+        self.status.set_processing();
     }
 
     pub(crate) fn priority_of_sender(&self) -> &Option<BroadcastPeerPriority> {
