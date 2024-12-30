@@ -357,6 +357,7 @@ impl RoundManager {
             .proposer_election
             .is_valid_proposer(self.proposal_generator.author(), new_round_event.round)
         {
+            info!("valid proposer, round {:?}, author: {}", new_round_event.round, self.proposal_generator.author());
             let epoch_state = self.epoch_state.clone();
             let network = self.network.clone();
             let sync_info = self.block_store.sync_info();
