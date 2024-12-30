@@ -296,12 +296,10 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .collect::<Vec<_>>();
         match &onchain_config.proposer_election_type() {
             ProposerElectionType::RotatingProposer(contiguous_rounds) => {
-                info!("rotating proposer");
                 Arc::new(RotatingProposer::new(proposers, *contiguous_rounds))
             },
             // We don't really have a fixed proposer!
             ProposerElectionType::FixedProposer(contiguous_rounds) => {
-                info!("fixed proposer");
                 let proposer = choose_leader(proposers);
                 Arc::new(RotatingProposer::new(vec![proposer], *contiguous_rounds))
             },
