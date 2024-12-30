@@ -53,8 +53,8 @@ static TELEMETRY_TOKEN: Lazy<String> = Lazy::new(|| {
 
 /// Returns true iff telemetry is disabled
 #[inline]
-pub fn telemetry_is_disabled() -> bool {
-    env::var(ENV_APTOS_DISABLE_TELEMETRY).is_ok()
+pub fn telemetry_is_enabled() -> bool {
+    env::var(ENV_APTOS_ENABLE_TELEMETRY).is_ok()
 }
 
 /// Flag to force enabling/disabling of telemetry
@@ -67,7 +67,7 @@ fn force_enable_telemetry() -> bool {
 #[inline]
 fn enable_prometheus_push_metrics() -> bool {
     force_enable_telemetry()
-        || !(telemetry_is_disabled() || env::var(ENV_APTOS_DISABLE_TELEMETRY_PUSH_METRICS).is_ok())
+        || !(!telemetry_is_enabled() || env::var(ENV_APTOS_DISABLE_TELEMETRY_PUSH_METRICS).is_ok())
 }
 
 #[inline]
@@ -79,20 +79,20 @@ fn enable_prometheus_node_metrics() -> bool {
 #[inline]
 fn enable_push_logs() -> bool {
     force_enable_telemetry()
-        || !(telemetry_is_disabled() || env::var(ENV_APTOS_DISABLE_TELEMETRY_PUSH_LOGS).is_ok())
+        || !(!telemetry_is_enabled() || env::var(ENV_APTOS_DISABLE_TELEMETRY_PUSH_LOGS).is_ok())
 }
 
 /// Flag to control enabling/disabling telemetry push events
 #[inline]
 fn enable_push_custom_events() -> bool {
     force_enable_telemetry()
-        || !(telemetry_is_disabled() || env::var(ENV_APTOS_DISABLE_TELEMETRY_PUSH_EVENTS).is_ok())
+        || !(!telemetry_is_enabled() || env::var(ENV_APTOS_DISABLE_TELEMETRY_PUSH_EVENTS).is_ok())
 }
 
 #[inline]
 fn enable_log_env_polling() -> bool {
     force_enable_telemetry()
-        || !(telemetry_is_disabled() || env::var(ENV_APTOS_DISABLE_LOG_ENV_POLLING).is_ok())
+        || !(!telemetry_is_enabled() || env::var(ENV_APTOS_DISABLE_LOG_ENV_POLLING).is_ok())
 }
 
 /// Starts the telemetry service and returns the execution runtime.
@@ -109,7 +109,7 @@ pub fn start_telemetry_service(
     }
 
     // Don't start the service if telemetry has been disabled
-    if telemetry_is_disabled() {
+    if !telemetry_is_enabled() {
         warn!("Aptos telemetry is disabled!");
         return None;
     }

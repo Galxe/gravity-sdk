@@ -4,7 +4,7 @@
 /// A collection of constants and default values for configuring telemetry components
 
 // Environment variables
-pub(crate) const ENV_APTOS_DISABLE_TELEMETRY: &str = "APTOS_DISABLE_TELEMETRY";
+pub(crate) const ENV_APTOS_ENABLE_TELEMETRY: &str = "APTOS_ENABLE_TELEMETRY";
 pub(crate) const ENV_APTOS_FORCE_ENABLE_TELEMETRY: &str = "APTOS_FORCE_ENABLE_TELEMETRY";
 pub(crate) const ENV_APTOS_DISABLE_TELEMETRY_PUSH_METRICS: &str =
     "APTOS_DISABLE_TELEMETRY_PUSH_METRICS";
