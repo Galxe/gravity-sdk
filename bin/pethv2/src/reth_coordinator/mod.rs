@@ -141,7 +141,7 @@ impl ExecutionApiV2 for RethCoordinator {
         info!("commit_block with block_id: {:?}", block_id);
         let (payload_id, parent_hash) = self.commit_buffer.recv().await;
         let block_hash = self.state.lock().await.get_block_hash(block_id).unwrap();
-        self.reth_cli.commit_block(parent_hash, payload_id, block_hash.into()).await.unwrap();
+        self.reth_cli.commit_block(block_id, block_hash.into()).await.unwrap();
         self.queue.recv_commit().await;
         Ok(())
     }

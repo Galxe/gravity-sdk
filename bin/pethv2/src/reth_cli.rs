@@ -10,7 +10,7 @@ use jsonrpsee::http_client::HttpClient;
 use reth::rpc::builder::auth::AuthServerHandle;
 use reth_ethereum_engine_primitives::{EthEngineTypes, EthPayloadAttributes};
 use reth_payload_builder::PayloadId;
-use reth_pipe_exec_layer_ext_v2::{OrderedBlock, PipeExecLayerApi};
+use reth_pipe_exec_layer_ext_v2::{ExecutedBlockMeta, OrderedBlock, PipeExecLayerApi};
 use reth_primitives::{Bytes, Signature, TransactionSigned, TxKind, U256};
 use reth_rpc_api::{EngineApiClient, EngineEthApiClient};
 use reth_rpc_layer::AuthClientService;
@@ -169,47 +169,29 @@ impl RethCli {
     pub async fn push_ordered_block(
         &self,
         block: ExternalBlock,
-        parent_hash: B256,
+        parent_id: B256,
     ) -> Result<PayloadId, String> {
-        // let pipe_api = self.pipe_api.lock().await;
-        // let payload_attr =
-        //     Self::create_payload_attributes(parent_hash.into(), block.block_meta.usecs / 1000000);
-        // let fcu_state = ForkchoiceState {
-        //     head_block_hash: parent_hash.into(),
-        //     safe_block_hash: parent_hash.into(),
-        //     finalized_block_hash: parent_hash.into(),
-        // };
-        // let engine_api = self.auth.http_client();
-        // let mut senders = vec![];
-        // let mut transactions = vec![];
-        // for (sender, txn) in
-        //     block.txns.iter().map(|txn| Self::txn_to_signed(&txn.bytes, self.chain_id))
-        // {
-        //     senders.push(sender);
-        //     transactions.push(txn);
-        // }
-        // pipe_api.push_ordered_block(OrderedBlock {
-        //     block_id: Self::block_id_to_b256(block.block_meta.block_id),
-        //     parent_hash: parent_hash.into(),
-        //     transactions,
-        //     senders,
-        // });
-        // let res = <HttpClient<AuthClientService<HttpBackend>> as EngineApiClient<EthEngineTypes>>::fork_choice_updated_v3(
-        //     &engine_api,
-        //     fcu_state, 
-        //     Some(payload_attr)
-        // ).await;
-        // match res {
-        //     Ok(res) => {
-        //         let payload_id = res.payload_id;
-        //         match payload_id {
-        //             Some(payload_id) => Ok(payload_id),
-        //             None => Err("Payload id not found".to_string()),
-        //         }
-        //     }
-        //     Err(_) => Err("Failed to push ordered block".to_string()),
-        // }
-        todo!()
+        let pipe_api = self.pipe_api.lock().await;
+        let mut senders = vec![];
+        let mut transactions = vec![];
+        for (sender, txn) in
+            block.txns.iter().map(|txn| Self::txn_to_signed(&txn.bytes, self.chain_id))
+        {
+            senders.push(sender);
+            transactions.push(txn);
+        }
+        // TODO: make zero make sense
+        pipe_api.push_ordered_block(OrderedBlock {
+            parent_id,
+            id: block.block_meta.block_id.into(),
+            number: block.block_meta.block_number,
+            timestamp: block.block_meta.usecs / 1000000,
+            coinbase: Address::ZERO,
+            prev_randao: B256::ZERO,
+            withdrawals: Some(Vec::new()),
+            transactions: transactions,
+            senders: senders,
+        });
     }
 
     pub async fn process_payload_id(
@@ -217,49 +199,22 @@ impl RethCli {
         block_id: B256,
         payload_id: PayloadId,
     ) -> Result<B256, ()> {
-        // let mut pipe_api = self.pipe_api.lock().await;
-        // let block_hash = pipe_api.pull_executed_block_hash(payload_id, block_id).await.unwrap();
-        // Ok(block_hash)
-        todo!()
+        let mut pipe_api = self.pipe_api.lock().await;
+        let block_hash = pipe_api.pull_executed_block_hash(block_id).await.unwrap();
+        Ok(block_hash)
+
     }
 
     pub async fn commit_block(
         &self,
-        parent_beacon_block_root: B256,
-        payload_id: PayloadId,
+        block_id: B256,
         block_hash: B256,
     ) -> Result<(), String> {
-        // let mut pipe_api = self.pipe_api.lock().await;
-        // pipe_api.ready_to_get_payload(payload_id).await.unwrap();
-        // let engine_api = self.auth.http_client();
-        // let payload = <HttpClient<AuthClientService<HttpBackend>> as EngineApiClient<
-        //     EthEngineTypes,
-        // >>::get_payload_v3(&engine_api, payload_id)
-        // .await
-        // .unwrap();
-        // assert_eq!(payload.execution_payload.payload_inner.payload_inner.block_hash, block_hash);
-        // pipe_api.ready_to_new_payload(block_hash.into()).await.unwrap();
-        // let res = <HttpClient<AuthClientService<HttpBackend>> as EngineApiClient<EthEngineTypes>>::new_payload_v3(
-        //     &engine_api,
-        //     payload.execution_payload,
-        //     vec![],
-        //     parent_beacon_block_root,
-        // ).await;
-        // info!("payload status {:?}", res);
-        // let res = <HttpClient<AuthClientService<HttpBackend>> as EngineApiClient<EthEngineTypes>>::fork_choice_updated_v3(
-        //     &engine_api,
-        //     ForkchoiceState {
-        //         head_block_hash: block_hash.into(),
-        //         safe_block_hash: block_hash.into(),
-        //         finalized_block_hash: block_hash.into(),
-        //     },
-        //     None
-        // ).await;
-        // match res {
-        //     Ok(_) => Ok(()),
-        //     Err(_) => Err("Failed to commit block".to_string()),
-        // }
-        todo!()
+        let pipe_api = self.pipe_api.lock().await;
+        pipe_api.commit_executed_block_hash(ExecutedBlockMeta {
+            block_id,
+            block_hash,
+        });
     }
 
     pub async fn process_pending_transactions(
