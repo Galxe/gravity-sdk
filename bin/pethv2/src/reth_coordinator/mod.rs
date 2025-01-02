@@ -5,8 +5,9 @@ use std::sync::Arc;
 use crate::reth_cli::RethCli;
 use api_types::u256_define::TxnHash;
 use api_types::{
-    u256_define::BlockId, u256_define::ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExternalBlock, ExternalBlockMeta,
-    ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
+    u256_define::BlockId, u256_define::ComputeRes, ExecError, ExecTxn, ExecutionApiV2,
+    ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn,
+    VerifiedTxnWithAccountSeqNum,
 };
 use async_trait::async_trait;
 use reth_payload_builder::PayloadId;
@@ -49,7 +50,7 @@ pub struct RethCoordinator {
 
 impl RethCoordinator {
     pub fn new(reth_cli: RethCli) -> Self {
-        let mut state = State::new();
+        let state = State::new();
         Self {
             queue: queue::Queue::new(1),
             reth_cli,
@@ -103,22 +104,21 @@ impl ExecutionApiV2 for RethCoordinator {
         parent_id: BlockId,
         mut ordered_block: ExternalBlock,
     ) -> Result<(), ExecError> {
-        info!("send_ordered_block with parent_id: {:?}", parent_id);
+        info!(
+            "send_ordered_block with parent_id: {:?} and block num {:?}",
+            parent_id, ordered_block.block_meta.block_number
+        );
         self.queue.send_exec(ordered_block.block_meta.block_id).await;
         let mut state = self.state.lock().await;
-        let parent_hash = state.get_block_hash(parent_id.clone());
-        if parent_hash.is_none() {
-            panic!("parent block not found {}", parent_id);
-        }
-        let parent_hash = parent_hash.unwrap();
         ordered_block.txns = ordered_block
             .txns
             .into_iter()
             .filter(|txn| state.update_account_seq_num(txn))
             .collect();
-        let payload_id = self.reth_cli.push_ordered_block(ordered_block, parent_hash).await;
-        self.pending_payload_id.send(payload_id.clone().unwrap()).await;
-        self.commit_buffer.send((payload_id.unwrap(), parent_hash)).await;
+        self.reth_cli
+            .push_ordered_block(ordered_block, B256::new(parent_id.bytes()))
+            .await
+            .unwrap();
         Ok(())
     }
 
@@ -127,19 +127,14 @@ impl ExecutionApiV2 for RethCoordinator {
         head: ExternalBlockMeta,
     ) -> Result<ComputeRes, ExecError> {
         info!("recv_executed_block_hash with head: {:?}", head);
-        self.queue.recv_exec().await;
-        self.queue.send_commit(head.block_id.clone()).await;
-        let block_id = &head.block_id;
-        let reth_block_id = B256::from_slice(&block_id.0);
-        let payload_id = self.pending_payload_id.recv().await;
-        let block_hash = self.reth_cli.process_payload_id(reth_block_id, payload_id).await;
+        let reth_block_id = B256::from_slice(&head.block_id.0);
+        let block_hash = self.reth_cli.recv_compute_res(reth_block_id).await;
         self.state.lock().await.insert_new_block(head.block_id, block_hash.unwrap().into());
         Ok(ComputeRes::new(block_hash.unwrap().into()))
     }
 
     async fn commit_block(&self, block_id: BlockId) -> Result<(), ExecError> {
         info!("commit_block with block_id: {:?}", block_id);
-        let (payload_id, parent_hash) = self.commit_buffer.recv().await;
         let block_hash = self.state.lock().await.get_block_hash(block_id).unwrap();
         self.reth_cli.commit_block(block_id, block_hash.into()).await.unwrap();
         self.queue.recv_commit().await;

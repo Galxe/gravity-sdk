@@ -1,22 +1,16 @@
 use alloy_eips::BlockHashOrNumber;
-use consensus::aptos::AptosConsensus;
+use consensus::mock::MockConsensus;
 use gravity_storage::block_view_storage::BlockViewStorage;
-use jsonrpsee::core::client;
 use reth::rpc::builder::auth::AuthServerHandle;
 use reth_cli_util;
 use reth_coordinator::RethCoordinator;
 use reth_node_builder;
 use reth_node_core;
 use reth_node_ethereum;
-use reth_primitives::Header;
-use reth_primitives::B256;
 use reth_provider;
 use reth_provider::BlockHashReader;
 use reth_provider::BlockNumReader;
 use reth_provider::BlockReader;
-use reth_provider::StateProviderFactory;
-use revm_primitives::FixedBytes;
-use tokio::net::unix::pipe;
 use tokio::sync::mpsc;
 mod cli;
 mod consensus;
@@ -40,7 +34,6 @@ pub struct EngineArgs {
 }
 
 use crate::reth_cli::RethCli;
-use api::check_bootstrap_config;
 use clap::Parser;
 use reth_node_builder::engine_tree_config;
 use reth_node_builder::EngineNodeLauncher;
@@ -49,10 +42,7 @@ use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
 use reth_provider::providers::BlockchainProvider2;
 
 fn run_reth(
-    tx: mpsc::Sender<(
-        AuthServerHandle,
-        reth_pipe_exec_layer_ext_v2::PipeExecLayerApi,
-    )>,
+    tx: mpsc::Sender<(AuthServerHandle, reth_pipe_exec_layer_ext_v2::PipeExecLayerApi)>,
     cli: Cli<DefaultChainSpecParser, EngineArgs>,
 ) {
     reth_cli_util::sigsegv_handler::install();
@@ -82,10 +72,14 @@ fn run_reth(
                 let engine_cli = handle.node.auth_server_handle().clone();
                 let provider = handle.node.provider;
                 let latest_block_number = provider.last_block_number();
-                let latest_block_hash = provider.block_hash(latest_block_number.clone().unwrap()).unwrap().unwrap();
-                let latest_block =
-                    provider.block(BlockHashOrNumber::Number(latest_block_number.unwrap())).unwrap().unwrap();
-                let storage = BlockViewStorage::new(provider, latest_block.number, latest_block_hash);
+                let latest_block_hash =
+                    provider.block_hash(latest_block_number.clone().unwrap()).unwrap().unwrap();
+                let latest_block = provider
+                    .block(BlockHashOrNumber::Number(latest_block_number.unwrap()))
+                    .unwrap()
+                    .unwrap();
+                let storage =
+                    BlockViewStorage::new(provider, latest_block.number, latest_block_hash);
                 let pipeline_api_v2 = reth_pipe_exec_layer_ext_v2::new_pipe_exec_layer_api(
                     chain_spec,
                     storage,
@@ -107,7 +101,7 @@ fn main() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
 
     let cli = Cli::<DefaultChainSpecParser, EngineArgs>::parse();
-    let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
+    // let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
     let consensus_gensis: [u8; 32] = [
         0x43, 0xbf, 0x83, 0x6b, 0x97, 0x02, 0x74, 0x90, 0x9c, 0xe1, 0x89, 0xef, 0xf8, 0xf4, 0x2e,
         0xea, 0x6e, 0x53, 0x06, 0x04, 0xeb, 0x3a, 0x76, 0xae, 0xbd, 0x9a, 0x6c, 0xd6, 0x45, 0xa6,
@@ -122,13 +116,16 @@ fn main() {
             if let Some((engine_cli, pipe_api)) = rx.recv().await {
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 let client = RethCli::new("/tmp/reth.ipc", engine_cli, pipe_api).await;
+                let genesis = client.get_latest_block_hash().await.unwrap();
                 let coordinator = Arc::new(RethCoordinator::new(client));
                 let cloned = coordinator.clone();
                 info!("created reth_cli with ipc");
                 tokio::spawn(async move {
                     cloned.run().await;
                 });
-                AptosConsensus::init(gcei_config, coordinator);
+                let c = MockConsensus::new(coordinator, genesis);
+                c.run().await;
+                // AptosConsensus::init(gcei_config, coordinator);
                 tokio::signal::ctrl_c().await.unwrap();
             }
         });

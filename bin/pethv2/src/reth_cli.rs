@@ -1,19 +1,14 @@
 use alloy_consensus::{TxEip1559, TxEip2930, TxLegacy};
 use alloy_primitives::{Address, B256};
-use alloy_rpc_types_engine::ForkchoiceState;
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
 use api_types::u256_define::{BlockId as ExternalBlockId, TxnHash};
 use api_types::{simple_hash, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 use jsonrpsee::core::Serialize;
-use jsonrpsee::http_client::transport::HttpBackend;
-use jsonrpsee::http_client::HttpClient;
 use reth::rpc::builder::auth::AuthServerHandle;
-use reth_ethereum_engine_primitives::{EthEngineTypes, EthPayloadAttributes};
-use reth_payload_builder::PayloadId;
+use reth_ethereum_engine_primitives::EthPayloadAttributes;
 use reth_pipe_exec_layer_ext_v2::{ExecutedBlockMeta, OrderedBlock, PipeExecLayerApi};
-use reth_primitives::{Bytes, Signature, TransactionSigned, TxKind, U256};
-use reth_rpc_api::{EngineApiClient, EngineEthApiClient};
-use reth_rpc_layer::AuthClientService;
+use reth_primitives::{Bytes, Signature, TransactionSigned, TxKind, Withdrawals, U256};
+use reth_rpc_api::EngineEthApiClient;
 use reth_rpc_types::{AccessList, AccessListItem};
 use std::io::Read;
 use std::sync::Arc;
@@ -170,7 +165,7 @@ impl RethCli {
         &self,
         block: ExternalBlock,
         parent_id: B256,
-    ) -> Result<PayloadId, String> {
+    ) -> Result<(), String> {
         let pipe_api = self.pipe_api.lock().await;
         let mut senders = vec![];
         let mut transactions = vec![];
@@ -183,38 +178,33 @@ impl RethCli {
         // TODO: make zero make sense
         pipe_api.push_ordered_block(OrderedBlock {
             parent_id,
-            id: block.block_meta.block_id.into(),
+            id: B256::from_slice(block.block_meta.block_id.as_bytes()),
             number: block.block_meta.block_number,
             timestamp: block.block_meta.usecs / 1000000,
             coinbase: Address::ZERO,
             prev_randao: B256::ZERO,
-            withdrawals: Some(Vec::new()),
-            transactions: transactions,
-            senders: senders,
+            withdrawals: Withdrawals::new(Vec::new()),
+            transactions,
+            senders,
         });
+        Ok(())
     }
 
-    pub async fn process_payload_id(
-        &self,
-        block_id: B256,
-        payload_id: PayloadId,
-    ) -> Result<B256, ()> {
-        let mut pipe_api = self.pipe_api.lock().await;
+    pub async fn recv_compute_res(&self, block_id: B256) -> Result<B256, ()> {
+        let pipe_api = self.pipe_api.lock().await;
         let block_hash = pipe_api.pull_executed_block_hash(block_id).await.unwrap();
         Ok(block_hash)
-
     }
 
     pub async fn commit_block(
         &self,
-        block_id: B256,
+        block_id: api_types::u256_define::BlockId,
         block_hash: B256,
     ) -> Result<(), String> {
+        let block_id = B256::from_slice(block_id.0.as_ref());
         let pipe_api = self.pipe_api.lock().await;
-        pipe_api.commit_executed_block_hash(ExecutedBlockMeta {
-            block_id,
-            block_hash,
-        });
+        pipe_api.commit_executed_block_hash(ExecutedBlockMeta { block_id, block_hash });
+        Ok(())
     }
 
     pub async fn process_pending_transactions(

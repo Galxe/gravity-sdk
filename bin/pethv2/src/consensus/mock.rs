@@ -6,9 +6,11 @@ use std::{
 
 use super::mempool::Mempool;
 use api_types::{
-    u256_define::BlockId, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn,
+    u256_define::BlockId, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr,
+    VerifiedTxn,
 };
 
+use reth_primitives::B256;
 use tracing::info;
 
 pub struct MockConsensus {
@@ -20,15 +22,16 @@ pub struct MockConsensus {
 }
 
 impl MockConsensus {
-    pub fn new(exec_api: Arc<dyn ExecutionApiV2>, gensis: [u8; 32]) -> Self {
-        let parent_meta =
-            ExternalBlockMeta { block_id: BlockId(gensis), block_number: 0, usecs: 0 };
+    pub fn new(exec_api: Arc<dyn ExecutionApiV2>, gensis: B256) -> Self {
+        let mut bytes = [0u8; 32];
+        bytes.copy_from_slice(gensis.as_slice());
+        let parent_meta = ExternalBlockMeta { block_id: BlockId(bytes), block_number: 0, usecs: 0 };
         Self {
             exec_api,
             parent_meta,
             pending_txns: Mempool::new(),
             block_number_water_mark: 0,
-            gensis,
+            gensis: bytes,
         }
     }
 

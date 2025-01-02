@@ -1,7 +1,7 @@
 use api::{consensus_api::ConsensusEngine, NodeConfig};
+use api_types::default_recover::DefaultRecovery;
 use api_types::{ConsensusApi, ExecutionApiV2, ExecutionLayer};
 use std::sync::Arc;
-use api_types::default_recover::DefaultRecovery;
 pub struct AptosConsensus {
     /// The execution client for interacting with the execution layer
     execution_client: Arc<dyn ExecutionApiV2>,

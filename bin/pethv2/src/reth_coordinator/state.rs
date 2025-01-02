@@ -1,9 +1,9 @@
+use api_types::account::ExternalAccountAddress;
+use api_types::VerifiedTxn;
 use api_types::{u256_define::BlockId, ExternalPayloadAttr};
 use reth::primitives::B256;
 use tracing::info;
 use web3::types::Transaction;
-use api_types::VerifiedTxn;
-use api_types::account::ExternalAccountAddress;
 pub struct BuildingState {
     gas_used: u64,
 }
