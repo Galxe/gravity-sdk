@@ -125,8 +125,7 @@ impl StateComputer for GravityExecutionProxy {
         let txns = self.aptos_state_computer.get_block_txns(block).await;
         let meta_data = ExternalBlockMeta {
             block_id: BlockId(*block.id()),
-            // TODO(gravity_lightman): we can't have block number when committing the block
-            block_number: 0,
+            block_number: block.block_number().unwrap_or_else(|| { panic!("No block number") }),
             usecs: block.timestamp_usecs(),
         };
         let id = HashValue::from(block.id());
@@ -154,7 +153,6 @@ impl StateComputer for GravityExecutionProxy {
             .await;
 
         let engine = Some(self.consensus_engine.clone());
-        let round = block.round();
         Box::pin(async move {
             let result = StateComputeResult::with_root_hash(HashValue::new(
                 engine
