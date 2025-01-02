@@ -268,6 +268,7 @@ impl StateComputer for ExecutionProxy {
 
         let blocks = blocks.to_vec();
         let wrapped_callback = move || {
+            payload_manager.notify_commit(block_timestamp, payloads);
             callback(&blocks, finality_proof);
         };
         self.async_state_sync_notifier
@@ -277,7 +278,6 @@ impl StateComputer for ExecutionProxy {
             .expect("Failed to send async state sync notification");
         // tokio::time::sleep(Duration::from_millis(1)).await;
         *latest_logical_time = logical_time;
-        payload_manager.notify_commit(block_timestamp, payloads);
         Ok(())
     }
 
