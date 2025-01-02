@@ -32,10 +32,10 @@ use aptos_types::{
     ledger_info::LedgerInfoWithSignatures, randomness::Randomness,
 };
 use coex_bridge::{get_coex_bridge, Func};
-use futures_channel::oneshot;
 use once_cell::sync::OnceCell;
 use std::time::Duration;
 use std::{boxed::Box, sync::Arc};
+use tokio::runtime::Runtime;
 
 pub struct ConsensusAdapterArgs {
     pub quorum_store_client: Option<Arc<QuorumStoreClient>>,
@@ -94,11 +94,16 @@ impl GravityExecutionProxy {
 pub struct GravityBlockExecutor {
     inner: BlockExecutor,
     consensus_engine: OnceCell<Arc<dyn ConsensusApi>>,
+    runtime: Runtime,
 }
 
 impl GravityBlockExecutor {
     pub(crate) fn new(inner: BlockExecutor) -> Self {
-        Self { inner, consensus_engine: OnceCell::new() }
+        Self {
+            inner,
+            consensus_engine: OnceCell::new(),
+            runtime: aptos_runtimes::spawn_named_runtime("tmp".into(), None),
+        }
     }
 
     pub fn set_consensus_engine(&self, consensus_engine: Arc<dyn ConsensusApi>) {
@@ -125,14 +130,13 @@ impl StateComputer for GravityExecutionProxy {
         let txns = self.aptos_state_computer.get_block_txns(block).await;
         let meta_data = ExternalBlockMeta {
             block_id: BlockId(*block.id()),
-            block_number: block.block_number().unwrap_or_else(|| { panic!("No block number") }),
+            block_number: block.block_number().unwrap_or_else(|| panic!("No block number")),
             usecs: block.timestamp_usecs(),
         };
-        let id = HashValue::from(block.id());
 
         // We would export the empty block detail to the outside GCEI caller
-        let vtxns: Vec<VerifiedTxn> =
-            txns.iter().map(|txn| Into::<VerifiedTxn>::into(&txn.clone())).collect();
+        let vtxns =
+            txns.iter().map(|txn| Into::<VerifiedTxn>::into(&txn.clone())).collect::<Vec<_>>();
         let real_txns = vtxns
             .into_iter()
             .map(|txn| {
@@ -145,23 +149,22 @@ impl StateComputer for GravityExecutionProxy {
                 )
             })
             .collect();
-        let external_block = ExternalBlock { block_meta: meta_data.clone(), txns: real_txns };
-        self.consensus_engine
+        let engine = self
+            .consensus_engine
             .get()
-            .expect("ConsensusEngine")
-            .send_ordered_block(*parent_block_id, external_block)
+            .unwrap_or_else(|| panic!("failed to get consensus engine"))
+            .clone();
+
+        engine
+            .send_ordered_block(
+                *parent_block_id,
+                ExternalBlock { block_meta: meta_data.clone(), txns: real_txns },
+            )
             .await;
 
-        let engine = Some(self.consensus_engine.clone());
         Box::pin(async move {
             let result = StateComputeResult::with_root_hash(HashValue::new(
-                engine
-                    .expect("No consensus api")
-                    .get()
-                    .expect("consensus engine")
-                    .recv_executed_block_hash(meta_data)
-                    .await
-                    .bytes(),
+                engine.recv_executed_block_hash(meta_data).await.bytes(),
             ));
             Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
         })
@@ -252,10 +255,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
     ) -> ExecutorResult<()> {
         info!("commit blocks: {:?}", block_ids);
         if !block_ids.is_empty() {
-            let (send, receiver) = oneshot::channel::<HashValue>();
-            // todo(gravity_byteyue): don't spawn runtime each time
-            let runtime = aptos_runtimes::spawn_named_runtime("tmp".into(), None);
-            let _ = runtime.block_on(async move {
+            self.runtime.block_on(async move {
                 for block_id in block_ids {
                     self.consensus_engine
                         .get()
@@ -264,9 +264,6 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                         .await;
                 }
             });
-            // if let Err(e) = r {
-            //     return Err(e);
-            // }
             // let last_block = block_ids.last();
             // let max_committed_block_id;
             // match last_block {

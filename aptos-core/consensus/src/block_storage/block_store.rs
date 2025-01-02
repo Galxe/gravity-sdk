@@ -12,7 +12,7 @@ use crate::{
     counters,
     payload_manager::TPayloadManager,
     persistent_liveness_storage::{
-        PersistentLivenessStorage, RecoveryData, RootInfo, RootMetadata,
+        PersistentLivenessStorage, RecoveryData, RootInfo,
     },
     pipeline::execution_client::TExecutionClient,
     util::time_service::TimeService,
@@ -29,14 +29,13 @@ use aptos_consensus_types::{
     timeout_2chain::TwoChainTimeoutCertificate,
     wrapped_ledger_info::WrappedLedgerInfo,
 };
-use aptos_crypto::{hash::ACCUMULATOR_PLACEHOLDER_HASH, HashValue};
+use aptos_crypto::HashValue;
 use aptos_executor_types::StateComputeResult;
 use aptos_infallible::{Mutex, RwLock};
 use aptos_logger::prelude::*;
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 use aptos_types::ledger_info::LedgerInfoWithSignatures;
 use futures::executor::block_on;
-use tokio::runtime::Runtime;
 
 #[cfg(test)]
 use std::collections::VecDeque;
@@ -161,10 +160,6 @@ impl BlockStore {
         .await;
         block_store.recover_blocks().await;
         block_store
-    }
-
-    pub fn get_block_tree(&self) -> Arc<RwLock<BlockTree>> {
-        self.inner.clone()
     }
 
     async fn recover_blocks(&self) {
@@ -317,11 +312,16 @@ impl BlockStore {
             for p_block in &blocks_to_commit {
                 info!("recover commit block {}", p_block.block());
                 // TODO(gravity_lightman): Error handle
-                self.execution_layer
+                match self.execution_layer
                     .as_ref()
                     .unwrap()
                     .execution_api.commit_block(BlockId(*p_block.block().id()))
-                    .await;
+                    .await { 
+                        Ok(_) => {}
+                        Err(e) => {
+                            todo!();
+                        }
+                    }
             }
             let commit_decision = finality_proof.ledger_info().clone();
             block_tree.write().commit_callback(
