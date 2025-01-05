@@ -1,5 +1,4 @@
 use alloy_eips::BlockHashOrNumber;
-use alloy_trie::HashMap;
 use consensus::mock::MockConsensus;
 use gravity_storage::block_view_storage::BlockViewStorage;
 use reth::rpc::builder::auth::AuthServerHandle;
