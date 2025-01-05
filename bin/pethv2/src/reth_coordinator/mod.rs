@@ -108,6 +108,7 @@ impl ExecutionApiV2 for RethCoordinator {
             "send_ordered_block with parent_id: {:?} and block num {:?}",
             parent_id, ordered_block.block_meta.block_number
         );
+        println!("parent id is {:?}", parent_id.bytes());
         self.queue.send_exec(ordered_block.block_meta.block_id).await;
         let mut state = self.state.lock().await;
         ordered_block.txns = ordered_block

@@ -166,6 +166,7 @@ impl RethCli {
         block: ExternalBlock,
         parent_id: B256,
     ) -> Result<(), String> {
+        info!("push ordered block {:?} with parent id {}", block, parent_id);
         let pipe_api = self.pipe_api.lock().await;
         let mut senders = vec![];
         let mut transactions = vec![];
@@ -181,7 +182,9 @@ impl RethCli {
             id: B256::from_slice(block.block_meta.block_id.as_bytes()),
             number: block.block_meta.block_number,
             timestamp: block.block_meta.usecs / 1000000,
+            // TODO(gravity_jan): add reth coinbase
             coinbase: Address::ZERO,
+            // TODO(gravity_jan): add aptos random
             prev_randao: B256::ZERO,
             withdrawals: Withdrawals::new(Vec::new()),
             transactions,

@@ -1,4 +1,5 @@
 use alloy_eips::BlockHashOrNumber;
+use alloy_trie::HashMap;
 use consensus::mock::MockConsensus;
 use gravity_storage::block_view_storage::BlockViewStorage;
 use reth::rpc::builder::auth::AuthServerHandle;
@@ -7,6 +8,7 @@ use reth_coordinator::RethCoordinator;
 use reth_node_builder;
 use reth_node_core;
 use reth_node_ethereum;
+use reth_primitives::B256;
 use reth_provider;
 use reth_provider::BlockHashReader;
 use reth_provider::BlockNumReader;
@@ -21,6 +23,7 @@ mod reth_coordinator;
 use crate::cli::Cli;
 use clap::Args;
 use reth_pipe_exec_layer_ext_v2;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::thread;
 use tracing::info;
@@ -40,6 +43,8 @@ use reth_node_builder::EngineNodeLauncher;
 use reth_node_core::args::utils::DefaultChainSpecParser;
 use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
 use reth_provider::providers::BlockchainProvider2;
+
+const consensus_gensis: [u8; 32] = [47, 152, 5, 118, 113, 30, 54, 23, 165, 228, 216, 61, 213, 57, 84, 142, 192, 247, 121, 32, 7, 213, 5, 163, 210, 233, 103, 72, 51, 175, 45, 124];
 
 fn run_reth(
     tx: mpsc::Sender<(AuthServerHandle, reth_pipe_exec_layer_ext_v2::PipeExecLayerApi)>,
@@ -78,8 +83,16 @@ fn run_reth(
                     .block(BlockHashOrNumber::Number(latest_block_number.unwrap()))
                     .unwrap()
                     .unwrap();
-                let storage =
-                    BlockViewStorage::new(provider, latest_block.number, latest_block_hash);
+                let mut block_number_to_id = BTreeMap::new();
+                let genesis_id = B256::new(consensus_gensis);
+                info!("genesis_id: {:?}", genesis_id);
+                block_number_to_id.insert(0u64, genesis_id);
+                let storage = BlockViewStorage::new(
+                    provider,
+                    latest_block.number,
+                    latest_block_hash,
+                    block_number_to_id,
+                );
                 let pipeline_api_v2 = reth_pipe_exec_layer_ext_v2::new_pipe_exec_layer_api(
                     chain_spec,
                     storage,
@@ -102,11 +115,6 @@ fn main() {
 
     let cli = Cli::<DefaultChainSpecParser, EngineArgs>::parse();
     // let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
-    let consensus_gensis: [u8; 32] = [
-        0x43, 0xbf, 0x83, 0x6b, 0x97, 0x02, 0x74, 0x90, 0x9c, 0xe1, 0x89, 0xef, 0xf8, 0xf4, 0x2e,
-        0xea, 0x6e, 0x53, 0x06, 0x04, 0xeb, 0x3a, 0x76, 0xae, 0xbd, 0x9a, 0x6c, 0xd6, 0x45, 0xa6,
-        0xe7, 0x7e,
-    ];
 
     // 启动consensus线程
     thread::spawn(move || {
