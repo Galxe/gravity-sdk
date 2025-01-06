@@ -181,6 +181,16 @@ pub static TXN_DEDUP_SECONDS: Lazy<Histogram> = Lazy::new(|| {
     .unwrap()
 });
 
+pub static BLOCK_PREPARER_LATENCY: Lazy<DurationHistogram> = Lazy::new(|| {
+    DurationHistogram::new(
+        register_histogram!(
+            "aptos_execution_block_preparer_seconds",
+            "The time spent in block preparer",
+        )
+        .unwrap(),
+    )
+});
+
 /// Transaction dedup number of filtered
 pub static TXN_DEDUP_FILTERED: Lazy<Histogram> = Lazy::new(|| {
     register_avg_counter(
@@ -809,6 +819,60 @@ const BLOCK_TRACING_BUCKETS: &[f64] = &[
     1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0,
     4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 10.0,
 ];
+
+pub static PIPELINE_INSERTION_TO_EXECUTED_TIME: Lazy<DurationHistogram> = Lazy::new(|| {
+    DurationHistogram::new(
+        register_histogram!(
+            "aptos_consensus_pipeline_insertion_to_executed_time",
+            "Histogram for the time it takes for a block to be executed after being inserted into the pipeline"
+        ).unwrap()
+    )
+});
+
+pub static PIPELINE_ENTRY_TO_INSERTED_TIME: Lazy<DurationHistogram> = Lazy::new(|| {
+    DurationHistogram::new(
+        register_histogram!(
+            "aptos_consensus_pipeline_entry_to_inserted_time",
+            "Histogram for the time it takes for a block to be inserted into the pipeline after being received"
+        ).unwrap()
+    )
+});
+
+pub static PREPARE_BLOCK_SIG_VERIFICATION_TIME: Lazy<DurationHistogram> = Lazy::new(|| {
+    DurationHistogram::new(
+        register_histogram!(
+            "aptos_consensus_prepare_block_sig_verification_time",
+            "Histogram for the time it takes to verify the signatures of a block after it is prepared"
+        ).unwrap()
+    )
+});
+
+pub static PREPARE_BLOCK_WAIT_TIME: Lazy<DurationHistogram> = Lazy::new(|| {
+    DurationHistogram::new(
+        register_histogram!(
+            "aptos_consensus_prepare_block_wait_time",
+            "Histogram for the time the block waits after it enters the pipeline before the block prepration starts"
+        ).unwrap()
+    )
+});
+
+pub static EXECUTE_BLOCK_WAIT_TIME: Lazy<DurationHistogram> = Lazy::new(|| {
+    DurationHistogram::new(
+        register_histogram!(
+            "aptos_consensus_execute_block_wait_time",
+            "Histogram for the time the block waits after the block is prepared before the block execution starts"
+        ).unwrap()
+    )
+});
+
+pub static APPLY_LEDGER_WAIT_TIME: Lazy<DurationHistogram> = Lazy::new(|| {
+    DurationHistogram::new(
+        register_histogram!(
+            "aptos_consensus_apply_ledger_wait_time",
+            "Histogram for the time the block waits after the block is executed before the ledger is applied"
+        ).unwrap()
+    )
+});
 
 /// Traces block movement throughout the node
 pub static BLOCK_TRACING: Lazy<HistogramVec> = Lazy::new(|| {

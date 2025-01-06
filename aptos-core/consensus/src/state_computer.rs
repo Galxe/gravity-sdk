@@ -37,7 +37,11 @@ use aptos_types::{
 };
 use fail::fail_point;
 use futures::{future::BoxFuture, SinkExt, StreamExt};
-use std::{boxed::Box, sync::Arc, time::Instant};
+use std::{
+    boxed::Box,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::sync::Mutex as AsyncMutex;
 
 pub type StateComputeResultFut = BoxFuture<'static, ExecutorResult<PipelineExecutionResult>>;
