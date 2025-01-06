@@ -42,22 +42,15 @@ pub struct RethCoordinator {
     reth_cli: RethCli,
     pending_buffer: Arc<Mutex<Vec<VerifiedTxnWithAccountSeqNum>>>,
     state: Arc<Mutex<State>>,
-    queue: queue::Queue,
-    pending_payload_id: Buffer<PayloadId>,
-    // parent block id and payload id
-    commit_buffer: Buffer<(PayloadId, B256)>,
 }
 
 impl RethCoordinator {
     pub fn new(reth_cli: RethCli) -> Self {
         let state = State::new();
         Self {
-            queue: queue::Queue::new(1),
             reth_cli,
             pending_buffer: Arc::new(Mutex::new(Vec::new())),
             state: Arc::new(Mutex::new(state)),
-            pending_payload_id: Buffer::new(1),
-            commit_buffer: Buffer::new(1),
         }
     }
 
@@ -109,7 +102,6 @@ impl ExecutionApiV2 for RethCoordinator {
             parent_id, ordered_block.block_meta.block_number
         );
         println!("parent id is {:?}", parent_id.bytes());
-        self.queue.send_exec(ordered_block.block_meta.block_id).await;
         let mut state = self.state.lock().await;
         ordered_block.txns = ordered_block
             .txns
@@ -138,7 +130,6 @@ impl ExecutionApiV2 for RethCoordinator {
         info!("commit_block with block_id: {:?}", block_id);
         let block_hash = self.state.lock().await.get_block_hash(block_id).unwrap();
         self.reth_cli.commit_block(block_id, block_hash.into()).await.unwrap();
-        self.queue.recv_commit().await;
         Ok(())
     }
 }
