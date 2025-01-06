@@ -176,6 +176,11 @@ impl RethCli {
             senders.push(sender);
             transactions.push(txn);
         }
+
+        let randao = match block.block_meta.randomness {
+            Some(randao) => B256::from_slice(randao.0.as_ref()),
+            None => B256::ZERO,
+        };
         // TODO: make zero make sense
         pipe_api.push_ordered_block(OrderedBlock {
             parent_id,
@@ -184,8 +189,7 @@ impl RethCli {
             timestamp: block.block_meta.usecs / 1000000,
             // TODO(gravity_jan): add reth coinbase
             coinbase: Address::ZERO,
-            // TODO(gravity_jan): add aptos random
-            prev_randao: B256::ZERO,
+            prev_randao: randao,
             withdrawals: Withdrawals::new(Vec::new()),
             transactions,
             senders,

@@ -25,7 +25,7 @@ impl MockConsensus {
     pub fn new(exec_api: Arc<dyn ExecutionApiV2>, gensis: B256) -> Self {
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(gensis.as_slice());
-        let parent_meta = ExternalBlockMeta { block_id: BlockId(bytes), block_number: 0, usecs: 0 };
+        let parent_meta = ExternalBlockMeta { block_id: BlockId(bytes), block_number: 0, usecs: 0, randomness: None };
         Self {
             exec_api,
             parent_meta,
@@ -52,6 +52,7 @@ impl MockConsensus {
                 block_id: BlockId(bytes),
                 block_number: self.block_number_water_mark,
                 usecs: attr.ts,
+                randomness: None,
             },
             txns: txns.drain(..).collect(),
         });
