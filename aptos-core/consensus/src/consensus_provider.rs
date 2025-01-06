@@ -81,7 +81,6 @@ pub fn start_consensus(
         state_sync_notifier,
         runtime.handle(),
         TransactionFilter::new(node_config.execution.transaction_filter.clone()),
-        node_config.consensus.enable_pre_commit,
     );
     let execution_proxy =
         Arc::new(GravityExecutionProxy::new(Arc::new(execution_proxy), executor.clone()));
@@ -190,7 +189,6 @@ pub fn start_consensus_observer(
             state_sync_notifier,
             runtime.handle(),
             TransactionFilter::new(node_config.execution.transaction_filter.clone()),
-            node_config.consensus.enable_pre_commit,
         );
 
         // Create the execution proxy client

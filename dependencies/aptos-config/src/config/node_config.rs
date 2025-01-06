@@ -96,8 +96,6 @@ pub struct NodeConfig {
     pub https_cert_pem_path: PathBuf,
     #[serde(default)]
     pub https_key_pem_path: PathBuf,
-    #[serde(default)]
-    pub enable_pre_commit: bool,
 }
 
 impl NodeConfig {

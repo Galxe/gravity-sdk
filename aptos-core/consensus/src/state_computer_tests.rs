@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    error::MempoolError, payload_manager::DirectMempoolPayloadManager, pipeline::pipeline_phase::CountedRequest, state_computer::ExecutionProxy, state_replication::StateComputer, transaction_deduper::NoOpDeduper, transaction_filter::TransactionFilter, transaction_shuffler::NoOpShuffler, txn_notifier::TxnNotifier
+    error::MempoolError, payload_manager::DirectMempoolPayloadManager,
+    state_computer::ExecutionProxy, state_replication::StateComputer,
+    transaction_deduper::NoOpDeduper, transaction_filter::TransactionFilter,
+    transaction_shuffler::NoOpShuffler, txn_notifier::TxnNotifier,
 };
 use aptos_config::config::transaction_filter_type::Filter;
 use aptos_consensus_notifications::{ConsensusNotificationSender, Error};
@@ -23,7 +26,7 @@ use aptos_types::{
     validator_txn::ValidatorTransaction,
 };
 use futures_channel::oneshot;
-use std::sync::{atomic::AtomicU64, Arc};
+use std::sync::Arc;
 use tokio::runtime::Handle;
 
 struct DummyStateSyncNotifier {
@@ -118,18 +121,6 @@ impl BlockExecutorTrait for DummyBlockExecutor {
     }
 
     fn finish(&self) {}
-    
-    fn pre_commit_block(
-        &self,
-        block_id: HashValue,
-        parent_block_id: HashValue,
-    ) -> ExecutorResult<()> {
-        Ok(())
-    }
-    
-    fn commit_ledger(&self, ledger_info_with_sigs: LedgerInfoWithSignatures) -> ExecutorResult<()> {
-        Ok(())
-    }
 }
 
 #[tokio::test]
@@ -145,7 +136,6 @@ async fn schedule_compute_should_discover_validator_txns() {
         Arc::new(DummyStateSyncNotifier::new()),
         &Handle::current(),
         TransactionFilter::new(Filter::empty()),
-        true,
     );
 
     let validator_txn_0 = ValidatorTransaction::dummy(vec![0xFF; 99]);
@@ -173,7 +163,7 @@ async fn schedule_compute_should_discover_validator_txns() {
 
     // Ensure the dummy executor has received the txns.
     let _ = execution_policy
-        .schedule_compute(&block, HashValue::zero(), None, dummy_guard())
+        .schedule_compute(&block, HashValue::zero(), None)
         .await
         .await;
 
@@ -199,7 +189,6 @@ async fn commit_should_discover_validator_txns() {
         state_sync_notifier.clone(),
         &tokio::runtime::Handle::current(),
         TransactionFilter::new(Filter::empty()),
-        true,
     );
 
     let validator_txn_0 = ValidatorTransaction::dummy(vec![0xFF; 99]);
@@ -264,8 +253,4 @@ async fn commit_should_discover_validator_txns() {
     // let supposed_validator_txn_1 = txns[2].try_as_validator_txn().unwrap();
     // assert_eq!(&validator_txn_0, supposed_validator_txn_0);
     // assert_eq!(&validator_txn_1, supposed_validator_txn_1);
-}
-
-fn dummy_guard() -> CountedRequest<()> {
-    CountedRequest::new((), Arc::new(AtomicU64::new(0)))
 }
