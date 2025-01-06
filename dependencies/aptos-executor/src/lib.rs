@@ -73,5 +73,17 @@ pub mod block_executor {
     fn finish(&self) { 
 
     }
+    
+    fn pre_commit_block(
+            &self,
+            block_id: HashValue,
+            parent_block_id: HashValue,
+        ) -> ExecutorResult<()> {
+            todo!()
+        }
+    
+    fn commit_ledger(&self, ledger_info_with_sigs: LedgerInfoWithSignatures) -> ExecutorResult<()> {
+            todo!()
+        }
 }
 }
