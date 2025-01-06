@@ -2,55 +2,46 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-
+use crate::persistent_liveness_storage::PersistentLivenessStorage;
 use crate::{
-    block_preparer::BlockPreparer, block_storage::tracing::{observe_block, BlockStage}, counters, error::StateSyncError, execution_pipeline::ExecutionPipeline, monitor, payload_manager::TPayloadManager, persistent_liveness_storage::StorageWriteProxy, state_replication::{StateComputer, StateComputerCommitCallBackType}, transaction_deduper::TransactionDeduper, transaction_filter::TransactionFilter, transaction_shuffler::TransactionShuffler, txn_notifier::TxnNotifier
+    block_preparer::BlockPreparer,
+    block_storage::tracing::{observe_block, BlockStage},
+    counters,
+    error::StateSyncError,
+    execution_pipeline::ExecutionPipeline,
+    monitor,
+    payload_manager::TPayloadManager,
+    pipeline::pipeline_phase::CountedRequest,
+    persistent_liveness_storage::StorageWriteProxy,
+    state_replication::{StateComputer, StateComputerCommitCallBackType},
+    transaction_deduper::TransactionDeduper,
+    transaction_filter::TransactionFilter,
+    transaction_shuffler::TransactionShuffler,
+    txn_notifier::TxnNotifier,
 };
 use anyhow::Result;
 use aptos_consensus_notifications::ConsensusNotificationSender;
-use aptos_consensus_types::{block::Block, common::Round, pipelined_block::PipelinedBlock};
+use aptos_consensus_types::{
+    block::Block, common::Round, pipeline_execution_result::PipelineExecutionResult,
+    pipelined_block::PipelinedBlock,
+};
 use aptos_crypto::HashValue;
 use aptos_executor_types::{BlockExecutorTrait, ExecutorResult, StateComputeResult};
 use aptos_infallible::RwLock;
 use aptos_logger::prelude::*;
+use aptos_types::transaction::SignedTransaction;
 use aptos_types::{
-    account_address::AccountAddress,
-    block_executor::config::BlockExecutorConfigFromOnchain,
-    contract_event::ContractEvent,
-    epoch_state::EpochState,
-    ledger_info::LedgerInfoWithSignatures,
-    randomness::Randomness,
-    transaction::{SignedTransaction, Transaction},
+    account_address::AccountAddress, block_executor::config::BlockExecutorConfigFromOnchain,
+    contract_event::ContractEvent, epoch_state::EpochState, ledger_info::LedgerInfoWithSignatures,
+    randomness::Randomness, transaction::Transaction,
 };
 use fail::fail_point;
 use futures::{future::BoxFuture, SinkExt, StreamExt};
-use std::{boxed::Box, f64::consts::E, sync::Arc, time::Duration};
+use std::{boxed::Box, sync::Arc, time::Instant};
 use tokio::sync::Mutex as AsyncMutex;
-use aptos_consensus_types::common::Payload;
-use crate::persistent_liveness_storage::PersistentLivenessStorage;
 
 pub type StateComputeResultFut = BoxFuture<'static, ExecutorResult<PipelineExecutionResult>>;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct PipelineExecutionResult {
-    pub input_txns: Vec<SignedTransaction>,
-    pub result: StateComputeResult,
-    pub execution_time: Duration,
-}
-
-impl PipelineExecutionResult {
-    pub fn new(
-        input_txns: Vec<SignedTransaction>,
-        result: StateComputeResult,
-        execution_time: Duration,
-    ) -> Self {
-        Self {
-            input_txns,
-            result,
-            execution_time,
-        }
-    }
-}
 
 type NotificationType = (
     Box<dyn FnOnce() + Send + Sync>,
@@ -102,20 +93,15 @@ impl ExecutionProxy {
             block_executor_onchain_config,
             transaction_deduper,
             is_randomness_enabled,
-        } = self
-            .state
-            .read()
-            .as_ref()
-            .cloned()
-            .expect("must be set within an epoch");
+        } = self.state.read().as_ref().cloned().expect("must be set within an epoch");
         let mut txns = vec![];
         match payload_manager.get_transactions(block).await {
             Ok((transactions, _)) => {
                 txns.extend(transactions);
-            },
+            }
             Err(e) => {
                 warn!("failed to get transactions from block {:?}, error {:?}", block, e);
-            },
+            }
         }
         txns
     }
@@ -125,6 +111,7 @@ impl ExecutionProxy {
         state_sync_notifier: Arc<dyn ConsensusNotificationSender>,
         handle: &tokio::runtime::Handle,
         txn_filter: TransactionFilter,
+        enable_pre_commit: bool,
     ) -> Self {
         let (tx, mut rx) =
             aptos_channels::new::<NotificationType>(10, &counters::PENDING_STATE_SYNC_NOTIFICATION);
@@ -141,7 +128,8 @@ impl ExecutionProxy {
                 callback();
             }
         });
-        let execution_pipeline = ExecutionPipeline::spawn(executor.clone(), handle);
+        let execution_pipeline = 
+            ExecutionPipeline::spawn(executor.clone(), handle, enable_pre_commit);
         Self {
             executor,
             txn_notifier,
@@ -195,6 +183,7 @@ impl StateComputer for ExecutionProxy {
         // The parent block id.
         parent_block_id: HashValue,
         randomness: Option<Randomness>,
+        lifetime_guard: CountedRequest<()>,
     ) -> StateComputeResultFut {
         panic!("ExecutionProxy does not implement schedule_compute");
     }
@@ -208,14 +197,10 @@ impl StateComputer for ExecutionProxy {
     ) -> ExecutorResult<()> {
         info!(
             "Received a commit request for blocks {:?} at round {}",
-            blocks
-                .iter()
-                .map(|block| block.id())
-                .collect::<Vec<_>>(),
+            blocks.iter().map(|block| block.id()).collect::<Vec<_>>(),
             finality_proof.ledger_info().round()
         );
         let mut latest_logical_time = self.write_mutex.lock().await;
-        let mut block_ids = Vec::new();
         let mut txns = Vec::new();
         let mut subscribable_txn_events = Vec::new();
         let mut payloads = Vec::new();
@@ -225,31 +210,28 @@ impl StateComputer for ExecutionProxy {
         );
         let block_timestamp = finality_proof.commit_info().timestamp_usecs();
 
-        let MutableState {
-            payload_manager,
-            validators,
-            is_randomness_enabled,
-            ..
-        } = self
-            .state
-            .read()
-            .as_ref()
-            .cloned()
-            .expect("must be set within an epoch");
+        let MutableState { payload_manager, validators, is_randomness_enabled, .. } =
+            self.state.read().as_ref().cloned().expect("must be set within an epoch");
         let mut committed_block_ids = vec![];
+        let mut pre_commit_futs = Vec::with_capacity(blocks.len());
         for block in blocks {
-            block_ids.push(block.id());
-
             if let Some(payload) = block.block().payload() {
                 payloads.push(payload.clone());
             }
             committed_block_ids.push(block.id());
 
-            let commit_transactions = self.transactions_to_commit(block, &validators, is_randomness_enabled);
+            let commit_transactions =
+                self.transactions_to_commit(block, &validators, is_randomness_enabled);
             if !commit_transactions.is_empty() {
                 txns.extend(commit_transactions);
             }
             subscribable_txn_events.extend(block.subscribable_events());
+            pre_commit_futs.push(block.take_pre_commit_fut());
+        }
+
+        // wait until all blocks are committed
+        for pre_commit_fut in pre_commit_futs {
+            pre_commit_fut.await?
         }
 
         let executor = self.executor.clone();
@@ -259,7 +241,7 @@ impl StateComputer for ExecutionProxy {
             "commit_block",
             tokio::task::spawn_blocking(move || {
                 executor
-                    .commit_blocks(committed_block_ids, proof)
+                    .commit_ledger(proof)
                     .expect("Failed to commit blocks");
             })
             .await
@@ -305,9 +287,7 @@ impl StateComputer for ExecutionProxy {
         // so it can set batches expiration accordingly.
         // Might be none if called in the recovery path, or between epoch stop and start.
         if let Some(inner) = self.state.read().as_ref() {
-            inner
-                .payload_manager
-                .notify_commit(block_timestamp, Vec::new());
+            inner.payload_manager.notify_commit(block_timestamp, Vec::new());
         }
 
         fail_point!("consensus::sync_to", |_| {
@@ -318,10 +298,7 @@ impl StateComputer for ExecutionProxy {
         // commitments, the sync state of ChunkExecutor may be not up to date so
         // it is required to reset the cache of ChunkExecutor in State Sync
         // when requested to sync.
-        let res = monitor!(
-            "sync_to",
-            self.state_sync_notifier.sync_to_target(target).await
-        );
+        let res = monitor!("sync_to", self.state_sync_notifier.sync_to_target(target).await);
         *latest_logical_time = logical_time;
 
         // Similarly, after the state synchronization, we have to reset the cache
@@ -424,9 +401,16 @@ async fn test_commit_sync_race() {
             todo!()
         }
 
-        fn commit_blocks(
+        fn pre_commit_block(
             &self,
-            _block_ids: Vec<HashValue>,
+            _block_id: HashValue,
+            _parent_block_id: HashValue,
+        ) -> ExecutorResult<()> {
+            todo!()
+        }
+
+        fn commit_ledger(
+            &self,
             ledger_info_with_sigs: LedgerInfoWithSignatures,
         ) -> ExecutorResult<()> {
             *self.time.lock() = LogicalTime::new(
@@ -467,9 +451,7 @@ async fn test_commit_sync_race() {
             let logical_time =
                 LogicalTime::new(target.ledger_info().epoch(), target.ledger_info().round());
             if logical_time <= *self.time.lock() {
-                return Err(Error::NotificationError(
-                    "Decreasing logical time".to_string(),
-                ));
+                return Err(Error::NotificationError("Decreasing logical time".to_string()));
             }
             *self.time.lock() = logical_time;
             Ok(())
@@ -477,15 +459,10 @@ async fn test_commit_sync_race() {
     }
 
     let callback = Box::new(move |_a: &[Arc<PipelinedBlock>], _b: LedgerInfoWithSignatures| {});
-    let recorded_commit = Arc::new(RecordedCommit {
-        time: Mutex::new(LogicalTime::new(0, 0)),
-    });
+    let recorded_commit = Arc::new(RecordedCommit { time: Mutex::new(LogicalTime::new(0, 0)) });
     let generate_li = |epoch, round| {
         LedgerInfoWithSignatures::new(
-            LedgerInfo::new(
-                BlockInfo::random_with_epoch(epoch, round),
-                HashValue::zero(),
-            ),
+            LedgerInfo::new(BlockInfo::random_with_epoch(epoch, round), HashValue::zero()),
             AggregateSignature::empty(),
         )
     };
@@ -495,6 +472,7 @@ async fn test_commit_sync_race() {
         recorded_commit.clone(),
         &tokio::runtime::Handle::current(),
         TransactionFilter::new(Filter::empty()),
+        true,
     );
 
     executor.new_epoch(
@@ -505,14 +483,8 @@ async fn test_commit_sync_race() {
         create_transaction_deduper(TransactionDeduperType::NoDedup),
         false,
     );
-    executor
-        .commit(&[], generate_li(1, 1), callback.clone())
-        .await
-        .unwrap();
-    executor
-        .commit(&[], generate_li(1, 10), callback)
-        .await
-        .unwrap();
+    executor.commit(&[], generate_li(1, 1), callback.clone()).await.unwrap();
+    executor.commit(&[], generate_li(1, 10), callback).await.unwrap();
     assert!(executor.sync_to(generate_li(1, 8)).await.is_ok());
     assert_eq!(*recorded_commit.time.lock(), LogicalTime::new(1, 10));
     assert!(executor.sync_to(generate_li(2, 8)).await.is_ok());

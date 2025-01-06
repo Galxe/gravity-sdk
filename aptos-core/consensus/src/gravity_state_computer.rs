@@ -4,7 +4,8 @@
 
 use crate::consensusdb::ConsensusDB;
 use crate::payload_client::user::quorum_store_client::QuorumStoreClient;
-use crate::state_computer::{ExecutionProxy, PipelineExecutionResult, StateComputeResultFut};
+use crate::pipeline::pipeline_phase::CountedRequest;
+use crate::state_computer::{ExecutionProxy, StateComputeResultFut};
 use crate::{
     error::StateSyncError,
     payload_manager::TPayloadManager,
@@ -18,6 +19,7 @@ use api_types::u256_define::TxnHash;
 use api_types::{
     u256_define::BlockId, ConsensusApi, ExecutionLayer, ExternalBlock, ExternalBlockMeta,
 };
+use aptos_consensus_types::pipeline_execution_result::PipelineExecutionResult;
 use aptos_consensus_types::{block::Block, pipelined_block::PipelinedBlock};
 use aptos_crypto::HashValue;
 use aptos_executor::block_executor::BlockExecutor;
@@ -32,6 +34,7 @@ use aptos_types::{
     ledger_info::LedgerInfoWithSignatures, randomness::Randomness,
 };
 use coex_bridge::{get_coex_bridge, Func};
+use futures::future::BoxFuture;
 use once_cell::sync::OnceCell;
 use std::time::Duration;
 use std::{boxed::Box, sync::Arc};
@@ -125,6 +128,7 @@ impl StateComputer for GravityExecutionProxy {
         // The parent block id.
         parent_block_id: HashValue,
         randomness: Option<Randomness>,
+        _lifetime_guard: CountedRequest<()>,
     ) -> StateComputeResultFut {
         assert!(block.block_number().is_some());
         let txns = self.aptos_state_computer.get_block_txns(block).await;
@@ -166,7 +170,13 @@ impl StateComputer for GravityExecutionProxy {
             let result = StateComputeResult::with_root_hash(HashValue::new(
                 engine.recv_executed_block_hash(meta_data).await.bytes(),
             ));
-            Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
+            let pre_commit_fut: BoxFuture<'static, ExecutorResult<()>> =
+                    {
+                        Box::pin(async move {
+                            Ok(())
+                        })
+                    };
+            Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO, pre_commit_fut))
         })
     }
 
@@ -298,5 +308,17 @@ impl BlockExecutorTrait for GravityBlockExecutor {
 
     fn finish(&self) {
         self.inner.finish()
+    }
+    
+    fn pre_commit_block(
+        &self,
+        block_id: HashValue,
+        parent_block_id: HashValue,
+    ) -> ExecutorResult<()> {
+        todo!()
+    }
+    
+    fn commit_ledger(&self, ledger_info_with_sigs: LedgerInfoWithSignatures) -> ExecutorResult<()> {
+        todo!()
     }
 }
