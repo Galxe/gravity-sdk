@@ -18,7 +18,7 @@ use crate::{
     util::time_service::TimeService,
 };
 use anyhow::{bail, ensure, format_err, Context};
-use api_types::{u256_define::BlockId, ExecutionLayer, ExternalBlock, ExternalBlockMeta};
+use api_types::{u256_define::{BlockId, Random}, ExecutionLayer, ExternalBlock, ExternalBlockMeta};
 use aptos_consensus_types::common::Payload::DirectMempool;
 use aptos_consensus_types::{
     block::Block,
@@ -43,7 +43,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::AtomicBool;
 #[cfg(any(test, feature = "fuzzing"))]
 use std::sync::atomic::Ordering;
-use std::{sync::Arc, time::Duration};
+use std::{io::Read, sync::Arc, time::Duration};
 
 #[cfg(test)]
 #[path = "block_store_test.rs"]
@@ -187,6 +187,7 @@ impl BlockStore {
                         block_id: BlockId(*block_to_recover.block().id()),
                         block_number: block_to_recover.block().block_number().unwrap(),
                         usecs: block_to_recover.block().timestamp_usecs(),
+                        randomness: block_to_recover.randomness().map(|r| Random::from_bytes(r.randomness())),
                     } };
                     self.execution_layer.as_ref().unwrap().recovery_api.recover_ordered_block(block_batch).await;
                 }

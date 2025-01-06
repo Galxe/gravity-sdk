@@ -14,7 +14,7 @@ use crate::{
 };
 use anyhow::Result;
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
-use api_types::u256_define::TxnHash;
+use api_types::u256_define::{Random, TxnHash};
 use api_types::{
     u256_define::BlockId, ConsensusApi, ExecutionLayer, ExternalBlock, ExternalBlockMeta,
 };
@@ -132,6 +132,7 @@ impl StateComputer for GravityExecutionProxy {
             block_id: BlockId(*block.id()),
             block_number: block.block_number().unwrap_or_else(|| panic!("No block number")),
             usecs: block.timestamp_usecs(),
+            randomness: randomness.map(|r| Random::from_bytes(r.randomness())),
         };
 
         // We would export the empty block detail to the outside GCEI caller

@@ -47,3 +47,4 @@ macro_rules! define_u256 {
 define_u256!(TxnHash);
 define_u256!(ComputeRes);
 define_u256!(BlockId);
+define_u256!(Random);

@@ -10,7 +10,7 @@ use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 use std::{fmt::Debug, hash::Hasher, sync::Arc};
-use u256_define::{BlockId, ComputeRes, TxnHash};
+use u256_define::{BlockId, ComputeRes, Random, TxnHash};
 
 #[async_trait]
 pub trait ConsensusApi: Send + Sync {
@@ -41,6 +41,7 @@ pub struct ExternalBlockMeta {
     pub block_id: BlockId,
     pub block_number: u64,
     pub usecs: u64,
+    pub randomness: Option<Random>,
 }
 
 #[derive(Debug, Clone)]
