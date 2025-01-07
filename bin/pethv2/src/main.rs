@@ -1,4 +1,6 @@
 use alloy_eips::BlockHashOrNumber;
+use api::check_bootstrap_config;
+use consensus::aptos::AptosConsensus;
 use consensus::mock::MockConsensus;
 use gravity_storage::block_view_storage::BlockViewStorage;
 use reth::rpc::builder::auth::AuthServerHandle;
@@ -43,8 +45,11 @@ use reth_node_core::args::utils::DefaultChainSpecParser;
 use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
 use reth_provider::providers::BlockchainProvider2;
 
-const consensus_gensis: [u8; 32] = [47, 152, 5, 118, 113, 30, 54, 23, 165, 228, 216, 61, 213, 57, 84, 142, 192, 247, 121, 32, 7, 213, 5, 163, 210, 233, 103, 72, 51, 175, 45, 124];
-
+const  consensus_gensis: [u8; 32] = [
+    0x43, 0xbf, 0x83, 0x6b, 0x97, 0x02, 0x74, 0x90, 0x9c, 0xe1, 0x89, 0xef, 0xf8, 0xf4, 0x2e,
+    0xea, 0x6e, 0x53, 0x06, 0x04, 0xeb, 0x3a, 0x76, 0xae, 0xbd, 0x9a, 0x6c, 0xd6, 0x45, 0xa6,
+    0xe7, 0x7e,
+];
 fn run_reth(
     tx: mpsc::Sender<(AuthServerHandle, reth_pipe_exec_layer_ext_v2::PipeExecLayerApi)>,
     cli: Cli<DefaultChainSpecParser, EngineArgs>,
@@ -113,8 +118,7 @@ fn main() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
 
     let cli = Cli::<DefaultChainSpecParser, EngineArgs>::parse();
-    // let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
-
+    let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
     // 启动consensus线程
     thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -130,9 +134,9 @@ fn main() {
                 tokio::spawn(async move {
                     cloned.run().await;
                 });
-                let c = MockConsensus::new(coordinator, genesis);
-                c.run().await;
-                // AptosConsensus::init(gcei_config, coordinator);
+                // let c = MockConsensus::new(coordinator, genesis);
+                // c.run().await;
+                AptosConsensus::init(gcei_config, coordinator);
                 tokio::signal::ctrl_c().await.unwrap();
             }
         });
