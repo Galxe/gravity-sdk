@@ -70,7 +70,6 @@ pub enum BlockGasLimitType {
     Limit(u64),
 }
 
-pub use state_checkpoint_output::StateCheckpointOutput;
 
 pub trait BlockExecutorTrait: Send + Sync {
     /// Get the latest committed block id
@@ -85,13 +84,12 @@ pub trait BlockExecutorTrait: Send + Sync {
         block: ExecutableBlock,
         parent_block_id: HashValue,
         onchain_config: BlockExecutorConfigFromOnchain,
-    ) -> ExecutorResult<StateCheckpointOutput>;
+    ) -> ExecutorResult<()>;
 
     fn ledger_update(
         &self,
         block_id: HashValue,
         parent_block_id: HashValue,
-        state_checkpoint_output: StateCheckpointOutput,
     ) -> ExecutorResult<StateComputeResult>;
 
     #[cfg(any(test, feature = "fuzzing"))]
@@ -100,10 +98,8 @@ pub trait BlockExecutorTrait: Send + Sync {
         block_ids: Vec<HashValue>,
         ledger_info_with_sigs: LedgerInfoWithSignatures,
     ) -> ExecutorResult<()> {
-        let mut parent_block_id = self.committed_block_id();
         for block_id in block_ids {
-            self.pre_commit_block(block_id, parent_block_id)?;
-            parent_block_id = block_id;
+            self.pre_commit_block(block_id)?;
         }
         self.commit_ledger(ledger_info_with_sigs)
     }
@@ -111,7 +107,6 @@ pub trait BlockExecutorTrait: Send + Sync {
     fn pre_commit_block(
         &self,
         block_id: HashValue,
-        parent_block_id: HashValue,
     ) -> ExecutorResult<()>;
 
     fn commit_ledger(&self, ledger_info_with_sigs: LedgerInfoWithSignatures) -> ExecutorResult<()>;

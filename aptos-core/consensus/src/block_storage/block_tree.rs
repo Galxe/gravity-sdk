@@ -9,10 +9,11 @@ use crate::{
     persistent_liveness_storage::PersistentLivenessStorage,
 };
 use anyhow::bail;
-use aptos_consensus_types::common::Payload;
+use aptos_consensus_types::common::{Payload, Round};
 use aptos_consensus_types::{
     pipelined_block::PipelinedBlock, quorum_cert::QuorumCert,
-    timeout_2chain::TwoChainTimeoutCertificate, wrapped_ledger_info::WrappedLedgerInfo,
+    timeout_2chain::TwoChainTimeoutCertificate, vote_data::VoteData,
+    wrapped_ledger_info::WrappedLedgerInfo,
 };
 use aptos_crypto::{hash::GENESIS_BLOCK_ID, HashValue};
 use aptos_logger::prelude::*;
@@ -605,6 +606,35 @@ impl BlockTree {
         // }
         self.process_pruned_blocks(ids_to_remove);
 
+        self.update_highest_commit_cert(commit_proof);
+    }
+
+    #[allow(dead_code)]
+    pub fn commit_callback_v2(
+        &mut self,
+        storage: Arc<dyn PersistentLivenessStorage>,
+        block_id: HashValue,
+        block_round: Round,
+        commit_decision: LedgerInfoWithSignatures,
+        prune_block_number: u64,
+    ) {
+        let commit_proof = WrappedLedgerInfo::new(VoteData::dummy(), commit_decision);
+
+        // let block_to_commit = blocks_to_commit.last().expect("pipeline is empty").clone();
+        // update_counters_for_committed_blocks(blocks_to_commit);
+        let current_round = self.commit_root().round();
+        let committed_round = block_round;
+        debug!(
+            LogSchema::new(LogEvent::CommitViaBlock).round(current_round),
+            committed_round = committed_round,
+            block_id = block_id,
+        );
+
+        // TODO(gravity_lightman): FIX
+        info!("the prune block block number {}", prune_block_number);
+        // TODO(gravity_lightman)
+        let ids_to_remove = self.find_blocks_to_prune_by_block_number(prune_block_number);
+        self.process_pruned_blocks(ids_to_remove);
         self.update_highest_commit_cert(commit_proof);
     }
 }

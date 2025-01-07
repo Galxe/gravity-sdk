@@ -95,16 +95,15 @@ impl BlockExecutorTrait for DummyBlockExecutor {
         block: ExecutableBlock,
         _parent_block_id: HashValue,
         _onchain_config: BlockExecutorConfigFromOnchain,
-    ) -> ExecutorResult<StateCheckpointOutput> {
+    ) -> ExecutorResult<()> {
         self.blocks_received.lock().push(block);
-        Ok(StateCheckpointOutput::default())
+        Ok(())
     }
 
     fn ledger_update(
         &self,
         _block_id: HashValue,
         _parent_block_id: HashValue,
-        _state_checkpoint_output: StateCheckpointOutput,
     ) -> ExecutorResult<StateComputeResult> {
         Ok(StateComputeResult::new_dummy())
     }
@@ -122,7 +121,6 @@ impl BlockExecutorTrait for DummyBlockExecutor {
     fn pre_commit_block(
         &self,
         block_id: HashValue,
-        parent_block_id: HashValue,
     ) -> ExecutorResult<()> {
         Ok(())
     }
