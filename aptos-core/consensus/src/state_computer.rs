@@ -392,7 +392,7 @@ async fn test_commit_sync_race() {
             _block: ExecutableBlock,
             _parent_block_id: HashValue,
             _onchain_config: BlockExecutorConfigFromOnchain,
-        ) -> ExecutorResult<StateCheckpointOutput> {
+        ) -> ExecutorResult<()> {
             todo!()
         }
 
@@ -400,7 +400,6 @@ async fn test_commit_sync_race() {
             &self,
             _block_id: HashValue,
             _parent_block_id: HashValue,
-            _state_checkpoint_output: StateCheckpointOutput,
         ) -> ExecutorResult<StateComputeResult> {
             todo!()
         }
@@ -408,7 +407,6 @@ async fn test_commit_sync_race() {
         fn pre_commit_block(
             &self,
             _block_id: HashValue,
-            _parent_block_id: HashValue,
         ) -> ExecutorResult<()> {
             todo!()
         }

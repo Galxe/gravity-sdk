@@ -17,11 +17,12 @@ use anyhow::Result;
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
 use api_types::u256_define::{Random, TxnHash};
 use api_types::{u256_define::BlockId, ExecutionLayer, ExternalBlock, ExternalBlockMeta};
+use aptos_consensus_types::pipeline_execution_result::PipelineExecutionResult;
 use aptos_consensus_types::{block::Block, pipelined_block::PipelinedBlock};
 use aptos_crypto::HashValue;
 use aptos_executor::block_executor::BlockExecutor;
 use aptos_executor_types::{
-    BlockExecutorTrait, ExecutorResult, StateCheckpointOutput, StateComputeResult,
+    BlockExecutorTrait, ExecutorResult, StateComputeResult,
 };
 use aptos_logger::info;
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
@@ -31,6 +32,7 @@ use aptos_types::{
     ledger_info::LedgerInfoWithSignatures, randomness::Randomness,
 };
 use coex_bridge::{get_coex_bridge, Func};
+use futures::future::BoxFuture;
 use std::time::Duration;
 use std::{boxed::Box, sync::Arc};
 use tokio::runtime::Runtime;
@@ -150,7 +152,13 @@ impl StateComputer for GravityExecutionProxy {
                 }
             };
             let result = StateComputeResult::with_root_hash(HashValue::new(hash.bytes()));
-            Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
+            let pre_commit_fut: BoxFuture<'static, ExecutorResult<()>> =
+                    {
+                        Box::pin(async move {
+                            Ok(())
+                        })
+                    };
+            Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO, pre_commit_fut))
         })
     }
 
@@ -209,7 +217,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         block: ExecutableBlock,
         parent_block_id: HashValue,
         onchain_config: BlockExecutorConfigFromOnchain,
-    ) -> ExecutorResult<StateCheckpointOutput> {
+    ) -> ExecutorResult<()> {
         self.inner.execute_and_state_checkpoint(block, parent_block_id, onchain_config)
     }
 
@@ -217,9 +225,8 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         &self,
         block_id: HashValue,
         parent_block_id: HashValue,
-        state_checkpoint_output: StateCheckpointOutput,
     ) -> ExecutorResult<StateComputeResult> {
-        self.inner.ledger_update(block_id, parent_block_id, state_checkpoint_output)
+        self.inner.ledger_update(block_id, parent_block_id)
     }
 
     fn commit_blocks(
@@ -279,7 +286,6 @@ impl BlockExecutorTrait for GravityBlockExecutor {
     fn pre_commit_block(
         &self,
         block_id: HashValue,
-        parent_block_id: HashValue,
     ) -> ExecutorResult<()> {
         todo!()
     }

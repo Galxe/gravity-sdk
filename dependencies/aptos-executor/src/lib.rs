@@ -8,7 +8,7 @@ pub mod block_executor {
     use anyhow::{Ok, Result};
 
     use aptos_crypto::HashValue;
-    use aptos_executor_types::{state_checkpoint_output::{self, BlockExecutorInner}, BlockExecutorTrait, ExecutorResult, StateCheckpointOutput, StateComputeResult};
+    use aptos_executor_types::{state_checkpoint_output::{self, BlockExecutorInner}, BlockExecutorTrait, ExecutorResult, StateComputeResult};
     use aptos_storage_interface::DbReaderWriter;
     use aptos_types::{
         block_executor::{config::{BlockExecutorConfig, BlockExecutorConfigFromOnchain}, partitioner::ExecutableBlock}, executable::Executable, ledger_info::LedgerInfoWithSignatures, state_store::TStateView, transaction::BlockExecutableTransaction as Transaction
@@ -46,16 +46,14 @@ pub mod block_executor {
         block: ExecutableBlock,
         parent_block_id: HashValue,
         onchain_config: BlockExecutorConfigFromOnchain,
-    ) -> ExecutorResult<StateCheckpointOutput> {
-        let state_checkpoint_output = StateCheckpointOutput::default();
-        ExecutorResult::Ok(state_checkpoint_output)
+    ) -> ExecutorResult<()> {
+        ExecutorResult::Ok(())
     }
 
     fn ledger_update(
         &self,
         block_id: HashValue,
         parent_block_id: HashValue,
-        state_checkpoint_output: StateCheckpointOutput,
     ) -> ExecutorResult<StateComputeResult> {
         let res = StateComputeResult::with_root_hash(block_id);
         ExecutorResult::Ok(res)
@@ -75,12 +73,11 @@ pub mod block_executor {
     }
     
     fn pre_commit_block(
-            &self,
-            block_id: HashValue,
-            parent_block_id: HashValue,
-        ) -> ExecutorResult<()> {
-            todo!()
-        }
+        &self,
+        block_id: HashValue,
+    ) -> ExecutorResult<()> {
+        todo!()
+    }
     
     fn commit_ledger(&self, ledger_info_with_sigs: LedgerInfoWithSignatures) -> ExecutorResult<()> {
             todo!()
