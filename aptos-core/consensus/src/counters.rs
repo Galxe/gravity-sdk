@@ -1226,31 +1226,31 @@ pub fn update_counters_for_block(block: &Block) {
 }
 
 pub fn update_counters_for_compute_result(compute_result: &StateComputeResult) {
-    let txn_status = compute_result.compute_status_for_input_txns();
-    LAST_COMMITTED_VERSION.set(compute_result.last_version_or_0() as i64);
-    NUM_TXNS_PER_BLOCK.observe(txn_status.len() as f64);
-    for status in txn_status.iter() {
-        let commit_status = match status {
-            TransactionStatus::Keep(_) => TXN_COMMIT_SUCCESS_LABEL,
-            TransactionStatus::Discard(reason) => {
-                /// TODO(gravity_byteyue): rethink do we need txn status
-                todo!();
-                // if *reason == DiscardedVMStatus::SEQUENCE_NUMBER_TOO_NEW {
-                //     TXN_COMMIT_RETRY_LABEL
-                // } else if *reason == DiscardedVMStatus::SEQUENCE_NUMBER_TOO_OLD {
-                //     TXN_COMMIT_FAILED_DUPLICATE_LABEL
-                // } else if *reason == DiscardedVMStatus::TRANSACTION_EXPIRED {
-                //     TXN_COMMIT_FAILED_EXPIRED_LABEL
-                // } else {
-                //     TXN_COMMIT_FAILED_LABEL
-                // }
-            },
-            TransactionStatus::Retry => TXN_COMMIT_RETRY_LABEL,
-        };
-        COMMITTED_TXNS_COUNT
-            .with_label_values(&[commit_status])
-            .inc();
-    }
+    // let txn_status = compute_result.compute_status_for_input_txns();
+    // LAST_COMMITTED_VERSION.set(compute_result.last_version_or_0() as i64);
+    // NUM_TXNS_PER_BLOCK.observe(txn_status.len() as f64);
+    // for status in txn_status.iter() {
+    //     let commit_status = match status {
+    //         TransactionStatus::Keep(_) => TXN_COMMIT_SUCCESS_LABEL,
+    //         TransactionStatus::Discard(reason) => {
+    //             /// TODO(gravity_byteyue): rethink do we need txn status
+    //             todo!();
+    //             if *reason == DiscardedVMStatus::SEQUENCE_NUMBER_TOO_NEW {
+    //                 TXN_COMMIT_RETRY_LABEL
+    //             } else if *reason == DiscardedVMStatus::SEQUENCE_NUMBER_TOO_OLD {
+    //                 TXN_COMMIT_FAILED_DUPLICATE_LABEL
+    //             } else if *reason == DiscardedVMStatus::TRANSACTION_EXPIRED {
+    //                 TXN_COMMIT_FAILED_EXPIRED_LABEL
+    //             } else {
+    //                 TXN_COMMIT_FAILED_LABEL
+    //             }
+    //         },
+    //         TransactionStatus::Retry => TXN_COMMIT_RETRY_LABEL,
+    //     };
+    //     COMMITTED_TXNS_COUNT
+    //         .with_label_values(&[commit_status])
+    //         .inc();
+    // }
 }
 
 /// Update various counters for committed blocks

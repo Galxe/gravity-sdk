@@ -38,6 +38,7 @@ use aptos_types::{
     validator_signer::ValidatorSigner,
 };
 use futures::FutureExt;
+use itertools::Itertools;
 use move_core_types::account_address::AccountAddress;
 use rayon::prelude::*;
 use std::{
@@ -449,12 +450,14 @@ impl PipelineBuilder {
         .await
         .expect("spawn blocking failed")?;
         observe_block(timestamp, BlockStage::EXECUTED);
-        let epoch_end_timestamp =
-            if result.has_reconfiguration() && !result.compute_status_for_input_txns().is_empty() {
-                Some(timestamp)
-            } else {
-                prev_epoch_end_timestamp
-            };
+        // FIXME(gravity_byteyue): fixme
+        // let epoch_end_timestamp =
+        //     if result.has_reconfiguration() && !result.compute_status_for_input_txns().is_empty() {
+        //         Some(timestamp)
+        //     } else {
+        //         prev_epoch_end_timestamp
+        //     };
+        let epoch_end_timestamp = None;
         Ok((result, epoch_end_timestamp))
     }
 
@@ -471,39 +474,39 @@ impl PipelineBuilder {
         let (compute_result, _) = ledger_update.await?;
 
         let _tracker = Tracker::new("post_ledger_update", &block);
-        let compute_status = compute_result.compute_status_for_input_txns();
-        // the length of compute_status is user_txns.len() + num_vtxns + 1 due to having blockmetadata
-        if user_txns.len() >= compute_status.len() {
-            // reconfiguration suffix blocks don't have any transactions
-            // otherwise, this is an error
-            if !compute_status.is_empty() {
-                error!(
-                        "Expected compute_status length and actual compute_status length mismatch! user_txns len: {}, compute_status len: {}, has_reconfiguration: {}",
-                        user_txns.len(),
-                        compute_status.len(),
-                        compute_result.has_reconfiguration(),
-                    );
-            }
-        } else {
-            let user_txn_status = &compute_status[compute_status.len() - user_txns.len()..];
-            // todo: avoid clone
-            let txns: Vec<SignedTransaction> = user_txns
-                .iter()
-                .flat_map(|txn| txn.get_transaction().map(|t| t.try_as_signed_user_txn()))
-                .flatten()
-                .cloned()
-                .collect();
+        // let compute_status = compute_result.compute_status_for_input_txns();
+        // // the length of compute_status is user_txns.len() + num_vtxns + 1 due to having blockmetadata
+        // if user_txns.len() >= compute_status.len() {
+        //     // reconfiguration suffix blocks don't have any transactions
+        //     // otherwise, this is an error
+        //     if !compute_status.is_empty() {
+        //         error!(
+        //                 "Expected compute_status length and actual compute_status length mismatch! user_txns len: {}, compute_status len: {}, has_reconfiguration: {}",
+        //                 user_txns.len(),
+        //                 compute_status.len(),
+        //                 compute_result.has_reconfiguration(),
+        //             );
+        //     }
+        // } else {
+        //     let user_txn_status = &compute_status[compute_status.len() - user_txns.len()..];
+        //     // todo: avoid clone
+        //     let txns: Vec<SignedTransaction> = user_txns
+        //         .iter()
+        //         .flat_map(|txn| txn.get_transaction().map(|t| t.try_as_signed_user_txn()))
+        //         .flatten()
+        //         .cloned()
+        //         .collect();
 
-            // notify mempool about failed transaction
-            if let Err(e) = mempool_notifier
-                .notify_failed_txn(&txns, user_txn_status)
-                .await
-            {
-                error!(
-                    error = ?e, "Failed to notify mempool of rejected txns",
-                );
-            }
-        }
+        //     // notify mempool about failed transaction
+        //     if let Err(e) = mempool_notifier
+        //         .notify_failed_txn(&txns, user_txn_status)
+        //         .await
+        //     {
+        //         error!(
+        //             error = ?e, "Failed to notify mempool of rejected txns",
+        //         );
+        //     }
+        // }
         Ok(())
     }
 
@@ -534,7 +537,7 @@ impl PipelineBuilder {
         let _tracker = Tracker::new("sign_commit_vote", &block);
         let mut block_info = block.gen_block_info(
             compute_result.root_hash(),
-            compute_result.last_version_or_0(),
+            0, // TODO(gravity_byteyue): fix this
             compute_result.epoch_state().clone(),
         );
         if let Some(timestamp) = epoch_end_timestamp {
@@ -611,8 +614,11 @@ impl PipelineBuilder {
         let timestamp = block.timestamp_usecs();
         let _timer = counters::OP_COUNTERS.timer("pre_commit_notify");
 
-        let txns = compute_result.transactions_to_commit().to_vec();
-        let subscribable_events = compute_result.subscribable_events().to_vec();
+        // let txns = compute_result.transactions_to_commit().to_vec();
+        let (txns, _) = payload_manager.get_transactions(&block).await.unwrap_or_default();
+        let txns = txns.into_iter().map(|t| { Transaction::UserTransaction(t) }).collect_vec();
+        // let subscribable_events = compute_result.subscribable_events().to_vec();
+        let subscribable_events = vec![];
         if let Err(e) = monitor!(
             "notify_state_sync",
             state_sync_notifier

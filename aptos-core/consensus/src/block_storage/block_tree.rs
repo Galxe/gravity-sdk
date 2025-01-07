@@ -616,6 +616,7 @@ impl BlockTree {
         block_id: HashValue,
         block_round: Round,
         commit_decision: LedgerInfoWithSignatures,
+        prune_block_number: u64,
     ) {
         let commit_proof = WrappedLedgerInfo::new(VoteData::dummy(), commit_decision);
 
@@ -629,13 +630,10 @@ impl BlockTree {
             block_id = block_id,
         );
 
-        let ids_to_remove = self.find_blocks_to_prune(block_id);
-        if let Err(e) = storage.prune_tree(ids_to_remove.clone().into_iter().collect()) {
-            // it's fine to fail here, as long as the commit succeeds, the next restart will clean
-            // up dangling blocks, and we need to prune the tree to keep the root consistent with
-            // executor.
-            warn!(error = ?e, "fail to delete block");
-        }
+        // TODO(gravity_lightman): FIX
+        info!("the prune block block number {}", prune_block_number);
+        // TODO(gravity_lightman)
+        let ids_to_remove = self.find_blocks_to_prune_by_block_number(prune_block_number);
         self.process_pruned_blocks(ids_to_remove);
         self.update_highest_commit_cert(commit_proof);
     }
