@@ -67,11 +67,25 @@ impl StatelessPipeline for PersistingPhase {
             commit_ledger_info,
             callback,
         } = req;
-        let round = commit_ledger_info.ledger_info().round();
+        if blocks
+            .last()
+            .expect("Blocks can't be empty")
+            .pipeline_enabled()
+        {
+            for b in &blocks {
+                if let Some(tx) = b.pipeline_tx().lock().as_mut() {
+                    let _ = tx.commit_proof_tx.send(commit_ledger_info.clone());
+                }
+                b.wait_for_commit_ledger().await;
+            }
 
-        self.persisting_handle
-            .commit(&blocks, commit_ledger_info, callback)
-            .await
-            .map(|_| round)
+            Ok(blocks.last().expect("Blocks can't be empty").round())
+        } else {
+            let round = commit_ledger_info.ledger_info().round();
+            self.persisting_handle
+                .commit(&blocks, commit_ledger_info, callback)
+                .await
+                .map(|_| round)
+        }
     }
 }

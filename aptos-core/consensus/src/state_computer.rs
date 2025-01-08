@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::persistent_liveness_storage::PersistentLivenessStorage;
+use crate::pipeline::pipeline_builder::PipelineBuilder;
 use crate::{
     block_preparer::BlockPreparer,
     block_storage::tracing::{observe_block, BlockStage},
@@ -30,6 +31,7 @@ use aptos_executor_types::{BlockExecutorTrait, ExecutorResult, StateComputeResul
 use aptos_infallible::RwLock;
 use aptos_logger::prelude::*;
 use aptos_types::transaction::SignedTransaction;
+use aptos_types::validator_signer::ValidatorSigner;
 use aptos_types::{
     account_address::AccountAddress, block_executor::config::BlockExecutorConfigFromOnchain,
     contract_event::ContractEvent, epoch_state::EpochState, ledger_info::LedgerInfoWithSignatures,
@@ -175,6 +177,40 @@ impl ExecutionProxy {
         //     .compute_result()
         //     .transactions_to_commit(input_txns, executed_block.id())
         input_txns
+    }
+
+    pub fn pipeline_builder(&self, commit_signer: Arc<ValidatorSigner>) -> PipelineBuilder {
+        let MutableState {
+            validators,
+            payload_manager,
+            transaction_shuffler,
+            block_executor_onchain_config,
+            transaction_deduper,
+            is_randomness_enabled,
+        } = self
+            .state
+            .read()
+            .as_ref()
+            .cloned()
+            .expect("must be set within an epoch");
+
+        let block_preparer = Arc::new(BlockPreparer::new(
+            payload_manager.clone(),
+            self.transaction_filter.clone(),
+            transaction_deduper.clone(),
+            transaction_shuffler.clone(),
+        ));
+        PipelineBuilder::new(
+            block_preparer,
+            self.executor.clone(),
+            validators,
+            block_executor_onchain_config,
+            is_randomness_enabled,
+            commit_signer,
+            self.state_sync_notifier.clone(),
+            payload_manager,
+            self.txn_notifier.clone(),
+        )
     }
 }
 

@@ -18,9 +18,7 @@ use aptos_consensus_types::{
     common::Round,
     pipeline::commit_vote::CommitVote,
     pipelined_block::{
-        CommitLedgerResult, CommitVoteResult, ExecuteResult, LedgerUpdateResult, PipelineFutures,
-        PipelineInputRx, PipelineInputTx, PostCommitResult, PostLedgerUpdateResult,
-        PostPreCommitResult, PreCommitResult, PrepareResult, TaskError, TaskFuture, TaskResult,
+        CommitLedgerResult, CommitVoteResult, ExecuteResult, LedgerUpdateResult, PipelineFutures, PipelineInputRx, PipelineInputTx, PipelinedBlock, PostCommitResult, PostLedgerUpdateResult, PostPreCommitResult, PreCommitResult, PrepareResult, TaskError, TaskFuture, TaskResult
     },
 };
 use aptos_crypto::HashValue;
@@ -193,8 +191,9 @@ impl PipelineBuilder {
         commit_proof: LedgerInfoWithSignatures,
     ) -> PipelineFutures {
         let prepare_fut = spawn_ready_fut(Arc::new(vec![]));
-        let execute_fut = spawn_ready_fut(());
-        let ledger_update_fut = spawn_ready_fut((compute_result.clone(), None));
+        let execute_fut = spawn_ready_fut(Duration::from_millis(0));
+        let ledger_update_fut =
+            spawn_ready_fut((compute_result.clone(), Duration::from_millis(0), None));
         let commit_vote_fut = spawn_ready_fut(CommitVote::new_with_signature(
             self.signer.author(),
             commit_proof.ledger_info().clone(),
@@ -222,7 +221,23 @@ impl PipelineBuilder {
 
     pub fn build(
         &self,
-        parent: &PipelineFutures,
+        pipelined_block: &PipelinedBlock,
+        parent_futs: PipelineFutures,
+        block_store_callback: Box<dyn FnOnce(LedgerInfoWithSignatures) + Send + Sync>,
+    ) {
+        let (futs, tx, abort_handles) = self.build_internal(
+            parent_futs,
+            Arc::new(pipelined_block.block().clone()),
+            block_store_callback,
+        );
+        pipelined_block.set_pipeline_futs(futs);
+        pipelined_block.set_pipeline_tx(tx);
+        pipelined_block.set_pipeline_abort_handles(abort_handles);
+    }
+
+    fn build_internal(
+        &self,
+        parent: PipelineFutures,
         block: Arc<Block>,
         block_store_callback: Box<dyn FnOnce(LedgerInfoWithSignatures) + Send + Sync>,
     ) -> (PipelineFutures, PipelineInputTx, Vec<AbortHandle>) {
@@ -415,6 +430,7 @@ impl PipelineBuilder {
             user_txns.as_ref().clone(),
         ]
         .concat();
+        let start = Instant::now();
         tokio::task::spawn_blocking(move || {
             executor
                 .execute_and_state_checkpoint(
@@ -426,7 +442,7 @@ impl PipelineBuilder {
         })
         .await
         .expect("spawn blocking failed")?;
-        Ok(())
+        Ok(start.elapsed())
     }
 
     /// Precondition: 1. execute finishes, 2. parent block's phase finishes
@@ -438,8 +454,8 @@ impl PipelineBuilder {
         executor: Arc<dyn BlockExecutorTrait>,
         block: Arc<Block>,
     ) -> TaskResult<LedgerUpdateResult> {
-        let (_, prev_epoch_end_timestamp) = parent_block_ledger_update_phase.await?;
-        execute_phase.await?;
+        let (_, _, prev_epoch_end_timestamp) = parent_block_ledger_update_phase.await?;
+        let execution_time = execute_phase.await?;
         let _tracker = Tracker::new("ledger_update", &block);
         let timestamp = block.timestamp_usecs();
         let result = tokio::task::spawn_blocking(move || {
@@ -458,7 +474,7 @@ impl PipelineBuilder {
         //         prev_epoch_end_timestamp
         //     };
         let epoch_end_timestamp = None;
-        Ok((result, epoch_end_timestamp))
+        Ok((result, execution_time, epoch_end_timestamp))
     }
 
     /// Precondition: ledger update finishes
@@ -471,7 +487,7 @@ impl PipelineBuilder {
         block: Arc<Block>,
     ) -> TaskResult<PostLedgerUpdateResult> {
         let user_txns = prepare_fut.await?;
-        let (compute_result, _) = ledger_update.await?;
+        let (compute_result, _, _) = ledger_update.await?;
 
         let _tracker = Tracker::new("post_ledger_update", &block);
         // let compute_status = compute_result.compute_status_for_input_txns();
@@ -520,7 +536,7 @@ impl PipelineBuilder {
         signer: Arc<ValidatorSigner>,
         block: Arc<Block>,
     ) -> TaskResult<CommitVoteResult> {
-        let (compute_result, epoch_end_timestamp) = ledger_update_phase.await?;
+        let (compute_result, _, epoch_end_timestamp) = ledger_update_phase.await?;
         // either order_vote_rx or order_proof_rx can trigger the next phase
         select! {
             Ok(_) = order_vote_rx => {
@@ -570,7 +586,7 @@ impl PipelineBuilder {
         executor: Arc<dyn BlockExecutorTrait>,
         block: Arc<Block>,
     ) -> TaskResult<PreCommitResult> {
-        let (compute_result, _) = ledger_update_phase.await?;
+        let (compute_result, _, _) = ledger_update_phase.await?;
         parent_block_pre_commit_phase.await?;
 
         order_proof_rx

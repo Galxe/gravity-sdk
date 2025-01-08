@@ -838,6 +838,13 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             )
             .await;
 
+        let maybe_pipeline_builder = if self.config.enable_pipeline {
+            let signer = Arc::new(ValidatorSigner::new(self.author, consensus_sk));
+            Some(self.execution_client.pipeline_builder(signer))
+        } else {
+            None
+        };
+
         info!(epoch = epoch, "Create BlockStore");
         // Read the last vote, before "moving" `recovery_data`
         let last_vote = recovery_data.last_vote();
@@ -852,6 +859,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             onchain_consensus_config.order_vote_enabled(),
             self.pending_blocks.clone(),
             self.execution_layer.clone(),
+            maybe_pipeline_builder,
         ).await);
 
         info!(epoch = epoch, "Create ProposalGenerator");

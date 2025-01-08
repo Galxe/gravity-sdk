@@ -368,6 +368,7 @@ impl BufferManager {
             let request = self.create_new_request(SigningRequest {
                 ordered_ledger_info: executed_item.ordered_proof.clone(),
                 commit_ledger_info: executed_item.partial_commit_proof.ledger_info().clone(),
+                blocks: executed_item.executed_blocks.clone(),
             });
             if cursor == self.signing_root {
                 let sender = self.signing_phase_tx.clone();
@@ -452,6 +453,13 @@ impl BufferManager {
     /// Internal requests are managed with ongoing_tasks.
     /// Incoming ordered blocks are pulled, it should only have existing blocks but no new blocks until reset finishes.
     async fn reset(&mut self) {
+        while let Some(item) = self.buffer.pop_front() {
+            for b in item.get_blocks() {
+                if let Some(futs) = b.abort_pipeline() {
+                    futs.wait_until_executor_finishes().await;
+                }
+            }
+        }
         self.buffer = Buffer::new();
         self.execution_root = None;
         self.signing_root = None;
@@ -636,7 +644,7 @@ impl BufferManager {
                 // find the corresponding item
                 let author = vote.author();
                 let commit_info = vote.commit_info().clone();
-                info!("Receive commit vote {} from {}", commit_info, author);
+                debug!("Receive commit vote {} from {}", commit_info, author);
                 let target_block_id = vote.commit_info().id();
                 let current_cursor = self
                     .buffer

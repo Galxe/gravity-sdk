@@ -11,8 +11,10 @@ use crate::{
     },
     counters,
     payload_manager::TPayloadManager,
-    persistent_liveness_storage::{PersistentLivenessStorage, RecoveryData, RootInfo},
-    pipeline::execution_client::TExecutionClient,
+    persistent_liveness_storage::{
+        PersistentLivenessStorage, RecoveryData, RootInfo,
+    },
+    pipeline::{execution_client::TExecutionClient, pipeline_builder::PipelineBuilder},
     util::time_service::TimeService,
 };
 use anyhow::{bail, ensure, format_err, Context};
@@ -28,6 +30,7 @@ use aptos_consensus_types::{
     quorum_cert::QuorumCert,
     sync_info::SyncInfo,
     timeout_2chain::TwoChainTimeoutCertificate,
+    vote_data::VoteData,
     wrapped_ledger_info::WrappedLedgerInfo,
 };
 use aptos_crypto::HashValue;
@@ -91,6 +94,7 @@ pub struct BlockStore {
     order_vote_enabled: bool,
     pending_blocks: Arc<Mutex<PendingBlocks>>,
     execution_layer: Option<ExecutionLayer>,
+    pipeline_builder: Option<PipelineBuilder>,
 }
 
 impl BlockStore {
@@ -105,6 +109,7 @@ impl BlockStore {
         order_vote_enabled: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
         execution_layer: Option<ExecutionLayer>,
+        pipeline_builder: Option<PipelineBuilder>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -123,6 +128,8 @@ impl BlockStore {
             order_vote_enabled,
             pending_blocks,
             execution_layer,
+            pipeline_builder,
+            None,
         ));
         block_on(block_store.recover_blocks());
         block_store
@@ -139,6 +146,7 @@ impl BlockStore {
         order_vote_enabled: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
         execution_layer: Option<ExecutionLayer>,
+        pipeline_builder: Option<PipelineBuilder>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -157,6 +165,8 @@ impl BlockStore {
             order_vote_enabled,
             pending_blocks,
             execution_layer,
+            pipeline_builder,
+            None,
         )
         .await;
         block_store.recover_blocks().await;
@@ -213,6 +223,7 @@ impl BlockStore {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn build(
         root: RootInfo,
         blocks: Vec<Block>,
@@ -227,6 +238,8 @@ impl BlockStore {
         order_vote_enabled: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
         execution_layer: Option<ExecutionLayer>,
+        pipeline_builder: Option<PipelineBuilder>,
+        tree_to_replace: Option<Arc<RwLock<BlockTree>>>,
     ) -> Self {
         let RootInfo(root_block, root_qc, root_ordered_cert, root_commit_cert) = root;
 
@@ -237,8 +250,14 @@ impl BlockStore {
             *root_block,
             vec![],
             // Create a dummy state_compute_result with necessary fields filled in.
-            result,
+            result.clone(),
         );
+
+        if let Some(pipeline_builder) = &pipeline_builder {
+            let pipeline_fut =
+                pipeline_builder.build_root(result, root_commit_cert.ledger_info().clone());
+            pipelined_root_block.set_pipeline_futs(pipeline_fut);
+        }
 
         let tree = BlockTree::new(
             pipelined_root_block,
@@ -249,8 +268,15 @@ impl BlockStore {
             highest_2chain_timeout_cert.map(Arc::new),
         );
 
+        let inner = if let Some(tree_to_replace) = tree_to_replace {
+            *tree_to_replace.write() = tree;
+            tree_to_replace
+        } else {
+            Arc::new(RwLock::new(tree))
+        };
+
         let block_store = Self {
-            inner: Arc::new(RwLock::new(tree)),
+            inner,
             execution_client,
             storage,
             time_service,
@@ -261,6 +287,7 @@ impl BlockStore {
             order_vote_enabled,
             pending_blocks,
             execution_layer,
+            pipeline_builder,
         };
 
         for block in blocks {
@@ -339,7 +366,7 @@ impl BlockStore {
                 }
             }
             let commit_decision = finality_proof.ledger_info().clone();
-            block_tree.write().commit_callback(
+            block_tree.write().commit_callback_deprecated(
                 storage,
                 &blocks_to_commit,
                 finality_proof,
@@ -356,7 +383,7 @@ impl BlockStore {
                     Box::new(
                         move |committed_blocks: &[Arc<PipelinedBlock>],
                               commit_decision: LedgerInfoWithSignatures| {
-                            block_tree.write().commit_callback(
+                            block_tree.write().commit_callback_deprecated(
                                 storage,
                                 committed_blocks,
                                 finality_proof,
@@ -387,7 +414,7 @@ impl BlockStore {
         let max_pruned_blocks_in_mem = self.inner.read().max_pruned_blocks_in_mem();
         // Rollover the previous highest TC from the old tree to the new one.
         let prev_2chain_htc = self.highest_2chain_timeout_cert().map(|tc| tc.as_ref().clone());
-        let BlockStore { inner, .. } = Self::build(
+        let _ = Self::build(
             root,
             blocks,
             quorum_certs,
@@ -401,13 +428,11 @@ impl BlockStore {
             self.order_vote_enabled,
             self.pending_blocks.clone(),
             self.execution_layer.clone(),
+            self.pipeline_builder.clone(),
+            Some(self.inner.clone()),
         )
         .await;
 
-        // Unwrap the new tree and replace the existing tree.
-        *self.inner.write() = Arc::try_unwrap(inner)
-            .unwrap_or_else(|_| panic!("New block tree is not shared"))
-            .into_inner();
         self.recover_blocks().await;
     }
 
@@ -435,7 +460,46 @@ impl BlockStore {
             );
         }
 
+        if let Some(payload) = block.payload() {
+            self.payload_manager
+                .prefetch_payload_data(payload, block.timestamp_usecs());
+        }
+
         let pipelined_block = PipelinedBlock::new_ordered(block.clone());
+
+        // build pipeline
+        if let Some(pipeline_builder) = &self.pipeline_builder {
+            let parent_block = self
+                .get_block(block.parent_id())
+                .ok_or_else(|| anyhow::anyhow!("Parent block not found"))?;
+
+            // need weak pointer to break the cycle between block tree -> pipeline block -> callback
+            let block_tree = Arc::downgrade(&self.inner);
+            let storage = self.storage.clone();
+            let id = block.id();
+            let round = block.round();
+            let finalized_block_number =
+                self.execution_layer.as_ref().unwrap().recovery_api.finalized_block_number().await;
+            let callback = Box::new(move |commit_decision: LedgerInfoWithSignatures| {
+                if let Some(tree) = block_tree.upgrade() {
+                    tree.write().commit_callback(
+                        storage,
+                        id,
+                        round,
+                        WrappedLedgerInfo::new(VoteData::dummy(), commit_decision),
+                        finalized_block_number
+                    );
+                }
+            });
+            pipeline_builder.build(
+                &pipelined_block,
+                parent_block
+                    .pipeline_futs()
+                    .expect("Futures should exist when pipeline enabled"),
+                callback,
+            );
+        }
+
         // ensure local time past the block time
         let block_time = Duration::from_micros(pipelined_block.timestamp_usecs());
         let current_timestamp = self.time_service.get_current_timestamp();
@@ -444,10 +508,6 @@ impl BlockStore {
                 warn!("Long wait time {}ms for block {}", t.as_millis(), pipelined_block.block());
             }
             self.time_service.wait_until(block_time).await;
-        }
-        if let Some(payload) = pipelined_block.block().payload() {
-            self.payload_manager
-                .prefetch_payload_data(payload, pipelined_block.block().timestamp_usecs());
         }
         if !rebuild {
             self.storage
