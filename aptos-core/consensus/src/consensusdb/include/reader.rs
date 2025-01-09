@@ -168,5 +168,3 @@ impl DbReader for ConsensusDB {
         Ok(Some(StateValue::new_legacy(bytes.into())))
     }
 }
-
-impl DbWriter for ConsensusDB {}

@@ -5,6 +5,7 @@
 #[cfg(test)]
 mod consensusdb_test;
 mod schema;
+mod ledger_db;
 
 use crate::error::DbError;
 use anyhow::Result;
@@ -13,6 +14,7 @@ use aptos_crypto::HashValue;
 use aptos_logger::prelude::*;
 use aptos_schemadb::{schema::Schema, Options, SchemaBatch, DB, DEFAULT_COLUMN_FAMILY_NAME};
 use aptos_storage_interface::AptosDbError;
+use ledger_db::LedgerDb;
 pub use schema::{
     block::BlockSchema,
     dag::{CertifiedNodeSchema, DagVoteSchema, NodeSchema},
@@ -25,10 +27,7 @@ use schema::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeMap,
-    iter::Iterator,
-    path::{Path, PathBuf},
-    time::Instant,
+    collections::BTreeMap, iter::Iterator, path::{Path, PathBuf}, sync::Arc, time::Instant
 };
 
 /// The name of the consensus db file
@@ -68,8 +67,9 @@ fn load_file(path: &Path) -> GravityNodeConfigSet {
 }
 
 pub struct ConsensusDB {
-    db: DB,
+    db: Arc<DB>,
     pub node_config_set: GravityNodeConfigSet,
+    ledger_db: LedgerDb,
 }
 
 impl ConsensusDB {
@@ -91,8 +91,8 @@ impl ConsensusDB {
         let mut opts = Options::default();
         opts.create_if_missing(true);
         opts.create_missing_column_families(true);
-        let db = DB::open(path.clone(), "consensus", column_families, &opts)
-            .expect("ConsensusDB open failed; unable to continue");
+        let db = Arc::new(DB::open(path.clone(), "consensus", column_families, &opts)
+            .expect("ConsensusDB open failed; unable to continue"));
 
         info!("Opened ConsensusDB at {:?} in {} ms", path, instant.elapsed().as_millis());
         let mut node_config_set = BTreeMap::new();
@@ -100,7 +100,9 @@ impl ConsensusDB {
             node_config_set = load_file(node_config_path.as_path());
         }
 
-        Self { db, node_config_set }
+        let ledger_db = LedgerDb::new(db.clone());
+
+        Self { db, node_config_set, ledger_db }
     }
 
     pub fn get_data(
@@ -214,6 +216,7 @@ impl ConsensusDB {
 }
 
 include!("include/reader.rs");
+include!("include/writer.rs");
 
 #[cfg(test)]
 mod test {

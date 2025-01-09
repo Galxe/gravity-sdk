@@ -290,10 +290,10 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             // }
         }
         // TODO(gravity_lightman): handle the following logic
-        // self.inner
-        //     .db
-        //     .writer
-        //     .commit_ledger(0, Some(&ledger_info_with_sigs), None);
+        self.inner
+            .db
+            .writer
+            .commit_ledger(0, Some(&ledger_info_with_sigs), None);
         Ok(())
     }
 

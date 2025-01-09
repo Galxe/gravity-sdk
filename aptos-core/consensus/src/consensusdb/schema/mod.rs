@@ -6,8 +6,11 @@ pub(crate) mod block;
 pub(crate) mod dag;
 pub(crate) mod quorum_certificate;
 pub(crate) mod single_entry;
+pub(crate) mod ledger_info;
 
 use anyhow::{ensure, Result};
+
+pub const LEDGER_INFO_CF_NAME: ColumnFamilyName = "ledger_info";
 
 pub(crate) fn ensure_slice_len_eq(data: &[u8], len: usize) -> Result<()> {
     ensure!(
@@ -35,6 +38,7 @@ macro_rules! define_schema {
     };
 }
 
+use aptos_schemadb::ColumnFamilyName;
 pub use block::BLOCK_CF_NAME;
 pub use dag::{CERTIFIED_NODE_CF_NAME, DAG_VOTE_CF_NAME, NODE_CF_NAME};
 pub use quorum_certificate::QC_CF_NAME;

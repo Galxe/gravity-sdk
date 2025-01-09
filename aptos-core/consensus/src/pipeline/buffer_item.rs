@@ -174,10 +174,10 @@ impl BufferItem {
                 for (b1, b2) in zip_eq(ordered_blocks.iter(), executed_blocks.iter()) {
                     assert_eq!(b1.id(), b2.id());
                 }
-                let mut commit_info = executed_blocks
+                let block = executed_blocks
                     .last()
-                    .expect("execute_blocks should not be empty!")
-                    .block_info();
+                    .expect("execute_blocks should not be empty!");
+                let mut commit_info = block.block_info();
                 match epoch_end_timestamp {
                     Some(timestamp) if commit_info.timestamp_usecs() != timestamp => {
                         assert!(executed_blocks
@@ -188,10 +188,11 @@ impl BufferItem {
                     },
                     _ => (),
                 }
-                if let Some(commit_proof) = commit_proof {
+                if let Some(mut commit_proof) = commit_proof {
                     // We have already received the commit proof in fast forward sync path,
                     // we can just use that proof and proceed to aggregated
                     assert_eq!(commit_proof.commit_info().clone(), commit_info);
+                    commit_proof.set_block_hash(block.compute_result().root_hash());
                     debug!(
                         "{} advance to aggregated from ordered",
                         commit_proof.commit_info()
@@ -202,11 +203,12 @@ impl BufferItem {
                         callback,
                     }))
                 } else {
-                    let commit_ledger_info = generate_commit_ledger_info(
+                    let mut commit_ledger_info = generate_commit_ledger_info(
                         &commit_info,
                         &ordered_proof,
                         order_vote_enabled,
                     );
+                    commit_ledger_info.set_block_hash(block.compute_result().root_hash());
 
                     let verified_signatures =
                         verify_signatures(unverified_signatures, validator, &commit_ledger_info);

@@ -85,6 +85,7 @@ tokio-retry = { workspace = true }
 tokio-stream = { workspace = true }
 api-types.workspace = true
 coex-bridge.workspace = true
+arc-swap = "1.7.1"
 
 [dev-dependencies]
 aptos-cached-packages = { workspace = true }

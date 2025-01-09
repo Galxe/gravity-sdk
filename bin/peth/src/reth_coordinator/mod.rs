@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use crate::reth_cli::RethCli;
 use api_types::u256_define::TxnHash;
+use api_types::{ExecutionBlocks, RecoveryApi, RecoveryError};
 use api_types::{
     u256_define::BlockId, u256_define::ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExternalBlock, ExternalBlockMeta,
     ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
@@ -145,5 +146,32 @@ impl ExecutionApiV2 for RethCoordinator {
         self.reth_cli.commit_block(parent_hash, payload_id, block_hash.into()).await.unwrap();
         self.queue.recv_commit().await;
         Ok(())
+    }
+}
+
+#[async_trait]
+impl RecoveryApi for RethCoordinator {
+    async fn latest_block_number(&self) -> u64 {
+
+    }
+
+    async fn finalized_block_number(&self) -> u64 {
+
+    }
+
+    async fn recover_ordered_block(&self, block: ExternalBlock) {
+
+    }
+
+    async fn recover_execution_blocks(&self, blocks: ExecutionBlocks) {
+
+    }
+
+    async fn get_blocks_by_range(
+        &self,
+        start_block_number: u64,
+        end_block_number: u64,
+    ) -> Result<ExecutionBlocks, RecoveryError> {
+        
     }
 }
