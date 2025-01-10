@@ -478,12 +478,13 @@ impl ConsensusObserver {
 
     /// Returns the last known block
     fn get_last_block(&self) -> BlockInfo {
-        if let Some(last_pending_block) = self.ordered_block_store.get_last_ordered_block() {
-            last_pending_block
-        } else {
-            // Return the root ledger info
-            self.root.lock().commit_info().clone()
-        }
+        todo!();
+        // if let Some(last_pending_block) = self.ordered_block_store.get_last_ordered_block() {
+        //     last_pending_block
+        // } else {
+        //     // Return the root ledger info
+        //     self.root.lock().commit_info().clone()
+        // }
     }
 
     /// Gets the connected peers and metadata. If an error occurred,
