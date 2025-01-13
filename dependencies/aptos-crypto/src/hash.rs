@@ -152,9 +152,7 @@ impl HashValue {
 
     /// Creates a zero-initialized instance.
     pub const fn zero() -> Self {
-        HashValue {
-            hash: [0; HashValue::LENGTH],
-        }
+        HashValue { hash: [0; HashValue::LENGTH] }
     }
 
     /// Create a cryptographically random instance.
@@ -250,10 +248,7 @@ impl HashValue {
 
     /// Returns the length of common prefix of `self` and `other` in bits.
     pub fn common_prefix_bits_len(&self, other: HashValue) -> usize {
-        self.iter_bits()
-            .zip(other.iter_bits())
-            .take_while(|(x, y)| x == y)
-            .count()
+        self.iter_bits().zip(other.iter_bits()).take_while(|(x, y)| x == y).count()
     }
 
     /// Full hex representation of a given hash value.
@@ -268,9 +263,7 @@ impl HashValue {
 
     /// Parse a given hex string to a hash value.
     pub fn from_hex<T: AsRef<[u8]>>(hex: T) -> Result<Self, HashValueParseError> {
-        <[u8; Self::LENGTH]>::from_hex(hex)
-            .map_err(|_| HashValueParseError)
-            .map(Self::new)
+        <[u8; Self::LENGTH]>::from_hex(hex).map_err(|_| HashValueParseError).map(Self::new)
     }
 
     /// Create a hash value whose contents are just the given integer. Useful for
@@ -689,9 +682,8 @@ pub static GENESIS_BLOCK_ID: Lazy<HashValue> = Lazy::new(|| {
     // This maintains the invariant that block.id() == block.hash(), for
     // the genesis block and allows us to (de/)serialize it consistently
     HashValue::new([
-        0x43, 0xbf, 0x83, 0x6b, 0x97, 0x02, 0x74, 0x90, 0x9c, 0xe1, 0x89, 0xef, 0xf8, 0xf4, 0x2e,
-        0xea, 0x6e, 0x53, 0x06, 0x04, 0xeb, 0x3a, 0x76, 0xae, 0xbd, 0x9a, 0x6c, 0xd6, 0x45, 0xa6,
-        0xe7, 0x7e,
+        141, 91, 216, 66, 168, 139, 218, 32, 132, 186, 161, 251, 250, 51, 34, 197, 38, 71, 196,
+        135, 49, 116, 247, 25, 67, 147, 163, 137, 28, 58, 62, 73,
     ])
 });
 

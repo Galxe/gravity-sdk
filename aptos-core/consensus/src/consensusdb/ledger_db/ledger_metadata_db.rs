@@ -1,29 +1,52 @@
+use aptos_consensus_types::vote_msg::VoteMsg;
 use aptos_schemadb::{SchemaBatch, DB};
-use aptos_storage_interface::Result;
+use aptos_storage_interface::{AptosDbError, Result};
 use aptos_types::ledger_info::LedgerInfoWithSignatures;
-use arc_swap::ArcSwap;
+use arc_swap::{access::Access, ArcSwap};
 use crate::consensusdb::schema::ledger_info::LedgerInfoSchema;
 use std::sync::Arc;
 
 const MAX_LEDGER_INFOS: u32 = 256;
 
 fn get_latest_ledger_info_in_db_impl(db: &DB) -> Result<Option<LedgerInfoWithSignatures>> {
-    let mut iter = db.iter::<LedgerInfoSchema>()?;
-    iter.seek_to_last();
-    Ok(iter.next().transpose()?.map(|(_, v)| v))
+    match db.iter::<LedgerInfoSchema>() {
+        Err(e) => {
+            if let AptosDbError::Other(msg) = &e {
+                if msg.contains("column family name: ledger_info") {
+                    return Ok(None);
+                }
+            }
+            Err(e)
+        }
+        Ok(mut iter) => {
+            iter.seek_to_last();
+            Ok(iter.next().transpose()?.map(|(_, v)| v))
+        }
+    }
 }
 
 fn get_latest_ledger_infos_in_db_impl(db: &DB) -> Result<Vec<LedgerInfoWithSignatures>> {
-    let mut res: Vec<_> = vec![];
-    let mut iter = db.iter::<LedgerInfoSchema>()?;
-    iter.seek_to_last();
-    for _ in 0..MAX_LEDGER_INFOS {
-        match iter.next().transpose() {
-            Ok(Some((_, v))) => res.push(v),
-            _ => break,
+    match db.iter::<LedgerInfoSchema>() {
+        Err(e) => {
+            if let AptosDbError::Other(msg) = &e {
+                if msg.contains("column family name: ledger_info") {
+                    return Ok(vec![]);
+                }
+            }
+            Err(e)
+        }
+        Ok(mut iter) => {
+            let mut res: Vec<_> = vec![];
+            iter.seek_to_last();
+            for _ in 0..MAX_LEDGER_INFOS {
+                match iter.next().transpose() {
+                    Ok(Some((_, v))) => res.push(v),
+                    _ => break,
+                }
+            }
+            Ok(res)
         }
     }
-    Ok(res)
 }
 
 #[derive(Debug)]
@@ -60,6 +83,12 @@ impl LedgerMetadataDb {
         self.latest_ledger_info
             .store(Arc::new(Some(ledger_info_with_sigs)));
     }
+
+    pub(crate) fn get_latest_ledger_info(&self) -> Option<LedgerInfoWithSignatures> {
+        let latest_ledger_info = self.latest_ledger_info.load();
+        latest_ledger_info.as_ref().clone()
+    }
+
     /// Writes `ledger_info_with_sigs` to `batch`.
     pub(crate) fn put_ledger_info(
         &self,

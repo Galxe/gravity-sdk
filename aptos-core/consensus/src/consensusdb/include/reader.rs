@@ -61,12 +61,17 @@ impl DbReader for ConsensusDB {
     }
 
     fn get_latest_ledger_info(&self) -> Result<LedgerInfoWithSignatures, AptosDbError> {
-        let genesis = LedgerInfoWithSignatures::genesis(
-            *ACCUMULATOR_PLACEHOLDER_HASH,
-            ValidatorSet::new(self.mock_validators()),
-        );
-        println!("genesis is {:?}", genesis);
-        Ok(genesis)
+        match self.ledger_db.metadata_db().get_latest_ledger_info() {
+            Some(ledger_info) => Ok(ledger_info),
+            None => {
+                let genesis = LedgerInfoWithSignatures::genesis(
+                    *ACCUMULATOR_PLACEHOLDER_HASH,
+                    ValidatorSet::new(self.mock_validators()),
+                );
+                info!("genesis is {:?}", genesis);
+                Ok(genesis)
+            }
+        }
     }
 
     fn get_state_proof(&self, known_version: u64) -> Result<StateProof, AptosDbError> {
