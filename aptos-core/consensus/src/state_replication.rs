@@ -64,4 +64,6 @@ pub trait StateComputer: Send + Sync {
 
     // Reconfigure to clear epoch state at end of epoch.
     fn end_epoch(&self);
+
+    fn pipeline_builder(&self, commit_signer: Arc<ValidatorSigner>) -> PipelineBuilder;
 }
