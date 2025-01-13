@@ -1134,7 +1134,7 @@ impl ConsensusObserver {
             aptos_channel::new::<AccountAddress, IncomingRandGenRequest>(QueueStyle::FIFO, 1, None);
         self.execution_client
             .start_epoch(
-                Some(sk),
+                sk,
                 epoch_state.clone(),
                 dummy_signer,
                 payload_manager,

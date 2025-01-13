@@ -94,7 +94,7 @@ impl MockExecutionClient {
 impl TExecutionClient for MockExecutionClient {
     async fn start_epoch(
         &self,
-        _maybe_consensus_key: Option<Arc<PrivateKey>>,
+        _maybe_consensus_key: Arc<PrivateKey>,
         _epoch_state: Arc<EpochState>,
         _commit_signer_provider: Arc<dyn CommitSignerProvider>,
         _payload_manager: Arc<dyn TPayloadManager>,

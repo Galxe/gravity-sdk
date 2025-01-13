@@ -686,6 +686,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         epoch_state: &EpochState,
         network_sender: NetworkSender,
         consensus_config: &OnChainConsensusConfig,
+        consensus_key: Arc<PrivateKey>,
     ) -> (
         Arc<dyn TPayloadManager>,
         QuorumStoreClient,
@@ -718,6 +719,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 self.config.safety_rules.backend.clone(),
                 self.quorum_store_storage.clone(),
                 !consensus_config.is_dag_enabled(),
+                consensus_key,
             ))
         } else {
             info!("Building DirectMempool");
@@ -765,7 +767,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
     async fn start_round_manager(
         &mut self,
-        consensus_key: Option<Arc<PrivateKey>>,
+        consensus_key: Arc<PrivateKey>,
         recovery_data: RecoveryData,
         epoch_state: Arc<EpochState>,
         onchain_consensus_config: OnChainConsensusConfig,
@@ -945,7 +947,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
     fn try_get_rand_config_for_new_epoch(
         &self,
-        maybe_consensus_key: Option<Arc<PrivateKey>>,
+        consensus_key: Arc<PrivateKey>,
         new_epoch_state: &EpochState,
         onchain_randomness_config: &OnChainRandomnessConfig,
         maybe_dkg_state: anyhow::Result<DKGState>,
@@ -974,8 +976,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .copied()
             .ok_or_else(|| NoRandomnessReason::NotInValidatorSet)?;
 
-        let consensus_key =
-            maybe_consensus_key.ok_or(NoRandomnessReason::ConsensusKeyUnavailable)?;
         let dkg_decrypt_key = maybe_dk_from_bls_sk(consensus_key.as_ref())
             .map_err(NoRandomnessReason::ErrConvertingConsensusKeyToDecryptionKey)?;
         let transcript = bcs::from_bytes::<<DefaultDKG as DKGTrait>::Transcript>(
@@ -1148,10 +1148,9 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         });
 
         let loaded_consensus_key = match self.load_consensus_key(&epoch_state.verifier) {
-            Ok(k) => Some(Arc::new(k)),
+            Ok(k) => Arc::new(k),
             Err(e) => {
-                warn!("load_consensus_key failed: {e}");
-                None
+                panic!("load_consensus_key failed: {e}");
             },
         };
 
@@ -1189,7 +1188,11 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         );
 
         let (network_sender, payload_client, payload_manager) = self
-            .initialize_shared_component(&epoch_state, &consensus_config)
+            .initialize_shared_component(
+                &epoch_state,
+                &consensus_config,
+                loaded_consensus_key.clone(),
+            )
             .await;
 
         let (rand_msg_tx, rand_msg_rx) = aptos_channel::new::<AccountAddress, IncomingRandGenRequest>(
@@ -1238,6 +1241,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         &mut self,
         epoch_state: &EpochState,
         consensus_config: &OnChainConsensusConfig,
+        consensus_key: Arc<PrivateKey>,
     ) -> (
         NetworkSender,
         Arc<dyn PayloadClient>,
@@ -1247,7 +1251,12 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         self.quorum_store_enabled = self.enable_quorum_store(consensus_config);
         let network_sender = self.create_network_sender(epoch_state);
         let (payload_manager, quorum_store_client, quorum_store_builder) = self
-            .init_payload_provider(epoch_state, network_sender.clone(), consensus_config)
+            .init_payload_provider(
+                epoch_state,
+                network_sender.clone(),
+                consensus_config,
+                consensus_key,
+            )
             .await;
         let effective_vtxn_config = consensus_config.effective_validator_txn_config();
         debug!("effective_vtxn_config={:?}", effective_vtxn_config);
@@ -1267,7 +1276,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     async fn start_new_epoch_with_joltean(
         &mut self,
         epoch_state: Arc<EpochState>,
-        consensus_key: Option<Arc<PrivateKey>>,
+        consensus_key: Arc<PrivateKey>,
         consensus_config: OnChainConsensusConfig,
         execution_config: OnChainExecutionConfig,
         onchain_randomness_config: OnChainRandomnessConfig,
@@ -1316,7 +1325,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     async fn start_new_epoch_with_dag(
         &mut self,
         epoch_state: Arc<EpochState>,
-        loaded_consensus_key: Option<Arc<PrivateKey>>,
+        loaded_consensus_key: Arc<PrivateKey>,
         onchain_consensus_config: OnChainConsensusConfig,
         on_chain_execution_config: OnChainExecutionConfig,
         onchain_randomness_config: OnChainRandomnessConfig,
@@ -1331,9 +1340,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         let epoch = epoch_state.epoch;
         let signer = Arc::new(ValidatorSigner::new(
             self.author,
-            loaded_consensus_key
-                .clone()
-                .expect("unable to get private key"),
+            loaded_consensus_key.clone()
         ));
         let commit_signer = Arc::new(DagCommitSigner::new(signer.clone()));
 
@@ -1791,12 +1798,18 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     }
 
     fn load_consensus_key(&self, vv: &ValidatorVerifier) -> anyhow::Result<PrivateKey> {
-        let pk = vv
-            .get_public_key(&self.author)
-            .ok_or_else(|| anyhow!("i am not in the validator set!"))?;
-        self.key_storage
-            .consensus_sk_by_pk(pk)
-            .map_err(|e| anyhow!("could not find sk by pk: {:?}", e))
+        match vv.get_public_key(&self.author) {
+            Some(pk) => self
+                .key_storage
+                .consensus_sk_by_pk(pk)
+                .map_err(|e| anyhow!("could not find sk by pk: {:?}", e)),
+            None => {
+                warn!("could not find my pk in validator set, loading default sk!");
+                self.key_storage
+                    .default_consensus_sk()
+                    .map_err(|e| anyhow!("could not load default sk: {e}"))
+            },
+        }
     }
 }
 
