@@ -5,12 +5,27 @@ use arc_swap::ArcSwap;
 use crate::consensusdb::schema::ledger_info::LedgerInfoSchema;
 use std::sync::Arc;
 
+const MAX_LEDGER_INFOS: u32 = 256;
 
 fn get_latest_ledger_info_in_db_impl(db: &DB) -> Result<Option<LedgerInfoWithSignatures>> {
     let mut iter = db.iter::<LedgerInfoSchema>()?;
     iter.seek_to_last();
     Ok(iter.next().transpose()?.map(|(_, v)| v))
 }
+
+fn get_latest_ledger_infos_in_db_impl(db: &DB) -> Result<Vec<LedgerInfoWithSignatures>> {
+    let mut res: Vec<_> = vec![];
+    let mut iter = db.iter::<LedgerInfoSchema>()?;
+    iter.seek_to_last();
+    for _ in 0..MAX_LEDGER_INFOS {
+        match iter.next().transpose() {
+            Ok(Some((_, v))) => res.push(v),
+            _ => break,
+        }
+    }
+    Ok(res)
+}
+
 #[derive(Debug)]
 pub(crate) struct LedgerMetadataDb {
     db: Arc<DB>,
@@ -53,5 +68,9 @@ impl LedgerMetadataDb {
     ) -> Result<()> {
         let ledger_info = ledger_info_with_sigs.ledger_info();
         batch.put::<LedgerInfoSchema>(&ledger_info.epoch(), ledger_info_with_sigs)
+    }
+
+    pub(crate) fn get_latest_ledger_infos(&self) -> Vec<LedgerInfoWithSignatures> {
+        get_latest_ledger_infos_in_db_impl(&self.db).expect("DB read failed.")
     }
 }

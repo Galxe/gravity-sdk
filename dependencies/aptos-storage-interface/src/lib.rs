@@ -463,6 +463,8 @@ pub trait DbReader: Send + Sync {
             version: Version,
             index: u64,
         ) -> Result<ContractEvent>;
+
+        fn get_latest_ledger_infos(&self) -> Vec<LedgerInfoWithSignatures>;
     ); // end delegated
 
     /// Returns the latest ledger info.

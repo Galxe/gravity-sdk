@@ -123,7 +123,7 @@ pub trait RecoveryApi: Send + Sync {
 
     async fn finalized_block_number(&self) -> u64;
 
-    async fn recover_ordered_block(&self, block: ExternalBlock);
+    async fn recover_ordered_block(&self, parent_id: BlockId, block: ExternalBlock) -> Result<(), ExecError>;
 
     async fn recover_execution_blocks(&self, blocks: ExecutionBlocks);
 

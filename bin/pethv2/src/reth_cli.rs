@@ -1,13 +1,19 @@
 use alloy_consensus::{TxEip1559, TxEip2930, TxLegacy};
+use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::{Address, B256};
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
 use api_types::u256_define::{BlockId as ExternalBlockId, TxnHash};
-use api_types::{simple_hash, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
+use api_types::{simple_hash, ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 use jsonrpsee::core::Serialize;
 use reth::rpc::builder::auth::AuthServerHandle;
+use reth_db::DatabaseEnv;
 use reth_ethereum_engine_primitives::EthPayloadAttributes;
+use reth_node_api::NodeTypesWithDBAdapter;
+use reth_node_ethereum::EthereumNode;
 use reth_pipe_exec_layer_ext_v2::{ExecutedBlockMeta, OrderedBlock, PipeExecLayerApi};
-use reth_primitives::{Bytes, Signature, TransactionSigned, TxKind, Withdrawals, U256};
+use reth_primitives::{Block, Bytes, Signature, TransactionSigned, TxKind, Withdrawals, U256};
+use reth_provider::providers::BlockchainProvider2;
+use reth_provider::{BlockNumReader, BlockReaderIdExt, DatabaseProviderFactory};
 use reth_rpc_api::EngineEthApiClient;
 use reth_rpc_types::{AccessList, AccessListItem};
 use std::io::Read;
@@ -20,11 +26,14 @@ use web3::transports::Ipc;
 use web3::types::{BlockId, Transaction, TransactionId, H160};
 use web3::Web3;
 
+use crate::ConsensusArgs;
+
 pub struct RethCli {
     ipc: Web3<Ipc>,
     auth: AuthServerHandle,
     pipe_api: Mutex<PipeExecLayerApi>,
     chain_id: u64,
+    provider: BlockchainProvider2<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>
 }
 
 pub fn covert_account(acc: H160) -> ExternalAccountAddress {
@@ -56,11 +65,11 @@ impl RethCli {
         }
     }
 
-    pub async fn new(ipc_url: &str, auth: AuthServerHandle, pipe_api: PipeExecLayerApi) -> Self {
+    pub async fn new(ipc_url: &str, args: ConsensusArgs) -> Self {
         let transport = web3::transports::Ipc::new(ipc_url).await.unwrap();
         let ipc = web3::Web3::new(transport);
         let chain_id = ipc.eth().chain_id().await.unwrap();
-        RethCli { ipc, auth, pipe_api: Mutex::new(pipe_api), chain_id: chain_id.as_u64() }
+        RethCli { ipc, auth: args.engine_api, pipe_api: Mutex::new(args.pipeline_api), chain_id: chain_id.as_u64(), provider: args.provider }
     }
 
     fn block_id_to_b256(block_id: ExternalBlockId) -> B256 {
@@ -266,6 +275,51 @@ impl RethCli {
         }
         info!("end process pending transactions");
         Ok(())
+    }
+
+    pub async fn latest_block_number(&self) -> u64 {
+        match self.provider.header_by_number_or_tag(BlockNumberOrTag::Latest).unwrap() {
+            Some(header) => header.number, // The genesis block has a number of zero;
+            None => 0,
+        }
+    }
+
+    pub async fn finalized_block_number(&self) -> u64 {
+        match self.provider.database_provider_ro().unwrap().last_block_number() {
+            Ok(block_number) => {
+                return block_number;
+            },
+            Err(e) => {
+                error!("finalized_block_number error {}", e);
+                return 0;
+            }
+        }
+    }
+
+    async fn recover_execution_blocks(&self, blocks: ExecutionBlocks) {}
+
+    pub fn get_blocks_by_range(
+        &self,
+        start_block_number: u64,
+        end_block_number: u64,
+    ) -> ExecutionBlocks {
+        let result = ExecutionBlocks { latest_block_hash: todo!(), latest_block_number: todo!(), blocks: vec![], latest_ts: todo!() };
+        for block_number in start_block_number..end_block_number {
+            match self.provider.block_by_number_or_tag(BlockNumberOrTag::Number(block_number)) {
+                Ok(block) => {
+                    assert!(block.is_some());
+                    let block = block.unwrap();
+                    if block_number == end_block_number - 1 {
+                        result.latest_block_hash = *block.hash_slow();
+                        result.latest_block_number = block_number;
+                        result.latest_ts = block.timestamp;
+                    }
+                    result.blocks.push(bincode::serialize(&block).unwrap());
+                }
+                Err(e) => panic!("get_blocks_by_range error {}", e),
+            }
+        }
+        result
     }
 }
 

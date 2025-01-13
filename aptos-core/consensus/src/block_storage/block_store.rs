@@ -11,14 +11,15 @@ use crate::{
     },
     counters,
     payload_manager::TPayloadManager,
-    persistent_liveness_storage::{
-        PersistentLivenessStorage, RecoveryData, RootInfo,
-    },
+    persistent_liveness_storage::{PersistentLivenessStorage, RecoveryData, RootInfo},
     pipeline::execution_client::TExecutionClient,
     util::time_service::TimeService,
 };
 use anyhow::{bail, ensure, format_err, Context};
-use api_types::{u256_define::{BlockId, Random}, ExecutionLayer, ExternalBlock, ExternalBlockMeta};
+use api_types::{
+    u256_define::{BlockId, Random},
+    ExecutionLayer, ExternalBlock, ExternalBlockMeta,
+};
 use aptos_consensus_types::common::Payload::DirectMempool;
 use aptos_consensus_types::{
     block::Block,
@@ -183,13 +184,23 @@ impl BlockStore {
                     let verified_txns: Vec<VerifiedTxn> =
                         txns.iter().map(|txn| txn.into()).collect();
                     let verified_txns = verified_txns.into_iter().map(|txn| txn.into()).collect();
-                    let block_batch = ExternalBlock { txns: verified_txns, block_meta: ExternalBlockMeta {
-                        block_id: BlockId(*block_to_recover.block().id()),
-                        block_number: block_to_recover.block().block_number().unwrap(),
-                        usecs: block_to_recover.block().timestamp_usecs(),
-                        randomness: block_to_recover.randomness().map(|r| Random::from_bytes(r.randomness())),
-                    } };
-                    self.execution_layer.as_ref().unwrap().recovery_api.recover_ordered_block(block_batch).await;
+                    let block_batch = ExternalBlock {
+                        txns: verified_txns,
+                        block_meta: ExternalBlockMeta {
+                            block_id: BlockId(*block_to_recover.block().id()),
+                            block_number: block_to_recover.block().block_number().unwrap(),
+                            usecs: block_to_recover.block().timestamp_usecs(),
+                            randomness: block_to_recover
+                                .randomness()
+                                .map(|r| Random::from_bytes(r.randomness())),
+                        },
+                    };
+                    self.execution_layer
+                        .as_ref()
+                        .unwrap()
+                        .recovery_api
+                        .recover_ordered_block(BlockId(*block_to_recover.parent_id()), block_batch)
+                        .await.unwrap();
                 }
                 if qc.commit_info().round() <= self.commit_root().round() {
                     continue;
@@ -313,16 +324,19 @@ impl BlockStore {
             for p_block in &blocks_to_commit {
                 info!("recover commit block {}", p_block.block());
                 // TODO(gravity_lightman): Error handle
-                match self.execution_layer
+                match self
+                    .execution_layer
                     .as_ref()
                     .unwrap()
-                    .execution_api.commit_block(BlockId(*p_block.block().id()))
-                    .await { 
-                        Ok(_) => {}
-                        Err(e) => {
-                            todo!();
-                        }
+                    .execution_api
+                    .commit_block(BlockId(*p_block.block().id()))
+                    .await
+                {
+                    Ok(_) => {}
+                    Err(e) => {
+                        todo!();
                     }
+                }
             }
             let commit_decision = finality_proof.ledger_info().clone();
             block_tree.write().commit_callback(

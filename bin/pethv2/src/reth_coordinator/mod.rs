@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use crate::reth_cli::RethCli;
 use api_types::u256_define::TxnHash;
+use api_types::{ExecutionBlocks, RecoveryApi, RecoveryError};
 use api_types::{
     u256_define::BlockId, u256_define::ComputeRes, ExecError, ExecTxn, ExecutionApiV2,
     ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn,
@@ -131,5 +132,32 @@ impl ExecutionApiV2 for RethCoordinator {
         let block_hash = self.state.lock().await.get_block_hash(block_id).unwrap();
         self.reth_cli.commit_block(block_id, block_hash.into()).await.unwrap();
         Ok(())
+    }
+}
+
+#[async_trait]
+impl RecoveryApi for RethCoordinator {
+    async fn latest_block_number(&self) -> u64 {
+        self.reth_cli.latest_block_number().await
+    }
+
+    async fn finalized_block_number(&self) -> u64 {
+        self.reth_cli.finalized_block_number().await
+    }
+
+    async fn recover_ordered_block(&self, parent_id: BlockId, block: ExternalBlock) -> Result<(), ExecError> {
+        self.send_ordered_block(parent_id, block).await
+    }
+
+    async fn recover_execution_blocks(&self, blocks: ExecutionBlocks) {
+
+    }
+
+    async fn get_blocks_by_range(
+        &self,
+        start_block_number: u64,
+        end_block_number: u64,
+    ) -> Result<ExecutionBlocks, RecoveryError> {
+        Ok(self.reth_cli.get_blocks_by_range(start_block_number, end_block_number))
     }
 }

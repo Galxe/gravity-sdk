@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::{ExecutionBlocks, ExternalBlock, RecoveryApi, RecoveryError};
+use crate::{u256_define::BlockId, ExecError, ExecutionBlocks, ExternalBlock, RecoveryApi, RecoveryError};
 
 #[derive(Default)]
 pub struct DefaultRecovery {}
@@ -15,8 +15,8 @@ impl RecoveryApi for DefaultRecovery {
         0
     }
 
-    async fn recover_ordered_block(&self, _: ExternalBlock) {
-        ()
+    async fn recover_ordered_block(&self, parent_id: BlockId, _: ExternalBlock) -> Result<(), ExecError> {
+        Ok(())
     }
 
     async fn recover_execution_blocks(&self, _: ExecutionBlocks) {

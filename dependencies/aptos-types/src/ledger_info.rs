@@ -47,6 +47,7 @@ pub struct LedgerInfo {
     /// consensus.
     consensus_data_hash: HashValue,
     block_hash: HashValue,
+    block_number: u64,
 }
 
 impl Display for LedgerInfo {
@@ -66,6 +67,7 @@ impl LedgerInfo {
             commit_info: BlockInfo::empty(),
             consensus_data_hash: HashValue::zero(),
             block_hash: HashValue::zero(),
+            block_number: 0,
         }
     }
 
@@ -79,6 +81,7 @@ impl LedgerInfo {
             commit_info,
             consensus_data_hash,
             block_hash: HashValue::zero(),
+            block_number: 0,
         }
     }
 
@@ -155,6 +158,18 @@ impl LedgerInfo {
 
     pub fn set_block_hash(&mut self, block_hash: HashValue) {
         self.block_hash = block_hash;
+    }
+
+    pub fn set_block_number(&mut self, block_number: u64) {
+        self.block_number = block_number;
+    }
+
+    pub fn block_hash(&self) -> HashValue {
+        self.block_hash
+    }
+
+    pub fn block_number(&self) -> u64 {
+        self.block_number
     }
 }
 
@@ -321,6 +336,10 @@ impl LedgerInfoWithV0 {
 
     pub fn set_block_hash(&mut self, block_hash: HashValue) {
         self.ledger_info.set_block_hash(block_hash);
+    }
+
+    pub fn set_block_number(&mut self, block_number: u64) {
+        self.ledger_info.set_block_number(block_number);
     }
 }
 

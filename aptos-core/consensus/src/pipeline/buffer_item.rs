@@ -193,6 +193,7 @@ impl BufferItem {
                     // we can just use that proof and proceed to aggregated
                     assert_eq!(commit_proof.commit_info().clone(), commit_info);
                     commit_proof.set_block_hash(block.compute_result().root_hash());
+                    commit_proof.set_block_number(block.block().block_number().unwrap());
                     debug!(
                         "{} advance to aggregated from ordered",
                         commit_proof.commit_info()
@@ -209,7 +210,7 @@ impl BufferItem {
                         order_vote_enabled,
                     );
                     commit_ledger_info.set_block_hash(block.compute_result().root_hash());
-
+                    commit_ledger_info.set_block_number(block.block().block_number().unwrap());
                     let verified_signatures =
                         verify_signatures(unverified_signatures, validator, &commit_ledger_info);
                     if (validator.check_voting_power(verified_signatures.signatures().keys(), true))

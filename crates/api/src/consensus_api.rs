@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{
     bootstrap::{
@@ -21,7 +21,7 @@ use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
 use aptos_event_notifications::EventNotificationSender;
 use aptos_logger::{info, warn};
 use aptos_network_builder::builder::NetworkBuilder;
-use aptos_storage_interface::DbReaderWriter;
+use aptos_storage_interface::{DbReader, DbReaderWriter};
 use aptos_telemetry::service::start_telemetry_service;
 use async_trait::async_trait;
 
@@ -57,6 +57,16 @@ fn fail_point_check(node_config: &NodeConfig) {
 }
 
 impl ConsensusEngine {
+    pub fn get_data_from_consensus_db(node_config: &NodeConfig) -> BTreeMap<u64, ComputeRes> {
+        let mut res = BTreeMap::new();
+        let consensus_db = Arc::new(ConsensusDB::new(node_config.storage.dir(), &node_config.node_config_path));
+        let ledger_infos = consensus_db.get_latest_ledger_infos();
+        for ledger_info in ledger_infos {
+            res.insert(ledger_info.ledger_info().block_number(), ComputeRes(*ledger_info.ledger_info().block_hash()));
+        }
+        res
+    }
+
     pub fn init(
         node_config: NodeConfig,
         execution_layer: ExecutionLayer,
@@ -66,9 +76,7 @@ impl ConsensusEngine {
         aptos_crash_handler::setup_panic_handler();
 
         fail_point_check(&node_config);
-
-        let consensus_db =
-            Arc::new(ConsensusDB::new(node_config.storage.dir(), &node_config.node_config_path));
+        let consensus_db = Arc::new(ConsensusDB::new(node_config.storage.dir(), &node_config.node_config_path));
         let peers_and_metadata = init_peers_and_metadata(&node_config, &consensus_db);
         let (remote_log_receiver, logger_filter_update) =
             logger::create_logger(&node_config, Some(node_config.log_file_path.clone()));

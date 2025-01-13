@@ -6,9 +6,12 @@ use gravity_storage::block_view_storage::BlockViewStorage;
 use reth::rpc::builder::auth::AuthServerHandle;
 use reth_cli_util;
 use reth_coordinator::RethCoordinator;
+use reth_db::DatabaseEnv;
+use reth_node_api::NodeTypesWithDBAdapter;
 use reth_node_builder;
 use reth_node_core;
 use reth_node_ethereum;
+use reth_pipe_exec_layer_ext_v2::PipeExecLayerApi;
 use reth_primitives::B256;
 use reth_provider;
 use reth_provider::BlockHashReader;
@@ -45,14 +48,21 @@ use reth_node_core::args::utils::DefaultChainSpecParser;
 use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
 use reth_provider::providers::BlockchainProvider2;
 
-const  consensus_gensis: [u8; 32] = [
-    0x43, 0xbf, 0x83, 0x6b, 0x97, 0x02, 0x74, 0x90, 0x9c, 0xe1, 0x89, 0xef, 0xf8, 0xf4, 0x2e,
-    0xea, 0x6e, 0x53, 0x06, 0x04, 0xeb, 0x3a, 0x76, 0xae, 0xbd, 0x9a, 0x6c, 0xd6, 0x45, 0xa6,
-    0xe7, 0x7e,
+const consensus_gensis: [u8; 32] = [
+    0x43, 0xbf, 0x83, 0x6b, 0x97, 0x02, 0x74, 0x90, 0x9c, 0xe1, 0x89, 0xef, 0xf8, 0xf4, 0x2e, 0xea,
+    0x6e, 0x53, 0x06, 0x04, 0xeb, 0x3a, 0x76, 0xae, 0xbd, 0x9a, 0x6c, 0xd6, 0x45, 0xa6, 0xe7, 0x7e,
 ];
+
+struct ConsensusArgs {
+    pub engine_api: AuthServerHandle,
+    pub pipeline_api: PipeExecLayerApi,
+    pub provider: BlockchainProvider2<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
+}
+
 fn run_reth(
-    tx: mpsc::Sender<(AuthServerHandle, reth_pipe_exec_layer_ext_v2::PipeExecLayerApi)>,
+    tx: mpsc::Sender<ConsensusArgs>,
     cli: Cli<DefaultChainSpecParser, EngineArgs>,
+    mut block_number_to_block_id: BTreeMap<u64, B256>,
 ) {
     reth_cli_util::sigsegv_handler::install();
 
@@ -79,7 +89,9 @@ fn run_reth(
                     .await?;
                 let chain_spec = handle.node.chain_spec();
                 let engine_cli = handle.node.auth_server_handle().clone();
-                let provider = handle.node.provider;
+                let provider: BlockchainProvider2<
+                    reth_node_api::NodeTypesWithDBAdapter<EthereumNode, Arc<reth_db::DatabaseEnv>>,
+                > = handle.node.provider;
                 let latest_block_number = provider.last_block_number();
                 let latest_block_hash =
                     provider.block_hash(latest_block_number.clone().unwrap()).unwrap().unwrap();
@@ -87,15 +99,16 @@ fn run_reth(
                     .block(BlockHashOrNumber::Number(latest_block_number.unwrap()))
                     .unwrap()
                     .unwrap();
-                let mut block_number_to_id = BTreeMap::new();
-                let genesis_id = B256::new(consensus_gensis);
-                info!("genesis_id: {:?}", genesis_id);
-                block_number_to_id.insert(0u64, genesis_id);
+                if block_number_to_block_id.is_empty() {
+                    let genesis_id = B256::new(consensus_gensis);
+                    info!("genesis_id: {:?}", genesis_id);
+                    block_number_to_block_id.insert(0u64, genesis_id);
+                }
                 let storage = BlockViewStorage::new(
-                    provider,
+                    provider.clone(),
                     latest_block.number,
                     latest_block_hash,
-                    block_number_to_id,
+                    block_number_to_block_id,
                 );
                 let pipeline_api_v2 = reth_pipe_exec_layer_ext_v2::new_pipe_exec_layer_api(
                     chain_spec,
@@ -103,7 +116,12 @@ fn run_reth(
                     latest_block.header,
                     latest_block_hash,
                 );
-                tx.send((engine_cli, pipeline_api_v2)).await.ok();
+                let args = ConsensusArgs {
+                    engine_api: engine_cli,
+                    pipeline_api: pipeline_api_v2,
+                    provider,
+                };
+                tx.send(args).await.ok();
                 handle.node_exit_future.await
             }
         })
@@ -119,14 +137,18 @@ fn main() {
 
     let cli = Cli::<DefaultChainSpecParser, EngineArgs>::parse();
     let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
+    let block_number_to_block_id = AptosConsensus::get_data_from_consensus_db(&gcei_config)
+        .into_iter()
+        .map(|(number, id)| (number, B256::new(id.0)))
+        .collect();
     // 启动consensus线程
     thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
             // 等待engine_cli可用
-            if let Some((engine_cli, pipe_api)) = rx.recv().await {
+            if let Some(args) = rx.recv().await {
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                let client = RethCli::new("/tmp/reth.ipc", engine_cli, pipe_api).await;
+                let client = RethCli::new("/tmp/reth.ipc", args).await;
                 let genesis = client.get_latest_block_hash().await.unwrap();
                 let coordinator = Arc::new(RethCoordinator::new(client));
                 let cloned = coordinator.clone();
@@ -141,6 +163,5 @@ fn main() {
             }
         });
     });
-
-    run_reth(tx, cli);
+    run_reth(tx, cli, block_number_to_block_id);
 }
