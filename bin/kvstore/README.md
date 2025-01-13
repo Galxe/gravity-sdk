@@ -23,7 +23,7 @@ To deploy and start the server in single-node mode, execute the following steps 
 ```bash
 rm -rf /tmp/node1
 ./deploy_utils/deploy.sh --mode single --node node1 --bin_version release
-./kvstore --gravity_node_config /tmp/node1/genesis/validator.yaml --listen-url 127.0.0.1:8545 --log_dir /tmp/node1/kvlogs
+./kvstore --gravity_node_config /tmp/node1/genesis/validator.yaml --listen-url 127.0.0.1:8545 --log-dir /tmp/node1/kvlogs
 ```
 
 Or you can deploy and start in the cluster mode. For example if you have four server then you can:
@@ -37,10 +37,10 @@ rm -rf /tmp/node4
 ./deploy_utils/deploy.sh --mode cluster --node node2 --bin_version release
 ./deploy_utils/deploy.sh --mode cluster --node node3 --bin_version release
 ./deploy_utils/deploy.sh --mode cluster --node node4 --bin_version release
-./kvstore --gravity_node_config /tmp/node1/genesis/validator.yaml --listen-url 127.0.0.1:8545 --log_dir /tmp/node1/kvlogs
-./kvstore --gravity_node_config /tmp/node2/genesis/validator.yaml --listen-url 127.0.0.1:8546 --log_dir /tmp/node2/kvlogs
-./kvstore --gravity_node_config /tmp/node3/genesis/validator.yaml --listen-url 127.0.0.1:8547 --log_dir /tmp/node3/kvlogs
-./kvstore --gravity_node_config /tmp/node4/genesis/validator.yaml --listen-url 127.0.0.1:8548 --log_dir /tmp/node4/kvlogs
+./kvstore --gravity_node_config /tmp/node1/genesis/validator.yaml --listen-url 127.0.0.1:8545 --log-dir /tmp/node1/kvlogs
+./kvstore --gravity_node_config /tmp/node2/genesis/validator.yaml --listen-url 127.0.0.1:8546 --log-dir /tmp/node2/kvlogs
+./kvstore --gravity_node_config /tmp/node3/genesis/validator.yaml --listen-url 127.0.0.1:8547 --log-dir /tmp/node3/kvlogs
+./kvstore --gravity_node_config /tmp/node4/genesis/validator.yaml --listen-url 127.0.0.1:8548 --log-dir /tmp/node4/kvlogs
 ```
 
 ### Explanation:

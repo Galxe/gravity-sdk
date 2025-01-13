@@ -1,6 +1,6 @@
 #!/bin/bash
 
-bin_name="pethv2"
+bin_name="kvstore-v2"
 node_arg=""
 bin_version="debug"
 mode="cluster"
