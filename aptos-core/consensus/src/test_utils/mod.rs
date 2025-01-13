@@ -99,6 +99,7 @@ pub async fn build_empty_tree() -> Arc<BlockStore> {
         false,
         Arc::new(Mutex::new(PendingBlocks::new())),
         Some(mock_execution_layer()),
+        None,
     ))
 }
 

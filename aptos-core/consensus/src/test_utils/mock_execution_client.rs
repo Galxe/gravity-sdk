@@ -7,8 +7,7 @@ use crate::{
     network::{IncomingCommitRequest, IncomingRandGenRequest},
     payload_manager::{DirectMempoolPayloadManager, TPayloadManager},
     pipeline::{
-        buffer_manager::OrderedBlocks, execution_client::TExecutionClient,
-        signing_phase::CommitSignerProvider,
+        buffer_manager::OrderedBlocks, execution_client::TExecutionClient, pipeline_builder::PipelineBuilder, signing_phase::CommitSignerProvider
     },
     rand::rand_gen::types::RandConfig,
     state_replication::StateComputerCommitCallBackType,
@@ -28,7 +27,7 @@ use aptos_types::{
     epoch_state::EpochState,
     ledger_info::LedgerInfoWithSignatures,
     on_chain_config::{OnChainConsensusConfig, OnChainExecutionConfig, OnChainRandomnessConfig},
-    transaction::SignedTransaction,
+    transaction::SignedTransaction, validator_signer::ValidatorSigner,
 };
 use futures::{channel::mpsc, SinkExt};
 use futures_channel::mpsc::UnboundedSender;
@@ -177,4 +176,8 @@ impl TExecutionClient for MockExecutionClient {
     }
 
     async fn end_epoch(&self) {}
+
+    fn pipeline_builder(&self, _signer: Arc<ValidatorSigner>) -> PipelineBuilder {
+        todo!()
+    }
 }

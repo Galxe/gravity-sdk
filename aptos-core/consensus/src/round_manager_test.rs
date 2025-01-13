@@ -295,6 +295,7 @@ impl NodeSetup {
             false,
             Arc::new(Mutex::new(PendingBlocks::new())),
             None,
+            None,
         ));
 
         let proposer_election = Self::create_proposer_election(proposers.clone());

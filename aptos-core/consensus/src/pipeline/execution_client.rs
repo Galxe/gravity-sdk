@@ -484,7 +484,8 @@ impl TExecutionClient for ExecutionProxyClient {
     }
 
     fn pipeline_builder(&self, signer: Arc<ValidatorSigner>) -> PipelineBuilder {
-        self.execution_proxy.pipeline_builder(signer)
+        todo!()
+       // self.execution_proxy.pipeline_builder(signer)
     }
 }
 
