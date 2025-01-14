@@ -55,7 +55,7 @@ pub fn start_consensus(
     vtxn_pool: VTxnPoolState,
     consensus_publisher: Option<Arc<ConsensusPublisher>>,
     gravity_args: &mut ConsensusAdapterArgs,
-) -> (Runtime, Arc<StorageWriteProxy>, Arc<QuorumStoreDB>, Arc<GravityExecutionProxy>) {
+) -> (Runtime, Arc<StorageWriteProxy>, Arc<QuorumStoreDB>) {
     let runtime = aptos_runtimes::spawn_named_runtime("consensus".into(), None);
     let mut recovery_api = None;
     if let Some(execution_layer) = &gravity_args.execution_layer {
@@ -135,7 +135,7 @@ pub fn start_consensus(
     runtime.spawn(epoch_mgr.start(timeout_receiver, network_receiver));
 
     debug!("Consensus started.");
-    (runtime, storage, quorum_store_db, execution_proxy)
+    (runtime, storage, quorum_store_db)
 }
 
 /// A helper function to start the consensus observer

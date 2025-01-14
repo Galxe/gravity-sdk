@@ -101,7 +101,7 @@ pub fn start_consensus(
     consensus_to_mempool_sender: Sender<QuorumStoreRequest>,
     db: DbReaderWriter,
     arg: &mut ConsensusAdapterArgs,
-) -> (Runtime, Arc<StorageWriteProxy>, Arc<QuorumStoreDB>, Arc<GravityExecutionProxy>) {
+) -> (Runtime, Arc<StorageWriteProxy>, Arc<QuorumStoreDB>) {
     let consensus_reconfig_subscription = event_subscription_service
         .subscribe_to_reconfigurations()
         .expect("Consensus must subscribe to reconfigurations");

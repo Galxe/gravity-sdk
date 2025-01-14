@@ -26,6 +26,7 @@ use aptos_telemetry::service::start_telemetry_service;
 use async_trait::async_trait;
 
 use aptos_types::chain_id::ChainId;
+use coex_bridge::{call::{self, AsyncCallImplTrait}, get_coex_bridge, Func};
 use futures::channel::mpsc;
 use tokio::runtime::Runtime;
 
@@ -56,13 +57,78 @@ fn fail_point_check(node_config: &NodeConfig) {
     }
 }
 
+pub struct SendOrderedBlocksCall {
+    consensus_engine: Arc<ConsensusEngine>,
+}
+
+#[async_trait]
+impl AsyncCallImplTrait for SendOrderedBlocksCall {
+    type Input = ([u8; 32], ExternalBlock);
+    type Output = ();
+    async fn call(&self, input: Self::Input) -> Result<Self::Output, ()> {
+        Ok(self.consensus_engine.send_ordered_block(input.0, input.1).await)
+    }
+}
+
+pub struct RecvExecutedBlockHashCall {
+    consensus_engine: Arc<ConsensusEngine>,
+}
+
+#[async_trait]
+impl AsyncCallImplTrait for RecvExecutedBlockHashCall {
+    type Input = ExternalBlockMeta;
+    type Output = ComputeRes;
+    async fn call(&self, input: Self::Input) -> Result<Self::Output, ()> {
+        Ok(self.consensus_engine.recv_executed_block_hash(input).await)
+    }
+}
+
+pub struct CommitBlockHashCall {
+    consensus_engine: Arc<ConsensusEngine>,
+}
+
+#[async_trait]
+impl AsyncCallImplTrait for CommitBlockHashCall {
+    type Input = [u8; 32];
+    type Output = ();
+    async fn call(&self, input: Self::Input) -> Result<Self::Output, ()> {
+        Ok(self.consensus_engine.commit_block_hash(input).await)
+    }
+}
+
+fn register_hook_func(consensus_engine: Arc<ConsensusEngine>) {
+    let coex_bridge = get_coex_bridge();
+    coex_bridge.register(
+        "send_ordered_block".to_string(),
+        Func::SendOrderedBlocks(call::AsyncCall::new(Box::new(SendOrderedBlocksCall {
+            consensus_engine: consensus_engine.clone(),
+        }))),
+    );
+    coex_bridge.register(
+        "recv_executed_block_hash".to_string(),
+        Func::RecvExecutedBlockHash(call::AsyncCall::new(Box::new(RecvExecutedBlockHashCall {
+            consensus_engine: consensus_engine.clone(),
+        }))),
+    );
+    coex_bridge.register(
+        "commit_block_hash".to_string(),
+        Func::CommittedBlockHash(call::AsyncCall::new(Box::new(CommitBlockHashCall {
+            consensus_engine,
+        }))),
+    );
+}
+
 impl ConsensusEngine {
     pub fn get_data_from_consensus_db(node_config: &NodeConfig) -> BTreeMap<u64, ComputeRes> {
         let mut res = BTreeMap::new();
-        let consensus_db = Arc::new(ConsensusDB::new(node_config.storage.dir(), &node_config.node_config_path));
+        let consensus_db =
+            Arc::new(ConsensusDB::new(node_config.storage.dir(), &node_config.node_config_path));
         let ledger_infos = consensus_db.get_latest_ledger_infos();
         for ledger_info in ledger_infos {
-            res.insert(ledger_info.ledger_info().block_number(), ComputeRes(*ledger_info.ledger_info().block_hash()));
+            res.insert(
+                ledger_info.ledger_info().block_number(),
+                ComputeRes(*ledger_info.ledger_info().block_hash()),
+            );
         }
         res
     }
@@ -76,7 +142,8 @@ impl ConsensusEngine {
         aptos_crash_handler::setup_panic_handler();
 
         fail_point_check(&node_config);
-        let consensus_db = Arc::new(ConsensusDB::new(node_config.storage.dir(), &node_config.node_config_path));
+        let consensus_db =
+            Arc::new(ConsensusDB::new(node_config.storage.dir(), &node_config.node_config_path));
         let peers_and_metadata = init_peers_and_metadata(&node_config, &consensus_db);
         let (remote_log_receiver, logger_filter_update) =
             logger::create_logger(&node_config, Some(node_config.log_file_path.clone()));
@@ -165,7 +232,7 @@ impl ConsensusEngine {
         );
         runtimes.extend(mempool_runtime);
         let mut args = ConsensusAdapterArgs::new(execution_layer.clone(), consensus_db);
-        let (consensus_runtime, _, _, execution_proxy) = start_consensus(
+        let (consensus_runtime, _, _) = start_consensus(
             &node_config,
             &mut event_subscription_service,
             consensus_network_interfaces,
@@ -189,16 +256,15 @@ impl ConsensusEngine {
             runtime.spawn(async move { https_server(args) });
             runtimes.push(runtime);
         }
-        let arc_self = Arc::new(Self {
+        let arc_consensus_engine = Arc::new(Self {
             address: node_config.validator_network.as_ref().unwrap().listen_address.to_string(),
             execution_layer: execution_layer.clone(),
             runtimes,
         });
+        register_hook_func(arc_consensus_engine.clone());
         // process new round should be after init retƒh hash
         let _ = event_subscription_service.notify_initial_configs(1_u64);
-
-        execution_proxy.set_consensus_engine(arc_self.clone());
-        arc_self
+        arc_consensus_engine
     }
 }
 

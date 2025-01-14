@@ -16,7 +16,7 @@ use anyhow::Result;
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
 use api_types::u256_define::{Random, TxnHash};
 use api_types::{
-    u256_define::BlockId, ConsensusApi, ExecutionLayer, ExternalBlock, ExternalBlockMeta,
+    u256_define::BlockId, ExecutionLayer, ExternalBlock, ExternalBlockMeta,
 };
 use aptos_consensus_types::{block::Block, pipelined_block::PipelinedBlock};
 use aptos_crypto::HashValue;
@@ -32,7 +32,6 @@ use aptos_types::{
     ledger_info::LedgerInfoWithSignatures, randomness::Randomness,
 };
 use coex_bridge::{get_coex_bridge, Func};
-use once_cell::sync::OnceCell;
 use std::time::Duration;
 use std::{boxed::Box, sync::Arc};
 use tokio::runtime::Runtime;
@@ -65,7 +64,6 @@ impl ConsensusAdapterArgs {
 /// implements StateComputer traits.
 pub struct GravityExecutionProxy {
     pub aptos_state_computer: Arc<ExecutionProxy>,
-    consensus_engine: OnceCell<Arc<dyn ConsensusApi>>,
     inner_executor: Arc<GravityBlockExecutor>,
 }
 
@@ -74,26 +72,12 @@ impl GravityExecutionProxy {
         aptos_state_computer: Arc<ExecutionProxy>,
         inner_executor: Arc<GravityBlockExecutor>,
     ) -> Self {
-        Self { aptos_state_computer, consensus_engine: OnceCell::new(), inner_executor }
-    }
-
-    pub fn set_consensus_engine(&self, consensus_engine: Arc<dyn ConsensusApi>) {
-        match self.consensus_engine.set(consensus_engine) {
-            Ok(_) => {
-                self.inner_executor.set_consensus_engine(
-                    self.consensus_engine.get().expect("consensus engine").clone(),
-                );
-            }
-            Err(_) => {
-                panic!("failed to set consensus engine")
-            }
-        }
+        Self { aptos_state_computer, inner_executor }
     }
 }
 
 pub struct GravityBlockExecutor {
     inner: BlockExecutor,
-    consensus_engine: OnceCell<Arc<dyn ConsensusApi>>,
     runtime: Runtime,
 }
 
@@ -101,17 +85,7 @@ impl GravityBlockExecutor {
     pub(crate) fn new(inner: BlockExecutor) -> Self {
         Self {
             inner,
-            consensus_engine: OnceCell::new(),
             runtime: aptos_runtimes::spawn_named_runtime("tmp".into(), None),
-        }
-    }
-
-    pub fn set_consensus_engine(&self, consensus_engine: Arc<dyn ConsensusApi>) {
-        match self.consensus_engine.set(consensus_engine) {
-            Ok(_) => {}
-            Err(_) => {
-                panic!("failed to set consensus engine")
-            }
         }
     }
 }
@@ -150,23 +124,33 @@ impl StateComputer for GravityExecutionProxy {
                 )
             })
             .collect();
-        let engine = self
-            .consensus_engine
-            .get()
-            .unwrap_or_else(|| panic!("failed to get consensus engine"))
-            .clone();
-
-        engine
-            .send_ordered_block(
-                *parent_block_id,
-                ExternalBlock { block_meta: meta_data.clone(), txns: real_txns },
-            )
-            .await;
+        let call = get_coex_bridge().take_func("send_ordered_block");
+        match call {
+            Some(Func::SendOrderedBlocks(call)) => {
+                info!("call send_ordered_block function");
+                call.call((
+                    *parent_block_id,
+                    ExternalBlock { block_meta: meta_data.clone(), txns: real_txns },
+                ))
+                .await.unwrap();
+            }
+            _ => {
+                info!("no send_ordered_block function");
+            }
+        }
 
         Box::pin(async move {
-            let result = StateComputeResult::with_root_hash(HashValue::new(
-                engine.recv_executed_block_hash(meta_data).await.bytes(),
-            ));
+            let call = get_coex_bridge().take_func("recv_executed_block_hash");
+            let hash = match call {
+                Some(Func::RecvExecutedBlockHash(call)) => {
+                    info!("call send_ordered_block function");
+                    call.call(meta_data).await.unwrap()
+                }
+                _ => {
+                    panic!("no send_ordered_block function");
+                }
+            };
+            let result = StateComputeResult::with_root_hash(HashValue::new(hash.bytes()));
             Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO))
         })
     }
@@ -178,16 +162,6 @@ impl StateComputer for GravityExecutionProxy {
         finality_proof: LedgerInfoWithSignatures,
         callback: StateComputerCommitCallBackType,
     ) -> ExecutorResult<()> {
-        let call = get_coex_bridge().take_func("test_info");
-        match call {
-            Some(Func::TestInfo(call)) => {
-                info!("call test_info function");
-                call.call("commit in aptos".to_string()).unwrap();
-            }
-            _ => {
-                info!("no test_info function");
-            }
-        }
         self.aptos_state_computer.commit(blocks, finality_proof, callback).await
     }
 
@@ -257,12 +231,17 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         info!("commit blocks: {:?}", block_ids);
         if !block_ids.is_empty() {
             self.runtime.block_on(async move {
-                for block_id in block_ids {
-                    self.consensus_engine
-                        .get()
-                        .expect("consensus engine")
-                        .commit_block_hash(*block_id)
-                        .await;
+                let call = get_coex_bridge().take_func("commit_block_hash");
+                match call {
+                    Some(Func::CommittedBlockHash(call)) => {
+                        info!("call send_ordered_block function");
+                        for block_id in block_ids {
+                            call.call(*block_id).await.unwrap();
+                        }
+                    }
+                    _ => {
+                        info!("no send_ordered_block function");
+                    }
                 }
             });
             // let last_block = block_ids.last();
@@ -290,10 +269,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             // }
         }
         // TODO(gravity_lightman): handle the following logic
-        self.inner
-            .db
-            .writer
-            .commit_ledger(0, Some(&ledger_info_with_sigs), None);
+        self.inner.db.writer.commit_ledger(0, Some(&ledger_info_with_sigs), None);
         Ok(())
     }
 

@@ -1,9 +1,14 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use api_types::u256_define::ComputeRes;
+use api_types::{ExternalBlock, ExternalBlockMeta};
 pub mod call;
 
 pub enum Func {
     AddTxn(call::Call<Vec<u8>, ()>),
+    SendOrderedBlocks(call::AsyncCall<([u8; 32], ExternalBlock), ()>),
+    RecvExecutedBlockHash(call::AsyncCall<ExternalBlockMeta, ComputeRes>),
+    CommittedBlockHash(call::AsyncCall<[u8; 32], ()>),
     TestInfo(call::Call<String, ()>),
 }
 
