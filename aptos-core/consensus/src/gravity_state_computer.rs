@@ -15,9 +15,7 @@ use crate::{
 use anyhow::Result;
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
 use api_types::u256_define::{Random, TxnHash};
-use api_types::{
-    u256_define::BlockId, ExecutionLayer, ExternalBlock, ExternalBlockMeta,
-};
+use api_types::{u256_define::BlockId, ExecutionLayer, ExternalBlock, ExternalBlockMeta};
 use aptos_consensus_types::{block::Block, pipelined_block::PipelinedBlock};
 use aptos_crypto::HashValue;
 use aptos_executor::block_executor::BlockExecutor;
@@ -83,10 +81,7 @@ pub struct GravityBlockExecutor {
 
 impl GravityBlockExecutor {
     pub(crate) fn new(inner: BlockExecutor) -> Self {
-        Self {
-            inner,
-            runtime: aptos_runtimes::spawn_named_runtime("tmp".into(), None),
-        }
+        Self { inner, runtime: aptos_runtimes::spawn_named_runtime("tmp".into(), None) }
     }
 }
 
@@ -124,7 +119,7 @@ impl StateComputer for GravityExecutionProxy {
                 )
             })
             .collect();
-        let call = get_coex_bridge().take_func("send_ordered_block");
+        let call = get_coex_bridge().borrow_func("send_ordered_block");
         match call {
             Some(Func::SendOrderedBlocks(call)) => {
                 info!("call send_ordered_block function");
@@ -132,7 +127,8 @@ impl StateComputer for GravityExecutionProxy {
                     *parent_block_id,
                     ExternalBlock { block_meta: meta_data.clone(), txns: real_txns },
                 ))
-                .await.unwrap();
+                .await
+                .unwrap();
             }
             _ => {
                 info!("no send_ordered_block function");
@@ -140,14 +136,14 @@ impl StateComputer for GravityExecutionProxy {
         }
 
         Box::pin(async move {
-            let call = get_coex_bridge().take_func("recv_executed_block_hash");
+            let call = get_coex_bridge().borrow_func("recv_executed_block_hash");
             let hash = match call {
                 Some(Func::RecvExecutedBlockHash(call)) => {
-                    info!("call send_ordered_block function");
+                    info!("call recv_executed_block_hash function");
                     call.call(meta_data).await.unwrap()
                 }
                 _ => {
-                    panic!("no send_ordered_block function");
+                    panic!("no recv_executed_block_hash function");
                 }
             };
             let result = StateComputeResult::with_root_hash(HashValue::new(hash.bytes()));
@@ -231,16 +227,16 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         info!("commit blocks: {:?}", block_ids);
         if !block_ids.is_empty() {
             self.runtime.block_on(async move {
-                let call = get_coex_bridge().take_func("commit_block_hash");
+                let call = get_coex_bridge().borrow_func("commit_block_hash");
                 match call {
                     Some(Func::CommittedBlockHash(call)) => {
-                        info!("call send_ordered_block function");
+                        info!("call commit_block_hash function");
                         for block_id in block_ids {
                             call.call(*block_id).await.unwrap();
                         }
                     }
                     _ => {
-                        info!("no send_ordered_block function");
+                        info!("no commit_block_hash function");
                     }
                 }
             });

@@ -26,7 +26,10 @@ use aptos_telemetry::service::start_telemetry_service;
 use async_trait::async_trait;
 
 use aptos_types::chain_id::ChainId;
-use coex_bridge::{call::{self, AsyncCallImplTrait}, get_coex_bridge, Func};
+use coex_bridge::{
+    call::{self, AsyncCallImplTrait},
+    get_coex_bridge, Func,
+};
 use futures::channel::mpsc;
 use tokio::runtime::Runtime;
 
@@ -100,21 +103,21 @@ fn register_hook_func(consensus_engine: Arc<ConsensusEngine>) {
     let coex_bridge = get_coex_bridge();
     coex_bridge.register(
         "send_ordered_block".to_string(),
-        Func::SendOrderedBlocks(call::AsyncCall::new(Box::new(SendOrderedBlocksCall {
+        Func::SendOrderedBlocks(Arc::new(call::AsyncCall::new(Box::new(SendOrderedBlocksCall {
             consensus_engine: consensus_engine.clone(),
-        }))),
+        })))),
     );
     coex_bridge.register(
         "recv_executed_block_hash".to_string(),
-        Func::RecvExecutedBlockHash(call::AsyncCall::new(Box::new(RecvExecutedBlockHashCall {
+        Func::RecvExecutedBlockHash(Arc::new(call::AsyncCall::new(Box::new(RecvExecutedBlockHashCall {
             consensus_engine: consensus_engine.clone(),
-        }))),
+        })))),
     );
     coex_bridge.register(
         "commit_block_hash".to_string(),
-        Func::CommittedBlockHash(call::AsyncCall::new(Box::new(CommitBlockHashCall {
+        Func::CommittedBlockHash(Arc::new(call::AsyncCall::new(Box::new(CommitBlockHashCall {
             consensus_engine,
-        }))),
+        })))),
     );
 }
 

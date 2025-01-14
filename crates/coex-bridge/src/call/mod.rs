@@ -31,7 +31,7 @@ impl<Input, Output> Call<Input, Output> {
 }
 
 #[async_trait]
-pub trait AsyncCallImplTrait : Send + Sync {
+pub trait AsyncCallImplTrait: Send + Sync {
     type Input;
     type Output;
     async fn call(&self, input: Self::Input) -> Result<Self::Output, ()>;

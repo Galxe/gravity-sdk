@@ -1,22 +1,19 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use api_types::u256_define::ComputeRes;
 use api_types::{ExternalBlock, ExternalBlockMeta};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 pub mod call;
 
+#[derive(Clone)]
 pub enum Func {
-    AddTxn(call::Call<Vec<u8>, ()>),
-    SendOrderedBlocks(call::AsyncCall<([u8; 32], ExternalBlock), ()>),
-    RecvExecutedBlockHash(call::AsyncCall<ExternalBlockMeta, ComputeRes>),
-    CommittedBlockHash(call::AsyncCall<[u8; 32], ()>),
-    TestInfo(call::Call<String, ()>),
+    SendOrderedBlocks(Arc<call::AsyncCall<([u8; 32], ExternalBlock), ()>>),
+    RecvExecutedBlockHash(Arc<call::AsyncCall<ExternalBlockMeta, ComputeRes>>),
+    CommittedBlockHash(Arc<call::AsyncCall<[u8; 32], ()>>),
 }
-
 
 pub struct CoExBridge {
     call: Arc<Mutex<HashMap<String, Func>>>,
 }
-
 
 use once_cell::sync::Lazy;
 
@@ -28,9 +25,7 @@ pub fn get_coex_bridge() -> &'static CoExBridge {
 
 impl CoExBridge {
     pub fn new() -> Self {
-        Self {
-            call: Arc::new(Mutex::new(HashMap::new())),
-        }
+        Self { call: Arc::new(Mutex::new(HashMap::new())) }
     }
 
     pub fn register(&self, name: String, func: Func) {
@@ -47,6 +42,14 @@ impl CoExBridge {
     pub fn take_func(&self, name: &str) -> Option<Func> {
         if let Ok(mut call) = self.call.lock() {
             call.remove(name)
+        } else {
+            panic!("Mutex lock failed");
+        }
+    }
+
+    pub fn borrow_func(&self, name: &str) -> Option<Func> {
+        if let Ok(call) = self.call.lock() {
+            call.get(name).cloned()
         } else {
             panic!("Mutex lock failed");
         }
