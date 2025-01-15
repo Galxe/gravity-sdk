@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 // NOTE: when changing, make sure to update QuorumStoreBackPressureConfig::backlog_txn_limit_count as well.
-const MAX_SENDING_BLOCK_TXNS_AFTER_FILTERING: u64 = 3000;
-const MAX_SENDING_BLOCK_TXNS: u64 = 7000;
+const MAX_SENDING_BLOCK_TXNS_AFTER_FILTERING: u64 = 30000;
+const MAX_SENDING_BLOCK_TXNS: u64 = 70000;
 pub(crate) static MAX_RECEIVING_BLOCK_TXNS: Lazy<u64> =
     Lazy::new(|| 10000.max(2 * MAX_SENDING_BLOCK_TXNS));
 // stop reducing size at this point, so 1MB transactions can still go through
@@ -193,11 +193,11 @@ impl Default for ConsensusConfig {
             max_network_channel_size: 1024,
             max_sending_block_txns: MAX_SENDING_BLOCK_TXNS,
             max_sending_block_txns_after_filtering: MAX_SENDING_BLOCK_TXNS_AFTER_FILTERING,
-            max_sending_block_bytes: 3 * 1024 * 1024, // 3MB
+            max_sending_block_bytes: 30 * 1024 * 1024, // 3MB
             max_receiving_block_txns: *MAX_RECEIVING_BLOCK_TXNS,
-            max_sending_inline_txns: 100,
-            max_sending_inline_bytes: 200 * 1024,       // 200 KB
-            max_receiving_block_bytes: 6 * 1024 * 1024, // 6MB
+            max_sending_inline_txns: 10000,
+            max_sending_inline_bytes: 2000 * 1024,       // 200 KB
+            max_receiving_block_bytes: 60 * 1024 * 1024, // 6MB
             max_pruned_blocks_in_mem: 100,
             mempool_executed_txn_timeout_ms: 1000,
             mempool_txn_pull_timeout_ms: 1000,

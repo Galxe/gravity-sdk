@@ -107,7 +107,7 @@ impl Default for MempoolConfig {
         MempoolConfig {
             shared_mempool_tick_interval_ms: 10,
             shared_mempool_backoff_interval_ms: 30_000,
-            shared_mempool_batch_size: 300,
+            shared_mempool_batch_size: 300000,
             shared_mempool_max_batch_bytes: MAX_APPLICATION_MESSAGE_SIZE as u64,
             shared_mempool_ack_timeout_ms: 2_000,
             shared_mempool_max_concurrent_inbound_syncs: 4,
@@ -116,7 +116,7 @@ impl Default for MempoolConfig {
             mempool_snapshot_interval_secs: 180,
             capacity: 2_000_000,
             capacity_bytes: 2 * 1024 * 1024 * 1024,
-            capacity_per_user: 100,
+            capacity_per_user: 1000000,
             default_failovers: 1,
             enable_intelligent_peer_prioritization: true,
             shared_mempool_peer_update_interval_ms: 1_000,

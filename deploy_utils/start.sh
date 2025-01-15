@@ -81,6 +81,14 @@ function start_node() {
             --datadir.static-files ${WORKSPACE}/data/reth \
             --gravity_node_config ${WORKSPACE}/genesis/validator.yaml \
             --log.file.directory ${WORKSPACE}/execution_logs/ \
+            --rpc.max-subscriptions-per-connection 20000 \
+            --rpc.max-connections 20000 \
+            --txpool.pending-max-count 18446744073709551615 \
+            --txpool.pending-max-size 17592186044415 \
+            --txpool.basefee-max-count 18446744073709551615 \
+            --txpool.basefee-max-size 17592186044415 \
+            --txpool.queued-max-count 18446744073709551615 \
+            --txpool.queued-max-size 17592186044415 \
             > ${WORKSPACE}/logs/debug.log &
         echo $!
     )

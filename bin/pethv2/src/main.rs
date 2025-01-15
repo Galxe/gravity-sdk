@@ -152,7 +152,6 @@ fn main() {
                 let genesis = client.get_latest_block_hash().await.unwrap();
                 let coordinator = Arc::new(RethCoordinator::new(client));
                 let cloned = coordinator.clone();
-                info!("created reth_cli with ipc");
                 tokio::spawn(async move {
                     cloned.run().await;
                 });

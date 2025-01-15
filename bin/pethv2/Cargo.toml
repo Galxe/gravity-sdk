@@ -129,3 +129,12 @@ gravity-storage = { git = "https://github.com/Galxe/grevm-reth", package = "grav
 # We'd better specify the version of wasm-bindgen, since some version like '0.2.97' can't compile in Linux
 [dependencies.wasm-bindgen]
 version = "0.2.99"
+
+[build]
+rustc-wrapper = "sccache"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true  # 移除调试符号

@@ -1,8 +1,8 @@
 #!/bin/bash
 
-bin_name="peth-v2"
+bin_name="pethv2"
 node_arg=""
-bin_version="debug"
+bin_version="release"
 mode="cluster"
 
 while [[ "$#" -gt 0 ]]; do

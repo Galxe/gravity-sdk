@@ -3,7 +3,9 @@ use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::{Address, B256};
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
 use api_types::u256_define::{BlockId as ExternalBlockId, TxnHash};
-use api_types::{simple_hash, ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
+use api_types::{
+    simple_hash, ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
+};
 use jsonrpsee::core::Serialize;
 use reth::rpc::builder::auth::AuthServerHandle;
 use reth_db::DatabaseEnv;
@@ -16,6 +18,7 @@ use reth_provider::providers::BlockchainProvider2;
 use reth_provider::{BlockNumReader, BlockReaderIdExt, DatabaseProviderFactory};
 use reth_rpc_api::EngineEthApiClient;
 use reth_rpc_types::{AccessList, AccessListItem};
+use tokio::task::JoinSet;
 use std::io::Read;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -25,7 +28,6 @@ use tracing::log::error;
 use web3::transports::Ipc;
 use web3::types::{BlockId, Transaction, TransactionId, H160};
 use web3::Web3;
-
 use crate::ConsensusArgs;
 
 pub struct RethCli {
@@ -33,7 +35,7 @@ pub struct RethCli {
     auth: AuthServerHandle,
     pipe_api: Mutex<PipeExecLayerApi>,
     chain_id: u64,
-    provider: BlockchainProvider2<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>
+    provider: BlockchainProvider2<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
 }
 
 pub fn covert_account(acc: H160) -> ExternalAccountAddress {
@@ -69,7 +71,13 @@ impl RethCli {
         let transport = web3::transports::Ipc::new(ipc_url).await.unwrap();
         let ipc = web3::Web3::new(transport);
         let chain_id = ipc.eth().chain_id().await.unwrap();
-        RethCli { ipc, auth: args.engine_api, pipe_api: Mutex::new(args.pipeline_api), chain_id: chain_id.as_u64(), provider: args.provider }
+        RethCli {
+            ipc,
+            auth: args.engine_api,
+            pipe_api: Mutex::new(args.pipeline_api),
+            chain_id: chain_id.as_u64(),
+            provider: args.provider,
+        }
     }
 
     fn block_id_to_b256(block_id: ExternalBlockId) -> B256 {
@@ -158,7 +166,7 @@ impl RethCli {
     }
 
     fn txn_to_signed(bytes: &[u8], chain_id: u64) -> (Address, TransactionSigned) {
-        let txn = serde_json::from_slice::<Transaction>(bytes).unwrap();
+        let txn: Transaction = serde_json::from_slice(&bytes).unwrap();
         let address = txn.from.unwrap();
         let address = Address::new(address.0);
         let hash = txn.hash;
@@ -227,13 +235,20 @@ impl RethCli {
         &self,
         buffer: Arc<Mutex<Vec<VerifiedTxnWithAccountSeqNum>>>,
     ) -> Result<(), String> {
-        let mut eth_sub =
-            self.ipc.eth_subscribe().subscribe_new_pending_transactions().await.unwrap();
+        let mut eth_sub = self.ipc.eth_subscribe().subscribe_new_pending_transactions().await.unwrap();
         info!("start process pending transactions");
+        let mut count = 0;
+        let mut total = 0;
+        let start_time = std::time::Instant::now();
+        let mut last_time = std::time::Instant::now();
+    
+        let mut tasks = JoinSet::new(); // 用于并行处理任务
+    
         while let Some(Ok(txn_hash)) = eth_sub.next().await {
-            info!("get txn hash {:?}", txn_hash);
+            let before_recv = std::time::Instant::now();
             let txn = self.ipc.eth().transaction(TransactionId::Hash(txn_hash)).await;
-            info!("get txn {:?}", txn);
+            let after_recv = std::time::Instant::now();
+    
             if let Ok(Some(txn)) = txn {
                 let account = match txn.from {
                     Some(account) => account,
@@ -242,37 +257,71 @@ impl RethCli {
                         continue;
                     }
                 };
-                let accout_nonce = self.ipc.eth().transaction_count(account, None).await;
-
-                match accout_nonce {
-                    Ok(accout_nonce) => {
-                        let mut buffer = buffer.lock().await;
-                        let bytes = serde_json::to_vec(&txn).unwrap();
-                        let committed_hash = TxnHash::new(simple_hash::hash_to_fixed_array(&bytes));
-                        let vtxn = VerifiedTxnWithAccountSeqNum {
-                            txn: VerifiedTxn {
-                                bytes,
-                                sender: covert_account(txn.from.unwrap()),
-                                sequence_number: txn.nonce.as_u64(),
-                                chain_id: ExternalChainId::new(0),
-                                committed_hash: committed_hash.into(),
-                            },
-                            account_seq_num: accout_nonce.as_u64(),
-                        };
-                        println!(
-                            "push txn nonce: {} acc_nonce: {}",
-                            txn.nonce, vtxn.account_seq_num
-                        );
-                        buffer.push(vtxn);
+    
+                let ipc_clone = self.ipc.clone(); // 克隆 IPC 以在任务中使用
+                let buffer_clone = buffer.clone(); // 克隆 buffer 以在任务中使用
+    
+                tasks.spawn(async move {
+                    let accout_nonce = ipc_clone.eth().transaction_count(account, None).await;
+    
+                    match accout_nonce {
+                        Ok(accout_nonce) => {
+                            let bytes = serde_json::to_vec(&txn).unwrap(); // 使用 bincode 序列化
+                            let committed_hash = TxnHash::new(simple_hash::hash_to_fixed_array(&bytes));
+                            let vtxn = VerifiedTxnWithAccountSeqNum {
+                                txn: VerifiedTxn {
+                                    bytes,
+                                    sender: covert_account(txn.from.unwrap()),
+                                    sequence_number: txn.nonce.as_u64(),
+                                    chain_id: ExternalChainId::new(0),
+                                    committed_hash: committed_hash.into(),
+                                },
+                                account_seq_num: accout_nonce.as_u64(),
+                            };
+    
+                            let after_ser = std::time::Instant::now();
+                            info!(
+                                "push txn nonce: {} acc_nonce: {} recv_time {} serialize_time {}",
+                                txn.nonce,
+                                vtxn.account_seq_num,
+                                after_recv.duration_since(before_recv).as_micros(),
+                                after_ser.duration_since(after_recv).as_micros()
+                            );
+    
+                            let mut buffer = buffer_clone.lock().await;
+                            buffer.push(vtxn);
+                        }
+                        Err(e) => {
+                            error!("Failed to get nonce for account {:?} with {:?}", account, e);
+                        }
                     }
-                    Err(e) => {
-                        error!("Failed to get nonce for account {:?} with {:?}", account, e);
-                    }
-                }
+                });
+    
+                count += 1;
             } else {
                 error!("Failed to get transaction {:?} {:?}", txn_hash, txn);
             }
+    
+            if last_time.elapsed().as_secs() > 1 {
+                info!(
+                    "processed {} transactions in {}s with speed {}",
+                    count,
+                    last_time.elapsed().as_secs(),
+                    count as f64 / start_time.elapsed().as_secs_f64()
+                );
+                total += count;
+                count = 0;
+                last_time = std::time::Instant::now();
+            }
         }
+    
+        // 等待所有任务完成
+        while let Some(result) = tasks.join_next().await {
+            if let Err(e) = result {
+                error!("Task failed: {:?}", e);
+            }
+        }
+    
         info!("end process pending transactions");
         Ok(())
     }
@@ -288,7 +337,7 @@ impl RethCli {
         match self.provider.database_provider_ro().unwrap().last_block_number() {
             Ok(block_number) => {
                 return block_number;
-            },
+            }
             Err(e) => {
                 error!("finalized_block_number error {}", e);
                 return 0;
@@ -303,7 +352,12 @@ impl RethCli {
         start_block_number: u64,
         end_block_number: u64,
     ) -> ExecutionBlocks {
-        let result = ExecutionBlocks { latest_block_hash: todo!(), latest_block_number: todo!(), blocks: vec![], latest_ts: todo!() };
+        let result = ExecutionBlocks {
+            latest_block_hash: todo!(),
+            latest_block_number: todo!(),
+            blocks: vec![],
+            latest_ts: todo!(),
+        };
         for block_number in start_block_number..end_block_number {
             match self.provider.block_by_number_or_tag(BlockNumberOrTag::Number(block_number)) {
                 Ok(block) => {
