@@ -89,10 +89,7 @@ impl ExecutionApiV2 for RethCoordinator {
     async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
         let now = std::time::Instant::now();
         let mut buffer = self.pending_buffer.lock().await;
-        // 方案1: 使用 take
         let res = std::mem::take(&mut *buffer);
-        // 或者方案2: 使用 replace
-        // let res = std::mem::replace(&mut *buffer, Vec::new());
         
         info!("recv_pending_txns with buffer size: {:?} in time {:?}", &res.len(), now.elapsed());
         Ok(res)
