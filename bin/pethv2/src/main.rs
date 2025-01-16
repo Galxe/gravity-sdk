@@ -1,7 +1,9 @@
 use alloy_eips::BlockHashOrNumber;
 use api::check_bootstrap_config;
+use api_types::u256_define::TxnHash;
 use consensus::aptos::AptosConsensus;
 use consensus::mock::MockConsensus;
+use futures::StreamExt;
 use gravity_storage::block_view_storage::BlockViewStorage;
 use reth::rpc::builder::auth::AuthServerHandle;
 use reth_cli_util;
@@ -17,6 +19,7 @@ use reth_provider;
 use reth_provider::BlockHashReader;
 use reth_provider::BlockNumReader;
 use reth_provider::BlockReader;
+use reth_transaction_pool::TransactionPool;
 use tokio::sync::mpsc;
 mod cli;
 mod consensus;
@@ -57,6 +60,8 @@ struct ConsensusArgs {
     pub engine_api: AuthServerHandle,
     pub pipeline_api: PipeExecLayerApi,
     pub provider: BlockchainProvider2<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
+    pub tx_listener: tokio::sync::mpsc::Receiver<alloy_primitives::TxHash>,
+    pub pool: reth_transaction_pool::Pool<reth_transaction_pool::TransactionValidationTaskExecutor<reth_transaction_pool::EthTransactionValidator<BlockchainProvider2<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>, reth_transaction_pool::EthPooledTransaction>>, reth_transaction_pool::CoinbaseTipOrdering<reth_transaction_pool::EthPooledTransaction>, reth_transaction_pool::blobstore::DiskFileBlobStore>
 }
 
 fn run_reth(
@@ -88,6 +93,7 @@ fn run_reth(
                     })
                     .await?;
                 let chain_spec = handle.node.chain_spec();
+                let pending_listener: tokio::sync::mpsc::Receiver<alloy_primitives::TxHash> = handle.node.pool.pending_transactions_listener();
                 let engine_cli = handle.node.auth_server_handle().clone();
                 let provider: BlockchainProvider2<
                     reth_node_api::NodeTypesWithDBAdapter<EthereumNode, Arc<reth_db::DatabaseEnv>>,
@@ -99,6 +105,8 @@ fn run_reth(
                     .block(BlockHashOrNumber::Number(latest_block_number.unwrap()))
                     .unwrap()
                     .unwrap();
+                let pool: reth_transaction_pool::Pool<reth_transaction_pool::TransactionValidationTaskExecutor<reth_transaction_pool::EthTransactionValidator<BlockchainProvider2<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>, reth_transaction_pool::EthPooledTransaction>>, reth_transaction_pool::CoinbaseTipOrdering<reth_transaction_pool::EthPooledTransaction>, reth_transaction_pool::blobstore::DiskFileBlobStore> = handle.node.pool;
+                
                 if block_number_to_block_id.is_empty() {
                     let genesis_id = B256::new(consensus_gensis);
                     info!("genesis_id: {:?}", genesis_id);
@@ -120,6 +128,8 @@ fn run_reth(
                     engine_api: engine_cli,
                     pipeline_api: pipeline_api_v2,
                     provider,
+                    tx_listener: pending_listener,
+                    pool,
                 };
                 tx.send(args).await.ok();
                 handle.node_exit_future.await

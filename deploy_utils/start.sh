@@ -83,6 +83,7 @@ function start_node() {
             --log.file.directory ${WORKSPACE}/execution_logs/ \
             --rpc.max-subscriptions-per-connection 20000 \
             --rpc.max-connections 20000 \
+            --txpool.max-pending-txns 1000000 \
             --txpool.pending-max-count 18446744073709551615 \
             --txpool.pending-max-size 17592186044415 \
             --txpool.basefee-max-count 18446744073709551615 \
