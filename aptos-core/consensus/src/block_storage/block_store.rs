@@ -17,7 +17,7 @@ use crate::{
 };
 use anyhow::{bail, ensure, format_err, Context};
 use api_types::{
-    u256_define::{BlockId, Random},
+    u256_define::{BlockId, ComputeRes, Random},
     ExecutionLayer, ExternalBlock, ExternalBlockMeta,
 };
 use aptos_consensus_types::common::Payload::DirectMempool;
@@ -168,31 +168,37 @@ impl BlockStore {
         let mut certs = self.inner.read().get_all_quorum_certs_with_commit_info();
         certs.sort_unstable_by_key(|qc| qc.commit_info().round());
         for qc in certs {
-            if qc.certified_block().round() > self.commit_root().round() {
+            if qc.commit_info().round() > self.commit_root().round() {
                 info!(
                     "trying to recover to round {} with ledger info {}",
                     qc.certified_block().round(),
                     qc.ledger_info()
                 );
-                let block_id_to_recover = qc.certified_block().id();
+                let block_id_to_recover = qc.commit_info().id();
                 let block_to_recover = self.get_block(block_id_to_recover);
                 assert!(block_to_recover.is_some());
                 let block_to_recover = block_to_recover.unwrap();
                 self.init_block_number(&vec![block_to_recover.clone()]);
-                if let Some(DirectMempool(txns)) = block_to_recover.block().payload() {
+                if let Ok((txns, _)) = self.payload_manager.get_transactions(block_to_recover.block()).await {
                     info!("recover block {}", block_to_recover.block());
                     let verified_txns: Vec<VerifiedTxn> =
                         txns.iter().map(|txn| txn.into()).collect();
                     let verified_txns = verified_txns.into_iter().map(|txn| txn.into()).collect();
+                    let block_number = block_to_recover.block().block_number().unwrap();
+                    let block_hash = match self.storage.consensus_db().ledger_db.metadata_db().get_block_hash(block_number) {
+                        Some(block_hash) => Some(ComputeRes::new(*block_hash)),
+                        None => None,
+                    };
                     let block_batch = ExternalBlock {
                         txns: verified_txns,
                         block_meta: ExternalBlockMeta {
                             block_id: BlockId(*block_to_recover.block().id()),
-                            block_number: block_to_recover.block().block_number().unwrap(),
+                            block_number,
                             usecs: block_to_recover.block().timestamp_usecs(),
                             randomness: block_to_recover
                                 .randomness()
                                 .map(|r| Random::from_bytes(r.randomness())),
+                            block_hash,
                         },
                     };
                     self.execution_layer
@@ -202,10 +208,7 @@ impl BlockStore {
                         .recover_ordered_block(BlockId(*block_to_recover.parent_id()), block_batch)
                         .await.unwrap();
                 }
-                if qc.commit_info().round() <= self.commit_root().round() {
-                    continue;
-                }
-                info!("trying to execute to round {}", qc.commit_info().round());
+                info!("trying to commit to round {}", qc.commit_info().round());
                 if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info(), true).await {
                     error!("Error in try-committing blocks. {}", e.to_string());
                 }

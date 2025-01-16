@@ -14,6 +14,7 @@ use std::{
     fmt::{Debug, Display, Formatter},
     sync::Arc,
 };
+use aptos_logger::info;
 
 /// [ This class is used when consensus.decoupled = true ]
 /// PersistingPhase is a singleton that receives aggregated blocks from
@@ -34,11 +35,7 @@ impl Debug for PersistingRequest {
 
 impl Display for PersistingRequest {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "PersistingRequest({:?}, {})",
-            self.blocks, self.commit_ledger_info,
-        )
+        write!(f, "PersistingRequest({:?}, {})", self.blocks, self.commit_ledger_info,)
     }
 }
 
@@ -62,14 +59,7 @@ impl StatelessPipeline for PersistingPhase {
     const NAME: &'static str = "persisting";
 
     async fn process(&self, req: PersistingRequest) -> PersistingResponse {
-        let PersistingRequest {
-            blocks,
-            commit_ledger_info,
-            callback,
-        } = req;
-
-        self.persisting_handle
-            .commit(&blocks, commit_ledger_info, callback)
-            .await
+        let PersistingRequest { blocks, commit_ledger_info, callback } = req;
+        self.persisting_handle.commit(&blocks, commit_ledger_info, callback).await
     }
 }

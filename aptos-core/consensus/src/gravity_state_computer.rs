@@ -102,6 +102,7 @@ impl StateComputer for GravityExecutionProxy {
             block_number: block.block_number().unwrap_or_else(|| panic!("No block number")),
             usecs: block.timestamp_usecs(),
             randomness: randomness.map(|r| Random::from_bytes(r.randomness())),
+            block_hash: None,
         };
 
         // We would export the empty block detail to the outside GCEI caller

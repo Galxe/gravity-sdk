@@ -146,7 +146,17 @@ impl RecoveryApi for RethCoordinator {
     }
 
     async fn recover_ordered_block(&self, parent_id: BlockId, block: ExternalBlock) -> Result<(), ExecError> {
-        self.send_ordered_block(parent_id, block).await
+        let block_id = block.block_meta.block_id.clone();
+        let origin_block_hash = block.block_meta.block_hash;
+        self.send_ordered_block(parent_id, block).await?;
+        let reth_block_id = B256::from_slice(&block_id.0);
+        let block_hash = self.reth_cli.recv_compute_res(reth_block_id).await.unwrap().into();
+        if let Some(origin_block_hash) = origin_block_hash {
+            let origin_block_hash = B256::new(origin_block_hash.0);
+            assert_eq!(origin_block_hash, block_hash);
+        }
+        self.state.lock().await.insert_new_block(block_id, block_hash);
+        Ok(())
     }
 
     async fn recover_execution_blocks(&self, blocks: ExecutionBlocks) {

@@ -169,7 +169,7 @@ impl BufferItem {
                     commit_proof,
                     unverified_signatures,
                     callback,
-                    ordered_proof,
+                    mut ordered_proof,
                 } = *ordered_item;
                 for (b1, b2) in zip_eq(ordered_blocks.iter(), executed_blocks.iter()) {
                     assert_eq!(b1.id(), b2.id());
@@ -284,7 +284,7 @@ impl BufferItem {
     /// it returns an updated item
     pub fn try_advance_to_aggregated_with_ledger_info(
         self,
-        commit_proof: LedgerInfoWithSignatures,
+        mut commit_proof: LedgerInfoWithSignatures,
     ) -> Self {
         match self {
             Self::Signed(signed_item) => {
@@ -317,6 +317,9 @@ impl BufferItem {
                     "{} advance to aggregated with commit decision",
                     commit_proof.commit_info()
                 );
+                let block = executed_blocks.last().unwrap();
+                commit_proof.set_block_hash(block.compute_result().root_hash());
+                commit_proof.set_block_number(block.block().block_number().unwrap());
                 Self::Aggregated(Box::new(AggregatedItem {
                     executed_blocks,
                     callback,
@@ -352,13 +355,17 @@ impl BufferItem {
                     .check_voting_power(signed_item.partial_commit_proof.signatures().keys(), true)
                     .is_ok()
                 {
-                    Self::Aggregated(Box::new(AggregatedItem {
-                        executed_blocks: signed_item.executed_blocks,
-                        commit_proof: aggregate_commit_proof(
+                    let mut commit_proof = aggregate_commit_proof(
                             signed_item.partial_commit_proof.ledger_info(),
                             signed_item.partial_commit_proof.partial_sigs(),
                             validator,
-                        ),
+                    );
+                    let block = signed_item.executed_blocks.last().unwrap();
+                    commit_proof.set_block_hash(block.compute_result().root_hash());
+                    commit_proof.set_block_number(block.block().block_number().unwrap());
+                    Self::Aggregated(Box::new(AggregatedItem {
+                        executed_blocks: signed_item.executed_blocks,
+                        commit_proof: commit_proof,
                         callback: signed_item.callback,
                     }))
                 } else {

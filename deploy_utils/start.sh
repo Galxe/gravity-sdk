@@ -46,9 +46,6 @@ function start_node() {
     authrpc_port=$2
     http_port=$3
     metric_port=$4
-    rm -rf $node_path/data/quorumstoreDB
-    rm -rf $node_path/data/consensus_db
-    rm -rf $node_path/data/rand_db
 
     # temporarily set these two round to zero
     jq 'walk(

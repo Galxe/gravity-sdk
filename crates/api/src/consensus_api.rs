@@ -65,7 +65,7 @@ impl ConsensusEngine {
         for ledger_info in ledger_infos {
             res.insert(
                 ledger_info.ledger_info().block_number(),
-                ComputeRes(*ledger_info.ledger_info().block_hash()),
+                ComputeRes(*ledger_info.ledger_info().consensus_block_id()),
             );
         }
         res

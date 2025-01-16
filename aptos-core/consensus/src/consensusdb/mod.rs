@@ -21,9 +21,7 @@ pub use schema::{
     quorum_certificate::QCSchema,
 };
 use schema::{
-    single_entry::{SingleEntryKey, SingleEntrySchema},
-    BLOCK_CF_NAME, CERTIFIED_NODE_CF_NAME, DAG_VOTE_CF_NAME, NODE_CF_NAME, QC_CF_NAME,
-    SINGLE_ENTRY_CF_NAME,
+    single_entry::{SingleEntryKey, SingleEntrySchema}, BLOCK_CF_NAME, CERTIFIED_NODE_CF_NAME, DAG_VOTE_CF_NAME, LEDGER_INFO_CF_NAME, NODE_CF_NAME, QC_CF_NAME, SINGLE_ENTRY_CF_NAME
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -69,7 +67,7 @@ fn load_file(path: &Path) -> GravityNodeConfigSet {
 pub struct ConsensusDB {
     db: Arc<DB>,
     pub node_config_set: GravityNodeConfigSet,
-    ledger_db: LedgerDb,
+    pub ledger_db: LedgerDb,
 }
 
 impl ConsensusDB {
@@ -82,6 +80,7 @@ impl ConsensusDB {
             NODE_CF_NAME,
             CERTIFIED_NODE_CF_NAME,
             DAG_VOTE_CF_NAME,
+            LEDGER_INFO_CF_NAME,
             "ordered_anchor_id", // deprecated CF
         ];
 

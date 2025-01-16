@@ -1,6 +1,6 @@
 #!/bin/bash
 
-bin_name="peth-v2"
+bin_name="pethv2"
 node_arg=""
 bin_version="debug"
 mode="cluster"
@@ -46,7 +46,7 @@ if [[ "$mode" != "cluster" && "$mode" != "single" ]]; then
     exit 1
 fi
 
-if [[ "$bin_name" != "gravity-reth" ]]; then
+if [[ "$bin_name" != "pethv2" ]]; then
     rm -rf /tmp/$node_arg
 fi
 
