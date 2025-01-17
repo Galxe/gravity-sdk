@@ -36,7 +36,7 @@ use crate::ConsensusArgs;
 pub struct RethCli {
     ipc: Web3<Ipc>,
     auth: AuthServerHandle,
-    pipe_api: Mutex<PipeExecLayerApi>,
+    pipe_api: PipeExecLayerApi,
     chain_id: u64,
     provider: BlockchainProvider2<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
     txn_listener: Mutex<tokio::sync::mpsc::Receiver<alloy_primitives::TxHash>>,
@@ -58,7 +58,7 @@ impl RethCli {
         RethCli {
             ipc,
             auth: args.engine_api,
-            pipe_api: Mutex::new(args.pipeline_api),
+            pipe_api: args.pipeline_api,
             chain_id: chain_id.as_u64(),
             provider: args.provider,
             txn_listener: Mutex::new(args.tx_listener),
@@ -186,7 +186,7 @@ impl RethCli {
         parent_id: B256,
     ) -> Result<(), String> {
         info!("push ordered block {:?} with parent id {}", block, parent_id);
-        let pipe_api = self.pipe_api.lock().await;
+        let pipe_api = &self.pipe_api;
         let mut senders = vec![];
         let mut transactions = vec![];
         for (sender, txn) in
@@ -217,8 +217,10 @@ impl RethCli {
     }
 
     pub async fn recv_compute_res(&self, block_id: B256) -> Result<B256, ()> {
-        let pipe_api = self.pipe_api.lock().await;
+        info!("recv compute res {:?}", block_id);
+        let pipe_api = &self.pipe_api;
         let block_hash = pipe_api.pull_executed_block_hash(block_id).await.unwrap();
+        info!("recv compute res done");
         Ok(block_hash)
     }
 
@@ -227,9 +229,11 @@ impl RethCli {
         block_id: api_types::u256_define::BlockId,
         block_hash: B256,
     ) -> Result<(), String> {
+        info!("commit block {:?} with hash {:?}", block_id, block_hash);
         let block_id = B256::from_slice(block_id.0.as_ref());
-        let pipe_api = self.pipe_api.lock().await;
+        let pipe_api = &self.pipe_api;
         pipe_api.commit_executed_block_hash(ExecutedBlockMeta { block_id, block_hash });
+        info!("commit block done");
         Ok(())
     }
 

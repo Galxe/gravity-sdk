@@ -101,19 +101,22 @@ impl ExecutionApiV2 for RethCoordinator {
         mut ordered_block: ExternalBlock,
     ) -> Result<(), ExecError> {
         info!(
-            "send_ordered_block with parent_id: {:?} and block num {:?} {:?}",
+            "send_ordered_block with parent_id: {:?} and block num {:?} txn count {:?}",
             parent_id, ordered_block.block_meta.block_number, ordered_block.txns.len()
         );
-        let mut state = self.state.lock().await;
-        ordered_block.txns = ordered_block
-            .txns
-            .into_iter()
-            .filter(|txn| state.update_account_seq_num(txn))
-            .collect();
+        {
+            let mut state = self.state.lock().await;
+            ordered_block.txns = ordered_block
+                .txns
+                .into_iter()
+                .filter(|txn| state.update_account_seq_num(txn))
+                .collect();
+        }
         self.reth_cli
             .push_ordered_block(ordered_block, B256::new(parent_id.bytes()))
             .await
             .unwrap();
+        info!("send_ordered_block done");
         Ok(())
     }
 
@@ -124,14 +127,20 @@ impl ExecutionApiV2 for RethCoordinator {
         info!("recv_executed_block_hash with head: {:?}", head);
         let reth_block_id = B256::from_slice(&head.block_id.0);
         let block_hash = self.reth_cli.recv_compute_res(reth_block_id).await;
-        self.state.lock().await.insert_new_block(head.block_id, block_hash.unwrap().into());
+        {
+            self.state.lock().await.insert_new_block(head.block_id, block_hash.unwrap().into());
+        }
+        info!("recv_executed_block_hash done");
         Ok(ComputeRes::new(block_hash.unwrap().into()))
     }
 
     async fn commit_block(&self, block_id: BlockId) -> Result<(), ExecError> {
         info!("commit_block with block_id: {:?}", block_id);
-        let block_hash = self.state.lock().await.get_block_hash(block_id).unwrap();
+        let block_hash = {
+           self.state.lock().await.get_block_hash(block_id).unwrap()
+        };
         self.reth_cli.commit_block(block_id, block_hash.into()).await.unwrap();
+        info!("commit_block done");
         Ok(())
     }
 }
