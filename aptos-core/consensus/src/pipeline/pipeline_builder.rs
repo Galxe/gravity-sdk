@@ -12,6 +12,7 @@ use crate::{
     txn_notifier::TxnNotifier,
 };
 use anyhow::anyhow;
+use api_types::{account::{ExternalAccountAddress, ExternalChainId}, u256_define::{BlockId, Random, TxnHash}, ExternalBlock, ExternalBlockMeta};
 use aptos_consensus_notifications::ConsensusNotificationSender;
 use aptos_consensus_types::{
     block::Block,
@@ -27,8 +28,10 @@ use aptos_crypto::HashValue;
 use aptos_executor_types::{StateComputeResult, BlockExecutorTrait};
 use aptos_experimental_runtimes::thread_manager::optimal_min_len;
 use aptos_logger::{error, info, warn};
+use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 use aptos_types::{
     block_executor::config::BlockExecutorConfigFromOnchain,
+    block_metadata_ext::BlockMetadataExt,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
     randomness::Randomness,
     transaction::{
@@ -37,16 +40,15 @@ use aptos_types::{
     },
     validator_signer::ValidatorSigner,
 };
+use coex_bridge::{get_coex_bridge, Func};
 use futures::FutureExt;
 use itertools::Itertools;
 use move_core_types::account_address::AccountAddress;
 use rayon::prelude::*;
 use std::{
-    future::Future,
-    sync::Arc,
-    time::{Duration, Instant},
+    collections::HashMap, future::Future, sync::Arc, time::{Duration, Instant}
 };
-use tokio::{select, sync::oneshot, task::AbortHandle};
+use tokio::{select, sync::{oneshot, Mutex}, task::AbortHandle};
 
 /// The pipeline builder is responsible for constructing the pipeline structure for a block.
 /// Each phase is represented as a shared future, takes in other futures as pre-condition.
@@ -68,6 +70,7 @@ pub struct PipelineBuilder {
     state_sync_notifier: Arc<dyn ConsensusNotificationSender>,
     payload_manager: Arc<dyn TPayloadManager>,
     txn_notifier: Arc<dyn TxnNotifier>,
+    block_metadata: Arc<Mutex<HashMap<BlockId, ExternalBlockMeta>>>,
 }
 
 fn spawn_shared_fut<
@@ -163,6 +166,7 @@ impl PipelineBuilder {
             state_sync_notifier,
             payload_manager,
             txn_notifier,
+            block_metadata: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -395,11 +399,12 @@ impl PipelineBuilder {
             .map_err(|_| anyhow!("randomness tx cancelled"))?;
 
         let _tracker = Tracker::new("execute", &block);
-        let metadata_txn = if is_randomness_enabled {
-            block.new_metadata_with_randomness(&validator, maybe_rand)
-        } else {
-            block.new_block_metadata(&validator).into()
-        };
+        // let metadata_txn = if is_randomness_enabled {
+        //     block.new_metadata_with_randomness(&validator, maybe_rand)
+        // } else {
+        //     block.new_block_metadata(&validator).into()
+        // };
+        let metadata_txn : BlockMetadataExt = block.new_block_metadata(&validator).into();
         let txns = [
             vec![SignatureVerifiedTransaction::from(Transaction::from(
                 metadata_txn,
@@ -415,17 +420,60 @@ impl PipelineBuilder {
             user_txns.as_ref().clone(),
         ]
         .concat();
-        tokio::task::spawn_blocking(move || {
-            executor
-                .execute_and_state_checkpoint(
-                    (block.id(), txns).into(),
-                    block.parent_id(),
-                    onchain_execution_config,
+        // tokio::task::spawn_blocking(move || {
+        //     executor
+        //         .execute_and_state_checkpoint(
+        //             (block.id(), txns).into(),
+        //             block.parent_id(),
+        //             onchain_execution_config,
+        //         )
+        //         .map_err(anyhow::Error::from)
+        // })
+        // .await
+        // .expect("spawn blocking failed")?;
+        let stxns =
+            txns.into_iter().map(|txn| {
+                match txn.into_inner() {
+                    Transaction::UserTransaction(sign_txn) => sign_txn,
+                    _ => panic!("Shouldn't be other txn"),
+                }
+            }).collect::<Vec<_>>();
+        let vtxns =
+            stxns.iter().map(|txn| Into::<VerifiedTxn>::into(&txn.clone())).collect::<Vec<_>>();
+        let real_txns = vtxns
+            .into_iter()
+            .map(|txn| {
+                api_types::VerifiedTxn::new(
+                    txn.bytes().to_vec(),
+                    ExternalAccountAddress::new(txn.sender().into_bytes()),
+                    txn.sequence_number(),
+                    ExternalChainId::new(txn.chain_id().id()),
+                    TxnHash::from_bytes(&txn.get_hash().to_vec()),
                 )
-                .map_err(anyhow::Error::from)
-        })
-        .await
-        .expect("spawn blocking failed")?;
+            })
+            .collect();
+        let meta_data = ExternalBlockMeta {
+            block_id: BlockId(*block.id()),
+            block_number: block.block_number().unwrap_or_else(|| panic!("No block number")),
+            usecs: block.timestamp_usecs(),
+            randomness: maybe_rand.map(|r| Random::from_bytes(r.randomness())),
+            block_hash: None,
+        };
+        let call = get_coex_bridge().borrow_func("send_ordered_block");
+        match call {
+            Some(Func::SendOrderedBlocks(call)) => {
+                info!("call send_ordered_block function");
+                call.call((
+                    *block.parent_id(),
+                    ExternalBlock { block_meta: meta_data.clone(), txns: real_txns },
+                ))
+                .await
+                .unwrap();
+            }
+            _ => {
+                info!("no send_ordered_block function");
+            }
+        }
         Ok(())
     }
 
@@ -441,14 +489,27 @@ impl PipelineBuilder {
         let (_, prev_epoch_end_timestamp) = parent_block_ledger_update_phase.await?;
         execute_phase.await?;
         let _tracker = Tracker::new("ledger_update", &block);
+        let block_id = block.id();
+        let block_number = block.block_number();
         let timestamp = block.timestamp_usecs();
-        let result = tokio::task::spawn_blocking(move || {
-            executor
-                .ledger_update(block.id(), block.parent_id())
-                .map_err(anyhow::Error::from)
-        })
-        .await
-        .expect("spawn blocking failed")?;
+        let meta_data = ExternalBlockMeta {
+            block_id: BlockId(*block_id),
+            block_number: block_number.unwrap_or_else(|| panic!("No block number")),
+            usecs: timestamp,
+            randomness: None,
+            block_hash: None,
+        };
+        let call = get_coex_bridge().borrow_func("recv_executed_block_hash");
+        let hash = match call {
+            Some(Func::RecvExecutedBlockHash(call)) => {
+                info!("call recv_executed_block_hash function");
+                call.call(meta_data).await.unwrap()
+            }
+            _ => {
+                panic!("no recv_executed_block_hash function");
+            }
+        };
+        let result = StateComputeResult::new(HashValue::new(hash.bytes()), None, None);
         observe_block(timestamp, BlockStage::EXECUTED);
         // FIXME(gravity_byteyue): fixme
         // let epoch_end_timestamp =
