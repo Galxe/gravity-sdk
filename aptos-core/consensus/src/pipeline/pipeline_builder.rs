@@ -31,6 +31,7 @@ use aptos_logger::{error, info, warn};
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 use aptos_types::{
     block_executor::config::BlockExecutorConfigFromOnchain,
+    block_metadata_ext::BlockMetadataExt,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
     randomness::Randomness,
     transaction::{
@@ -403,7 +404,7 @@ impl PipelineBuilder {
         // } else {
         //     block.new_block_metadata(&validator).into()
         // };
-        let metadata_txn = block.new_block_metadata(&validator).into();
+        let metadata_txn : BlockMetadataExt = block.new_block_metadata(&validator).into();
         let txns = [
             vec![SignatureVerifiedTransaction::from(Transaction::from(
                 metadata_txn,
@@ -430,8 +431,15 @@ impl PipelineBuilder {
         // })
         // .await
         // .expect("spawn blocking failed")?;
+        let stxns =
+            txns.into_iter().map(|txn| {
+                match txn.into_inner() {
+                    Transaction::UserTransaction(sign_txn) => sign_txn,
+                    _ => panic!("Shouldn't be other txn"),
+                }
+            }).collect::<Vec<_>>();
         let vtxns =
-            txns.iter().map(|txn| Into::<VerifiedTxn>::into(&txn.clone())).collect::<Vec<_>>();
+            stxns.iter().map(|txn| Into::<VerifiedTxn>::into(&txn.clone())).collect::<Vec<_>>();
         let real_txns = vtxns
             .into_iter()
             .map(|txn| {
