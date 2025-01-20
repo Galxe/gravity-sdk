@@ -79,7 +79,7 @@ pub mod block_executor {
         todo!()
     }
     
-    fn commit_ledger(&self, ledger_info_with_sigs: LedgerInfoWithSignatures) -> ExecutorResult<()> {
+    fn commit_ledger(&self, block_ids: Vec<HashValue>, ledger_info_with_sigs: LedgerInfoWithSignatures) -> ExecutorResult<()> {
             todo!()
         }
 }

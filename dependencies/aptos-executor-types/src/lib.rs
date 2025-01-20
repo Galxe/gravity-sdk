@@ -98,10 +98,10 @@ pub trait BlockExecutorTrait: Send + Sync {
         block_ids: Vec<HashValue>,
         ledger_info_with_sigs: LedgerInfoWithSignatures,
     ) -> ExecutorResult<()> {
-        for block_id in block_ids {
-            self.pre_commit_block(block_id)?;
+        for block_id in &block_ids {
+            self.pre_commit_block(block_id.clone())?;
         }
-        self.commit_ledger(ledger_info_with_sigs)
+        self.commit_ledger(block_ids, ledger_info_with_sigs)
     }
 
     fn pre_commit_block(
@@ -109,7 +109,7 @@ pub trait BlockExecutorTrait: Send + Sync {
         block_id: HashValue,
     ) -> ExecutorResult<()>;
 
-    fn commit_ledger(&self, ledger_info_with_sigs: LedgerInfoWithSignatures) -> ExecutorResult<()>;
+    fn commit_ledger(&self, block_ids: Vec<HashValue>, ledger_info_with_sigs: LedgerInfoWithSignatures) -> ExecutorResult<()>;
 
     /// Finishes the block executor by releasing memory held by inner data structures(SMT).
     fn finish(&self);
