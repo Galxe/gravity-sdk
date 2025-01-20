@@ -238,7 +238,9 @@ impl TransactionStore {
             // insert into storage and other indexes
             self.hash_index
                 .insert(txn.get_hash(), (txn.verified_txn().sender(), txn_seq_num));
-            self.sequence_numbers.insert(txn.verified_txn().sender(), acc_seq_num);
+            if self.sequence_numbers.get(&address).map_or(true, |v| *v < acc_seq_num) {
+                self.sequence_numbers.insert(address, acc_seq_num);
+            }
             self.size_bytes += txn.get_estimated_bytes();
             txns.insert(txn_seq_num, txn);
             self.track_indices();
@@ -385,7 +387,7 @@ impl TransactionStore {
 
             while let Some(txn) = txns.get_mut(&min_seq) {
                 let process_ready = !self.priority_index.contains(txn);
-
+                
                 self.priority_index.insert(txn);
 
                 let process_broadcast_ready = txn.timeline_state == TimelineState::NotReady;
@@ -647,8 +649,20 @@ impl TransactionStore {
         self.priority_index.iter()
     }
 
+    pub(crate) fn get_priority_index_size(&self) -> usize {
+        self.priority_index.size()
+    }
+
     // #[cfg(test)]
     pub(crate) fn get_transactions(&self) -> &HashMap<AccountAddress, AccountTransactions> {
         &self.transactions
+    }
+
+    pub(crate) fn txn_size(&self) -> usize {
+        let mut count = 0;
+        for txns in self.transactions.values() {
+            count += txns.len();
+        }
+        count
     }
 }
