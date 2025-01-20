@@ -18,7 +18,7 @@ CARGO_FEATURES := $(if $(FEATURE),--features $(FEATURE),)
 all: $(BINARY)
 
 peth:
-	cd bin/peth && cargo build $(CARGO_FLAGS) $(CARGO_FEATURES)
+	cd bin/pethv2 && cargo build $(CARGO_FLAGS) $(CARGO_FEATURES)
 
 bench:
 	cd bin/bench && cargo build $(CARGO_FLAGS) $(CARGO_FEATURES)
