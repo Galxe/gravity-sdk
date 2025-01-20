@@ -11,25 +11,35 @@ Before using this tool, you must install **Ansible** on your local machine. Foll
 ### Installing Ansible
 
 #### Ubuntu
+
 1. Update your package manager:
+
    ```bash
    sudo apt update
    ```
+
 2. Install Ansible:
+
    ```bash
    sudo apt install -y ansible
    ```
+
 3. Verify installation:
+
    ```bash
    ansible --version
    ```
 
 #### macOS
+
 1. Install Ansible using Homebrew:
+
    ```bash
    brew install ansible
    ```
+
 2. Verify installation:
+
    ```bash
    ansible --version
    ```
@@ -48,11 +58,13 @@ server1 ansible_host=${HOST} ansible_user=${USER}
 ### Adding New Servers
 
 To add new servers, follow these rules:
+
 1. Define the server under the `[reth_servers]` group.
 2. Specify `ansible_host` (the server's IP or hostname).
 3. Specify `ansible_user` (the SSH user for that server).
 
 For example, to add another server:
+
 ```ini
 [reth_servers]
 server1 ansible_host=${HOST} ansible_user=${USER}
@@ -102,10 +114,13 @@ This structured configuration allows each server to have its customized settings
 ### Compile, Deploy, and Start Reth
 
 - To **compile, deploy, and start Reth on a single server** (e.g., `server1`):
+
   ```bash
   ansible-playbook -i inventory.ini reth_deploy.yml --limit server1
+
   ```
 - To **compile, deploy, and start Reth on all servers**:
+
   ```bash
   ansible-playbook -i inventory.ini reth_deploy.yml
   ```
@@ -117,13 +132,34 @@ This structured configuration allows each server to have its customized settings
 ### Stop Reth Service
 
 - To **stop the Reth service on a single server** (e.g., `server1`):
+
   ```bash
   ansible-playbook -i inventory.ini reth_stop.yml --limit server1
   ```
+
 - To **stop the Reth service on all servers**:
+
   ```bash
   ansible-playbook -i inventory.ini reth_stop.yml
   ```
+
+---
+
+## Start using manager.sh
+
+You can use the `manager.sh` file to start the corresponding server. This script will launch a background process to monitor whether the node you started is running properly. If the node goes down, it will automatically restart it.
+
+Example usage:
+
+```bash
+bash manager.sh action=deploy node=server1
+```
+
+**Nodes started in this way should also be stopped using manager.sh**:
+
+```bash
+bash manager.sh action=stop node=server1
+```
 
 ---
 
