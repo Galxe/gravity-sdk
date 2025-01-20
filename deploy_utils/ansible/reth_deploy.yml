@@ -60,7 +60,7 @@
         dest: "/tmp/{{ reth_node_id }}/script"
 
     - name: Start service using separate playbook
-      include_tasks: start_service.yml
+      include_tasks: reth_service.yml
 
     - name: Output collected logs
       debug:

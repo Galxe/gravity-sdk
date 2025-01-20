@@ -1,5 +1,6 @@
 reth_compile_options: ""
+reth_env: ""
 tag_or_brach: "main"
 reth_node_arg: "--mode cluster --node node3 --bin_version release"
-reth_root_dir: "/home/ubuntu/projects/gravity-sdk/"
+reth_root_dir: "/home/${USER}/projects/gravity-sdk/"
 reth_node_id: "node3"

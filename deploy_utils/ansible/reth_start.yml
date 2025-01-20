@@ -11,6 +11,6 @@
       poll: 5
       register: deploy_service_log
 
-    - name: Append service start logs to collection
-      set_fact:
-        log_collection: "{{ log_collection + [deploy_service_log] }}"
+    - name: Display service start logs
+      debug:
+        var: deploy_service_log
