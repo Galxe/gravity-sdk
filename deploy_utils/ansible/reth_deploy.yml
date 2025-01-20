@@ -5,7 +5,7 @@
   tasks:
     - name: Pull and checkout code
       shell: |
-        git pull && git checkout {{ tag_or_brach }}"
+        git pull && git checkout {{ tag_or_brach }}
       async: 600
       poll: 30
       args:
@@ -60,7 +60,7 @@
         dest: "/tmp/{{ reth_node_id }}/script"
 
     - name: Start service using separate playbook
-      include_playbook: start_service.yml
+      include_tasks: start_service.yml
 
     - name: Output collected logs
       debug:
