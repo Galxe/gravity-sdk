@@ -824,7 +824,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
         self.execution_client
             .start_epoch(
-                consensus_key,
+                consensus_key.clone(),
                 epoch_state.clone(),
                 safety_rules_container.clone(),
                 payload_manager.clone(),
@@ -837,7 +837,16 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 recovery_data.root_block().round(),
             )
             .await;
-
+        let consensus_sk = consensus_key;
+        
+        let maybe_pipeline_builder = if self.config.enable_pipeline {
+            info!(epoch = epoch, "Create PipelineBuilder");
+            let signer = Arc::new(ValidatorSigner::new(self.author, consensus_sk));
+            Some(self.execution_client.pipeline_builder(signer))
+        } else {
+            None
+        };
+        
         info!(epoch = epoch, "Create BlockStore");
         // Read the last vote, before "moving" `recovery_data`
         let last_vote = recovery_data.last_vote();

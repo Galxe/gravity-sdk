@@ -53,6 +53,8 @@ use futures_channel::mpsc::unbounded;
 use move_core_types::account_address::AccountAddress;
 use std::sync::Arc;
 
+use super::pipeline_builder::PipelineBuilder;
+
 #[async_trait::async_trait]
 pub trait TExecutionClient: Send + Sync {
     /// Initialize the execution phase for a new epoch.
@@ -96,6 +98,9 @@ pub trait TExecutionClient: Send + Sync {
 
     /// Shutdown the current processor at the end of the epoch.
     async fn end_epoch(&self);
+
+    /// Returns a pipeline builder for the current epoch.
+    fn pipeline_builder(&self, signer: Arc<ValidatorSigner>) -> PipelineBuilder;
 }
 
 struct BufferManagerHandle {
@@ -144,7 +149,7 @@ impl BufferManagerHandle {
 
 pub struct ExecutionProxyClient {
     consensus_config: ConsensusConfig,
-    execution_proxy: Arc<dyn StateComputer>,
+    execution_proxy: Arc<ExecutionProxy>,
     author: Author,
     self_sender: aptos_channels::UnboundedSender<Event<ConsensusMsg>>,
     network_sender: ConsensusNetworkClient<NetworkClient<ConsensusMsg>>,
@@ -159,7 +164,7 @@ pub struct ExecutionProxyClient {
 impl ExecutionProxyClient {
     pub fn new(
         consensus_config: ConsensusConfig,
-        execution_proxy: Arc<dyn StateComputer>,
+        execution_proxy: Arc<ExecutionProxy>,
         author: Author,
         self_sender: aptos_channels::UnboundedSender<Event<ConsensusMsg>>,
         network_sender: ConsensusNetworkClient<NetworkClient<ConsensusMsg>>,
@@ -478,6 +483,10 @@ impl TExecutionClient for ExecutionProxyClient {
         }
         self.execution_proxy.end_epoch();
     }
+
+    fn pipeline_builder(&self, signer: Arc<ValidatorSigner>) -> PipelineBuilder {
+        self.execution_proxy.pipeline_builder(signer)
+    }
 }
 
 pub struct DummyExecutionClient;
@@ -526,4 +535,8 @@ impl TExecutionClient for DummyExecutionClient {
     }
 
     async fn end_epoch(&self) {}
+
+    fn pipeline_builder(&self, signer: Arc<ValidatorSigner>) -> PipelineBuilder {
+        todo!()
+    }
 }

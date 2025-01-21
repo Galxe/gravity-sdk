@@ -10,7 +10,7 @@ use aptos_config::{
     config::{NetworkConfig, NodeConfig, Peer, PeerRole},
     network_id::NetworkId,
 };
-use aptos_consensus::{consensusdb::ConsensusDB, gravity_state_computer::GravityExecutionProxy};
+use aptos_consensus::consensusdb::ConsensusDB;
 use aptos_consensus::{
     gravity_state_computer::ConsensusAdapterArgs, network_interface::ConsensusMsg,
     persistent_liveness_storage::StorageWriteProxy, quorum_store::quorum_store_db::QuorumStoreDB,

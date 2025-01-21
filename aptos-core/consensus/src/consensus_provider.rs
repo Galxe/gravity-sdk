@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::gravity_state_computer::{
-    ConsensusAdapterArgs, GravityBlockExecutor, GravityExecutionProxy,
+    ConsensusAdapterArgs, GravityBlockExecutor,
 };
 use crate::{
     consensus_observer::{
@@ -83,8 +83,6 @@ pub fn start_consensus(
         TransactionFilter::new(node_config.execution.transaction_filter.clone()),
         node_config.consensus.enable_pre_commit,
     );
-    let execution_proxy =
-        Arc::new(GravityExecutionProxy::new(Arc::new(execution_proxy), executor.clone()));
 
     let time_service = Arc::new(ClockTimeService::new(runtime.handle().clone()));
 
@@ -101,7 +99,7 @@ pub fn start_consensus(
 
     let execution_client = Arc::new(ExecutionProxyClient::new(
         node_config.consensus.clone(),
-        execution_proxy.clone(),
+        Arc::new(execution_proxy),
         node_config.validator_network.as_ref().unwrap().peer_id(),
         self_sender.clone(),
         consensus_network_client.clone(),

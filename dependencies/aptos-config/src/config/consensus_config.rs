@@ -89,6 +89,7 @@ pub struct ConsensusConfig {
     pub rand_rb_config: ReliableBroadcastConfig,
     pub num_bounded_executor_tasks: u64,
     pub enable_pre_commit: bool,
+    pub enable_pipeline: bool,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -354,6 +355,7 @@ impl Default for ConsensusConfig {
             },
             num_bounded_executor_tasks: 16,
             enable_pre_commit: true,
+            enable_pipeline: false,
         }
     }
 }

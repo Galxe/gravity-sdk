@@ -4,37 +4,21 @@
 
 use crate::consensusdb::ConsensusDB;
 use crate::payload_client::user::quorum_store_client::QuorumStoreClient;
-use crate::pipeline::pipeline_phase::CountedRequest;
-use crate::state_computer::{ExecutionProxy, StateComputeResultFut};
-use crate::{
-    error::StateSyncError,
-    payload_manager::TPayloadManager,
-    state_replication::{StateComputer, StateComputerCommitCallBackType},
-    transaction_deduper::TransactionDeduper,
-    transaction_shuffler::TransactionShuffler,
-};
 use anyhow::Result;
-use api_types::account::{ExternalAccountAddress, ExternalChainId};
-use api_types::u256_define::{Random, TxnHash};
-use api_types::{u256_define::BlockId, ExecutionLayer, ExternalBlock, ExternalBlockMeta};
-use aptos_consensus_types::pipeline_execution_result::PipelineExecutionResult;
-use aptos_consensus_types::{block::Block, pipelined_block::PipelinedBlock};
+use api_types::ExecutionLayer;
 use aptos_crypto::HashValue;
 use aptos_executor::block_executor::BlockExecutor;
 use aptos_executor_types::{
     BlockExecutorTrait, ExecutorResult, StateComputeResult,
 };
 use aptos_logger::info;
-use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 use aptos_types::block_executor::partitioner::ExecutableBlock;
 use aptos_types::{
-    block_executor::config::BlockExecutorConfigFromOnchain, epoch_state::EpochState,
-    ledger_info::LedgerInfoWithSignatures, randomness::Randomness,
+    block_executor::config::BlockExecutorConfigFromOnchain,
+    ledger_info::LedgerInfoWithSignatures,
 };
 use coex_bridge::{get_coex_bridge, Func};
-use futures::future::BoxFuture;
-use std::time::Duration;
-use std::{boxed::Box, sync::Arc};
+use std::sync::Arc;
 use tokio::runtime::Runtime;
 
 pub struct ConsensusAdapterArgs {
@@ -61,22 +45,6 @@ impl ConsensusAdapterArgs {
     }
 }
 
-/// Basic communication with the Execution module;
-/// implements StateComputer traits.
-pub struct GravityExecutionProxy {
-    pub aptos_state_computer: Arc<ExecutionProxy>,
-    inner_executor: Arc<GravityBlockExecutor>,
-}
-
-impl GravityExecutionProxy {
-    pub fn new(
-        aptos_state_computer: Arc<ExecutionProxy>,
-        inner_executor: Arc<GravityBlockExecutor>,
-    ) -> Self {
-        Self { aptos_state_computer, inner_executor }
-    }
-}
-
 pub struct GravityBlockExecutor {
     inner: BlockExecutor,
     runtime: Runtime,
@@ -85,121 +53,6 @@ pub struct GravityBlockExecutor {
 impl GravityBlockExecutor {
     pub(crate) fn new(inner: BlockExecutor) -> Self {
         Self { inner, runtime: aptos_runtimes::spawn_named_runtime("tmp".into(), None) }
-    }
-}
-
-#[async_trait::async_trait]
-impl StateComputer for GravityExecutionProxy {
-    async fn schedule_compute(
-        &self,
-        // The block to be executed.
-        block: &Block,
-        // The parent block id.
-        parent_block_id: HashValue,
-        randomness: Option<Randomness>,
-        _lifetime_guard: CountedRequest<()>,
-    ) -> StateComputeResultFut {
-        assert!(block.block_number().is_some());
-        let txns = self.aptos_state_computer.get_block_txns(block).await;
-        let meta_data = ExternalBlockMeta {
-            block_id: BlockId(*block.id()),
-            block_number: block.block_number().unwrap_or_else(|| panic!("No block number")),
-            usecs: block.timestamp_usecs(),
-            randomness: randomness.map(|r| Random::from_bytes(r.randomness())),
-            block_hash: None,
-        };
-
-        // We would export the empty block detail to the outside GCEI caller
-        let vtxns =
-            txns.iter().map(|txn| Into::<VerifiedTxn>::into(&txn.clone())).collect::<Vec<_>>();
-        let real_txns = vtxns
-            .into_iter()
-            .map(|txn| {
-                api_types::VerifiedTxn::new(
-                    txn.bytes().to_vec(),
-                    ExternalAccountAddress::new(txn.sender().into_bytes()),
-                    txn.sequence_number(),
-                    ExternalChainId::new(txn.chain_id().id()),
-                    TxnHash::from_bytes(&txn.get_hash().to_vec()),
-                )
-            })
-            .collect();
-        let call = get_coex_bridge().borrow_func("send_ordered_block");
-        match call {
-            Some(Func::SendOrderedBlocks(call)) => {
-                info!("call send_ordered_block function");
-                call.call((
-                    *parent_block_id,
-                    ExternalBlock { block_meta: meta_data.clone(), txns: real_txns },
-                ))
-                .await
-                .unwrap();
-            }
-            _ => {
-                info!("no send_ordered_block function");
-            }
-        }
-
-        Box::pin(async move {
-            let call = get_coex_bridge().borrow_func("recv_executed_block_hash");
-            let hash = match call {
-                Some(Func::RecvExecutedBlockHash(call)) => {
-                    info!("call recv_executed_block_hash function");
-                    call.call(meta_data).await.unwrap()
-                }
-                _ => {
-                    panic!("no recv_executed_block_hash function");
-                }
-            };
-            let result = StateComputeResult::with_root_hash(HashValue::new(hash.bytes()));
-            let pre_commit_fut: BoxFuture<'static, ExecutorResult<()>> =
-                    {
-                        Box::pin(async move {
-                            Ok(())
-                        })
-                    };
-            Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO, pre_commit_fut))
-        })
-    }
-
-    /// Send a successful commit. A future is fulfilled when the state is finalized.
-    async fn commit(
-        &self,
-        blocks: &[Arc<PipelinedBlock>],
-        finality_proof: LedgerInfoWithSignatures,
-        callback: StateComputerCommitCallBackType,
-    ) -> ExecutorResult<()> {
-        self.aptos_state_computer.commit(blocks, finality_proof, callback).await
-    }
-
-    /// Synchronize to a commit that not present locally.
-    async fn sync_to(&self, target: LedgerInfoWithSignatures) -> Result<(), StateSyncError> {
-        self.aptos_state_computer.sync_to(target).await
-    }
-
-    fn new_epoch(
-        &self,
-        epoch_state: &EpochState,
-        payload_manager: Arc<dyn TPayloadManager>,
-        transaction_shuffler: Arc<dyn TransactionShuffler>,
-        block_executor_onchain_config: BlockExecutorConfigFromOnchain,
-        transaction_deduper: Arc<dyn TransactionDeduper>,
-        randomness_enabled: bool,
-    ) {
-        self.aptos_state_computer.new_epoch(
-            epoch_state,
-            payload_manager,
-            transaction_shuffler,
-            block_executor_onchain_config,
-            transaction_deduper,
-            randomness_enabled,
-        )
-    }
-
-    // Clears the epoch-specific state. Only a sync_to call is expected before calling new_epoch
-    // on the next epoch.
-    fn end_epoch(&self) {
-        self.aptos_state_computer.end_epoch()
     }
 }
 

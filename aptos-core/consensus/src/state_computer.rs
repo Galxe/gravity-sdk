@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::persistent_liveness_storage::PersistentLivenessStorage;
+use crate::pipeline::pipeline_builder::PipelineBuilder;
 use crate::{
     block_preparer::BlockPreparer,
     block_storage::tracing::{observe_block, BlockStage},
@@ -20,6 +21,9 @@ use crate::{
     txn_notifier::TxnNotifier,
 };
 use anyhow::Result;
+use api_types::account::{ExternalAccountAddress, ExternalChainId};
+use api_types::u256_define::{BlockId, Random, TxnHash};
+use api_types::{ExternalBlock, ExternalBlockMeta};
 use aptos_consensus_notifications::ConsensusNotificationSender;
 use aptos_consensus_types::{
     block::Block, common::Round, pipeline_execution_result::PipelineExecutionResult,
@@ -29,12 +33,15 @@ use aptos_crypto::HashValue;
 use aptos_executor_types::{BlockExecutorTrait, ExecutorResult, StateComputeResult};
 use aptos_infallible::RwLock;
 use aptos_logger::prelude::*;
+use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 use aptos_types::transaction::SignedTransaction;
+use aptos_types::validator_signer::ValidatorSigner;
 use aptos_types::{
     account_address::AccountAddress, block_executor::config::BlockExecutorConfigFromOnchain,
     contract_event::ContractEvent, epoch_state::EpochState, ledger_info::LedgerInfoWithSignatures,
     randomness::Randomness, transaction::Transaction,
 };
+use coex_bridge::{get_coex_bridge, Func};
 use fail::fail_point;
 use futures::{future::BoxFuture, SinkExt, StreamExt};
 use std::{
@@ -89,7 +96,7 @@ pub struct ExecutionProxy {
 }
 
 impl ExecutionProxy {
-    pub async fn get_block_txns(&self, block: &Block) -> Vec<SignedTransaction> {
+    async fn get_block_txns(&self, block: &Block) -> Vec<SignedTransaction> {
         let MutableState {
             validators,
             payload_manager,
@@ -176,6 +183,40 @@ impl ExecutionProxy {
         //     .transactions_to_commit(input_txns, executed_block.id())
         input_txns
     }
+
+    pub fn pipeline_builder(&self, commit_signer: Arc<ValidatorSigner>) -> PipelineBuilder {
+        let MutableState {
+            validators,
+            payload_manager,
+            transaction_shuffler,
+            block_executor_onchain_config,
+            transaction_deduper,
+            is_randomness_enabled,
+        } = self
+            .state
+            .read()
+            .as_ref()
+            .cloned()
+            .expect("must be set within an epoch");
+
+        let block_preparer = Arc::new(BlockPreparer::new(
+            payload_manager.clone(),
+            self.transaction_filter.clone(),
+            transaction_deduper.clone(),
+            transaction_shuffler.clone(),
+        ));
+        PipelineBuilder::new(
+            block_preparer,
+            self.executor.clone(),
+            validators,
+            block_executor_onchain_config,
+            is_randomness_enabled,
+            commit_signer,
+            self.state_sync_notifier.clone(),
+            payload_manager,
+            self.txn_notifier.clone(),
+        )
+    }
 }
 
 #[async_trait::async_trait]
@@ -189,7 +230,67 @@ impl StateComputer for ExecutionProxy {
         randomness: Option<Randomness>,
         lifetime_guard: CountedRequest<()>,
     ) -> StateComputeResultFut {
-        panic!("ExecutionProxy does not implement schedule_compute");
+        assert!(block.block_number().is_some());
+        let txns = self.get_block_txns(block).await;
+        let meta_data = ExternalBlockMeta {
+            block_id: BlockId(*block.id()),
+            block_number: block.block_number().unwrap_or_else(|| panic!("No block number")),
+            usecs: block.timestamp_usecs(),
+            randomness: randomness.map(|r| Random::from_bytes(r.randomness())),
+            block_hash: None,
+        };
+
+        // We would export the empty block detail to the outside GCEI caller
+        let vtxns =
+            txns.iter().map(|txn| Into::<VerifiedTxn>::into(&txn.clone())).collect::<Vec<_>>();
+        let real_txns = vtxns
+            .into_iter()
+            .map(|txn| {
+                api_types::VerifiedTxn::new(
+                    txn.bytes().to_vec(),
+                    ExternalAccountAddress::new(txn.sender().into_bytes()),
+                    txn.sequence_number(),
+                    ExternalChainId::new(txn.chain_id().id()),
+                    TxnHash::from_bytes(&txn.get_hash().to_vec()),
+                )
+            })
+            .collect();
+        let call = get_coex_bridge().borrow_func("send_ordered_block");
+        match call {
+            Some(Func::SendOrderedBlocks(call)) => {
+                info!("call send_ordered_block function");
+                call.call((
+                    *parent_block_id,
+                    ExternalBlock { block_meta: meta_data.clone(), txns: real_txns },
+                ))
+                .await
+                .unwrap();
+            }
+            _ => {
+                info!("no send_ordered_block function");
+            }
+        }
+
+        Box::pin(async move {
+            let call = get_coex_bridge().borrow_func("recv_executed_block_hash");
+            let hash = match call {
+                Some(Func::RecvExecutedBlockHash(call)) => {
+                    info!("call recv_executed_block_hash function");
+                    call.call(meta_data).await.unwrap()
+                }
+                _ => {
+                    panic!("no recv_executed_block_hash function");
+                }
+            };
+            let result = StateComputeResult::with_root_hash(HashValue::new(hash.bytes()));
+            let pre_commit_fut: BoxFuture<'static, ExecutorResult<()>> =
+                    {
+                        Box::pin(async move {
+                            Ok(())
+                        })
+                    };
+            Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO, pre_commit_fut))
+        })
     }
 
     /// Send a successful commit. A future is fulfilled when the state is finalized.
