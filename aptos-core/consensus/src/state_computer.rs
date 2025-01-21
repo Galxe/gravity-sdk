@@ -319,6 +319,7 @@ impl StateComputer for ExecutionProxy {
             self.state.read().as_ref().cloned().expect("must be set within an epoch");
         let mut committed_block_ids = vec![];
         let mut pre_commit_futs = Vec::with_capacity(blocks.len());
+        let mut block_ids = vec![];
         for block in blocks {
             if let Some(payload) = block.block().payload() {
                 payloads.push(payload.clone());
@@ -332,6 +333,7 @@ impl StateComputer for ExecutionProxy {
             }
             subscribable_txn_events.extend(block.subscribable_events());
             pre_commit_futs.push(block.take_pre_commit_fut());
+            block_ids.push(block.id());
         }
 
         // wait until all blocks are committed
@@ -346,7 +348,7 @@ impl StateComputer for ExecutionProxy {
             "commit_block",
             tokio::task::spawn_blocking(move || {
                 executor
-                    .commit_ledger(proof)
+                    .commit_ledger(block_ids, proof)
                     .expect("Failed to commit blocks");
             })
             .await
@@ -514,6 +516,7 @@ async fn test_commit_sync_race() {
 
         fn commit_ledger(
             &self,
+            block_ids: Vec<HashValue>,
             ledger_info_with_sigs: LedgerInfoWithSignatures,
         ) -> ExecutorResult<()> {
             *self.time.lock() = LogicalTime::new(

@@ -716,10 +716,12 @@ impl PipelineBuilder {
         }
 
         let _tracker = Tracker::new("commit_ledger", &block);
+        let mut block_ids = vec![];
+        block_ids.push(block.id());
         let ledger_info_with_sigs_clone = ledger_info_with_sigs.clone();
         tokio::task::spawn_blocking(move || {
             executor
-                .commit_ledger(ledger_info_with_sigs_clone)
+                .commit_ledger(block_ids, ledger_info_with_sigs_clone)
                 .map_err(anyhow::Error::from)
         })
         .await

@@ -2,20 +2,19 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::cmp::max;
-use std::fmt::Display;
 use aptos_crypto::hash::{HashValue, TransactionAccumulatorHasher, ACCUMULATOR_PLACEHOLDER_HASH};
 use aptos_types::block_executor::config::BlockExecutorConfigFromOnchain;
 use aptos_types::block_executor::partitioner::ExecutableBlock;
+use aptos_types::contract_event::ContractEvent;
 use aptos_types::epoch_state::EpochState;
 use aptos_types::ledger_info::LedgerInfoWithSignatures;
-use aptos_types::transaction::{BlockEpiloguePayload, ExecutionStatus};
-use aptos_types::transaction::{Transaction, TransactionStatus, block_epilogue::BlockEndInfo};
-use aptos_types::contract_event::ContractEvent;
 use aptos_types::proof::AccumulatorExtensionProof;
+use aptos_types::transaction::{block_epilogue::BlockEndInfo, Transaction, TransactionStatus};
+use aptos_types::transaction::{BlockEpiloguePayload, ExecutionStatus};
 use serde::{Deserialize, Serialize};
+use std::cmp::max;
+use std::fmt::Display;
 use thiserror::Error;
-
 
 #[derive(Debug, Deserialize, Error, PartialEq, Eq, Serialize)]
 /// Different reasons for proposal rejection
@@ -32,11 +31,7 @@ pub enum ExecutorError {
         to_commit,
         target_version
     )]
-    BadNumTxnsToCommit {
-        first_version: Version,
-        to_commit: usize,
-        target_version: Version,
-    },
+    BadNumTxnsToCommit { first_version: Version, to_commit: usize, target_version: Version },
 
     #[error("Internal error: {:?}", error)]
     InternalError { error: String },
@@ -55,9 +50,7 @@ pub type Version = u64;
 
 impl ExecutorError {
     pub fn internal_err<E: Display>(e: E) -> Self {
-        Self::InternalError {
-            error: format!("{}", e),
-        }
+        Self::InternalError { error: format!("{}", e) }
     }
 }
 
@@ -69,7 +62,6 @@ pub enum BlockGasLimitType {
     NoLimit,
     Limit(u64),
 }
-
 
 pub trait BlockExecutorTrait: Send + Sync {
     /// Get the latest committed block id
@@ -98,18 +90,19 @@ pub trait BlockExecutorTrait: Send + Sync {
         block_ids: Vec<HashValue>,
         ledger_info_with_sigs: LedgerInfoWithSignatures,
     ) -> ExecutorResult<()> {
-        for block_id in block_ids {
-            self.pre_commit_block(block_id)?;
+        for block_id in &block_ids {
+            self.pre_commit_block(block_id.clone())?;
         }
-        self.commit_ledger(ledger_info_with_sigs)
+        self.commit_ledger(block_ids, ledger_info_with_sigs)
     }
 
-    fn pre_commit_block(
-        &self,
-        block_id: HashValue,
-    ) -> ExecutorResult<()>;
+    fn pre_commit_block(&self, block_id: HashValue) -> ExecutorResult<()>;
 
-    fn commit_ledger(&self, ledger_info_with_sigs: LedgerInfoWithSignatures) -> ExecutorResult<()>;
+    fn commit_ledger(
+        &self,
+        block_ids: Vec<HashValue>,
+        ledger_info_with_sigs: LedgerInfoWithSignatures,
+    ) -> ExecutorResult<()>;
 
     /// Finishes the block executor by releasing memory held by inner data structures(SMT).
     fn finish(&self);
@@ -117,9 +110,9 @@ pub trait BlockExecutorTrait: Send + Sync {
 
 #[derive(Debug, Default, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StateComputeResult {
-        root_hash: HashValue,
-        epoch_state: Option<EpochState>,
-        block_end_info: Option<BlockEndInfo>,
+    root_hash: HashValue,
+    epoch_state: Option<EpochState>,
+    block_end_info: Option<BlockEndInfo>,
 }
 
 impl StateComputeResult {
@@ -128,11 +121,7 @@ impl StateComputeResult {
         epoch_state: Option<EpochState>,
         block_end_info: Option<BlockEndInfo>,
     ) -> Self {
-        Self {
-            root_hash,
-            epoch_state,
-            block_end_info,
-        }
+        Self { root_hash, epoch_state, block_end_info }
     }
 
     pub fn version(&self) -> Version {
@@ -148,11 +137,7 @@ impl StateComputeResult {
     /// this function is used in RandomComputeResultStateComputer to assert that the compute
     /// function is really called.
     pub fn with_root_hash(root_hash: HashValue) -> Self {
-        Self {
-            root_hash,
-            epoch_state: None,
-            block_end_info: None,
-        }
+        Self { root_hash, epoch_state: None, block_end_info: None }
     }
 
     pub fn root_hash(&self) -> HashValue {
@@ -170,9 +155,7 @@ impl StateComputeResult {
 
 impl From<anyhow::Error> for ExecutorError {
     fn from(error: anyhow::Error) -> Self {
-        Self::InternalError {
-            error: format!("{}", error),
-        }
+        Self::InternalError { error: format!("{}", error) }
     }
 }
 
@@ -180,8 +163,7 @@ pub mod state_checkpoint_output {
     use std::marker::PhantomData;
 
     #[derive(Default)]
-    pub struct StateCheckpointOutput {
-    }
+    pub struct StateCheckpointOutput {}
 
     pub struct BlockExecutorInner<V> {
         phantom: PhantomData<V>,
@@ -189,5 +171,4 @@ pub mod state_checkpoint_output {
 }
 
 #[cfg(test)]
-mod tests {
-}
+mod tests {}

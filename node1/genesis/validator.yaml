@@ -14,6 +14,7 @@ consensus:
         waypoint:
           from_file: /tmp/node1/genesis/waypoint.txt
         identity_blob_path: /tmp/node1/genesis/validator-identity.yaml
+  enable_pipeline: true
 
 validator_network:
   network_id: validator
