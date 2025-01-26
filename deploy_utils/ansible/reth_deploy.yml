@@ -5,7 +5,7 @@
   tasks:
     - name: Pull and checkout code
       shell: |
-        git pull && git checkout {{ tag_or_brach }}
+        git checkout main && git pull && git checkout {{ tag_or_brach }}
       async: 600
       poll: 30
       args:
@@ -18,7 +18,7 @@
     - name: Compile Reth with custom options
       shell: |
         bash -c ". "$HOME/.cargo/env" && make {{ reth_compile_options }}"
-      async: 600
+      async: 1200
       poll: 30
       args:
         chdir: "{{ reth_root_dir }}"
@@ -30,7 +30,7 @@
     - name: Start Reth service using script
       shell: |
         bash deploy_utils/deploy.sh {{ reth_node_arg }}
-      async: 30
+      async: 120
       poll: 5
       args:
         chdir: "{{ reth_root_dir }}"
@@ -60,7 +60,7 @@
         dest: "/tmp/{{ reth_node_id }}/script"
 
     - name: Start service using separate playbook
-      include_tasks: reth_service.yml
+      include_tasks: reth_start.yml
 
     - name: Output collected logs
       debug:
