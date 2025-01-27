@@ -69,7 +69,7 @@ if [ "$action" == "deploy" ]; then
     fi
 fi
 
-validator_file="./server_confs/${node}/genesis/validator.yml"
+validator_file="./server_confs/${node}/genesis/validator.yaml"
 inventory_file="./inventory.ini"
 
 if [ ! -f "$validator_file" ]; then
