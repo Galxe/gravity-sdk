@@ -1,6 +1,6 @@
 ---
 - name: Start Reth service
-  hosts: "{{ reth_servers | default(omit) }}"
+  hosts: reth_servers
   tasks:
     - name: Start Reth service using script
       shell: |
