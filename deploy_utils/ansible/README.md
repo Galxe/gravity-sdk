@@ -113,10 +113,10 @@ This structured configuration allows each server to have its customized settings
 
 ### Compile, Deploy, and Start Reth
 
-- To **compile, deploy, and start Reth on a single server** (e.g., `server1`):
+- To **compile, deploy, and start Reth on a single server** (e.g., `node1`):
 
   ```bash
-  ansible-playbook -i inventory.ini reth_deploy.yml --limit server1
+  ansible-playbook -i inventory.ini reth_deploy.yml --limit node1
 
   ```
 - To **compile, deploy, and start Reth on all servers**:
@@ -131,10 +131,10 @@ This structured configuration allows each server to have its customized settings
 
 ### Stop Reth Service
 
-- To **stop the Reth service on a single server** (e.g., `server1`):
+- To **stop the Reth service on a single server** (e.g., `node1`):
 
   ```bash
-  ansible-playbook -i inventory.ini reth_stop.yml --limit server1
+  ansible-playbook -i inventory.ini reth_stop.yml --limit node1
   ```
 
 - To **stop the Reth service on all servers**:
@@ -152,13 +152,13 @@ You can use the `manager.sh` file to start the corresponding server. This script
 Example usage:
 
 ```bash
-bash manager.sh action=deploy node=server1
+bash manager.sh action=deploy node=node1
 ```
 
 **Nodes started in this way should also be stopped using manager.sh**:
 
 ```bash
-bash manager.sh action=stop node=server1
+bash manager.sh action=stop node=node1
 ```
 
 ---

@@ -27,7 +27,7 @@
       set_fact:
         log_collection: "{{ log_collection + [compile_log] }}"
 
-    - name: Start Reth service using script
+    - name: Deploy Reth service using script
       shell: |
         bash deploy_utils/deploy.sh {{ reth_node_arg }}
       async: 120
@@ -58,9 +58,6 @@
       copy:
         src: "../start.sh"
         dest: "/tmp/{{ reth_node_id }}/script"
-
-    - name: Start service using separate playbook
-      include_tasks: reth_start.yml
 
     - name: Output collected logs
       debug:
