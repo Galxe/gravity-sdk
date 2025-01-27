@@ -2,8 +2,8 @@ use api_types::account::ExternalAccountAddress;
 use api_types::VerifiedTxn;
 use api_types::{u256_define::BlockId, ExternalPayloadAttr};
 use reth::primitives::B256;
+use reth_primitives::Transaction;
 use tracing::info;
-use web3::types::Transaction;
 pub struct BuildingState {
     gas_used: u64,
 }
@@ -49,7 +49,7 @@ impl State {
     pub fn check_new_txn(&mut self, attr: &ExternalPayloadAttr, txn: Transaction) -> bool {
         let building_state =
             self.building_block.entry(attr.clone()).or_insert(BuildingState { gas_used: 0 });
-        building_state.gas_used += txn.gas.as_u64();
+        building_state.gas_used += txn.gas_limit();
         if building_state.gas_used > 1000000 {
             return false;
         }
