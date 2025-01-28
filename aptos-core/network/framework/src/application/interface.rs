@@ -161,6 +161,7 @@ impl<Message: NetworkMessageTrait + Clone> NetworkClient<Message> {
         // Sort peers by protocol
         let mut peers_per_protocol = HashMap::new();
         let mut peers_without_a_protocol = vec![];
+        info!("the peer network vec is {:?}", peers);
         for peer in peers {
             match self
                 .get_preferred_protocol_for_peer(&peer, &self.direct_send_protocols_and_preferences)
