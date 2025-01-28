@@ -170,7 +170,7 @@ impl<Message: NetworkMessageTrait + Clone> NetworkClient<Message> {
                     .or_insert_with(Vec::new)
                     .push(peer),
                 Err(e) => {
-                    warn!(e);
+                    warn!("find protocol error {:?}", e);
                     peers_without_a_protocol.push(peer)
                 },
             }
