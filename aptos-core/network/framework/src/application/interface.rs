@@ -169,7 +169,10 @@ impl<Message: NetworkMessageTrait + Clone> NetworkClient<Message> {
                     .entry(protocol)
                     .or_insert_with(Vec::new)
                     .push(peer),
-                Err(_) => peers_without_a_protocol.push(peer),
+                Err(e) => {
+                    warn!(e);
+                    peers_without_a_protocol.push(peer)
+                },
             }
         }
 
