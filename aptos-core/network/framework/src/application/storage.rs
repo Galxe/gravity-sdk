@@ -17,7 +17,7 @@ use aptos_config::{
     network_id::{NetworkId, PeerNetworkId},
 };
 use aptos_infallible::{Mutex, RwLock};
-use aptos_logger::{sample, sample::SampleRate, warn};
+use aptos_logger::{info, sample::{self, SampleRate}, warn};
 use aptos_peer_monitoring_service_types::PeerMonitoringMetadata;
 use aptos_types::{account_address::AccountAddress, PeerId};
 use arc_swap::ArcSwap;
@@ -155,6 +155,8 @@ impl PeersAndMetadata {
     ) -> Result<PeerMetadata, Error> {
         // Get the cached peers and metadata
         let cached_peers_and_metadata = self.cached_peers_and_metadata.load();
+        info!("the cached_peers_and_metadata is {:?}", cached_peers_and_metadata);
+        info!("the peer is {:?}", peer_network_id);
 
         // Fetch the peers and metadata for the given network
         let network_id = peer_network_id.network_id();

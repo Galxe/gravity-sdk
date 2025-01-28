@@ -5,7 +5,7 @@
   tasks:
     - name: Pull and checkout code
       shell: |
-        git fetch --all && git checkout {{ tag_or_brach }}
+        git pull --all && git checkout {{ tag_or_brach }}
       async: 600
       poll: 30
       args:
