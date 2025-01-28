@@ -192,7 +192,7 @@ impl ConsensusEngine {
                 cert_pem: node_config.https_cert_pem_path,
                 key_pem: node_config.https_key_pem_path,
             };
-            let runtime = aptos_runtimes::spawn_named_runtime("Http".into(), None);
+            let runtime = aptos_runtimes::spawn_named_runtime("http".into(), None);
             runtime.spawn(async move { https_server(args) });
             runtimes.push(runtime);
         }
