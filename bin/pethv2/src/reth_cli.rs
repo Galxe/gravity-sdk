@@ -24,7 +24,7 @@ use std::io::Read;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_stream::StreamExt;
-use tracing::info;
+use tracing::{debug, info};
 use tracing::log::error;
 use crate::ConsensusArgs;
 
@@ -90,7 +90,7 @@ impl RethCli {
         mut block: ExternalBlock,
         parent_id: B256,
     ) -> Result<(), String> {
-        info!("push ordered block {:?} with parent id {}", block, parent_id);
+        debug!("push ordered block {:?} with parent id {}", block, parent_id);
         let pipe_api = &self.pipe_api;
         let mut senders = vec![];
         let mut transactions = vec![];
@@ -122,10 +122,10 @@ impl RethCli {
     }
 
     pub async fn recv_compute_res(&self, block_id: B256) -> Result<B256, ()> {
-        info!("recv compute res {:?}", block_id);
+        debug!("recv compute res {:?}", block_id);
         let pipe_api = &self.pipe_api;
         let block_hash = pipe_api.pull_executed_block_hash(block_id).await.unwrap();
-        info!("recv compute res done");
+        debug!("recv compute res done");
         Ok(block_hash)
     }
 
@@ -134,11 +134,11 @@ impl RethCli {
         block_id: api_types::u256_define::BlockId,
         block_hash: B256,
     ) -> Result<(), String> {
-        info!("commit block {:?} with hash {:?}", block_id, block_hash);
+        debug!("commit block {:?} with hash {:?}", block_id, block_hash);
         let block_id = B256::from_slice(block_id.0.as_ref());
         let pipe_api = &self.pipe_api;
         pipe_api.commit_executed_block_hash(ExecutedBlockMeta { block_id, block_hash });
-        info!("commit block done");
+        debug!("commit block done");
         Ok(())
     }
 
@@ -146,7 +146,7 @@ impl RethCli {
         &self,
         buffer: Arc<Mutex<Vec<VerifiedTxnWithAccountSeqNum>>>,
     ) -> Result<(), String> {
-        info!("start process pending transactions");
+        debug!("start process pending transactions");
         let mut count = 0;
         let mut total = 0;
         let start_time = std::time::Instant::now();
@@ -179,7 +179,7 @@ impl RethCli {
                 buffer.push(vtxn);
             }
             let after_ser = std::time::Instant::now();
-            info!(
+            debug!(
                 "push txn nonce: {} acc_nonce: {} recv_time {} serialize_time {}",
                 txn.transaction.nonce(),
                 accout_nonce,
@@ -187,7 +187,7 @@ impl RethCli {
                 after_ser.elapsed().as_micros()
             );
             if last_time.elapsed().as_secs() > 1 {
-                info!(
+                debug!(
                     "processed {} transactions in {}s with speed {}",
                     count,
                     last_time.elapsed().as_secs(),
@@ -199,7 +199,7 @@ impl RethCli {
             }
         }
     
-        info!("end process pending transactions");
+        debug!("end process pending transactions");
         Ok(())
     }
 

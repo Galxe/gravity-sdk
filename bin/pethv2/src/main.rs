@@ -20,6 +20,7 @@ use reth_provider::BlockNumReader;
 use reth_provider::BlockReader;
 use reth_transaction_pool::TransactionPool;
 use tokio::sync::mpsc;
+use tracing::debug;
 mod cli;
 mod consensus;
 mod exec_layer;
@@ -108,7 +109,7 @@ fn run_reth(
                 
                 if block_number_to_block_id.is_empty() {
                     let genesis_id = B256::new(consensus_gensis);
-                    info!("genesis_id: {:?}", genesis_id);
+                    debug!("genesis_id: {:?}", genesis_id);
                     block_number_to_block_id.insert(0u64, genesis_id);
                 }
                 let storage = BlockViewStorage::new(

@@ -3,7 +3,7 @@ use api_types::VerifiedTxn;
 use api_types::{u256_define::BlockId, ExternalPayloadAttr};
 use reth::primitives::B256;
 use reth_primitives::Transaction;
-use tracing::info;
+use tracing::{debug, info};
 pub struct BuildingState {
     gas_used: u64,
 }
@@ -39,7 +39,7 @@ impl State {
         let account = txn.sender.clone();
         let seq_num = self.accout_seq_num.entry(account).or_insert(-1);
         if *seq_num + 1 != txn.sequence_number as i64 {
-            info!("meet false seq_num: {:?} {:?}", seq_num, txn.sequence_number);
+            debug!("meet false seq_num: {:?} {:?}", seq_num, txn.sequence_number);
             return false;
         }
         *seq_num += 1;
@@ -57,7 +57,7 @@ impl State {
     }
 
     pub fn insert_new_block(&mut self, block_id: BlockId, block_hash: B256) {
-        info!("insert_new_block: {:?} {:?}", block_id, block_hash);
+        debug!("insert_new_block: {:?} {:?}", block_id, block_hash);
         self.block_hash_to_id.insert(block_hash, block_id.clone());
         self.block_id_to_hash.insert(block_id, block_hash);
     }
