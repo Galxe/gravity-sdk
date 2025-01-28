@@ -82,6 +82,7 @@ impl PeersAndMetadata {
         // Initialize the cached peers and metadata
         let cached_peers_and_metadata = peers_and_metadata.peers_and_metadata.read().clone();
         peers_and_metadata.set_cached_peers_and_metadata(cached_peers_and_metadata);
+        info!("when new the peers_and_metadata is {:?}, network ids is {:?}", peers_and_metadata, network_ids);
 
         // Return the peers and metadata container
         Arc::new(peers_and_metadata)

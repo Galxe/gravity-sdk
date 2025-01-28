@@ -83,6 +83,7 @@ impl ConsensusEngine {
         let consensus_db =
             Arc::new(ConsensusDB::new(node_config.storage.dir(), &node_config.node_config_path));
         let peers_and_metadata = init_peers_and_metadata(&node_config, &consensus_db);
+        info!("when init peers_and_metadata is {:?}", peers_and_metadata);
         let (remote_log_receiver, logger_filter_update) =
             logger::create_logger(&node_config, Some(node_config.log_file_path.clone()));
         let mut runtimes = vec![];
