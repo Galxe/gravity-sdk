@@ -141,6 +141,7 @@ impl<Message: NetworkMessageTrait + Clone> NetworkClient<Message> {
         preferred_protocols: &[ProtocolId],
     ) -> Result<ProtocolId, Error> {
         let protocols_supported_by_peer = self.get_supported_protocols(peer)?;
+        info!("the protocols supported by peer are {:?}", protocols_supported_by_peer);
         for protocol in preferred_protocols {
             if protocols_supported_by_peer.contains(*protocol) {
                 return Ok(*protocol);

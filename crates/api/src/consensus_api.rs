@@ -101,6 +101,7 @@ impl ConsensusEngine {
                 aptos_infallible::RwLock::new(db.clone()),
             ));
         let network_configs = extract_network_configs(&node_config);
+        info!("Network Configs: {:?}", network_configs);
 
         let network_config = network_configs.get(0).unwrap();
         // Create a network runtime for the config
