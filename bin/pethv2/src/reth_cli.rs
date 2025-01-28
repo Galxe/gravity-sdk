@@ -1,12 +1,10 @@
-use alloy_consensus::{TxEip1559, TxEip2930, TxLegacy};
-use alloy_eips::BlockNumberOrTag;
-use alloy_primitives::{Address, B256};
-use alloy_rlp::{BufMut, Decodable, Encodable};
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
 use api_types::u256_define::{BlockId as ExternalBlockId, TxnHash};
 use api_types::{
     simple_hash, ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
 };
+use reth_primitives::alloy_primitives::private::alloy_rlp::Encodable;
+use reth_primitives::alloy_primitives::private::alloy_rlp::Decodable;
 use jsonrpsee::core::Serialize;
 use reth::rpc::builder::auth::AuthServerHandle;
 use reth_db::DatabaseEnv;
@@ -14,11 +12,11 @@ use reth_ethereum_engine_primitives::EthPayloadAttributes;
 use reth_node_api::NodeTypesWithDBAdapter;
 use reth_node_ethereum::EthereumNode;
 use reth_pipe_exec_layer_ext_v2::{ExecutedBlockMeta, OrderedBlock, PipeExecLayerApi};
-use reth_primitives::{Block, Bytes, Signature, TransactionSigned, TransactionSignedEcRecovered, TxKind, Withdrawals, U256};
+use reth_primitives::{Address, Block, Bytes, Signature, TransactionSigned, TransactionSignedEcRecovered, TxKind, Withdrawals, B256, U256};
 use reth_provider::providers::BlockchainProvider2;
-use reth_provider::{AccountReader, BlockNumReader, BlockReaderIdExt, ChangeSetReader, DatabaseProviderFactory, TransactionsProvider};
+use reth_provider::{AccountReader, BlockNumReader, BlockReaderIdExt, ChainSpecProvider, ChangeSetReader, DatabaseProviderFactory, TransactionsProvider};
 use reth_rpc_api::EngineEthApiClient;
-use reth_rpc_types::{AccessList, AccessListItem};
+use reth_rpc_types::{AccessList, AccessListItem, BlockNumberOrTag};
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
 use tokio::task::JoinSet;
 use core::panic;
@@ -26,65 +24,52 @@ use std::io::Read;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_stream::StreamExt;
-use tracing::info;
+use tracing::{debug, info};
 use tracing::log::error;
-use web3::transports::Ipc;
-use web3::types::{BlockId, Transaction, TransactionId, H160};
-use web3::Web3;
 use crate::ConsensusArgs;
 
 pub struct RethCli {
-    ipc: Web3<Ipc>,
     auth: AuthServerHandle,
     pipe_api: PipeExecLayerApi,
     chain_id: u64,
     provider: BlockchainProvider2<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
-    txn_listener: Mutex<tokio::sync::mpsc::Receiver<alloy_primitives::TxHash>>,
+    txn_listener: Mutex<tokio::sync::mpsc::Receiver<reth::primitives::TxHash>>,
     pool: reth_transaction_pool::Pool<reth_transaction_pool::TransactionValidationTaskExecutor<reth_transaction_pool::EthTransactionValidator<BlockchainProvider2<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>, reth_transaction_pool::EthPooledTransaction>>, reth_transaction_pool::CoinbaseTipOrdering<reth_transaction_pool::EthPooledTransaction>, reth_transaction_pool::blobstore::DiskFileBlobStore>
 
 }
 
-pub fn covert_account(acc: Address) -> ExternalAccountAddress {
+pub fn covert_account(acc: reth_primitives::Address) -> ExternalAccountAddress {
     let mut bytes = [0u8; 32];
     bytes[12..].copy_from_slice(acc.as_slice());
     ExternalAccountAddress::new(bytes)
 }
 
 impl RethCli {
-    pub async fn new(ipc_url: &str, args: ConsensusArgs) -> Self {
-        let transport = web3::transports::Ipc::new(ipc_url).await.unwrap();
-        let ipc = web3::Web3::new(transport);
-        let chain_id = ipc.eth().chain_id().await.unwrap();
+    pub async fn new(args: ConsensusArgs) -> Self {
+        let chian_info = args.provider.chain_spec().chain;
+        let chain_id = match chian_info.into_kind() {
+            reth_chainspec::ChainKind::Named(n) => {
+                n as u64
+            },
+            reth_chainspec::ChainKind::Id(id) => id,
+        };
         RethCli {
-            ipc,
             auth: args.engine_api,
             pipe_api: args.pipeline_api,
-            chain_id: chain_id.as_u64(),
+            chain_id: chain_id,
             provider: args.provider,
             txn_listener: Mutex::new(args.tx_listener),
             pool: args.pool
         }
     }
 
-    fn create_payload_attributes(parent_beacon_block_root: B256, ts: u64) -> EthPayloadAttributes {
+    fn create_payload_attributes(parent_beacon_block_root: reth::primitives::B256, ts: u64) -> EthPayloadAttributes {
         EthPayloadAttributes {
             timestamp: ts,
-            prev_randao: B256::ZERO,
-            suggested_fee_recipient: Address::ZERO,
+            prev_randao: reth::primitives::B256::ZERO,
+            suggested_fee_recipient: reth_primitives::Address::ZERO,
             withdrawals: Some(Vec::new()),
             parent_beacon_block_root: Some(parent_beacon_block_root),
-        }
-    }
-
-    pub async fn get_latest_block_hash(&self) -> Result<B256, String> {
-        let block = self.ipc.eth().block(BlockId::Number(web3::types::BlockNumber::Latest)).await;
-
-        match block {
-            Ok(Some(block)) => {
-                let hash = B256::from_slice(block.hash.unwrap().as_bytes());
-                Ok(hash)
-            }
-            _ => Err("Failed to get block".to_string()),
         }
     }
 
@@ -94,86 +79,6 @@ impl RethCli {
         B256::new(block_id.0)
     }
 
-    fn construct_sig(txn: &Transaction) -> Signature {
-        let r = txn.r.unwrap();
-        let s = txn.s.unwrap();
-        let v = txn.v.unwrap();
-        let odd_y_parity = match v.as_u64() {
-            27 => false,
-            28 => true,
-            v => v % 2 == 1, // EIP-155 情况
-        };
-        let mut bytes = [0u8; 32];
-        r.to_big_endian(&mut bytes);
-        let r = U256::from_be_bytes(bytes);
-        let mut bytes = [0u8; 32];
-        s.to_big_endian(&mut bytes);
-        let s = U256::from_be_bytes(bytes);
-        Signature { r, s, odd_y_parity }
-    }
-
-    fn to_tx_kind(address: Option<H160>) -> TxKind {
-        match address {
-            Some(address) => TxKind::Call(Address::new(address.0)),
-            None => TxKind::Create,
-        }
-    }
-
-    fn convert_accest_list(access_list: Option<Vec<web3::types::AccessListItem>>) -> AccessList {
-        AccessList(
-            access_list
-                .unwrap_or_default()
-                .iter()
-                .map(|x| AccessListItem {
-                    address: Address::from_slice(x.address.as_bytes()),
-                    storage_keys: x
-                        .storage_keys
-                        .iter()
-                        .map(|x| B256::from_slice(x.as_bytes()))
-                        .collect(),
-                })
-                .collect(),
-        )
-    }
-
-    fn convert_to_reth_transaction(
-        tx: web3::types::Transaction,
-        chain_id: u64,
-    ) -> reth::primitives::Transaction {
-        match tx.transaction_type.map(|t| t.as_u64()) {
-            Some(0) => reth::primitives::Transaction::Legacy(TxLegacy {
-                chain_id: Some(chain_id),
-                nonce: tx.nonce.as_u64(),
-                gas_price: tx.gas_price.unwrap().as_u128(),
-                gas_limit: tx.gas.as_u128(),
-                to: Self::to_tx_kind(tx.to),
-                value: U256::from(tx.value.as_u128()),
-                input: Bytes::copy_from_slice(tx.input.0.as_slice()),
-            }),
-            Some(1) => reth::primitives::Transaction::Eip2930(TxEip2930 {
-                chain_id,
-                nonce: tx.nonce.as_u64(),
-                gas_price: tx.gas_price.unwrap().as_u128(),
-                gas_limit: tx.gas.as_u128(),
-                to: Self::to_tx_kind(tx.to),
-                value: U256::from(tx.value.as_u128()),
-                access_list: Self::convert_accest_list(tx.access_list),
-                input: Bytes::copy_from_slice(tx.input.0.as_slice()),
-            }),
-            Some(2) => reth::primitives::Transaction::Eip1559(TxEip1559 {
-                chain_id,
-                nonce: tx.nonce.as_u64(),
-                gas_limit: tx.gas.as_u128(),
-                to: Self::to_tx_kind(tx.to),
-                value: U256::from(tx.value.as_u128()),
-                access_list: Self::convert_accest_list(tx.access_list),
-                input: Bytes::copy_from_slice(tx.input.0.as_slice()),
-                max_fee_per_gas: tx.max_fee_per_gas.unwrap().as_u128(),
-                max_priority_fee_per_gas: tx.max_priority_fee_per_gas.unwrap().as_u128(),
-            }),
-            _ => panic!("Unknown transaction type {:?}", tx.transaction_type),
-        }
-    }
 
     fn txn_to_signed(bytes: &mut [u8], chain_id: u64) -> (Address, TransactionSigned) {
         let txn = TransactionSignedEcRecovered::decode(&mut bytes.as_ref()).unwrap();
@@ -185,7 +90,7 @@ impl RethCli {
         mut block: ExternalBlock,
         parent_id: B256,
     ) -> Result<(), String> {
-        info!("push ordered block {:?} with parent id {}", block, parent_id);
+        debug!("push ordered block {:?} with parent id {}", block, parent_id);
         let pipe_api = &self.pipe_api;
         let mut senders = vec![];
         let mut transactions = vec![];
@@ -217,10 +122,10 @@ impl RethCli {
     }
 
     pub async fn recv_compute_res(&self, block_id: B256) -> Result<B256, ()> {
-        info!("recv compute res {:?}", block_id);
+        debug!("recv compute res {:?}", block_id);
         let pipe_api = &self.pipe_api;
         let block_hash = pipe_api.pull_executed_block_hash(block_id).await.unwrap();
-        info!("recv compute res done");
+        debug!("recv compute res done");
         Ok(block_hash)
     }
 
@@ -229,11 +134,11 @@ impl RethCli {
         block_id: api_types::u256_define::BlockId,
         block_hash: B256,
     ) -> Result<(), String> {
-        info!("commit block {:?} with hash {:?}", block_id, block_hash);
+        debug!("commit block {:?} with hash {:?}", block_id, block_hash);
         let block_id = B256::from_slice(block_id.0.as_ref());
         let pipe_api = &self.pipe_api;
         pipe_api.commit_executed_block_hash(ExecutedBlockMeta { block_id, block_hash });
-        info!("commit block done");
+        debug!("commit block done");
         Ok(())
     }
 
@@ -241,7 +146,7 @@ impl RethCli {
         &self,
         buffer: Arc<Mutex<Vec<VerifiedTxnWithAccountSeqNum>>>,
     ) -> Result<(), String> {
-        info!("start process pending transactions");
+        debug!("start process pending transactions");
         let mut count = 0;
         let mut total = 0;
         let start_time = std::time::Instant::now();
@@ -255,6 +160,7 @@ impl RethCli {
             let txn = txn.transaction.transaction();
             let accout_nonce = self.provider.basic_account(sender).unwrap().map(|x| x.nonce).unwrap_or(0);
             let mut bytes = Vec::with_capacity(1024 * 4);
+            // txn.encode(&mut bytes);
             txn.encode(&mut bytes);
 
             let vtxn = VerifiedTxnWithAccountSeqNum {
@@ -273,7 +179,7 @@ impl RethCli {
                 buffer.push(vtxn);
             }
             let after_ser = std::time::Instant::now();
-            info!(
+            debug!(
                 "push txn nonce: {} acc_nonce: {} recv_time {} serialize_time {}",
                 txn.transaction.nonce(),
                 accout_nonce,
@@ -281,7 +187,7 @@ impl RethCli {
                 after_ser.elapsed().as_micros()
             );
             if last_time.elapsed().as_secs() > 1 {
-                info!(
+                debug!(
                     "processed {} transactions in {}s with speed {}",
                     count,
                     last_time.elapsed().as_secs(),
@@ -293,7 +199,7 @@ impl RethCli {
             }
         }
     
-        info!("end process pending transactions");
+        debug!("end process pending transactions");
         Ok(())
     }
 
@@ -348,15 +254,3 @@ impl RethCli {
     }
 }
 
-#[derive(Serialize)]
-struct JsonRpcRequest<'a> {
-    jsonrpc: &'a str,
-    method: &'a str,
-    params: Vec<String>,
-    id: u64,
-}
-
-#[derive(serde::Deserialize)]
-struct JsonRpcResponse<T> {
-    result: T,
-}

@@ -16,7 +16,7 @@ use reth_primitives::B256;
 use state::State;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
-use tracing::info;
+use tracing::{debug, info};
 
 pub struct Buffer<T> {
     sender: mpsc::Sender<T>,
@@ -75,7 +75,7 @@ impl ExecutionApiV2 for RethCoordinator {
         payload_attr: ExternalPayloadAttr,
         txns: Vec<VerifiedTxn>,
     ) -> Result<bool, ExecError> {
-        info!("check_block_txns with payload_attr: {:?}", payload_attr);
+        debug!("check_block_txns with payload_attr: {:?}", payload_attr);
         for txn in txns {
             let mut state = self.state.lock().await;
             let txn = serde_json::from_slice(&txn.bytes).unwrap();
@@ -91,7 +91,7 @@ impl ExecutionApiV2 for RethCoordinator {
         let mut buffer = self.pending_buffer.lock().await;
         let res = std::mem::take(&mut *buffer);
         
-        info!("recv_pending_txns with buffer size: {:?} in time {:?}", &res.len(), now.elapsed());
+        debug!("recv_pending_txns with buffer size: {:?} in time {:?}", &res.len(), now.elapsed());
         Ok(res)
     }
 
@@ -100,7 +100,7 @@ impl ExecutionApiV2 for RethCoordinator {
         parent_id: BlockId,
         mut ordered_block: ExternalBlock,
     ) -> Result<(), ExecError> {
-        info!(
+        debug!(
             "send_ordered_block with parent_id: {:?} and block num {:?} txn count {:?}",
             parent_id, ordered_block.block_meta.block_number, ordered_block.txns.len()
         );
@@ -116,7 +116,7 @@ impl ExecutionApiV2 for RethCoordinator {
             .push_ordered_block(ordered_block, B256::new(parent_id.bytes()))
             .await
             .unwrap();
-        info!("send_ordered_block done");
+        debug!("send_ordered_block done");
         Ok(())
     }
 
@@ -124,23 +124,23 @@ impl ExecutionApiV2 for RethCoordinator {
         &self,
         head: ExternalBlockMeta,
     ) -> Result<ComputeRes, ExecError> {
-        info!("recv_executed_block_hash with head: {:?}", head);
+        debug!("recv_executed_block_hash with head: {:?}", head);
         let reth_block_id = B256::from_slice(&head.block_id.0);
         let block_hash = self.reth_cli.recv_compute_res(reth_block_id).await;
         {
             self.state.lock().await.insert_new_block(head.block_id, block_hash.unwrap().into());
         }
-        info!("recv_executed_block_hash done");
+        debug!("recv_executed_block_hash done");
         Ok(ComputeRes::new(block_hash.unwrap().into()))
     }
 
     async fn commit_block(&self, block_id: BlockId) -> Result<(), ExecError> {
-        info!("commit_block with block_id: {:?}", block_id);
+        debug!("commit_block with block_id: {:?}", block_id);
         let block_hash = {
            self.state.lock().await.get_block_hash(block_id).unwrap()
         };
         self.reth_cli.commit_block(block_id, block_hash.into()).await.unwrap();
-        info!("commit_block done");
+        debug!("commit_block done");
         Ok(())
     }
 }

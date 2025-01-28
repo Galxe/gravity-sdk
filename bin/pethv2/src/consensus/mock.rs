@@ -11,7 +11,7 @@ use api_types::{
 };
 
 use reth_primitives::B256;
-use tracing::info;
+use tracing::{debug, info};
 
 pub struct MockConsensus {
     exec_api: Arc<dyn ExecutionApiV2>,
@@ -99,7 +99,7 @@ impl MockConsensus {
             for txn in txns {
                 self.pending_txns.add(txn);
             }
-            info!("pending txns size is {:?}", block_txns.len());
+            debug!("pending txns size is {:?}", block_txns.len());
             let block = self.check_and_construct_block(&mut block_txns, attr.clone()).await;
             if let Some(block) = block {
                 let head = block.block_meta.clone();

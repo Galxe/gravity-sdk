@@ -1,4 +1,3 @@
-use alloy_eips::BlockHashOrNumber;
 use api::check_bootstrap_config;
 use api_types::u256_define::TxnHash;
 use consensus::aptos::AptosConsensus;
@@ -21,6 +20,7 @@ use reth_provider::BlockNumReader;
 use reth_provider::BlockReader;
 use reth_transaction_pool::TransactionPool;
 use tokio::sync::mpsc;
+use tracing::debug;
 mod cli;
 mod consensus;
 mod exec_layer;
@@ -60,7 +60,7 @@ struct ConsensusArgs {
     pub engine_api: AuthServerHandle,
     pub pipeline_api: PipeExecLayerApi,
     pub provider: BlockchainProvider2<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
-    pub tx_listener: tokio::sync::mpsc::Receiver<alloy_primitives::TxHash>,
+    pub tx_listener: tokio::sync::mpsc::Receiver<reth::primitives::TxHash>,
     pub pool: reth_transaction_pool::Pool<reth_transaction_pool::TransactionValidationTaskExecutor<reth_transaction_pool::EthTransactionValidator<BlockchainProvider2<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>, reth_transaction_pool::EthPooledTransaction>>, reth_transaction_pool::CoinbaseTipOrdering<reth_transaction_pool::EthPooledTransaction>, reth_transaction_pool::blobstore::DiskFileBlobStore>
 }
 
@@ -93,7 +93,7 @@ fn run_reth(
                     })
                     .await?;
                 let chain_spec = handle.node.chain_spec();
-                let pending_listener: tokio::sync::mpsc::Receiver<alloy_primitives::TxHash> = handle.node.pool.pending_transactions_listener();
+                let pending_listener: tokio::sync::mpsc::Receiver<reth::primitives::TxHash> = handle.node.pool.pending_transactions_listener();
                 let engine_cli = handle.node.auth_server_handle().clone();
                 let provider: BlockchainProvider2<
                     reth_node_api::NodeTypesWithDBAdapter<EthereumNode, Arc<reth_db::DatabaseEnv>>,
@@ -102,14 +102,14 @@ fn run_reth(
                 let latest_block_hash =
                     provider.block_hash(latest_block_number.clone().unwrap()).unwrap().unwrap();
                 let latest_block = provider
-                    .block(BlockHashOrNumber::Number(latest_block_number.unwrap()))
+                    .block(reth_primitives::BlockHashOrNumber::Number(latest_block_number.unwrap()))
                     .unwrap()
                     .unwrap();
                 let pool: reth_transaction_pool::Pool<reth_transaction_pool::TransactionValidationTaskExecutor<reth_transaction_pool::EthTransactionValidator<BlockchainProvider2<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>, reth_transaction_pool::EthPooledTransaction>>, reth_transaction_pool::CoinbaseTipOrdering<reth_transaction_pool::EthPooledTransaction>, reth_transaction_pool::blobstore::DiskFileBlobStore> = handle.node.pool;
                 
                 if block_number_to_block_id.is_empty() {
                     let genesis_id = B256::new(consensus_gensis);
-                    info!("genesis_id: {:?}", genesis_id);
+                    debug!("genesis_id: {:?}", genesis_id);
                     block_number_to_block_id.insert(0u64, genesis_id);
                 }
                 let storage = BlockViewStorage::new(
@@ -158,8 +158,8 @@ fn main() {
             // 等待engine_cli可用
             if let Some(args) = rx.recv().await {
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                let client = RethCli::new("/tmp/reth.ipc", args).await;
-                let genesis = client.get_latest_block_hash().await.unwrap();
+
+                let client = RethCli::new(args).await;
                 let coordinator = Arc::new(RethCoordinator::new(client));
                 let cloned = coordinator.clone();
                 tokio::spawn(async move {

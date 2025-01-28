@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use api_types::{account::ExternalAccountAddress, VerifiedTxnWithAccountSeqNum};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 pub struct Mempool {
     /// AccountAddress -> (sequence_number -> transaction)
@@ -25,7 +25,7 @@ impl Mempool {
         let account = txn.txn.sender.clone();
         let account_seq = txn.account_seq_num;
         let seq_num = txn.txn.sequence_number;
-        info!("add txn to mempool: {:?}, seq, seq_num: {}", account_seq, seq_num);
+        debug!("add txn to mempool: {:?}, seq, seq_num: {}", account_seq, seq_num);
 
         if seq_num < self.get_current_sequence_number(&account) {
             warn!("txn sequence number is less than current sequence number");

@@ -7,6 +7,7 @@ use reth_db;
 use reth_node_builder;
 use reth_node_core;
 use reth_node_ethereum;
+use reth_rpc_types::trace;
 use reth_tracing;
 
 use api::GravityNodeArgs;
@@ -22,13 +23,13 @@ use reth_node_core::args::utils::DefaultChainSpecParser;
 use reth_node_core::args::LogArgs;
 use reth_node_ethereum::{EthExecutorProvider, EthereumNode};
 use reth_tracing::FileWorkerGuard;
+use tracing::debug;
 use std::{
     ffi::OsString,
     fmt::{self},
     future::Future,
     sync::Arc,
 };
-use tracing::info;
 
 /// The main reth cli interface.
 ///
@@ -134,7 +135,7 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
             self.logs.log_file_directory.join(self.chain.chain.to_string());
 
         let _guard = self.init_tracing()?;
-        info!(target: "reth::cli", "Initialized tracing, log directory: {}, log level {:?}", self.logs.log_file_directory, self.logs.verbosity);
+        debug!(target: "reth::cli", "Initialized tracing, log directory: {}, log level {:?}", self.logs.log_file_directory, self.logs.verbosity);
 
         let runner = CliRunner::default();
         match self.command {
