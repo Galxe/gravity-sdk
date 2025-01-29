@@ -4,6 +4,7 @@ bin_name="pethv2"
 node_arg=""
 bin_version="release"
 mode="cluster"
+recover="false"
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
@@ -46,7 +47,7 @@ if [[ "$mode" != "cluster" && "$mode" != "single" ]]; then
     exit 1
 fi
 
-if [[ "$bin_name" != "pethv2" ]]; then
+if [[ "$recover" != "true" ]]; then
     rm -rf /tmp/$node_arg
 fi
 
