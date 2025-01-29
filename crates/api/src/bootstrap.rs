@@ -159,6 +159,7 @@ pub fn init_peers_and_metadata(
         .get(&listen_address)
         .expect(&format!("addr {:?} has no config", listen_address));
     let network_ids = extract_network_ids(node_config);
+    println!("network_ids: {:?}", network_ids);
     let peers_and_metadata = PeersAndMetadata::new(&network_ids);
     let mut peer_set = HashMap::new();
     for trusted_peer in &gravity_node_config.trusted_peers_map {

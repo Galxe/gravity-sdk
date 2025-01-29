@@ -200,6 +200,10 @@ impl PeersAndMetadata {
         peer_network_id: PeerNetworkId,
         connection_metadata: ConnectionMetadata,
     ) -> Result<(), Error> {
+        {
+            let peers_and_metadata = self.peers_and_metadata.read();
+            info!("the peer_network_id is {:?}, connection_metadata is {:?}, peers_and_metadata is {:?}", peer_network_id, connection_metadata, peers_and_metadata);
+        }
         // Grab the write lock for the peer metadata
         let mut peers_and_metadata = self.peers_and_metadata.write();
 
