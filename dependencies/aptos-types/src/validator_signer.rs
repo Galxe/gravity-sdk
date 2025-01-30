@@ -9,7 +9,7 @@ use aptos_crypto::{
 };
 use rand::{rngs::StdRng, SeedableRng};
 use serde::ser::Serialize;
-use std::{convert::TryFrom, sync::Arc};
+use std::convert::TryFrom;
 
 /// ValidatorSigner associates an author with public and private keys with helpers for signing and
 /// validating. This struct can be used for all signing operations including block and network
@@ -18,11 +18,11 @@ use std::{convert::TryFrom, sync::Arc};
 #[cfg_attr(any(test, feature = "fuzzing"), derive(Clone))]
 pub struct ValidatorSigner {
     author: AccountAddress,
-    private_key: Arc<bls12381::PrivateKey>,
+    private_key: bls12381::PrivateKey,
 }
 
 impl ValidatorSigner {
-    pub fn new(author: AccountAddress, private_key: Arc<bls12381::PrivateKey>) -> Self {
+    pub fn new(author: AccountAddress, private_key: bls12381::PrivateKey) -> Self {
         ValidatorSigner {
             author,
             private_key,
@@ -50,7 +50,7 @@ impl ValidatorSigner {
     /// Returns the private key associated with this signer. Only available for testing purposes.
     #[cfg(any(test, feature = "fuzzing"))]
     pub fn private_key(&self) -> &bls12381::PrivateKey {
-        &self.private_key.as_ref()
+        &self.private_key
     }
 }
 
@@ -63,7 +63,7 @@ impl ValidatorSigner {
         let mut rng = StdRng::from_seed(opt_rng_seed.into().unwrap_or(TEST_SEED));
         Self::new(
             AccountAddress::random(),
-            Arc::new(bls12381::PrivateKey::generate(&mut rng)),
+            bls12381::PrivateKey::generate(&mut rng),
         )
     }
 
@@ -73,10 +73,7 @@ impl ValidatorSigner {
         let mut address = [0; AccountAddress::LENGTH];
         address[0] = num;
         let private_key = bls12381::PrivateKey::generate_for_testing();
-        Self::new(
-            AccountAddress::try_from(&address[..]).unwrap(),
-            Arc::new(private_key),
-        )
+        Self::new(AccountAddress::try_from(&address[..]).unwrap(), private_key)
     }
 }
 
@@ -102,7 +99,7 @@ pub mod proptests {
         signing_key_strategy.prop_map(|signing_key| {
             ValidatorSigner::new(
                 AccountAddress::from_bytes(&signing_key.public_key().to_bytes()[0..32]).unwrap(),
-                Arc::new(signing_key),
+                signing_key,
             )
         })
     }
@@ -118,7 +115,7 @@ pub mod proptests {
             rand_signer(),
             LazyJust::new(|| {
                 let genesis_key = bls12381::PrivateKey::genesis();
-                ValidatorSigner::new(AccountAddress::random(), Arc::new(genesis_key))
+                ValidatorSigner::new(AccountAddress::random(), genesis_key)
             })
         ]
     }
@@ -142,7 +139,7 @@ pub mod proptests {
         #[test]
         fn test_new_signer(signing_key in arb_signing_key()){
             let public_key = signing_key.public_key();
-            let signer = ValidatorSigner::new(AccountAddress::random(), Arc::new(signing_key));
+            let signer = ValidatorSigner::new(AccountAddress::random(), signing_key);
             prop_assert_eq!(public_key, signer.public_key());
         }
 

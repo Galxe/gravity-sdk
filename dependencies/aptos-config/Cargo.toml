@@ -46,6 +46,5 @@ tempfile = { workspace = true }
 default = []
 failpoints = []
 fuzzing = ["aptos-crypto/fuzzing", "aptos-types/fuzzing"]
-smoke-test = []
 testing = []
 tokio-console = []
