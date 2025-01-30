@@ -96,14 +96,6 @@ impl PersistentSafetyStorage {
         Ok(self.internal_store.get(OWNER_ACCOUNT).map(|v| v.value)?)
     }
 
-    pub fn default_consensus_sk(
-        &self,
-    ) -> Result<bls12381::PrivateKey, aptos_secure_storage::Error> {
-        self.internal_store
-            .get::<bls12381::PrivateKey>(CONSENSUS_KEY)
-            .map(|v| v.value)
-    }
-
     pub fn consensus_sk_by_pk(
         &self,
         pk: bls12381::PublicKey,
@@ -115,7 +107,10 @@ impl PersistentSafetyStorage {
             .internal_store
             .get::<bls12381::PrivateKey>(explicit_storage_key.as_str())
             .map(|v| v.value);
-        let default_sk = self.default_consensus_sk();
+        let default_sk = self
+            .internal_store
+            .get::<bls12381::PrivateKey>(CONSENSUS_KEY)
+            .map(|v| v.value);
         let key = match (explicit_sk, default_sk) {
             (Ok(sk_0), _) => sk_0,
             (Err(_), Ok(sk_1)) => sk_1,
