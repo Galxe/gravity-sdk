@@ -1164,7 +1164,7 @@ impl RoundManager {
                 vote_msg.vote().author(),
             )
             .await
-            .context("[RoundManager] Stop processing vote")?
+            .context(format!("[RoundManager] Stop processing vote, round {:?}", vote_msg.vote().vote_data().proposed().round()))?
         {
             self.process_vote(vote_msg.vote())
                 .await

@@ -198,7 +198,7 @@ impl SyncInfo {
                 if self.highest_commit_cert.commit_info().round() > 0 {
                     self.highest_commit_cert
                         .verify(validator)
-                        .context("Fail to verify commit certificate")?
+                        .context(format!("Fail to verify commit certificate for round {:?}", self.highest_commit_cert.commit_info().round()))?
                 }
                 Ok(())
             })
@@ -208,7 +208,7 @@ impl SyncInfo {
                 }
                 Ok(())
             })
-            .context("Fail to verify SyncInfo")?;
+            .context(format!("Fail to verify SyncInfo for hr {:?}, hcr {:?}, hor {:?}, htr {:?}, hcr {:?}", self.highest_round(), self.highest_commit_round(), self.highest_ordered_round(), self.highest_timeout_round(), self.highest_certified_round()))?;
         Ok(())
     }
 

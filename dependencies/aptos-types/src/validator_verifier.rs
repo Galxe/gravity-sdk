@@ -17,6 +17,7 @@ use aptos_crypto::{
     hash::CryptoHash,
     Signature, VerifyingKey,
 };
+use aptos_logger::info;
 use itertools::Itertools;
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest_derive::Arbitrary;
@@ -276,6 +277,7 @@ impl ValidatorVerifier {
         Self::check_num_of_voters(self.len() as u16, multi_signature.get_signers_bitvec())?;
         let mut pub_keys = vec![];
         let mut authors = vec![];
+        info!("the multi_signature is: {:?}", multi_signature);
         for index in multi_signature.get_signers_bitvec().iter_ones() {
             let validator = self
                 .validator_infos
