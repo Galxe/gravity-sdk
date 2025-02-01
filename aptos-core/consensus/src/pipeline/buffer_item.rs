@@ -66,8 +66,14 @@ fn generate_executed_item_from_ordered(
     order_vote_enabled: bool,
 ) -> BufferItem {
     debug!("{} advance to executed from ordered", commit_info);
+    let block = executed_blocks
+            .last()
+            .expect("execute_blocks should not be empty!");
+    let mut commit_ledger_info = generate_commit_ledger_info(&commit_info, &ordered_proof, order_vote_enabled);
+    commit_ledger_info.set_block_hash(block.compute_result().root_hash());
+    commit_ledger_info.set_block_number(block.block().block_number().unwrap());
     let partial_commit_proof = LedgerInfoWithPartialSignatures::new(
-        generate_commit_ledger_info(&commit_info, &ordered_proof, order_vote_enabled),
+        commit_ledger_info,
         verified_signatures,
     );
     BufferItem::Executed(Box::new(ExecutedItem {
@@ -192,8 +198,6 @@ impl BufferItem {
                     // We have already received the commit proof in fast forward sync path,
                     // we can just use that proof and proceed to aggregated
                     assert_eq!(commit_proof.commit_info().clone(), commit_info);
-                    commit_proof.set_block_hash(block.compute_result().root_hash());
-                    commit_proof.set_block_number(block.block().block_number().unwrap());
                     debug!(
                         "{} advance to aggregated from ordered",
                         commit_proof.commit_info()
@@ -209,8 +213,6 @@ impl BufferItem {
                         &ordered_proof,
                         order_vote_enabled,
                     );
-                    commit_ledger_info.set_block_hash(block.compute_result().root_hash());
-                    commit_ledger_info.set_block_number(block.block().block_number().unwrap());
                     let verified_signatures =
                         verify_signatures(unverified_signatures, validator, &commit_ledger_info);
                     if (validator.check_voting_power(verified_signatures.signatures().keys(), true))
@@ -318,8 +320,6 @@ impl BufferItem {
                     commit_proof.commit_info()
                 );
                 let block = executed_blocks.last().unwrap();
-                commit_proof.set_block_hash(block.compute_result().root_hash());
-                commit_proof.set_block_number(block.block().block_number().unwrap());
                 Self::Aggregated(Box::new(AggregatedItem {
                     executed_blocks,
                     callback,
@@ -361,8 +361,6 @@ impl BufferItem {
                             validator,
                     );
                     let block = signed_item.executed_blocks.last().unwrap();
-                    commit_proof.set_block_hash(block.compute_result().root_hash());
-                    commit_proof.set_block_number(block.block().block_number().unwrap());
                     Self::Aggregated(Box::new(AggregatedItem {
                         executed_blocks: signed_item.executed_blocks,
                         commit_proof: commit_proof,
