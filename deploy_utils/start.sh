@@ -71,9 +71,11 @@ function start_node() {
         ${WORKSPACE}/bin/${bin_name} node \
             --http.port ${http_port} \
             --http.api all \
+            --http.addr 0.0.0.0 \
             --port ${reth_rpc_port} \
             --authrpc.port ${authrpc_port} \
-            --metrics ${metric_port} \
+            --authrpc.addr 0.0.0.0 \
+            --metrics 0.0.0.0:${metric_port} \
             --dev \
             --datadir ${WORKSPACE}/data/reth \
             --datadir.static-files ${WORKSPACE}/data/reth \

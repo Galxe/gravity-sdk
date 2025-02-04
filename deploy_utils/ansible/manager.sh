@@ -45,6 +45,8 @@ elif [ "$action" == "stop" ]; then
         fi
     done
     playbook="reth_stop.yml"
+    ansible-playbook -i inventory.ini "$playbook" --limit "$node"
+    exit
 fi
 
 echo "Executing ansible-playbook with action=$action on nodes=$node..."

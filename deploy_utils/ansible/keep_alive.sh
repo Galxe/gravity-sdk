@@ -36,7 +36,7 @@ while true; do
   if [ $? -ne 0 ] || [ -z "$response" ]; then
     echo "Metrics not available or request timed out. Restarting service for node $node..."
     
-    ansible-playbook -i inventory.ini reth_start.yml -e reth_servers="$node"
+    ansible-playbook -i inventory.ini reth_start.yml --limit "$node"
     if [ $? -eq 0 ]; then
       echo "Service restarted successfully for node $node."
     else
