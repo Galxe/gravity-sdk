@@ -5,20 +5,19 @@
 #![allow(clippy::arc_with_non_send_sync)]
 
 use crate::{
-    account_address::AccountAddress, block_metadata::BlockMetadata, chain_id::ChainId, contract_event::{ContractEvent, FEE_STATEMENT_EVENT_TYPE}, keyless::{KeylessPublicKey, KeylessSignature}, ledger_info::LedgerInfo, mempool_status::MempoolStatus, on_chain_config::{FeatureFlag, Features}, proof::{TransactionInfoListWithProof, TransactionInfoWithProof}, state_store::ShardedStateUpdates, transaction::authenticator::{
+    account_address::AccountAddress, block_metadata::BlockMetadata, chain_id::ChainId, contract_event::{ContractEvent, FEE_STATEMENT_EVENT_TYPE}, keyless::{KeylessPublicKey, KeylessSignature}, ledger_info::LedgerInfo, on_chain_config::{FeatureFlag, Features}, proof::{TransactionInfoListWithProof, TransactionInfoWithProof}, state_store::ShardedStateUpdates, transaction::authenticator::{
         AccountAuthenticator, AnyPublicKey, AnySignature, SingleKeyAuthenticator,
         TransactionAuthenticator,
     }, vm_status::{DiscardedVMStatus, KeptVMStatus, StatusCode, StatusType, VMStatus}, write_set::WriteSet
 };
 use anyhow::{ensure, format_err, Context, Error, Result};
 use aptos_crypto::{
-    ed25519::*, hash::CryptoHash, multi_ed25519::{MultiEd25519PublicKey, MultiEd25519Signature}, secp256k1_ecdsa, traits::{signing_message, SigningKey}, CryptoMaterialError, HashValue, PrivateKey, Uniform
+    ed25519::*, hash::CryptoHash, multi_ed25519::{MultiEd25519PublicKey, MultiEd25519Signature}, secp256k1_ecdsa, traits::{signing_message, SigningKey}, CryptoMaterialError, HashValue
 };
 use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest_derive::Arbitrary;
 use rayon::prelude::*;
-use ruint::aliases::U256;
 use serde::{Deserialize, Serialize};
 use std::{
     convert::TryFrom,

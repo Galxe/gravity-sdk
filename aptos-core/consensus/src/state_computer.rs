@@ -2,18 +2,15 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::persistent_liveness_storage::PersistentLivenessStorage;
 use crate::pipeline::pipeline_builder::PipelineBuilder;
 use crate::{
     block_preparer::BlockPreparer,
-    block_storage::tracing::{observe_block, BlockStage},
     counters,
     error::StateSyncError,
     execution_pipeline::ExecutionPipeline,
     monitor,
     payload_manager::TPayloadManager,
     pipeline::pipeline_phase::CountedRequest,
-    persistent_liveness_storage::StorageWriteProxy,
     state_replication::{StateComputer, StateComputerCommitCallBackType},
     transaction_deduper::TransactionDeduper,
     transaction_filter::TransactionFilter,
@@ -47,7 +44,7 @@ use futures::{future::BoxFuture, SinkExt, StreamExt};
 use std::{
     boxed::Box,
     sync::Arc,
-    time::{Duration, Instant},
+    time::Duration,
 };
 use tokio::sync::Mutex as AsyncMutex;
 
@@ -457,7 +454,7 @@ async fn test_commit_sync_race() {
     };
     use aptos_config::config::transaction_filter_type::Filter;
     use aptos_consensus_notifications::Error;
-    use aptos_executor_types::state_checkpoint_output::StateCheckpointOutput;
+    
     use aptos_infallible::Mutex;
     use aptos_types::{
         aggregate_signature::AggregateSignature,

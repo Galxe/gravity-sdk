@@ -4,10 +4,10 @@
 
 //! Processes that are directly spawned by shared mempool runtime initialization
 use crate::{
-    core_mempool::{CoreMempool, TimelineState}, counters, logging::{LogEntry, LogEvent, LogSchema}, network::{BroadcastPeerPriority, MempoolSyncMsg}, shared_mempool::{
+    core_mempool::CoreMempool, counters, logging::{LogEntry, LogEvent, LogSchema}, network::{BroadcastPeerPriority, MempoolSyncMsg}, shared_mempool::{
         tasks::{self, process_committed_transactions},
         types::{
-            notify_subscribers, MempoolMessageId, ScheduledBroadcast, SharedMempool,
+            notify_subscribers, SharedMempool,
             SharedMempoolNotification,
         },
         use_case_history::UseCaseHistory,
@@ -17,7 +17,7 @@ use api_types::{ExecTxn, VerifiedTxn};
 use aptos_bounded_executor::BoundedExecutor;
 use aptos_config::network_id::{NetworkId, PeerNetworkId};
 use aptos_event_notifications::ReconfigNotificationListener;
-use aptos_infallible::{Mutex, RwLock};
+use aptos_infallible::Mutex;
 use aptos_logger::prelude::*;
 use aptos_mempool_notifications::{MempoolCommitNotification, MempoolNotificationListener};
 use aptos_network::{
@@ -29,12 +29,11 @@ use aptos_network::{
 };
 use aptos_types::{
     on_chain_config::{OnChainConfigPayload, OnChainConfigProvider},
-    transaction::SignedTransaction,
     PeerId,
 };
 use futures::{
     channel::mpsc,
-    stream::{select_all, FuturesUnordered},
+    stream::select_all,
     FutureExt, StreamExt,
 };
 use std::{

@@ -25,8 +25,8 @@ impl PoolStateInner {
     pub fn pull(
         &mut self,
         deadline: Instant,
-        mut max_items: u64,
-        mut max_bytes: u64,
+        max_items: u64,
+        max_bytes: u64,
         filter: TransactionFilter,
     ) -> Vec<ValidatorTransaction> {
         // todo(gravity_byteyue): implement this

@@ -20,7 +20,6 @@ use api_types::{
     u256_define::{BlockId, ComputeRes, Random},
     ExecutionLayer, ExternalBlock, ExternalBlockMeta,
 };
-use aptos_consensus_types::common::Payload::DirectMempool;
 use aptos_consensus_types::{
     block::Block,
     common::Round,

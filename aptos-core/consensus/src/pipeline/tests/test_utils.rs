@@ -19,7 +19,7 @@ use aptos_safety_rules::{
 };
 use aptos_secure_storage::Storage;
 use aptos_types::{
-    ledger_info::{generate_ledger_info_with_sig, LedgerInfo, LedgerInfoWithSignatures},
+    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
     validator_signer::ValidatorSigner,
     validator_verifier::random_validator_verifier,
     waypoint::Waypoint,

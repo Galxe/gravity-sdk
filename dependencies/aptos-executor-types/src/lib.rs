@@ -2,17 +2,13 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos_crypto::hash::{HashValue, TransactionAccumulatorHasher, ACCUMULATOR_PLACEHOLDER_HASH};
+use aptos_crypto::hash::{HashValue, ACCUMULATOR_PLACEHOLDER_HASH};
 use aptos_types::block_executor::config::BlockExecutorConfigFromOnchain;
 use aptos_types::block_executor::partitioner::ExecutableBlock;
-use aptos_types::contract_event::ContractEvent;
 use aptos_types::epoch_state::EpochState;
 use aptos_types::ledger_info::LedgerInfoWithSignatures;
-use aptos_types::proof::AccumulatorExtensionProof;
-use aptos_types::transaction::{block_epilogue::BlockEndInfo, Transaction, TransactionStatus};
-use aptos_types::transaction::{BlockEpiloguePayload, ExecutionStatus};
+use aptos_types::transaction::block_epilogue::BlockEndInfo;
 use serde::{Deserialize, Serialize};
-use std::cmp::max;
 use std::fmt::Display;
 use thiserror::Error;
 

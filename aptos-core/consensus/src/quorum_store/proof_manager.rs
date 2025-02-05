@@ -23,10 +23,9 @@ use rand::{seq::SliceRandom, thread_rng};
 use std::{
     cmp::min,
     collections::{BTreeMap, HashMap, HashSet},
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::Duration,
 };
-use coex_bridge::get_coex_bridge;
 
 #[derive(Debug)]
 pub enum ProofManagerCommand {

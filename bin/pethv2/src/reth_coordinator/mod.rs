@@ -4,19 +4,18 @@ use std::sync::Arc;
 
 use crate::reth_cli::RethCli;
 use api_types::u256_define::TxnHash;
-use api_types::{ExecutionBlocks, RecoveryApi, RecoveryError};
 use api_types::{
     u256_define::BlockId, u256_define::ComputeRes, ExecError, ExecTxn, ExecutionApiV2,
     ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn,
     VerifiedTxnWithAccountSeqNum,
 };
+use api_types::{ExecutionBlocks, RecoveryApi, RecoveryError};
 use async_trait::async_trait;
-use reth_payload_builder::PayloadId;
-use reth_primitives::B256;
+use greth::reth_primitives::B256;
 use state::State;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
-use tracing::{debug, info};
+use tracing::debug;
 
 pub struct Buffer<T> {
     sender: mpsc::Sender<T>,
@@ -90,7 +89,7 @@ impl ExecutionApiV2 for RethCoordinator {
         let now = std::time::Instant::now();
         let mut buffer = self.pending_buffer.lock().await;
         let res = std::mem::take(&mut *buffer);
-        
+
         debug!("recv_pending_txns with buffer size: {:?} in time {:?}", &res.len(), now.elapsed());
         Ok(res)
     }
@@ -102,7 +101,9 @@ impl ExecutionApiV2 for RethCoordinator {
     ) -> Result<(), ExecError> {
         debug!(
             "send_ordered_block with parent_id: {:?} and block num {:?} txn count {:?}",
-            parent_id, ordered_block.block_meta.block_number, ordered_block.txns.len()
+            parent_id,
+            ordered_block.block_meta.block_number,
+            ordered_block.txns.len()
         );
         {
             let mut state = self.state.lock().await;
@@ -136,9 +137,7 @@ impl ExecutionApiV2 for RethCoordinator {
 
     async fn commit_block(&self, block_id: BlockId) -> Result<(), ExecError> {
         debug!("commit_block with block_id: {:?}", block_id);
-        let block_hash = {
-           self.state.lock().await.get_block_hash(block_id).unwrap()
-        };
+        let block_hash = { self.state.lock().await.get_block_hash(block_id).unwrap() };
         self.reth_cli.commit_block(block_id, block_hash.into()).await.unwrap();
         debug!("commit_block done");
         Ok(())
@@ -155,7 +154,11 @@ impl RecoveryApi for RethCoordinator {
         self.reth_cli.finalized_block_number().await
     }
 
-    async fn recover_ordered_block(&self, parent_id: BlockId, block: ExternalBlock) -> Result<(), ExecError> {
+    async fn recover_ordered_block(
+        &self,
+        parent_id: BlockId,
+        block: ExternalBlock,
+    ) -> Result<(), ExecError> {
         let block_id = block.block_meta.block_id.clone();
         let origin_block_hash = block.block_meta.block_hash;
         self.send_ordered_block(parent_id, block).await?;
@@ -169,9 +172,7 @@ impl RecoveryApi for RethCoordinator {
         Ok(())
     }
 
-    async fn recover_execution_blocks(&self, blocks: ExecutionBlocks) {
-
-    }
+    async fn recover_execution_blocks(&self, blocks: ExecutionBlocks) {}
 
     async fn get_blocks_by_range(
         &self,

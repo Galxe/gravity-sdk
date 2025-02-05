@@ -3,11 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    core_mempool::{self, transaction::VerifiedTxn, CoreMempool},
-    shared_mempool::{
-        start_shared_mempool,
-        types::{MempoolMessageId, MempoolSenderBucket},
-    },
+    core_mempool::{self, CoreMempool},
+    shared_mempool::types::{MempoolMessageId, MempoolSenderBucket},
     tests::common::{self, TestTransaction},
     MempoolClientRequest, MempoolClientSender, MempoolSyncMsg, QuorumStoreRequest,
 };
@@ -16,9 +13,8 @@ use aptos_config::{
     config::NodeConfig,
     network_id::{NetworkId, PeerNetworkId},
 };
-use aptos_event_notifications::{ReconfigNotification, ReconfigNotificationListener};
 use aptos_id_generator::U32IdGenerator;
-use aptos_infallible::{Mutex, RwLock};
+use aptos_infallible::Mutex;
 use aptos_mempool_notifications::MempoolNotifier;
 use aptos_network::{
     application::{
@@ -44,11 +40,9 @@ use aptos_network::{
     },
     ProtocolId,
 };
-use aptos_storage_interface::mock::MockDbReaderWriter;
 use aptos_types::{
     account_address::AccountAddress,
     mempool_status::MempoolStatusCode,
-    on_chain_config::{InMemoryOnChainConfig, OnChainConfigPayload},
     transaction::SignedTransaction,
 };
 // use aptos_vm_validator::mocks::mock_vm_validator::MockVMValidator;
@@ -56,7 +50,7 @@ use futures::{channel::oneshot, SinkExt};
 use itertools::Itertools;
 use maplit::btreemap;
 use std::{collections::HashMap, hash::Hash, sync::Arc};
-use tokio::{runtime::Handle, time::Duration};
+use tokio::time::Duration;
 use tokio_stream::StreamExt;
 
 /// An individual mempool node that runs in it's own runtime.

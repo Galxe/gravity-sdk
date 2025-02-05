@@ -14,12 +14,11 @@ use crate::{
 };
 use aptos_crypto::{bls12381, hash::HashValue};
 use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
-use once_cell::sync::OnceCell;
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeMap, fmt::{Display, Formatter}, hash::Hash, ops::{Deref, DerefMut}
+    collections::BTreeMap, fmt::{Display, Formatter}, ops::{Deref, DerefMut}
 };
 
 /// This structure serves a dual purpose.

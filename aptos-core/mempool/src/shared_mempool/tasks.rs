@@ -11,15 +11,14 @@ use crate::{
     network::{BroadcastError, BroadcastPeerPriority, MempoolSyncMsg},
     shared_mempool::{
         types::{
-            notify_subscribers, ScheduledBroadcast, SharedMempool, SharedMempoolNotification,
+            SharedMempool,
             SubmissionStatusBundle,
         },
         use_case_history::UseCaseHistory,
     },
     thread_pool::IO_POOL,
-    QuorumStoreRequest, QuorumStoreResponse, SubmissionStatus,
+    QuorumStoreRequest, QuorumStoreResponse,
 };
-use anyhow::Result;
 use api_types::VerifiedTxn;
 use aptos_config::network_id::PeerNetworkId;
 use aptos_consensus_types::common::RejectedTransactionSummary;
@@ -29,20 +28,17 @@ use aptos_logger::prelude::*;
 use aptos_mempool_notifications::CommittedTransaction;
 use aptos_metrics_core::HistogramTimer;
 use aptos_network::application::interface::NetworkClientInterface;
-use aptos_storage_interface::state_view::LatestDbStateCheckpointView;
 use aptos_types::{
-    mempool_status::{MempoolStatus, MempoolStatusCode},
+    mempool_status::MempoolStatusCode,
     on_chain_config::{OnChainConfigPayload, OnChainConfigProvider, OnChainConsensusConfig},
     transaction::SignedTransaction,
-    vm_status::{DiscardedVMStatus, StatusCode},
 };
 // use aptos_vm_validator::vm_validator::{get_account_sequence_number, TransactionValidation};
-use futures::{channel::oneshot, stream::FuturesUnordered};
+use futures::channel::oneshot;
 use rayon::prelude::*;
 use std::{
     cmp,
     sync::Arc,
-    thread::sleep,
     time::{Duration, Instant},
 };
 use tokio::runtime::Handle;
@@ -366,13 +362,13 @@ pub(crate) fn process_quorum_store_request<NetworkClient>(
             exclude_transactions,
             callback,
         ) => {
-            let mut txns;
+            let txns;
             {
                 let lock_timer = counters::mempool_service_start_latency_timer(
                     counters::GET_BLOCK_LOCK_LABEL,
                     counters::REQUEST_SUCCESS_LABEL,
                 );
-                let mut mempool = smp.mempool.lock();
+                let mempool = smp.mempool.lock();
                 lock_timer.observe_duration();
 
                 let max_txns = cmp::max(max_txns, 1);

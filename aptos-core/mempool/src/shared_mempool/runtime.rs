@@ -2,7 +2,7 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 use crate::{
-    core_mempool::{transaction::VerifiedTxn, CoreMempool, TimelineState},
+    core_mempool::{CoreMempool, TimelineState},
     network::{BroadcastPeerPriority, MempoolSyncMsg},
     shared_mempool::{
         coordinator::{coordinator, gc_coordinator, snapshot_job},
@@ -10,11 +10,10 @@ use crate::{
     },
     QuorumStoreRequest,
 };
-use anyhow::Result;
 use api_types::ExecutionApiV2;
 use aptos_config::config::{NodeConfig, NodeType};
 use aptos_event_notifications::{DbBackedOnChainConfig, ReconfigNotificationListener};
-use aptos_infallible::{Mutex, RwLock};
+use aptos_infallible::Mutex;
 use aptos_logger::{info, warn, Level};
 use aptos_mempool_notifications::MempoolNotificationListener;
 use aptos_network::application::{
@@ -22,11 +21,7 @@ use aptos_network::application::{
     storage::PeersAndMetadata,
 };
 use aptos_storage_interface::DbReader;
-use aptos_types::account_address::AccountAddress;
-use aptos_types::{
-    on_chain_config::OnChainConfigProvider,
-    transaction::{SignedTransaction, VMValidatorResult},
-};
+use aptos_types::on_chain_config::OnChainConfigProvider;
 use futures::channel::mpsc::{Receiver, UnboundedSender};
 use std::sync::Arc;
 use tokio::runtime::{Handle, Runtime};

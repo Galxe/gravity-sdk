@@ -4,14 +4,12 @@
 
 use crate::{
     core_mempool::{
-        index::{
-            AccountTransactions, TTLIndex,
-        },
+        index::AccountTransactions,
         mempool::Mempool,
         transaction::{InsertionInfo, MempoolTransaction, TimelineState},
     },
     counters::{self, BROADCAST_BATCHED_LABEL, BROADCAST_READY_LABEL, CONSENSUS_READY_LABEL},
-    logging::{LogEntry, LogEvent, LogSchema, TxnsLog},
+    logging::{LogEntry, LogSchema, TxnsLog},
     network::BroadcastPeerPriority,
     shared_mempool::types::{
         MempoolSenderBucket, MultiBucketTimelineIndexIds, TimelineIndexIdentifier,
@@ -26,7 +24,7 @@ use aptos_types::{
     transaction::SignedTransaction,
 };
 use std::{
-    cmp::max, collections::HashMap, mem::size_of, ops::Bound, sync::atomic::AtomicU8, time::{Duration, Instant, SystemTime}
+    cmp::max, collections::HashMap, mem::size_of, time::{Instant, SystemTime}
 };
 
 use super::index::{MultiBucketTimelineIndex, PriorityIndex, PriorityQueueIter};
@@ -424,7 +422,7 @@ impl TransactionStore {
                 min_seq += 1;
             }
 
-            let mut parking_lot_txns = 0;
+            let parking_lot_txns = 0;
             // for (_, txn) in txns.range_mut((Bound::Excluded(min_seq), Bound::Unbounded)) {
             //     match txn.timeline_state {
             //         TimelineState::Ready(_) => {},

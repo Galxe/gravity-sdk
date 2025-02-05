@@ -35,8 +35,7 @@ use aptos_types::{
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
     randomness::Randomness,
     transaction::{
-        signature_verified_transaction::{SignatureVerifiedTransaction, TransactionProvider},
-        SignedTransaction, Transaction,
+        signature_verified_transaction::SignatureVerifiedTransaction, Transaction,
     },
     validator_signer::ValidatorSigner,
 };

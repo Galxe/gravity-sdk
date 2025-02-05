@@ -54,7 +54,7 @@ use crate::{
     util::time_service::TimeService,
 };
 use anyhow::{anyhow, bail, ensure, Context};
-use api_types::{ExecutionApiV2, ExecutionLayer, RecoveryApi};
+use api_types::ExecutionLayer;
 use aptos_bounded_executor::BoundedExecutor;
 use aptos_channels::{aptos_channel, message_queues::QueueStyle};
 use aptos_config::config::{

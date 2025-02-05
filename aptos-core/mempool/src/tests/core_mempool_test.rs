@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    core_mempool::{sender_bucket, CoreMempool, MempoolTransaction, SubmittedBy, TimelineState},
+    core_mempool::{sender_bucket, CoreMempool, SubmittedBy, TimelineState},
     network::BroadcastPeerPriority,
     tests::common::{
         add_signed_txn, add_txn, add_txns_to_mempool, setup_mempool,
@@ -14,11 +14,11 @@ use aptos_config::config::{MempoolConfig, NodeConfig};
 use aptos_consensus_types::common::{TransactionInProgress, TransactionSummary};
 use aptos_crypto::HashValue;
 use aptos_types::{
-    mempool_status::MempoolStatusCode, transaction::SignedTransaction, vm_status::DiscardedVMStatus,
+    transaction::SignedTransaction, vm_status::DiscardedVMStatus,
 };
 use itertools::Itertools;
 use maplit::btreemap;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
 // #[test]
 // fn test_transaction_ordering_only_seqnos() {

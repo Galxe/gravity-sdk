@@ -31,43 +31,9 @@ bincode = "1.3"
 time = "0.3.36"
 anyhow = "1.0.87"
 
-reth = { git = "https://github.com/Galxe/grevm-reth", package = "reth", branch = "v1.0.7-gravity" }
-reth-node-builder = { git = "https://github.com/Galxe/grevm-reth", package = "reth-node-builder", branch = "v1.0.7-gravity" }
-reth-node-ethereum = { git = "https://github.com/Galxe/grevm-reth", package = "reth-node-ethereum", branch = "v1.0.7-gravity" }
-reth-node-core = { git = "https://github.com/Galxe/grevm-reth", package = "reth-node-core", branch = "v1.0.7-gravity" }
-reth-provider = { git = "https://github.com/Galxe/grevm-reth", package = "reth-provider", branch = "v1.0.7-gravity" }
-reth-db = { git = "https://github.com/Galxe/grevm-reth", package = "reth-db", branch = "v1.0.7-gravity" }
-reth-tasks = { git = "https://github.com/Galxe/grevm-reth", package = "reth-tasks", branch = "v1.0.7-gravity" }
-reth-cli-runner = { git = "https://github.com/Galxe/grevm-reth", package = "reth-cli-runner", branch = "v1.0.7-gravity" }
-reth-cli = { git = "https://github.com/Galxe/grevm-reth", package = "reth-cli", branch = "v1.0.7-gravity" }
-reth-cli-util = { git = "https://github.com/Galxe/grevm-reth", package = "reth-cli-util", branch = "v1.0.7-gravity" }
-reth-chainspec = { git = "https://github.com/Galxe/grevm-reth", package = "reth-chainspec", branch = "v1.0.7-gravity" }
-reth-tracing = { git = "https://github.com/Galxe/grevm-reth", package = "reth-tracing", branch = "v1.0.7-gravity" }
-reth-auto-seal-consensus = { git = "https://github.com/Galxe/grevm-reth", package = "reth-auto-seal-consensus", branch = "v1.0.7-gravity" }
-reth-basic-payload-builder = { git = "https://github.com/Galxe/grevm-reth", package = "reth-basic-payload-builder", branch = "v1.0.7-gravity" }
-reth-beacon-consensus = { git = "https://github.com/Galxe/grevm-reth", package = "reth-beacon-consensus", branch = "v1.0.7-gravity" }
-reth-ethereum-engine-primitives = { git = "https://github.com/Galxe/grevm-reth", package = "reth-ethereum-engine-primitives", branch = "v1.0.7-gravity" }
-reth-evm-ethereum = { git = "https://github.com/Galxe/grevm-reth", package = "reth-evm-ethereum", branch = "v1.0.7-gravity" }
-reth-network = { git = "https://github.com/Galxe/grevm-reth", package = "reth-network", branch = "v1.0.7-gravity" }
-reth-node-api = { git = "https://github.com/Galxe/grevm-reth", package = "reth-node-api", branch = "v1.0.7-gravity" }
-reth-payload-builder = { git = "https://github.com/Galxe/grevm-reth", package = "reth-payload-builder", branch = "v1.0.7-gravity" }
-reth-rpc = { git = "https://github.com/Galxe/grevm-reth", package = "reth-rpc", branch = "v1.0.7-gravity" }
-reth-rpc-api = { git = "https://github.com/Galxe/grevm-reth", package = "reth-rpc-api", branch = "v1.0.7-gravity", features = [
-    "client",
-] }
-reth-rpc-layer = { git = "https://github.com/Galxe/grevm-reth", package = "reth-rpc-layer", branch = "v1.0.7-gravity" }
-reth-rpc-types = { git = "https://github.com/Galxe/grevm-reth", package = "reth-rpc-types", branch = "v1.0.7-gravity" }
-reth-transaction-pool = { git = "https://github.com/Galxe/grevm-reth", package = "reth-transaction-pool", branch = "v1.0.7-gravity" }
-reth-consensus = { git = "https://github.com/Galxe/grevm-reth", package = "reth-consensus", branch = "v1.0.7-gravity" }
-reth-ethereum-payload-builder = { git = "https://github.com/Galxe/grevm-reth", package = "reth-ethereum-payload-builder", branch = "v1.0.7-gravity" }
-reth-primitives = { git = "https://github.com/Galxe/grevm-reth", package = "reth-primitives", branch = "v1.0.7-gravity" }
-reth-cli-commands = { git = "https://github.com/Galxe/grevm-reth", package = "reth-cli-commands", features = [
-    "dev",
-], branch = "v1.0.7-gravity" }
-reth-pipe-exec-layer-ext-v2 = { git = "https://github.com/Galxe/grevm-reth", package = "reth-pipe-exec-layer-ext-v2", branch = "v1.0.7-gravity" }
+greth = { git = "https://github.com/Galxe/grevm-reth", branch = "add_lib" }
 reqwest = "0.12.9"
 async-trait.workspace = true
-gravity-storage = { git = "https://github.com/Galxe/grevm-reth", package = "gravity-storage", branch = "v1.0.7-gravity" }
 
 # We'd better specify the version of wasm-bindgen, since some version like '0.2.97' can't compile in Linux
 [dependencies.wasm-bindgen]

@@ -1,8 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::network_controller::{metrics::NETWORK_HANDLER_TIMER, Message, MessageType};
-use aptos_logger::{error, info};
+use crate::network_controller::{Message, MessageType};
 // use aptos_protos::remote_executor::v1::{
 //     network_message_service_client::NetworkMessageServiceClient,
 //     network_message_service_server::{NetworkMessageService, NetworkMessageServiceServer},
@@ -15,10 +14,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tokio::{runtime::Runtime, sync::oneshot};
-use tonic::{
-    transport::{Channel, Server},
-    Request, Response, Status,
-};
 
 const MAX_MESSAGE_SIZE: usize = 1024 * 1024 * 80;
 

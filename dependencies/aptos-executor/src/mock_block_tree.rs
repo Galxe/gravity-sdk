@@ -1,4 +1,4 @@
-use std::{collections::HashMap, default};
+use std::collections::HashMap;
 
 use aptos_crypto::HashValue;
 use aptos_types::block_executor::partitioner::ExecutableBlock;

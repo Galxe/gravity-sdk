@@ -11,13 +11,12 @@ use aptos_crypto::{
     hash::CryptoHash,
 };
 use aptos_infallible::RwLock;
-use aptos_time_service::{TimeService, TimeServiceTrait};
+use aptos_time_service::TimeService;
 use aptos_vault_client::Client;
-use chrono::DateTime;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{
     collections::HashMap,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::atomic::AtomicU64,
 };
 
 const TRANSIT_NAMESPACE_SEPARATOR: &str = "__";
@@ -164,7 +163,7 @@ impl CryptoStorage for VaultStorage {
 pub mod policy {
     use super::*;
     use crate::{Capability, Identity, Policy};
-    use aptos_vault_client as vault;
+    
 
     const APTOS_DEFAULT: &str = "aptos_default";
 
@@ -196,7 +195,7 @@ pub mod policy {
         }
 
         /// Creates a token but uses the namespace for policies
-        pub fn create_token(&self, mut policies: Vec<&str>) -> Result<String, Error> {
+        pub fn create_token(&self, policies: Vec<&str>) -> Result<String, Error> {
             todo!()
         }
 

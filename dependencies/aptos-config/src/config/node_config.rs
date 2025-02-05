@@ -22,7 +22,7 @@ use aptos_types::account_address::AccountAddress as PeerId;
 use rand::{prelude::StdRng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap, fmt::Debug, os::unix::net::SocketAddr, path::{Path, PathBuf}
+    collections::HashMap, fmt::Debug, path::{Path, PathBuf}
 };
 
 /// The node configuration defines the configuration for a single Aptos

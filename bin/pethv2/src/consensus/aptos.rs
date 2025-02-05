@@ -1,7 +1,6 @@
 use api::{consensus_api::ConsensusEngine, NodeConfig};
-use api_types::default_recover::DefaultRecovery;
 use api_types::u256_define::ComputeRes;
-use api_types::{ConsensusApi, ExecutionApiV2, ExecutionLayer, RecoveryApi};
+use api_types::{ConsensusApi, ExecutionApiV2, ExecutionLayer};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 

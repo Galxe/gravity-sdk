@@ -74,7 +74,7 @@ mod test {
     use fail::fail_point;
     use rcgen::generate_simple_self_signed;
     use reqwest::ClientBuilder;
-    use std::{collections::HashMap, fs, path::PathBuf, sync::Arc, thread::sleep};
+    use std::{collections::HashMap, fs, path::PathBuf, sync::Arc};
 
     use crate::https::tx::TxResponse;
 

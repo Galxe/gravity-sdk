@@ -1,17 +1,12 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{
-    // grpc_network_service::GRPCNetworkMessageServiceClientWrapper,
-    network_controller::{
-        inbound_handler::InboundHandler, metrics::NETWORK_HANDLER_TIMER, Message, MessageType,
-    },
-};
-use aptos_logger::{info, warn};
-use crossbeam_channel::{unbounded, Receiver, Select, Sender};
+use crate::network_controller::{
+        inbound_handler::InboundHandler, Message, MessageType,
+    };
+use crossbeam_channel::{Receiver, Sender};
 use std::{
-    collections::{HashMap, HashSet},
-    mem,
+    collections::HashSet,
     net::SocketAddr,
     sync::{Arc, Mutex},
 };

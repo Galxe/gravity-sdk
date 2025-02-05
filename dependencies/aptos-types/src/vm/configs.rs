@@ -3,8 +3,7 @@
 
 use crate::on_chain_config::{
     randomness_api_v0_config::{AllowCustomMaxGasFlag, RequiredGasDeposit},
-    ConfigStorage, FeatureFlag, Features, OnChainConfig, TimedFeatureFlag, TimedFeatureOverride,
-    TimedFeatures,
+    ConfigStorage, OnChainConfig, TimedFeatureOverride,
 };
 // use move_binary_format::deserializer::DeserializerConfig;
 // use move_bytecode_verifier::VerifierConfig;

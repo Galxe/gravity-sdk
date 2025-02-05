@@ -145,7 +145,7 @@ pub trait Schema: Debug + Send + Sync + 'static {
 
 #[cfg(feature = "fuzzing")]
 pub mod fuzzing {
-    use aptos_logger::Value;
+    
     
     use crate::schema::{KeyCodec, Schema, ValueCodec};
 

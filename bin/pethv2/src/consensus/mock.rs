@@ -10,8 +10,8 @@ use api_types::{
     VerifiedTxn,
 };
 
-use reth_primitives::B256;
-use tracing::{debug, info};
+use greth::reth_primitives::B256;
+use tracing::debug;
 
 pub struct MockConsensus {
     exec_api: Arc<dyn ExecutionApiV2>,
@@ -25,7 +25,13 @@ impl MockConsensus {
     pub fn new(exec_api: Arc<dyn ExecutionApiV2>, gensis: B256) -> Self {
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(gensis.as_slice());
-        let parent_meta = ExternalBlockMeta { block_id: BlockId(bytes), block_number: 0, usecs: 0, randomness: None, block_hash: None,};
+        let parent_meta = ExternalBlockMeta {
+            block_id: BlockId(bytes),
+            block_number: 0,
+            usecs: 0,
+            randomness: None,
+            block_hash: None,
+        };
         Self {
             exec_api,
             parent_meta,

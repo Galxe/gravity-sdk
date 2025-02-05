@@ -5,42 +5,24 @@
 use crate::{
     core_mempool::{CoreMempool, TimelineState},
     network::BroadcastPeerPriority,
-    shared_mempool::start_shared_mempool,
     MempoolClientSender, QuorumStoreRequest,
 };
 use anyhow::{format_err, Result};
-use aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
-use aptos_config::{
-    config::{NetworkConfig, NodeConfig},
-    network_id::NetworkId,
-};
-use aptos_event_notifications::{ReconfigNotification, ReconfigNotificationListener};
-use aptos_infallible::{Mutex, RwLock};
+use aptos_channels::{self};
+use aptos_infallible::Mutex;
 use aptos_mempool_notifications::{self, MempoolNotifier};
-use aptos_network::{
-    application::{
-        interface::{NetworkClient, NetworkServiceEvents},
-        storage::PeersAndMetadata,
-    },
-    peer_manager::{ConnectionRequestSender, PeerManagerRequestSender},
-    protocols::{
-        network::{NetworkEvents, NetworkSender, NewNetworkEvents, NewNetworkSender},
-        wire::handshake::v1::ProtocolId::MempoolDirectSend,
-    },
-};
-use aptos_storage_interface::{mock::MockDbReaderWriter, DbReaderWriter};
+use aptos_network::protocols::network::{NewNetworkEvents, NewNetworkSender};
+use aptos_storage_interface::DbReaderWriter;
 use aptos_types::{
     mempool_status::MempoolStatusCode,
-    on_chain_config::{InMemoryOnChainConfig, OnChainConfigPayload},
     transaction::SignedTransaction,
 };
 // use aptos_vm_validator::{
 //     mocks::mock_vm_validator::MockVMValidator, vm_validator::TransactionValidation,
 // };
 use futures::channel::mpsc;
-use maplit::hashmap;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::BTreeMap,
     sync::Arc,
 };
 use tokio::runtime::Handle;

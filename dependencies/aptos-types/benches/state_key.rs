@@ -5,20 +5,18 @@
 
 use aptos_crypto::HashValue;
 use aptos_types::{
-    access_path::AccessPath,
     account_config::AccountResource,
-    state_store::state_key::{inner::StateKeyInner, registry::StateKeyRegistry, StateKey},
+    state_store::state_key::{inner::StateKeyInner, registry::StateKeyRegistry},
 };
 use criterion::{criterion_group, criterion_main, Criterion};
 use derivative::Derivative;
 use fxhash::FxHasher;
 use move_core_types::{
-    account_address::AccountAddress, language_storage::StructTag, move_resource::MoveStructType,
+    account_address::AccountAddress, move_resource::MoveStructType,
 };
 use once_cell::sync::OnceCell;
-use proptest::prelude::*;
 use std::{
-    collections::{hash_map::DefaultHasher, HashSet},
+    collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
 };
 

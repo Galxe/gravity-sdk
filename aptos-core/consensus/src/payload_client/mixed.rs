@@ -10,7 +10,7 @@ use crate::{
     payload_client::{user::UserPayloadClient, PayloadClient},
 };
 use aptos_consensus_types::common::{Payload, PayloadFilter};
-use aptos_logger::{debug, info};
+use aptos_logger::debug;
 use aptos_types::{on_chain_config::ValidatorTxnConfig, validator_txn::ValidatorTransaction};
 use aptos_validator_transaction_pool as vtxn_pool;
 use fail::fail_point;

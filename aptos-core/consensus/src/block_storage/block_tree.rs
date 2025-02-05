@@ -9,7 +9,7 @@ use crate::{
     persistent_liveness_storage::PersistentLivenessStorage,
 };
 use anyhow::bail;
-use aptos_consensus_types::common::{Payload, Round};
+use aptos_consensus_types::common::Round;
 use aptos_consensus_types::{
     pipelined_block::PipelinedBlock, quorum_cert::QuorumCert,
     timeout_2chain::TwoChainTimeoutCertificate, vote_data::VoteData,
@@ -18,7 +18,6 @@ use aptos_consensus_types::{
 use aptos_crypto::{hash::GENESIS_BLOCK_ID, HashValue};
 use aptos_logger::prelude::*;
 use aptos_types::{block_info::BlockInfo, ledger_info::LedgerInfoWithSignatures};
-use futures::executor::block_on;
 use mirai_annotations::{checked_verify_eq, precondition};
 use std::{
     collections::{vec_deque::VecDeque, BTreeMap, HashMap, HashSet},

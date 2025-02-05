@@ -3,20 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    core_mempool::{CoreMempool, TimelineState},
-    network::{BroadcastPeerPriority, MempoolSyncMsg},
-    shared_mempool::{tasks, types::SharedMempool},
+    core_mempool::TimelineState,
+    network::BroadcastPeerPriority,
 };
-use aptos_config::{
-    config::{NodeConfig, NodeType},
-    network_id::NetworkId,
-};
-use aptos_infallible::{Mutex, RwLock};
-use aptos_network::{
-    application::{interface::NetworkClient, storage::PeersAndMetadata},
-    protocols::wire::handshake::v1::ProtocolId::MempoolDirectSend,
-};
-use aptos_storage_interface::mock::MockDbReaderWriter;
 use aptos_types::transaction::SignedTransaction;
 // use aptos_vm_validator::mocks::mock_vm_validator::MockVMValidator;
 use proptest::{
@@ -24,7 +13,6 @@ use proptest::{
     prelude::*,
     strategy::{Just, Strategy},
 };
-use std::{collections::HashMap, sync::Arc};
 
 impl Arbitrary for BroadcastPeerPriority {
     type Parameters = ();

@@ -6,7 +6,7 @@ use crate::{
     block_storage::{block_store::sync_manager::NeedFetchResult, BlockReader},
     pending_votes::{PendingVotes, VoteReceptionResult},
     test_utils::{
-        build_empty_tree, build_simple_tree, consensus_runtime, timed_block_on, TreeInserter,
+        build_empty_tree, build_simple_tree, TreeInserter,
     },
     util::mock_time_service::SimulatedTimeService,
 };
@@ -14,22 +14,22 @@ use aptos_config::config::QcAggregatorType;
 use aptos_consensus_types::{
     block::{
         block_test_utils::{
-            self, certificate_for_genesis, gen_test_certificate, placeholder_certificate_for_block,
+            certificate_for_genesis, gen_test_certificate, placeholder_certificate_for_block,
             placeholder_ledger_info,
         },
         Block,
     },
-    common::{Author, Payload},
+    common::Payload,
     vote::Vote,
     vote_data::VoteData,
 };
-use aptos_crypto::{HashValue, PrivateKey};
+use aptos_crypto::HashValue;
 use aptos_types::{
     validator_signer::ValidatorSigner, validator_verifier::random_validator_verifier,
 };
 use futures_channel::mpsc::unbounded;
 use proptest::prelude::*;
-use std::{cmp::min, collections::HashSet, sync::Arc};
+use std::{cmp::min, sync::Arc};
 
 #[tokio::test]
 async fn test_highest_block_and_quorum_cert() {

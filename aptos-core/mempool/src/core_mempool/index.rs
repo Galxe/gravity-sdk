@@ -3,24 +3,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /// This module provides various indexes used by Mempool.
-use crate::core_mempool::transaction::{MempoolTransaction, SequenceInfo, TimelineState};
-use crate::{
-    counters,
-    logging::{LogEntry, LogSchema},
-    shared_mempool::types::{MultiBucketTimelineIndexIds, TimelineIndexIdentifier},
-};
+use crate::core_mempool::transaction::{MempoolTransaction, TimelineState};
+use crate::shared_mempool::types::{MultiBucketTimelineIndexIds, TimelineIndexIdentifier};
 use aptos_consensus_types::common::TransactionSummary;
 use aptos_crypto::HashValue;
-use aptos_logger::prelude::*;
 use aptos_types::account_address::AccountAddress;
-use rand::seq::SliceRandom;
 use std::{
     cmp::Ordering,
     collections::{btree_set::Iter, BTreeMap, BTreeSet, HashMap},
     hash::Hash,
     iter::Rev,
     ops::Bound,
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, Instant},
 };
 
 pub type AccountTransactions = BTreeMap<u64, MempoolTransaction>;

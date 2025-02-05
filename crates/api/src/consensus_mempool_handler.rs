@@ -3,7 +3,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use aptos_consensus_notifications::{
     ConsensusCommitNotification, ConsensusNotification, ConsensusNotificationListener,
 };
-use aptos_logger::info;
 use aptos_mempool_notifications::MempoolNotificationSender;
 use aptos_types::transaction::Transaction;
 use futures::StreamExt;

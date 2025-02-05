@@ -7,7 +7,6 @@ use crate::{
     index::routes,
     metrics::PrometheusExporter,
     peer_location::PeerLocationUpdater,
-    validator_cache::PeerSetCacheUpdater,
 };
 use aptos_crypto::{x25519, ValidCryptoMaterialStringExt};
 use aptos_types::{chain_id::ChainId, PeerId};
@@ -25,7 +24,6 @@ use std::{
     net::SocketAddr,
     path::PathBuf,
     sync::Arc,
-    time::Duration,
 };
 use types::common::ChainCommonName;
 use warp::{Filter, Reply};

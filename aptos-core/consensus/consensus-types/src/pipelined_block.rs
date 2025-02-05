@@ -23,7 +23,6 @@ use aptos_types::{
     randomness::Randomness,
     transaction::{
         signature_verified_transaction::SignatureVerifiedTransaction, SignedTransaction,
-        TransactionStatus,
     },
     validator_txn::ValidatorTransaction,
 };
@@ -205,7 +204,7 @@ impl PipelinedBlock {
         self.pre_commit_fut = Arc::new(Mutex::new(Some(pre_commit_fut)));
 
         let mut to_commit = 0;
-        let mut to_retry = 0;
+        let to_retry = 0;
 
         to_commit += self.block.payload().map_or(0, |payload| {
             payload.len() as u64

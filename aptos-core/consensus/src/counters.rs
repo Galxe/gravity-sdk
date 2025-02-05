@@ -19,8 +19,6 @@ use aptos_metrics_core::{
     Counter, Gauge, GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge,
     IntGaugeVec,
 };
-use aptos_types::transaction::TransactionStatus;
-use move_core_types::vm_status::DiscardedVMStatus;
 use once_cell::sync::Lazy;
 use std::sync::Arc;
 

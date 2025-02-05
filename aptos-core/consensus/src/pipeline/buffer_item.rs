@@ -175,7 +175,7 @@ impl BufferItem {
                     commit_proof,
                     unverified_signatures,
                     callback,
-                    mut ordered_proof,
+                    ordered_proof,
                 } = *ordered_item;
                 for (b1, b2) in zip_eq(ordered_blocks.iter(), executed_blocks.iter()) {
                     assert_eq!(b1.id(), b2.id());
@@ -194,7 +194,7 @@ impl BufferItem {
                     },
                     _ => (),
                 }
-                if let Some(mut commit_proof) = commit_proof {
+                if let Some(commit_proof) = commit_proof {
                     // We have already received the commit proof in fast forward sync path,
                     // we can just use that proof and proceed to aggregated
                     assert_eq!(commit_proof.commit_info().clone(), commit_info);
@@ -208,7 +208,7 @@ impl BufferItem {
                         callback,
                     }))
                 } else {
-                    let mut commit_ledger_info = generate_commit_ledger_info(
+                    let commit_ledger_info = generate_commit_ledger_info(
                         &commit_info,
                         &ordered_proof,
                         order_vote_enabled,
@@ -286,7 +286,7 @@ impl BufferItem {
     /// it returns an updated item
     pub fn try_advance_to_aggregated_with_ledger_info(
         self,
-        mut commit_proof: LedgerInfoWithSignatures,
+        commit_proof: LedgerInfoWithSignatures,
     ) -> Self {
         match self {
             Self::Signed(signed_item) => {
@@ -355,7 +355,7 @@ impl BufferItem {
                     .check_voting_power(signed_item.partial_commit_proof.signatures().keys(), true)
                     .is_ok()
                 {
-                    let mut commit_proof = aggregate_commit_proof(
+                    let commit_proof = aggregate_commit_proof(
                             signed_item.partial_commit_proof.ledger_info(),
                             signed_item.partial_commit_proof.partial_sigs(),
                             validator,

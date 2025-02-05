@@ -5,7 +5,7 @@
 use crate::{
     epoch_manager::LivenessStorageData,
     persistent_liveness_storage::{
-        LedgerRecoveryData, PersistentLivenessStorage, RecoveryData, RootMetadata,
+        LedgerRecoveryData, PersistentLivenessStorage, RecoveryData,
     },
 };
 use anyhow::Result;
@@ -16,10 +16,10 @@ use aptos_crypto::HashValue;
 use aptos_infallible::Mutex;
 use aptos_storage_interface::DbReader;
 use aptos_types::{
-    aggregate_signature::AggregateSignature, epoch_change::EpochChangeProof, error::not_implemented, ledger_info::{LedgerInfo, LedgerInfoWithSignatures}, on_chain_config::ValidatorSet
+    aggregate_signature::AggregateSignature, epoch_change::EpochChangeProof, ledger_info::{LedgerInfo, LedgerInfoWithSignatures}, on_chain_config::ValidatorSet
 };
 use async_trait::async_trait;
-use std::{cell::Cell, collections::HashMap, sync::{atomic::{AtomicU64, Ordering}, Arc}};
+use std::{collections::HashMap, sync::{atomic::{AtomicU64, Ordering}, Arc}};
 
 pub struct MockSharedStorage {
     // Safety state

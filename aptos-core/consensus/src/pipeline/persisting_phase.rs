@@ -14,7 +14,6 @@ use std::{
     fmt::{Debug, Display, Formatter},
     sync::Arc,
 };
-use aptos_logger::info;
 
 /// [ This class is used when consensus.decoupled = true ]
 /// PersistingPhase is a singleton that receives aggregated blocks from

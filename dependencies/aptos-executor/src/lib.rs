@@ -2,26 +2,19 @@ mod mock_block_tree;
 
 pub mod block_executor {
     use anyhow::{Ok, Result};
-    use std::{
-        marker::PhantomData,
-        sync::{Arc, RwLock},
-    };
+    use std::sync::RwLock;
 
     use aptos_crypto::HashValue;
     use aptos_executor_types::{
-        state_checkpoint_output::{self, BlockExecutorInner},
         BlockExecutorTrait, ExecutorResult, StateComputeResult,
     };
     use aptos_storage_interface::DbReaderWriter;
     use aptos_types::{
         block_executor::{
-            config::{BlockExecutorConfig, BlockExecutorConfigFromOnchain},
+            config::BlockExecutorConfigFromOnchain,
             partitioner::ExecutableBlock,
         },
-        executable::Executable,
         ledger_info::LedgerInfoWithSignatures,
-        state_store::TStateView,
-        transaction::BlockExecutableTransaction as Transaction,
     };
 
     use crate::mock_block_tree::MockBlockTree;

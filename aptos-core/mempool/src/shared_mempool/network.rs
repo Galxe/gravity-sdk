@@ -6,7 +6,7 @@
 
 use crate::{
     counters,
-    logging::{LogEntry, LogEvent, LogSchema},
+    logging::{LogEntry, LogSchema},
     shared_mempool::{
         priority::PrioritizedPeersState,
         tasks,

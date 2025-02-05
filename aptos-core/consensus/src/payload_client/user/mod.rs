@@ -3,7 +3,6 @@
 
 use crate::error::QuorumStoreError;
 use aptos_consensus_types::common::{Payload, PayloadFilter};
-use aptos_crypto::HashValue;
 #[cfg(test)]
 use aptos_types::transaction::SignedTransaction;
 use futures::future::BoxFuture;

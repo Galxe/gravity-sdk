@@ -1,12 +1,10 @@
-use aptos_consensus_types::vote_msg::VoteMsg;
 use aptos_crypto::HashValue;
 use aptos_schemadb::{SchemaBatch, DB};
 use aptos_storage_interface::{AptosDbError, Result};
 use aptos_types::ledger_info::LedgerInfoWithSignatures;
 use arc_swap::{access::Access, ArcSwap};
-use crate::consensusdb::schema::ledger_info::{self, LedgerInfoSchema};
+use crate::consensusdb::schema::ledger_info::{LedgerInfoSchema};
 use std::sync::Arc;
-use aptos_logger::info;
 
 const MAX_LEDGER_INFOS: u32 = 256;
 
@@ -121,8 +119,8 @@ mod tests {
     use crate::consensusdb::schema::LEDGER_INFO_CF_NAME;
 
     use super::*;
-    use aptos_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH;
-    use aptos_types::on_chain_config::ValidatorSet;
+    
+    
     use rocksdb::Options;
 
     fn init_db() -> Arc<DB> {

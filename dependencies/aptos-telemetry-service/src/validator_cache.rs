@@ -7,15 +7,9 @@ use crate::{
     metrics::{VALIDATOR_SET_UPDATE_FAILED_COUNT, VALIDATOR_SET_UPDATE_SUCCESS_COUNT},
     types::common::{ChainCommonName, EpochedPeerStore},
 };
-use aptos_config::config::{Peer, PeerRole, PeerSet};
 use aptos_infallible::RwLock;
-use aptos_rest_client::Response;
-use aptos_types::{
-    account_config::CORE_CODE_ADDRESS, chain_id::ChainId, on_chain_config::ValidatorSet, PeerId,
-};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::time;
-use url::Url;
 
 #[derive(Clone)]
 pub struct PeerSetCacheUpdater {

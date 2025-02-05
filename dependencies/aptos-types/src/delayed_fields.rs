@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // use crate::serde_helper::bcs_utils::bcs_size_of_byte_array;
-use move_core_types::vm_status::StatusCode;
 use once_cell::sync::Lazy;
 use std::fmt::Display;
 

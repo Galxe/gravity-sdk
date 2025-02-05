@@ -8,7 +8,6 @@ use crate::{
         tracing::{observe_block, BlockStage},
         BlockReader, BlockStore,
     },
-    consensus_observer::ordered_blocks,
     counters::{
         BLOCKS_FETCHED_FROM_NETWORK_IN_BLOCK_RETRIEVER,
         BLOCKS_FETCHED_FROM_NETWORK_WHILE_FAST_FORWARD_SYNC,
@@ -21,11 +20,10 @@ use crate::{
     network::{IncomingBlockRetrievalRequest, NetworkSender},
     network_interface::ConsensusMsg,
     payload_manager::TPayloadManager,
-    persistent_liveness_storage::{LedgerRecoveryData, PersistentLivenessStorage, RecoveryData},
-    pipeline::execution_client::TExecutionClient,
+    persistent_liveness_storage::{PersistentLivenessStorage, RecoveryData},
 };
-use anyhow::{anyhow, bail, Context};
-use api_types::{u256_define::BlockId, ExecutionApiV2, ExecutionBlocks, ExecutionLayer, ExternalBlockMeta, RecoveryApi};
+use anyhow::{anyhow, bail};
+use api_types::{u256_define::BlockId, ExecutionApiV2, ExecutionLayer, RecoveryApi};
 use aptos_consensus_types::{
     block::Block,
     block_retrieval::{

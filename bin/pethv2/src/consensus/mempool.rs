@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use api_types::{account::ExternalAccountAddress, VerifiedTxnWithAccountSeqNum};
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 pub struct Mempool {
     /// AccountAddress -> (sequence_number -> transaction)

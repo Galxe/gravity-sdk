@@ -15,7 +15,7 @@ use aptos_types::{
     ledger_info::LedgerInfoWithSignatures,
     proof::{
         AccumulatorConsistencyProof, SparseMerkleProof, SparseMerkleProofExt,
-        SparseMerkleRangeProof, TransactionAccumulatorRangeProof, TransactionAccumulatorSummary,
+        SparseMerkleRangeProof, TransactionAccumulatorRangeProof,
     },
     state_proof::StateProof,
     state_store::{

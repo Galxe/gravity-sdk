@@ -2,27 +2,25 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    error::MempoolError, payload_manager::DirectMempoolPayloadManager, pipeline::pipeline_phase::CountedRequest, state_computer::ExecutionProxy, state_replication::StateComputer, transaction_deduper::NoOpDeduper, transaction_filter::TransactionFilter, transaction_shuffler::NoOpShuffler, txn_notifier::TxnNotifier
+    error::MempoolError, pipeline::pipeline_phase::CountedRequest, state_computer::ExecutionProxy, state_replication::StateComputer, transaction_deduper::NoOpDeduper, transaction_filter::TransactionFilter, transaction_shuffler::NoOpShuffler, txn_notifier::TxnNotifier
 };
 use aptos_config::config::transaction_filter_type::Filter;
 use aptos_consensus_notifications::{ConsensusNotificationSender, Error};
-use aptos_consensus_types::{block::Block, block_data::BlockData, pipelined_block::PipelinedBlock};
+use aptos_consensus_types::{block::Block, block_data::BlockData};
 use aptos_crypto::HashValue;
 use aptos_executor_types::{
-    state_checkpoint_output::StateCheckpointOutput, BlockExecutorTrait, ExecutorResult,
+    BlockExecutorTrait, ExecutorResult,
     StateComputeResult,
 };
 use aptos_infallible::Mutex;
 use aptos_types::{
-    aggregate_signature::AggregateSignature,
     block_executor::{config::BlockExecutorConfigFromOnchain, partitioner::ExecutableBlock},
     contract_event::ContractEvent,
     epoch_state::EpochState,
-    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
-    transaction::{ExecutionStatus, SignedTransaction, Transaction, TransactionStatus},
+    ledger_info::LedgerInfoWithSignatures,
+    transaction::{SignedTransaction, Transaction, TransactionStatus},
     validator_txn::ValidatorTransaction,
 };
-use futures_channel::oneshot;
 use std::sync::{atomic::AtomicU64, Arc};
 use tokio::runtime::Handle;
 

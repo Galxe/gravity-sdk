@@ -3,9 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{consensusdb::ConsensusDB, epoch_manager::LivenessStorageData, error::DbError};
-use anyhow::{format_err, Context, Result};
-use api_types::{ExecutionApiV2, RecoveryApi};
-use aptos_config::config::NodeConfig;
+use anyhow::{format_err, Result};
+use api_types::RecoveryApi;
 use aptos_consensus_types::{
     block::Block, quorum_cert::QuorumCert, timeout_2chain::TwoChainTimeoutCertificate, vote::Vote,
     vote_data::VoteData, wrapped_ledger_info::WrappedLedgerInfo,
@@ -15,7 +14,7 @@ use aptos_logger::prelude::*;
 use aptos_storage_interface::DbReader;
 use aptos_types::{
     block_info::Round, epoch_change::EpochChangeProof, ledger_info::LedgerInfoWithSignatures,
-    proof::TransactionAccumulatorSummary, test_helpers::transaction_test_helpers::block,
+    proof::TransactionAccumulatorSummary,
     transaction::Version,
 };
 use async_trait::async_trait;
@@ -452,7 +451,7 @@ impl PersistentLivenessStorage for StorageWriteProxy {
             highest_2chain_timeout_cert,
             order_vote_enabled,
         ) {
-            Ok(mut initial_data) => {
+            Ok(initial_data) => {
                 // TODO(gravity_lightman)
                 // (self as &dyn PersistentLivenessStorage)
                 //     .prune_tree(initial_data.take_blocks_to_prune())
