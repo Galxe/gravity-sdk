@@ -504,6 +504,17 @@ coex-bridge = { path = "./crates/coex-bridge" }
 debug = true
 overflow-checks = true
 
+[profile.quick-release]
+inherits = "release"
+opt-level = 1
+debug = false
+debug-assertions = false
+codegen-units = 256
+lto = false
+incremental = true
+panic = "abort"
+
+
 # The performance build is not currently recommended
 # for production deployments. It has not been widely tested.
 [profile.performance]
