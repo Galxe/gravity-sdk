@@ -70,6 +70,65 @@ To help you get started with Gravity-SDK, we provide detailed instructions for d
 Ensure you have the necessary development environment set up, including the required dependencies for compiling and running the SDK.
 Familiarity with blockchain concepts, especially consensus algorithms and execution layers, is recommended.
 
+### Compiling the Binaries
+
+To compile the binaries for the project, we use a `Makefile` to manage the build process. The `Makefile` allows you to compile different components with customizable options.
+
+Here’s how to use the `Makefile` to compile the binaries:
+
+#### Prerequisites
+- Ensure that you have [Rust](https://www.rust-lang.org/learn/get-started) installed, as it is required for building the project.
+- The `Makefile` controls the build process for the following binaries:
+  - `peth`
+  - `bench`
+  - `kvstore`
+
+#### Steps to Compile
+
+1. **Clone the Repository and Navigate to the Project Directory**
+   Ensure you have cloned the repository and navigated to the root directory of the project.
+
+2. **Choose the Mode and Features (Optional)**
+   The build mode can be set to `release` or `debug` (default: `release`). If you need specific features enabled, use the `FEATURE` variable.
+
+   Example:
+   ```bash
+   make MODE=debug FEATURE=some_feature
+   ```
+
+3. **Build the Project**
+   To compile the project, run the following command:
+   ```bash
+   make
+   ```
+
+   This will compile the binary specified in the `BINARY` variable, which defaults to `peth`. To build another binary (e.g., `bench` or `kvstore`), set the `BINARY` variable as follows:
+
+   ```bash
+   make BINARY=bench
+   ```
+
+4. **Clean the Build Artifacts (Optional)**
+   If you want to clean up the build artifacts, you can run:
+   ```bash
+   make clean
+   ```
+
+   This will remove any previously compiled files from the `bin/` directory.
+
+#### Customizing the Build
+- **Build Mode**: The default build mode is `release`. You can set the mode to `debug` by using the `MODE` variable:
+  ```bash
+  make MODE=debug
+  ```
+- **Features**: You can specify additional features to include in the build by setting the `FEATURE` variable:
+  ```bash
+  make FEATURE=some_feature
+  ```
+
+This setup ensures that all required components are compiled based on the configuration you specify.
+
+
 ### Quick Start Guide
 For step-by-step instructions on how to deploy a network of multiple nodes, refer to the following guide:
 

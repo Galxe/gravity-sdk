@@ -29,7 +29,7 @@ base:
 
 ## Compilation
 
-In the bin directory, enter either the `bench` or `reth` directory to compile.
+In the bin directory, enter either the `bench` or `peth` or `kvstore` directory to compile.
 
 example:
 
@@ -37,7 +37,7 @@ example:
 cd bin/bench
 cargo build
 
-cd bin/reth
+cd bin/peth
 cargo build
 ```
 
