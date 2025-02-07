@@ -142,7 +142,6 @@ fn run_reth(
 }
 
 fn main() {
-    // 创建tokio通道
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
 
     let cli = Cli::<DefaultChainSpecParser, EngineArgs>::parse();
@@ -151,11 +150,9 @@ fn main() {
         .into_iter()
         .map(|(number, id)| (number, B256::new(id.0)))
         .collect();
-    // 启动consensus线程
     thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
-            // 等待engine_cli可用
             if let Some(args) = rx.recv().await {
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 

@@ -110,7 +110,7 @@ pub fn start_consensus(
     aptos_consensus::consensus_provider::start_consensus(
         &node_config,
         consensus_network_interfaces.network_client,
-        consensus_network_interfaces.network_service_events, // 这个network_service_events会在coordinator的那个(network_id, event) = events.select_next_some()上用到
+        consensus_network_interfaces.network_service_events,
         Arc::new(consensus_notifier),
         consensus_to_mempool_sender,
         db.clone(),

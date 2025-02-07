@@ -10,4 +10,4 @@ theme:
     - search.highlight
 
 nav:
-  - 主页: index.md
+  - main: index.md

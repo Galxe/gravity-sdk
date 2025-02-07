@@ -73,7 +73,6 @@ fn run_reth(tx: mpsc::Sender<AuthServerHandle>, cli: Cli<DefaultChainSpecParser,
 }
 
 fn main() {
-    // 创建tokio通道
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
     let pipeline_cli = reth_pipe_exec_layer_ext::new_pipe_exec_layer_api();
     let cli = Cli::<DefaultChainSpecParser, EngineArgs>::parse();
@@ -84,11 +83,9 @@ fn main() {
         0xe7, 0x7e,
     ];
 
-    // 启动consensus线程
     thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
-            // 等待engine_cli可用
             if let Some(engine_cli) = rx.recv().await {
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 let client = RethCli::new("/tmp/reth.ipc", engine_cli, pipeline_cli).await;

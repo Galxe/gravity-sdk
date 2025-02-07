@@ -79,7 +79,7 @@ impl RethCli {
         let odd_y_parity = match v.as_u64() {
             27 => false,
             28 => true,
-            v => v % 2 == 1, // EIP-155 情况
+            v => v % 2 == 1, 
         };
         let mut bytes = [0u8; 32];
         r.to_big_endian(&mut bytes);

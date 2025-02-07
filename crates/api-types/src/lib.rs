@@ -72,7 +72,7 @@ pub trait ExecutionApiV2: Send + Sync {
     ///
     /// # Returns
     /// A `Vec` containing tuples, where each tuple consists of:
-    /// - `TxnHash`: The committed hash for the newly added txn(不论是raw还是verifiedtxn都应该重新计算一次,广播过来的verified txn也应该计算一次——aptos是这样).
+    /// - `TxnHash`: The committed hash for the newly added txn
     /// - `sender_latest_committed_sequence_number`: The latest committed sequence number associated with the sender on the execution layer.
     ///
     async fn add_txn(&self, bytes: ExecTxn) -> Result<TxnHash, ExecError>;
@@ -93,8 +93,6 @@ pub trait ExecutionApiV2: Send + Sync {
     ///
     async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError>;
 
-    // parent的: reth的hash -> 这个得等yuxuan重构reth
-    // 当前block的: txns, 自己的block_number(aptos和reth一样)
     // async fn send_ordered_block(&self, ordered_block: Vec<Txns>, block_number: BlockNumber, parent_mata_data: ExternalBlockMeta) -> Result<(), ExecError>;
     async fn send_ordered_block(
         &self,
