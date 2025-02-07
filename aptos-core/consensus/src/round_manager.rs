@@ -335,7 +335,7 @@ impl RoundManager {
         new_round_event: NewRoundEvent,
     ) -> anyhow::Result<()> {
         // TODO(gravity_jan): add sleep 1s for reth compatibility
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
         counters::CURRENT_ROUND.set(new_round_event.round as i64);
         counters::ROUND_TIMEOUT_MS.set(new_round_event.timeout.as_millis() as i64);
         match new_round_event.reason {

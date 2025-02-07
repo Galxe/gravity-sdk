@@ -2,7 +2,7 @@
 
 bin_name="pethv2"
 node_arg=""
-bin_version="release"
+bin_version="quick-release"
 mode="cluster"
 recover="false"
 
@@ -31,11 +31,6 @@ while [[ "$#" -gt 0 ]]; do
     esac
     shift
 done
-
-if [[ "$bin_version" != "release" && "$bin_version" != "debug" ]]; then
-    echo "Error: bin_version must be either 'release' or 'debug'."
-    exit 1
-fi
 
 if [[ -z "$node_arg" ]]; then
     echo "Error: --node parameter is required."
