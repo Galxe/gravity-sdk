@@ -1,9 +1,9 @@
-use api_types::{u256_define::BlockId, ExternalPayloadAttr};
-use reth::primitives::B256;
-use tracing::info;
-use web3::types::Transaction;
-use api_types::VerifiedTxn;
 use api_types::account::ExternalAccountAddress;
+use api_types::VerifiedTxn;
+use api_types::{u256_define::BlockId, ExternalPayloadAttr};
+use greth::reth::primitives::B256;
+use greth::reth_primitives::Transaction;
+use tracing::debug;
 pub struct BuildingState {
     gas_used: u64,
 }
@@ -39,7 +39,7 @@ impl State {
         let account = txn.sender.clone();
         let seq_num = self.accout_seq_num.entry(account).or_insert(-1);
         if *seq_num + 1 != txn.sequence_number as i64 {
-            info!("meet false seq_num: {:?} {:?}", seq_num, txn.sequence_number);
+            debug!("meet false seq_num: {:?} {:?}", seq_num, txn.sequence_number);
             return false;
         }
         *seq_num += 1;
@@ -49,7 +49,7 @@ impl State {
     pub fn check_new_txn(&mut self, attr: &ExternalPayloadAttr, txn: Transaction) -> bool {
         let building_state =
             self.building_block.entry(attr.clone()).or_insert(BuildingState { gas_used: 0 });
-        building_state.gas_used += txn.gas.as_u64();
+        building_state.gas_used += txn.gas_limit();
         if building_state.gas_used > 1000000 {
             return false;
         }
@@ -57,7 +57,7 @@ impl State {
     }
 
     pub fn insert_new_block(&mut self, block_id: BlockId, block_hash: B256) {
-        info!("insert_new_block: {:?} {:?}", block_id, block_hash);
+        debug!("insert_new_block: {:?} {:?}", block_id, block_hash);
         self.block_hash_to_id.insert(block_hash, block_id.clone());
         self.block_id_to_hash.insert(block_id, block_hash);
     }

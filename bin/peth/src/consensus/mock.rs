@@ -6,10 +6,12 @@ use std::{
 
 use super::mempool::Mempool;
 use api_types::{
-    u256_define::BlockId, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn,
+    u256_define::BlockId, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr,
+    VerifiedTxn,
 };
 
-use tracing::info;
+use greth::reth_primitives::B256;
+use tracing::debug;
 
 pub struct MockConsensus {
     exec_api: Arc<dyn ExecutionApiV2>,
@@ -20,15 +22,22 @@ pub struct MockConsensus {
 }
 
 impl MockConsensus {
-    pub fn new(exec_api: Arc<dyn ExecutionApiV2>, gensis: [u8; 32]) -> Self {
-        let parent_meta =
-            ExternalBlockMeta { block_id: BlockId(gensis), block_number: 0, usecs: 0, block_hash: None, randomness: None };
+    pub fn new(exec_api: Arc<dyn ExecutionApiV2>, gensis: B256) -> Self {
+        let mut bytes = [0u8; 32];
+        bytes.copy_from_slice(gensis.as_slice());
+        let parent_meta = ExternalBlockMeta {
+            block_id: BlockId(bytes),
+            block_number: 0,
+            usecs: 0,
+            randomness: None,
+            block_hash: None,
+        };
         Self {
             exec_api,
             parent_meta,
             pending_txns: Mempool::new(),
             block_number_water_mark: 0,
-            gensis,
+            gensis: bytes,
         }
     }
 
@@ -96,7 +105,7 @@ impl MockConsensus {
             for txn in txns {
                 self.pending_txns.add(txn);
             }
-            info!("pending txns size is {:?}", block_txns.len());
+            debug!("pending txns size is {:?}", block_txns.len());
             let block = self.check_and_construct_block(&mut block_txns, attr.clone()).await;
             if let Some(block) = block {
                 let head = block.block_meta.clone();

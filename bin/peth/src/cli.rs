@@ -1,34 +1,23 @@
-use reth;
-use reth_chainspec;
-use reth_cli;
-use reth_cli_commands;
-use reth_cli_runner;
-use reth_db;
-use reth_node_builder;
-use reth_node_core;
-use reth_node_ethereum;
-use reth_tracing;
-
 use api::GravityNodeArgs;
 use clap::{value_parser, Parser};
-use reth::cli::Commands;
-use reth_chainspec::ChainSpec;
-use reth_cli::chainspec::ChainSpecParser;
-use reth_cli_commands::node::NoArgs;
-use reth_cli_runner::CliRunner;
-use reth_db::DatabaseEnv;
-use reth_node_builder::{NodeBuilder, WithLaunchContext};
-use reth_node_core::args::utils::DefaultChainSpecParser;
-use reth_node_core::args::LogArgs;
-use reth_node_ethereum::{EthExecutorProvider, EthereumNode};
-use reth_tracing::FileWorkerGuard;
+use greth::reth::cli::Commands;
+use greth::reth_chainspec::ChainSpec;
+use greth::reth_cli::chainspec::ChainSpecParser;
+use greth::reth_cli_commands::node::NoArgs;
+use greth::reth_cli_runner::CliRunner;
+use greth::reth_db::DatabaseEnv;
+use greth::reth_node_builder::{NodeBuilder, WithLaunchContext};
+use greth::reth_node_core::args::utils::DefaultChainSpecParser;
+use greth::reth_node_core::args::LogArgs;
+use greth::reth_node_ethereum::{EthExecutorProvider, EthereumNode};
+use greth::reth_tracing::FileWorkerGuard;
 use std::{
     ffi::OsString,
     fmt::{self},
     future::Future,
     sync::Arc,
 };
-use tracing::info;
+use tracing::debug;
 
 /// The main reth cli interface.
 ///
@@ -109,7 +98,7 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
     ///
     /// ```no_run
     /// use clap::Parser;
-    /// use reth::{args::utils::DefaultChainSpecParser, cli::Cli};
+    /// use greth::reth::{args::utils::DefaultChainSpecParser, cli::Cli};
     ///
     /// #[derive(Debug, Parser)]
     /// pub struct MyArgs {
@@ -134,7 +123,7 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
             self.logs.log_file_directory.join(self.chain.chain.to_string());
 
         let _guard = self.init_tracing()?;
-        info!(target: "reth::cli", "Initialized tracing, log directory: {}, log level {:?}", self.logs.log_file_directory, self.logs.verbosity);
+        debug!(target: "reth::cli", "Initialized tracing, log directory: {}, log level {:?}", self.logs.log_file_directory, self.logs.verbosity);
 
         let runner = CliRunner::default();
         match self.command {
