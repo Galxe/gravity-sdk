@@ -60,6 +60,7 @@ members = [
     "bin/kvstore",
     "crates/coex-bridge",
     "bin/bench",
+    "bin/peth"
 ]
 
 
