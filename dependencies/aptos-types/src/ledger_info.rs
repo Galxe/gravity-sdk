@@ -53,9 +53,11 @@ impl Display for LedgerInfo {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "LedgerInfo: [commit_info: {}] [Consensus data hash: {}]",
+            "LedgerInfo: [commit_info: {}] [Consensus data hash: {}] [block_hash: {}] [block_number: {}]",
             self.commit_info(),
-            self.consensus_data_hash()
+            self.consensus_data_hash(),
+            self.block_hash(),
+            self.block_number()
         )
     }
 }

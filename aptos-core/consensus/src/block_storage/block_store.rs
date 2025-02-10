@@ -34,8 +34,9 @@ use aptos_executor_types::StateComputeResult;
 use aptos_infallible::{Mutex, RwLock};
 use aptos_logger::prelude::*;
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
-use aptos_types::ledger_info::LedgerInfoWithSignatures;
+use aptos_types::{aggregate_signature::AggregateSignature, ledger_info::{LedgerInfo, LedgerInfoWithSignatures}};
 use futures::executor::block_on;
+use sha3::digest::generic_array::typenum::Le;
 
 #[cfg(test)]
 use std::collections::VecDeque;
@@ -43,7 +44,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::AtomicBool;
 #[cfg(any(test, feature = "fuzzing"))]
 use std::sync::atomic::Ordering;
-use std::{io::Read, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, io::Read, sync::Arc, time::Duration};
 
 #[cfg(test)]
 #[path = "block_store_test.rs"]
@@ -162,50 +163,92 @@ impl BlockStore {
         block_store
     }
 
+    fn find_the_last_ledger_info(
+        &self,
+        cur_round: u64,
+        round_to_ledger_infos: &BTreeMap<u64, LedgerInfoWithSignatures>,
+    ) -> LedgerInfoWithSignatures {
+        for i in (1..cur_round).rev() {
+            if let Some(li) = round_to_ledger_infos.get(&i) {
+                return li.clone();
+            }
+        }
+        LedgerInfoWithSignatures::new(LedgerInfo::dummy(), AggregateSignature::empty())
+    }
+
     async fn recover_blocks(&self) {
         // reproduce the same batches (important for the commit phase)
         let mut certs = self.inner.read().get_all_quorum_certs_with_commit_info();
-        certs.sort_unstable_by_key(|qc| qc.commit_info().round());
-        for qc in certs {
-            if qc.commit_info().round() > self.commit_root().round() {
+        let round_to_ledger_infos: BTreeMap<_, _> = self
+            .storage
+            .consensus_db()
+            .ledger_db
+            .metadata_db()
+            .get_ledger_infos_by_range((self.commit_root().round() + 1, 0))
+            .into_iter()
+            .map(|li| (li.ledger_info().round(), li.clone()))
+            .collect();
+        certs.sort_unstable_by_key(|qc| qc.certified_block().round());
+        if let Some(start_pos) =
+            certs.iter().position(|qc| qc.certified_block().round() > self.commit_root().round())
+        {
+            for qc in &certs[start_pos..] {
+                let mut qc = qc.clone();
+                if qc.commit_info().round() == 0 {
+                    let last_ledger_info =
+                        self.find_the_last_ledger_info(qc.certified_block().round(), &round_to_ledger_infos);
+                    qc = qc.create_merged_with_executed_state_without_checked(last_ledger_info);
+                }
                 info!(
-                    "trying to recover to round {} with ledger info {}",
-                    qc.certified_block().round(),
-                    qc.ledger_info()
+                    "trying to recover to qc {}",
+                    qc
                 );
+
+                if qc.commit_info().round() <= self.commit_root().round() {
+                    continue;
+                }
                 let block_id_to_recover = qc.commit_info().id();
-                let block_to_recover = self.get_block(block_id_to_recover);
-                assert!(block_to_recover.is_some());
-                let block_to_recover = block_to_recover.unwrap();
-                self.init_block_number(&vec![block_to_recover.clone()]);
-                if let Ok((txns, _)) = self.payload_manager.get_transactions(block_to_recover.block()).await {
-                    info!("recover block {}", block_to_recover.block());
-                    let verified_txns: Vec<VerifiedTxn> =
-                        txns.iter().map(|txn| txn.into()).collect();
-                    let verified_txns = verified_txns.into_iter().map(|txn| txn.into()).collect();
-                    let block_number = block_to_recover.block().block_number().unwrap();
-                    let block_hash = match self.storage.consensus_db().ledger_db.metadata_db().get_block_hash(block_number) {
-                        Some(block_hash) => Some(ComputeRes::new(*block_hash)),
-                        None => None,
-                    };
-                    let block_batch = ExternalBlock {
-                        txns: verified_txns,
-                        block_meta: ExternalBlockMeta {
-                            block_id: BlockId(*block_to_recover.block().id()),
-                            block_number,
-                            usecs: block_to_recover.block().timestamp_usecs(),
-                            randomness: block_to_recover
-                                .randomness()
-                                .map(|r| Random::from_bytes(r.randomness())),
-                            block_hash,
-                        },
-                    };
-                    self.execution_layer
-                        .as_ref()
-                        .unwrap()
-                        .recovery_api
-                        .recover_ordered_block(BlockId(*block_to_recover.parent_id()), block_batch)
-                        .await.unwrap();
+                let blocks_to_recover = self.path_from_ordered_root(block_id_to_recover).unwrap_or_default();
+                assert!(!blocks_to_recover.is_empty());
+                for block_to_recover in blocks_to_recover {
+                    if let Ok((txns, _)) =
+                        self.payload_manager.get_transactions(block_to_recover.block()).await
+                    {
+                        info!("recover block {}", block_to_recover.block());
+                        let verified_txns: Vec<VerifiedTxn> =
+                            txns.iter().map(|txn| txn.into()).collect();
+                        let verified_txns = verified_txns.into_iter().map(|txn| txn.into()).collect();
+                        let block_number = block_to_recover.block().block_number().unwrap();
+                        let block_hash = match self
+                            .storage
+                            .consensus_db()
+                            .ledger_db
+                            .metadata_db()
+                            .get_block_hash(block_number)
+                        {
+                            Some(block_hash) => Some(ComputeRes::new(*block_hash)),
+                            None => None,
+                        };
+                        let block_batch = ExternalBlock {
+                            txns: verified_txns,
+                            block_meta: ExternalBlockMeta {
+                                block_id: BlockId(*block_to_recover.block().id()),
+                                block_number,
+                                usecs: block_to_recover.block().timestamp_usecs(),
+                                randomness: block_to_recover
+                                    .randomness()
+                                    .map(|r| Random::from_bytes(r.randomness())),
+                                block_hash,
+                            },
+                        };
+                        self.execution_layer
+                            .as_ref()
+                            .unwrap()
+                            .recovery_api
+                            .recover_ordered_block(BlockId(*block_to_recover.parent_id()), block_batch)
+                            .await
+                            .unwrap();
+                    }
                 }
                 info!("trying to commit to round {}", qc.commit_info().round());
                 if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info(), true).await {
@@ -287,9 +330,6 @@ impl BlockStore {
                 continue;
             }
             p_block.block().set_block_number(self.storage.fetch_next_block_number());
-            self.inner
-                .write()
-                .insert_block_number(p_block.block().block_number().unwrap(), p_block.block().id());
             blocks.push(p_block.as_ref().into());
         }
         if blocks.len() != 0 {
@@ -315,8 +355,6 @@ impl BlockStore {
         );
 
         let blocks_to_commit = self.path_from_ordered_root(block_id_to_commit).unwrap_or_default();
-        let finalized_block_number =
-            self.execution_layer.as_ref().unwrap().recovery_api.finalized_block_number().await;
         assert!(!blocks_to_commit.is_empty());
         let block_tree = self.inner.clone();
         let storage = self.storage.clone();
@@ -346,10 +384,19 @@ impl BlockStore {
                 &blocks_to_commit,
                 finality_proof,
                 commit_decision,
-                finalized_block_number,
             );
         } else {
-            self.init_block_number(&blocks_to_commit);
+            let mut blocks = vec![];
+            for p_block in &blocks_to_commit {
+                if let Some(_) = p_block.block().block_number() {
+                    continue;
+                }
+                p_block.block().set_block_number(self.storage.fetch_next_block_number());
+                blocks.push(p_block.as_ref().into());
+            }
+            if blocks.len() != 0 {
+                self.storage.save_tree(blocks, vec![]);
+            }
             // This callback is invoked synchronously with and could be used for multiple batches of blocks.
             self.execution_client
                 .finalize_order(
@@ -363,7 +410,6 @@ impl BlockStore {
                                 committed_blocks,
                                 finality_proof,
                                 commit_decision,
-                                finalized_block_number,
                             );
                         },
                     ),
@@ -525,12 +571,11 @@ impl BlockStore {
             // executor.
             warn!(error = ?e, "fail to delete block");
         }
-        let id_to_remove_ = id_to_remove.iter().map(|id| (0u64, *id)).collect();
         // synchronously update both root_id and commit_root_id
         let mut wlock = self.inner.write();
         wlock.update_ordered_root(next_root_id);
         wlock.update_commit_and_finalized_root(next_root_id);
-        wlock.process_pruned_blocks(id_to_remove_);
+        wlock.process_pruned_blocks(id_to_remove.clone());
         id_to_remove
     }
 
@@ -561,18 +606,6 @@ impl BlockReader for BlockStore {
 
     fn get_block(&self, block_id: HashValue) -> Option<Arc<PipelinedBlock>> {
         self.inner.read().get_block(&block_id)
-    }
-
-    fn get_block_by_block_number(&self, block_number: u64) -> Option<Arc<PipelinedBlock>> {
-        self.inner.read().get_block_by_block_number(block_number)
-    }
-
-    fn get_blocks_by_range(
-        &self,
-        start_block_number: u64,
-        end_block_number: u64,
-    ) -> Vec<Arc<PipelinedBlock>> {
-        self.inner.read().get_blocks_by_range(start_block_number, end_block_number)
     }
 
     fn ordered_root(&self) -> Arc<PipelinedBlock> {

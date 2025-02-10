@@ -275,7 +275,7 @@ impl RecoveryData {
         info!("blocks in db: {:?}", blocks.len());
         info!("quorum certs in db: {:?}", quorum_certs.len());
         let root;
-        if !blocks.is_empty() && execution_latest_block_num != 0 {
+        if !blocks.is_empty() && execution_latest_block_num != 0{
             root = Self::find_root_by_block_number(
                 execution_latest_block_num,
                 &mut blocks,
@@ -285,12 +285,8 @@ impl RecoveryData {
         } else {
             root = ledger_recovery_data.find_root(&mut blocks, &mut quorum_certs, order_vote_enabled)?;
         }
-        info!("root info: {:?}", root);
-        let blocks_to_prune = Some(Self::find_blocks_to_prune(
-            root.0.id(),
-            &mut blocks,
-            &mut quorum_certs,
-        ));
+        println!("root info: {:?}", root);
+        let blocks_to_prune = Some(vec![]);
         let epoch = root.0.epoch();
         Ok(RecoveryData {
             last_vote: match last_vote {
@@ -400,6 +396,7 @@ impl PersistentLivenessStorage for StorageWriteProxy {
     }
 
     fn prune_tree(&self, block_ids: Vec<HashValue>) -> Result<()> {
+        panic!("Can't delete blocks");
         if !block_ids.is_empty() {
             // quorum certs that certified the block_ids will get removed
             self.db.delete_blocks_and_quorum_certificates(block_ids)?;
@@ -444,7 +441,7 @@ impl PersistentLivenessStorage for StorageWriteProxy {
         let ledger_recovery_data = LedgerRecoveryData::new(latest_ledger_info);
         match RecoveryData::new(
             last_vote,
-            ledger_recovery_data.clone(),
+            ledger_recovery_data,
             latest_block_number,
             blocks,
             quorum_certs,
@@ -475,12 +472,13 @@ impl PersistentLivenessStorage for StorageWriteProxy {
                     initial_data.last_vote.as_ref().map_or("None".to_string(), |v| v.to_string()),
                     initial_data.highest_2chain_timeout_certificate().as_ref().map_or("None".to_string(), |v| v.to_string()),
                 );
+
                 LivenessStorageData::FullRecoveryData(initial_data)
             }
             Err(e) => {
-                panic!("");
                 error!(error = ?e, "Failed to construct recovery data");
-                LivenessStorageData::PartialRecoveryData(ledger_recovery_data)
+                panic!(""); // TODO(gravity_lightman)
+                            // LivenessStorageData::PartialRecoveryData(ledger_recovery_data)
             }
         }
     }

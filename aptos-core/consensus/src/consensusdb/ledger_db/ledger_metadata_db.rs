@@ -1,8 +1,10 @@
 use aptos_crypto::HashValue;
-use aptos_schemadb::{SchemaBatch, DB};
+use aptos_logger::info;
+use aptos_schemadb::{schema::KeyCodec, SchemaBatch, DB};
 use aptos_storage_interface::{AptosDbError, Result};
 use aptos_types::ledger_info::LedgerInfoWithSignatures;
 use arc_swap::{access::Access, ArcSwap};
+use rocksdb::ReadOptions;
 use crate::consensusdb::schema::ledger_info::{LedgerInfoSchema};
 use std::sync::Arc;
 
@@ -21,6 +23,38 @@ fn get_latest_ledger_info_in_db_impl(db: &DB) -> Result<Option<LedgerInfoWithSig
         Ok(mut iter) => {
             iter.seek_to_last();
             Ok(iter.next().transpose()?.map(|(_, v)| v))
+        }
+    }
+}
+
+fn get_ledger_infos_by_range_in_db_impl(db: &DB, range: (u64, u64)) -> Result<Vec<LedgerInfoWithSignatures>> {
+    assert!(range.1 == 0 || range.0 < range.1);
+    let mut option = ReadOptions::default();
+    let lower_bound = <u64 as KeyCodec<LedgerInfoSchema>>::encode_key(&range.0).unwrap();
+    option.set_iterate_lower_bound(lower_bound);
+    if range.1 != 0 {
+        let upper_bound = <u64 as KeyCodec<LedgerInfoSchema>>::encode_key(&range.1).unwrap();
+        option.set_iterate_upper_bound(upper_bound);
+    }
+    match db.iter_with_opts::<LedgerInfoSchema>(option) {
+        Err(e) => {
+            if let AptosDbError::Other(msg) = &e {
+                if msg.contains("column family name: ledger_info") {
+                    return Ok(vec![]);
+                }
+            }
+            Err(e)
+        }
+        Ok(mut iter) => {
+            let mut res: Vec<_> = vec![];
+            iter.seek_to_first();
+            loop {
+                match iter.next().transpose() {
+                    Ok(Some((_, v))) => res.push(v),
+                    _ => break,
+                }
+            }
+            Ok(res)
         }
     }
 }
@@ -112,6 +146,11 @@ impl LedgerMetadataDb {
             _ => None,
         }
     }
+
+    pub(crate) fn get_ledger_infos_by_range(&self, range: (u64, u64)) -> Vec<LedgerInfoWithSignatures> {
+        get_ledger_infos_by_range_in_db_impl(&self.db, range).expect("DB read failed.")
+    }
+
 }
 
 #[cfg(test)]
@@ -128,7 +167,7 @@ mod tests {
         opts.create_if_missing(true);
         opts.create_missing_column_families(true);
         Arc::new(DB::open(
-            "/tmp/node1/data/consensus_db",
+            "/tmp/node3/data/consensus_db",
             "ledger_meta_db_test",
             vec![LEDGER_INFO_CF_NAME],
             &opts,
@@ -153,9 +192,11 @@ mod tests {
 
         {
             let ledger_metadata_db = LedgerMetadataDb::new(init_db());
-            let res = ledger_metadata_db.get_latest_ledger_infos();
+            let res = ledger_metadata_db.get_ledger_infos_by_range((0, 0));
             println!("res len {} ", res.len());
-            println!("latest_block_number {}", ledger_metadata_db.get_latest_ledger_info().unwrap().ledger_info().block_number());
+            for li in res {
+                println!("{}", li);
+            }
         }
     }
 }

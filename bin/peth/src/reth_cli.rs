@@ -25,7 +25,7 @@ use std::io::Read;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_stream::StreamExt;
-use tracing::debug;
+use tracing::{debug, info};
 use tracing::log::error;
 
 pub struct RethCli {

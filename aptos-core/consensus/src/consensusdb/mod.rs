@@ -139,9 +139,12 @@ impl ConsensusDB {
             return Err(anyhow::anyhow!("Consensus block and qc data is empty!").into());
         }
         let batch = SchemaBatch::new();
-        // TODO(gravity_lightman): block_id key -> round/block_number
-        block_data.iter().try_for_each(|block| batch.put::<BlockSchema>(&block.id(), block))?;
-        qc_data.iter().try_for_each(|qc| batch.put::<QCSchema>(&qc.certified_block().id(), qc))?;
+        block_data
+            .iter()
+            .try_for_each(|block| batch.put::<BlockSchema>(&block.id(), block))?;
+        qc_data
+            .iter()
+            .try_for_each(|qc| batch.put::<QCSchema>(&qc.certified_block().id(), qc))?;
         self.commit(batch)
     }
 

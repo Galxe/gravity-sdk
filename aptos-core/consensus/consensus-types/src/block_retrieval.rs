@@ -7,7 +7,7 @@ use anyhow::ensure;
 use api_types::ExecutionBlocks;
 use aptos_crypto::hash::{HashValue, GENESIS_BLOCK_ID};
 use aptos_short_hex_str::AsShortHexStr;
-use aptos_types::validator_verifier::ValidatorVerifier;
+use aptos_types::{ledger_info::LedgerInfoWithSignatures, validator_verifier::ValidatorVerifier};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -16,28 +16,12 @@ pub const NUM_PEERS_PER_RETRY: usize = 3;
 pub const RETRY_INTERVAL_MSEC: u64 = 500;
 pub const RPC_TIMEOUT_MSEC: u64 = 5000;
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub enum SyncBlocks {
-    Consensus(Vec<Block>),
-    Execution(ExecutionBlocks),
-}
-
-impl SyncBlocks {
-    pub fn latest_block_number(&self) -> u64 {
-        match self {
-            SyncBlocks::Consensus(blocks) => blocks.last().unwrap().block_number().unwrap(),
-            SyncBlocks::Execution(blocks) => blocks.latest_block_number,
-        }
-    }
-}
-
 /// RPC to get a chain of block of the given length starting from the given block id.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct BlockRetrievalRequest {
     block_id: HashValue,
     num_blocks: u64,
     target_block_id: Option<HashValue>,
-    start_block_number: Option<u64>,
 }
 
 impl BlockRetrievalRequest {
@@ -46,16 +30,6 @@ impl BlockRetrievalRequest {
             block_id,
             num_blocks,
             target_block_id: None,
-            start_block_number: None,
-        }
-    }
-
-    pub fn new_with_block_number(num_blocks: u64, start_block_number: u64) -> Self {
-        Self {
-            block_id: HashValue::zero(),
-            num_blocks: num_blocks,
-            target_block_id: None,
-            start_block_number: Some(start_block_number),
         }
     }
 
@@ -68,7 +42,6 @@ impl BlockRetrievalRequest {
             block_id,
             num_blocks,
             target_block_id: Some(target_block_id),
-            start_block_number: None,
         }
     }
 
@@ -86,10 +59,6 @@ impl BlockRetrievalRequest {
 
     pub fn match_target_id(&self, hash_value: HashValue) -> bool {
         self.target_block_id.map_or(false, |id| id == hash_value)
-    }
-
-    pub fn start_block_number(&self) -> Option<u64> {
-        self.start_block_number
     }
 }
 
@@ -119,34 +88,25 @@ pub enum BlockRetrievalStatus {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct BlockRetrievalResponse {
     status: BlockRetrievalStatus,
-    blocks: SyncBlocks,
+    blocks: Vec<Block>,
+    ledger_infos: Vec<LedgerInfoWithSignatures>,
 }
 
 impl BlockRetrievalResponse {
-    pub fn new(status: BlockRetrievalStatus, blocks: SyncBlocks) -> Self {
-        Self { status, blocks }
+    pub fn new(status: BlockRetrievalStatus, blocks: Vec<Block>, ledger_infos: Vec<LedgerInfoWithSignatures>) -> Self {
+        Self { status, blocks, ledger_infos }
     }
 
     pub fn status(&self) -> BlockRetrievalStatus {
         self.status.clone()
     }
 
-    pub fn consensus_blocks(&self) -> &Vec<Block> {
-        if let SyncBlocks::Consensus(blocks) = &self.blocks {
-            return blocks;
-        }
-        panic!("The sync block type is not consensus blocks");
+    pub fn blocks(&self) -> &Vec<Block> {
+        &self.blocks
     }
 
-    pub fn execution_blocks(&self) -> ExecutionBlocks {
-        if let SyncBlocks::Execution(blocks) = &self.blocks {
-            return blocks.clone();
-        }
-        panic!("The sync block type is consensus block")
-    }
-
-    pub fn sync_blocks(&self) -> SyncBlocks {
-        self.blocks.clone()
+    pub fn ledger_infos(&self) -> &Vec<LedgerInfoWithSignatures> {
+        &self.ledger_infos
     }
 
     pub fn verify(
@@ -154,20 +114,17 @@ impl BlockRetrievalResponse {
         retrieval_request: BlockRetrievalRequest,
         sig_verifier: &ValidatorVerifier,
     ) -> anyhow::Result<()> {
-        if let SyncBlocks::Execution(_) = &self.blocks {
-            return Ok(());
-        }
-        let blocks = self.consensus_blocks();
         ensure!(
             self.status != BlockRetrievalStatus::Succeeded
-                || blocks.len() as u64 == retrieval_request.num_blocks(),
+                || self.blocks.len() as u64 == retrieval_request.num_blocks(),
             "not enough blocks returned, expect {}, get {}",
             retrieval_request.num_blocks(),
-            blocks.len(),
+            self.blocks.len(),
         );
         ensure!(
             self.status != BlockRetrievalStatus::SucceededWithTarget
-                || blocks
+                || self
+                    .blocks
                     .last()
                     .map_or(false, |block| {
                         if retrieval_request.match_target_id(*GENESIS_BLOCK_ID) {
@@ -179,7 +136,7 @@ impl BlockRetrievalResponse {
             "target not found in blocks returned, expect {:?}",
             retrieval_request.target_block_id(),
         );
-        blocks
+        self.blocks
             .iter()
             .try_fold(retrieval_request.block_id(), |expected_id, block| {
                 block.validate_signature(sig_verifier)?;
@@ -198,27 +155,22 @@ impl BlockRetrievalResponse {
 
 impl fmt::Display for BlockRetrievalResponse {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let SyncBlocks::Consensus(blocks) = &self.blocks {
-            match self.status() {
-                BlockRetrievalStatus::Succeeded | BlockRetrievalStatus::SucceededWithTarget => {
-                    write!(
-                        f,
-                        "[BlockRetrievalResponse: status: {:?}, num_blocks: {}, block_ids: ",
-                        self.status(),
-                        blocks.len(),
-                    )?;
+        match self.status() {
+            BlockRetrievalStatus::Succeeded | BlockRetrievalStatus::SucceededWithTarget => {
+                write!(
+                    f,
+                    "[BlockRetrievalResponse: status: {:?}, num_blocks: {}, block_ids: ",
+                    self.status(),
+                    self.blocks().len(),
+                )?;
 
-                    f.debug_list()
-                        .entries(blocks.iter().map(|b| b.id().short_str()))
-                        .finish()?;
+                f.debug_list()
+                    .entries(self.blocks.iter().map(|b| b.id().short_str()))
+                    .finish()?;
 
-                    return write!(f, "]");
-                },
-                _ => {
-                    return write!(f, "[BlockRetrievalResponse: status: {:?}]", self.status());
-                }
-            }
+                write!(f, "]")
+            },
+            _ => write!(f, "[BlockRetrievalResponse: status: {:?}]", self.status()),
         }
-        write!(f, "[BlockRetrievalResponse: status: {:?}]", self.status())
     }
 }

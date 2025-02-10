@@ -163,6 +163,13 @@ impl QuorumCert {
         Ok(Self::new(self.vote_data.clone(), executed_ledger_info))
     }
 
+    pub fn create_merged_with_executed_state_without_checked(
+        &self,
+        executed_ledger_info: LedgerInfoWithSignatures,
+    ) -> QuorumCert {
+        Self::new(self.vote_data.clone(), executed_ledger_info)
+    }
+
     pub fn into_wrapped_ledger_info(&self) -> WrappedLedgerInfo {
         WrappedLedgerInfo::new(self.vote_data.clone(), self.ledger_info().clone())
     }

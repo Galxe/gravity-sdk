@@ -95,17 +95,13 @@ impl RecoveryManager {
         let mut retriever = BlockRetriever::new(
             self.network.clone(),
             peer,
-            self.epoch_state.verifier.get_ordered_account_addresses_iter().collect(),
+            self.epoch_state
+                .verifier
+                .get_ordered_account_addresses_iter()
+                .collect(),
             self.max_blocks_to_request,
             self.pending_blocks.clone(),
         );
-        BlockStore::fast_forward_sync_by_block_number(
-            &mut retriever,
-            self.execution_layer.as_ref().unwrap().clone(),
-            self.storage.latest_block_number().await + 1,
-            self.payload_manager.clone(),
-            self.storage.clone()
-        ).await?;
         let recovery_data = BlockStore::fast_forward_sync(
             sync_info.highest_quorum_cert(),
             sync_info.highest_commit_cert(),
