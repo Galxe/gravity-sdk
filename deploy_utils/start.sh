@@ -5,7 +5,7 @@ WORKSPACE=$SCRIPT_DIR/..
 
 log_suffix=$(date +"%Y-%d-%m:%H:%M:%S")
 
-bin_name="pethv2"
+bin_name="peth"
 node_arg=""
 
 while [[ "$#" -gt 0 ]]; do

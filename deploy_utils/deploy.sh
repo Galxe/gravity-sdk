@@ -1,6 +1,6 @@
 #!/bin/bash
 
-bin_name="pethv2"
+bin_name="peth"
 node_arg=""
 bin_version="release"
 mode="cluster"
