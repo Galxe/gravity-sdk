@@ -65,8 +65,9 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
                 SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
             )
             .await?;
-
-        Ok(())
+        self.consensus_notification_listener
+        .respond_to_commit_notification(consensus_commit_notification, Ok(())).await
+        .map_err(|e| anyhow::anyhow!(e))
     }
 
     async fn handle_consensus_notification(&mut self, notification: ConsensusNotification) {
@@ -77,10 +78,10 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
                 self.handle_consensus_commit_notification(commit_notification).await
             }
             ConsensusNotification::SyncToTarget(sync_notification) => {
-                todo!()
+                panic!("receive consensus sync notification {:?}", sync_notification);
             }
         };
-
+        
         // Log any errors from notification handling
         if let Err(error) = result {
             // warn!(LogSchema::new(LogEntry::ConsensusNotification)
