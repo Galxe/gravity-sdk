@@ -91,7 +91,7 @@ async fn retrieve_from_execution_routine(
             Ok(txns) => {
                 info!("the recv_pending_txns size is {:?}", txns.len());
                 txns.into_iter().for_each(|txn_with_number| {
-                    let _r = mempool.lock().add_txn(
+                    let r = mempool.lock().add_txn(
                         txn_with_number.txn.into(),
                         txn_with_number.account_seq_num,
                         TimelineState::NotReady,
@@ -99,6 +99,10 @@ async fn retrieve_from_execution_routine(
                         None,
                         Some(BroadcastPeerPriority::Primary),
                     );
+                    match r.code{
+                        aptos_types::mempool_status::MempoolStatusCode::Accepted => {},
+                        _ => panic!("{:?}", r),
+                    }
                     // TODO(gravity_byteyue): handle error msg
                 });
             }

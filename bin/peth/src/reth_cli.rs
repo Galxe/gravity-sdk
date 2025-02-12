@@ -167,7 +167,10 @@ impl RethCli {
             let nonce = txn.nonce();
             let txn = txn.transaction.transaction();
             let accout_nonce =
-                self.provider.basic_account(sender).unwrap().map(|x| x.nonce).unwrap_or(0);
+                self.provider.basic_account(sender)
+                .unwrap()
+                .map(|x| x.nonce)
+                .unwrap_or(txn.nonce());
             let mut bytes = Vec::with_capacity(1024 * 4);
             // txn.encode(&mut bytes);
             txn.encode(&mut bytes);
@@ -189,7 +192,8 @@ impl RethCli {
             }
             let after_ser = std::time::Instant::now();
             debug!(
-                "push txn nonce: {} acc_nonce: {} recv_time {} serialize_time {}",
+                "push addr {} txn nonce: {} acc_nonce: {} recv_time {} serialize_time {}",
+                sender,
                 txn.transaction.nonce(),
                 accout_nonce,
                 before_recv.elapsed().as_micros(),

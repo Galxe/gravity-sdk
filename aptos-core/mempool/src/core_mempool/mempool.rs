@@ -29,7 +29,7 @@ use aptos_types::{
 };
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
-    sync::atomic::Ordering,
+    sync::{atomic::Ordering},
     time::{Duration, Instant, SystemTime},
 };
 
@@ -50,8 +50,9 @@ impl Mempool {
 
     /// This function will be called once the transaction has been stored.
     pub(crate) fn commit_transaction(&mut self, sender: &AccountAddress, sequence_number: u64) {
-        info!(
-            "commit txn to mempool, seq, seq_num: {}",
+        debug!(
+            "commit txn {} {}",
+            sender,
             sequence_number
         );
         self.transactions
@@ -474,10 +475,9 @@ impl Mempool {
                 );
             }
         }
-
+        
         let block_end_time = start_time.elapsed();
         let block_time = block_end_time.saturating_sub(result_end_time);
-
         if result_size > 0 {
             debug!(
                 LogSchema::new(LogEntry::GetBlock),

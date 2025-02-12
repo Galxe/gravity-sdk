@@ -183,10 +183,10 @@ impl TransactionStore {
     }
 
     /// Insert transaction into TransactionStore. Performs validation checks and updates indexes.
-    pub(crate) fn insert(&mut self, txn: MempoolTransaction) -> MempoolStatus {
+    pub(crate) fn insert(&mut self, mut txn: MempoolTransaction) -> MempoolStatus {
         let address = txn.verified_txn().sender();
         let txn_seq_num = txn.verified_txn().sequence_number();
-
+        debug!("add txn ({} {} {})", txn.sender(), txn.sequence_number(), txn.account_sequence_number());
         // If the transaction is already in Mempool, we just reject
         // TODO: how to replace the old txn with the new one?
         if let Some(txns) = self.transactions.get_mut(&address) {
@@ -208,7 +208,10 @@ impl TransactionStore {
                 }
             }
         }
-        let acc_seq_num = txn.account_sequence_number();
+        let account_seq_num_in_store = self.get_sequence_number(&address).map_or(0, |v| *v);
+        let acc_seq_num = max(txn.account_sequence_number(), account_seq_num_in_store);
+        txn.set_account_sequence_number(acc_seq_num);
+
         if self.check_is_full_after_eviction(&txn, acc_seq_num) {
             return MempoolStatus::new(MempoolStatusCode::MempoolIsFull).with_message(format!(
                 "Mempool is full. Mempool size: {}, Capacity: {}",
@@ -220,7 +223,6 @@ impl TransactionStore {
         self.clean_committed_transactions(&address, acc_seq_num);
 
         self.transactions.entry(address).or_default();
-
         if let Some(txns) = self.transactions.get_mut(&address) {
             // capacity check
             if txns.len() >= self.capacity_per_user {
@@ -236,9 +238,7 @@ impl TransactionStore {
             // insert into storage and other indexes
             self.hash_index
                 .insert(txn.get_hash(), (txn.verified_txn().sender(), txn_seq_num));
-            if self.sequence_numbers.get(&address).map_or(true, |v| *v < acc_seq_num) {
-                self.sequence_numbers.insert(address, acc_seq_num);
-            }
+            self.sequence_numbers.insert(address, acc_seq_num);
             self.size_bytes += txn.get_estimated_bytes();
             txns.insert(txn_seq_num, txn);
             self.track_indices();
@@ -379,10 +379,14 @@ impl TransactionStore {
     ///   TimelineIndex (txns for SharedMempool).
     /// - Other txns are considered to be "non-ready" and should be added to ParkingLotIndex.
     fn process_ready_transactions(&mut self, address: &AccountAddress, sequence_num: u64) {
+        debug!("[mempool] processing ready transactions without range  addr {} min seq {}", address, sequence_num,
+                );
         let sender_bucket = sender_bucket(address, self.num_sender_buckets);
         if let Some(txns) = self.transactions.get_mut(address) {
+            if txns.is_empty() {
+                return;
+            }
             let mut min_seq = sequence_num;
-
             while let Some(txn) = txns.get_mut(&min_seq) {
                 let process_ready = !self.priority_index.contains(txn);
                 
@@ -421,7 +425,6 @@ impl TransactionStore {
                 // priority_index / timeline_index, i.e., txn status is ready.
                 min_seq += 1;
             }
-
             let parking_lot_txns = 0;
             // for (_, txn) in txns.range_mut((Bound::Excluded(min_seq), Bound::Unbounded)) {
             //     match txn.timeline_state {
@@ -475,6 +478,7 @@ impl TransactionStore {
     /// It includes deletion of all transactions with sequence number <= `account_sequence_number`
     /// and potential promotion of sequential txns to PriorityIndex/TimelineIndex.
     pub fn commit_transaction(&mut self, account: &AccountAddress, sequence_number: u64) {
+        debug!("[mempool] committing txn {} {}", account, sequence_number);
         let current_seq_number = self.get_sequence_number(account).map_or(0, |v| *v);
         let new_seq_number = max(current_seq_number, sequence_number + 1);
         self.sequence_numbers.insert(*account, new_seq_number);
@@ -499,7 +503,6 @@ impl TransactionStore {
                 txns.remove(&sequence_number);
             }
             self.index_remove(&txn_to_remove);
-            println!("remove {:?}", txn_to_remove.verified_txn());
             if aptos_logger::enabled!(Level::Trace) {
                 let mut txns_log = TxnsLog::new();
                 txns_log.add(
@@ -531,10 +534,15 @@ impl TransactionStore {
         // Remove account datastructures if there are no more transactions for the account.
         let address = &txn.verified_txn().sender();
         if let Some(txns) = self.transactions.get(address) {
-            if txns.is_empty() {
-                self.transactions.remove(address);
-                self.sequence_numbers.remove(address);
-            }
+            // We can not remove accout address, consider the follow case
+            // insert (acc_nonce: 0, txn_nonce: 0)
+            // commit 0, remove address
+            // insert(acc_nocne: 0, txn_nonce: 1)
+            // then the txn nonce can't be put in priority queue
+            // if txns.is_empty() {
+            //     self.transactions.remove(address);
+            //     self.sequence_numbers.remove(address);
+            // }
         }
 
         self.track_indices();

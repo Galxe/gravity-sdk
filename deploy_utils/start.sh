@@ -70,6 +70,7 @@ function start_node() {
     pid=$(
         ${WORKSPACE}/bin/${bin_name} node \
             --http.port ${http_port} \
+            --http.api all \
             --port ${reth_rpc_port} \
             --authrpc.port ${authrpc_port} \
             --metrics ${metric_port} \

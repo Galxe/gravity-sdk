@@ -196,8 +196,20 @@ impl MempoolTransaction {
         }
     }
 
+    pub fn sender(&self) -> AccountAddress {
+        self.verified_txn.sender()
+    }
+
     pub fn account_sequence_number(&self) -> u64 {
         self.sequence_info.account_sequence_number
+    }
+
+    pub fn set_account_sequence_number(&mut self, account_sequence_number: u64) {
+        self.sequence_info.account_sequence_number = account_sequence_number;
+    }
+
+    pub fn sequence_number(&self) -> u64 {
+        self.sequence_info.transaction_sequence_number
     }
 
     pub fn is_processing(&self) -> bool {
