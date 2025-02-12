@@ -179,34 +179,10 @@ impl BlockStore {
     async fn recover_blocks(&self) {
         // reproduce the same batches (important for the commit phase)
         let mut certs = self.inner.read().get_all_quorum_certs_with_commit_info();
-        let round_to_ledger_infos: BTreeMap<_, _> = self
-            .storage
-            .consensus_db()
-            .ledger_db
-            .metadata_db()
-            .get_ledger_infos_by_range((self.commit_root().round() + 1, 0))
-            .into_iter()
-            .map(|li| (li.ledger_info().round(), li.clone()))
-            .collect();
-        certs.sort_unstable_by_key(|qc| qc.certified_block().round());
-        if let Some(start_pos) =
-            certs.iter().position(|qc| qc.certified_block().round() > self.commit_root().round())
-        {
-            for qc in &certs[start_pos..] {
-                let mut qc = qc.clone();
-                if qc.commit_info().round() == 0 {
-                    let last_ledger_info =
-                        self.find_the_last_ledger_info(qc.certified_block().round(), &round_to_ledger_infos);
-                    qc = qc.create_merged_with_executed_state_without_checked(last_ledger_info);
-                }
-                info!(
-                    "trying to recover to qc {}",
-                    qc
-                );
-
-                if qc.commit_info().round() <= self.commit_root().round() {
-                    continue;
-                }
+        certs.sort_unstable_by_key(|qc| qc.commit_info().round());
+        for qc in certs {
+            info!("trying to recover qc {}, commit_round={}", qc, self.commit_root().round());
+            if qc.commit_info().round() > self.commit_root().round() {
                 let block_id_to_recover = qc.commit_info().id();
                 let blocks_to_recover = self.path_from_ordered_root(block_id_to_recover).unwrap_or_default();
                 assert!(!blocks_to_recover.is_empty());

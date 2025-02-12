@@ -243,6 +243,7 @@ impl BlockTree {
         return self
             .id_to_quorum_cert
             .values()
+            .filter(|qc| qc.commit_info() != &BlockInfo::empty())
             .map(|qc| (**qc).clone())
             .collect::<Vec<QuorumCert>>();
     }

@@ -9,13 +9,11 @@ use aptos_consensus_types::{
     block::Block, quorum_cert::QuorumCert, timeout_2chain::TwoChainTimeoutCertificate, vote::Vote,
     vote_data::VoteData, wrapped_ledger_info::WrappedLedgerInfo,
 };
-use aptos_crypto::HashValue;
+use aptos_crypto::{hash::ACCUMULATOR_PLACEHOLDER_HASH, HashValue};
 use aptos_logger::prelude::*;
 use aptos_storage_interface::DbReader;
 use aptos_types::{
-    block_info::Round, epoch_change::EpochChangeProof, ledger_info::LedgerInfoWithSignatures,
-    proof::TransactionAccumulatorSummary,
-    transaction::Version,
+    block_info::Round, epoch_change::EpochChangeProof, ledger_info::LedgerInfoWithSignatures, on_chain_config::ValidatorSet, proof::TransactionAccumulatorSummary, transaction::Version
 };
 use async_trait::async_trait;
 use std::{
@@ -434,10 +432,11 @@ impl PersistentLivenessStorage for StorageWriteProxy {
         info!("The following quorum certs were restored from ConsensusDB: {}", qc_repr.concat());
         let latest_block_number = self.latest_block_number().await;
         info!("The execution_latest_block_number is {}", latest_block_number);
-        let latest_ledger_info = self
-            .aptos_db
-            .get_latest_ledger_info()
-            .expect("Failed to get latest ledger info.");
+        // only use when latest_block_number is zero
+        let latest_ledger_info = LedgerInfoWithSignatures::genesis(
+                *ACCUMULATOR_PLACEHOLDER_HASH,
+                ValidatorSet::new(self.consensus_db().mock_validators()),
+            );
         let ledger_recovery_data = LedgerRecoveryData::new(latest_ledger_info);
         match RecoveryData::new(
             last_vote,
