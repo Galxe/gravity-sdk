@@ -20,6 +20,10 @@ while [[ "$#" -gt 0 ]]; do
         bin_version="$2"
         shift
         ;;
+    --recover)
+        recover="$2"
+        shift
+        ;;
     --mode)
         mode="$2"
         shift
@@ -48,6 +52,7 @@ if [[ "$mode" != "cluster" && "$mode" != "single" ]]; then
 fi
 
 if [[ "$recover" != "true" ]]; then
+    echo "delete the previous legacy data"
     rm -rf /tmp/$node_arg
 fi
 
