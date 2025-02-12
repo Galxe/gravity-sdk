@@ -1,4 +1,4 @@
-reth_compile_options: ""
+reth_compile_options: "MODE=quick-release"
 reth_env: ""
 tag_or_brach: "main"
 reth_node_arg: "--mode cluster --node node3 --bin_version release"

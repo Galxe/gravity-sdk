@@ -7,6 +7,8 @@ BIN_PATHS := $(addprefix bin/, $(BIN_DIRS))
 
 ifeq ($(MODE),release)
     CARGO_FLAGS := --release
+else ifeq ($(MODE),quick-release)
+    CARGO_FLAGS := --profile quick-release
 else
     CARGO_FLAGS :=
 endif
