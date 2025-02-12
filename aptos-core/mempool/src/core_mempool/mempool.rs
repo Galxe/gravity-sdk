@@ -409,13 +409,6 @@ impl Mempool {
             if exclude_transactions.contains_key(&txn_ptr) {
                 continue;
             }
-            let mempool_txn = self.transactions.get_mempool_txn(&txn.address, txn.sequence_number);
-            if let Some(mempool_txn) = mempool_txn {
-                if mempool_txn.is_processing() {
-                    continue;
-                }
-                mempool_txn.set_processing();
-            }
             let tx_seq = txn.get_sequence_number();
             let txn_in_sequence = tx_seq > 0
                 && Self::txn_was_chosen(txn.address, tx_seq - 1, &inserted, &exclude_transactions);

@@ -24,7 +24,10 @@ use aptos_types::{
     transaction::SignedTransaction,
 };
 use std::{
-    cmp::max, collections::HashMap, mem::size_of, time::{Instant, SystemTime}
+    cmp::max,
+    collections::HashMap,
+    mem::size_of,
+    time::{Instant, SystemTime},
 };
 
 use super::index::{MultiBucketTimelineIndex, PriorityIndex, PriorityQueueIter};
@@ -87,6 +90,7 @@ impl TransactionStore {
             hash_index: HashMap::new(),
             // estimated size in bytes
             size_bytes: 0,
+
             // configuration
             capacity: config.capacity,
             capacity_bytes: config.capacity_bytes,
@@ -96,7 +100,7 @@ impl TransactionStore {
     }
 
     #[inline]
-    pub fn get_mempool_txn(
+    fn get_mempool_txn(
         &self,
         address: &AccountAddress,
         sequence_number: u64,
