@@ -3,14 +3,16 @@ pub mod default_recover;
 pub mod mock_execution_layer;
 pub mod simple_hash;
 pub mod u256_define;
+pub mod compute_res;
 use crate::account::{ExternalAccountAddress, ExternalChainId};
 use async_trait::async_trait;
+use compute_res::ComputeRes;
 use core::str;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 use std::{fmt::Debug, hash::Hasher, sync::Arc};
-use u256_define::{BlockId, ComputeRes, Random, TxnHash};
+use u256_define::{BlockId, Random, TxnHash};
 
 #[async_trait]
 pub trait ConsensusApi: Send + Sync {

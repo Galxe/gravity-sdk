@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use api_types::{u256_define::ComputeRes, ConsensusApi, ExternalBlockMeta};
+use api_types::{compute_res::ComputeRes, ConsensusApi, ExternalBlockMeta};
 use async_trait::async_trait;
 
 use api_types::ExternalBlock;

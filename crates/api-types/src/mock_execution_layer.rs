@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use rand::Rng;
 
-use crate::{default_recover::DefaultRecovery, u256_define::{BlockId, ComputeRes, TxnHash}, ExecError, ExecTxn, ExecutionApiV2, ExecutionLayer, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
+use crate::{compute_res::ComputeRes, default_recover::DefaultRecovery, u256_define::{BlockId, TxnHash}, ExecError, ExecTxn, ExecutionApiV2, ExecutionLayer, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 
 pub struct MockExecutionApi {}
 
@@ -44,7 +44,7 @@ impl ExecutionApiV2 for MockExecutionApi {
     ) -> Result<ComputeRes, ExecError> {
         let mut rng = rand::thread_rng();
         let random_bytes: [u8; 32] = rng.gen();
-        Ok(ComputeRes::new(random_bytes))
+        Ok(ComputeRes::new(random_bytes, 0))
     }
 
     async fn commit_block(&self, head: BlockId) -> Result<(), ExecError> {

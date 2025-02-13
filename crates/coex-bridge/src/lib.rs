@@ -1,4 +1,4 @@
-use api_types::u256_define::ComputeRes;
+use api_types::compute_res::ComputeRes;
 use api_types::{ExternalBlock, ExternalBlockMeta};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

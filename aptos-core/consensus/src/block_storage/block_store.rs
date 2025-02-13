@@ -17,8 +17,7 @@ use crate::{
 };
 use anyhow::{bail, ensure, format_err, Context};
 use api_types::{
-    u256_define::{BlockId, ComputeRes, Random},
-    ExecutionLayer, ExternalBlock, ExternalBlockMeta,
+    compute_res::ComputeRes, u256_define::{BlockId, Random}, ExecutionLayer, ExternalBlock, ExternalBlockMeta
 };
 use aptos_consensus_types::{
     block::Block,
@@ -193,6 +192,7 @@ impl BlockStore {
                         info!("recover block {}", block_to_recover.block());
                         let verified_txns: Vec<VerifiedTxn> =
                             txns.iter().map(|txn| txn.into()).collect();
+                        let txn_num = verified_txns.len() as u64;
                         let verified_txns = verified_txns.into_iter().map(|txn| txn.into()).collect();
                         let block_number = block_to_recover.block().block_number().unwrap();
                         let block_hash = match self
@@ -202,7 +202,7 @@ impl BlockStore {
                             .metadata_db()
                             .get_block_hash(block_number)
                         {
-                            Some(block_hash) => Some(ComputeRes::new(*block_hash)),
+                            Some(block_hash) => Some(ComputeRes::new(*block_hash, txn_num)),
                             None => None,
                         };
                         let block_batch = ExternalBlock {

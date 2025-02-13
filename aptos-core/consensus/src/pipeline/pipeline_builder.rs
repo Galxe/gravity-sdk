@@ -4,8 +4,7 @@
 use crate::{
     block_preparer::BlockPreparer,
     block_storage::tracing::{observe_block, BlockStage},
-    counters,
-    counters::{update_counters_for_block, update_counters_for_compute_result},
+    counters::{self, update_counters_for_block, update_counters_for_compute_res, update_counters_for_compute_result},
     execution_pipeline::SIG_VERIFY_POOL,
     monitor,
     payload_manager::TPayloadManager,
@@ -508,6 +507,7 @@ impl PipelineBuilder {
                 panic!("no recv_executed_block_hash function");
             }
         };
+        update_counters_for_compute_res(&hash);
         let result = StateComputeResult::new(HashValue::new(hash.bytes()), None, None);
         observe_block(timestamp, BlockStage::EXECUTED);
         // FIXME(gravity_byteyue): fixme

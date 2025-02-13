@@ -11,8 +11,7 @@ use crate::{
     network::{create_network_runtime, extract_network_configs},
 };
 use api_types::{
-    u256_define::BlockId, u256_define::ComputeRes, ConsensusApi, ExecutionLayer, ExternalBlock,
-    ExternalBlockMeta,
+    compute_res::ComputeRes, u256_define::BlockId, ConsensusApi, ExecutionLayer, ExternalBlock, ExternalBlockMeta
 };
 use aptos_build_info::build_information;
 use aptos_config::{config::NodeConfig, network_id::NetworkId};
@@ -65,7 +64,7 @@ impl ConsensusEngine {
         for ledger_info in ledger_infos {
             res.insert(
                 ledger_info.ledger_info().block_number(),
-                ComputeRes(*ledger_info.ledger_info().consensus_block_id()),
+                ComputeRes::new(*ledger_info.ledger_info().consensus_block_id(), 0),
             );
         }
         res

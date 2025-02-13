@@ -36,6 +36,7 @@ mod reth_coordinator;
 use crate::cli::Cli;
 use clap::Args;
 use std::collections::BTreeMap;
+use std::io::Read;
 use std::sync::Arc;
 use std::thread;
 /// Parameters for configuring the engine
@@ -175,7 +176,7 @@ fn main() {
     let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
     let block_number_to_block_id = AptosConsensus::get_data_from_consensus_db(&gcei_config)
         .into_iter()
-        .map(|(number, id)| (number, B256::new(id.0)))
+        .map(|(number, id)| (number, B256::new(id.data)))
         .collect();
     thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();

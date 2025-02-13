@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
+use api_types::compute_res::ComputeRes;
 use api_types::u256_define::TxnHash;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Mutex;
-use api_types::{u256_define::BlockId, u256_define::ComputeRes, ExecError, ExecTxn, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
+use api_types::{u256_define::BlockId, ExecError, ExecTxn, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 use crate::stateful_mempool::Mempool;
 use crate::txn::RawTxn;
 use async_trait::async_trait;
@@ -96,7 +97,7 @@ impl ExecutionApiV2 for KvStore {
         v[0..8].copy_from_slice(&bytes);
 
         let (send, recv) = tokio::sync::mpsc::channel::<ComputeRes>(1);
-        send.send(ComputeRes::new(v)).await.unwrap();
+        send.send(ComputeRes::new(v, ordered_block.txns.len() as u64)).await.unwrap();
         let mut r = self.compute_res_recv.lock().await;
         r.insert(ordered_block.block_meta.clone(), recv);
 
