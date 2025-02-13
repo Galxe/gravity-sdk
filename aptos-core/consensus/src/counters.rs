@@ -1226,10 +1226,12 @@ pub fn update_counters_for_block(block: &Block) {
 
 // TODO(gravity_byteyue): Refactor this when compute res can carry txn status
 pub fn update_counters_for_compute_res(compute_res: &ComputeRes) {
-    LAST_COMMITTED_VERSION.add(compute_res.txn_num() as i64);
+    let num = compute_res.txn_num() as i64; 
+    LAST_COMMITTED_VERSION.add(num);
+    NUM_TXNS_PER_BLOCK.observe(num as f64);
     COMMITTED_TXNS_COUNT
         .with_label_values(&[TXN_COMMIT_SUCCESS_LABEL])
-        .inc_by(compute_res.txn_num() as u64);
+        .inc_by(num as u64);
 }
 
 pub fn update_counters_for_compute_result(compute_result: &StateComputeResult) {
