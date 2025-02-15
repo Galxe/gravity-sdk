@@ -26,16 +26,10 @@ while [[ "$#" -gt 0 ]]; do
     shift
 done
 
-
-if [[ -z "$node_arg" ]]; then
-    echo "Error: --node parameter is required."
-    exit 1
-fi
-
 if [ -e ${WORKSPACE}/script/node.pid ]; then
     pid=$(cat ${WORKSPACE}/script/node.pid)
     if [ -d "/proc/$pid" ]; then
-        echo ${node_arg} is started
+        echo ${pid} is running, stop it first
         exit 1
     fi
 fi
@@ -96,10 +90,10 @@ function start_node() {
     echo $pid >${WORKSPACE}/script/node.pid
 }
 
-port1=""
-port2=""
-port3=""
-port4=""
+port1="12024"
+port2="8551"
+port3="8545"
+port4="9001"
 if [ "$node_arg" == "node1" ]; then
     port1="12024"
     port2="8551"
@@ -120,9 +114,6 @@ elif [ "$node_arg" == "node4" ]; then
     port2="8554"
     port3="8548"
     port4="9004"
-else
-    echo "Error: --node parameter ranges in [node1, node2, node3, node4]."
-    exit 1
 fi
 
 echo "start $node_arg ${port1} ${port2} ${port3} ${port4} ${bin_name}"
