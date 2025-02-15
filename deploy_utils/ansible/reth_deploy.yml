@@ -56,7 +56,7 @@
     
     - name: Copy start bash to remote
       copy:
-        src: "../start.sh"
+        src: "{{ reth_root_dir }}/deploy_utils/start.sh"
         dest: "/tmp/{{ reth_node_id }}/script"
 
     - name: Output collected logs
