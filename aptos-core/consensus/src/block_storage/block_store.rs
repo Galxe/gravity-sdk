@@ -370,6 +370,7 @@ impl BlockStore {
                 p_block.block().set_block_number(self.storage.fetch_next_block_number());
                 blocks.push(p_block.as_ref().into());
             }
+            info!("send the block {:?} to execute", blocks);
             if blocks.len() != 0 {
                 self.storage.save_tree(blocks, vec![]);
             }

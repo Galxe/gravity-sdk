@@ -60,7 +60,6 @@ impl StatelessPipeline for ExecutionSchedulePhase {
     const NAME: &'static str = "execution_schedule";
 
     async fn process(&self, req: ExecutionRequest) -> ExecutionWaitRequest {
-        info!("ExecutionSchedulePhase ???");
         let ExecutionRequest {
             ordered_blocks,
             lifetime_guard,

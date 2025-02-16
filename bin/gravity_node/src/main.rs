@@ -29,6 +29,7 @@ use reth_transaction_pool::TransactionPool;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tracing::debug;
+use tracing::info;
 mod cli;
 mod consensus;
 mod exec_layer;
@@ -115,11 +116,12 @@ fn run_reth(
                 let provider: BlockchainProvider2<
                     reth_node_api::NodeTypesWithDBAdapter<EthereumNode, Arc<reth_db::DatabaseEnv>>,
                 > = handle.node.provider;
-                let latest_block_number = provider.last_block_number();
+                let latest_block_number = provider.last_block_number().unwrap();
+                info!("The latest_block_number is {}", latest_block_number);
                 let latest_block_hash =
-                    provider.block_hash(latest_block_number.clone().unwrap()).unwrap().unwrap();
+                    provider.block_hash(latest_block_number).unwrap().unwrap();
                 let latest_block = provider
-                    .block(reth_primitives::BlockHashOrNumber::Number(latest_block_number.unwrap()))
+                    .block(reth_primitives::BlockHashOrNumber::Number(latest_block_number))
                     .unwrap()
                     .unwrap();
                 let pool: reth_transaction_pool::Pool<
