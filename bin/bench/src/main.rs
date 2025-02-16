@@ -7,7 +7,7 @@ use std::{sync::Arc, thread};
 
 use api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
 use api_types::{
-    account::ExternalAccountAddress, default_recover::DefaultRecovery, ConsensusApi, ExecTxn, ExecutionApiV2, ExecutionLayer
+    account::ExternalAccountAddress, default_recover::DefaultRecovery, ConsensusApi, ExecTxn, ExecutionChannel, ExecutionLayer
 };
 use clap::Parser;
 use cli::Cli;
@@ -22,11 +22,11 @@ use warp::Filter;
 
 struct TestConsensusLayer {
     consensus_engine: Arc<dyn ConsensusApi>,
-    execution_api: Arc<dyn ExecutionApiV2>,
+    execution_api: Arc<dyn ExecutionChannel>,
 }
 
 impl TestConsensusLayer {
-    fn new(node_config: NodeConfig, execution_client: Arc<dyn ExecutionApiV2>) -> Self {
+    fn new(node_config: NodeConfig, execution_client: Arc<dyn ExecutionChannel>) -> Self {
         let safe_hash = [0u8; 32];
         let head_hash = [0u8; 32];
         let finalized_hash = [0u8; 32];
@@ -66,7 +66,7 @@ impl TestConsensusLayer {
                     |txn| {
                         let execution = self.execution_api.clone();
                         tokio::spawn(async move {
-                            let _ = execution.add_txn(txn).await;
+                            let _ = execution.send_user_txn(txn).await;
                         });
                     },
                 );

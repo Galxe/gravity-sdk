@@ -4,13 +4,13 @@ use async_trait::async_trait;
 
 use rand::Rng;
 
-use crate::{compute_res::ComputeRes, default_recover::DefaultRecovery, u256_define::{BlockId, TxnHash}, ExecError, ExecTxn, ExecutionApiV2, ExecutionLayer, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
+use crate::{compute_res::ComputeRes, default_recover::DefaultRecovery, u256_define::{BlockId, TxnHash}, ExecError, ExecTxn, ExecutionChannel, ExecutionLayer, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 
 pub struct MockExecutionApi {}
 
 #[async_trait]
-impl ExecutionApiV2 for MockExecutionApi {
-    async fn add_txn(&self, bytes: ExecTxn) -> Result<TxnHash, ExecError> {
+impl ExecutionChannel for MockExecutionApi {
+    async fn send_user_txn(&self, bytes: ExecTxn) -> Result<TxnHash, ExecError> {
         Ok(TxnHash::random())
     }
 
@@ -47,7 +47,7 @@ impl ExecutionApiV2 for MockExecutionApi {
         Ok(ComputeRes::new(random_bytes, 0))
     }
 
-    async fn commit_block(&self, head: BlockId) -> Result<(), ExecError> {
+    async fn send_committed_block_info(&self, head: BlockId) -> Result<(), ExecError> {
         Ok(())
     }
 }

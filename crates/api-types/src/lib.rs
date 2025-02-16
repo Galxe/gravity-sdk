@@ -70,14 +70,14 @@ pub struct VerifiedTxnWithAccountSeqNum {
 }
 
 #[async_trait]
-pub trait ExecutionApiV2: Send + Sync {
+pub trait ExecutionChannel: Send + Sync {
     ///
     /// # Returns
     /// A `Vec` containing tuples, where each tuple consists of:
     /// - `TxnHash`: The committed hash for the newly added txn
     /// - `sender_latest_committed_sequence_number`: The latest committed sequence number associated with the sender on the execution layer.
     ///
-    async fn add_txn(&self, bytes: ExecTxn) -> Result<TxnHash, ExecError>;
+    async fn send_user_txn(&self, bytes: ExecTxn) -> Result<TxnHash, ExecError>;
 
     async fn recv_unbroadcasted_txn(&self) -> Result<Vec<VerifiedTxn>, ExecError>;
 
@@ -109,7 +109,7 @@ pub trait ExecutionApiV2: Send + Sync {
     ) -> Result<ComputeRes, ExecError>;
 
     // this function is called by the execution layer commit the block hash
-    async fn commit_block(&self, block_id: BlockId) -> Result<(), ExecError>;
+    async fn send_committed_block_info(&self, block_id: BlockId) -> Result<(), ExecError>;
 }
 
 #[derive(Debug)]
@@ -137,7 +137,7 @@ pub trait RecoveryApi: Send + Sync {
 
 #[derive(Clone)]
 pub struct ExecutionLayer {
-    pub execution_api: Arc<dyn ExecutionApiV2>,
+    pub execution_api: Arc<dyn ExecutionChannel>,
     pub recovery_api: Arc<dyn RecoveryApi>,
 }
 

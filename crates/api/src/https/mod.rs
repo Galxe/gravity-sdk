@@ -2,7 +2,7 @@ mod set_failpoints;
 mod tx;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
-use api_types::ExecutionApiV2;
+use api_types::ExecutionChannel;
 use aptos_crypto::HashValue;
 use aptos_logger::info;
 use axum::{
@@ -20,7 +20,7 @@ use tx::{get_tx_by_hash, submit_tx, TxRequest};
 
 pub struct HttpsServerArgs {
     pub address: String,
-    pub execution_api: Arc<dyn ExecutionApiV2>,
+    pub execution_api: Arc<dyn ExecutionChannel>,
     pub cert_pem: PathBuf,
     pub key_pem: PathBuf,
 }

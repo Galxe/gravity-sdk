@@ -163,7 +163,7 @@ impl MockSharedMempool {
             let mut pool = self.mempool.lock();
             for txn in txns {
                 if pool
-                    .add_txn(
+                    .send_user_txn(
                         (&txn).into(),
                         0,
                         TimelineState::NotReady,

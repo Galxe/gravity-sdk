@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::network::{build_network_interfaces, consensus_network_configuration, extract_network_ids, mempool_network_configuration};
-use api_types::ExecutionApiV2;
+use api_types::ExecutionChannel;
 use aptos_config::{
     config::{NetworkConfig, NodeConfig, Peer, PeerRole},
     network_id::NetworkId,
@@ -130,7 +130,7 @@ pub fn init_mempool(
     consensus_to_mempool_receiver: Receiver<QuorumStoreRequest>,
     mempool_listener: MempoolNotificationListener,
     peers_and_metadata: Arc<PeersAndMetadata>,
-    execution_api: Arc<dyn ExecutionApiV2>,
+    execution_api: Arc<dyn ExecutionChannel>,
 ) -> Vec<Runtime> {
     let mempool_reconfig_subscription = event_subscription_service
         .subscribe_to_reconfigurations()

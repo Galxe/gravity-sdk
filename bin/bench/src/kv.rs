@@ -4,7 +4,7 @@ use crate::txn::RawTxn;
 use api_types::compute_res::ComputeRes;
 use api_types::u256_define::TxnHash;
 use api_types::{
-    u256_define::BlockId, ExecError, ExecTxn, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum
+    u256_define::BlockId, ExecError, ExecTxn, ExecutionChannel, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum
 };
 use async_trait::async_trait;
 use log::info;
@@ -87,8 +87,8 @@ impl KvStore {
 }
 
 #[async_trait]
-impl ExecutionApiV2 for KvStore {
-    async fn add_txn(&self, txn: ExecTxn) -> Result<TxnHash, ExecError> {
+impl ExecutionChannel for KvStore {
+    async fn send_user_txn(&self, txn: ExecTxn) -> Result<TxnHash, ExecError> {
         match txn {
             ExecTxn::RawTxn(bytes) => self.mempool.add_raw_txn(bytes).await,
             ExecTxn::VerifiedTxn(verified_txn) => self.mempool.add_verified_txn(verified_txn).await,
@@ -170,7 +170,7 @@ impl ExecutionApiV2 for KvStore {
         }
     }
 
-    async fn commit_block(&self, head: BlockId) -> Result<(), ExecError> {
+    async fn send_committed_block_info(&self, head: BlockId) -> Result<(), ExecError> {
         let mut guard = self.not_empty_sets.lock().await;
         if guard.contains(&head) {
             info!("enter one execute");

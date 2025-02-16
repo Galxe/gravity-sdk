@@ -270,7 +270,7 @@ async fn process_received_txns<NetworkClient>(
     NetworkClient: NetworkClientInterface<MempoolSyncMsg> + 'static,
 {
     for (txn, _, _) in transactions {
-        let _r = smp.execution_api.as_ref().add_txn(
+        let _r = smp.execution_api.as_ref().send_user_txn(
             ExecTxn::VerifiedTxn(txn)
         ).await;
         info!("add_txn result is {:?}", _r);

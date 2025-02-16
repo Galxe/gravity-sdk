@@ -345,7 +345,7 @@ impl BlockStore {
                     .as_ref()
                     .unwrap()
                     .execution_api
-                    .commit_block(BlockId(*p_block.block().id()))
+                    .send_committed_block_info(BlockId(*p_block.block().id()))
                     .await
                 {
                     Ok(_) => {}

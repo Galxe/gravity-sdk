@@ -9,7 +9,7 @@ use crate::{
     shared_mempool::use_case_history::UseCaseHistory,
 };
 use anyhow::Result;
-use api_types::ExecutionApiV2;
+use api_types::ExecutionChannel;
 use aptos_config::{
     config::{MempoolConfig, NodeType},
     network_id::PeerNetworkId,
@@ -55,7 +55,7 @@ pub(crate) struct SharedMempool<NetworkClient> {
     pub subscribers: Vec<UnboundedSender<SharedMempoolNotification>>,
     pub broadcast_within_validator_network: Arc<RwLock<bool>>,
     pub use_case_history: Arc<Mutex<UseCaseHistory>>,
-    pub execution_api: Arc<dyn ExecutionApiV2>,
+    pub execution_api: Arc<dyn ExecutionChannel>,
 }
 
 impl<
@@ -69,7 +69,7 @@ impl<
         db: Arc<dyn DbReader>,
         subscribers: Vec<UnboundedSender<SharedMempoolNotification>>,
         node_type: NodeType,
-        execution_api: Arc<dyn ExecutionApiV2>
+        execution_api: Arc<dyn ExecutionChannel>
     ) -> Self {
         let network_interface =
             MempoolNetworkInterface::new(network_client, node_type, config.clone());

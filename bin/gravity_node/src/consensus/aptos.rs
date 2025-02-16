@@ -1,13 +1,13 @@
 use api::{consensus_api::ConsensusEngine, NodeConfig};
 use api_types::compute_res::ComputeRes;
-use api_types::{ConsensusApi, ExecutionApiV2, ExecutionLayer};
+use api_types::{ConsensusApi, ExecutionChannel, ExecutionLayer};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::reth_coordinator::RethCoordinator;
 pub struct AptosConsensus {
     /// The execution client for interacting with the execution layer
-    execution_client: Arc<dyn ExecutionApiV2>,
+    execution_client: Arc<dyn ExecutionChannel>,
     /// The consensus engine
     consensus_engine: Arc<dyn ConsensusApi>,
 }

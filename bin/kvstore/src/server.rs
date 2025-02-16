@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use api_types::{account::ExternalAccountAddress, ExecTxn, ExecutionApiV2};
+use api_types::{account::ExternalAccountAddress, ExecTxn, ExecutionChannel};
 use log::warn;
 use rand::Rng;
 use tokio::{
@@ -40,7 +40,7 @@ impl Server {
         }
     }
 
-    pub async fn execution_client(&self) -> Arc<dyn ExecutionApiV2> {
+    pub async fn execution_client(&self) -> Arc<dyn ExecutionChannel> {
         self.kv_store.clone()
     }
 
@@ -63,7 +63,7 @@ impl Server {
                     let val = parts.next().unwrap_or("").to_string();
                     let raw_txn =
                         RawTxn { account: generate_random_address(), sequence_number: 1, key, val };
-                    match kv_store.add_txn(ExecTxn::RawTxn(raw_txn.to_bytes())).await {
+                    match kv_store.send_user_txn(ExecTxn::RawTxn(raw_txn.to_bytes())).await {
                         Ok(_) => reader.get_mut().write_all(b"OK\n").await?,
                         Err(_) => reader.get_mut().write_all(b"FAILED TO SET\n").await?,
                     }

@@ -117,7 +117,7 @@ pub(crate) fn add_txns_to_mempool(
     let mut transactions = vec![];
     for transaction in txns {
         let txn = transaction.make_signed_transaction();
-        pool.add_txn(
+        pool.send_user_txn(
             (&txn).into(),
             transaction.account_seqno,
             TimelineState::NotReady,
@@ -135,7 +135,7 @@ pub(crate) fn txn_bytes_len(transaction: TestTransaction) -> u64 {
     txn.txn_bytes_len() as u64
 }
 
-pub(crate) fn add_txn(
+pub(crate) fn send_user_txn(
     pool: &mut CoreMempool,
     transaction: TestTransaction,
 ) -> Result<SignedTransaction> {
@@ -146,7 +146,7 @@ pub(crate) fn add_txn(
 
 pub(crate) fn add_signed_txn(pool: &mut CoreMempool, transaction: SignedTransaction) -> Result<()> {
     match pool
-        .add_txn(
+        .send_user_txn(
             (&transaction).into(),
             0,
             TimelineState::NotReady,

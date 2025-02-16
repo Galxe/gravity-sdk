@@ -10,7 +10,7 @@ use crate::{
     },
     QuorumStoreRequest,
 };
-use api_types::ExecutionApiV2;
+use api_types::ExecutionChannel;
 use aptos_config::config::{NodeConfig, NodeType};
 use aptos_event_notifications::{DbBackedOnChainConfig, ReconfigNotificationListener};
 use aptos_infallible::Mutex;
@@ -44,7 +44,7 @@ pub(crate) fn start_shared_mempool<ConfigProvider>(
     db: Arc<dyn DbReader>,
     subscribers: Vec<UnboundedSender<SharedMempoolNotification>>,
     peers_and_metadata: Arc<PeersAndMetadata>,
-    execution_api: Arc<dyn ExecutionApiV2>,
+    execution_api: Arc<dyn ExecutionChannel>,
 ) where
     ConfigProvider: OnChainConfigProvider,
 {
@@ -83,7 +83,7 @@ pub(crate) fn start_shared_mempool<ConfigProvider>(
 
 async fn retrieve_from_execution_routine(
     mempool: Arc<Mutex<CoreMempool>>,
-    execution_api: Arc<dyn ExecutionApiV2>,
+    execution_api: Arc<dyn ExecutionChannel>,
 ) {
     info!("start retrieve_from_execution_routine");
     loop {
@@ -91,7 +91,7 @@ async fn retrieve_from_execution_routine(
             Ok(txns) => {
                 info!("the recv_pending_txns size is {:?}", txns.len());
                 txns.into_iter().for_each(|txn_with_number| {
-                    let r = mempool.lock().add_txn(
+                    let r = mempool.lock().send_user_txn(
                         txn_with_number.txn.into(),
                         txn_with_number.account_seq_num,
                         TimelineState::NotReady,
@@ -125,7 +125,7 @@ pub fn bootstrap(
     mempool_listener: MempoolNotificationListener,
     mempool_reconfig_events: ReconfigNotificationListener<DbBackedOnChainConfig>,
     peers_and_metadata: Arc<PeersAndMetadata>,
-    execution_api: Arc<dyn ExecutionApiV2>,
+    execution_api: Arc<dyn ExecutionChannel>,
 ) -> Vec<Runtime> {
     let runtime = aptos_runtimes::spawn_named_runtime("shared-mem".into(), None);
     let retrive_runtime = aptos_runtimes::spawn_named_runtime("retrive".into(), None);

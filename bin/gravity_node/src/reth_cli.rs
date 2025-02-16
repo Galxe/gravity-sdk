@@ -137,7 +137,7 @@ impl RethCli {
         Ok(block_hash)
     }
 
-    pub async fn commit_block(
+    pub async fn send_committed_block_info(
         &self,
         block_id: api_types::u256_define::BlockId,
         block_hash: B256,

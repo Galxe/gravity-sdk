@@ -70,7 +70,7 @@ fn test_transaction_metrics() {
     let (mut mempool, _) = setup_mempool();
 
     let txn = TestTransaction::new(0, 0, 1).make_signed_transaction();
-    mempool.add_txn(
+    mempool.send_user_txn(
         (&txn).into(),
         0,
         TimelineState::NotReady,
@@ -79,7 +79,7 @@ fn test_transaction_metrics() {
         Some(BroadcastPeerPriority::Primary),
     );
     let txn = TestTransaction::new(1, 0, 1).make_signed_transaction();
-    mempool.add_txn(
+    mempool.send_user_txn(
         (&txn).into(),
         0,
         TimelineState::NonQualified,
@@ -88,7 +88,7 @@ fn test_transaction_metrics() {
         Some(BroadcastPeerPriority::Primary),
     );
     let txn = TestTransaction::new(2, 0, 1).make_signed_transaction();
-    mempool.add_txn(
+    mempool.send_user_txn(
         (&txn).into(),
         0,
         TimelineState::NotReady,
@@ -136,7 +136,7 @@ fn test_update_transaction_in_mempool() {
 fn test_ignore_same_transaction_submitted_to_mempool() {
     let (mut mempool, _) = setup_mempool();
     let _ = add_txns_to_mempool(&mut mempool, vec![TestTransaction::new(0, 0, 0)]);
-    let ret = add_txn(&mut mempool, TestTransaction::new(0, 0, 0));
+    let ret = send_user_txn(&mut mempool, TestTransaction::new(0, 0, 0));
     assert!(ret.is_err())
 }
 
@@ -285,11 +285,11 @@ fn test_commit_transaction() {
 //     config.mempool.system_transaction_timeout_secs = 0;
 //     let mut mempool = CoreMempool::new(&config);
 
-//     add_txn(&mut mempool, TestTransaction::new(0, 0, 10)).unwrap();
+//     send_user_txn(&mut mempool, TestTransaction::new(0, 0, 10)).unwrap();
 
 //     // Add new transaction. Should be valid for 10 seconds.
 //     let transaction = TestTransaction::new(1, 0, 1);
-//     add_txn(&mut mempool, transaction.clone()).unwrap();
+//     send_user_txn(&mut mempool, transaction.clone()).unwrap();
 
 //     let batch = mempool.get_batch(1, 1024, true, btreemap![]);
 //     assert_eq!(vec![transaction.make_signed_transaction()], batch);
@@ -709,7 +709,7 @@ fn test_capacity() {
     let mut pool = CoreMempool::new(&config);
 
     // Error on exceeding limit.
-    add_txn(&mut pool, TestTransaction::new(1, 0, 1)).unwrap();
+    send_user_txn(&mut pool, TestTransaction::new(1, 0, 1)).unwrap();
     assert!(add_txn(&mut pool, TestTransaction::new(1, 1, 1)).is_err());
 
     // Commit transaction and free space.
@@ -758,7 +758,7 @@ fn test_capacity() {
 
 //     for _i in 0..2 {
 //         txns.clone().into_iter().for_each(|txn| {
-//             let status = pool.add_txn(
+//             let status = pool.send_user_txn(
 //                 txn.txn,
 //                 txn.ranking_score,
 //                 txn.sequence_info.account_sequence_number,
@@ -771,7 +771,7 @@ fn test_capacity() {
 //         });
 
 //         if let Some(txn) = last_txn.clone() {
-//             let status = pool.add_txn(
+//             let status = pool.send_user_txn(
 //                 txn.txn,
 //                 txn.ranking_score,
 //                 txn.sequence_info.account_sequence_number,
@@ -808,11 +808,11 @@ fn test_parking_lot_eviction() {
     let mut pool = CoreMempool::new(&config);
     // Add transactions with the following sequence numbers to Mempool.
     for seq in &[0, 1, 2, 9, 10] {
-        add_txn(&mut pool, TestTransaction::new(1, *seq, 1)).unwrap();
+        send_user_txn(&mut pool, TestTransaction::new(1, *seq, 1)).unwrap();
     }
     // Mempool is full. Insert few txns for other account.
     for seq in &[0, 1] {
-        add_txn(&mut pool, TestTransaction::new(0, *seq, 1)).unwrap();
+        send_user_txn(&mut pool, TestTransaction::new(0, *seq, 1)).unwrap();
     }
     // Make sure that we have correct txns in Mempool.
     let mut txns: Vec<_> = pool
@@ -834,13 +834,13 @@ fn test_parking_lot_evict_only_for_ready_txn_insertion() {
     let mut pool = CoreMempool::new(&config);
     // Add transactions with the following sequence numbers to Mempool.
     for seq in &[0, 1, 2, 9, 10, 11] {
-        add_txn(&mut pool, TestTransaction::new(1, *seq, 1)).unwrap();
+        send_user_txn(&mut pool, TestTransaction::new(1, *seq, 1)).unwrap();
     }
 
     // Try inserting for ready txs.
     let ready_seq_nums = vec![3, 4];
     for seq in ready_seq_nums {
-        add_txn(&mut pool, TestTransaction::new(1, seq, 1)).unwrap();
+        send_user_txn(&mut pool, TestTransaction::new(1, seq, 1)).unwrap();
     }
 
     // Make sure that we have correct txns in Mempool.
@@ -862,13 +862,13 @@ fn test_parking_lot_evict_only_for_ready_txn_insertion() {
 #[test]
 fn test_gc_ready_transaction() {
     let mut pool = setup_mempool().0;
-    add_txn(&mut pool, TestTransaction::new(1, 0, 1)).unwrap();
+    send_user_txn(&mut pool, TestTransaction::new(1, 0, 1)).unwrap();
 
     // Insert in the middle transaction that's going to be expired.
     let txn = TestTransaction::new(1, 1, 1).make_signed_transaction_with_expiration_time(0);
     let sender_bucket = sender_bucket(&txn.sender(), MempoolConfig::default().num_sender_buckets);
 
-    pool.add_txn(
+    pool.send_user_txn(
         (&txn).into(),
         0,
         TimelineState::NotReady,
@@ -879,8 +879,8 @@ fn test_gc_ready_transaction() {
 
     // Insert few transactions after it.
     // They are supposed to be ready because there's a sequential path from 0 to them.
-    add_txn(&mut pool, TestTransaction::new(1, 2, 1)).unwrap();
-    add_txn(&mut pool, TestTransaction::new(1, 3, 1)).unwrap();
+    send_user_txn(&mut pool, TestTransaction::new(1, 2, 1)).unwrap();
+    send_user_txn(&mut pool, TestTransaction::new(1, 3, 1)).unwrap();
 
     // Check that all txns are ready.
     let (timeline, _) = pool.read_timeline(
@@ -907,7 +907,7 @@ fn test_gc_ready_transaction() {
     assert_eq!(timeline[0].0.sequence_number(), 0);
 
     // Resubmit txn 1
-    add_txn(&mut pool, TestTransaction::new(1, 1, 1)).unwrap();
+    send_user_txn(&mut pool, TestTransaction::new(1, 1, 1)).unwrap();
 
     // Make sure txns 2 and 3 can be broadcast after txn 1 is resubmitted
     let (timeline, _) = pool.read_timeline(
@@ -924,11 +924,11 @@ fn test_gc_ready_transaction() {
 fn test_clean_stuck_transactions() {
     let mut pool = setup_mempool().0;
     for seq in 0..5 {
-        add_txn(&mut pool, TestTransaction::new(0, seq, 1)).unwrap();
+        send_user_txn(&mut pool, TestTransaction::new(0, seq, 1)).unwrap();
     }
     let db_sequence_number = 10;
     let txn = TestTransaction::new(0, db_sequence_number, 1).make_signed_transaction();
-    pool.add_txn(
+    pool.send_user_txn(
         (&txn).into(),
         db_sequence_number,
         TimelineState::NotReady,
@@ -946,7 +946,7 @@ fn test_get_transaction_by_hash() {
     let mut pool = setup_mempool().0;
     let db_sequence_number = 10;
     let txn = TestTransaction::new(0, db_sequence_number, 1).make_signed_transaction();
-    pool.add_txn(
+    pool.send_user_txn(
         (&txn).into(),
         db_sequence_number,
         TimelineState::NotReady,
@@ -967,7 +967,7 @@ fn test_get_transaction_by_hash_after_the_txn_is_updated() {
     let mut pool = setup_mempool().0;
     let db_sequence_number = 10;
     let txn = TestTransaction::new(0, db_sequence_number, 1).make_signed_transaction();
-    pool.add_txn(
+    pool.send_user_txn(
         (&txn).into(),
         db_sequence_number,
         TimelineState::NotReady,
@@ -979,7 +979,7 @@ fn test_get_transaction_by_hash_after_the_txn_is_updated() {
 
     // new txn with higher gas price
     let new_txn = TestTransaction::new(0, db_sequence_number, 100).make_signed_transaction();
-    pool.add_txn(
+    pool.send_user_txn(
         (&new_txn).into(),
         db_sequence_number,
         TimelineState::NotReady,
@@ -1003,7 +1003,7 @@ fn test_bytes_limit() {
     let mut pool = CoreMempool::new(&config);
     // add 100 transacionts
     for seq in 0..100 {
-        add_txn(&mut pool, TestTransaction::new(1, seq, 1)).unwrap();
+        send_user_txn(&mut pool, TestTransaction::new(1, seq, 1)).unwrap();
     }
     let get_all = pool.get_batch(100, 100 * 1024, true, btreemap![]);
     assert_eq!(get_all.len(), 100);
@@ -1025,9 +1025,9 @@ fn test_transaction_store_remove_account_if_empty() {
 
     assert_eq!(pool.get_transaction_store().get_transactions().len(), 0);
 
-    add_txn(&mut pool, TestTransaction::new(1, 0, 1)).unwrap();
-    add_txn(&mut pool, TestTransaction::new(1, 1, 1)).unwrap();
-    add_txn(&mut pool, TestTransaction::new(2, 0, 1)).unwrap();
+    send_user_txn(&mut pool, TestTransaction::new(1, 0, 1)).unwrap();
+    send_user_txn(&mut pool, TestTransaction::new(1, 1, 1)).unwrap();
+    send_user_txn(&mut pool, TestTransaction::new(2, 0, 1)).unwrap();
     assert_eq!(pool.get_transaction_store().get_transactions().len(), 2);
 
     pool.commit_transaction(&TestTransaction::get_address(1), 0);
@@ -1055,10 +1055,10 @@ fn test_sequence_number_behavior_at_capacity() {
     config.mempool.capacity = 2;
     let mut pool = CoreMempool::new(&config);
 
-    add_txn(&mut pool, TestTransaction::new(0, 0, 1)).unwrap();
-    add_txn(&mut pool, TestTransaction::new(1, 0, 1)).unwrap();
+    send_user_txn(&mut pool, TestTransaction::new(0, 0, 1)).unwrap();
+    send_user_txn(&mut pool, TestTransaction::new(1, 0, 1)).unwrap();
     pool.commit_transaction(&TestTransaction::get_address(1), 0);
-    add_txn(&mut pool, TestTransaction::new(2, 0, 1)).unwrap();
+    send_user_txn(&mut pool, TestTransaction::new(2, 0, 1)).unwrap();
     pool.commit_transaction(&TestTransaction::get_address(2), 0);
 
     let batch = pool.get_batch(10, 10240, true, btreemap![]);
@@ -1074,8 +1074,8 @@ fn test_not_return_non_full() {
     let txn_1 = TestTransaction::new(0, 1, 1);
     let txn_num = 2;
     let txn_bytes = txn_bytes_len(txn_0.clone()) + txn_bytes_len(txn_1.clone());
-    add_txn(&mut pool, txn_0).unwrap();
-    add_txn(&mut pool, txn_1).unwrap();
+    send_user_txn(&mut pool, txn_0).unwrap();
+    send_user_txn(&mut pool, txn_1).unwrap();
 
     // doesn't hit any limits
     let batch = pool.get_batch(10, 10240, true, btreemap![]);
@@ -1133,7 +1133,7 @@ fn test_include_gas_upgraded() {
     let address_index = 0;
 
     let low_gas_price = 1;
-    let low_gas_signed_txn = add_txn(
+    let low_gas_signed_txn = send_user_txn(
         &mut pool,
         TestTransaction::new(address_index, sequence_number, low_gas_price),
     )
@@ -1150,7 +1150,7 @@ fn test_include_gas_upgraded() {
     assert_eq!(batch.len(), 0);
 
     let high_gas_price = 100;
-    let high_gas_signed_txn = add_txn(
+    let high_gas_signed_txn = send_user_txn(
         &mut pool,
         TestTransaction::new(address_index, sequence_number, high_gas_price),
     )

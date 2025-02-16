@@ -377,7 +377,7 @@ impl Node {
         let mut mempool = self.mempool();
         for txn in txns {
             let transaction = txn.make_signed_transaction_with_max_gas_amount(5);
-            mempool.add_txn(
+            mempool.send_user_txn(
                 (&transaction).into(),
                 0,
                 TimelineState::NotReady,

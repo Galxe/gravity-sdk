@@ -7,7 +7,7 @@ use crate::reth_cli::RethCli;
 use api_types::compute_res::ComputeRes;
 use api_types::u256_define::TxnHash;
 use api_types::{
-    u256_define::BlockId, ExecError, ExecTxn, ExecutionApiV2,
+    u256_define::BlockId, ExecError, ExecTxn, ExecutionChannel,
     ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn,
     VerifiedTxnWithAccountSeqNum,
 };
@@ -65,8 +65,8 @@ impl RethCoordinator {
 }
 
 #[async_trait]
-impl ExecutionApiV2 for RethCoordinator {
-    async fn add_txn(&self, _bytes: ExecTxn) -> Result<TxnHash, ExecError> {
+impl ExecutionChannel for RethCoordinator {
+    async fn send_user_txn(&self, _bytes: ExecTxn) -> Result<TxnHash, ExecError> {
         panic!("Reth Coordinator does not support add_txn");
     }
 
@@ -149,10 +149,10 @@ impl ExecutionApiV2 for RethCoordinator {
         Ok(ComputeRes::new(block_hash.unwrap().into(), block_number.unwrap()))
     }
 
-    async fn commit_block(&self, block_id: BlockId) -> Result<(), ExecError> {
+    async fn send_committed_block_info(&self, block_id: BlockId) -> Result<(), ExecError> {
         debug!("commit_block with block_id: {:?}", block_id);
         let block_hash = { self.state.lock().await.get_block_hash(block_id).unwrap() };
-        self.reth_cli.commit_block(block_id, block_hash.into()).await.unwrap();
+        self.reth_cli.send_committed_block_info(block_id, block_hash.into()).await.unwrap();
         debug!("commit_block done");
         Ok(())
     }

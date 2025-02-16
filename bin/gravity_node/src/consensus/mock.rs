@@ -6,7 +6,7 @@ use std::{
 
 use super::mempool::Mempool;
 use api_types::{
-    u256_define::BlockId, ExecutionApiV2, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr,
+    u256_define::BlockId, ExecutionChannel, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr,
     VerifiedTxn,
 };
 
@@ -14,7 +14,7 @@ use greth::reth_primitives::B256;
 use tracing::debug;
 
 pub struct MockConsensus {
-    exec_api: Arc<dyn ExecutionApiV2>,
+    exec_api: Arc<dyn ExecutionChannel>,
     parent_meta: ExternalBlockMeta,
     pending_txns: Mempool,
     block_number_water_mark: u64,
@@ -22,7 +22,7 @@ pub struct MockConsensus {
 }
 
 impl MockConsensus {
-    pub fn new(exec_api: Arc<dyn ExecutionApiV2>, gensis: B256) -> Self {
+    pub fn new(exec_api: Arc<dyn ExecutionChannel>, gensis: B256) -> Self {
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(gensis.as_slice());
         let parent_meta = ExternalBlockMeta {
@@ -119,7 +119,7 @@ impl MockConsensus {
                 for txn in commit_txns {
                     self.pending_txns.commit(&txn.sender, txn.sequence_number);
                 }
-                self.exec_api.commit_block(head.block_id.clone()).await.unwrap();
+                self.exec_api.send_committed_block_info(head.block_id.clone()).await.unwrap();
                 self.parent_meta = head;
             }
         }

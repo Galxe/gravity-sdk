@@ -230,7 +230,7 @@ impl ConsensusApi for ConsensusEngine {
     }
 
     async fn commit_block_hash(&self, head: [u8; 32]) {
-        match self.execution_layer.execution_api.commit_block(BlockId(head)).await {
+        match self.execution_layer.execution_api.send_committed_block_info(BlockId(head)).await {
             Ok(_) => {}
             Err(_) => panic!("commit_block_hash should not fail"),
         }
