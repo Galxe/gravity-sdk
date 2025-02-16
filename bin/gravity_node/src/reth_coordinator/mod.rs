@@ -13,10 +13,11 @@ use api_types::{
 };
 use api_types::{ExecutionBlocks, RecoveryApi, RecoveryError};
 use async_trait::async_trait;
+use greth::reth_pipe_exec_layer_ext_v2::ExecutionArgs;
 use greth::reth_primitives::B256;
 use state::State;
-use tokio::sync::mpsc;
 use tokio::sync::Mutex;
+use tokio::sync::{mpsc, oneshot};
 use tracing::debug;
 
 pub struct Buffer<T> {
@@ -46,16 +47,18 @@ pub struct RethCoordinator {
     state: Arc<Mutex<State>>,
     // todo(gravity_byteyue): Use one elegant way
     block_number_to_txn_in_block: Arc<Mutex<HashMap<u64, u64>>>,
+    execution_args_tx: Arc<Mutex<Option<oneshot::Sender<ExecutionArgs>>>>,
 }
 
 impl RethCoordinator {
-    pub fn new(reth_cli: RethCli) -> Self {
+    pub fn new(reth_cli: RethCli, execution_args_tx: oneshot::Sender<ExecutionArgs>) -> Self {
         let state = State::new();
         Self {
             reth_cli,
             pending_buffer: Arc::new(Mutex::new(Vec::new())),
             state: Arc::new(Mutex::new(state)),
             block_number_to_txn_in_block: Arc::new(Mutex::new(HashMap::new())),
+            execution_args_tx: Arc::new(Mutex::new(Some(execution_args_tx))),
         }
     }
 
@@ -160,6 +163,20 @@ impl ExecutionChannel for RethCoordinator {
 
 #[async_trait]
 impl RecoveryApi for RethCoordinator {
+    async fn register_execution_args(&self, args: api_types::ExecutionArgs) {
+        let mut guard = self.execution_args_tx.lock().await;
+        let execution_args_tx = guard.take();
+        if let Some(execution_args_tx) = execution_args_tx {
+            let block_number_to_block_id = args
+                .block_number_to_block_id
+                .into_iter()
+                .map(|(block_number, block_id)| (block_number, B256::new(*block_id)))
+                .collect();
+            let execution_args = ExecutionArgs { block_number_to_block_id };
+            execution_args_tx.send(execution_args).unwrap();
+        }
+    }
+
     async fn latest_block_number(&self) -> u64 {
         self.reth_cli.latest_block_number().await
     }
@@ -184,15 +201,5 @@ impl RecoveryApi for RethCoordinator {
         }
         self.state.lock().await.insert_new_block(block_id, block_hash);
         Ok(())
-    }
-
-    async fn recover_execution_blocks(&self, blocks: ExecutionBlocks) {}
-
-    async fn get_blocks_by_range(
-        &self,
-        start_block_number: u64,
-        end_block_number: u64,
-    ) -> Result<ExecutionBlocks, RecoveryError> {
-        Ok(self.reth_cli.get_blocks_by_range(start_block_number, end_block_number))
     }
 }

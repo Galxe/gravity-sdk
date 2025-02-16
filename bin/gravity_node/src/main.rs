@@ -7,6 +7,7 @@ use greth::reth_node_builder;
 use greth::reth_node_core;
 use greth::reth_node_ethereum;
 use greth::reth_pipe_exec_layer_ext_v2;
+use greth::reth_pipe_exec_layer_ext_v2::ExecutionArgs;
 use greth::reth_primitives;
 use greth::reth_provider;
 use greth::reth_transaction_pool;
@@ -26,6 +27,7 @@ use reth_provider::BlockNumReader;
 use reth_provider::BlockReader;
 use reth_transaction_pool::TransactionPool;
 use tokio::sync::mpsc;
+use tokio::sync::oneshot;
 use tracing::debug;
 mod cli;
 mod consensus;
@@ -81,7 +83,7 @@ struct ConsensusArgs {
 fn run_reth(
     tx: mpsc::Sender<ConsensusArgs>,
     cli: Cli<DefaultChainSpecParser, EngineArgs>,
-    mut block_number_to_block_id: BTreeMap<u64, B256>,
+    execution_args_rx: oneshot::Receiver<ExecutionArgs>,
 ) {
     reth_cli_util::sigsegv_handler::install();
 
@@ -135,22 +137,18 @@ fn run_reth(
                     reth_transaction_pool::blobstore::DiskFileBlobStore,
                 > = handle.node.pool;
 
-                if block_number_to_block_id.is_empty() {
-                    let genesis_id = B256::new(consensus_gensis);
-                    debug!("genesis_id: {:?}", genesis_id);
-                    block_number_to_block_id.insert(0u64, genesis_id);
-                }
                 let storage = BlockViewStorage::new(
                     provider.clone(),
                     latest_block.number,
                     latest_block_hash,
-                    block_number_to_block_id,
+                    BTreeMap::new(),
                 );
                 let pipeline_api_v2 = reth_pipe_exec_layer_ext_v2::new_pipe_exec_layer_api(
                     chain_spec,
                     storage,
                     latest_block.header,
                     latest_block_hash,
+                    execution_args_rx,
                 );
                 let args = ConsensusArgs {
                     engine_api: engine_cli,
@@ -174,10 +172,7 @@ fn main() {
 
     let cli = Cli::<DefaultChainSpecParser, EngineArgs>::parse();
     let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
-    let block_number_to_block_id = AptosConsensus::get_data_from_consensus_db(&gcei_config)
-        .into_iter()
-        .map(|(number, id)| (number, B256::new(id.data)))
-        .collect();
+    let (execution_args_tx, execution_args_rx) = oneshot::channel();
     thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
@@ -185,7 +180,7 @@ fn main() {
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
                 let client = RethCli::new(args).await;
-                let coordinator = Arc::new(RethCoordinator::new(client));
+                let coordinator = Arc::new(RethCoordinator::new(client, execution_args_tx));
                 let cloned = coordinator.clone();
                 tokio::spawn(async move {
                     cloned.run().await;
@@ -197,5 +192,5 @@ fn main() {
             }
         });
     });
-    run_reth(tx, cli, block_number_to_block_id);
+    run_reth(tx, cli, execution_args_rx);
 }

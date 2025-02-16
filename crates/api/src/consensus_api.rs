@@ -56,19 +56,6 @@ fn fail_point_check(node_config: &NodeConfig) {
 }
 
 impl ConsensusEngine {
-    pub fn get_data_from_consensus_db(node_config: &NodeConfig) -> BTreeMap<u64, ComputeRes> {
-        let mut res = BTreeMap::new();
-        let consensus_db =
-            Arc::new(ConsensusDB::new(node_config.storage.dir(), &node_config.node_config_path));
-        let ledger_infos = consensus_db.get_latest_ledger_infos();
-        for ledger_info in ledger_infos {
-            res.insert(
-                ledger_info.ledger_info().block_number(),
-                ComputeRes::new(*ledger_info.ledger_info().consensus_block_id(), 0),
-            );
-        }
-        res
-    }
 
     pub fn init(
         node_config: NodeConfig,

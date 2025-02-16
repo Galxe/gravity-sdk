@@ -4,21 +4,23 @@
 
 use crate::{consensusdb::ConsensusDB, epoch_manager::LivenessStorageData, error::DbError};
 use anyhow::{format_err, Result};
-use api_types::RecoveryApi;
+use api_types::{ExecutionArgs, RecoveryApi};
 use aptos_consensus_types::{
     block::Block, quorum_cert::QuorumCert, timeout_2chain::TwoChainTimeoutCertificate, vote::Vote,
     vote_data::VoteData, wrapped_ledger_info::WrappedLedgerInfo,
 };
-use aptos_crypto::{hash::ACCUMULATOR_PLACEHOLDER_HASH, HashValue};
+use aptos_crypto::{hash::{ACCUMULATOR_PLACEHOLDER_HASH, GENESIS_BLOCK_ID}, HashValue};
 use aptos_logger::prelude::*;
 use aptos_storage_interface::DbReader;
 use aptos_types::{
-    block_info::Round, epoch_change::EpochChangeProof, ledger_info::LedgerInfoWithSignatures, on_chain_config::ValidatorSet, proof::TransactionAccumulatorSummary, transaction::Version
+    block_info::Round, epoch_change::EpochChangeProof, ledger_info::LedgerInfoWithSignatures,
+    on_chain_config::ValidatorSet, proof::TransactionAccumulatorSummary, transaction::Version,
 };
 use async_trait::async_trait;
+use itertools::Itertools;
 use std::{
     cmp::max,
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     fmt::Debug,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -273,7 +275,7 @@ impl RecoveryData {
         info!("blocks in db: {:?}", blocks.len());
         info!("quorum certs in db: {:?}", quorum_certs.len());
         let root;
-        if !blocks.is_empty() && execution_latest_block_num != 0{
+        if !blocks.is_empty() && execution_latest_block_num != 0 {
             root = Self::find_root_by_block_number(
                 execution_latest_block_num,
                 &mut blocks,
@@ -281,7 +283,11 @@ impl RecoveryData {
                 order_vote_enabled,
             )?;
         } else {
-            root = ledger_recovery_data.find_root(&mut blocks, &mut quorum_certs, order_vote_enabled)?;
+            root = ledger_recovery_data.find_root(
+                &mut blocks,
+                &mut quorum_certs,
+                order_vote_enabled,
+            )?;
         }
         println!("root info: {:?}", root);
         let blocks_to_prune = Some(vec![]);
@@ -385,6 +391,24 @@ impl StorageWriteProxy {
         }
         self.next_block_number.store(max_block_number + 1, Ordering::SeqCst);
     }
+
+    async fn register_execution_args(&self, blocks: &Vec<Block>, latest_block_number: u64) {
+        let mut block_number_to_block_id: BTreeMap<u64, HashValue> = blocks
+            .iter()
+            .filter(|block| {
+                block.block_number().is_some()
+                    && block.block_number().unwrap() <= latest_block_number
+            })
+            .map(|block| (block.block_number().unwrap(), block.id()))
+            .sorted_by(|a, b| Ord::cmp(&b.0, &a.0))
+            .take(256)
+            .collect();
+        if latest_block_number == 0 {
+            block_number_to_block_id.insert(0u64, *GENESIS_BLOCK_ID);
+        }
+        let args = ExecutionArgs { block_number_to_block_id };
+        self.recovery_api.as_ref().unwrap().register_execution_args(args).await;
+    }
 }
 
 #[async_trait]
@@ -434,9 +458,10 @@ impl PersistentLivenessStorage for StorageWriteProxy {
         info!("The execution_latest_block_number is {}", latest_block_number);
         // only use when latest_block_number is zero
         let latest_ledger_info = LedgerInfoWithSignatures::genesis(
-                *ACCUMULATOR_PLACEHOLDER_HASH,
-                ValidatorSet::new(self.consensus_db().mock_validators()),
-            );
+            *ACCUMULATOR_PLACEHOLDER_HASH,
+            ValidatorSet::new(self.consensus_db().mock_validators()),
+        );
+        self.register_execution_args(&blocks, latest_block_number).await;
         let ledger_recovery_data = LedgerRecoveryData::new(latest_ledger_info);
         match RecoveryData::new(
             last_vote,

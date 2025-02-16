@@ -5,9 +5,11 @@ pub mod simple_hash;
 pub mod u256_define;
 pub mod compute_res;
 use crate::account::{ExternalAccountAddress, ExternalChainId};
+use aptos_crypto::HashValue;
 use async_trait::async_trait;
 use compute_res::ComputeRes;
 use core::str;
+use std::collections::BTreeMap;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
@@ -120,19 +122,17 @@ pub enum RecoveryError {
 
 #[async_trait]
 pub trait RecoveryApi: Send + Sync {
+    async fn register_execution_args(&self, args: ExecutionArgs);
+
     async fn latest_block_number(&self) -> u64;
 
     async fn finalized_block_number(&self) -> u64;
 
     async fn recover_ordered_block(&self, parent_id: BlockId, block: ExternalBlock) -> Result<(), ExecError>;
+}
 
-    async fn recover_execution_blocks(&self, blocks: ExecutionBlocks);
-
-    async fn get_blocks_by_range(
-        &self,
-        start_block_number: u64,
-        end_block_number: u64,
-    ) -> Result<ExecutionBlocks, RecoveryError>;
+pub struct ExecutionArgs {
+    pub block_number_to_block_id: BTreeMap<u64, HashValue>,
 }
 
 #[derive(Clone)]

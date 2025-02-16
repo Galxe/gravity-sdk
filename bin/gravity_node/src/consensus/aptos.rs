@@ -13,9 +13,6 @@ pub struct AptosConsensus {
 }
 
 impl AptosConsensus {
-    pub fn get_data_from_consensus_db(node_config: &NodeConfig) -> BTreeMap<u64, ComputeRes> {
-        ConsensusEngine::get_data_from_consensus_db(node_config)
-    }
 
     pub fn init(node_config: NodeConfig, execution_client: Arc<RethCoordinator>) {
         let execution_layer = ExecutionLayer {
