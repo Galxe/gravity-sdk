@@ -79,7 +79,7 @@ Here’s how to use the `Makefile` to compile the binaries:
 #### Prerequisites
 - Ensure that you have [Rust](https://www.rust-lang.org/learn/get-started) installed, as it is required for building the project.
 - The `Makefile` controls the build process for the following binaries:
-  - `peth`
+  - `gravity_node`
   - `bench`
   - `kvstore`
 
@@ -102,7 +102,7 @@ Here’s how to use the `Makefile` to compile the binaries:
    make
    ```
 
-   This will compile the binary specified in the `BINARY` variable, which defaults to `peth`. To build another binary (e.g., `bench` or `kvstore`), set the `BINARY` variable as follows:
+   This will compile the binary specified in the `BINARY` variable, which defaults to `gravity_node`. To build another binary (e.g., `bench` or `kvstore`), set the `BINARY` variable as follows:
 
    ```bash
    make BINARY=bench

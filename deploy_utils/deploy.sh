@@ -19,7 +19,7 @@ declare -A VALID_MODES=(
 )
 
 # Default settings
-bin_name="peth"
+bin_name="gravity_node"
 node_arg=""
 bin_version="release"
 mode="cluster"
@@ -43,7 +43,7 @@ show_help() {
     echo "Usage: $0 [options]"
     echo
     echo "Options:"
-    echo "  -b, --bin_name NAME     Specify binary name (default: peth)"
+    echo "  -b, --bin_name NAME     Specify binary name (default: gravity_node)"
     echo "  -n, --node NODE         Specify node name (required)"
     echo "  -v, --bin_version VER   Specify version:"
     for ver in "${!VALID_VERSIONS[@]}"; do

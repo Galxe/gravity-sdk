@@ -60,7 +60,7 @@ else
 fi
 
 if [ "$action" == "deploy" ]; then
-    echo "Starting peth on nodes=$node..."
+    echo "Starting gravity_node on nodes=$node..."
     ansible-playbook -i inventory.ini reth_start.yml --limit "$node"
 
     if [ $? -eq 0 ]; then
