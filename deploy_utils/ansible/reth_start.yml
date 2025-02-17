@@ -4,7 +4,7 @@
   tasks:
     - name: Start Reth service using script
       shell: |
-        {{ reth_env }} bash start.sh --node {{ reth_node_id }}
+        {{ reth_env }} bash start.sh
       args:
         chdir: "/tmp/{{ reth_node_id }}/script"
       async: 30
