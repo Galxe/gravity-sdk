@@ -209,9 +209,9 @@ impl ConsensusApi for ConsensusEngine {
 
     async fn recv_executed_block_hash(&self, head: ExternalBlockMeta) -> ComputeRes {
         info!("recv_executed_block_hash");
-        let res = match self.execution_layer.execution_api.recv_executed_block_hash(head).await {
+        let res = match self.execution_layer.execution_api.recv_executed_block_hash(head.clone()).await {
             Ok(r) => r,
-            Err(_) => panic!("send_ordered_block should not fail"),
+            Err(e) => panic!("{}", format!("send_ordered_block should not fail {:?}, head {:?}", e, head)),
         };
         res
     }

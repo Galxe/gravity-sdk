@@ -19,9 +19,6 @@ struct TestConsensusLayer {
 
 impl TestConsensusLayer {
     fn new(node_config: NodeConfig, execution_client: Arc<dyn ExecutionChannel>) -> Self {
-        let safe_hash = [0u8; 32];
-        let head_hash = [0u8; 32];
-        let finalized_hash = [0u8; 32];
         let execution_layer = ExecutionLayer {
             execution_api: execution_client,
             recovery_api: Arc::new(DefaultRecovery{}),

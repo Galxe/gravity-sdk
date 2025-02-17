@@ -1,0 +1,31 @@
+[package]
+name = "pipeline_blockchain"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+futures.workspace = true
+bincode = "1.3"
+blake3 = "1.3"
+hex = "0.4"
+sha3 = "0.10"
+secp256k1 = { version = "0.27", features = ["rand-std", "recovery"] }
+sled = "0.34"
+rand = "0.8"
+tracing = "0.1"
+flexi_logger = "0.23"
+log = "0.4"
+api.workspace = true
+poem.workspace = true
+poem-openapi.workspace = true
+poem-openapi-derive.workspace = true
+thiserror.workspace = true
+api-types.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+async-trait = { workspace = true }
+clap = { version = "4.3.9", features = ["derive", "env", "unstable-styles"] }
+clap-verbosity-flag = "2.1.1"
+clap_complete = "4.4.1"
+clap_derive = "4.5.18"
