@@ -27,6 +27,7 @@ use aptos_bounded_executor::BoundedExecutor;
 use aptos_config::config::ConsensusObserverConfig;
 use aptos_consensus_types::{
     common::{Author, Round},
+    pipeline::commit_vote::CommitVote,
     pipelined_block::PipelinedBlock,
 };
 use aptos_crypto::HashValue;
@@ -49,9 +50,12 @@ use futures::{
     FutureExt, SinkExt, StreamExt,
 };
 use once_cell::sync::OnceCell;
-use std::sync::{
-    atomic::{AtomicBool, AtomicU64, Ordering},
-    Arc,
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc,
+    },
 };
 use tokio::time::{Duration, Instant};
 use tokio_retry::strategy::ExponentialBackoff;
@@ -81,10 +85,7 @@ pub struct OrderedBlocks {
 
 impl OrderedBlocks {
     pub fn latest_round(&self) -> Round {
-        self.ordered_blocks
-            .last()
-            .expect("OrderedBlocks empty.")
-            .round()
+        self.ordered_blocks.last().expect("OrderedBlocks empty.").round()
     }
 }
 
@@ -157,6 +158,9 @@ pub struct BufferManager {
     // Consensus publisher for downstream observers.
     consensus_observer_config: ConsensusObserverConfig,
     consensus_publisher: Option<Arc<ConsensusPublisher>>,
+
+    executed_block_counter: u64,
+    commit_vote_cache: HashMap<HashValue, HashMap<HashValue, CommitVote>>,
 }
 
 impl BufferManager {
@@ -189,9 +193,8 @@ impl BufferManager {
     ) -> Self {
         let buffer = Buffer::<BufferItem>::new();
 
-        let rb_backoff_policy = ExponentialBackoff::from_millis(2)
-            .factor(50)
-            .max_delay(Duration::from_secs(5));
+        let rb_backoff_policy =
+            ExponentialBackoff::from_millis(2).factor(50).max_delay(Duration::from_secs(5));
 
         let (tx, rx) = unbounded();
 
@@ -246,6 +249,8 @@ impl BufferManager {
 
             consensus_observer_config,
             consensus_publisher,
+            executed_block_counter: 0,
+            commit_vote_cache: HashMap::new(),
         }
     }
 
@@ -259,11 +264,7 @@ impl BufferManager {
         let (abort_handle, abort_registration) = AbortHandle::new_pair();
         let task = self.reliable_broadcast.broadcast(
             message,
-            AckState::new(
-                self.epoch_state
-                    .verifier
-                    .get_ordered_account_addresses_iter(),
-            ),
+            AckState::new(self.epoch_state.verifier.get_ordered_account_addresses_iter()),
         );
         tokio::spawn(Abortable::new(task, abort_registration));
         Some(DropGuard::new(abort_handle))
@@ -281,21 +282,14 @@ impl BufferManager {
         counters::BUFFER_MANAGER_RETRY_COUNT.inc();
         spawn_named!("retry request", async move {
             tokio::time::sleep(duration).await;
-            sender
-                .send(request)
-                .await
-                .expect("Failed to send retry request");
+            sender.send(request).await.expect("Failed to send retry request");
         });
     }
 
     /// process incoming ordered blocks
     /// push them into the buffer and update the roots if they are none.
     async fn process_ordered_blocks(&mut self, ordered_blocks: OrderedBlocks) {
-        let OrderedBlocks {
-            ordered_blocks,
-            ordered_proof,
-            callback,
-        } = ordered_blocks;
+        let OrderedBlocks { ordered_blocks, ordered_proof, callback } = ordered_blocks;
 
         info!(
             "Receive ordered block {}, the queue size is {}",
@@ -328,19 +322,15 @@ impl BufferManager {
     /// Return Some(block_id) if the block needs to be scheduled for retry
     fn advance_execution_root(&mut self) -> Option<HashValue> {
         let cursor = self.execution_root;
-        self.execution_root = self
-            .buffer
-            .find_elem_from(cursor.or_else(|| *self.buffer.head_cursor()), |item| {
+        self.execution_root =
+            self.buffer.find_elem_from(cursor.or_else(|| *self.buffer.head_cursor()), |item| {
                 item.is_ordered()
             });
         if self.execution_root.is_some() && cursor == self.execution_root {
             // Schedule retry.
             self.execution_root
         } else {
-            info!(
-                "Advance execution root from {:?} to {:?}",
-                cursor, self.execution_root
-            );
+            info!("Advance execution root from {:?} to {:?}", cursor, self.execution_root);
             // Otherwise do nothing, because the execution wait phase is driven by the response of
             // the execution schedule phase, which is in turn fed as soon as the ordered blocks
             // come in.
@@ -352,15 +342,11 @@ impl BufferManager {
     /// Set to None if not exist
     async fn advance_signing_root(&mut self) {
         let cursor = self.signing_root;
-        self.signing_root = self
-            .buffer
-            .find_elem_from(cursor.or_else(|| *self.buffer.head_cursor()), |item| {
+        self.signing_root =
+            self.buffer.find_elem_from(cursor.or_else(|| *self.buffer.head_cursor()), |item| {
                 item.is_executed()
             });
-        info!(
-            "Advance signing root from {:?} to {:?}",
-            cursor, self.signing_root
-        );
+        info!("Advance signing root from {:?} to {:?}", cursor, self.signing_root);
         if self.signing_root.is_some() {
             let item = self.buffer.get(&self.signing_root);
             let executed_item = item.unwrap_executed_ref();
@@ -372,10 +358,7 @@ impl BufferManager {
                 let sender = self.signing_phase_tx.clone();
                 Self::spawn_retry_request(sender, request, Duration::from_millis(100));
             } else {
-                self.signing_phase_tx
-                    .send(request)
-                    .await
-                    .expect("Failed to send signing request");
+                self.signing_phase_tx.send(request).await.expect("Failed to send signing request");
             }
         }
     }
@@ -475,7 +458,7 @@ impl BufferManager {
             ResetSignal::TargetRound(round) => {
                 self.highest_committed_round = round;
                 self.latest_round = round;
-            },
+            }
         }
 
         self.reset().await;
@@ -509,10 +492,7 @@ impl BufferManager {
                 .expect("Failed to send execution schedule request.");
             cursor = self.buffer.get_next(&cursor);
         }
-        info!(
-            "Reschedule {} execution requests from {:?}",
-            count, self.execution_root
-        );
+        info!("Reschedule {} execution requests from {:?}", count, self.execution_root);
     }
 
     /// If the response is successful, advance the item to Executed, otherwise panic (TODO fix).
@@ -534,12 +514,9 @@ impl BufferManager {
                     block_id,
                 );
                 return;
-            },
+            }
         };
-        info!(
-            "Receive executed response {}",
-            executed_blocks.last().unwrap().block_info()
-        );
+        info!("Receive executed response {}", executed_blocks.last().unwrap().block_info());
         let current_item = self.buffer.get(&current_cursor);
 
         if current_item.block_id() != block_id {
@@ -583,25 +560,18 @@ impl BufferManager {
 
     /// If the signing response is successful, advance the item to Signed and broadcast commit votes.
     async fn process_signing_response(&mut self, response: SigningResponse) {
-        let SigningResponse {
-            signature_result,
-            commit_ledger_info,
-        } = response;
+        let SigningResponse { signature_result, commit_ledger_info } = response;
         let signature = match signature_result {
             Ok(sig) => sig,
             Err(e) => {
                 error!("Signing failed {:?}", e);
                 return;
-            },
+            }
         };
-        info!(
-            "Receive signing response {}",
-            commit_ledger_info.commit_info()
-        );
+        info!("Receive signing response {}", commit_ledger_info.commit_info());
         // find the corresponding item, may not exist if a reset or aggregated happened
-        let current_cursor = self
-            .buffer
-            .find_elem_by_key(self.signing_root, commit_ledger_info.commit_info().id());
+        let current_cursor =
+            self.buffer.find_elem_by_key(self.signing_root, commit_ledger_info.commit_info().id());
         if current_cursor.is_some() {
             let item = self.buffer.take(&current_cursor);
             // it is possible that we already signed this buffer item (double check after the final integration)
@@ -611,9 +581,8 @@ impl BufferManager {
                 let signed_item_mut = signed_item.unwrap_signed_mut();
                 let commit_vote = signed_item_mut.commit_vote.clone();
                 let commit_vote = CommitMessage::Vote(commit_vote);
-                signed_item_mut.rb_handle = self
-                    .do_reliable_broadcast(commit_vote)
-                    .map(|handle| (Instant::now(), handle));
+                signed_item_mut.rb_handle =
+                    self.do_reliable_broadcast(commit_vote).map(|handle| (Instant::now(), handle));
                 self.buffer.set(&current_cursor, signed_item);
             } else {
                 self.buffer.set(&current_cursor, item);
@@ -621,27 +590,45 @@ impl BufferManager {
         }
     }
 
+    fn add_signature_if_matched_from_cache(
+        &mut self,
+        item: &mut BufferItem,
+        target_block_id: &HashValue,
+    ) {
+        if let Some(cache) = self.commit_vote_cache.get(target_block_id) {
+            cache.iter().for_each(|(_, vote)| {
+                item.add_signature_if_matched(vote.clone());
+            });
+            self.commit_vote_cache.remove(target_block_id);
+        }
+    }
+
     /// process the commit vote messages
     /// it scans the whole buffer for a matching blockinfo
     /// if found, try advancing the item to be aggregated
     fn process_commit_message(&mut self, commit_msg: IncomingCommitRequest) -> Option<HashValue> {
-        let IncomingCommitRequest {
-            req,
-            protocol,
-            response_sender,
-        } = commit_msg;
+        let IncomingCommitRequest { req, protocol, response_sender } = commit_msg;
         match req {
             CommitMessage::Vote(vote) => {
                 // find the corresponding item
                 let author = vote.author();
                 let commit_info = vote.commit_info().clone();
                 info!("Receive commit vote {} from {}", commit_info, author);
+                if commit_info.round() > self.latest_round {
+                    if !self.commit_vote_cache.contains_key(&commit_info.id()) {
+                        self.commit_vote_cache.insert(commit_info.id(), HashMap::new());
+                    }
+                    self.commit_vote_cache
+                        .get_mut(&commit_info.id())
+                        .unwrap()
+                        .insert(HashValue::new(*author), vote.clone());
+                }
                 let target_block_id = vote.commit_info().id();
-                let current_cursor = self
-                    .buffer
-                    .find_elem_by_key(*self.buffer.head_cursor(), target_block_id);
+                let current_cursor =
+                    self.buffer.find_elem_by_key(*self.buffer.head_cursor(), target_block_id);
                 if current_cursor.is_some() {
                     let mut item = self.buffer.take(&current_cursor);
+                    self.add_signature_if_matched_from_cache(&mut item, &target_block_id);
                     let new_item = match item.add_signature_if_matched(vote) {
                         Ok(()) => {
                             let response =
@@ -650,7 +637,7 @@ impl BufferManager {
                                 let _ = response_sender.send(Ok(bytes.into()));
                             }
                             item.try_advance_to_aggregated(&self.epoch_state.verifier)
-                        },
+                        }
                         Err(e) => {
                             error!(
                                 error = ?e,
@@ -660,7 +647,7 @@ impl BufferManager {
                             );
                             reply_nack(protocol, response_sender);
                             item
-                        },
+                        }
                     };
                     self.buffer.set(&current_cursor, new_item);
                     if self.buffer.get(&current_cursor).is_aggregated() {
@@ -668,19 +655,13 @@ impl BufferManager {
                     } else {
                         return None;
                     }
-                } else {
-                    reply_nack(protocol, response_sender); // TODO: send_commit_vote() doesn't care about the response and this should be direct send not RPC
                 }
-            },
+            }
             CommitMessage::Decision(commit_proof) => {
                 let target_block_id = commit_proof.ledger_info().commit_info().id();
-                info!(
-                    "Receive commit decision {}",
-                    commit_proof.ledger_info().commit_info()
-                );
-                let cursor = self
-                    .buffer
-                    .find_elem_by_key(*self.buffer.head_cursor(), target_block_id);
+                info!("Receive commit decision {}", commit_proof.ledger_info().commit_info());
+                let cursor =
+                    self.buffer.find_elem_by_key(*self.buffer.head_cursor(), target_block_id);
                 if cursor.is_some() {
                     let item = self.buffer.take(&cursor);
                     let new_item = item.try_advance_to_aggregated_with_ledger_info(
@@ -698,14 +679,14 @@ impl BufferManager {
                     }
                 }
                 reply_nack(protocol, response_sender); // TODO: send_commit_proof() doesn't care about the response and this should be direct send not RPC
-            },
+            }
             CommitMessage::Ack(_) => {
                 // It should be filtered out by verify, so we log errors here
                 error!("Unexpected ack message");
-            },
+            }
             CommitMessage::Nack => {
                 error!("Unexpected NACK message");
-            },
+            }
         }
         None
     }
@@ -735,7 +716,7 @@ impl BufferManager {
                     Some((start_time, _)) => {
                         start_time.elapsed()
                             >= Duration::from_millis(COMMIT_VOTE_REBROADCAST_INTERVAL_MS)
-                    },
+                    }
                 };
                 if re_broadcast {
                     let commit_vote = CommitMessage::Vote(signed_item.commit_vote.clone());
@@ -764,16 +745,16 @@ impl BufferManager {
             match self.buffer.get(&cursor) {
                 BufferItem::Ordered(_) => {
                     pending_ordered += 1;
-                },
+                }
                 BufferItem::Executed(_) => {
                     pending_executed += 1;
-                },
+                }
                 BufferItem::Signed(_) => {
                     pending_signed += 1;
-                },
+                }
                 BufferItem::Aggregated(_) => {
                     pending_aggregated += 1;
-                },
+                }
             }
             cursor = self.buffer.get_next(&cursor);
         }
@@ -784,9 +765,7 @@ impl BufferManager {
         counters::NUM_BLOCKS_IN_PIPELINE
             .with_label_values(&["executed"])
             .set(pending_executed as i64);
-        counters::NUM_BLOCKS_IN_PIPELINE
-            .with_label_values(&["signed"])
-            .set(pending_signed as i64);
+        counters::NUM_BLOCKS_IN_PIPELINE.with_label_values(&["signed"]).set(pending_signed as i64);
         counters::NUM_BLOCKS_IN_PIPELINE
             .with_label_values(&["aggregated"])
             .set(pending_aggregated as i64);
@@ -794,8 +773,8 @@ impl BufferManager {
 
     fn need_backpressure(&self) -> bool {
         const MAX_BACKLOG: Round = 20;
-
-        self.highest_committed_round + MAX_BACKLOG < self.latest_round
+        // self.highest_committed_round + MAX_BACKLOG < self.latest_round
+        self.executed_block_counter > MAX_BACKLOG
     }
 
     pub async fn start(mut self) {
@@ -814,7 +793,7 @@ impl BufferManager {
                         match commit_msg.req.verify(&epoch_state_clone.verifier) {
                             Ok(_) => {
                                 let _ = tx.unbounded_send(commit_msg);
-                            },
+                            }
                             Err(e) => warn!("Invalid commit message: {}", e),
                         }
                     })
@@ -826,6 +805,7 @@ impl BufferManager {
             ::tokio::select! {
                 Some(blocks) = self.block_rx.next(), if !self.need_backpressure() => {
                     self.latest_round = blocks.latest_round();
+                    self.executed_block_counter += 1;
                     monitor!("buffer_manager_process_ordered", {
                     self.process_ordered_blocks(blocks).await;
                     if self.execution_root.is_none() {
@@ -871,6 +851,7 @@ impl BufferManager {
                 },
                 Some(Ok(round)) = self.persisting_phase_rx.next() => {
                     // see where `need_backpressure()` is called.
+                    self.executed_block_counter -= 1;
                     self.highest_committed_round = round
                 },
                 Some(rpc_request) = verified_commit_msg_rx.next() => {
