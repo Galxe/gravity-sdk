@@ -10,7 +10,7 @@ use api_types::{
     VerifiedTxn,
 };
 
-use greth::reth_primitives::B256;
+use alloy_primitives::B256;
 use tracing::debug;
 
 pub struct MockConsensus {

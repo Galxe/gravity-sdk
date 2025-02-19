@@ -6,15 +6,14 @@ use std::sync::Arc;
 use crate::reth_cli::RethCli;
 use api_types::compute_res::ComputeRes;
 use api_types::u256_define::TxnHash;
+use api_types::RecoveryApi;
 use api_types::{
-    u256_define::BlockId, ExecError, ExecTxn, ExecutionChannel,
-    ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn,
-    VerifiedTxnWithAccountSeqNum,
+    u256_define::BlockId, ExecError, ExecTxn, ExecutionChannel, ExternalBlock, ExternalBlockMeta,
+    ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
 };
-use api_types::{ExecutionBlocks, RecoveryApi, RecoveryError};
 use async_trait::async_trait;
 use greth::reth_pipe_exec_layer_ext_v2::ExecutionArgs;
-use greth::reth_primitives::B256;
+use alloy_primitives::B256;
 use state::State;
 use tokio::sync::Mutex;
 use tokio::sync::{mpsc, oneshot};
