@@ -1,11 +1,8 @@
-use std::sync::atomic::{AtomicU64, Ordering};
-
+use alloy_consensus::Transaction as _;
+use alloy_primitives::B256;
 use api_types::account::ExternalAccountAddress;
 use api_types::VerifiedTxn;
 use api_types::{u256_define::BlockId, ExternalPayloadAttr};
-use greth::reth::primitives::B256;
-use greth::reth_primitives::revm_primitives::bitvec::store::BitStore;
-use greth::reth_primitives::revm_primitives::bitvec::view::BitViewSized;
 use greth::reth_primitives::Transaction;
 use tracing::debug;
 pub struct BuildingState {

@@ -1,34 +1,32 @@
+use alloy_eips::BlockHashOrNumber;
+use alloy_primitives::TxHash;
 use greth::gravity_storage;
 use greth::reth;
+use greth::reth::chainspec::EthereumChainSpecParser;
 use greth::reth_cli_util;
 use greth::reth_db;
 use greth::reth_node_api;
 use greth::reth_node_builder;
-use greth::reth_node_core;
 use greth::reth_node_ethereum;
 use greth::reth_pipe_exec_layer_ext_v2;
 use greth::reth_pipe_exec_layer_ext_v2::ExecutionArgs;
-use greth::reth_primitives;
 use greth::reth_provider;
 use greth::reth_transaction_pool;
 
 use api::check_bootstrap_config;
 use consensus::aptos::AptosConsensus;
-use futures::StreamExt;
 use gravity_storage::block_view_storage::BlockViewStorage;
 use reth::rpc::builder::auth::AuthServerHandle;
 use reth_coordinator::RethCoordinator;
 use reth_db::DatabaseEnv;
 use reth_node_api::NodeTypesWithDBAdapter;
 use reth_pipe_exec_layer_ext_v2::PipeExecLayerApi;
-use reth_primitives::B256;
 use reth_provider::BlockHashReader;
 use reth_provider::BlockNumReader;
 use reth_provider::BlockReader;
 use reth_transaction_pool::TransactionPool;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
-use tracing::debug;
 use tracing::info;
 mod cli;
 mod consensus;
@@ -39,7 +37,6 @@ mod reth_coordinator;
 use crate::cli::Cli;
 use clap::Args;
 use std::collections::BTreeMap;
-use std::io::Read;
 use std::sync::Arc;
 use std::thread;
 /// Parameters for configuring the engine
@@ -55,9 +52,8 @@ use crate::reth_cli::RethCli;
 use clap::Parser;
 use reth_node_builder::engine_tree_config;
 use reth_node_builder::EngineNodeLauncher;
-use reth_node_core::args::utils::DefaultChainSpecParser;
 use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
-use reth_provider::providers::BlockchainProvider2;
+use reth_provider::providers::BlockchainProvider;
 
 const consensus_gensis: [u8; 32] = [
     141, 91, 216, 66, 168, 139, 218, 32, 132, 186, 161, 251, 250, 51, 34, 197, 38, 71, 196, 135,
@@ -67,12 +63,12 @@ const consensus_gensis: [u8; 32] = [
 struct ConsensusArgs {
     pub engine_api: AuthServerHandle,
     pub pipeline_api: PipeExecLayerApi,
-    pub provider: BlockchainProvider2<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
-    pub tx_listener: tokio::sync::mpsc::Receiver<reth::primitives::TxHash>,
+    pub provider: BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
+    pub tx_listener: tokio::sync::mpsc::Receiver<TxHash>,
     pub pool: reth_transaction_pool::Pool<
         reth_transaction_pool::TransactionValidationTaskExecutor<
             reth_transaction_pool::EthTransactionValidator<
-                BlockchainProvider2<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
+                BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
                 reth_transaction_pool::EthPooledTransaction,
             >,
         >,
@@ -83,7 +79,7 @@ struct ConsensusArgs {
 
 fn run_reth(
     tx: mpsc::Sender<(ConsensusArgs, u64)>,
-    cli: Cli<DefaultChainSpecParser, EngineArgs>,
+    cli: Cli<EthereumChainSpecParser, EngineArgs>,
     execution_args_rx: oneshot::Receiver<ExecutionArgs>,
 ) {
     reth_cli_util::sigsegv_handler::install();
@@ -97,9 +93,9 @@ fn run_reth(
             let tx = tx.clone();
             async move {
                 let handle = builder
-                    .with_types_and_provider::<EthereumNode, BlockchainProvider2<_>>()
+                    .with_types_and_provider::<EthereumNode, BlockchainProvider<_>>()
                     .with_components(EthereumNode::components())
-                    .with_add_ons::<EthereumAddOns>()
+                    .with_add_ons(EthereumAddOns::default())
                     .launch_with_fn(|builder| {
                         let launcher = EngineNodeLauncher::new(
                             builder.task_executor().clone(),
@@ -110,24 +106,23 @@ fn run_reth(
                     })
                     .await?;
                 let chain_spec = handle.node.chain_spec();
-                let pending_listener: tokio::sync::mpsc::Receiver<reth::primitives::TxHash> =
+                let pending_listener: tokio::sync::mpsc::Receiver<TxHash> =
                     handle.node.pool.pending_transactions_listener();
                 let engine_cli = handle.node.auth_server_handle().clone();
-                let provider: BlockchainProvider2<
+                let provider: BlockchainProvider<
                     reth_node_api::NodeTypesWithDBAdapter<EthereumNode, Arc<reth_db::DatabaseEnv>>,
                 > = handle.node.provider;
                 let latest_block_number = provider.last_block_number().unwrap();
                 info!("The latest_block_number is {}", latest_block_number);
-                let latest_block_hash =
-                    provider.block_hash(latest_block_number).unwrap().unwrap();
+                let latest_block_hash = provider.block_hash(latest_block_number).unwrap().unwrap();
                 let latest_block = provider
-                    .block(reth_primitives::BlockHashOrNumber::Number(latest_block_number))
+                    .block(BlockHashOrNumber::Number(latest_block_number))
                     .unwrap()
                     .unwrap();
                 let pool: reth_transaction_pool::Pool<
                     reth_transaction_pool::TransactionValidationTaskExecutor<
                         reth_transaction_pool::EthTransactionValidator<
-                            BlockchainProvider2<
+                            BlockchainProvider<
                                 NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>,
                             >,
                             reth_transaction_pool::EthPooledTransaction,
@@ -172,7 +167,7 @@ fn run_reth(
 fn main() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
 
-    let cli = Cli::<DefaultChainSpecParser, EngineArgs>::parse();
+    let cli = Cli::parse();
     let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
     let (execution_args_tx, execution_args_rx) = oneshot::channel();
     thread::spawn(move || {
@@ -183,7 +178,8 @@ fn main() {
 
                 let client = RethCli::new(args).await;
                 let chain_id = client.chain_id();
-                let coordinator = Arc::new(RethCoordinator::new(client, latest_block_number, execution_args_tx));
+                let coordinator =
+                    Arc::new(RethCoordinator::new(client, latest_block_number, execution_args_tx));
                 let cloned = coordinator.clone();
                 tokio::spawn(async move {
                     cloned.run().await;

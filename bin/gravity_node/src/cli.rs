@@ -1,15 +1,15 @@
 use api::GravityNodeArgs;
 use clap::{value_parser, Parser};
-use greth::reth::cli::Commands;
+use greth::reth::{chainspec::EthereumChainSpecParser, cli::Commands};
 use greth::reth_chainspec::ChainSpec;
 use greth::reth_cli::chainspec::ChainSpecParser;
 use greth::reth_cli_commands::node::NoArgs;
 use greth::reth_cli_runner::CliRunner;
 use greth::reth_db::DatabaseEnv;
+use greth::reth_network::EthNetworkPrimitives;
 use greth::reth_node_builder::{NodeBuilder, WithLaunchContext};
-use greth::reth_node_core::args::utils::DefaultChainSpecParser;
 use greth::reth_node_core::args::LogArgs;
-use greth::reth_node_ethereum::{EthExecutorProvider, EthereumNode};
+use greth::reth_node_ethereum::{consensus::EthBeaconConsensus, EthExecutorProvider, EthereumNode};
 use greth::reth_tracing::FileWorkerGuard;
 use std::{
     ffi::OsString,
@@ -25,7 +25,7 @@ use tracing::debug;
 #[derive(Debug, Parser)]
 #[command(author, about = "Reth", long_about = None)]
 pub(crate) struct Cli<
-    C: ChainSpecParser = DefaultChainSpecParser,
+    C: ChainSpecParser = EthereumChainSpecParser,
     Ext: clap::Args + fmt::Debug = NoArgs,
 > {
     /// The command to run
@@ -91,6 +91,20 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
     /// [`NodeCommand`](node::NodeCommand).
     ///
     ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use reth::cli::Cli;
+    /// use reth_node_ethereum::EthereumNode;
+    ///
+    /// Cli::parse_args()
+    ///     .run(|builder, _| async move {
+    ///         let handle = builder.launch_node(EthereumNode::default()).await?;
+    ///
+    ///         handle.wait_for_node_exit().await
+    ///     })
+    ///     .unwrap();
+    /// ```
     ///
     /// # Example
     ///
@@ -98,14 +112,15 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
     ///
     /// ```no_run
     /// use clap::Parser;
-    /// use greth::reth::{args::utils::DefaultChainSpecParser, cli::Cli};
+    /// use reth::cli::Cli;
+    /// use reth_ethereum_cli::chainspec::EthereumChainSpecParser;
     ///
     /// #[derive(Debug, Parser)]
     /// pub struct MyArgs {
     ///     pub enable: bool,
     /// }
     ///
-    /// Cli::<DefaultChainSpecParser, MyArgs>::parse()
+    /// Cli::<EthereumChainSpecParser, MyArgs>::parse()
     ///     .run(|builder, my_args: MyArgs| async move {
     ///         // launch the node
     ///
@@ -126,6 +141,9 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
         debug!(target: "reth::cli", "Initialized tracing, log directory: {}, log level {:?}", self.logs.log_file_directory, self.logs.verbosity);
 
         let runner = CliRunner::default();
+        let components = |spec: Arc<C::ChainSpec>| {
+            (EthExecutorProvider::ethereum(spec.clone()), EthBeaconConsensus::new(spec))
+        };
         match self.command {
             Commands::Node(command) => {
                 println!("Running node command, {:?}", command.dev);
@@ -138,27 +156,29 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
             Commands::InitState(command) => {
                 runner.run_blocking_until_ctrl_c(command.execute::<EthereumNode>())
             }
-            Commands::Import(command) => runner.run_blocking_until_ctrl_c(
-                command.execute::<EthereumNode, _, _>(EthExecutorProvider::ethereum),
-            ),
+            Commands::Import(command) => {
+                runner.run_blocking_until_ctrl_c(command.execute::<EthereumNode, _, _>(components))
+            }
             Commands::DumpGenesis(command) => runner.run_blocking_until_ctrl_c(command.execute()),
             Commands::Db(command) => {
                 runner.run_blocking_until_ctrl_c(command.execute::<EthereumNode>())
             }
             Commands::Stage(command) => runner.run_command_until_exit(|ctx| {
-                command.execute::<EthereumNode, _, _>(ctx, EthExecutorProvider::ethereum)
+                command.execute::<EthereumNode, _, _, EthNetworkPrimitives>(ctx, components)
             }),
-            Commands::P2P(command) => runner.run_until_ctrl_c(command.execute()),
+            Commands::P2P(command) => {
+                runner.run_until_ctrl_c(command.execute::<EthNetworkPrimitives>())
+            }
             #[cfg(feature = "dev")]
             Commands::TestVectors(command) => runner.run_until_ctrl_c(command.execute()),
             Commands::Config(command) => runner.run_until_ctrl_c(command.execute()),
+            Commands::Debug(command) => {
+                runner.run_command_until_exit(|ctx| command.execute::<EthereumNode>(ctx))
+            }
             Commands::Recover(command) => {
                 runner.run_command_until_exit(|ctx| command.execute::<EthereumNode>(ctx))
             }
             Commands::Prune(command) => runner.run_until_ctrl_c(command.execute::<EthereumNode>()),
-            Commands::Debug(command) => {
-                todo!()
-            }
         }
     }
 

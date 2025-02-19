@@ -28,6 +28,9 @@ time = "0.3.36"
 anyhow = "1.0.87"
 greth = { git = "https://github.com/Galxe/gravity-reth", branch = "main" }
 reqwest = "0.12.9"
+alloy-primitives = { version = "0.8.20", default-features = false, features = ["map-foldhash"] }
+alloy-eips = { version = "0.11.1", default-features = false }
+alloy-consensus = { version = "0.11.1", default-features = false }
 
 async-trait.workspace = true
 api.workspace = true
