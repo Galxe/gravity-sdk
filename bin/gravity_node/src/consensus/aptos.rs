@@ -13,8 +13,7 @@ pub struct AptosConsensus {
 }
 
 impl AptosConsensus {
-
-    pub fn init(node_config: NodeConfig, execution_client: Arc<RethCoordinator>) {
+    pub fn init(node_config: NodeConfig, execution_client: Arc<RethCoordinator>, chain_id: u64) {
         let execution_layer = ExecutionLayer {
             execution_api: execution_client.clone(),
             recovery_api: execution_client.clone(),
@@ -23,7 +22,7 @@ impl AptosConsensus {
         let consensus_engine = ConsensusEngine::init(
             node_config,
             execution_layer,
-            1337, // Chain ID
+            chain_id, // Chain ID
         );
     }
 }

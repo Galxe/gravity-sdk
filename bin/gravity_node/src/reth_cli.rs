@@ -71,6 +71,10 @@ impl RethCli {
         }
     }
 
+    pub fn chain_id(&self) -> u64 {
+        self.chain_id
+    }
+
     fn create_payload_attributes(
         parent_beacon_block_root: greth::reth::primitives::B256,
         ts: u64,

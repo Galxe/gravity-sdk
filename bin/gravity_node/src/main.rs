@@ -182,14 +182,13 @@ fn main() {
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
                 let client = RethCli::new(args).await;
+                let chain_id = client.chain_id();
                 let coordinator = Arc::new(RethCoordinator::new(client, execution_args_tx));
                 let cloned = coordinator.clone();
                 tokio::spawn(async move {
                     cloned.run().await;
                 });
-                // let c = MockConsensus::new(coordinator, genesis);
-                // c.run().await;
-                AptosConsensus::init(gcei_config, coordinator);
+                AptosConsensus::init(gcei_config, coordinator, chain_id);
                 tokio::signal::ctrl_c().await.unwrap();
             }
         });
