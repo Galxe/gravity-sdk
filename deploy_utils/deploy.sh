@@ -151,9 +151,12 @@ main() {
     # Validate parameters
     validate_params
 
+    SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+    TARGET_DIR="$SCRIPT_DIR/../target"
+
     # Check binary file
-    if [[ ! -f "target/$bin_version/$bin_name" ]]; then
-        log_error "Binary not found: target/$bin_version/$bin_name"
+    if [[ ! -f "$TARGET_DIR/$bin_version/$bin_name" ]]; then
+        log_error "Binary not found: $TARGET_DIR/$bin_version/$bin_name"
         exit 1
     fi
 
@@ -170,22 +173,23 @@ main() {
 
     # Copy files
     log_info "Copying configuration files"
-    cp -r "$node_arg/genesis" "/tmp/$node_arg"
+
+    cp -r "$SCRIPT_DIR/$node_arg/genesis" "/tmp/$node_arg"
 
     if [[ "$mode" == "cluster" ]]; then
         log_info "Setting up cluster mode"
-        cp -r "deploy_utils/four_nodes_config.json" "/tmp/$node_arg/genesis/nodes_config.json"
-        cp -r "deploy_utils/four_nodes_discovery" "/tmp/$node_arg/discovery"
+        cp -r "$SCRIPT_DIR/four_nodes_config.json" "/tmp/$node_arg/genesis/nodes_config.json"
+        cp -r "$SCRIPT_DIR/four_nodes_discovery" "/tmp/$node_arg/discovery"
     else
         log_info "Setting up single node mode"
-        cp -r "deploy_utils/single_node_config.json" "/tmp/$node_arg/genesis/nodes_config.json"
-        cp -r "deploy_utils/single_node_discovery" "/tmp/$node_arg/discovery"
+        cp -r "$SCRIPT_DIR/single_node_config.json" "/tmp/$node_arg/genesis/nodes_config.json"
+        cp -r "$SCRIPT_DIR/single_node_discovery" "/tmp/$node_arg/discovery"
     fi
 
     log_info "Copying program files"
-    cp "target/$bin_version/$bin_name" "/tmp/$node_arg/bin"
-    cp "deploy_utils/start.sh" "/tmp/$node_arg/script"
-    cp "deploy_utils/stop.sh" "/tmp/$node_arg/script"
+    cp "$TARGET_DIR/$bin_version/$bin_name" "/tmp/$node_arg/bin"
+    cp "$SCRIPT_DIR/start.sh" "/tmp/$node_arg/script"
+    cp "$SCRIPT_DIR/stop.sh" "/tmp/$node_arg/script"
 
     log_info "Deployment completed!"
     log_info "Configuration summary:"
