@@ -35,18 +35,9 @@ mod reth_cli;
 mod reth_coordinator;
 
 use crate::cli::Cli;
-use clap::Args;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::thread;
-/// Parameters for configuring the engine
-#[derive(Debug, Clone, Args, PartialEq, Eq, Default)]
-#[command(next_help_heading = "Engine")]
-pub struct EngineArgs {
-    /// Enable the engine2 experimental features on reth binary
-    #[arg(long = "engine.experimental", default_value = "false")]
-    pub experimental: bool,
-}
 
 use crate::reth_cli::RethCli;
 use clap::Parser;
@@ -54,11 +45,6 @@ use reth_node_builder::engine_tree_config;
 use reth_node_builder::EngineNodeLauncher;
 use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
 use reth_provider::providers::BlockchainProvider;
-
-const consensus_gensis: [u8; 32] = [
-    141, 91, 216, 66, 168, 139, 218, 32, 132, 186, 161, 251, 250, 51, 34, 197, 38, 71, 196, 135,
-    49, 116, 247, 25, 67, 147, 163, 137, 28, 58, 62, 73,
-];
 
 struct ConsensusArgs {
     pub engine_api: AuthServerHandle,
@@ -79,7 +65,7 @@ struct ConsensusArgs {
 
 fn run_reth(
     tx: mpsc::Sender<(ConsensusArgs, u64)>,
-    cli: Cli<EthereumChainSpecParser, EngineArgs>,
+    cli: Cli<EthereumChainSpecParser>,
     execution_args_rx: oneshot::Receiver<ExecutionArgs>,
 ) {
     reth_cli_util::sigsegv_handler::install();
@@ -89,7 +75,7 @@ fn run_reth(
     }
 
     if let Err(err) = {
-        cli.run(|builder, engine_args| {
+        cli.run(|builder, _| {
             let tx = tx.clone();
             async move {
                 let handle = builder
