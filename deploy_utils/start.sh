@@ -7,6 +7,7 @@ log_suffix=$(date +"%Y-%d-%m:%H:%M:%S")
 
 bin_name="gravity_node"
 node_arg=""
+chain="DEV"
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
@@ -16,6 +17,10 @@ while [[ "$#" -gt 0 ]]; do
         ;;
     --node)
         node_arg="$2"
+        shift
+        ;;
+    --chain)
+        chain="$2"
         shift
         ;;
     *)
@@ -63,14 +68,15 @@ function start_node() {
 
     pid=$(
         ${WORKSPACE}/bin/${bin_name} node \
+            --chain ${chain} \
             --http.port ${http_port} \
-            --http.api all \
+            --http.corsdomain "*" \
+            --http.api "debug,eth,net,trace,txpool,web3,rpc" \
             --http.addr 0.0.0.0 \
             --port ${reth_rpc_port} \
             --authrpc.port ${authrpc_port} \
             --authrpc.addr 0.0.0.0 \
             --metrics 0.0.0.0:${metric_port} \
-            --dev \
             --log.file.filter info \
             --datadir ${WORKSPACE}/data/reth \
             --datadir.static-files ${WORKSPACE}/data/reth \

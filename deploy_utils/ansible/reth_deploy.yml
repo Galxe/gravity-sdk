@@ -49,10 +49,10 @@
         src: ./server_confs/discovery
         dest: "/tmp/{{ reth_node_id }}/discovery"
 
-    - name: Copy validator conf to remote
+    - name: Copy validator genesis conf to remote
       copy:
-        src: "./server_confs/{{ reth_node_id }}/genesis/validator.yaml"
-        dest: "/tmp/{{ reth_node_id }}/genesis/validator.yaml"
+        src: "./server_confs/{{ reth_node_id }}/genesis"
+        dest: "/tmp/{{ reth_node_id }}/genesis"
     
     - name: Copy start bash to remote
       copy:
