@@ -674,6 +674,14 @@ pub static AVG_BATCH_SIZE: Lazy<Histogram> = Lazy::new(|| {
     .unwrap()
 });
 
+pub static GET_BATCH_SIZE: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "aptos_mempool_get_batch_size",
+        "Number of txns in a batch"
+    )
+    .unwrap()
+});
+
 #[cfg(test)]
 mod test {
     use crate::counters::RANKING_SCORE_BUCKETS;
