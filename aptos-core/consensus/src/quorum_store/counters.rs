@@ -877,3 +877,17 @@ pub static BATCH_RECEIVED_LATE_REPLIES_COUNT: Lazy<IntCounter> = Lazy::new(|| {
     )
     .unwrap()
 });
+
+pub static MAX_BATCH_COUNT: Lazy<Histogram> = Lazy::new(|| {
+    register_avg_counter(
+        "quorum_store_max_batch_count",
+        "Maximum number of batches in the quorum store."
+    )
+});
+
+pub static MAX_BATCH_BYTES: Lazy<Histogram> = Lazy::new(|| {
+    register_avg_counter(
+        "quorum_store_max_batch_bytes",
+        "Maximum number of bytes in the quorum store."
+    )
+});

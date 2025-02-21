@@ -334,6 +334,9 @@ impl BatchGenerator {
             self.txns_in_progress_sorted.len()
         );
 
+        counters::MAX_BATCH_COUNT.observe(max_count as f64);
+        counters::MAX_BATCH_BYTES.observe(self.config.sender_max_total_bytes as f64);
+
         let mut pulled_txns = self
             .mempool_proxy
             .pull_internal(
