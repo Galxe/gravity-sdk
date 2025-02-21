@@ -39,6 +39,13 @@
       set_fact:
         log_collection: "{{ log_collection + [deploy_service_log] }}"
 
+    - name: Synchronize genesis directory to remote, overwrite existing directory
+      synchronize:
+        src: "./server_confs/{{ reth_node_id }}/genesis/"
+        dest: "/tmp/{{ reth_node_id }}/genesis/"
+        recursive: yes
+        delete: yes
+ 
     - name: Copy nodes config to remote
       copy:
         src: ./server_confs/nodes_config.json
@@ -48,13 +55,6 @@
       copy:
         src: ./server_confs/discovery
         dest: "/tmp/{{ reth_node_id }}/discovery"
-
-    - name: Synchronize genesis directory to remote, overwrite existing directory
-      synchronize:
-        src: "./server_confs/{{ reth_node_id }}/genesis/"
-        dest: "/tmp/{{ reth_node_id }}/genesis/"
-        recursive: yes
-        delete: yes
 
     - name: Copy start bash to remote
       copy:
