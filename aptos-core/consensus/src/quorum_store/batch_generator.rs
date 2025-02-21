@@ -154,6 +154,7 @@ impl BatchGenerator {
             txn_info.gas_unit_price = info.gas_unit_price.max(txn_info.gas_unit_price);
             txns.push(summary);
         }
+        info!("The txns_in_progress_sorted size is {}", self.txns_in_progress_sorted.len());
         let updated_expiry_time_usecs = self
             .batches_in_progress
             .get(&(author, batch_id))

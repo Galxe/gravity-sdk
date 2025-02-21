@@ -205,7 +205,7 @@ impl BatchStore {
         let digest = *value.digest();
         let author = value.author();
         let expiration_time = value.expiration();
-
+        info!("The db_cache size is {}", self.db_cache.len());
         {
             // Acquire dashmap internal lock on the entry corresponding to the digest.
             let cache_entry = self.db_cache.entry(digest);

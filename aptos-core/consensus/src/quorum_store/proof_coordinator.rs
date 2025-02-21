@@ -200,6 +200,7 @@ impl ProofCoordinator {
         self.batch_info_to_time
             .entry(signed_batch_info.batch_info().clone())
             .or_insert(chrono::Utc::now().naive_utc().timestamp_micros() as u64);
+        info!("The batch_info_to_time size is {}", self.batch_info_to_time.len());
         debug!(
             LogSchema::new(LogEvent::ProofOfStoreInit),
             digest = signed_batch_info.digest(),
