@@ -69,10 +69,13 @@ function start_node() {
     pid=$(
         ${WORKSPACE}/bin/${bin_name} node \
             --chain ${chain} \
+            --http \
             --http.port ${http_port} \
             --http.corsdomain "*" \
             --http.api "debug,eth,net,trace,txpool,web3,rpc" \
             --http.addr 0.0.0.0 \
+            --ws \
+            --ws.addr 0.0.0.0 \
             --port ${reth_rpc_port} \
             --authrpc.port ${authrpc_port} \
             --authrpc.addr 0.0.0.0 \
