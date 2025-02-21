@@ -49,11 +49,13 @@
         src: ./server_confs/discovery
         dest: "/tmp/{{ reth_node_id }}/discovery"
 
-    - name: Copy validator genesis conf to remote
-      copy:
-        src: "./server_confs/{{ reth_node_id }}/"
-        dest: "/tmp/{{ reth_node_id }}/genesis"
-    
+    - name: Synchronize genesis directory to remote, overwrite existing directory
+      synchronize:
+        src: "./server_confs/{{ reth_node_id }}/genesis/"
+        dest: "/tmp/{{ reth_node_id }}/genesis/"
+        recursive: yes
+        delete: yes
+
     - name: Copy start bash to remote
       copy:
         src: "{{ reth_root_dir }}/deploy_utils/start.sh"
