@@ -51,10 +51,8 @@
 
     - name: Copy validator genesis conf to remote
       copy:
-        src: "./server_confs/{{ reth_node_id }}/genesis"
+        src: "./server_confs/{{ reth_node_id }}/"
         dest: "/tmp/{{ reth_node_id }}/genesis"
-      with_fileglob:
-        - "./server_confs/{{ reth_node_id }}/genesis/*"
     
     - name: Copy start bash to remote
       copy:
