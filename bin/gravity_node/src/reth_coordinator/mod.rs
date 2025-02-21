@@ -19,30 +19,11 @@ use state::State;
 use tokio::sync::Mutex;
 use tokio::sync::{mpsc, oneshot};
 use tracing::debug;
-
-pub struct Buffer<T> {
-    sender: mpsc::Sender<T>,
-    receiver: Arc<Mutex<mpsc::Receiver<T>>>,
-}
-
-impl<T> Buffer<T> {
-    pub fn new(size: usize) -> Buffer<T> {
-        let (sender, receiver) = mpsc::channel(size);
-        Buffer { sender, receiver: Arc::new(Mutex::new(receiver)) }
-    }
-
-    pub async fn send(&self, item: T) {
-        self.sender.clone().send(item).await.unwrap();
-    }
-
-    pub async fn recv(&self) -> T {
-        let mut recv = self.receiver.lock().await;
-        recv.recv().await.unwrap()
-    }
-}
+use crate::metric::RethCliMetric;
 
 pub struct RethCoordinator {
     reth_cli: RethCli,
+    reth_metric: RethCliMetric,
     pending_buffer: Arc<Mutex<Vec<VerifiedTxnWithAccountSeqNum>>>,
     state: Arc<Mutex<State>>,
     // todo(gravity_byteyue): Use one elegant way
@@ -55,6 +36,7 @@ impl RethCoordinator {
         let state = State::new();
         Self {
             reth_cli,
+            reth_metric: RethCliMetric::default(),
             pending_buffer: Arc::new(Mutex::new(Vec::new())),
             state: Arc::new(Mutex::new(state)),
             block_number_to_txn_in_block: Arc::new(Mutex::new(HashMap::new())),
@@ -97,7 +79,7 @@ impl ExecutionChannel for RethCoordinator {
         let now = std::time::Instant::now();
         let mut buffer = self.pending_buffer.lock().await;
         let res = std::mem::take(&mut *buffer);
-
+        self.reth_metric.recv_txns_rate.record(res.len() as f64);
         debug!("recv_pending_txns with buffer size: {:?} in time {:?}", &res.len(), now.elapsed());
         Ok(res)
     }

@@ -28,7 +28,7 @@ time = "0.3.36"
 anyhow = "1.0.87"
 greth = { git = "https://github.com/Galxe/grevm-reth", branch = "main" }
 reqwest = "0.12.9"
-
+metrics = "0.23.0"
 async-trait.workspace = true
 api.workspace = true
 api-types.workspace = true

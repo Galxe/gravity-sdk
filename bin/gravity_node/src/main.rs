@@ -11,6 +11,7 @@ use greth::reth_pipe_exec_layer_ext_v2::ExecutionArgs;
 use greth::reth_primitives;
 use greth::reth_provider;
 use greth::reth_transaction_pool;
+use greth::reth_metrics;
 
 use api::check_bootstrap_config;
 use consensus::aptos::AptosConsensus;
@@ -35,6 +36,7 @@ mod consensus;
 mod exec_layer;
 mod reth_cli;
 mod reth_coordinator;
+mod metric;
 
 use crate::cli::Cli;
 use clap::Args;
