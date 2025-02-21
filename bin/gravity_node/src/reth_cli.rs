@@ -3,6 +3,7 @@ use crate::ConsensusArgs;
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
 use api_types::u256_define::{BlockId as ExternalBlockId, TxnHash};
 use api_types::{ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
+use greth::reth_primitives::revm_primitives::FixedBytes;
 use core::panic;
 use greth::reth::rpc::builder::auth::AuthServerHandle;
 use greth::reth_db::DatabaseEnv;
@@ -155,135 +156,81 @@ impl RethCli {
         Ok(())
     }
 
+    pub async fn process_txn_hash(pool: greth::reth_transaction_pool::Pool<
+        greth::reth_transaction_pool::TransactionValidationTaskExecutor<
+            greth::reth_transaction_pool::EthTransactionValidator<
+                BlockchainProvider2<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
+                greth::reth_transaction_pool::EthPooledTransaction,
+            >,
+        >,
+        greth::reth_transaction_pool::CoinbaseTipOrdering<
+            greth::reth_transaction_pool::EthPooledTransaction,
+        >,
+        greth::reth_transaction_pool::blobstore::DiskFileBlobStore,
+    >
+        , 
+        provider: BlockchainProvider2<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>
+        ,txn_hash: FixedBytes<32>, buffer: Arc<Mutex<Vec<VerifiedTxnWithAccountSeqNum>>>) {
+        METRICS.get_or_init(|| RethCliMetric::default()).reth_notify_count.increment(1);
+            let txn = pool.get(&txn_hash).unwrap();
+            let before_recv = std::time::Instant::now();
+            let sender = txn.sender();
+            let nonce = txn.nonce();
+            let txn = txn.transaction.transaction();
+            let accout_nonce =
+                provider.basic_account(sender)
+                .unwrap()
+                .map(|x| x.nonce)
+                .unwrap_or(txn.nonce());
+            let mut bytes = Vec::with_capacity(1024 * 4);
+            // txn.encode(&mut bytes);
+            txn.encode(&mut bytes);
+
+            let vtxn = VerifiedTxnWithAccountSeqNum {
+                txn: VerifiedTxn {
+                    bytes,
+                    sender: covert_account(sender),
+                    sequence_number: nonce,
+                    chain_id: ExternalChainId::new(0),
+                    committed_hash: TxnHash::from_bytes(txn.hash().as_slice()).into(),
+                },
+                account_seq_num: accout_nonce,
+            };
+            buffer.lock().await.push(vtxn);
+            
+            let after_ser = std::time::Instant::now();
+            debug!(
+                "push addr {} txn nonce: {} acc_nonce: {} recv_time {} serialize_time {}",
+                sender,
+                txn.transaction.nonce(),
+                accout_nonce,
+                before_recv.elapsed().as_micros(),
+                after_ser.elapsed().as_micros()
+            );
+    }
+
     pub async fn process_pending_transactions(
         &self,
         buffer: Arc<Mutex<Vec<VerifiedTxnWithAccountSeqNum>>>,
     ) -> Result<(), String> {
         debug!("start process pending transactions");
-        const BATCH_SIZE: usize = 100; // 批处理大小
-        const PARALLEL_TASKS: usize = 4; // 并行任务数
+        let mut mut_txn_listener = self.txn_listener.lock().await;
         
-        let start_time = std::time::Instant::now();
-        let mut last_time = std::time::Instant::now();
-        let mut count = 0;
-        let mut total = 0;
-
-        // 创建一个channel用于并行处理
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<VerifiedTxnWithAccountSeqNum>(BATCH_SIZE * 2);
-        
-        // 启动处理任务
-        let buffer_clone = buffer.clone();
-        let process_handle = tokio::spawn(async move {
-            let mut batch = Vec::with_capacity(BATCH_SIZE);
-            while let Some(vtxn) = rx.recv().await {
-                batch.push(vtxn);
-                
-                if batch.len() >= BATCH_SIZE {
-                    let mut buffer_guard = buffer_clone.lock().await;
-                    buffer_guard.extend(batch.drain(..));
-                    drop(buffer_guard);
-                }
+        let mut set = tokio::task::JoinSet::new();
+        while let Some(txn_hash) = mut_txn_listener.recv().await {
+            if set.len() >= 32 { // 限制并发数为32
+                // 等待任意一个任务完成后继续
+                set.join_next().await;
             }
             
-            // 处理剩余的交易
-            if !batch.is_empty() {
-                let mut buffer_guard = buffer_clone.lock().await;
-                buffer_guard.extend(batch);
-            }
-        });
-
-        let mut tasks = Vec::with_capacity(PARALLEL_TASKS);
-        loop {
-            // 收集一批交易哈希
-            let mut txn_hashes = Vec::with_capacity(BATCH_SIZE);
-            {
-                let mut mut_txn_listener = self.txn_listener.lock().await;
-                while txn_hashes.len() < BATCH_SIZE {
-                    match mut_txn_listener.try_recv() {
-                        Ok(Some(hash)) => txn_hashes.push(hash),
-                        Ok(None) | Err(_) => break,
-                    }
-                }
-            }
-            
-            if txn_hashes.is_empty() {
-                break;
-            }
-
-            // 并行处理交易
-            for chunk in txn_hashes.chunks(txn_hashes.len() / PARALLEL_TASKS.max(1)) {
-                let chunk = chunk.to_vec();
-                let tx = tx.clone();
-                let pool = self.pool.clone();
-                let provider = self.provider.clone();
-                
-                let task = tokio::spawn(async move {
-                    for txn_hash in chunk {
-                        METRICS.get_or_init(|| RethCliMetric::default()).reth_notify_count.increment(1);
-                        
-                        let txn = pool.get(&txn_hash).unwrap();
-                        let sender = txn.sender();
-                        let nonce = txn.nonce();
-                        let txn = txn.transaction.transaction();
-                        
-                        let account_nonce = provider
-                            .basic_account(sender)
-                            .unwrap()
-                            .map(|x| x.nonce)
-                            .unwrap_or(txn.nonce());
-
-                        let mut bytes = Vec::with_capacity(1024 * 4);
-                        txn.encode(&mut bytes);
-
-                        let vtxn = VerifiedTxnWithAccountSeqNum {
-                            txn: VerifiedTxn {
-                                bytes,
-                                sender: covert_account(sender),
-                                sequence_number: nonce,
-                                chain_id: ExternalChainId::new(0),
-                                committed_hash: TxnHash::from_bytes(txn.hash().as_slice()).into(),
-                            },
-                            account_seq_num: account_nonce,
-                        };
-                        
-                        if let Err(_) = tx.send(vtxn).await {
-                            break;
-                        }
-                    }
-                });
-                tasks.push(task);
-            }
-
-            // 等待所有任务完成
-            for task in tasks.drain(..) {
-                task.await.map_err(|e| e.to_string())?;
-            }
-
-            // 更新计数器和日志
-            count += txn_hashes.len();
-            if last_time.elapsed().as_secs() >= 1 {
-                let elapsed = last_time.elapsed().as_secs();
-                debug!(
-                    "processed {} transactions in {}s with speed {}",
-                    count,
-                    elapsed,
-                    count as f64 / elapsed as f64
-                );
-                total += count;
-                count = 0;
-                last_time = std::time::Instant::now();
-            }
+            let buffer = buffer.clone();
+            let pool = self.pool.clone();
+            let provider = self.provider.clone();
+            set.spawn(async move {
+                Self::process_txn_hash(pool, provider, txn_hash, buffer).await
+            });
         }
-
-        // 等待处理任务完成
-        drop(tx);
-        process_handle.await.map_err(|e| e.to_string())?;
-
-        debug!(
-            "end process pending transactions, total processed: {}, average speed: {}/s",
-            total,
-            total as f64 / start_time.elapsed().as_secs_f64()
-        );
+        debug!("end process pending transactions");
         Ok(())
     }
 
