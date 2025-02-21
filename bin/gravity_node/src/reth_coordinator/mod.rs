@@ -19,11 +19,10 @@ use state::State;
 use tokio::sync::Mutex;
 use tokio::sync::{mpsc, oneshot};
 use tracing::debug;
-use crate::metric::RethCliMetric;
+use crate::metric::{RethCliMetric, METRICS};
 
 pub struct RethCoordinator {
     reth_cli: RethCli,
-    reth_metric: RethCliMetric,
     pending_buffer: Arc<Mutex<Vec<VerifiedTxnWithAccountSeqNum>>>,
     state: Arc<Mutex<State>>,
     // todo(gravity_byteyue): Use one elegant way
@@ -36,7 +35,6 @@ impl RethCoordinator {
         let state = State::new();
         Self {
             reth_cli,
-            reth_metric: RethCliMetric::default(),
             pending_buffer: Arc::new(Mutex::new(Vec::new())),
             state: Arc::new(Mutex::new(state)),
             block_number_to_txn_in_block: Arc::new(Mutex::new(HashMap::new())),
@@ -79,7 +77,7 @@ impl ExecutionChannel for RethCoordinator {
         let now = std::time::Instant::now();
         let mut buffer = self.pending_buffer.lock().await;
         let res = std::mem::take(&mut *buffer);
-        self.reth_metric.recv_txns_rate.record(res.len() as f64);
+        METRICS.get_or_init(|| RethCliMetric::default()).recv_txns_count.increment(res.len() as u64);
         debug!("recv_pending_txns with buffer size: {:?} in time {:?}", &res.len(), now.elapsed());
         Ok(res)
     }

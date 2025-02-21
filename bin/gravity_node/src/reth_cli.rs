@@ -1,3 +1,4 @@
+use crate::metric::{RethCliMetric, METRICS};
 use crate::ConsensusArgs;
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
 use api_types::u256_define::{BlockId as ExternalBlockId, TxnHash};
@@ -165,6 +166,8 @@ impl RethCli {
         let mut last_time = std::time::Instant::now();
         let mut mut_txn_listener = self.txn_listener.lock().await;
         while let Some(txn_hash) = mut_txn_listener.recv().await {
+            
+            METRICS.get_or_init(|| RethCliMetric::default()).reth_notify_count.increment(1);
             let txn = self.pool.get(&txn_hash).unwrap();
             let before_recv = std::time::Instant::now();
             let sender = txn.sender();
