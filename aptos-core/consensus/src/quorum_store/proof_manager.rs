@@ -53,6 +53,7 @@ impl BatchQueue {
         for batch in batches.into_iter() {
             let queue = self.author_to_batches.entry(batch.author()).or_default();
             queue.insert(BatchSortKey::from_info(&batch), batch.clone());
+            info!("The author {} batch size is {}", batch.author(), queue.len());
         }
     }
 

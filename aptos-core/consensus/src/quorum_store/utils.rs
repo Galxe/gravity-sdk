@@ -732,6 +732,7 @@ impl ProofQueue {
                 self.dec_remaining(&batch.author(), batch.num_txns());
             }
             self.batch_to_proof.insert(batch_key.clone(), None);
+            info!("The batch_to_proof size is {}", self.batch_to_proof.len());
             if let Some((txn_summaries, _, true)) = self.batch_summaries.get(&batch_key) {
                 for txn_summary in txn_summaries {
                     if let Some(count) = self.txn_summary_num_occurrences.get_mut(txn_summary) {

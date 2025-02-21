@@ -164,6 +164,7 @@ impl BatchGenerator {
             (author, batch_id),
             BatchInProgress::new(txns, updated_expiry_time_usecs),
         );
+        info!("The batches_in_progress size is {}", self.batches_in_progress.len());
         self.batch_expirations
             .add_item((author, batch_id), updated_expiry_time_usecs);
     }

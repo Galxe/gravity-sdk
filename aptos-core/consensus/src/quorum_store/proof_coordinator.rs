@@ -195,6 +195,7 @@ impl ProofCoordinator {
             signed_batch_info.batch_info().clone(),
             IncrementalProofState::new(signed_batch_info.batch_info().clone()),
         );
+        info!("The batch_info_to_proof size is {}", self.batch_info_to_proof.len());
         #[allow(deprecated)]
         self.batch_info_to_time
             .entry(signed_batch_info.batch_info().clone())
