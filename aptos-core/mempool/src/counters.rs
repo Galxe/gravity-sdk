@@ -682,6 +682,13 @@ pub static GET_BATCH_SIZE: Lazy<IntCounter> = Lazy::new(|| {
     .unwrap()
 });
 
+pub static CORE_MEMPOOL_ADD_TXNS: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "aptos_core_mempool_added_txns_count",
+        "Number of txns removed from core mempool"
+    )
+    .unwrap()
+});
 #[cfg(test)]
 mod test {
     use crate::counters::RANKING_SCORE_BUCKETS;

@@ -341,6 +341,7 @@ impl Mempool {
                 .as_str(),
             ranking_score,
         );
+        counters::CORE_MEMPOOL_ADD_TXNS.inc();
         status
     }
 
@@ -508,6 +509,7 @@ impl Mempool {
             block.clear();
         }
         counters::AVG_BATCH_SIZE.observe(block.len() as f64);
+        counters::GET_BATCH_SIZE.inc_by(block.len() as u64);
         counters::mempool_service_transactions(counters::GET_BLOCK_LABEL, block.len());
         counters::MEMPOOL_SERVICE_BYTES_GET_BLOCK.observe(total_bytes as f64);
         for transaction in &block {
