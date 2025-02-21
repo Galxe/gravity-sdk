@@ -89,9 +89,10 @@ async fn retrieve_from_execution_routine(
     loop {
         match execution_api.recv_pending_txns().await {
             Ok(txns) => {
+                let mut mut_lock = mempool.lock();
                 info!("the recv_pending_txns size is {:?}", txns.len());
                 txns.into_iter().for_each(|txn_with_number| {
-                    let r = mempool.lock().send_user_txn(
+                    let r = mut_lock.add_txn(
                         txn_with_number.txn.into(),
                         txn_with_number.account_seq_num,
                         TimelineState::NotReady,
@@ -111,7 +112,7 @@ async fn retrieve_from_execution_routine(
                 continue;
             }
         }
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 }
 

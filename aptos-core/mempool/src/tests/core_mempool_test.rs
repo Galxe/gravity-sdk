@@ -70,7 +70,7 @@ fn test_transaction_metrics() {
     let (mut mempool, _) = setup_mempool();
 
     let txn = TestTransaction::new(0, 0, 1).make_signed_transaction();
-    mempool.send_user_txn(
+    mempool.add_txn(
         (&txn).into(),
         0,
         TimelineState::NotReady,
@@ -79,7 +79,7 @@ fn test_transaction_metrics() {
         Some(BroadcastPeerPriority::Primary),
     );
     let txn = TestTransaction::new(1, 0, 1).make_signed_transaction();
-    mempool.send_user_txn(
+    mempool.add_txn(
         (&txn).into(),
         0,
         TimelineState::NonQualified,
@@ -88,7 +88,7 @@ fn test_transaction_metrics() {
         Some(BroadcastPeerPriority::Primary),
     );
     let txn = TestTransaction::new(2, 0, 1).make_signed_transaction();
-    mempool.send_user_txn(
+    mempool.add_txn(
         (&txn).into(),
         0,
         TimelineState::NotReady,
@@ -868,7 +868,7 @@ fn test_gc_ready_transaction() {
     let txn = TestTransaction::new(1, 1, 1).make_signed_transaction_with_expiration_time(0);
     let sender_bucket = sender_bucket(&txn.sender(), MempoolConfig::default().num_sender_buckets);
 
-    pool.send_user_txn(
+    pool.add_txn(
         (&txn).into(),
         0,
         TimelineState::NotReady,
@@ -928,7 +928,7 @@ fn test_clean_stuck_transactions() {
     }
     let db_sequence_number = 10;
     let txn = TestTransaction::new(0, db_sequence_number, 1).make_signed_transaction();
-    pool.send_user_txn(
+    pool.add_txn(
         (&txn).into(),
         db_sequence_number,
         TimelineState::NotReady,
@@ -946,7 +946,7 @@ fn test_get_transaction_by_hash() {
     let mut pool = setup_mempool().0;
     let db_sequence_number = 10;
     let txn = TestTransaction::new(0, db_sequence_number, 1).make_signed_transaction();
-    pool.send_user_txn(
+    pool.add_txn(
         (&txn).into(),
         db_sequence_number,
         TimelineState::NotReady,
@@ -967,7 +967,7 @@ fn test_get_transaction_by_hash_after_the_txn_is_updated() {
     let mut pool = setup_mempool().0;
     let db_sequence_number = 10;
     let txn = TestTransaction::new(0, db_sequence_number, 1).make_signed_transaction();
-    pool.send_user_txn(
+    pool.add_txn(
         (&txn).into(),
         db_sequence_number,
         TimelineState::NotReady,
@@ -979,7 +979,7 @@ fn test_get_transaction_by_hash_after_the_txn_is_updated() {
 
     // new txn with higher gas price
     let new_txn = TestTransaction::new(0, db_sequence_number, 100).make_signed_transaction();
-    pool.send_user_txn(
+    pool.add_txn(
         (&new_txn).into(),
         db_sequence_number,
         TimelineState::NotReady,

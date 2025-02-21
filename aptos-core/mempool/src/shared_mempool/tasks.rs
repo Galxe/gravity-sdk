@@ -259,7 +259,7 @@ fn validate_and_add_transactions<NetworkClient>(
     for (idx, (transaction, sequence_info, ready_time_at_sender, priority)) in
         transactions.into_iter().enumerate()
     {
-        let mempool_status = mempool.send_user_txn(
+        let mempool_status = mempool.add_txn(
             transaction.into(),
             sequence_info,
             timeline_state,
