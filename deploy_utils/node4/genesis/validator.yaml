@@ -37,4 +37,4 @@ log_file_path: "/tmp/node4/consensus_log"
 
 inspection_service:
   port: 10003
-  address: 127.0.0.1
+  address: 0.0.0.0
