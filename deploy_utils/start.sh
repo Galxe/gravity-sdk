@@ -7,7 +7,7 @@ log_suffix=$(date +"%Y-%d-%m:%H:%M:%S")
 
 bin_name="gravity_node"
 node_arg=""
-chain="DEV"
+chain="dev"
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
