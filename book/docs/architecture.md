@@ -162,7 +162,7 @@ The **Consensus** module is responsible for ordering the Proof of Store objects 
 - The consensus layer first verifies the validity of each Proof of Store to ensure it satisfies the requirements of the pre-consensus mechanism.
 
 #### **Ordering Proof of Store**
-- Proofs of Store are ordered using a consensus algorithm (e.g., Byzantine Fault Tolerance or other suitable mechanisms).  
+- Proofs of Store are ordered using a consensus algorithm (Aptos BFT).  
 - The result is an **Ordered Block**, which contains a list of transactions arranged in a deterministic sequence.
 
 #### **Ensuring Deterministic State Transitions**
