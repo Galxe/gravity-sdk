@@ -213,22 +213,15 @@ The Gravity SDK architecture provides a modular and efficient framework for proc
 This design ensures high performance, scalability, and compatibility, making the Gravity SDK a powerful and versatile solution for a wide range of blockchain applications.
 
 
-## 5. Recovery Mechanism
+## 4. Recovery Mechanism
 
-### 5.1. Local Execution Layer Recovery
+### 4.1. Local Execution Layer Recovery
 
 1. When restarted, the consensus layer reads the latest execution block number from the execution layer and finds the corresponding block in the consensus layer database as the root block.
 2. It then iterates over all blocks, finds the block that is newer than the root block (Round larger), and has achieved a committed QC, and plays back to the execution layer.
 
-### 5.2. Block Sync
+### 4.2. Block Sync
 
 1. When a new node is added or an old node is restarted after a long period of time and receives the consensus layer information of other nodes, compare the Round of the node first. If the current Round of the node is smaller than the Round of the message, Block Sync is initiated.
 2. Consensus layer information carries SyncInfo by default, which records highest_committed_qc and highest_quorum_qc. The current node will first determine whether the block corresponding to highest_committed_qc is local or not. If it is not, it will initiate the first Block Sync, which will synchronize the execution layer blocks of other nodes.
 3. After the execution layer of the current node is synchronized to highest_committed_qc, the second block sync will be initiated. This time, block sync mainly synchronizes the consensus layer blocks between highest_committed_qc and highest_quorum_qc of other nodes.
-
-## 6. Performance Characteristics
-
-- **Throughput**: Optimized for high transaction processing
-- **Latency**: Minimized block confirmation time
-- **Scalability**: Support for dynamic validator sets
-- **Fault Tolerance**: Byzantine fault tolerance up to f=(n-1)/3
