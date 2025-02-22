@@ -86,6 +86,10 @@ execution processes are properly synchronized. The GCEI protocol specification d
   when a Gravity Node experiences an unexpected shutdown. They provide a mechanism for rapid re-participation in the
   Gravity Network and are triggered only during system startup recovery.
 
+For more details on the GCEI protocol APIs, please refer to the [Gravity SDK Architecture](./book/docs/architecture.md)
+and [GCEI Protocol Specification](./book/docs/gcei_protocol.md) . These APIs define the standardized interfaces for
+communication between the consensus and execution layers, ensuring seamless integration and efficient operation of the
+Gravity SDK framework.
 
 ### Block Lifecycle Perspective
 
@@ -122,7 +126,7 @@ three stages:
 │            │       │                  │                      │
 ├────────────┤       │                  │                      │          B[n-1] B[n] B[n+1]
 │            │       │                  │    Order Block       │           ┌──┐  ┌──┐  ┌──┐
-│ Consensus  │       │                  │<─────────────────────│           │✓ │  │⚡│  │QC│
+│ Consensus  │       │                  │<─────────────────────│           │✓ │  │⚡ │  │QC│
 │            │       │<─────────────────│    Execute Block     │           └──┘  └──┘  └──┘
 │            │       │   Return Result  │                      │          ⚡:  executable
 │            │       │─────────────────>│    Return Result     │          QC: has a quorum cert
@@ -130,7 +134,7 @@ three stages:
 │            │       │                  │                      │
 ├────────────┤       │                  │                      │          B[n-1] B[n] B[n+1]
 │   Post-    │       │                  │    Commit Block      │           ┌──┐  ┌──┐  ┌──┐
-│ Consensus  │       │                  │<─────────────────────│           │✓ │  │✓ │ │QC│
+│ Consensus  │       │                  │<─────────────────────│           │✓ │  │✓ │  │QC│
 │            │       │<─────────────────│    Commit Block      │           └──┘  └──┘  └──┘
 │            │       │                  │                      │          
 └────────────┘       │                  │                      │
