@@ -9,8 +9,7 @@ The **Gravity Consensus Execution Interface (GCEI)** protocol provides a standar
 ### 2.1 Core Components
 
 1. **Interface Layers**  
-   - **Consensus Layer**: Manages block ordering and consensus agreement based on the Aptos-BFT protocol.
-   - **Execution Layer**: Responsible for processing transactions and updating the blockchain state.
+   - **ExecutionChannel Layer**: Responsible for processing transactions and updating the blockchain state.
    - **Recovery Layer**: Handles recovery operations to maintain consistency in the event of failures.
 
 2. **Communication Flow**  
@@ -22,64 +21,67 @@ Consensus Layer ←→ GCEI Protocol ←→ Execution Layer
         └──────── Recovery Layer ───────┘
 ```
 
-### 2.2 State Management
-
-1. **Block States**  
-   GCEI operates with several key block states:
-
-   - **Safe Block**: The last block that has been fully committed to the chain.
-   - **Head Block**: The most recent block received by the execution engine.
-   - **Ordered Block**: A block whose transactions have been ordered by the consensus layer.
-   - **Executed Block**: A block whose transactions have been executed by the execution engine.
-
-2. **State Transitions**  
-   Blocks move through the following states:
-
-```text
-[Pending] → [Ordered] → [Executed] → [Committed]
-```
 
 ## 3. API Specification – Design
 
-### 3.1 Execution Layer API – Design
+### ExecutionChannel API
 
-The **Execution Layer API** manages the interaction between the execution layer and the consensus layer. It defines the following core functions:
+From the perspective of a transaction’s lifecycle, the `ExecutionChannel APIs` defines the following methods:
 
-1. **`request_block_batch(state: BlockHashState) -> Result<BlockBatch>`**  
-   - Description: Requests a batch of transactions from the execution engine based on the current blockchain state.
-   - Inputs:  
-     - `state`: The state of the block hash, including the safe block and the head block.
-   - Output:  
-     - `BlockBatch`: A batch of transactions to be processed.
+1. **`send_pending_txns`**
 
-2. **`send_ordered_block(block: BlockBatch) -> Result<()>`**  
-   - Description: Sends an ordered block (a batch of transactions) from the consensus layer to the execution engine for processing.
-   - Inputs:  
-     - `block`: A batch of transactions that has been ordered by the consensus layer.
+    - **Input**: None
+    - **Output**: Returns `Result<(Vec<VerifiedTxnWithAccountSeqNum>)>`, which contains a verified
+      transaction (`VerifiedTxn`) along with the committed nonce of the transaction sender’s account.
+    - **Usage**: When called, this method retrieves all pending transactions from the transaction pool and then clears
+      the pending queue.
 
-3. **`recv_executed_block_hash() -> Result<HashValue>`**  
-   - Description: Receives the hash of the executed block from the execution engine after processing.
-   - Output:  
-     - `HashValue`: The hash of the executed block.
+2. **`recv_ordered_block`**
 
-4. **`commit_block_hash(block_ids: Vec<BlockId>) -> Result<()>`**  
-   - Description: Commits the block identified by the provided block IDs to finalize it in the blockchain.
-   - Inputs:  
-     - `block_ids`: A list of block IDs representing the blocks to be committed.
+    - **Input**: A `BlockID` and an `OrderedBlock` (of type `ExternalBlock`), which contains ordered transactions and
+      block metadata.
+    - **Output**: Returns `Result<()>`, indicating whether the block is successfully received and accepted by the
+      execution layer.
+    - **Usage**: After the consensus engine proposes a block, it sends the block to the execution layer for transaction
+      execution. This method allows the execution layer to receive and process the ordered block.
 
-### 3.2 Consensus Layer API – Design
+3. **`send_executed_block_hash`**
 
-The **Consensus Layer API** enables the consensus layer to interact with the execution layer. The following functions are defined:
+    - **Input**: A target block number (`BlockNumber`) and its corresponding block identifier (`BlockID`).
+    - **Output**: Returns `Result<(ComputeRes)>`, which includes the computed `BlockHash` and the total number of
+      transactions (`TxnNum`) processed so far.
+    - **Usage**:
+        - Once the execution layer computes the state commitment (i.e., the `BlockHash`), it sends this information to
+          the consensus layer for finalization. The consensus layer attempts to reach a 2f+1 light consensus with other
+          validators.
+        - If the finalized state commitment deviates significantly from the originally proposed blocks, the pipeline
+          controller may adjust the block proposing pace accordingly.
 
-1. **`recv_batch() -> Result<BlockBatch>`**  
-   - Description: Receives a batch of transactions prepared by the execution engine for consensus ordering.
-   - Output:  
-     - `BlockBatch`: A batch of transactions ready for ordering by the consensus layer.
+4. **`commit_block_info`**
 
-2. **`recv_compute_res() -> Result<ExecutionResult>`**  
-   - Description: Receives the results of the transaction execution from the execution engine.
-   - Output:  
-     - `ExecutionResult`: The results of the transaction execution, which the consensus layer uses for block finalization.
+    - **Input**: A vector of `BlockID` values, representing the blocks to be committed.
+    - **Output**: Returns `Result<()>`, indicating the success or failure of the operation.
+    - **Usage**: When the state commitment is finalized, the consensus layer notifies the execution layer to commit the
+      block hash to the blockchain storage.
+
+   ![GCEI Protocol](./book/assets/gcei_txn_lifecycle.png)
+
+
+### 3.2 Recovery API
+
+The `Recovery APIs` defines the following methods which help gravity node recover from an unexpected shutdown:
+
+1. `latest_block_number()`: Retrieves the latest block height known to the Execution Layer.
+2. `recover_ordered_block(parent_id, block)`: Replays the specified block from the Consensus Layer to the Execution
+   Layer if the Execution Layer is missing it.
+3. `register_execution_args(args)`: Collects initial data from the Consensus Layer at startup and sends it to the
+   Execution Layer to facilitate recovery.
+4. `finalized_block_number()`: Returns the Execution Layer’s highest fully persisted (finalized) block number.
+
+For more details on the GCEI protocol APIs, please refer to the [Gravity SDK Architecture](./book/docs/architecture.md)
+and [GCEI Protocol Specification](./book/docs/gcei_protocol.md) . These APIs define the standardized interfaces for
+communication between the consensus and execution layers, ensuring seamless integration and efficient operation of the
+Gravity SDK framework.
 
 ## 4. Protocol Operations
 
@@ -99,14 +101,9 @@ The **Consensus Layer API** enables the consensus layer to interact with the exe
 
 ### 4.2 Recovery Mechanism
 
-todo()
-
-## 5. Error Handling
-
-todo()
 
 
-### 6.1 Core API Implementation
+### 5.1 Core API Implementation
 
 The GCEI protocol is implemented using a single primary trait, `ExecutionApi`, which handles all core interactions between the consensus and execution layers. The implementation uses Rust's async/await pattern for efficient non-blocking operations:
 
@@ -128,7 +125,7 @@ pub trait ExecutionApi: Send + Sync {
 }
 ```
 
-### 6.2 Implementation Details
+### 5.2 Implementation Details
 
 The `ExecutionApi` trait provides four core functions that implement the operations described in the design section:
 
@@ -154,7 +151,7 @@ The `ExecutionApi` trait provides four core functions that implement the operati
    - Completes the commitment phase described in Section 4.1
 
 
-## 7. Conclusion
+## 6. Conclusion
 
 The **GCEI protocol** is a key component of the **Gravity-SDK**, enabling efficient communication between the consensus and execution layers in a blockchain system. The design of the **Execution Layer API** and **Consensus Layer API** ensures that both layers can interact seamlessly. By separating the design from the implementation, the protocol provides flexibility for future improvements and optimizations. The use of Rust's asynchronous traits ensures that the protocol can handle high transaction volumes efficiently, making it a robust solution for modern blockchain systems.
 

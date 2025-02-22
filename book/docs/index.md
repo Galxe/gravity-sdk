@@ -5,8 +5,8 @@
 - [1.1 Architecture](architecture.md)
 
 ## GCEI Protocol
-- [2.1 Core API](gcei.md#core-api)
-- [2.2 Recovers](gcei.md#recovers)
+- [2.1 Core API](gcei_protocol#core-api)
+- [2.2 Recovers](gcei_protocol#recovers)
 
 ## Compatibility
 - [3.1 Compatibility with Ethereum Engine API](compatibility.md#Compatibility with Ethereum Engine API)

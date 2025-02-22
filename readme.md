@@ -86,47 +86,6 @@ execution processes are properly synchronized. The GCEI protocol specification d
   when a Gravity Node experiences an unexpected shutdown. They provide a mechanism for rapid re-participation in the
   Gravity Network and are triggered only during system startup recovery.
 
-### ExecutionChannel API
-
-From the perspective of a transaction’s lifecycle, the `ExecutionChannel APIs` defines the following methods:
-
-1. **`send_pending_txns`**
-
-    - **Input**: None
-    - **Output**: Returns `Result<(Vec<VerifiedTxnWithAccountSeqNum>)>`, which contains a verified
-      transaction (`VerifiedTxn`) along with the committed nonce of the transaction sender’s account.
-    - **Usage**: When called, this method retrieves all pending transactions from the transaction pool and then clears
-      the pending queue.
-
-2. **`recv_ordered_block`**
-
-    - **Input**: A `BlockID` and an `OrderedBlock` (of type `ExternalBlock`), which contains ordered transactions and
-      block metadata.
-    - **Output**: Returns `Result<()>`, indicating whether the block is successfully received and accepted by the
-      execution layer.
-    - **Usage**: After the consensus engine proposes a block, it sends the block to the execution layer for transaction
-      execution. This method allows the execution layer to receive and process the ordered block.
-
-3. **`send_executed_block_hash`**
-
-    - **Input**: A target block number (`BlockNumber`) and its corresponding block identifier (`BlockID`).
-    - **Output**: Returns `Result<(ComputeRes)>`, which includes the computed `BlockHash` and the total number of
-      transactions (`TxnNum`) processed so far.
-    - **Usage**:
-        - Once the execution layer computes the state commitment (i.e., the `BlockHash`), it sends this information to
-          the consensus layer for finalization. The consensus layer attempts to reach a 2f+1 light consensus with other
-          validators.
-        - If the finalized state commitment deviates significantly from the originally proposed blocks, the pipeline
-          controller may adjust the block proposing pace accordingly.
-
-4. **`commit_block_info`**
-
-    - **Input**: A vector of `BlockID` values, representing the blocks to be committed.
-    - **Output**: Returns `Result<()>`, indicating the success or failure of the operation.
-    - **Usage**: When the state commitment is finalized, the consensus layer notifies the execution layer to commit the
-      block hash to the blockchain storage.
-
-   ![GCEI Protocol](./book/assets/gcei_txn_lifecycle.png)
 
 ### Block Lifecycle Perspective
 
@@ -176,22 +135,6 @@ three stages:
 │            │       │                  │                      │          
 └────────────┘       │                  │                      │
 ```
-
-### Recovery API
-
-The `Recovery APIs` defines the following methods which help gravity node recover from an unexpected shutdown:
-
-1. `latest_block_number()`: Retrieves the latest block height known to the Execution Layer.
-2. `recover_ordered_block(parent_id, block)`: Replays the specified block from the Consensus Layer to the Execution
-   Layer if the Execution Layer is missing it.
-3. `register_execution_args(args)`: Collects initial data from the Consensus Layer at startup and sends it to the
-   Execution Layer to facilitate recovery.
-4. `finalized_block_number()`: Returns the Execution Layer’s highest fully persisted (finalized) block number.
-
-For more details on the GCEI protocol APIs, please refer to the [Gravity SDK Architecture](./book/docs/architecture.md)
-and [GCEI Protocol Specification](./book/docs/gcei_protocol.md) . These APIs define the standardized interfaces for
-communication between the consensus and execution layers, ensuring seamless integration and efficient operation of the
-Gravity SDK framework.
 
 ## Getting Started
 
