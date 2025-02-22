@@ -61,6 +61,9 @@ From the perspective of a transaction’s lifecycle, the `ExecutionChannel APIs`
 
    ![GCEI Protocol](../assets/gcei_txn_lifecycle.png)
 
+
+For the life cycle of a batch request, you can see [Gravity SDK Architecture](./book/docs/architecture.md).
+
 ## 3 Recovery
 
 This chapter explains how Gravity SDK handles node recovery after an unexpected shutdown by synchronizing the block
