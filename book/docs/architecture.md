@@ -94,90 +94,123 @@ Transaction Flow:
                           ↓                 ↓               ↓
                      [POS Gen] → [Block Ordering] → [Block Commitment]
 ```
-3 Gravity SDK Architecture
+
+
+## 3 Gravity SDK Architecture
+
 The Gravity SDK is a modular blockchain execution engine designed with a focus on generality, scalability, and high performance, while ensuring security and decentralization. This document outlines the core architecture of the SDK and the specific roles of its modules in the transaction lifecycle.
 
-3.1 Mempool
-The Mempool is the entry point for transactions into the execution engine. Designed with minimalism in mind, it prioritizes compatibility and protocol independence while serving as a staging area for transactions before further processing.
+---
 
-Transaction Reception and Validation
-The Mempool receives ready transactions from the execution layer.
-All validation, such as signature verification, nonce checks, gas limits, and format checks, is completed at the execution layer before a transaction is forwarded to the Mempool.
-The Mempool in Gravity SDK only processes transactions that are pre-validated and marked as ready.
-Transaction Storage
-Upon receiving a transaction, the Mempool stores only the essential pieces of data, minimizing overhead:
-Account Address: Identifies the sender of the transaction.
-Account Nonce: Tracks the sender's latest transaction sequence.
-Transaction Nonce: Ensures the transaction's order and prevents replay.
-Transaction Bytes: Contains the raw transaction data without parsing or interpreting its contents.
-By avoiding transaction content parsing, the Mempool maintains protocol independence, allowing the SDK to work with diverse blockchain protocols and VM implementations.
-Order and Replay Protection
-The nonce mechanism ensures that:
-Transactions are executed in the correct order.
-Duplicate or replayed transactions are effectively rejected.
+### 3.1 Mempool
+
+The **Mempool** is the entry point for transactions into the execution engine. Designed with minimalism in mind, it prioritizes compatibility and protocol independence while serving as a staging area for transactions before further processing.
+
+#### **Transaction Reception and Validation**
+- The Mempool receives **ready transactions** from the execution layer.  
+- All validation, such as signature verification, nonce checks, gas limits, and format checks, is completed at the execution layer before a transaction is forwarded to the Mempool.  
+- The Mempool in Gravity SDK only processes transactions that are pre-validated and marked as ready.
+
+#### **Transaction Storage**
+- Upon receiving a transaction, the Mempool stores only the **essential pieces of data**, minimizing overhead:
+  - **Account Address**: Identifies the sender of the transaction.
+  - **Account Nonce**: Tracks the sender's latest transaction sequence.
+  - **Transaction Nonce**: Ensures the transaction's order and prevents replay.
+  - **Transaction Bytes**: Contains the raw transaction data without parsing or interpreting its contents.
+
+- By avoiding transaction content parsing, the Mempool maintains protocol independence, allowing the SDK to work with diverse blockchain protocols and VM implementations.
+
+#### **Order and Replay Protection**
+- The nonce mechanism ensures that:
+  - Transactions are executed in the correct order.
+  - Duplicate or replayed transactions are effectively rejected.
+
 With its minimal and general-purpose design, the Mempool provides a lightweight yet powerful foundation for transaction handling, enabling seamless integration with various blockchain systems while optimizing storage and throughput.
 
-3.2 Quorum Store
-The Quorum Store introduces a pre-consensus mechanism to enhance network efficiency and reduce bandwidth consumption. By focusing on transaction propagation and availability, it ensures that transactions are reliably distributed and prepared for consensus.
+---
 
-Batching Transactions
-Transactions in the Mempool are grouped into batches, reducing the overhead of broadcasting individual transactions.
-Weak Broadcast
-Transaction batches are propagated across the network using a weak broadcast protocol, which:
-Does not enforce strict consistency during data dissemination.
-Ensures that the majority of nodes receive the transaction batches.
-Transaction Confirmation
-When a node receives a transaction batch:
-If the transactions are already stored locally, the node sends a confirmation message.
-If any transactions are missing, the node requests them, stores them locally, and then confirms their availability.
-Proof of Store
-Once a node collects a sufficient number of confirmations (typically from a quorum of nodes), it generates a Proof of Store.
-The Proof of Store serves as a proof of transaction availability, confirming that the transaction batch is widely stored across the network.
+### 3.2 Quorum Store
+
+The **Quorum Store** introduces a pre-consensus mechanism to enhance network efficiency and reduce bandwidth consumption. By focusing on transaction propagation and availability, it ensures that transactions are reliably distributed and prepared for consensus.
+
+#### **Batching Transactions**
+- Transactions in the Mempool are grouped into **batches**, reducing the overhead of broadcasting individual transactions.
+
+#### **Weak Broadcast**
+- Transaction batches are propagated across the network using a **weak broadcast protocol**, which:
+  - Does not enforce strict consistency during data dissemination.
+  - Ensures that the majority of nodes receive the transaction batches.
+
+#### **Transaction Confirmation**
+- When a node receives a transaction batch:
+  - If the transactions are already stored locally, the node sends a confirmation message.
+  - If any transactions are missing, the node requests them, stores them locally, and then confirms their availability.
+
+#### **Proof of Store**
+- Once a node collects a sufficient number of confirmations (typically from a quorum of nodes), it generates a **Proof of Store**.  
+- The Proof of Store serves as a **proof of transaction availability**, confirming that the transaction batch is widely stored across the network.
+
 The Quorum Store ensures efficient transaction propagation while preparing transactions for consensus, reducing the load on the consensus mechanism and improving overall system performance.
 
-3.3 Consensus
-The Consensus module is responsible for ordering the Proof of Store objects generated by the Quorum Store. It establishes a deterministic order for transactions, which is essential for maintaining consistent state transitions across the network.
+---
 
-Validating Proof of Store
-The consensus layer first verifies the validity of each Proof of Store to ensure it satisfies the requirements of the pre-consensus mechanism.
-Ordering Proof of Store
-Proofs of Store are ordered using a consensus algorithm (e.g., Byzantine Fault Tolerance or other suitable mechanisms).
-The result is an Ordered Block, which contains a list of transactions arranged in a deterministic sequence.
-Ensuring Deterministic State Transitions
-The strict ordering of transactions within the Ordered Block guarantees that all nodes execute transactions in the same sequence, preventing inconsistencies or state divergence.
+### 3.3 Consensus
+
+The **Consensus** module is responsible for ordering the Proof of Store objects generated by the Quorum Store. It establishes a deterministic order for transactions, which is essential for maintaining consistent state transitions across the network.
+
+#### **Validating Proof of Store**
+- The consensus layer first verifies the validity of each Proof of Store to ensure it satisfies the requirements of the pre-consensus mechanism.
+
+#### **Ordering Proof of Store**
+- Proofs of Store are ordered using a consensus algorithm (e.g., Byzantine Fault Tolerance or other suitable mechanisms).  
+- The result is an **Ordered Block**, which contains a list of transactions arranged in a deterministic sequence.
+
+#### **Ensuring Deterministic State Transitions**
+- The strict ordering of transactions within the Ordered Block guarantees that all nodes execute transactions in the same sequence, preventing inconsistencies or state divergence.
+
 The Consensus module's design ensures compatibility with various consensus algorithms, providing flexibility for diverse blockchain implementations while maintaining deterministic and reliable state transitions.
 
-3.4 Execution Pipeline
-The Execution Pipeline is the coordination layer that processes Ordered Blocks and converts the deterministic transaction order into a consistent, shared state. It ensures that all nodes in the network reach agreement on the resulting state.
+---
 
-Receiving and Forwarding Ordered Blocks
-The Execution Pipeline receives Ordered Blocks from the Consensus module.
-It forwards the transactions in the specified order to the Virtual Machine (VM) for execution.
-Collecting and Verifying Execution Results
-Each node independently processes the transactions in the Ordered Block and generates a Compute Result.
-Nodes broadcast their Compute Results to the network.
-Each node verifies the Compute Results from others.
-Once a sufficient number of identical Compute Results (typically 2/3+1) are received, the network reaches execution result consensus.
-State Commitment
-After reaching execution result consensus:
-The block is committed in sequence, following its block number.
-The state is atomically updated, ensuring consistency across all nodes.
-The external VM is notified to finalize the state update.
-Key Features of the Execution Pipeline
-Decoupled Execution and Consensus: Execution logic is separated from consensus logic, enabling modularity and easier system optimization.
-Support for Multiple VMs: The pipeline supports various VM implementations, allowing flexibility for different blockchain protocols.
-Result Consensus for Fault Tolerance: Even with faulty or malicious nodes, the system ensures state consistency by requiring consensus on execution results.
+### 3.4 Execution Pipeline
+
+The **Execution Pipeline** is the coordination layer that processes Ordered Blocks and converts the deterministic transaction order into a consistent, shared state. It ensures that all nodes in the network reach agreement on the resulting state.
+
+#### **Receiving and Forwarding Ordered Blocks**
+- The Execution Pipeline receives Ordered Blocks from the Consensus module.  
+- It forwards the transactions in the specified order to the Virtual Machine (VM) for execution.
+
+#### **Collecting and Verifying Execution Results**
+- Each node independently processes the transactions in the Ordered Block and generates a **Compute Result**.  
+- Nodes broadcast their Compute Results to the network.  
+- Each node verifies the Compute Results from others.  
+- Once a sufficient number of identical Compute Results (typically **2/3+1**) are received, the network reaches **execution result consensus**.
+
+#### **State Commitment**
+- After reaching execution result consensus:
+  1. The block is committed in sequence, following its block number.
+  2. The state is atomically updated, ensuring consistency across all nodes.
+  3. The external VM is notified to finalize the state update.
+
+#### **Key Features of the Execution Pipeline**
+- **Decoupled Execution and Consensus**: Execution logic is separated from consensus logic, enabling modularity and easier system optimization.  
+- **Support for Multiple VMs**: The pipeline supports various VM implementations, allowing flexibility for different blockchain protocols.  
+- **Result Consensus for Fault Tolerance**: Even with faulty or malicious nodes, the system ensures state consistency by requiring consensus on execution results.
+
 The Execution Pipeline transforms ordered transactions into a reliable, deterministic state, ensuring the integrity and consistency of the blockchain across all nodes.
 
-Summary
+---
+
+### Summary
+
 The Gravity SDK architecture provides a modular and efficient framework for processing transactions, from initial reception to final state commitment:
 
-Mempool: Handles transaction reception and storage while maintaining protocol independence.
-Quorum Store: Optimizes transaction propagation with pre-consensus mechanisms to improve network efficiency.
-Consensus: Establishes a deterministic transaction order, ensuring state consistency and reliability.
-Execution Pipeline: Converts ordered transactions into a shared, deterministic state while supporting modular VM integration.
-This design ensures high performance, scalability, and compatibility, making the Gravity SDK a powerful and versatile solution for a wide range of blockchain applications.
+1. **Mempool**: Handles transaction reception and storage while maintaining protocol independence.  
+2. **Quorum Store**: Optimizes transaction propagation with pre-consensus mechanisms to improve network efficiency.  
+3. **Consensus**: Establishes a deterministic transaction order, ensuring state consistency and reliability.  
+4. **Execution Pipeline**: Converts ordered transactions into a shared, deterministic state while supporting modular VM integration.
 
+This design ensures high performance, scalability, and compatibility, making the Gravity SDK a powerful and versatile solution for a wide range of blockchain applications.
 
 
 ## 5. Recovery Mechanism
