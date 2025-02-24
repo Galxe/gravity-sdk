@@ -1,0 +1,15 @@
+{
+    "a478561fdb039e2e325bd8ae4c136f3e964cf418": {
+      "nonce": 0,
+      "balance": 184467440737095516,
+      "kv_store": {}
+    },
+    "4bab0b606f95ac53cfdc2644ac4376de8dd019b3": {
+      "nonce": 0,
+      "balance": 184467440737095516,
+      "kv_store": {
+        "name": "example",
+        "fake": "true"
+      }
+    }
+  }

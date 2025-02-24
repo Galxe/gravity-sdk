@@ -9,8 +9,8 @@ pub struct Blockchain {
 }
 
 impl Blockchain {
-    pub fn new(storage: Arc<dyn Storage>) -> Self {
-        Self { state: Arc::new(RwLock::new(State::new())), storage }
+    pub fn new(storage: Arc<dyn Storage>, genesis_path: Option<&str>) -> Self {
+        Self { state: Arc::new(RwLock::new(State::new(genesis_path))), storage }
     }
 
     pub fn state(&self) -> Arc<RwLock<State>> {

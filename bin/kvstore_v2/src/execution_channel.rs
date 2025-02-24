@@ -60,12 +60,6 @@ impl ExecutionChannel for ExecutionChannelImpl {
         unimplemented!("Currently not implemented");
     }
 
-    ///
-    /// # Returns
-    /// A `Vec` containing tuples, where each tuple consists of:
-    /// - `VerifiedTxn`: The transaction object.
-    /// - `sender_latest_committed_sequence_number`: The latest committed sequence number associated with the sender on the execution layer.
-    ///
     async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
         Ok(self.mempool.pending_txns().await)
     }
@@ -82,9 +76,9 @@ impl ExecutionChannel for ExecutionChannelImpl {
             .map(|verified_txn| TransactionWithAccount::from_bytes(verified_txn.bytes).txn)
             .collect();
 
-        info!("send ordered block {:?}", ordered_block.block_meta.block_number);
         // TODO(): maybe we should send parent block id to get parent block number to read the state root
         let block = RawBlock { block_number: ordered_block.block_meta.block_number, transactions };
+        info!("send ordered block {:?}, empty block {}", ordered_block.block_meta.block_number, block.transactions.is_empty());
 
         let (sender, receiver) = channel();
         let executable_block = ExecutableBlock { block, callbacks: sender };

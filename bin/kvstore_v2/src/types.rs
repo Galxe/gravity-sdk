@@ -47,15 +47,28 @@ impl From<VerifiedTxn> for TransactionWithAccount {
     }
 }
 
-fn string_to_u8_32(input: &str) -> Result<[u8; 32], String> {
-    let bytes = decode(input).map_err(|_| "Invalid hex string".to_string())?;
-    if bytes.len() != 32 {
-        return Err(format!("Invalid length: expected 32 bytes, got {}", bytes.len()));
+// fn convert_account(input: &str) -> Result<[u8; 32], String> {
+//     let bytes = decode(input).map_err(|_| "Invalid hex string".to_string())?;
+//     if bytes.len() != 32 {
+//         return Err(format!("Invalid length: expected 32 bytes, got {}", bytes.len()));
+//     }
+
+//     let mut array = [0u8; 32];
+//     array.copy_from_slice(&bytes);
+//     Ok(array)
+// }
+
+fn convert_account(acc: &str) -> Result<[u8; 32], String> {
+    let acc_bytes = hex::decode(acc).unwrap();
+
+    if acc_bytes.len() != 20 {
+        return Err(format!("Invalid length: expected 20 bytes, got {}", acc_bytes.len()));
     }
 
-    let mut array = [0u8; 32];
-    array.copy_from_slice(&bytes);
-    Ok(array)
+    let mut bytes = [0u8; 32];
+    bytes[12..].copy_from_slice(&acc_bytes);
+
+    Ok(bytes)
 }
 
 impl TransactionWithAccount {
@@ -81,7 +94,10 @@ impl TransactionWithAccount {
     }
 
     pub fn account(&self) -> ExternalAccountAddress {
-        ExternalAccountAddress::new(string_to_u8_32(self.address.as_str()).unwrap())
+        ExternalAccountAddress::new(convert_account(self.address.as_str()).unwrap())
+        // let mut bytes = [0u8; 32];
+        // bytes[12..].copy_from_slice(&string_to_u8_32(self.address.as_str()).unwrap());
+        // ExternalAccountAddress::new(bytes)
     }
 
     pub fn sequence_number(&self) -> u64 {

@@ -1,5 +1,5 @@
 use sha3::Digest;
-use std::collections::HashMap;
+use std::{collections::HashMap, fs::File, io::BufReader};
 
 use crate::{AccountId, AccountState, StateRoot};
 
@@ -10,8 +10,19 @@ pub struct State {
 }
 
 impl State {
-    pub fn new() -> Self {
-        Self { accounts: HashMap::new(), block_number: 0 }
+    pub fn new(genesis_path: Option<&str>) -> Self {
+        let accounts = if genesis_path.is_some() {
+            let file = File::open(genesis_path.unwrap()).unwrap();
+            let reader = BufReader::new(file);
+            serde_json::from_reader(reader).unwrap()
+        } else {
+            HashMap::new()
+        };
+
+        Self {
+            accounts,
+            block_number: 0,
+        }
     }
 
     pub fn get_current_block_number(&self) -> u64 {

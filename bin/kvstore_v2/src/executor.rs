@@ -187,8 +187,8 @@ impl PipelineExecutor {
         let sender = verify_signature(tx)?;
         let sender_id = AccountId(sender.clone());
         info!(
-            "Executing transaction from {} to {:?}, state is {:?}",
-            sender, tx.unsigned.kind, state
+            "Executing transaction from {} tx {:?}, state is {:?}",
+            sender, tx.unsigned, state
         );
 
         let mut sender_state = state_updates
@@ -208,8 +208,8 @@ impl PipelineExecutor {
 
         if tx.unsigned.nonce != sender_state.nonce {
             return Err(format!(
-                "Invalid nonce, tx nonce {}, state nonce {}",
-                tx.unsigned.nonce, sender_state.nonce
+                "Invalid nonce, tx nonce {}, tx {:?}, state nonce {}, whole state {:?}",
+                tx.unsigned.nonce, tx, sender_state.nonce, state,
             ));
         }
         sender_state.nonce += 1;

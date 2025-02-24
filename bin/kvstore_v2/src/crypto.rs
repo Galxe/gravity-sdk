@@ -7,6 +7,7 @@ use sha3::{Digest, Keccak256};
 
 use crate::{Transaction, UnsignedTransaction};
 
+#[derive(Debug)]
 pub struct KeyPair {
     pub secret_key: SecretKey,
     pub public_key: PublicKey,

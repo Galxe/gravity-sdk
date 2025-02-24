@@ -94,6 +94,7 @@ async fn add_txn(
     info!("add_txn: transaction: {:?}", transaction);
     let account_address =
         verify_signature(&transaction).map_err(|e| TransactionError::InvalidSignature(e))?;
+    info!("add_txn: txn {:?}, address: {}", transaction, account_address);
     let txn_with_account = TransactionWithAccount { txn: transaction, address: account_address };
     match serde_json::to_string(&txn_with_account) {
         Ok(raw_txn) => {

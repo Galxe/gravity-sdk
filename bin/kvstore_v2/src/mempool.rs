@@ -118,7 +118,7 @@ impl Mempool {
         let account_mempool = mempool.get_mut(&account).unwrap();
         let sequence_number = water_mark.entry(account).or_insert(0);
         for txn in account_mempool.values_mut() {
-            if txn.raw_txn.sequence_number() == *sequence_number + 1 {
+            if txn.raw_txn.sequence_number() == *sequence_number {
                 *sequence_number += 1;
                 txn.status = TxnStatus::Pending;
                 self.pending_send.send(txn.raw_txn.clone().into_verified()).await.unwrap();
@@ -135,7 +135,8 @@ impl Mempool {
         } {
             match result {
                 Ok(txn) => {
-                    txns.push(VerifiedTxnWithAccountSeqNum { txn, account_seq_num: 1 });
+                    // This it not a good practice, the better way is to read the account nonce from the state
+                    txns.push(VerifiedTxnWithAccountSeqNum { txn, account_seq_num: 0 });
                 }
                 Err(TryRecvError::Empty) => {
                     break;
