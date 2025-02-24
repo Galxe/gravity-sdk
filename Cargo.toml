@@ -58,7 +58,7 @@ members = [
     "crates/api",
     "crates/api-types",
     "bin/kvstore",
-    "bin/kvstore_v2",
+    "bin/gravity_sdk_kvstore",
     "crates/coex-bridge",
     "bin/bench",
     "bin/gravity_node"

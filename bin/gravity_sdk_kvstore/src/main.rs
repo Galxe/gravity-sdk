@@ -4,7 +4,7 @@ use clap::Parser;
 use cli::Cli;
 use execution_channel::ExecutionChannelImpl;
 use flexi_logger::{detailed_format, FileSpec, Logger, WriteMode};
-use pipeline_blockchain::*;
+use gravity_sdk_kvstore::*;
 use secp256k1::SecretKey;
 use server::ServerApp;
 use std::{error::Error, sync::Arc, thread};

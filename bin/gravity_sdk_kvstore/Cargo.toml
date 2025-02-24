@@ -1,5 +1,5 @@
 [package]
-name = "pipeline_blockchain"
+name = "gravity_sdk_kvstore"
 version = "0.1.0"
 edition = "2021"
 

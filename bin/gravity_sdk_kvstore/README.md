@@ -22,7 +22,7 @@ To compile the project, execute the following command after cloning the reposito
 cargo build --release
 ```
 
-This command generates the optimized executable pipeline_blockchain in the target/release/ directory.
+This command generates the optimized executable gravity_sdk_kvstore in the target/release/ directory.
 
 ---
 
@@ -35,9 +35,9 @@ To deploy and start the server in single-node mode, perform the following steps 
 ```bash
 rm -rf /tmp/node1
 
-./deploy_utils/deploy.sh --mode single --node node1 -v debug -b pipeline_blockchain
+./deploy_utils/deploy.sh --mode single --node node1 -v debug -b gravity_sdk_kvstore
 
-./target/release/pipeline_blockchain \
+./target/release/gravity_sdk_kvstore \
     --genesis_path $genesis_path \
     --listen_url $url \
     --gravity_node_config $validator.yaml \
@@ -51,27 +51,27 @@ For a cluster deployment with four nodes, execute the following commands:
 ```bash
 rm -rf /tmp/node1 /tmp/node2 /tmp/node3 /tmp/node4
 
-./deploy_utils/deploy.sh --mode cluster --node node1 -v debug -b pipeline_blockchain
-./deploy_utils/deploy.sh --mode cluster --node node2 -v debug -b pipeline_blockchain
-./deploy_utils/deploy.sh --mode cluster --node node3 -v debug -b pipeline_blockchain
-./deploy_utils/deploy.sh --mode cluster --node node4 -v debug -b pipeline_blockchain
+./deploy_utils/deploy.sh --mode cluster --node node1 -v debug -b gravity_sdk_kvstore
+./deploy_utils/deploy.sh --mode cluster --node node2 -v debug -b gravity_sdk_kvstore
+./deploy_utils/deploy.sh --mode cluster --node node3 -v debug -b gravity_sdk_kvstore
+./deploy_utils/deploy.sh --mode cluster --node node4 -v debug -b gravity_sdk_kvstore
 
-./target/release/pipeline_blockchain \
+./target/release/gravity_sdk_kvstore \
     --genesis_path $genesis_path \
     --listen_url $url_node1 \
     --gravity_node_config $validator_node1 \
     --log_dir $log_dir_node1
-./target/release/pipeline_blockchain \
+./target/release/gravity_sdk_kvstore \
     --genesis_path $genesis_path \
     --listen_url $url_node2 \
     --gravity_node_config $validator_node2 \
     --log_dir $log_dir_node2
-./target/release/pipeline_blockchain \
+./target/release/gravity_sdk_kvstore \
     --genesis_path $genesis_path \
     --listen_url $url_node3 \
     --gravity_node_config $validator_node3 \
     --log_dir $log_dir_node3
-./target/release/pipeline_blockchain \
+./target/release/gravity_sdk_kvstore \
     --genesis_path $genesis_path \
     --listen_url $url_node4 \
     --gravity_node_config $validator_node4 \
