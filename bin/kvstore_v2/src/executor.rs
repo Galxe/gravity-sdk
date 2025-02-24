@@ -353,6 +353,21 @@ impl PipelineExecutor {
         Ok(())
     }
 
+    /// +---------------------+     +----------------------+     +--------------------------+     +--------------------+     +--------------------------------+
+    /// | Stage One:          |     | Stage Two:           |     | Stage Three:             |     | Stage Four:        |     | Stage Five:                    |
+    /// | Get ordered block   | --> | Get execution result | --> | Get execution result     | --> | Persist all data   | --> | Release resource & schedule    |
+    /// | from consensus      |     | and send to          |     | consensus result from    |     |                    |     | next block                     |
+    /// | layer & trigger     |     | consensus layer      |     | consensus layer          |     |                    |     |                                |
+    /// | execution process   |     |                      |     |                          |     |                    |     |                                |
+    /// +---------------------+     +----------------------+     +--------------------------+     +--------------------+     +--------------------------------+
+    ///      |                         |                          |                          |                         |                         |
+    ///      | ordered_block_receiver  | execution_queue          | commit_req_receiver      | persisting_notifiers  | committing_queue          |
+    ///      |                         |                          |                          |                         |                         |
+    ///      v                         v                          v                         v                         v
+    /// +---------------------+     +----------------------+     +--------------------------+     +--------------------+     +--------------------------------+
+    /// | add_block(block)    |     | process_execution_   |     | process_commit_request   |     | persist_block      |     | release_account_locks,         |
+    /// |                     |     | results(execution_result)| (state, execution_result)|     |                    |     | schedule_ready_blocks          |
+    /// +---------------------+     +----------------------+     +--------------------------+     +--------------------+     +--------------------------------+
     pub async fn start(mut self, storage: Arc<dyn Storage>) {
         loop {
             tokio::select! {

@@ -29,6 +29,17 @@ impl TestConsensusLayer {
     }
 }
 
+/// **Note:** This code serves as a minimum viable implementation for demonstrating how to build a DApp using `gravity-sdk`.
+/// It does not include account balance validation, comprehensive error handling, or robust runtime fault tolerance.
+/// Current limitations and future tasks include:
+/// 1. Block Synchronization: Block synchronization is not yet implemented.
+/// A basic Recover API implementation is required for block synchronization functionality.
+///
+/// 2. State Persistence: The server does not load persisted state data on restart,
+/// leading to state resets after each restart.
+///
+/// 3. Execution Pipeline: Although the execution layer pipeline is designed with
+/// five stages, it currently executes blocks serially instead of in a pipelined manner.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
@@ -79,7 +90,6 @@ mod tests {
 
     use super::*;
 
- 
     #[tokio::test]
     async fn test_blockchain_processing() -> Result<(), Box<dyn Error>> {
         let storage = SledStorage::new("test_blockchain_db")?;
@@ -168,7 +178,12 @@ fn create_transfer_transaction(
     Transaction { unsigned, signature }
 }
 
-fn create_kv_transaction(secret_key: &SecretKey, nonce: u64, key: &str, value: &str) -> Transaction {
+fn create_kv_transaction(
+    secret_key: &SecretKey,
+    nonce: u64,
+    key: &str,
+    value: &str,
+) -> Transaction {
     let unsigned = UnsignedTransaction {
         nonce,
         kind: TransactionKind::SetKV { key: key.to_string(), value: value.to_string() },
