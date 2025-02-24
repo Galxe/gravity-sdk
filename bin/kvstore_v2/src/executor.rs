@@ -5,7 +5,7 @@ use futures::channel::{mpsc, oneshot};
 use futures::future::BoxFuture;
 use futures::{stream::FuturesUnordered, StreamExt};
 use futures::{FutureExt, SinkExt};
-use log::info;
+use log::{debug, info};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -186,7 +186,7 @@ impl PipelineExecutor {
     ) -> Result<TransactionReceipt, String> {
         let sender = verify_signature(tx)?;
         let sender_id = AccountId(sender.clone());
-        info!(
+        debug!(
             "Executing transaction from {} tx {:?}, state is {:?}",
             sender, tx.unsigned, state
         );
@@ -247,7 +247,7 @@ impl PipelineExecutor {
             transaction: tx.clone(),
             transaction_hash: compute_transaction_hash(&tx.unsigned),
             status: true,
-            gas_used: 21000, // to simplify, we used one fiexd gas num
+            gas_used: 21000, // to simplify, we use one fiexd gas num
             logs: Vec::new(),
         })
     }

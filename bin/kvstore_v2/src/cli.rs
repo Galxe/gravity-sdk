@@ -9,8 +9,14 @@ pub struct Cli {
     #[command(flatten)]
     pub gravity_node_config: GravityNodeArgs,
 
-    #[arg(long)]
+    #[arg(long = "log_dir")]
     pub log_dir: String,
+
+    #[arg(long = "genesis_path")]
+    pub genesis_path: Option<String>,
+
+    #[arg(long = "listen_url")]
+    pub listen_url: String,
 }
 
 impl Cli {

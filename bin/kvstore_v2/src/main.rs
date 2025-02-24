@@ -42,13 +42,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .start()
         .unwrap();
     let storage = Arc::new(SledStorage::new("blockchain_db")?);
-    let path = Some("/home/jingyue/projects/gravity-sdk/bin/kvstore_v2/src/genesis.json");
-    let mut blockchain = Blockchain::new(storage.clone(), path);
-    // let mut blockchain = Blockchain::new(storage.clone(), None);
+    let genesis_path = cli.genesis_path.clone();
+    let mut blockchain = Blockchain::new(storage.clone(), genesis_path);
 
     let (ordered_block_sender, ordered_block_receiver) = futures::channel::mpsc::channel(10);
     blockchain.process_blocks_pipeline(ordered_block_receiver).await?;
     let execution_channel = Arc::new(ExecutionChannelImpl::new(ordered_block_sender));
+    let listen_url = cli.listen_url.clone();
 
     cli.run(move || {
         tokio::spawn(async move {
@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let cl = TestConsensusLayer::new(gcei_config, execution_channel);
                 tokio::runtime::Runtime::new().unwrap().block_on(cl.run());
             });
-            server.start("127.0.0.1:9006").await.unwrap();
+            server.start(listen_url.as_str()).await.unwrap();
         })
     })
     .await;

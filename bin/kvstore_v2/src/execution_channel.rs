@@ -64,10 +64,9 @@ impl ExecutionChannel for ExecutionChannelImpl {
         Ok(self.mempool.pending_txns().await)
     }
 
-    // async fn send_ordered_block(&self, ordered_block: Vec<Txns>, block_number: BlockNumber, parent_mata_data: ExternalBlockMeta) -> Result<(), ExecError>;
     async fn send_ordered_block(
         &self,
-        parent_id: BlockId,
+        _parent_id: BlockId,
         ordered_block: ExternalBlock,
     ) -> Result<(), ExecError> {
         let transactions = ordered_block

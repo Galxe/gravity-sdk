@@ -9,7 +9,7 @@ pub struct Blockchain {
 }
 
 impl Blockchain {
-    pub fn new(storage: Arc<dyn Storage>, genesis_path: Option<&str>) -> Self {
+    pub fn new(storage: Arc<dyn Storage>, genesis_path: Option<String>) -> Self {
         Self { state: Arc::new(RwLock::new(State::new(genesis_path))), storage }
     }
 

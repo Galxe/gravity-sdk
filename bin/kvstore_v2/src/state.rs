@@ -10,7 +10,7 @@ pub struct State {
 }
 
 impl State {
-    pub fn new(genesis_path: Option<&str>) -> Self {
+    pub fn new(genesis_path: Option<String>) -> Self {
         let accounts = if genesis_path.is_some() {
             let file = File::open(genesis_path.unwrap()).unwrap();
             let reader = BufReader::new(file);
