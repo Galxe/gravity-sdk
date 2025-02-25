@@ -1,6 +1,6 @@
 [workspace.package]
 authors = ["Gravity Team"]
-edition = "2024"
+edition = "2021"
 homepage = "https://gravity.xyz/"
 license = "Apache-2.0"
 publish = false
