@@ -68,7 +68,7 @@ impl Display for Block {
             .unwrap_or_else(|| "(NIL)".to_string());
         write!(
             f,
-            "[id: {}, author: {}, epoch: {}, round: {:02}, parent_id: {}, timestamp: {}, block_number: {:?}]",
+            "[id: {}, author: {}, epoch: {}, round: {:02}, parent_id: {}, timestamp: {}, block_number: {:?}, payload: {:?}]",
             self.id,
             author,
             self.epoch(),
@@ -76,6 +76,7 @@ impl Display for Block {
             self.parent_id(),
             self.timestamp_usecs(),
             self.block_number(),
+            self.payload(),
         )
     }
 }
