@@ -39,6 +39,8 @@ struct TimeMetric {
     interval: u128,
     last: Instant,
     txn_count: u64,
+    exclude_size: u64,
+    count: u64,
 }
 
 static TIME_METRIC: OnceLock<Mutex<TimeMetric>> = OnceLock::new();
@@ -50,20 +52,13 @@ pub struct Mempool {
 
 impl Mempool {
     pub fn new(config: &NodeConfig) -> Self {
-        Mempool {
-            transactions: TransactionStore::new(&config.mempool),
-        }
+        Mempool { transactions: TransactionStore::new(&config.mempool) }
     }
 
     /// This function will be called once the transaction has been stored.
     pub(crate) fn commit_transaction(&mut self, sender: &AccountAddress, sequence_number: u64) {
-        debug!(
-            "commit txn {} {}",
-            sender,
-            sequence_number
-        );
-        self.transactions
-            .commit_transaction(sender, sequence_number);
+        debug!("commit txn {} {}", sender, sequence_number);
+        self.transactions.commit_transaction(sender, sequence_number);
     }
 
     pub(crate) fn log_commit_transaction(
@@ -129,8 +124,7 @@ impl Mempool {
             counters::COMMIT_REJECTED_LABEL
         };
         self.log_reject_transaction(sender, sequence_number, label);
-        self.transactions
-            .reject_transaction(sender, sequence_number, hash);
+        self.transactions.reject_transaction(sender, sequence_number, hash);
     }
 
     pub(crate) fn log_txn_latency(
@@ -151,13 +145,11 @@ impl Mempool {
     }
 
     fn log_consensus_pulled_latency(&self, account: AccountAddress, sequence_number: u64) {
-        if let Some((insertion_info, bucket, priority)) = self
-            .transactions
-            .get_insertion_info_and_bucket(&account, sequence_number)
+        if let Some((insertion_info, bucket, priority)) =
+            self.transactions.get_insertion_info_and_bucket(&account, sequence_number)
         {
-            let prev_count = insertion_info
-                .consensus_pulled_counter
-                .fetch_add(1, Ordering::Relaxed);
+            let prev_count =
+                insertion_info.consensus_pulled_counter.fetch_add(1, Ordering::Relaxed);
             Self::log_txn_latency(
                 insertion_info,
                 bucket.as_str(),
@@ -174,9 +166,8 @@ impl Mempool {
         sequence_number: u64,
         stage: &'static str,
     ) {
-        if let Some((insertion_info, bucket, priority)) = self
-            .transactions
-            .get_insertion_info_and_bucket(&account, sequence_number)
+        if let Some((insertion_info, bucket, priority)) =
+            self.transactions.get_insertion_info_and_bucket(&account, sequence_number)
         {
             Self::log_txn_latency(insertion_info, bucket.as_str(), stage, priority.as_str());
         }
@@ -189,10 +180,8 @@ impl Mempool {
         tracked_use_case: Option<(UseCaseKey, &String)>,
     ) {
         let parked_duration = if let Some(park_time) = insertion_info.park_time {
-            let parked_duration = insertion_info
-                .ready_time
-                .duration_since(park_time)
-                .unwrap_or(Duration::ZERO);
+            let parked_duration =
+                insertion_info.ready_time.duration_since(park_time).unwrap_or(Duration::ZERO);
             counters::core_mempool_txn_commit_latency(
                 counters::PARKED_TIME_LABEL,
                 insertion_info.submitted_by_label(),
@@ -207,9 +196,8 @@ impl Mempool {
 
         if let Ok(commit_duration) = SystemTime::now().duration_since(insertion_info.insertion_time)
         {
-            let commit_minus_parked = commit_duration
-                .checked_sub(parked_duration)
-                .unwrap_or(Duration::ZERO);
+            let commit_minus_parked =
+                commit_duration.checked_sub(parked_duration).unwrap_or(Duration::ZERO);
             counters::core_mempool_txn_commit_latency(
                 counters::NON_PARKED_COMMIT_ACCEPTED_LABEL,
                 insertion_info.submitted_by_label(),
@@ -221,9 +209,7 @@ impl Mempool {
             if insertion_info.park_time.is_none() {
                 let use_case_label = tracked_use_case
                     .as_ref()
-                    .map_or("entry_user_other", |(_, use_case_name)| {
-                        use_case_name.as_str()
-                    });
+                    .map_or("entry_user_other", |(_, use_case_name)| use_case_name.as_str());
 
                 counters::TXN_E2E_USE_CASE_COMMIT_LATENCY
                     .with_label_values(&[
@@ -243,9 +229,8 @@ impl Mempool {
         tracked_use_case: Option<(UseCaseKey, &String)>,
         block_timestamp: Duration,
     ) {
-        if let Some((insertion_info, bucket, priority)) = self
-            .transactions
-            .get_insertion_info_and_bucket(&account, sequence_number)
+        if let Some((insertion_info, bucket, priority)) =
+            self.transactions.get_insertion_info_and_bucket(&account, sequence_number)
         {
             Self::log_txn_latency(
                 insertion_info,
@@ -292,10 +277,8 @@ impl Mempool {
         // The prority of this node for the peer that sent the transaction
         priority: Option<BroadcastPeerPriority>,
     ) -> MempoolStatus {
-        trace!(
-            LogSchema::new(LogEntry::AddTxn)
-                .txns(TxnsLog::new_txn(txn.sender(), txn.sequence_number())),
-        );
+        trace!(LogSchema::new(LogEntry::AddTxn)
+            .txns(TxnsLog::new_txn(txn.sender(), txn.sequence_number())),);
         let sender = txn.sender();
         const ZERO_RANKING_SCORE: u64 = 10;
         // we use sequence number as ranking score, the smaller the sequence number, the higher the ranking score
@@ -315,12 +298,12 @@ impl Mempool {
         // TODO: add bytes to the transaction
         let txn_info: MempoolTransaction = MempoolTransaction::new(
             txn,
-            timeline_state, 
-            insertion_info, 
+            timeline_state,
+            insertion_info,
             priority.clone(),
             ranking_score,
-            db_sequence_number);
-
+            db_sequence_number,
+        );
 
         let submitted_by_label = txn_info.insertion_info().submitted_by_label();
         let status = self.transactions.insert(txn_info);
@@ -343,9 +326,7 @@ impl Mempool {
         counters::core_mempool_txn_ranking_score(
             counters::INSERT_LABEL,
             status.code.to_string().as_str(),
-            self.transactions
-                .get_bucket(ranking_score, &sender)
-                .as_str(),
+            self.transactions.get_bucket(ranking_score, &sender).as_str(),
             ranking_score,
         );
         counters::CORE_MEMPOOL_ADD_TXNS.inc();
@@ -365,16 +346,10 @@ impl Mempool {
         }
 
         let min_inclusive = TxnPointer::new(account_address, sequence_number, HashValue::zero());
-        let max_exclusive = TxnPointer::new(
-            account_address,
-            sequence_number.saturating_add(1),
-            HashValue::zero(),
-        );
+        let max_exclusive =
+            TxnPointer::new(account_address, sequence_number.saturating_add(1), HashValue::zero());
 
-        exclude_transactions
-            .range(min_inclusive..max_exclusive)
-            .next()
-            .is_some()
+        exclude_transactions.range(min_inclusive..max_exclusive).next().is_some()
     }
 
     /// Fetches next block of transactions for consensus.
@@ -452,9 +427,8 @@ impl Mempool {
         let mut block = Vec::with_capacity(result_size);
         let mut full_bytes = false;
         for (sender, sequence_number) in result {
-            if let Some((txn, ranking_score)) = self
-                .transactions
-                .get_with_ranking_score(&sender, sequence_number)
+            if let Some((txn, ranking_score)) =
+                self.transactions.get_with_ranking_score(&sender, sequence_number)
             {
                 let txn_size = txn.txn_bytes_len() as u64;
                 if total_bytes + txn_size > max_bytes {
@@ -469,14 +443,12 @@ impl Mempool {
                 counters::core_mempool_txn_ranking_score(
                     counters::CONSENSUS_PULLED_LABEL,
                     counters::CONSENSUS_PULLED_LABEL,
-                    self.transactions
-                        .get_bucket(ranking_score, &sender)
-                        .as_str(),
+                    self.transactions.get_bucket(ranking_score, &sender).as_str(),
                     ranking_score,
                 );
             }
         }
-        
+
         let block_end_time = start_time.elapsed();
         let block_time = block_end_time.saturating_sub(result_end_time);
         if result_size > 0 {
@@ -511,22 +483,37 @@ impl Mempool {
                 )
             );
         }
-        let tm = TIME_METRIC.get_or_init(|| Mutex::new(TimeMetric {
-            interval: 60_000,
-            last: Instant::now(),
-            txn_count: 0,
-        }));
+        let tm = TIME_METRIC.get_or_init(|| {
+            Mutex::new(TimeMetric {
+                interval: 60_000,
+                last: Instant::now(),
+                txn_count: 0,
+                exclude_size: 0,
+                count: 0,
+            })
+        });
         let mut tm = tm.lock().unwrap();
         tm.txn_count += result_size as u64;
         tm.interval += tm.last.elapsed().as_millis();
+        tm.count += 1;
+        tm.exclude_size += exclude_size as u64;
         if tm.interval >= 1000 {
-            println!("mempool get batch txn_count: {} in {} {}/s", tm.txn_count, tm.interval, (tm.txn_count * 1000) as f64 / tm.interval as f64);
+            println!(
+                "mempool get batch txn_count: {} in {} {}/s and remain txn {} exclude {} count {}",
+                tm.txn_count,
+                tm.interval,
+                (tm.txn_count * 1000) as f64 / tm.interval as f64,
+                self.transactions.txn_size(),
+                tm.exclude_size,
+                tm.count
+            );
             tm.txn_count = 0;
             tm.interval = 0;
+            tm.exclude_size = 0;
+            tm.count = 0;
         }
         tm.last = Instant::now();
 
-        
         if !return_non_full && !full_bytes && (block.len() as u64) < max_txns {
             block.clear();
         }
@@ -537,7 +524,13 @@ impl Mempool {
         for transaction in &block {
             self.log_consensus_pulled_latency(transaction.sender(), transaction.sequence_number());
         }
-        println!("max txns: {}, max bytes: {}, return_non_full: {}, block len: {:?}", max_txns, max_bytes, return_non_full, block.len());
+        println!(
+            "max txns: {}, max bytes: {}, return_non_full: {}, block len: {:?}",
+            max_txns,
+            max_bytes,
+            return_non_full,
+            block.len()
+        );
         block
     }
 
@@ -567,8 +560,7 @@ impl Mempool {
         sender_bucket: MempoolSenderBucket,
         start_end_pairs: HashMap<TimelineIndexIdentifier, (u64, u64)>,
     ) -> Vec<(SignedTransaction, u64)> {
-        self.transactions
-            .timeline_range(sender_bucket, start_end_pairs)
+        self.transactions.timeline_range(sender_bucket, start_end_pairs)
     }
 
     pub(crate) fn timeline_range_of_message(
@@ -581,8 +573,7 @@ impl Mempool {
         sender_start_end_pairs
             .iter()
             .flat_map(|(sender_bucket, start_end_pairs)| {
-                self.transactions
-                    .timeline_range(*sender_bucket, start_end_pairs.clone())
+                self.transactions.timeline_range(*sender_bucket, start_end_pairs.clone())
             })
             .collect()
     }

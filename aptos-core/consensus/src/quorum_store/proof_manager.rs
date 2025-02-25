@@ -23,9 +23,19 @@ use rand::{seq::SliceRandom, thread_rng};
 use std::{
     cmp::min,
     collections::{BTreeMap, HashMap, HashSet},
-    sync::Arc,
-    time::Duration,
+    sync::{Arc, Mutex, OnceLock},
+    time::{Duration, Instant},
 };
+
+struct TimeMetric {
+    interval: u128,
+    last: Instant,
+    txn_count: u64,
+    exclude_size: u64,
+    count: u64,
+}
+
+static TIME_METRIC: OnceLock<Mutex<TimeMetric>> = OnceLock::new();
 
 #[derive(Debug)]
 pub enum ProofManagerCommand {
@@ -125,6 +135,16 @@ impl BatchQueue {
                 }
             })
         }
+
+        let tm = TIME_METRIC.get_or_init(|| {
+            Mutex::new(TimeMetric {
+                interval: 0,
+                last: Instant::now(),
+                txn_count: 0,
+                exclude_size: 0,
+                count: 0,
+            })
+        });
         result
     }
 }

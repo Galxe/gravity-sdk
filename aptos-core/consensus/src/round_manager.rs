@@ -515,6 +515,7 @@ impl RoundManager {
         proposer_election: Arc<dyn ProposerElection + Send + Sync>,
     ) -> anyhow::Result<ProposalMsg> {
         // Proposal generator will ensure that at most one proposal is generated per round
+        let start = Instant::now();
         let callback_sync_info = sync_info.clone();
         let callback = async move {
             network.broadcast_sync_info(callback_sync_info).await;

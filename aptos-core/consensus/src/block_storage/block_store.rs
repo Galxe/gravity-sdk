@@ -43,7 +43,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::AtomicBool;
 #[cfg(any(test, feature = "fuzzing"))]
 use std::sync::atomic::Ordering;
-use std::{collections::BTreeMap, io::Read, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, io::Read, sync::Arc, time::{Duration, Instant}};
 
 #[cfg(test)]
 #[path = "block_store_test.rs"]
@@ -319,6 +319,7 @@ impl BlockStore {
         finality_proof: WrappedLedgerInfo,
         recovery: bool,
     ) -> anyhow::Result<()> {
+        let start = Instant::now();
         let block_id_to_commit = finality_proof.commit_info().id();
         let block_to_commit = self
             .get_block(block_id_to_commit)
@@ -372,8 +373,11 @@ impl BlockStore {
             }
             info!("send the block {:?} to execute", blocks);
             if blocks.len() != 0 {
+                let start = Instant::now();
                 self.storage.save_tree(blocks, vec![]);
+                println!("save tree time {:?}", start.elapsed());
             }
+            println!("send for execution {:?}", start.elapsed());
             // This callback is invoked synchronously with and could be used for multiple batches of blocks.
             self.execution_client
                 .finalize_order(
@@ -398,7 +402,7 @@ impl BlockStore {
         self.inner.write().update_ordered_root(block_to_commit.id());
         self.inner.write().insert_ordered_cert(finality_proof_clone.clone());
         update_counters_for_ordered_blocks(&blocks_to_commit);
-
+        println!("send for execution finished {:?}", start.elapsed());
         Ok(())
     }
 

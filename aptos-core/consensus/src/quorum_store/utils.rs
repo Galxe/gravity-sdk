@@ -21,6 +21,16 @@ use std::{
 };
 use tokio::time::timeout;
 
+struct TimeMetric {
+    interval: u128,
+    last: Instant,
+    txn_count: u64,
+    exclude_size: u64,
+    count: u64,
+}
+
+// static TIME_METRIC: OnceLock<Mutex<TimeMetric>> = OnceLock::new();
+
 pub(crate) struct Timeouts<T> {
     timeouts: VecDeque<(i64, T)>,
 }
@@ -571,6 +581,34 @@ impl ProofQueue {
             return_non_full = return_non_full,
             "Pull payloads from QuorumStore: internal"
         );
+        // let tm = TIME_METRIC.get_or_init(|| {
+        //     Mutex::new(TimeMetric {
+        //         interval: 0,
+        //         last: Instant::now(),
+        //         txn_count: 0,
+        //         exclude_size: 0,
+        //         count: 0,
+        //     })
+        // });
+        // let mut tm = tm.lock().unwrap();
+        // tm.txn_count += num_txns as u64;
+        // tm.interval += tm.last.elapsed().as_millis();
+        // tm.count += 1;
+        // tm.exclude_size += 0 as u64;
+        // if tm.interval >= 1000 {
+        //     println!(
+        //         "batch queue get batch txn_count: {} in {} {}/s max_txn {}",
+        //         tm.txn_count,
+        //         tm.interval,
+        //         (tm.txn_count * 1000) as f64 / tm.interval as f64,
+        //         max_txns,
+        //     );
+        //     tm.txn_count = 0;
+        //     tm.interval = 0;
+        //     tm.exclude_size = 0;
+        //     tm.count = 0;
+        // }
+        // tm.last = Instant::now();
 
         if full || return_non_full {
             counters::BLOCK_SIZE_WHEN_PULL.observe(cur_unique_txns as f64);

@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 pub const BATCH_PADDING_BYTES: usize = 160;
-pub const DEFEAULT_MAX_BATCH_TXNS: usize = 250;
-const DEFAULT_MAX_NUM_BATCHES: usize = 20;
+pub const DEFEAULT_MAX_BATCH_TXNS: usize = 500;
+const DEFAULT_MAX_NUM_BATCHES: usize = 50;
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(default, deny_unknown_fields)]
