@@ -38,7 +38,7 @@ impl Default for QuorumStoreBackPressureConfig {
             increase_duration_ms: 1000,
             decrease_fraction: 0.5,
             dynamic_min_txn_per_s: 160,
-            dynamic_max_txn_per_s: 12000,
+            dynamic_max_txn_per_s: 20000,
             // When the QS is no longer backpressured, we increase number of txns to be pulled from mempool
             // by this amount every second until we reach dynamic_max_txn_per_s
             additive_increase_when_no_backpressure: 2000,
@@ -110,13 +110,13 @@ impl Default for QuorumStoreConfig {
             // TODO: on next release, remove BATCH_PADDING_BYTES
             sender_max_batch_bytes: 1024 * 1024 - BATCH_PADDING_BYTES,
             sender_max_num_batches: DEFAULT_MAX_NUM_BATCHES,
-            sender_max_total_txns: 2000,
+            sender_max_total_txns: 5000,
             // TODO: on next release, remove DEFAULT_MAX_NUM_BATCHES * BATCH_PADDING_BYTES
             sender_max_total_bytes: 4 * 1024 * 1024 - DEFAULT_MAX_NUM_BATCHES * BATCH_PADDING_BYTES,
             receiver_max_batch_txns: 250,
             receiver_max_batch_bytes: 1024 * 1024 + BATCH_PADDING_BYTES,
             receiver_max_num_batches: 20,
-            receiver_max_total_txns: 2000,
+            receiver_max_total_txns: 5000,
             receiver_max_total_bytes: 4 * 1024 * 1024
                 + DEFAULT_MAX_NUM_BATCHES
                 + BATCH_PADDING_BYTES,
