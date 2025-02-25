@@ -373,7 +373,6 @@ impl BatchGenerator {
         let batches = self.bucket_into_batches(&mut pulled_txns, expiry_time);
         self.last_end_batch_time = Instant::now();
         counters::BATCH_CREATION_COMPUTE_LATENCY.observe_duration(bucket_compute_start.elapsed());
-
         batches
     }
 

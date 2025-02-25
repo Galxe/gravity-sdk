@@ -537,6 +537,7 @@ impl Mempool {
         for transaction in &block {
             self.log_consensus_pulled_latency(transaction.sender(), transaction.sequence_number());
         }
+        println!("max txns: {}, max bytes: {}, return_non_full: {}, block len: {:?}", max_txns, max_bytes, return_non_full, block.len());
         block
     }
 
