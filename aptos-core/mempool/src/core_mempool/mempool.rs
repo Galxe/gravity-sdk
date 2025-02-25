@@ -512,6 +512,7 @@ impl Mempool {
         counters::GET_BATCH_SIZE.inc_by(block.len() as u64);
         counters::mempool_service_transactions(counters::GET_BLOCK_LABEL, block.len());
         counters::MEMPOOL_SERVICE_BYTES_GET_BLOCK.observe(total_bytes as f64);
+        println!("block: {:?}", block.len());
         for transaction in &block {
             self.log_consensus_pulled_latency(transaction.sender(), transaction.sequence_number());
         }
