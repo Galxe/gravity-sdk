@@ -29,12 +29,19 @@ use aptos_types::{
 };
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
-    sync::{atomic::Ordering},
+    sync::{atomic::Ordering, Mutex, OnceLock},
     time::{Duration, Instant, SystemTime},
 };
 
 use super::transaction::VerifiedTxn;
 
+struct TimeMetric {
+    interval: u128,
+    last: Instant,
+    txn_count: u64,
+}
+
+static TIME_METRIC: OnceLock<Mutex<TimeMetric>> = OnceLock::new();
 
 pub struct Mempool {
     // Stores the metadata of all transactions in mempool (of all states).
@@ -504,7 +511,22 @@ impl Mempool {
                 )
             );
         }
+        let tm = TIME_METRIC.get_or_init(|| Mutex::new(TimeMetric {
+            interval: 60_000,
+            last: Instant::now(),
+            txn_count: 0,
+        }));
+        let mut tm = tm.lock().unwrap();
+        tm.txn_count += result_size as u64;
+        tm.interval += tm.last.elapsed().as_millis();
+        if tm.interval >= 1000 {
+            println!("mempool get batch txn_count: {} in {} {}/s", tm.txn_count, tm.interval, (tm.txn_count * 1000) as f64 / tm.interval as f64);
+            tm.txn_count = 0;
+            tm.interval = 0;
+        }
+        tm.last = Instant::now();
 
+        
         if !return_non_full && !full_bytes && (block.len() as u64) < max_txns {
             block.clear();
         }
@@ -512,7 +534,6 @@ impl Mempool {
         counters::GET_BATCH_SIZE.inc_by(block.len() as u64);
         counters::mempool_service_transactions(counters::GET_BLOCK_LABEL, block.len());
         counters::MEMPOOL_SERVICE_BYTES_GET_BLOCK.observe(total_bytes as f64);
-        println!("block: {:?}", block.len());
         for transaction in &block {
             self.log_consensus_pulled_latency(transaction.sender(), transaction.sequence_number());
         }
