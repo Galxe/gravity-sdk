@@ -95,23 +95,23 @@ pub trait ExecutionChannel: Send + Sync {
     /// - `VerifiedTxn`: The transaction object.
     /// - `sender_latest_committed_sequence_number`: The latest committed sequence number associated with the sender on the execution layer.
     ///
-    async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError>;
+    async fn send_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError>;
 
     // async fn send_ordered_block(&self, ordered_block: Vec<Txns>, block_number: BlockNumber, parent_mata_data: ExternalBlockMeta) -> Result<(), ExecError>;
-    async fn send_ordered_block(
+    async fn recv_ordered_block(
         &self,
         parent_id: BlockId,
         ordered_block: ExternalBlock,
     ) -> Result<(), ExecError>;
 
     // the block hash is the hash of the block that has been executed, which is passed by the send_ordered_block
-    async fn recv_executed_block_hash(
+    async fn send_executed_block_hash(
         &self,
         head: ExternalBlockMeta,
     ) -> Result<ComputeRes, ExecError>;
 
     // this function is called by the execution layer commit the block hash
-    async fn send_committed_block_info(&self, block_id: BlockId) -> Result<(), ExecError>;
+    async fn recv_committed_block_info(&self, block_id: BlockId) -> Result<(), ExecError>;
 }
 
 #[derive(Debug)]

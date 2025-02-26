@@ -101,7 +101,7 @@ impl MockConsensus {
         };
         loop {
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            let txns = self.exec_api.recv_pending_txns().await.unwrap();
+            let txns = self.exec_api.send_pending_txns().await.unwrap();
             for txn in txns {
                 self.pending_txns.add(txn);
             }
@@ -110,16 +110,16 @@ impl MockConsensus {
             if let Some(block) = block {
                 let head = block.block_meta.clone();
                 let commit_txns = block.txns.clone();
-                self.exec_api.send_ordered_block(self.parent_meta.block_id, block).await.unwrap();
+                self.exec_api.recv_ordered_block(self.parent_meta.block_id, block).await.unwrap();
                 attr.ts =
                     SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
 
                 block_txns.clear();
-                let _ = self.exec_api.recv_executed_block_hash(head.clone()).await.unwrap();
+                let _ = self.exec_api.send_executed_block_hash(head.clone()).await.unwrap();
                 for txn in commit_txns {
                     self.pending_txns.commit(&txn.sender, txn.sequence_number);
                 }
-                self.exec_api.send_committed_block_info(head.block_id.clone()).await.unwrap();
+                self.exec_api.recv_committed_block_info(head.block_id.clone()).await.unwrap();
                 self.parent_meta = head;
             }
         }

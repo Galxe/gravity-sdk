@@ -199,7 +199,7 @@ impl ConsensusApi for ConsensusEngine {
         match self
             .execution_layer
             .execution_api
-            .send_ordered_block(BlockId(parent_id), ordered_block)
+            .recv_ordered_block(BlockId(parent_id), ordered_block)
             .await
         {
             Ok(_) => {}
@@ -209,7 +209,7 @@ impl ConsensusApi for ConsensusEngine {
 
     async fn recv_executed_block_hash(&self, head: ExternalBlockMeta) -> ComputeRes {
         info!("recv_executed_block_hash");
-        let res = match self.execution_layer.execution_api.recv_executed_block_hash(head).await {
+        let res = match self.execution_layer.execution_api.send_executed_block_hash(head).await {
             Ok(r) => r,
             Err(_) => panic!("send_ordered_block should not fail"),
         };
@@ -217,7 +217,7 @@ impl ConsensusApi for ConsensusEngine {
     }
 
     async fn commit_block_hash(&self, head: [u8; 32]) {
-        match self.execution_layer.execution_api.send_committed_block_info(BlockId(head)).await {
+        match self.execution_layer.execution_api.recv_committed_block_info(BlockId(head)).await {
             Ok(_) => {}
             Err(_) => panic!("commit_block_hash should not fail"),
         }

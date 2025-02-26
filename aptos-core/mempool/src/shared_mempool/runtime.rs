@@ -87,7 +87,7 @@ async fn retrieve_from_execution_routine(
 ) {
     info!("start retrieve_from_execution_routine");
     loop {
-        match execution_api.recv_pending_txns().await {
+        match execution_api.send_pending_txns().await {
             Ok(txns) => {
                 info!("the recv_pending_txns size is {:?}", txns.len());
                 txns.into_iter().for_each(|txn_with_number| {

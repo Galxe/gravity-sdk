@@ -76,11 +76,11 @@ impl ExecutionChannel for KvStore {
         }
     }
 
-    async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
+    async fn send_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
         Ok(self.mempool.pending_txns().await)
     }
 
-    async fn send_ordered_block(&self, _parent_id: BlockId, ordered_block: ExternalBlock) -> Result<(), ExecError> {
+    async fn recv_ordered_block(&self, _parent_id: BlockId, ordered_block: ExternalBlock) -> Result<(), ExecError> {
         let mut res = vec![];
 
         for txn in &ordered_block.txns {
@@ -107,7 +107,7 @@ impl ExecutionChannel for KvStore {
         Ok(())
     }
 
-    async fn recv_executed_block_hash(&self, head: ExternalBlockMeta) -> Result<ComputeRes, ExecError> {
+    async fn send_executed_block_hash(&self, head: ExternalBlockMeta) -> Result<ComputeRes, ExecError> {
         let mut r = self.compute_res_recv.lock().await;
         let receiver = r.get_mut(&head).expect("Failed to get receiver");
         let res = receiver.recv().await;
@@ -117,7 +117,7 @@ impl ExecutionChannel for KvStore {
         }
     }
 
-    async fn send_committed_block_info(&self, head: BlockId) -> Result<(), ExecError> {
+    async fn recv_committed_block_info(&self, head: BlockId) -> Result<(), ExecError> {
         let block = self.ordered_block.lock().await;
         for txn in &block.get(&head).unwrap().txns {
             self.mempool.remove_txn(txn).await
