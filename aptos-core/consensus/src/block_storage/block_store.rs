@@ -217,7 +217,7 @@ impl BlockStore {
                                 block_hash,
                             },
                         };
-                        info!("recover_block {:?} txn_size: {}", block_batch, txns.len());
+                        info!("txn_size: {}, recover_block {:?}",  txns.len(), block_batch);
                         self.execution_layer
                             .as_ref()
                             .unwrap()

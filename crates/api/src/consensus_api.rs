@@ -195,7 +195,7 @@ impl ConsensusEngine {
 #[async_trait]
 impl ConsensusApi for ConsensusEngine {
     async fn send_ordered_block(&self, parent_id: [u8; 32], ordered_block: ExternalBlock) {
-        info!("send_order_block {:?}, txn_size: {}", ordered_block, ordered_block.txns.len());
+        info!("txn_size: {}, send_order_block {:?}", ordered_block.txns.len(), ordered_block);
         match self
             .execution_layer
             .execution_api
