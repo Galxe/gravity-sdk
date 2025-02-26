@@ -1,3 +1,4 @@
+pub mod heap_profiler;
 mod set_failpoints;
 mod tx;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
@@ -15,6 +16,7 @@ use axum::{
     Json, Router,
 };
 use axum_server::tls_rustls::RustlsConfig;
+use heap_profiler::control_profiler;
 use set_failpoints::{set_failpoint, FailpointConf};
 use tx::{get_tx_by_hash, submit_tx, TxRequest};
 
@@ -47,11 +49,17 @@ pub async fn https_server(args: HttpsServerArgs) {
     let set_fail_point_lambda =
         |Json(request): Json<FailpointConf>| async move { set_failpoint(request).await };
 
+    let control_profiler_lambda = |Json(request): Json<heap_profiler::ControlProfileRequest>| async move {
+        control_profiler(request).await
+    };
+
     let https_app = Router::new()
         .route("/tx/submit_tx", post(submit_tx_lambda))
         .route("/tx/get_tx_by_hash/:hash_value", get(get_tx_by_hash_lambda))
         .layer(middleware::from_fn(ensure_https));
-    let http_app = Router::new().route("/set_failpoint", post(set_fail_point_lambda));
+    let http_app = Router::new()
+        .route("/set_failpoint", post(set_fail_point_lambda))
+        .route("/mem_prof", post(control_profiler_lambda));
     let app = Router::new().merge(https_app).merge(http_app);
     // configure certificate and private key used by https
     let config = RustlsConfig::from_pem_file(args.cert_pem.clone(), args.key_pem.clone())
