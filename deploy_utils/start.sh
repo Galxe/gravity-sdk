@@ -45,6 +45,7 @@ function start_node() {
     authrpc_port=$2
     http_port=$3
     metric_port=$4
+    discovery_port=$5
 
     # temporarily set these two round to zero
     jq 'walk(
@@ -74,8 +75,6 @@ function start_node() {
             --http.corsdomain "*" \
             --http.api "debug,eth,net,trace,txpool,web3,rpc" \
             --http.addr 0.0.0.0 \
-            --ws \
-            --ws.addr 0.0.0.0 \
             --port ${reth_rpc_port} \
             --authrpc.port ${authrpc_port} \
             --authrpc.addr 0.0.0.0 \
@@ -94,6 +93,7 @@ function start_node() {
             --txpool.basefee-max-size 17592186044415 \
             --txpool.queued-max-count 18446744073709551615 \
             --txpool.queued-max-size 17592186044415 \
+            --discovery.port ${discovery_port} \
             > ${WORKSPACE}/logs/debug.log &
         echo $!
     )
@@ -104,27 +104,32 @@ port1="12024"
 port2="8551"
 port3="8545"
 port4="9001"
+port5="30303"
 if [ "$node_arg" == "node1" ]; then
     port1="12024"
     port2="8551"
     port3="8545"
     port4="9001"
+    port5="30303"
 elif [ "$node_arg" == "node2" ]; then
     port1="12025"
     port2="8552"
     port3="8546"
     port4="9002"
+    port5="30304"
 elif [ "$node_arg" == "node3" ]; then
     port1="12026"
     port2="8553"
     port3="8547"
     port4="9003"
+    port5="30305"
 elif [ "$node_arg" == "node4" ]; then
     port1="16180"
     port2="8554"
     port3="8548"
     port4="9004"
+    port5="30306"
 fi
 
-echo "start $node_arg ${port1} ${port2} ${port3} ${port4} ${bin_name}"
-start_node ${port1} ${port2} ${port3} ${port4}
+echo "start $node_arg ${port1} ${port2} ${port3} ${port4} ${port5} ${bin_name}"
+start_node ${port1} ${port2} ${port3} ${port4} ${port5}
