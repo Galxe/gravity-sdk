@@ -403,7 +403,8 @@ impl BatchGenerator {
         let mut dynamic_pull_txn_per_s = (self.config.back_pressure.dynamic_min_txn_per_s
             + self.config.back_pressure.dynamic_max_txn_per_s)
             / 2;
-
+        let mut last_call = Instant::now();
+        let mut current_call = Instant::now();
         loop {
             let _timer = counters::BATCH_GENERATOR_MAIN_LOOP.start_timer();
 
@@ -412,7 +413,7 @@ impl BatchGenerator {
                     self.back_pressure = updated_back_pressure;
                 },
                 _ = interval.tick() => monitor!("batch_generator_handle_tick", {
-
+                    current_call = Instant::now();
                     let tick_start = Instant::now();
                     // TODO: refactor back_pressure logic into its own function
                     if self.back_pressure.txn_count {
@@ -478,6 +479,8 @@ impl BatchGenerator {
 
                             network_sender.broadcast_batch_msg(batches).await;
                             println!("broadcasted batch msg take {} ms", start.elapsed().as_millis());
+                            println!("handle_tick take {} ms", tick_start.elapsed().as_millis());
+                            println!("handle_tick take interval {} ms", current_call.duration_since(last_call).as_millis());
                         } else if tick_start.elapsed() > interval.period().checked_div(2).unwrap_or(Duration::ZERO) {
                             // If the pull takes too long, it's also accounted as a non-empty pull to avoid pulling too often.
                             last_non_empty_pull = tick_start;
@@ -490,6 +493,8 @@ impl BatchGenerator {
                             );
                         }
                     }
+                    last_call = current_call;
+                        
                 }),
                 Some(cmd) = cmd_rx.recv() => monitor!("batch_generator_handle_command", {
                     let start = Instant::now();
