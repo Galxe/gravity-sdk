@@ -5,7 +5,7 @@ homepage = "https://gravity.xyz/"
 license = "Apache-2.0"
 publish = false
 repository = "https://github.com/Galxe/gravity-sdk"
-rust-version = "1.81.0"
+rust-version = "1.83.0"
 resolver = "2"
 
 [workspace]
