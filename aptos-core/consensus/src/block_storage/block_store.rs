@@ -189,7 +189,7 @@ impl BlockStore {
                     if let Ok((txns, _)) =
                         self.payload_manager.get_transactions(block_to_recover.block()).await
                     {
-                        info!("recover block {}, txn_size: {}", block_to_recover.block(), txns.len());
+                        // info!("recover block {}", block_to_recover.block());
                         info!("recover {} txn_size: {}", block_to_recover.block().id(), txns.len());
                         let verified_txns: Vec<VerifiedTxn> =
                             txns.iter().map(|txn| txn.into()).collect();
