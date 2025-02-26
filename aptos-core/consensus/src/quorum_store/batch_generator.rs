@@ -243,7 +243,7 @@ impl BatchGenerator {
     ) -> Vec<Batch> {
         // Sort by gas, in descending order. This is a stable sort on existing mempool ordering,
         // so will not reorder accounts or their sequence numbers as long as they have the same gas.
-        pulled_txns.sort_by_key(|txn| u64::MAX - txn.gas_unit_price());
+        // pulled_txns.sort_by_key(|txn| u64::MAX - txn.gas_unit_price());
 
         let reverse_buckets_excluding_zero: Vec<_> = self
             .config
@@ -262,13 +262,8 @@ impl BatchGenerator {
             }
 
             // Search for key in descending gas order
-            let num_txns_in_bucket = match pulled_txns
-                .binary_search_by_key(&(u64::MAX - (*bucket_start - 1), PeerId::ZERO), |txn| {
-                    (u64::MAX - txn.gas_unit_price(), txn.sender())
-                }) {
-                Ok(index) => index,
-                Err(index) => index,
-            };
+            let num_txns_in_bucket = pulled_txns
+                .len();
             if num_txns_in_bucket == 0 {
                 continue;
             }
@@ -328,6 +323,7 @@ impl BatchGenerator {
     }
 
     pub(crate) async fn handle_scheduled_pull(&mut self, max_count: u64) -> Vec<Batch> {
+        let start = Instant::now();
         counters::BATCH_PULL_EXCLUDED_TXNS.observe(self.txns_in_progress_sorted.len() as f64);
         trace!(
             "QS: excluding txs len: {:?}",
@@ -346,7 +342,7 @@ impl BatchGenerator {
             )
             .await
             .unwrap_or_default();
-
+        println!("mempool_proxy.pull_internal take {} ms", start.elapsed().as_millis());
         trace!("QS: pulled_txns len: {:?}", pulled_txns.len());
 
         if pulled_txns.is_empty() {
@@ -373,6 +369,7 @@ impl BatchGenerator {
         let batches = self.bucket_into_batches(&mut pulled_txns, expiry_time);
         self.last_end_batch_time = Instant::now();
         counters::BATCH_CREATION_COMPUTE_LATENCY.observe_duration(bucket_compute_start.elapsed());
+        println!("handle_scheduled_pull take {} ms", start.elapsed().as_millis());
         batches
     }
 
@@ -468,6 +465,7 @@ impl BatchGenerator {
                         );
                         let batches = self.handle_scheduled_pull(pull_max_txn).await;
                         if !batches.is_empty() {
+                            let start = Instant::now();
                             last_non_empty_pull = tick_start;
 
                             let persist_start = Instant::now();
@@ -479,6 +477,7 @@ impl BatchGenerator {
                             counters::BATCH_CREATION_PERSIST_LATENCY.observe_duration(persist_start.elapsed());
 
                             network_sender.broadcast_batch_msg(batches).await;
+                            println!("broadcasted batch msg take {} ms", start.elapsed().as_millis());
                         } else if tick_start.elapsed() > interval.period().checked_div(2).unwrap_or(Duration::ZERO) {
                             // If the pull takes too long, it's also accounted as a non-empty pull to avoid pulling too often.
                             last_non_empty_pull = tick_start;
@@ -493,6 +492,7 @@ impl BatchGenerator {
                     }
                 }),
                 Some(cmd) = cmd_rx.recv() => monitor!("batch_generator_handle_command", {
+                    let start = Instant::now();
                     match cmd {
                         BatchGeneratorCommand::CommitNotification(block_timestamp, batches) => {
                             trace!(
@@ -530,6 +530,7 @@ impl BatchGenerator {
                                     );
                                 }
                             }
+                            println!("handle_commit_notification take {} ms", start.elapsed().as_millis());
                         },
                         BatchGeneratorCommand::ProofExpiration(batch_ids) => {
                             for batch_id in batch_ids {

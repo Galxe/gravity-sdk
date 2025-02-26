@@ -39,6 +39,7 @@ struct TimeMetric {
     interval: u128,
     last: Instant,
     txn_count: u64,
+    call_count: u64,
 }
 
 static TIME_METRIC: OnceLock<Mutex<TimeMetric>> = OnceLock::new();
@@ -514,15 +515,18 @@ impl Mempool {
         let tm = TIME_METRIC.get_or_init(|| Mutex::new(TimeMetric {
             interval: 60_000,
             last: Instant::now(),
+            call_count: 0,
             txn_count: 0,
         }));
         let mut tm = tm.lock().unwrap();
         tm.txn_count += result_size as u64;
         tm.interval += tm.last.elapsed().as_millis();
-        if tm.interval >= 1000 {
-            println!("mempool get batch txn_count: {} in {} {}/s", tm.txn_count, tm.interval, (tm.txn_count * 1000) as f64 / tm.interval as f64);
+        tm.call_count += 1;
+        if tm.interval >= 1000 && tm.call_count > 0 && tm.txn_count > 0 {
+            println!("mempool get batch txn_count: {} in {} {}/s avg call take {:?}", tm.txn_count, tm.interval, (tm.txn_count * 1000) as f64 / tm.interval as f64, tm.interval as f64 / tm.call_count as f64);
             tm.txn_count = 0;
             tm.interval = 0;
+            tm.call_count = 0;
         }
         tm.last = Instant::now();
 
@@ -537,7 +541,7 @@ impl Mempool {
         for transaction in &block {
             self.log_consensus_pulled_latency(transaction.sender(), transaction.sequence_number());
         }
-        println!("max txns: {}, max bytes: {}, return_non_full: {}, block len: {:?}", max_txns, max_bytes, return_non_full, block.len());
+        println!("max txns: {}, max bytes: {}, return_non_full: {}, block len: {:?}, exclude {:?}", max_txns, max_bytes, return_non_full, block.len(), exclude_size);
         block
     }
 

@@ -105,18 +105,18 @@ impl Default for QuorumStoreConfig {
             proof_timeout_ms: 10000,
             batch_generation_poll_interval_ms: 25,
             batch_generation_min_non_empty_interval_ms: 100,
-            batch_generation_max_interval_ms: 250,
+            batch_generation_max_interval_ms: 2000,
             sender_max_batch_txns: DEFEAULT_MAX_BATCH_TXNS,
             // TODO: on next release, remove BATCH_PADDING_BYTES
             sender_max_batch_bytes: 1024 * 1024 - BATCH_PADDING_BYTES,
             sender_max_num_batches: DEFAULT_MAX_NUM_BATCHES,
-            sender_max_total_txns: 10000,
+            sender_max_total_txns: 5000,
             // TODO: on next release, remove DEFAULT_MAX_NUM_BATCHES * BATCH_PADDING_BYTES
             sender_max_total_bytes: 4 * 1024 * 1024 - DEFAULT_MAX_NUM_BATCHES * BATCH_PADDING_BYTES,
             receiver_max_batch_txns: 250,
             receiver_max_batch_bytes: 1024 * 1024 + BATCH_PADDING_BYTES,
             receiver_max_num_batches: 20,
-            receiver_max_total_txns: 10000,
+            receiver_max_total_txns: 5000,
             receiver_max_total_bytes: 4 * 1024 * 1024
                 + DEFAULT_MAX_NUM_BATCHES
                 + BATCH_PADDING_BYTES,
