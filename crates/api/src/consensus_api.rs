@@ -4,11 +4,7 @@ use crate::{
     bootstrap::{
         init_mempool, init_network_interfaces, init_peers_and_metadata, start_consensus,
         start_node_inspection_service,
-    },
-    consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler},
-    https::{https_server, HttpsServerArgs},
-    logger,
-    network::{create_network_runtime, extract_network_configs},
+    }, consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler}, https::heap_profiler::HeapProfiler, https::{https_server, HttpsServerArgs}, logger, network::{create_network_runtime, extract_network_configs}
 };
 use api_types::{
     compute_res::ComputeRes, u256_define::BlockId, ConsensusApi, ExecError, ExecutionLayer, ExternalBlock, ExternalBlockMeta
@@ -180,6 +176,17 @@ impl ConsensusEngine {
             runtime.spawn(async move { https_server(args) });
             runtimes.push(runtime);
         }
+        let runtime = aptos_runtimes::spawn_named_runtime("Prof".into(), None);
+        runtime.spawn(async move {
+            let heap_profiler = Arc::new(HeapProfiler::new());
+            heap_profiler.set_prof_active(true).unwrap();
+            loop {
+                heap_profiler.dump_heap_profile();
+                info!("dump heap profile");
+                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+            }
+        });
+        runtimes.push(runtime);
         let arc_consensus_engine = Arc::new(Self {
             address: node_config.validator_network.as_ref().unwrap().listen_address.to_string(),
             execution_layer: execution_layer.clone(),
