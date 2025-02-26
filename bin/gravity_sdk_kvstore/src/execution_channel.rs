@@ -60,11 +60,11 @@ impl ExecutionChannel for ExecutionChannelImpl {
         unimplemented!("Currently not implemented");
     }
 
-    async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
+    async fn send_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
         Ok(self.mempool.pending_txns().await)
     }
 
-    async fn send_ordered_block(
+    async fn recv_ordered_block(
         &self,
         _parent_id: BlockId,
         ordered_block: ExternalBlock,
@@ -95,7 +95,7 @@ impl ExecutionChannel for ExecutionChannelImpl {
     }
 
     // the block hash is the hash of the block that has been executed, which is passed by the send_ordered_block
-    async fn recv_executed_block_hash(
+    async fn send_executed_block_hash(
         &self,
         head: ExternalBlockMeta,
     ) -> Result<ComputeRes, ExecError> {
@@ -118,7 +118,7 @@ impl ExecutionChannel for ExecutionChannelImpl {
     }
 
     // this function is called by the execution layer commit the block hash
-    async fn send_committed_block_info(&self, block_id: BlockId) -> Result<(), ExecError> {
+    async fn recv_committed_block_info(&self, block_id: BlockId) -> Result<(), ExecError> {
         info!("send committed block info {:?}", block_id);
         let (block_number, sender) =
             self.block_commit_sender.lock().await.remove(&block_id).expect("Failed to get sender");

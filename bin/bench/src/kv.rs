@@ -116,14 +116,14 @@ impl ExecutionChannel for KvStore {
         }
     }
 
-    async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
+    async fn send_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
         match should_produce_txn().await {
             true => Ok(self.mempool.pending_txns().await),
             false => Ok(vec![]),
         }
     }
 
-    async fn send_ordered_block(
+    async fn recv_ordered_block(
         &self,
         parent_id: BlockId,
         ordered_block: ExternalBlock,
@@ -157,7 +157,7 @@ impl ExecutionChannel for KvStore {
         Ok(())
     }
 
-    async fn recv_executed_block_hash(
+    async fn send_executed_block_hash(
         &self,
         head: ExternalBlockMeta,
     ) -> Result<ComputeRes, ExecError> {
@@ -170,7 +170,7 @@ impl ExecutionChannel for KvStore {
         }
     }
 
-    async fn send_committed_block_info(&self, head: BlockId) -> Result<(), ExecError> {
+    async fn recv_committed_block_info(&self, head: BlockId) -> Result<(), ExecError> {
         let mut guard = self.not_empty_sets.lock().await;
         if guard.contains(&head) {
             info!("enter one execute");

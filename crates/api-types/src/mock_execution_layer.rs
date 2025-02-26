@@ -26,11 +26,11 @@ impl ExecutionChannel for MockExecutionApi {
         Ok(true)
     }
 
-    async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
+    async fn send_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
         Ok(vec![])
     }
 
-    async fn send_ordered_block(
+    async fn recv_ordered_block(
         &self,
         parent_id: BlockId,
         ordered_block: ExternalBlock,
@@ -38,7 +38,7 @@ impl ExecutionChannel for MockExecutionApi {
         Ok(())
     }
 
-    async fn recv_executed_block_hash(
+    async fn send_executed_block_hash(
         &self,
         head: ExternalBlockMeta,
     ) -> Result<ComputeRes, ExecError> {
@@ -47,7 +47,7 @@ impl ExecutionChannel for MockExecutionApi {
         Ok(ComputeRes::new(random_bytes, 0))
     }
 
-    async fn send_committed_block_info(&self, head: BlockId) -> Result<(), ExecError> {
+    async fn recv_committed_block_info(&self, head: BlockId) -> Result<(), ExecError> {
         Ok(())
     }
 }

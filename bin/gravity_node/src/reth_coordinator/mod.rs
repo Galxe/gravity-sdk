@@ -93,7 +93,7 @@ impl ExecutionChannel for RethCoordinator {
         Ok(true)
     }
 
-    async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
+    async fn send_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
         let now = std::time::Instant::now();
         let mut buffer = self.pending_buffer.lock().await;
         let res = std::mem::take(&mut *buffer);
@@ -102,7 +102,7 @@ impl ExecutionChannel for RethCoordinator {
         Ok(res)
     }
 
-    async fn send_ordered_block(
+    async fn recv_ordered_block(
         &self,
         parent_id: BlockId,
         mut ordered_block: ExternalBlock,
@@ -133,7 +133,7 @@ impl ExecutionChannel for RethCoordinator {
         Ok(())
     }
 
-    async fn recv_executed_block_hash(
+    async fn send_executed_block_hash(
         &self,
         head: ExternalBlockMeta,
     ) -> Result<ComputeRes, ExecError> {
@@ -152,7 +152,7 @@ impl ExecutionChannel for RethCoordinator {
         Ok(ComputeRes::new(block_hash.unwrap().into(), block_number.unwrap()))
     }
 
-    async fn send_committed_block_info(&self, block_id: BlockId) -> Result<(), ExecError> {
+    async fn recv_committed_block_info(&self, block_id: BlockId) -> Result<(), ExecError> {
         debug!("commit_block with block_id: {:?}", block_id);
         let block_hash = { self.state.lock().await.get_block_hash(block_id).unwrap() };
         self.reth_cli.send_committed_block_info(block_id, block_hash.into()).await.unwrap();
@@ -192,7 +192,7 @@ impl RecoveryApi for RethCoordinator {
     ) -> Result<(), ExecError> {
         let block_id = block.block_meta.block_id.clone();
         let origin_block_hash = block.block_meta.block_hash;
-        self.send_ordered_block(parent_id, block).await?;
+        self.recv_ordered_block(parent_id, block).await?;
         let reth_block_id = B256::from_slice(&block_id.0);
         let block_hash = self.reth_cli.recv_compute_res(reth_block_id).await.unwrap().into();
         if let Some(origin_block_hash) = origin_block_hash {
