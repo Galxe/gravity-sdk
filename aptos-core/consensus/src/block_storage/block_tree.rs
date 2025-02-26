@@ -190,11 +190,6 @@ impl BlockTree {
         max_pruned_blocks_in_mem: usize,
         highest_2chain_timeout_cert: Option<Arc<TwoChainTimeoutCertificate>>,
     ) -> Self {
-        assert_eq!(
-            root.id(),
-            root_ordered_cert.commit_info().id(),
-            "inconsistent root and ledger info"
-        );
         let root_id = root.id();
         info!("insert root block id {}", root_id);
         let mut id_to_block = HashMap::new();
