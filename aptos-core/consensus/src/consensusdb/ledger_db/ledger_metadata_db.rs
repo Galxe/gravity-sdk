@@ -147,6 +147,13 @@ impl LedgerMetadataDb {
         }
     }
 
+    pub(crate) fn get_ledger_info(&self, block_number: u64) -> Option<LedgerInfoWithSignatures> {
+        match self.db.get::<LedgerInfoSchema>(&block_number) {
+            Ok(Some(ledger_info)) => Some(ledger_info),
+            _ => None,
+        }
+    }
+
     pub(crate) fn get_ledger_infos_by_range(&self, range: (u64, u64)) -> Vec<LedgerInfoWithSignatures> {
         get_ledger_infos_by_range_in_db_impl(&self.db, range).expect("DB read failed.")
     }

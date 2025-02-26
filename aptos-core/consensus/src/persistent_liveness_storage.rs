@@ -13,7 +13,7 @@ use aptos_crypto::{hash::{ACCUMULATOR_PLACEHOLDER_HASH, GENESIS_BLOCK_ID}, HashV
 use aptos_logger::prelude::*;
 use aptos_storage_interface::DbReader;
 use aptos_types::{
-    block_info::Round, epoch_change::EpochChangeProof, ledger_info::LedgerInfoWithSignatures,
+    block_info::{BlockInfo, Round}, epoch_change::EpochChangeProof, ledger_info::LedgerInfoWithSignatures,
     on_chain_config::ValidatorSet, proof::TransactionAccumulatorSummary, transaction::Version,
 };
 use async_trait::async_trait;
@@ -225,6 +225,7 @@ impl RecoveryData {
     ) -> Result<RootInfo> {
         // sort by (epoch, round) to guarantee the topological order of parent <- child
         blocks.sort_by_key(|b| (b.epoch(), b.round()));
+        quorum_certs.sort_by_key(|q| (q.certified_block().epoch(), q.certified_block().round()));
         let root_idx = blocks
             .iter()
             .position(|block| match block.block_number() {
@@ -250,7 +251,7 @@ impl RecoveryData {
         } else {
             let root_ordered_cert = quorum_certs
                 .iter()
-                .find(|qc| qc.commit_info().id() == root_block.id())
+                .find(|qc| qc.certified_block().round() > root_block.round() && !qc.commit_info().is_empty())
                 .ok_or_else(|| format_err!("No LI found for root: {}", root_block.id()))?
                 .clone()
                 .into_wrapped_ledger_info();
@@ -457,10 +458,13 @@ impl PersistentLivenessStorage for StorageWriteProxy {
         let latest_block_number = self.latest_block_number().await;
         info!("The execution_latest_block_number is {}", latest_block_number);
         // only use when latest_block_number is zero
-        let latest_ledger_info = LedgerInfoWithSignatures::genesis(
+        let mut latest_ledger_info = LedgerInfoWithSignatures::genesis(
             *ACCUMULATOR_PLACEHOLDER_HASH,
             ValidatorSet::new(self.consensus_db().mock_validators()),
         );
+        if latest_block_number != 0 {
+            latest_ledger_info = self.aptos_db().get_latest_ledger_info().unwrap();
+        }
         self.register_execution_args(&blocks, latest_block_number).await;
         let ledger_recovery_data = LedgerRecoveryData::new(latest_ledger_info);
         match RecoveryData::new(

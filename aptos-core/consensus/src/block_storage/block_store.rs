@@ -162,19 +162,6 @@ impl BlockStore {
         block_store
     }
 
-    fn find_the_last_ledger_info(
-        &self,
-        cur_round: u64,
-        round_to_ledger_infos: &BTreeMap<u64, LedgerInfoWithSignatures>,
-    ) -> LedgerInfoWithSignatures {
-        for i in (1..cur_round).rev() {
-            if let Some(li) = round_to_ledger_infos.get(&i) {
-                return li.clone();
-            }
-        }
-        LedgerInfoWithSignatures::new(LedgerInfo::dummy(), AggregateSignature::empty())
-    }
-
     async fn recover_blocks(&self) {
         // reproduce the same batches (important for the commit phase)
         let mut certs = self.inner.read().get_all_quorum_certs_with_commit_info();
@@ -298,20 +285,6 @@ impl BlockStore {
 
         counters::LAST_COMMITTED_ROUND.set(block_store.ordered_root().round() as i64);
         block_store
-    }
-
-    pub fn init_block_number(&self, ordered_blocks: &Vec<Arc<PipelinedBlock>>) {
-        let mut blocks = vec![];
-        for p_block in ordered_blocks {
-            if let Some(_) = p_block.block().block_number() {
-                continue;
-            }
-            p_block.block().set_block_number(self.storage.fetch_next_block_number());
-            blocks.push(p_block.as_ref().into());
-        }
-        if blocks.len() != 0 {
-            self.storage.save_tree(blocks, vec![]).unwrap();
-        }
     }
 
     /// Send an ordered block id with the proof for execution, returns () on success or error
