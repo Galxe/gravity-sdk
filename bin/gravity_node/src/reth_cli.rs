@@ -106,6 +106,7 @@ impl RethCli {
         let pipe_api = &self.pipe_api;
         let mut senders = vec![];
         let mut transactions = vec![];
+        debug!("lightman0227 number={}, orgin_txn_size={}", block.block_meta.block_number, block.txns.len());
         for (sender, txn) in
             block.txns.iter_mut().map(|txn| Self::txn_to_signed(&mut txn.bytes, self.chain_id))
         {
@@ -113,6 +114,7 @@ impl RethCli {
             senders.push(sender);
             transactions.push(txn);
         }
+        debug!("lightman0227 number={}, txn_size={}", block.block_meta.block_number, transactions.len());
 
         let randao = match block.block_meta.randomness {
             Some(randao) => B256::from_slice(randao.0.as_ref()),
