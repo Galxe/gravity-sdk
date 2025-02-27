@@ -109,6 +109,7 @@ impl RethCli {
         for (sender, txn) in
             block.txns.iter_mut().map(|txn| Self::txn_to_signed(&mut txn.bytes, self.chain_id))
         {
+            debug!("lightman0227 number={}, txn_hash={}", block.block_meta.block_number, txn.hash);
             senders.push(sender);
             transactions.push(txn);
         }
