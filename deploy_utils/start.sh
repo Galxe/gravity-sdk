@@ -79,7 +79,7 @@ function start_node() {
             --authrpc.port ${authrpc_port} \
             --authrpc.addr 0.0.0.0 \
             --metrics 0.0.0.0:${metric_port} \
-            --log.file.filter info \
+            --log.file.filter debug \
             --datadir ${WORKSPACE}/data/reth \
             --datadir.static-files ${WORKSPACE}/data/reth \
             --gravity_node_config ${WORKSPACE}/genesis/validator.yaml \
