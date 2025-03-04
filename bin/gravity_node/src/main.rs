@@ -82,7 +82,7 @@ struct ConsensusArgs {
 }
 
 fn run_reth(
-    tx: mpsc::Sender<ConsensusArgs>,
+    tx: mpsc::Sender<(ConsensusArgs, u64)>,
     cli: Cli<DefaultChainSpecParser, EngineArgs>,
     execution_args_rx: oneshot::Receiver<ExecutionArgs>,
 ) {
@@ -159,7 +159,7 @@ fn run_reth(
                     tx_listener: pending_listener,
                     pool,
                 };
-                tx.send(args).await.ok();
+                tx.send((args, latest_block_number)).await.ok();
                 handle.node_exit_future.await
             }
         })
@@ -178,12 +178,12 @@ fn main() {
     thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
-            if let Some(args) = rx.recv().await {
+            if let Some((args, latest_block_number)) = rx.recv().await {
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
                 let client = RethCli::new(args).await;
                 let chain_id = client.chain_id();
-                let coordinator = Arc::new(RethCoordinator::new(client, execution_args_tx));
+                let coordinator = Arc::new(RethCoordinator::new(client, latest_block_number, execution_args_tx));
                 let cloned = coordinator.clone();
                 tokio::spawn(async move {
                     cloned.run().await;
