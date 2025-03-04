@@ -37,7 +37,7 @@ impl State {
 
     pub fn update_account_seq_num(&mut self, txn: &VerifiedTxn) -> bool {
         let account = txn.sender.clone();
-        let seq_num = self.accout_seq_num.entry(account).or_insert(txn.sequence_number - 1);
+        let seq_num = self.accout_seq_num.entry(account).or_insert(txn.sequence_number as i64 -1);
         if *seq_num + 1 != txn.sequence_number as i64 {
             debug!("meet false seq_num: {:?} {:?}", seq_num, txn.sequence_number);
             return false;
