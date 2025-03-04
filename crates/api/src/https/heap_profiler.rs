@@ -94,7 +94,7 @@ impl HeapProfiler {
 
     fn get_prof_dump(&self, profile_file_name: &CString) {
         let _guard = self.mutex.lock().unwrap();
-        dump_prof(profile_file_name);
+        // dump_prof(profile_file_name);
     }
 
     pub fn dump_heap_profile(&self) -> String {
@@ -156,4 +156,3 @@ impl HeapProfiler {
 //     .run()
 //     .await
 // }
-// export _RJEM_MALLOC_CONF=prof:true,lg_prof_interval:30,lg_prof_sample:21,prof_prefix:/home/jingyue/projects/gravity-sdk/jemalloc
