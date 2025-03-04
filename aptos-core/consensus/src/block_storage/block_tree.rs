@@ -547,7 +547,7 @@ impl BlockTree {
             block_id = block_to_commit.id(),
         );
 
-        let prune_block_id = blocks_to_commit.first().expect("pipeline is empty").clone().parent_id();
+        let prune_block_id = blocks_to_commit.last().expect("pipeline is empty").id();
         let ids_to_remove = self.find_blocks_to_prune(prune_block_id);
         self.process_pruned_blocks(ids_to_remove);
 
