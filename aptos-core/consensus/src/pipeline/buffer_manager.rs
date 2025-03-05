@@ -773,6 +773,7 @@ impl BufferManager {
 
     fn need_backpressure(&self) -> bool {
         const MAX_BACKLOG: Round = 20;
+        info!("lightman0306 need_backpressure {}", self.executed_block_counter);
         // self.highest_committed_round + MAX_BACKLOG < self.latest_round
         self.executed_block_counter > MAX_BACKLOG
     }
