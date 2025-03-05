@@ -131,11 +131,6 @@ impl ExecutionChannel for RethCoordinator {
                 return Err(ExecError::DuplicateExecError);
             }
             state.insert_block_number(ordered_block.block_meta.block_id, block_number);
-            ordered_block.txns = ordered_block
-                .txns
-                .into_iter()
-                .filter(|txn| state.update_account_seq_num(txn))
-                .collect();
         }
         {
             let mut map = self.block_number_to_txn_in_block.lock().await;
