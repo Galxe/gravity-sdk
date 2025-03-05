@@ -25,8 +25,7 @@ use std::io::Read;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_stream::StreamExt;
-use tracing::{debug, info};
-use tracing::log::error;
+use tracing::*;
 
 pub struct RethCli {
     auth: AuthServerHandle,
@@ -102,7 +101,7 @@ impl RethCli {
         mut block: ExternalBlock,
         parent_id: B256,
     ) -> Result<(), String> {
-        debug!("push ordered block {:?} with parent id {}", block, parent_id);
+        trace!("push ordered block {:?} with parent id {}", block, parent_id);
         let pipe_api = &self.pipe_api;
         let mut senders = vec![];
         let mut transactions = vec![];
@@ -170,8 +169,9 @@ impl RethCli {
             let sender = txn.sender();
             let nonce = txn.nonce();
             let txn = txn.transaction.transaction();
-            let accout_nonce =
-                self.provider.basic_account(sender)
+            let accout_nonce = self
+                .provider
+                .basic_account(sender)
                 .unwrap()
                 .map(|x| x.nonce)
                 .unwrap_or(txn.nonce());
@@ -195,7 +195,7 @@ impl RethCli {
                 buffer.push(vtxn);
             }
             let after_ser = std::time::Instant::now();
-            debug!(
+            trace!(
                 "push addr {} txn nonce: {} acc_nonce: {} recv_time {} serialize_time {}",
                 sender,
                 txn.transaction.nonce(),

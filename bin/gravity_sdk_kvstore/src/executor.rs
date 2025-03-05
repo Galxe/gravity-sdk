@@ -5,7 +5,7 @@ use futures::channel::{mpsc, oneshot};
 use futures::future::BoxFuture;
 use futures::{stream::FuturesUnordered, StreamExt};
 use futures::{FutureExt, SinkExt};
-use log::{debug, info};
+use log::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -186,10 +186,7 @@ impl PipelineExecutor {
     ) -> Result<TransactionReceipt, String> {
         let sender = verify_signature(tx)?;
         let sender_id = AccountId(sender.clone());
-        debug!(
-            "Executing transaction from {} tx {:?}, state is {:?}",
-            sender, tx.unsigned, state
-        );
+        trace!("Executing transaction from {} tx {:?}, state is {:?}", sender, tx.unsigned, state);
 
         let mut sender_state = state_updates
             .get(&sender_id)

@@ -8,6 +8,7 @@ log_suffix=$(date +"%Y-%d-%m:%H:%M:%S")
 bin_name="gravity_node"
 node_arg=""
 chain="dev"
+log_level="info"
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
@@ -21,6 +22,10 @@ while [[ "$#" -gt 0 ]]; do
         ;;
     --chain)
         chain="$2"
+        shift
+        ;;
+    --log_level)
+        log_level="$2"
         shift
         ;;
     *)
@@ -80,7 +85,7 @@ function start_node() {
             --authrpc.port ${authrpc_port} \
             --authrpc.addr 0.0.0.0 \
             --metrics 0.0.0.0:${metric_port} \
-            --log.file.filter info \
+            --log.file.filter ${log_level} \
             --datadir ${WORKSPACE}/data/reth \
             --datadir.static-files ${WORKSPACE}/data/reth \
             --gravity_node_config ${WORKSPACE}/genesis/validator.yaml \
