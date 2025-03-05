@@ -58,7 +58,6 @@ pub struct KvStore {
     mempool: Mempool,
     block_status: Mutex<HashMap<ExternalPayloadAttr, BlockStatus>>,
     compute_res_recv: Mutex<HashMap<ExternalBlockMeta, Receiver<ComputeRes>>>,
-    ordered_block: Mutex<HashMap<ExternalBlockMeta, ExternalBlock>>,
     counter: Mutex<CounterTimer>,
     not_empty_sets: Mutex<HashSet<BlockId>>,
 }
@@ -70,7 +69,6 @@ impl KvStore {
             mempool: Mempool::new(),
             block_status: Mutex::new(HashMap::new()),
             compute_res_recv: Mutex::new(HashMap::new()),
-            ordered_block: Mutex::new(HashMap::new()),
             counter: Mutex::new(CounterTimer::new()),
             not_empty_sets: Mutex::new(HashSet::new()),
         }
@@ -159,9 +157,6 @@ impl ExecutionChannel for KvStore {
         send.send(ComputeRes::new(v, ordered_block.txns.len() as u64)).await.unwrap();
         let mut r = self.compute_res_recv.lock().await;
         r.insert(ordered_block.block_meta.clone(), recv);
-
-        let mut block = self.ordered_block.lock().await;
-        block.insert(ordered_block.block_meta.clone(), ordered_block);
         Ok(())
     }
 
@@ -169,8 +164,11 @@ impl ExecutionChannel for KvStore {
         &self,
         head: ExternalBlockMeta,
     ) -> Result<ComputeRes, ExecError> {
-        let mut r = self.compute_res_recv.lock().await;
-        let receiver = r.get_mut(&head).expect("Failed to get receiver");
+        let mut receiver = {
+                        let mut r = self.compute_res_recv.lock().await;
+                        r.remove(&head).expect("Failed to get receiver")
+                    
+                    };
         let res = receiver.recv().await;
         match res {
             Some(r) => {
@@ -184,6 +182,7 @@ impl ExecutionChannel for KvStore {
 
     async fn send_committed_block_info(&self, head: BlockId) -> Result<(), ExecError> {
         let mut guard = self.not_empty_sets.lock().await;
+        info!("enter send_committed_block_info");
         if guard.contains(&head) {
             info!("enter one execute");
             self.counter.lock().await.count();

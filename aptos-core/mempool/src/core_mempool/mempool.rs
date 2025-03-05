@@ -446,6 +446,7 @@ impl Mempool {
                 skipped.insert((txn.address, tx_seq));
             }
         }
+        info!("walked: {} skipped: {}, exclude: {}", txn_walked, skipped.len(), exclude_transactions.len());
         let result_size = result.len();
         let result_end_time = start_time.elapsed();
         let result_time = result_end_time.saturating_sub(gas_end_time);

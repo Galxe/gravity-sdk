@@ -57,6 +57,7 @@ impl TestConsensusLayer {
     }
 
     async fn run(self) {
+        
         loop {
             if should_produce_txn().await {
                 info!("start produce new txn");
