@@ -11,7 +11,7 @@ use crate::{
     network::{create_network_runtime, extract_network_configs},
 };
 use api_types::{
-    compute_res::ComputeRes, u256_define::BlockId, ConsensusApi, ExecutionLayer, ExternalBlock, ExternalBlockMeta
+    compute_res::ComputeRes, u256_define::BlockId, ConsensusApi, ExecError, ExecutionLayer, ExternalBlock, ExternalBlockMeta
 };
 use aptos_build_info::build_information;
 use aptos_config::{config::NodeConfig, network_id::NetworkId};
@@ -202,7 +202,8 @@ impl ConsensusApi for ConsensusEngine {
             .recv_ordered_block(BlockId(parent_id), ordered_block)
             .await
         {
-            Ok(_) => {}
+            Ok(_) => {},
+            Err(ExecError::DuplicateExecError) => {},
             Err(_) => panic!("send_ordered_block should not fail"),
         }
     }
