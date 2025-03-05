@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use log::info;
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Mutex;
 use tokio::time::Instant;
@@ -86,6 +87,9 @@ impl KvStore {
     }
 }
 
+static RECV_TXN_SUM: AtomicU64 = AtomicU64::new(0);
+static SEND_TXN_SUM: AtomicU64 = AtomicU64::new(0);
+static COMPUTE_RES_SUM: AtomicU64 = AtomicU64::new(0);
 #[async_trait]
 impl ExecutionChannel for KvStore {
     async fn send_user_txn(&self, txn: ExecTxn) -> Result<TxnHash, ExecError> {
@@ -117,10 +121,13 @@ impl ExecutionChannel for KvStore {
     }
 
     async fn recv_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
-        match should_produce_txn().await {
+        let txns = match should_produce_txn().await {
             true => Ok(self.mempool.pending_txns().await),
             false => Ok(vec![]),
-        }
+        }?;
+        RECV_TXN_SUM.fetch_add(txns.len() as u64, Ordering::Relaxed);
+        info!("RECV_TXN_SUM: {}", RECV_TXN_SUM.load(Ordering::Relaxed));
+        Ok(txns)
     }
 
     async fn send_ordered_block(
@@ -133,7 +140,8 @@ impl ExecutionChannel for KvStore {
         if !ordered_block.txns.is_empty() {
             self.not_empty_sets.lock().await.insert(ordered_block.block_meta.block_id);
         }
-
+        SEND_TXN_SUM.fetch_add(ordered_block.txns.len() as u64, Ordering::Relaxed);
+        info!("SEND_TXN_SUM: {}", SEND_TXN_SUM.load(Ordering::Relaxed));
         for txn in &ordered_block.txns {
             let raw_txn = RawTxn::from_bytes(txn.bytes().to_vec());
             self.set(raw_txn.key().clone(), raw_txn.val().clone()).await;
@@ -165,7 +173,11 @@ impl ExecutionChannel for KvStore {
         let receiver = r.get_mut(&head).expect("Failed to get receiver");
         let res = receiver.recv().await;
         match res {
-            Some(r) => Ok(r),
+            Some(r) => {
+                COMPUTE_RES_SUM.fetch_add(r.txn_num, Ordering::Relaxed);
+                info!("COMPUTE_RES_SUM: {}", COMPUTE_RES_SUM.load(Ordering::Relaxed));
+                Ok(r)
+            },
             None => Err(ExecError::InternalError),
         }
     }

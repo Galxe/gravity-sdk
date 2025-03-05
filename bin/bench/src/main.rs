@@ -62,7 +62,7 @@ impl TestConsensusLayer {
                 info!("start produce new txn");
                 let txn_num_in_block =
                     std::env::var("BLOCK_TXN_NUMS").map(|s| s.parse().unwrap()).unwrap_or(1000);
-                TestConsensusLayer::random_txns(txn_num_in_block).await.into_iter().for_each(
+                    TestConsensusLayer::random_txns(txn_num_in_block).await.into_iter().for_each(
                     |txn| {
                         let execution = self.execution_api.clone();
                         tokio::spawn(async move {

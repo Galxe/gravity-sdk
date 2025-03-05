@@ -46,9 +46,11 @@ impl Mempool {
                     txns.push(txn)
                 },
                 Err(TryRecvError::Empty) => {
+                    panic!("unexpected empty");
                     break;
                 }
                 Err(TryRecvError::Disconnected) => {
+                    panic!("unexpected disconnected");
                     break;
                 }
             }
