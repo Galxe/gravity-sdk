@@ -114,14 +114,6 @@ impl ExecutionChannel for RethCoordinator {
             ordered_block.txns.len()
         );
         {
-            let mut state = self.state.lock().await;
-            ordered_block.txns = ordered_block
-                .txns
-                .into_iter()
-                .filter(|txn| state.update_account_seq_num(txn))
-                .collect();
-        }
-        {
             let mut map = self.block_number_to_txn_in_block.lock().await;
             map.insert(ordered_block.block_meta.block_number, ordered_block.txns.len() as u64);
         }
