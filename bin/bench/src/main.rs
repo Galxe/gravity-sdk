@@ -7,7 +7,8 @@ use std::{sync::Arc, thread};
 
 use api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
 use api_types::{
-    account::ExternalAccountAddress, default_recover::DefaultRecovery, ConsensusApi, ExecTxn, ExecutionChannel, ExecutionLayer
+    account::ExternalAccountAddress, default_recover::DefaultRecovery, ConsensusApi, ExecTxn,
+    ExecutionChannel, ExecutionLayer,
 };
 use clap::Parser;
 use cli::Cli;
@@ -33,7 +34,7 @@ impl TestConsensusLayer {
         Self {
             consensus_engine: ConsensusEngine::init(
                 node_config,
-                ExecutionLayer{
+                ExecutionLayer {
                     execution_api: execution_client.clone(),
                     recovery_api: Arc::new(DefaultRecovery {}),
                 },
@@ -62,14 +63,10 @@ impl TestConsensusLayer {
                 info!("start produce new txn");
                 let txn_num_in_block =
                     std::env::var("BLOCK_TXN_NUMS").map(|s| s.parse().unwrap()).unwrap_or(1000);
-                TestConsensusLayer::random_txns(txn_num_in_block).await.into_iter().for_each(
-                    |txn| {
-                        let execution = self.execution_api.clone();
-                        tokio::spawn(async move {
-                            let _ = execution.send_user_txn(txn).await;
-                        });
-                    },
-                );
+                let txns = TestConsensusLayer::random_txns(txn_num_in_block).await;
+                for txn in txns {
+                    self.execution_api.send_user_txn(txn).await.unwrap();
+                }
             }
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await
         }
