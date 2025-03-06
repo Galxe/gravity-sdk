@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use log::info;
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Mutex;
 use tokio::time::Instant;
@@ -53,38 +54,36 @@ impl CounterTimer {
 }
 
 pub struct KvStore {
-    store: Mutex<HashMap<String, String>>,
+    _store: Mutex<HashMap<String, String>>,
     mempool: Mempool,
     block_status: Mutex<HashMap<ExternalPayloadAttr, BlockStatus>>,
-    compute_res_recv: Mutex<HashMap<ExternalBlockMeta, Receiver<ComputeRes>>>,
-    ordered_block: Mutex<HashMap<ExternalBlockMeta, ExternalBlock>>,
-    counter: Mutex<CounterTimer>,
-    not_empty_sets: Mutex<HashSet<BlockId>>,
+    block_len: Mutex<HashMap<BlockId, usize>>,
 }
 
 impl KvStore {
     pub fn new() -> Self {
         KvStore {
-            store: Mutex::new(HashMap::new()),
+            _store: Mutex::new(HashMap::new()),
             mempool: Mempool::new(),
             block_status: Mutex::new(HashMap::new()),
-            compute_res_recv: Mutex::new(HashMap::new()),
-            ordered_block: Mutex::new(HashMap::new()),
-            counter: Mutex::new(CounterTimer::new()),
-            not_empty_sets: Mutex::new(HashSet::new()),
+            block_len: Mutex::new(HashMap::new()),
         }
     }
 
     pub async fn get(&self, key: &str) -> Option<String> {
-        let data = self.store.lock().await;
+        let data = self._store.lock().await;
         data.get(key).cloned()
     }
 
     pub async fn set(&self, key: String, val: String) {
-        let mut store = self.store.lock().await;
+        let mut store = self._store.lock().await;
         store.insert(key, val);
     }
 }
+
+static RECV_TXN_SUM: AtomicU64 = AtomicU64::new(0);
+static SEND_TXN_SUM: AtomicU64 = AtomicU64::new(0);
+static COMPUTE_RES_SUM: AtomicU64 = AtomicU64::new(0);
 
 #[async_trait]
 impl ExecutionChannel for KvStore {
@@ -117,10 +116,13 @@ impl ExecutionChannel for KvStore {
     }
 
     async fn send_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
-        match should_produce_txn().await {
+        let txns = match should_produce_txn().await {
             true => Ok(self.mempool.pending_txns().await),
             false => Ok(vec![]),
-        }
+        }?;
+        RECV_TXN_SUM.fetch_add(txns.len() as u64, Ordering::Relaxed);
+        info!("RECV_TXN_SUM: {}", RECV_TXN_SUM.load(Ordering::Relaxed));
+        Ok(txns)
     }
 
     async fn recv_ordered_block(
@@ -128,32 +130,12 @@ impl ExecutionChannel for KvStore {
         parent_id: BlockId,
         ordered_block: ExternalBlock,
     ) -> Result<(), ExecError> {
-        let mut res = vec![];
-
-        if !ordered_block.txns.is_empty() {
-            self.not_empty_sets.lock().await.insert(ordered_block.block_meta.block_id);
+        {
+            let mut block_len = self.block_len.lock().await;
+            block_len.insert(ordered_block.block_meta.block_id, ordered_block.txns.len());
         }
-
-        for txn in &ordered_block.txns {
-            let raw_txn = RawTxn::from_bytes(txn.bytes().to_vec());
-            self.set(raw_txn.key().clone(), raw_txn.val().clone()).await;
-            let val = self.get(raw_txn.key()).await;
-            res.push(val);
-        }
-        let mut hasher = DefaultHasher::new();
-        res.hash(&mut hasher);
-        let hash_value = hasher.finish();
-        let mut v = [0; 32];
-        let bytes = hash_value.to_le_bytes();
-        v[0..8].copy_from_slice(&bytes);
-
-        let (send, recv) = tokio::sync::mpsc::channel::<ComputeRes>(1);
-        send.send(ComputeRes::new(v, ordered_block.txns.len() as u64)).await.unwrap();
-        let mut r = self.compute_res_recv.lock().await;
-        r.insert(ordered_block.block_meta.clone(), recv);
-
-        let mut block = self.ordered_block.lock().await;
-        block.insert(ordered_block.block_meta.clone(), ordered_block);
+        SEND_TXN_SUM.fetch_add(ordered_block.txns.len() as u64, Ordering::Relaxed);
+        info!("SEND_TXN_SUM: {}", SEND_TXN_SUM.load(Ordering::Relaxed));
         Ok(())
     }
 
@@ -161,22 +143,18 @@ impl ExecutionChannel for KvStore {
         &self,
         head: ExternalBlockMeta,
     ) -> Result<ComputeRes, ExecError> {
-        let mut r = self.compute_res_recv.lock().await;
-        let receiver = r.get_mut(&head).expect("Failed to get receiver");
-        let res = receiver.recv().await;
-        match res {
-            Some(r) => Ok(r),
-            None => Err(ExecError::InternalError),
-        }
+        let mut r = ComputeRes::random();
+        r.txn_num = {
+            let mut block_len = self.block_len.lock().await;
+            block_len.remove(&head.block_id).unwrap().clone()
+        } as u64;
+        COMPUTE_RES_SUM.fetch_add(r.txn_num, Ordering::Relaxed);
+        info!("COMPUTE_RES_SUM: {}", COMPUTE_RES_SUM.load(Ordering::Relaxed));
+        Ok(r)
     }
 
     async fn recv_committed_block_info(&self, head: BlockId) -> Result<(), ExecError> {
-        let mut guard = self.not_empty_sets.lock().await;
-        if guard.contains(&head) {
-            info!("enter one execute");
-            self.counter.lock().await.count();
-            guard.remove(&head);
-        }
+        info!("enter send_committed_block_info");
         Ok(())
     }
 }

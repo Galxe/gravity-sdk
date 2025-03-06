@@ -20,7 +20,7 @@ use state::State;
 use tokio::sync::Mutex;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::{sleep, Sleep};
-use tracing::debug;
+use tracing::{debug, info};
 
 pub struct Buffer<T> {
     sender: mpsc::Sender<T>,
