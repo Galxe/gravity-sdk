@@ -20,15 +20,15 @@ CARGO_FEATURES := $(if $(FEATURE),--features $(FEATURE),)
 all: $(BINARY)
 
 gravity_node:
-    cd bin/gravity_node && cargo build $(CARGO_FLAGS) $(CARGO_FEATURES)
+	cargo build -p gravity_node $(CARGO_FLAGS) $(CARGO_FEATURES)
 
 bench:
-    cd bin/bench && cargo build $(CARGO_FLAGS) $(CARGO_FEATURES)
+	cargo build -p bench $(CARGO_FLAGS) $(CARGO_FEATURES)
 
 kvstore:
-    cd bin/kvstore && cargo build $(CARGO_FLAGS) $(CARGO_FEATURES)
+	cargo build -p kvstore $(CARGO_FLAGS) $(CARGO_FEATURES)
 
 clean:
-    for dir in $(BIN_PATHS); do \
-        (cd $$dir && cargo clean); \
-    done
+	for dir in $(BIN_PATHS); do \
+		(cd $$dir && cargo clean); \
+	done

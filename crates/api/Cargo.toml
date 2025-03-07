@@ -73,3 +73,4 @@ once_cell = { workspace = true }
 [features]
 default = []
 failpoints = ["fail/failpoints", "aptos-consensus/failpoints", "aptos-mempool/failpoints", "aptos-config/failpoints"]
+jemalloc-profiling = ["tikv-jemallocator/profiling", "tikv-jemalloc-sys/profiling"]
