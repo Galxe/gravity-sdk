@@ -20,7 +20,7 @@ pub static PROFILER: Lazy<HeapProfiler> = Lazy::new(|| HeapProfiler::new());
 
 #[derive(Deserialize, Serialize)]
 pub struct ControlProfileRequest {
-    start: bool,
+    enable: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -28,9 +28,11 @@ pub struct ControlProfileResponse {
     pub response: String,
 }
 
+/// User should use binary with feature api/jemalloc-profiling enabled.
+/// This feature can be enabled by ```Cargo build --features api/jemalloc-profiling```
 pub async fn control_profiler(request: ControlProfileRequest) -> impl IntoResponse {
     #[cfg(feature = "jemalloc-profiling")]
-    match PROFILER.set_prof_active(request.start) {
+    match PROFILER.set_prof_active(request.enable) {
         Ok(_) => Json(ControlProfileResponse { response: "success".to_string() }),
         Err(e) => Json(ControlProfileResponse { response: e }),
     }
