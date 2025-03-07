@@ -533,6 +533,7 @@ impl TransactionStore {
                 )
             })
             .remove(txn);
+        self.hash_index.remove(&txn.get_hash());
         self.size_bytes -= txn.get_estimated_bytes();
 
         // Remove account datastructures if there are no more transactions for the account.
