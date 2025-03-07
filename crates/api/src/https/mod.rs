@@ -23,8 +23,8 @@ use tx::{get_tx_by_hash, submit_tx, TxRequest};
 pub struct HttpsServerArgs {
     pub address: String,
     pub execution_api: Arc<dyn ExecutionChannel>,
-    pub cert_pem: PathBuf,
-    pub key_pem: PathBuf,
+    pub cert_pem: Option<PathBuf>,
+    pub key_pem: Option<PathBuf>,
 }
 
 async fn ensure_https(req: Request<Body>, next: Next) -> Response {
@@ -61,19 +61,32 @@ pub async fn https_server(args: HttpsServerArgs) {
         .route("/set_failpoint", post(set_fail_point_lambda))
         .route("/mem_prof", post(control_profiler_lambda));
     let app = Router::new().merge(https_app).merge(http_app);
-    // configure certificate and private key used by https
-    let config = RustlsConfig::from_pem_file(args.cert_pem.clone(), args.key_pem.clone())
-        .await
-        .unwrap_or_else(|e| {
-            panic!("error {:?}, cert {:?}, key {:?} doesn't work", e, args.cert_pem, args.key_pem)
-        });
     let addr: SocketAddr = args.address.parse().unwrap();
-    info!("https server listen address {}", addr);
-    axum_server::bind_rustls(addr, config).serve(app.into_make_service()).await.unwrap_or_else(
-        |e| {
-            panic!("failed to bind rustls due to {:?}", e);
-        },
-    );
+    match (args.cert_pem.clone(), args.key_pem.clone()) {
+        (Some(cert_path), Some(key_path)) => {
+            // configure certificate and private key used by https
+            let config =
+                RustlsConfig::from_pem_file(cert_path, key_path).await.unwrap_or_else(|e| {
+                    panic!(
+                        "error {:?}, cert {:?}, key {:?} doesn't work",
+                        e, args.cert_pem, args.key_pem
+                    )
+                });
+            info!("https server listen address {}", addr);
+            axum_server::bind_rustls(addr, config)
+                .serve(app.into_make_service())
+                .await
+                .unwrap_or_else(|e| {
+                    panic!("failed to bind rustls due to {:?}", e);
+                });
+        }
+        _ => {
+            info!("http server listen address {}", addr);
+            axum_server::bind(addr).serve(app.into_make_service()).await.unwrap_or_else(|e| {
+                panic!("failed to bind http due to {:?}", e);
+            });
+        }
+    }
 }
 
 #[cfg(test)]
@@ -104,15 +117,15 @@ mod test {
         let cert_pem = cert.serialize_pem().unwrap();
         let key_pem = cert.serialize_private_key_pem();
         let dir = env!("CARGO_MANIFEST_DIR").to_owned();
-        fs::create_dir(dir.clone() + "/src/https/test");
-        fs::write(dir.clone() + "/src/https/test/cert.pem", cert_pem);
-        fs::write(dir.clone() + "/src/https/test/key.pem", key_pem);
+        fs::create_dir(dir.clone() + "/src/https/test").unwrap();
+        fs::write(dir.clone() + "/src/https/test/cert.pem", cert_pem).unwrap();
+        fs::write(dir.clone() + "/src/https/test/key.pem", key_pem).unwrap();
 
         let args = HttpsServerArgs {
             address: "127.0.0.1:5425".to_owned(),
             execution_api: Arc::new(MockExecutionApi {}),
-            cert_pem: PathBuf::from(dir.clone() + "/src/https/test/cert.pem"),
-            key_pem: PathBuf::from(dir.clone() + "/src/https/test/key.pem"),
+            cert_pem: Some(PathBuf::from(dir.clone() + "/src/https/test/cert.pem")),
+            key_pem: Some(PathBuf::from(dir.clone() + "/src/https/test/key.pem")),
         };
         let _handler = tokio::spawn(https_server(args));
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;

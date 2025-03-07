@@ -1,13 +1,18 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
 use crate::{
     bootstrap::{
         init_mempool, init_network_interfaces, init_peers_and_metadata, start_consensus,
         start_node_inspection_service,
-    }, consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler}, https::heap_profiler::HeapProfiler, https::{https_server, HttpsServerArgs}, logger, network::{create_network_runtime, extract_network_configs}
+    },
+    consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler},
+    https::{https_server, HttpsServerArgs},
+    logger,
+    network::{create_network_runtime, extract_network_configs},
 };
 use api_types::{
-    compute_res::ComputeRes, u256_define::BlockId, ConsensusApi, ExecError, ExecutionLayer, ExternalBlock, ExternalBlockMeta
+    compute_res::ComputeRes, u256_define::BlockId, ConsensusApi, ExecError, ExecutionLayer,
+    ExternalBlock, ExternalBlockMeta,
 };
 use aptos_build_info::build_information;
 use aptos_config::{config::NodeConfig, network_id::NetworkId};
@@ -16,13 +21,17 @@ use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
 use aptos_event_notifications::EventNotificationSender;
 use aptos_logger::{info, warn};
 use aptos_network_builder::builder::NetworkBuilder;
-use aptos_storage_interface::{DbReader, DbReaderWriter};
+use aptos_storage_interface::DbReaderWriter;
 use aptos_telemetry::service::start_telemetry_service;
 use async_trait::async_trait;
 
 use aptos_types::chain_id::ChainId;
 use futures::channel::mpsc;
 use tokio::runtime::Runtime;
+
+#[cfg(unix)]
+#[global_allocator]
+static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 pub struct ConsensusEngine {
     address: String,
@@ -52,7 +61,6 @@ fn fail_point_check(node_config: &NodeConfig) {
 }
 
 impl ConsensusEngine {
-
     pub fn init(
         node_config: NodeConfig,
         execution_layer: ExecutionLayer,
@@ -163,29 +171,24 @@ impl ConsensusEngine {
         );
         runtimes.push(consensus_runtime);
         // trigger this to make epoch manager invoke new epoch
-        if !node_config.https_cert_pem_path.to_str().unwrap().is_empty()
-            && !node_config.https_key_pem_path.to_str().unwrap().is_empty()
-        {
-            let args = HttpsServerArgs {
-                address: node_config.https_server_address,
-                execution_api: execution_layer.execution_api.clone(),
-                cert_pem: node_config.https_cert_pem_path,
-                key_pem: node_config.https_key_pem_path,
-            };
-            let runtime = aptos_runtimes::spawn_named_runtime("Http".into(), None);
-            runtime.spawn(async move { https_server(args) });
-            runtimes.push(runtime);
-        }
-        let runtime = aptos_runtimes::spawn_named_runtime("Prof".into(), None);
-        runtime.spawn(async move {
-            let heap_profiler = Arc::new(HeapProfiler::new());
-            heap_profiler.set_prof_active(true).unwrap();
-            loop {
-                heap_profiler.dump_heap_profile();
-                info!("dump heap profile");
-                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
-            }
-        });
+        let args = HttpsServerArgs {
+            address: node_config.https_server_address,
+            execution_api: execution_layer.execution_api.clone(),
+            cert_pem: node_config
+                .https_cert_pem_path
+                .clone()
+                .to_str()
+                .filter(|s| !s.is_empty())
+                .map(|_| node_config.https_cert_pem_path),
+            key_pem: node_config
+                .https_key_pem_path
+                .clone()
+                .to_str()
+                .filter(|s| !s.is_empty())
+                .map(|_| node_config.https_key_pem_path),
+        };
+        let runtime = aptos_runtimes::spawn_named_runtime("Http".into(), None);
+        runtime.spawn(async move { https_server(args) });
         runtimes.push(runtime);
         let arc_consensus_engine = Arc::new(Self {
             address: node_config.validator_network.as_ref().unwrap().listen_address.to_string(),
@@ -209,8 +212,8 @@ impl ConsensusApi for ConsensusEngine {
             .recv_ordered_block(BlockId(parent_id), ordered_block)
             .await
         {
-            Ok(_) => {},
-            Err(ExecError::DuplicateExecError) => {},
+            Ok(_) => {}
+            Err(ExecError::DuplicateExecError) => {}
             Err(_) => panic!("send_ordered_block should not fail"),
         }
     }
