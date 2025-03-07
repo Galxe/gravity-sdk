@@ -64,10 +64,6 @@ members = [
     "bin/gravity_node"
 ]
 
-
-
-
-
 [workspace.dependencies]
 aptos-consensus = { path = "./aptos-core/consensus" }
 
@@ -303,8 +299,8 @@ internment = { version = "0.5.0", features = ["arc"] }
 ipnet = "2.5.0"
 itertools = "0.13"
 tikv-jemalloc-ctl = "0.6"
-tikv-jemallocator = { version = "0.6", features = ["profiling"] }
-tikv-jemalloc-sys = { version = "0.6", features = ["profiling"] }
+tikv-jemallocator = { version = "0.6" }
+tikv-jemalloc-sys = { version = "0.6" }
 json-patch = "0.2.6"
 jsonwebtoken = "8.1"
 jwt = "0.16.0"
@@ -546,3 +542,6 @@ serde-reflection = { git = "https://github.com/aptos-labs/serde-reflection", rev
 merlin = { git = "https://github.com/aptos-labs/merlin" }
 x25519-dalek = { git = "https://github.com/aptos-labs/x25519-dalek", branch = "zeroize_v1" }
 tonic = { git = "https://github.com/aptos-labs/tonic.git", rev = "0da1ba8b1751d6e19eb55be24cccf9ae933c666e" }
+
+[workspace.features]
+jemalloc-profiling = ["tikv-jemallocator/profiling", "tikv-jemalloc-sys/profiling"]
