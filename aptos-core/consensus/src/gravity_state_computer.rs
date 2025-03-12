@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::consensusdb::ConsensusDB;
+use crate::counters;
 use crate::payload_client::user::quorum_store_client::QuorumStoreClient;
 use anyhow::Result;
 use api_types::ExecutionLayer;
@@ -12,6 +13,7 @@ use aptos_executor_types::{
     BlockExecutorTrait, ExecutorResult, StateComputeResult,
 };
 use aptos_logger::info;
+use aptos_mempool::counters::{APTOS_COMMIT_BLOCKS, APTOS_EXECUTION_TXNS};
 use aptos_types::block_executor::partitioner::ExecutableBlock;
 use aptos_types::{
     block_executor::config::BlockExecutorConfigFromOnchain,
@@ -71,6 +73,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         parent_block_id: HashValue,
         onchain_config: BlockExecutorConfigFromOnchain,
     ) -> ExecutorResult<()> {
+        APTOS_EXECUTION_TXNS.observe(block.transactions.num_transactions() as f64);
         self.inner.execute_and_state_checkpoint(block, parent_block_id, onchain_config)
     }
 
@@ -87,7 +90,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         block_ids: Vec<HashValue>,
         ledger_info_with_sigs: LedgerInfoWithSignatures,
     ) -> ExecutorResult<()> {
-        info!("commit blocks: {:?}", block_ids);
+        APTOS_COMMIT_BLOCKS.inc_by(block_ids.len() as u64);
         if !block_ids.is_empty() {
             self.runtime.block_on(async move {
                 let call = get_coex_bridge().borrow_func("commit_block_hash");

@@ -328,6 +328,23 @@ static MEMPOOL_SERVICE_TXNS: Lazy<HistogramVec> = Lazy::new(|| {
     .unwrap()
 });
 
+pub static APTOS_EXECUTION_TXNS: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!(
+        "aptos_execution_transactions",
+        "Number of transactions handled in one request/response between mempool and execution layer",
+        TRANSACTION_COUNT_BUCKETS.clone()
+    )
+    .unwrap()
+});
+
+pub static APTOS_COMMIT_BLOCKS: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "aptos_commit_transactions",
+        "Number of transactions committed by consensus",
+    )
+    .unwrap()
+});
+
 pub fn mempool_service_transactions(label: &'static str, num: usize) {
     MEMPOOL_SERVICE_TXNS
         .with_label_values(&[label])

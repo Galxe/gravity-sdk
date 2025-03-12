@@ -132,6 +132,14 @@ pub static PROOF_QUEUE_REMAINING_TXNS_DURATION: Lazy<DurationHistogram> = Lazy::
     )
 });
 
+pub static PROOF_CREAT_COUNT: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "quorum_store_proof_create_count",
+        "Counter for the number of proofs created"
+    )
+    .unwrap()
+});
+
 /// Duration of each run of the event loop.
 pub static BATCH_GENERATOR_MAIN_LOOP: Lazy<DurationHistogram> = Lazy::new(|| {
     DurationHistogram::new(
