@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::Error;
-use aptos_consensus_types::common::{Author, Round};
-use aptos_logger::Schema;
-use aptos_types::waypoint::Waypoint;
+use gaptos::aptos_consensus_types::common::{Author, Round};
+use gaptos::aptos_logger::Schema;
+use gaptos::aptos_types::waypoint::Waypoint;
 use serde::Serialize;
 
 #[derive(Schema)]

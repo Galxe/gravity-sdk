@@ -17,16 +17,16 @@ use crate::{
         types::{Batch, BatchResponse},
     }, round_manager::VerifiedEvent
 };
-use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_config::config::{QuorumStoreConfig, SecureBackend};
-use aptos_consensus_types::{
+use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_config::config::{QuorumStoreConfig, SecureBackend};
+use gaptos::aptos_consensus_types::{
     common::Author, proof_of_store::ProofCache, request_response::GetPayloadCommand,
 };
-use aptos_crypto::bls12381::PrivateKey;
-use aptos_logger::prelude::*;
-use aptos_mempool::QuorumStoreRequest;
-use aptos_storage_interface::DbReader;
-use aptos_types::{
+use gaptos::aptos_crypto::bls12381::PrivateKey;
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_mempool::QuorumStoreRequest;
+use gaptos::aptos_storage_interface::DbReader;
+use gaptos::aptos_types::{
     account_address::AccountAddress, validator_signer::ValidatorSigner,
     validator_verifier::ValidatorVerifier,
 };
@@ -59,7 +59,7 @@ impl QuorumStoreBuilder {
         self,
     ) -> Option<(
         Sender<CoordinatorCommand>,
-        aptos_channel::Sender<AccountAddress, IncomingBatchRetrievalRequest>,
+        gaptos::aptos_channel::Sender<AccountAddress, IncomingBatchRetrievalRequest>,
     )> {
         match self {
             QuorumStoreBuilder::DirectMempool(inner) => {
@@ -134,7 +134,7 @@ pub struct InnerBuilder {
     back_pressure_tx: tokio::sync::mpsc::Sender<BackPressure>,
     back_pressure_rx: Option<tokio::sync::mpsc::Receiver<BackPressure>>,
     quorum_store_storage: Arc<dyn QuorumStoreStorage>,
-    quorum_store_msg_tx: aptos_channel::Sender<AccountAddress, VerifiedEvent>,
+    quorum_store_msg_tx: gaptos::aptos_channel::Sender<AccountAddress, VerifiedEvent>,
     quorum_store_msg_rx: Option<aptos_channel::Receiver<AccountAddress, VerifiedEvent>>,
     remote_batch_coordinator_cmd_tx: Vec<tokio::sync::mpsc::Sender<BatchCoordinatorCommand>>,
     remote_batch_coordinator_cmd_rx: Vec<tokio::sync::mpsc::Receiver<BatchCoordinatorCommand>>,
@@ -172,7 +172,7 @@ impl InnerBuilder {
             tokio::sync::mpsc::channel(config.channel_size);
         let (back_pressure_tx, back_pressure_rx) = tokio::sync::mpsc::channel(config.channel_size);
         let (quorum_store_msg_tx, quorum_store_msg_rx) =
-            aptos_channel::new::<AccountAddress, VerifiedEvent>(
+            gaptos::aptos_channel::new::<AccountAddress, VerifiedEvent>(
                 QueueStyle::FIFO,
                 config.channel_size,
                 None,
@@ -261,7 +261,7 @@ impl InnerBuilder {
         mut self,
     ) -> (
         Sender<CoordinatorCommand>,
-        aptos_channel::Sender<AccountAddress, IncomingBatchRetrievalRequest>,
+        gaptos::aptos_channel::Sender<AccountAddress, IncomingBatchRetrievalRequest>,
     ) {
         // TODO: parameter? bring back back-off?
         let interval = tokio::time::interval(Duration::from_millis(
@@ -375,7 +375,7 @@ impl InnerBuilder {
         let batch_store = self.batch_store.clone().unwrap();
         let epoch = self.epoch;
         let (batch_retrieval_tx, mut batch_retrieval_rx) =
-            aptos_channel::new::<AccountAddress, IncomingBatchRetrievalRequest>(
+            gaptos::aptos_channel::new::<AccountAddress, IncomingBatchRetrievalRequest>(
                 QueueStyle::LIFO,
                 10,
                 Some(&counters::BATCH_RETRIEVAL_TASK_MSGS),
@@ -442,7 +442,7 @@ impl InnerBuilder {
         self,
     ) -> (
         Sender<CoordinatorCommand>,
-        aptos_channel::Sender<AccountAddress, IncomingBatchRetrievalRequest>,
+        gaptos::aptos_channel::Sender<AccountAddress, IncomingBatchRetrievalRequest>,
     ) {
         self.spawn_quorum_store()
     }

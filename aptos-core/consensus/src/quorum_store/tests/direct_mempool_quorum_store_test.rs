@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::quorum_store::direct_mempool_quorum_store::DirectMempoolQuorumStore;
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::{
     common::PayloadFilter,
     request_response::{GetPayloadCommand, GetPayloadResponse},
 };
-use aptos_mempool::{QuorumStoreRequest, QuorumStoreResponse};
+use gaptos::aptos_mempool::{QuorumStoreRequest, QuorumStoreResponse};
 use futures::{
     channel::{mpsc, oneshot},
     StreamExt,
@@ -39,7 +39,7 @@ async fn test_block_request_no_txns() {
             true,
             PayloadFilter::DirectMempool(vec![]),
             consensus_callback,
-            aptos_infallible::duration_since_epoch(),
+            gaptos::aptos_infallible::duration_since_epoch(),
         ))
         .unwrap();
 

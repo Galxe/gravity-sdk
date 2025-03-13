@@ -23,20 +23,20 @@ use crate::{
     },
     state_replication::StateComputerCommitCallBackType,
 };
-use aptos_bounded_executor::BoundedExecutor;
-use aptos_config::config::ConsensusObserverConfig;
-use aptos_consensus_types::{
+use gaptos::aptos_bounded_executor::BoundedExecutor;
+use gaptos::aptos_config::config::ConsensusObserverConfig;
+use gaptos::aptos_consensus_types::{
     common::{Author, Round},
     pipeline::commit_vote::CommitVote,
     pipelined_block::PipelinedBlock,
 };
-use aptos_crypto::HashValue;
-use aptos_executor_types::ExecutorResult;
-use aptos_logger::prelude::*;
-use aptos_network::protocols::{rpc::error::RpcError, wire::handshake::v1::ProtocolId};
-use aptos_reliable_broadcast::{DropGuard, ReliableBroadcast};
-use aptos_time_service::TimeService;
-use aptos_types::{
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_executor_types::ExecutorResult;
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_network::protocols::{rpc::error::RpcError, wire::handshake::v1::ProtocolId};
+use gaptos::aptos_reliable_broadcast::{DropGuard, ReliableBroadcast};
+use gaptos::aptos_time_service::TimeService;
+use gaptos::aptos_types::{
     account_address::AccountAddress, epoch_change::EpochChangeProof, epoch_state::EpochState,
     ledger_info::LedgerInfoWithSignatures,
 };
@@ -174,7 +174,7 @@ impl BufferManager {
         signing_phase_tx: Sender<CountedRequest<SigningRequest>>,
         signing_phase_rx: Receiver<SigningResponse>,
         commit_msg_tx: Arc<NetworkSender>,
-        commit_msg_rx: aptos_channels::aptos_channel::Receiver<
+        commit_msg_rx: gaptos::aptos_channels::aptos_channel::Receiver<
             AccountAddress,
             IncomingCommitRequest,
         >,

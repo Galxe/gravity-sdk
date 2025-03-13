@@ -8,16 +8,16 @@ use crate::{
     payload_manager::DirectMempoolPayloadManager,
 };
 use api_types::mock_execution_layer::mock_execution_layer;
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::{
     block::{block_test_utils::certificate_for_genesis, Block},
     common::{Author, Round},
     pipelined_block::PipelinedBlock,
     quorum_cert::QuorumCert,
     sync_info::SyncInfo,
 };
-use aptos_crypto::{HashValue, PrivateKey, Uniform};
-use aptos_logger::Level;
-use aptos_types::{ledger_info::LedgerInfo, validator_signer::ValidatorSigner};
+use gaptos::aptos_crypto::{HashValue, PrivateKey, Uniform};
+use gaptos::aptos_logger::Level;
+use gaptos::aptos_types::{ledger_info::LedgerInfo, validator_signer::ValidatorSigner};
 use std::{future::Future, sync::Arc, time::Duration};
 use tokio::{runtime, time::timeout};
 
@@ -33,10 +33,10 @@ use crate::{
     block_storage::pending_blocks::PendingBlocks, pipeline::execution_client::DummyExecutionClient,
     util::mock_time_service::SimulatedTimeService,
 };
-use aptos_consensus_types::{block::block_test_utils::gen_test_certificate, common::Payload};
-use aptos_crypto::ed25519::{Ed25519PrivateKey, Ed25519Signature};
-use aptos_infallible::Mutex;
-use aptos_types::{
+use gaptos::aptos_consensus_types::{block::block_test_utils::gen_test_certificate, common::Payload};
+use gaptos::aptos_crypto::ed25519::{Ed25519PrivateKey, Ed25519Signature};
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_types::{
     block_info::BlockInfo,
     chain_id::ChainId,
     transaction::{RawTransaction, Script, SignedTransaction, TransactionPayload},
@@ -47,7 +47,7 @@ pub use mock_state_computer::EmptyStateComputer;
 #[cfg(test)]
 pub use mock_state_computer::RandomComputeResultStateComputer;
 pub use mock_storage::{EmptyStorage, MockStorage};
-use move_core_types::account_address::AccountAddress;
+use gaptos::move_core_types::account_address::AccountAddress;
 
 
 pub const TEST_TIMEOUT: Duration = Duration::from_secs(60);
@@ -227,7 +227,7 @@ pub fn consensus_runtime() -> runtime::Runtime {
         ::aptos_logger::Logger::new().level(Level::Debug).init();
     }
 
-    aptos_runtimes::spawn_named_runtime("consensus".into(), None)
+    gaptos::aptos_runtimes::spawn_named_runtime("consensus".into(), None)
 }
 
 pub fn timed_block_on<F>(runtime: &runtime::Runtime, f: F) -> <F as Future>::Output

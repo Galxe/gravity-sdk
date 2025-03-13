@@ -6,7 +6,7 @@ use crate::{
     monitor, persistent_liveness_storage::PersistentLivenessStorage,
     pipeline::signing_phase::CommitSignerProvider,
 };
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::{
     block_data::BlockData,
     order_vote::OrderVote,
     order_vote_proposal::OrderVoteProposal,
@@ -14,11 +14,11 @@ use aptos_consensus_types::{
     vote::Vote,
     vote_proposal::VoteProposal,
 };
-use aptos_crypto::bls12381;
-use aptos_infallible::Mutex;
-use aptos_logger::prelude::info;
-use aptos_safety_rules::{ConsensusState, Error, TSafetyRules};
-use aptos_types::{
+use gaptos::aptos_crypto::bls12381;
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_logger::prelude::info;
+use gaptos::aptos_safety_rules::{ConsensusState, Error, TSafetyRules};
+use gaptos::aptos_types::{
     epoch_change::EpochChangeProof,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
 };
@@ -164,7 +164,7 @@ impl CommitSignerProvider for Mutex<MetricsSafetyRules> {
 #[cfg(test)]
 mod tests {
     use crate::{metrics_safety_rules::MetricsSafetyRules, test_utils::EmptyStorage};
-    use aptos_consensus_types::{
+    use gaptos::aptos_consensus_types::{
         block_data::BlockData,
         order_vote::OrderVote,
         order_vote_proposal::OrderVoteProposal,
@@ -172,9 +172,9 @@ mod tests {
         vote::Vote,
         vote_proposal::VoteProposal,
     };
-    use aptos_crypto::bls12381;
-    use aptos_safety_rules::{ConsensusState, Error, TSafetyRules};
-    use aptos_types::{
+    use gaptos::aptos_crypto::bls12381;
+    use gaptos::aptos_safety_rules::{ConsensusState, Error, TSafetyRules};
+    use gaptos::aptos_types::{
         epoch_change::EpochChangeProof,
         ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
     };

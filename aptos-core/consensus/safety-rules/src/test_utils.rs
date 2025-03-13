@@ -6,7 +6,7 @@ use crate::{
     persistent_safety_storage::PersistentSafetyStorage, serializer::SerializerService, SafetyRules,
     TSafetyRules,
 };
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::{
     block::Block,
     common::{Payload, Round},
     quorum_cert::QuorumCert,
@@ -17,9 +17,9 @@ use aptos_consensus_types::{
     vote_data::VoteData,
     vote_proposal::VoteProposal,
 };
-use aptos_crypto::{hash::{CryptoHash, TransactionAccumulatorHasher}, HashValue};
-use aptos_secure_storage::{InMemoryStorage, Storage};
-use aptos_types::{
+use gaptos::aptos_crypto::{hash::{CryptoHash, TransactionAccumulatorHasher}, HashValue};
+use gaptos::aptos_secure_storage::{InMemoryStorage, Storage};
+use gaptos::aptos_types::{
     aggregate_signature::{AggregateSignature, PartialSignatures},
     block_info::BlockInfo,
     epoch_change::EpochChangeProof,

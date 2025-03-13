@@ -1,8 +1,8 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos_consensus_types::common::{Author, Round};
-use aptos_logger::Schema;
+use gaptos::aptos_consensus_types::common::{Author, Round};
+use gaptos::aptos_logger::Schema;
 use serde::Serialize;
 
 #[derive(Schema)]

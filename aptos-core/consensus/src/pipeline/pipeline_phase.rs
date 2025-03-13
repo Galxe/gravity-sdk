@@ -6,7 +6,7 @@ use crate::{
     counters::BUFFER_MANAGER_PHASE_PROCESS_SECONDS,
     pipeline::buffer_manager::{Receiver, Sender},
 };
-use aptos_logger::debug;
+use gaptos::aptos_logger::debug;
 use async_trait::async_trait;
 use futures::{SinkExt, StreamExt};
 use std::sync::{

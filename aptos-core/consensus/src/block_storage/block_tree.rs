@@ -9,20 +9,20 @@ use crate::{
     persistent_liveness_storage::PersistentLivenessStorage,
 };
 use anyhow::bail;
-use aptos_consensus_types::common::Round;
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::common::Round;
+use gaptos::aptos_consensus_types::{
     pipelined_block::PipelinedBlock, quorum_cert::QuorumCert,
     timeout_2chain::TwoChainTimeoutCertificate, vote_data::VoteData,
     wrapped_ledger_info::WrappedLedgerInfo,
 };
-use aptos_crypto::{hash::GENESIS_BLOCK_ID, HashValue};
-use aptos_logger::prelude::*;
-use aptos_types::{block_info::BlockInfo, ledger_info::LedgerInfoWithSignatures};
+use gaptos::aptos_crypto::{hash::GENESIS_BLOCK_ID, HashValue};
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_types::{block_info::BlockInfo, ledger_info::LedgerInfoWithSignatures};
 use mirai_annotations::{checked_verify_eq, precondition};
 use std::{
     collections::{vec_deque::VecDeque, HashMap, HashSet}, fmt::{self, Display}, sync::Arc
 };
-use aptos_consensus_types::common::Payload;
+use gaptos::aptos_consensus_types::common::Payload;
 
 /// This structure is a wrapper of [`ExecutedBlock`](aptos_consensus_types::pipelined_block::PipelinedBlock)
 /// that adds `children` field to know the parent-child relationship between blocks.

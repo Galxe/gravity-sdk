@@ -22,17 +22,17 @@ use crate::{
     ProtocolId,
 };
 use anyhow::anyhow;
-use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_config::{
+use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_config::{
     config::{PeerRole, MAX_INBOUND_CONNECTIONS},
     network_id::{NetworkContext, NetworkId},
 };
-use aptos_memsocket::MemorySocket;
-use aptos_netcore::transport::{
+use gaptos::aptos_memsocket::MemorySocket;
+use gaptos::aptos_netcore::transport::{
     boxed::BoxedTransport, memory::MemoryTransport, ConnectionOrigin, TransportExt,
 };
-use aptos_time_service::TimeService;
-use aptos_types::{network_address::NetworkAddress, PeerId};
+use gaptos::aptos_time_service::TimeService;
+use gaptos::aptos_types::{network_address::NetworkAddress, PeerId};
 use bytes::Bytes;
 use futures::{channel::oneshot, io::AsyncWriteExt, stream::StreamExt};
 use std::error::Error;
@@ -87,14 +87,14 @@ fn build_test_peer_manager(
         BoxedTransport<Connection<MemorySocket>, impl std::error::Error + Sync + Send + 'static>,
         MemorySocket,
     >,
-    aptos_channel::Sender<(PeerId, ProtocolId), PeerManagerRequest>,
-    aptos_channel::Sender<PeerId, ConnectionRequest>,
+    gaptos::aptos_channel::Sender<(PeerId, ProtocolId), PeerManagerRequest>,
+    gaptos::aptos_channel::Sender<PeerId, ConnectionRequest>,
     conn_notifs_channel::Receiver,
 ) {
     let (peer_manager_request_tx, peer_manager_request_rx) =
-        aptos_channel::new(QueueStyle::FIFO, 1, None);
-    let (connection_reqs_tx, connection_reqs_rx) = aptos_channel::new(QueueStyle::FIFO, 1, None);
-    let (hello_tx, _hello_rx) = aptos_channel::new(QueueStyle::FIFO, 1, None);
+        gaptos::aptos_channel::new(QueueStyle::FIFO, 1, None);
+    let (connection_reqs_tx, connection_reqs_rx) = gaptos::aptos_channel::new(QueueStyle::FIFO, 1, None);
+    let (hello_tx, _hello_rx) = gaptos::aptos_channel::new(QueueStyle::FIFO, 1, None);
     let (conn_status_tx, conn_status_rx) = conn_notifs_channel::new();
 
     let network_id = NetworkId::Validator;

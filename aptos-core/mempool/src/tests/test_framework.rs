@@ -8,15 +8,15 @@ use crate::{
     tests::common::{self, TestTransaction},
     MempoolClientRequest, MempoolClientSender, MempoolSyncMsg, QuorumStoreRequest,
 };
-use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_config::{
+use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_config::{
     config::NodeConfig,
     network_id::{NetworkId, PeerNetworkId},
 };
-use aptos_id_generator::U32IdGenerator;
-use aptos_infallible::Mutex;
-use aptos_mempool_notifications::MempoolNotifier;
-use aptos_network::{
+use gaptos::aptos_id_generator::U32IdGenerator;
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_mempool_notifications::MempoolNotifier;
+use gaptos::aptos_network::{
     application::{
         interface::{NetworkClient, NetworkServiceEvents},
         storage::PeersAndMetadata,
@@ -40,12 +40,12 @@ use aptos_network::{
     },
     ProtocolId,
 };
-use aptos_types::{
+use gaptos::aptos_types::{
     account_address::AccountAddress,
     mempool_status::MempoolStatusCode,
     transaction::SignedTransaction,
 };
-// use aptos_vm_validator::mocks::mock_vm_validator::MockVMValidator;
+// use gaptos::aptos_vm_validator::mocks::mock_vm_validator::MockVMValidator;
 use futures::{channel::oneshot, SinkExt};
 use itertools::Itertools;
 use maplit::btreemap;
@@ -588,9 +588,9 @@ fn setup_network(
     InboundNetworkHandle,
     OutboundMessageReceiver,
 ) {
-    let (reqs_inbound_sender, reqs_inbound_receiver) = aptos_channel();
-    let (reqs_outbound_sender, reqs_outbound_receiver) = aptos_channel();
-    let (connection_outbound_sender, _connection_outbound_receiver) = aptos_channel();
+    let (reqs_inbound_sender, reqs_inbound_receiver) = gaptos::aptos_channel();
+    let (reqs_outbound_sender, reqs_outbound_receiver) = gaptos::aptos_channel();
+    let (connection_outbound_sender, _connection_outbound_receiver) = gaptos::aptos_channel();
 
     // Create the network sender and events
     let network_sender = NetworkSender::new(
@@ -611,10 +611,10 @@ fn setup_network(
 }
 
 /// A generic FIFO Aptos channel
-fn aptos_channel<K: Eq + Hash + Clone, T>(
-) -> (aptos_channel::Sender<K, T>, aptos_channel::Receiver<K, T>) {
+fn gaptos::aptos_channel<K: Eq + Hash + Clone, T>(
+) -> (aptos_channel::Sender<K, T>, gaptos::aptos_channel::Receiver<K, T>) {
     static MAX_QUEUE_SIZE: usize = 8;
-    aptos_channel::new(QueueStyle::FIFO, MAX_QUEUE_SIZE, None)
+    gaptos::aptos_channel::new(QueueStyle::FIFO, MAX_QUEUE_SIZE, None)
 }
 
 /// Creates a full [`SharedMempool`] and mocks all of the database information.
@@ -633,13 +633,13 @@ fn setup_mempool(
     // let (ac_endpoint_sender, ac_endpoint_receiver) = mpsc_channel();
     // let (quorum_store_sender, quorum_store_receiver) = mpsc_channel();
     let (mempool_notifier, mempool_listener) =
-        aptos_mempool_notifications::new_mempool_notifier_listener_pair(100);
+        gaptos::aptos_mempool_notifications::new_mempool_notifier_listener_pair(100);
 
     let mempool = Arc::new(Mutex::new(CoreMempool::new(&config)));
     // let vm_validator = Arc::new(RwLock::new(MockVMValidator));
     // let db_ro = Arc::new(MockDbReaderWriter);
 
-    // let (reconfig_sender, reconfig_events) = aptos_channel::new(QueueStyle::LIFO, 1, None);
+    // let (reconfig_sender, reconfig_events) = gaptos::aptos_channel::new(QueueStyle::LIFO, 1, None);
     // let reconfig_event_subscriber = ReconfigNotificationListener {
     //     notification_receiver: reconfig_events,
     // };

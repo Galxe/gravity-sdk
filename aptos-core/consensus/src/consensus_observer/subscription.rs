@@ -5,11 +5,11 @@ use crate::consensus_observer::{
     error::Error,
     logging::{LogEntry, LogSchema},
 };
-use aptos_config::{config::ConsensusObserverConfig, network_id::PeerNetworkId};
-use aptos_logger::warn;
-use aptos_network::application::metadata::PeerMetadata;
-use aptos_storage_interface::DbReader;
-use aptos_time_service::{TimeService, TimeServiceTrait};
+use gaptos::aptos_config::{config::ConsensusObserverConfig, network_id::PeerNetworkId};
+use gaptos::aptos_logger::warn;
+use gaptos::aptos_network::application::metadata::PeerMetadata;
+use gaptos::aptos_storage_interface::DbReader;
+use gaptos::aptos_time_service::{TimeService, TimeServiceTrait};
 use ordered_float::OrderedFloat;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -276,12 +276,12 @@ pub fn sort_peers_by_distance_and_latency(
 #[cfg(test)]
 mod test {
     use super::*;
-    use aptos_network::transport::ConnectionMetadata;
-    use aptos_peer_monitoring_service_types::{
+    use gaptos::aptos_network::transport::ConnectionMetadata;
+    use gaptos::aptos_peer_monitoring_service_types::{
         response::NetworkInformationResponse, PeerMonitoringMetadata,
     };
-    use aptos_storage_interface::Result;
-    use aptos_types::transaction::Version;
+    use gaptos::aptos_storage_interface::Result;
+    use gaptos::aptos_types::transaction::Version;
     use mockall::mock;
 
     // This is a simple mock of the DbReader (it generates a MockDatabaseReader)

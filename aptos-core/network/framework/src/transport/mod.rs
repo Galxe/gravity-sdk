@@ -10,19 +10,19 @@ use crate::{
         wire::handshake::v1::{HandshakeMsg, MessagingProtocolVersion, ProtocolIdSet},
     },
 };
-use aptos_config::{
+use gaptos::aptos_config::{
     config::{PeerRole, HANDSHAKE_VERSION},
     network_id::{NetworkContext, NetworkId},
 };
-use aptos_crypto::x25519;
-use aptos_id_generator::{IdGenerator, U32IdGenerator};
-use aptos_logger::prelude::*;
+use gaptos::aptos_crypto::x25519;
+use gaptos::aptos_id_generator::{IdGenerator, U32IdGenerator};
+use gaptos::aptos_logger::prelude::*;
 // Re-exposed for aptos-network-checker
-pub use aptos_netcore::transport::tcp::{resolve_and_connect, TCPBufferCfg, TcpSocket};
-use aptos_netcore::transport::{proxy_protocol, tcp, ConnectionOrigin, Transport};
-use aptos_short_hex_str::AsShortHexStr;
-use aptos_time_service::{timeout, TimeService, TimeServiceTrait};
-use aptos_types::{
+pub use gaptos::aptos_netcore::transport::tcp::{resolve_and_connect, TCPBufferCfg, TcpSocket};
+use gaptos::aptos_netcore::transport::{proxy_protocol, tcp, ConnectionOrigin, Transport};
+use gaptos::aptos_short_hex_str::AsShortHexStr;
+use gaptos::aptos_time_service::{timeout, TimeService, TimeServiceTrait};
+use gaptos::aptos_types::{
     chain_id::ChainId,
     network_address::{parse_dns_tcp, parse_ip_tcp, parse_memory, NetworkAddress},
     PeerId,
@@ -49,7 +49,7 @@ pub const SUPPORTED_MESSAGING_PROTOCOL: MessagingProtocolVersion = MessagingProt
 static CONNECTION_ID_GENERATOR: ConnectionIdGenerator = ConnectionIdGenerator::new();
 
 /// tcp::Transport with Aptos-specific configuration applied.
-pub const APTOS_TCP_TRANSPORT: tcp::TcpTransport = tcp::TcpTransport {
+pub const gaptos::aptos_TCP_TRANSPORT: tcp::TcpTransport = tcp::TcpTransport {
     // Use default options.
     ttl: None,
     // Use TCP_NODELAY for Aptos tcp connections.
@@ -476,7 +476,7 @@ where
     fn parse_dial_addr(
         addr: &NetworkAddress,
     ) -> io::Result<(NetworkAddress, x25519::PublicKey, u8)> {
-        use aptos_types::network_address::Protocol::*;
+        use gaptos::aptos_types::network_address::Protocol::*;
 
         let protos = addr.as_slice();
 

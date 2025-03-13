@@ -13,13 +13,13 @@ use crate::{
         proposer_election::ProposerElection,
     },
 };
-use aptos_bitvec::BitVec;
-use aptos_collections::BoundedVecDeque;
-use aptos_consensus_types::common::{Author, Round};
-use aptos_crypto::HashValue;
-use aptos_infallible::Mutex;
-use aptos_types::account_config::NewBlockEvent;
-use move_core_types::account_address::AccountAddress;
+use gaptos::aptos_bitvec::BitVec;
+use gaptos::aptos_collections::BoundedVecDeque;
+use gaptos::aptos_consensus_types::common::{Author, Round};
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_types::account_config::NewBlockEvent;
+use gaptos::move_core_types::account_address::AccountAddress;
 use std::{collections::HashMap, sync::Arc};
 
 pub struct MetadataBackendAdapter {

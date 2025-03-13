@@ -19,9 +19,9 @@ use crate::{
     transport::ConnectionMetadata,
     ProtocolId,
 };
-use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_config::network_id::NetworkId;
-use aptos_time_service::{MockTimeService, TimeService};
+use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_config::network_id::NetworkId;
+use gaptos::aptos_time_service::{MockTimeService, TimeService};
 use futures::future;
 use maplit::hashmap;
 use std::sync::Arc;
@@ -31,9 +31,9 @@ const PING_TIMEOUT: Duration = Duration::from_millis(500);
 
 struct TestHarness {
     mock_time: MockTimeService,
-    peer_mgr_reqs_rx: aptos_channel::Receiver<(PeerId, ProtocolId), PeerManagerRequest>,
-    peer_mgr_notifs_tx: aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>,
-    connection_reqs_rx: aptos_channel::Receiver<PeerId, ConnectionRequest>,
+    peer_mgr_reqs_rx: gaptos::aptos_channel::Receiver<(PeerId, ProtocolId), PeerManagerRequest>,
+    peer_mgr_notifs_tx: gaptos::aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>,
+    connection_reqs_rx: gaptos::aptos_channel::Receiver<PeerId, ConnectionRequest>,
     connection_notifs_tx: tokio::sync::mpsc::Sender<ConnectionNotification>,
     peers_and_metadata: Arc<PeersAndMetadata>,
 }
@@ -45,11 +45,11 @@ impl TestHarness {
         ::aptos_logger::Logger::init_for_testing();
         let mock_time = TimeService::mock();
 
-        let (peer_mgr_reqs_tx, peer_mgr_reqs_rx) = aptos_channel::new(QueueStyle::FIFO, 1, None);
+        let (peer_mgr_reqs_tx, peer_mgr_reqs_rx) = gaptos::aptos_channel::new(QueueStyle::FIFO, 1, None);
         let (connection_reqs_tx, connection_reqs_rx) =
-            aptos_channel::new(QueueStyle::FIFO, 1, None);
+            gaptos::aptos_channel::new(QueueStyle::FIFO, 1, None);
         let (peer_mgr_notifs_tx, peer_mgr_notifs_rx) =
-            aptos_channel::new(QueueStyle::FIFO, 1, None);
+            gaptos::aptos_channel::new(QueueStyle::FIFO, 1, None);
         let (connection_notifs_tx, connection_notifs_rx) = tokio::sync::mpsc::channel(10);
 
         let network_sender = NetworkSender::new(

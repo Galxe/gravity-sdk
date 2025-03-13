@@ -4,13 +4,13 @@
 use crate::quorum_store::{
     proof_manager::ProofManager, tests::batch_store_test::batch_store_for_test,
 };
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::{
     common::{Payload, PayloadFilter},
     proof_of_store::{BatchId, BatchInfo, ProofOfStore},
     request_response::{GetPayloadCommand, GetPayloadResponse},
 };
-use aptos_crypto::HashValue;
-use aptos_types::{aggregate_signature::AggregateSignature, PeerId};
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_types::{aggregate_signature::AggregateSignature, PeerId};
 use futures::channel::oneshot;
 use std::collections::HashSet;
 
@@ -63,7 +63,7 @@ async fn get_proposal(
         true,
         PayloadFilter::InQuorumStore(filter_set),
         callback_tx,
-        aptos_infallible::duration_since_epoch(),
+        gaptos::aptos_infallible::duration_since_epoch(),
     );
     proof_manager.handle_proposal_request(req);
     let GetPayloadResponse::GetPayloadResponse(payload) = callback_rx.await.unwrap().unwrap();

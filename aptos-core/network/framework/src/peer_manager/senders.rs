@@ -10,8 +10,8 @@ use crate::{
     },
     ProtocolId,
 };
-use aptos_channels::{self, aptos_channel};
-use aptos_types::{network_address::NetworkAddress, PeerId};
+use gaptos::aptos_channels::{self, gaptos::aptos_channel};
+use gaptos::aptos_types::{network_address::NetworkAddress, PeerId};
 use bytes::Bytes;
 use futures::channel::oneshot;
 use std::time::Duration;
@@ -20,19 +20,19 @@ use std::time::Duration;
 /// from PeerManager.
 #[derive(Clone, Debug)]
 pub struct PeerManagerRequestSender {
-    inner: aptos_channel::Sender<(PeerId, ProtocolId), PeerManagerRequest>,
+    inner: gaptos::aptos_channel::Sender<(PeerId, ProtocolId), PeerManagerRequest>,
 }
 
 /// Convenience wrapper which makes it easy to issue connection requests and await the responses
 /// from PeerManager.
 #[derive(Clone, Debug)]
 pub struct ConnectionRequestSender {
-    inner: aptos_channel::Sender<PeerId, ConnectionRequest>,
+    inner: gaptos::aptos_channel::Sender<PeerId, ConnectionRequest>,
 }
 
 impl PeerManagerRequestSender {
     /// Construct a new PeerManagerRequestSender with a raw channel::Sender
-    pub fn new(inner: aptos_channel::Sender<(PeerId, ProtocolId), PeerManagerRequest>) -> Self {
+    pub fn new(inner: gaptos::aptos_channel::Sender<(PeerId, ProtocolId), PeerManagerRequest>) -> Self {
         Self { inner }
     }
 
@@ -109,8 +109,8 @@ impl PeerManagerRequestSender {
 }
 
 impl ConnectionRequestSender {
-    /// Construct a new ConnectionRequestSender with a raw aptos_channel::Sender
-    pub fn new(inner: aptos_channel::Sender<PeerId, ConnectionRequest>) -> Self {
+    /// Construct a new ConnectionRequestSender with a raw gaptos::aptos_channel::Sender
+    pub fn new(inner: gaptos::aptos_channel::Sender<PeerId, ConnectionRequest>) -> Self {
         Self { inner }
     }
 

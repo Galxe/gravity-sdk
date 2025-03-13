@@ -2,10 +2,10 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos_consensus_types::{common::Author, order_vote::OrderVote};
-use aptos_crypto::{hash::CryptoHash, HashValue};
-use aptos_logger::prelude::*;
-use aptos_types::{
+use gaptos::aptos_consensus_types::{common::Author, order_vote::OrderVote};
+use gaptos::aptos_crypto::{hash::CryptoHash, HashValue};
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_types::{
     aggregate_signature::PartialSignatures,
     ledger_info::{LedgerInfo, LedgerInfoWithPartialSignatures, LedgerInfoWithSignatures},
     validator_verifier::{ValidatorVerifier, VerifyError},
@@ -157,9 +157,9 @@ impl PendingOrderVotes {
 #[cfg(test)]
 mod tests {
     use super::{OrderVoteReceptionResult, PendingOrderVotes};
-    use aptos_consensus_types::order_vote::OrderVote;
-    use aptos_crypto::HashValue;
-    use aptos_types::{
+    use gaptos::aptos_consensus_types::order_vote::OrderVote;
+    use gaptos::aptos_crypto::HashValue;
+    use gaptos::aptos_types::{
         block_info::BlockInfo, ledger_info::LedgerInfo,
         validator_verifier::random_validator_verifier,
     };

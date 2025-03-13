@@ -10,15 +10,15 @@ use crate::{
     pipeline::pipeline_phase::CountedRequest,
     state_computer::StateComputeResultFut,
 };
-use aptos_consensus_types::{block::Block, pipeline_execution_result::PipelineExecutionResult};
-use aptos_crypto::HashValue;
-use aptos_executor_types::{
+use gaptos::aptos_consensus_types::{block::Block, pipeline_execution_result::PipelineExecutionResult};
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_executor_types::{
     BlockExecutorTrait, ExecutorError,
     ExecutorResult,
 };
-use aptos_experimental_runtimes::thread_manager::optimal_min_len;
-use aptos_logger::{debug, warn};
-use aptos_types::{
+use gaptos::aptos_experimental_runtimes::thread_manager::optimal_min_len;
+use gaptos::aptos_logger::{debug, warn};
+use gaptos::aptos_types::{
     block_executor::{config::BlockExecutorConfigFromOnchain, partitioner::ExecutableBlock},
     block_metadata_ext::BlockMetadataExt,
     transaction::{

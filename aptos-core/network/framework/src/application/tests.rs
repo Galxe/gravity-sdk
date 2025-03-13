@@ -25,13 +25,13 @@ use crate::{
     },
     transport::ConnectionMetadata,
 };
-use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_config::{
+use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_config::{
     config::{Peer, PeerRole, PeerSet},
     network_id::{NetworkId, PeerNetworkId},
 };
-use aptos_peer_monitoring_service_types::PeerMonitoringMetadata;
-use aptos_types::{account_address::AccountAddress, PeerId};
+use gaptos::aptos_peer_monitoring_service_types::PeerMonitoringMetadata;
+use gaptos::aptos_types::{account_address::AccountAddress, PeerId};
 use futures_util::StreamExt;
 use maplit::hashmap;
 use serde::{Deserialize, Serialize};
@@ -1002,8 +1002,8 @@ fn compare_vectors_ignore_order<T: Clone + Debug + Ord>(
 
 /// Returns an aptos channel for testing
 fn create_aptos_channel<K: Eq + Hash + Clone, T>(
-) -> (aptos_channel::Sender<K, T>, aptos_channel::Receiver<K, T>) {
-    aptos_channel::new(QueueStyle::FIFO, 10, None)
+) -> (aptos_channel::Sender<K, T>, gaptos::aptos_channel::Receiver<K, T>) {
+    gaptos::aptos_channel::new(QueueStyle::FIFO, 10, None)
 }
 
 /// Creates a set of network senders and events for the specified
@@ -1014,8 +1014,8 @@ fn create_network_sender_and_events(
 ) -> (
     HashMap<NetworkId, NetworkSender<DummyMessage>>,
     NetworkServiceEvents<DummyMessage>,
-    HashMap<NetworkId, aptos_channel::Receiver<(PeerId, ProtocolId), PeerManagerRequest>>,
-    HashMap<NetworkId, aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>>,
+    HashMap<NetworkId, gaptos::aptos_channel::Receiver<(PeerId, ProtocolId), PeerManagerRequest>>,
+    HashMap<NetworkId, gaptos::aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>>,
 ) {
     let mut network_senders = HashMap::new();
     let mut network_and_events = HashMap::new();
@@ -1178,11 +1178,11 @@ async fn wait_for_network_event(
     expected_peer_network_id: PeerNetworkId,
     outbound_request_receivers: &mut HashMap<
         NetworkId,
-        aptos_channel::Receiver<(PeerId, ProtocolId), PeerManagerRequest>,
+        gaptos::aptos_channel::Receiver<(PeerId, ProtocolId), PeerManagerRequest>,
     >,
     inbound_request_senders: &mut HashMap<
         NetworkId,
-        aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>,
+        gaptos::aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>,
     >,
     network_events: &mut NetworkEvents<DummyMessage>,
     is_rpc_request: bool,

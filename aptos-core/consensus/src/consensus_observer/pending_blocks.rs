@@ -7,10 +7,10 @@ use crate::consensus_observer::{
     network_message::OrderedBlock,
     payload_store::BlockPayloadStore,
 };
-use aptos_config::config::ConsensusObserverConfig;
-use aptos_infallible::Mutex;
-use aptos_logger::{info, warn};
-use aptos_types::block_info::Round;
+use gaptos::aptos_config::config::ConsensusObserverConfig;
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_logger::{info, warn};
+use gaptos::aptos_types::block_info::Round;
 use std::{
     collections::{btree_map::Entry, BTreeMap},
     sync::Arc,
@@ -181,14 +181,14 @@ impl PendingBlockStore {
 mod test {
     use super::*;
     use crate::consensus_observer::network_message::{BlockPayload, BlockTransactionPayload};
-    use aptos_consensus_types::{
+    use gaptos::aptos_consensus_types::{
         block::Block,
         block_data::{BlockData, BlockType},
         pipelined_block::PipelinedBlock,
         quorum_cert::QuorumCert,
     };
-    use aptos_crypto::HashValue;
-    use aptos_types::{
+    use gaptos::aptos_crypto::HashValue;
+    use gaptos::aptos_types::{
         aggregate_signature::AggregateSignature,
         block_info::BlockInfo,
         ledger_info::{LedgerInfo, LedgerInfoWithSignatures},

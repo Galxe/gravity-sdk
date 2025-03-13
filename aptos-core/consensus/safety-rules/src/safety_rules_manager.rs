@@ -11,12 +11,12 @@ use crate::{
     thread::ThreadService,
     SafetyRules, TSafetyRules,
 };
-use aptos_config::config::{InitialSafetyRulesConfig, SafetyRulesConfig, SafetyRulesService};
-use aptos_crypto::bls12381::PublicKey;
-use aptos_global_constants::CONSENSUS_KEY;
-use aptos_infallible::RwLock;
-use aptos_logger::{info, warn};
-use aptos_secure_storage::{KVStorage, Storage};
+use gaptos::aptos_config::config::{InitialSafetyRulesConfig, SafetyRulesConfig, SafetyRulesService};
+use gaptos::aptos_crypto::bls12381::PublicKey;
+use gaptos::aptos_global_constants::CONSENSUS_KEY;
+use gaptos::aptos_infallible::RwLock;
+use gaptos::aptos_logger::{info, warn};
+use gaptos::aptos_secure_storage::{KVStorage, Storage};
 use std::{net::SocketAddr, sync::Arc, time::Instant};
 
 pub fn storage(config: &SafetyRulesConfig) -> PersistentSafetyStorage {

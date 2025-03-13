@@ -9,12 +9,12 @@ use crate::{
         batch_generator::BatchGeneratorCommand, batch_store::BatchReader, counters, utils::Timeouts,
     },
 };
-use aptos_consensus_types::proof_of_store::{
+use gaptos::aptos_consensus_types::proof_of_store::{
     BatchInfo, ProofCache, ProofOfStore, SignedBatchInfo, SignedBatchInfoError, SignedBatchInfoMsg,
 };
-use aptos_crypto::bls12381;
-use aptos_logger::prelude::*;
-use aptos_types::{
+use gaptos::aptos_crypto::bls12381;
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_types::{
     aggregate_signature::PartialSignatures, validator_verifier::ValidatorVerifier, PeerId,
 };
 use std::{

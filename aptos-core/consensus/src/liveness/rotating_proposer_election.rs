@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::liveness::proposer_election::ProposerElection;
-use aptos_consensus_types::common::{Author, Round};
+use gaptos::aptos_consensus_types::common::{Author, Round};
 
 /// The rotating proposer maps a round to an author according to a round-robin rotation.
 /// A fixed proposer strategy loses liveness when the fixed proposer is down. Rotating proposers

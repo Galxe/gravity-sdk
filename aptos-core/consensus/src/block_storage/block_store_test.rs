@@ -10,8 +10,8 @@ use crate::{
     },
     util::mock_time_service::SimulatedTimeService,
 };
-use aptos_config::config::QcAggregatorType;
-use aptos_consensus_types::{
+use gaptos::aptos_config::config::QcAggregatorType;
+use gaptos::aptos_consensus_types::{
     block::{
         block_test_utils::{
             certificate_for_genesis, gen_test_certificate, placeholder_certificate_for_block,
@@ -23,8 +23,8 @@ use aptos_consensus_types::{
     vote::Vote,
     vote_data::VoteData,
 };
-use aptos_crypto::HashValue;
-use aptos_types::{
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_types::{
     validator_signer::ValidatorSigner, validator_verifier::random_validator_verifier,
 };
 use futures_channel::mpsc::unbounded;

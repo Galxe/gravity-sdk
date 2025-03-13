@@ -10,10 +10,10 @@ use crate::consensus_observer::{
         ConsensusObserverResponse,
     },
 };
-use aptos_config::network_id::PeerNetworkId;
-use aptos_logger::{debug, warn};
-use aptos_network::application::{interface::NetworkClientInterface, storage::PeersAndMetadata};
-use aptos_time_service::{TimeService, TimeServiceTrait};
+use gaptos::aptos_config::network_id::PeerNetworkId;
+use gaptos::aptos_logger::{debug, warn};
+use gaptos::aptos_network::application::{interface::NetworkClientInterface, storage::PeersAndMetadata};
+use gaptos::aptos_time_service::{TimeService, TimeServiceTrait};
 use bytes::Bytes;
 use rand::Rng;
 use std::{sync::Arc, time::Duration};

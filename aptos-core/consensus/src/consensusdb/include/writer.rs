@@ -1,4 +1,4 @@
-use aptos_types::transaction::TransactionToCommit;
+use gaptos::aptos_types::transaction::TransactionToCommit;
 impl DbWriter for ConsensusDB {
     /// Commit pre-committed transactions to the ledger.
     ///

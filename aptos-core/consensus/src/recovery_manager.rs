@@ -14,13 +14,13 @@ use crate::{
 };
 use anyhow::{anyhow, ensure, Context, Result};
 use api_types::ExecutionLayer;
-use aptos_channels::aptos_channel;
-use aptos_consensus_types::{
+use gaptos::aptos_channels::aptos_channel;
+use gaptos::aptos_consensus_types::{
     common::Author, proposal_msg::ProposalMsg, sync_info::SyncInfo, vote_msg::VoteMsg,
 };
-use aptos_infallible::Mutex;
-use aptos_logger::prelude::*;
-use aptos_types::{block_info::Round, epoch_state::EpochState};
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_types::{block_info::Round, epoch_state::EpochState};
 use futures::{FutureExt, StreamExt};
 use futures_channel::oneshot;
 use std::{mem::Discriminant, process, sync::Arc};
@@ -117,7 +117,7 @@ impl RecoveryManager {
 
     pub async fn start(
         mut self,
-        mut event_rx: aptos_channel::Receiver<
+        mut event_rx: gaptos::aptos_channel::Receiver<
             (Author, Discriminant<VerifiedEvent>),
             (Author, VerifiedEvent),
         >,

@@ -5,7 +5,7 @@
 //! Protocol used to exchange supported protocol information with a remote.
 
 use crate::protocols::wire::handshake::v1::HandshakeMsg;
-use aptos_netcore::framing::{read_u16frame, write_u16frame};
+use gaptos::aptos_netcore::framing::{read_u16frame, write_u16frame};
 use bytes::BytesMut;
 use futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use std::io;
@@ -49,9 +49,9 @@ mod tests {
         },
         ProtocolId,
     };
-    use aptos_config::network_id::NetworkId;
-    use aptos_memsocket::MemorySocket;
-    use aptos_types::chain_id::ChainId;
+    use gaptos::aptos_config::network_id::NetworkId;
+    use gaptos::aptos_memsocket::MemorySocket;
+    use gaptos::aptos_types::chain_id::ChainId;
     use futures::{executor::block_on, future::join};
     use std::{collections::BTreeMap, iter::FromIterator};
 

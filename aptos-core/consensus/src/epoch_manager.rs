@@ -55,29 +55,29 @@ use crate::{
 };
 use anyhow::{anyhow, bail, ensure, Context};
 use api_types::ExecutionLayer;
-use aptos_bounded_executor::BoundedExecutor;
-use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_config::config::{
+use gaptos::aptos_bounded_executor::BoundedExecutor;
+use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_config::config::{
     ConsensusConfig, DagConsensusConfig, ExecutionConfig, NodeConfig, QcAggregatorType,
 };
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::{
     common::{Author, Round},
     delayed_qc_msg::DelayedQcMsg,
     epoch_retrieval::EpochRetrievalRequest,
     proof_of_store::ProofCache,
 };
-use aptos_crypto::bls12381::PrivateKey;
-use aptos_dkg::{
+use gaptos::aptos_crypto::bls12381::PrivateKey;
+use gaptos::aptos_dkg::{
     pvss::{traits::Transcript, Player},
     weighted_vuf::traits::WeightedVUF,
 };
-use aptos_event_notifications::ReconfigNotificationListener;
-use aptos_infallible::{duration_since_epoch, Mutex};
-use aptos_logger::prelude::*;
-use aptos_mempool::QuorumStoreRequest;
-use aptos_network::{application::interface::NetworkClient, protocols::network::Event};
-use aptos_safety_rules::{safety_rules_manager, PersistentSafetyStorage, SafetyRulesManager};
-use aptos_types::{
+use gaptos::aptos_event_notifications::ReconfigNotificationListener;
+use gaptos::aptos_infallible::{duration_since_epoch, Mutex};
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_mempool::QuorumStoreRequest;
+use gaptos::aptos_network::{application::interface::NetworkClient, protocols::network::Event};
+use gaptos::aptos_safety_rules::{safety_rules_manager, PersistentSafetyStorage, SafetyRulesManager};
+use gaptos::aptos_types::{
     account_address::AccountAddress,
     dkg::{real_dkg::maybe_dk_from_bls_sk, DKGState, DKGTrait, DefaultDKG},
     epoch_change::EpochChangeProof,
@@ -93,7 +93,7 @@ use aptos_types::{
     validator_signer::ValidatorSigner,
     validator_verifier::ValidatorVerifier,
 };
-use aptos_validator_transaction_pool::VTxnPoolState;
+use gaptos::aptos_validator_transaction_pool::VTxnPoolState;
 use fail::fail_point;
 use futures::{
     channel::{
@@ -137,9 +137,9 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     execution_config: ExecutionConfig,
     randomness_override_seq_num: u64,
     time_service: Arc<dyn TimeService>,
-    self_sender: aptos_channels::UnboundedSender<Event<ConsensusMsg>>,
+    self_sender: gaptos::aptos_channels::UnboundedSender<Event<ConsensusMsg>>,
     network_sender: ConsensusNetworkClient<NetworkClient<ConsensusMsg>>,
-    timeout_sender: aptos_channels::Sender<Round>,
+    timeout_sender: gaptos::aptos_channels::Sender<Round>,
     quorum_store_enabled: bool,
     quorum_store_to_mempool_sender: Sender<QuorumStoreRequest>,
     execution_client: Arc<dyn TExecutionClient>,
@@ -151,7 +151,7 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     rand_manager_msg_tx: Option<aptos_channel::Sender<AccountAddress, IncomingRandGenRequest>>,
     // channels to round manager
     round_manager_tx: Option<
-        aptos_channel::Sender<(Author, Discriminant<VerifiedEvent>), (Author, VerifiedEvent)>,
+        gaptos::aptos_channel::Sender<(Author, Discriminant<VerifiedEvent>), (Author, VerifiedEvent)>,
     >,
     buffered_proposal_tx: Option<aptos_channel::Sender<Author, VerifiedEvent>>,
     round_manager_close_tx: Option<oneshot::Sender<oneshot::Sender<()>>>,
@@ -167,7 +167,7 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     // recovery_mode is set to true when the recovery manager is spawned
     recovery_mode: bool,
 
-    aptos_time_service: aptos_time_service::TimeService,
+    gaptos::aptos_time_service: gaptos::aptos_time_service::TimeService,
     dag_rpc_tx: Option<aptos_channel::Sender<AccountAddress, IncomingDAGRequest>>,
     dag_shutdown_tx: Option<oneshot::Sender<oneshot::Sender<()>>>,
     dag_config: DagConsensusConfig,
@@ -185,16 +185,16 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     pub(crate) fn new(
         node_config: &NodeConfig,
         time_service: Arc<dyn TimeService>,
-        self_sender: aptos_channels::UnboundedSender<Event<ConsensusMsg>>,
+        self_sender: gaptos::aptos_channels::UnboundedSender<Event<ConsensusMsg>>,
         network_sender: ConsensusNetworkClient<NetworkClient<ConsensusMsg>>,
-        timeout_sender: aptos_channels::Sender<Round>,
+        timeout_sender: gaptos::aptos_channels::Sender<Round>,
         quorum_store_to_mempool_sender: Sender<QuorumStoreRequest>,
         execution_client: Arc<dyn TExecutionClient>,
         storage: Arc<dyn PersistentLivenessStorage>,
         quorum_store_storage: Arc<dyn QuorumStoreStorage>,
         reconfig_events: ReconfigNotificationListener<P>,
         bounded_executor: BoundedExecutor,
-        aptos_time_service: aptos_time_service::TimeService,
+        gaptos::aptos_time_service: gaptos::aptos_time_service::TimeService,
         vtxn_pool: VTxnPoolState,
         rand_storage: Arc<dyn RandStorage<AugmentedData>>,
         consensus_publisher: Option<Arc<ConsensusPublisher>>,
@@ -238,7 +238,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             recovery_mode: false,
             dag_rpc_tx: None,
             dag_shutdown_tx: None,
-            aptos_time_service,
+            gaptos::aptos_time_service,
             dag_config,
             payload_manager: Arc::new(DirectMempoolPayloadManager::new()),
             rand_storage,
@@ -267,7 +267,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     fn create_round_state(
         &self,
         time_service: Arc<dyn TimeService>,
-        timeout_sender: aptos_channels::Sender<Round>,
+        timeout_sender: gaptos::aptos_channels::Sender<Round>,
         delayed_qc_tx: UnboundedSender<DelayedQcMsg>,
         qc_aggregator_type: QcAggregatorType,
     ) -> RoundState {
@@ -576,7 +576,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         block_store: Arc<BlockStore>,
         max_blocks_allowed: u64,
     ) {
-        let (request_tx, mut request_rx) = aptos_channel::new::<_, IncomingBlockRetrievalRequest>(
+        let (request_tx, mut request_rx) = gaptos::aptos_channel::new::<_, IncomingBlockRetrievalRequest>(
             QueueStyle::KLAST,
             10,
             Some(&counters::BLOCK_RETRIEVAL_TASK_MSGS),
@@ -657,7 +657,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         epoch_state: Arc<EpochState>,
         network_sender: Arc<NetworkSender>,
     ) {
-        let (recovery_manager_tx, recovery_manager_rx) = aptos_channel::new(
+        let (recovery_manager_tx, recovery_manager_rx) = gaptos::aptos_channel::new(
             QueueStyle::KLAST,
             10,
             Some(&counters::ROUND_MANAGER_CHANNEL_MSGS),
@@ -779,7 +779,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         payload_manager: Arc<dyn TPayloadManager>,
         rand_config: Option<RandConfig>,
         fast_rand_config: Option<RandConfig>,
-        rand_msg_rx: aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
+        rand_msg_rx: gaptos::aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
     ) {
         let epoch = epoch_state.epoch;
         info!(
@@ -888,13 +888,13 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 .quorum_store
                 .allow_batches_without_pos_in_proposal,
         );
-        let (round_manager_tx, round_manager_rx) = aptos_channel::new(
+        let (round_manager_tx, round_manager_rx) = gaptos::aptos_channel::new(
             QueueStyle::KLAST,
             10,
             Some(&counters::ROUND_MANAGER_CHANNEL_MSGS),
         );
 
-        let (buffered_proposal_tx, buffered_proposal_rx) = aptos_channel::new(
+        let (buffered_proposal_tx, buffered_proposal_rx) = gaptos::aptos_channel::new(
             QueueStyle::KLAST,
             10,
             Some(&counters::ROUND_MANAGER_CHANNEL_MSGS),
@@ -1204,7 +1204,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             )
             .await;
 
-        let (rand_msg_tx, rand_msg_rx) = aptos_channel::new::<AccountAddress, IncomingRandGenRequest>(
+        let (rand_msg_tx, rand_msg_rx) = gaptos::aptos_channel::new::<AccountAddress, IncomingRandGenRequest>(
             QueueStyle::KLAST,
             10,
             None,
@@ -1295,7 +1295,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         payload_manager: Arc<dyn TPayloadManager>,
         rand_config: Option<RandConfig>,
         fast_rand_config: Option<RandConfig>,
-        rand_msg_rx: aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
+        rand_msg_rx: gaptos::aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
     ) {
         match self.storage.start(consensus_config.order_vote_enabled()).await {
             LivenessStorageData::FullRecoveryData(initial_data) => {
@@ -1344,7 +1344,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         payload_manager: Arc<dyn TPayloadManager>,
         rand_config: Option<RandConfig>,
         fast_rand_config: Option<RandConfig>,
-        rand_msg_rx: aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
+        rand_msg_rx: gaptos::aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
     ) {
         let epoch = epoch_state.epoch;
         let signer = Arc::new(ValidatorSigner::new(
@@ -1424,7 +1424,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 .allow_batches_without_pos_in_proposal,
         );
 
-        let (dag_rpc_tx, dag_rpc_rx) = aptos_channel::new(QueueStyle::FIFO, 10, None);
+        let (dag_rpc_tx, dag_rpc_rx) = gaptos::aptos_channel::new(QueueStyle::FIFO, 10, None);
         self.dag_rpc_tx = Some(dag_rpc_tx);
         let (dag_shutdown_tx, dag_shutdown_rx) = oneshot::channel();
         self.dag_shutdown_tx = Some(dag_shutdown_tx);
@@ -1627,7 +1627,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     fn forward_event(
         quorum_store_msg_tx: Option<aptos_channel::Sender<AccountAddress, VerifiedEvent>>,
         round_manager_tx: Option<
-            aptos_channel::Sender<(Author, Discriminant<VerifiedEvent>), (Author, VerifiedEvent)>,
+            gaptos::aptos_channel::Sender<(Author, Discriminant<VerifiedEvent>), (Author, VerifiedEvent)>,
         >,
         buffered_proposal_tx: Option<aptos_channel::Sender<Author, VerifiedEvent>>,
         peer_id: AccountAddress,
@@ -1758,7 +1758,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
     pub async fn start(
         mut self,
-        mut round_timeout_sender_rx: aptos_channels::Receiver<Round>,
+        mut round_timeout_sender_rx: gaptos::aptos_channels::Receiver<Round>,
         mut network_receivers: NetworkReceivers,
     ) {
         // initial start of the processor

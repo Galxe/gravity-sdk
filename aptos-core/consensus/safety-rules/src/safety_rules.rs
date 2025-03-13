@@ -10,7 +10,7 @@ use crate::{
     persistent_safety_storage::PersistentSafetyStorage,
     t_safety_rules::TSafetyRules,
 };
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::{
     block_data::BlockData,
     common::{Author, Round},
     order_vote::OrderVote,
@@ -22,9 +22,9 @@ use aptos_consensus_types::{
     vote_data::VoteData,
     vote_proposal::VoteProposal,
 };
-use aptos_crypto::{bls12381, hash::CryptoHash};
-use aptos_logger::prelude::*;
-use aptos_types::{
+use gaptos::aptos_crypto::{bls12381, hash::CryptoHash};
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_types::{
     epoch_change::EpochChangeProof,
     epoch_state::EpochState,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},

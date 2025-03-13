@@ -9,11 +9,11 @@ mod schema;
 
 use crate::error::DbError;
 use anyhow::Result;
-use aptos_consensus_types::{block::Block, quorum_cert::QuorumCert};
-use aptos_crypto::HashValue;
-use aptos_logger::prelude::*;
-use aptos_schemadb::{schema::Schema, Options, SchemaBatch, DB, DEFAULT_COLUMN_FAMILY_NAME};
-use aptos_storage_interface::AptosDbError;
+use gaptos::aptos_consensus_types::{block::Block, quorum_cert::QuorumCert};
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_schemadb::{schema::Schema, Options, SchemaBatch, DB, DEFAULT_COLUMN_FAMILY_NAME};
+use gaptos::aptos_storage_interface::AptosDbError;
 use ledger_db::LedgerDb;
 pub use schema::{
     block::BlockSchema,
@@ -259,10 +259,10 @@ include!("include/writer.rs");
 
 #[cfg(test)]
 mod test {
-    use aptos_crypto::ed25519::Ed25519PrivateKey;
-    use aptos_crypto::ed25519::Ed25519PublicKey;
-    use aptos_crypto::test_utils::KeyPair;
-    use aptos_crypto::{bls12381, x25519, PrivateKey};
+    use gaptos::aptos_crypto::ed25519::Ed25519PrivateKey;
+    use gaptos::aptos_crypto::ed25519::Ed25519PublicKey;
+    use gaptos::aptos_crypto::test_utils::KeyPair;
+    use gaptos::aptos_crypto::{bls12381, x25519, PrivateKey};
 
     #[test]
     fn gen_account_private_key() {
@@ -281,7 +281,7 @@ mod test {
         });
     }
 
-    use aptos_crypto::{Uniform, ValidCryptoMaterial};
+    use gaptos::aptos_crypto::{Uniform, ValidCryptoMaterial};
     use rand::thread_rng;
     use std::path::Path;
 

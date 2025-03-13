@@ -6,10 +6,10 @@ use crate::quorum_store::{
     quorum_store_db::QuorumStoreDB,
     types::{PersistedValue, StorageMode},
 };
-use aptos_consensus_types::proof_of_store::{BatchId, BatchInfo};
-use aptos_crypto::HashValue;
-use aptos_temppath::TempPath;
-use aptos_types::{
+use gaptos::aptos_consensus_types::proof_of_store::{BatchId, BatchInfo};
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_temppath::TempPath;
+use gaptos::aptos_types::{
     account_address::AccountAddress, transaction::SignedTransaction,
     validator_verifier::random_validator_verifier,
 };

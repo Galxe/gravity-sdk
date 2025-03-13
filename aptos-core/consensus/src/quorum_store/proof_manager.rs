@@ -10,13 +10,13 @@ use crate::{
         utils::{BatchSortKey, ProofQueue},
     },
 };
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::{
     common::{Payload, PayloadFilter, ProofWithData, TxnSummaryWithExpiration},
     proof_of_store::{BatchInfo, ProofOfStore, ProofOfStoreMsg},
     request_response::{GetPayloadCommand, GetPayloadResponse},
 };
-use aptos_logger::prelude::*;
-use aptos_types::{transaction::SignedTransaction, PeerId};
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_types::{transaction::SignedTransaction, PeerId};
 use futures::StreamExt;
 use futures_channel::mpsc::Receiver;
 use rand::{seq::SliceRandom, thread_rng};

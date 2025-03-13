@@ -10,20 +10,20 @@ use crate::{
     counters,
     quorum_store::{batch_store::BatchReader, quorum_store_coordinator::CoordinatorCommand},
 };
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::{
     block::Block,
     common::{DataStatus, Payload, ProofWithData, Round},
     payload::{BatchPointer, TDataInfo},
     proof_of_store::BatchInfo,
 };
-use aptos_crypto::HashValue;
-use aptos_executor_types::{
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_executor_types::{
     ExecutorError::{DataNotFound, InternalError},
     *,
 };
-use aptos_infallible::Mutex;
-use aptos_logger::prelude::*;
-use aptos_types::{transaction::SignedTransaction, PeerId};
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_types::{transaction::SignedTransaction, PeerId};
 use async_trait::async_trait;
 use futures::channel::mpsc::Sender;
 use std::{

@@ -34,12 +34,12 @@ use crate::{
     },
     ProtocolId,
 };
-use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_config::network_id::{NetworkContext, PeerNetworkId};
-use aptos_logger::prelude::*;
-use aptos_short_hex_str::AsShortHexStr;
-use aptos_time_service::{TimeService, TimeServiceTrait};
-use aptos_types::PeerId;
+use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_config::network_id::{NetworkContext, PeerNetworkId};
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_short_hex_str::AsShortHexStr;
+use gaptos::aptos_time_service::{TimeService, TimeServiceTrait};
+use gaptos::aptos_types::PeerId;
 use bytes::Bytes;
 use futures::{
     channel::oneshot,
@@ -71,7 +71,7 @@ pub fn health_checker_network_config() -> NetworkApplicationConfig {
     let network_service_config = NetworkServiceConfig::new(
         direct_send_protocols,
         rpc_protocols,
-        aptos_channel::Config::new(NETWORK_CHANNEL_SIZE)
+        gaptos::aptos_channel::Config::new(NETWORK_CHANNEL_SIZE)
             .queue_style(QueueStyle::LIFO)
             .counters(&counters::PENDING_HEALTH_CHECKER_NETWORK_EVENTS),
     );

@@ -8,8 +8,8 @@ use crate::{
     test_utils::{consensus_runtime, timed_block_on},
     twins::twins_node::SMRNode,
 };
-use aptos_consensus_types::{block::Block, common::Round};
-use aptos_types::on_chain_config::ProposerElectionType::{
+use gaptos::aptos_consensus_types::{block::Block, common::Round};
+use gaptos::aptos_types::on_chain_config::ProposerElectionType::{
     FixedProposer, RotatingProposer, RoundProposer,
 };
 use futures::StreamExt;

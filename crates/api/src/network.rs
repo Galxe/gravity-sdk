@@ -1,11 +1,11 @@
-use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_config::{
+use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_config::{
     config::{NetworkConfig, NodeConfig},
     network_id::NetworkId,
 };
-use aptos_crypto::{PrivateKey, Uniform};
-use aptos_mempool::MempoolClientRequest;
-use aptos_network::{
+use gaptos::aptos_crypto::{PrivateKey, Uniform};
+use gaptos::aptos_mempool::MempoolClientRequest;
+use gaptos::aptos_network::{
     application::{
         interface::{NetworkClient, NetworkServiceEvents},
         storage::PeersAndMetadata,
@@ -16,8 +16,8 @@ use aptos_network::{
     },
     ProtocolId,
 };
-use aptos_network_builder::builder::NetworkBuilder;
-use aptos_types::{
+use gaptos::aptos_network_builder::builder::NetworkBuilder;
+use gaptos::aptos_types::{
     chain_id::ChainId,
     transaction::{RawTransaction, Script, SignedTransaction},
 };
@@ -56,15 +56,15 @@ pub fn extract_network_ids(node_config: &NodeConfig) -> Vec<NetworkId> {
 /// Returns the network application config for the consensus client and service
 pub fn consensus_network_configuration(node_config: &NodeConfig) -> NetworkApplicationConfig {
     let direct_send_protocols: Vec<ProtocolId> =
-        aptos_consensus::network_interface::DIRECT_SEND.into();
-    let rpc_protocols: Vec<ProtocolId> = aptos_consensus::network_interface::RPC.into();
+        gaptos::aptos_consensus::network_interface::DIRECT_SEND.into();
+    let rpc_protocols: Vec<ProtocolId> = gaptos::aptos_consensus::network_interface::RPC.into();
 
     let network_client_config =
         NetworkClientConfig::new(direct_send_protocols.clone(), rpc_protocols.clone());
     let network_service_config = NetworkServiceConfig::new(
         direct_send_protocols,
         rpc_protocols,
-        aptos_channel::Config::new(node_config.consensus.max_network_channel_size)
+        gaptos::aptos_channel::Config::new(node_config.consensus.max_network_channel_size)
             .queue_style(QueueStyle::FIFO)
             .counters(&aptos_consensus::counters::PENDING_CONSENSUS_NETWORK_EVENTS),
     );
@@ -81,7 +81,7 @@ pub fn mempool_network_configuration(node_config: &NodeConfig) -> NetworkApplica
     let network_service_config = NetworkServiceConfig::new(
         direct_send_protocols,
         rpc_protocols,
-        aptos_channel::Config::new(node_config.mempool.max_network_channel_size)
+        gaptos::aptos_channel::Config::new(node_config.mempool.max_network_channel_size)
             .queue_style(QueueStyle::KLAST) // TODO: why is this not FIFO?
             .counters(&aptos_mempool::counters::PENDING_MEMPOOL_NETWORK_EVENTS),
     );
@@ -89,8 +89,8 @@ pub fn mempool_network_configuration(node_config: &NodeConfig) -> NetworkApplica
 }
 
 // used for UT
-pub async fn mock_mempool_client_sender(mut mc_sender: aptos_mempool::MempoolClientSender) {
-    let addr = aptos_types::account_address::AccountAddress::random();
+pub async fn mock_mempool_client_sender(mut mc_sender: gaptos::aptos_mempool::MempoolClientSender) {
+    let addr = gaptos::aptos_types::account_address::AccountAddress::random();
     let mut seq_num = 0;
     loop {
         let txn: SignedTransaction = SignedTransaction::new(
@@ -103,8 +103,8 @@ pub async fn mock_mempool_client_sender(mut mc_sender: aptos_mempool::MempoolCli
                 SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() + 60,
                 ChainId::test(),
             ),
-            aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing().public_key(),
-            aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap(),
+            gaptos::aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing().public_key(),
+            gaptos::aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap(),
         );
         seq_num += 1;
         let (sender, receiver) = oneshot::channel();
@@ -202,5 +202,5 @@ pub fn create_network_runtime(network_config: &NetworkConfig) -> Runtime {
     // Create the runtime
     let thread_name =
         format!("network-{}", network_id.as_str().chars().take(3).collect::<String>());
-    aptos_runtimes::spawn_named_runtime(thread_name, network_config.runtime_threads)
+    gaptos::aptos_runtimes::spawn_named_runtime(thread_name, network_config.runtime_threads)
 }

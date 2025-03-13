@@ -1,23 +1,23 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos_config::{
+use gaptos::aptos_config::{
     config::NodeConfig,
     network_id::{NetworkId, PeerNetworkId},
 };
-use aptos_logger::{
+use gaptos::aptos_logger::{
     debug, info,
     prelude::{sample, SampleRate},
     warn,
 };
-use aptos_metrics_core::{register_int_counter_vec, IntCounter, IntCounterVec};
-use aptos_network::{
+use gaptos::aptos_metrics_core::{register_int_counter_vec, IntCounter, IntCounterVec};
+use gaptos::aptos_network::{
     application::interface::{NetworkClient, NetworkClientInterface, NetworkServiceEvents},
     peer_manager::ConnectionNotification,
     protocols::{network::Event, rpc::error::RpcError, wire::handshake::v1::ProtocolId},
 };
-use aptos_time_service::{TimeService, TimeServiceTrait};
-use aptos_types::{account_address::AccountAddress, PeerId};
+use gaptos::aptos_time_service::{TimeService, TimeServiceTrait};
+use gaptos::aptos_types::{account_address::AccountAddress, PeerId};
 use bytes::Bytes;
 use futures::{
     channel::oneshot::Sender,
@@ -566,7 +566,7 @@ pub struct SendRecord {
     pub bytes_sent: usize,
 }
 
-pub static APTOS_NETWORK_BENCHMARK_DIRECT_MESSAGES: Lazy<IntCounterVec> = Lazy::new(|| {
+pub static gaptos::aptos_NETWORK_BENCHMARK_DIRECT_MESSAGES: Lazy<IntCounterVec> = Lazy::new(|| {
     register_int_counter_vec!(
         "aptos_network_benchmark_direct_messages",
         "Number of net benchmark direct messages",
@@ -576,12 +576,12 @@ pub static APTOS_NETWORK_BENCHMARK_DIRECT_MESSAGES: Lazy<IntCounterVec> = Lazy::
 });
 
 fn direct_messages(state_label: &'static str) {
-    APTOS_NETWORK_BENCHMARK_DIRECT_MESSAGES
+    gaptos::aptos_NETWORK_BENCHMARK_DIRECT_MESSAGES
         .with_label_values(&[state_label])
         .inc();
 }
 
-pub static APTOS_NETWORK_BENCHMARK_DIRECT_BYTES: Lazy<IntCounterVec> = Lazy::new(|| {
+pub static gaptos::aptos_NETWORK_BENCHMARK_DIRECT_BYTES: Lazy<IntCounterVec> = Lazy::new(|| {
     register_int_counter_vec!(
         "aptos_network_benchmark_direct_bytes",
         "Number of net benchmark direct bytes",
@@ -591,12 +591,12 @@ pub static APTOS_NETWORK_BENCHMARK_DIRECT_BYTES: Lazy<IntCounterVec> = Lazy::new
 });
 
 fn direct_bytes(state_label: &'static str, byte_count: u64) {
-    APTOS_NETWORK_BENCHMARK_DIRECT_BYTES
+    gaptos::aptos_NETWORK_BENCHMARK_DIRECT_BYTES
         .with_label_values(&[state_label])
         .inc_by(byte_count);
 }
 
-pub static APTOS_NETWORK_BENCHMARK_DIRECT_MICROS: Lazy<IntCounterVec> = Lazy::new(|| {
+pub static gaptos::aptos_NETWORK_BENCHMARK_DIRECT_MICROS: Lazy<IntCounterVec> = Lazy::new(|| {
     register_int_counter_vec!(
         "aptos_network_benchmark_direct_micros",
         "Number of net benchmark direct micros",
@@ -606,12 +606,12 @@ pub static APTOS_NETWORK_BENCHMARK_DIRECT_MICROS: Lazy<IntCounterVec> = Lazy::ne
 });
 
 fn direct_micros(state_label: &'static str, micros: u64) {
-    APTOS_NETWORK_BENCHMARK_DIRECT_MICROS
+    gaptos::aptos_NETWORK_BENCHMARK_DIRECT_MICROS
         .with_label_values(&[state_label])
         .inc_by(micros);
 }
 
-pub static APTOS_NETWORK_BENCHMARK_RPC_MESSAGES: Lazy<IntCounterVec> = Lazy::new(|| {
+pub static gaptos::aptos_NETWORK_BENCHMARK_RPC_MESSAGES: Lazy<IntCounterVec> = Lazy::new(|| {
     register_int_counter_vec!(
         "aptos_network_benchmark_rpc_messages",
         "Number of net benchmark RPC messages",
@@ -621,12 +621,12 @@ pub static APTOS_NETWORK_BENCHMARK_RPC_MESSAGES: Lazy<IntCounterVec> = Lazy::new
 });
 
 fn rpc_messages(state_label: &'static str) {
-    APTOS_NETWORK_BENCHMARK_RPC_MESSAGES
+    gaptos::aptos_NETWORK_BENCHMARK_RPC_MESSAGES
         .with_label_values(&[state_label])
         .inc();
 }
 
-pub static APTOS_NETWORK_BENCHMARK_RPC_BYTES: Lazy<IntCounterVec> = Lazy::new(|| {
+pub static gaptos::aptos_NETWORK_BENCHMARK_RPC_BYTES: Lazy<IntCounterVec> = Lazy::new(|| {
     register_int_counter_vec!(
         "aptos_network_benchmark_rpc_bytes",
         "Number of net benchmark RPC bytes transferred",
@@ -636,10 +636,10 @@ pub static APTOS_NETWORK_BENCHMARK_RPC_BYTES: Lazy<IntCounterVec> = Lazy::new(||
 });
 
 pub fn rpc_bytes(state_label: &'static str) -> IntCounter {
-    APTOS_NETWORK_BENCHMARK_RPC_BYTES.with_label_values(&[state_label])
+    gaptos::aptos_NETWORK_BENCHMARK_RPC_BYTES.with_label_values(&[state_label])
 }
 
-pub static APTOS_NETWORK_BENCHMARK_RPC_MICROS: Lazy<IntCounterVec> = Lazy::new(|| {
+pub static gaptos::aptos_NETWORK_BENCHMARK_RPC_MICROS: Lazy<IntCounterVec> = Lazy::new(|| {
     register_int_counter_vec!(
         "aptos_network_benchmark_rpc_micros",
         "Number of net benchmark RPC microseconds used (hint: divide by _messages)",
@@ -649,5 +649,5 @@ pub static APTOS_NETWORK_BENCHMARK_RPC_MICROS: Lazy<IntCounterVec> = Lazy::new(|
 });
 
 pub fn rpc_micros(state_label: &'static str) -> IntCounter {
-    APTOS_NETWORK_BENCHMARK_RPC_MICROS.with_label_values(&[state_label])
+    gaptos::aptos_NETWORK_BENCHMARK_RPC_MICROS.with_label_values(&[state_label])
 }

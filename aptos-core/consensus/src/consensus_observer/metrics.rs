@@ -3,8 +3,8 @@
 
 #![allow(clippy::unwrap_used)]
 
-use aptos_config::network_id::{NetworkId, PeerNetworkId};
-use aptos_metrics_core::{
+use gaptos::aptos_config::network_id::{NetworkId, PeerNetworkId};
+use gaptos::aptos_metrics_core::{
     register_histogram_vec, register_int_counter_vec, register_int_gauge_vec, HistogramVec,
     IntCounterVec, IntGaugeVec,
 };

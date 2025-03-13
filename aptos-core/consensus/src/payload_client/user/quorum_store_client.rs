@@ -5,11 +5,11 @@ use crate::{
     counters::WAIT_FOR_FULL_BLOCKS_TRIGGERED, error::QuorumStoreError, monitor,
     payload_client::user::UserPayloadClient,
 };
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::{
     common::{Payload, PayloadFilter},
     request_response::{GetPayloadCommand, GetPayloadResponse},
 };
-use aptos_logger::info;
+use gaptos::aptos_logger::info;
 use fail::fail_point;
 use futures::future::BoxFuture;
 use futures_channel::{mpsc, oneshot};

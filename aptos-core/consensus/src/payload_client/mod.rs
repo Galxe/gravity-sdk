@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::error::QuorumStoreError;
-use aptos_consensus_types::common::{Payload, PayloadFilter};
-use aptos_types::validator_txn::ValidatorTransaction;
-use aptos_validator_transaction_pool::TransactionFilter;
+use gaptos::aptos_consensus_types::common::{Payload, PayloadFilter};
+use gaptos::aptos_types::validator_txn::ValidatorTransaction;
+use gaptos::aptos_validator_transaction_pool::TransactionFilter;
 use futures::future::BoxFuture;
 use std::time::Duration;
 

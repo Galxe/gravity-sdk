@@ -1,9 +1,9 @@
 use anyhow::Result;
-use aptos_schemadb::{
+use gaptos::aptos_schemadb::{
     define_schema,
     schema::{KeyCodec, ValueCodec},
 };
-use aptos_types::ledger_info::LedgerInfoWithSignatures;
+use gaptos::aptos_types::ledger_info::LedgerInfoWithSignatures;
 use super::ensure_slice_len_eq;
 use super::LEDGER_INFO_CF_NAME;
 use byteorder::{BigEndian, ReadBytesExt};

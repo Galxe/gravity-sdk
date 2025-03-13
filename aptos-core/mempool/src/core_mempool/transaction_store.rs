@@ -15,10 +15,10 @@ use crate::{
         MempoolSenderBucket, MultiBucketTimelineIndexIds, TimelineIndexIdentifier,
     },
 };
-use aptos_config::config::MempoolConfig;
-use aptos_crypto::HashValue;
-use aptos_logger::{prelude::*, Level};
-use aptos_types::{
+use gaptos::aptos_config::config::MempoolConfig;
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_logger::{prelude::*, Level};
+use gaptos::aptos_types::{
     account_address::AccountAddress,
     mempool_status::{MempoolStatus, MempoolStatusCode},
     transaction::SignedTransaction,
@@ -458,7 +458,7 @@ impl TransactionStore {
             txns.clear();
             txns.append(&mut active);
 
-            let mut rm_txns = match aptos_logger::enabled!(Level::Trace) {
+            let mut rm_txns = match gaptos::aptos_logger::enabled!(Level::Trace) {
                 true => TxnsLog::new(),
                 false => TxnsLog::new_with_max(10),
             };
@@ -507,7 +507,7 @@ impl TransactionStore {
                 txns.remove(&sequence_number);
             }
             self.index_remove(&txn_to_remove);
-            if aptos_logger::enabled!(Level::Trace) {
+            if gaptos::aptos_logger::enabled!(Level::Trace) {
                 let mut txns_log = TxnsLog::new();
                 txns_log.add(
                     txn_to_remove.verified_txn().sender(),
@@ -594,7 +594,7 @@ impl TransactionStore {
                         // reconstruct signed transaction from raw transaction bytes
                         batch.push((
                             (txn.verified_txn().clone()),
-                            aptos_infallible::duration_since_epoch_at(
+                            gaptos::aptos_infallible::duration_since_epoch_at(
                                 &txn.insertion_info().ready_time,
                             )
                             .as_millis() as u64,
@@ -646,7 +646,7 @@ impl TransactionStore {
                     .map(|txn| {
                         (
                             txn.verified_txn().clone(),
-                            aptos_infallible::duration_since_epoch_at(
+                            gaptos::aptos_infallible::duration_since_epoch_at(
                                 &txn.insertion_info().ready_time,
                             )
                             .as_millis() as u64,

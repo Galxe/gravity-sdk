@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::pipeline::pipeline_phase::StatelessPipeline;
-use aptos_crypto::bls12381;
-use aptos_safety_rules::Error;
-use aptos_types::ledger_info::{LedgerInfo, LedgerInfoWithSignatures};
+use gaptos::aptos_crypto::bls12381;
+use gaptos::aptos_safety_rules::Error;
+use gaptos::aptos_types::ledger_info::{LedgerInfo, LedgerInfoWithSignatures};
 use async_trait::async_trait;
 use std::{
     fmt::{Debug, Display, Formatter},

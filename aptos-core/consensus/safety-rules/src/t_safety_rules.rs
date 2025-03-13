@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{ConsensusState, Error};
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::{
     block_data::BlockData,
     order_vote::OrderVote,
     order_vote_proposal::OrderVoteProposal,
@@ -11,8 +11,8 @@ use aptos_consensus_types::{
     vote::Vote,
     vote_proposal::VoteProposal,
 };
-use aptos_crypto::bls12381;
-use aptos_types::{
+use gaptos::aptos_crypto::bls12381;
+use gaptos::aptos_types::{
     epoch_change::EpochChangeProof,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
 };

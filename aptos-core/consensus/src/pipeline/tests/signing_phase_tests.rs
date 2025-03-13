@@ -17,9 +17,9 @@ use crate::{
     },
     test_utils::consensus_runtime,
 };
-use aptos_crypto::HashValue;
-use aptos_safety_rules::Error;
-use aptos_types::{
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_safety_rules::Error;
+use gaptos::aptos_types::{
     aggregate_signature::AggregateSignature,
     block_info::BlockInfo,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},

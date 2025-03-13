@@ -13,7 +13,7 @@ pub struct DbError {
 }
 
 impl From<aptos_storage_interface::AptosDbError> for DbError {
-    fn from(e: aptos_storage_interface::AptosDbError) -> Self {
+    fn from(e: gaptos::aptos_storage_interface::AptosDbError) -> Self {
         DbError { inner: e.into() }
     }
 }
@@ -32,7 +32,7 @@ impl From<pipeline::errors::Error> for StateSyncError {
 }
 
 impl From<aptos_executor_types::ExecutorError> for StateSyncError {
-    fn from(e: aptos_executor_types::ExecutorError) -> Self {
+    fn from(e: gaptos::aptos_executor_types::ExecutorError) -> Self {
         StateSyncError { inner: e.into() }
     }
 }
@@ -98,7 +98,7 @@ mod tests {
 
     #[test]
     fn conversion_and_downcast() {
-        let error = aptos_executor_types::ExecutorError::InternalError {
+        let error = gaptos::aptos_executor_types::ExecutorError::InternalError {
             error: "lalala".to_string(),
         };
         let typed_error: StateSyncError = error.into();

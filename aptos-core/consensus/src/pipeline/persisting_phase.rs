@@ -6,9 +6,9 @@ use crate::{
     pipeline::pipeline_phase::StatelessPipeline,
     state_replication::{StateComputer, StateComputerCommitCallBackType},
 };
-use aptos_consensus_types::{common::Round, pipelined_block::PipelinedBlock};
-use aptos_executor_types::ExecutorResult;
-use aptos_types::ledger_info::LedgerInfoWithSignatures;
+use gaptos::aptos_consensus_types::{common::Round, pipelined_block::PipelinedBlock};
+use gaptos::aptos_executor_types::ExecutorResult;
+use gaptos::aptos_types::ledger_info::LedgerInfoWithSignatures;
 use async_trait::async_trait;
 use std::{
     fmt::{Debug, Display, Formatter},
