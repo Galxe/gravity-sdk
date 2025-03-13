@@ -507,7 +507,7 @@ impl Mempool {
         if !return_non_full && !full_bytes && (block.len() as u64) < max_txns {
             block.clear();
         }
-        counters::MEMPOOL_TXN_COUNT_IN_GET_BACTH.inc_by(block.len() as u64);
+        counters::MEMPOOL_TXN_COUNT_IN_GET_BACTH.observe(block.len() as f64);
         counters::mempool_service_transactions(counters::GET_BLOCK_LABEL, block.len());
         counters::MEMPOOL_SERVICE_BYTES_GET_BLOCK.observe(total_bytes as f64);
         for transaction in &block {

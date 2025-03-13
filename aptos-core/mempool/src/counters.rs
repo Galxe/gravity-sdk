@@ -334,14 +334,6 @@ pub fn mempool_service_transactions(label: &'static str, num: usize) {
         .observe(num as f64)
 }
 
-pub static MEMPOOL_TXN_COUNT_IN_GET_BACTH: Lazy<IntCounter> = Lazy::new(|| {
-    register_int_counter!(
-        "aptos_mempool_txn_count_in_get_batch",
-        "Number of transactions in one request/response between mempool and consensus/state sync"
-    )
-    .unwrap()
-});
-
 /// Histogram for the byte size of transactions processed in get_block
 pub static MEMPOOL_SERVICE_BYTES_GET_BLOCK: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!(
@@ -351,6 +343,13 @@ pub static MEMPOOL_SERVICE_BYTES_GET_BLOCK: Lazy<Histogram> = Lazy::new(|| {
     .unwrap()
 });
 
+pub static MEMPOOL_TXN_COUNT_IN_GET_BACTH: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!(
+        "aptos_mempool_service_txn_get_block",
+        "Histogram for the number of txns per (mempool returned for batch generator) blocks."
+    )
+    .unwrap()
+});
 /// Counter for tracking latency of mempool processing requests from consensus/state sync
 /// A 'fail' result means the mempool's callback response to consensus/state sync failed.
 static MEMPOOL_SERVICE_LATENCY: Lazy<HistogramVec> = Lazy::new(|| {
