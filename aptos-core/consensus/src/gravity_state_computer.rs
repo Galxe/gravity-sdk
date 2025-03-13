@@ -88,7 +88,6 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         block_ids: Vec<HashValue>,
         ledger_info_with_sigs: LedgerInfoWithSignatures,
     ) -> ExecutorResult<()> {
-        APTOS_COMMIT_BLOCKS.inc_by(block_ids.len() as u64);
         if !block_ids.is_empty() {
             self.runtime.block_on(async move {
                 let call = get_coex_bridge().borrow_func("commit_block_hash");
@@ -121,6 +120,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         block_ids: Vec<HashValue>,
         ledger_info_with_sigs: LedgerInfoWithSignatures,
     ) -> ExecutorResult<()> {
+        APTOS_COMMIT_BLOCKS.inc_by(block_ids.len() as u64);
         info!("commit blocks: {:?}", block_ids);
         if !block_ids.is_empty() {
             self.runtime.block_on(async move {
