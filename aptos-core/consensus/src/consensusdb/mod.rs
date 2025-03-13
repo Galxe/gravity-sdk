@@ -4,8 +4,8 @@
 
 #[cfg(test)]
 mod consensusdb_test;
-mod schema;
 mod ledger_db;
+mod schema;
 
 use crate::error::DbError;
 use anyhow::Result;
@@ -21,11 +21,17 @@ pub use schema::{
     quorum_certificate::QCSchema,
 };
 use schema::{
-    single_entry::{SingleEntryKey, SingleEntrySchema}, BLOCK_CF_NAME, CERTIFIED_NODE_CF_NAME, DAG_VOTE_CF_NAME, LEDGER_INFO_CF_NAME, NODE_CF_NAME, QC_CF_NAME, SINGLE_ENTRY_CF_NAME
+    single_entry::{SingleEntryKey, SingleEntrySchema},
+    BLOCK_CF_NAME, CERTIFIED_NODE_CF_NAME, DAG_VOTE_CF_NAME, LEDGER_INFO_CF_NAME, NODE_CF_NAME,
+    QC_CF_NAME, SINGLE_ENTRY_CF_NAME,
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeMap, iter::Iterator, path::{Path, PathBuf}, sync::Arc, time::Instant
+    collections::BTreeMap,
+    iter::Iterator,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Instant,
 };
 
 /// The name of the consensus db file
@@ -36,7 +42,9 @@ pub fn create_checkpoint<P: AsRef<Path> + Clone>(db_path: P, checkpoint_path: P)
     let start = Instant::now();
     let consensus_db_checkpoint_path = checkpoint_path.as_ref().join(CONSENSUS_DB_NAME);
     std::fs::remove_dir_all(&consensus_db_checkpoint_path).unwrap_or(());
-    ConsensusDB::new(db_path, &PathBuf::new()).db.create_checkpoint(&consensus_db_checkpoint_path)?;
+    ConsensusDB::new(db_path, &PathBuf::new())
+        .db
+        .create_checkpoint(&consensus_db_checkpoint_path)?;
     info!(
         path = consensus_db_checkpoint_path,
         time_ms = %start.elapsed().as_millis(),
@@ -90,8 +98,10 @@ impl ConsensusDB {
         let mut opts = Options::default();
         opts.create_if_missing(true);
         opts.create_missing_column_families(true);
-        let db = Arc::new(DB::open(path.clone(), "consensus", column_families, &opts)
-            .expect("ConsensusDB open failed; unable to continue"));
+        let db = Arc::new(
+            DB::open(path.clone(), "consensus", column_families, &opts)
+                .expect("ConsensusDB open failed; unable to continue"),
+        );
 
         info!("Opened ConsensusDB at {:?} in {} ms", path, instant.elapsed().as_millis());
         let mut node_config_set = BTreeMap::new();
@@ -106,12 +116,34 @@ impl ConsensusDB {
 
     pub fn get_data(
         &self,
+        latest_block_number: u64,
     ) -> Result<(Option<Vec<u8>>, Option<Vec<u8>>, Vec<Block>, Vec<QuorumCert>)> {
         let last_vote = self.get_last_vote()?;
         let highest_2chain_timeout_certificate = self.get_highest_2chain_timeout_certificate()?;
-        let consensus_blocks =
-            self.get_all::<BlockSchema>()?.into_iter().map(|(_, block)| block).collect();
-        let consensus_qcs = self.get_all::<QCSchema>()?.into_iter().map(|(_, qc)| qc).collect();
+        let consensus_blocks: Vec<_> = self
+            .get_all::<BlockSchema>()?
+            .into_iter()
+            .map(|(_, block)| block)
+            .filter(|block| {
+                block.block_number().is_none()
+                    || block.block_number().unwrap() >= latest_block_number
+            })
+            .collect();
+        let latest_round = match consensus_blocks
+            .iter()
+            .find(|&block| {
+                block.block_number().is_some()
+                    && block.block_number().unwrap() == latest_block_number
+            }) {
+                Some(block) => block.round(),
+                None => 0,
+            };
+        let consensus_qcs = self
+            .get_all::<QCSchema>()?
+            .into_iter()
+            .map(|(_, qc)| qc)
+            .filter(|qc| qc.certified_block().round() >= latest_round)
+            .collect();
 
         println!("qcs : {:?}", consensus_qcs);
         Ok((last_vote, highest_2chain_timeout_certificate, consensus_blocks, consensus_qcs))
@@ -139,12 +171,8 @@ impl ConsensusDB {
             return Err(anyhow::anyhow!("Consensus block and qc data is empty!").into());
         }
         let batch = SchemaBatch::new();
-        block_data
-            .iter()
-            .try_for_each(|block| batch.put::<BlockSchema>(&block.id(), block))?;
-        qc_data
-            .iter()
-            .try_for_each(|qc| batch.put::<QCSchema>(&qc.certified_block().id(), qc))?;
+        block_data.iter().try_for_each(|block| batch.put::<BlockSchema>(&block.id(), block))?;
+        qc_data.iter().try_for_each(|qc| batch.put::<QCSchema>(&qc.certified_block().id(), qc))?;
         self.commit(batch)
     }
 

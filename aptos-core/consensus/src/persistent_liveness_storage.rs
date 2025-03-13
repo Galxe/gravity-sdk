@@ -438,7 +438,9 @@ impl PersistentLivenessStorage for StorageWriteProxy {
 
     async fn start(&self, order_vote_enabled: bool) -> LivenessStorageData {
         info!("Start consensus recovery.");
-        let raw_data = self.db.get_data().expect("unable to recover consensus data");
+        let latest_block_number = self.latest_block_number().await;
+        info!("The execution_latest_block_number is {}", latest_block_number);
+        let raw_data = self.db.get_data(latest_block_number).expect("unable to recover consensus data");
 
         let last_vote = raw_data
             .0
@@ -454,8 +456,6 @@ impl PersistentLivenessStorage for StorageWriteProxy {
         info!("The following blocks were restored from ConsensusDB : {}", blocks_repr.concat());
         let qc_repr: Vec<String> = quorum_certs.iter().map(|qc| format!("\n\t{}", qc)).collect();
         info!("The following quorum certs were restored from ConsensusDB: {}", qc_repr.concat());
-        let latest_block_number = self.latest_block_number().await;
-        info!("The execution_latest_block_number is {}", latest_block_number);
         // only use when latest_block_number is zero
         let latest_ledger_info = LedgerInfoWithSignatures::genesis(
             *ACCUMULATOR_PLACEHOLDER_HASH,
