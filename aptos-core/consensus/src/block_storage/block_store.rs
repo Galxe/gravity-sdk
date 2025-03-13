@@ -184,6 +184,7 @@ impl BlockStore {
             if qc.commit_info().round() > self.commit_root().round() {
                 let block_id_to_recover = qc.commit_info().id();
                 let blocks_to_recover = self.path_from_ordered_root(block_id_to_recover).unwrap_or_default();
+                self.init_block_number(&blocks_to_recover);
                 assert!(!blocks_to_recover.is_empty());
                 for block_to_recover in blocks_to_recover {
                     if let Ok((txns, _)) =
