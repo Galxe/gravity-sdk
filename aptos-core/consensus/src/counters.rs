@@ -49,6 +49,23 @@ pub static ERROR_COUNT: Lazy<IntGauge> = Lazy::new(|| {
     .unwrap()
 });
 
+
+pub static APTOS_EXECUTION_TXNS: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!(
+        "aptos_execution_transactions",
+        "Number of transactions handled in one request/response between mempool and execution layer",
+    )
+    .unwrap()
+});
+
+pub static APTOS_COMMIT_BLOCKS: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "aptos_commit_transactions",
+        "Number of transactions committed by consensus",
+    )
+    .unwrap()
+});
+
 /// This counter is set to the round of the highest committed block.
 pub static LAST_COMMITTED_ROUND: Lazy<IntGauge> = Lazy::new(|| {
     register_int_gauge!(

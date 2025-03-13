@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::consensusdb::ConsensusDB;
-use crate::counters;
+use crate::counters::{APTOS_COMMIT_BLOCKS, APTOS_EXECUTION_TXNS};
 use crate::payload_client::user::quorum_store_client::QuorumStoreClient;
 use anyhow::Result;
 use api_types::ExecutionLayer;
@@ -13,7 +13,6 @@ use aptos_executor_types::{
     BlockExecutorTrait, ExecutorResult, StateComputeResult,
 };
 use aptos_logger::info;
-use aptos_mempool::counters::{APTOS_COMMIT_BLOCKS, APTOS_EXECUTION_TXNS};
 use aptos_types::block_executor::partitioner::ExecutableBlock;
 use aptos_types::{
     block_executor::config::BlockExecutorConfigFromOnchain,
