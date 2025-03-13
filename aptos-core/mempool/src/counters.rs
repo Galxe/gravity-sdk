@@ -226,6 +226,14 @@ static CORE_MEMPOOL_TXN_LATENCIES: Lazy<HistogramVec> = Lazy::new(|| {
     .unwrap()
 });
 
+pub static MEMPOOL_TXN_ADD_COUNT: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "aptos_core_mempool_add_txns_count",
+        "Number of txns added to core mempool"
+    )
+    .unwrap()
+});
+
 pub static TXN_E2E_USE_CASE_COMMIT_LATENCY: Lazy<HistogramVec> = Lazy::new(|| {
     register_histogram_vec!(
         "aptos_txn_e2e_use_case_commit_latency",

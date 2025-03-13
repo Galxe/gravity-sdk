@@ -320,6 +320,7 @@ impl Mempool {
         let now = aptos_infallible::duration_since_epoch().as_millis() as u64;
 
         if status.code == MempoolStatusCode::Accepted {
+            counters::MEMPOOL_TXN_ADD_COUNT.inc();
             if let Some(ready_time_at_sender) = ready_time_at_sender {
                 let bucket = self.transactions.get_bucket(ranking_score, &sender);
                 counters::core_mempool_txn_commit_latency(
