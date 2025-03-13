@@ -120,7 +120,7 @@ impl ConsensusDB {
     ) -> Result<(Option<Vec<u8>>, Option<Vec<u8>>, Vec<Block>, Vec<QuorumCert>)> {
         let last_vote = self.get_last_vote()?;
         let highest_2chain_timeout_certificate = self.get_highest_2chain_timeout_certificate()?;
-        let consensus_blocks: Vec<_> = self
+        let mut consensus_blocks: Vec<_> = self
             .get_all::<BlockSchema>()?
             .into_iter()
             .map(|(_, block)| block)
@@ -138,6 +138,11 @@ impl ConsensusDB {
                 Some(block) => block.round(),
                 None => 0,
             };
+        let consensus_blocks: Vec<_> = consensus_blocks.into_iter()
+            .filter(|block| {
+                block.round() >= latest_round
+            })
+            .collect();
         let consensus_qcs = self
             .get_all::<QCSchema>()?
             .into_iter()
