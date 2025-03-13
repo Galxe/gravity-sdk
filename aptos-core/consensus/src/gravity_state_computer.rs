@@ -72,7 +72,6 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         parent_block_id: HashValue,
         onchain_config: BlockExecutorConfigFromOnchain,
     ) -> ExecutorResult<()> {
-        APTOS_EXECUTION_TXNS.observe(block.transactions.num_transactions() as f64);
         self.inner.execute_and_state_checkpoint(block, parent_block_id, onchain_config)
     }
 

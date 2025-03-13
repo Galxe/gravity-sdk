@@ -2,7 +2,7 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::counters::update_counters_for_compute_res;
+use crate::counters::{update_counters_for_compute_res, APTOS_EXECUTION_TXNS};
 use crate::pipeline::pipeline_builder::PipelineBuilder;
 use crate::{
     block_preparer::BlockPreparer,
@@ -241,7 +241,7 @@ impl StateComputer for ExecutionProxy {
         // We would export the empty block detail to the outside GCEI caller
         let vtxns =
             txns.iter().map(|txn| Into::<VerifiedTxn>::into(&txn.clone())).collect::<Vec<_>>();
-        let real_txns = vtxns
+        let real_txns: Vec<api_types::VerifiedTxn> = vtxns
             .into_iter()
             .map(|txn| {
                 api_types::VerifiedTxn::new(
@@ -254,6 +254,7 @@ impl StateComputer for ExecutionProxy {
             })
             .collect();
         let call = get_coex_bridge().borrow_func("send_ordered_block");
+        APTOS_EXECUTION_TXNS.observe(real_txns.len() as f64);
         match call {
             Some(Func::SendOrderedBlocks(call)) => {
                 info!("call send_ordered_block function");

@@ -60,7 +60,7 @@ pub static APTOS_EXECUTION_TXNS: Lazy<Histogram> = Lazy::new(|| {
 
 pub static APTOS_COMMIT_BLOCKS: Lazy<IntCounter> = Lazy::new(|| {
     register_int_counter!(
-        "aptos_commit_transactions",
+        "aptos_commit_blocks",
         "Number of transactions committed by consensus",
     )
     .unwrap()
