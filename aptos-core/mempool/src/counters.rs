@@ -334,6 +334,14 @@ pub fn mempool_service_transactions(label: &'static str, num: usize) {
         .observe(num as f64)
 }
 
+pub static MEMPOOL_TXN_COUNT_IN_GET_BACTH: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "aptos_mempool_txn_count_in_get_batch",
+        "Number of transactions in one request/response between mempool and consensus/state sync"
+    )
+    .unwrap()
+});
+
 /// Histogram for the byte size of transactions processed in get_block
 pub static MEMPOOL_SERVICE_BYTES_GET_BLOCK: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!(
