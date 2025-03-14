@@ -11,11 +11,11 @@ use crate::{
     protocols::wire::messaging::v1::{IncomingRequest, NetworkMessage},
     ProtocolId,
 };
-use aptos_channels::aptos_channel;
-use aptos_config::network_id::PeerNetworkId;
-use aptos_logger::prelude::*;
-use aptos_short_hex_str::AsShortHexStr;
-use aptos_types::{network_address::NetworkAddress, PeerId};
+use gaptos::aptos_channels::aptos_channel;
+use gaptos::aptos_config::network_id::PeerNetworkId;
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_short_hex_str::AsShortHexStr;
+use gaptos::aptos_types::{network_address::NetworkAddress, PeerId};
 use bytes::Bytes;
 use futures::{
     channel::oneshot,
@@ -95,14 +95,14 @@ pub struct NetworkServiceConfig {
     /// RPC protocols for the application (sorted by preference, highest to lowest)
     pub rpc_protocols_and_preferences: Vec<ProtocolId>,
     /// The inbound queue config (from the network to the application)
-    pub inbound_queue_config: aptos_channel::Config,
+    pub inbound_queue_config: gaptos::aptos_channel::Config,
 }
 
 impl NetworkServiceConfig {
     pub fn new(
         direct_send_protocols_and_preferences: Vec<ProtocolId>,
         rpc_protocols_and_preferences: Vec<ProtocolId>,
-        inbound_queue_config: aptos_channel::Config,
+        inbound_queue_config: gaptos::aptos_channel::Config,
     ) -> Self {
         Self {
             direct_send_protocols_and_preferences,
@@ -199,7 +199,7 @@ pub struct NetworkEvents<TMessage> {
 /// Trait specifying the signature for `new()` `NetworkEvents`
 pub trait NewNetworkEvents {
     fn new(
-        peer_mgr_notifs_rx: aptos_channel::Receiver<(PeerId, ProtocolId), ReceivedMessage>,
+        peer_mgr_notifs_rx: gaptos::aptos_channel::Receiver<(PeerId, ProtocolId), ReceivedMessage>,
         max_parallel_deserialization_tasks: Option<usize>,
         allow_out_of_order_delivery: bool,
     ) -> Self;
@@ -207,7 +207,7 @@ pub trait NewNetworkEvents {
 
 impl<TMessage: Message + Send + Sync + 'static> NewNetworkEvents for NetworkEvents<TMessage> {
     fn new(
-        peer_mgr_notifs_rx: aptos_channel::Receiver<(PeerId, ProtocolId), ReceivedMessage>,
+        peer_mgr_notifs_rx: gaptos::aptos_channel::Receiver<(PeerId, ProtocolId), ReceivedMessage>,
         max_parallel_deserialization_tasks: Option<usize>,
         allow_out_of_order_delivery: bool,
     ) -> Self {

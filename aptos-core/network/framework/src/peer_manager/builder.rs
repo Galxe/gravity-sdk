@@ -14,21 +14,21 @@ use crate::{
         network::{NetworkClientConfig, NetworkServiceConfig, ReceivedMessage},
         wire::handshake::v1::ProtocolIdSet,
     },
-    transport::{self, AptosNetTransport, Connection, APTOS_TCP_TRANSPORT},
+    transport::{self, AptosNetTransport, Connection, gaptos::aptos_TCP_TRANSPORT},
     ProtocolId,
 };
-use aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
-use aptos_config::{config::HANDSHAKE_VERSION, network_id::NetworkContext};
-use aptos_crypto::x25519;
-use aptos_logger::prelude::*;
+use gaptos::aptos_channels::{self, gaptos::aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_config::{config::HANDSHAKE_VERSION, network_id::NetworkContext};
+use gaptos::aptos_crypto::x25519;
+use gaptos::aptos_logger::prelude::*;
 #[cfg(any(test, feature = "testing", feature = "fuzzing"))]
-use aptos_netcore::transport::memory::MemoryTransport;
-use aptos_netcore::transport::{
+use gaptos::aptos_netcore::transport::memory::MemoryTransport;
+use gaptos::aptos_netcore::transport::{
     tcp::{TCPBufferCfg, TcpSocket, TcpTransport},
     Transport,
 };
-use aptos_time_service::TimeService;
-use aptos_types::{chain_id::ChainId, network_address::NetworkAddress, PeerId};
+use gaptos::aptos_time_service::TimeService;
+use gaptos::aptos_types::{chain_id::ChainId, network_address::NetworkAddress, PeerId};
 use std::{clone::Clone, collections::HashMap, fmt::Debug, sync::Arc};
 use tokio::runtime::Handle;
 
@@ -63,14 +63,14 @@ impl TransportContext {
 
 struct PeerManagerContext {
     // TODO(philiphayes): better support multiple listening addrs
-    pm_reqs_tx: aptos_channel::Sender<(PeerId, ProtocolId), PeerManagerRequest>,
-    pm_reqs_rx: aptos_channel::Receiver<(PeerId, ProtocolId), PeerManagerRequest>,
-    connection_reqs_tx: aptos_channel::Sender<PeerId, ConnectionRequest>,
-    connection_reqs_rx: aptos_channel::Receiver<PeerId, ConnectionRequest>,
+    pm_reqs_tx: gaptos::aptos_channel::Sender<(PeerId, ProtocolId), PeerManagerRequest>,
+    pm_reqs_rx: gaptos::aptos_channel::Receiver<(PeerId, ProtocolId), PeerManagerRequest>,
+    connection_reqs_tx: gaptos::aptos_channel::Sender<PeerId, ConnectionRequest>,
+    connection_reqs_rx: gaptos::aptos_channel::Receiver<PeerId, ConnectionRequest>,
 
     peers_and_metadata: Arc<PeersAndMetadata>,
     upstream_handlers:
-        HashMap<ProtocolId, aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>>,
+        HashMap<ProtocolId, gaptos::aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>>,
     connection_event_handlers: Vec<conn_notifs_channel::Sender>,
 
     channel_size: usize,
@@ -83,15 +83,15 @@ struct PeerManagerContext {
 impl PeerManagerContext {
     #[allow(clippy::too_many_arguments)]
     fn new(
-        pm_reqs_tx: aptos_channel::Sender<(PeerId, ProtocolId), PeerManagerRequest>,
-        pm_reqs_rx: aptos_channel::Receiver<(PeerId, ProtocolId), PeerManagerRequest>,
-        connection_reqs_tx: aptos_channel::Sender<PeerId, ConnectionRequest>,
-        connection_reqs_rx: aptos_channel::Receiver<PeerId, ConnectionRequest>,
+        pm_reqs_tx: gaptos::aptos_channel::Sender<(PeerId, ProtocolId), PeerManagerRequest>,
+        pm_reqs_rx: gaptos::aptos_channel::Receiver<(PeerId, ProtocolId), PeerManagerRequest>,
+        connection_reqs_tx: gaptos::aptos_channel::Sender<PeerId, ConnectionRequest>,
+        connection_reqs_rx: gaptos::aptos_channel::Receiver<PeerId, ConnectionRequest>,
 
         peers_and_metadata: Arc<PeersAndMetadata>,
         upstream_handlers: HashMap<
             ProtocolId,
-            aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>,
+            gaptos::aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>,
         >,
         connection_event_handlers: Vec<conn_notifs_channel::Sender>,
 
@@ -122,7 +122,7 @@ impl PeerManagerContext {
     fn add_upstream_handler(
         &mut self,
         protocol_id: ProtocolId,
-        channel: aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>,
+        channel: gaptos::aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>,
     ) -> &mut Self {
         self.upstream_handlers.insert(protocol_id, channel);
         self
@@ -175,14 +175,14 @@ impl PeerManagerBuilder {
         tcp_buffer_cfg: TCPBufferCfg,
     ) -> Self {
         // Setup channel to send requests to peer manager.
-        let (pm_reqs_tx, pm_reqs_rx) = aptos_channel::new(
+        let (pm_reqs_tx, pm_reqs_rx) = gaptos::aptos_channel::new(
             QueueStyle::FIFO,
             channel_size,
             Some(&counters::PENDING_PEER_MANAGER_REQUESTS),
         );
         // Setup channel to send connection requests to peer manager.
         let (connection_reqs_tx, connection_reqs_rx) =
-            aptos_channel::new(QueueStyle::FIFO, channel_size, None);
+            gaptos::aptos_channel::new(QueueStyle::FIFO, channel_size, None);
 
         Self {
             network_context,
@@ -217,7 +217,7 @@ impl PeerManagerBuilder {
         self.listen_address.clone()
     }
 
-    pub fn connection_reqs_tx(&self) -> aptos_channel::Sender<PeerId, ConnectionRequest> {
+    pub fn connection_reqs_tx(&self) -> gaptos::aptos_channel::Sender<PeerId, ConnectionRequest> {
         self.peer_manager_context
             .as_ref()
             .expect("Cannot access connection_reqs once PeerManager has been built")
@@ -240,7 +240,7 @@ impl PeerManagerBuilder {
     /// Create the configured transport and start PeerManager.
     /// Return the actual NetworkAddress over which this peer is listening.
     pub fn build(&mut self, executor: &Handle) -> &mut Self {
-        use aptos_types::network_address::Protocol::*;
+        use gaptos::aptos_types::network_address::Protocol::*;
 
         let transport_context = self
             .transport_context
@@ -262,15 +262,15 @@ impl PeerManagerBuilder {
             ),
         };
 
-        let mut aptos_tcp_transport = APTOS_TCP_TRANSPORT.clone();
+        let mut gaptos::aptos_tcp_transport = gaptos::aptos_TCP_TRANSPORT.clone();
         let tcp_cfg = self.get_tcp_buffers_cfg();
-        aptos_tcp_transport.set_tcp_buffers(&tcp_cfg);
+        gaptos::aptos_tcp_transport.set_tcp_buffers(&tcp_cfg);
 
         self.peer_manager = match self.listen_address.as_slice() {
             [Ip4(_), Tcp(_)] | [Ip6(_), Tcp(_)] => {
                 Some(TransportPeerManager::Tcp(self.build_with_transport(
                     AptosNetTransport::new(
-                        aptos_tcp_transport,
+                        gaptos::aptos_tcp_transport,
                         self.network_context,
                         self.time_service.clone(),
                         key,
@@ -411,7 +411,7 @@ impl PeerManagerBuilder {
     pub fn add_service(
         &mut self,
         config: &NetworkServiceConfig,
-    ) -> aptos_channel::Receiver<(PeerId, ProtocolId), ReceivedMessage> {
+    ) -> gaptos::aptos_channel::Receiver<(PeerId, ProtocolId), ReceivedMessage> {
         // Register the direct send and rpc protocols
         self.transport_context()
             .add_protocols(&config.direct_send_protocols_and_preferences);

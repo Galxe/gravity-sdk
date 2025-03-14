@@ -4,10 +4,10 @@
 
 #![allow(clippy::unwrap_used)]
 
-use aptos_consensus_types::block::block_test_utils;
-use aptos_safety_rules::{test_utils, PersistentSafetyStorage, SafetyRulesManager, TSafetyRules};
-use aptos_secure_storage::{InMemoryStorage, KVStorage, OnDiskStorage, Storage, VaultStorage};
-use aptos_types::validator_signer::ValidatorSigner;
+use gaptos::aptos_consensus_types::block::block_test_utils;
+use gaptos::aptos_safety_rules::{test_utils, PersistentSafetyStorage, SafetyRulesManager, TSafetyRules};
+use gaptos::aptos_secure_storage::{InMemoryStorage, KVStorage, OnDiskStorage, Storage, VaultStorage};
+use gaptos::aptos_types::validator_signer::ValidatorSigner;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use tempfile::NamedTempFile;
 

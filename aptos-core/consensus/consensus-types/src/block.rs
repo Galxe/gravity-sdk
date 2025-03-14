@@ -6,10 +6,10 @@ use crate::{
     block_data::{BlockData, BlockType}, common::{Author, Payload, Round}, pipelined_block::PipelinedBlock, quorum_cert::QuorumCert
 };
 use anyhow::{bail, ensure, format_err};
-use aptos_bitvec::BitVec;
-use aptos_crypto::{bls12381, hash::{CryptoHash, GENESIS_BLOCK_ID}, HashValue};
-use aptos_infallible::duration_since_epoch;
-use aptos_types::{
+use gaptos::aptos_bitvec::BitVec;
+use gaptos::aptos_crypto::{bls12381, hash::{CryptoHash, GENESIS_BLOCK_ID}, HashValue};
+use gaptos::aptos_infallible::duration_since_epoch;
+use gaptos::aptos_types::{
     account_address::AccountAddress,
     block_info::BlockInfo,
     block_metadata::BlockMetadata,

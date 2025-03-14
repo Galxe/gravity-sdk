@@ -2,16 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{monitor, quorum_store::counters};
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::{
     common::{TransactionInProgress, TransactionSummary, TxnSummaryWithExpiration},
     proof_of_store::{BatchId, BatchInfo, ProofOfStore},
 };
-use aptos_logger::prelude::*;
-use aptos_mempool::{QuorumStoreRequest, QuorumStoreResponse};
-use aptos_types::{transaction::SignedTransaction, PeerId};
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_mempool::{QuorumStoreRequest, QuorumStoreResponse};
+use gaptos::aptos_types::{transaction::SignedTransaction, PeerId};
 use chrono::Utc;
 use futures::channel::{mpsc::Sender, oneshot};
-use move_core_types::account_address::AccountAddress;
+use gaptos::move_core_types::account_address::AccountAddress;
 use rand::{seq::SliceRandom, thread_rng};
 use std::{
     cmp::{Ordering, Reverse},

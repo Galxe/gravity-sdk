@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::quorum_store::utils::ProofQueue;
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::{
     common::TxnSummaryWithExpiration,
     proof_of_store::{BatchId, BatchInfo, ProofOfStore},
 };
-use aptos_crypto::HashValue;
-use aptos_types::{aggregate_signature::AggregateSignature, PeerId};
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_types::{aggregate_signature::AggregateSignature, PeerId};
 use maplit::hashset;
 use std::{collections::HashSet, time::Duration};
 
@@ -90,7 +90,7 @@ fn test_proof_queue_sorting() {
         2,
         2,
         true,
-        aptos_infallible::duration_since_epoch(),
+        gaptos::aptos_infallible::duration_since_epoch(),
     );
     let mut count_author_0 = 0;
     let mut count_author_1 = 0;
@@ -120,7 +120,7 @@ fn test_proof_queue_sorting() {
         4,
         4,
         true,
-        aptos_infallible::duration_since_epoch(),
+        gaptos::aptos_infallible::duration_since_epoch(),
     );
     let mut count_author_0 = 0;
     let mut count_author_1 = 0;
@@ -147,8 +147,8 @@ fn test_proof_queue_sorting() {
 fn test_proof_calculate_remaining_txns_and_proofs() {
     let my_peer_id = PeerId::random();
     let mut proof_queue = ProofQueue::new(my_peer_id);
-    let now_in_secs = aptos_infallible::duration_since_epoch().as_secs() as u64;
-    let now_in_usecs = aptos_infallible::duration_since_epoch().as_micros() as u64;
+    let now_in_secs = gaptos::aptos_infallible::duration_since_epoch().as_secs() as u64;
+    let now_in_usecs = gaptos::aptos_infallible::duration_since_epoch().as_micros() as u64;
     let author_0 = PeerId::random();
     let author_1 = PeerId::random();
     let txns = vec![
@@ -406,7 +406,7 @@ fn test_proof_calculate_remaining_txns_and_proofs() {
 fn test_proof_pull_proofs_with_duplicates() {
     let my_peer_id = PeerId::random();
     let mut proof_queue = ProofQueue::new(my_peer_id);
-    let now_in_secs = aptos_infallible::duration_since_epoch().as_secs() as u64;
+    let now_in_secs = gaptos::aptos_infallible::duration_since_epoch().as_secs() as u64;
     let now_in_usecs = now_in_secs * 1_000_000;
     let txns = vec![
         TxnSummaryWithExpiration::new(PeerId::ONE, 0, now_in_secs + 2, HashValue::zero()),
@@ -683,7 +683,7 @@ fn test_proof_queue_soft_limit() {
         12,
         100,
         true,
-        aptos_infallible::duration_since_epoch(),
+        gaptos::aptos_infallible::duration_since_epoch(),
     );
 
     assert_eq!(pulled.len(), 1);
@@ -696,7 +696,7 @@ fn test_proof_queue_soft_limit() {
         12,
         100,
         true,
-        aptos_infallible::duration_since_epoch(),
+        gaptos::aptos_infallible::duration_since_epoch(),
     );
 
     assert_eq!(pulled.len(), 2);

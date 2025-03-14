@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::testutils::test_node::{ApplicationNode, NodeId};
-use aptos_config::{config::NodeConfig, network_id::PeerNetworkId};
+use gaptos::aptos_config::{config::NodeConfig, network_id::PeerNetworkId};
 use std::collections::HashMap;
 
 // TODO: this code needs to either be used across applications, or just

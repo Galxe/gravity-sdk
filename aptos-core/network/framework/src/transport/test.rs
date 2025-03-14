@@ -8,14 +8,14 @@ use crate::{
     testutils,
     transport::*,
 };
-use aptos_config::config::{Peer, PeerRole, PeerSet, HANDSHAKE_VERSION};
-use aptos_crypto::{test_utils::TEST_SEED, traits::Uniform, x25519, x25519::PrivateKey};
-use aptos_netcore::{
+use gaptos::aptos_config::config::{Peer, PeerRole, PeerSet, HANDSHAKE_VERSION};
+use gaptos::aptos_crypto::{test_utils::TEST_SEED, traits::Uniform, x25519, x25519::PrivateKey};
+use gaptos::aptos_netcore::{
     framing::{read_u16frame, write_u16frame},
     transport::{memory, ConnectionOrigin, Transport},
 };
-use aptos_time_service::MockTimeService;
-use aptos_types::{
+use gaptos::aptos_time_service::MockTimeService;
+use gaptos::aptos_types::{
     account_address::AccountAddress,
     chain_id::ChainId,
     network_address::{NetworkAddress, Protocol::*},
@@ -561,7 +561,7 @@ fn test_memory_transport_maybe_mutual() {
 #[test]
 fn test_tcp_transport_mutual_auth() {
     test_transport_success(
-        APTOS_TCP_TRANSPORT.clone(),
+        gaptos::aptos_TCP_TRANSPORT.clone(),
         Auth::Mutual,
         "/ip4/127.0.0.1/tcp/0",
         expect_ip4_tcp_noise_addr,
@@ -571,7 +571,7 @@ fn test_tcp_transport_mutual_auth() {
 #[test]
 fn test_tcp_transport_server_only_auth() {
     test_transport_success(
-        APTOS_TCP_TRANSPORT.clone(),
+        gaptos::aptos_TCP_TRANSPORT.clone(),
         Auth::ServerOnly,
         "/ip4/127.0.0.1/tcp/0",
         expect_ip4_tcp_noise_addr,
@@ -581,7 +581,7 @@ fn test_tcp_transport_server_only_auth() {
 #[test]
 fn test_tcp_transport_rejects_unauthed_dialer() {
     test_transport_rejects_unauthed_dialer(
-        APTOS_TCP_TRANSPORT.clone(),
+        gaptos::aptos_TCP_TRANSPORT.clone(),
         "/ip4/127.0.0.1/tcp/0",
         expect_ip4_tcp_noise_addr,
     );

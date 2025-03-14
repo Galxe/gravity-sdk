@@ -5,16 +5,16 @@ use crate::{
     pipeline::buffer_manager::OrderedBlocks,
     rand::rand_gen::types::{MockShare, RandShare},
 };
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::{
     block::Block,
     block_data::{BlockData, BlockType},
     common::{Author, Round},
     pipelined_block::PipelinedBlock,
     quorum_cert::QuorumCert,
 };
-use aptos_crypto::HashValue;
-use aptos_executor_types::StateComputeResult;
-use aptos_types::{
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_executor_types::StateComputeResult;
+use gaptos::aptos_types::{
     aggregate_signature::AggregateSignature,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
     randomness::RandMetadata,

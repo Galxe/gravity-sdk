@@ -6,11 +6,11 @@ use crate::consensus_observer::{
     metrics,
     network_message::{CommitDecision, OrderedBlock},
 };
-use aptos_config::config::ConsensusObserverConfig;
-use aptos_consensus_types::common::Round;
-use aptos_infallible::Mutex;
-use aptos_logger::{debug, warn};
-use aptos_types::{block_info::BlockInfo, ledger_info::LedgerInfoWithSignatures};
+use gaptos::aptos_config::config::ConsensusObserverConfig;
+use gaptos::aptos_consensus_types::common::Round;
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_logger::{debug, warn};
+use gaptos::aptos_types::{block_info::BlockInfo, ledger_info::LedgerInfoWithSignatures};
 use std::{collections::BTreeMap, sync::Arc};
 
 /// A simple struct to store ordered blocks
@@ -161,14 +161,14 @@ impl OrderedBlockStore {
 #[cfg(test)]
 mod test {
     use super::*;
-    use aptos_consensus_types::{
+    use gaptos::aptos_consensus_types::{
         block::Block,
         block_data::{BlockData, BlockType},
         pipelined_block::PipelinedBlock,
         quorum_cert::QuorumCert,
     };
-    use aptos_crypto::HashValue;
-    use aptos_types::{
+    use gaptos::aptos_crypto::HashValue;
+    use gaptos::aptos_types::{
         aggregate_signature::AggregateSignature, ledger_info::LedgerInfo, transaction::Version,
     };
 
@@ -506,7 +506,7 @@ mod test {
             // Create a new block info
             let block_info = BlockInfo::new(
                 epoch,
-                i as aptos_types::block_info::Round,
+                i as gaptos::aptos_types::block_info::Round,
                 HashValue::random(),
                 HashValue::random(),
                 i as Version,

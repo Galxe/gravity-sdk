@@ -8,9 +8,9 @@ use crate::{
     transaction_filter::TransactionFilter,
     transaction_shuffler::TransactionShuffler,
 };
-use aptos_consensus_types::block::Block;
-use aptos_executor_types::ExecutorResult;
-use aptos_types::transaction::SignedTransaction;
+use gaptos::aptos_consensus_types::block::Block;
+use gaptos::aptos_executor_types::ExecutorResult;
+use gaptos::aptos_types::transaction::SignedTransaction;
 use fail::fail_point;
 use std::{sync::Arc, time::Instant};
 
@@ -38,7 +38,7 @@ impl BlockPreparer {
 
     pub async fn prepare_block(&self, block: &Block) -> ExecutorResult<Vec<SignedTransaction>> {
         fail_point!("consensus::prepare_block", |_| {
-            use aptos_executor_types::ExecutorError;
+            use gaptos::aptos_executor_types::ExecutorError;
             use std::{thread, time::Duration};
             thread::sleep(Duration::from_millis(10));
             Err(ExecutorError::CouldNotGetData)

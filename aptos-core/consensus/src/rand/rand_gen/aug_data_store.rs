@@ -9,9 +9,9 @@ use crate::rand::rand_gen::{
     },
 };
 use anyhow::ensure;
-use aptos_consensus_types::common::Author;
-use aptos_logger::error;
-use aptos_types::validator_signer::ValidatorSigner;
+use gaptos::aptos_consensus_types::common::Author;
+use gaptos::aptos_logger::error;
+use gaptos::aptos_types::validator_signer::ValidatorSigner;
 use std::{collections::HashMap, sync::Arc};
 
 pub struct AugDataStore<D> {

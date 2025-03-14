@@ -24,13 +24,13 @@ use crate::{
     transport::{Connection, ConnectionId, ConnectionMetadata},
     ProtocolId,
 };
-use aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
-use aptos_config::{config::PeerRole, network_id::NetworkContext};
-use aptos_logger::info;
-use aptos_memsocket::MemorySocket;
-use aptos_netcore::transport::ConnectionOrigin;
-use aptos_time_service::{MockTimeService, TimeService};
-use aptos_types::{network_address::NetworkAddress, PeerId};
+use gaptos::aptos_channels::{self, gaptos::aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_config::{config::PeerRole, network_id::NetworkContext};
+use gaptos::aptos_logger::info;
+use gaptos::aptos_memsocket::MemorySocket;
+use gaptos::aptos_netcore::transport::ConnectionOrigin;
+use gaptos::aptos_time_service::{MockTimeService, TimeService};
+use gaptos::aptos_types::{network_address::NetworkAddress, PeerId};
 use bytes::Bytes;
 use futures::{
     channel::oneshot,
@@ -57,13 +57,13 @@ fn build_test_peer(
     time_service: TimeService,
     origin: ConnectionOrigin,
     upstream_handlers: Arc<
-        HashMap<ProtocolId, aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>>,
+        HashMap<ProtocolId, gaptos::aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>>,
     >,
 ) -> (
     Peer<MemorySocket>,
     PeerHandle,
     MemorySocket,
-    aptos_channels::Receiver<TransportNotification<MemorySocket>>,
+    gaptos::aptos_channels::Receiver<TransportNotification<MemorySocket>>,
 ) {
     let (a, b) = MemorySocket::new_pair();
     let peer_id = PeerId::random();
@@ -80,9 +80,9 @@ fn build_test_peer(
         socket: a,
     };
 
-    let (connection_notifs_tx, connection_notifs_rx) = aptos_channels::new_test(1);
+    let (connection_notifs_tx, connection_notifs_rx) = gaptos::aptos_channels::new_test(1);
     let (peer_reqs_tx, peer_reqs_rx) =
-        aptos_channel::new(QueueStyle::FIFO, NETWORK_CHANNEL_SIZE, None);
+        gaptos::aptos_channel::new(QueueStyle::FIFO, NETWORK_CHANNEL_SIZE, None);
 
     let peer = Peer::new(
         NetworkContext::mock(),
@@ -107,21 +107,21 @@ fn build_test_connected_peers(
     executor: Handle,
     time_service: TimeService,
     upstream_handlers_a: Arc<
-        HashMap<ProtocolId, aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>>,
+        HashMap<ProtocolId, gaptos::aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>>,
     >,
     upstream_handlers_b: Arc<
-        HashMap<ProtocolId, aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>>,
+        HashMap<ProtocolId, gaptos::aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>>,
     >,
 ) -> (
     (
         Peer<MemorySocket>,
         PeerHandle,
-        aptos_channels::Receiver<TransportNotification<MemorySocket>>,
+        gaptos::aptos_channels::Receiver<TransportNotification<MemorySocket>>,
     ),
     (
         Peer<MemorySocket>,
         PeerHandle,
-        aptos_channels::Receiver<TransportNotification<MemorySocket>>,
+        gaptos::aptos_channels::Receiver<TransportNotification<MemorySocket>>,
     ),
 ) {
     let (peer_a, peer_handle_a, connection_a, connection_notifs_rx_a) = build_test_peer(
@@ -160,7 +160,7 @@ fn build_network_sink_stream(
 async fn assert_disconnected_event(
     peer_id: PeerId,
     reason: DisconnectReason,
-    connection_notifs_rx: &mut aptos_channels::Receiver<TransportNotification<MemorySocket>>,
+    connection_notifs_rx: &mut gaptos::aptos_channels::Receiver<TransportNotification<MemorySocket>>,
 ) {
     match connection_notifs_rx.next().await {
         Some(TransportNotification::Disconnected(metadata, actual_reason)) => {
@@ -244,11 +244,11 @@ fn peer_send_message() {
 }
 
 fn test_upstream_handlers() -> (
-    Arc<HashMap<ProtocolId, aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>>>,
-    aptos_channel::Receiver<(PeerId, ProtocolId), ReceivedMessage>,
+    Arc<HashMap<ProtocolId, gaptos::aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>>>,
+    gaptos::aptos_channel::Receiver<(PeerId, ProtocolId), ReceivedMessage>,
 ) {
     let mut upstream_handlers = HashMap::new();
-    let (sender, receiver) = aptos_channel::new(QueueStyle::FIFO, 100, None);
+    let (sender, receiver) = gaptos::aptos_channel::new(QueueStyle::FIFO, 100, None);
     upstream_handlers.insert(PROTOCOL, sender);
     let upstream_handlers = Arc::new(upstream_handlers);
     (upstream_handlers, receiver)

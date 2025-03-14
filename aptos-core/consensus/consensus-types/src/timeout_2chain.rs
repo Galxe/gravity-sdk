@@ -4,9 +4,9 @@
 
 use crate::{common::Author, quorum_cert::QuorumCert};
 use anyhow::ensure;
-use aptos_crypto::{bls12381, CryptoMaterialError};
-use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
-use aptos_types::{
+use gaptos::aptos_crypto::{bls12381, CryptoMaterialError};
+use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
+use gaptos::aptos_types::{
     account_address::AccountAddress,
     aggregate_signature::{AggregateSignature, PartialSignatures},
     block_info::Round,
@@ -397,13 +397,13 @@ mod tests {
         quorum_cert::QuorumCert,
         timeout_2chain::{TwoChainTimeout, TwoChainTimeoutWithPartialSignatures},
     };
-    use aptos_crypto::bls12381;
+    use gaptos::aptos_crypto::bls12381;
 
     #[test]
     fn test_2chain_timeout_certificate() {
         use crate::vote_data::VoteData;
-        use aptos_crypto::hash::CryptoHash;
-        use aptos_types::{
+        use gaptos::aptos_crypto::hash::CryptoHash;
+        use gaptos::aptos_types::{
             aggregate_signature::PartialSignatures,
             block_info::BlockInfo,
             ledger_info::{LedgerInfo, LedgerInfoWithPartialSignatures},

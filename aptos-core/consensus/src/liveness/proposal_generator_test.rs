@@ -14,11 +14,11 @@ use crate::{
     test_utils::{build_empty_tree, MockPayloadManager, TreeInserter},
     util::mock_time_service::SimulatedTimeService,
 };
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::{
     block::{block_test_utils::certificate_for_genesis, Block},
     common::Author,
 };
-use aptos_types::{on_chain_config::ValidatorTxnConfig, validator_signer::ValidatorSigner};
+use gaptos::aptos_types::{on_chain_config::ValidatorTxnConfig, validator_signer::ValidatorSigner};
 use futures::{future::BoxFuture, FutureExt};
 use std::{sync::Arc, time::Duration};
 

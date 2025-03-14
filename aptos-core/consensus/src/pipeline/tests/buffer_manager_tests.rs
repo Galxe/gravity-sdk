@@ -24,16 +24,16 @@ use crate::{
         RandomComputeResultStateComputer,
     },
 };
-use aptos_bounded_executor::BoundedExecutor;
-use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_config::{config::ConsensusObserverConfig, network_id::NetworkId};
-use aptos_consensus_types::{
+use gaptos::aptos_bounded_executor::BoundedExecutor;
+use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_config::{config::ConsensusObserverConfig, network_id::NetworkId};
+use gaptos::aptos_consensus_types::{
     block::block_test_utils::certificate_for_genesis, pipelined_block::PipelinedBlock,
     vote_proposal::VoteProposal,
 };
-use aptos_crypto::{hash::ACCUMULATOR_PLACEHOLDER_HASH, HashValue};
-use aptos_infallible::Mutex;
-use aptos_network::{
+use gaptos::aptos_crypto::{hash::ACCUMULATOR_PLACEHOLDER_HASH, HashValue};
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_network::{
     application::{interface::NetworkClient, storage::PeersAndMetadata},
     peer_manager::{ConnectionRequestSender, PeerManagerRequestSender},
     protocols::{
@@ -41,9 +41,9 @@ use aptos_network::{
         network::{Event, NewNetworkSender},
     },
 };
-use aptos_safety_rules::{PersistentSafetyStorage, SafetyRulesManager};
-use aptos_secure_storage::Storage;
-use aptos_types::{
+use gaptos::aptos_safety_rules::{PersistentSafetyStorage, SafetyRulesManager};
+use gaptos::aptos_secure_storage::Storage;
+use gaptos::aptos_types::{
     account_address::AccountAddress,
     epoch_state::EpochState,
     ledger_info::LedgerInfo,
@@ -63,8 +63,8 @@ pub async fn prepare_buffer_manager(
     BufferManager,
     Sender<OrderedBlocks>,
     Sender<ResetRequest>,
-    aptos_channel::Sender<AccountAddress, IncomingCommitRequest>,
-    aptos_channels::UnboundedReceiver<Event<ConsensusMsg>>,
+    gaptos::aptos_channel::Sender<AccountAddress, IncomingCommitRequest>,
+    gaptos::aptos_channels::UnboundedReceiver<Event<ConsensusMsg>>,
     PipelinePhase<ExecutionSchedulePhase>,
     PipelinePhase<ExecutionWaitPhase>,
     PipelinePhase<SigningPhase>,
@@ -99,8 +99,8 @@ pub async fn prepare_buffer_manager(
     let mut safety_rules = MetricsSafetyRules::new(safety_rules_manager.client(), storage);
     safety_rules.perform_initialize().unwrap();
 
-    let (network_reqs_tx, _network_reqs_rx) = aptos_channel::new(QueueStyle::FIFO, 8, None);
-    let (connection_reqs_tx, _) = aptos_channel::new(QueueStyle::FIFO, 8, None);
+    let (network_reqs_tx, _network_reqs_rx) = gaptos::aptos_channel::new(QueueStyle::FIFO, 8, None);
+    let (connection_reqs_tx, _) = gaptos::aptos_channel::new(QueueStyle::FIFO, 8, None);
     let network_sender = network::NetworkSender::new(
         PeerManagerRequestSender::new(network_reqs_tx),
         ConnectionRequestSender::new(connection_reqs_tx),
@@ -113,7 +113,7 @@ pub async fn prepare_buffer_manager(
     );
     let consensus_network_client = ConsensusNetworkClient::new(network_client);
 
-    let (self_loop_tx, self_loop_rx) = aptos_channels::new_unbounded_test();
+    let (self_loop_tx, self_loop_rx) = gaptos::aptos_channels::new_unbounded_test();
     let network = NetworkSender::new(
         author,
         consensus_network_client,
@@ -121,7 +121,7 @@ pub async fn prepare_buffer_manager(
         validators.clone(),
     );
 
-    let (msg_tx, msg_rx) = aptos_channel::new::<AccountAddress, IncomingCommitRequest>(
+    let (msg_tx, msg_rx) = gaptos::aptos_channel::new::<AccountAddress, IncomingCommitRequest>(
         QueueStyle::FIFO,
         channel_size,
         None,
@@ -182,8 +182,8 @@ pub async fn prepare_buffer_manager(
 pub async fn launch_buffer_manager() -> (
     Sender<OrderedBlocks>,
     Sender<ResetRequest>,
-    aptos_channel::Sender<AccountAddress, IncomingCommitRequest>,
-    aptos_channels::UnboundedReceiver<Event<ConsensusMsg>>,
+    gaptos::aptos_channel::Sender<AccountAddress, IncomingCommitRequest>,
+    gaptos::aptos_channels::UnboundedReceiver<Event<ConsensusMsg>>,
     HashValue,
     Runtime,
     Vec<ValidatorSigner>,

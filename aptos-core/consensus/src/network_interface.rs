@@ -10,8 +10,8 @@ use crate::{
     quorum_store::types::{Batch, BatchMsg, BatchRequest, BatchResponse},
     rand::rand_gen::network_messages::RandGenMessage,
 };
-use aptos_config::network_id::{NetworkId, PeerNetworkId};
-use aptos_consensus_types::{
+use gaptos::aptos_config::network_id::{NetworkId, PeerNetworkId};
+use gaptos::aptos_consensus_types::{
     block_retrieval::{BlockRetrievalRequest, BlockRetrievalResponse},
     epoch_retrieval::EpochRetrievalRequest,
     order_vote_msg::OrderVoteMsg,
@@ -21,11 +21,11 @@ use aptos_consensus_types::{
     sync_info::SyncInfo,
     vote_msg::VoteMsg,
 };
-use aptos_network::{
+use gaptos::aptos_network::{
     application::{error::Error, interface::NetworkClientInterface},
     ProtocolId,
 };
-use aptos_types::{epoch_change::EpochChangeProof, PeerId};
+use gaptos::aptos_types::{epoch_change::EpochChangeProof, PeerId};
 use bytes::Bytes;
 pub use pipeline::commit_reliable_broadcast::CommitMessage;
 use serde::{Deserialize, Serialize};

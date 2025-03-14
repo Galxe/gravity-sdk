@@ -9,9 +9,9 @@ use crate::{
     },
 };
 use anyhow::ensure;
-use aptos_consensus_types::common::{Author, Round};
-use aptos_logger::warn;
-use aptos_types::randomness::{FullRandMetadata, RandMetadata, Randomness};
+use gaptos::aptos_consensus_types::common::{Author, Round};
+use gaptos::aptos_logger::warn;
+use gaptos::aptos_types::randomness::{FullRandMetadata, RandMetadata, Randomness};
 use itertools::Either;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -338,13 +338,13 @@ mod tests {
         test_utils::{create_ordered_blocks, create_share, create_share_for_round},
         types::{MockShare, PathType, RandConfig},
     };
-    use aptos_consensus_types::common::Author;
-    use aptos_crypto::{bls12381, HashValue, Uniform};
-    use aptos_dkg::{
+    use gaptos::aptos_consensus_types::common::Author;
+    use gaptos::aptos_crypto::{bls12381, HashValue, Uniform};
+    use gaptos::aptos_dkg::{
         pvss::{traits::Transcript, Player, WeightedConfig},
         weighted_vuf::traits::WeightedVUF,
     };
-    use aptos_types::{
+    use gaptos::aptos_types::{
         dkg::{real_dkg::maybe_dk_from_bls_sk, DKGSessionMetadata, DKGTrait, DefaultDKG},
         on_chain_config::OnChainRandomnessConfig,
         randomness::{FullRandMetadata, RandKeys, WvufPP, WVUF},

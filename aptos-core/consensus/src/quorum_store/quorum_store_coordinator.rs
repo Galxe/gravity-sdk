@@ -9,10 +9,10 @@ use crate::{
     },
     round_manager::VerifiedEvent,
 };
-use aptos_channels::aptos_channel;
-use aptos_consensus_types::proof_of_store::BatchInfo;
-use aptos_logger::prelude::*;
-use aptos_types::{account_address::AccountAddress, PeerId};
+use gaptos::aptos_channels::aptos_channel;
+use gaptos::aptos_consensus_types::proof_of_store::BatchInfo;
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_types::{account_address::AccountAddress, PeerId};
 use futures::StreamExt;
 use tokio::sync::{mpsc, oneshot};
 
@@ -27,7 +27,7 @@ pub struct QuorumStoreCoordinator {
     remote_batch_coordinator_cmd_tx: Vec<mpsc::Sender<BatchCoordinatorCommand>>,
     proof_coordinator_cmd_tx: mpsc::Sender<ProofCoordinatorCommand>,
     proof_manager_cmd_tx: mpsc::Sender<ProofManagerCommand>,
-    quorum_store_msg_tx: aptos_channel::Sender<AccountAddress, VerifiedEvent>,
+    quorum_store_msg_tx: gaptos::aptos_channel::Sender<AccountAddress, VerifiedEvent>,
 }
 
 impl QuorumStoreCoordinator {
@@ -37,7 +37,7 @@ impl QuorumStoreCoordinator {
         remote_batch_coordinator_cmd_tx: Vec<mpsc::Sender<BatchCoordinatorCommand>>,
         proof_coordinator_cmd_tx: mpsc::Sender<ProofCoordinatorCommand>,
         proof_manager_cmd_tx: mpsc::Sender<ProofManagerCommand>,
-        quorum_store_msg_tx: aptos_channel::Sender<AccountAddress, VerifiedEvent>,
+        quorum_store_msg_tx: gaptos::aptos_channel::Sender<AccountAddress, VerifiedEvent>,
     ) -> Self {
         Self {
             my_peer_id,
