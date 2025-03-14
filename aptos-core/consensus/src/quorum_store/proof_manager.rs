@@ -1,7 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use super::batch_store::BatchStore;
+use super::{batch_store::BatchStore, counters::PROOF_CREAT_COUNT};
 use crate::{
     monitor,
     quorum_store::{
@@ -161,6 +161,7 @@ impl ProofManager {
     pub(crate) fn receive_proofs(&mut self, proofs: Vec<ProofOfStore>) {
         for proof in proofs.into_iter() {
             self.batch_queue.remove_batch(proof.info());
+            PROOF_CREAT_COUNT.inc();
             self.proofs_for_consensus.push(proof);
         }
         (self.remaining_total_txn_num, self.remaining_total_proof_num) =
@@ -238,7 +239,7 @@ impl ProofManager {
                         return_non_full,
                         block_timestamp,
                     );
-
+                counters::NUM_PROOF_OF_STORE_IN_PROPOSAL.observe(proof_block.len() as f64);
                 counters::NUM_BATCHES_WITHOUT_PROOF_OF_STORE.observe(self.batch_queue.len() as f64);
                 counters::PROOF_QUEUE_FULLY_UTILIZED
                     .observe(if proof_queue_fully_utilized { 1.0 } else { 0.0 });

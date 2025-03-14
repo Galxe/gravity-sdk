@@ -55,6 +55,7 @@ impl Mempool {
             sender,
             sequence_number
         );
+        counters::MEMPOOL_TXN_COMMIT_COUNT.inc();
         self.transactions
             .commit_transaction(sender, sequence_number);
     }
@@ -320,6 +321,7 @@ impl Mempool {
         let now = aptos_infallible::duration_since_epoch().as_millis() as u64;
 
         if status.code == MempoolStatusCode::Accepted {
+            counters::MEMPOOL_TXN_ADD_COUNT.inc();
             if let Some(ready_time_at_sender) = ready_time_at_sender {
                 let bucket = self.transactions.get_bucket(ranking_score, &sender);
                 counters::core_mempool_txn_commit_latency(
@@ -507,7 +509,7 @@ impl Mempool {
         if !return_non_full && !full_bytes && (block.len() as u64) < max_txns {
             block.clear();
         }
-
+        counters::MEMPOOL_TXN_COUNT_IN_GET_BACTH.observe(block.len() as f64);
         counters::mempool_service_transactions(counters::GET_BLOCK_LABEL, block.len());
         counters::MEMPOOL_SERVICE_BYTES_GET_BLOCK.observe(total_bytes as f64);
         for transaction in &block {

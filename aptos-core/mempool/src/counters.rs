@@ -226,6 +226,22 @@ static CORE_MEMPOOL_TXN_LATENCIES: Lazy<HistogramVec> = Lazy::new(|| {
     .unwrap()
 });
 
+pub static MEMPOOL_TXN_ADD_COUNT: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "aptos_core_mempool_add_txns_count",
+        "Number of txns added to core mempool"
+    )
+    .unwrap()
+});
+
+pub static MEMPOOL_TXN_COMMIT_COUNT: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "aptos_core_mempool_commit_txns_count",
+        "Number of txns added to core mempool"
+    )
+    .unwrap()
+});
+
 pub static TXN_E2E_USE_CASE_COMMIT_LATENCY: Lazy<HistogramVec> = Lazy::new(|| {
     register_histogram_vec!(
         "aptos_txn_e2e_use_case_commit_latency",
@@ -343,6 +359,13 @@ pub static MEMPOOL_SERVICE_BYTES_GET_BLOCK: Lazy<Histogram> = Lazy::new(|| {
     .unwrap()
 });
 
+pub static MEMPOOL_TXN_COUNT_IN_GET_BACTH: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!(
+        "aptos_mempool_service_txn_get_block",
+        "Histogram for the number of txns per (mempool returned for batch generator) blocks."
+    )
+    .unwrap()
+});
 /// Counter for tracking latency of mempool processing requests from consensus/state sync
 /// A 'fail' result means the mempool's callback response to consensus/state sync failed.
 static MEMPOOL_SERVICE_LATENCY: Lazy<HistogramVec> = Lazy::new(|| {
