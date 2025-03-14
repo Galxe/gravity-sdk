@@ -802,6 +802,8 @@ impl BufferManager {
         });
         while !self.stop {
             // advancing the root will trigger sending requests to the pipeline
+            counters::BUFFER_MANAGER_BACKPRESSURE_TRIGGERED
+                .observe(if self.need_backpressure() { 1.0 } else { 0.0 });
             ::tokio::select! {
                 Some(blocks) = self.block_rx.next(), if !self.need_backpressure() => {
                     self.latest_round = blocks.latest_round();

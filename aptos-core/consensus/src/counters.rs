@@ -173,6 +173,15 @@ pub static NUM_SENDERS_IN_BLOCK: Lazy<Gauge> = Lazy::new(|| {
     register_gauge!("num_senders_in_block", "Total number of senders in a block").unwrap()
 });
 
+/// Number of executed block in buffer manager
+pub static EXECUTED_BLOCK_COUNTER: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!(
+        "aptos_consensus_buffer_manager_executed_block_counter",
+        "Number of blocks processed by buffer manager"
+    )
+    .unwrap()
+});
+
 /// Transaction shuffling call latency
 pub static TXN_SHUFFLE_SECONDS: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!(
