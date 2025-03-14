@@ -174,10 +174,26 @@ pub static NUM_SENDERS_IN_BLOCK: Lazy<Gauge> = Lazy::new(|| {
 });
 
 /// Number of executed block in buffer manager
-pub static EXECUTED_BLOCK_COUNTER: Lazy<Histogram> = Lazy::new(|| {
-    register_histogram!(
+pub static EXECUTED_BLOCK_COUNTER: Lazy<Gauge> = Lazy::new(|| {
+    register_gauge!(
         "aptos_consensus_buffer_manager_executed_block_counter",
         "Number of blocks processed by buffer manager"
+    )
+    .unwrap()
+});
+
+pub static CREATED_EXECUTED_BLOCK_COUNTER: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "aptos_consensus_buffer_manager_created_executed_block_counter",
+        "Number of blocks created by buffer manager"
+    )
+    .unwrap()
+});
+
+pub static FINALIZED_EXECUTED_BLOCK_COUNTER: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "aptos_consensus_buffer_manager_finalized_executed_block_counter",
+        "Number of blocks finalized by buffer manager"
     )
     .unwrap()
 });

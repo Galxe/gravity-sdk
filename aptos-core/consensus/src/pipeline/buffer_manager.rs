@@ -802,11 +802,12 @@ impl BufferManager {
         });
         while !self.stop {
             // advancing the root will trigger sending requests to the pipeline
-            counters::BUFFER_MANAGER_BACKPRESSURE_TRIGGERED
-                .observe(if self.need_backpressure() { 1.0 } else { 0.0 });
+            counters::EXECUTED_BLOCK_COUNTER
+                .set(self.executed_block_counter as f64);
             ::tokio::select! {
                 Some(blocks) = self.block_rx.next(), if !self.need_backpressure() => {
                     self.latest_round = blocks.latest_round();
+                    counters::CREATED_EXECUTED_BLOCK_COUNTER.inc();
                     self.executed_block_counter += 1;
                     monitor!("buffer_manager_process_ordered", {
                     self.process_ordered_blocks(blocks).await;
@@ -854,6 +855,7 @@ impl BufferManager {
                 Some(Ok(round)) = self.persisting_phase_rx.next() => {
                     // see where `need_backpressure()` is called.
                     self.executed_block_counter -= 1;
+                    counters::FINALIZED_EXECUTED_BLOCK_COUNTER.inc();
                     self.highest_committed_round = round
                 },
                 Some(rpc_request) = verified_commit_msg_rx.next() => {
