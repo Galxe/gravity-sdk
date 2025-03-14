@@ -363,22 +363,6 @@ impl BlockStore {
                 commit_decision,
             );
         } else {
-            let mut blocks = vec![];
-            for p_block in &blocks_to_commit {
-                if let Some(_) = p_block.block().block_number() {
-                    continue;
-                }
-                p_block.block().set_block_number(self.storage.fetch_next_block_number());
-                blocks.push(p_block.as_ref().into());
-            }
-            let storage_clone = self.storage.clone();
-            tokio::spawn(async move {
-                if blocks.len() != 0 {
-                    storage_clone.save_tree(blocks, vec![]).unwrap();
-                }
-            });
-            
-            
             // This callback is invoked synchronously with and could be used for multiple batches of blocks.
             self.execution_client
                 .finalize_order(
@@ -398,6 +382,18 @@ impl BlockStore {
                 )
                 .await
                 .expect("Failed to persist commit");
+            let mut blocks = vec![];
+            for p_block in &blocks_to_commit {
+                if let Some(_) = p_block.block().block_number() {
+                    continue;
+                }
+                p_block.block().set_block_number(self.storage.fetch_next_block_number());
+                blocks.push(p_block.as_ref().into());
+            }
+            let storage_clone = self.storage.clone();
+            if blocks.len() != 0 {
+                storage_clone.save_tree(blocks, vec![]).unwrap();
+            }
         }
 
         self.inner.write().update_ordered_root(block_to_commit.id());
