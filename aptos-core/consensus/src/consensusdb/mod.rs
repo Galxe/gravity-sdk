@@ -248,6 +248,10 @@ impl ConsensusDB {
     pub fn get<S: Schema>(&self, key: &S::Key) -> Result<Option<S::Value>, DbError> {
         Ok(self.db.get::<S>(key)?)
     }
+
+    pub fn get_block(&self, block_id: &HashValue) -> Result<Option<Block>, DbError> {
+        Ok(self.db.get::<BlockSchema>(block_id)?)
+    }
 }
 
 include!("include/reader.rs");

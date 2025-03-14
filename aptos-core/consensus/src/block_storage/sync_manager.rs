@@ -528,6 +528,16 @@ impl BlockStore {
                     break;
                 }
                 id = executed_block.parent_id();
+            } else if let Ok(Some(executed_block)) = self.storage.consensus_db().get_block(&id) {
+                if executed_block.is_genesis_block() {
+                    continue;
+                }
+                blocks.push(executed_block.clone());
+                if request.req.match_target_id(id) {
+                    status = BlockRetrievalStatus::SucceededWithTarget;
+                    break;
+                }
+                id = executed_block.parent_id();
             } else {
                 info!("Cannot find the block id {}", id);
                 status = BlockRetrievalStatus::NotEnoughBlocks;
