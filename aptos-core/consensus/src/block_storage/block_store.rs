@@ -332,6 +332,7 @@ impl BlockStore {
 
         let blocks_to_commit = self.path_from_ordered_root(block_id_to_commit).unwrap_or_default();
         assert!(!blocks_to_commit.is_empty());
+        counters::SEND_TO_EXECUTION_BLOCK_COUNTER.inc_by(blocks_to_commit.len() as u64);
         let block_tree = self.inner.clone();
         let storage = self.storage.clone();
         let finality_proof_clone = finality_proof.clone();
@@ -362,18 +363,18 @@ impl BlockStore {
                 commit_decision,
             );
         } else {
-            let mut blocks = vec![];
-            for p_block in &blocks_to_commit {
-                if let Some(_) = p_block.block().block_number() {
-                    continue;
-                }
-                p_block.block().set_block_number(self.storage.fetch_next_block_number());
-                blocks.push(p_block.as_ref().into());
-            }
-            info!("send the block {:?} to execute", blocks);
-            if blocks.len() != 0 {
-                self.storage.save_tree(blocks, vec![]);
-            }
+            // let mut blocks = vec![];
+            // for p_block in &blocks_to_commit {
+            //     if let Some(_) = p_block.block().block_number() {
+            //         continue;
+            //     }
+            //     p_block.block().set_block_number(self.storage.fetch_next_block_number());
+            //     blocks.push(p_block.as_ref().into());
+            // }
+
+            // if blocks.len() != 0 {
+            //     self.storage.save_tree(blocks, vec![]).unwrap();
+            // }
             // This callback is invoked synchronously with and could be used for multiple batches of blocks.
             self.execution_client
                 .finalize_order(
@@ -398,7 +399,6 @@ impl BlockStore {
         self.inner.write().update_ordered_root(block_to_commit.id());
         self.inner.write().insert_ordered_cert(finality_proof_clone.clone());
         update_counters_for_ordered_blocks(&blocks_to_commit);
-
         Ok(())
     }
 

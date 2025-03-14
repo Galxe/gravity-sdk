@@ -182,6 +182,14 @@ pub static EXECUTED_BLOCK_COUNTER: Lazy<Gauge> = Lazy::new(|| {
     .unwrap()
 });
 
+pub static SEND_TO_EXECUTION_BLOCK_COUNTER: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "aptos_consensus_buffer_manager_send_to_execution_block_counter",
+        "Number of blocks sent to execution layer"
+    )
+    .unwrap()
+});
+
 pub static CREATED_EXECUTED_BLOCK_COUNTER: Lazy<IntCounter> = Lazy::new(|| {
     register_int_counter!(
         "aptos_consensus_buffer_manager_created_executed_block_counter",
