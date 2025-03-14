@@ -99,6 +99,7 @@ pub struct RawTransaction {
 
 impl fmt::Debug for RawTransaction {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        
         f.debug_struct("RawTransaction").field("sender", &self.sender).field("sequence_number", &self.sequence_number).field("max_gas_amount", &self.max_gas_amount).field("gas_unit_price", &self.gas_unit_price).field("expiration_timestamp_secs", &self.expiration_timestamp_secs).field("chain_id", &self.chain_id).finish()
     }
 }

@@ -289,7 +289,6 @@ impl RecoveryData {
                 order_vote_enabled,
             )?;
         }
-        println!("root info: {:?}", root);
         let blocks_to_prune = Some(vec![]);
         let epoch = root.0.epoch();
         Ok(RecoveryData {
@@ -485,13 +484,7 @@ impl PersistentLivenessStorage for StorageWriteProxy {
                         .delete_highest_2chain_timeout_certificate()
                         .expect("unable to cleanup highest 2-chain timeout cert");
                 }
-                println!(
-                    "Starting up the consensus state machine with recovery data - [root block {:?}] [last_vote {}], [highest timeout certificate: {}]",
-                    initial_data.root_block(),
-                    initial_data.last_vote.as_ref().map_or("None".to_string(), |v| v.to_string()),
-                    initial_data.highest_2chain_timeout_certificate().as_ref().map_or("None".to_string(), |v| v.to_string()),
-                );
-                info!(
+                debug!(
                     "Starting up the consensus state machine with recovery data - [last_vote {}], [highest timeout certificate: {}]",
                     initial_data.last_vote.as_ref().map_or("None".to_string(), |v| v.to_string()),
                     initial_data.highest_2chain_timeout_certificate().as_ref().map_or("None".to_string(), |v| v.to_string()),

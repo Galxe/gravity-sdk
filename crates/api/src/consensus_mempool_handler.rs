@@ -72,7 +72,6 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
 
     async fn handle_consensus_notification(&mut self, notification: ConsensusNotification) {
         // Handle the notification
-        println!("receive consensus commit notification {:?}", notification);
         let result = match notification {
             ConsensusNotification::NotifyCommit(commit_notification) => {
                 self.handle_consensus_commit_notification(commit_notification).await
