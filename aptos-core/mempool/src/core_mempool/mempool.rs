@@ -55,6 +55,7 @@ impl Mempool {
             sender,
             sequence_number
         );
+        counters::MEMPOOL_TXN_COMMIT_COUNT.inc();
         self.transactions
             .commit_transaction(sender, sequence_number);
     }

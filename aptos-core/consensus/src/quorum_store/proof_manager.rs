@@ -239,7 +239,7 @@ impl ProofManager {
                         return_non_full,
                         block_timestamp,
                     );
-
+                counters::NUM_PROOF_OF_STORE_IN_PROPOSAL.observe(proof_block.len() as f64);
                 counters::NUM_BATCHES_WITHOUT_PROOF_OF_STORE.observe(self.batch_queue.len() as f64);
                 counters::PROOF_QUEUE_FULLY_UTILIZED
                     .observe(if proof_queue_fully_utilized { 1.0 } else { 0.0 });

@@ -151,6 +151,15 @@ pub static BATCH_GENERATOR_MAIN_LOOP: Lazy<DurationHistogram> = Lazy::new(|| {
     )
 });
 
+pub static PROCESS_TXN_IN_BATCH_GENERATOR: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "process_txn_in_batch_generator",
+        "Counter for the number of batches created"
+    )
+    .unwrap()
+});
+
+
 //////////////////////
 // NEW QUORUM STORE
 //////////////////////
@@ -235,6 +244,14 @@ pub static NUM_BATCHES_WITHOUT_PROOF_OF_STORE: Lazy<Histogram> = Lazy::new(|| {
         "num_batches_without_proof_of_store",
         "Histogram for the number of batches without proof of store in proof manager",
         TRANSACTION_COUNT_BUCKETS.clone(),
+    )
+    .unwrap()
+});
+
+pub static NUM_PROOF_OF_STORE_IN_PROPOSAL: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!(
+        "num_proof_of_store_in_proposal",
+        "Counter for the number of proof-of-store in block proposal"
     )
     .unwrap()
 });

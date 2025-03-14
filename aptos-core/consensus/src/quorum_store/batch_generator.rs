@@ -407,7 +407,8 @@ impl BatchGenerator {
 
         loop {
             let _timer = counters::BATCH_GENERATOR_MAIN_LOOP.start_timer();
-
+            counters::PROCESS_TXN_IN_BATCH_GENERATOR.reset();
+            counters::PROCESS_TXN_IN_BATCH_GENERATOR.inc_by(self.txns_in_progress_sorted.len() as u64);
             tokio::select! {
                 Some(updated_back_pressure) = back_pressure_rx.recv() => {
                     self.back_pressure = updated_back_pressure;
