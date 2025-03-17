@@ -1,5 +1,6 @@
 use alloy_eips::BlockHashOrNumber;
 use alloy_primitives::TxHash;
+use block_buffer_manager::block_buffer_manager::BlockBufferManager;
 use greth::gravity_storage;
 use greth::reth;
 use greth::reth::chainspec::EthereumChainSpecParser;
@@ -35,8 +36,10 @@ mod reth_cli;
 mod reth_coordinator;
 
 use crate::cli::Cli;
+use std::cell::OnceCell;
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::thread;
 
 use crate::reth_cli::RethCli;
@@ -45,6 +48,8 @@ use reth_node_builder::engine_tree_config;
 use reth_node_builder::EngineNodeLauncher;
 use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
 use reth_provider::providers::BlockchainProvider;
+
+static BLOCK_BUFFER_MANAGER : OnceLock<Arc<BlockBufferManager>> = OnceLock::new();
 
 struct ConsensusArgs {
     pub engine_api: AuthServerHandle,
@@ -151,6 +156,7 @@ fn run_reth(
 }
 
 fn main() {
+    BLOCK_BUFFER_MANAGER.get_or_init(|| Arc::new(BlockBufferManager::new()));
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
 
     let cli = Cli::parse();
