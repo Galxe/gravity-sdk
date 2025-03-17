@@ -11,50 +11,6 @@ resolver = "2"
 [workspace]
 members = [
     "aptos-core/consensus",
-    # "dependencies/crash-handler",
-    # "dependencies/aptos-bitvec",
-    # "dependencies/aptos-build-info",
-    # "dependencies/aptos-bounded-executor",
-    # "dependencies/aptos-cached-packages",
-    # "dependencies/aptos-channels",
-    # "dependencies/aptos-collections",
-    # "dependencies/aptos-config",
-    # "dependencies/aptos-consensus-notifications",
-    # "dependencies/aptos-crypto",
-    # "dependencies/aptos-crypto-derive",
-    # "dependencies/aptos-dkg",
-    # "dependencies/aptos-enum-conversion-derive",
-    # "dependencies/aptos-event-notifications",
-    # "dependencies/aptos-executor",
-    # "dependencies/aptos-executor-test-helpers",
-    # "dependencies/aptos-executor-types",
-    # "dependencies/aptos-experimental-runtimes",
-    # "dependencies/aptos-fallible",
-    # "dependencies/aptos-global-constants",
-    # "dependencies/aptos-infallible",
-    # "dependencies/aptos-inspection-service",
-    # "dependencies/aptos-keygen",
-    # "dependencies/aptos-logger",
-    # "dependencies/aptos-metrics-core",
-    # "dependencies/aptos-peer-monitoring-service-types",
-    # "dependencies/aptos-proptest-helpers",
-    # "dependencies/aptos-reliable-broadcast",
-    # "dependencies/aptos-runtimes",
-    # "dependencies/aptos-schemadb",
-    # "dependencies/aptos-secure-net",
-    # "dependencies/aptos-secure-storage",
-    # "dependencies/aptos-short-hex-str",
-    # "dependencies/aptos-storage-interface",
-    # "dependencies/aptos-temppath",
-    # "dependencies/aptos-time-service",
-    # "dependencies/aptos-types",
-    # "dependencies/aptos-validator-transaction-pool",
-    # "dependencies/aptos-vault-client",
-    # "dependencies/aptos-log-derive",
-    # "dependencies/move-core-types",
-    # "dependencies/aptos-telemetry",
-    # "dependencies/aptos-telemetry-service",
-    # "dependencies/node-resource-metrics",
     "crates/api",
     "crates/api-types",
     "bin/kvstore",
@@ -68,64 +24,8 @@ members = [
 aptos-consensus = { path = "./aptos-core/consensus" }
 #  from aptos =======================
 gaptos = { git = "https://github.com/Galxe/gravity-aptos.git", branch = "dev-0313-lib"}
-# aptos-id-generator = { path = "./dependencies/aptos-id-generator" }
-# aptos-compression = { path = "./dependencies/aptos-compression" }
-# aptos-proptest-helpers = { path = "./dependencies/aptos-proptest-helpers" }
-# aptos-bitvec = { path = "./dependencies/aptos-bitvec", features = ["fuzzing"] }
-# aptos-crash-handler = { path = "./dependencies/crash-handler" }
-# aptos-bounded-executor = { path = "./dependencies/aptos-bounded-executor" }
-# aptos-cached-packages = { path = "./dependencies/aptos-cached-packages" }
-# aptos-channels = { path = "./dependencies/aptos-channels" }
-# aptos-collections = { path = "./dependencies/aptos-collections" }
-# aptos-config = { path = "./dependencies/aptos-config", features = ["fuzzing"] }
-# aptos-consensus-notifications = { path = "./dependencies/aptos-consensus-notifications" }
-# aptos-crypto = { path = "./dependencies/aptos-crypto" }
-# aptos-crypto-derive = { path = "./dependencies/aptos-crypto-derive" }
-# aptos-dkg = { path = "./dependencies/aptos-dkg" }
-# aptos-enum-conversion-derive = { path = "./dependencies/aptos-enum-conversion-derive" }
-# aptos-event-notifications = { path = "./dependencies/aptos-event-notifications" }
-# aptos-executor = { path = "./dependencies/aptos-executor" }
-# aptos-executor-test-helpers = { path = "./dependencies/aptos-executor-test-helpers" }
-# aptos-executor-types = { path = "./dependencies/aptos-executor-types", features = [
-#     "fuzzing",
-# ] }
-# aptos-experimental-runtimes = { path = "./dependencies/aptos-experimental-runtimes" }
-# aptos-fallible = { path = "./dependencies/aptos-fallible" }
-# aptos-global-constants = { path = "./dependencies/aptos-global-constants" }
-# aptos-infallible = { path = "./dependencies/aptos-infallible" }
-# aptos-inspection-service = { path = "./dependencies/aptos-inspection-service" }
-# aptos-build-info = { path = "./dependencies/aptos-build-info" }
-# aptos-keygen = { path = "./dependencies/aptos-keygen" }
-# aptos-logger = { path = "./dependencies/aptos-logger" }
-# aptos-mempool-notifications = { path = "./dependencies/mempool-notifications" }
-# aptos-metrics-core = { path = "./dependencies/aptos-metrics-core" }
-# aptos-peer-monitoring-service-types = { path = "./dependencies/aptos-peer-monitoring-service-types" }
-# aptos-reliable-broadcast = { path = "./dependencies/aptos-reliable-broadcast" }
-# aptos-runtimes = { path = "./dependencies/aptos-runtimes" }
-# aptos-schemadb = { path = "./dependencies/aptos-schemadb", features = [
-#     "fuzzing",
-# ] }
-# aptos-node-resource-metrics = { path = "./dependencies/node-resource-metrics" }
 api = { path = "./crates/api" }
 api-types = { path = "./crates/api-types" }
-# aptos-secure-net = { path = "./dependencies/aptos-secure-net" }
-# aptos-secure-storage = { path = "./dependencies/aptos-secure-storage" }
-# aptos-short-hex-str = { path = "./dependencies/aptos-short-hex-str" }
-# aptos-storage-interface = { path = "./dependencies/aptos-storage-interface" }
-# aptos-temppath = { path = "./dependencies/aptos-temppath" }
-# aptos-time-service = { path = "./dependencies/aptos-time-service", features = [
-#     "async",
-# ] }
-# aptos-types = { path = "./dependencies/aptos-types" }
-# aptos-validator-transaction-pool = { path = "./dependencies/aptos-validator-transaction-pool" }
-# aptos-vault-client = { path = "./dependencies/aptos-vault-client" }
-# aptos-log-derive = { path = "./dependencies/aptos-log-derive" }
-# aptos-rest-client = { path = "./dependencies/aptos-rest-client" }
-# move-core-types = { path = "./dependencies/move-core-types" }
-# aptos-proxy = { path = "./dependencies/proxy" }
-# aptos-num-variants = { path = "./dependencies/num-variants" }
-# aptos-telemetry = { path = "./dependencies/aptos-telemetry" }
-# aptos-telemetry-service = { path = "./dependencies/aptos-telemetry-service" }
 
 # core ----
 aptos-consensus-types = { path = "./aptos-core/consensus/consensus-types", features = [
