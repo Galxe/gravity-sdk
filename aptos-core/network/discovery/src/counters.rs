@@ -2,7 +2,7 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos_metrics_core::{
+use gaptos::aptos_metrics_core::{
     op_counters::DurationHistogram, register_histogram, register_int_counter_vec,
     register_int_gauge_vec, IntCounterVec, IntGaugeVec,
 };

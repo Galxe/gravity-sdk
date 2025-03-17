@@ -22,19 +22,19 @@ use anyhow::Result;
 use api_types::account::{ExternalAccountAddress, ExternalChainId};
 use api_types::u256_define::{BlockId, Random, TxnHash};
 use api_types::{ExternalBlock, ExternalBlockMeta};
-use aptos_consensus_notifications::ConsensusNotificationSender;
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_notifications::ConsensusNotificationSender;
+use gaptos::aptos_consensus_types::{
     block::Block, common::Round, pipeline_execution_result::PipelineExecutionResult,
     pipelined_block::PipelinedBlock,
 };
-use aptos_crypto::HashValue;
-use aptos_executor_types::{BlockExecutorTrait, ExecutorResult, StateComputeResult};
-use aptos_infallible::RwLock;
-use aptos_logger::prelude::*;
-use aptos_mempool::core_mempool::transaction::VerifiedTxn;
-use aptos_types::transaction::SignedTransaction;
-use aptos_types::validator_signer::ValidatorSigner;
-use aptos_types::{
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_executor_types::{BlockExecutorTrait, ExecutorResult, StateComputeResult};
+use gaptos::aptos_infallible::RwLock;
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_mempool::core_mempool::transaction::VerifiedTxn;
+use gaptos::aptos_types::transaction::SignedTransaction;
+use gaptos::aptos_types::validator_signer::ValidatorSigner;
+use gaptos::aptos_types::{
     account_address::AccountAddress, block_executor::config::BlockExecutorConfigFromOnchain,
     contract_event::ContractEvent, epoch_state::EpochState, ledger_info::LedgerInfoWithSignatures,
     randomness::Randomness, transaction::Transaction,
@@ -86,7 +86,7 @@ pub struct ExecutionProxy {
     executor: Arc<dyn BlockExecutorTrait>,
     txn_notifier: Arc<dyn TxnNotifier>,
     state_sync_notifier: Arc<dyn ConsensusNotificationSender>,
-    async_state_sync_notifier: aptos_channels::Sender<NotificationType>,
+    async_state_sync_notifier: gaptos::aptos_channels::Sender<NotificationType>,
     write_mutex: AsyncMutex<LogicalTime>,
     transaction_filter: Arc<TransactionFilter>,
     execution_pipeline: ExecutionPipeline,
@@ -123,7 +123,7 @@ impl ExecutionProxy {
         enable_pre_commit: bool,
     ) -> Self {
         let (tx, mut rx) =
-            aptos_channels::new::<NotificationType>(10, &counters::PENDING_STATE_SYNC_NOTIFICATION);
+            gaptos::aptos_channels::new::<NotificationType>(10, &counters::PENDING_STATE_SYNC_NOTIFICATION);
         let notifier = state_sync_notifier.clone();
         handle.spawn(async move {
             while let Some((callback, txns, subscribable_events)) = rx.next().await {
@@ -455,11 +455,11 @@ async fn test_commit_sync_race() {
         transaction_deduper::create_transaction_deduper,
         transaction_shuffler::create_transaction_shuffler,
     };
-    use aptos_config::config::transaction_filter_type::Filter;
-    use aptos_consensus_notifications::Error;
+    use gaptos::aptos_config::config::transaction_filter_type::Filter;
+    use gaptos::aptos_consensus_notifications::Error;
     
-    use aptos_infallible::Mutex;
-    use aptos_types::{
+    use gaptos::aptos_infallible::Mutex;
+    use gaptos::aptos_types::{
         aggregate_signature::AggregateSignature,
         block_executor::partitioner::ExecutableBlock,
         block_info::BlockInfo,

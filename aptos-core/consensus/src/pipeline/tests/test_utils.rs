@@ -3,22 +3,22 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{metrics_safety_rules::MetricsSafetyRules, test_utils::MockStorage};
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::{
     block::block_test_utils::certificate_for_genesis,
     common::{Payload, Round},
     pipelined_block::PipelinedBlock,
     quorum_cert::QuorumCert,
     vote_proposal::VoteProposal,
 };
-use aptos_crypto::{hash::ACCUMULATOR_PLACEHOLDER_HASH, HashValue};
-use aptos_executor_types::StateComputeResult;
-use aptos_infallible::Mutex;
-use aptos_safety_rules::{
+use gaptos::aptos_crypto::{hash::ACCUMULATOR_PLACEHOLDER_HASH, HashValue};
+use gaptos::aptos_executor_types::StateComputeResult;
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_safety_rules::{
     test_utils::{make_proposal_with_parent, make_proposal_with_qc},
     PersistentSafetyStorage, SafetyRulesManager,
 };
-use aptos_secure_storage::Storage;
-use aptos_types::{
+use gaptos::aptos_secure_storage::Storage;
+use gaptos::aptos_types::{
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
     validator_signer::ValidatorSigner,
     validator_verifier::random_validator_verifier,

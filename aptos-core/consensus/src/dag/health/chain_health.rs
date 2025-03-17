@@ -6,8 +6,8 @@ use crate::{
     dag::anchor_election::CommitHistory,
     liveness::{leader_reputation::VotingPowerRatio, proposal_generator::ChainHealthBackoffConfig},
 };
-use aptos_config::config::ChainHealthBackoffValues;
-use aptos_consensus_types::common::Round;
+use gaptos::aptos_config::config::ChainHealthBackoffValues;
+use gaptos::aptos_consensus_types::common::Round;
 use std::{sync::Arc, time::Duration};
 
 pub trait TChainHealth: Send + Sync {

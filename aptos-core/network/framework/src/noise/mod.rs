@@ -12,17 +12,17 @@
 //! Usage example:
 //!
 //! ```
-//! use aptos_network::noise::{AntiReplayTimestamps, HandshakeAuthMode, NoiseUpgrader};
+//! use gaptos::aptos_network::noise::{AntiReplayTimestamps, HandshakeAuthMode, NoiseUpgrader};
 //! use futures::{executor, future, io::{AsyncReadExt, AsyncWriteExt}};
-//! use aptos_memsocket::MemorySocket;
-//! use aptos_config::{config::{Peer, PeerRole}, network_id::{NetworkContext, NetworkId}};
-//! use aptos_crypto::{x25519, ed25519, Uniform, PrivateKey, test_utils::TEST_SEED};
-//! use aptos_infallible::RwLock;
+//! use gaptos::aptos_memsocket::MemorySocket;
+//! use gaptos::aptos_config::{config::{Peer, PeerRole}, network_id::{NetworkContext, NetworkId}};
+//! use gaptos::aptos_crypto::{x25519, ed25519, Uniform, PrivateKey, test_utils::TEST_SEED};
+//! use gaptos::aptos_infallible::RwLock;
 //! use rand::{rngs::StdRng, SeedableRng};
-//! use aptos_types::PeerId;
+//! use gaptos::aptos_types::PeerId;
 //! use std::{collections::{HashSet, HashMap}, io, sync::Arc};
-//! use aptos_config::config::RoleType;
-//! use aptos_network::application::storage::PeersAndMetadata;
+//! use gaptos::aptos_config::config::RoleType;
+//! use gaptos::aptos_network::application::storage::PeersAndMetadata;
 //!
 //! fn example() -> io::Result<()> {
 //! // create client and server NoiseUpgrader

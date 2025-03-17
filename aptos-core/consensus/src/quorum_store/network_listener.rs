@@ -9,14 +9,14 @@ use crate::{
     },
     round_manager::VerifiedEvent,
 };
-use aptos_channels::aptos_channel;
-use aptos_logger::prelude::*;
-use aptos_types::PeerId;
+use gaptos::aptos_channels::aptos_channel;
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_types::PeerId;
 use futures::StreamExt;
 use tokio::sync::mpsc::Sender;
 
 pub(crate) struct NetworkListener {
-    network_msg_rx: aptos_channel::Receiver<PeerId, VerifiedEvent>,
+    network_msg_rx: gaptos::aptos_channel::Receiver<PeerId, VerifiedEvent>,
     proof_coordinator_tx: Sender<ProofCoordinatorCommand>,
     remote_batch_coordinator_tx: Vec<Sender<BatchCoordinatorCommand>>,
     proof_manager_tx: Sender<ProofManagerCommand>,
@@ -24,7 +24,7 @@ pub(crate) struct NetworkListener {
 
 impl NetworkListener {
     pub(crate) fn new(
-        network_msg_rx: aptos_channel::Receiver<PeerId, VerifiedEvent>,
+        network_msg_rx: gaptos::aptos_channel::Receiver<PeerId, VerifiedEvent>,
         proof_coordinator_tx: Sender<ProofCoordinatorCommand>,
         remote_batch_coordinator_tx: Vec<Sender<BatchCoordinatorCommand>>,
         proof_manager_tx: Sender<ProofManagerCommand>,

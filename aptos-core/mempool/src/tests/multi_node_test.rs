@@ -12,12 +12,12 @@ use crate::{
     }
 };
 use api_types::VerifiedTxn;
-use aptos_config::{
+use gaptos::aptos_config::{
     config::{NodeConfig, PeerRole},
     network_id::{NetworkId, PeerNetworkId},
 };
-use aptos_netcore::transport::ConnectionOrigin;
-use aptos_network::{
+use gaptos::aptos_netcore::transport::ConnectionOrigin;
+use gaptos::aptos_network::{
     peer_manager::PeerManagerRequest,
     protocols::{
         direct_send::Message,
@@ -26,7 +26,7 @@ use aptos_network::{
     },
     ProtocolId,
 };
-use aptos_types::{transaction::SignedTransaction, PeerId};
+use gaptos::aptos_types::{transaction::SignedTransaction, PeerId};
 use maplit::btreemap;
 use rand::{rngs::StdRng, SeedableRng};
 use std::collections::HashMap;

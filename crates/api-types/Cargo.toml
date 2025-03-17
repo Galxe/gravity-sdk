@@ -17,6 +17,6 @@ ruint = { workspace = true }
 serde = { workspace = true }
 rand = { workspace = true }
 hex = "0.4.3"
-aptos-crypto = { workspace = true }
+gaptos = { workspace = true }
 sha2 = { workspace = true }
 once_cell = { workspace = true }

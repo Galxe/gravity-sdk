@@ -24,7 +24,7 @@ use crate::{
 };
 use anyhow::{anyhow, bail};
 use api_types::{u256_define::BlockId, ExecutionChannel, ExecutionLayer, RecoveryApi};
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::{
     block::Block,
     block_retrieval::{
         BlockRetrievalRequest, BlockRetrievalResponse, BlockRetrievalStatus, NUM_PEERS_PER_RETRY,
@@ -35,11 +35,11 @@ use aptos_consensus_types::{
     sync_info::SyncInfo,
     wrapped_ledger_info::WrappedLedgerInfo,
 };
-use aptos_crypto::{hash::GENESIS_BLOCK_ID, HashValue};
-use aptos_infallible::Mutex;
-use aptos_logger::prelude::*;
-use aptos_schemadb::SchemaBatch;
-use aptos_types::{
+use gaptos::aptos_crypto::{hash::GENESIS_BLOCK_ID, HashValue};
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_schemadb::SchemaBatch;
+use gaptos::aptos_types::{
     account_address::AccountAddress, epoch_change::EpochChangeProof,
     ledger_info::{self, LedgerInfoWithSignatures},
 };

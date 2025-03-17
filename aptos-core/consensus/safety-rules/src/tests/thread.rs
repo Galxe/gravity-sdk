@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{test_utils, tests::suite, SafetyRulesManager};
-use aptos_types::validator_signer::ValidatorSigner;
+use gaptos::aptos_types::validator_signer::ValidatorSigner;
 
 #[test]
 fn test() {

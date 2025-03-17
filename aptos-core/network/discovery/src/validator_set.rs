@@ -6,16 +6,16 @@ use crate::{
     counters::{DISCOVERY_COUNTS, EVENT_PROCESSING_LOOP_BUSY_DURATION_S, NETWORK_KEY_MISMATCH},
     DiscoveryError,
 };
-use aptos_config::{
+use gaptos::aptos_config::{
     config::{Peer, PeerRole, PeerSet},
     network_id::NetworkContext,
 };
-use aptos_crypto::x25519;
-use aptos_event_notifications::ReconfigNotificationListener;
-use aptos_logger::prelude::*;
-use aptos_network::{counters::inc_by_with_context, logging::NetworkSchema};
-use aptos_short_hex_str::AsShortHexStr;
-use aptos_types::on_chain_config::{OnChainConfigPayload, OnChainConfigProvider, ValidatorSet};
+use gaptos::aptos_crypto::x25519;
+use gaptos::aptos_event_notifications::ReconfigNotificationListener;
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_network::{counters::inc_by_with_context, logging::NetworkSchema};
+use gaptos::aptos_short_hex_str::AsShortHexStr;
+use gaptos::aptos_types::on_chain_config::{OnChainConfigPayload, OnChainConfigProvider, ValidatorSet};
 use futures::Stream;
 use std::{
     collections::HashSet,
@@ -154,11 +154,11 @@ pub(crate) fn extract_validator_set_updates(
 mod tests {
     use super::*;
     use crate::DiscoveryChangeListener;
-    use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-    use aptos_config::config::HANDSHAKE_VERSION;
-    use aptos_crypto::{bls12381, x25519::PrivateKey, PrivateKey as PK, Uniform};
-    use aptos_event_notifications::ReconfigNotification;
-    use aptos_types::{
+    use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
+    use gaptos::aptos_config::config::HANDSHAKE_VERSION;
+    use gaptos::aptos_crypto::{bls12381, x25519::PrivateKey, PrivateKey as PK, Uniform};
+    use gaptos::aptos_event_notifications::ReconfigNotification;
+    use gaptos::aptos_types::{
         network_address::NetworkAddress,
         on_chain_config::{InMemoryOnChainConfig, OnChainConfig},
         validator_config::ValidatorConfig,
@@ -175,17 +175,17 @@ mod tests {
 
     #[test]
     fn metric_if_key_mismatch() {
-        aptos_logger::Logger::init_for_testing();
+        gaptos::aptos_logger::Logger::init_for_testing();
         let runtime = Runtime::new().unwrap();
         let consensus_private_key = bls12381::PrivateKey::generate_for_testing();
         let consensus_pubkey = consensus_private_key.public_key();
         let pubkey = test_pubkey([0u8; 32]);
         let different_pubkey = test_pubkey([1u8; 32]);
-        let peer_id = aptos_types::account_address::from_identity_public_key(pubkey);
+        let peer_id = gaptos::aptos_types::account_address::from_identity_public_key(pubkey);
 
         // Build up the Reconfig Listener
-        let (conn_mgr_reqs_tx, _rx) = aptos_channels::new_test(1);
-        let (mut reconfig_sender, reconfig_events) = aptos_channel::new(QueueStyle::LIFO, 1, None);
+        let (conn_mgr_reqs_tx, _rx) = gaptos::aptos_channels::new_test(1);
+        let (mut reconfig_sender, reconfig_events) = gaptos::aptos_channel::new(QueueStyle::LIFO, 1, None);
         let reconfig_listener = ReconfigNotificationListener {
             notification_receiver: reconfig_events,
         };
@@ -239,7 +239,7 @@ mod tests {
         peer_id: PeerId,
         consensus_pubkey: bls12381::PublicKey,
         pubkey: x25519::PublicKey,
-        reconfig_tx: &mut aptos_channels::aptos_channel::Sender<
+        reconfig_tx: &mut gaptos::aptos_channels::aptos_channel::Sender<
             (),
             ReconfigNotification<InMemoryOnChainConfig>,
         >,

@@ -5,8 +5,8 @@ use crate::{
     common::DataStatus,
     proof_of_store::{BatchInfo, ProofOfStore},
 };
-use aptos_infallible::Mutex;
-use aptos_types::{transaction::SignedTransaction, PeerId};
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_types::{transaction::SignedTransaction, PeerId};
 use core::fmt;
 use serde::{Deserialize, Serialize};
 use std::{

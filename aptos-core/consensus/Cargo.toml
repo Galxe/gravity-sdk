@@ -14,39 +14,7 @@ rust-version = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
-aptos-bitvec = { workspace = true }
-aptos-bounded-executor = { workspace = true }
-aptos-channels = { workspace = true }
-aptos-collections = { workspace = true }
-aptos-config = { workspace = true }
-aptos-consensus-notifications = { workspace = true }
-aptos-consensus-types = { workspace = true }
-aptos-crypto = { workspace = true }
-aptos-crypto-derive = { workspace = true }
-aptos-dkg = { workspace = true }
-aptos-enum-conversion-derive = { workspace = true }
-aptos-event-notifications = { workspace = true }
-aptos-executor = { workspace = true }
-aptos-executor-types = { workspace = true }
-aptos-experimental-runtimes = { workspace = true }
-aptos-fallible = { workspace = true }
-aptos-infallible = { workspace = true }
-aptos-logger = { workspace = true }
-aptos-mempool = { workspace = true }
-aptos-metrics-core = { workspace = true }
-aptos-network = { workspace = true }
-aptos-peer-monitoring-service-types = { workspace = true }
-aptos-reliable-broadcast = { workspace = true }
-aptos-runtimes = { workspace = true }
-aptos-safety-rules = { workspace = true }
-aptos-schemadb = { workspace = true }
-aptos-secure-storage = { workspace = true }
-aptos-storage-interface = { workspace = true }
-aptos-temppath = { workspace = true }
-aptos-time-service = { workspace = true }
-aptos-types = { workspace = true }
-aptos-validator-transaction-pool = { workspace = true }
-async-trait = { workspace = true }
+gaptos = { workspace = true }
 bcs = { workspace = true }
 byteorder = { workspace = true }
 bytes = { workspace = true }
@@ -64,7 +32,6 @@ lru = { workspace = true }
 maplit = { workspace = true }
 mini-moka = { workspace = true }
 mirai-annotations = { workspace = true }
-move-core-types = { workspace = true }
 num-derive = { workspace = true }
 num-traits = { workspace = true }
 once_cell = { workspace = true }
@@ -89,17 +56,9 @@ rocksdb = { workspace = true }
 
 
 [dev-dependencies]
-aptos-cached-packages = { workspace = true }
-aptos-config = { workspace = true, features = ["fuzzing"] }
-aptos-consensus-types = { workspace = true, features = ["fuzzing"] }
-aptos-executor-test-helpers = { workspace = true }
-aptos-keygen = { workspace = true }
-aptos-mempool = { workspace = true, features = ["fuzzing"] }
-aptos-network = { workspace = true, features = ["fuzzing"] }
-aptos-safety-rules = { workspace = true, features = ["testing"] }
+gaptos = { workspace = true }
 claims = { workspace = true }
 mockall = { workspace = true }
-move-core-types = { workspace = true }
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
 tempfile = { workspace = true }
@@ -107,14 +66,6 @@ rocksdb = { workspace = true }
 
 [features]
 default = []
-fuzzing = [
-    "aptos-consensus-types/fuzzing",
-    "aptos-config/fuzzing",
-    "aptos-crypto/fuzzing",
-    "aptos-mempool/fuzzing",
-    "aptos-types/fuzzing",
-    "aptos-safety-rules/testing",
-]
 failpoints = ["fail/failpoints"]
 
 [package.metadata.cargo-machete]

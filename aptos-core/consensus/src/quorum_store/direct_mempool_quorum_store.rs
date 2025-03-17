@@ -3,13 +3,13 @@
 
 use crate::{monitor, quorum_store::counters};
 use anyhow::Result;
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::{
     common::{Payload, PayloadFilter, TransactionInProgress, TransactionSummary},
     request_response::{GetPayloadCommand, GetPayloadResponse},
 };
-use aptos_logger::prelude::*;
-use aptos_mempool::{QuorumStoreRequest, QuorumStoreResponse};
-use aptos_types::transaction::SignedTransaction;
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_mempool::{QuorumStoreRequest, QuorumStoreResponse};
+use gaptos::aptos_types::transaction::SignedTransaction;
 use futures::{
     channel::{
         mpsc::{Receiver, Sender},

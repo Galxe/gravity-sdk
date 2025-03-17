@@ -6,28 +6,28 @@ use std::{
 
 use crate::network::{build_network_interfaces, consensus_network_configuration, extract_network_ids, mempool_network_configuration};
 use api_types::ExecutionChannel;
-use aptos_config::{
+use gaptos::aptos_config::{
     config::{NetworkConfig, NodeConfig, Peer, PeerRole},
     network_id::NetworkId,
 };
-use aptos_consensus::consensusdb::ConsensusDB;
-use aptos_consensus::{
+use gaptos::aptos_consensus::consensusdb::ConsensusDB;
+use gaptos::aptos_consensus::{
     gravity_state_computer::ConsensusAdapterArgs, network_interface::ConsensusMsg,
     persistent_liveness_storage::StorageWriteProxy, quorum_store::quorum_store_db::QuorumStoreDB,
 };
-use aptos_consensus_notifications::ConsensusNotifier;
-use aptos_crypto::x25519;
-use aptos_event_notifications::EventSubscriptionService;
-use aptos_mempool::{MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest};
-use aptos_mempool_notifications::MempoolNotificationListener;
-use aptos_network::application::{
+use gaptos::aptos_consensus_notifications::ConsensusNotifier;
+use gaptos::aptos_crypto::x25519;
+use gaptos::aptos_event_notifications::EventSubscriptionService;
+use gaptos::aptos_mempool::{MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest};
+use gaptos::aptos_mempool_notifications::MempoolNotificationListener;
+use gaptos::aptos_network::application::{
     interface::{NetworkClient, NetworkServiceEvents},
     storage::PeersAndMetadata,
 };
-use aptos_network_builder::builder::NetworkBuilder;
-use aptos_storage_interface::DbReaderWriter;
-use aptos_types::account_address::AccountAddress;
-use aptos_validator_transaction_pool::VTxnPoolState;
+use gaptos::aptos_network_builder::builder::NetworkBuilder;
+use gaptos::aptos_storage_interface::DbReaderWriter;
+use gaptos::aptos_types::account_address::AccountAddress;
+use gaptos::aptos_validator_transaction_pool::VTxnPoolState;
 use futures::channel::mpsc::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
 use tokio::runtime::Runtime;
@@ -90,7 +90,7 @@ pub fn start_node_inspection_service(
     node_config: &NodeConfig,
     peers_and_metadata: Arc<PeersAndMetadata>,
 ) {
-    aptos_inspection_service::start_inspection_service(node_config.clone(), peers_and_metadata)
+    gaptos::aptos_inspection_service::start_inspection_service(node_config.clone(), peers_and_metadata)
 }
 
 pub fn start_consensus(
@@ -107,7 +107,7 @@ pub fn start_consensus(
         .expect("Consensus must subscribe to reconfigurations");
     let vtxn_pool = VTxnPoolState::default();
     // TODO(gravity_byteyue: return quorum store client also)
-    aptos_consensus::consensus_provider::start_consensus(
+    gaptos::aptos_consensus::consensus_provider::start_consensus(
         &node_config,
         consensus_network_interfaces.network_client,
         consensus_network_interfaces.network_service_events,
@@ -135,7 +135,7 @@ pub fn init_mempool(
     let mempool_reconfig_subscription = event_subscription_service
         .subscribe_to_reconfigurations()
         .expect("Mempool must subscribe to reconfigurations");
-    aptos_mempool::bootstrap(
+    gaptos::aptos_mempool::bootstrap(
         &node_config,
         Arc::clone(&db.reader),
         mempool_interfaces.network_client,

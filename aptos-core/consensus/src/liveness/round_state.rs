@@ -7,14 +7,14 @@ use crate::{
     pending_votes::{PendingVotes, VoteReceptionResult},
     util::time_service::{SendTask, TimeService},
 };
-use aptos_config::config::QcAggregatorType;
-use aptos_consensus_types::{
+use gaptos::aptos_config::config::QcAggregatorType;
+use gaptos::aptos_consensus_types::{
     common::Round, delayed_qc_msg::DelayedQcMsg, sync_info::SyncInfo,
     timeout_2chain::TwoChainTimeoutWithPartialSignatures, vote::Vote,
 };
-use aptos_crypto::HashValue;
-use aptos_logger::{prelude::*, Schema};
-use aptos_types::{
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_logger::{prelude::*, Schema};
+use gaptos::aptos_types::{
     ledger_info::LedgerInfoWithPartialSignatures, validator_verifier::ValidatorVerifier,
 };
 use futures::future::AbortHandle;
@@ -156,7 +156,7 @@ pub struct RoundState {
     // Service for timer
     time_service: Arc<dyn TimeService>,
     // To send local timeout events to the subscriber (e.g., SMR)
-    timeout_sender: aptos_channels::Sender<Round>,
+    timeout_sender: gaptos::aptos_channels::Sender<Round>,
     // Votes received for the current round.
     pending_votes: PendingVotes,
     // Vote sent locally for the current round.
@@ -193,7 +193,7 @@ impl RoundState {
     pub fn new(
         time_interval: Box<dyn RoundTimeInterval>,
         time_service: Arc<dyn TimeService>,
-        timeout_sender: aptos_channels::Sender<Round>,
+        timeout_sender: gaptos::aptos_channels::Sender<Round>,
         delayed_qc_tx: UnboundedSender<DelayedQcMsg>,
         qc_aggregator_type: QcAggregatorType,
     ) -> Self {

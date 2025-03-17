@@ -9,10 +9,10 @@ use crate::{
     error::QuorumStoreError,
     payload_client::{user::UserPayloadClient, PayloadClient},
 };
-use aptos_consensus_types::common::{Payload, PayloadFilter};
-use aptos_logger::debug;
-use aptos_types::{on_chain_config::ValidatorTxnConfig, validator_txn::ValidatorTransaction};
-use aptos_validator_transaction_pool as vtxn_pool;
+use gaptos::aptos_consensus_types::common::{Payload, PayloadFilter};
+use gaptos::aptos_logger::debug;
+use gaptos::aptos_types::{on_chain_config::ValidatorTxnConfig, validator_txn::ValidatorTransaction};
+use gaptos::aptos_validator_transaction_pool as vtxn_pool;
 use fail::fail_point;
 use futures::future::BoxFuture;
 #[cfg(test)]
@@ -47,8 +47,8 @@ impl MixedPayloadClient {
     /// When enabled in smoke tests, generate 2 random validator transactions, 1 valid, 1 invalid.
     fn extra_test_only_vtxns(&self) -> Vec<ValidatorTransaction> {
         fail_point!("mixed_payload_client::extra_test_only_vtxns", |_| {
-            use aptos_types::dkg::{DKGTranscript, DKGTranscriptMetadata};
-            use move_core_types::account_address::AccountAddress;
+            use gaptos::aptos_types::dkg::{DKGTranscript, DKGTranscriptMetadata};
+            use gaptos::move_core_types::account_address::AccountAddress;
 
             vec![ValidatorTransaction::DKGResult(DKGTranscript {
                 metadata: DKGTranscriptMetadata {
@@ -171,7 +171,7 @@ async fn mixed_payload_client_should_prioritize_validator_txns() {
             false,
             0,
             0.,
-            aptos_infallible::duration_since_epoch(),
+            gaptos::aptos_infallible::duration_since_epoch(),
         )
         .await
         .unwrap()
@@ -197,7 +197,7 @@ async fn mixed_payload_client_should_prioritize_validator_txns() {
             false,
             0,
             0.,
-            aptos_infallible::duration_since_epoch(),
+            gaptos::aptos_infallible::duration_since_epoch(),
         )
         .await
         .unwrap()
@@ -223,7 +223,7 @@ async fn mixed_payload_client_should_prioritize_validator_txns() {
             false,
             0,
             0.,
-            aptos_infallible::duration_since_epoch(),
+            gaptos::aptos_infallible::duration_since_epoch(),
         )
         .await
         .unwrap()
@@ -249,7 +249,7 @@ async fn mixed_payload_client_should_prioritize_validator_txns() {
             false,
             0,
             0.,
-            aptos_infallible::duration_since_epoch(),
+            gaptos::aptos_infallible::duration_since_epoch(),
         )
         .await
         .unwrap()
@@ -293,7 +293,7 @@ async fn mixed_payload_client_should_respect_validator_txn_feature_flag() {
             false,
             0,
             0.,
-            aptos_infallible::duration_since_epoch(),
+            gaptos::aptos_infallible::duration_since_epoch(),
         )
         .await
         .unwrap()

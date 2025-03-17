@@ -13,8 +13,8 @@ use crate::{
     qc_aggregator::{create_qc_aggregator, QcAggregator},
     util::time_service::TimeService,
 };
-use aptos_config::config::QcAggregatorType;
-use aptos_consensus_types::{
+use gaptos::aptos_config::config::QcAggregatorType;
+use gaptos::aptos_consensus_types::{
     common::Author,
     delayed_qc_msg::DelayedQcMsg,
     quorum_cert::QuorumCert,
@@ -22,9 +22,9 @@ use aptos_consensus_types::{
     vote::Vote,
     vote_data::VoteData,
 };
-use aptos_crypto::{hash::CryptoHash, HashValue};
-use aptos_logger::prelude::*;
-use aptos_types::{
+use gaptos::aptos_crypto::{hash::CryptoHash, HashValue};
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_types::{
     aggregate_signature::PartialSignatures,
     ledger_info::LedgerInfoWithPartialSignatures,
     validator_verifier::{ValidatorVerifier, VerifyError},
@@ -406,12 +406,12 @@ impl fmt::Display for PendingVotes {
 mod tests {
     use super::{PendingVotes, VoteReceptionResult};
     use crate::util::mock_time_service::SimulatedTimeService;
-    use aptos_config::config::QcAggregatorType;
-    use aptos_consensus_types::{
+    use gaptos::aptos_config::config::QcAggregatorType;
+    use gaptos::aptos_consensus_types::{
         block::block_test_utils::certificate_for_genesis, vote::Vote, vote_data::VoteData,
     };
-    use aptos_crypto::HashValue;
-    use aptos_types::{
+    use gaptos::aptos_crypto::HashValue;
+    use gaptos::aptos_types::{
         block_info::BlockInfo, ledger_info::LedgerInfo,
         validator_verifier::random_validator_verifier,
     };

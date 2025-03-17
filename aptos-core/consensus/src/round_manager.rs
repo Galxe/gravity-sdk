@@ -33,9 +33,9 @@ use crate::{
     util::is_vtxn_expected,
 };
 use anyhow::{bail, ensure, Context};
-use aptos_channels::aptos_channel;
-use aptos_config::config::ConsensusConfig;
-use aptos_consensus_types::{
+use gaptos::aptos_channels::aptos_channel;
+use gaptos::aptos_config::config::ConsensusConfig;
+use gaptos::aptos_consensus_types::{
     block::Block,
     block_data::BlockType,
     common::{Author, Round},
@@ -51,13 +51,13 @@ use aptos_consensus_types::{
     vote_msg::VoteMsg,
     wrapped_ledger_info::WrappedLedgerInfo,
 };
-use aptos_crypto::HashValue;
-use aptos_infallible::{checked, Mutex};
-use aptos_logger::prelude::*;
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_infallible::{checked, Mutex};
+use gaptos::aptos_logger::prelude::*;
 #[cfg(test)]
-use aptos_safety_rules::ConsensusState;
-use aptos_safety_rules::TSafetyRules;
-use aptos_types::{
+use gaptos::aptos_safety_rules::ConsensusState;
+use gaptos::aptos_safety_rules::TSafetyRules;
+use gaptos::aptos_types::{
     block_info::BlockInfo,
     epoch_state::EpochState,
     on_chain_config::{
@@ -239,7 +239,7 @@ pub struct RoundManager {
     storage: Arc<dyn PersistentLivenessStorage>,
     onchain_config: OnChainConsensusConfig,
     vtxn_config: ValidatorTxnConfig,
-    buffered_proposal_tx: aptos_channel::Sender<Author, VerifiedEvent>,
+    buffered_proposal_tx: gaptos::aptos_channel::Sender<Author, VerifiedEvent>,
     local_config: ConsensusConfig,
     randomness_config: OnChainRandomnessConfig,
     jwk_consensus_config: OnChainJWKConsensusConfig,
@@ -265,7 +265,7 @@ impl RoundManager {
         network: Arc<NetworkSender>,
         storage: Arc<dyn PersistentLivenessStorage>,
         onchain_config: OnChainConsensusConfig,
-        buffered_proposal_tx: aptos_channel::Sender<Author, VerifiedEvent>,
+        buffered_proposal_tx: gaptos::aptos_channel::Sender<Author, VerifiedEvent>,
         local_config: ConsensusConfig,
         randomness_config: OnChainRandomnessConfig,
         jwk_consensus_config: OnChainJWKConsensusConfig,
@@ -953,7 +953,7 @@ impl RoundManager {
 
     async fn resend_verified_proposal_to_self(
         block_store: Arc<BlockStore>,
-        self_sender: aptos_channel::Sender<Author, VerifiedEvent>,
+        self_sender: gaptos::aptos_channel::Sender<Author, VerifiedEvent>,
         proposal: Block,
         author: Author,
         polling_interval_ms: u64,
@@ -1435,11 +1435,11 @@ impl RoundManager {
     #[allow(clippy::unwrap_used)]
     pub async fn start(
         mut self,
-        mut event_rx: aptos_channel::Receiver<
+        mut event_rx: gaptos::aptos_channel::Receiver<
             (Author, Discriminant<VerifiedEvent>),
             (Author, VerifiedEvent),
         >,
-        mut buffered_proposal_rx: aptos_channel::Receiver<Author, VerifiedEvent>,
+        mut buffered_proposal_rx: gaptos::aptos_channel::Receiver<Author, VerifiedEvent>,
         mut delayed_qc_rx: UnboundedReceiver<DelayedQcMsg>,
         close_rx: oneshot::Receiver<oneshot::Sender<()>>,
     ) {

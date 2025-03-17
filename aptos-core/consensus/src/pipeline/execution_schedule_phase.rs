@@ -8,10 +8,10 @@ use crate::{
     },
     state_replication::StateComputer,
 };
-use aptos_consensus_types::pipelined_block::PipelinedBlock;
-use aptos_crypto::HashValue;
-use aptos_executor_types::ExecutorError;
-use aptos_logger::{debug, info};
+use gaptos::aptos_consensus_types::pipelined_block::PipelinedBlock;
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_executor_types::ExecutorError;
+use gaptos::aptos_logger::{debug, info};
 use async_trait::async_trait;
 use futures::TryFutureExt;
 use std::{

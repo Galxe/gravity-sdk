@@ -6,7 +6,7 @@ use crate::{
     network_interface::ConsensusMsg,
     quorum_store::types::{Batch, BatchRequest, BatchResponse},
 };
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::{
     common::Author,
     proof_of_store::{ProofOfStore, ProofOfStoreMsg, SignedBatchInfo, SignedBatchInfoMsg},
 };

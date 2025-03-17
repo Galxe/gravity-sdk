@@ -8,16 +8,16 @@ use crate::{
     MempoolClientSender, QuorumStoreRequest,
 };
 use anyhow::{format_err, Result};
-use aptos_channels::{self};
-use aptos_infallible::Mutex;
-use aptos_mempool_notifications::{self, MempoolNotifier};
-use aptos_network::protocols::network::{NewNetworkEvents, NewNetworkSender};
-use aptos_storage_interface::DbReaderWriter;
-use aptos_types::{
+use gaptos::aptos_channels::{self};
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_mempool_notifications::{self, MempoolNotifier};
+use gaptos::aptos_network::protocols::network::{NewNetworkEvents, NewNetworkSender};
+use gaptos::aptos_storage_interface::DbReaderWriter;
+use gaptos::aptos_types::{
     mempool_status::MempoolStatusCode,
     transaction::SignedTransaction,
 };
-// use aptos_vm_validator::{
+// use gaptos::aptos_vm_validator::{
 //     mocks::mock_vm_validator::MockVMValidator, vm_validator::TransactionValidation,
 // };
 use futures::channel::mpsc;
@@ -62,7 +62,7 @@ impl MockSharedMempool {
     /// Creates a mock shared mempool and runtime
     pub fn new_with_runtime() -> Self {
         // Create a runtime
-        let runtime = aptos_runtimes::spawn_named_runtime("shared-mem".into(), None);
+        let runtime = gaptos::aptos_runtimes::spawn_named_runtime("shared-mem".into(), None);
         let _entered_runtime = runtime.enter();
 
         // Create and return the shared mempool
@@ -103,9 +103,9 @@ impl MockSharedMempool {
         // config.validator_network = Some(NetworkConfig::network_with_id(NetworkId::Validator));
 
         // let mempool = Arc::new(Mutex::new(CoreMempool::new(&config)));
-        // let (network_reqs_tx, _network_reqs_rx) = aptos_channel::new(QueueStyle::FIFO, 8, None);
-        // let (connection_reqs_tx, _) = aptos_channel::new(QueueStyle::FIFO, 8, None);
-        // let (_network_notifs_tx, network_notifs_rx) = aptos_channel::new(QueueStyle::FIFO, 8, None);
+        // let (network_reqs_tx, _network_reqs_rx) = gaptos::aptos_channel::new(QueueStyle::FIFO, 8, None);
+        // let (connection_reqs_tx, _) = gaptos::aptos_channel::new(QueueStyle::FIFO, 8, None);
+        // let (_network_notifs_tx, network_notifs_rx) = gaptos::aptos_channel::new(QueueStyle::FIFO, 8, None);
         // let network_sender = NetworkSender::new(
         //     PeerManagerRequestSender::new(network_reqs_tx),
         //     ConnectionRequestSender::new(connection_reqs_tx),
@@ -114,8 +114,8 @@ impl MockSharedMempool {
         // let (ac_client, client_events) = mpsc::channel(1_024);
         // let (quorum_store_sender, quorum_store_receiver) = mpsc::channel(1_024);
         // let (mempool_notifier, mempool_listener) =
-        //     aptos_mempool_notifications::new_mempool_notifier_listener_pair(100);
-        // let (reconfig_sender, reconfig_events) = aptos_channel::new(QueueStyle::LIFO, 1, None);
+        //     gaptos::aptos_mempool_notifications::new_mempool_notifier_listener_pair(100);
+        // let (reconfig_sender, reconfig_events) = gaptos::aptos_channel::new(QueueStyle::LIFO, 1, None);
         // let reconfig_event_subscriber = ReconfigNotificationListener {
         //     notification_receiver: reconfig_events,
         // };

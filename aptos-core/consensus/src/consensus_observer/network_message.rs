@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::consensus_observer::error::Error;
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::{
     common::{BatchPayload, Payload},
     pipelined_block::PipelinedBlock,
     proof_of_store::{BatchInfo, ProofCache, ProofOfStore},
 };
-use aptos_crypto::hash::CryptoHash;
-use aptos_types::{
+use gaptos::aptos_crypto::hash::CryptoHash;
+use gaptos::aptos_types::{
     block_info::{BlockInfo, Round},
     epoch_change::Verifier,
     epoch_state::EpochState,
@@ -732,16 +732,16 @@ fn reconstruct_and_verify_batch(
 #[cfg(test)]
 mod test {
     use super::*;
-    use aptos_bitvec::BitVec;
-    use aptos_consensus_types::{
+    use gaptos::aptos_bitvec::BitVec;
+    use gaptos::aptos_consensus_types::{
         block::Block,
         block_data::{BlockData, BlockType},
         common::{Author, ProofWithData, ProofWithDataWithTxnLimit},
         proof_of_store::BatchId,
         quorum_cert::QuorumCert,
     };
-    use aptos_crypto::{ed25519::Ed25519PrivateKey, HashValue, PrivateKey, SigningKey, Uniform};
-    use aptos_types::{
+    use gaptos::aptos_crypto::{ed25519::Ed25519PrivateKey, HashValue, PrivateKey, SigningKey, Uniform};
+    use gaptos::aptos_types::{
         aggregate_signature::AggregateSignature,
         chain_id::ChainId,
         ledger_info::LedgerInfo,
@@ -751,7 +751,7 @@ mod test {
         PeerId,
     };
     use claims::assert_matches;
-    use move_core_types::account_address::AccountAddress;
+    use gaptos::move_core_types::account_address::AccountAddress;
 
     #[test]
     fn test_verify_against_ordered_payload_mempool() {

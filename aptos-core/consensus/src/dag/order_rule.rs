@@ -14,10 +14,10 @@ use crate::dag::{
     types::NodeMetadata,
     CertifiedNode,
 };
-use aptos_consensus_types::common::Round;
-use aptos_infallible::Mutex;
-use aptos_logger::debug;
-use aptos_types::epoch_state::EpochState;
+use gaptos::aptos_consensus_types::common::Round;
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_logger::debug;
+use gaptos::aptos_types::epoch_state::EpochState;
 use std::sync::Arc;
 
 pub trait TOrderRule: Send + Sync {

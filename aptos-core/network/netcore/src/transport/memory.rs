@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::transport::Transport;
-use aptos_memsocket::{MemoryListener, MemorySocket};
-use aptos_types::{
+use gaptos::aptos_memsocket::{MemoryListener, MemorySocket};
+use gaptos::aptos_types::{
     network_address::{parse_memory, NetworkAddress, Protocol},
     PeerId,
 };
@@ -102,7 +102,7 @@ impl Stream for Listener {
 #[cfg(test)]
 mod test {
     use crate::transport::{memory::MemoryTransport, Transport};
-    use aptos_types::PeerId;
+    use gaptos::aptos_types::PeerId;
     use futures::{
         executor::block_on,
         future::join,

@@ -19,7 +19,7 @@ use anyhow::{bail, ensure, format_err, Context};
 use api_types::{
     compute_res::ComputeRes, u256_define::{BlockId, Random}, ExecutionLayer, ExternalBlock, ExternalBlockMeta
 };
-use aptos_consensus_types::{
+use gaptos::aptos_consensus_types::{
     block::Block,
     common::Round,
     pipelined_block::{ExecutionSummary, PipelinedBlock},
@@ -28,12 +28,12 @@ use aptos_consensus_types::{
     timeout_2chain::TwoChainTimeoutCertificate,
     wrapped_ledger_info::WrappedLedgerInfo,
 };
-use aptos_crypto::HashValue;
-use aptos_executor_types::StateComputeResult;
-use aptos_infallible::{Mutex, RwLock};
-use aptos_logger::prelude::*;
-use aptos_mempool::core_mempool::transaction::VerifiedTxn;
-use aptos_types::{aggregate_signature::AggregateSignature, ledger_info::{LedgerInfo, LedgerInfoWithSignatures}};
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_executor_types::StateComputeResult;
+use gaptos::aptos_infallible::{Mutex, RwLock};
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_mempool::core_mempool::transaction::VerifiedTxn;
+use gaptos::aptos_types::{aggregate_signature::AggregateSignature, ledger_info::{LedgerInfo, LedgerInfoWithSignatures}};
 use futures::executor::block_on;
 use sha3::digest::generic_array::typenum::Le;
 
