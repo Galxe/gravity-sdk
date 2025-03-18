@@ -157,6 +157,10 @@ impl ExecutionChannel for RethCoordinator {
         if block_hash.is_none() {
             let reth_block_id = B256::from_slice(&head.block_id.0);
             info!("waiting for block hash for block {:?}", head);
+            // sleep 100ms
+            tokio::time::sleep(Duration::from_millis(
+                std::env::var("FUCK_SLEEEEEEEEEEP").unwrap_or(100)
+            )).await;
             block_hash = Some(self.reth_cli.recv_compute_res(reth_block_id).await.unwrap());
             {
                 self.state.lock().await.insert_new_block(head.block_id, block_hash.unwrap().into());
