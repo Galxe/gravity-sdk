@@ -159,7 +159,7 @@ impl ExecutionChannel for RethCoordinator {
             info!("waiting for block hash for block {:?}", head);
             // sleep 100ms
             tokio::time::sleep(Duration::from_millis(
-                std::env::var("FUCK_SLEEEEEEEEEEP").unwrap_or(100)
+                std::env::var("FUCK_SLEEEEEEEEEEP").unwrap_or("100".to_string()).parse().unwrap()
             )).await;
             block_hash = Some(self.reth_cli.recv_compute_res(reth_block_id).await.unwrap());
             {
