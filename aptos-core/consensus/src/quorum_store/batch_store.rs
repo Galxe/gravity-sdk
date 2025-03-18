@@ -161,7 +161,7 @@ impl BatchStore {
                 expiration,
                 digest
             );
-
+            // latest_ledgerinfo_time
             if last_certified_time >= expiration {
                 expired_keys.push(digest);
             } else {
@@ -374,14 +374,21 @@ impl BatchStore {
             info!("QS: get_batch_from_local {}", digest);
             if value.payload_storage_mode() == StorageMode::PersistedOnly {
                 info!("QS: get_batch_from_local persisted only {}", digest);
-                self.get_batch_from_db(digest)
+                return self.get_batch_from_db(digest);
             } else {
                 // Available in memory.
-                Ok(value.clone())
+                return Ok(value.clone());
             }
-        } else {
-            warn!("Could not get batch from local");
-            Err(ExecutorError::CouldNotGetData)
+        }
+        match self.get_batch_from_db(digest) {
+            Ok(value) => {
+                info!("QS: get_batch_from_db success {}", digest);
+                Ok(value)
+            },
+            Err(e) => {
+                error!("QS: get_batch_from_db error {}", e);
+                Err(e)
+            }
         }
     }
 
