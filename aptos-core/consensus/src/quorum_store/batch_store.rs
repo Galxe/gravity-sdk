@@ -371,13 +371,16 @@ impl BatchStore {
         digest: &HashValue,
     ) -> ExecutorResult<PersistedValue> {
         if let Some(value) = self.db_cache.get(digest) {
+            info!("QS: get_batch_from_local {}", digest);
             if value.payload_storage_mode() == StorageMode::PersistedOnly {
+                info!("QS: get_batch_from_local persisted only {}", digest);
                 self.get_batch_from_db(digest)
             } else {
                 // Available in memory.
                 Ok(value.clone())
             }
         } else {
+            warn!("Could not get batch from local");
             Err(ExecutorError::CouldNotGetData)
         }
     }
@@ -472,13 +475,14 @@ impl<T: QuorumStoreSender + Clone + Send + Sync + 'static> BatchReader for Batch
                     .send(Ok(value.take_payload().expect("Must have payload")))
                     .is_err()
                 {
-                    debug!(
+                    info!(
                         "Receiver of local batch not available for digest {}",
                         digest,
                     )
                 };
             } else {
                 // Quorum store metrics
+                info!("request from other node");
                 counters::MISSED_BATCHES_COUNT.inc();
                 let subscriber_rx = batch_store.subscribe(digest);
                 if let Some((batch_info, payload)) = batch_requester
