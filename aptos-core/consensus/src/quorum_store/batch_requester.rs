@@ -180,14 +180,14 @@ impl<T: QuorumStoreSender + Sync + 'static> BatchRequester<T> {
                                     && ledger_info.verify_signatures(&validator_verifier).is_ok()
                                 {
                                     counters::RECEIVED_BATCH_EXPIRED_COUNT.inc();
-                                    debug!("QS: batch request expired, digest:{}", digest);
+                                    info!("QS: batch request expired, digest:{}", digest);
                                     request_state.serve_request(digest, None);
                                     return None;
                                 }
                             }
                             Err(e) => {
                                 counters::RECEIVED_BATCH_RESPONSE_ERROR_COUNT.inc();
-                                debug!("QS: batch request error, digest:{}, error:{:?}", digest, e);
+                                info!("QS: batch request error, digest:{}, error:{:?}", digest, e);
                             }
                         }
                     },
@@ -207,7 +207,7 @@ impl<T: QuorumStoreSender + Sync + 'static> BatchRequester<T> {
                 }
             }
             counters::RECEIVED_BATCH_REQUEST_TIMEOUT_COUNT.inc();
-            debug!("QS: batch request timed out, digest:{}", digest);
+            info!("QS: batch request timed out, digest:{}", digest);
             request_state.serve_request(digest, None);
             None
         })
