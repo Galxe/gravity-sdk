@@ -209,7 +209,7 @@ impl BatchStore {
         {
             // Acquire dashmap internal lock on the entry corresponding to the digest.
             let cache_entry = self.db_cache.entry(digest);
-
+            info!("QS: insert_to_cache digest {}", digest);
             if let Occupied(entry) = &cache_entry {
                 if entry.get().expiration() >= expiration_time {
                     debug!(
@@ -370,6 +370,7 @@ impl BatchStore {
         &self,
         digest: &HashValue,
     ) -> ExecutorResult<PersistedValue> {
+        info!("try get_batch_from_local {} ", digest);
         if let Some(value) = self.db_cache.get(digest) {
             info!("QS: get_batch_from_local {}", digest);
             if value.payload_storage_mode() == StorageMode::PersistedOnly {
