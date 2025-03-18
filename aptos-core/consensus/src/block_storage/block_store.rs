@@ -476,6 +476,7 @@ impl BlockStore {
             self.time_service.wait_until(block_time).await;
         }
         if let Some(payload) = pipelined_block.block().payload() {
+            info!("prefetch payload data for block {:?} for payload {:?}", pipelined_block.block().block_number(), payload);
             self.payload_manager
                 .prefetch_payload_data(payload, pipelined_block.block().timestamp_usecs());
         }
