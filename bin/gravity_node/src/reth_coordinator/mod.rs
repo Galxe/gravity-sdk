@@ -122,7 +122,7 @@ impl ExecutionChannel for RethCoordinator {
         );
         {
             let mut state = self.state.lock().await;
-            if !state.cas_executed_block_number(block_number) {
+            if !state.can_executed_block_number(block_number) {
                 info!(
                     "The block number {} is executed, latest block number is {}",
                     block_number,
@@ -148,7 +148,7 @@ impl ExecutionChannel for RethCoordinator {
         &self,
         head: ExternalBlockMeta,
     ) -> Result<ComputeRes, ExecError> {
-        debug!("recv_executed_block_hash with head: {:?}", head);
+        info!("recv_executed_block_hash with head: {:?}", head);
         let mut block_hash = None;
         {
             let state = self.state.lock().await;
@@ -156,6 +156,7 @@ impl ExecutionChannel for RethCoordinator {
         }
         if block_hash.is_none() {
             let reth_block_id = B256::from_slice(&head.block_id.0);
+            info!("waiting for block hash for block {:?}", head);
             block_hash = Some(self.reth_cli.recv_compute_res(reth_block_id).await.unwrap());
             {
                 self.state.lock().await.insert_new_block(head.block_id, block_hash.unwrap().into());
@@ -171,11 +172,11 @@ impl ExecutionChannel for RethCoordinator {
     }
 
     async fn recv_committed_block_info(&self, block_id: BlockId) -> Result<(), ExecError> {
-        debug!("commit_block with block_id: {:?}", block_id);
+        info!("commit_block with block_id: {:?}", block_id);
         {
             let mut state = self.state.lock().await;
             let block_number = state.get_block_number(&block_id);
-            if !state.cas_committed_block_number(block_number) {
+            if !state.can_committed_block_number(block_number) {
                 info!(
                     "The block number {} is committed, latest block number is {}",
                     block_number,

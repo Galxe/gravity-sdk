@@ -78,10 +78,12 @@ impl State {
     }
 
     pub fn get_block_number(&self, block_id: &BlockId) -> u64 {
-        self.block_id_to_block_number.get(block_id).unwrap().clone()
+        self.block_id_to_block_number.get(block_id).unwrap_or_else(
+            || panic!("block_id_to_block_number not found {:?}", block_id),
+        ).clone()
     }
 
-    pub fn cas_executed_block_number(&mut self, executed_block_number: u64) -> bool {
+    pub fn can_executed_block_number(&mut self, executed_block_number: u64) -> bool {
         assert!(executed_block_number <= self.latest_executed_block_number + 1);
         if executed_block_number == self.latest_executed_block_number + 1 {
             self.latest_executed_block_number += 1;
@@ -90,7 +92,7 @@ impl State {
         false
     }
 
-    pub fn cas_committed_block_number(&mut self, committed_block_number: u64) -> bool {
+    pub fn can_committed_block_number(&mut self, committed_block_number: u64) -> bool {
         assert!(committed_block_number <= self.latest_committed_block_number + 1);
         if committed_block_number == self.latest_committed_block_number + 1 {
             self.latest_committed_block_number += 1;
