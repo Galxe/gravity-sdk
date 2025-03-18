@@ -49,8 +49,6 @@ use reth_node_builder::EngineNodeLauncher;
 use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
 use reth_provider::providers::BlockchainProvider;
 
-static BLOCK_BUFFER_MANAGER : OnceLock<Arc<BlockBufferManager>> = OnceLock::new();
-
 struct ConsensusArgs {
     pub engine_api: AuthServerHandle,
     pub pipeline_api: PipeExecLayerApi,
@@ -156,9 +154,7 @@ fn run_reth(
 }
 
 fn main() {
-    BLOCK_BUFFER_MANAGER.get_or_init(|| Arc::new(BlockBufferManager::new()));
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-
     let cli = Cli::parse();
     let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
     let (execution_args_tx, execution_args_rx) = oneshot::channel();

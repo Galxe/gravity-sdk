@@ -18,6 +18,7 @@ use aptos_types::{
     block_executor::config::BlockExecutorConfigFromOnchain,
     ledger_info::LedgerInfoWithSignatures,
 };
+use block_buffer_manager::get_block_buffer_manager;
 use coex_bridge::{get_coex_bridge, Func};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
@@ -124,18 +125,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         info!("commit blocks: {:?}", block_ids);
         if !block_ids.is_empty() {
             self.runtime.block_on(async move {
-                let call = get_coex_bridge().borrow_func("commit_block_hash");
-                match call {
-                    Some(Func::CommittedBlockHash(call)) => {
-                        info!("call commit_block_hash function");
-                        for block_id in block_ids {
-                            call.call(*block_id).await.unwrap();
-                        }
-                    }
-                    _ => {
-                        info!("no commit_block_hash function");
-                    }
-                }
+                get_block_buffer_manager().push_txns(block_ids).await;
             });
         }
         self.inner.db.writer.commit_ledger(0, Some(&ledger_info_with_sigs), None);

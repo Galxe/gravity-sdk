@@ -22,6 +22,7 @@ use aptos_network::application::{
 };
 use aptos_storage_interface::DbReader;
 use aptos_types::on_chain_config::OnChainConfigProvider;
+use block_buffer_manager::get_block_buffer_manager;
 use futures::channel::mpsc::{Receiver, UnboundedSender};
 use std::sync::Arc;
 use tokio::runtime::{Handle, Runtime};
@@ -83,11 +84,10 @@ pub(crate) fn start_shared_mempool<ConfigProvider>(
 
 async fn retrieve_from_execution_routine(
     mempool: Arc<Mutex<CoreMempool>>,
-    execution_api: Arc<dyn ExecutionChannel>,
 ) {
     info!("start retrieve_from_execution_routine");
     loop {
-        match execution_api.send_pending_txns().await {
+        match get_block_buffer_manager().pop_txns(usize::MAX).await {
             Ok(txns) => {
                 info!("the recv_pending_txns size is {:?}", txns.len());
                 txns.into_iter().for_each(|txn_with_number| {
@@ -130,7 +130,7 @@ pub fn bootstrap(
     let runtime = aptos_runtimes::spawn_named_runtime("shared-mem".into(), None);
     let retrive_runtime = aptos_runtimes::spawn_named_runtime("retrive".into(), None);
     let mempool = Arc::new(Mutex::new(CoreMempool::new(config)));
-    retrive_runtime.handle().spawn(retrieve_from_execution_routine(mempool.clone(), execution_api.clone()));
+    retrive_runtime.handle().spawn(retrieve_from_execution_routine(mempool.clone()));
     start_shared_mempool(
         runtime.handle(),
         config,
