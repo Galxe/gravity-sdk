@@ -653,7 +653,7 @@ impl BufferManager {
                         }
                     };
                     // 打印item是什么类型 用 bool
-                    info!("round new item is_aggregated = {}, is_signed = {}, is_executed {}", round, new_item.is_aggregated(), new_item.is_signed(), new_item.is_executed());
+                    info!("round {} new item is_aggregated = {}, is_signed = {}, is_executed {}", round, new_item.is_aggregated(), new_item.is_signed(), new_item.is_executed());
                     self.buffer.set(&current_cursor, new_item);
                     if self.buffer.get(&current_cursor).is_aggregated() {
                         return Some(target_block_id);
