@@ -300,6 +300,7 @@ impl StateComputer for ExecutionProxy {
         finality_proof: LedgerInfoWithSignatures,
         callback: StateComputerCommitCallBackType,
     ) -> ExecutorResult<()> {
+        let round = finality_proof.ledger_info().round();
         info!(
             "Received a commit request for blocks {:?} at round {}",
             blocks.iter().map(|block| block.id()).collect::<Vec<_>>(),
@@ -357,8 +358,11 @@ impl StateComputer for ExecutionProxy {
 
         let blocks = blocks.to_vec();
         let wrapped_callback = move || {
+            info!("enter wrapped callback at round {}", round);
             payload_manager.notify_commit(block_timestamp, payloads);
+            info!("before write callback at round {}, len {}", round, blocks.len());
             callback(&blocks, finality_proof);
+            info!("write callback at round {} is done", round);
         };
         self.async_state_sync_notifier
             .clone()
@@ -367,6 +371,10 @@ impl StateComputer for ExecutionProxy {
             .expect("Failed to send async state sync notification");
         // tokio::time::sleep(Duration::from_millis(1)).await;
         *latest_logical_time = logical_time;
+        info!(
+            "Succeed to do commit for round {}",
+            round
+        );
         Ok(())
     }
 

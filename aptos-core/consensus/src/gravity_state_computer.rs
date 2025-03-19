@@ -139,6 +139,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             });
         }
         self.inner.db.writer.commit_ledger(0, Some(&ledger_info_with_sigs), None);
+        info!("commit blocks done");
         Ok(())
     }
 }

@@ -459,6 +459,10 @@ impl BlockStore {
         retriever: &mut BlockRetriever,
     ) -> anyhow::Result<()> {
         let ledger_info = highest_commit_cert.ledger_info();
+        // print all the round from self and other cert
+        info!("self commit round {}, block exist {}, order round {}. other commit round {}.",
+            self.commit_root().round(), self.block_exists(ledger_info.commit_info().id()),
+                self.ordered_root().round(), ledger_info.commit_info().round());
         // if the block exists between commit root and ordered root
         if self.commit_root().round() < ledger_info.commit_info().round()
             && self.block_exists(ledger_info.commit_info().id())
@@ -466,6 +470,7 @@ impl BlockStore {
         {
             let proof = ledger_info.clone();
             let network = retriever.network.clone();
+            info!("Send commit proof to network");
             tokio::spawn(async move { network.send_commit_proof(proof).await });
             return Ok(());
         } else if self.ordered_root().round() < ledger_info.commit_info().round() 

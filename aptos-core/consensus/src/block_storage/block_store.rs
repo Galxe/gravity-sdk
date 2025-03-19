@@ -367,7 +367,9 @@ impl BlockStore {
                     .recv_committed_block_info(BlockId(*p_block.block().id()))
                     .await
                 {
-                    Ok(_) => {}
+                    Ok(_) => {
+                        counters::SEND_TO_RECOVER_BLOCK_COUNTER.inc();
+                    }
                     Err(e) => {
                         todo!();
                     }
@@ -390,6 +392,7 @@ impl BlockStore {
                 p_block.block().set_block_number(self.storage.fetch_next_block_number());
                 blocks.push(p_block.as_ref().into());
             }
+            counters::SEND_TO_EXECUTION_CHANNEL_BLOCK_COUNTER.inc_by(blocks_to_commit.len().try_into().unwrap());
             let storage_clone = self.storage.clone();
             if blocks.len() != 0 {
                 storage_clone.save_tree(blocks, vec![]).unwrap();

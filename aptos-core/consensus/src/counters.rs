@@ -190,16 +190,48 @@ pub static SEND_TO_EXECUTION_BLOCK_COUNTER: Lazy<IntCounter> = Lazy::new(|| {
     .unwrap()
 });
 
-pub static CREATED_EXECUTED_BLOCK_COUNTER: Lazy<IntCounter> = Lazy::new(|| {
+pub static SEND_TO_RECOVER_BLOCK_COUNTER: Lazy<IntCounter> = Lazy::new(|| {
     register_int_counter!(
+        "aptos_consensus_buffer_manager_send_to_recover_block_counter",
+        "Number of blocks sent to do recover in execution layer"
+    )
+    .unwrap()
+});
+
+pub static SEND_TO_EXECUTION_CHANNEL_BLOCK_COUNTER: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "aptos_consensus_buffer_manager_send_to_channel_execution_block_counter",
+        "Number of blocks sent to buffer manager's execution layer"
+    )
+    .unwrap()
+});
+
+pub static SEND_TO_PERSISTING_BLOCK_COUNTER: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "aptos_consensus_buffer_manager_send_to_persisting_block_counter",
+        "Number of blocks sent to do persisting in execution layer"
+    )
+    .unwrap()
+});
+
+pub static SEND_PERSISTING_BLOCK_REQ_COUNTER: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "aptos_consensus_buffer_manager_persisting_block_req_counter",
+        "Number of req for blocks sent to do persisting in execution layer"
+    )
+    .unwrap()
+});
+
+pub static CREATED_EXECUTED_BLOCK_COUNTER: Lazy<Gauge> = Lazy::new(|| {
+    register_gauge!(
         "aptos_consensus_buffer_manager_created_executed_block_counter",
         "Number of blocks created by buffer manager"
     )
     .unwrap()
 });
 
-pub static FINALIZED_EXECUTED_BLOCK_COUNTER: Lazy<IntCounter> = Lazy::new(|| {
-    register_int_counter!(
+pub static FINALIZED_EXECUTED_BLOCK_COUNTER: Lazy<Gauge> = Lazy::new(|| {
+    register_gauge!(
         "aptos_consensus_buffer_manager_finalized_executed_block_counter",
         "Number of blocks finalized by buffer manager"
     )
