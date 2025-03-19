@@ -613,6 +613,7 @@ impl BufferManager {
                 // find the corresponding item
                 let author = vote.author();
                 let commit_info = vote.commit_info().clone();
+                let round = vote.round();
                 info!("Receive commit vote {} from {}, latest_round {}", commit_info, author, self.latest_round);
                 if commit_info.round() > self.latest_round {
                     if !self.commit_vote_cache.contains_key(&commit_info.id()) {
@@ -629,7 +630,7 @@ impl BufferManager {
                 if current_cursor.is_some() {
                     let mut item = self.buffer.take(&current_cursor);
                     self.add_signature_if_matched_from_cache(&mut item, &target_block_id);
-                    info!("item is_aggregated = {}, is_signed = {}, is_executed {}", item.is_aggregated(), item.is_signed(), item.is_executed());
+                    info!("round {} item is_aggregated = {}, is_signed = {}, is_executed {}", round, item.is_aggregated(), item.is_signed(), item.is_executed());
                     let new_item = match item.add_signature_if_matched(vote) {
                         Ok(()) => {
                             info!("Add commit vote {} from {}", commit_info, author);
@@ -652,7 +653,7 @@ impl BufferManager {
                         }
                     };
                     // 打印item是什么类型 用 bool
-                    info!("new item is_aggregated = {}, is_signed = {}, is_executed {}", new_item.is_aggregated(), new_item.is_signed(), new_item.is_executed());
+                    info!("round new item is_aggregated = {}, is_signed = {}, is_executed {}", round, new_item.is_aggregated(), new_item.is_signed(), new_item.is_executed());
                     self.buffer.set(&current_cursor, new_item);
                     if self.buffer.get(&current_cursor).is_aggregated() {
                         return Some(target_block_id);
