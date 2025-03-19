@@ -351,9 +351,12 @@ impl BufferItem {
     pub fn try_advance_to_aggregated(self, validator: &ValidatorVerifier) -> Self {
         match self {
             Self::Signed(signed_item) => {
-                if validator
-                    .check_voting_power(signed_item.partial_commit_proof.signatures().keys(), true)
-                    .is_ok()
+                let round = signed_item.commit_vote.round();
+                let ok = validator
+                .check_voting_power(signed_item.partial_commit_proof.signatures().keys(), true)
+                .is_ok();
+            info!("sign try_advance_to_aggregated: round: {}, ok: {}, keys size {}", round, ok, signed_item.partial_commit_proof.signatures().keys().len());
+                if ok
                 {
                     let commit_proof = aggregate_commit_proof(
                             signed_item.partial_commit_proof.ledger_info(),
@@ -371,12 +374,15 @@ impl BufferItem {
                 }
             },
             Self::Executed(executed_item) => {
-                if validator
+                let round = executed_item.partial_commit_proof.ledger_info().round();
+                let ok = validator
                     .check_voting_power(
                         executed_item.partial_commit_proof.signatures().keys(),
                         true,
                     )
-                    .is_ok()
+                    .is_ok();
+                info!("exe try_advance_to_aggregated: round: {}, ok: {}, keys size {}", round, ok, executed_item.partial_commit_proof.signatures().keys().len());
+                if ok
                 {
                     Self::Aggregated(Box::new(AggregatedItem {
                         executed_blocks: executed_item.executed_blocks,
