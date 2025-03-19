@@ -336,7 +336,7 @@ impl RoundManager {
     ) -> anyhow::Result<()> {
         tokio::time::sleep(Duration::from_millis(
             // try get env
-            std::env::var("APTOS_PROPOSER_SLEEP_MS").map(|s| s.parse().unwrap()).unwrap_or(200)
+            std::env::var("APTOS_PROPOSER_SLEEP_MS").map(|s| s.parse().unwrap()).unwrap_or(500)
         )).await;
         counters::CURRENT_ROUND.set(new_round_event.round as i64);
         counters::ROUND_TIMEOUT_MS.set(new_round_event.timeout.as_millis() as i64);
