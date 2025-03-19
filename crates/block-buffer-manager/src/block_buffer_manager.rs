@@ -44,4 +44,20 @@ impl BlockBufferManager {
     pub async fn pop_txns(&self, max_size: usize) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, anyhow::Error> {
         todo!()
     }
+
+    pub async fn push_commit_blocks(&self, block_ids: Vec<BlockId>) -> Result<(), anyhow::Error> {
+        todo!()
+    }
+
+    pub async fn push_ordered_blocks(&self, parent_id: BlockId, blocks: ExternalBlock) -> Result<(), anyhow::Error> {
+        todo!()
+    }
+
+    pub async fn get_executed_res(&self, block_id: BlockId) -> Result<ComputeRes, anyhow::Error> {
+        todo!()
+    }
+
+    pub async fn pop_wait_commit(&self) -> Result<(), anyhow::Error> {
+        todo!()
+    }
 }
