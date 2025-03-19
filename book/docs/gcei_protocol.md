@@ -111,7 +111,7 @@ There are three principles when recovery:
 3. **Find the Corresponding Recovery Root**: Match the Execution Layer’s latest block number with the closest block in
    the Consensus Layer, treating that block as the root for replay.
 4. **Compare Root with QC**: Identify blocks whose round is greater than the root’s round.
-5. **Replay Missing Blocks**: Invoke recover_ordered_block to fill in any missing blocks on the Execution Layer side.
+5. **Replay Missing Blocks**: Though buffer_manager to fill in any missing blocks on the Execution Layer side.
 
 Once the local block replay is completed, the node can communicate with peers. If the node’s round is behind during
 these communications, it initiates Block Sync to obtain the latest blocks from other nodes.
@@ -125,20 +125,16 @@ The `Recovery APIs` defines the following methods which help gravity node recove
 pub trait RecoveryApi: Send + Sync {
     async fn latest_block_number(&self) -> u64;
 
-    async fn recover_ordered_block(&self, parent_id: BlockId, block: ExternalBlock) -> Result<(), ExecError>;
-
     async fn finalized_block_number(&self) -> u64;
 
-    async fn register_execution_args(&self, args: ExecutionArgs);
+    async fn send_execution_args(&self, args: ExecutionArgs);
 }
 ```
 
 1. `latest_block_number()`: Retrieves the latest block height known to the Execution Layer.
-2. `recover_ordered_block(parent_id, block)`: Replays the specified block from the Consensus Layer to the Execution
-   Layer if the Execution Layer is missing it.
-3. `register_execution_args(args)`: Collects initial data from the Consensus Layer at startup and sends it to the
+2. `send_execution_args(args)`: Collects initial data from the Consensus Layer at startup and sends it to the
    Execution Layer to facilitate recovery.
-4. `finalized_block_number()`: Returns the Execution Layer’s highest fully persisted (finalized) block number.
+3. `finalized_block_number()`: Returns the Execution Layer’s highest fully persisted (finalized) block number.
 
 ![GCEI Protocol](../assets/recovery_flow.png)
 

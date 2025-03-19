@@ -23,7 +23,7 @@ use crate::{
     persistent_liveness_storage::{PersistentLivenessStorage, RecoveryData},
 };
 use anyhow::{anyhow, bail};
-use api_types::{u256_define::BlockId, ExecutionChannel, ExecutionLayer, RecoveryApi};
+use api_types::{u256_define::BlockId, ExecutionChannel};
 use aptos_consensus_types::{
     block::Block,
     block_retrieval::{
@@ -170,7 +170,7 @@ impl BlockStore {
         }
         if self.ordered_root().round() < qc.commit_info().round() {
             SUCCESSFUL_EXECUTED_WITH_REGULAR_QC.inc();
-            self.send_for_execution(qc.into_wrapped_ledger_info(), false)
+            self.send_for_execution(qc.into_wrapped_ledger_info())
                 .await?;
             if qc.ends_epoch() {
                 retriever
@@ -201,7 +201,7 @@ impl BlockStore {
                     );
                 }
                 SUCCESSFUL_EXECUTED_WITH_ORDER_VOTE_QC.inc();
-                self.send_for_execution(ordered_cert.clone(), false).await?;
+                self.send_for_execution(ordered_cert.clone()).await?;
             } else {
                 bail!("Ordered block not found in block store when inserting ordered cert");
             }

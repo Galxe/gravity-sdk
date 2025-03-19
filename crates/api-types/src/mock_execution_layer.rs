@@ -51,10 +51,3 @@ impl ExecutionChannel for MockExecutionApi {
         Ok(())
     }
 }
-
-pub fn mock_execution_layer() -> ExecutionLayer {
-    ExecutionLayer {
-        execution_api: Arc::new(MockExecutionApi {}),
-        recovery_api: Arc::new(DefaultRecovery {}),
-    }
-}

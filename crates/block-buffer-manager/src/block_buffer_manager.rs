@@ -1,13 +1,9 @@
 use log::info;
-use std::{collections::HashMap, str, time::Duration};
-use tokio::{
-    sync::{broadcast::Receiver, Mutex},
-    time::Instant,
-};
+use std::{cell::OnceCell, collections::HashMap, sync::{Arc, OnceLock}, time::Duration};
+use tokio::{sync::Mutex, time::Instant};
 
 use api_types::{
-    compute_res::ComputeRes, u256_define::BlockId, ExternalBlock, ExternalBlockMeta, VerifiedTxn,
-    VerifiedTxnWithAccountSeqNum,
+    compute_res::ComputeRes, default_recover::DefaultRecovery, u256_define::BlockId, ExternalBlock, RecoveryApi, VerifiedTxn, VerifiedTxnWithAccountSeqNum
 };
 use itertools::Itertools;
 
@@ -35,6 +31,7 @@ pub struct BlockStateMachine {
 pub struct BlockBufferManager {
     txn_buffer: TxnBuffer,
     block_state_machine: Mutex<BlockStateMachine>,
+    recovery_api: OnceLock<Arc<dyn RecoveryApi>>,
 }
 
 impl BlockBufferManager {
@@ -43,7 +40,16 @@ impl BlockBufferManager {
         Self {
             txn_buffer: TxnBuffer { txns: Mutex::new(Vec::new()) },
             block_state_machine: Mutex::new(BlockStateMachine { sender, blocks: HashMap::new() }),
+            recovery_api: OnceLock::new(),
         }
+    }
+
+    pub fn set_recovery_api(&self, recovery_api: Arc<dyn RecoveryApi>) {
+        self.recovery_api.set(recovery_api);
+    }
+
+    pub fn get_recovery_api(&self) -> Arc<dyn RecoveryApi> {
+        self.recovery_api.get_or_init(|| Arc::new(DefaultRecovery {})).clone()
     }
 
     // Helper method to wait for changes
@@ -227,12 +233,18 @@ impl BlockBufferManager {
     ) -> Result<(), anyhow::Error> {
         let mut block_state_machine = self.block_state_machine.lock().await;
         for block_id_num_hash in block_ids {
-            info!("push_commit_blocks id {:?} num {:?}", block_id_num_hash.block_id, block_id_num_hash.num);
+            info!(
+                "push_commit_blocks id {:?} num {:?}",
+                block_id_num_hash.block_id, block_id_num_hash.num
+            );
             if let Some(state) = block_state_machine.blocks.get_mut(&block_id_num_hash.block_id) {
                 match state {
                     BlockState::Computed((num, _)) => {
                         if *num == block_id_num_hash.num {
-                            *state = BlockState::Commited { hash: block_id_num_hash.hash, num: block_id_num_hash.num };
+                            *state = BlockState::Commited {
+                                hash: block_id_num_hash.hash,
+                                num: block_id_num_hash.num,
+                            };
                         } else {
                             panic!("There is no Ordered Block but try to push commit block for block {:?}", block_id_num_hash.block_id);
                         }
@@ -275,7 +287,7 @@ impl BlockBufferManager {
                 .map(|(block_id, block_state)| match block_state {
                     BlockState::Commited { hash, num } => {
                         Some(BlockIdNumHash { block_id: *block_id, num: *num, hash: *hash })
-                    },
+                    }
                     _ => None,
                 })
                 .filter(|v| v.is_some())

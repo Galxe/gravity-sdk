@@ -1,6 +1,7 @@
 use alloy_eips::BlockHashOrNumber;
 use alloy_primitives::TxHash;
 use block_buffer_manager::block_buffer_manager::BlockBufferManager;
+use block_buffer_manager::get_block_buffer_manager;
 use greth::gravity_storage;
 use greth::reth;
 use greth::reth::chainspec::EthereumChainSpecParser;
@@ -167,6 +168,7 @@ fn main() {
                 let chain_id = client.chain_id();
                 let coordinator =
                     Arc::new(RethCoordinator::new(client, latest_block_number, execution_args_tx));
+                get_block_buffer_manager().set_recovery_api(coordinator.clone());
                 coordinator.run().await;
                 AptosConsensus::init(gcei_config, coordinator, chain_id);
                 tokio::signal::ctrl_c().await.unwrap();

@@ -7,7 +7,7 @@ pub struct DefaultRecovery {}
 
 #[async_trait]
 impl RecoveryApi for DefaultRecovery {
-    async fn register_execution_args(&self, args: ExecutionArgs) {
+    async fn send_execution_args(&self, _: ExecutionArgs) {
         ()
     }
 
@@ -17,9 +17,5 @@ impl RecoveryApi for DefaultRecovery {
 
     async fn finalized_block_number(&self) -> u64 {
         0
-    }
-
-    async fn recover_ordered_block(&self, parent_id: BlockId, _: ExternalBlock) -> Result<(), ExecError> {
-        Ok(())
     }
 }
