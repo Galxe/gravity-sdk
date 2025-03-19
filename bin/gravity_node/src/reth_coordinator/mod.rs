@@ -114,7 +114,7 @@ impl ExecutionChannel for RethCoordinator {
         mut ordered_block: ExternalBlock,
     ) -> Result<(), ExecError> {
         let block_number = ordered_block.block_meta.block_number;
-        debug!(
+        info!(
             "send_ordered_block with parent_id: {:?} and block num {:?} txn count {:?}",
             parent_id,
             block_number,
@@ -140,7 +140,7 @@ impl ExecutionChannel for RethCoordinator {
             .push_ordered_block(ordered_block, B256::new(parent_id.bytes()))
             .await
             .unwrap();
-        debug!("send_ordered_block done");
+        info!("send_ordered_block done {:?}", block_number);
         Ok(())
     }
 
@@ -148,7 +148,7 @@ impl ExecutionChannel for RethCoordinator {
         &self,
         head: ExternalBlockMeta,
     ) -> Result<ComputeRes, ExecError> {
-        debug!("recv_executed_block_hash with head: {:?}", head);
+        info!("recv_executed_block_hash with head: {:?}", head);
         let mut block_hash = None;
         {
             let state = self.state.lock().await;
@@ -161,7 +161,7 @@ impl ExecutionChannel for RethCoordinator {
                 self.state.lock().await.insert_new_block(head.block_id, block_hash.unwrap().into());
             }
         }
-        debug!("recv_executed_block_hash done");
+        info!("recv_executed_block_hash done {:?}", head);
         let mut txn_number = None;
         {
             let mut map = self.block_number_to_txn_in_block.lock().await;
@@ -171,7 +171,7 @@ impl ExecutionChannel for RethCoordinator {
     }
 
     async fn recv_committed_block_info(&self, block_id: BlockId) -> Result<(), ExecError> {
-        debug!("commit_block with block_id: {:?}", block_id);
+        info!("commit_block with block_id: {:?}", block_id);
         {
             let mut state = self.state.lock().await;
             let block_number = state.get_block_number(&block_id);
@@ -186,7 +186,7 @@ impl ExecutionChannel for RethCoordinator {
         }
         let block_hash = { self.state.lock().await.get_block_hash(block_id).unwrap() };
         self.reth_cli.send_committed_block_info(block_id, block_hash.into()).await.unwrap();
-        debug!("commit_block done");
+        info!("commit_block done {:?}", block_id);
         Ok(())
     }
 }
