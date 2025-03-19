@@ -4,9 +4,10 @@ use alloy_primitives::{
     private::alloy_rlp::{Decodable, Encodable},
     Address, TxHash, B256,
 };
-use api_types::account::{ExternalAccountAddress, ExternalChainId};
+use api_types::{account::{ExternalAccountAddress, ExternalChainId}, compute_res::ComputeRes};
 use api_types::u256_define::{BlockId as ExternalBlockId, TxnHash};
 use api_types::{ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
+use block_buffer_manager::get_block_buffer_manager;
 use core::panic;
 use greth::reth_db::DatabaseEnv;
 use greth::reth_ethereum_engine_primitives::EthPayloadAttributes;
@@ -149,9 +150,29 @@ impl RethCli {
         Ok(())
     }
 
-    pub async fn process_pending_transactions(
+    pub async fn start_execution(&self) -> Result<(), String> {
+        loop {
+            let (ordered_block, parent_id) = get_block_buffer_manager().pop_ordered_blocks().await.expect(
+                "failed to pop ordered blocks"
+            );
+            self.push_ordered_block(ordered_block, B256::from_slice(parent_id.as_bytes()));
+        }   
+    }
+
+    pub async fn start_commit(&self) -> Result<(), String> {
+        loop {
+            let compute_res = self.recv_compute_res(todo!()).await
+                .expect("failed to recv compute res");
+            let compute_res = ComputeRes {
+                data: todo!(),
+                txn_num: todo!(),
+            };
+            get_block_buffer_manager().push_compute_res(todo!(), compute_res);
+        }
+    }
+
+    pub async fn start_mempool(
         &self,
-        buffer: Arc<Mutex<Vec<VerifiedTxnWithAccountSeqNum>>>,
     ) -> Result<(), String> {
         debug!("start process pending transactions");
         let mut count = 0;
@@ -182,8 +203,7 @@ impl RethCli {
             };
             {
                 count += 1;
-                let mut buffer = buffer.lock().await;
-                buffer.push(vtxn);
+                get_block_buffer_manager().push_txn(vtxn).await;
             }
             let after_ser = std::time::Instant::now();
             trace!(

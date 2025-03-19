@@ -69,7 +69,15 @@ impl RethCoordinator {
     }
 
     pub async fn run(&self) {
-        self.reth_cli.process_pending_transactions(self.pending_buffer.clone()).await.unwrap();
+        tokio::spawn(async move {
+            self.reth_cli.start_mempool().await.unwrap();
+        });
+        tokio::spawn(async move {
+            self.reth_cli.start_mempool(self.pending_buffer.clone()).await.unwrap();
+        });
+        tokio::spawn(async move {
+            self.reth_cli.start_mempool(self.pending_buffer.clone()).await.unwrap();
+        });
     }
 }
 
@@ -88,24 +96,11 @@ impl ExecutionChannel for RethCoordinator {
         payload_attr: ExternalPayloadAttr,
         txns: Vec<VerifiedTxn>,
     ) -> Result<bool, ExecError> {
-        debug!("check_block_txns with payload_attr: {:?}", payload_attr);
-        for txn in txns {
-            let mut state = self.state.lock().await;
-            let txn = serde_json::from_slice(&txn.bytes).unwrap();
-            if !state.check_new_txn(&payload_attr, txn) {
-                return Ok(false);
-            }
-        }
-        Ok(true)
+        panic!("Reth Coordinator does not support check_block_txns");
     }
 
     async fn send_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
-        let now = std::time::Instant::now();
-        let mut buffer = self.pending_buffer.lock().await;
-        let res = std::mem::take(&mut *buffer);
-
-        debug!("recv_pending_txns with buffer size: {:?} in time {:?}", &res.len(), now.elapsed());
-        Ok(res)
+        panic!("Reth Coordinator does not support send_pending_txns");
     }
 
     async fn recv_ordered_block(
@@ -113,81 +108,18 @@ impl ExecutionChannel for RethCoordinator {
         parent_id: BlockId,
         mut ordered_block: ExternalBlock,
     ) -> Result<(), ExecError> {
-        let block_number = ordered_block.block_meta.block_number;
-        debug!(
-            "send_ordered_block with parent_id: {:?} and block num {:?} txn count {:?}",
-            parent_id,
-            block_number,
-            ordered_block.txns.len()
-        );
-        {
-            let mut state = self.state.lock().await;
-            if !state.cas_executed_block_number(block_number) {
-                info!(
-                    "The block number {} is executed, latest block number is {}",
-                    block_number,
-                    state.latest_executed_block_number()
-                );
-                return Err(ExecError::DuplicateExecError);
-            }
-            state.insert_block_number(ordered_block.block_meta.block_id, block_number);
-        }
-        {
-            let mut map = self.block_number_to_txn_in_block.lock().await;
-            map.insert(block_number, ordered_block.txns.len() as u64);
-        }
-        self.reth_cli
-            .push_ordered_block(ordered_block, B256::new(parent_id.bytes()))
-            .await
-            .unwrap();
-        debug!("send_ordered_block done");
-        Ok(())
+        panic!("Reth Coordinator does not support recv_ordered_block");
     }
 
     async fn send_executed_block_hash(
         &self,
         head: ExternalBlockMeta,
     ) -> Result<ComputeRes, ExecError> {
-        debug!("recv_executed_block_hash with head: {:?}", head);
-        let mut block_hash = None;
-        {
-            let state = self.state.lock().await;
-            block_hash = state.get_block_hash(head.block_id);
-        }
-        if block_hash.is_none() {
-            let reth_block_id = B256::from_slice(&head.block_id.0);
-            block_hash = Some(self.reth_cli.recv_compute_res(reth_block_id).await.unwrap());
-            {
-                self.state.lock().await.insert_new_block(head.block_id, block_hash.unwrap().into());
-            }
-        }
-        debug!("recv_executed_block_hash done");
-        let mut txn_number = None;
-        {
-            let mut map = self.block_number_to_txn_in_block.lock().await;
-            txn_number = map.remove(&head.block_number);
-        }
-        Ok(ComputeRes::new(block_hash.unwrap().into(), txn_number.unwrap()))
+        panic!("Reth Coordinator does not support send_executed_block_hash");
     }
 
     async fn recv_committed_block_info(&self, block_id: BlockId) -> Result<(), ExecError> {
-        debug!("commit_block with block_id: {:?}", block_id);
-        {
-            let mut state = self.state.lock().await;
-            let block_number = state.get_block_number(&block_id);
-            if !state.cas_committed_block_number(block_number) {
-                info!(
-                    "The block number {} is committed, latest block number is {}",
-                    block_number,
-                    state.latest_committed_block_number()
-                );
-                return Ok(());
-            }
-        }
-        let block_hash = { self.state.lock().await.get_block_hash(block_id).unwrap() };
-        self.reth_cli.send_committed_block_info(block_id, block_hash.into()).await.unwrap();
-        debug!("commit_block done");
-        Ok(())
+        panic!("Reth Coordinator does not support recv_committed_block_info")
     }
 }
 
