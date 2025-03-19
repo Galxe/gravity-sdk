@@ -1,11 +1,11 @@
 [workspace.package]
 authors = ["Gravity Team"]
-edition = "2021"
+edition = "2024"
 homepage = "https://gravity.xyz/"
 license = "Apache-2.0"
 publish = false
 repository = "https://github.com/Galxe/gravity-sdk"
-rust-version = "1.83.0"
+rust-version = "1.85.0"
 resolver = "2"
 
 [workspace]
@@ -327,7 +327,7 @@ mockall = "0.11.4"
 more-asserts = "0.3.0"
 named-lock = "0.2.0"
 native-tls = "0.2.10"
-neptune = { version = "13.0.0", default_features = false }
+neptune = { version = "13.0.0", default-features = false }
 ntest = "0.9.0"
 num = "0.4.0"
 num-bigint = { version = "0.3.2", features = ["rand"] }
