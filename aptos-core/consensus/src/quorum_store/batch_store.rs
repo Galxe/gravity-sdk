@@ -359,8 +359,12 @@ impl BatchStore {
 
         match self.db.get_batch(digest) {
             Ok(Some(value)) => Ok(value),
-            Ok(None) | Err(_) => {
-                warn!("Could not get batch from db");
+            Ok(None) => {
+                warn!("Could not get batch from db because the key {} doesnt exist", digest);
+                Err(ExecutorError::CouldNotGetData)
+            }
+            Err(e) => { 
+                warn!("Could not get batch from db {}", e);
                 Err(ExecutorError::CouldNotGetData)
             },
         }
@@ -372,13 +376,21 @@ impl BatchStore {
     ) -> ExecutorResult<PersistedValue> {
         if let Some(value) = self.db_cache.get(digest) {
             if value.payload_storage_mode() == StorageMode::PersistedOnly {
-                self.get_batch_from_db(digest)
+                return self.get_batch_from_db(digest);
             } else {
                 // Available in memory.
-                Ok(value.clone())
+                return Ok(value.clone());
             }
-        } else {
-            Err(ExecutorError::CouldNotGetData)
+        };
+        match self.get_batch_from_db(digest) {
+            Ok(value) => {
+                info!("QS: get_batch_from_db success {}", digest);
+                Ok(value)
+            },
+            Err(e) => {
+                error!("QS: get_batch_from_db error {}", e);
+                Err(e)
+            }
         }
     }
 

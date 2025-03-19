@@ -17,7 +17,9 @@ use crate::{
 };
 use anyhow::{bail, ensure, format_err, Context};
 use api_types::{
-    compute_res::ComputeRes, u256_define::{BlockId, Random}, ExecutionLayer, ExternalBlock, ExternalBlockMeta
+    compute_res::ComputeRes,
+    u256_define::{BlockId, Random},
+    ExecutionLayer, ExternalBlock, ExternalBlockMeta,
 };
 use aptos_consensus_types::{
     block::Block,
@@ -33,7 +35,10 @@ use aptos_executor_types::StateComputeResult;
 use aptos_infallible::{Mutex, RwLock};
 use aptos_logger::prelude::*;
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
-use aptos_types::{aggregate_signature::AggregateSignature, ledger_info::{LedgerInfo, LedgerInfoWithSignatures}};
+use aptos_types::{
+    aggregate_signature::AggregateSignature,
+    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+};
 use futures::executor::block_on;
 use sha3::digest::generic_array::typenum::Le;
 
@@ -183,48 +188,60 @@ impl BlockStore {
             info!("trying to recover qc {}, commit_round={}", qc, self.commit_root().round());
             if qc.commit_info().round() > self.commit_root().round() {
                 let block_id_to_recover = qc.commit_info().id();
-                let blocks_to_recover = self.path_from_ordered_root(block_id_to_recover).unwrap_or_default();
+                let blocks_to_recover =
+                    self.path_from_ordered_root(block_id_to_recover).unwrap_or_default();
                 self.init_block_number(&blocks_to_recover);
                 assert!(!blocks_to_recover.is_empty());
                 for block_to_recover in blocks_to_recover {
-                    if let Ok((txns, _)) =
-                        self.payload_manager.get_transactions(block_to_recover.block()).await
-                    {
-                        info!("recover block {}, txn_size: {}", block_to_recover.block(), txns.len());
-                        let verified_txns: Vec<VerifiedTxn> =
-                            txns.iter().map(|txn| txn.into()).collect();
-                        let txn_num = verified_txns.len() as u64;
-                        let verified_txns = verified_txns.into_iter().map(|txn| txn.into()).collect();
-                        let block_number = block_to_recover.block().block_number().unwrap();
-                        let block_hash = match self
-                            .storage
-                            .consensus_db()
-                            .ledger_db
-                            .metadata_db()
-                            .get_block_hash(block_number)
-                        {
-                            Some(block_hash) => Some(ComputeRes::new(*block_hash, txn_num)),
-                            None => None,
-                        };
-                        let block_batch = ExternalBlock {
-                            txns: verified_txns,
-                            block_meta: ExternalBlockMeta {
-                                block_id: BlockId(*block_to_recover.block().id()),
-                                block_number,
-                                usecs: block_to_recover.block().timestamp_usecs(),
-                                randomness: block_to_recover
-                                    .randomness()
-                                    .map(|r| Random::from_bytes(r.randomness())),
-                                block_hash,
-                            },
-                        };
-                        self.execution_layer
-                            .as_ref()
-                            .unwrap()
-                            .recovery_api
-                            .recover_ordered_block(BlockId(*block_to_recover.parent_id()), block_batch)
-                            .await
-                            .unwrap();
+                    match self.payload_manager.get_transactions(block_to_recover.block()).await {
+                        Ok((txns, _)) => {
+                            info!(
+                                "recover block {}, txn_size: {}",
+                                block_to_recover.block(),
+                                txns.len()
+                            );
+                            let verified_txns: Vec<VerifiedTxn> =
+                                txns.iter().map(|txn| txn.into()).collect();
+                            let txn_num = verified_txns.len() as u64;
+                            let verified_txns =
+                                verified_txns.into_iter().map(|txn| txn.into()).collect();
+                            let block_number = block_to_recover.block().block_number().unwrap();
+                            let block_hash = match self
+                                .storage
+                                .consensus_db()
+                                .ledger_db
+                                .metadata_db()
+                                .get_block_hash(block_number)
+                            {
+                                Some(block_hash) => Some(ComputeRes::new(*block_hash, txn_num)),
+                                None => None,
+                            };
+                            let block_batch = ExternalBlock {
+                                txns: verified_txns,
+                                block_meta: ExternalBlockMeta {
+                                    block_id: BlockId(*block_to_recover.block().id()),
+                                    block_number,
+                                    usecs: block_to_recover.block().timestamp_usecs(),
+                                    randomness: block_to_recover
+                                        .randomness()
+                                        .map(|r| Random::from_bytes(r.randomness())),
+                                    block_hash,
+                                },
+                            };
+                            self.execution_layer
+                                .as_ref()
+                                .unwrap()
+                                .recovery_api
+                                .recover_ordered_block(
+                                    BlockId(*block_to_recover.parent_id()),
+                                    block_batch,
+                                )
+                                .await
+                                .unwrap();
+                        }
+                        Err(e) => {
+                            panic!("get transaction error {}", e);
+                        }
                     }
                 }
                 info!("trying to commit to round {}", qc.commit_info().round());
