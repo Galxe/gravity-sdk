@@ -78,7 +78,7 @@ impl BlockBufferManager {
         Ok(())
     }
 
-    pub async fn pop_commit_blocks(&self) -> Result<Vec<BlockId>, anyhow::Error> {
+    pub async fn pop_commit_blocks(&self) -> Result<Vec<(BlockId, )>, anyhow::Error> {
         let mut block_state_machine = self.block_state_machine.lock().await;
         let mut block_ids = Vec::new();
         for (block_id, block_state) in block_state_machine.blocks.iter() {
