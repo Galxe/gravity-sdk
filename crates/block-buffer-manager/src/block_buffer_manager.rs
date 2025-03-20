@@ -13,6 +13,7 @@ pub enum BlockState {
     Commited,
 }
 
+// TODO check block id and block number are matched
 pub struct BlockStateMachine {
     sender: tokio::sync::broadcast::Sender<()>,
     blocks: HashMap<BlockId, BlockState>

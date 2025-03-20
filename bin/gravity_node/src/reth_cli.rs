@@ -132,7 +132,7 @@ impl RethCli {
     pub async fn recv_compute_res(&self, block_id: B256) -> Result<B256, ()> {
         debug!("recv compute res {:?}", block_id);
         let pipe_api = &self.pipe_api;
-        let (block_id, block_hash) = pipe_api.pull_executed_block_hash().await.unwrap();
+        let (block_id, block_num, block_hash) = pipe_api.pull_executed_block_hash().await.unwrap();
         debug!("recv compute res done");
         Ok(block_hash)
     }
@@ -161,9 +161,9 @@ impl RethCli {
 
     pub async fn start_commit_vote(&self) -> Result<(), String> {
         loop {
-            let compute_res = self.recv_compute_res(todo!()).await
+            let (id, compute_res) = self.recv_compute_res(todo!()).await
                 .expect("failed to recv compute res");
-            let ordered_ids = get_block_buffer_manager().pop_ordered_block_ids().await
+            let ordered_ids = get_block_buffer_manager().set(id, compute_res).await
                 .expect("failed to pop ordered block ids");
             let compute_res = ComputeRes {
                 data: todo!(),
