@@ -12,22 +12,28 @@ use anyhow::Result;
 use aptos_consensus_types::{block::Block, quorum_cert::QuorumCert};
 use aptos_crypto::HashValue;
 use aptos_logger::prelude::*;
-use aptos_schemadb::{schema::Schema, Options, SchemaBatch, DB, DEFAULT_COLUMN_FAMILY_NAME};
+use aptos_schemadb::{
+    schema::{KeyCodec, Schema},
+    Options, SchemaBatch, DB, DEFAULT_COLUMN_FAMILY_NAME,
+};
 use aptos_storage_interface::AptosDbError;
 use ledger_db::LedgerDb;
+use rocksdb::ReadOptions;
 pub use schema::{
+    block::BlockNumberSchema,
     block::BlockSchema,
     dag::{CertifiedNodeSchema, DagVoteSchema, NodeSchema},
     quorum_certificate::QCSchema,
 };
 use schema::{
+    block::BLOCK_NUMBER_CF_NAME,
     single_entry::{SingleEntryKey, SingleEntrySchema},
     BLOCK_CF_NAME, CERTIFIED_NODE_CF_NAME, DAG_VOTE_CF_NAME, LEDGER_INFO_CF_NAME, NODE_CF_NAME,
     QC_CF_NAME, SINGLE_ENTRY_CF_NAME,
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     iter::Iterator,
     path::{Path, PathBuf},
     sync::Arc,
@@ -89,6 +95,7 @@ impl ConsensusDB {
             CERTIFIED_NODE_CF_NAME,
             DAG_VOTE_CF_NAME,
             LEDGER_INFO_CF_NAME,
+            BLOCK_NUMBER_CF_NAME,
             "ordered_anchor_id", // deprecated CF
         ];
 
@@ -120,29 +127,36 @@ impl ConsensusDB {
     ) -> Result<(Option<Vec<u8>>, Option<Vec<u8>>, Vec<Block>, Vec<QuorumCert>)> {
         let last_vote = self.get_last_vote()?;
         let highest_2chain_timeout_certificate = self.get_highest_2chain_timeout_certificate()?;
+        let block_number_to_block_id = self
+            .get_all::<BlockNumberSchema>()?
+            .into_iter()
+            .filter(|(_, block_number)| block_number >= &latest_block_number)
+            .map(|(block_id, block_number)| (block_number, block_id))
+            .collect::<HashMap<u64, HashValue>>();
+        let block_id_to_block_number = block_number_to_block_id
+            .iter()
+            .map(|(block_number, block_id)| (*block_id, *block_number))
+            .collect::<HashMap<HashValue, u64>>();
+        let latest_round = if block_number_to_block_id.contains_key(&latest_block_number) {
+            self.get::<BlockSchema>(&block_number_to_block_id[&latest_block_number])?
+                .unwrap()
+                .round()
+        } else {
+            0
+        };
         let mut consensus_blocks: Vec<_> = self
             .get_all::<BlockSchema>()?
             .into_iter()
             .map(|(_, block)| block)
-            .filter(|block| {
-                block.block_number().is_none()
-                    || block.block_number().unwrap() >= latest_block_number
-            })
+            .filter(|block| block.round() >= latest_round)
             .collect();
-        let latest_round = match consensus_blocks
-            .iter()
-            .find(|&block| {
-                block.block_number().is_some()
-                    && block.block_number().unwrap() == latest_block_number
-            }) {
-                Some(block) => block.round(),
-                None => 0,
-            };
-        let consensus_blocks: Vec<_> = consensus_blocks.into_iter()
-            .filter(|block| {
-                block.round() >= latest_round
-            })
-            .collect();
+        consensus_blocks.iter_mut().for_each(|block| {
+            if block.block_number().is_none() {
+                if let Some(block_number) = block_id_to_block_number.get(&block.id()) {
+                    block.set_block_number(*block_number);
+                }
+            }
+        });
         let consensus_qcs = self
             .get_all::<QCSchema>()?
             .into_iter()
@@ -173,11 +187,22 @@ impl ConsensusDB {
         qc_data: Vec<QuorumCert>,
     ) -> Result<(), DbError> {
         if block_data.is_empty() && qc_data.is_empty() {
-            return Err(anyhow::anyhow!("Consensus block and qc data is empty!").into());
+            return Ok(());
         }
         let batch = SchemaBatch::new();
         block_data.iter().try_for_each(|block| batch.put::<BlockSchema>(&block.id(), block))?;
         qc_data.iter().try_for_each(|qc| batch.put::<QCSchema>(&qc.certified_block().id(), qc))?;
+        self.commit(batch)
+    }
+
+    pub fn save_block_numbers(&self, block_numbers: Vec<(u64, HashValue)>) -> Result<(), DbError> {
+        if block_numbers.is_empty() {
+            return Ok(());
+        }
+        let batch = SchemaBatch::new();
+        block_numbers.iter().try_for_each(|(block_number, block_id)| {
+            batch.put::<BlockNumberSchema>(block_id, block_number)
+        })?;
         self.commit(batch)
     }
 
@@ -250,7 +275,15 @@ impl ConsensusDB {
     }
 
     pub fn get_block(&self, block_id: &HashValue) -> Result<Option<Block>, DbError> {
-        Ok(self.db.get::<BlockSchema>(block_id)?)
+        let block = self.get::<BlockSchema>(block_id)?;
+        if let Some(block) = &block {
+            let block_number = self.get::<BlockNumberSchema>(block_id)?;
+            match block_number {
+                Some(block_number) => block.set_block_number(block_number),
+                None => (),
+            }
+        }
+        Ok(block)
     }
 }
 

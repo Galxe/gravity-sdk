@@ -9,7 +9,10 @@ use aptos_consensus_types::{
     block::Block, quorum_cert::QuorumCert, timeout_2chain::TwoChainTimeoutCertificate, vote::Vote,
     vote_data::VoteData, wrapped_ledger_info::WrappedLedgerInfo,
 };
-use aptos_crypto::{hash::{ACCUMULATOR_PLACEHOLDER_HASH, GENESIS_BLOCK_ID}, HashValue};
+use aptos_crypto::{
+    hash::{ACCUMULATOR_PLACEHOLDER_HASH, GENESIS_BLOCK_ID},
+    HashValue,
+};
 use aptos_logger::prelude::*;
 use aptos_storage_interface::DbReader;
 use aptos_types::{
@@ -36,7 +39,12 @@ use std::{
 #[async_trait]
 pub trait PersistentLivenessStorage: Send + Sync {
     /// Persist the blocks and quorum certs into storage atomically.
-    fn save_tree(&self, blocks: Vec<Block>, quorum_certs: Vec<QuorumCert>) -> Result<()>;
+    fn save_tree(
+        &self,
+        blocks: Vec<Block>,
+        quorum_certs: Vec<QuorumCert>,
+        block_numbers: Vec<(u64, HashValue)>
+    ) -> Result<()>;
 
     /// Delete the corresponding blocks and quorum certs atomically.
     fn prune_tree(&self, block_ids: Vec<HashValue>) -> Result<()>;
@@ -412,8 +420,10 @@ impl StorageWriteProxy {
 
 #[async_trait]
 impl PersistentLivenessStorage for StorageWriteProxy {
-    fn save_tree(&self, blocks: Vec<Block>, quorum_certs: Vec<QuorumCert>) -> Result<()> {
-        Ok(self.db.save_blocks_and_quorum_certificates(blocks, quorum_certs)?)
+    fn save_tree(&self, blocks: Vec<Block>, quorum_certs: Vec<QuorumCert>, block_numbers: Vec<(u64, HashValue)>) -> Result<()> {
+        self.db.save_blocks_and_quorum_certificates(blocks, quorum_certs)?;
+        self.db.save_block_numbers(block_numbers)?;
+        Ok(())
     }
 
     fn prune_tree(&self, block_ids: Vec<HashValue>) -> Result<()> {
@@ -439,7 +449,8 @@ impl PersistentLivenessStorage for StorageWriteProxy {
         info!("Start consensus recovery.");
         let latest_block_number = self.latest_block_number().await;
         info!("The execution_latest_block_number is {}", latest_block_number);
-        let raw_data = self.db.get_data(latest_block_number).expect("unable to recover consensus data");
+        let raw_data =
+            self.db.get_data(latest_block_number).expect("unable to recover consensus data");
 
         let last_vote = raw_data
             .0

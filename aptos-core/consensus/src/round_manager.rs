@@ -565,7 +565,6 @@ impl RoundManager {
                 proposal_msg.sync_info(),
                 proposal_msg.proposer(),
             )
-            .await
             .context("[RoundManager] Process proposal")?,
             "Stale proposal {}, current round {}",
             proposal_msg.proposal(),
@@ -654,6 +653,7 @@ impl RoundManager {
         author: Author,
     ) -> anyhow::Result<bool> {
         if message_round < self.round_state.current_round() {
+            info!("Stale proposal {}, current round {}", message_round, self.round_state.current_round());
             return Ok(false);
         }
         self.sync_up(sync_info, author).await?;

@@ -18,8 +18,12 @@ use aptos_schemadb::{
     schema::{KeyCodec, ValueCodec},
     ColumnFamilyName,
 };
+use byteorder::{BigEndian, ReadBytesExt};
+
+use super::ensure_slice_len_eq;
 
 pub const BLOCK_CF_NAME: ColumnFamilyName = "block";
+pub const BLOCK_NUMBER_CF_NAME: ColumnFamilyName = "block_number";
 
 define_schema!(BlockSchema, HashValue, Block, BLOCK_CF_NAME);
 
@@ -40,6 +44,28 @@ impl ValueCodec<BlockSchema> for Block {
 
     fn decode_value(data: &[u8]) -> Result<Self> {
         Ok(bcs::from_bytes(data)?)
+    }
+}
+
+define_schema!(BlockNumberSchema, HashValue, u64, BLOCK_NUMBER_CF_NAME);
+
+impl KeyCodec<BlockNumberSchema> for HashValue {
+    fn encode_key(&self) -> Result<Vec<u8>> {
+        Ok(self.to_vec())
+    }
+
+    fn decode_key(data: &[u8]) -> Result<Self> {
+        Ok(HashValue::from_slice(data)?)
+    }
+}
+
+impl ValueCodec<BlockNumberSchema> for u64 {
+    fn encode_value(&self) -> Result<Vec<u8>> {
+        Ok(self.to_be_bytes().to_vec())
+    }
+    fn decode_value(mut data: &[u8]) -> Result<Self> {
+        ensure_slice_len_eq(data, std::mem::size_of::<Self>())?;
+        Ok(data.read_u64::<BigEndian>()?)
     }
 }
 

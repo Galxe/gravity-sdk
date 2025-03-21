@@ -327,16 +327,16 @@ impl BlockStore {
     }
 
     pub fn init_block_number(&self, ordered_blocks: &Vec<Arc<PipelinedBlock>>) {
-        let mut blocks = vec![];
+        let mut block_numbers = vec![];
         for p_block in ordered_blocks {
             if let Some(_) = p_block.block().block_number() {
                 continue;
             }
             p_block.block().set_block_number(self.storage.fetch_next_block_number());
-            blocks.push(p_block.as_ref().into());
+            block_numbers.push((p_block.block().block_number().unwrap(), p_block.block().id()));
         }
-        if blocks.len() != 0 {
-            self.storage.save_tree(blocks, vec![]).unwrap();
+        if block_numbers.len() != 0 {
+            self.storage.save_tree(vec![], vec![], block_numbers).unwrap();
         }
     }
 
@@ -393,18 +393,7 @@ impl BlockStore {
             );
         } else {
             // This callback is invoked synchronously with and could be used for multiple batches of blocks.
-            let mut blocks = vec![];
-            for p_block in &blocks_to_commit {
-                if let Some(_) = p_block.block().block_number() {
-                    continue;
-                }
-                p_block.block().set_block_number(self.storage.fetch_next_block_number());
-                blocks.push(p_block.as_ref().into());
-            }
-            let storage_clone = self.storage.clone();
-            if blocks.len() != 0 {
-                storage_clone.save_tree(blocks, vec![]).unwrap();
-            }
+            self.init_block_number(&blocks_to_commit);
             self.execution_client
                 .finalize_order(
                     &blocks_to_commit,
@@ -505,7 +494,7 @@ impl BlockStore {
         }
         if !rebuild {
             self.storage
-                .save_tree(vec![pipelined_block.block().clone()], vec![])
+                .save_tree(vec![pipelined_block.block().clone()], vec![], vec![])
                 .context("Insert block failed when saving block")?;
         }
         self.inner.write().insert_block(pipelined_block)
@@ -534,7 +523,7 @@ impl BlockStore {
         };
         if !rebuild {
             self.storage
-                .save_tree(vec![], vec![qc.clone()])
+                .save_tree(vec![], vec![qc.clone()], vec![])
                 .context("Insert block failed when saving quorum")?;
         }
         self.inner.write().insert_quorum_cert(qc)
