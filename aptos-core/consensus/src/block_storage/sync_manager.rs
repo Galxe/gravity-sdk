@@ -735,9 +735,9 @@ impl BlockRetriever {
                 Ok(result) if matches!(result.status(), BlockRetrievalStatus::Succeeded) => {
                     // extend the result blocks
                     let batch = result.blocks().clone();
-                    for block in batch.iter(){
-                    if let Some(payload) = block.payload() {
-                        payload_manager.prefetch_payload_data(payload, block.timestamp_usecs());
+                    for block in batch.iter() {
+                        if let Some(payload) = block.payload() {
+                            payload_manager.prefetch_payload_data(payload, block.timestamp_usecs());
                         }
                     }
                     progress += batch.len() as u64;
@@ -750,9 +750,9 @@ impl BlockRetriever {
                 {
                     // if we found the target, end the loop
                     let batch = result.blocks().clone();
-                    for block in batch.iter(){
-                    if let Some(payload) = block.payload() {
-                        payload_manager.prefetch_payload_data(payload, block.timestamp_usecs());
+                    for block in batch.iter() {
+                        if let Some(payload) = block.payload() {
+                            payload_manager.prefetch_payload_data(payload, block.timestamp_usecs());
                         }
                     }
                     result_blocks.extend(batch);
