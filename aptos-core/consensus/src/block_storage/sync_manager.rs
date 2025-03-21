@@ -234,6 +234,7 @@ impl BlockStore {
                     retrieve_qc.certified_block().id(),
                     qc.ledger_info()
                         .get_voters(&retriever.validator_addresses()),
+                    self.payload_manager.clone(),
                 )
                 .await?;
             // retrieve_blocks_in_range guarantees that blocks has exactly 1 element
@@ -328,6 +329,7 @@ impl BlockStore {
                 highest_quorum_cert
                     .ledger_info()
                     .get_voters(&retriever.validator_addresses()),
+                payload_manager.clone(),
             )
             .await?;
 
@@ -377,6 +379,7 @@ impl BlockStore {
                         highest_commit_cert
                             .ledger_info()
                             .get_voters(&retriever.validator_addresses()),
+                        payload_manager.clone(),
                     )
                     .await?;
 
@@ -403,9 +406,6 @@ impl BlockStore {
         );
         for (i, block) in blocks.iter().enumerate() {
             assert_eq!(block.id(), quorum_certs[i].certified_block().id());
-            if let Some(payload) = block.payload() {
-                payload_manager.prefetch_payload_data(payload, block.timestamp_usecs());
-            }
         }
         // Check early that recovery will succeed, and return before corrupting our state in case it will not.
         // TODO(gravity_lightman):
@@ -700,6 +700,7 @@ impl BlockRetriever {
         target_block_id: HashValue,
         peers: Vec<AccountAddress>,
         num_blocks: u64,
+        payload_manager: Arc<dyn TPayloadManager>,
     ) -> anyhow::Result<(Vec<Block>, Vec<LedgerInfoWithSignatures>)> {
         info!(
             "Retrieving blocks starting from {}, the total number is {}",
@@ -734,6 +735,11 @@ impl BlockRetriever {
                 Ok(result) if matches!(result.status(), BlockRetrievalStatus::Succeeded) => {
                     // extend the result blocks
                     let batch = result.blocks().clone();
+                    for block in batch.iter(){
+                    if let Some(payload) = block.payload() {
+                        payload_manager.prefetch_payload_data(payload, block.timestamp_usecs());
+                        }
+                    }
                     progress += batch.len() as u64;
                     last_block_id = batch.last().expect("Batch should not be empty").parent_id();
                     result_blocks.extend(batch);
@@ -744,6 +750,11 @@ impl BlockRetriever {
                 {
                     // if we found the target, end the loop
                     let batch = result.blocks().clone();
+                    for block in batch.iter(){
+                    if let Some(payload) = block.payload() {
+                        payload_manager.prefetch_payload_data(payload, block.timestamp_usecs());
+                        }
+                    }
                     result_blocks.extend(batch);
                     ledger_infos.extend(result.ledger_infos().clone());
                     break;
@@ -776,9 +787,10 @@ impl BlockRetriever {
         num_blocks: u64,
         target_block_id: HashValue,
         peers: Vec<AccountAddress>,
+        payload_manager: Arc<dyn TPayloadManager>,
     ) -> anyhow::Result<(Vec<Block>, Vec<LedgerInfoWithSignatures>)> {
         BLOCKS_FETCHED_FROM_NETWORK_IN_BLOCK_RETRIEVER.inc_by(num_blocks);
-        self.retrieve_block_for_id(initial_block_id, target_block_id, peers, num_blocks)
+        self.retrieve_block_for_id(initial_block_id, target_block_id, peers, num_blocks, payload_manager)
             .await
     }
 
