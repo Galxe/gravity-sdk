@@ -1222,11 +1222,16 @@ impl RoundManager {
             .get_quorum_cert_for_block(block_id)
             .is_some()
         {
+            info!("Vote for block {:?} already has a QC", block_id);
             return Ok(());
         }
         let vote_reception_result = self
             .round_state
             .insert_vote(vote, &self.epoch_state.verifier);
+        info!(
+            "Vote reception result is {:?} for vote {:?}",
+            vote_reception_result, vote
+        );
         self.process_vote_reception_result(vote, vote_reception_result)
             .await
     }
