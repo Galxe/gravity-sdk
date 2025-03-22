@@ -654,8 +654,6 @@ impl BufferManager {
                     } else {
                         return None;
                     }
-                } else {
-                    return None;
                 }
             }
             CommitMessage::Decision(commit_proof) => {
