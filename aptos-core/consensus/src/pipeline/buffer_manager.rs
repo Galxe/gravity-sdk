@@ -367,7 +367,6 @@ impl BufferManager {
         let mut blocks_to_persist: Vec<Arc<PipelinedBlock>> = vec![];
 
         while let Some(item) = self.buffer.pop_front() {
-            info!("expect block id: {} to be persisted, target_id {}", item.block_id(), target_block_id);
             blocks_to_persist.extend(
                 item.get_blocks()
                     .iter()
@@ -613,7 +612,7 @@ impl BufferManager {
                 // find the corresponding item
                 let author = vote.author();
                 let commit_info = vote.commit_info().clone();
-                let round = vote.round();
+                info!("Receive commit vote {} from {}", commit_info, author);
                 if commit_info.round() > self.latest_round {
                     if !self.commit_vote_cache.contains_key(&commit_info.id()) {
                         self.commit_vote_cache.insert(commit_info.id(), HashMap::new());
@@ -626,14 +625,11 @@ impl BufferManager {
                 let target_block_id = vote.commit_info().id();
                 let current_cursor =
                     self.buffer.find_elem_by_key(*self.buffer.head_cursor(), target_block_id);
-                info!("round {:} Receive commit vote {} from {}, latest_round {}, current_cursor {}", round, commit_info, author, self.latest_round, current_cursor.is_some());
                 if current_cursor.is_some() {
                     let mut item = self.buffer.take(&current_cursor);
                     self.add_signature_if_matched_from_cache(&mut item, &target_block_id);
-                    info!("round {} item is_aggregated = {}, is_signed = {}, is_executed {}", round, item.is_aggregated(), item.is_signed(), item.is_executed());
                     let new_item = match item.add_signature_if_matched(vote) {
                         Ok(()) => {
-                            info!("round {} Add commit vote {} from {}", round, commit_info, author);
                             let response =
                                 ConsensusMsg::CommitMessage(Box::new(CommitMessage::Ack(())));
                             if let Ok(bytes) = protocol.to_bytes(&response) {
@@ -652,7 +648,6 @@ impl BufferManager {
                             item
                         }
                     };
-                    info!("round {} new item is_aggregated = {}, is_signed = {}, is_executed {}", round, new_item.is_aggregated(), new_item.is_signed(), new_item.is_executed());
                     self.buffer.set(&current_cursor, new_item);
                     if self.buffer.get(&current_cursor).is_aggregated() {
                         return Some(target_block_id);
@@ -660,7 +655,6 @@ impl BufferManager {
                         return None;
                     }
                 } else {
-                    info!("round {} Block {} not found in the buffer", round, target_block_id);
                     return None;
                 }
             }
@@ -668,8 +662,7 @@ impl BufferManager {
                 let target_block_id = commit_proof.ledger_info().commit_info().id();
                 let cursor =
                     self.buffer.find_elem_by_key(*self.buffer.head_cursor(), target_block_id);
-                info!("Receive commit decision {}, target id {}, is some {}", commit_proof.ledger_info().commit_info(),
-                    target_block_id, cursor.is_some());
+                info!("Receive commit decision {}", commit_proof.ledger_info().commit_info());
                 if cursor.is_some() {
                     let item = self.buffer.take(&cursor);
                     let new_item = item.try_advance_to_aggregated_with_ledger_info(
@@ -678,8 +671,6 @@ impl BufferManager {
                     let aggregated = new_item.is_aggregated();
                     self.buffer.set(&cursor, new_item);
                     if aggregated {
-                        info!("Receive commit decision {}, target id {} has agg", commit_proof.ledger_info().commit_info(),
-                    target_block_id);
                         let response =
                             ConsensusMsg::CommitMessage(Box::new(CommitMessage::Ack(())));
                         if let Ok(bytes) = protocol.to_bytes(&response) {

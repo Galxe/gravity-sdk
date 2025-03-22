@@ -8,7 +8,6 @@ use crate::{
 };
 use aptos_consensus_types::{common::Round, pipelined_block::PipelinedBlock};
 use aptos_executor_types::ExecutorResult;
-use aptos_logger::info;
 use aptos_types::ledger_info::LedgerInfoWithSignatures;
 use async_trait::async_trait;
 use std::{
@@ -39,7 +38,6 @@ impl Display for PersistingRequest {
     }
 }
 
-/// PersistingResponse is a tuple of the round and the number of blocks persisted.
 pub type PersistingResponse = ExecutorResult<Round>;
 
 pub struct PersistingPhase {

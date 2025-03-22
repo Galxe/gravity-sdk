@@ -167,9 +167,7 @@ impl ExecutionChannel for RethCoordinator {
             let mut map = self.block_number_to_txn_in_block.lock().await;
             txn_number = map.remove(&head.block_number);
         }
-        let hash : [u8; 32] = block_hash.unwrap().into();
-        let hash = BlockId::from_bytes(&hash);
-        info!("recv_executed_block_hash done {:?}, hash {:?}", head, hash);
+        info!("recv_executed_block_hash done {:?}", head);
         Ok(ComputeRes::new(block_hash.unwrap().into(), txn_number.unwrap()))
     }
 
