@@ -200,6 +200,7 @@ impl From<TransactionAccumulatorSummary> for RootMetadata {
     }
 }
 
+#[derive(Debug)]
 /// The recovery data constructed from raw consensusdb data, it'll find the root value and
 /// blocks that need cleanup or return error if the input data is inconsistent.
 pub struct RecoveryData {
