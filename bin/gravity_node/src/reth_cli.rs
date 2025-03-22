@@ -212,7 +212,7 @@ impl RethCli {
     }
 
     pub async fn latest_block_number(&self) -> u64 {
-        match self.provider.header_by_number_or_tag(BlockNumberOrTag::Safe).unwrap() {
+        match self.provider.header_by_number_or_tag(BlockNumberOrTag::Latest).unwrap() {
             Some(header) => header.number, // The genesis block has a number of zero;
             None => 0,
         }
