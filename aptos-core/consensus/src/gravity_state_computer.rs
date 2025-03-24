@@ -6,6 +6,7 @@ use crate::consensusdb::ConsensusDB;
 use crate::counters::{APTOS_COMMIT_BLOCKS, APTOS_EXECUTION_TXNS};
 use crate::payload_client::user::quorum_store_client::QuorumStoreClient;
 use anyhow::Result;
+use api_types::u256_define::BlockId;
 use api_types::ExecutionLayer;
 use aptos_crypto::HashValue;
 use aptos_executor::block_executor::BlockExecutor;
@@ -18,6 +19,7 @@ use aptos_types::{
     block_executor::config::BlockExecutorConfigFromOnchain,
     ledger_info::LedgerInfoWithSignatures,
 };
+use block_buffer_manager::get_block_buffer_manager;
 use coex_bridge::{get_coex_bridge, Func};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
@@ -89,19 +91,23 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         ledger_info_with_sigs: LedgerInfoWithSignatures,
     ) -> ExecutorResult<()> {
         if !block_ids.is_empty() {
+            let (block_id, block_hash) = (ledger_info_with_sigs.ledger_info().commit_info().id(), ledger_info_with_sigs.ledger_info().block_hash());
             self.runtime.block_on(async move {
-                let call = get_coex_bridge().borrow_func("commit_block_hash");
-                match call {
-                    Some(Func::CommittedBlockHash(call)) => {
-                        info!("call commit_block_hash function");
-                        for block_id in block_ids {
-                            call.call(*block_id).await.unwrap();
+                get_block_buffer_manager()
+                    .push_commit_blocks(block_ids.into_iter()
+                    .map(|x| 
+                        {
+                            let mut v = [0u8; 32];
+                            v.copy_from_slice(block_hash.as_ref());
+                            if x == block_id {
+                                (BlockId::from_bytes(x.as_slice()), Some(v))
+                            } else {
+                                (BlockId::from_bytes(x.as_slice()), None)
+                            }
                         }
-                    }
-                    _ => {
-                        info!("no commit_block_hash function");
-                    }
-                }
+                    ).collect())
+                    .await
+                    .unwrap_or_else(|e| panic!("Failed to push commit blocks {}", e));
             });
         }
         self.inner.db.writer.commit_ledger(0, Some(&ledger_info_with_sigs), None);
@@ -122,20 +128,22 @@ impl BlockExecutorTrait for GravityBlockExecutor {
     ) -> ExecutorResult<()> {
         APTOS_COMMIT_BLOCKS.inc_by(block_ids.len() as u64);
         info!("commit blocks: {:?}", block_ids);
+        let (block_id, block_hash) = (ledger_info_with_sigs.ledger_info().commit_info().id(), ledger_info_with_sigs.ledger_info().block_hash());
         if !block_ids.is_empty() {
             self.runtime.block_on(async move {
-                let call = get_coex_bridge().borrow_func("commit_block_hash");
-                match call {
-                    Some(Func::CommittedBlockHash(call)) => {
-                        info!("call commit_block_hash function");
-                        for block_id in block_ids {
-                            call.call(*block_id).await.unwrap();
-                        }
+                get_block_buffer_manager().push_commit_blocks(block_ids.into_iter()
+                .map(|x| {
+                    let mut v = [0u8; 32];
+                    v.copy_from_slice(block_hash.as_ref());
+                    if x == block_id {
+                        (BlockId::from_bytes(x.as_slice()), Some(v))
+                    } else {
+                        (BlockId::from_bytes(x.as_slice()), None)
                     }
-                    _ => {
-                        info!("no commit_block_hash function");
-                    }
-                }
+                })
+                .collect())
+                .await.unwrap()
+                ;
             });
         }
         self.inner.db.writer.commit_ledger(0, Some(&ledger_info_with_sigs), None);

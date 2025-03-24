@@ -1,5 +1,6 @@
 use alloy_eips::BlockHashOrNumber;
 use alloy_primitives::TxHash;
+use block_buffer_manager::block_buffer_manager::BlockBufferManager;
 use greth::gravity_storage;
 use greth::reth;
 use greth::reth::chainspec::EthereumChainSpecParser;
@@ -35,8 +36,10 @@ mod reth_cli;
 mod reth_coordinator;
 
 use crate::cli::Cli;
+use std::cell::OnceCell;
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::thread;
 
 use crate::reth_cli::RethCli;
@@ -152,7 +155,6 @@ fn run_reth(
 
 fn main() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-
     let cli = Cli::parse();
     let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
     let (execution_args_tx, execution_args_rx) = oneshot::channel();
@@ -166,10 +168,7 @@ fn main() {
                 let chain_id = client.chain_id();
                 let coordinator =
                     Arc::new(RethCoordinator::new(client, latest_block_number, execution_args_tx));
-                let cloned = coordinator.clone();
-                tokio::spawn(async move {
-                    cloned.run().await;
-                });
+                coordinator.run().await;
                 AptosConsensus::init(gcei_config, coordinator, chain_id);
                 tokio::signal::ctrl_c().await.unwrap();
             }
