@@ -4,9 +4,13 @@ use alloy_primitives::{
     private::alloy_rlp::{Decodable, Encodable},
     Address, TxHash, B256,
 };
-use api_types::account::{ExternalAccountAddress, ExternalChainId};
 use api_types::u256_define::{BlockId as ExternalBlockId, TxnHash};
+use api_types::{
+    account::{ExternalAccountAddress, ExternalChainId},
+    compute_res::ComputeRes,
+};
 use api_types::{ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
+use block_buffer_manager::get_block_buffer_manager;
 use core::panic;
 use greth::reth_db::DatabaseEnv;
 use greth::reth_ethereum_engine_primitives::EthPayloadAttributes;
@@ -128,31 +132,69 @@ impl RethCli {
         Ok(())
     }
 
-    pub async fn recv_compute_res(&self, block_id: B256) -> Result<B256, ()> {
+    pub async fn recv_compute_res(&self) -> Result<ExecutedBlockMeta, ()> {
         debug!("recv compute res {:?}", block_id);
         let pipe_api = &self.pipe_api;
-        let block_hash = pipe_api.pull_executed_block_hash(block_id).await.unwrap();
+        let meta = pipe_api
+            .pull_executed_block_hash()
+            .await
+            .expect("failed to recv compute res in recv_compute_res");
         debug!("recv compute res done");
-        Ok(block_hash)
+        Ok(meta)
     }
 
     pub async fn send_committed_block_info(
         &self,
         block_id: api_types::u256_define::BlockId,
-        block_hash: B256,
+        block_hash: Option<B256>,
     ) -> Result<(), String> {
         debug!("commit block {:?} with hash {:?}", block_id, block_hash);
         let block_id = B256::from_slice(block_id.0.as_ref());
         let pipe_api = &self.pipe_api;
-        pipe_api.commit_executed_block_hash(ExecutedBlockMeta { block_id, block_hash });
+        pipe_api.commit_executed_block_hash(block_id, block_hash);
         debug!("commit block done");
         Ok(())
     }
 
-    pub async fn process_pending_transactions(
-        &self,
-        buffer: Arc<Mutex<Vec<VerifiedTxnWithAccountSeqNum>>>,
-    ) -> Result<(), String> {
+    pub async fn start_execution(&self) -> Result<(), String> {
+        loop {
+            let (ordered_block, parent_id) = get_block_buffer_manager()
+                .pop_ordered_blocks()
+                .await
+                .expect("failed to pop ordered blocks");
+            self.push_ordered_block(ordered_block, B256::from_slice(parent_id.as_bytes()));
+        }
+    }
+
+    pub async fn start_commit_vote(&self) -> Result<(), String> {
+        loop {
+            let metadata = self.recv_compute_res().await.expect("failed to recv compute res");
+            let mut block_hash_data = [0u8; 32];
+            block_hash_data.copy_from_slice(metadata.block_hash.as_bytes());
+            get_block_buffer_manager().get_block_size(metadata.block_id);
+            get_block_buffer_manager()
+                .push_compute_res(metadata.block_id, block_hash_data, metadata.block_number)
+                .await
+                .expect("failed to pop ordered block ids");
+            get_block_buffer_manager().push_compute_res(
+                metadata.block_id,
+                compute_res,
+                metadata.block_number,
+            );
+        }
+    }
+
+    pub async fn start_commit(&self) -> Result<(), String> {
+        loop {
+            let block_id = get_block_buffer_manager()
+                .pop_commit_blocks()
+                .await
+                .expect("failed to pop commit blocks");
+            self.send_committed_block_info(block_id, todo!());
+        }
+    }
+
+    pub async fn start_mempool(&self) -> Result<(), String> {
         debug!("start process pending transactions");
         let mut count = 0;
         let mut total = 0;
@@ -182,8 +224,7 @@ impl RethCli {
             };
             {
                 count += 1;
-                let mut buffer = buffer.lock().await;
-                buffer.push(vtxn);
+                get_block_buffer_manager().push_txn(vtxn).await;
             }
             let after_ser = std::time::Instant::now();
             trace!(
