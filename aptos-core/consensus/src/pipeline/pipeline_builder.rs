@@ -38,6 +38,7 @@ use aptos_types::{
     },
     validator_signer::ValidatorSigner, vm_status::{DiscardedVMStatus, StatusCode},
 };
+use block_buffer_manager::get_block_buffer_manager;
 use coex_bridge::{get_coex_bridge, Func};
 use futures::FutureExt;
 use itertools::Itertools;
@@ -457,21 +458,10 @@ impl PipelineBuilder {
             randomness: maybe_rand.map(|r| Random::from_bytes(r.randomness())),
             block_hash: None,
         };
-        let call = get_coex_bridge().borrow_func("send_ordered_block");
-        match call {
-            Some(Func::SendOrderedBlocks(call)) => {
-                info!("call send_ordered_block function");
-                call.call((
-                    *block.parent_id(),
-                    ExternalBlock { block_meta: meta_data.clone(), txns: real_txns },
-                ))
-                .await
-                .unwrap();
-            }
-            _ => {
-                info!("no send_ordered_block function");
-            }
-        }
+        get_block_buffer_manager()
+            .push_ordered_blocks(BlockId::from_bytes(block.parent_id().as_slice()), ExternalBlock { block_meta: meta_data, txns: real_txns })
+            .await
+            .unwrap_or_else(|e| panic!("Failed to push ordered blocks {}", e));
         Ok(())
     }
 
@@ -497,16 +487,10 @@ impl PipelineBuilder {
             randomness: None,
             block_hash: None,
         };
-        let call = get_coex_bridge().borrow_func("recv_executed_block_hash");
-        let hash = match call {
-            Some(Func::RecvExecutedBlockHash(call)) => {
-                info!("call recv_executed_block_hash function");
-                call.call(meta_data).await.unwrap()
-            }
-            _ => {
-                panic!("no recv_executed_block_hash function");
-            }
-        };
+        let hash = get_block_buffer_manager()
+            .get_executed_res(BlockId::from_bytes(block_id.as_slice()))
+            .await
+            .unwrap_or_else(|e| panic!("Failed to get executed result {}", e));
         update_counters_for_compute_res(&hash);
         let result = StateComputeResult::new(hash, None, None);
         observe_block(timestamp, BlockStage::EXECUTED);
