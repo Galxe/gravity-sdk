@@ -129,23 +129,25 @@ impl RethCli {
         Ok(())
     }
 
-    pub async fn recv_compute_res(&self, block_id: B256) -> Result<B256, ()> {
+    pub async fn recv_compute_res(&self) -> Result<ExecutedBlockMeta, ()> {
         debug!("recv compute res {:?}", block_id);
         let pipe_api = &self.pipe_api;
-        let (block_id, block_num, block_hash) = pipe_api.pull_executed_block_hash().await.unwrap();
+        let meta = pipe_api.pull_executed_block_hash().await.expect(
+            "failed to recv compute res in recv_compute_res"
+        );
         debug!("recv compute res done");
-        Ok(block_hash)
+        Ok(meta)
     }
 
     pub async fn send_committed_block_info(
         &self,
         block_id: api_types::u256_define::BlockId,
-        block_hash: B256,
+        block_hash: Option<B256>,
     ) -> Result<(), String> {
         debug!("commit block {:?} with hash {:?}", block_id, block_hash);
         let block_id = B256::from_slice(block_id.0.as_ref());
         let pipe_api = &self.pipe_api;
-        pipe_api.commit_executed_block_hash(ExecutedBlockMeta { block_id, block_hash });
+        pipe_api.commit_executed_block_hash(block_id, block_hash);
         debug!("commit block done");
         Ok(())
     }
@@ -161,15 +163,15 @@ impl RethCli {
 
     pub async fn start_commit_vote(&self) -> Result<(), String> {
         loop {
-            let (id, compute_res) = self.recv_compute_res(todo!()).await
+            let metadata = self.recv_compute_res().await
                 .expect("failed to recv compute res");
-            let ordered_ids = get_block_buffer_manager().set(id, compute_res).await
+            let ordered_ids = get_block_buffer_manager().set(metadata.block_id, compute_res).await
                 .expect("failed to pop ordered block ids");
             let compute_res = ComputeRes {
                 data: todo!(),
                 txn_num: todo!(),
             };
-            get_block_buffer_manager().push_compute_res(todo!(), compute_res);
+            get_block_buffer_manager().push_compute_res(metadata.block_id, compute_res, metadata.block_number);
         }
     }
 

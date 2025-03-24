@@ -8,9 +8,9 @@ pub struct TxnBuffer {
     txns: Mutex<Vec<VerifiedTxnWithAccountSeqNum>>,
 }
 pub enum BlockState {
-    Ordered((BlockId, ExternalBlock)),
-    Computed(ComputeRes),
-    Commited,
+    Ordered((u64, ExternalBlock)),
+    Computed((u64, ComputeRes)),
+    Commited(Option<[u8; 32]>),
 }
 
 // TODO check block id and block number are matched
@@ -38,7 +38,7 @@ impl BlockBufferManager {
     }
 
     pub async fn recv_unbroadcasted_txn(&self) -> Result<Vec<VerifiedTxn>, anyhow::Error> {
-        todo!()
+        unimplemented!()
     }
 
     pub async fn push_txns(&self, txn: Vec<VerifiedTxnWithAccountSeqNum>) {
@@ -63,41 +63,41 @@ impl BlockBufferManager {
         }
     }
 
-    pub async fn push_commit_blocks(&self, block_ids: Vec<BlockId>) -> Result<(), anyhow::Error> {
+    pub async fn push_commit_blocks(&self, block_ids: Vec<(BlockId, Option<[u8; 32]>)>) -> Result<(), anyhow::Error> {
         let mut block_state_machine = self.block_state_machine.lock().await;
-        for block_id in block_ids {
-            block_state_machine.blocks.insert(block_id, BlockState::Commited);
+        for (block_id, block_hash) in block_ids {
+            block_state_machine.blocks.insert(block_id, BlockState::Commited(block_hash));
         }
         block_state_machine.sender.send(()).unwrap();
         Ok(())
     }
 
-    pub async fn push_compute_res(&self, block_id: BlockId, compute_res: ComputeRes) -> Result<(), anyhow::Error> {
+    pub async fn push_compute_res(&self, block_id: BlockId, compute_res: ComputeRes, block_num: u64) -> Result<(), anyhow::Error> {
         let mut block_state_machine = self.block_state_machine.lock().await;
-        block_state_machine.blocks.insert(block_id, BlockState::Computed(compute_res));
+        block_state_machine.blocks.insert(block_id, BlockState::Computed((block_num, compute_res)));
         block_state_machine.sender.send(()).unwrap();
         Ok(())
     }
 
-    pub async fn pop_commit_blocks(&self) -> Result<Vec<(BlockId, )>, anyhow::Error> {
+    pub async fn pop_commit_blocks(&self) -> Result<Vec<(BlockId, Option<[u8; 32]>)>, anyhow::Error> {
         let mut block_state_machine = self.block_state_machine.lock().await;
-        let mut block_ids = Vec::new();
+        let mut block_metas = Vec::new();
         for (block_id, block_state) in block_state_machine.blocks.iter() {
-            if let BlockState::Commited = block_state {
-                block_ids.push(*block_id);
+            if let BlockState::Commited(hash) = block_state {
+                block_metas.push((*block_id, *hash));
             }
         }
         block_state_machine.blocks.retain(|_, block_state| {
-            !matches!(block_state, BlockState::Commited)
+            !matches!(block_state, BlockState::Commited(_))
         });
         block_state_machine.sender.send(()).unwrap();
-        Ok(block_ids)
+        Ok(block_metas)
     }
 
     pub async fn push_ordered_blocks(&self, parent_id: BlockId, blocks: ExternalBlock) -> Result<(), anyhow::Error> {
         let mut block_state_machine = self.block_state_machine.lock().await;
         let block_id = blocks.block_meta.block_id;
-        block_state_machine.blocks.insert(block_id, BlockState::Ordered((parent_id, blocks)));
+        block_state_machine.blocks.insert(block_id, BlockState::Ordered((blocks.block_meta.block_number, blocks)));
         block_state_machine.sender.send(()).unwrap();
         Ok(())
     }
@@ -117,9 +117,9 @@ impl BlockBufferManager {
                 info!("get_executed_res {:?}", block_id);
                 if let Some(block) = block_state_machine.blocks.get(&block_id) {
                     let res = match block {
-                        BlockState::Computed(res) => Result::ComputeResult(res.clone()),
+                        BlockState::Computed((num, res)) => Result::ComputeResult(res.clone()),
                         BlockState::Ordered(_) => Result::WaitChange(block_state_machine.sender.subscribe()),
-                        BlockState::Commited => {
+                        BlockState::Commited(_) => {
                             panic!("There is no Ordered Block but try to get executed result for block {:?}", block_id);
                         }
                     };

@@ -13,6 +13,7 @@ use api_types::{
     ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
 };
 use async_trait::async_trait;
+use block_buffer_manager::get_block_buffer_manager;
 use greth::reth::revm::db::components::block_hash;
 use greth::reth_pipe_exec_layer_ext_v2::ExecutionArgs;
 use alloy_primitives::B256;
@@ -73,10 +74,13 @@ impl RethCoordinator {
             self.reth_cli.start_mempool().await.unwrap();
         });
         tokio::spawn(async move {
-            self.reth_cli.start_mempool(self.pending_buffer.clone()).await.unwrap();
+            self.reth_cli.start_execution().await.unwrap();
         });
         tokio::spawn(async move {
-            self.reth_cli.start_mempool(self.pending_buffer.clone()).await.unwrap();
+            self.reth_cli.start_commit_vote().await.unwrap();
+        });
+        tokio::spawn(async move {
+            self.reth_cli.start_commit().await.unwrap();
         });
     }
 }
@@ -169,7 +173,10 @@ impl RecoveryApi for RethCoordinator {
             Err(err) => return Err(err),
             Ok(()) => {
                 let reth_block_id = B256::from_slice(&block_id.0);
-                block_hash = self.reth_cli.recv_compute_res(reth_block_id).await.unwrap().into();
+                block_hash = get_block_buffer_manager().get_executed_res(reth_block_id).await.unwrap_or(|| {
+                    panic!("Failed to get executed result for block {:?}", block_id);
+                });
+                // self.reth_cli.recv_compute_res(reth_block_id).await.unwrap().into();
             }
         }
         if let Some(origin_block_hash) = origin_block_hash {
