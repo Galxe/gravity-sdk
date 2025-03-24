@@ -4,8 +4,11 @@ use alloy_primitives::{
     private::alloy_rlp::{Decodable, Encodable},
     Address, TxHash, B256,
 };
-use api_types::{account::{ExternalAccountAddress, ExternalChainId}, compute_res::ComputeRes};
 use api_types::u256_define::{BlockId as ExternalBlockId, TxnHash};
+use api_types::{
+    account::{ExternalAccountAddress, ExternalChainId},
+    compute_res::ComputeRes,
+};
 use api_types::{ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 use block_buffer_manager::get_block_buffer_manager;
 use core::panic;
@@ -132,9 +135,10 @@ impl RethCli {
     pub async fn recv_compute_res(&self) -> Result<ExecutedBlockMeta, ()> {
         debug!("recv compute res {:?}", block_id);
         let pipe_api = &self.pipe_api;
-        let meta = pipe_api.pull_executed_block_hash().await.expect(
-            "failed to recv compute res in recv_compute_res"
-        );
+        let meta = pipe_api
+            .pull_executed_block_hash()
+            .await
+            .expect("failed to recv compute res in recv_compute_res");
         debug!("recv compute res done");
         Ok(meta)
     }
@@ -154,38 +158,43 @@ impl RethCli {
 
     pub async fn start_execution(&self) -> Result<(), String> {
         loop {
-            let (ordered_block, parent_id) = get_block_buffer_manager().pop_ordered_blocks().await.expect(
-                "failed to pop ordered blocks"
-            );
+            let (ordered_block, parent_id) = get_block_buffer_manager()
+                .pop_ordered_blocks()
+                .await
+                .expect("failed to pop ordered blocks");
             self.push_ordered_block(ordered_block, B256::from_slice(parent_id.as_bytes()));
-        }   
+        }
     }
 
     pub async fn start_commit_vote(&self) -> Result<(), String> {
         loop {
-            let metadata = self.recv_compute_res().await
-                .expect("failed to recv compute res");
-            let ordered_ids = get_block_buffer_manager().set(metadata.block_id, compute_res).await
+            let metadata = self.recv_compute_res().await.expect("failed to recv compute res");
+            let mut block_hash_data = [0u8; 32];
+            block_hash_data.copy_from_slice(metadata.block_hash.as_bytes());
+            get_block_buffer_manager().get_block_size(metadata.block_id);
+            get_block_buffer_manager()
+                .push_compute_res(metadata.block_id, block_hash_data, metadata.block_number)
+                .await
                 .expect("failed to pop ordered block ids");
-            let compute_res = ComputeRes {
-                data: todo!(),
-                txn_num: todo!(),
-            };
-            get_block_buffer_manager().push_compute_res(metadata.block_id, compute_res, metadata.block_number);
+            get_block_buffer_manager().push_compute_res(
+                metadata.block_id,
+                compute_res,
+                metadata.block_number,
+            );
         }
     }
 
     pub async fn start_commit(&self) -> Result<(), String> {
         loop {
-            let block_id = get_block_buffer_manager().pop_commit_blocks().await
+            let block_id = get_block_buffer_manager()
+                .pop_commit_blocks()
+                .await
                 .expect("failed to pop commit blocks");
             self.send_committed_block_info(block_id, todo!());
         }
     }
 
-    pub async fn start_mempool(
-        &self,
-    ) -> Result<(), String> {
+    pub async fn start_mempool(&self) -> Result<(), String> {
         debug!("start process pending transactions");
         let mut count = 0;
         let mut total = 0;

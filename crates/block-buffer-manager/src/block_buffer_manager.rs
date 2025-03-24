@@ -8,7 +8,7 @@ pub struct TxnBuffer {
     txns: Mutex<Vec<VerifiedTxnWithAccountSeqNum>>,
 }
 pub enum BlockState {
-    Ordered((u64, ExternalBlock)),
+    Ordered(ExternalBlock),
     Computed((u64, ComputeRes)),
     Commited(Option<[u8; 32]>),
 }
@@ -72,11 +72,18 @@ impl BlockBufferManager {
         Ok(())
     }
 
-    pub async fn push_compute_res(&self, block_id: BlockId, compute_res: ComputeRes, block_num: u64) -> Result<(), anyhow::Error> {
+    pub async fn push_compute_res(&self, block_id: BlockId, block_hash: [u8; 32], block_num: u64) -> Result<ExternalBlock, anyhow::Error> {
         let mut block_state_machine = self.block_state_machine.lock().await;
-        block_state_machine.blocks.insert(block_id, BlockState::Computed((block_num, compute_res)));
-        block_state_machine.sender.send(()).unwrap();
-        Ok(())
+        if let Some(BlockState::Ordered(block)) = block_state_machine.blocks.remove(&block_id) {
+            assert_eq!(block.block_meta.block_number, block_num);
+            block_state_machine.blocks.insert(block_id, BlockState::Computed((block_num, ComputeRes {
+                data: block_hash,
+                txn_num: block.txns.len() as u64
+            })));
+            block_state_machine.sender.send(()).unwrap();
+            return Ok(block);
+        }
+        panic!("There is no Ordered Block but try to push compute result for block {:?}", block_id)
     }
 
     pub async fn pop_commit_blocks(&self) -> Result<Vec<(BlockId, Option<[u8; 32]>)>, anyhow::Error> {
@@ -97,13 +104,21 @@ impl BlockBufferManager {
     pub async fn push_ordered_blocks(&self, parent_id: BlockId, blocks: ExternalBlock) -> Result<(), anyhow::Error> {
         let mut block_state_machine = self.block_state_machine.lock().await;
         let block_id = blocks.block_meta.block_id;
-        block_state_machine.blocks.insert(block_id, BlockState::Ordered((blocks.block_meta.block_number, blocks)));
+        block_state_machine.blocks.insert(block_id, BlockState::Ordered(blocks));
         block_state_machine.sender.send(()).unwrap();
         Ok(())
     }
 
-    pub async fn pop_ordered_blocks(&self) -> Result<(ExternalBlock, BlockId), anyhow::Error> {
-        todo!()
+    pub async fn pop_ordered_blocks(&self) -> Result<Vec<ExternalBlock>, anyhow::Error> {
+        let block_state_machine = self.block_state_machine.lock().await;
+        let mut blocks = Vec::new();
+        for (_, block_state) in block_state_machine.blocks.iter() {
+            if let BlockState::Ordered(block) = block_state {
+                blocks.push(block.clone());
+            }
+        }
+        block_state_machine.sender.send(()).unwrap();
+        Ok(blocks)
     }
 
     pub async fn get_executed_res(&self, block_id: BlockId) -> Result<ComputeRes, anyhow::Error> {
