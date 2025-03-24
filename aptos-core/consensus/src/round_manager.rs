@@ -565,6 +565,7 @@ impl RoundManager {
                 proposal_msg.sync_info(),
                 proposal_msg.proposer(),
             )
+            .await
             .context("[RoundManager] Process proposal")?,
             "Stale proposal {}, current round {}",
             proposal_msg.proposal(),

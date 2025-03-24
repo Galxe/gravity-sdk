@@ -769,12 +769,8 @@ impl BlockRetriever {
         payload_manager: Arc<dyn TPayloadManager>,
     ) -> anyhow::Result<(Vec<Block>, Vec<LedgerInfoWithSignatures>)> {
         BLOCKS_FETCHED_FROM_NETWORK_IN_BLOCK_RETRIEVER.inc_by(num_blocks);
-<<<<<<< HEAD
         self.retrieve_block_for_id(initial_block_id, target_block_id, peers, num_blocks, payload_manager)
             .await
-=======
-        self.retrieve_block_for_id(initial_block_id, target_block_id, peers, num_blocks).await
->>>>>>> d4f8343 ([improve] Support to persist block number)
     }
 
     fn pick_peer(&self, first_atempt: bool, peers: &mut Vec<AccountAddress>) -> AccountAddress {
