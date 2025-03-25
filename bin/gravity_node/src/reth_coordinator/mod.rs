@@ -45,7 +45,7 @@ impl<T> Buffer<T> {
 }
 
 pub struct RethCoordinator {
-    reth_cli: RethCli,
+    reth_cli: Arc<RethCli>,
     pending_buffer: Arc<Mutex<Vec<VerifiedTxnWithAccountSeqNum>>>,
     state: Arc<Mutex<State>>,
     // todo(gravity_byteyue): Use one elegant way
@@ -61,7 +61,7 @@ impl RethCoordinator {
     ) -> Self {
         let state = State::new(latest_block_number);
         Self {
-            reth_cli,
+            reth_cli: Arc::new(reth_cli),
             pending_buffer: Arc::new(Mutex::new(Vec::new())),
             state: Arc::new(Mutex::new(state)),
             block_number_to_txn_in_block: Arc::new(Mutex::new(HashMap::new())),
@@ -70,17 +70,21 @@ impl RethCoordinator {
     }
 
     pub async fn run(&self) {
+        let reth_cli = self.reth_cli.clone();
         tokio::spawn(async move {
-            self.reth_cli.start_mempool().await.unwrap();
+            reth_cli.start_mempool().await.unwrap();
         });
+        let reth_cli = self.reth_cli.clone();
         tokio::spawn(async move {
-            self.reth_cli.start_execution().await.unwrap();
+            reth_cli.start_execution().await.unwrap();
         });
+        let reth_cli = self.reth_cli.clone();
         tokio::spawn(async move {
-            self.reth_cli.start_commit_vote().await.unwrap();
+            reth_cli.start_commit_vote().await.unwrap();
         });
+        let reth_cli = self.reth_cli.clone();
         tokio::spawn(async move {
-            self.reth_cli.start_commit().await.unwrap();
+            reth_cli.start_commit().await.unwrap();
         });
     }
 }
@@ -172,10 +176,11 @@ impl RecoveryApi for RethCoordinator {
             },
             Err(err) => return Err(err),
             Ok(()) => {
-                let reth_block_id = B256::from_slice(&block_id.0);
-                block_hash = get_block_buffer_manager().get_executed_res(reth_block_id).await.unwrap_or(|| {
+                block_hash = B256::from_slice(&get_block_buffer_manager().get_executed_res(
+                    BlockId::from_bytes(&block_id.0)
+                ).await.unwrap_or_else(|_| {
                     panic!("Failed to get executed result for block {:?}", block_id);
-                });
+                }).data);
                 // self.reth_cli.recv_compute_res(reth_block_id).await.unwrap().into();
             }
         }
