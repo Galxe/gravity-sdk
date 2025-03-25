@@ -193,56 +193,65 @@ impl BlockStore {
                 self.init_block_number(&blocks_to_recover);
                 assert!(!blocks_to_recover.is_empty());
                 for block_to_recover in blocks_to_recover {
-                    match self.payload_manager.get_transactions(block_to_recover.block()).await {
-                        Ok((txns, _)) => {
-                            info!(
-                                "recover block {}, txn_size: {}",
-                                block_to_recover.block(),
-                                txns.len()
-                            );
-                            let verified_txns: Vec<VerifiedTxn> =
-                                txns.iter().map(|txn| txn.into()).collect();
-                            let txn_num = verified_txns.len() as u64;
-                            let verified_txns =
-                                verified_txns.into_iter().map(|txn| txn.into()).collect();
-                            let block_number = block_to_recover.block().block_number().unwrap();
-                            let block_hash = match self
-                                .storage
-                                .consensus_db()
-                                .ledger_db
-                                .metadata_db()
-                                .get_block_hash(block_number)
-                            {
-                                Some(block_hash) => Some(ComputeRes::new(*block_hash, txn_num)),
-                                None => None,
-                            };
-                            let block_batch = ExternalBlock {
-                                txns: verified_txns,
-                                block_meta: ExternalBlockMeta {
-                                    block_id: BlockId(*block_to_recover.block().id()),
-                                    block_number,
-                                    usecs: block_to_recover.block().timestamp_usecs(),
-                                    randomness: block_to_recover
-                                        .randomness()
-                                        .map(|r| Random::from_bytes(r.randomness())),
-                                    block_hash,
-                                },
-                            };
-                            self.execution_layer
-                                .as_ref()
-                                .unwrap()
-                                .recovery_api
-                                .recover_ordered_block(
-                                    BlockId(*block_to_recover.parent_id()),
-                                    block_batch,
-                                )
-                                .await
-                                .unwrap();
-                        }
-                        Err(e) => {
-                            panic!("get transaction error {}", e);
+                    let mut txns = vec![];
+                    loop {
+                        match self.payload_manager.get_transactions(block_to_recover.block()).await {
+                            Ok((mut txns_, _)) => {
+                                txns.append(&mut txns_);
+                                break;
+                            }
+                            Err(e) => {
+                                warn!("get transaction error {}", e);
+                                if let Some(payload) = block_to_recover.block().payload() {
+                                    self.payload_manager
+                                        .prefetch_payload_data(payload, block_to_recover.block().timestamp_usecs());
+                                }
+                            }
                         }
                     }
+                    info!(
+                        "recover block {}, txn_size: {}",
+                        block_to_recover.block(),
+                        txns.len()
+                    );
+                    let verified_txns: Vec<VerifiedTxn> =
+                        txns.iter().map(|txn| txn.into()).collect();
+                    let txn_num = verified_txns.len() as u64;
+                    let verified_txns =
+                        verified_txns.into_iter().map(|txn| txn.into()).collect();
+                    let block_number = block_to_recover.block().block_number().unwrap();
+                    let block_hash = match self
+                        .storage
+                        .consensus_db()
+                        .ledger_db
+                        .metadata_db()
+                        .get_block_hash(block_number)
+                    {
+                        Some(block_hash) => Some(ComputeRes::new(*block_hash, txn_num)),
+                        None => None,
+                    };
+                    let block_batch = ExternalBlock {
+                        txns: verified_txns,
+                        block_meta: ExternalBlockMeta {
+                            block_id: BlockId(*block_to_recover.block().id()),
+                            block_number,
+                            usecs: block_to_recover.block().timestamp_usecs(),
+                            randomness: block_to_recover
+                                .randomness()
+                                .map(|r| Random::from_bytes(r.randomness())),
+                            block_hash,
+                        },
+                    };
+                    self.execution_layer
+                        .as_ref()
+                        .unwrap()
+                        .recovery_api
+                        .recover_ordered_block(
+                            BlockId(*block_to_recover.parent_id()),
+                            block_batch,
+                        )
+                        .await
+                        .unwrap();
                 }
                 info!("trying to commit to round {}", qc.commit_info().round());
                 if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info(), true).await {

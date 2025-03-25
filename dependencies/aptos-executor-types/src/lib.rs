@@ -38,7 +38,7 @@ pub enum ExecutorError {
     #[error("Received Empty Blocks")]
     EmptyBlocks,
 
-    #[error("request timeout")]
+    #[error("Could Not Get Data")]
     CouldNotGetData,
 }
 
