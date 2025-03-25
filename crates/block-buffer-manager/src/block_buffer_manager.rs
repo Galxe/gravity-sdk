@@ -7,8 +7,14 @@ use api_types::{compute_res::ComputeRes, u256_define::BlockId, ExternalBlock, Ex
 pub struct TxnBuffer {
     txns: Mutex<Vec<VerifiedTxnWithAccountSeqNum>>,
 }
+
+
+
 pub enum BlockState {
-    Ordered(ExternalBlock),
+    Ordered{
+        block: ExternalBlock,
+        parent_id: BlockId,
+    },
     Computed((u64, ComputeRes)),
     Commited(Option<[u8; 32]>),
 }
@@ -74,7 +80,7 @@ impl BlockBufferManager {
 
     pub async fn push_compute_res(&self, block_id: BlockId, block_hash: [u8; 32], block_num: u64) -> Result<ExternalBlock, anyhow::Error> {
         let mut block_state_machine = self.block_state_machine.lock().await;
-        if let Some(BlockState::Ordered(block)) = block_state_machine.blocks.remove(&block_id) {
+        if let Some(BlockState::Ordered{block, parent_id}) = block_state_machine.blocks.remove(&block_id) {
             assert_eq!(block.block_meta.block_number, block_num);
             block_state_machine.blocks.insert(block_id, BlockState::Computed((block_num, ComputeRes {
                 data: block_hash,
@@ -101,20 +107,20 @@ impl BlockBufferManager {
         Ok(block_metas)
     }
 
-    pub async fn push_ordered_blocks(&self, parent_id: BlockId, blocks: ExternalBlock) -> Result<(), anyhow::Error> {
+    pub async fn push_ordered_blocks(&self, parent_id: BlockId, block: ExternalBlock) -> Result<(), anyhow::Error> {
         let mut block_state_machine = self.block_state_machine.lock().await;
-        let block_id = blocks.block_meta.block_id;
-        block_state_machine.blocks.insert(block_id, BlockState::Ordered(blocks));
+        let block_id = block.block_meta.block_id;
+        block_state_machine.blocks.insert(block_id, BlockState::Ordered{block, parent_id});
         block_state_machine.sender.send(()).unwrap();
-        Ok(())
+        Ok(())  
     }
 
-    pub async fn pop_ordered_blocks(&self) -> Result<Vec<ExternalBlock>, anyhow::Error> {
+    pub async fn pop_ordered_blocks(&self) -> Result<Vec<(ExternalBlock, BlockId)>, anyhow::Error> {
         let block_state_machine = self.block_state_machine.lock().await;
         let mut blocks = Vec::new();
         for (_, block_state) in block_state_machine.blocks.iter() {
-            if let BlockState::Ordered(block) = block_state {
-                blocks.push(block.clone());
+            if let BlockState::Ordered{block, parent_id} = block_state {
+                blocks.push((block.clone(), *parent_id));
             }
         }
         block_state_machine.sender.send(()).unwrap();
@@ -133,7 +139,7 @@ impl BlockBufferManager {
                 if let Some(block) = block_state_machine.blocks.get(&block_id) {
                     let res = match block {
                         BlockState::Computed((num, res)) => Result::ComputeResult(res.clone()),
-                        BlockState::Ordered(_) => Result::WaitChange(block_state_machine.sender.subscribe()),
+                        BlockState::Ordered{..} => Result::WaitChange(block_state_machine.sender.subscribe()),
                         BlockState::Commited(_) => {
                             panic!("There is no Ordered Block but try to get executed result for block {:?}", block_id);
                         }
