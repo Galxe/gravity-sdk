@@ -15,8 +15,15 @@ pub enum BlockState {
         block: ExternalBlock,
         parent_id: BlockId,
     },
+    OrderedAndPoped{
+        block: ExternalBlock,
+        parent_id: BlockId,
+    },
     Computed((u64, ComputeRes)),
-    Commited(Option<[u8; 32]>),
+    Commited{
+        hash: Option<[u8; 32]>,
+        num: Option<u64>,
+    },
 }
 
 // TODO check block id and block number are matched
@@ -53,6 +60,7 @@ impl BlockBufferManager {
     }
 
     pub async fn push_txn(&self, txn: VerifiedTxnWithAccountSeqNum) {
+        info!("push_txn {:?}", txn.txn.seq_number());
         let mut txns = self.txn_buffer.txns.lock().await;
         txns.push(txn);
     }
@@ -73,10 +81,13 @@ impl BlockBufferManager {
         }
     }
 
-    pub async fn push_commit_blocks(&self, block_ids: Vec<(BlockId, Option<[u8; 32]>)>) -> Result<(), anyhow::Error> {
+    pub async fn push_commit_blocks(&self, block_ids: Vec<(BlockId, Option<[u8; 32]>, Option<u64>)>) -> Result<(), anyhow::Error> {
         let mut block_state_machine = self.block_state_machine.lock().await;
-        for (block_id, block_hash) in block_ids {
-            block_state_machine.blocks.insert(block_id, BlockState::Commited(block_hash));
+        for (block_id, block_hash, block_num) in block_ids {
+            block_state_machine.blocks.insert(block_id, BlockState::Commited{
+                hash: block_hash,
+                num: block_num,
+            });
         }
         let _ = block_state_machine.sender.send(());
         Ok(())
@@ -84,7 +95,7 @@ impl BlockBufferManager {
 
     pub async fn push_compute_res(&self, block_id: BlockId, block_hash: [u8; 32], block_num: u64) -> Result<ExternalBlock, anyhow::Error> {
         let mut block_state_machine = self.block_state_machine.lock().await;
-        if let Some(BlockState::Ordered{block, parent_id}) = block_state_machine.blocks.remove(&block_id) {
+        if let Some(BlockState::OrderedAndPoped{block, parent_id}) = block_state_machine.blocks.remove(&block_id) {
             assert_eq!(block.block_meta.block_number, block_num);
             block_state_machine.blocks.insert(block_id, BlockState::Computed((block_num, ComputeRes {
                 data: block_hash,
@@ -100,18 +111,20 @@ impl BlockBufferManager {
         let mut block_state_machine = self.block_state_machine.lock().await;
         let mut block_metas = Vec::new();
         for (block_id, block_state) in block_state_machine.blocks.iter() {
-            if let BlockState::Commited(hash) = block_state {
+            if let BlockState::Commited{hash, num} = block_state {
+                info!("pop_commit_blocks id {:?} num {:?}", block_id, num);
                 block_metas.push((*block_id, *hash));
             }
         }
         block_state_machine.blocks.retain(|_, block_state| {
-            !matches!(block_state, BlockState::Commited(_))
+            !matches!(block_state, BlockState::Commited{..})
         });
         let _ = block_state_machine.sender.send(());
         Ok(block_metas)
     }
 
     pub async fn push_ordered_blocks(&self, parent_id: BlockId, block: ExternalBlock) -> Result<(), anyhow::Error> {
+        info!("push_ordered_blocks {:?} num {:?}", block.block_meta.block_id, block.block_meta.block_number);
         let mut block_state_machine = self.block_state_machine.lock().await;
         let block_id = block.block_meta.block_id;
         block_state_machine.blocks.insert(block_id, BlockState::Ordered{block, parent_id});
@@ -120,11 +133,13 @@ impl BlockBufferManager {
     }
 
     pub async fn pop_ordered_blocks(&self) -> Result<Vec<(ExternalBlock, BlockId)>, anyhow::Error> {
-        let block_state_machine = self.block_state_machine.lock().await;
+        let mut block_state_machine = self.block_state_machine.lock().await;
         let mut blocks = Vec::new();
-        for (_, block_state) in block_state_machine.blocks.iter() {
+        for (_, block_state) in block_state_machine.blocks.iter_mut() {
             if let BlockState::Ordered{block, parent_id} = block_state {
+                info!("pop_ordered_blocks {:?} num {:?}", block.block_meta.block_id, block.block_meta.block_number);
                 blocks.push((block.clone(), *parent_id));
+                *block_state = BlockState::OrderedAndPoped{block: block.clone(), parent_id: *parent_id};
             }
         }
         let _ = block_state_machine.sender.send(());
@@ -133,7 +148,7 @@ impl BlockBufferManager {
 
     pub async fn get_executed_res(&self, block_id: BlockId) -> Result<ComputeRes, anyhow::Error> {
         pub enum Result {
-            ComputeResult(ComputeRes),
+            ComputeResult((u64, ComputeRes)),
             WaitChange(Receiver<()>)
         }
         loop {
@@ -142,20 +157,23 @@ impl BlockBufferManager {
                 info!("get_executed_res {:?}", block_id);
                 if let Some(block) = block_state_machine.blocks.get(&block_id) {
                     let res = match block {
-                        BlockState::Computed((num, res)) => Result::ComputeResult(res.clone()),
+                        BlockState::Computed((num, res)) => Result::ComputeResult((*num, res.clone())),
+                        BlockState::OrderedAndPoped{..} => Result::WaitChange(block_state_machine.sender.subscribe()),
                         BlockState::Ordered{..} => Result::WaitChange(block_state_machine.sender.subscribe()),
-                        BlockState::Commited(_) => {
+                        BlockState::Commited{..} => {
                             panic!("There is no Ordered Block but try to get executed result for block {:?}", block_id);
                         }
                     };
-                    info!("get_executed_res done with res {:?}", block_id);
                     res
                 } else {
                     panic!("There is no Ordered Block but try to get executed result for block {:?}", block_id)
                 }
             };
             match recv {
-                Result::ComputeResult(res) => return Ok(res),
+                Result::ComputeResult(res) => {
+                    info!("get_executed_res done with id {:?} num {:?} res {:?}", block_id, res.0, res.1);
+                    return Ok(res.1);
+                },
                 Result::WaitChange(mut recv) => {
                     tokio::select! {
                         _ = recv.recv() => continue,

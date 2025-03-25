@@ -188,7 +188,7 @@ impl RethCli {
                 .await
                 .expect("failed to pop commit blocks");
             for (block_id, block_hash) in block_ids {
-                self.send_committed_block_info(block_id, block_hash.map(|x| B256::from_slice(x.as_slice())));
+                self.send_committed_block_info(block_id, block_hash.map(|x| B256::from_slice(x.as_slice()))).await.unwrap();
             }
         }
     }

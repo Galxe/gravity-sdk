@@ -31,7 +31,6 @@ use tokio::sync::oneshot;
 use tracing::info;
 mod cli;
 mod consensus;
-mod exec_layer;
 mod reth_cli;
 mod reth_coordinator;
 

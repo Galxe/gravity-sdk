@@ -23,33 +23,9 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::time::{sleep, Sleep};
 use tracing::{debug, info};
 
-pub struct Buffer<T> {
-    sender: mpsc::Sender<T>,
-    receiver: Arc<Mutex<mpsc::Receiver<T>>>,
-}
-
-impl<T> Buffer<T> {
-    pub fn new(size: usize) -> Buffer<T> {
-        let (sender, receiver) = mpsc::channel(size);
-        Buffer { sender, receiver: Arc::new(Mutex::new(receiver)) }
-    }
-
-    pub async fn send(&self, item: T) {
-        self.sender.clone().send(item).await.unwrap();
-    }
-
-    pub async fn recv(&self) -> T {
-        let mut recv = self.receiver.lock().await;
-        recv.recv().await.unwrap()
-    }
-}
-
 pub struct RethCoordinator {
     reth_cli: Arc<RethCli>,
-    pending_buffer: Arc<Mutex<Vec<VerifiedTxnWithAccountSeqNum>>>,
     state: Arc<Mutex<State>>,
-    // todo(gravity_byteyue): Use one elegant way
-    block_number_to_txn_in_block: Arc<Mutex<HashMap<u64, u64>>>,
     execution_args_tx: Arc<Mutex<Option<oneshot::Sender<ExecutionArgs>>>>,
 }
 
@@ -62,9 +38,7 @@ impl RethCoordinator {
         let state = State::new(latest_block_number);
         Self {
             reth_cli: Arc::new(reth_cli),
-            pending_buffer: Arc::new(Mutex::new(Vec::new())),
             state: Arc::new(Mutex::new(state)),
-            block_number_to_txn_in_block: Arc::new(Mutex::new(HashMap::new())),
             execution_args_tx: Arc::new(Mutex::new(Some(execution_args_tx))),
         }
     }
