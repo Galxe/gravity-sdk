@@ -1,5 +1,5 @@
 use crate::ConsensusArgs;
-use alloy_eips::{eip4895::Withdrawals, BlockNumberOrTag};
+use alloy_eips::{eip4895::Withdrawals, BlockId, BlockNumberOrTag};
 use alloy_primitives::{
     private::alloy_rlp::{Decodable, Encodable},
     Address, TxHash, B256,
@@ -133,7 +133,6 @@ impl RethCli {
     }
 
     pub async fn recv_compute_res(&self) -> Result<ExecutedBlockMeta, ()> {
-        debug!("recv compute res {:?}", block_id);
         let pipe_api = &self.pipe_api;
         let meta = pipe_api
             .pull_executed_block_hash()
@@ -158,11 +157,14 @@ impl RethCli {
 
     pub async fn start_execution(&self) -> Result<(), String> {
         loop {
-            let (ordered_block, parent_id) = get_block_buffer_manager()
+            let exec_blocks = get_block_buffer_manager()
                 .pop_ordered_blocks()
                 .await
                 .expect("failed to pop ordered blocks");
-            self.push_ordered_block(ordered_block, B256::from_slice(parent_id.as_bytes()));
+            for (block, parent_id) in exec_blocks {
+                let parent_id = B256::from_slice(parent_id.as_bytes());
+                self.push_ordered_block(block, parent_id).await?;
+            }
         }
     }
 
@@ -170,27 +172,24 @@ impl RethCli {
         loop {
             let metadata = self.recv_compute_res().await.expect("failed to recv compute res");
             let mut block_hash_data = [0u8; 32];
-            block_hash_data.copy_from_slice(metadata.block_hash.as_bytes());
-            get_block_buffer_manager().get_block_size(metadata.block_id);
+            block_hash_data.copy_from_slice(metadata.block_hash.as_slice());
+            let block_id = ExternalBlockId::from_bytes(metadata.block_id.as_slice());
             get_block_buffer_manager()
-                .push_compute_res(metadata.block_id, block_hash_data, metadata.block_number)
+                .push_compute_res(block_id, block_hash_data, metadata.block_number)
                 .await
                 .expect("failed to pop ordered block ids");
-            get_block_buffer_manager().push_compute_res(
-                metadata.block_id,
-                compute_res,
-                metadata.block_number,
-            );
         }
     }
 
     pub async fn start_commit(&self) -> Result<(), String> {
         loop {
-            let block_id = get_block_buffer_manager()
+            let block_ids = get_block_buffer_manager()
                 .pop_commit_blocks()
                 .await
                 .expect("failed to pop commit blocks");
-            self.send_committed_block_info(block_id, todo!());
+            for (block_id, block_hash) in block_ids {
+                self.send_committed_block_info(block_id, block_hash.map(|x| B256::from_slice(x.as_slice())));
+            }
         }
     }
 
