@@ -85,7 +85,8 @@ impl BlockStore {
         }
         if self
             .get_quorum_cert_for_block(qc.certified_block().id())
-            .is_some() {
+            .is_some()
+        {
             return NeedFetchResult::QCAlreadyExist;
         }
         if self.block_exists(qc.certified_block().id()) {
@@ -104,7 +105,7 @@ impl BlockStore {
     ) -> anyhow::Result<()> {
         self.sync_to_highest_commit_cert(
             sync_info.highest_commit_cert().clone(),
-            &mut retriever
+            &mut retriever,
         )
         .await?;
 
@@ -133,7 +134,7 @@ impl BlockStore {
         // to execution.
         if self.order_vote_enabled {
             self.insert_ordered_cert(&sync_info.highest_ordered_cert())
-                            .await?;
+                .await?;
         } else {
             // When order votes are disabled, the highest_ordered_cert().certified_block().id() need not be
             // one of the ancestors of highest_quorum_cert.certified_block().id() due to forks. So, we call
@@ -196,7 +197,7 @@ impl BlockStore {
                 if !ordered_block.block().is_nil_block() {
                     observe_block(
                         ordered_block.block().timestamp_usecs(),
-                        BlockStage::OC_ADDED
+                        BlockStage::OC_ADDED,
                     );
                 }
                 SUCCESSFUL_EXECUTED_WITH_ORDER_VOTE_QC.inc();
@@ -353,8 +354,8 @@ impl BlockStore {
             blocks
                 .iter()
                 .take(blocks.len() - 1)
-                .map(|block| block.quorum_cert().clone())
-            );
+                .map(|block| block.quorum_cert().clone()),
+        );
         if !order_vote_enabled && highest_commit_cert.commit_info().id() != *GENESIS_BLOCK_ID {
             // check if highest_commit_cert comes from a fork
             // if so, we need to fetch it's block as well, to have a proof of commit.
@@ -395,7 +396,7 @@ impl BlockStore {
                 quorum_certs.push(
                     highest_commit_cert
                         .clone()
-                        .into_quorum_cert(order_vote_enabled)?
+                        .into_quorum_cert(order_vote_enabled)?,
                 );
             }
         }
@@ -471,7 +472,7 @@ impl BlockStore {
             let network = retriever.network.clone();
             tokio::spawn(async move { network.send_commit_proof(proof).await });
             return Ok(());
-        } else if self.ordered_root().round() < ledger_info.commit_info().round()
+        } else if self.ordered_root().round() < ledger_info.commit_info().round() 
             && !self.block_exists(ledger_info.commit_info().id()) {
             // if the block doesnt exist after ordered root
             let highest_commit_cert = highest_commit_cert.into_quorum_cert(self.order_vote_enabled).unwrap();
@@ -511,7 +512,7 @@ impl BlockStore {
             Err(anyhow::anyhow!("Injected error in process_block_retrieval"))
         });
         info!("process_block_retrieval origin_block_id {}, target_block_id {}",
-            request.req.block_id(), request.req.target_block_id().unwrap());
+                request.req.block_id(), request.req.target_block_id().unwrap());
         let mut blocks = vec![];
         let mut status = BlockRetrievalStatus::Succeeded;
         let mut id = request.req.block_id();
@@ -595,12 +596,12 @@ impl BlockRetriever {
         max_blocks_to_request: u64,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
     ) -> Self {
-        Self { 
-            network, 
-            preferred_peer, 
-            validator_addresses, 
-            max_blocks_to_request, 
-            pending_blocks 
+        Self {
+            network,
+            preferred_peer,
+            validator_addresses,
+            max_blocks_to_request,
+            pending_blocks,
         }
     }
 
@@ -707,7 +708,7 @@ impl BlockRetriever {
     ) -> anyhow::Result<(Vec<Block>, Vec<LedgerInfoWithSignatures>)> {
         info!(
             "Retrieving blocks starting from {}, the total number is {}",
-             block_id, num_blocks
+            block_id, num_blocks
         );
         let mut progress = 0;
         let mut last_block_id = block_id;
