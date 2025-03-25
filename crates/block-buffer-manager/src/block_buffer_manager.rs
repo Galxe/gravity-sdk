@@ -1,4 +1,4 @@
-use std::{collections::HashMap};
+use std::{collections::HashMap, time::Duration};
 use log::info;
 use tokio::sync::{broadcast::Receiver, Mutex};
 
@@ -59,13 +59,17 @@ impl BlockBufferManager {
 
     pub async fn pop_txns(&self, max_size: usize) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, anyhow::Error> {
         let mut txns = self.txn_buffer.txns.lock().await;
-        let len = txns.len();
-        if len <= max_size && !txns.is_empty() {
+        
+        if txns.is_empty() || max_size == 0 {
+            return Ok(Vec::new());
+        }
+        if txns.len() <= max_size {
             let result = std::mem::take(&mut *txns);
-            return Ok(result)
+            return Ok(result);
         } else {
-            let result = txns.split_off(max_size - len);
-            return Ok(result)
+            // take 0..max_size
+            let result = txns.drain(0..max_size).collect();
+            return Ok(result);
         }
     }
 
@@ -74,7 +78,7 @@ impl BlockBufferManager {
         for (block_id, block_hash) in block_ids {
             block_state_machine.blocks.insert(block_id, BlockState::Commited(block_hash));
         }
-        block_state_machine.sender.send(()).unwrap();
+        let _ = block_state_machine.sender.send(());
         Ok(())
     }
 
@@ -86,7 +90,7 @@ impl BlockBufferManager {
                 data: block_hash,
                 txn_num: block.txns.len() as u64
             })));
-            block_state_machine.sender.send(()).unwrap();
+            let _ = block_state_machine.sender.send(());
             return Ok(block);
         }
         panic!("There is no Ordered Block but try to push compute result for block {:?}", block_id)
@@ -103,7 +107,7 @@ impl BlockBufferManager {
         block_state_machine.blocks.retain(|_, block_state| {
             !matches!(block_state, BlockState::Commited(_))
         });
-        block_state_machine.sender.send(()).unwrap();
+        let _ = block_state_machine.sender.send(());
         Ok(block_metas)
     }
 
@@ -111,7 +115,7 @@ impl BlockBufferManager {
         let mut block_state_machine = self.block_state_machine.lock().await;
         let block_id = block.block_meta.block_id;
         block_state_machine.blocks.insert(block_id, BlockState::Ordered{block, parent_id});
-        block_state_machine.sender.send(()).unwrap();
+        let _ = block_state_machine.sender.send(());
         Ok(())  
     }
 
@@ -123,7 +127,7 @@ impl BlockBufferManager {
                 blocks.push((block.clone(), *parent_id));
             }
         }
-        block_state_machine.sender.send(()).unwrap();
+        let _ = block_state_machine.sender.send(());
         Ok(blocks)
     }
 
@@ -153,10 +157,12 @@ impl BlockBufferManager {
             match recv {
                 Result::ComputeResult(res) => return Ok(res),
                 Result::WaitChange(mut recv) => {
-                    if let Err(e) = recv.recv().await {
-                        panic!("Failed to get executed result for block {:?}", block_id)
+                    tokio::select! {
+                        _ = recv.recv() => continue,
+                        _ = tokio::time::sleep(Duration::from_secs(1)) => {
+                            continue;
+                        }
                     }
-                    continue;
                 }
             }
         }
