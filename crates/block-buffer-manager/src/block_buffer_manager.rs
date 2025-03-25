@@ -84,10 +84,31 @@ impl BlockBufferManager {
     pub async fn push_commit_blocks(&self, block_ids: Vec<(BlockId, Option<[u8; 32]>, Option<u64>)>) -> Result<(), anyhow::Error> {
         let mut block_state_machine = self.block_state_machine.lock().await;
         for (block_id, block_hash, block_num) in block_ids {
-            block_state_machine.blocks.insert(block_id, BlockState::Commited{
-                hash: block_hash,
-                num: block_num,
-            });
+            info!("push_commit_blocks id {:?} num {:?}", block_id, block_num);
+            if let Some(state) = block_state_machine.blocks.get_mut(&block_id) {
+                match state {
+                    BlockState::Computed((num, _)) => {
+                        if block_num.is_some() && *num == block_num.unwrap() {
+                            *state = BlockState::Commited{
+                                hash: block_hash,
+                                num: block_num,
+                            };
+                        } else if block_num.is_none() {
+                            *state = BlockState::Commited{
+                                hash: block_hash,
+                                num: None,
+                            };
+                        } else {
+                            panic!("There is no Ordered Block but try to push commit block for block {:?}", block_id);
+                        }
+                    }
+                    _ => {
+                        panic!("There is no Ordered Block but try to push commit block for block {:?}", block_id);
+                    }
+                }
+            } else {
+                panic!("There is no Ordered Block but try to push commit block for block {:?}", block_id);
+            }
         }
         let _ = block_state_machine.sender.send(());
         Ok(())
@@ -95,7 +116,7 @@ impl BlockBufferManager {
 
     pub async fn push_compute_res(&self, block_id: BlockId, block_hash: [u8; 32], block_num: u64) -> Result<ExternalBlock, anyhow::Error> {
         let mut block_state_machine = self.block_state_machine.lock().await;
-        if let Some(BlockState::OrderedAndPoped{block, parent_id}) = block_state_machine.blocks.remove(&block_id) {
+        if let Some(BlockState::OrderedAndPoped{block, parent_id: _}) = block_state_machine.blocks.remove(&block_id) {
             assert_eq!(block.block_meta.block_number, block_num);
             block_state_machine.blocks.insert(block_id, BlockState::Computed((block_num, ComputeRes {
                 data: block_hash,

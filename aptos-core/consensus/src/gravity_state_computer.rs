@@ -130,6 +130,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         APTOS_COMMIT_BLOCKS.inc_by(block_ids.len() as u64);
         info!("commit blocks: {:?}", block_ids);
         let (block_id, block_hash) = (ledger_info_with_sigs.ledger_info().commit_info().id(), ledger_info_with_sigs.ledger_info().block_hash());
+        let block_num = ledger_info_with_sigs.ledger_info().block_number();
         if !block_ids.is_empty() {
             self.runtime.block_on(async move {
                 get_block_buffer_manager().push_commit_blocks(block_ids.into_iter()
@@ -137,9 +138,9 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                     let mut v = [0u8; 32];
                     v.copy_from_slice(block_hash.as_ref());
                     if x == block_id {
-                        (BlockId::from_bytes(x.as_slice()), Some(v))
+                        (BlockId::from_bytes(x.as_slice()), Some(v), Some(block_num))
                     } else {
-                        (BlockId::from_bytes(x.as_slice()), None)
+                        (BlockId::from_bytes(x.as_slice()), None, None)
                     }
                 })
                 .collect())
