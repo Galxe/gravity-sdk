@@ -137,6 +137,7 @@ impl RecoveryApi for RethCoordinator {
         let block_id = block.block_meta.block_id.clone();
         let origin_block_hash = block.block_meta.block_hash;
         let mut block_hash;
+        let block_number = block.block_meta.block_number;
         match self.recv_ordered_block(parent_id, block).await {
             Err(ExecError::DuplicateExecError) => {
                 loop {
@@ -151,7 +152,8 @@ impl RecoveryApi for RethCoordinator {
             Err(err) => return Err(err),
             Ok(()) => {
                 block_hash = B256::from_slice(&get_block_buffer_manager().get_executed_res(
-                    BlockId::from_bytes(&block_id.0)
+                    BlockId::from_bytes(&block_id.0),
+                    block_number
                 ).await.unwrap_or_else(|_| {
                     panic!("Failed to get executed result for block {:?}", block_id);
                 }).data);

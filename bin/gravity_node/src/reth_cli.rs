@@ -12,7 +12,7 @@ use api_types::{
 use api_types::{ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 use block_buffer_manager::get_block_buffer_manager;
 use core::panic;
-use greth::reth_db::DatabaseEnv;
+use greth::{reth_db::DatabaseEnv, reth_provider::BlockHashReader};
 use greth::reth_ethereum_engine_primitives::EthPayloadAttributes;
 use greth::reth_node_api::NodeTypesWithDBAdapter;
 use greth::reth_node_ethereum::EthereumNode;
@@ -156,12 +156,20 @@ impl RethCli {
     }
 
     pub async fn start_execution(&self) -> Result<(), String> {
+        let mut start_ordered_block = self.provider.last_block_number().unwrap();
         loop {
+            // max executing block number
             let exec_blocks = get_block_buffer_manager()
-                .pop_ordered_blocks()
+                .get_ordered_blocks(start_ordered_block, None)
                 .await
                 .expect("failed to pop ordered blocks");
+            
+            if exec_blocks.is_empty() {
+                continue;
+            }
+            start_ordered_block = exec_blocks.last().unwrap().0.block_meta.block_number + 1;
             for (block, parent_id) in exec_blocks {
+                info!("push ordered block {:?} with parent id {}", block.block_meta.block_number, parent_id);
                 let parent_id = B256::from_slice(parent_id.as_bytes());
                 self.push_ordered_block(block, parent_id).await?;
             }
@@ -175,21 +183,28 @@ impl RethCli {
             block_hash_data.copy_from_slice(metadata.block_hash.as_slice());
             let block_id = ExternalBlockId::from_bytes(metadata.block_id.as_slice());
             get_block_buffer_manager()
-                .push_compute_res(block_id, block_hash_data, metadata.block_number)
+                .set_compute_res(block_id, block_hash_data, metadata.block_number)
                 .await
                 .expect("failed to pop ordered block ids");
         }
     }
 
     pub async fn start_commit(&self) -> Result<(), String> {
+        let mut start_commit = self.provider.last_block_number().unwrap();
         loop {
+            // (start, Option<size>)
             let block_ids = get_block_buffer_manager()
-                .pop_commit_blocks()
+                .get_commited_blocks(start_commit, None)
                 .await
                 .expect("failed to pop commit blocks");
-            for (block_id, block_hash) in block_ids {
+            if block_ids.is_empty() {
+                continue;
+            }
+            start_commit = block_ids.last().unwrap().1 + 1;
+            for (block_id, _block_num, block_hash) in block_ids {
                 self.send_committed_block_info(block_id, block_hash.map(|x| B256::from_slice(x.as_slice()))).await.unwrap();
             }
+            get_block_buffer_manager().remove_commited_blocks(self.provider.last_block_number().unwrap()).await.unwrap();
         }
     }
 
