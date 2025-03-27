@@ -159,7 +159,7 @@ impl ConsensusEngine {
             execution_layer.execution_api.clone(),
         );
         runtimes.extend(mempool_runtime);
-        let mut args = ConsensusAdapterArgs::new(execution_layer.clone(), consensus_db);
+        let mut args = ConsensusAdapterArgs::new(consensus_db);
         let (consensus_runtime, _, _) = start_consensus(
             &node_config,
             &mut event_subscription_service,
