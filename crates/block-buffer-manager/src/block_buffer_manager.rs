@@ -1,5 +1,5 @@
 use log::info;
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, str, time::Duration};
 use tokio::{
     sync::{broadcast::Receiver, Mutex},
     time::Instant,
@@ -13,6 +13,12 @@ use itertools::Itertools;
 
 pub struct TxnBuffer {
     txns: Mutex<Vec<VerifiedTxnWithAccountSeqNum>>,
+}
+
+pub struct BlockIdNumHash {
+    pub block_id: BlockId,
+    pub num: u64,
+    pub hash: Option<[u8; 32]>,
 }
 
 pub enum BlockState {
@@ -106,8 +112,7 @@ impl BlockBufferManager {
         max_size: Option<usize>,
     ) -> Result<Vec<(ExternalBlock, BlockId)>, anyhow::Error> {
         let start = Instant::now();
-        let timeout = Duration::from_secs(2);
-
+        let timeout = Duration::from_secs(5);
         loop {
             if start.elapsed() > timeout {
                 return Err(anyhow::anyhow!("Timeout waiting for ordered blocks"));
@@ -127,7 +132,6 @@ impl BlockBufferManager {
                 .sorted_by_key(|(b, _id)| b.block_meta.block_number)
                 .take(max_size.unwrap_or(usize::MAX))
                 .collect::<Vec<_>>();
-
             if result.is_empty() {
                 // Release lock before waiting
                 drop(block_state_machine);
@@ -149,7 +153,7 @@ impl BlockBufferManager {
         block_num: u64,
     ) -> Result<ComputeRes, anyhow::Error> {
         let start = Instant::now();
-        let timeout = Duration::from_secs(2);
+        let timeout = Duration::from_secs(5);
 
         loop {
             if start.elapsed() > timeout {
@@ -219,31 +223,31 @@ impl BlockBufferManager {
 
     pub async fn set_commit_blocks(
         &self,
-        block_ids: Vec<(BlockId, Option<[u8; 32]>, u64)>,
+        block_ids: Vec<BlockIdNumHash>,
     ) -> Result<(), anyhow::Error> {
         let mut block_state_machine = self.block_state_machine.lock().await;
-        for (block_id, block_hash, block_num) in block_ids {
-            info!("push_commit_blocks id {:?} num {:?}", block_id, block_num);
-            if let Some(state) = block_state_machine.blocks.get_mut(&block_id) {
+        for block_id_num_hash in block_ids {
+            info!("push_commit_blocks id {:?} num {:?}", block_id_num_hash.block_id, block_id_num_hash.num);
+            if let Some(state) = block_state_machine.blocks.get_mut(&block_id_num_hash.block_id) {
                 match state {
                     BlockState::Computed((num, _)) => {
-                        if *num == block_num {
-                            *state = BlockState::Commited { hash: block_hash, num: block_num };
+                        if *num == block_id_num_hash.num {
+                            *state = BlockState::Commited { hash: block_id_num_hash.hash, num: block_id_num_hash.num };
                         } else {
-                            panic!("There is no Ordered Block but try to push commit block for block {:?}", block_id);
+                            panic!("There is no Ordered Block but try to push commit block for block {:?}", block_id_num_hash.block_id);
                         }
                     }
                     _ => {
                         panic!(
                             "There is no Ordered Block but try to push commit block for block {:?}",
-                            block_id
+                            block_id_num_hash.block_id
                         );
                     }
                 }
             } else {
                 panic!(
                     "There is no Ordered Block but try to push commit block for block {:?}",
-                    block_id
+                    block_id_num_hash.block_id
                 );
             }
         }
@@ -255,7 +259,7 @@ impl BlockBufferManager {
         &self,
         start_num: u64,
         max_size: Option<usize>,
-    ) -> Result<Vec<(BlockId, u64, Option<[u8; 32]>)>, anyhow::Error> {
+    ) -> Result<Vec<BlockIdNumHash>, anyhow::Error> {
         let start = Instant::now();
         let timeout = Duration::from_secs(2);
 
@@ -269,13 +273,15 @@ impl BlockBufferManager {
                 .blocks
                 .iter()
                 .map(|(block_id, block_state)| match block_state {
-                    BlockState::Commited { hash, num } => Some((*block_id, *num, *hash)),
+                    BlockState::Commited { hash, num } => {
+                        Some(BlockIdNumHash { block_id: *block_id, num: *num, hash: *hash })
+                    },
                     _ => None,
                 })
                 .filter(|v| v.is_some())
                 .map(|v| v.unwrap()) // Unwrap after filtering for Some values
-                .filter(|(_, num, _)| *num >= start_num)
-                .sorted_by_key(|(_, num, _)| *num) // Use sorted_by_key from itertools
+                .filter(|v| v.num >= start_num)
+                .sorted_by_key(|v| v.num) // Use sorted_by_key from itertools
                 .take(max_size.unwrap_or(usize::MAX))
                 .collect::<Vec<_>>();
 

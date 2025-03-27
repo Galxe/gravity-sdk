@@ -50,7 +50,7 @@ use reth_provider::providers::BlockchainProvider;
 
 struct ConsensusArgs {
     pub engine_api: AuthServerHandle,
-    pub pipeline_api: PipeExecLayerApi,
+    pub pipeline_api: PipeExecLayerApi<BlockViewStorage<BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>>>,
     pub provider: BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
     pub tx_listener: tokio::sync::mpsc::Receiver<TxHash>,
     pub pool: reth_transaction_pool::Pool<
@@ -128,7 +128,7 @@ fn run_reth(
                     latest_block_hash,
                     BTreeMap::new(),
                 );
-                let pipeline_api_v2 = reth_pipe_exec_layer_ext_v2::new_pipe_exec_layer_api(
+                let pipeline_api_v2: PipeExecLayerApi<BlockViewStorage<BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>>> = reth_pipe_exec_layer_ext_v2::new_pipe_exec_layer_api(
                     chain_spec,
                     storage,
                     latest_block.header,

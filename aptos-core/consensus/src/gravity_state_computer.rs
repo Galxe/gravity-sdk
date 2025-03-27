@@ -19,6 +19,7 @@ use aptos_types::{
     block_executor::config::BlockExecutorConfigFromOnchain,
     ledger_info::LedgerInfoWithSignatures,
 };
+use block_buffer_manager::block_buffer_manager::BlockIdNumHash;
 use block_buffer_manager::get_block_buffer_manager;
 use coex_bridge::{get_coex_bridge, Func};
 use std::sync::Arc;
@@ -104,10 +105,10 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                             let mut v = [0u8; 32];
                             v.copy_from_slice(block_hash.as_ref());
                             if x == block_id {
-                                (BlockId::from_bytes(x.as_slice()), Some(v), block_num + (i - len + 1) as u64)
+                                BlockIdNumHash { block_id: BlockId::from_bytes(x.as_slice()), num: block_num + (i - len + 1) as u64, hash: Some(v) }
                             } else {
                                 // TODO: commit use block num, but here use block id, need to fix
-                                (BlockId::from_bytes(x.as_slice()), None, block_num + (i - len + 1) as u64)
+                                BlockIdNumHash { block_id: BlockId::from_bytes(x.as_slice()), num: block_num + (i - len + 1) as u64, hash: None }
                             }
                         }
                     ).collect())
@@ -144,9 +145,9 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                     let mut v = [0u8; 32];
                     v.copy_from_slice(block_hash.as_ref());
                     if x == block_id {
-                        (BlockId::from_bytes(x.as_slice()), Some(v), block_num - (len - 1 - i) as u64)
+                        BlockIdNumHash { block_id: BlockId::from_bytes(x.as_slice()), num: block_num - (len - 1 - i) as u64, hash: Some(v) }
                     } else {
-                        (BlockId::from_bytes(x.as_slice()), None, block_num - (len - 1 - i) as u64)
+                        BlockIdNumHash { block_id: BlockId::from_bytes(x.as_slice()), num: block_num - (len - 1 - i) as u64, hash: None }
                     }
                 })
                 .collect())
