@@ -12,7 +12,7 @@ use api_types::{
 use api_types::{ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 use block_buffer_manager::get_block_buffer_manager;
 use core::panic;
-use greth::reth_db::DatabaseEnv;
+use greth::{gravity_storage::block_view_storage::BlockViewStorage, reth_db::DatabaseEnv, reth_primitives::EthPrimitives, reth_provider::BlockHashReader};
 use greth::reth_ethereum_engine_primitives::EthPayloadAttributes;
 use greth::reth_node_api::NodeTypesWithDBAdapter;
 use greth::reth_node_ethereum::EthereumNode;
@@ -26,13 +26,13 @@ use greth::reth_transaction_pool::TransactionPool;
 use greth::{
     reth::rpc::builder::auth::AuthServerHandle, reth_node_core::primitives::SignedTransaction,
 };
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 use tracing::*;
 
 pub struct RethCli {
     auth: AuthServerHandle,
-    pipe_api: PipeExecLayerApi,
+    pipe_api: PipeExecLayerApi<BlockViewStorage<BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>>>,    
     chain_id: u64,
     provider: BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
     txn_listener: Mutex<tokio::sync::mpsc::Receiver<TxHash>>,
@@ -77,19 +77,6 @@ impl RethCli {
         self.chain_id
     }
 
-    fn create_payload_attributes(parent_beacon_block_root: B256, ts: u64) -> EthPayloadAttributes {
-        EthPayloadAttributes {
-            timestamp: ts,
-            prev_randao: B256::ZERO,
-            suggested_fee_recipient: Address::ZERO,
-            withdrawals: Some(Vec::new()),
-            parent_beacon_block_root: Some(parent_beacon_block_root),
-        }
-    }
-
-    fn block_id_to_b256(block_id: ExternalBlockId) -> B256 {
-        B256::new(block_id.0)
-    }
 
     fn txn_to_signed(bytes: &mut [u8], chain_id: u64) -> (Address, TransactionSigned) {
         let txn = TransactionSigned::decode(&mut bytes.as_ref()).unwrap();
@@ -155,54 +142,14 @@ impl RethCli {
         Ok(())
     }
 
-    pub async fn start_execution(&self) -> Result<(), String> {
-        loop {
-            let exec_blocks = get_block_buffer_manager()
-                .pop_ordered_blocks()
-                .await
-                .expect("failed to pop ordered blocks");
-            for (block, parent_id) in exec_blocks {
-                let parent_id = B256::from_slice(parent_id.as_bytes());
-                self.push_ordered_block(block, parent_id).await?;
-            }
-        }
-    }
-
-    pub async fn start_commit_vote(&self) -> Result<(), String> {
-        loop {
-            let metadata = self.recv_compute_res().await.expect("failed to recv compute res");
-            let mut block_hash_data = [0u8; 32];
-            block_hash_data.copy_from_slice(metadata.block_hash.as_slice());
-            let block_id = ExternalBlockId::from_bytes(metadata.block_id.as_slice());
-            get_block_buffer_manager()
-                .push_compute_res(block_id, block_hash_data, metadata.block_number)
-                .await
-                .expect("failed to pop ordered block ids");
-        }
-    }
-
-    pub async fn start_commit(&self) -> Result<(), String> {
-        loop {
-            let block_ids = get_block_buffer_manager()
-                .pop_commit_blocks()
-                .await
-                .expect("failed to pop commit blocks");
-            for (block_id, block_hash) in block_ids {
-                self.send_committed_block_info(block_id, block_hash.map(|x| B256::from_slice(x.as_slice())));
-            }
-        }
-    }
-
     pub async fn start_mempool(&self) -> Result<(), String> {
         debug!("start process pending transactions");
         let mut count = 0;
         let mut total = 0;
-        let start_time = std::time::Instant::now();
         let mut last_time = std::time::Instant::now();
         let mut mut_txn_listener = self.txn_listener.lock().await;
         while let Some(txn_hash) = mut_txn_listener.recv().await {
             let txn = self.pool.get(&txn_hash).unwrap();
-            let before_recv = std::time::Instant::now();
             let sender = txn.sender();
             let nonce = txn.nonce();
             let txn = txn.transaction.transaction().tx();
@@ -225,21 +172,10 @@ impl RethCli {
                 count += 1;
                 get_block_buffer_manager().push_txn(vtxn).await;
             }
-            let after_ser = std::time::Instant::now();
-            trace!(
-                "push addr {} txn nonce: {} acc_nonce: {} recv_time {} serialize_time {}",
-                sender,
-                nonce,
-                account_nonce,
-                before_recv.elapsed().as_micros(),
-                after_ser.elapsed().as_micros()
-            );
             if last_time.elapsed().as_secs() > 1 {
-                debug!(
-                    "processed {} transactions in {}s with speed {}",
-                    count,
-                    last_time.elapsed().as_secs(),
-                    count as f64 / start_time.elapsed().as_secs_f64()
+                info!(
+                    "processed {} transactions in last second total {}",
+                    count, total
                 );
                 total += count;
                 count = 0;
@@ -249,6 +185,63 @@ impl RethCli {
 
         debug!("end process pending transactions");
         Ok(())
+    }
+
+    pub async fn start_execution(&self) -> Result<(), String> {
+        let mut start_ordered_block = self.provider.last_block_number().unwrap();
+        loop {
+            // max executing block number
+            let exec_blocks = get_block_buffer_manager()
+                .get_ordered_blocks(start_ordered_block, None)
+                .await
+                .expect("failed to pop ordered blocks");
+            if exec_blocks.is_empty() {
+                info!("no ordered blocks");
+                continue;
+            }
+            start_ordered_block = exec_blocks.last().unwrap().0.block_meta.block_number + 1;
+            for (block, parent_id) in exec_blocks {
+                info!("send reth ordered block num {:?} id {:?} with parent id {}", block.block_meta.block_number, block.block_meta.block_id, parent_id);
+                let parent_id = B256::from_slice(parent_id.as_bytes());
+                self.push_ordered_block(block, parent_id).await?;
+            }
+        }
+    }
+
+    pub async fn start_commit_vote(&self) -> Result<(), String> {
+        loop {
+            let metadata = self.recv_compute_res().await.expect("failed to recv compute res");
+            let mut block_hash_data = [0u8; 32];
+            block_hash_data.copy_from_slice(metadata.block_hash.as_slice());
+            let block_id = ExternalBlockId::from_bytes(metadata.block_id.as_slice());
+            get_block_buffer_manager()
+                .set_compute_res(block_id, block_hash_data, metadata.block_number)
+                .await
+                .expect("failed to pop ordered block ids");
+        }
+    }
+
+    pub async fn start_commit(&self) -> Result<(), String> {
+        let mut start_commit_num = self.provider.last_block_number().unwrap();
+        loop {
+            let block_ids = get_block_buffer_manager()
+                .get_commited_blocks(start_commit_num,None)
+                .await
+                .expect("failed to pop commit blocks");
+            if block_ids.is_empty() {
+                continue;
+            }
+            let block_id = self.pipe_api.get_block_id(block_ids.last().unwrap().num).unwrap_or_else(|| {
+                panic!("commit num {} not found block id", start_commit_num);
+            });
+            assert_eq!(ExternalBlockId::from_bytes(block_id.as_slice()), block_ids.last().unwrap().block_id);
+            start_commit_num = block_ids.last().unwrap().num + 1;
+            for block_id_num_hash in block_ids {
+                self.send_committed_block_info(block_id_num_hash.block_id, block_id_num_hash.hash.map(|x| B256::from_slice(x.as_slice()))).await.unwrap();
+            }
+            let last_block_number = self.provider.last_block_number().unwrap();
+            get_block_buffer_manager().remove_commited_blocks(last_block_number).await.unwrap();
+        }
     }
 
     pub async fn latest_block_number(&self) -> u64 {
