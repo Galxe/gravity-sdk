@@ -286,6 +286,7 @@ impl Mempool {
         // The prority of this node for the peer that sent the transaction
         priority: Option<BroadcastPeerPriority>,
     ) -> MempoolStatus {
+        let nonce = txn.sequence_number();
         trace!(
             LogSchema::new(LogEntry::AddTxn)
                 .txns(TxnsLog::new_txn(txn.sender(), txn.sequence_number())),
@@ -296,6 +297,7 @@ impl Mempool {
         let ranking_score = ZERO_RANKING_SCORE;
         // don't accept old transactions (e.g. seq is less than account's current seq_number)
         if txn.sequence_number() < db_sequence_number {
+            info!("txn from account {}, nonce {} too new", sender.to_canonical_string(), nonce);
             return MempoolStatus::new(MempoolStatusCode::InvalidSeqNumber).with_message(format!(
                 "transaction sequence number is {}, current sequence number is  {}",
                 txn.sequence_number(),
@@ -335,6 +337,7 @@ impl Mempool {
                 );
             }
         }
+        info!("txn from account {}, nonce {}, status {}", sender.to_canonical_string(), nonce, status.code);
         counters::core_mempool_txn_ranking_score(
             counters::INSERT_LABEL,
             status.code.to_string().as_str(),
