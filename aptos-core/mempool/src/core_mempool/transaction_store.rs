@@ -190,7 +190,7 @@ impl TransactionStore {
     pub(crate) fn insert(&mut self, mut txn: MempoolTransaction) -> MempoolStatus {
         let address = txn.verified_txn().sender();
         let txn_seq_num = txn.verified_txn().sequence_number();
-        debug!("add txn ({} {} {})", txn.sender(), txn.sequence_number(), txn.account_sequence_number());
+        info!("add txn ({} {} {})", txn.sender(), txn.sequence_number(), txn.account_sequence_number());
         // If the transaction is already in Mempool, we just reject
         // TODO: how to replace the old txn with the new one?
         if let Some(txns) = self.transactions.get_mut(&address) {
@@ -252,6 +252,9 @@ impl TransactionStore {
     }
 
     fn track_indices(&self) {
+        counters::core_mempool_index_size(
+            counters::TRANSACTION_STORE_INDEX_LABEL,
+            self.transactions.len());
         counters::core_mempool_index_size(
             counters::PRIORITY_INDEX_LABEL,
             self.priority_index.size(),
@@ -383,7 +386,7 @@ impl TransactionStore {
     ///   TimelineIndex (txns for SharedMempool).
     /// - Other txns are considered to be "non-ready" and should be added to ParkingLotIndex.
     fn process_ready_transactions(&mut self, address: &AccountAddress, sequence_num: u64) {
-        debug!("[mempool] processing ready transactions without range  addr {} min seq {}", address, sequence_num,
+        info!("[mempool] processing ready transactions without range  addr {} min seq {}", address, sequence_num,
                 );
         let sender_bucket = sender_bucket(address, self.num_sender_buckets);
         if let Some(txns) = self.transactions.get_mut(address) {
@@ -482,7 +485,7 @@ impl TransactionStore {
     /// It includes deletion of all transactions with sequence number <= `account_sequence_number`
     /// and potential promotion of sequential txns to PriorityIndex/TimelineIndex.
     pub fn commit_transaction(&mut self, account: &AccountAddress, sequence_number: u64) {
-        debug!("[mempool] committing txn {} {}", account, sequence_number);
+        info!("[mempool] committing txn {} {}", account, sequence_number);
         let current_seq_number = self.get_sequence_number(account).map_or(0, |v| *v);
         let new_seq_number = max(current_seq_number, sequence_number + 1);
         self.sequence_numbers.insert(*account, new_seq_number);
