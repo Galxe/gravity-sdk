@@ -459,7 +459,7 @@ impl PipelineBuilder {
             block_hash: None,
         };
         get_block_buffer_manager()
-            .push_ordered_blocks(BlockId::from_bytes(block.parent_id().as_slice()), ExternalBlock { block_meta: meta_data, txns: real_txns })
+            .set_ordered_blocks(BlockId::from_bytes(block.parent_id().as_slice()), ExternalBlock { block_meta: meta_data, txns: real_txns })
             .await
             .unwrap_or_else(|e| panic!("Failed to push ordered blocks {}", e));
         Ok(())
@@ -480,15 +480,8 @@ impl PipelineBuilder {
         let block_id = block.id();
         let block_number = block.block_number();
         let timestamp = block.timestamp_usecs();
-        let meta_data = ExternalBlockMeta {
-            block_id: BlockId(*block_id),
-            block_number: block_number.unwrap_or_else(|| panic!("No block number")),
-            usecs: timestamp,
-            randomness: None,
-            block_hash: None,
-        };
         let hash = get_block_buffer_manager()
-            .get_executed_res(BlockId::from_bytes(block_id.as_slice()))
+            .get_executed_res(BlockId::from_bytes(block_id.as_slice()), block_number.unwrap())
             .await
             .unwrap_or_else(|e| panic!("Failed to get executed result {}", e));
         update_counters_for_compute_res(&hash);
