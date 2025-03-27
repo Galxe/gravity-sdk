@@ -248,13 +248,13 @@ impl StateComputer for ExecutionProxy {
         Box::pin(async move {
             let block_id = meta_data.block_id;
             get_block_buffer_manager()
-                .push_ordered_blocks(BlockId::from_bytes(parent_block_id.as_slice()), ExternalBlock {
-                    block_meta: meta_data,
+                .set_ordered_blocks(BlockId::from_bytes(parent_block_id.as_slice()), ExternalBlock {
+                    block_meta: meta_data.clone(),
                     txns: real_txns,
                 })
                 .await.unwrap_or_else(|e| panic!("Failed to push ordered blocks {}", e));
             let res = get_block_buffer_manager()
-                .get_executed_res(block_id)
+                .get_executed_res(block_id, meta_data.block_number)
                 .await.unwrap_or_else(|e| panic!("Failed to get executed result {}", e));
             update_counters_for_compute_res(&res);
             let result = StateComputeResult::with_root_hash(HashValue::new(res.bytes()));
