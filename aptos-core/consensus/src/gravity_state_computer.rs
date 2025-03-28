@@ -7,7 +7,6 @@ use crate::counters::{APTOS_COMMIT_BLOCKS, APTOS_EXECUTION_TXNS};
 use crate::payload_client::user::quorum_store_client::QuorumStoreClient;
 use anyhow::Result;
 use api_types::u256_define::BlockId;
-use api_types::ExecutionLayer;
 use aptos_crypto::HashValue;
 use aptos_executor::block_executor::BlockExecutor;
 use aptos_executor_types::{
@@ -27,15 +26,13 @@ use tokio::runtime::Runtime;
 
 pub struct ConsensusAdapterArgs {
     pub quorum_store_client: Option<Arc<QuorumStoreClient>>,
-    pub execution_layer: Option<ExecutionLayer>,
     pub consensus_db: Option<Arc<ConsensusDB>>,
 }
 
 impl ConsensusAdapterArgs {
-    pub fn new(execution_layer: ExecutionLayer, consensus_db: Arc<ConsensusDB>) -> Self {
+    pub fn new(consensus_db: Arc<ConsensusDB>) -> Self {
         Self {
             quorum_store_client: None,
-            execution_layer: Some(execution_layer),
             consensus_db: Some(consensus_db),
         }
     }
@@ -45,7 +42,7 @@ impl ConsensusAdapterArgs {
     }
 
     pub fn dummy() -> Self {
-        Self { quorum_store_client: None, execution_layer: None, consensus_db: None }
+        Self { quorum_store_client: None, consensus_db: None }
     }
 }
 
