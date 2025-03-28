@@ -5,12 +5,13 @@ use std::{
 };
 
 use crate::network::{build_network_interfaces, consensus_network_configuration, extract_network_ids, mempool_network_configuration};
-use api_types::ExecutionChannel;
+use api_types::{u256_define::BlockId, ExecutionChannel};
+use block_buffer_manager::get_block_buffer_manager;
 use aptos_config::{
     config::{NetworkConfig, NodeConfig, Peer, PeerRole},
     network_id::NetworkId,
 };
-use aptos_consensus::consensusdb::ConsensusDB;
+use aptos_consensus::consensusdb::{BlockSchema, ConsensusDB};
 use aptos_consensus::{
     gravity_state_computer::ConsensusAdapterArgs, network_interface::ConsensusMsg,
     persistent_liveness_storage::StorageWriteProxy, quorum_store::quorum_store_db::QuorumStoreDB,
@@ -186,4 +187,21 @@ pub fn init_peers_and_metadata(
     }
     let _ = peers_and_metadata.set_trusted_peers(&NetworkId::Validator, peer_set);
     peers_and_metadata
+}
+
+pub async fn init_block_buffer_manager(
+    consensus_db: &Arc<ConsensusDB>,
+    latest_block_number: u64,
+) {
+    let start_block_number = latest_block_number - 256;
+    let block_number_to_block_id = consensus_db.get_all::<BlockSchema>().unwrap()
+            .into_iter()
+            .map(|(_, block)| block)
+            .filter(|block| {
+                block.block_number().is_some()
+                    && block.block_number().unwrap() >= start_block_number
+            })
+            .map(|block| (block.block_number().unwrap(), BlockId::new(*block.id())))
+            .collect::<HashMap<u64, BlockId>>();
+    get_block_buffer_manager().init(latest_block_number, block_number_to_block_id).await;
 }

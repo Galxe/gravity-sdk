@@ -54,7 +54,6 @@ use crate::{
     util::time_service::TimeService,
 };
 use anyhow::{anyhow, bail, ensure, Context};
-use api_types::ExecutionLayer;
 use aptos_bounded_executor::BoundedExecutor;
 use aptos_channels::{aptos_channel, message_queues::QueueStyle};
 use aptos_config::config::{
@@ -177,7 +176,6 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     consensus_publisher: Option<Arc<ConsensusPublisher>>,
     pending_blocks: Arc<Mutex<PendingBlocks>>,
     key_storage: PersistentSafetyStorage,
-    execution_layer: Option<ExecutionLayer>,
 }
 
 impl<P: OnChainConfigProvider> EpochManager<P> {
@@ -198,7 +196,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         vtxn_pool: VTxnPoolState,
         rand_storage: Arc<dyn RandStorage<AugmentedData>>,
         consensus_publisher: Option<Arc<ConsensusPublisher>>,
-        execution_layer: Option<ExecutionLayer>,
     ) -> Self {
         let author = node_config.validator_network.as_ref().unwrap().peer_id();
         let config = node_config.consensus.clone();
@@ -250,7 +247,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             consensus_publisher,
             pending_blocks: Arc::new(Mutex::new(PendingBlocks::new())),
             key_storage,
-            execution_layer,
         }
     }
 
@@ -676,7 +672,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             self.payload_manager.clone(),
             onchain_consensus_config.order_vote_enabled(),
             self.pending_blocks.clone(),
-            self.execution_layer.clone(),
         );
         tokio::spawn(recovery_manager.start(recovery_manager_rx, close_rx));
     }
@@ -860,7 +855,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             payload_manager,
             onchain_consensus_config.order_vote_enabled(),
             self.pending_blocks.clone(),
-            self.execution_layer.clone(),
         ).await);
 
         info!(epoch = epoch, "Create ProposalGenerator");

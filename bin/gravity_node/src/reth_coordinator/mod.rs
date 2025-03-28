@@ -7,7 +7,6 @@ use std::time::Duration;
 use crate::reth_cli::RethCli;
 use api_types::compute_res::ComputeRes;
 use api_types::u256_define::TxnHash;
-use api_types::RecoveryApi;
 use api_types::{
     u256_define::BlockId, ExecError, ExecTxn, ExecutionChannel, ExternalBlock, ExternalBlockMeta,
     ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
@@ -40,6 +39,20 @@ impl RethCoordinator {
             reth_cli: Arc::new(reth_cli),
             state: Arc::new(Mutex::new(state)),
             execution_args_tx: Arc::new(Mutex::new(Some(execution_args_tx))),
+        }
+    }
+
+    pub async fn send_execution_args(&self) {
+        let mut guard = self.execution_args_tx.lock().await;
+        let execution_args_tx = guard.take();
+        if let Some(execution_args_tx) = execution_args_tx {
+            let block_number_to_block_id = get_block_buffer_manager()
+                .block_number_to_block_id().await
+                .into_iter()
+                .map(|(block_number, block_id)| (block_number, B256::new(block_id.bytes())))
+                .collect();
+            let execution_args = ExecutionArgs { block_number_to_block_id };
+            execution_args_tx.send(execution_args).unwrap();
         }
     }
 
@@ -102,69 +115,5 @@ impl ExecutionChannel for RethCoordinator {
 
     async fn recv_committed_block_info(&self, block_id: BlockId) -> Result<(), ExecError> {
         panic!("Reth Coordinator does not support recv_committed_block_info")
-    }
-}
-
-#[async_trait]
-impl RecoveryApi for RethCoordinator {
-    async fn register_execution_args(&self, args: api_types::ExecutionArgs) {
-        let mut guard = self.execution_args_tx.lock().await;
-        let execution_args_tx = guard.take();
-        if let Some(execution_args_tx) = execution_args_tx {
-            let block_number_to_block_id = args
-                .block_number_to_block_id
-                .into_iter()
-                .map(|(block_number, block_id)| (block_number, B256::new(*block_id)))
-                .collect();
-            let execution_args = ExecutionArgs { block_number_to_block_id };
-            execution_args_tx.send(execution_args).unwrap();
-        }
-    }
-
-    async fn latest_block_number(&self) -> u64 {
-        self.reth_cli.latest_block_number().await
-    }
-
-    async fn finalized_block_number(&self) -> u64 {
-        self.reth_cli.finalized_block_number().await
-    }
-
-    async fn recover_ordered_block(
-        &self,
-        parent_id: BlockId,
-        block: ExternalBlock,
-    ) -> Result<(), ExecError> {
-        let block_id = block.block_meta.block_id.clone();
-        let origin_block_hash = block.block_meta.block_hash;
-        let mut block_hash;
-        let block_number = block.block_meta.block_number;
-        match self.recv_ordered_block(parent_id, block).await {
-            Err(ExecError::DuplicateExecError) => {
-                loop {
-                    let state = self.state.lock().await;
-                    if let Some(block_hash_) = state.get_block_hash(block_id) {
-                        block_hash = block_hash_;
-                        break;
-                    }
-                    sleep(Duration::from_millis(100)).await;
-                }
-            },
-            Err(err) => return Err(err),
-            Ok(()) => {
-                block_hash = B256::from_slice(&get_block_buffer_manager().get_executed_res(
-                    BlockId::from_bytes(&block_id.0),
-                    block_number
-                ).await.unwrap_or_else(|_| {
-                    panic!("Failed to get executed result for block {:?}", block_id);
-                }).data);
-                // self.reth_cli.recv_compute_res(reth_block_id).await.unwrap().into();
-            }
-        }
-        if let Some(origin_block_hash) = origin_block_hash {
-            let origin_block_hash = B256::new(origin_block_hash.data);
-            assert_eq!(origin_block_hash, block_hash);
-        }
-        self.state.lock().await.insert_new_block(block_id, block_hash);
-        Ok(())
     }
 }
