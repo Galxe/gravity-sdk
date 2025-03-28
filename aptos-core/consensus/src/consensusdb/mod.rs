@@ -42,6 +42,7 @@ use std::{
 
 /// The name of the consensus db file
 pub const CONSENSUS_DB_NAME: &str = "consensus_db";
+const RECENT_BLOCKS_RANGE: u64 = 256;
 
 /// Creates new physical DB checkpoint in directory specified by `checkpoint_path`.
 pub fn create_checkpoint<P: AsRef<Path> + Clone>(db_path: P, checkpoint_path: P) -> Result<()> {
@@ -125,19 +126,24 @@ impl ConsensusDB {
         &self,
         latest_block_number: u64,
     ) -> Result<(Option<Vec<u8>>, Option<Vec<u8>>, Vec<Block>, Vec<QuorumCert>)> {
+        let start_block_number = if latest_block_number > RECENT_BLOCKS_RANGE {
+            latest_block_number - RECENT_BLOCKS_RANGE
+        } else {
+            0
+        };
         let last_vote = self.get_last_vote()?;
         let highest_2chain_timeout_certificate = self.get_highest_2chain_timeout_certificate()?;
         let block_number_to_block_id = self
             .get_all::<BlockNumberSchema>()?
             .into_iter()
-            .filter(|(_, block_number)| block_number >= &latest_block_number)
+            .filter(|(_, block_number)| block_number >= &start_block_number)
             .map(|(block_id, block_number)| (block_number, block_id))
             .collect::<HashMap<u64, HashValue>>();
         let block_id_to_block_number = block_number_to_block_id
             .iter()
             .map(|(block_number, block_id)| (*block_id, *block_number))
             .collect::<HashMap<HashValue, u64>>();
-        let latest_round = if block_number_to_block_id.contains_key(&latest_block_number) {
+        let start_round = if block_number_to_block_id.contains_key(&start_block_number) {
             self.get::<BlockSchema>(&block_number_to_block_id[&latest_block_number])?
                 .unwrap()
                 .round()
@@ -148,7 +154,7 @@ impl ConsensusDB {
             .get_all::<BlockSchema>()?
             .into_iter()
             .map(|(_, block)| block)
-            .filter(|block| block.round() >= latest_round)
+            .filter(|block| block.round() >= start_round)
             .collect();
         consensus_blocks.iter_mut().for_each(|block| {
             if block.block_number().is_none() {
@@ -161,7 +167,7 @@ impl ConsensusDB {
             .get_all::<QCSchema>()?
             .into_iter()
             .map(|(_, qc)| qc)
-            .filter(|qc| qc.certified_block().round() >= latest_round)
+            .filter(|qc| qc.certified_block().round() >= start_round)
             .collect();
 
         println!("qcs : {:?}", consensus_qcs);
