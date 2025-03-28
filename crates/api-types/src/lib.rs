@@ -1,5 +1,4 @@
 pub mod account;
-pub mod default_recover;
 pub mod mock_execution_layer;
 pub mod simple_hash;
 pub mod u256_define;
@@ -116,23 +115,6 @@ pub trait ExecutionChannel: Send + Sync {
     async fn recv_committed_block_info(&self, block_id: BlockId) -> Result<(), ExecError>;
 }
 
-#[derive(Debug)]
-pub enum RecoveryError {
-    InternalError(String),
-    UnimplementError,
-}
-
-#[async_trait]
-pub trait RecoveryApi: Send + Sync {
-    async fn register_execution_args(&self, args: ExecutionArgs);
-
-    async fn latest_block_number(&self) -> u64;
-
-    async fn finalized_block_number(&self) -> u64;
-
-    async fn recover_ordered_block(&self, parent_id: BlockId, block: ExternalBlock) -> Result<(), ExecError>;
-}
-
 pub struct ExecutionArgs {
     pub block_number_to_block_id: BTreeMap<u64, HashValue>,
 }
@@ -140,7 +122,6 @@ pub struct ExecutionArgs {
 #[derive(Clone)]
 pub struct ExecutionLayer {
     pub execution_api: Arc<dyn ExecutionChannel>,
-    pub recovery_api: Arc<dyn RecoveryApi>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
