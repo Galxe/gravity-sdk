@@ -1,9 +1,15 @@
 use log::info;
-use std::{cell::OnceCell, collections::HashMap, sync::{Arc, OnceLock}, time::Duration};
+use std::{
+    cell::OnceCell,
+    collections::HashMap,
+    sync::{atomic::AtomicU64, Arc, OnceLock},
+    time::Duration,
+};
 use tokio::{sync::Mutex, time::Instant};
 
 use api_types::{
-    compute_res::ComputeRes, default_recover::DefaultRecovery, u256_define::BlockId, ExternalBlock, RecoveryApi, VerifiedTxn, VerifiedTxnWithAccountSeqNum
+    compute_res::ComputeRes, u256_define::BlockId, ExternalBlock,
+    VerifiedTxn, VerifiedTxnWithAccountSeqNum,
 };
 use itertools::Itertools;
 
@@ -26,12 +32,14 @@ pub enum BlockState {
 pub struct BlockStateMachine {
     sender: tokio::sync::broadcast::Sender<()>,
     blocks: HashMap<BlockId, BlockState>,
+    latest_block_number: u64,
+    latest_finalized_block_number: u64,
+    block_number_to_block_id: HashMap<u64, BlockId>,
 }
 
 pub struct BlockBufferManager {
     txn_buffer: TxnBuffer,
     block_state_machine: Mutex<BlockStateMachine>,
-    recovery_api: OnceLock<Arc<dyn RecoveryApi>>,
 }
 
 impl BlockBufferManager {
@@ -39,17 +47,22 @@ impl BlockBufferManager {
         let (sender, _recv) = tokio::sync::broadcast::channel(1024);
         Self {
             txn_buffer: TxnBuffer { txns: Mutex::new(Vec::new()) },
-            block_state_machine: Mutex::new(BlockStateMachine { sender, blocks: HashMap::new() }),
-            recovery_api: OnceLock::new(),
+            block_state_machine: Mutex::new(BlockStateMachine {
+                sender,
+                blocks: HashMap::new(),
+                latest_block_number: 0,
+                latest_finalized_block_number: 0,
+                block_number_to_block_id: HashMap::new(),
+            }),
         }
     }
 
-    pub fn set_recovery_api(&self, recovery_api: Arc<dyn RecoveryApi>) {
-        self.recovery_api.set(recovery_api);
-    }
-
-    pub fn get_recovery_api(&self) -> Arc<dyn RecoveryApi> {
-        self.recovery_api.get_or_init(|| Arc::new(DefaultRecovery {})).clone()
+    pub async fn init(&self, latest_block_number: u64, block_number_to_block_id: HashMap<u64, BlockId>) {
+        let mut block_state_machine = self.block_state_machine.lock().await;
+        // When init, the latest_finalized_block_number is the same as latest_block_number
+        block_state_machine.latest_block_number = latest_block_number;
+        block_state_machine.latest_finalized_block_number = latest_block_number;
+        block_state_machine.block_number_to_block_id = block_number_to_block_id;
     }
 
     // Helper method to wait for changes
@@ -323,5 +336,15 @@ impl BlockBufferManager {
         });
         let _ = block_state_machine.sender.send(());
         Ok(())
+    }
+
+    pub async fn latest_block_number(&self) -> u64 {
+        let block_state_machine = self.block_state_machine.lock().await;
+        block_state_machine.latest_block_number
+    }
+
+    pub async fn block_number_to_block_id(&self) -> HashMap<u64, BlockId> {
+        let block_state_machine = self.block_state_machine.lock().await;
+        block_state_machine.block_number_to_block_id.clone()
     }
 }

@@ -389,24 +389,6 @@ impl StorageWriteProxy {
         }
         self.next_block_number.store(max_block_number + 1, Ordering::SeqCst);
     }
-
-    async fn send_execution_args(&self, blocks: &Vec<Block>, latest_block_number: u64) {
-        let mut block_number_to_block_id: BTreeMap<u64, HashValue> = blocks
-            .iter()
-            .filter(|block| {
-                block.block_number().is_some()
-                    && block.block_number().unwrap() <= latest_block_number
-            })
-            .map(|block| (block.block_number().unwrap(), block.id()))
-            .sorted_by(|a, b| Ord::cmp(&b.0, &a.0))
-            .take(256)
-            .collect();
-        if latest_block_number == 0 {
-            block_number_to_block_id.insert(0u64, *GENESIS_BLOCK_ID);
-        }
-        let args = ExecutionArgs { block_number_to_block_id };
-        get_block_buffer_manager().get_recovery_api().send_execution_args(args).await;
-    }
 }
 
 #[async_trait]
@@ -459,7 +441,6 @@ impl PersistentLivenessStorage for StorageWriteProxy {
             *ACCUMULATOR_PLACEHOLDER_HASH,
             ValidatorSet::new(self.consensus_db().mock_validators()),
         );
-        self.send_execution_args(&blocks, latest_block_number).await;
         let ledger_recovery_data = LedgerRecoveryData::new(latest_ledger_info);
         match RecoveryData::new(
             last_vote,
@@ -527,6 +508,6 @@ impl PersistentLivenessStorage for StorageWriteProxy {
     }
 
     async fn latest_block_number(&self) -> u64 {
-        get_block_buffer_manager().get_recovery_api().latest_block_number().await
+        get_block_buffer_manager().latest_block_number().await
     }
 }

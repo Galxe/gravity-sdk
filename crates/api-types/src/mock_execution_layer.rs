@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use rand::Rng;
 
-use crate::{compute_res::ComputeRes, default_recover::DefaultRecovery, u256_define::{BlockId, TxnHash}, ExecError, ExecTxn, ExecutionChannel, ExecutionLayer, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
+use crate::{compute_res::ComputeRes, u256_define::{BlockId, TxnHash}, ExecError, ExecTxn, ExecutionChannel, ExecutionLayer, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 
 pub struct MockExecutionApi {}
 
@@ -49,5 +49,11 @@ impl ExecutionChannel for MockExecutionApi {
 
     async fn recv_committed_block_info(&self, head: BlockId) -> Result<(), ExecError> {
         Ok(())
+    }
+}
+
+pub fn mock_execution_layer() -> ExecutionLayer {
+    ExecutionLayer {
+        execution_api: Arc::new(MockExecutionApi {}),
     }
 }

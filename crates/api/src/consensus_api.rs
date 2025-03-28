@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     bootstrap::{
-        init_mempool, init_network_interfaces, init_peers_and_metadata, start_consensus,
-        start_node_inspection_service,
+        init_block_buffer_manager, init_mempool, init_network_interfaces, init_peers_and_metadata, start_consensus, start_node_inspection_service
     },
     consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler},
     https::{https_server, HttpsServerArgs},
@@ -61,10 +60,11 @@ fn fail_point_check(node_config: &NodeConfig) {
 }
 
 impl ConsensusEngine {
-    pub fn init(
+    pub async fn init(
         node_config: NodeConfig,
         execution_layer: ExecutionLayer,
         chain_id: u64,
+        latest_block_number: u64,
     ) -> Arc<Self> {
         // Setup panic handler
         aptos_crash_handler::setup_panic_handler();
@@ -159,6 +159,7 @@ impl ConsensusEngine {
             execution_layer.execution_api.clone(),
         );
         runtimes.extend(mempool_runtime);
+        init_block_buffer_manager(&consensus_db, latest_block_number).await;
         let mut args = ConsensusAdapterArgs::new(consensus_db);
         let (consensus_runtime, _, _) = start_consensus(
             &node_config,

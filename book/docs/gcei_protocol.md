@@ -116,26 +116,6 @@ There are three principles when recovery:
 Once the local block replay is completed, the node can communicate with peers. If the node’s round is behind during
 these communications, it initiates Block Sync to obtain the latest blocks from other nodes.
 
-### 3.4 Recovery API Definition
-
-The `Recovery APIs` defines the following methods which help gravity node recover from an unexpected shutdown:
-
-```rust
-#[async_trait]
-pub trait RecoveryApi: Send + Sync {
-    async fn latest_block_number(&self) -> u64;
-
-    async fn finalized_block_number(&self) -> u64;
-
-    async fn send_execution_args(&self, args: ExecutionArgs);
-}
-```
-
-1. `latest_block_number()`: Retrieves the latest block height known to the Execution Layer.
-2. `send_execution_args(args)`: Collects initial data from the Consensus Layer at startup and sends it to the
-   Execution Layer to facilitate recovery.
-3. `finalized_block_number()`: Returns the Execution Layer’s highest fully persisted (finalized) block number.
-
 ![GCEI Protocol](../assets/recovery_flow.png)
 
 ### 3.5 Network-Based Synchronization Flow

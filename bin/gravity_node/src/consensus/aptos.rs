@@ -13,16 +13,16 @@ pub struct AptosConsensus {
 }
 
 impl AptosConsensus {
-    pub fn init(node_config: NodeConfig, execution_client: Arc<RethCoordinator>, chain_id: u64) {
+    pub async fn init(node_config: NodeConfig, execution_client: Arc<RethCoordinator>, chain_id: u64, latest_block_number: u64) {
         let execution_layer = ExecutionLayer {
             execution_api: execution_client.clone(),
-            recovery_api: execution_client.clone(),
         };
 
         let consensus_engine = ConsensusEngine::init(
             node_config,
             execution_layer,
             chain_id, // Chain ID
-        );
+            latest_block_number
+        ).await;
     }
 }

@@ -7,7 +7,6 @@ use std::time::Duration;
 use crate::reth_cli::RethCli;
 use api_types::compute_res::ComputeRes;
 use api_types::u256_define::TxnHash;
-use api_types::RecoveryApi;
 use api_types::{
     u256_define::BlockId, ExecError, ExecTxn, ExecutionChannel, ExternalBlock, ExternalBlockMeta,
     ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
@@ -40,6 +39,20 @@ impl RethCoordinator {
             reth_cli: Arc::new(reth_cli),
             state: Arc::new(Mutex::new(state)),
             execution_args_tx: Arc::new(Mutex::new(Some(execution_args_tx))),
+        }
+    }
+
+    pub async fn send_execution_args(&self) {
+        let mut guard = self.execution_args_tx.lock().await;
+        let execution_args_tx = guard.take();
+        if let Some(execution_args_tx) = execution_args_tx {
+            let block_number_to_block_id = get_block_buffer_manager()
+                .block_number_to_block_id().await
+                .into_iter()
+                .map(|(block_number, block_id)| (block_number, B256::new(block_id.bytes())))
+                .collect();
+            let execution_args = ExecutionArgs { block_number_to_block_id };
+            execution_args_tx.send(execution_args).unwrap();
         }
     }
 
@@ -102,30 +115,5 @@ impl ExecutionChannel for RethCoordinator {
 
     async fn recv_committed_block_info(&self, block_id: BlockId) -> Result<(), ExecError> {
         panic!("Reth Coordinator does not support recv_committed_block_info")
-    }
-}
-
-#[async_trait]
-impl RecoveryApi for RethCoordinator {
-    async fn send_execution_args(&self, args: api_types::ExecutionArgs) {
-        let mut guard = self.execution_args_tx.lock().await;
-        let execution_args_tx = guard.take();
-        if let Some(execution_args_tx) = execution_args_tx {
-            let block_number_to_block_id = args
-                .block_number_to_block_id
-                .into_iter()
-                .map(|(block_number, block_id)| (block_number, B256::new(*block_id)))
-                .collect();
-            let execution_args = ExecutionArgs { block_number_to_block_id };
-            execution_args_tx.send(execution_args).unwrap();
-        }
-    }
-
-    async fn latest_block_number(&self) -> u64 {
-        self.reth_cli.latest_block_number().await
-    }
-
-    async fn finalized_block_number(&self) -> u64 {
-        self.reth_cli.finalized_block_number().await
     }
 }
