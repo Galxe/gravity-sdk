@@ -293,7 +293,7 @@ impl BlockBufferManager {
                 return Err(anyhow::anyhow!("Timeout waiting for committed blocks"));
             }
 
-            let block_state_machine = self.block_state_machine.lock().await;
+            let mut block_state_machine = self.block_state_machine.lock().await;
             let result = block_state_machine
                 .blocks
                 .iter()
@@ -320,6 +320,7 @@ impl BlockBufferManager {
                     Err(_) => continue, // Timeout on the wait, retry
                 }
             } else {
+                block_state_machine.latest_finalized_block_number = std::cmp::max(block_state_machine.latest_finalized_block_number, result.last().unwrap().num);
                 return Ok(result);
             }
         }
@@ -330,6 +331,7 @@ impl BlockBufferManager {
         latest_persist_block_num: u64,
     ) -> Result<(), anyhow::Error> {
         let mut block_state_machine = self.block_state_machine.lock().await;
+        block_state_machine.latest_finalized_block_number = std::cmp::max(block_state_machine.latest_finalized_block_number, latest_persist_block_num);
         block_state_machine.blocks.retain(|_, block_state| match block_state {
             BlockState::Commited { num, .. } => *num > latest_persist_block_num,
             _ => true,
