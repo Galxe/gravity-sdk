@@ -1,14 +1,14 @@
 use crate::ConsensusArgs;
-use alloy_eips::{eip4895::Withdrawals, BlockNumberOrTag};
+use alloy_eips::{eip4895::Withdrawals, BlockNumberOrTag, Decodable2718, Encodable2718};
 use alloy_primitives::{
     private::alloy_rlp::{Decodable, Encodable},
     Address, TxHash, B256,
 };
-use api_types::account::{ExternalAccountAddress, ExternalChainId};
+use api_types::{account::{ExternalAccountAddress, ExternalChainId}, GLOBAL_CRYPTO_TXN_HASHER};
 use api_types::u256_define::{BlockId as ExternalBlockId, TxnHash};
 use api_types::{ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 use core::panic;
-use greth::reth_db::DatabaseEnv;
+use greth::{reth_db::DatabaseEnv, reth_pipe_exec_layer_ext_v2::ExecutionResult};
 use greth::reth_ethereum_engine_primitives::EthPayloadAttributes;
 use greth::reth_node_api::NodeTypesWithDBAdapter;
 use greth::reth_node_ethereum::EthereumNode;
@@ -46,10 +46,14 @@ pub struct RethCli {
     >,
 }
 
-pub fn covert_account(acc: Address) -> ExternalAccountAddress {
+pub fn convert_account(acc: Address) -> ExternalAccountAddress {
     let mut bytes = [0u8; 32];
     bytes[12..].copy_from_slice(acc.as_slice());
     ExternalAccountAddress::new(bytes)
+}
+
+fn calculate_txn_hash(bytes: &Vec<u8>) -> [u8; 32] {
+    alloy_primitives::utils::keccak256(bytes.clone()).as_slice().try_into().unwrap()
 }
 
 impl RethCli {
@@ -59,6 +63,7 @@ impl RethCli {
             greth::reth_chainspec::ChainKind::Named(n) => n as u64,
             greth::reth_chainspec::ChainKind::Id(id) => id,
         };
+        GLOBAL_CRYPTO_TXN_HASHER.get_or_init(|| Box::new(calculate_txn_hash));
         RethCli {
             auth: args.engine_api,
             pipe_api: args.pipeline_api,
@@ -88,7 +93,7 @@ impl RethCli {
     }
 
     fn txn_to_signed(bytes: &mut [u8], chain_id: u64) -> (Address, TransactionSigned) {
-        let txn = TransactionSigned::decode(&mut bytes.as_ref()).unwrap();
+        let txn = TransactionSigned::decode_2718(&mut bytes.as_ref()).unwrap();
         (txn.recover_signer().unwrap(), txn)
     }
 
@@ -128,10 +133,10 @@ impl RethCli {
         Ok(())
     }
 
-    pub async fn recv_compute_res(&self, block_id: B256) -> Result<B256, ()> {
+    pub async fn recv_compute_res(&self, block_id: B256) -> Result<ExecutionResult, ()> {
         debug!("recv compute res {:?}", block_id);
         let pipe_api = &self.pipe_api;
-        let block_hash = pipe_api.pull_executed_block_hash(block_id).await.unwrap();
+        let block_hash = pipe_api.pull_execution_result(block_id).await.unwrap();
         debug!("recv compute res done");
         Ok(block_hash)
     }
@@ -167,13 +172,13 @@ impl RethCli {
             let txn = txn.transaction.transaction().tx();
             let account_nonce =
                 self.provider.basic_account(&sender).unwrap().map(|x| x.nonce).unwrap_or(nonce);
-            let mut bytes = Vec::with_capacity(1024 * 4);
-            txn.encode(&mut bytes);
+            // Since the consensus layer might use the bytes to recalculate the hash, we need to encode the transaction
+            let bytes = txn.encoded_2718();
 
             let vtxn = VerifiedTxnWithAccountSeqNum {
                 txn: VerifiedTxn {
                     bytes,
-                    sender: covert_account(sender),
+                    sender: convert_account(sender),
                     sequence_number: nonce,
                     chain_id: ExternalChainId::new(0),
                     committed_hash: TxnHash::from_bytes(txn.hash().as_slice()).into(),

@@ -227,7 +227,7 @@ impl BlockStore {
                         .metadata_db()
                         .get_block_hash(block_number)
                     {
-                        Some(block_hash) => Some(ComputeRes::new(*block_hash, txn_num)),
+                        Some(block_hash) => Some(ComputeRes::new(*block_hash, txn_num, vec![])),
                         None => None,
                     };
                     let block_batch = ExternalBlock {
@@ -279,7 +279,7 @@ impl BlockStore {
         let RootInfo(root_block, root_qc, root_ordered_cert, root_commit_cert) = root;
 
         // TODO(gravity_lightman)
-        let result = StateComputeResult::new(root_block.id(), None, None);
+        let result = StateComputeResult::with_root_hash(root_block.id());
 
         let pipelined_root_block = PipelinedBlock::new(
             *root_block,

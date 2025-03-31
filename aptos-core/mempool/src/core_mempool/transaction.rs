@@ -35,6 +35,7 @@ static GLOBAL_PUBLIC_KEY: Lazy<aptos_crypto::ed25519::Ed25519PublicKey> = Lazy::
 static GLOBAL_SIGNATURE: Lazy<aptos_crypto::ed25519::Ed25519Signature> =
     Lazy::new(|| aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap());
 
+/// TODO(gravity_byteyue): is this function useful? it seems not right
 impl From<&SignedTransaction> for VerifiedTxn {
     fn from(signed_txn: &SignedTransaction) -> Self {
         let raw_txn = signed_txn.payload();
@@ -110,13 +111,19 @@ pub struct SequenceInfo {
     pub account_sequence_number: u64,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct VerifiedTxn {
     pub(crate) bytes: Vec<u8>,
     pub(crate) sender: AccountAddress,
     pub(crate) sequence_number: u64,
     pub(crate) chain_id: chain_id::ChainId,
     pub(crate) committed_hash: HashValue,
+}
+
+impl std::fmt::Debug for VerifiedTxn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "VerifiedTxn {{ sender: {:?}, sequence_number: {:?}, committed_hash: {:?} }}", self.sender, self.sequence_number, self.committed_hash)
+    }
 }
 
 impl From<api_types::VerifiedTxn> for VerifiedTxn {

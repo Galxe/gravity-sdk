@@ -6,7 +6,7 @@ use crate::{
 };
 use aptos_config::config::transaction_filter_type::Filter;
 use aptos_consensus_notifications::{ConsensusNotificationSender, Error};
-use aptos_consensus_types::{block::Block, block_data::BlockData};
+use aptos_consensus_types::{block::Block, block_data::BlockData, common::RejectedTransactionSummary};
 use aptos_crypto::HashValue;
 use aptos_executor_types::{
     BlockExecutorTrait, ExecutorResult,
@@ -60,8 +60,7 @@ struct DummyTxnNotifier {}
 impl TxnNotifier for DummyTxnNotifier {
     async fn notify_failed_txn(
         &self,
-        _txns: &[SignedTransaction],
-        _statuses: &[TransactionStatus],
+        _rejected_txns: Vec<RejectedTransactionSummary>,
     ) -> anyhow::Result<(), MempoolError> {
         Ok(())
     }

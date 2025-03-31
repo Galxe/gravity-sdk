@@ -316,7 +316,7 @@ impl PipelineExecutor {
 
         let state_root = state_guard.compute_state_root()?;
 
-        let compute_res = ComputeRes { data: state_root.0, txn_num: result.receipts.len() as u64 };
+        let compute_res = ComputeRes { data: state_root.0, txn_num: result.receipts.len() as u64, txn_status: Arc::new(None) };
         let send_computes_res_sender =
             self.compute_res_senders.remove(&result.block_number).unwrap();
 
