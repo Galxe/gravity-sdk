@@ -97,7 +97,7 @@ impl ExecutionChannel for KvStore {
         v[0..8].copy_from_slice(&bytes);
 
         let (send, recv) = tokio::sync::mpsc::channel::<ComputeRes>(1);
-        send.send(ComputeRes::new(v, ordered_block.txns.len() as u64)).await.unwrap();
+        send.send(ComputeRes::new(v, ordered_block.txns.len() as u64, vec![])).await.unwrap();
         let mut r = self.compute_res_recv.lock().await;
         r.insert(ordered_block.block_meta.clone(), recv);
 

@@ -3,6 +3,7 @@ use alloy_primitives::B256;
 use api_types::account::ExternalAccountAddress;
 use api_types::VerifiedTxn;
 use api_types::{u256_define::BlockId, ExternalPayloadAttr};
+use greth::reth_pipe_exec_layer_ext_v2::ExecutionResult;
 use greth::reth_primitives::Transaction;
 use tracing::debug;
 pub struct BuildingState {
@@ -18,8 +19,7 @@ pub enum Status {
 pub struct State {
     status: Status,
     accout_seq_num: std::collections::HashMap<ExternalAccountAddress, i64>,
-    block_id_to_hash: std::collections::HashMap<BlockId, B256>,
-    block_hash_to_id: std::collections::HashMap<B256, BlockId>,
+    block_id_to_result: std::collections::HashMap<BlockId, ExecutionResult>,
     block_id_parent: std::collections::HashMap<BlockId, BlockId>,
     building_block: std::collections::HashMap<ExternalPayloadAttr, BuildingState>,
     block_id_to_block_number: std::collections::HashMap<BlockId, u64>,
@@ -32,8 +32,7 @@ impl State {
         State {
             status: Status::Executing,
             accout_seq_num: std::collections::HashMap::new(),
-            block_id_to_hash: std::collections::HashMap::new(),
-            block_hash_to_id: std::collections::HashMap::new(),
+            block_id_to_result: std::collections::HashMap::new(),
             block_id_parent: std::collections::HashMap::new(),
             building_block: std::collections::HashMap::new(),
             block_id_to_block_number: std::collections::HashMap::new(),
@@ -63,14 +62,13 @@ impl State {
         true
     }
 
-    pub fn insert_new_block(&mut self, block_id: BlockId, block_hash: B256) {
-        debug!("insert_new_block: {:?} {:?}", block_id, block_hash);
-        self.block_hash_to_id.insert(block_hash, block_id.clone());
-        self.block_id_to_hash.insert(block_id, block_hash);
+    pub fn insert_new_block(&mut self, block_id: BlockId, block_result: ExecutionResult) {
+        debug!("insert_new_block: {:?} {:?}", block_id, block_result);
+        self.block_id_to_result.insert(block_id, block_result);
     }
 
-    pub fn get_block_hash(&self, block_id: BlockId) -> Option<B256> {
-        self.block_id_to_hash.get(&block_id).cloned()
+    pub fn get_block_result(&self, block_id: BlockId) -> Option<ExecutionResult> {
+        self.block_id_to_result.get(&block_id).cloned()
     }
 
     pub fn insert_block_number(&mut self, block_id: BlockId, block_numnber: u64) {

@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::reth_cli::RethCli;
-use api_types::compute_res::ComputeRes;
+use crate::reth_cli::{convert_account, RethCli};
+use api_types::compute_res::{ComputeRes, TxnStatus};
 use api_types::u256_define::TxnHash;
 use api_types::RecoveryApi;
 use api_types::{
@@ -14,7 +14,7 @@ use api_types::{
 };
 use async_trait::async_trait;
 use greth::reth::revm::db::components::block_hash;
-use greth::reth_pipe_exec_layer_ext_v2::ExecutionArgs;
+use greth::reth_pipe_exec_layer_ext_v2::{ExecutionArgs, ExecutionResult};
 use alloy_primitives::B256;
 use state::State;
 use tokio::sync::Mutex;
@@ -149,16 +149,16 @@ impl ExecutionChannel for RethCoordinator {
         head: ExternalBlockMeta,
     ) -> Result<ComputeRes, ExecError> {
         info!("recv_executed_block_hash with head: {:?}", head);
-        let mut block_hash = None;
+        let mut block_result = None;
         {
             let state = self.state.lock().await;
-            block_hash = state.get_block_hash(head.block_id);
+            block_result = state.get_block_result(head.block_id);
         }
-        if block_hash.is_none() {
+        if block_result.is_none() {
             let reth_block_id = B256::from_slice(&head.block_id.0);
-            block_hash = Some(self.reth_cli.recv_compute_res(reth_block_id).await.unwrap());
+            block_result = Some(self.reth_cli.recv_compute_res(reth_block_id).await.unwrap());
             {
-                self.state.lock().await.insert_new_block(head.block_id, block_hash.unwrap().into());
+                self.state.lock().await.insert_new_block(head.block_id, block_result.clone().unwrap().into());
             }
         }
         
@@ -168,7 +168,14 @@ impl ExecutionChannel for RethCoordinator {
             txn_number = map.remove(&head.block_number);
         }
         info!("recv_executed_block_hash done {:?}", head);
-        Ok(ComputeRes::new(block_hash.unwrap().into(), txn_number.unwrap()))
+        let ExecutionResult {block_id, block_hash, txs_info} = block_result.as_mut().unwrap();
+        let txn_status = txs_info.iter().map(|txn| TxnStatus {
+            txn_hash: txn.tx_hash.into(),
+            nonce: txn.nonce,
+            sender: convert_account(txn.sender).bytes(),
+            is_discarded: txn.is_discarded,
+        }).collect();
+        Ok(ComputeRes::new((*block_hash).into(), txn_number.unwrap(), txn_status))
     }
 
     async fn recv_committed_block_info(&self, block_id: BlockId) -> Result<(), ExecError> {
@@ -185,8 +192,8 @@ impl ExecutionChannel for RethCoordinator {
                 return Ok(());
             }
         }
-        let block_hash = { self.state.lock().await.get_block_hash(block_id).unwrap() };
-        self.reth_cli.send_committed_block_info(block_id, block_hash.into()).await.unwrap();
+        let block_hash = { self.state.lock().await.get_block_result(block_id).unwrap() };
+        self.reth_cli.send_committed_block_info(block_id, block_hash.block_hash.into()).await.unwrap();
         info!("commit_block done {:?}", block_id);
         Ok(())
     }
@@ -222,13 +229,13 @@ impl RecoveryApi for RethCoordinator {
         block: ExternalBlock,
     ) -> Result<(), ExecError> {
         let block_id = block.block_meta.block_id.clone();
-        let origin_block_hash = block.block_meta.block_hash;
+        let origin_block_hash = block.block_meta.block_hash.clone();
         let mut block_hash;
         match self.recv_ordered_block(parent_id, block).await {
             Err(ExecError::DuplicateExecError) => {
                 loop {
                     let state = self.state.lock().await;
-                    if let Some(block_hash_) = state.get_block_hash(block_id) {
+                    if let Some(block_hash_) = state.get_block_result(block_id) {
                         block_hash = block_hash_;
                         break;
                     }
@@ -243,7 +250,7 @@ impl RecoveryApi for RethCoordinator {
         }
         if let Some(origin_block_hash) = origin_block_hash {
             let origin_block_hash = B256::new(origin_block_hash.data);
-            assert_eq!(origin_block_hash, block_hash);
+            assert_eq!(origin_block_hash, block_hash.block_hash);
         }
         self.state.lock().await.insert_new_block(block_id, block_hash);
         Ok(())

@@ -44,7 +44,7 @@ impl ExecutionChannel for MockExecutionApi {
     ) -> Result<ComputeRes, ExecError> {
         let mut rng = rand::thread_rng();
         let random_bytes: [u8; 32] = rng.gen();
-        Ok(ComputeRes::new(random_bytes, 0))
+        Ok(ComputeRes::new(random_bytes, 0, vec![]))
     }
 
     async fn recv_committed_block_info(&self, head: BlockId) -> Result<(), ExecError> {
