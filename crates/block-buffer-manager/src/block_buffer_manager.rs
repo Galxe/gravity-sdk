@@ -32,7 +32,7 @@ pub enum BlockState {
 pub struct BlockStateMachine {
     sender: tokio::sync::broadcast::Sender<()>,
     blocks: HashMap<BlockId, BlockState>,
-    latest_block_number: u64,
+    latest_commit_block_number: u64,
     latest_finalized_block_number: u64,
     block_number_to_block_id: HashMap<u64, BlockId>,
 }
@@ -50,18 +50,18 @@ impl BlockBufferManager {
             block_state_machine: Mutex::new(BlockStateMachine {
                 sender,
                 blocks: HashMap::new(),
-                latest_block_number: 0,
+                latest_commit_block_number: 0,
                 latest_finalized_block_number: 0,
                 block_number_to_block_id: HashMap::new(),
             }),
         }
     }
 
-    pub async fn init(&self, latest_block_number: u64, block_number_to_block_id: HashMap<u64, BlockId>) {
+    pub async fn init(&self, latest_commit_block_number: u64, block_number_to_block_id: HashMap<u64, BlockId>) {
         let mut block_state_machine = self.block_state_machine.lock().await;
-        // When init, the latest_finalized_block_number is the same as latest_block_number
-        block_state_machine.latest_block_number = latest_block_number;
-        block_state_machine.latest_finalized_block_number = latest_block_number;
+        // When init, the latest_finalized_block_number is the same as latest_commit_block_number
+        block_state_machine.latest_commit_block_number = latest_commit_block_number;
+        block_state_machine.latest_finalized_block_number = latest_commit_block_number;
         block_state_machine.block_number_to_block_id = block_number_to_block_id;
     }
 
@@ -340,9 +340,9 @@ impl BlockBufferManager {
         Ok(())
     }
 
-    pub async fn latest_block_number(&self) -> u64 {
+    pub async fn latest_commit_block_number(&self) -> u64 {
         let block_state_machine = self.block_state_machine.lock().await;
-        block_state_machine.latest_block_number
+        block_state_machine.latest_commit_block_number
     }
 
     pub async fn block_number_to_block_id(&self) -> HashMap<u64, BlockId> {
