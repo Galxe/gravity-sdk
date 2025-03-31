@@ -23,6 +23,7 @@ use api_types::account::{ExternalAccountAddress, ExternalChainId};
 use api_types::u256_define::{BlockId, Random, TxnHash};
 use api_types::{ExternalBlock, ExternalBlockMeta};
 use aptos_consensus_notifications::ConsensusNotificationSender;
+use aptos_consensus_types::common::RejectedTransactionSummary;
 use aptos_consensus_types::{
     block::Block, common::Round, pipeline_execution_result::PipelineExecutionResult,
     pipelined_block::PipelinedBlock,
@@ -34,6 +35,7 @@ use aptos_logger::prelude::*;
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 use aptos_types::transaction::SignedTransaction;
 use aptos_types::validator_signer::ValidatorSigner;
+use aptos_types::vm_status::{DiscardedVMStatus, StatusCode};
 use aptos_types::{
     account_address::AccountAddress, block_executor::config::BlockExecutorConfigFromOnchain,
     contract_event::ContractEvent, epoch_state::EpochState, ledger_info::LedgerInfoWithSignatures,
@@ -172,14 +174,15 @@ impl ExecutionProxy {
             executed_block.block().new_block_metadata(validators).into()
         };
 
-        let input_txns = Block::combine_to_input_transactions(validator_txns, user_txns, metadata);
+        // let input_txns = Block::combine_to_input_transactions(validator_txns, user_txns, metadata);
 
-        // TODO(gravity_byteyue): Should gravity do the same thing?
+        // TODO(gravity_byteyue): We manually skipped the validator txns and metadata here.
+        // we might need to re-add them back
         // Adds StateCheckpoint/BlockEpilogue transaction if needed.
-        // executed_block
-        //     .compute_result()
-        //     .transactions_to_commit(input_txns, executed_block.id())
-        input_txns
+        executed_block
+            .compute_result()
+            .transactions_to_commit(user_txns.into_iter().map(Transaction::UserTransaction).collect())
+        // input_txns
     }
 
     pub fn pipeline_builder(&self, commit_signer: Arc<ValidatorSigner>) -> PipelineBuilder {
@@ -270,9 +273,11 @@ impl StateComputer for ExecutionProxy {
             }
         }
 
+        let txn_notifier = self.txn_notifier.clone();
+
         Box::pin(async move {
             let call = get_coex_bridge().borrow_func("recv_executed_block_hash");
-            let hash = match call {
+            let compute_result = match call {
                 Some(Func::RecvExecutedBlockHash(call)) => {
                     info!("call recv_executed_block_hash function");
                     call.call(meta_data).await.unwrap()
@@ -281,8 +286,25 @@ impl StateComputer for ExecutionProxy {
                     panic!("no recv_executed_block_hash function");
                 }
             };
-            update_counters_for_compute_res(&hash);
-            let result = StateComputeResult::with_root_hash(HashValue::new(hash.bytes()));
+            update_counters_for_compute_res(&compute_result);
+            let txn_status = compute_result.txn_status.clone();
+            match (*txn_status).as_ref() {
+                Some(txn_status) => {
+                    let rejected_txns = txn_status.iter().filter(|txn| txn.is_discarded).map(|discard_txn_info| {
+                        RejectedTransactionSummary {
+                            sender: discard_txn_info.sender.into(),
+                            sequence_number: discard_txn_info.nonce,
+                            hash: HashValue::new(discard_txn_info.txn_hash),
+                            reason: DiscardedVMStatus::from(StatusCode::SEQUENCE_NONCE_INVALID),
+                        }
+                    }).collect::<Vec<_>>();
+                    if let Err(e) = txn_notifier.notify_failed_txn(rejected_txns).await {
+                        error!(error = ?e, "Failed to notify mempool of rejected txns");
+                    }
+                }
+                None => {}
+            }
+            let result = StateComputeResult::new(compute_result, None, None);
             let pre_commit_fut: BoxFuture<'static, ExecutorResult<()>> =
                     {
                         Box::pin(async move {
@@ -533,8 +555,7 @@ async fn test_commit_sync_race() {
     impl TxnNotifier for RecordedCommit {
         async fn notify_failed_txn(
             &self,
-            _txns: &[SignedTransaction],
-            _compute_results: &[TransactionStatus],
+            _rejected_txns: Vec<RejectedTransactionSummary>,
         ) -> Result<(), MempoolError> {
             Ok(())
         }

@@ -18,8 +18,7 @@ pub trait TxnNotifier: Send + Sync {
     /// state sync.)
     async fn notify_failed_txn(
         &self,
-        txns: &[SignedTransaction],
-        statuses: &[TransactionStatus],
+        rejected_txns: Vec<RejectedTransactionSummary>,
     ) -> Result<(), MempoolError>;
 }
 
@@ -47,21 +46,20 @@ impl MempoolNotifier {
 impl TxnNotifier for MempoolNotifier {
     async fn notify_failed_txn(
         &self,
-        user_txns: &[SignedTransaction],
-        user_txn_statuses: &[TransactionStatus],
+        rejected_txns: Vec<RejectedTransactionSummary>,
     ) -> Result<(), MempoolError> {
-        let mut rejected_txns = vec![];
+        // let mut rejected_txns = vec![];
 
-        for (txn, status) in user_txns.iter().zip_eq(user_txn_statuses) {
-            if let TransactionStatus::Discard(reason) = status {
-                rejected_txns.push(RejectedTransactionSummary {
-                    sender: txn.sender(),
-                    sequence_number: txn.sequence_number(),
-                    hash: txn.committed_hash(),
-                    reason: *reason,
-                });
-            }
-        }
+        // for (txn, status) in user_txns.iter().zip_eq(user_txn_statuses) {
+        //     if let TransactionStatus::Discard(reason) = status {
+        //         rejected_txns.push(RejectedTransactionSummary {
+        //             sender: txn.sender(),
+        //             sequence_number: txn.sequence_number(),
+        //             hash: txn.committed_hash(),
+        //             reason: *reason,
+        //         });
+        //     }
+        // }
 
         if rejected_txns.is_empty() {
             return Ok(());

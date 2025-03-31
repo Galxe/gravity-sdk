@@ -2,14 +2,15 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use api_types::compute_res::{ComputeRes, TxnStatus};
 use aptos_crypto::hash::{HashValue, ACCUMULATOR_PLACEHOLDER_HASH};
-use aptos_types::block_executor::config::BlockExecutorConfigFromOnchain;
+use aptos_types::{block_executor::config::BlockExecutorConfigFromOnchain, transaction::Transaction};
 use aptos_types::block_executor::partitioner::ExecutableBlock;
 use aptos_types::epoch_state::EpochState;
 use aptos_types::ledger_info::LedgerInfoWithSignatures;
 use aptos_types::transaction::block_epilogue::BlockEndInfo;
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use std::{fmt::Display, sync::Arc};
 use thiserror::Error;
 
 #[derive(Debug, Deserialize, Error, PartialEq, Eq, Serialize)]
@@ -106,18 +107,18 @@ pub trait BlockExecutorTrait: Send + Sync {
 
 #[derive(Debug, Default, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StateComputeResult {
-    root_hash: HashValue,
+    execution_output: ComputeRes,
     epoch_state: Option<EpochState>,
     block_end_info: Option<BlockEndInfo>,
 }
 
 impl StateComputeResult {
     pub fn new(
-        root_hash: HashValue,
+        execution_output: ComputeRes,
         epoch_state: Option<EpochState>,
         block_end_info: Option<BlockEndInfo>,
     ) -> Self {
-        Self { root_hash, epoch_state, block_end_info }
+        Self { execution_output, epoch_state, block_end_info }
     }
 
     pub fn version(&self) -> Version {
@@ -133,11 +134,15 @@ impl StateComputeResult {
     /// this function is used in RandomComputeResultStateComputer to assert that the compute
     /// function is really called.
     pub fn with_root_hash(root_hash: HashValue) -> Self {
-        Self { root_hash, epoch_state: None, block_end_info: None }
+        Self { execution_output: ComputeRes {
+            data: root_hash.to_vec().try_into().unwrap(),
+            txn_num: 0,
+            txn_status: Arc::new(None),
+        }, epoch_state: None, block_end_info: None }
     }
 
     pub fn root_hash(&self) -> HashValue {
-        self.root_hash
+        HashValue::new(self.execution_output.data)
     }
 
     pub fn epoch_state(&self) -> &Option<EpochState> {
@@ -146,6 +151,24 @@ impl StateComputeResult {
 
     pub fn has_reconfiguration(&self) -> bool {
         self.epoch_state.is_some()
+    }
+
+    pub fn txn_status(&self) -> Arc<Option<Vec<TxnStatus>>> {
+        self.execution_output.txn_status.clone()
+    }
+
+    /// This function only returns the user transactions for the mempool to do gc
+    pub fn transactions_to_commit(&self, input_txns: Vec<Transaction>) -> Vec<Transaction> {
+        let txn_status = self.execution_output.txn_status.clone();
+        let status_len = match txn_status.as_ref() {
+            Some(status) => status.len(),
+            None => return input_txns,
+        };
+        // TODO(gravity_byteyue): how to unify recover and execution here
+        // assert_eq!(status_len, input_txns.len());
+        let status = txn_status.as_ref().as_ref().unwrap();
+        // for the corresponding status, if it is discarded, then remove the txn from the input_txns
+        input_txns.into_iter().zip(status.iter()).filter(|(_, status)| !status.is_discarded).map(|(txn, _)| txn).collect()
     }
 }
 

@@ -10,6 +10,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+api-types.workspace = true
 serde = { workspace = true }
 aptos-crypto = { workspace = true }
 aptos-types = { workspace = true }
