@@ -2,7 +2,7 @@ use log::info;
 use std::{
     cell::OnceCell,
     collections::HashMap,
-    sync::{atomic::AtomicU64, Arc, OnceLock},
+    sync::{atomic::{AtomicU64, AtomicU8, Ordering}, Arc, OnceLock},
     time::Duration,
 };
 use tokio::{sync::Mutex, time::Instant};
@@ -29,6 +29,13 @@ pub enum BlockState {
     Commited { hash: Option<[u8; 32]>, num: u64 },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[repr(u8)]
+pub enum BufferState {
+    Uninitialized,
+    Ready,
+}
+
 pub struct BlockStateMachine {
     sender: tokio::sync::broadcast::Sender<()>,
     blocks: HashMap<BlockId, BlockState>,
@@ -40,6 +47,7 @@ pub struct BlockStateMachine {
 pub struct BlockBufferManager {
     txn_buffer: TxnBuffer,
     block_state_machine: Mutex<BlockStateMachine>,
+    buffer_state: AtomicU8,
 }
 
 impl BlockBufferManager {
@@ -54,6 +62,7 @@ impl BlockBufferManager {
                 latest_finalized_block_number: 0,
                 block_number_to_block_id: HashMap::new(),
             }),
+            buffer_state: AtomicU8::new(BufferState::Uninitialized as u8),
         }
     }
 
@@ -63,6 +72,7 @@ impl BlockBufferManager {
         block_state_machine.latest_block_number = latest_block_number;
         block_state_machine.latest_finalized_block_number = latest_block_number;
         block_state_machine.block_number_to_block_id = block_number_to_block_id;
+        self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
     }
 
     // Helper method to wait for changes
@@ -87,7 +97,14 @@ impl BlockBufferManager {
         txns.extend(txn);
     }
 
+    pub fn is_ready(&self) -> bool {
+        self.buffer_state.load(Ordering::SeqCst) == BufferState::Ready as u8
+    }
+
     pub async fn push_txn(&self, txn: VerifiedTxnWithAccountSeqNum) {
+        if !self.is_ready() {
+            panic!("Buffer is not ready");
+        }
         info!("push_txn {:?}", txn.txn.seq_number());
         let mut txns = self.txn_buffer.txns.lock().await;
         txns.push(txn);
@@ -97,6 +114,9 @@ impl BlockBufferManager {
         &self,
         max_size: usize,
     ) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, anyhow::Error> {
+        if !self.is_ready() {
+            panic!("Buffer is not ready");
+        }
         let mut txns = self.txn_buffer.txns.lock().await;
 
         if txns.len() <= max_size {
@@ -114,6 +134,9 @@ impl BlockBufferManager {
         parent_id: BlockId,
         block: ExternalBlock,
     ) -> Result<(), anyhow::Error> {
+        if !self.is_ready() {
+            panic!("Buffer is not ready");
+        }
         info!(
             "push_ordered_blocks {:?} num {:?}",
             block.block_meta.block_id, block.block_meta.block_number
@@ -130,6 +153,9 @@ impl BlockBufferManager {
         start_num: u64,
         max_size: Option<usize>,
     ) -> Result<Vec<(ExternalBlock, BlockId)>, anyhow::Error> {
+        if !self.is_ready() {
+            panic!("Buffer is not ready");
+        }
         let start = Instant::now();
         let timeout = Duration::from_secs(5);
         loop {
@@ -171,6 +197,9 @@ impl BlockBufferManager {
         block_id: BlockId,
         block_num: u64,
     ) -> Result<ComputeRes, anyhow::Error> {
+        if !self.is_ready() {
+            panic!("Buffer is not ready");
+        }
         let start = Instant::now();
         let timeout = Duration::from_secs(5);
 
@@ -221,6 +250,9 @@ impl BlockBufferManager {
         block_hash: [u8; 32],
         block_num: u64,
     ) -> Result<(), anyhow::Error> {
+        if !self.is_ready() {
+            panic!("Buffer is not ready");
+        }
         let mut block_state_machine = self.block_state_machine.lock().await;
         if let Some(BlockState::Ordered { block, parent_id: _ }) =
             block_state_machine.blocks.get(&block_id)
@@ -244,6 +276,9 @@ impl BlockBufferManager {
         &self,
         block_ids: Vec<BlockIdNumHash>,
     ) -> Result<(), anyhow::Error> {
+        if !self.is_ready() {
+            panic!("Buffer is not ready");
+        }
         let mut block_state_machine = self.block_state_machine.lock().await;
         for block_id_num_hash in block_ids {
             info!(
@@ -285,6 +320,9 @@ impl BlockBufferManager {
         start_num: u64,
         max_size: Option<usize>,
     ) -> Result<Vec<BlockIdNumHash>, anyhow::Error> {
+        if !self.is_ready() {
+            panic!("Buffer is not ready");
+        }
         let start = Instant::now();
         let timeout = Duration::from_secs(2);
 
@@ -329,6 +367,9 @@ impl BlockBufferManager {
         &self,
         latest_persist_block_num: u64,
     ) -> Result<(), anyhow::Error> {
+        if !self.is_ready() {
+            panic!("Buffer is not ready");
+        }
         let mut block_state_machine = self.block_state_machine.lock().await;
         block_state_machine.blocks.retain(|_, block_state| match block_state {
             BlockState::Commited { num, .. } => *num > latest_persist_block_num,
