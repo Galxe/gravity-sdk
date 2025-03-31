@@ -33,6 +33,8 @@ use futures::channel::mpsc::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
 use tokio::runtime::Runtime;
 
+const RECENT_BLOCKS_RANGE: u64 = 256;
+
 pub struct ApplicationNetworkInterfaces<T> {
     pub network_client: NetworkClient<T>,
     pub network_service_events: NetworkServiceEvents<T>,
@@ -193,7 +195,11 @@ pub async fn init_block_buffer_manager(
     consensus_db: &Arc<ConsensusDB>,
     latest_block_number: u64,
 ) {
-    let start_block_number = latest_block_number - 256;
+    let start_block_number = if latest_block_number > RECENT_BLOCKS_RANGE {
+        latest_block_number - RECENT_BLOCKS_RANGE
+    } else {
+        0
+    };
     let block_number_to_block_id = consensus_db.get_all::<BlockSchema>().unwrap()
             .into_iter()
             .map(|(_, block)| block)
