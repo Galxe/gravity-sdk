@@ -44,14 +44,29 @@ pub struct BlockStateMachine {
     block_number_to_block_id: HashMap<u64, BlockId>,
 }
 
+pub struct BlockBufferManagerConfig {
+    pub wait_for_change_timeout: Duration,
+    pub max_wait_timeout: Duration,
+}
+
+impl Default for BlockBufferManagerConfig {
+    fn default() -> Self {
+        Self {
+            wait_for_change_timeout: Duration::from_millis(100),
+            max_wait_timeout: Duration::from_secs(5),
+        }
+    }
+}
+
 pub struct BlockBufferManager {
     txn_buffer: TxnBuffer,
     block_state_machine: Mutex<BlockStateMachine>,
     buffer_state: AtomicU8,
+    config: BlockBufferManagerConfig,
 }
 
 impl BlockBufferManager {
-    pub fn new() -> Self {
+    pub fn new(config: BlockBufferManagerConfig) -> Self {
         let (sender, _recv) = tokio::sync::broadcast::channel(1024);
         Self {
             txn_buffer: TxnBuffer { txns: Mutex::new(Vec::new()) },
@@ -63,6 +78,7 @@ impl BlockBufferManager {
                 block_number_to_block_id: HashMap::new(),
             }),
             buffer_state: AtomicU8::new(BufferState::Uninitialized as u8),
+            config,
         }
     }
 
@@ -157,9 +173,8 @@ impl BlockBufferManager {
             panic!("Buffer is not ready");
         }
         let start = Instant::now();
-        let timeout = Duration::from_secs(5);
         loop {
-            if start.elapsed() > timeout {
+            if start.elapsed() > self.config.max_wait_timeout {
                 return Err(anyhow::anyhow!("Timeout waiting for ordered blocks"));
             }
 
@@ -182,7 +197,7 @@ impl BlockBufferManager {
                 drop(block_state_machine);
 
                 // Wait for changes and try again
-                match self.wait_for_change(Duration::from_millis(100)).await {
+                match self.wait_for_change(self.config.wait_for_change_timeout).await {
                     Ok(_) => continue,
                     Err(_) => continue, // Timeout on the wait, retry
                 }
@@ -201,10 +216,9 @@ impl BlockBufferManager {
             panic!("Buffer is not ready");
         }
         let start = Instant::now();
-        let timeout = Duration::from_secs(5);
 
         loop {
-            if start.elapsed() > timeout {
+            if start.elapsed() > self.config.max_wait_timeout {
                 return Err(anyhow::anyhow!("get_executed_res timeout for block {:?}", block_id));
             }
 
@@ -226,7 +240,7 @@ impl BlockBufferManager {
                         drop(block_state_machine);
 
                         // Wait for changes and try again
-                        match self.wait_for_change(Duration::from_millis(100)).await {
+                        match self.wait_for_change(self.config.wait_for_change_timeout).await {
                             Ok(_) => continue,
                             Err(_) => continue, // Timeout on the wait, retry
                         }
@@ -324,10 +338,9 @@ impl BlockBufferManager {
             panic!("Buffer is not ready");
         }
         let start = Instant::now();
-        let timeout = Duration::from_secs(2);
 
         loop {
-            if start.elapsed() > timeout {
+            if start.elapsed() > self.config.max_wait_timeout {
                 return Err(anyhow::anyhow!("Timeout waiting for committed blocks"));
             }
 
@@ -353,7 +366,7 @@ impl BlockBufferManager {
                 drop(block_state_machine);
 
                 // Wait for changes and try again
-                match self.wait_for_change(Duration::from_millis(100)).await {
+                match self.wait_for_change(self.config.wait_for_change_timeout).await {
                     Ok(_) => continue,
                     Err(_) => continue, // Timeout on the wait, retry
                 }
