@@ -26,7 +26,7 @@ pub struct BlockHashRef {
 pub enum BlockState {
     Ordered { block: ExternalBlock, parent_id: BlockId },
     Computed((u64, ComputeRes)),
-    Commited { hash: Option<[u8; 32]>, num: u64 },
+    Committed { hash: Option<[u8; 32]>, num: u64 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,7 +47,7 @@ pub struct BlockStateMachine {
 pub struct BlockBufferManagerConfig {
     pub wait_for_change_timeout: Duration,
     pub max_wait_timeout: Duration,
-    pub remove_commited_blocks_interval: Duration,
+    pub remove_committed_blocks_interval: Duration,
 }
 
 impl Default for BlockBufferManagerConfig {
@@ -55,7 +55,7 @@ impl Default for BlockBufferManagerConfig {
         Self {
             wait_for_change_timeout: Duration::from_millis(100),
             max_wait_timeout: Duration::from_secs(5),
-            remove_commited_blocks_interval: Duration::from_secs(1),
+            remove_committed_blocks_interval: Duration::from_secs(1),
         }
     }
 }
@@ -84,17 +84,17 @@ impl BlockBufferManager {
         };
         let block_buffer_manager = Arc::new(block_buffer_manager);
         let clone = block_buffer_manager.clone();
-        // spawn task to remove commited blocks
+        // spawn task to remove committed blocks
         tokio::spawn(async move {
             loop {
-                clone.remove_commited_blocks().await.unwrap();
-                tokio::time::sleep(clone.config.remove_commited_blocks_interval).await;
+                clone.remove_committed_blocks().await.unwrap();
+                tokio::time::sleep(clone.config.remove_committed_blocks_interval).await;
             }
         });
         block_buffer_manager
     }
 
-    async fn remove_commited_blocks(
+    async fn remove_committed_blocks(
         &self,
     ) -> Result<(), anyhow::Error> {
         if !self.is_ready() {
@@ -104,7 +104,7 @@ impl BlockBufferManager {
         let latest_persist_block_num = block_state_machine.latest_finalized_block_number;
         block_state_machine.latest_finalized_block_number = std::cmp::max(block_state_machine.latest_finalized_block_number, latest_persist_block_num);
         block_state_machine.blocks.retain(|_, block_state| match block_state {
-            BlockState::Commited { num, .. } => *num > latest_persist_block_num,
+            BlockState::Committed { num, .. } => *num > latest_persist_block_num,
             _ => true,
         });
         let _ = block_state_machine.sender.send(());
@@ -274,7 +274,7 @@ impl BlockBufferManager {
                             Err(_) => continue, // Timeout on the wait, retry
                         }
                     }
-                    BlockState::Commited { .. } => {
+                    BlockState::Committed { .. } => {
                         panic!("There is no Ordered Block but try to get executed result for block {:?}", block_id);
                     }
                 }
@@ -332,7 +332,7 @@ impl BlockBufferManager {
                 match state {
                     BlockState::Computed((num, _)) => {
                         if *num == block_id_num_hash.num {
-                            *state = BlockState::Commited {
+                            *state = BlockState::Committed {
                                 hash: block_id_num_hash.hash,
                                 num: block_id_num_hash.num,
                             };
@@ -358,7 +358,7 @@ impl BlockBufferManager {
         Ok(())
     }
 
-    pub async fn get_commited_blocks(
+    pub async fn get_committed_blocks(
         &self,
         start_num: u64,
         max_size: Option<usize>,
@@ -378,7 +378,7 @@ impl BlockBufferManager {
                 .blocks
                 .iter()
                 .map(|(block_id, block_state)| match block_state {
-                    BlockState::Commited { hash, num } => {
+                    BlockState::Committed { hash, num } => {
                         Some(BlockHashRef { block_id: *block_id, num: *num, hash: *hash })
                     }
                     _ => None,
