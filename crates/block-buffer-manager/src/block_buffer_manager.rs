@@ -49,6 +49,15 @@ pub struct BlockBufferManagerConfig {
     pub max_wait_timeout: Duration,
 }
 
+impl Default for BlockBufferManagerConfig {
+    fn default() -> Self {
+        Self {
+            wait_for_change_timeout: Duration::from_millis(100),
+            max_wait_timeout: Duration::from_secs(5),
+        }
+    }
+}
+
 pub struct BlockBufferManager {
     txn_buffer: TxnBuffer,
     block_state_machine: Mutex<BlockStateMachine>,
@@ -57,7 +66,7 @@ pub struct BlockBufferManager {
 }
 
 impl BlockBufferManager {
-    pub fn new(config: Option<BlockBufferManagerConfig>) -> Self {
+    pub fn new(config: BlockBufferManagerConfig) -> Self {
         let (sender, _recv) = tokio::sync::broadcast::channel(1024);
         Self {
             txn_buffer: TxnBuffer { txns: Mutex::new(Vec::new()) },
@@ -69,12 +78,7 @@ impl BlockBufferManager {
                 block_number_to_block_id: HashMap::new(),
             }),
             buffer_state: AtomicU8::new(BufferState::Uninitialized as u8),
-            config: config.unwrap_or(
-                BlockBufferManagerConfig {
-                    wait_for_change_timeout: Duration::from_millis(100),
-                    max_wait_timeout: Duration::from_secs(5),
-                }
-            ),
+            config,
         }
     }
 
