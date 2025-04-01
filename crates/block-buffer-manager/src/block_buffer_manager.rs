@@ -88,7 +88,7 @@ impl BlockBufferManager {
         tokio::spawn(async move {
             loop {
                 clone.remove_commited_blocks().await.unwrap();
-                tokio::time::sleep(Duration::from_secs(1)).await;
+                tokio::time::sleep(clone.config.remove_commited_blocks_interval).await;
             }
         });
         block_buffer_manager
