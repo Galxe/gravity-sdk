@@ -212,7 +212,7 @@ impl BlockBufferManager {
             panic!("Buffer is not ready");
         }
         let start = Instant::now();
-        info!("get_ordered_blocks start_num: {:?} max_size: {:?}", start_num, max_size);
+        info!("call get_ordered_blocks start_num: {:?} max_size: {:?}", start_num, max_size);
         loop {
             if start.elapsed() > self.config.max_wait_timeout {
                 return Err(anyhow::anyhow!(
@@ -226,6 +226,7 @@ impl BlockBufferManager {
             // get block num, block num + 1
             let mut result = Vec::new();
             let mut current_num = start_num;
+            info!("keys: {:?}", block_state_machine.blocks.keys());
             while let Some(block) = block_state_machine.blocks.get(&current_num) {
                 match block {
                     BlockState::Ordered { block, parent_id } => {
