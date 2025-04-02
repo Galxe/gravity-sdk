@@ -253,6 +253,9 @@ impl TransactionStore {
 
     fn track_indices(&self) {
         counters::core_mempool_index_size(
+            counters::TRANSACTION_STORE_INDEX_LABEL,
+            self.transactions.len());
+        counters::core_mempool_index_size(
             counters::PRIORITY_INDEX_LABEL,
             self.priority_index.size(),
         );
@@ -496,6 +499,7 @@ impl TransactionStore {
         sequence_number: u64,
         hash: &HashValue,
     ) {
+        debug!("reject txn {} {} hash {}", account, sequence_number, hash);
         let mut txn_to_remove = None;
         if let Some((indexed_account, indexed_sequence_number)) = self.hash_index.get(hash) {
             if account == indexed_account && sequence_number == *indexed_sequence_number {

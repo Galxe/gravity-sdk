@@ -96,10 +96,8 @@ pub fn prepare_executed_blocks_with_ledger_info(
         proposals.push(proposal);
     }
 
-    let compute_result = StateComputeResult::new(
+    let compute_result = StateComputeResult::with_root_hash(
         executed_hash,
-        None,
-        None,
     );
 
     unimplemented!()

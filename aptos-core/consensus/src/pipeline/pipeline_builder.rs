@@ -15,7 +15,7 @@ use api_types::{account::{ExternalAccountAddress, ExternalChainId}, u256_define:
 use aptos_consensus_notifications::ConsensusNotificationSender;
 use aptos_consensus_types::{
     block::Block,
-    common::Round,
+    common::{RejectedTransactionSummary, Round},
     pipeline::commit_vote::CommitVote,
     pipelined_block::{
         CommitLedgerResult, CommitVoteResult, ExecuteResult, LedgerUpdateResult, PipelineFutures,
@@ -34,9 +34,9 @@ use aptos_types::{
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
     randomness::Randomness,
     transaction::{
-        signature_verified_transaction::SignatureVerifiedTransaction, Transaction,
+        signature_verified_transaction::SignatureVerifiedTransaction, SignedTransaction, Transaction
     },
-    validator_signer::ValidatorSigner,
+    validator_signer::ValidatorSigner, vm_status::{DiscardedVMStatus, StatusCode},
 };
 use coex_bridge::{get_coex_bridge, Func};
 use futures::FutureExt;
@@ -508,7 +508,7 @@ impl PipelineBuilder {
             }
         };
         update_counters_for_compute_res(&hash);
-        let result = StateComputeResult::new(HashValue::new(hash.bytes()), None, None);
+        let result = StateComputeResult::new(hash, None, None);
         observe_block(timestamp, BlockStage::EXECUTED);
         // FIXME(gravity_byteyue): fixme
         // let epoch_end_timestamp =
@@ -534,6 +534,23 @@ impl PipelineBuilder {
         let (compute_result, _) = ledger_update.await?;
 
         let _tracker = Tracker::new("post_ledger_update", &block);
+        let txn_status = compute_result.txn_status();
+        match (*txn_status).as_ref() {
+            Some(txn_status) => {
+                let rejected_txns = txn_status.iter().filter(|txn| txn.is_discarded).map(|discard_txn_info| {
+                    RejectedTransactionSummary {
+                        sender: discard_txn_info.sender.into(),
+                        sequence_number: discard_txn_info.nonce,
+                        hash: HashValue::new(discard_txn_info.txn_hash),
+                        reason: DiscardedVMStatus::from(StatusCode::SEQUENCE_NONCE_INVALID),
+                    }
+                }).collect::<Vec<_>>();
+                if let Err(e) = mempool_notifier.notify_failed_txn(rejected_txns).await {
+                    error!(error = ?e, "Failed to notify mempool of rejected txns");
+                }
+            }
+            None => {}
+        }
         // let compute_status = compute_result.compute_status_for_input_txns();
         // // the length of compute_status is user_txns.len() + num_vtxns + 1 due to having blockmetadata
         // if user_txns.len() >= compute_status.len() {
@@ -677,12 +694,13 @@ impl PipelineBuilder {
         // let txns = compute_result.transactions_to_commit().to_vec();
         let (txns, _) = payload_manager.get_transactions(&block).await.unwrap_or_default();
         let txns = txns.into_iter().map(|t| { Transaction::UserTransaction(t) }).collect_vec();
+        let commit_txns = compute_result.transactions_to_commit(txns);
         // let subscribable_events = compute_result.subscribable_events().to_vec();
         let subscribable_events = vec![];
         if let Err(e) = monitor!(
             "notify_state_sync",
             state_sync_notifier
-                .notify_new_commit(txns, subscribable_events)
+                .notify_new_commit(commit_txns, subscribable_events)
                 .await
         ) {
             error!(error = ?e, "Failed to notify state synchronizer");
