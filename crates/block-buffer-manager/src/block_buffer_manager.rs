@@ -201,7 +201,8 @@ impl BlockBufferManager {
             return Ok(());
         }
         let block_id = block.block_meta.block_id;
-        block_state_machine.blocks.insert(block_id, BlockState::Ordered { block, parent_id });
+        block_state_machine.block_number_to_block_id.insert(block.block_meta.block_number, block_id.clone());
+        block_state_machine.blocks.insert(block_id, BlockState::Ordered { block: block.clone(), parent_id });
         let _ = block_state_machine.sender.send(());
         Ok(())
     }
