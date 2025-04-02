@@ -198,7 +198,7 @@ impl BlockBufferManager {
         info!("get_ordered_blocks start_num: {:?} max_size: {:?}", start_num, max_size);
         loop {
             if start.elapsed() > self.config.max_wait_timeout {
-                return Err(anyhow::anyhow!("Timeout waiting for ordered blocks after {:?}", start.elapsed()));
+                return Err(anyhow::anyhow!("Timeout waiting for ordered blocks after {:?} block_number: {:?}", start.elapsed(), start_num));
             }
 
             let block_state_machine = self.block_state_machine.lock().await;
@@ -242,7 +242,7 @@ impl BlockBufferManager {
         info!("get_executed_res start {:?} num {:?}", block_id, block_num);
         loop {
             if start.elapsed() > self.config.max_wait_timeout {
-                return Err(anyhow::anyhow!("get_executed_res timeout for block {:?} after {:?}", block_id, start.elapsed()));
+                return Err(anyhow::anyhow!("get_executed_res timeout for block {:?} after {:?} block_number: {:?}", block_id, start.elapsed(), block_num));
             }
 
             let block_state_machine = self.block_state_machine.lock().await;
@@ -364,7 +364,7 @@ impl BlockBufferManager {
 
         loop {
             if start.elapsed() > self.config.max_wait_timeout {
-                return Err(anyhow::anyhow!("Timeout waiting for committed blocks after {:?}", start.elapsed()));
+                return Err(anyhow::anyhow!("Timeout waiting for committed blocks after {:?} block_number: {:?}", start.elapsed(), start_num));
             }
 
             let mut block_state_machine = self.block_state_machine.lock().await;
