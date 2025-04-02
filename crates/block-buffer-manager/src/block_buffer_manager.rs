@@ -147,9 +147,6 @@ impl BlockBufferManager {
     }
 
     pub async fn push_txn(&self, txn: VerifiedTxnWithAccountSeqNum) {
-        if !self.is_ready() {
-            panic!("Buffer is not ready");
-        }
         info!("push_txn {:?}", txn.txn.seq_number());
         let mut txns = self.txn_buffer.txns.lock().await;
         txns.push(txn);
@@ -159,9 +156,6 @@ impl BlockBufferManager {
         &self,
         max_size: usize,
     ) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, anyhow::Error> {
-        if !self.is_ready() {
-            panic!("Buffer is not ready");
-        }
         let mut txns = self.txn_buffer.txns.lock().await;
 
         if txns.len() <= max_size {
