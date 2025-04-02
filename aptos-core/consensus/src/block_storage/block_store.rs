@@ -35,11 +35,13 @@ use aptos_executor_types::StateComputeResult;
 use aptos_infallible::{Mutex, RwLock};
 use aptos_logger::prelude::*;
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
+use aptos_metrics_core::{register_int_gauge_vec, IntGaugeVec};
 use aptos_types::{
     aggregate_signature::AggregateSignature,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
 };
 use futures::executor::block_on;
+use once_cell::sync::Lazy;
 use sha3::digest::generic_array::typenum::Le;
 
 #[cfg(test)]
@@ -56,6 +58,15 @@ mod block_store_test;
 
 #[path = "sync_manager.rs"]
 pub mod sync_manager;
+
+static CUR_RECOVER_BLOCK_NUMBER_GAUGE: Lazy<IntGaugeVec> = Lazy::new(|| {
+    register_int_gauge_vec!(
+        "aptos_current_recover_block_number",
+        "Current reccover block number",
+        &["block_number"]
+    )
+    .unwrap()
+});
 
 fn update_counters_for_ordered_blocks(ordered_blocks: &[Arc<PipelinedBlock>]) {
     for block in ordered_blocks {
@@ -220,6 +231,7 @@ impl BlockStore {
                     let verified_txns =
                         verified_txns.into_iter().map(|txn| txn.into()).collect();
                     let block_number = block_to_recover.block().block_number().unwrap();
+                    CUR_RECOVER_BLOCK_NUMBER_GAUGE.with_label_values(&["block_number"]).set(block_number.try_into().unwrap());
                     let block_hash = match self
                         .storage
                         .consensus_db()

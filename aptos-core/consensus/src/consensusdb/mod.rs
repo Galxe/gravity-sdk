@@ -131,6 +131,7 @@ impl ConsensusDB {
         } else {
             0
         };
+        info!("fetch blocks start from block number : {}", start_block_number);
         let last_vote = self.get_last_vote()?;
         let highest_2chain_timeout_certificate = self.get_highest_2chain_timeout_certificate()?;
         let block_number_to_block_id = self
@@ -143,7 +144,7 @@ impl ConsensusDB {
             .iter()
             .map(|(block_number, block_id)| (*block_id, *block_number))
             .collect::<HashMap<HashValue, u64>>();
-        let start_round = if block_number_to_block_id.contains_key(&start_block_number) {
+        let start_round = if block_number_to_block_id.contains_key(&latest_block_number) {
             self.get::<BlockSchema>(&block_number_to_block_id[&latest_block_number])?
                 .unwrap()
                 .round()
@@ -163,14 +164,15 @@ impl ConsensusDB {
                 }
             }
         });
-        let consensus_qcs = self
+        let consensus_qcs: Vec<_> = self
             .get_all::<QCSchema>()?
             .into_iter()
             .map(|(_, qc)| qc)
             .filter(|qc| qc.certified_block().round() >= start_round)
             .collect();
-
-        println!("qcs : {:?}", consensus_qcs);
+        info!("consensus_blocks size : {}, consensus_qcs size : {}, block_number_to_block_id size : {}",
+                consensus_blocks.len(), consensus_qcs.len(), block_number_to_block_id.len());
+        info!("qcs : {:?}", consensus_qcs);
         Ok((last_vote, highest_2chain_timeout_certificate, consensus_blocks, consensus_qcs))
     }
 
