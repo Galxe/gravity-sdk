@@ -51,6 +51,7 @@ impl RethCoordinator {
                 .into_iter()
                 .map(|(block_number, block_id)| (block_number, B256::new(block_id.bytes())))
                 .collect();
+            info!("send_execution_args block_number_to_block_id: {:?}", block_number_to_block_id);
             let execution_args = ExecutionArgs { block_number_to_block_id };
             execution_args_tx.send(execution_args).unwrap();
         }
