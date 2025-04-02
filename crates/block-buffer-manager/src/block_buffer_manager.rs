@@ -410,6 +410,9 @@ impl BlockBufferManager {
     }
 
     pub async fn block_number_to_block_id(&self) -> HashMap<u64, BlockId> {
+        if !self.is_ready() {
+            panic!("Buffer is not ready when get block_number_to_block_id");
+        }
         let block_state_machine = self.block_state_machine.lock().await;
         block_state_machine.block_number_to_block_id.clone()
     }
