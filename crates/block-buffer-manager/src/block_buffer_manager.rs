@@ -97,8 +97,10 @@ impl BlockBufferManager {
     async fn remove_committed_blocks(
         &self,
     ) -> Result<(), anyhow::Error> {
+        
         let mut block_state_machine = self.block_state_machine.lock().await;
         let latest_persist_block_num = block_state_machine.latest_finalized_block_number;
+        info!("remove_committed_blocks latest_persist_block_num: {:?}", latest_persist_block_num);
         block_state_machine.latest_finalized_block_number = std::cmp::max(block_state_machine.latest_finalized_block_number, latest_persist_block_num);
         block_state_machine.blocks.retain(|_, block_state| match block_state {
             BlockState::Committed { num, .. } => *num > latest_persist_block_num,
@@ -145,7 +147,6 @@ impl BlockBufferManager {
     }
 
     pub async fn push_txn(&self, txn: VerifiedTxnWithAccountSeqNum) {
-        info!("push_txn {:?}", txn.txn.seq_number());
         let mut txns = self.txn_buffer.txns.lock().await;
         txns.push(txn);
     }
@@ -175,7 +176,7 @@ impl BlockBufferManager {
             panic!("Buffer is not ready");
         }
         info!(
-            "push_ordered_blocks {:?} num {:?}",
+            "set_ordered_blocks {:?} num {:?}",
             block.block_meta.block_id, block.block_meta.block_number
         );
         let mut block_state_machine = self.block_state_machine.lock().await;
@@ -194,6 +195,7 @@ impl BlockBufferManager {
             panic!("Buffer is not ready");
         }
         let start = Instant::now();
+        info!("get_ordered_blocks start_num: {:?} max_size: {:?}", start_num, max_size);
         loop {
             if start.elapsed() > self.config.max_wait_timeout {
                 return Err(anyhow::anyhow!("Timeout waiting for ordered blocks after {:?}", start.elapsed()));
@@ -237,15 +239,13 @@ impl BlockBufferManager {
             panic!("Buffer is not ready");
         }
         let start = Instant::now();
-
+        info!("get_executed_res start {:?}", block_id);
         loop {
             if start.elapsed() > self.config.max_wait_timeout {
                 return Err(anyhow::anyhow!("get_executed_res timeout for block {:?} after {:?}", block_id, start.elapsed()));
             }
 
             let block_state_machine = self.block_state_machine.lock().await;
-            info!("get_executed_res {:?}", block_id);
-
             if let Some(block) = block_state_machine.blocks.get(&block_id) {
                 match block {
                     BlockState::Computed((num, res)) => {
@@ -288,6 +288,7 @@ impl BlockBufferManager {
         if !self.is_ready() {
             panic!("Buffer is not ready");
         }
+        info!("set_compute_res id {:?} num {:?} hash {:?}", block_id, block_num, BlockId::from_bytes(block_hash.as_slice()));
         let mut block_state_machine = self.block_state_machine.lock().await;
         if let Some(BlockState::Ordered { block, parent_id: _ }) =
             block_state_machine.blocks.get(&block_id)
@@ -358,6 +359,7 @@ impl BlockBufferManager {
         if !self.is_ready() {
             panic!("Buffer is not ready");
         }
+        info!("get_committed_blocks start_num: {:?} max_size: {:?}", start_num, max_size);
         let start = Instant::now();
 
         loop {
@@ -399,6 +401,7 @@ impl BlockBufferManager {
     }
 
     pub async fn set_latest_finalized_block_number(&self, latest_finalized_block_number: u64) -> Result<(), anyhow::Error> {
+        info!("set_latest_finalized_block_number {:?}", latest_finalized_block_number);
         let mut block_state_machine = self.block_state_machine.lock().await;
         block_state_machine.latest_finalized_block_number = latest_finalized_block_number;
         let _ = block_state_machine.sender.send(());
