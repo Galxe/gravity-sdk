@@ -2,6 +2,7 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::block_storage::tracing::{observe_block, BlockStage};
 use crate::counters::{update_counters_for_compute_res, APTOS_EXECUTION_TXNS};
 use crate::pipeline::pipeline_builder::PipelineBuilder;
 use crate::{
@@ -286,6 +287,7 @@ impl StateComputer for ExecutionProxy {
                     panic!("no recv_executed_block_hash function");
                 }
             };
+            observe_block(block.timestamp_usecs(), BlockStage::EXECUTED);
             update_counters_for_compute_res(&compute_result);
             let txn_status = compute_result.txn_status.clone();
             match (*txn_status).as_ref() {
