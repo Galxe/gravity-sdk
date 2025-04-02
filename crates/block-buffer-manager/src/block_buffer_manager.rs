@@ -28,8 +28,8 @@ pub struct BlockHashRef {
 
 pub enum BlockState {
     Ordered { block: ExternalBlock, parent_id: BlockId },
-    Computed((u64, ComputeRes)),
-    Committed { hash: Option<[u8; 32]>, compute_res: ComputeRes, num: u64 },
+    Computed{ id: BlockId, compute_res: ComputeRes },
+    Committed { hash: Option<[u8; 32]>, compute_res: ComputeRes, id: BlockId },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,7 +41,7 @@ pub enum BufferState {
 
 pub struct BlockStateMachine {
     sender: tokio::sync::broadcast::Sender<()>,
-    blocks: HashMap<BlockId, BlockState>,
+    blocks: HashMap<u64, BlockState>,
     latest_commit_block_number: u64,
     latest_finalized_block_number: u64,
     block_number_to_block_id: HashMap<u64, BlockId>,
@@ -110,11 +110,7 @@ impl BlockBufferManager {
             block_state_machine.latest_finalized_block_number,
             latest_persist_block_num,
         );
-        block_state_machine.block_number_to_block_id.retain(|num, _| *num > latest_persist_block_num);
-        block_state_machine.blocks.retain(|_, block_state| match block_state {
-            BlockState::Committed { num, .. } => *num > latest_persist_block_num,
-            _ => true,
-        });
+        block_state_machine.blocks.retain(|num, _| *num > latest_persist_block_num);
         let _ = block_state_machine.sender.send(());
         Ok(())
     }
@@ -193,7 +189,7 @@ impl BlockBufferManager {
             block.block_meta.block_id, block.block_meta.block_number
         );
         let mut block_state_machine = self.block_state_machine.lock().await;
-        if block_state_machine.blocks.contains_key(&block.block_meta.block_id) {
+        if block_state_machine.blocks.contains_key(&block.block_meta.block_number) {
             log::warn!(
                 "set_ordered_blocks block {:?} block num {} already exists",
                 block.block_meta.block_id,
@@ -201,9 +197,8 @@ impl BlockBufferManager {
             );
             return Ok(());
         }
-        let block_id = block.block_meta.block_id;
-        block_state_machine.block_number_to_block_id.insert(block.block_meta.block_number, block_id.clone());
-        block_state_machine.blocks.insert(block_id, BlockState::Ordered { block: block.clone(), parent_id });
+        let block_num = block.block_meta.block_number;
+        block_state_machine.blocks.insert(block_num, BlockState::Ordered { block: block.clone(), parent_id });
         let _ = block_state_machine.sender.send(());
         Ok(())
     }
@@ -231,28 +226,19 @@ impl BlockBufferManager {
             // get block num, block num + 1
             let mut result = Vec::new();
             let mut current_num = start_num;
-            let current_id =
-                block_state_machine.block_number_to_block_id.get(&current_num);
-            if let Some(mut current_id) = current_id {
-                while let Some(block) = block_state_machine.blocks.get(current_id) {
-                    match block {
-                        BlockState::Ordered { block, parent_id } => {
+            while let Some(block) = block_state_machine.blocks.get(&current_num) {
+                match block {
+                    BlockState::Ordered { block, parent_id } => {
                         result.push((block.clone(), *parent_id));
                     }
                     _ => {
-                        panic!("There is no Ordered Block but try to get ordered blocks for block {:?}", current_id);
+                        panic!("There is no Ordered Block but try to get ordered blocks for block {:?}", current_num);
                     }
                 }
                 if result.len() >= max_size.unwrap_or(usize::MAX) {
                     break;
                 }
                 current_num += 1;
-                    if let Some(id) = block_state_machine.block_number_to_block_id.get(&current_num) {
-                        current_id = id;
-                    } else {
-                        break;
-                    }
-                }
             }
 
             if result.is_empty() {
@@ -290,15 +276,15 @@ impl BlockBufferManager {
             }
 
             let block_state_machine = self.block_state_machine.lock().await;
-            if let Some(block) = block_state_machine.blocks.get(&block_id) {
+            if let Some(block) = block_state_machine.blocks.get(&block_num) {
                 match block {
-                    BlockState::Computed((num, res)) => {
+                    BlockState::Computed{ id, compute_res } => {
                         info!(
                             "get_executed_res done with id {:?} num {:?} res {:?}",
-                            block_id, *num, res
+                            block_id, block_num, compute_res
                         );
-                        assert_eq!(*num, block_num);
-                        return Ok(res.clone());
+                        assert_eq!(id, &block_id);
+                        return Ok(compute_res.clone());
                     }
                     BlockState::Ordered { .. } => {
                         // Release lock before waiting
@@ -310,14 +296,14 @@ impl BlockBufferManager {
                             Err(_) => continue, // Timeout on the wait, retry
                         }
                     }
-                    BlockState::Committed { hash: _, compute_res, num } => {
+                    BlockState::Committed { hash: _, compute_res, id } => {
                         log::warn!(
                             "get_executed_res done with id {:?} num {:?} res {:?}",
                             block_id,
-                            *num,
+                            id,
                             compute_res
                         );
-                        assert_eq!(*num, block_num);
+                        assert_eq!(id, &block_id);
                         return Ok(compute_res.clone());
                     }
                 }
@@ -347,16 +333,16 @@ impl BlockBufferManager {
         );
         let mut block_state_machine = self.block_state_machine.lock().await;
         if let Some(BlockState::Ordered { block, parent_id: _ }) =
-            block_state_machine.blocks.get(&block_id)
+            block_state_machine.blocks.get(&block_num)
         {
             assert_eq!(block.block_meta.block_number, block_num);
             let txn_len = block.txns.len();
             block_state_machine.blocks.insert(
-                block_id,
-                BlockState::Computed((
-                    block_num,
-                    ComputeRes { data: block_hash, txn_num: txn_len as u64 },
-                )),
+                block_num,
+                BlockState::Computed{
+                    id: block_id,
+                    compute_res: ComputeRes { data: block_hash, txn_num: txn_len as u64 },
+                },
             );
             let _ = block_state_machine.sender.send(());
             return Ok(());
@@ -377,14 +363,14 @@ impl BlockBufferManager {
                 "push_commit_blocks id {:?} num {:?}",
                 block_id_num_hash.block_id, block_id_num_hash.num
             );
-            if let Some(state) = block_state_machine.blocks.get_mut(&block_id_num_hash.block_id) {
+            if let Some(state) = block_state_machine.blocks.get_mut(&block_id_num_hash.num) {
                 match state {
-                    BlockState::Computed((num, compute_res)) => {
-                        if *num == block_id_num_hash.num {
+                    BlockState::Computed{ id, compute_res } => {
+                        if *id == block_id_num_hash.block_id {
                             *state = BlockState::Committed {
                                 hash: block_id_num_hash.hash,
                                 compute_res: compute_res.clone(),
-                                num: block_id_num_hash.num,
+                                id: block_id_num_hash.block_id,
                             };
                         } else {
                             panic!("There is no Ordered Block but try to push commit block for block {:?}", block_id_num_hash.block_id);
@@ -431,28 +417,19 @@ impl BlockBufferManager {
             let mut block_state_machine = self.block_state_machine.lock().await;
             let mut result = Vec::new();
             let mut current_num = start_num;
-            let current_id =
-                block_state_machine.block_number_to_block_id.get(&current_num);
-            if let Some(mut current_id) = current_id {
-                while let Some(block) = block_state_machine.blocks.get(current_id) {
-                        match block {
-                            BlockState::Committed { hash, compute_res: _, num } => {
-                            result.push(BlockHashRef { block_id: *current_id, num: *num, hash: *hash });
-                        }
-                        _ => {
-                            continue;
-                        }
+            while let Some(block) = block_state_machine.blocks.get(&current_num) {
+                match block {
+                    BlockState::Committed { hash, compute_res: _, id } => {
+                        result.push(BlockHashRef { block_id: *id, num: current_num, hash: *hash });
                     }
-                    if result.len() >= max_size.unwrap_or(usize::MAX) {
-                        break;
-                    }
-                    current_num += 1;
-                    if let Some(id) = block_state_machine.block_number_to_block_id.get(&current_num) {
-                        current_id = id;
-                    } else {
-                        break;
+                    _ => {
+                        continue;
                     }
                 }
+                if result.len() >= max_size.unwrap_or(usize::MAX) {
+                    break;
+                }
+                current_num += 1;
             }
             if result.is_empty() {
                 // Release lock before waiting
