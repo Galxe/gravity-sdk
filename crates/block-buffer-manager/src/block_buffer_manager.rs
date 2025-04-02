@@ -17,7 +17,7 @@ pub struct TxnBuffer {
     txns: Mutex<Vec<VerifiedTxnWithAccountSeqNum>>,
 }
 
-pub struct BlockIdNumHash {
+pub struct BlockHashRef {
     pub block_id: BlockId,
     pub num: u64,
     pub hash: Option<[u8; 32]>,
@@ -26,7 +26,7 @@ pub struct BlockIdNumHash {
 pub enum BlockState {
     Ordered { block: ExternalBlock, parent_id: BlockId },
     Computed((u64, ComputeRes)),
-    Commited { hash: Option<[u8; 32]>, num: u64 },
+    Committed { hash: Option<[u8; 32]>, num: u64 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,6 +47,7 @@ pub struct BlockStateMachine {
 pub struct BlockBufferManagerConfig {
     pub wait_for_change_timeout: Duration,
     pub max_wait_timeout: Duration,
+    pub remove_committed_blocks_interval: Duration,
 }
 
 impl Default for BlockBufferManagerConfig {
@@ -54,6 +55,7 @@ impl Default for BlockBufferManagerConfig {
         Self {
             wait_for_change_timeout: Duration::from_millis(100),
             max_wait_timeout: Duration::from_secs(5),
+            remove_committed_blocks_interval: Duration::from_secs(1),
         }
     }
 }
@@ -66,9 +68,9 @@ pub struct BlockBufferManager {
 }
 
 impl BlockBufferManager {
-    pub fn new(config: BlockBufferManagerConfig) -> Self {
+    pub fn new(config: BlockBufferManagerConfig) -> Arc<Self> {
         let (sender, _recv) = tokio::sync::broadcast::channel(1024);
-        Self {
+        let block_buffer_manager = Self {
             txn_buffer: TxnBuffer { txns: Mutex::new(Vec::new()) },
             block_state_machine: Mutex::new(BlockStateMachine {
                 sender,
@@ -79,7 +81,34 @@ impl BlockBufferManager {
             }),
             buffer_state: AtomicU8::new(BufferState::Uninitialized as u8),
             config,
+        };
+        let block_buffer_manager = Arc::new(block_buffer_manager);
+        let clone = block_buffer_manager.clone();
+        // spawn task to remove committed blocks
+        tokio::spawn(async move {
+            loop {
+                clone.remove_committed_blocks().await.unwrap();
+                tokio::time::sleep(clone.config.remove_committed_blocks_interval).await;
+            }
+        });
+        block_buffer_manager
+    }
+
+    async fn remove_committed_blocks(
+        &self,
+    ) -> Result<(), anyhow::Error> {
+        if !self.is_ready() {
+            panic!("Buffer is not ready");
         }
+        let mut block_state_machine = self.block_state_machine.lock().await;
+        let latest_persist_block_num = block_state_machine.latest_finalized_block_number;
+        block_state_machine.latest_finalized_block_number = std::cmp::max(block_state_machine.latest_finalized_block_number, latest_persist_block_num);
+        block_state_machine.blocks.retain(|_, block_state| match block_state {
+            BlockState::Committed { num, .. } => *num > latest_persist_block_num,
+            _ => true,
+        });
+        let _ = block_state_machine.sender.send(());
+        Ok(())
     }
 
     pub async fn init(&self, latest_commit_block_number: u64, block_number_to_block_id: HashMap<u64, BlockId>) {
@@ -245,7 +274,7 @@ impl BlockBufferManager {
                             Err(_) => continue, // Timeout on the wait, retry
                         }
                     }
-                    BlockState::Commited { .. } => {
+                    BlockState::Committed { .. } => {
                         panic!("There is no Ordered Block but try to get executed result for block {:?}", block_id);
                     }
                 }
@@ -288,7 +317,7 @@ impl BlockBufferManager {
 
     pub async fn set_commit_blocks(
         &self,
-        block_ids: Vec<BlockIdNumHash>,
+        block_ids: Vec<BlockHashRef>,
     ) -> Result<(), anyhow::Error> {
         if !self.is_ready() {
             panic!("Buffer is not ready");
@@ -303,7 +332,7 @@ impl BlockBufferManager {
                 match state {
                     BlockState::Computed((num, _)) => {
                         if *num == block_id_num_hash.num {
-                            *state = BlockState::Commited {
+                            *state = BlockState::Committed {
                                 hash: block_id_num_hash.hash,
                                 num: block_id_num_hash.num,
                             };
@@ -329,11 +358,11 @@ impl BlockBufferManager {
         Ok(())
     }
 
-    pub async fn get_commited_blocks(
+    pub async fn get_committed_blocks(
         &self,
         start_num: u64,
         max_size: Option<usize>,
-    ) -> Result<Vec<BlockIdNumHash>, anyhow::Error> {
+    ) -> Result<Vec<BlockHashRef>, anyhow::Error> {
         if !self.is_ready() {
             panic!("Buffer is not ready");
         }
@@ -349,8 +378,8 @@ impl BlockBufferManager {
                 .blocks
                 .iter()
                 .map(|(block_id, block_state)| match block_state {
-                    BlockState::Commited { hash, num } => {
-                        Some(BlockIdNumHash { block_id: *block_id, num: *num, hash: *hash })
+                    BlockState::Committed { hash, num } => {
+                        Some(BlockHashRef { block_id: *block_id, num: *num, hash: *hash })
                     }
                     _ => None,
                 })
@@ -377,19 +406,9 @@ impl BlockBufferManager {
         }
     }
 
-    pub async fn remove_commited_blocks(
-        &self,
-        latest_persist_block_num: u64,
-    ) -> Result<(), anyhow::Error> {
-        if !self.is_ready() {
-            panic!("Buffer is not ready");
-        }
+    pub async fn set_latest_finalized_block_number(&self, latest_finalized_block_number: u64) -> Result<(), anyhow::Error> {
         let mut block_state_machine = self.block_state_machine.lock().await;
-        block_state_machine.latest_finalized_block_number = std::cmp::max(block_state_machine.latest_finalized_block_number, latest_persist_block_num);
-        block_state_machine.blocks.retain(|_, block_state| match block_state {
-            BlockState::Commited { num, .. } => *num > latest_persist_block_num,
-            _ => true,
-        });
+        block_state_machine.latest_finalized_block_number = latest_finalized_block_number;
         let _ = block_state_machine.sender.send(());
         Ok(())
     }
