@@ -248,6 +248,7 @@ impl StateComputer for ExecutionProxy {
         APTOS_EXECUTION_TXNS.observe(real_txns.len() as f64);
         Box::pin(async move {
             let block_id = meta_data.block_id;
+            let block_timestamp = meta_data.usecs;
             get_block_buffer_manager()
                 .set_ordered_blocks(BlockId::from_bytes(parent_block_id.as_slice()), ExternalBlock {
                     block_meta: meta_data.clone(),
@@ -258,7 +259,7 @@ impl StateComputer for ExecutionProxy {
                 .get_executed_res(block_id, meta_data.block_number)
                 .await.unwrap_or_else(|e| panic!("Failed to get executed result {}", e));
             update_counters_for_compute_res(&res);
-            observe_block(block.timestamp_usecs(), BlockStage::EXECUTED);
+            observe_block(block_timestamp, BlockStage::EXECUTED);
             let result = StateComputeResult::with_root_hash(HashValue::new(res.bytes()));
             let pre_commit_fut: BoxFuture<'static, ExecutorResult<()>> =
                     {
