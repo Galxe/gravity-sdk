@@ -254,11 +254,12 @@ impl StateComputer for ExecutionProxy {
                     txns: real_txns,
                 })
                 .await.unwrap_or_else(|e| panic!("Failed to push ordered blocks {}", e));
+            let block_timestamp = meta_data.usecs;
             let res = get_block_buffer_manager()
                 .get_executed_res(block_id, meta_data.block_number)
                 .await.unwrap_or_else(|e| panic!("Failed to get executed result {}", e));
             update_counters_for_compute_res(&res);
-            observe_block(block.timestamp_usecs(), BlockStage::EXECUTED);
+            observe_block(block_timestamp, BlockStage::EXECUTED);
             let result = StateComputeResult::with_root_hash(HashValue::new(res.bytes()));
             let pre_commit_fut: BoxFuture<'static, ExecutorResult<()>> =
                     {
