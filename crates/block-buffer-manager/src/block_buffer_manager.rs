@@ -2,14 +2,17 @@ use log::{info, warn};
 use std::{
     cell::OnceCell,
     collections::HashMap,
-    sync::{atomic::{AtomicU64, AtomicU8, Ordering}, Arc, OnceLock},
+    sync::{
+        atomic::{AtomicU64, AtomicU8, Ordering},
+        Arc, OnceLock,
+    },
     time::Duration,
 };
 use tokio::{sync::Mutex, time::Instant};
 
 use api_types::{
-    compute_res::ComputeRes, u256_define::BlockId, ExternalBlock,
-    VerifiedTxn, VerifiedTxnWithAccountSeqNum,
+    compute_res::ComputeRes, u256_define::BlockId, ExternalBlock, VerifiedTxn,
+    VerifiedTxnWithAccountSeqNum,
 };
 use itertools::Itertools;
 
@@ -96,17 +99,17 @@ impl BlockBufferManager {
         block_buffer_manager
     }
 
-    async fn remove_committed_blocks(
-        &self,
-    ) -> Result<(), anyhow::Error> {
-        
+    async fn remove_committed_blocks(&self) -> Result<(), anyhow::Error> {
         let mut block_state_machine = self.block_state_machine.lock().await;
         if block_state_machine.blocks.len() < self.config.max_block_size {
             return Ok(());
         }
         let latest_persist_block_num = block_state_machine.latest_finalized_block_number;
         info!("remove_committed_blocks latest_persist_block_num: {:?}", latest_persist_block_num);
-        block_state_machine.latest_finalized_block_number = std::cmp::max(block_state_machine.latest_finalized_block_number, latest_persist_block_num);
+        block_state_machine.latest_finalized_block_number = std::cmp::max(
+            block_state_machine.latest_finalized_block_number,
+            latest_persist_block_num,
+        );
         block_state_machine.blocks.retain(|_, block_state| match block_state {
             BlockState::Committed { num, .. } => *num > latest_persist_block_num,
             _ => true,
@@ -115,7 +118,11 @@ impl BlockBufferManager {
         Ok(())
     }
 
-    pub async fn init(&self, latest_commit_block_number: u64, block_number_to_block_id: HashMap<u64, BlockId>) {
+    pub async fn init(
+        &self,
+        latest_commit_block_number: u64,
+        block_number_to_block_id: HashMap<u64, BlockId>,
+    ) {
         info!("init block_buffer_manager with latest_commit_block_number: {:?} block_number_to_block_id: {:?}", latest_commit_block_number, block_number_to_block_id);
         let mut block_state_machine = self.block_state_machine.lock().await;
         // When init, the latest_finalized_block_number is the same as latest_commit_block_number
@@ -186,7 +193,11 @@ impl BlockBufferManager {
         );
         let mut block_state_machine = self.block_state_machine.lock().await;
         if block_state_machine.blocks.contains_key(&block.block_meta.block_id) {
-            log::warn!("set_ordered_blocks block {:?} block num {} already exists", block.block_meta.block_id, block.block_meta.block_number);
+            log::warn!(
+                "set_ordered_blocks block {:?} block num {} already exists",
+                block.block_meta.block_id,
+                block.block_meta.block_number
+            );
             return Ok(());
         }
         let block_id = block.block_meta.block_id;
@@ -207,29 +218,36 @@ impl BlockBufferManager {
         info!("get_ordered_blocks start_num: {:?} max_size: {:?}", start_num, max_size);
         loop {
             if start.elapsed() > self.config.max_wait_timeout {
-                return Err(anyhow::anyhow!("Timeout waiting for ordered blocks after {:?} block_number: {:?}", start.elapsed(), start_num));
+                return Err(anyhow::anyhow!(
+                    "Timeout waiting for ordered blocks after {:?} block_number: {:?}",
+                    start.elapsed(),
+                    start_num
+                ));
             }
 
             let block_state_machine = self.block_state_machine.lock().await;
-            let result = block_state_machine
-                .blocks
-                .iter()
-                .map(|(_id, block_state)| match block_state {
-                    BlockState::Ordered { block, parent_id } => Some((block.clone(), *parent_id)),
-                    _ => None,
-                })
-                .filter(|v| v.is_some())
-                .map(|v| v.unwrap())
-                .filter(|(b, _id)| b.block_meta.block_number >= start_num)
-                .sorted_by_key(|(b, _id)| b.block_meta.block_number)
-                .take(max_size.unwrap_or(usize::MAX))
-                .collect::<Vec<_>>();
-            if result.is_empty() || result.first().map(|v| v.0.block_meta.block_number) != Some(start_num) {
+            // get block num, block num + 1
+            let mut result = Vec::new();
+            let mut current_num = start_num;
+            let mut current_id =
+                block_state_machine.block_number_to_block_id.get(&current_num).unwrap();
+            
+            while let Some(block) = block_state_machine.blocks.get(current_id) {
+                match block {
+                    BlockState::Ordered { block, parent_id } => {
+                        result.push((block.clone(), *parent_id));
+                    }
+                    _ => {
+                        panic!("There is no Ordered Block but try to get ordered blocks for block {:?}", current_id);
+                    }
+                }
+                current_num += 1;
+                current_id =
+                    block_state_machine.block_number_to_block_id.get(&current_num).unwrap();
+            }
+            if result.is_empty() {
                 // Release lock before waiting
                 drop(block_state_machine);
-                if let Some(first_block_num) = result.first().map(|v| v.0.block_meta.block_number) {
-                    log::warn!("get_ordered_blocks done with start_num {:?} num {:?}", start_num, first_block_num);
-                }
                 // Wait for changes and try again
                 match self.wait_for_change(self.config.wait_for_change_timeout).await {
                     Ok(_) => continue,
@@ -253,7 +271,12 @@ impl BlockBufferManager {
         info!("get_executed_res start {:?} num {:?}", block_id, block_num);
         loop {
             if start.elapsed() > self.config.max_wait_timeout {
-                return Err(anyhow::anyhow!("get_executed_res timeout for block {:?} after {:?} block_number: {:?}", block_id, start.elapsed(), block_num));
+                return Err(anyhow::anyhow!(
+                    "get_executed_res timeout for block {:?} after {:?} block_number: {:?}",
+                    block_id,
+                    start.elapsed(),
+                    block_num
+                ));
             }
 
             let block_state_machine = self.block_state_machine.lock().await;
@@ -280,7 +303,9 @@ impl BlockBufferManager {
                     BlockState::Committed { hash: _, compute_res, num } => {
                         log::warn!(
                             "get_executed_res done with id {:?} num {:?} res {:?}",
-                            block_id, *num, compute_res
+                            block_id,
+                            *num,
+                            compute_res
                         );
                         assert_eq!(*num, block_num);
                         return Ok(compute_res.clone());
@@ -304,7 +329,12 @@ impl BlockBufferManager {
         if !self.is_ready() {
             panic!("Buffer is not ready");
         }
-        info!("set_compute_res id {:?} num {:?} hash {:?}", block_id, block_num, BlockId::from_bytes(block_hash.as_slice()));
+        info!(
+            "set_compute_res id {:?} num {:?} hash {:?}",
+            block_id,
+            block_num,
+            BlockId::from_bytes(block_hash.as_slice())
+        );
         let mut block_state_machine = self.block_state_machine.lock().await;
         if let Some(BlockState::Ordered { block, parent_id: _ }) =
             block_state_machine.blocks.get(&block_id)
@@ -381,45 +411,53 @@ impl BlockBufferManager {
 
         loop {
             if start.elapsed() > self.config.max_wait_timeout {
-                return Err(anyhow::anyhow!("Timeout waiting for committed blocks after {:?} block_number: {:?}", start.elapsed(), start_num));
+                return Err(anyhow::anyhow!(
+                    "Timeout waiting for committed blocks after {:?} block_number: {:?}",
+                    start.elapsed(),
+                    start_num
+                ));
             }
 
             let mut block_state_machine = self.block_state_machine.lock().await;
-            let result = block_state_machine
-                .blocks
-                .iter()
-                .map(|(block_id, block_state)| match block_state {
+            let mut result = Vec::new();
+            let mut current_num = start_num;
+            let mut current_id =
+                block_state_machine.block_number_to_block_id.get(&current_num).unwrap();
+            while let Some(block) = block_state_machine.blocks.get(current_id) {
+                match block {
                     BlockState::Committed { hash, compute_res: _, num } => {
-                        Some(BlockHashRef { block_id: *block_id, num: *num, hash: *hash })
+                        result.push(BlockHashRef { block_id: *current_id, num: *num, hash: *hash });
                     }
-                    _ => None,
-                })
-                .filter(|v| v.is_some())
-                .map(|v| v.unwrap()) // Unwrap after filtering for Some values
-                .filter(|v| v.num >= start_num)
-                .sorted_by_key(|v| v.num) // Use sorted_by_key from itertools
-                .take(max_size.unwrap_or(usize::MAX))
-                .collect::<Vec<_>>();
-
-            if result.is_empty() || result.first().map(|v| v.num) != Some(start_num) {
+                    _ => {
+                        continue;
+                    }
+                }
+                current_num += 1;
+                current_id =
+                    block_state_machine.block_number_to_block_id.get(&current_num).unwrap();
+            }
+            if result.is_empty() {
                 // Release lock before waiting
                 drop(block_state_machine);
-                if let Some(first_block_num) = result.first().map(|v| v.num) {
-                    log::warn!("get_committed_blocks done with start_num {:?} num {:?}", start_num, first_block_num);
-                }
                 // Wait for changes and try again
                 match self.wait_for_change(self.config.wait_for_change_timeout).await {
                     Ok(_) => continue,
                     Err(_) => continue, // Timeout on the wait, retry
                 }
             } else {
-                block_state_machine.latest_finalized_block_number = std::cmp::max(block_state_machine.latest_finalized_block_number, result.last().unwrap().num);
+                block_state_machine.latest_finalized_block_number = std::cmp::max(
+                    block_state_machine.latest_finalized_block_number,
+                    result.last().unwrap().num,
+                );
                 return Ok(result);
             }
         }
     }
 
-    pub async fn set_latest_finalized_block_number(&self, latest_finalized_block_number: u64) -> Result<(), anyhow::Error> {
+    pub async fn set_latest_finalized_block_number(
+        &self,
+        latest_finalized_block_number: u64,
+    ) -> Result<(), anyhow::Error> {
         info!("set_latest_finalized_block_number {:?}", latest_finalized_block_number);
         let mut block_state_machine = self.block_state_machine.lock().await;
         block_state_machine.latest_finalized_block_number = latest_finalized_block_number;
