@@ -1,4 +1,4 @@
-use log::info;
+use log::{info, warn};
 use std::{
     cell::OnceCell,
     collections::HashMap,
@@ -224,8 +224,9 @@ impl BlockBufferManager {
                 .sorted_by_key(|(b, _id)| b.block_meta.block_number)
                 .take(max_size.unwrap_or(usize::MAX))
                 .collect::<Vec<_>>();
-            if result.is_empty() || result.first().map(|(b, _id)| b.block_meta.block_number) == Some(start_num) {
+            if result.is_empty() || result.first().map(|v| v.0.block_meta.block_number) != Some(start_num) {
                 // Release lock before waiting
+                log::warn!("get_ordered_blocks done with start_num {:?} num {:?}", start_num, result.first().map(|v| v.0.block_meta.block_number));
                 drop(block_state_machine);
 
                 // Wait for changes and try again
@@ -399,10 +400,10 @@ impl BlockBufferManager {
                 .take(max_size.unwrap_or(usize::MAX))
                 .collect::<Vec<_>>();
 
-            if result.is_empty() || result.first().map(|v| v.num) == Some(start_num) {
+            if result.is_empty() || result.first().map(|v| v.num) != Some(start_num) {
                 // Release lock before waiting
                 drop(block_state_machine);
-
+                warn!("get_committed_blocks done with start_num {:?} num {:?}", start_num, result.first().map(|v| v.num));
                 // Wait for changes and try again
                 match self.wait_for_change(self.config.wait_for_change_timeout).await {
                     Ok(_) => continue,
