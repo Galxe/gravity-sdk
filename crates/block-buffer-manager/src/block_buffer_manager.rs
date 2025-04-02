@@ -226,9 +226,10 @@ impl BlockBufferManager {
                 .collect::<Vec<_>>();
             if result.is_empty() || result.first().map(|v| v.0.block_meta.block_number) != Some(start_num) {
                 // Release lock before waiting
-                log::warn!("get_ordered_blocks done with start_num {:?} num {:?}", start_num, result.first().map(|v| v.0.block_meta.block_number));
                 drop(block_state_machine);
-
+                if let Some(first_block_num) = result.first().map(|v| v.0.block_meta.block_number) {
+                    log::warn!("get_ordered_blocks done with start_num {:?} num {:?}", start_num, first_block_num);
+                }
                 // Wait for changes and try again
                 match self.wait_for_change(self.config.wait_for_change_timeout).await {
                     Ok(_) => continue,
@@ -403,7 +404,9 @@ impl BlockBufferManager {
             if result.is_empty() || result.first().map(|v| v.num) != Some(start_num) {
                 // Release lock before waiting
                 drop(block_state_machine);
-                warn!("get_committed_blocks done with start_num {:?} num {:?}", start_num, result.first().map(|v| v.num));
+                if let Some(first_block_num) = result.first().map(|v| v.num) {
+                    log::warn!("get_committed_blocks done with start_num {:?} num {:?}", start_num, first_block_num);
+                }
                 // Wait for changes and try again
                 match self.wait_for_change(self.config.wait_for_change_timeout).await {
                     Ok(_) => continue,
