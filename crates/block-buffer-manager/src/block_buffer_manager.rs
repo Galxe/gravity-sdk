@@ -109,6 +109,7 @@ impl BlockBufferManager {
     }
 
     pub async fn init(&self, latest_commit_block_number: u64, block_number_to_block_id: HashMap<u64, BlockId>) {
+        info!("init block_buffer_manager with latest_commit_block_number: {:?} block_number_to_block_id: {:?}", latest_commit_block_number, block_number_to_block_id);
         let mut block_state_machine = self.block_state_machine.lock().await;
         // When init, the latest_finalized_block_number is the same as latest_commit_block_number
         block_state_machine.latest_commit_block_number = latest_commit_block_number;
