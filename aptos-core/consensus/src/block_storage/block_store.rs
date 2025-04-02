@@ -35,7 +35,7 @@ use aptos_executor_types::StateComputeResult;
 use aptos_infallible::{Mutex, RwLock};
 use aptos_logger::prelude::*;
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
-use aptos_metrics_core::{register_int_gauge_vec, IntGaugeVec};
+use aptos_metrics_core::{register_int_gauge_vec, IntGaugeHelper, IntGaugeVec};
 use aptos_types::{
     aggregate_signature::AggregateSignature,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
@@ -63,7 +63,16 @@ static CUR_RECOVER_BLOCK_NUMBER_GAUGE: Lazy<IntGaugeVec> = Lazy::new(|| {
     register_int_gauge_vec!(
         "aptos_current_recover_block_number",
         "Current reccover block number",
-        &["block_number"]
+        &[]
+    )
+    .unwrap()
+});
+
+static RECOVERY_GAUGE: Lazy<IntGaugeVec> = Lazy::new(|| {
+    register_int_gauge_vec!(
+        "aptos_recovery",
+        "is recovery or not",
+        &[]
     )
     .unwrap()
 });
@@ -192,6 +201,7 @@ impl BlockStore {
     }
 
     async fn recover_blocks(&self) {
+        RECOVERY_GAUGE.set_with(&[], 1);
         // reproduce the same batches (important for the commit phase)
         let mut certs = self.inner.read().get_all_quorum_certs_with_commit_info();
         certs.sort_unstable_by_key(|qc| qc.commit_info().round());
@@ -231,7 +241,7 @@ impl BlockStore {
                     let verified_txns =
                         verified_txns.into_iter().map(|txn| txn.into()).collect();
                     let block_number = block_to_recover.block().block_number().unwrap();
-                    CUR_RECOVER_BLOCK_NUMBER_GAUGE.with_label_values(&["block_number"]).set(block_number.try_into().unwrap());
+                    CUR_RECOVER_BLOCK_NUMBER_GAUGE.with_label_values(&[]).set(block_number.try_into().unwrap());
                     let block_hash = match self
                         .storage
                         .consensus_db()
@@ -271,6 +281,7 @@ impl BlockStore {
                 }
             }
         }
+        RECOVERY_GAUGE.set_with(&[], 0);
     }
 
     async fn build(
