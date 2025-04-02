@@ -42,24 +42,24 @@
     - name: Synchronize genesis directory to remote, overwrite existing directory
       synchronize:
         src: "./server_confs/{{ reth_node_id }}/genesis/"
-        dest: "/tmp/{{ reth_node_id }}/genesis/"
+        dest: "{{ reth_install_dir }}/{{ reth_node_id }}/genesis/"
         recursive: yes
         delete: yes
  
     - name: Copy nodes config to remote
       copy:
         src: ./server_confs/nodes_config.json
-        dest: "/tmp/{{ reth_node_id }}/genesis/nodes_config.json"
+        dest: "{{ reth_install_dir }}/{{ reth_node_id }}/genesis/nodes_config.json"
 
     - name: Copy nodes discover to remote
       copy:
         src: ./server_confs/discovery
-        dest: "/tmp/{{ reth_node_id }}/discovery"
+        dest: "{{ reth_install_dir }}/{{ reth_node_id }}/discovery"
 
     - name: Copy start bash to remote
       copy:
         src: "{{ reth_root_dir }}/deploy_utils/start.sh"
-        dest: "/tmp/{{ reth_node_id }}/script"
+        dest: "{{ reth_install_dir }}/{{ reth_node_id }}/script"
 
     - name: Output collected logs
       debug:
