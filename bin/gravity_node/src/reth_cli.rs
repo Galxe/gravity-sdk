@@ -225,7 +225,7 @@ impl RethCli {
         let mut start_commit_num = self.provider.last_block_number().unwrap();
         loop {
             let block_ids = get_block_buffer_manager()
-                .get_commited_blocks(start_commit_num,None)
+                .get_committed_blocks(start_commit_num,None)
                 .await
                 .expect("failed to pop commit blocks");
             if block_ids.is_empty() {
