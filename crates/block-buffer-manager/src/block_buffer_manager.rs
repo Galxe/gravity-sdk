@@ -376,8 +376,8 @@ impl BlockBufferManager {
                             panic!("There is no Ordered Block but try to push commit block for block {:?}", block_id_num_hash.block_id);
                         }
                     }
-                    BlockState::Committed { hash, num } => {
-                        if !(*num == block_id_num_hash.num && *hash == block_id_num_hash.hash) {
+                    BlockState::Committed { hash, compute_res: _, id } => {
+                        if !(*id == block_id_num_hash.block_id && *hash == block_id_num_hash.hash) {
                             panic!("There is no Ordered Block but try to push commit block for block {:?}", block_id_num_hash.block_id);
                         }
                     }
