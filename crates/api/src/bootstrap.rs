@@ -17,7 +17,7 @@ use aptos_consensus::{
     persistent_liveness_storage::StorageWriteProxy, quorum_store::quorum_store_db::QuorumStoreDB,
 };
 use aptos_consensus_notifications::ConsensusNotifier;
-use aptos_crypto::x25519;
+use aptos_crypto::{hash::GENESIS_BLOCK_ID, x25519};
 use aptos_event_notifications::EventSubscriptionService;
 use aptos_mempool::{MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest};
 use aptos_mempool_notifications::MempoolNotificationListener;
@@ -200,7 +200,8 @@ pub async fn init_block_buffer_manager(
     } else {
         0
     };
-    let block_number_to_block_id = consensus_db.get_all::<BlockSchema>().unwrap()
+    
+    let mut block_number_to_block_id = consensus_db.get_all::<BlockSchema>().unwrap()
             .into_iter()
             .map(|(_, block)| block)
             .filter(|block| {
@@ -209,5 +210,8 @@ pub async fn init_block_buffer_manager(
             })
             .map(|block| (block.block_number().unwrap(), BlockId::new(*block.id())))
             .collect::<HashMap<u64, BlockId>>();
+    if start_block_number == 0 {
+        block_number_to_block_id.insert(0u64, BlockId::from_bytes(GENESIS_BLOCK_ID.as_slice()));
+    }
     get_block_buffer_manager().init(latest_block_number, block_number_to_block_id).await;
 }

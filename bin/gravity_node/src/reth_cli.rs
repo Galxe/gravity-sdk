@@ -195,7 +195,7 @@ impl RethCli {
     }
 
     pub async fn start_execution(&self) -> Result<(), String> {
-        let mut start_ordered_block = self.provider.last_block_number().unwrap();
+        let mut start_ordered_block = self.provider.last_block_number().unwrap() + 1;
         loop {
             // max executing block number
             let exec_blocks = get_block_buffer_manager()
@@ -233,7 +233,7 @@ impl RethCli {
     }
 
     pub async fn start_commit(&self) -> Result<(), String> {
-        let mut start_commit_num = self.provider.last_block_number().unwrap();
+        let mut start_commit_num = self.provider.last_block_number().unwrap() + 1;
         loop {
             let block_ids = get_block_buffer_manager()
                 .get_committed_blocks(start_commit_num,None)
