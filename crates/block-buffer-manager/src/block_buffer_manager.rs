@@ -229,12 +229,12 @@ impl BlockBufferManager {
             // get block num, block num + 1
             let mut result = Vec::new();
             let mut current_num = start_num;
-            let mut current_id =
-                block_state_machine.block_number_to_block_id.get(&current_num).unwrap();
-            
-            while let Some(block) = block_state_machine.blocks.get(current_id) {
-                match block {
-                    BlockState::Ordered { block, parent_id } => {
+            let current_id =
+                block_state_machine.block_number_to_block_id.get(&current_num);
+            if let Some(mut current_id) = current_id {
+                while let Some(block) = block_state_machine.blocks.get(current_id) {
+                    match block {
+                        BlockState::Ordered { block, parent_id } => {
                         result.push((block.clone(), *parent_id));
                     }
                     _ => {
@@ -245,9 +245,14 @@ impl BlockBufferManager {
                     break;
                 }
                 current_num += 1;
-                current_id =
-                    block_state_machine.block_number_to_block_id.get(&current_num).unwrap();
+                    if let Some(id) = block_state_machine.block_number_to_block_id.get(&current_num) {
+                        current_id = id;
+                    } else {
+                        break;
+                    }
+                }
             }
+
             if result.is_empty() {
                 // Release lock before waiting
                 drop(block_state_machine);
@@ -424,23 +429,28 @@ impl BlockBufferManager {
             let mut block_state_machine = self.block_state_machine.lock().await;
             let mut result = Vec::new();
             let mut current_num = start_num;
-            let mut current_id =
-                block_state_machine.block_number_to_block_id.get(&current_num).unwrap();
-            while let Some(block) = block_state_machine.blocks.get(current_id) {
-                match block {
-                    BlockState::Committed { hash, compute_res: _, num } => {
-                        result.push(BlockHashRef { block_id: *current_id, num: *num, hash: *hash });
+            let current_id =
+                block_state_machine.block_number_to_block_id.get(&current_num);
+            if let Some(mut current_id) = current_id {
+                while let Some(block) = block_state_machine.blocks.get(current_id) {
+                        match block {
+                            BlockState::Committed { hash, compute_res: _, num } => {
+                            result.push(BlockHashRef { block_id: *current_id, num: *num, hash: *hash });
+                        }
+                        _ => {
+                            continue;
+                        }
                     }
-                    _ => {
-                        continue;
+                    if result.len() >= max_size.unwrap_or(usize::MAX) {
+                        break;
+                    }
+                    current_num += 1;
+                    if let Some(id) = block_state_machine.block_number_to_block_id.get(&current_num) {
+                        current_id = id;
+                    } else {
+                        break;
                     }
                 }
-                if result.len() >= max_size.unwrap_or(usize::MAX) {
-                    break;
-                }
-                current_num += 1;
-                current_id =
-                    block_state_machine.block_number_to_block_id.get(&current_num).unwrap();
             }
             if result.is_empty() {
                 // Release lock before waiting
