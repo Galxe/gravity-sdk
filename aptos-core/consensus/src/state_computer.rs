@@ -252,6 +252,7 @@ impl StateComputer for ExecutionProxy {
         let txn_notifier = self.txn_notifier.clone();
         Box::pin(async move {
             let block_id = meta_data.block_id;
+            let block_timestamp = meta_data.usecs;
             get_block_buffer_manager()
                 .set_ordered_blocks(BlockId::from_bytes(parent_block_id.as_slice()), ExternalBlock {
                     block_meta: meta_data.clone(),
@@ -264,7 +265,7 @@ impl StateComputer for ExecutionProxy {
                 .await.unwrap_or_else(|e| panic!("Failed to get executed result {}", e));
 
             update_counters_for_compute_res(&compute_result);
-            observe_block(block.timestamp_usecs(), BlockStage::EXECUTED);
+            observe_block(block_timestamp, BlockStage::EXECUTED);
 
             let txn_status = compute_result.txn_status.clone();
             match (*txn_status).as_ref() {
