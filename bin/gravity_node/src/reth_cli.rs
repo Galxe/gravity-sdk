@@ -200,8 +200,12 @@ impl RethCli {
             // max executing block number
             let exec_blocks = get_block_buffer_manager()
                 .get_ordered_blocks(start_ordered_block, None)
-                .await
-                .expect("failed to pop ordered blocks");
+                .await;
+            if let Err(e) = exec_blocks {
+                warn!("failed to get ordered blocks: {}", e);
+                continue;
+            }
+            let exec_blocks = exec_blocks.unwrap();
             if exec_blocks.is_empty() {
                 info!("no ordered blocks");
                 continue;
@@ -233,8 +237,12 @@ impl RethCli {
         loop {
             let block_ids = get_block_buffer_manager()
                 .get_committed_blocks(start_commit_num,None)
-                .await
-                .expect("failed to pop commit blocks");
+                .await;
+            if let Err(e) = block_ids {
+                warn!("failed to get committed blocks: {}", e);
+                continue;
+            }
+            let block_ids = block_ids.unwrap();
             if block_ids.is_empty() {
                 continue;
             }
