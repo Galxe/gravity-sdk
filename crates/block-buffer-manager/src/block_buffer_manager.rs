@@ -224,7 +224,7 @@ impl BlockBufferManager {
                 .sorted_by_key(|(b, _id)| b.block_meta.block_number)
                 .take(max_size.unwrap_or(usize::MAX))
                 .collect::<Vec<_>>();
-            if result.is_empty() {
+            if result.is_empty() || result.first().map(|(b, _id)| b.block_meta.block_number) == Some(start_num) {
                 // Release lock before waiting
                 drop(block_state_machine);
 
@@ -399,7 +399,7 @@ impl BlockBufferManager {
                 .take(max_size.unwrap_or(usize::MAX))
                 .collect::<Vec<_>>();
 
-            if result.is_empty() {
+            if result.is_empty() || result.first().map(|v| v.num) == Some(start_num) {
                 // Release lock before waiting
                 drop(block_state_machine);
 
