@@ -87,8 +87,8 @@ impl BlockBufferManager {
         // spawn task to remove committed blocks
         tokio::spawn(async move {
             loop {
-                clone.remove_committed_blocks().await.unwrap();
                 tokio::time::sleep(clone.config.remove_committed_blocks_interval).await;
+                clone.remove_committed_blocks().await.unwrap();
             }
         });
         block_buffer_manager
@@ -195,7 +195,7 @@ impl BlockBufferManager {
         let start = Instant::now();
         loop {
             if start.elapsed() > self.config.max_wait_timeout {
-                return Err(anyhow::anyhow!("Timeout waiting for ordered blocks"));
+                return Err(anyhow::anyhow!("Timeout waiting for ordered blocks after {:?}", start.elapsed()));
             }
 
             let block_state_machine = self.block_state_machine.lock().await;
@@ -239,7 +239,7 @@ impl BlockBufferManager {
 
         loop {
             if start.elapsed() > self.config.max_wait_timeout {
-                return Err(anyhow::anyhow!("get_executed_res timeout for block {:?}", block_id));
+                return Err(anyhow::anyhow!("get_executed_res timeout for block {:?} after {:?}", block_id, start.elapsed()));
             }
 
             let block_state_machine = self.block_state_machine.lock().await;
@@ -361,7 +361,7 @@ impl BlockBufferManager {
 
         loop {
             if start.elapsed() > self.config.max_wait_timeout {
-                return Err(anyhow::anyhow!("Timeout waiting for committed blocks"));
+                return Err(anyhow::anyhow!("Timeout waiting for committed blocks after {:?}", start.elapsed()));
             }
 
             let mut block_state_machine = self.block_state_machine.lock().await;
