@@ -180,6 +180,10 @@ impl BlockBufferManager {
             block.block_meta.block_id, block.block_meta.block_number
         );
         let mut block_state_machine = self.block_state_machine.lock().await;
+        if block_state_machine.blocks.contains_key(&block.block_meta.block_id) {
+            log::warn!("set_ordered_blocks block {:?} block num {} already exists", block.block_meta.block_id, block.block_meta.block_number);
+            return Ok(());
+        }
         let block_id = block.block_meta.block_id;
         block_state_machine.blocks.insert(block_id, BlockState::Ordered { block, parent_id });
         let _ = block_state_machine.sender.send(());
