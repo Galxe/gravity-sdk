@@ -226,7 +226,6 @@ impl BlockBufferManager {
             // get block num, block num + 1
             let mut result = Vec::new();
             let mut current_num = start_num;
-            info!("keys: {:?}", block_state_machine.blocks.keys());
             while let Some(block) = block_state_machine.blocks.get(&current_num) {
                 match block {
                     BlockState::Ordered { block, parent_id } => {
@@ -336,7 +335,7 @@ impl BlockBufferManager {
         if let Some(BlockState::Ordered { block, parent_id: _ }) =
             block_state_machine.blocks.get(&block_num)
         {
-            assert_eq!(block.block_meta.block_number, block_num);
+            assert_eq!(block.block_meta.block_id, block_id);
             let txn_len = block.txns.len();
             block_state_machine.blocks.insert(
                 block_num,
@@ -424,7 +423,7 @@ impl BlockBufferManager {
                         result.push(BlockHashRef { block_id: *id, num: current_num, hash: *hash });
                     }
                     _ => {
-                        continue;
+                        break;
                     }
                 }
                 if result.len() >= max_size.unwrap_or(usize::MAX) {
