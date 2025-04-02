@@ -239,7 +239,7 @@ impl BlockBufferManager {
             panic!("Buffer is not ready");
         }
         let start = Instant::now();
-        info!("get_executed_res start {:?}", block_id);
+        info!("get_executed_res start {:?} num {:?}", block_id, block_num);
         loop {
             if start.elapsed() > self.config.max_wait_timeout {
                 return Err(anyhow::anyhow!("get_executed_res timeout for block {:?} after {:?}", block_id, start.elapsed()));
