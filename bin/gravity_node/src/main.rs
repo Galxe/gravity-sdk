@@ -168,8 +168,8 @@ fn main() {
                 let chain_id = client.chain_id();
                 let coordinator =
                     Arc::new(RethCoordinator::new(client, latest_block_number, execution_args_tx));
-                coordinator.run().await;
                 AptosConsensus::init(gcei_config, coordinator.clone(), chain_id, latest_block_number).await;
+                coordinator.run().await;
                 coordinator.send_execution_args().await;
                 tokio::signal::ctrl_c().await.unwrap();
             }
