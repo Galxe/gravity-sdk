@@ -110,6 +110,7 @@ impl BlockBufferManager {
             block_state_machine.latest_finalized_block_number,
             latest_persist_block_num,
         );
+        block_state_machine.block_number_to_block_id.retain(|num, _| *num > latest_persist_block_num);
         block_state_machine.blocks.retain(|_, block_state| match block_state {
             BlockState::Committed { num, .. } => *num > latest_persist_block_num,
             _ => true,
