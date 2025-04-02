@@ -241,6 +241,9 @@ impl BlockBufferManager {
                         panic!("There is no Ordered Block but try to get ordered blocks for block {:?}", current_id);
                     }
                 }
+                if result.len() >= max_size.unwrap_or(usize::MAX) {
+                    break;
+                }
                 current_num += 1;
                 current_id =
                     block_state_machine.block_number_to_block_id.get(&current_num).unwrap();
@@ -431,6 +434,9 @@ impl BlockBufferManager {
                     _ => {
                         continue;
                     }
+                }
+                if result.len() >= max_size.unwrap_or(usize::MAX) {
+                    break;
                 }
                 current_num += 1;
                 current_id =
