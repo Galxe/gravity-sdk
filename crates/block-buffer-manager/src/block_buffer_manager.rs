@@ -26,7 +26,7 @@ pub struct BlockHashRef {
 pub enum BlockState {
     Ordered { block: ExternalBlock, parent_id: BlockId },
     Computed((u64, ComputeRes)),
-    Committed { hash: Option<[u8; 32]>, num: u64 },
+    Committed { hash: Option<[u8; 32]>, compute_res: ComputeRes, num: u64 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,6 +48,7 @@ pub struct BlockBufferManagerConfig {
     pub wait_for_change_timeout: Duration,
     pub max_wait_timeout: Duration,
     pub remove_committed_blocks_interval: Duration,
+    pub max_block_size: usize,
 }
 
 impl Default for BlockBufferManagerConfig {
@@ -56,6 +57,7 @@ impl Default for BlockBufferManagerConfig {
             wait_for_change_timeout: Duration::from_millis(100),
             max_wait_timeout: Duration::from_secs(5),
             remove_committed_blocks_interval: Duration::from_secs(1),
+            max_block_size: 256,
         }
     }
 }
@@ -99,6 +101,9 @@ impl BlockBufferManager {
     ) -> Result<(), anyhow::Error> {
         
         let mut block_state_machine = self.block_state_machine.lock().await;
+        if block_state_machine.blocks.len() < self.config.max_block_size {
+            return Ok(());
+        }
         let latest_persist_block_num = block_state_machine.latest_finalized_block_number;
         info!("remove_committed_blocks latest_persist_block_num: {:?}", latest_persist_block_num);
         block_state_machine.latest_finalized_block_number = std::cmp::max(block_state_machine.latest_finalized_block_number, latest_persist_block_num);
@@ -270,8 +275,13 @@ impl BlockBufferManager {
                             Err(_) => continue, // Timeout on the wait, retry
                         }
                     }
-                    BlockState::Committed { .. } => {
-                        panic!("There is no Ordered Block but try to get executed result for block {:?}", block_id);
+                    BlockState::Committed { hash: _, compute_res, num } => {
+                        log::warn!(
+                            "get_executed_res done with id {:?} num {:?} res {:?}",
+                            block_id, *num, compute_res
+                        );
+                        assert_eq!(*num, block_num);
+                        return Ok(compute_res.clone());
                     }
                 }
             } else {
@@ -327,10 +337,11 @@ impl BlockBufferManager {
             );
             if let Some(state) = block_state_machine.blocks.get_mut(&block_id_num_hash.block_id) {
                 match state {
-                    BlockState::Computed((num, _)) => {
+                    BlockState::Computed((num, compute_res)) => {
                         if *num == block_id_num_hash.num {
                             *state = BlockState::Committed {
                                 hash: block_id_num_hash.hash,
+                                compute_res: compute_res.clone(),
                                 num: block_id_num_hash.num,
                             };
                         } else {
@@ -376,7 +387,7 @@ impl BlockBufferManager {
                 .blocks
                 .iter()
                 .map(|(block_id, block_state)| match block_state {
-                    BlockState::Committed { hash, num } => {
+                    BlockState::Committed { hash, compute_res: _, num } => {
                         Some(BlockHashRef { block_id: *block_id, num: *num, hash: *hash })
                     }
                     _ => None,
