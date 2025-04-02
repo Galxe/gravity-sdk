@@ -73,23 +73,16 @@ details GCEI in the following section.
 - Robust recovery mechanisms
 - Asynchronous communication support
 
-## GCEI Protocol
+## BlockBufferManager: The Consensus-Execution Bridge
 
-The GCEI (Gravity Consensus Execution Interface) protocol is the communication bridge between the consensus and
-execution modules in Gravity-SDK. It standardizes the interaction between the two layers, ensuring that consensus and
-execution processes are properly synchronized. The GCEI protocol specification defines two sets of APIs:
+The BlockBufferManager serves as the core communication bridge implementing the GCEI (Gravity Consensus Execution Interface) protocol within the Gravity-SDK.
 
-- **ExecutionChannel APIs**: These APIs enable the Consensus Layer to fetch consecutive transactions and blocks from
-  the Execution Layer. Once the data is consumed, it is immediately removed. By relying on a fully asynchronous model,
-  these APIs facilitate non-blocking ordering and consensus processes.
-- **Recovery APIs**: These APIs are used to synchronize the block heights of the Consensus Layer and Execution Layer
-  when a Gravity Node experiences an unexpected shutdown. They provide a mechanism for rapid re-participation in the
-  Gravity Network and are triggered only during system startup recovery.
+Its primary purpose is to decouple the Consensus Layer from the Execution Layer, enabling them to operate concurrently while maintaining synchronization. It achieves this by:
 
-For more details on the GCEI protocol APIs, please refer to the [Gravity SDK Architecture](./book/docs/architecture.md)
-and [GCEI Protocol Specification](./book/docs/gcei_protocol.md) . These APIs define the standardized interfaces for
-communication between the consensus and execution layers, ensuring seamless integration and efficient operation of the
-Gravity SDK framework.
+Providing asynchronous, buffered channels for exchanging data (transactions, ordered blocks, execution results, commit confirmations).
+Rigorously managing the lifecycle state of blocks (Ordered -> Computed -> Commited) as they progress through the system.
+This component acts as a managed, shared interface, ensuring smooth and efficient coordination between the distinct processes of block ordering (Consensus) and block execution (Execution).
+
 
 ### Block Lifecycle Perspective
 
