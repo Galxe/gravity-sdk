@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use compute_res::ComputeRes;
 use core::str;
 use std::collections::BTreeMap;
+use std::sync::OnceLock;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
@@ -142,7 +143,7 @@ pub struct ExecutionLayer {
     pub recovery_api: Arc<dyn RecoveryApi>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct VerifiedTxn {
     pub bytes: Vec<u8>,
     pub sender: ExternalAccountAddress,
@@ -150,6 +151,13 @@ pub struct VerifiedTxn {
     pub chain_id: ExternalChainId,
     #[serde(skip)]
     pub committed_hash: OnceCell<TxnHash>,
+}
+
+// implment the Debug for VerifiedTxn
+impl std::fmt::Debug for VerifiedTxn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "VerifiedTxn {{ sender: {:?}, sequence_number: {:?}, committed_hash: {:?} }}", self.sender, self.sequence_number, self.committed_hash)
+    }
 }
 
 impl Hash for VerifiedTxn {
@@ -160,6 +168,12 @@ impl Hash for VerifiedTxn {
         self.chain_id.hash(state);
     }
 }
+
+pub trait CryptoTxnHasher : Send + Sync {
+    fn get_hash(bytes: &Vec<u8>) -> [u8; 32];
+}
+
+pub static GLOBAL_CRYPTO_TXN_HASHER: OnceLock<Box<dyn Fn(&Vec<u8>) -> [u8; 32] + Send + Sync>> = OnceLock::new();
 
 impl VerifiedTxn {
     pub fn new(
@@ -187,7 +201,7 @@ impl VerifiedTxn {
     pub fn committed_hash(&self) -> [u8; 32] {
         self.committed_hash
             .get_or_init(|| {
-                u256_define::TxnHash::new(simple_hash::hash_to_fixed_array(self.bytes()))
+                u256_define::TxnHash::new(GLOBAL_CRYPTO_TXN_HASHER.get().unwrap()(self.bytes()))
             })
             .bytes()
     }

@@ -20,6 +20,7 @@ pub const SYSTEM_TTL_INDEX_LABEL: &str = "system_ttl";
 pub const TIMELINE_INDEX_LABEL: &str = "timeline";
 pub const PARKING_LOT_INDEX_LABEL: &str = "parking_lot";
 pub const TRANSACTION_HASH_INDEX_LABEL: &str = "transaction_hash";
+pub const TRANSACTION_STORE_INDEX_LABEL: &str = "transaction_store";
 pub const SIZE_BYTES_LABEL: &str = "size_bytes";
 
 // Core mempool stages labels
