@@ -97,9 +97,6 @@ impl BlockBufferManager {
     async fn remove_committed_blocks(
         &self,
     ) -> Result<(), anyhow::Error> {
-        if !self.is_ready() {
-            panic!("Buffer is not ready");
-        }
         let mut block_state_machine = self.block_state_machine.lock().await;
         let latest_persist_block_num = block_state_machine.latest_finalized_block_number;
         block_state_machine.latest_finalized_block_number = std::cmp::max(block_state_machine.latest_finalized_block_number, latest_persist_block_num);
