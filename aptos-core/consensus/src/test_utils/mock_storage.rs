@@ -152,7 +152,7 @@ impl MockStorage {
 // A impl that always start from genesis.
 #[async_trait]
 impl PersistentLivenessStorage for MockStorage {
-    async fn latest_block_number(&self) -> u64 {
+    async fn latest_commit_block_number(&self) -> u64 {
         unimplemented!("")
     }
 
