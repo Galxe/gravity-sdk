@@ -16,7 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Build
-      run: cargo build --bin gravity_node --profile quick-release
+      run: cargo update -p darling --precise 0.20.10 && cargo build --bin gravity_node --profile quick-release
     # - name: Run tests
     #   run: cargo test --verbose
     # - name: Check formatting
