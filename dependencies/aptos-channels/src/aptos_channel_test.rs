@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{aptos_channel, aptos_channel::ElementStatus, message_queues::QueueStyle};
-use aptos_types::account_address::AccountAddress;
+use gaptos::aptos_types::account_address::AccountAddress;
 use futures::{
     channel::oneshot,
     executor::block_on,

@@ -6,7 +6,7 @@
 //!
 //! Example:
 //! ```
-//! use aptos_logger::info;
+//! use gaptos::aptos_logger::info;
 //! info!(
 //!   key = "value"
 //! );

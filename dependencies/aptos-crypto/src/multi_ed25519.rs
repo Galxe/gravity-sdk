@@ -16,7 +16,7 @@ use crate::{
     traits::*,
 };
 use anyhow::{anyhow, Result};
-use aptos_crypto_derive::{DeserializeKey, SerializeKey, SilentDebug, SilentDisplay};
+use gaptos::aptos_crypto_derive::{DeserializeKey, SerializeKey, SilentDebug, SilentDisplay};
 use core::convert::TryFrom;
 use rand::Rng;
 use serde::Serialize;

@@ -4,8 +4,8 @@
 #![allow(clippy::ptr_arg)]
 #![allow(clippy::needless_borrow)]
 
-use aptos_crypto::Uniform;
-use aptos_dkg::{
+use gaptos::aptos_crypto::Uniform;
+use gaptos::aptos_dkg::{
     pvss,
     pvss::{
         test_utils,

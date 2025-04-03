@@ -54,10 +54,10 @@ macro_rules! encryption_dlog_keys_impl {
                 serialization::{scalar_from_bytes_le, $gt_proj_from_bytes},
             },
         };
-        use aptos_crypto::{
+        use gaptos::aptos_crypto::{
             CryptoMaterialError, Length, Uniform, ValidCryptoMaterial, ValidCryptoMaterialStringExt,
         };
-        use aptos_crypto_derive::{DeserializeKey, SerializeKey, SilentDebug, SilentDisplay};
+        use gaptos::aptos_crypto_derive::{DeserializeKey, SerializeKey, SilentDebug, SilentDisplay};
         use blstrs::{$GTProjective, Scalar};
         use std::{
             fmt,

@@ -22,13 +22,13 @@ use crate::{
     },
     ProtocolId,
 };
-use aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
-use aptos_config::network_id::{NetworkContext, PeerNetworkId};
-use aptos_logger::prelude::*;
+use gaptos::aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_config::network_id::{NetworkContext, PeerNetworkId};
+use gaptos::aptos_logger::prelude::*;
 use aptos_netcore::transport::{ConnectionOrigin, Transport};
-use aptos_short_hex_str::AsShortHexStr;
-use aptos_time_service::{TimeService, TimeServiceTrait};
-use aptos_types::{network_address::NetworkAddress, PeerId};
+use gaptos::aptos_short_hex_str::AsShortHexStr;
+use gaptos::aptos_time_service::{TimeService, TimeServiceTrait};
+use gaptos::aptos_types::{network_address::NetworkAddress, PeerId};
 use futures::{
     channel::oneshot,
     io::{AsyncRead, AsyncWrite, AsyncWriteExt},
@@ -58,8 +58,8 @@ use crate::{
     peer_manager::transport::{TransportHandler, TransportRequest},
     protocols::network::{ReceivedMessage, SerializedRequest},
 };
-use aptos_config::config::PeerRole;
-use aptos_types::account_address::AccountAddress;
+use gaptos::aptos_config::config::PeerRole;
+use gaptos::aptos_types::account_address::AccountAddress;
 pub use senders::*;
 pub use types::*;
 
@@ -97,13 +97,13 @@ where
     /// Channels to send NewPeer/LostPeer notifications to.
     connection_event_handlers: Vec<conn_notifs_channel::Sender>,
     /// Channel used to send Dial requests to the ConnectionHandler actor
-    transport_reqs_tx: aptos_channels::Sender<TransportRequest>,
+    transport_reqs_tx: gaptos::aptos_channels::Sender<TransportRequest>,
     /// Sender for connection events.
-    transport_notifs_tx: aptos_channels::Sender<TransportNotification<TSocket>>,
+    transport_notifs_tx: gaptos::aptos_channels::Sender<TransportNotification<TSocket>>,
     /// Receiver for connection requests.
     connection_reqs_rx: aptos_channel::Receiver<PeerId, ConnectionRequest>,
     /// Receiver for connection events.
-    transport_notifs_rx: aptos_channels::Receiver<TransportNotification<TSocket>>,
+    transport_notifs_rx: gaptos::aptos_channels::Receiver<TransportNotification<TSocket>>,
     /// A map of outstanding disconnect requests.
     outstanding_disconnect_requests:
         HashMap<ConnectionId, oneshot::Sender<Result<(), PeerManagerError>>>,
@@ -145,12 +145,12 @@ where
         max_message_size: usize,
         inbound_connection_limit: usize,
     ) -> Self {
-        let (transport_notifs_tx, transport_notifs_rx) = aptos_channels::new(
+        let (transport_notifs_tx, transport_notifs_rx) = gaptos::aptos_channels::new(
             channel_size,
             &counters::PENDING_CONNECTION_HANDLER_NOTIFICATIONS,
         );
         let (transport_reqs_tx, transport_reqs_rx) =
-            aptos_channels::new(channel_size, &counters::PENDING_PEER_MANAGER_DIAL_REQUESTS);
+            gaptos::aptos_channels::new(channel_size, &counters::PENDING_PEER_MANAGER_DIAL_REQUESTS);
         //TODO now that you can only listen on a socket inside of a tokio runtime we'll need to
         // rethink how we init the PeerManager so we don't have to do this funny thing.
         let transport_notifs_tx_clone = transport_notifs_tx.clone();

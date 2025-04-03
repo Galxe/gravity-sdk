@@ -22,13 +22,13 @@ use crate::{
     },
 };
 use anyhow::Result;
-use aptos_crypto::{
+use gaptos::aptos_crypto::{
     hash::{CryptoHash, DummyHasher},
     HashValue,
 };
 use bytes::Bytes;
 use inner::StateKeyInner;
-use move_core_types::{
+use gaptos::move_core_types::{
     account_address::AccountAddress,
     identifier::IdentStr,
     language_storage::{ModuleId, StructTag},

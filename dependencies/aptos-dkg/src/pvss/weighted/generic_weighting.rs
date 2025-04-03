@@ -9,8 +9,8 @@ use crate::pvss::{
     traits::{transcript::MalleableTranscript, Reconstructable, SecretSharingConfig, Transcript},
     Player, ThresholdConfig, WeightedConfig,
 };
-use aptos_crypto::{CryptoMaterialError, ValidCryptoMaterial};
-use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
+use gaptos::aptos_crypto::{CryptoMaterialError, ValidCryptoMaterial};
+use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
 use rand_core::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 

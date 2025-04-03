@@ -3,10 +3,10 @@
 
 use crate::{keyless::Claims, move_any::AsMoveAny, move_utils::as_move_value::AsMoveValue};
 use anyhow::{anyhow, bail, ensure, Result};
-use aptos_crypto::poseidon_bn254;
+use gaptos::aptos_crypto::poseidon_bn254;
 use base64::URL_SAFE_NO_PAD;
 use jsonwebtoken::{Algorithm, DecodingKey, TokenData, Validation};
-use move_core_types::value::{MoveStruct, MoveValue};
+use gaptos::move_core_types::value::{MoveStruct, MoveValue};
 use once_cell::sync::Lazy;
 use poem_openapi_derive::Object;
 use ring::signature::RsaKeyPair;

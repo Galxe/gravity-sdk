@@ -1,8 +1,8 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos_crypto::HashValue;
-use aptos_types::{
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_types::{
     account_address::AccountAddress,
     transaction::{SignedTransaction, TransactionPayload},
 };

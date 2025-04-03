@@ -4,7 +4,7 @@
 
 use crate::{block_info::Round, on_chain_config::OnChainConfig};
 use anyhow::{format_err, Result};
-use move_core_types::account_address::AccountAddress;
+use gaptos::move_core_types::account_address::AccountAddress;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

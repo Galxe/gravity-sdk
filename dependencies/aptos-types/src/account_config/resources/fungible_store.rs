@@ -1,7 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use move_core_types::{
+use gaptos::move_core_types::{
     account_address::AccountAddress,
     ident_str,
     identifier::IdentStr,
@@ -15,7 +15,7 @@ pub fn primary_store(address: &AccountAddress) -> AccountAddress {
     let mut bytes = address.to_vec();
     bytes.append(&mut AccountAddress::TEN.to_vec());
     bytes.push(0xFC);
-    AccountAddress::from_bytes(aptos_crypto::hash::HashValue::sha3_256_of(&bytes).to_vec()).unwrap()
+    AccountAddress::from_bytes(gaptos::aptos_crypto::hash::HashValue::sha3_256_of(&bytes).to_vec()).unwrap()
 }
 
 /// The balance resource held under an account.

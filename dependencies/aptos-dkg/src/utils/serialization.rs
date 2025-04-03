@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{G1_PROJ_NUM_BYTES, G2_PROJ_NUM_BYTES, SCALAR_NUM_BYTES};
-use aptos_crypto::CryptoMaterialError;
+use gaptos::aptos_crypto::CryptoMaterialError;
 use blstrs::{G1Projective, G2Projective, Scalar};
 
 /// Helper method to *securely* parse a sequence of bytes into a `G1Projective` point.

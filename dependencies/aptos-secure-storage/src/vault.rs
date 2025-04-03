@@ -6,12 +6,12 @@ use crate::{
     namespaced::NAMESPACE_SEPARATOR, CryptoStorage, Error, GetResponse, KVStorage,
     PublicKeyResponse,
 };
-use aptos_crypto::{
+use gaptos::aptos_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature},
     hash::CryptoHash,
 };
-use aptos_infallible::RwLock;
-use aptos_time_service::TimeService;
+use gaptos::aptos_infallible::RwLock;
+use gaptos::aptos_time_service::TimeService;
 use aptos_vault_client::Client;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{

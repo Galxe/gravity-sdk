@@ -10,8 +10,8 @@
 //! Internally, it uses the `PerKeyQueue` to store messages
 use crate::message_queues::{PerKeyQueue, QueueStyle};
 use anyhow::{ensure, Result};
-use aptos_infallible::{Mutex, NonZeroUsize};
-use aptos_metrics_core::IntCounterVec;
+use gaptos::aptos_infallible::{Mutex, NonZeroUsize};
+use gaptos::aptos_metrics_core::IntCounterVec;
 use futures::{
     channel::oneshot,
     stream::{FusedStream, Stream},

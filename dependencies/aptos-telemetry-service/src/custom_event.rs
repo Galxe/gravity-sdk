@@ -14,7 +14,7 @@ use crate::{
     },
 };
 use anyhow::anyhow;
-use aptos_types::PeerId;
+use gaptos::aptos_types::PeerId;
 use gcp_bigquery_client::model::table_data_insert_all_request::TableDataInsertAllRequest;
 use serde_json::json;
 use std::{str::FromStr, time::Duration};
@@ -150,7 +150,7 @@ mod test {
         common::NodeType,
         telemetry::{TelemetryDump, TelemetryEvent},
     };
-    use aptos_types::{chain_id::ChainId, PeerId};
+    use gaptos::aptos_types::{chain_id::ChainId, PeerId};
     use claims::assert_ok;
     use std::collections::BTreeMap;
     use uuid::Uuid;

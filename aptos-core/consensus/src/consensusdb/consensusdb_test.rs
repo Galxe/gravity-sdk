@@ -9,9 +9,9 @@ use aptos_consensus_types::{
     block::block_test_utils::certificate_for_genesis,
     common::{Author, Payload},
 };
-use aptos_crypto::bls12381::Signature;
-use aptos_temppath::TempPath;
-use aptos_types::aggregate_signature::AggregateSignature;
+use gaptos::aptos_crypto::bls12381::Signature;
+use gaptos::aptos_temppath::TempPath;
+use gaptos::aptos_types::aggregate_signature::AggregateSignature;
 use std::{collections::HashMap, hash::Hash};
 
 #[test]

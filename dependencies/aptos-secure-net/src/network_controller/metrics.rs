@@ -1,7 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos_metrics_core::{exponential_buckets, register_histogram_vec, HistogramVec};
+use gaptos::aptos_metrics_core::{exponential_buckets, register_histogram_vec, HistogramVec};
 use once_cell::sync::Lazy;
 
 pub static NETWORK_HANDLER_TIMER: Lazy<HistogramVec> = Lazy::new(|| {

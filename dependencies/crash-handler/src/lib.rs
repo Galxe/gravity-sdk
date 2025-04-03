@@ -4,9 +4,9 @@
 
 #![forbid(unsafe_code)]
 
-use aptos_logger::prelude::*;
+use gaptos::aptos_logger::prelude::*;
 use backtrace::Backtrace;
-// use move_core_types::state::{self, VMState};
+// use gaptos::move_core_types::state::{self, VMState};
 use serde::Serialize;
 use std::{
     panic::{self, PanicInfo},
@@ -44,7 +44,7 @@ fn handle_panic(panic_info: &PanicInfo<'_>) {
     eprintln!("{}", crash_info);
 
     // Wait till the logs have been flushed
-    aptos_logger::flush();
+    gaptos::aptos_logger::flush();
 
     // Do not kill the process if the panics happened at move-bytecode-verifier.
     // This is safe because the `state::get_state()` uses a thread_local for storing states. Thus the state can only be mutated to VERIFIER by the thread that's running the bytecode verifier.

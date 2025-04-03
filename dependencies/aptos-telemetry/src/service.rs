@@ -9,13 +9,13 @@ use crate::{
     system_information::create_system_info_telemetry_event,
     telemetry_log_sender::TelemetryLogSender, utils::create_build_info_telemetry_event,
 };
-use aptos_config::config::NodeConfig;
-use aptos_logger::{
-    aptos_logger::RUST_LOG_TELEMETRY, prelude::*, telemetry_log_writer::TelemetryLog,
+use gaptos::aptos_config::config::NodeConfig;
+use gaptos::aptos_logger::{
+    gaptos::aptos_logger::RUST_LOG_TELEMETRY, prelude::*, telemetry_log_writer::TelemetryLog,
     LoggerFilterUpdater,
 };
-use aptos_telemetry_service::types::telemetry::{TelemetryDump, TelemetryEvent};
-use aptos_types::chain_id::ChainId;
+use gaptos::gaptos::aptos_telemetry_service::types::telemetry::{TelemetryDump, TelemetryEvent};
+use gaptos::aptos_types::chain_id::ChainId;
 use futures::channel::mpsc::{self, Receiver};
 use once_cell::sync::Lazy;
 use rand::Rng;
@@ -105,7 +105,7 @@ pub fn start_telemetry_service(
     logger_filter_update_job: Option<LoggerFilterUpdater>,
 ) -> Option<Runtime> {
     if enable_prometheus_node_metrics() {
-        aptos_node_resource_metrics::register_node_metrics_collector();
+        gaptos::aptos_node_resource_metrics::register_node_metrics_collector();
     }
 
     // Don't start the service if telemetry has been disabled
@@ -115,7 +115,7 @@ pub fn start_telemetry_service(
     }
 
     // Create the telemetry runtime
-    let telemetry_runtime = aptos_runtimes::spawn_named_runtime("telemetry".into(), None);
+    let telemetry_runtime = gaptos::aptos_runtimes::spawn_named_runtime("telemetry".into(), None);
     telemetry_runtime.handle().spawn(spawn_telemetry_service(
         node_config,
         chain_id,

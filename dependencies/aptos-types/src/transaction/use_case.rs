@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::transaction::SignedTransaction;
-use move_core_types::account_address::AccountAddress;
+use gaptos::move_core_types::account_address::AccountAddress;
 
 #[derive(Clone, Eq, Hash, PartialEq)]
 pub enum UseCaseKey {

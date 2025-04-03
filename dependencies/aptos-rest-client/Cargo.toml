@@ -21,6 +21,5 @@ reqwest = { workspace = true }
 url = { workspace = true }
 thiserror ={ workspace = true }
 serde = { workspace = true }
-move-core-types ={ workspace = true }
 
 [dev-dependencies]

@@ -6,7 +6,7 @@ use crate::{
     PublicKeyResponse, 
     VaultStorage,
 };
-use aptos_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
+use gaptos::aptos_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
 use enum_dispatch::enum_dispatch;
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -76,7 +76,7 @@ impl CryptoStorage for Box<Storage> {
         Storage::rotate_key(self, name)
     }
 
-    fn sign<T: aptos_crypto::hash::CryptoHash + Serialize>(
+    fn sign<T: gaptos::aptos_crypto::hash::CryptoHash + Serialize>(
         &self,
         name: &str,
         message: &T,
@@ -84,7 +84,7 @@ impl CryptoStorage for Box<Storage> {
         Storage::sign(self, name, message)
     }
 
-    fn sign_using_version<T: aptos_crypto::hash::CryptoHash + Serialize>(
+    fn sign_using_version<T: gaptos::aptos_crypto::hash::CryptoHash + Serialize>(
         &self,
         name: &str,
         version: Ed25519PublicKey,

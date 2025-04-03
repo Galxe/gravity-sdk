@@ -10,7 +10,7 @@ use crate::{
     transaction::authenticator::EphemeralPublicKey,
 };
 use anyhow::{ensure, Context};
-use aptos_crypto::{poseidon_bn254, CryptoMaterialError};
+use gaptos::aptos_crypto::{poseidon_bn254, CryptoMaterialError};
 use ark_bn254::Fr;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

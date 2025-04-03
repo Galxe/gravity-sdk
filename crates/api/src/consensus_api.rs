@@ -13,18 +13,19 @@ use api_types::{
     compute_res::ComputeRes, u256_define::BlockId, ConsensusApi, ExecError, ExecutionLayer,
     ExternalBlock, ExternalBlockMeta,
 };
-use aptos_build_info::build_information;
-use aptos_config::{config::NodeConfig, network_id::NetworkId};
+use gaptos::aptos_build_info as aptos_build_info;
+use gaptos::aptos_build_info::build_information;
+use gaptos::aptos_config::{config::NodeConfig, network_id::NetworkId};
 use aptos_consensus::consensusdb::ConsensusDB;
 use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
-use aptos_event_notifications::EventNotificationSender;
-use aptos_logger::{info, warn};
+use gaptos::aptos_event_notifications::EventNotificationSender;
+use gaptos::aptos_logger::{info, warn};
 use aptos_network_builder::builder::NetworkBuilder;
-use aptos_storage_interface::DbReaderWriter;
-use aptos_telemetry::service::start_telemetry_service;
+use gaptos::aptos_storage_interface::DbReaderWriter;
+use gaptos::aptos_telemetry::service::start_telemetry_service;
 use async_trait::async_trait;
 
-use aptos_types::chain_id::ChainId;
+use gaptos::aptos_types::chain_id::ChainId;
 use futures::channel::mpsc;
 use tokio::runtime::Runtime;
 
@@ -67,7 +68,7 @@ impl ConsensusEngine {
         latest_block_number: u64,
     ) -> Arc<Self> {
         // Setup panic handler
-        aptos_crash_handler::setup_panic_handler();
+        gaptos::aptos_crash_handler::setup_panic_handler();
 
         fail_point_check(&node_config);
         let consensus_db =
@@ -78,17 +79,17 @@ impl ConsensusEngine {
         let mut runtimes = vec![];
         if let Some(runtime) = start_telemetry_service(
             node_config.clone(),
-            ChainId::new(chain_id),
+            ChainId::new(chain_id as u8),
             build_information!(),
             remote_log_receiver,
             Some(logger_filter_update),
         ) {
             runtimes.push(runtime);
         }
-        let db: DbReaderWriter = DbReaderWriter::new(consensus_db.clone());
+        let db: DbReaderWriter = DbReaderWriter::from_arc(consensus_db.clone());
         let mut event_subscription_service =
-            aptos_event_notifications::EventSubscriptionService::new(Arc::new(
-                aptos_infallible::RwLock::new(db.clone()),
+            gaptos::aptos_event_notifications::EventSubscriptionService::new(Arc::new(
+                gaptos::aptos_infallible::RwLock::new(db.clone()),
             ));
         let network_configs = extract_network_configs(&node_config);
 
@@ -102,7 +103,7 @@ impl ConsensusEngine {
             chain_id,
             node_config.base.role,
             &network_config,
-            aptos_time_service::TimeService::real(),
+            gaptos::aptos_time_service::TimeService::real(),
             Some(&mut event_subscription_service),
             peers_and_metadata.clone(),
         );
@@ -118,7 +119,7 @@ impl ConsensusEngine {
         // The consensus_listener would listenes the request sent by ExecutionProxy's commit function
         // And then send NotifyCommit request to mempool which is named consensus_to_mempool_sender in Gravity
         let (consensus_notifier, consensus_listener) =
-            aptos_consensus_notifications::new_consensus_notifier_listener_pair(
+            gaptos::aptos_consensus_notifications::new_consensus_notifier_listener_pair(
                 state_sync_config.state_sync_driver.commit_notification_timeout_ms,
             );
         // Build and start the network on the runtime
@@ -135,17 +136,17 @@ impl ConsensusEngine {
         // Create notification senders and listeners for mempool, consensus and the storage service
         // For Gravity we only use it to notify the mempool for the committed txn gc logic
         let mempool_notifier =
-            aptos_mempool_notifications::MempoolNotifier::new(notification_sender);
+            gaptos::aptos_mempool_notifications::MempoolNotifier::new(notification_sender);
         let mempool_notification_handler = MempoolNotificationHandler::new(mempool_notifier);
         let mut consensus_mempool_handler =
             ConsensusToMempoolHandler::new(mempool_notification_handler, consensus_listener);
-        let runtime = aptos_runtimes::spawn_named_runtime("Con2Mempool".into(), None);
+        let runtime = gaptos::aptos_runtimes::spawn_named_runtime("Con2Mempool".into(), None);
         runtime.spawn(async move {
             consensus_mempool_handler.start().await;
         });
         runtimes.push(runtime);
         let mempool_listener =
-            aptos_mempool_notifications::MempoolNotificationListener::new(notification_receiver);
+            gaptos::aptos_mempool_notifications::MempoolNotificationListener::new(notification_receiver);
         let (_mempool_client_sender, _mempool_client_receiver) = mpsc::channel(1);
         let mempool_runtime = init_mempool(
             &node_config,
@@ -188,7 +189,7 @@ impl ConsensusEngine {
                 .filter(|s| !s.is_empty())
                 .map(|_| node_config.https_key_pem_path),
         };
-        let runtime = aptos_runtimes::spawn_named_runtime("Http".into(), None);
+        let runtime = gaptos::aptos_runtimes::spawn_named_runtime("Http".into(), None);
         runtime.spawn(async move { https_server(args) });
         runtimes.push(runtime);
         let arc_consensus_engine = Arc::new(Self {

@@ -33,7 +33,7 @@ use crate::{
     vm_status::VMStatus,
     write_set::{WriteOp, WriteSet, WriteSetMut},
 };
-use aptos_crypto::{
+use gaptos::aptos_crypto::{
     bls12381::{self, bls12381_keys},
     ed25519::{self, Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
@@ -42,7 +42,7 @@ use aptos_crypto::{
 };
 use arr_macro::arr;
 use bytes::Bytes;
-use move_core_types::language_storage::TypeTag;
+use gaptos::move_core_types::language_storage::TypeTag;
 use proptest::{
     collection::{vec, SizeRange},
     option,

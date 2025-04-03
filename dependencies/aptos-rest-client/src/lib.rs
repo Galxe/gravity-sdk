@@ -1,5 +1,5 @@
 use error::RestError;
-use move_core_types::account_address::AccountAddress;
+use gaptos::move_core_types::account_address::AccountAddress;
 use serde::de::DeserializeOwned;
 use url::Url;
 use reqwest::Client as ReqwestClient;

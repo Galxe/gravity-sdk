@@ -14,7 +14,7 @@
 //! The below examples do no type checking for structured log fields, and instead just serialize
 //! whatever is given.
 //! ```
-//! use aptos_logger::info;
+//! use gaptos::aptos_logger::info;
 //!
 //! let world = "world!";
 //!
@@ -52,7 +52,7 @@
 //! trait for the struct as well as providing setters for all fields.
 //!
 //! ```
-//! use aptos_logger::{info, Schema};
+//! use gaptos::aptos_logger::{info, Schema};
 //!
 //! #[derive(Schema)]
 //! struct LogSchema<'a> {
@@ -112,7 +112,7 @@
 //! `SampleRate` determines how often the sampled statement will occur.
 //!
 //! ```
-//! use aptos_logger::{info, sample, sample::{SampleRate, Sampling}};
+//! use gaptos::aptos_logger::{info, sample, sample::{SampleRate, Sampling}};
 //! use std::time::Duration;
 //!
 //! // Sampled based on frequency of events, log only every 2 logs
@@ -127,7 +127,7 @@
 //! done by using the `Logger` type:
 //!
 //! ```
-//! use aptos_logger::{Level, Logger};
+//! use gaptos::aptos_logger::{Level, Logger};
 //!
 //! Logger::builder().level(Level::Info).build();
 //! ```
@@ -136,7 +136,7 @@
 
 pub mod prelude {
     pub use crate::{
-        aptos_logger::FileWriter,
+        gaptos::aptos_logger::FileWriter,
         debug, error, info, sample,
         sample::{SampleRate, Sampling},
         security::SecurityEvent,
@@ -144,7 +144,7 @@ pub mod prelude {
     };
 }
 
-pub mod aptos_logger;
+pub mod gaptos::aptos_logger;
 mod event;
 mod filter;
 mod kv;
@@ -157,10 +157,10 @@ pub mod tracing_adapter;
 
 mod security;
 
-pub use crate::aptos_logger::{
+pub use crate::gaptos::aptos_logger::{
     AptosData as Logger, AptosDataBuilder, LoggerFilterUpdater, Writer, CHANNEL_SIZE,
 };
-pub use aptos_log_derive::Schema;
+pub use gaptos::aptos_log_derive::Schema;
 pub use event::Event;
 pub use filter::{Filter, LevelFilter};
 pub use kv::{Key, KeyValue, Schema, Value, Visitor};

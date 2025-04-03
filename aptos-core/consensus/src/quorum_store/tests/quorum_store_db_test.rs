@@ -9,8 +9,8 @@ use crate::{
     test_utils::create_vec_signed_transactions,
 };
 use aptos_consensus_types::proof_of_store::BatchId;
-use aptos_temppath::TempPath;
-use aptos_types::account_address::AccountAddress;
+use gaptos::aptos_temppath::TempPath;
+use gaptos::aptos_types::account_address::AccountAddress;
 use claims::assert_ok;
 
 #[test]

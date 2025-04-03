@@ -3,7 +3,7 @@
 
 #![forbid(unsafe_code)]
 
-use aptos_metrics_core::{exponential_buckets, register_histogram_vec, HistogramVec};
+use gaptos::aptos_metrics_core::{exponential_buckets, register_histogram_vec, HistogramVec};
 use once_cell::sync::Lazy;
 
 pub static TIMER: Lazy<HistogramVec> = Lazy::new(|| {

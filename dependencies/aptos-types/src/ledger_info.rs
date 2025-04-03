@@ -12,8 +12,8 @@ use crate::{
     transaction::Version,
     validator_verifier::{ValidatorVerifier, VerifyError},
 };
-use aptos_crypto::{bls12381, hash::HashValue};
-use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
+use gaptos::aptos_crypto::{bls12381, hash::HashValue};
+use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
@@ -411,7 +411,7 @@ use crate::aggregate_signature::{AggregateSignature, PartialSignatures};
 use crate::validator_verifier::generate_validator_verifier;
 #[cfg(any(test, feature = "fuzzing"))]
 use crate::validator_verifier::random_validator_verifier;
-use aptos_bitvec::BitVec;
+use gaptos::aptos_bitvec::BitVec;
 use itertools::Itertools;
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest::prelude::*;

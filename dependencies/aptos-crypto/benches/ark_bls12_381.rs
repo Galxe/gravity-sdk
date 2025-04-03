@@ -11,7 +11,7 @@ use crate::bench_utils::{
     bench_function_pow_u256, bench_function_serialize_uncomp, bench_function_square,
     bench_function_sub,
 };
-use aptos_crypto::test_utils::random_bytes;
+use gaptos::aptos_crypto::test_utils::random_bytes;
 use ark_bls12_381::{Fq12, Fr, G1Affine, G1Projective, G2Affine, G2Projective};
 use ark_ec::{
     hashing::HashToCurve, pairing::Pairing, short_weierstrass::Projective, AffineRepr, CurveGroup,

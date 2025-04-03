@@ -1,7 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use move_core_types::value::{MoveStruct, MoveValue};
+use gaptos::move_core_types::value::{MoveStruct, MoveValue};
 
 pub trait AsMoveValue {
     fn as_move_value(&self) -> MoveValue;

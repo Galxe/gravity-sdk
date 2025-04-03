@@ -287,7 +287,7 @@ const _: fn() = || {
 /// Creating a valid static or const [`IdentStr`]:
 ///
 /// ```rust
-/// use move_core_types::{ident_str, identifier::IdentStr};
+/// use gaptos::move_core_types::{ident_str, identifier::IdentStr};
 /// const VALID_IDENT: &'static IdentStr = ident_str!("MyCoolIdentifier");
 ///
 /// const THING_NAME: &'static str = "thing_name";
@@ -297,7 +297,7 @@ const _: fn() = || {
 /// In contrast, creating an invalid [`IdentStr`] will fail at compile time:
 ///
 /// ```rust,compile_fail
-/// use move_core_types::{ident_str, identifier::IdentStr};
+/// use gaptos::move_core_types::{ident_str, identifier::IdentStr};
 /// const INVALID_IDENT: &'static IdentStr = ident_str!("123Foo"); // Fails to compile!
 /// ```
 // TODO(philiphayes): this should really be an associated const fn like `IdentStr::new`;

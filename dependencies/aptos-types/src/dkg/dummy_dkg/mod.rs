@@ -3,7 +3,7 @@
 
 use crate::dkg::{DKGSessionMetadata, DKGTrait};
 use anyhow::{anyhow, ensure};
-use aptos_crypto::{bls12381, Uniform};
+use gaptos::aptos_crypto::{bls12381, Uniform};
 use rand::{CryptoRng, Rng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};

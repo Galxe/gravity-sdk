@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{serde_helper::vec_bytes, transaction::user_transaction_context::EntryFunctionPayload};
-pub use move_core_types::abi::{
+pub use gaptos::move_core_types::abi::{
     ArgumentABI, ScriptFunctionABI as EntryFunctionABI, TransactionScriptABI, TypeArgumentABI,
 };
-use move_core_types::{
+use gaptos::move_core_types::{
     identifier::{IdentStr, Identifier},
     language_storage::{ModuleId, TypeTag},
     transaction_argument::TransactionArgument,
@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// How to call a particular Move script (aka. an "ABI"). This is a clone of
-/// move_core_types::abi::ScriptABI but with a tweak on EntryFunction -> EntryFunction
+/// gaptos::move_core_types::abi::ScriptABI but with a tweak on EntryFunction -> EntryFunction
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub enum EntryABI {
     TransactionScript(TransactionScriptABI),

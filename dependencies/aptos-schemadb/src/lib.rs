@@ -30,9 +30,9 @@ use crate::{
     schema::{KeyCodec, Schema, SeekKeyCodec, ValueCodec},
 };
 use anyhow::format_err;
-use aptos_infallible::Mutex;
-use aptos_logger::prelude::*;
-use aptos_storage_interface::{AptosDbError, Result as DbResult};
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_storage_interface::{AptosDbError, Result as DbResult};
 use iterator::{ScanDirection, SchemaIterator};
 use rand::Rng;
 use rocksdb::ErrorKind;
@@ -81,7 +81,7 @@ impl SchemaBatch {
         &self,
         key: &S::Key,
         value: &S::Value,
-    ) -> aptos_storage_interface::Result<()> {
+    ) -> gaptos::aptos_storage_interface::Result<()> {
         let key = <S::Key as KeyCodec<S>>::encode_key(key)?;
         let value = <S::Value as ValueCodec<S>>::encode_value(value)?;
         self.rows
@@ -362,7 +362,7 @@ impl DB {
             .property_int_value_cf(self.get_cf_handle(cf_name)?, property_name)
             .into_db_res()?
             .ok_or_else(|| {
-                aptos_storage_interface::AptosDbError::Other(
+                gaptos::aptos_storage_interface::AptosDbError::Other(
                     format!(
                         "Unable to get property \"{}\" of  column family \"{}\".",
                         property_name, cf_name,

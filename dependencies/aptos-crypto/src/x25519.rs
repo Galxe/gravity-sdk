@@ -11,7 +11,7 @@
 //! # Examples
 //!
 //! ```
-//! use aptos_crypto::{x25519, Uniform, test_utils::TEST_SEED};
+//! use gaptos::aptos_crypto::{x25519, Uniform, test_utils::TEST_SEED};
 //! use rand::{rngs::StdRng, SeedableRng};
 //!
 //! // Derive an X25519 private key for testing.
@@ -20,8 +20,8 @@
 //! let public_key = private_key.public_key();
 //!
 //! // Deserialize an hexadecimal private or public key
-//! use aptos_crypto::traits::ValidCryptoMaterialStringExt;
-//! # fn main() -> Result<(), aptos_crypto::traits::CryptoMaterialError> {
+//! use gaptos::aptos_crypto::traits::ValidCryptoMaterialStringExt;
+//! # fn main() -> Result<(), gaptos::aptos_crypto::traits::CryptoMaterialError> {
 //! let private_key = "404acc8ec6a0f18df7359a6ee7823f19dd95616b10fed8bdb0de030e891b945a";
 //! let private_key = x25519::PrivateKey::from_encoded_string(&private_key)?;
 //! let public_key = "080e287879c918794170e258bfaddd75acac5b3e350419044655e4983a487120";
@@ -35,7 +35,7 @@ use crate::{
     traits::{self, CryptoMaterialError, ValidCryptoMaterial, ValidCryptoMaterialStringExt},
     x25519,
 };
-use aptos_crypto_derive::{DeserializeKey, SerializeKey, SilentDebug, SilentDisplay};
+use gaptos::aptos_crypto_derive::{DeserializeKey, SerializeKey, SilentDebug, SilentDisplay};
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest_derive::Arbitrary;
 use rand::{CryptoRng, RngCore};

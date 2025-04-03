@@ -20,8 +20,8 @@ use crate::{
     },
 };
 use anyhow::{anyhow, bail, ensure};
-use aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
-use aptos_config::network_id::NetworkId;
+use gaptos::aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_config::network_id::NetworkId;
 use aptos_consensus_types::{
     block_retrieval::{BlockRetrievalRequest, BlockRetrievalResponse},
     common::Author,
@@ -32,14 +32,14 @@ use aptos_consensus_types::{
     sync_info::SyncInfo,
     vote_msg::VoteMsg,
 };
-use aptos_logger::prelude::*;
+use gaptos::aptos_logger::prelude::*;
 use aptos_network::{
     application::interface::{NetworkClient, NetworkServiceEvents},
     protocols::{network::Event, rpc::error::RpcError},
     ProtocolId,
 };
-use aptos_reliable_broadcast::{RBMessage, RBNetworkSender};
-use aptos_types::{
+use gaptos::aptos_reliable_broadcast::{RBMessage, RBNetworkSender};
+use gaptos::aptos_types::{
     account_address::AccountAddress, epoch_change::EpochChangeProof,
     ledger_info::LedgerInfoWithSignatures, validator_verifier::ValidatorVerifier,
 };
@@ -197,16 +197,16 @@ pub struct NetworkSender {
     pub(crate) consensus_network_client: ConsensusNetworkClient<NetworkClient<ConsensusMsg>>,
     // Self sender and self receivers provide a shortcut for sending the messages to itself.
     // (self sending is not supported by the networking API).
-    self_sender: aptos_channels::UnboundedSender<Event<ConsensusMsg>>,
+    self_sender: gaptos::aptos_channels::UnboundedSender<Event<ConsensusMsg>>,
     validators: ValidatorVerifier,
-    time_service: aptos_time_service::TimeService,
+    time_service: gaptos::aptos_time_service::TimeService,
 }
 
 impl NetworkSender {
     pub fn new(
         author: Author,
         consensus_network_client: ConsensusNetworkClient<NetworkClient<ConsensusMsg>>,
-        self_sender: aptos_channels::UnboundedSender<Event<ConsensusMsg>>,
+        self_sender: gaptos::aptos_channels::UnboundedSender<Event<ConsensusMsg>>,
         validators: ValidatorVerifier,
     ) -> Self {
         NetworkSender {
@@ -214,7 +214,7 @@ impl NetworkSender {
             consensus_network_client,
             self_sender,
             validators,
-            time_service: aptos_time_service::TimeService::real(),
+            time_service: gaptos::aptos_time_service::TimeService::real(),
         }
     }
 
@@ -639,7 +639,7 @@ impl NetworkTask {
     /// Establishes the initial connections with the peers and returns the receivers.
     pub fn new(
         network_service_events: NetworkServiceEvents<ConsensusMsg>,
-        self_receiver: aptos_channels::UnboundedReceiver<Event<ConsensusMsg>>,
+        self_receiver: gaptos::aptos_channels::UnboundedReceiver<Event<ConsensusMsg>>,
     ) -> (NetworkTask, NetworkReceivers) {
         let (consensus_messages_tx, consensus_messages) = aptos_channel::new(
             QueueStyle::FIFO,

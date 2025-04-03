@@ -1,8 +1,8 @@
 use std::{collections::HashSet, sync::Arc, time::Instant};
 
-use aptos_crypto::HashValue;
-use aptos_infallible::Mutex;
-use aptos_types::validator_txn::ValidatorTransaction;
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_types::validator_txn::ValidatorTransaction;
 
 #[derive(Clone)]
 pub struct VTxnPoolState {

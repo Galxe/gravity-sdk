@@ -3,7 +3,7 @@
 
 use crate::transaction::authenticator::AnyPublicKey;
 use anyhow::{anyhow, Result};
-use aptos_crypto::{
+use gaptos::aptos_crypto::{
     hash::CryptoHash, secp256r1_ecdsa, signing_message, CryptoMaterialError, HashValue, Signature,
 };
 use passkey_types::{crypto::sha256, webauthn::CollectedClientData, Bytes};
@@ -170,14 +170,14 @@ mod tests {
         },
     };
     use anyhow::anyhow;
-    use aptos_crypto::{
+    use gaptos::aptos_crypto::{
         secp256r1_ecdsa,
         secp256r1_ecdsa::{PrivateKey, PublicKey, Signature},
         signing_message, HashValue, PrivateKey as PrivateKeyTrait, Uniform,
         ValidCryptoMaterialStringExt,
     };
     use coset::CoseKey;
-    use move_core_types::account_address::AccountAddress;
+    use gaptos::move_core_types::account_address::AccountAddress;
     use p256::pkcs8::DecodePublicKey;
     use passkey_authenticator::{
         public_key_der_from_cose_key, Authenticator, UserValidationMethod,
@@ -868,7 +868,7 @@ mod tests {
         );
         let mut rng: StdRng = SeedableRng::from_seed([0; 32]);
         let bad_private_key: secp256r1_ecdsa::PrivateKey =
-            aptos_crypto::Uniform::generate(&mut rng);
+            gaptos::aptos_crypto::Uniform::generate(&mut rng);
         let bad_public_key = PrivateKey::public_key(&bad_private_key);
         let bad_any_public_key = AnyPublicKey::Secp256r1Ecdsa {
             public_key: bad_public_key,

@@ -12,8 +12,8 @@ use crate::{
     },
     network_id::NetworkId,
 };
-use aptos_crypto::{x25519, ValidCryptoMaterialStringExt};
-use aptos_types::{chain_id::ChainId, network_address::NetworkAddress, PeerId};
+use gaptos::aptos_crypto::{x25519, ValidCryptoMaterialStringExt};
+use gaptos::aptos_types::{chain_id::ChainId, network_address::NetworkAddress, PeerId};
 use maplit::hashset;
 use serde_yaml::Value;
 use std::{collections::HashMap, str::FromStr};
@@ -321,8 +321,8 @@ mod tests {
         },
         network_id::NetworkId,
     };
-    use aptos_crypto::{Uniform, ValidCryptoMaterial};
-    use aptos_types::{account_address::AccountAddress, waypoint::Waypoint};
+    use gaptos::aptos_crypto::{Uniform, ValidCryptoMaterial};
+    use gaptos::aptos_types::{account_address::AccountAddress, waypoint::Waypoint};
     use rand::rngs::OsRng;
     use std::{io::Write, path::PathBuf};
     use tempfile::{tempdir, NamedTempFile};

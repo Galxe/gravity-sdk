@@ -8,7 +8,7 @@ use crate::proof::{
     position::{FrozenSubtreeSiblingIterator, Position},
     TestAccumulatorInternalNode,
 };
-use aptos_crypto::{
+use gaptos::aptos_crypto::{
     hash::{CryptoHash, TestOnlyHash, TestOnlyHasher, ACCUMULATOR_PLACEHOLDER_HASH},
     HashValue,
 };

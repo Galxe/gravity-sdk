@@ -4,7 +4,7 @@
 //! These constants are from commit 125522b4b226f8ece3e3162cecfefe915d13bc30 of keyless-circuit.
 
 use crate::keyless::bn254_circom::{g1_projective_str_to_affine, g2_projective_str_to_affine};
-use aptos_crypto::poseidon_bn254;
+use gaptos::aptos_crypto::poseidon_bn254;
 use ark_bn254::Bn254;
 use ark_groth16::{PreparedVerifyingKey, VerifyingKey};
 

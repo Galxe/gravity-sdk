@@ -59,7 +59,7 @@
 //! Run HKDF extract-then-expand so as to return 64 bytes, using 'salt', 'seed' and 'info' as
 //! inputs.
 //! ```
-//! use aptos_crypto::hkdf::Hkdf;
+//! use gaptos::aptos_crypto::hkdf::Hkdf;
 //! use sha2::Sha256;
 //!
 //! // some bytes required for this example.

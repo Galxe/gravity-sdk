@@ -6,10 +6,10 @@
 macro_rules! encryption_elgamal_pp_impl {
     ($GT_PROJ_NUM_BYTES:ident, $gt_proj_from_bytes:ident, $GTProjective:ident) => {
         use crate::{constants::$GT_PROJ_NUM_BYTES, utils::serialization::$gt_proj_from_bytes};
-        use aptos_crypto::{
+        use gaptos::aptos_crypto::{
             CryptoMaterialError, ValidCryptoMaterial, ValidCryptoMaterialStringExt,
         };
-        use aptos_crypto_derive::{DeserializeKey, SerializeKey};
+        use gaptos::aptos_crypto_derive::{DeserializeKey, SerializeKey};
         use blstrs::$GTProjective;
 
         //

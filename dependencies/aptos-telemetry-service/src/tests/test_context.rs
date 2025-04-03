@@ -5,9 +5,9 @@ use crate::{
     context::{ClientTuple, Context, GroupedMetricsClients, JsonWebTokenService, PeerStoreTuple},
     index, CustomEventConfig, LogIngestConfig, MetricsEndpointsConfig, TelemetryServiceConfig,
 };
-use aptos_crypto::{x25519, Uniform};
-use aptos_infallible::RwLock;
-// use aptos_rest_client::aptos_api_types::mime_types;
+use gaptos::aptos_crypto::{x25519, Uniform};
+use gaptos::aptos_infallible::RwLock;
+// use gaptos::aptos_rest_client::aptos_api_types::mime_types;
 use rand::SeedableRng;
 use reqwest::header::AUTHORIZATION;
 use serde_json::Value;

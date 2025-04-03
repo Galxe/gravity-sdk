@@ -26,7 +26,7 @@ use crate::{
     ValidCryptoMaterialStringExt, VerifyingKey,
 };
 use anyhow::{anyhow, Result};
-use aptos_crypto_derive::{DeserializeKey, SerializeKey, SilentDebug, SilentDisplay};
+use gaptos::aptos_crypto_derive::{DeserializeKey, SerializeKey, SilentDebug, SilentDisplay};
 use serde::Serialize;
 use std::{convert::TryFrom, fmt};
 

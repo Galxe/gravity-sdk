@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::DbReader;
-use aptos_crypto::{hash::CryptoHash, HashValue};
-use aptos_types::{
+use gaptos::aptos_crypto::{hash::CryptoHash, HashValue};
+use gaptos::aptos_types::{
     ledger_info::LedgerInfo,
     state_store::{
         errors::StateviewError, state_key::StateKey, state_storage_usage::StateStorageUsage,

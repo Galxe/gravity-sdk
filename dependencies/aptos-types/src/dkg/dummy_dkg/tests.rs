@@ -9,8 +9,8 @@ use crate::{
     on_chain_config::OnChainRandomnessConfig,
     validator_verifier::{ValidatorConsensusInfo, ValidatorConsensusInfoMoveStruct},
 };
-use aptos_crypto::{bls12381, Uniform};
-use move_core_types::account_address::AccountAddress;
+use gaptos::aptos_crypto::{bls12381, Uniform};
+use gaptos::move_core_types::account_address::AccountAddress;
 use rand::thread_rng;
 
 struct DealerState {

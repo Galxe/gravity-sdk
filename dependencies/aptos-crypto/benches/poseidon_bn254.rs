@@ -4,7 +4,7 @@
 #[macro_use]
 extern crate criterion;
 
-use aptos_crypto::{poseidon_bn254, test_utils::random_bytes};
+use gaptos::aptos_crypto::{poseidon_bn254, test_utils::random_bytes};
 use ark_ff::PrimeField;
 use criterion::{measurement::Measurement, BenchmarkGroup, BenchmarkId, Criterion, Throughput};
 use poseidon_ark::Poseidon;

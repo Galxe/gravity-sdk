@@ -10,7 +10,7 @@ use crate::{
     secp256r1_ecdsa::{Signature, ORDER, PRIVATE_KEY_LENGTH, PUBLIC_KEY_LENGTH},
     traits::{PrivateKey as PrivateKeyTrait, PublicKey as PublicKeyTrait, *},
 };
-use aptos_crypto_derive::{key_name, DeserializeKey, SerializeKey, SilentDebug, SilentDisplay};
+use gaptos::aptos_crypto_derive::{key_name, DeserializeKey, SerializeKey, SilentDebug, SilentDisplay};
 use core::convert::TryFrom;
 use num_bigint::BigUint;
 use num_integer::Integer;

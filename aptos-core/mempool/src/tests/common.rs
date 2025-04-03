@@ -7,11 +7,11 @@ use crate::{
     network::{BroadcastPeerPriority, MempoolSyncMsg},
 };
 use anyhow::{format_err, Result};
-use aptos_compression::client::CompressionClient;
-use aptos_config::config::{NodeConfig, MAX_APPLICATION_MESSAGE_SIZE};
+use gaptos::aptos_compression::client::CompressionClient;
+use gaptos::aptos_config::config::{NodeConfig, MAX_APPLICATION_MESSAGE_SIZE};
 use aptos_consensus_types::common::{TransactionInProgress, TransactionSummary};
-use aptos_crypto::{ed25519::Ed25519PrivateKey, PrivateKey, Uniform};
-use aptos_types::{
+use gaptos::aptos_crypto::{ed25519::Ed25519PrivateKey, PrivateKey, Uniform};
+use gaptos::aptos_types::{
     account_address::AccountAddress,
     chain_id::ChainId,
     mempool_status::MempoolStatusCode,
@@ -199,7 +199,7 @@ impl ConsensusMock {
 /// Decompresses and deserializes the raw message bytes into a message struct
 pub fn decompress_and_deserialize(message_bytes: &Vec<u8>) -> MempoolSyncMsg {
     bcs::from_bytes(
-        &aptos_compression::decompress(
+        &gaptos::aptos_compression::decompress(
             message_bytes,
             CompressionClient::Mempool,
             MAX_APPLICATION_MESSAGE_SIZE,

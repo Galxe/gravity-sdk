@@ -4,7 +4,7 @@
 #[macro_use]
 extern crate criterion;
 
-use aptos_crypto::test_utils::random_bytes;
+use gaptos::aptos_crypto::test_utils::random_bytes;
 use criterion::{measurement::Measurement, BenchmarkGroup, Criterion, Throughput};
 use rand::{prelude::ThreadRng, thread_rng};
 

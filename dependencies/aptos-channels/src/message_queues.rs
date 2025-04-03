@@ -2,7 +2,7 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos_metrics_core::IntCounterVec;
+use gaptos::aptos_metrics_core::IntCounterVec;
 use std::{
     collections::{HashMap, VecDeque},
     fmt::{Debug, Formatter, Result},

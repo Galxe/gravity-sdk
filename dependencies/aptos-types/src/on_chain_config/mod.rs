@@ -10,7 +10,7 @@ use crate::{
 };
 use anyhow::{format_err, Result};
 use bytes::Bytes;
-use move_core_types::{
+use gaptos::move_core_types::{
     account_address::AccountAddress,
     ident_str,
     identifier::{IdentStr, Identifier},

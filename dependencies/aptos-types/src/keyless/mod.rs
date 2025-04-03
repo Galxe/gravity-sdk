@@ -11,8 +11,8 @@ use crate::{
     },
 };
 use anyhow::bail;
-use aptos_crypto::{poseidon_bn254, CryptoMaterialError, ValidCryptoMaterial};
-use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
+use gaptos::aptos_crypto::{poseidon_bn254, CryptoMaterialError, ValidCryptoMaterial};
+use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
 use ark_bn254::Bn254;
 use ark_groth16::PreparedVerifyingKey;
 use ark_serialize::CanonicalSerialize;

@@ -4,8 +4,8 @@
 use super::{types::Vote, NodeId};
 use crate::dag::{CertifiedNode, Node};
 use aptos_consensus_types::common::{Author, Round};
-use aptos_crypto::HashValue;
-use aptos_types::ledger_info::LedgerInfoWithSignatures;
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_types::ledger_info::LedgerInfoWithSignatures;
 use std::collections::HashMap;
 
 #[derive(Clone)]

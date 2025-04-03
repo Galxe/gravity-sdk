@@ -1,7 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos_enum_conversion_derive::EnumConversion;
+use gaptos::aptos_enum_conversion_derive ::EnumConversion;
 
 #[test]
 fn test_enum_conversion_derive_valid() {

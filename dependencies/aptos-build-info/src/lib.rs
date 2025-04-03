@@ -26,10 +26,10 @@ pub const BUILD_USING_TOKIO_UNSTABLE: &str = "build_using_tokio_unstable";
 #[macro_export]
 macro_rules! build_information {
     () => {{
-        let mut build_information = aptos_build_info::get_build_information();
+        let mut build_information = gaptos::aptos_build_info::get_build_information();
 
         build_information.insert(
-            aptos_build_info::BUILD_PKG_VERSION.into(),
+            gaptos::aptos_build_info::BUILD_PKG_VERSION.into(),
             env!("CARGO_PKG_VERSION").into(),
         );
 

@@ -8,8 +8,8 @@ use crate::{
     metrics::PrometheusExporter,
     peer_location::PeerLocationUpdater,
 };
-use aptos_crypto::{x25519, ValidCryptoMaterialStringExt};
-use aptos_types::{chain_id::ChainId, PeerId};
+use gaptos::aptos_crypto::{x25519, ValidCryptoMaterialStringExt};
+use gaptos::aptos_types::{chain_id::ChainId, PeerId};
 use clap::Parser;
 use context::GroupedMetricsClients;
 use gcp_bigquery_client::Client as BigQueryClient;
@@ -105,9 +105,9 @@ impl AptosTelemetryServiceArgs {
                 .as_str(),
         );
 
-        let validators = Arc::new(aptos_infallible::RwLock::new(HashMap::new()));
-        let validator_fullnodes = Arc::new(aptos_infallible::RwLock::new(HashMap::new()));
-        let peer_locations = Arc::new(aptos_infallible::RwLock::new(HashMap::new()));
+        let validators = Arc::new(gaptos::aptos_infallible::RwLock::new(HashMap::new()));
+        let validator_fullnodes = Arc::new(gaptos::aptos_infallible::RwLock::new(HashMap::new()));
+        let peer_locations = Arc::new(gaptos::aptos_infallible::RwLock::new(HashMap::new()));
         let public_fullnodes = config.pfn_allowlist.clone();
 
         let context = Context::new(

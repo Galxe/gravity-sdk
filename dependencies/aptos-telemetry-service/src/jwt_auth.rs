@@ -7,7 +7,7 @@ use crate::{
     errors::{JwtAuthError, ServiceError},
     types::{auth::Claims, common::NodeType},
 };
-use aptos_types::{chain_id::ChainId, PeerId};
+use gaptos::aptos_types::{chain_id::ChainId, PeerId};
 use chrono::Utc;
 use jsonwebtoken::{errors::Error, TokenData};
 use uuid::Uuid;

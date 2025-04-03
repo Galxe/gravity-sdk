@@ -12,8 +12,8 @@ use crate::{
     },
 };
 use anyhow::ensure;
-use aptos_logger::prelude::*;
-use aptos_types::PeerId;
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_types::PeerId;
 use std::sync::Arc;
 use tokio::sync::{
     mpsc::{Receiver, Sender},

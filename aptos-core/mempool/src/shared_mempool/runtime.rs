@@ -11,17 +11,18 @@ use crate::{
     QuorumStoreRequest,
 };
 use api_types::ExecutionChannel;
-use aptos_config::config::{NodeConfig, NodeType};
-use aptos_event_notifications::{DbBackedOnChainConfig, ReconfigNotificationListener};
-use aptos_infallible::Mutex;
-use aptos_logger::{info, warn, Level};
-use aptos_mempool_notifications::MempoolNotificationListener;
+use gaptos::aptos_config::config::{NodeConfig, NodeType};
+use gaptos::aptos_event_notifications::{DbBackedOnChainConfig, ReconfigNotificationListener};
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_logger::{info, warn, Level};
+use gaptos::aptos_mempool_notifications::MempoolNotificationListener;
 use aptos_network::application::{
     interface::{NetworkClient, NetworkServiceEvents},
     storage::PeersAndMetadata,
 };
-use aptos_storage_interface::DbReader;
-use aptos_types::on_chain_config::OnChainConfigProvider;
+
+use gaptos::aptos_storage_interface::DbReader;
+use gaptos::aptos_types::on_chain_config::OnChainConfigProvider;
 use block_buffer_manager::get_block_buffer_manager;
 use futures::channel::mpsc::{Receiver, UnboundedSender};
 use std::sync::Arc;
@@ -77,7 +78,7 @@ pub(crate) fn start_shared_mempool<ConfigProvider>(
     executor
         .spawn(gc_coordinator(mempool.clone(), config.mempool.system_transaction_gc_interval_ms));
 
-    if aptos_logger::enabled!(Level::Trace) {
+    if gaptos::aptos_logger::enabled!(Level::Trace) {
         executor.spawn(snapshot_job(mempool, config.mempool.mempool_snapshot_interval_secs));
     }
 }
@@ -100,7 +101,7 @@ async fn retrieve_from_execution_routine(
                         Some(BroadcastPeerPriority::Primary),
                     );
                     match r.code{
-                        aptos_types::mempool_status::MempoolStatusCode::Accepted => {},
+                        gaptos::aptos_types::mempool_status::MempoolStatusCode::Accepted => {},
                         _ => panic!("{:?}", r),
                     }
                     // TODO(gravity_byteyue): handle error msg
@@ -127,8 +128,8 @@ pub fn bootstrap(
     peers_and_metadata: Arc<PeersAndMetadata>,
     execution_api: Arc<dyn ExecutionChannel>,
 ) -> Vec<Runtime> {
-    let runtime = aptos_runtimes::spawn_named_runtime("shared-mem".into(), None);
-    let retrive_runtime = aptos_runtimes::spawn_named_runtime("retrive".into(), None);
+    let runtime = gaptos::aptos_runtimes::spawn_named_runtime("shared-mem".into(), None);
+    let retrive_runtime = gaptos::aptos_runtimes::spawn_named_runtime("retrive".into(), None);
     let mempool = Arc::new(Mutex::new(CoreMempool::new(config)));
     retrive_runtime.handle().spawn(retrieve_from_execution_routine(mempool.clone()));
     start_shared_mempool(

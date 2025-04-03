@@ -12,8 +12,8 @@ use crate::{
     keys::ConfigKey,
 };
 use anyhow::bail;
-use aptos_crypto::{bls12381, Uniform};
-use aptos_types::{chain_id::ChainId, network_address::NetworkAddress, waypoint::Waypoint, PeerId};
+use gaptos::aptos_crypto::{bls12381, Uniform};
+use gaptos::aptos_types::{chain_id::ChainId, network_address::NetworkAddress, waypoint::Waypoint, PeerId};
 use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use std::{

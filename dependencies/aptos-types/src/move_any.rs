@@ -3,7 +3,7 @@
 
 use crate::move_utils::as_move_value::AsMoveValue;
 use anyhow::bail;
-use move_core_types::value::{MoveStruct, MoveValue};
+use gaptos::move_core_types::value::{MoveStruct, MoveValue};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 /// Rust representation of the Move Any type

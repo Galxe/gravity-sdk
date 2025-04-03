@@ -23,14 +23,14 @@ use crate::{
     },
     write_set::WriteSet,
 };
-use aptos_crypto::{
+use gaptos::aptos_crypto::{
     hash::{
         CryptoHash, TestOnlyHash, TestOnlyHasher, ACCUMULATOR_PLACEHOLDER_HASH, GENESIS_BLOCK_ID,
         SPARSE_MERKLE_PLACEHOLDER_HASH,
     },
     HashValue,
 };
-use move_core_types::language_storage::TypeTag;
+use gaptos::move_core_types::language_storage::TypeTag;
 
 type SparseMerkleProof = crate::proof::SparseMerkleProof;
 

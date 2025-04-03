@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! This module defines error types used by `AptosDB`.
-use aptos_types::state_store::errors::StateviewError;
+use gaptos::aptos_types::state_store::errors::StateviewError;
 use std::sync::mpsc::RecvError;
 use thiserror::Error;
 

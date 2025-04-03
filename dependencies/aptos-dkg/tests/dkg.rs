@@ -1,8 +1,8 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos_crypto::hash::CryptoHash;
-use aptos_dkg::{
+use gaptos::aptos_crypto::hash::CryptoHash;
+use gaptos::aptos_dkg::{
     pvss::{
         das,
         das::unweighted_protocol,

@@ -18,8 +18,8 @@ macro_rules! dealt_secret_key_impl {
             },
             utils::{serialization::$gt_proj_from_bytes, $gt_multi_exp},
         };
-        use aptos_crypto::CryptoMaterialError;
-        use aptos_crypto_derive::{SilentDebug, SilentDisplay};
+        use gaptos::aptos_crypto::CryptoMaterialError;
+        use gaptos::aptos_crypto_derive::{SilentDebug, SilentDisplay};
         use blstrs::{$GTProjective, Scalar};
         use ff::Field;
         use more_asserts::{assert_ge, assert_le};

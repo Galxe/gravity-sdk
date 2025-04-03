@@ -5,12 +5,12 @@
 #[macro_use]
 extern crate criterion;
 
-use aptos_crypto::{
+use gaptos::aptos_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature},
     traits::{Signature, SigningKey, Uniform},
     PrivateKey,
 };
-use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
+use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
 use criterion::{measurement::Measurement, BenchmarkGroup, Criterion, Throughput};
 use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
 use rand::{distributions, prelude::ThreadRng, thread_rng, Rng};

@@ -24,21 +24,21 @@ use crate::{
     txn_notifier::MempoolNotifier,
     util::time_service::ClockTimeService,
 };
-use aptos_bounded_executor::BoundedExecutor;
-use aptos_config::config::NodeConfig;
-use aptos_consensus_notifications::ConsensusNotificationSender;
-use aptos_event_notifications::{DbBackedOnChainConfig, ReconfigNotificationListener};
+use gaptos::aptos_bounded_executor::BoundedExecutor;
+use gaptos::aptos_config::config::NodeConfig;
+use gaptos::aptos_consensus_notifications::ConsensusNotificationSender;
+use gaptos::aptos_event_notifications::{DbBackedOnChainConfig, ReconfigNotificationListener};
 use aptos_executor::block_executor::BlockExecutor;
-use aptos_logger::prelude::*;
+use gaptos::aptos_logger::prelude::*;
 use aptos_mempool::QuorumStoreRequest;
 use aptos_network::application::interface::{
     NetworkClient, NetworkClientInterface, NetworkServiceEvents,
 };
-use aptos_storage_interface::DbReaderWriter;
-use aptos_time_service::TimeService;
-use aptos_validator_transaction_pool::VTxnPoolState;
+use gaptos::aptos_storage_interface::DbReaderWriter;
+use gaptos::aptos_time_service::TimeService;
+use gaptos::aptos_validator_transaction_pool::VTxnPoolState;
 use futures::channel::mpsc;
-use move_core_types::account_address::AccountAddress;
+use gaptos::move_core_types::account_address::AccountAddress;
 use std::{collections::HashMap, sync::Arc};
 use tokio::runtime::Runtime;
 
@@ -56,7 +56,7 @@ pub fn start_consensus(
     consensus_publisher: Option<Arc<ConsensusPublisher>>,
     gravity_args: &mut ConsensusAdapterArgs,
 ) -> (Runtime, Arc<StorageWriteProxy>, Arc<QuorumStoreDB>) {
-    let runtime = aptos_runtimes::spawn_named_runtime("consensus".into(), None);
+    let runtime = gaptos::aptos_runtimes::spawn_named_runtime("consensus".into(), None);
     let storage = Arc::new(StorageWriteProxy::new(
         gravity_args.consensus_db.as_ref().unwrap().clone(),
         aptos_db.reader.clone(),
@@ -82,9 +82,9 @@ pub fn start_consensus(
     let time_service = Arc::new(ClockTimeService::new(runtime.handle().clone()));
 
     let (timeout_sender, timeout_receiver) =
-        aptos_channels::new(1_024, &counters::PENDING_ROUND_TIMEOUTS);
+        gaptos::aptos_channels::new(1_024, &counters::PENDING_ROUND_TIMEOUTS);
     let (self_sender, self_receiver) =
-        aptos_channels::new_unbounded(&counters::PENDING_SELF_MESSAGES);
+        gaptos::aptos_channels::new_unbounded(&counters::PENDING_SELF_MESSAGES);
     let consensus_network_client = ConsensusNetworkClient::new(network_client);
     let bounded_executor = BoundedExecutor::new(
         node_config.consensus.num_bounded_executor_tasks as usize,
@@ -116,7 +116,7 @@ pub fn start_consensus(
         quorum_store_db.clone(),
         reconfig_events,
         bounded_executor,
-        aptos_time_service::TimeService::real(),
+        gaptos::aptos_time_service::TimeService::real(),
         vtxn_pool,
         rand_storage,
         consensus_publisher,
@@ -143,7 +143,7 @@ pub fn start_consensus_observer(
     reconfig_events: Option<ReconfigNotificationListener<DbBackedOnChainConfig>>,
 ) -> Runtime {
     // Create a consensus observer runtime
-    let runtime = aptos_runtimes::spawn_named_runtime("observer".into(), None);
+    let runtime = gaptos::aptos_runtimes::spawn_named_runtime("observer".into(), None);
 
     // Create the consensus observer client
     let consensus_observer_client = if let Some(consensus_publisher) = &consensus_publisher {
@@ -160,7 +160,7 @@ pub fn start_consensus_observer(
 
     // Create the (dummy) consensus network client
     let (self_sender, _self_receiver) =
-        aptos_channels::new_unbounded(&counters::PENDING_SELF_MESSAGES);
+        gaptos::aptos_channels::new_unbounded(&counters::PENDING_SELF_MESSAGES);
     let consensus_network_client = ConsensusNetworkClient::new(NetworkClient::new(
         vec![],
         vec![],

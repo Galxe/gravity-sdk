@@ -4,7 +4,7 @@
 use crate::network_controller::{
     inbound_handler::InboundHandler, outbound_handler::OutboundHandler,
 };
-use aptos_logger::{info, warn};
+use gaptos::aptos_logger::{info, warn};
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use serde::{Deserialize, Serialize};
 use std::{

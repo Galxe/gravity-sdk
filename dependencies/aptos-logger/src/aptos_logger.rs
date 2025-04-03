@@ -16,7 +16,7 @@ use crate::{
     Event, Filter, Key, Level, LevelFilter, Metadata, ERROR_LOG_COUNT, INFO_LOG_COUNT,
     WARN_LOG_COUNT,
 };
-use aptos_infallible::RwLock;
+use gaptos::aptos_infallible::RwLock;
 use backtrace::Backtrace;
 use chrono::{SecondsFormat, Utc};
 use futures::channel;
@@ -812,7 +812,7 @@ impl LoggerFilterUpdater {
 mod tests {
     use super::{text_format, AptosData, LogEntry};
     use crate::{
-        aptos_logger::{json_format, TruncatedLogString, RUST_LOG_TELEMETRY},
+        gaptos::aptos_logger::{json_format, TruncatedLogString, RUST_LOG_TELEMETRY},
         debug, error, info,
         logger::Logger,
         telemetry_log_writer::TelemetryLog,
@@ -956,7 +956,7 @@ mod tests {
         line_num += 1;
         let thread_name = thread::current().name().map(|s| s.to_string()).unwrap();
 
-        let expected = format!("{{\"level\":\"INFO\",\"source\":{{\"package\":\"aptos_logger\",\"file\":\"crates/aptos-logger/src/aptos_logger.rs:{line_num}\"}},\"thread_name\":\"{thread_name}\",\"hostname\":\"test-host\",\"timestamp\":\"2022-07-24T23:42:29.540278Z\",\"message\":\"This is a log\",\"data\":{{\"bar\":\"foo_bar\",\"category\":\"name\",\"display\":\"12345\",\"foo\":5,\"test\":true}}}}");
+        let expected = format!("{{\"level\":\"INFO\",\"source\":{{\"package\":\"gaptos::aptos_logger\",\"file\":\"crates/aptos-logger/src/gaptos::aptos_logger.rs:{line_num}\"}},\"thread_name\":\"{thread_name}\",\"hostname\":\"test-host\",\"timestamp\":\"2022-07-24T23:42:29.540278Z\",\"message\":\"This is a log\",\"data\":{{\"bar\":\"foo_bar\",\"category\":\"name\",\"display\":\"12345\",\"foo\":5,\"test\":true}}}}");
 
         assert_eq!(json_format(&entry).unwrap(), expected);
 

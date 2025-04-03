@@ -3,8 +3,8 @@
 
 use super::common::NAMESPACE;
 use crate::collectors::common::MeasureLatency;
-use aptos_infallible::Mutex;
-use aptos_metrics_core::const_metric::ConstMetric;
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_metrics_core::const_metric::ConstMetric;
 use prometheus::{
     core::{Collector, Desc, Describer},
     proto::MetricFamily,

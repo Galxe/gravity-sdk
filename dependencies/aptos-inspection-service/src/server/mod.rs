@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::server::utils::CONTENT_TYPE_TEXT;
-use aptos_config::config::NodeConfig;
+use gaptos::aptos_config::config::NodeConfig;
 // TODO(grativy_byteyue): We might need to reintroduce state-sync
 // use aptos_data_client::client::AptosDataClient;
-use aptos_logger::debug;
+use gaptos::aptos_logger::debug;
 use aptos_network::application::storage::PeersAndMetadata;
 use hyper::{
     service::{make_service_fn, service_fn},
@@ -66,7 +66,7 @@ pub fn start_inspection_service(
         .unwrap();
 
     // Create a runtime for the inspection service
-    let runtime = aptos_runtimes::spawn_named_runtime("inspection".into(), None);
+    let runtime = gaptos::aptos_runtimes::spawn_named_runtime("inspection".into(), None);
 
     // Spawn the inspection service
     thread::spawn(move || {

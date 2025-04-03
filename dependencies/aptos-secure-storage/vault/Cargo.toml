@@ -14,7 +14,6 @@ rust-version = { workspace = true }
 
 [dependencies]
 aptos-crypto = { workspace = true }
-aptos-types = { workspace = true, optional = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
 native-tls = { workspace = true }
@@ -27,8 +26,7 @@ ureq = { workspace = true }
 
 [dev-dependencies]
 aptos-proptest-helpers = { workspace = true }
-aptos-types = { workspace = true, features = ["fuzzing"] }
 proptest = { workspace = true }
 
 [features]
-fuzzing = ["proptest", "aptos-types", "aptos-types/fuzzing"]
+fuzzing = ["proptest"]

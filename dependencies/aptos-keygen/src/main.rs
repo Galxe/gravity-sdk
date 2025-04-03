@@ -1,9 +1,9 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos_crypto::ValidCryptoMaterialStringExt;
-use aptos_keygen::KeyGen;
-use aptos_types::transaction::authenticator::AuthenticationKey;
+use gaptos::aptos_crypto::ValidCryptoMaterialStringExt;
+use gaptos::aptos_keygen::KeyGen;
+use gaptos::aptos_types::transaction::authenticator::AuthenticationKey;
 
 fn main() {
     let mut keygen = KeyGen::from_os_rng();

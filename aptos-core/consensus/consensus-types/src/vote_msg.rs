@@ -4,8 +4,8 @@
 
 use crate::{sync_info::SyncInfo, vote::Vote};
 use anyhow::ensure;
-use aptos_crypto::HashValue;
-use aptos_types::validator_verifier::ValidatorVerifier;
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_types::validator_verifier::ValidatorVerifier;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 

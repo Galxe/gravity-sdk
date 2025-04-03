@@ -6,7 +6,7 @@ use crate::{
     utility_coin::APTOS_COIN_TYPE,
     write_set::{WriteOp, WriteSet, WriteSetMut},
 };
-use move_core_types::{
+use gaptos::move_core_types::{
     account_address::AccountAddress,
     ident_str,
     identifier::IdentStr,

@@ -3,9 +3,9 @@
 
 use crate::{metrics::TIMER, DbReader};
 use anyhow::{anyhow, Result};
-use aptos_crypto::{hash::CryptoHash, HashValue};
-use aptos_logger::{error, sample, sample::SampleRate};
-use aptos_types::{
+use gaptos::aptos_crypto::{hash::CryptoHash, HashValue};
+use gaptos::aptos_logger::{error, sample, sample::SampleRate};
+use gaptos::aptos_types::{
     proof::SparseMerkleProofExt,
     state_store::{state_key::StateKey, state_value::StateValue},
     transaction::Version,
@@ -169,7 +169,7 @@ impl AsyncProofFetcher {
 mod tests {
     use super::*;
     use crate::mock::MockDbReaderWriter;
-    use aptos_types::state_store::state_key::inner::StateKeyInner;
+    use gaptos::aptos_types::state_store::state_key::inner::StateKeyInner;
     use assert_unordered::assert_eq_unordered;
 
     #[test]

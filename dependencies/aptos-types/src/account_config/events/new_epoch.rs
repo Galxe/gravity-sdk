@@ -4,7 +4,7 @@
 
 use crate::{contract_event::ContractEvent, event::EventKey, on_chain_config::new_epoch_event_key};
 use anyhow::Result;
-use move_core_types::{
+use gaptos::move_core_types::{
     ident_str, identifier::IdentStr, language_storage::TypeTag, move_resource::MoveStructType,
 };
 use once_cell::sync::Lazy;

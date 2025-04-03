@@ -9,11 +9,11 @@ use crate::{
     },
     transaction::Version,
 };
-use aptos_crypto::HashValue;
-use aptos_experimental_runtimes::thread_manager::THREAD_MANAGER;
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_experimental_runtimes::thread_manager::THREAD_MANAGER;
 use arr_macro::arr;
 use bytes::Bytes;
-use move_core_types::move_resource::MoveResource;
+use gaptos::move_core_types::move_resource::MoveResource;
 use std::{collections::HashMap, ops::Deref};
 
 pub mod errors;

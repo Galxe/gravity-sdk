@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::cached_state_view::ShardedStateCache;
-use aptos_crypto::{hash::CryptoHash, HashValue};
-pub use aptos_types::indexer::indexer_db_reader::Order;
-use aptos_types::{
+use gaptos::aptos_crypto::{hash::CryptoHash, HashValue};
+pub use gaptos::aptos_types::indexer::indexer_db_reader::Order;
+use gaptos::aptos_types::{
     account_address::AccountAddress,
     account_config::NewBlockEvent,
     contract_event::{ContractEvent, EventWithVersion},
@@ -63,8 +63,8 @@ pub struct StateStoreStatus {
 }
 
 use crate::state_delta::StateDelta;
-pub use aptos_types::block_info::BlockHeight;
-use aptos_types::state_store::state_key::prefix::StateKeyPrefix;
+pub use gaptos::aptos_types::block_info::BlockHeight;
+use gaptos::aptos_types::state_store::state_key::prefix::StateKeyPrefix;
 pub use errors::AptosDbError;
 pub use executed_trees::ExecutedTrees;
 
@@ -104,8 +104,8 @@ impl From<bcs::Error> for Error {
     }
 }
 
-impl From<aptos_secure_net::Error> for Error {
-    fn from(error: aptos_secure_net::Error) -> Self {
+impl From<gaptos::aptos_secure_net::Error> for Error {
+    fn from(error: gaptos::aptos_secure_net::Error) -> Self {
         Self::ServiceError {
             error: format!("{}", error),
         }

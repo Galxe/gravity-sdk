@@ -5,8 +5,8 @@ use crate::{
     account_config::{AccountResource, ObjectGroupResource},
     state_store::state_key::StateKey,
 };
-use aptos_crypto::hash::CryptoHash;
-use move_core_types::{account_address::AccountAddress, ident_str, move_resource::MoveStructType};
+use gaptos::aptos_crypto::hash::CryptoHash;
+use gaptos::move_core_types::{account_address::AccountAddress, ident_str, move_resource::MoveStructType};
 
 fn assert_crypto_hash(key: &StateKey, expected_hash: &str) {
     let expected_hash = expected_hash.parse().unwrap();

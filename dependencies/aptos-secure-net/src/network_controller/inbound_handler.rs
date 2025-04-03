@@ -5,7 +5,7 @@ use crate::{
     grpc_network_service::GRPCNetworkMessageServiceServerWrapper,
     network_controller::{Message, MessageType},
 };
-use aptos_logger::warn;
+use gaptos::aptos_logger::warn;
 use crossbeam_channel::Sender;
 use std::{
     collections::HashMap,

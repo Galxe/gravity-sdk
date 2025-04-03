@@ -7,9 +7,9 @@ use crate::{
     types::common::EpochedPeerStore,
     LogIngestConfig, MetricsEndpointsConfig,
 };
-use aptos_crypto::{noise, x25519};
-use aptos_infallible::RwLock;
-use aptos_types::{chain_id::ChainId, PeerId};
+use gaptos::aptos_crypto::{noise, x25519};
+use gaptos::aptos_infallible::RwLock;
+use gaptos::aptos_types::{chain_id::ChainId, PeerId};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, TokenData, Validation};
 use serde::{de::DeserializeOwned, Serialize};
 use std::{

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::account_address::AccountAddress;
-use aptos_crypto::{
+use gaptos::aptos_crypto::{
     bls12381, hash::CryptoHash, test_utils::TEST_SEED, CryptoMaterialError, PrivateKey, SigningKey,
     Uniform,
 };
@@ -83,7 +83,7 @@ impl ValidatorSigner {
 #[cfg(any(test, feature = "fuzzing"))]
 pub mod proptests {
     use super::*;
-    use aptos_crypto::Genesis;
+    use gaptos::aptos_crypto::Genesis;
     use proptest::{prelude::*, sample, strategy::LazyJust};
 
     #[allow(clippy::redundant_closure)]

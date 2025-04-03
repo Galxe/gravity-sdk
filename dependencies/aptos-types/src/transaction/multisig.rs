@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::transaction::{user_transaction_context::MultisigPayload, EntryFunction};
-use move_core_types::{account_address::AccountAddress, vm_status::VMStatus};
+use gaptos::move_core_types::{account_address::AccountAddress, vm_status::VMStatus};
 use serde::{Deserialize, Serialize};
 
 /// A multisig transaction that allows an owner of a multisig account to execute a pre-approved

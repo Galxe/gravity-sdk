@@ -35,12 +35,12 @@ use aptos_consensus_types::{
     sync_info::SyncInfo,
     wrapped_ledger_info::WrappedLedgerInfo,
 };
-use aptos_crypto::{hash::GENESIS_BLOCK_ID, HashValue};
-use aptos_infallible::Mutex;
-use aptos_logger::prelude::*;
-use aptos_metrics_core::{register_int_gauge_vec, IntGaugeHelper, IntGaugeVec};
-use aptos_schemadb::SchemaBatch;
-use aptos_types::{
+use gaptos::aptos_metrics_core::{register_int_gauge_vec, IntGaugeHelper, IntGaugeVec};
+use gaptos::aptos_crypto::{hash::GENESIS_BLOCK_ID, HashValue};
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_schemadb::SchemaBatch;
+use gaptos::aptos_types::{
     account_address::AccountAddress, epoch_change::EpochChangeProof,
     ledger_info::{self, LedgerInfoWithSignatures},
 };

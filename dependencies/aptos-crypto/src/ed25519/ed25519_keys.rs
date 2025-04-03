@@ -10,7 +10,7 @@ use crate::{
     hash::CryptoHash,
     traits::*,
 };
-use aptos_crypto_derive::{DeserializeKey, SerializeKey, SilentDebug, SilentDisplay};
+use gaptos::aptos_crypto_derive::{DeserializeKey, SerializeKey, SilentDebug, SilentDisplay};
 use core::convert::TryFrom;
 use curve25519_dalek::{edwards::CompressedEdwardsY, scalar::Scalar};
 use ed25519_dalek::ExpandedSecretKey;

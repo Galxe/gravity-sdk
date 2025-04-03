@@ -12,7 +12,7 @@ use crate::{
     }
 };
 use api_types::VerifiedTxn;
-use aptos_config::{
+use gaptos::aptos_config::{
     config::{NodeConfig, PeerRole},
     network_id::{NetworkId, PeerNetworkId},
 };
@@ -26,7 +26,7 @@ use aptos_network::{
     },
     ProtocolId,
 };
-use aptos_types::{transaction::SignedTransaction, PeerId};
+use gaptos::aptos_types::{transaction::SignedTransaction, PeerId};
 use maplit::btreemap;
 use rand::{rngs::StdRng, SeedableRng};
 use std::collections::HashMap;

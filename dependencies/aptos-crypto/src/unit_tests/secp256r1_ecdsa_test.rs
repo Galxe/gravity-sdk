@@ -3,7 +3,7 @@
 
 #![allow(clippy::redundant_clone)] // Required to work around prop_assert_eq! limitations
 
-use crate as aptos_crypto;
+use crate as gaptos::aptos_crypto;
 use crate::{
     secp256r1_ecdsa::{
         PrivateKey, PublicKey, Signature, ORDER_HALF, PRIVATE_KEY_LENGTH, PUBLIC_KEY_LENGTH,
@@ -12,7 +12,7 @@ use crate::{
     test_utils::{random_serializable_struct, uniform_keypair_strategy},
     traits::{Signature as SignatureTrait, *},
 };
-use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
+use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
 use core::convert::TryFrom;
 use p256::{EncodedPoint, NonZeroScalar};
 use proptest::{collection::vec, prelude::*};

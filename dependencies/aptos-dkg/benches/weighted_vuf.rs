@@ -6,7 +6,7 @@
 #![allow(clippy::extra_unused_type_parameters)]
 #![allow(clippy::needless_borrow)]
 
-use aptos_dkg::{
+use gaptos::aptos_dkg::{
     pvss::{
         das,
         dealt_secret_key::g1::DealtSecretKey,
@@ -22,7 +22,7 @@ use aptos_dkg::{
         traits::WeightedVUF,
     },
 };
-use aptos_runtimes::spawn_rayon_thread_pool;
+use gaptos::aptos_runtimes::spawn_rayon_thread_pool;
 use blstrs::{G1Projective, G2Projective, Scalar};
 use core::iter::zip;
 use criterion::{

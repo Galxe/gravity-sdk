@@ -1,7 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos_metrics_core::{exponential_buckets, HistogramVec};
+use gaptos::aptos_metrics_core::{exponential_buckets, HistogramVec};
 use once_cell::sync::Lazy;
 use prometheus::{
     core::{self, Collector},

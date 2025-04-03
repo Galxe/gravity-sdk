@@ -8,7 +8,7 @@ use crate::{
     on_chain_config::{FeatureFlag, Features, OnChainConfig},
 };
 use anyhow::anyhow;
-use move_core_types::value::{MoveStruct, MoveValue};
+use gaptos::move_core_types::value::{MoveStruct, MoveValue};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]

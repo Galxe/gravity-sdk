@@ -10,7 +10,7 @@
 //! authentication -- a network end-point running with remote authentication enabled will
 //! connect to or accept connections from an end-point running in authenticated mode as
 //! long as the latter is in its trusted peers set.
-use aptos_config::{
+use gaptos::aptos_config::{
     config::{
         DiscoveryMethod, NetworkConfig, Peer, PeerRole, PeerSet, RoleType, CONNECTION_BACKOFF_BASE,
         CONNECTIVITY_CHECK_INTERVAL_MS, MAX_CONNECTION_DELAY_MS, MAX_FRAME_SIZE,
@@ -18,8 +18,8 @@ use aptos_config::{
     },
     network_id::NetworkContext,
 };
-use aptos_event_notifications::{DbBackedOnChainConfig, EventSubscriptionService};
-use aptos_logger::prelude::*;
+use gaptos::aptos_event_notifications::{DbBackedOnChainConfig, EventSubscriptionService};
+use gaptos::aptos_logger::prelude::*;
 use aptos_netcore::transport::tcp::TCPBufferCfg;
 use aptos_network::{
     application::storage::PeersAndMetadata,
@@ -39,8 +39,8 @@ use aptos_network::{
     },
 };
 use aptos_network_discovery::DiscoveryChangeListener;
-use aptos_time_service::TimeService;
-use aptos_types::{chain_id::ChainId, network_address::NetworkAddress};
+use gaptos::aptos_time_service::TimeService;
+use gaptos::aptos_types::{chain_id::ChainId, network_address::NetworkAddress};
 use std::{clone::Clone, collections::HashSet, sync::Arc, time::Duration};
 use tokio::runtime::Handle;
 
@@ -287,7 +287,7 @@ impl NetworkBuilder {
         self.network_context
     }
 
-    pub fn conn_mgr_reqs_tx(&self) -> Option<aptos_channels::Sender<ConnectivityRequest>> {
+    pub fn conn_mgr_reqs_tx(&self) -> Option<gaptos::aptos_channels::Sender<ConnectivityRequest>> {
         self.connectivity_manager_builder
             .as_ref()
             .map(|conn_mgr_builder| conn_mgr_builder.conn_mgr_reqs_tx())

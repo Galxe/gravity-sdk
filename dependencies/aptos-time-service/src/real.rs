@@ -34,7 +34,7 @@ impl TimeServiceTrait for RealTimeService {
     }
 
     fn now_unix_time(&self) -> Duration {
-        aptos_infallible::duration_since_epoch()
+        gaptos::aptos_infallible::duration_since_epoch()
     }
 
     #[cfg(any(test, feature = "async"))]

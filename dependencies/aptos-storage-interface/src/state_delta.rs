@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::SparseMerkleTree;
-use aptos_crypto::HashValue;
-use aptos_types::{
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_types::{
     state_store::{
         combine_sharded_state_updates, state_storage_usage::StateStorageUsage,
         state_value::StateValue, ShardedStateUpdates,

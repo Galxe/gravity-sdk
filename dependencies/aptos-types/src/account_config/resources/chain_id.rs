@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{chain_id::ChainId, on_chain_config::OnChainConfig};
-use move_core_types::{
+use gaptos::move_core_types::{
     ident_str,
     identifier::IdentStr,
     move_resource::{MoveResource, MoveStructType},

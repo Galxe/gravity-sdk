@@ -10,9 +10,9 @@
 // };
 // use aptos_db::AptosDB;
 // use aptos_executor_test_helpers::bootstrap_genesis;
-// use aptos_infallible::RwLock;
-// use aptos_storage_interface::DbReaderWriter;
-// use aptos_types::{
+// use gaptos::aptos_infallible::RwLock;
+// use gaptos::aptos_storage_interface::DbReaderWriter;
+// use gaptos::aptos_types::{
 //     account_address::AccountAddress,
 //     contract_event::ContractEvent,
 //     event::EventKey,
@@ -23,7 +23,7 @@
 // use aptos_vm::AptosVM;
 // use claims::{assert_lt, assert_matches, assert_ok};
 // use futures::{FutureExt, StreamExt};
-// use move_core_types::language_storage::TypeTag;
+// use gaptos::move_core_types::language_storage::TypeTag;
 // use serde::{Deserialize, Serialize};
 // use std::{convert::TryInto, str::FromStr, sync::Arc};
 
@@ -546,7 +546,7 @@
 //     let (genesis, _) = aptos_vm_genesis::test_genesis_change_set_and_validators(Some(1));
 
 //     // Create test aptos database
-//     let db_path = aptos_temppath::TempPath::new();
+//     let db_path = gaptos::aptos_temppath::TempPath::new();
 //     assert_ok!(db_path.create_as_dir());
 //     let (_, db_rw) = DbReaderWriter::wrap(AptosDB::new_for_test(db_path.path()));
 

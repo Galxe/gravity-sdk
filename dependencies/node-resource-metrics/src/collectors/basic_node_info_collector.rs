@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::collectors::common::NAMESPACE;
-use aptos_infallible::Mutex;
-use aptos_metrics_core::const_metric::ConstMetric;
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_metrics_core::const_metric::ConstMetric;
 use prometheus::{
     core::{Collector, Desc, Describer},
     proto::MetricFamily,
@@ -71,7 +71,7 @@ impl Collector for BasicNodeInfoCollector {
         let host_name_metrics =
             ConstMetric::new_gauge(self.hostname.clone(), 1.0, Some(&[hostname])).unwrap();
 
-        let git_hash = aptos_build_info::get_git_hash();
+        let git_hash = gaptos::aptos_build_info::get_git_hash();
         let release_metrics =
             ConstMetric::new_gauge(self.release.clone(), 1.0, Some(&[git_hash])).unwrap();
 

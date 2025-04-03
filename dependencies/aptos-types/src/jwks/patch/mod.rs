@@ -6,7 +6,7 @@ use crate::{
     move_any::{Any as MoveAny, AsMoveAny},
     move_utils::as_move_value::AsMoveValue,
 };
-use move_core_types::value::{MoveStruct, MoveValue};
+use gaptos::move_core_types::value::{MoveStruct, MoveValue};
 use serde::{Deserialize, Serialize};
 
 pub struct PatchJWKMoveStruct {

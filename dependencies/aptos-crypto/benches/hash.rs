@@ -4,7 +4,7 @@
 #[macro_use]
 extern crate criterion;
 
-use aptos_crypto::{bls12381::DST_BLS_SIG_IN_G2_WITH_POP, test_utils::random_bytes};
+use gaptos::aptos_crypto::{bls12381::DST_BLS_SIG_IN_G2_WITH_POP, test_utils::random_bytes};
 use blake2::{
     digest::{Update, VariableOutput},
     Blake2bVar,

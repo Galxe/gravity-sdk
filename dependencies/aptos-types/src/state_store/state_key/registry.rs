@@ -9,11 +9,11 @@ use crate::{
     },
 };
 use anyhow::Result;
-use aptos_crypto::{hash::CryptoHasher, HashValue};
-use aptos_infallible::RwLock;
+use gaptos::aptos_crypto::{hash::CryptoHasher, HashValue};
+use gaptos::aptos_infallible::RwLock;
 use bytes::Bytes;
 use hashbrown::HashMap;
-use move_core_types::{
+use gaptos::move_core_types::{
     account_address::AccountAddress,
     identifier::{IdentStr, Identifier},
     language_storage::StructTag,

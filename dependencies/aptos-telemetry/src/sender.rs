@@ -3,19 +3,19 @@
 
 use crate::metrics::{self, increment_log_ingest_failures_by, increment_log_ingest_successes_by};
 use anyhow::{anyhow, Error, Result};
-use aptos_config::config::{NodeConfig, RoleType};
-use aptos_crypto::{
+use gaptos::aptos_config::config::{NodeConfig, RoleType};
+use gaptos::aptos_crypto::{
     noise::{self, NoiseConfig},
     x25519,
 };
-use aptos_infallible::{Mutex, RwLock};
-use aptos_logger::debug;
-use aptos_telemetry_service::types::{
+use gaptos::aptos_infallible::{Mutex, RwLock};
+use gaptos::aptos_logger::debug;
+use gaptos::gaptos::aptos_telemetry_service::types::{
     auth::{AuthRequest, AuthResponse},
     response::IndexResponse,
     telemetry::TelemetryDump,
 };
-use aptos_types::{chain_id::ChainId, PeerId};
+use gaptos::aptos_types::{chain_id::ChainId, PeerId};
 use flate2::{write::GzEncoder, Compression};
 use prometheus::{default_registry, Registry};
 use reqwest::{header::CONTENT_ENCODING, Response, StatusCode, Url};
@@ -421,9 +421,9 @@ async fn error_for_status_with_body(response: Response) -> Result<Response, anyh
 mod tests {
 
     use super::*;
-    use crate::metrics::{APTOS_TELEMETRY_SERVICE_FAILURE, APTOS_TELEMETRY_SERVICE_SUCCESS};
-    use aptos_crypto::Uniform;
-    use aptos_telemetry_service::types::telemetry::TelemetryEvent;
+    use crate::metrics::{gaptos::gaptos::aptos_telemetry_service_FAILURE, gaptos::gaptos::aptos_telemetry_service_SUCCESS};
+    use gaptos::aptos_crypto::Uniform;
+    use gaptos::gaptos::aptos_telemetry_service::types::telemetry::TelemetryEvent;
     use httpmock::MockServer;
     use prometheus::{register_int_counter_vec_with_registry, Registry};
     use std::{
@@ -559,13 +559,13 @@ mod tests {
 
         mock.assert_hits(1);
         assert_eq!(
-            APTOS_TELEMETRY_SERVICE_SUCCESS
+            gaptos::gaptos::aptos_telemetry_service_SUCCESS
                 .with_label_values(&[event_name])
                 .get(),
             0
         );
         assert_eq!(
-            APTOS_TELEMETRY_SERVICE_FAILURE
+            gaptos::gaptos::aptos_telemetry_service_FAILURE
                 .with_label_values(&[event_name])
                 .get(),
             1
@@ -579,7 +579,7 @@ mod tests {
         let test_registry = Registry::default();
 
         let counter = register_int_counter_vec_with_registry!(
-            "aptos_telemetry_service_success",
+            "gaptos::gaptos::aptos_telemetry_service_success",
             "Number of telemetry events successfully sent to telemetry service",
             &["event_name"],
             test_registry

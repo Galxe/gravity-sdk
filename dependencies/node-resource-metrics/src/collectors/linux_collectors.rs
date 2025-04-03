@@ -3,8 +3,8 @@
 
 use super::common::NAMESPACE;
 use crate::collectors::common::MeasureLatency;
-use aptos_logger::warn;
-use aptos_metrics_core::const_metric::ConstMetric;
+use gaptos::aptos_logger::warn;
+use gaptos::aptos_metrics_core::const_metric::ConstMetric;
 use procfs::{DiskStat, KernelStats};
 use prometheus::{
     core::{Collector, Desc, Describer},

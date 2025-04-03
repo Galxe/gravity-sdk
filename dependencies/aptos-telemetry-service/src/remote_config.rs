@@ -36,8 +36,8 @@ async fn handle_telemetry_log_env(
 #[cfg(test)]
 mod tests {
     use crate::{jwt_auth::create_jwt_token, tests::test_context, types::common::NodeType};
-    use aptos_config::config::PeerSet;
-    use aptos_types::{chain_id::ChainId, PeerId};
+    use gaptos::aptos_config::config::PeerSet;
+    use gaptos::aptos_types::{chain_id::ChainId, PeerId};
     use std::collections::HashMap;
     use uuid::Uuid;
 

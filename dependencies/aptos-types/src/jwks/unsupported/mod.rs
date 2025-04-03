@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{move_any::AsMoveAny, move_utils::as_move_value::AsMoveValue};
-use aptos_crypto::HashValue;
-use move_core_types::value::{MoveStruct, MoveValue};
+use gaptos::aptos_crypto::HashValue;
+use gaptos::move_core_types::value::{MoveStruct, MoveValue};
 use poem_openapi_derive::Object;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Formatter};
