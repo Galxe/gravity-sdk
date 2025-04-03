@@ -11,13 +11,13 @@ use aptos_config::{
     config::{NetworkConfig, NodeConfig, Peer, PeerRole},
     network_id::NetworkId,
 };
-use aptos_consensus::consensusdb::{BlockSchema, ConsensusDB};
+use aptos_consensus::consensusdb::{BlockNumberSchema, BlockSchema, ConsensusDB};
 use aptos_consensus::{
     gravity_state_computer::ConsensusAdapterArgs, network_interface::ConsensusMsg,
     persistent_liveness_storage::StorageWriteProxy, quorum_store::quorum_store_db::QuorumStoreDB,
 };
 use aptos_consensus_notifications::ConsensusNotifier;
-use aptos_crypto::{hash::GENESIS_BLOCK_ID, x25519};
+use aptos_crypto::{hash::GENESIS_BLOCK_ID, x25519, HashValue};
 use aptos_event_notifications::EventSubscriptionService;
 use aptos_mempool::{MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest};
 use aptos_mempool_notifications::MempoolNotificationListener;
@@ -201,17 +201,15 @@ pub async fn init_block_buffer_manager(
         0
     };
     
-    let mut block_number_to_block_id = consensus_db.get_all::<BlockSchema>().unwrap()
+    let mut block_number_to_block_id = consensus_db
+            .get_all::<BlockNumberSchema>()
+            .unwrap()
             .into_iter()
-            .map(|(_, block)| block)
-            .filter(|block| {
-                block.block_number().is_some()
-                    && block.block_number().unwrap() >= start_block_number
-            })
-            .map(|block| (block.block_number().unwrap(), BlockId::new(*block.id())))
+            .filter(|(_, block_number)| block_number >= &start_block_number)
+            .map(|(block_id, block_number)| (block_number, BlockId::from_bytes(block_id.as_slice())))
             .collect::<HashMap<u64, BlockId>>();
     if start_block_number == 0 {
         block_number_to_block_id.insert(0u64, BlockId::from_bytes(GENESIS_BLOCK_ID.as_slice()));
-    }
+    }   
     get_block_buffer_manager().init(latest_block_number, block_number_to_block_id).await;
 }
