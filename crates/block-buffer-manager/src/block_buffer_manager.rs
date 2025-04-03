@@ -373,12 +373,12 @@ impl BlockBufferManager {
                                 id: block_id_num_hash.block_id,
                             };
                         } else {
-                            panic!("Block id and number is not equal id: {:?}={:?} num: {:?}", block_id_num_hash.block_id, *id, block_id_num_hash.num);
+                            panic!("Computed Block id and number is not equal id: {:?}={:?} num: {:?}", block_id_num_hash.block_id, *id, block_id_num_hash.num);
                         }
                     }
                     BlockState::Committed { hash, compute_res: _, id } => {
                         if !(*id == block_id_num_hash.block_id && *hash == block_id_num_hash.hash) {
-                            panic!("Block id and number is not equal id: {:?}={:?} hash: {:?}={:?}", block_id_num_hash.block_id, *id, block_id_num_hash.hash, *hash);
+                            panic!("Commited Block id and number is not equal id: {:?}={:?} hash: {:?}={:?}", block_id_num_hash.block_id, *id, block_id_num_hash.hash, *hash);
                         }
                     }
                     BlockState::Ordered { block: _, parent_id:_ } => {
