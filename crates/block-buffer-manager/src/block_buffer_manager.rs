@@ -377,7 +377,7 @@ impl BlockBufferManager {
                         }
                     }
                     BlockState::Committed { hash, compute_res: _, id } => {
-                        if !(*id == block_id_num_hash.block_id && *hash == block_id_num_hash.hash) {
+                        if *id != block_id_num_hash.block_id {
                             panic!("Commited Block id and number is not equal id: {:?}={:?} hash: {:?}={:?}", block_id_num_hash.block_id, *id, block_id_num_hash.hash, *hash);
                         }
                     }
