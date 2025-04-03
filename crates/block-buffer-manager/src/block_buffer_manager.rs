@@ -381,9 +381,9 @@ impl BlockBufferManager {
                             panic!("Block id and number is not equal id: {:?}={:?} hash: {:?}={:?}", block_id_num_hash.block_id, *id, block_id_num_hash.hash, *hash);
                         }
                     }
-                    _ => {
+                    BlockState::Ordered { block: _, parent_id:_ } => {
                         panic!(
-                            "There is no Ordered Block but try to push commit block for block {:?} num {}",
+                            "Set commit block meet ordered block for block id {:?} num {}",
                             block_id_num_hash.block_id, block_id_num_hash.num
                         );
                     }
