@@ -180,21 +180,6 @@ impl BlockStore {
         // reproduce the same batches (important for the commit phase)
         let mut certs = self.inner.read().get_all_quorum_certs_with_commit_info();
         certs.sort_unstable_by_key(|qc| qc.commit_info().round());
-        // for qc in certs {
-        //     info!("trying to recover qc {}, commit_round={}", qc, self.commit_root().round());
-        //     if qc.commit_info().round() > self.commit_root().round() {
-        //         if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info()).await {
-        //             error!("Error in try-committing blocks. {}", e.to_string());
-        //         }
-        //         self.network.send_commit_proof(qc.ledger_info().clone()).await;
-        //         while self.commit_root().round() != qc.commit_info().round() {
-        //             info!("waiting for commit root to be updated to {}", qc.commit_info().round());
-        //             tokio::time::sleep(Duration::from_millis(10)).await;
-        //         }
-        //     }
-        // }
-        // 10 as a batch and send to execution and commit and wait for commit root to be updated
-        
         for qc in certs {
             let mut batch = vec![];
             if qc.commit_info().round() > self.commit_root().round() {
@@ -211,9 +196,6 @@ impl BlockStore {
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
         }
-        
-
-        
     }
 
     async fn build(
@@ -229,7 +211,7 @@ impl BlockStore {
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
-        network: Arc<NetworkClient>,
+        network: Arc<NetworkSender>,
     ) -> Self {
         let RootInfo(root_block, root_qc, root_ordered_cert, root_commit_cert) = root;
 
@@ -369,6 +351,7 @@ impl BlockStore {
             self.payload_manager.clone(),
             self.order_vote_enabled,
             self.pending_blocks.clone(),
+            self.network.clone(),
         )
         .await;
 
