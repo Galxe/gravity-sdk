@@ -855,6 +855,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             payload_manager,
             onchain_consensus_config.order_vote_enabled(),
             self.pending_blocks.clone(),
+            network_sender.clone(),
         ).await);
 
         info!(epoch = epoch, "Create ProposalGenerator");
