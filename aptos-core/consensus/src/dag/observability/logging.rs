@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use aptos_consensus_types::common::{Author, Round};
-use aptos_logger::Schema;
+use gaptos::aptos_logger as aptos_logger;
+use gaptos::aptos_logger::Schema;
 use serde::Serialize;
 
 #[derive(Schema)]

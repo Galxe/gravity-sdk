@@ -9,7 +9,7 @@ use crate::config::{
     ExecutionConfig, IndexerGrpcConfig, InspectionServiceConfig, LoggerConfig, MempoolConfig,
     NetbenchConfig, NodeConfig, StateSyncConfig, StorageConfig,
 };
-use aptos_types::chain_id::ChainId;
+use gaptos::aptos_types::chain_id::ChainId;
 use std::collections::HashSet;
 
 // Useful sanitizer constants

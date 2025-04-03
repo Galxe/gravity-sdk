@@ -19,10 +19,10 @@
 //! Usage example:
 //!
 //! ```
-//! use aptos_crypto::{noise, x25519, traits::*};
+//! use gaptos::aptos_crypto::{noise, x25519, traits::*};
 //! use rand::prelude::*;
 //!
-//! # fn main() -> Result<(), aptos_crypto::noise::NoiseError> {
+//! # fn main() -> Result<(), gaptos::aptos_crypto::noise::NoiseError> {
 //! let mut rng = rand::thread_rng();
 //! let initiator_static = x25519::PrivateKey::generate(&mut rng);
 //! let responder_static = x25519::PrivateKey::generate(&mut rng);

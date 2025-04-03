@@ -4,7 +4,7 @@
 #[macro_use]
 extern crate criterion;
 
-use aptos_crypto::test_utils::random_bytes;
+use gaptos::aptos_crypto::test_utils::random_bytes;
 use criterion::{measurement::Measurement, BenchmarkGroup, BenchmarkId, Criterion, Throughput};
 use curve25519_dalek::{
     constants::RISTRETTO_BASEPOINT_TABLE,

@@ -6,7 +6,7 @@ use crate::{
     move_any::{Any as MoveAny, AsMoveAny},
     move_utils::as_move_value::AsMoveValue,
 };
-use aptos_crypto::HashValue;
+use gaptos::aptos_crypto::HashValue;
 use std::str::FromStr;
 
 #[test]

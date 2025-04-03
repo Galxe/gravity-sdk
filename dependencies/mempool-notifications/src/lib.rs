@@ -4,7 +4,7 @@
 
 #![forbid(unsafe_code)]
 
-use aptos_types::{
+use gaptos::aptos_types::{
     account_address::AccountAddress,
     transaction::{
         use_case::{UseCaseAwareTransaction, UseCaseKey},
@@ -183,8 +183,8 @@ impl fmt::Display for CommittedTransaction {
 #[cfg(test)]
 mod tests {
     use crate::{CommittedTransaction, Error, MempoolNotificationSender};
-    use aptos_crypto::{ed25519::Ed25519PrivateKey, HashValue, PrivateKey, SigningKey, Uniform};
-    use aptos_types::{
+    use gaptos::aptos_crypto::{ed25519::Ed25519PrivateKey, HashValue, PrivateKey, SigningKey, Uniform};
+    use gaptos::aptos_types::{
         account_address::AccountAddress,
         block_metadata::BlockMetadata,
         chain_id::ChainId,

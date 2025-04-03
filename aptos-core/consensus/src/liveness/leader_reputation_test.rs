@@ -11,13 +11,13 @@ use crate::liveness::{
     },
     proposer_election::{choose_index, ProposerElection},
 };
-use aptos_bitvec::BitVec;
+use gaptos::aptos_bitvec::BitVec;
 use aptos_consensus_types::common::{Author, Round};
-use aptos_crypto::{bls12381, HashValue};
-use aptos_infallible::Mutex;
-use aptos_keygen::KeyGen;
-use aptos_storage_interface::DbReader;
-use aptos_types::{
+use gaptos::aptos_crypto::{bls12381, HashValue};
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_keygen::KeyGen;
+use gaptos::aptos_storage_interface::DbReader;
+use gaptos::aptos_types::{
     account_address::AccountAddress,
     account_config::{new_block_event_key, NewBlockEvent},
     contract_event::{ContractEvent, EventWithVersion},
@@ -27,7 +27,7 @@ use aptos_types::{
 };
 use claims::assert_err;
 use itertools::Itertools;
-use move_core_types::{language_storage::TypeTag, move_resource::MoveStructType};
+use gaptos::move_core_types::{language_storage::TypeTag, move_resource::MoveStructType};
 use num_traits::Pow;
 use std::{collections::HashMap, sync::Arc};
 
@@ -486,7 +486,7 @@ impl DbReader for MockDbReader {
     fn get_latest_block_events(
         &self,
         num_events: usize,
-    ) -> aptos_storage_interface::Result<Vec<EventWithVersion>> {
+    ) -> gaptos::aptos_storage_interface::Result<Vec<EventWithVersion>> {
         *self.fetched.lock() += 1;
         let events = self.events.lock();
         // println!("Events {:?}", *events);
@@ -499,7 +499,7 @@ impl DbReader for MockDbReader {
     }
 
     /// Returns the latest version, error on on non-bootstrapped DB.
-    fn get_latest_ledger_info_version(&self) -> aptos_storage_interface::Result<Version> {
+    fn get_latest_ledger_info_version(&self) -> gaptos::aptos_storage_interface::Result<Version> {
         let version = *self.idx.lock();
         let mut to_add = self.to_add_event_after_call.lock();
         if let Some((epoch, round)) = *to_add {
@@ -514,7 +514,7 @@ impl DbReader for MockDbReader {
     fn get_accumulator_root_hash(
         &self,
         _version: Version,
-    ) -> aptos_storage_interface::Result<HashValue> {
+    ) -> gaptos::aptos_storage_interface::Result<HashValue> {
         Ok(HashValue::zero())
     }
 }

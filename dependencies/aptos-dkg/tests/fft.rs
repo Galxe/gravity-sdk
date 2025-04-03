@@ -3,7 +3,7 @@
 
 #![allow(clippy::needless_range_loop)]
 
-use aptos_dkg::{
+use gaptos::aptos_dkg::{
     algebra::{
         evaluation_domain::{BatchEvaluationDomain, EvaluationDomain},
         fft::{fft_assign, ifft_assign},

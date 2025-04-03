@@ -3,7 +3,7 @@
 
 #![forbid(unsafe_code)]
 
-use aptos_telemetry_service::types::telemetry::TelemetryEvent;
+use gaptos::gaptos::aptos_telemetry_service::types::telemetry::TelemetryEvent;
 use prometheus::proto::MetricFamily;
 use std::collections::BTreeMap;
 

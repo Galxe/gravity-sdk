@@ -13,7 +13,7 @@
 //! while ignored during serialization.
 //!
 
-use aptos_crypto::{
+use gaptos::aptos_crypto::{
     CryptoMaterialError, PrivateKey, ValidCryptoMaterial, ValidCryptoMaterialStringExt,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -39,7 +39,7 @@ impl<T: DeserializeOwned + PrivateKey + ValidCryptoMaterial + Serialize> ConfigK
     }
 
     pub fn public_key(&self) -> T::PublicKeyMaterial {
-        aptos_crypto::PrivateKey::public_key(&self.key)
+        gaptos::aptos_crypto::PrivateKey::public_key(&self.key)
     }
 
     pub fn from_encoded_string(str: &str) -> Result<Self, CryptoMaterialError> {
@@ -54,10 +54,10 @@ impl<T: DeserializeOwned + PrivateKey + Serialize> Clone for ConfigKey<T> {
 }
 
 #[cfg(test)]
-impl<T: PrivateKey + Serialize + aptos_crypto::Uniform> Default for ConfigKey<T> {
+impl<T: PrivateKey + Serialize + gaptos::aptos_crypto::Uniform> Default for ConfigKey<T> {
     fn default() -> Self {
         Self {
-            key: aptos_crypto::Uniform::generate_for_testing(),
+            key: gaptos::aptos_crypto::Uniform::generate_for_testing(),
         }
     }
 }

@@ -37,10 +37,10 @@
 //! # Quick Start
 //!
 //! To obtain a `hash()` method for any new type `MyNewStruct`, it is (strongly) recommended to
-//! use the derive macros of `serde` and `aptos_crypto_derive` as follows:
+//! use the derive macros of `serde` and `gaptos::aptos_crypto_derive` as follows:
 //! ```
-//! use aptos_crypto::hash::CryptoHash;
-//! use aptos_crypto_derive::{CryptoHasher, BCSCryptoHash};
+//! use gaptos::aptos_crypto::hash::CryptoHash;
+//! use gaptos::aptos_crypto_derive::{CryptoHasher, BCSCryptoHash};
 //! use serde::{Deserialize, Serialize};
 //! #[derive(Serialize, Deserialize, CryptoHasher, BCSCryptoHash)]
 //! struct MyNewStruct { /*...*/ }
@@ -63,7 +63,7 @@
 //! use the derive macro [`CryptoHasher`](https://doc.rust-lang.org/reference/procedural-macros.html).
 //!
 //! ```
-//! use aptos_crypto_derive::CryptoHasher;
+//! use gaptos::aptos_crypto_derive::CryptoHasher;
 //! use serde::Deserialize;
 //! #[derive(Deserialize, CryptoHasher)]
 //! #[serde(rename = "OptionalCustomSerdeName")]
@@ -92,7 +92,7 @@
 //! **IMPORTANT:** Do NOT use this for new code unless you know what you are doing.
 //!
 //! ```
-//! use aptos_crypto::hash::{CryptoHasher, TestOnlyHasher};
+//! use gaptos::aptos_crypto::hash::{CryptoHasher, TestOnlyHasher};
 //!
 //! let mut hasher = TestOnlyHasher::default();
 //! hasher.update("Test message".as_bytes());
@@ -692,7 +692,7 @@ pub static GENESIS_BLOCK_ID: Lazy<HashValue> = Lazy::new(|| {
 ///
 /// # Example
 /// ```
-/// use aptos_crypto::hash::TestOnlyHash;
+/// use gaptos::aptos_crypto::hash::TestOnlyHash;
 ///
 /// b"hello world".test_only_hash();
 /// ```

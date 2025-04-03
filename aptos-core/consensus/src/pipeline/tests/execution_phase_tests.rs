@@ -19,9 +19,9 @@ use aptos_consensus_types::{
     pipelined_block::PipelinedBlock,
     quorum_cert::QuorumCert,
 };
-use aptos_crypto::HashValue;
+use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::{ExecutorError, StateComputeResult};
-use aptos_types::{ledger_info::LedgerInfo, validator_verifier::random_validator_verifier};
+use gaptos::aptos_types::{ledger_info::LedgerInfo, validator_verifier::random_validator_verifier};
 use async_trait::async_trait;
 use std::sync::{
     atomic::{AtomicBool, AtomicU64},

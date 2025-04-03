@@ -8,7 +8,7 @@ use crate::{
     },
     move_utils::as_move_value::AsMoveValue,
 };
-use move_core_types::{
+use gaptos::move_core_types::{
     ident_str,
     identifier::IdentStr,
     move_resource::MoveStructType,

@@ -9,8 +9,8 @@ use crate::{
     },
     utils,
 };
-use aptos_logger::{Level, CHANNEL_SIZE};
-use aptos_types::chain_id::ChainId;
+use gaptos::aptos_logger::{Level, CHANNEL_SIZE};
+use gaptos::aptos_types::chain_id::ChainId;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 

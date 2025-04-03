@@ -10,8 +10,8 @@ use crate::{
     on_chain_config::ValidatorSet,
 };
 use anyhow::{ensure, Result};
-use aptos_bitvec::BitVec;
-use aptos_crypto::{
+use gaptos::aptos_bitvec::BitVec;
+use gaptos::aptos_crypto::{
     bls12381,
     bls12381::{bls12381_keys, PublicKey},
     hash::CryptoHash,
@@ -571,7 +571,7 @@ pub fn random_validator_verifier(
 mod tests {
     use super::*;
     use crate::validator_signer::ValidatorSigner;
-    use aptos_crypto::test_utils::{TestAptosCrypto, TEST_SEED};
+    use gaptos::aptos_crypto::test_utils::{TestAptosCrypto, TEST_SEED};
     use proptest::{collection::vec, prelude::*};
     use std::collections::BTreeMap;
 

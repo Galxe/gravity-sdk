@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::{pipeline_health::TPipelineHealth, TChainHealth};
-use aptos_config::config::DagPayloadConfig;
+use gaptos::aptos_config::config::DagPayloadConfig;
 use aptos_consensus_types::common::Round;
-use aptos_types::epoch_state::EpochState;
+use gaptos::aptos_types::epoch_state::EpochState;
 use std::{sync::Arc, time::Duration};
 
 #[derive(Clone)]

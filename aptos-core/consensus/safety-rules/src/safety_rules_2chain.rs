@@ -12,8 +12,8 @@ use aptos_consensus_types::{
     vote::Vote,
     vote_proposal::VoteProposal,
 };
-use aptos_crypto::{bls12381, hash::CryptoHash, HashValue};
-use aptos_types::{block_info::BlockInfo, ledger_info::LedgerInfo};
+use gaptos::aptos_crypto::{bls12381, hash::CryptoHash, HashValue};
+use gaptos::aptos_types::{block_info::BlockInfo, ledger_info::LedgerInfo};
 
 /// 2-chain safety rules implementation
 impl SafetyRules {

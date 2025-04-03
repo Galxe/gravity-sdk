@@ -10,7 +10,7 @@ use crate::{
     },
 };
 use anyhow::{bail, ensure, Error, Result};
-use aptos_crypto::{
+use gaptos::aptos_crypto::{
     ed25519::{Ed25519PublicKey, Ed25519Signature},
     hash::CryptoHash,
     multi_ed25519::{MultiEd25519PublicKey, MultiEd25519Signature},
@@ -18,7 +18,7 @@ use aptos_crypto::{
     traits::Signature,
     CryptoMaterialError, HashValue, ValidCryptoMaterial, ValidCryptoMaterialStringExt,
 };
-use aptos_crypto_derive::{CryptoHasher, DeserializeKey, SerializeKey};
+use gaptos::aptos_crypto_derive::{CryptoHasher, DeserializeKey, SerializeKey};
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest_derive::Arbitrary;
 use rand::{rngs::OsRng, Rng};
@@ -344,7 +344,7 @@ impl TransactionAuthenticator {
                         .iter()
                         .map(|sig| AnySignature::ed25519(sig.clone()))
                         .collect();
-                    let signatures_bitmap = aptos_bitvec::BitVec::from(signature.bitmap().to_vec());
+                    let signatures_bitmap = gaptos::aptos_bitvec::BitVec::from(signature.bitmap().to_vec());
                     let authenticator = MultiKeyAuthenticator {
                         public_keys,
                         signatures,
@@ -765,7 +765,7 @@ impl fmt::Display for AuthenticationKey {
 pub struct MultiKeyAuthenticator {
     public_keys: MultiKey,
     signatures: Vec<AnySignature>,
-    signatures_bitmap: aptos_bitvec::BitVec,
+    signatures_bitmap: gaptos::aptos_bitvec::BitVec,
 }
 
 impl MultiKeyAuthenticator {
@@ -776,7 +776,7 @@ impl MultiKeyAuthenticator {
             public_keys.len(),
         );
 
-        let mut signatures_bitmap = aptos_bitvec::BitVec::with_num_bits(public_keys.len() as u16);
+        let mut signatures_bitmap = gaptos::aptos_bitvec::BitVec::with_num_bits(public_keys.len() as u16);
         let mut any_signatures = vec![];
 
         for (idx, signature) in signatures {
@@ -1243,7 +1243,7 @@ mod tests {
         },
         transaction::{webauthn::AssertionSignature, SignedTransaction},
     };
-    use aptos_crypto::{
+    use gaptos::aptos_crypto::{
         ed25519::Ed25519PrivateKey,
         secp256k1_ecdsa,
         secp256r1_ecdsa::{PublicKey, Signature},

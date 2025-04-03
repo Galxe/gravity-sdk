@@ -11,10 +11,10 @@ use crate::{
     }, vm_status::{DiscardedVMStatus, KeptVMStatus, StatusCode, StatusType, VMStatus}, write_set::WriteSet
 };
 use anyhow::{ensure, format_err, Context, Error, Result};
-use aptos_crypto::{
+use gaptos::aptos_crypto::{
     ed25519::*, hash::CryptoHash, multi_ed25519::{MultiEd25519PublicKey, MultiEd25519Signature}, secp256k1_ecdsa, traits::{signing_message, SigningKey}, CryptoMaterialError, HashValue
 };
-use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
+use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest_derive::Arbitrary;
 use rayon::prelude::*;
@@ -48,8 +48,8 @@ use crate::{
 pub use block_output::BlockOutput;
 pub use change_set::ChangeSet;
 pub use module::{Module, ModuleBundle};
-pub use move_core_types::transaction_argument::TransactionArgument;
-use move_core_types::vm_status::AbortLocation;
+pub use gaptos::move_core_types::transaction_argument::TransactionArgument;
+use gaptos::move_core_types::vm_status::AbortLocation;
 // use move_vm_types::delayed_values::delayed_field_id::{
 //     ExtractUniqueIndex, ExtractWidth, TryFromMoveValue, TryIntoMoveValue,
 // };

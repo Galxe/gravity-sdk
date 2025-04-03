@@ -15,7 +15,7 @@ use crate::{
     CryptoMaterialError, Length, ValidCryptoMaterial, ValidCryptoMaterialStringExt,
 };
 use anyhow::{anyhow, Result};
-use aptos_crypto_derive::{DeserializeKey, SerializeKey};
+use gaptos::aptos_crypto_derive::{DeserializeKey, SerializeKey};
 use blst::BLST_ERROR;
 use std::{convert::TryFrom, fmt};
 

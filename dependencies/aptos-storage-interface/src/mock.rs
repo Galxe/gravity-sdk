@@ -5,7 +5,7 @@
 //! This module provides mock dbreader for tests.
 
 use crate::{errors::AptosDbError, DbReader, DbWriter, Result};
-use aptos_types::{
+use gaptos::aptos_types::{
     proof::SparseMerkleProofExt,
     state_store::{
         state_key::{inner::StateKeyInner, StateKey},

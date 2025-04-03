@@ -13,7 +13,7 @@ use crate::{
     write_set::WriteOp::{Creation, Deletion, Modification},
 };
 use anyhow::{bail, ensure, Result};
-use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
+use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
 use bytes::Bytes;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};

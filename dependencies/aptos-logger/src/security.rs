@@ -9,7 +9,7 @@
 //! TODO: This likely belongs outside of the logging crate
 //!
 //! ```
-//! use aptos_logger::{error, SecurityEvent};
+//! use gaptos::aptos_logger::{error, SecurityEvent};
 //!
 //! error!(
 //!     SecurityEvent::InvalidRetrievedBlock,

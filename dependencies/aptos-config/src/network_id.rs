@@ -2,8 +2,8 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 use crate::config::{PeerRole, RoleType};
-use aptos_short_hex_str::AsShortHexStr;
-use aptos_types::PeerId;
+use gaptos::aptos_short_hex_str::AsShortHexStr;
+use gaptos::aptos_types::PeerId;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{fmt, str::FromStr};
 

@@ -3,15 +3,15 @@
 
 #![allow(clippy::non_canonical_partial_ord_impl)]
 
-use aptos_crypto::HashValue;
-use aptos_types::{
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_types::{
     account_config::AccountResource,
     state_store::state_key::{inner::StateKeyInner, registry::StateKeyRegistry},
 };
 use criterion::{criterion_group, criterion_main, Criterion};
 use derivative::Derivative;
 use fxhash::FxHasher;
-use move_core_types::{
+use gaptos::move_core_types::{
     account_address::AccountAddress, move_resource::MoveStructType,
 };
 use once_cell::sync::OnceCell;

@@ -10,7 +10,7 @@ use crate::{
     debug, error,
 };
 use anyhow::anyhow;
-use aptos_metrics_core::{
+use gaptos::aptos_metrics_core::{
     register_histogram_vec, register_int_counter, register_int_counter_vec, HistogramVec,
     IntCounter, IntCounterVec,
 };

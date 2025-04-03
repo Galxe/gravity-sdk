@@ -1,7 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos_dkg::{
+use gaptos::aptos_dkg::{
     algebra::polynomials::{
         poly_eval, poly_mul_fft, poly_mul_less_slow, poly_mul_slow, poly_xnmul,
     },
@@ -11,7 +11,7 @@ use aptos_dkg::{
     },
     weighted_vuf::pinkas::MIN_MULTIPAIR_NUM_JOBS,
 };
-use aptos_runtimes::spawn_rayon_thread_pool;
+use gaptos::aptos_runtimes::spawn_rayon_thread_pool;
 use blstrs::{G1Projective, G2Projective, Scalar};
 use ff::Field;
 use group::Group;

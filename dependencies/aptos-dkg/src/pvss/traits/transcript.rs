@@ -52,7 +52,7 @@ use crate::pvss::{
     Player,
 };
 use anyhow::bail;
-use aptos_crypto::{SigningKey, Uniform, ValidCryptoMaterial, VerifyingKey};
+use gaptos::aptos_crypto::{SigningKey, Uniform, ValidCryptoMaterial, VerifyingKey};
 use num_traits::Zero;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{fmt::Debug, ops::AddAssign};

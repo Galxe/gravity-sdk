@@ -1,8 +1,8 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos_logger::info;
-use aptos_types::{on_chain_config::TransactionShufflerType, transaction::SignedTransaction};
+use gaptos::aptos_logger::info;
+use gaptos::aptos_types::{on_chain_config::TransactionShufflerType, transaction::SignedTransaction};
 use sender_aware::SenderAwareShuffler;
 use std::sync::Arc;
 

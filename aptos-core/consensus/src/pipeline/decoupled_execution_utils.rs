@@ -15,11 +15,11 @@ use crate::{
     },
     state_replication::StateComputer,
 };
-use aptos_bounded_executor::BoundedExecutor;
-use aptos_channels::aptos_channel::Receiver;
-use aptos_config::config::ConsensusObserverConfig;
+use gaptos::aptos_bounded_executor::BoundedExecutor;
+use gaptos::aptos_channels::aptos_channel::Receiver;
+use gaptos::aptos_config::config::ConsensusObserverConfig;
 use aptos_consensus_types::common::Author;
-use aptos_types::{account_address::AccountAddress, epoch_state::EpochState};
+use gaptos::aptos_types::{account_address::AccountAddress, epoch_state::EpochState};
 use futures::channel::mpsc::UnboundedReceiver;
 use std::sync::{
     atomic::{AtomicBool, AtomicU64},

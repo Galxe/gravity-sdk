@@ -1,7 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos_dkg::algebra::{
+use gaptos::aptos_dkg::algebra::{
     evaluation_domain::BatchEvaluationDomain, lagrange::lagrange_coefficients,
 };
 use blstrs::Scalar;

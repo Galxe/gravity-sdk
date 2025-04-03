@@ -5,7 +5,7 @@ use crate::pvss::{
     traits::{transcript::Transcript, Convert, HasEncryptionPublicParams, SecretSharingConfig},
     Player, ThresholdConfig, WeightedConfig,
 };
-use aptos_crypto::{hash::CryptoHash, SigningKey, Uniform};
+use gaptos::aptos_crypto::{hash::CryptoHash, SigningKey, Uniform};
 use num_traits::Zero;
 use rand::{prelude::ThreadRng, thread_rng};
 use serde::Serialize;

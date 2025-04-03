@@ -4,11 +4,11 @@
 
 #![forbid(unsafe_code)]
 use anyhow::{anyhow, Result};
-use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_id_generator::{IdGenerator, U64IdGenerator};
-use aptos_infallible::RwLock;
-use aptos_storage_interface::{state_view::DbStateViewAtVersion, DbReader, DbReaderWriter};
-use aptos_types::{
+use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_id_generator::{IdGenerator, U64IdGenerator};
+use gaptos::aptos_infallible::RwLock;
+use gaptos::aptos_storage_interface::{state_view::DbStateViewAtVersion, DbReader, DbReaderWriter};
+use gaptos::aptos_types::{
     contract_event::ContractEvent,
     event::EventKey,
     on_chain_config::{
@@ -337,7 +337,7 @@ type SubscriptionId = u64;
 #[derive(Debug)]
 struct EventSubscription {
     pub event_buffer: Vec<ContractEvent>,
-    pub notification_sender: aptos_channels::aptos_channel::Sender<(), EventNotification>,
+    pub notification_sender: gaptos::aptos_channels::aptos_channel::Sender<(), EventNotification>,
 }
 
 impl EventSubscription {
@@ -361,7 +361,7 @@ impl EventSubscription {
 /// corresponding notifications.
 struct ReconfigSubscription {
     pub notification_sender:
-        aptos_channels::aptos_channel::Sender<(), ReconfigNotification<DbBackedOnChainConfig>>,
+        gaptos::aptos_channels::aptos_channel::Sender<(), ReconfigNotification<DbBackedOnChainConfig>>,
 }
 
 impl ReconfigSubscription {
@@ -442,7 +442,7 @@ pub type ReconfigNotificationListener<P> = NotificationListener<ReconfigNotifica
 /// The component responsible for listening to subscription notifications.
 #[derive(Debug)]
 pub struct NotificationListener<T> {
-    pub notification_receiver: aptos_channels::aptos_channel::Receiver<(), T>,
+    pub notification_receiver: gaptos::aptos_channels::aptos_channel::Receiver<(), T>,
 }
 
 impl<T> Stream for NotificationListener<T> {

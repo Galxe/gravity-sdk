@@ -8,7 +8,7 @@ use crate::{
     },
     transaction::authenticator::EphemeralPublicKey,
 };
-use aptos_crypto::{
+use gaptos::aptos_crypto::{
     ed25519::Ed25519PrivateKey,
     poseidon_bn254,
     traits::{PrivateKey, Uniform},

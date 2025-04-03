@@ -12,8 +12,8 @@ use crate::{
 };
 use anyhow::{bail, Result};
 use aptos_consensus_types::{block::Block, common::Payload};
-use aptos_crypto::HashValue;
-use aptos_types::transaction::{SignedTransaction, Transaction};
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_types::transaction::{SignedTransaction, Transaction};
 use clap::Parser;
 use std::{collections::HashMap, path::PathBuf};
 

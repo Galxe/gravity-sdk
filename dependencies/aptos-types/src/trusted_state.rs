@@ -14,7 +14,7 @@ use crate::{
     waypoint::Waypoint,
 };
 use anyhow::{bail, ensure, format_err, Result};
-use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
+use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};

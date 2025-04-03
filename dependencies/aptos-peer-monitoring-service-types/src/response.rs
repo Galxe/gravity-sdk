@@ -1,8 +1,8 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos_config::{config::PeerRole, network_id::PeerNetworkId};
-use aptos_types::{network_address::NetworkAddress, PeerId};
+use gaptos::aptos_config::{config::PeerRole, network_id::PeerNetworkId};
+use gaptos::aptos_types::{network_address::NetworkAddress, PeerId};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fmt, fmt::Display, time::Duration};
 use thiserror::Error;

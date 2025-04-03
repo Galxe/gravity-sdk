@@ -4,7 +4,7 @@
 
 #![allow(clippy::arc_with_non_send_sync)]
 
-use aptos_crypto::{
+use gaptos::aptos_crypto::{
     traits::{CryptoMaterialError, ValidCryptoMaterialStringExt},
     x25519,
 };
@@ -91,7 +91,7 @@ const MAX_DNS_NAME_SIZE: usize = 255;
 /// //               \  '-- uvarint number of protocols
 /// //                '-- length of encoded network address
 ///
-/// use aptos_types::network_address::NetworkAddress;
+/// use gaptos::aptos_types::network_address::NetworkAddress;
 /// use bcs;
 /// use std::{str::FromStr, convert::TryFrom};
 ///
@@ -325,8 +325,8 @@ impl NetworkAddress {
     /// ### Example
     ///
     /// ```rust
-    /// use aptos_crypto::{traits::ValidCryptoMaterialStringExt, x25519};
-    /// use aptos_types::network_address::NetworkAddress;
+    /// use gaptos::aptos_crypto::{traits::ValidCryptoMaterialStringExt, x25519};
+    /// use gaptos::aptos_types::network_address::NetworkAddress;
     /// use std::str::FromStr;
     ///
     /// let pubkey_str = "080e287879c918794170e258bfaddd75acac5b3e350419044655e4983a487120";
@@ -367,7 +367,7 @@ impl NetworkAddress {
     /// ### Example
     ///
     /// ```rust
-    /// use aptos_types::network_address::NetworkAddress;
+    /// use gaptos::aptos_types::network_address::NetworkAddress;
     /// use std::str::FromStr;
     ///
     /// let addr_str = "/ip4/1.2.3.4/tcp/6180/noise-ik/080e287879c918794170e258bfaddd75acac5b3e350419044655e4983a487120/handshake/0";

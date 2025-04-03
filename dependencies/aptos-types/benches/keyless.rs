@@ -4,7 +4,7 @@
 #[macro_use]
 extern crate criterion;
 
-use aptos_types::keyless::{
+use gaptos::aptos_types::keyless::{
     get_public_inputs_hash,
     test_utils::{get_sample_groth16_sig_and_pk, get_sample_jwk},
     Configuration,

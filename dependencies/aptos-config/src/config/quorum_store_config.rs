@@ -4,8 +4,8 @@
 use crate::config::{
     config_sanitizer::ConfigSanitizer, node_config_loader::NodeType, Error, NodeConfig,
 };
-use aptos_global_constants::DEFAULT_BUCKETS;
-use aptos_types::chain_id::ChainId;
+use gaptos::aptos_global_constants::DEFAULT_BUCKETS;
+use gaptos::aptos_types::chain_id::ChainId;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 

@@ -43,8 +43,8 @@ use crate::{
     state_store::state_key::{inner::StateKeyInner, StateKey},
 };
 use anyhow::{Error, Result};
-use aptos_crypto::hash::HashValue;
-use move_core_types::language_storage::{ModuleId, StructTag};
+use gaptos::aptos_crypto::hash::HashValue;
+use gaptos::move_core_types::language_storage::{ModuleId, StructTag};
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest::prelude::*;
 #[cfg(any(test, feature = "fuzzing"))]

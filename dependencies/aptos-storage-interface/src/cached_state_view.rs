@@ -5,9 +5,9 @@ use super::{FrozenSparseMerkleTree, SparseMerkleTree};
 use crate::{
     async_proof_fetcher::AsyncProofFetcher, metrics::TIMER, state_view::DbStateView, DbReader,
 };
-use aptos_crypto::HashValue;
-use aptos_experimental_runtimes::thread_manager::THREAD_MANAGER;
-use aptos_types::{
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_experimental_runtimes::thread_manager::THREAD_MANAGER;
+use gaptos::aptos_types::{
     proof::SparseMerkleProofExt,
     state_store::{
         errors::StateviewError, state_key::StateKey, state_storage_usage::StateStorageUsage,

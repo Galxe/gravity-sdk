@@ -6,7 +6,7 @@ use crate::on_chain_config::OnChainConfig;
 //     file_format_common,
 //     file_format_common::{IDENTIFIER_SIZE_MAX, LEGACY_IDENTIFIER_SIZE_MAX},
 // };
-use move_core_types::{
+use gaptos::move_core_types::{
     effects::{ChangeSet, Op},
     language_storage::CORE_CODE_ADDRESS,
 };

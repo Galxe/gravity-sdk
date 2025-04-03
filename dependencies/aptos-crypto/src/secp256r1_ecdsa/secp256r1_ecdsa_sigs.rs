@@ -10,7 +10,7 @@ use crate::{
     traits::{Signature as SignatureTrait, *},
 };
 use anyhow::{anyhow, Result};
-use aptos_crypto_derive::{key_name, DeserializeKey, SerializeKey};
+use gaptos::aptos_crypto_derive::{key_name, DeserializeKey, SerializeKey};
 use core::convert::TryFrom;
 use p256::NonZeroScalar;
 use serde::Serialize;

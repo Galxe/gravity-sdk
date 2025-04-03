@@ -5,8 +5,8 @@ use crate::{
     async_proof_fetcher::AsyncProofFetcher, cached_state_view::CachedStateView,
     state_delta::StateDelta, DbReader,
 };
-use aptos_crypto::HashValue;
-use aptos_types::{
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_types::{
     proof::accumulator::{InMemoryAccumulator, InMemoryTransactionAccumulator},
     state_store::{errors::StateviewError, state_storage_usage::StateStorageUsage, StateViewId},
     transaction::Version,

@@ -3,12 +3,12 @@
 
 //! Test file for the procedural macros CryptoHasher and BCSCryptoHash.
 
-use crate as aptos_crypto;
+use crate as gaptos::aptos_crypto;
 use crate::{
     hash::{CryptoHash, CryptoHasher, HASH_PREFIX},
     HashValue,
 };
-use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
+use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
 use serde::{Deserialize, Serialize};
 use tiny_keccak::{Hasher, Sha3};
 

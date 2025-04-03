@@ -7,8 +7,8 @@ use crate::{
     transaction::{BlockExecutableTransaction, Transaction},
     write_set::WriteOp,
 };
-use aptos_crypto::{hash::CryptoHash, HashValue};
-use move_core_types::{account_address::AccountAddress, language_storage::StructTag};
+use gaptos::aptos_crypto::{hash::CryptoHash, HashValue};
+use gaptos::move_core_types::{account_address::AccountAddress, language_storage::StructTag};
 // use move_vm_types::delayed_values::delayed_field_id::DelayedFieldID;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;

@@ -10,7 +10,7 @@ use crate::{
     metrics::METRICS_INGEST_BACKEND_REQUEST_DURATION,
     types::{auth::Claims, common::NodeType},
 };
-use aptos_types::PeerId;
+use gaptos::aptos_types::PeerId;
 use rand::Rng;
 use reqwest::{header::CONTENT_ENCODING, StatusCode};
 use std::{env, time::Duration};
@@ -206,7 +206,7 @@ fn peer_location_labels(context: &Context, peer_id: &PeerId) -> Vec<String> {
 mod test {
     use super::*;
     use crate::{peer_location::PeerLocation, tests::test_context, MetricsClient};
-    use aptos_types::{chain_id::ChainId, PeerId};
+    use gaptos::aptos_types::{chain_id::ChainId, PeerId};
     use httpmock::MockServer;
     use reqwest::Url;
     use std::str::FromStr;

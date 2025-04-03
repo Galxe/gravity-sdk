@@ -16,7 +16,7 @@ pub fn gcp_trace_id() -> Option<String> {
 #[macro_export]
 macro_rules! trace {
     ($($arg:tt)+) => {
-        $crate::log!(aptos_logger::Level::Trace, $($arg)+)
+        $crate::log!(gaptos::aptos_logger::Level::Trace, $($arg)+)
     };
 }
 
@@ -24,7 +24,7 @@ macro_rules! trace {
 #[macro_export]
 macro_rules! debug {
     ($($arg:tt)+) => {
-        $crate::log!(aptos_logger::Level::Debug, $($arg)+)
+        $crate::log!(gaptos::aptos_logger::Level::Debug, $($arg)+)
     };
 }
 
@@ -32,7 +32,7 @@ macro_rules! debug {
 #[macro_export]
 macro_rules! info {
     ($($arg:tt)+) => {
-        $crate::log!(aptos_logger::Level::Info, $($arg)+)
+        $crate::log!(gaptos::aptos_logger::Level::Info, $($arg)+)
     };
 }
 
@@ -40,7 +40,7 @@ macro_rules! info {
 #[macro_export]
 macro_rules! warn {
     ($($arg:tt)+) => {
-        $crate::log!(aptos_logger::Level::Warn, $($arg)+)
+        $crate::log!(gaptos::aptos_logger::Level::Warn, $($arg)+)
     };
 }
 
@@ -48,7 +48,7 @@ macro_rules! warn {
 #[macro_export]
 macro_rules! error {
     ($($arg:tt)+) => {
-        $crate::log!(aptos_logger::Level::Error, $($arg)+)
+        $crate::log!(gaptos::aptos_logger::Level::Error, $($arg)+)
     };
 }
 
@@ -58,9 +58,9 @@ macro_rules! log {
     // Entry, Log Level + stuff
     ($level:expr, $($args:tt)+) => {{
         if let Some(trace_id) = $crate::gcp_logger::gcp_trace_id() {
-            aptos_logger::log!($level, "logging.googleapis.com/trace"=%trace_id, $($args)+)
+            gaptos::aptos_logger::log!($level, "logging.googleapis.com/trace"=%trace_id, $($args)+)
         } else {
-            aptos_logger::log!($level, $($args)+)
+            gaptos::aptos_logger::log!($level, $($args)+)
         }
     }};
 }

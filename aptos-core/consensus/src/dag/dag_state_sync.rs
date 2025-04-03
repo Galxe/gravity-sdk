@@ -14,11 +14,11 @@ use crate::{
     pipeline::execution_client::TExecutionClient,
 };
 use anyhow::{bail, ensure};
-use aptos_channels::aptos_channel;
+use gaptos::aptos_channels::aptos_channel;
 use aptos_consensus_types::common::{Author, Round};
-use aptos_logger::{debug, error};
-use aptos_time_service::TimeService;
-use aptos_types::{
+use gaptos::aptos_logger::{debug, error};
+use gaptos::aptos_time_service::TimeService;
+use gaptos::aptos_types::{
     epoch_change::EpochChangeProof, epoch_state::EpochState, ledger_info::LedgerInfoWithSignatures,
 };
 use core::fmt;

@@ -8,7 +8,7 @@ use crate::{
     },
     utils::get_genesis_txn,
 };
-use aptos_types::{
+use gaptos::aptos_types::{
     chain_id::ChainId,
     on_chain_config::OnChainConfig,
     state_store::state_key::StateKey,

@@ -24,14 +24,14 @@ use crate::{
     transaction::{TransactionInfo, Version},
 };
 use anyhow::{ensure, Result};
-use aptos_crypto::{
+use gaptos::aptos_crypto::{
     hash::{
         CryptoHash, CryptoHasher, EventAccumulatorHasher, SparseMerkleInternalHasher,
         TestOnlyHasher, TransactionAccumulatorHasher,
     },
     HashValue,
 };
-use aptos_crypto_derive::CryptoHasher;
+use gaptos::aptos_crypto_derive::CryptoHasher;
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{CryptoStorage, Error, GetResponse, KVStorage, PublicKeyResponse};
-use aptos_crypto::{
+use gaptos::aptos_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature},
     hash::CryptoHash,
 };
@@ -137,7 +137,7 @@ impl<S: CryptoStorage> CryptoStorage for Namespaced<S> {
 mod test {
     use super::*;
     use crate::OnDiskStorage;
-    use aptos_temppath::TempPath;
+    use gaptos::aptos_temppath::TempPath;
 
     #[test]
     fn test_different_namespaces() {

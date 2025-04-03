@@ -9,7 +9,7 @@ use crate::{
     traits::*,
 };
 use anyhow::{anyhow, Result};
-use aptos_crypto_derive::{DeserializeKey, SerializeKey};
+use gaptos::aptos_crypto_derive::{DeserializeKey, SerializeKey};
 use core::convert::TryFrom;
 use serde::Serialize;
 use std::{cmp::Ordering, fmt};

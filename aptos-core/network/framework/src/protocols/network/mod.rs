@@ -11,11 +11,11 @@ use crate::{
     protocols::wire::messaging::v1::{IncomingRequest, NetworkMessage},
     ProtocolId,
 };
-use aptos_channels::aptos_channel;
-use aptos_config::network_id::PeerNetworkId;
-use aptos_logger::prelude::*;
-use aptos_short_hex_str::AsShortHexStr;
-use aptos_types::{network_address::NetworkAddress, PeerId};
+use gaptos::aptos_channels::aptos_channel;
+use gaptos::aptos_config::network_id::PeerNetworkId;
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_short_hex_str::AsShortHexStr;
+use gaptos::aptos_types::{network_address::NetworkAddress, PeerId};
 use bytes::Bytes;
 use futures::{
     channel::oneshot,

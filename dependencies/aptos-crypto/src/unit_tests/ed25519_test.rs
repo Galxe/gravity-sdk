@@ -3,7 +3,7 @@
 
 #![allow(clippy::redundant_clone)] // Required to work around prop_assert_eq! limitations
 
-use crate as aptos_crypto;
+use crate as gaptos::aptos_crypto;
 use crate::{
     ed25519::{
         Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature, ED25519_PRIVATE_KEY_LENGTH,
@@ -16,7 +16,7 @@ use crate::{
     traits::*,
     x25519,
 };
-use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
+use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
 use core::{
     convert::TryFrom,
     ops::{Add, Index, IndexMut, Mul, Neg},

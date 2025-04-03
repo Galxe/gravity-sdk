@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{block_info::Round, on_chain_config::OnChainConfig};
-use aptos_crypto::HashValue;
-use aptos_crypto_derive::SilentDebug;
-use aptos_dkg::{weighted_vuf, weighted_vuf::traits::WeightedVUF};
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_crypto_derive::SilentDebug;
+use gaptos::aptos_dkg::{weighted_vuf, weighted_vuf::traits::WeightedVUF};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 

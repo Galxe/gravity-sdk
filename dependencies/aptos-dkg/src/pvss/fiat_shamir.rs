@@ -12,7 +12,7 @@ use crate::{
     utils::random::random_scalar_from_uniform_bytes,
     SCALAR_NUM_BYTES,
 };
-use aptos_crypto::ValidCryptoMaterial;
+use gaptos::aptos_crypto::ValidCryptoMaterial;
 use blstrs::Scalar;
 use ff::PrimeField;
 use serde::Serialize;

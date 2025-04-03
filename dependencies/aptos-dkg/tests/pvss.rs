@@ -6,8 +6,8 @@
 #![allow(clippy::let_and_return)]
 
 //! PVSS scheme-independent testing
-use aptos_crypto::hash::CryptoHash;
-use aptos_dkg::{
+use gaptos::aptos_crypto::hash::CryptoHash;
+use gaptos::aptos_dkg::{
     constants::{G1_PROJ_NUM_BYTES, G2_PROJ_NUM_BYTES},
     pvss::{
         das,

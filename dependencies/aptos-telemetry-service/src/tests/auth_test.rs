@@ -9,13 +9,13 @@ use crate::{
         common::NodeType,
     },
 };
-use aptos_config::config::{Peer, PeerRole, PeerSet, RoleType};
-use aptos_crypto::{
+use gaptos::aptos_config::config::{Peer, PeerRole, PeerSet, RoleType};
+use gaptos::aptos_crypto::{
     noise,
     noise::{InitiatorHandshakeState, NoiseConfig},
     x25519, Uniform,
 };
-use aptos_types::{
+use gaptos::aptos_types::{
     account_address,
     chain_id::ChainId,
     network_address::{

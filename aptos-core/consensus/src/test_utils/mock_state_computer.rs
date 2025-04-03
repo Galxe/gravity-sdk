@@ -13,10 +13,10 @@ use crate::{
 };
 use anyhow::Result;
 use aptos_consensus_types::{block::Block, pipeline_execution_result::PipelineExecutionResult, pipelined_block::PipelinedBlock};
-use aptos_crypto::HashValue;
+use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::{ExecutorError, ExecutorResult, StateComputeResult};
-use aptos_logger::debug;
-use aptos_types::{
+use gaptos::aptos_logger::debug;
+use gaptos::aptos_types::{
     block_executor::config::BlockExecutorConfigFromOnchain, epoch_state::EpochState,
     ledger_info::LedgerInfoWithSignatures, randomness::Randomness,
 };

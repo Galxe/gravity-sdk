@@ -19,8 +19,8 @@
 pub mod grpc_network_service;
 pub mod network_controller;
 
-use aptos_logger::{info, trace, warn, Schema};
-use aptos_metrics_core::{register_int_counter_vec, IntCounterVec};
+use gaptos::aptos_logger::{info, trace, warn, Schema};
+use gaptos::aptos_metrics_core::{register_int_counter_vec, IntCounterVec};
 use once_cell::sync::Lazy;
 use serde::Serialize;
 use std::{

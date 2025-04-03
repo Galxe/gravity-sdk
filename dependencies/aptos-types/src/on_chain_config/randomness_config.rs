@@ -9,7 +9,7 @@ use crate::{
 };
 use anyhow::anyhow;
 use fixed::types::U64F64;
-use move_core_types::value::{MoveStruct, MoveValue};
+use gaptos::move_core_types::value::{MoveStruct, MoveValue};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize)]

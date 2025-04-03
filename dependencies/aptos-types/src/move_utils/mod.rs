@@ -3,7 +3,7 @@
 
 use crate::account_address::AccountAddress;
 use anyhow::{bail, Context};
-use move_core_types::{identifier::Identifier, language_storage::ModuleId};
+use gaptos::move_core_types::{identifier::Identifier, language_storage::ModuleId};
 use std::str::FromStr;
 
 /// Identifier of a module member (function or struct).

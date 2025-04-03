@@ -4,10 +4,10 @@
 macro_rules! dealt_secret_key_share_impl {
     ($GTProjective:ident, $gt:ident) => {
         use crate::pvss::dealt_secret_key::$gt::{DealtSecretKey, DEALT_SK_NUM_BYTES};
-        use aptos_crypto::{
+        use gaptos::aptos_crypto::{
             CryptoMaterialError, ValidCryptoMaterial, ValidCryptoMaterialStringExt,
         };
-        use aptos_crypto_derive::{DeserializeKey, SerializeKey, SilentDebug, SilentDisplay};
+        use gaptos::aptos_crypto_derive::{DeserializeKey, SerializeKey, SilentDebug, SilentDisplay};
         use blstrs::$GTProjective;
 
         /// The size of a serialized *dealt secret key share*.

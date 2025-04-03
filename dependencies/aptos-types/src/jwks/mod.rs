@@ -10,9 +10,9 @@ use crate::{
     on_chain_config::OnChainConfig,
 };
 use anyhow::{bail, Context};
-use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
+use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
 use jwk::JWKMoveStruct;
-use move_core_types::{
+use gaptos::move_core_types::{
     ident_str,
     identifier::IdentStr,
     language_storage::TypeTag,

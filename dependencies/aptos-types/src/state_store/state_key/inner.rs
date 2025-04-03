@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{access_path::AccessPath, state_store::table::TableHandle};
-use aptos_crypto_derive::CryptoHasher;
+use gaptos::aptos_crypto_derive::CryptoHasher;
 use bytes::{BufMut, Bytes, BytesMut};
 use num_derive::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};

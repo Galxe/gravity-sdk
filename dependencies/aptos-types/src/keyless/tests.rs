@@ -11,7 +11,7 @@ use crate::keyless::{
     Configuration, EphemeralCertificate, KeylessPublicKey, KeylessSignature,
     DEVNET_VERIFICATION_KEY,
 };
-use aptos_crypto::poseidon_bn254::keyless::fr_to_bytes_le;
+use gaptos::aptos_crypto::poseidon_bn254::keyless::fr_to_bytes_le;
 use std::ops::{AddAssign, Deref};
 
 /// Outputs:

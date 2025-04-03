@@ -9,8 +9,8 @@
 //! # Examples
 //!
 //! ```
-//! use aptos_crypto_derive::{CryptoHasher, BCSCryptoHash};
-//! use aptos_crypto::{
+//! use gaptos::aptos_crypto_derive::{CryptoHasher, BCSCryptoHash};
+//! use gaptos::aptos_crypto::{
 //!     secp256r1_ecdsa::*,
 //!     traits::{Signature, SigningKey, Uniform},
 //!     test_utils::KeyPair

@@ -19,9 +19,9 @@ use crate::{
     transport::ConnectionMetadata,
     ProtocolId,
 };
-use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_config::network_id::NetworkId;
-use aptos_time_service::{MockTimeService, TimeService};
+use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_config::network_id::NetworkId;
+use gaptos::aptos_time_service::{MockTimeService, TimeService};
 use futures::future;
 use maplit::hashmap;
 use std::sync::Arc;
@@ -42,7 +42,7 @@ impl TestHarness {
     fn new_permissive(
         ping_failures_tolerated: u64,
     ) -> (Self, HealthChecker<NetworkClient<HealthCheckerMsg>>) {
-        ::aptos_logger::Logger::init_for_testing();
+        ::gaptos::aptos_logger::Logger::init_for_testing();
         let mock_time = TimeService::mock();
 
         let (peer_mgr_reqs_tx, peer_mgr_reqs_rx) = aptos_channel::new(QueueStyle::FIFO, 1, None);

@@ -4,7 +4,7 @@
 use crate::consensus_observer::network_message::{
     ConsensusObserverMessage, ConsensusObserverResponse,
 };
-use aptos_config::network_id::{NetworkId, PeerNetworkId};
+use gaptos::aptos_config::network_id::{NetworkId, PeerNetworkId};
 use aptos_network::{
     application::interface::NetworkServiceEvents,
     protocols::{

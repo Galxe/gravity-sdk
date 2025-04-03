@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::config::Error;
-use aptos_secure_storage::{InMemoryStorage, Namespaced, OnDiskStorage, Storage, VaultStorage};
+use gaptos::aptos_secure_storage::{InMemoryStorage, Namespaced, OnDiskStorage, Storage, VaultStorage};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
@@ -292,7 +292,7 @@ vault:
 
     #[test]
     fn test_token_reading() {
-        let temppath = aptos_temppath::TempPath::new();
+        let temppath = gaptos::aptos_temppath::TempPath::new();
         temppath.create_as_file().unwrap();
         let mut file = File::create(temppath.path()).unwrap();
         file.write_all(b"disk_token").unwrap();

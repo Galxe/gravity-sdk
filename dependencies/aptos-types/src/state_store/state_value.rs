@@ -5,11 +5,11 @@ use crate::{
     on_chain_config::CurrentTimeMicroseconds, proof::SparseMerkleRangeProof,
     state_store::state_key::StateKey, transaction::Version,
 };
-use aptos_crypto::{
+use gaptos::aptos_crypto::{
     hash::{CryptoHash, SPARSE_MERKLE_PLACEHOLDER_HASH},
     HashValue,
 };
-use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
+use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
 use bytes::Bytes;
 use once_cell::sync::OnceCell;
 #[cfg(any(test, feature = "fuzzing"))]

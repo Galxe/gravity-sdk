@@ -15,7 +15,7 @@ use crate::{
         TransactionPayload,
     },
 };
-use aptos_crypto::{ed25519::*, traits::*};
+use gaptos::aptos_crypto::{ed25519::*, traits::*};
 
 const MAX_GAS_AMOUNT: u64 = 1_000_000;
 const TEST_GAS_PRICE: u64 = 100;

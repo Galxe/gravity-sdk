@@ -14,13 +14,13 @@ use crate::{
     liveness::proposer_election::{choose_index, ProposerElection},
 };
 use anyhow::{ensure, Result};
-use aptos_bitvec::BitVec;
+use gaptos::aptos_bitvec::BitVec;
 use aptos_consensus_types::common::{Author, Round};
-use aptos_crypto::HashValue;
-use aptos_infallible::{Mutex, MutexGuard};
-use aptos_logger::prelude::*;
-use aptos_storage_interface::DbReader;
-use aptos_types::{
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_infallible::{Mutex, MutexGuard};
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_storage_interface::DbReader;
+use gaptos::aptos_types::{
     account_config::NewBlockEvent, epoch_change::EpochChangeProof, epoch_state::EpochState,
 };
 use std::{

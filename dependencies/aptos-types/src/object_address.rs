@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::account_address::create_object_address;
-use move_core_types::account_address::AccountAddress;
+use gaptos::move_core_types::account_address::AccountAddress;
 
 const OBJECT_CODE_DEPLOYMENT_DOMAIN_SEPARATOR: &[u8] = b"aptos_framework::object_code_deployment";
 

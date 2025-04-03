@@ -2,7 +2,7 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos_log_derive::Schema;
+use gaptos::aptos_log_derive::Schema;
 
 #[test]
 fn simple() {
@@ -88,5 +88,5 @@ fn error_trait_object() {
         .debug_error(&debug_error)
         .display_error(&display_error);
 
-    ::aptos_logger::info!(t);
+    ::gaptos::aptos_logger::info!(t);
 }

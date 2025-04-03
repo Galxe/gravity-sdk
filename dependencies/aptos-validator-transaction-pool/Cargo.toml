@@ -11,5 +11,5 @@ rust-version.workspace = true
 
 [dependencies]
 aptos-crypto = { workspace = true }
-aptos-types = { workspace = true }
-aptos-infallible = { workspace = true }
+
+gaptos = { workspace = true }

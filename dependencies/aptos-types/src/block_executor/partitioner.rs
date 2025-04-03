@@ -6,7 +6,7 @@ use crate::transaction::{
     signature_verified_transaction::{into_signature_verified_block, SignatureVerifiedTransaction},
     Transaction,
 };
-use aptos_crypto::HashValue;
+use gaptos::aptos_crypto::HashValue;
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,

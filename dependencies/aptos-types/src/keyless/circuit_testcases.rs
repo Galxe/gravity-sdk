@@ -17,7 +17,7 @@ use crate::{
     },
     transaction::authenticator::EphemeralPublicKey,
 };
-use aptos_crypto::{ed25519::Ed25519PrivateKey, PrivateKey, Uniform};
+use gaptos::aptos_crypto::{ed25519::Ed25519PrivateKey, PrivateKey, Uniform};
 use ark_bn254::Bn254;
 use ark_groth16::{PreparedVerifyingKey, VerifyingKey};
 use once_cell::sync::Lazy;

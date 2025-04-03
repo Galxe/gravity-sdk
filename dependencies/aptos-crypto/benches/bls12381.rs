@@ -4,14 +4,14 @@
 #[macro_use]
 extern crate criterion;
 
-use aptos_crypto::{
+use gaptos::aptos_crypto::{
     bls12381,
     bls12381::ProofOfPossession,
     test_utils::{random_keypairs, random_subset, KeyPair},
     traits::{Signature, SigningKey, Uniform},
     PrivateKey,
 };
-use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
+use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
 use criterion::{
     measurement::Measurement, AxisScale, BatchSize, BenchmarkGroup, BenchmarkId, Criterion,
     PlotConfiguration, Throughput,

@@ -9,7 +9,7 @@ use crate::{
     traits::{CryptoMaterialError, ValidCryptoMaterial, ValidCryptoMaterialStringExt},
 };
 use anyhow::{anyhow, Result};
-use aptos_crypto_derive::{key_name, DeserializeKey, SerializeKey, SilentDebug, SilentDisplay};
+use gaptos::aptos_crypto_derive::{key_name, DeserializeKey, SerializeKey, SilentDebug, SilentDisplay};
 use core::convert::TryFrom;
 use serde::Serialize;
 

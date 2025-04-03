@@ -7,7 +7,7 @@ use crate::{
     metrics::{VALIDATOR_SET_UPDATE_FAILED_COUNT, VALIDATOR_SET_UPDATE_SUCCESS_COUNT},
     types::common::{ChainCommonName, EpochedPeerStore},
 };
-use aptos_infallible::RwLock;
+use gaptos::aptos_infallible::RwLock;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::time;
 
@@ -76,7 +76,7 @@ impl PeerSetCacheUpdater {
         url: &str,
     ) -> Result<(), ValidatorCacheUpdateError> {
         todo!();
-        // let client = aptos_rest_client::Client::new(Url::parse(url).map_err(|e| {
+        // let client = gaptos::aptos_rest_client::Client::new(Url::parse(url).map_err(|e| {
         //     error!("invalid url for chain_id {}: {}", chain_name, e);
         //     ValidatorCacheUpdateError::InvalidUrl
         // })?);
@@ -172,14 +172,14 @@ impl PeerSetCacheUpdater {
 // #[cfg(test)]
 // mod tests {
 //     use super::PeerSetCacheUpdater;
-//     use aptos_crypto::{
+//     use gaptos::aptos_crypto::{
 //         bls12381::{PrivateKey, PublicKey},
 //         test_utils::KeyPair,
 //         Uniform,
 //     };
-//     use aptos_infallible::RwLock;
-//     use aptos_rest_client::aptos_api_types::*;
-//     use aptos_types::{
+//     use gaptos::aptos_infallible::RwLock;
+//     use gaptos::aptos_rest_client::aptos_api_types::*;
+//     use gaptos::aptos_types::{
 //         chain_id::ChainId, network_address::NetworkAddress, on_chain_config::ValidatorSet,
 //         validator_config::ValidatorConfig, validator_info::ValidatorInfo, PeerId,
 //     };

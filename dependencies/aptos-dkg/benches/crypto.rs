@@ -3,7 +3,7 @@
 
 #![allow(clippy::useless_conversion)]
 
-use aptos_dkg::{
+use gaptos::aptos_dkg::{
     algebra::{
         evaluation_domain::{BatchEvaluationDomain, EvaluationDomain},
         fft::fft_assign,
@@ -18,7 +18,7 @@ use aptos_dkg::{
     },
     weighted_vuf::pinkas::MIN_MULTIPAIR_NUM_JOBS,
 };
-use aptos_runtimes::spawn_rayon_thread_pool;
+use gaptos::aptos_runtimes::spawn_rayon_thread_pool;
 use blstrs::{G1Projective, G2Projective, Gt};
 use criterion::{
     criterion_group, criterion_main, measurement::Measurement, BenchmarkGroup, BenchmarkId,

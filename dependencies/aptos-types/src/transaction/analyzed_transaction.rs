@@ -11,11 +11,11 @@ use crate::{
         TransactionPayload,
     },
 };
-use aptos_crypto::HashValue;
-pub use move_core_types::abi::{
+use gaptos::aptos_crypto::HashValue;
+pub use gaptos::move_core_types::abi::{
     ArgumentABI, ScriptFunctionABI as EntryFunctionABI, TransactionScriptABI, TypeArgumentABI,
 };
-use move_core_types::{account_address::AccountAddress, language_storage::StructTag};
+use gaptos::move_core_types::{account_address::AccountAddress, language_storage::StructTag};
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 

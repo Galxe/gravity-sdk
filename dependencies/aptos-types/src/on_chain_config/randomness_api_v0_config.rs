@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{move_utils::as_move_value::AsMoveValue, on_chain_config::OnChainConfig};
-use move_core_types::value::{MoveStruct, MoveValue};
+use gaptos::move_core_types::value::{MoveStruct, MoveValue};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize)]

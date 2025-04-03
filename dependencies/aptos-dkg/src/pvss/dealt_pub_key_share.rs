@@ -8,10 +8,10 @@
 macro_rules! dealt_pub_key_share_impl {
     ($GTProjective:ident, $gt:ident) => {
         use crate::pvss::dealt_pub_key::$gt::{DealtPubKey, DEALT_PK_NUM_BYTES};
-        use aptos_crypto::{
+        use gaptos::aptos_crypto::{
             CryptoMaterialError, ValidCryptoMaterial, ValidCryptoMaterialStringExt,
         };
-        use aptos_crypto_derive::{DeserializeKey, SerializeKey};
+        use gaptos::aptos_crypto_derive::{DeserializeKey, SerializeKey};
         use blstrs::$GTProjective;
 
         /// The size of a serialized *dealt public key share*.

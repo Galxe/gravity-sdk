@@ -4,7 +4,7 @@
 #![allow(clippy::ptr_arg)]
 #![allow(clippy::needless_borrow)]
 
-use aptos_dkg::{
+use gaptos::aptos_dkg::{
     pvss,
     pvss::{
         test_utils,
@@ -15,7 +15,7 @@ use aptos_dkg::{
     utils::random::random_scalar,
     weighted_vuf::{pinkas::PinkasWUF, traits::WeightedVUF},
 };
-use aptos_runtimes::spawn_rayon_thread_pool;
+use gaptos::aptos_runtimes::spawn_rayon_thread_pool;
 use rand::{rngs::StdRng, thread_rng};
 use rand_core::SeedableRng;
 use sha3::{Digest, Sha3_256};

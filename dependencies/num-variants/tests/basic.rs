@@ -7,7 +7,7 @@
 // TODO: There are no negative tests at the moment (e.g. deriving NumVariants on a struct or union).
 // Add some, possibly using compiletest-rs: https://github.com/laumann/compiletest-rs
 
-use aptos_num_variants::NumVariants;
+use gaptos::aptos_num_variants::NumVariants;
 
 #[derive(NumVariants)]
 enum BasicEnum {

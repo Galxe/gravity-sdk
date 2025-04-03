@@ -10,11 +10,11 @@
 //! - the `SilentDebug` and SilentDisplay macros are meant to be used on private key types, and
 //!   elide their input for confidentiality.
 //! - the `Deref` macro helps derive the canonical instances on new types.
-//! - the derive macros for `aptos_crypto::traits`, namely `ValidCryptoMaterial`, `PublicKey`, `PrivateKey`,
+//! - the derive macros for `gaptos::aptos_crypto::traits`, namely `ValidCryptoMaterial`, `PublicKey`, `PrivateKey`,
 //!   `VerifyingKey`, `SigningKey` and `Signature` are meant to be derived on simple unions of types
 //!   implementing these traits.
-//! - the derive macro for `aptos_crypto::hash::CryptoHasher`, which defines
-//!   the domain-separation hasher structures described in `aptos_crypto::hash`
+//! - the derive macro for `gaptos::aptos_crypto::hash::CryptoHasher`, which defines
+//!   the domain-separation hasher structures described in `gaptos::aptos_crypto::hash`
 //!   (look there for details). This derive macro has for sole difference that it
 //!   automatically picks a unique salt for you, using the Serde name. For a container `Foo`,
 //!   this is usually equivalent to:
@@ -52,12 +52,12 @@
 //!
 //! ```ignore
 //! # #[macro_use] extern crate crypto-derive;
-//! use aptos_crypto::{
+//! use gaptos::aptos_crypto::{
 //!     hash::HashValue,
 //!     bls12381::{BLS12381PrivateKey, BLS12381PublicKey, BLS12381Signature},
 //!     ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature},
 //! };
-//! use aptos_crypto_derive::{
+//! use gaptos::aptos_crypto_derive::{
 //!     SilentDebug, PrivateKey, PublicKey, Signature, SigningKey, ValidCryptoMaterial, VerifyingKey,
 //! };
 //!
@@ -350,7 +350,7 @@ pub fn derive_enum_signature(input: TokenStream) -> TokenStream {
 }
 
 // There is a unit test for this logic in the crypto crate, at
-// aptos_crypto::unit_tests::cryptohasher — you may have to modify it if you
+// gaptos::aptos_crypto::unit_tests::cryptohasher — you may have to modify it if you
 // edit the below.
 #[proc_macro_derive(CryptoHasher)]
 pub fn hasher_dispatch(input: TokenStream) -> TokenStream {
@@ -382,21 +382,21 @@ pub fn hasher_dispatch(input: TokenStream) -> TokenStream {
     let out = quote!(
         /// Cryptographic hasher for an BCS-serializable #item
         #[derive(Clone)]
-        pub struct #hasher_name(aptos_crypto::hash::DefaultHasher);
+        pub struct #hasher_name(gaptos::aptos_crypto::hash::DefaultHasher);
 
-        static #static_seed_name: aptos_crypto::_once_cell::sync::OnceCell<[u8; 32]> = aptos_crypto::_once_cell::sync::OnceCell::new();
+        static #static_seed_name: gaptos::aptos_crypto::_once_cell::sync::OnceCell<[u8; 32]> = gaptos::aptos_crypto::_once_cell::sync::OnceCell::new();
 
         impl #hasher_name {
             fn new() -> Self {
-                let name = aptos_crypto::_serde_name::trace_name::<#type_name #param>()
+                let name = gaptos::aptos_crypto::_serde_name::trace_name::<#type_name #param>()
                     .expect("The `CryptoHasher` macro only applies to structs and enums");
                 #hasher_name(
-                    aptos_crypto::hash::DefaultHasher::new(&name.as_bytes()))
+                    gaptos::aptos_crypto::hash::DefaultHasher::new(&name.as_bytes()))
             }
         }
 
-        static #static_hasher_name: aptos_crypto::_once_cell::sync::Lazy<#hasher_name> =
-            aptos_crypto::_once_cell::sync::Lazy::new(|| #hasher_name::new());
+        static #static_hasher_name: gaptos::aptos_crypto::_once_cell::sync::Lazy<#hasher_name> =
+            gaptos::aptos_crypto::_once_cell::sync::Lazy::new(|| #hasher_name::new());
 
 
         impl std::default::Default for #hasher_name
@@ -406,12 +406,12 @@ pub fn hasher_dispatch(input: TokenStream) -> TokenStream {
             }
         }
 
-        impl aptos_crypto::hash::CryptoHasher for #hasher_name {
+        impl gaptos::aptos_crypto::hash::CryptoHasher for #hasher_name {
             fn seed() -> &'static [u8; 32] {
                 #static_seed_name.get_or_init(|| {
-                    let name = aptos_crypto::_serde_name::trace_name::<#type_name #param>()
+                    let name = gaptos::aptos_crypto::_serde_name::trace_name::<#type_name #param>()
                         .expect("The `CryptoHasher` macro only applies to structs and enums.").as_bytes();
-                    aptos_crypto::hash::DefaultHasher::prefixed_hash(&name)
+                    gaptos::aptos_crypto::hash::DefaultHasher::prefixed_hash(&name)
                 })
             }
 
@@ -419,14 +419,14 @@ pub fn hasher_dispatch(input: TokenStream) -> TokenStream {
                 self.0.update(bytes);
             }
 
-            fn finish(self) -> aptos_crypto::hash::HashValue {
+            fn finish(self) -> gaptos::aptos_crypto::hash::HashValue {
                 self.0.finish()
             }
         }
 
         impl std::io::Write for #hasher_name {
             fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-                use aptos_crypto::hash::CryptoHasher;
+                use gaptos::aptos_crypto::hash::CryptoHasher;
 
                 self.0.update(bytes);
                 Ok(bytes.len())
@@ -452,11 +452,11 @@ pub fn bcs_crypto_hash_dispatch(input: TokenStream) -> TokenStream {
     let generics = add_trait_bounds(ast.generics);
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let out = quote!(
-        impl #impl_generics aptos_crypto::hash::CryptoHash for #name #ty_generics #where_clause {
+        impl #impl_generics gaptos::aptos_crypto::hash::CryptoHash for #name #ty_generics #where_clause {
             type Hasher = #hasher_name;
 
-            fn hash(&self) -> aptos_crypto::hash::HashValue {
-                use aptos_crypto::hash::CryptoHasher;
+            fn hash(&self) -> gaptos::aptos_crypto::hash::HashValue {
+                use gaptos::aptos_crypto::hash::CryptoHasher;
 
                 let mut state = Self::Hasher::default();
                 bcs::serialize_into(&mut state, &self).expect(#error_msg);

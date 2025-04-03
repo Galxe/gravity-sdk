@@ -9,8 +9,8 @@ use crate::{
         telemetry::{TelemetryDump, TelemetryEvent},
     },
 };
-use aptos_config::config::PeerSet;
-use aptos_types::{chain_id::ChainId, PeerId};
+use gaptos::aptos_config::config::PeerSet;
+use gaptos::aptos_types::{chain_id::ChainId, PeerId};
 use chrono::Utc;
 use serde_json::json;
 use std::collections::BTreeMap;

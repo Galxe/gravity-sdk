@@ -3,14 +3,14 @@
 
 // This is necessary for the derive macros which rely on being used in a
 // context where the crypto crate is external
-use crate as aptos_crypto;
+use crate as gaptos::aptos_crypto;
 use crate::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature},
     multi_ed25519::{MultiEd25519PrivateKey, MultiEd25519PublicKey, MultiEd25519Signature},
     test_utils::{random_serializable_struct, uniform_keypair_strategy},
     traits::*,
 };
-use aptos_crypto_derive::{
+use gaptos::aptos_crypto_derive::{
     PrivateKey, PublicKey, Signature, SigningKey, SilentDebug, ValidCryptoMaterial, VerifyingKey,
 };
 use proptest::prelude::*;

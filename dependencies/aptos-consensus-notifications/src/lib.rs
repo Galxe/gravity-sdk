@@ -4,7 +4,7 @@
 
 #![forbid(unsafe_code)]
 
-use aptos_types::{
+use gaptos::aptos_types::{
     contract_event::ContractEvent, ledger_info::LedgerInfoWithSignatures, transaction::Transaction,
 };
 use async_trait::async_trait;
@@ -272,8 +272,8 @@ impl ConsensusSyncNotification {
 #[cfg(test)]
 mod tests {
     use crate::{ConsensusNotification, ConsensusNotificationSender, Error};
-    use aptos_crypto::{ed25519::Ed25519PrivateKey, HashValue, PrivateKey, SigningKey, Uniform};
-    use aptos_types::{
+    use gaptos::aptos_crypto::{ed25519::Ed25519PrivateKey, HashValue, PrivateKey, SigningKey, Uniform};
+    use gaptos::aptos_types::{
         account_address::AccountAddress,
         aggregate_signature::AggregateSignature,
         block_info::BlockInfo,
@@ -285,7 +285,7 @@ mod tests {
     };
     use claims::{assert_err, assert_matches, assert_ok};
     use futures::{executor::block_on, FutureExt, StreamExt};
-    use move_core_types::language_storage::TypeTag;
+    use gaptos::move_core_types::language_storage::TypeTag;
     use std::time::Duration;
     use tokio::runtime::Runtime;
 
@@ -451,6 +451,6 @@ mod tests {
     }
 
     fn create_runtime() -> Runtime {
-        aptos_runtimes::spawn_named_runtime("test".into(), None)
+        gaptos::aptos_runtimes::spawn_named_runtime("test".into(), None)
     }
 }
