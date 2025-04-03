@@ -18,7 +18,7 @@ jobs:
     - name: update darling
       run: cargo update -p darling --precise 0.20.10
     - name: Build
-      run: cargo build --bin gravity_node --profile quick-release
+      run: RUSTFLAGS="--cfg tokio_unstable" cargo build --bin gravity_node --profile quick-release
     # - name: Run tests
     #   run: cargo test --verbose
     # - name: Check formatting
