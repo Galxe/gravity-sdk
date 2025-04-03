@@ -30,12 +30,12 @@ use aptos_consensus_types::{
     timeout_2chain::TwoChainTimeoutCertificate,
     wrapped_ledger_info::WrappedLedgerInfo,
 };
-use aptos_crypto::HashValue;
+use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::StateComputeResult;
-use aptos_infallible::{Mutex, RwLock};
-use aptos_logger::prelude::*;
+use gaptos::aptos_infallible::{Mutex, RwLock};
+use gaptos::aptos_logger::prelude::*;
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
-use aptos_types::{
+use gaptos::aptos_types::{
     aggregate_signature::AggregateSignature,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
 };

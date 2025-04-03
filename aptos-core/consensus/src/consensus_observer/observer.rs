@@ -27,21 +27,21 @@ use crate::{
     pipeline::execution_client::TExecutionClient,
     state_replication::StateComputerCommitCallBackType,
 };
-use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_config::{config::NodeConfig, network_id::PeerNetworkId};
+use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_config::{config::NodeConfig, network_id::PeerNetworkId};
 use aptos_consensus_types::{pipeline, pipelined_block::PipelinedBlock};
-use aptos_crypto::{bls12381, Genesis};
-use aptos_event_notifications::{DbBackedOnChainConfig, ReconfigNotificationListener};
-use aptos_infallible::Mutex;
-use aptos_logger::{debug, error, info, warn};
+use gaptos::aptos_crypto::{bls12381, Genesis};
+use gaptos::aptos_event_notifications::{DbBackedOnChainConfig, ReconfigNotificationListener};
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_logger::{debug, error, info, warn};
 use aptos_network::{
     application::{interface::NetworkClient, metadata::PeerMetadata},
     protocols::wire::handshake::v1::ProtocolId,
 };
-use aptos_reliable_broadcast::DropGuard;
-use aptos_storage_interface::DbReader;
-use aptos_time_service::TimeService;
-use aptos_types::{
+use gaptos::aptos_reliable_broadcast::DropGuard;
+use gaptos::aptos_storage_interface::DbReader;
+use gaptos::aptos_time_service::TimeService;
+use gaptos::aptos_types::{
     block_info::{BlockInfo, Round},
     epoch_state::EpochState,
     ledger_info::LedgerInfoWithSignatures,
@@ -56,7 +56,7 @@ use futures::{
     StreamExt,
 };
 use futures_channel::oneshot;
-use move_core_types::account_address::AccountAddress;
+use gaptos::move_core_types::account_address::AccountAddress;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{sync::mpsc::UnboundedSender, time::interval};
 use tokio_stream::wrappers::IntervalStream;
@@ -1128,7 +1128,7 @@ impl ConsensusObserver {
 
         // Start the new epoch
         let sk = Arc::new(bls12381::PrivateKey::genesis());
-        let signer = Arc::new(ValidatorSigner::new(AccountAddress::ZERO, sk.clone()));
+        let signer = Arc::new(ValidatorSigner::new(AccountAddress::ZERO, (*sk).clone()));
         let dummy_signer = Arc::new(DagCommitSigner::new(signer.clone()));
         let (_, rand_msg_rx) =
             aptos_channel::new::<AccountAddress, IncomingRandGenRequest>(QueueStyle::FIFO, 1, None);

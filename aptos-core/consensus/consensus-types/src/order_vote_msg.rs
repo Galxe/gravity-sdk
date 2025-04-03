@@ -4,7 +4,7 @@
 
 use crate::{order_vote::OrderVote, quorum_cert::QuorumCert};
 use anyhow::{ensure, Context};
-use aptos_types::validator_verifier::ValidatorVerifier;
+use gaptos::aptos_types::validator_verifier::ValidatorVerifier;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 

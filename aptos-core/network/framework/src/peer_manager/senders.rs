@@ -10,8 +10,8 @@ use crate::{
     },
     ProtocolId,
 };
-use aptos_channels::{self, aptos_channel};
-use aptos_types::{network_address::NetworkAddress, PeerId};
+use gaptos::aptos_channels::{self, aptos_channel};
+use gaptos::aptos_types::{network_address::NetworkAddress, PeerId};
 use bytes::Bytes;
 use futures::channel::oneshot;
 use std::time::Duration;

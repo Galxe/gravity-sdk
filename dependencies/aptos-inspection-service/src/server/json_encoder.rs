@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::utils::CONTENT_TYPE_JSON;
-use aptos_logger::error;
+use gaptos::aptos_logger::error;
 use prometheus::{
     proto::{LabelPair, Metric, MetricFamily, MetricType},
     Encoder, Result,

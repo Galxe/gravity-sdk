@@ -10,8 +10,8 @@ use crate::dag::{
     },
 };
 use aptos_consensus_types::common::Payload;
-use aptos_crypto::HashValue;
-use aptos_types::{
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_types::{
     aggregate_signature::AggregateSignature, validator_verifier::random_validator_verifier,
 };
 use claims::assert_ok;

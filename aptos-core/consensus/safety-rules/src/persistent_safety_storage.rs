@@ -8,11 +8,11 @@ use crate::{
     Error,
 };
 use aptos_consensus_types::{common::Author, safety_data::SafetyData};
-use aptos_crypto::{bls12381, PrivateKey};
-use aptos_global_constants::{CONSENSUS_KEY, OWNER_ACCOUNT, SAFETY_DATA, WAYPOINT};
-use aptos_logger::prelude::*;
-use aptos_secure_storage::{KVStorage, Storage};
-use aptos_types::waypoint::Waypoint;
+use gaptos::aptos_crypto::{bls12381, PrivateKey};
+use gaptos::aptos_global_constants::{CONSENSUS_KEY, OWNER_ACCOUNT, SAFETY_DATA, WAYPOINT};
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_secure_storage::{KVStorage, Storage};
+use gaptos::aptos_types::waypoint::Waypoint;
 
 /// SafetyRules needs an abstract storage interface to act as a common utility for storing
 /// persistent data to local disk, cloud, secrets managers, or even memory (for tests)
@@ -72,7 +72,7 @@ impl PersistentSafetyStorage {
         // inconsistencies or why they did not reset storage between rounds. Do not repeat the
         // checks again below, because it is just too strange to have a partially configured
         // storage.
-        if let Err(aptos_secure_storage::Error::KeyAlreadyExists(_)) = result {
+        if let Err(gaptos::aptos_secure_storage::Error::KeyAlreadyExists(_)) = result {
             warn!("Attempted to re-initialize existing storage");
             return Ok(());
         }
@@ -98,7 +98,7 @@ impl PersistentSafetyStorage {
 
     pub fn default_consensus_sk(
         &self,
-    ) -> Result<bls12381::PrivateKey, aptos_secure_storage::Error> {
+    ) -> Result<bls12381::PrivateKey, gaptos::aptos_secure_storage::Error> {
         self.internal_store
             .get::<bls12381::PrivateKey>(CONSENSUS_KEY)
             .map(|v| v.value)
@@ -194,9 +194,9 @@ impl PersistentSafetyStorage {
 mod tests {
     use super::*;
     use crate::counters;
-    use aptos_crypto::hash::HashValue;
-    use aptos_secure_storage::InMemoryStorage;
-    use aptos_types::{
+    use gaptos::aptos_crypto::hash::HashValue;
+    use gaptos::aptos_secure_storage::InMemoryStorage;
+    use gaptos::aptos_types::{
         block_info::BlockInfo, epoch_state::EpochState, ledger_info::LedgerInfo,
         transaction::Version, validator_signer::ValidatorSigner, waypoint::Waypoint,
     };

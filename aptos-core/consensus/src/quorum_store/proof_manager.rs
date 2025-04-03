@@ -15,8 +15,8 @@ use aptos_consensus_types::{
     proof_of_store::{BatchInfo, ProofOfStore, ProofOfStoreMsg},
     request_response::{GetPayloadCommand, GetPayloadResponse},
 };
-use aptos_logger::prelude::*;
-use aptos_types::{transaction::SignedTransaction, PeerId};
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_types::{transaction::SignedTransaction, PeerId};
 use futures::StreamExt;
 use futures_channel::mpsc::Receiver;
 use rand::{seq::SliceRandom, thread_rng};

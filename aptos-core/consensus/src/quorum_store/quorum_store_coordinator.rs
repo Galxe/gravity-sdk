@@ -9,10 +9,10 @@ use crate::{
     },
     round_manager::VerifiedEvent,
 };
-use aptos_channels::aptos_channel;
+use gaptos::aptos_channels::aptos_channel;
 use aptos_consensus_types::proof_of_store::BatchInfo;
-use aptos_logger::prelude::*;
-use aptos_types::{account_address::AccountAddress, PeerId};
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_types::{account_address::AccountAddress, PeerId};
 use futures::StreamExt;
 use tokio::sync::{mpsc, oneshot};
 

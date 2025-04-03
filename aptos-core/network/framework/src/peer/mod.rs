@@ -35,12 +35,12 @@ use crate::{
     transport::{self, Connection, ConnectionMetadata},
     ProtocolId,
 };
-use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_config::network_id::{NetworkContext, PeerNetworkId};
-use aptos_logger::prelude::*;
-use aptos_short_hex_str::AsShortHexStr;
-use aptos_time_service::{TimeService, TimeServiceTrait};
-use aptos_types::PeerId;
+use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_config::network_id::{NetworkContext, PeerNetworkId};
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_short_hex_str::AsShortHexStr;
+use gaptos::aptos_time_service::{TimeService, TimeServiceTrait};
+use gaptos::aptos_types::PeerId;
 use futures::{
     self,
     channel::oneshot,
@@ -112,7 +112,7 @@ pub struct Peer<TSocket> {
     /// Underlying connection.
     connection: Option<TSocket>,
     /// Channel to notify PeerManager that we've disconnected.
-    connection_notifs_tx: aptos_channels::Sender<TransportNotification<TSocket>>,
+    connection_notifs_tx: gaptos::aptos_channels::Sender<TransportNotification<TSocket>>,
     /// Channel to receive requests from PeerManager to send messages and rpcs.
     peer_reqs_rx: aptos_channel::Receiver<ProtocolId, PeerRequest>,
     /// Where to send inbound messages and rpcs.
@@ -142,7 +142,7 @@ where
         executor: Handle,
         time_service: TimeService,
         connection: Connection<TSocket>,
-        connection_notifs_tx: aptos_channels::Sender<TransportNotification<TSocket>>,
+        connection_notifs_tx: gaptos::aptos_channels::Sender<TransportNotification<TSocket>>,
         peer_reqs_rx: aptos_channel::Receiver<ProtocolId, PeerRequest>,
         upstream_handlers: Arc<
             HashMap<ProtocolId, aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>>,
@@ -338,9 +338,9 @@ where
             );
         let (close_tx, mut close_rx) = oneshot::channel();
 
-        let (mut msg_tx, msg_rx) = aptos_channels::new(1024, &counters::PENDING_MULTIPLEX_MESSAGE);
+        let (mut msg_tx, msg_rx) = gaptos::aptos_channels::new(1024, &counters::PENDING_MULTIPLEX_MESSAGE);
         let (stream_msg_tx, stream_msg_rx) =
-            aptos_channels::new(1024, &counters::PENDING_MULTIPLEX_STREAM);
+            gaptos::aptos_channels::new(1024, &counters::PENDING_MULTIPLEX_STREAM);
 
         // this task ends when the multiplex task ends (by dropping the senders) or receiving a close instruction
         let writer_task = async move {

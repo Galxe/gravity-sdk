@@ -10,18 +10,18 @@ use crate::{
         create_vec_signed_transactions_with_gas,
     }
 };
-use aptos_config::config::QuorumStoreConfig;
+use gaptos::aptos_config::config::QuorumStoreConfig;
 use aptos_consensus_types::{
     common::{TransactionInProgress, TransactionSummary},
     proof_of_store::{BatchId, SignedBatchInfo},
 };
 use aptos_mempool::{QuorumStoreRequest, QuorumStoreResponse};
-use aptos_types::transaction::SignedTransaction;
+use gaptos::aptos_types::transaction::SignedTransaction;
 use futures::{
     channel::mpsc::{channel, Receiver},
     StreamExt,
 };
-use move_core_types::account_address::AccountAddress;
+use gaptos::move_core_types::account_address::AccountAddress;
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use tokio::{sync::mpsc::channel as TokioChannel, time::timeout};
 

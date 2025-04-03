@@ -6,7 +6,7 @@ use std::{
 
 use crate::network::{build_network_interfaces, consensus_network_configuration, extract_network_ids, mempool_network_configuration};
 use api_types::ExecutionChannel;
-use aptos_config::{
+use gaptos::aptos_config::{
     config::{NetworkConfig, NodeConfig, Peer, PeerRole},
     network_id::NetworkId,
 };
@@ -15,19 +15,19 @@ use aptos_consensus::{
     gravity_state_computer::ConsensusAdapterArgs, network_interface::ConsensusMsg,
     persistent_liveness_storage::StorageWriteProxy, quorum_store::quorum_store_db::QuorumStoreDB,
 };
-use aptos_consensus_notifications::ConsensusNotifier;
-use aptos_crypto::x25519;
-use aptos_event_notifications::EventSubscriptionService;
+use gaptos::aptos_consensus_notifications::ConsensusNotifier;
+use gaptos::aptos_crypto::x25519;
+use gaptos::aptos_event_notifications::EventSubscriptionService;
 use aptos_mempool::{MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest};
-use aptos_mempool_notifications::MempoolNotificationListener;
+use gaptos::aptos_mempool_notifications::MempoolNotificationListener;
 use aptos_network::application::{
     interface::{NetworkClient, NetworkServiceEvents},
     storage::PeersAndMetadata,
 };
 use aptos_network_builder::builder::NetworkBuilder;
-use aptos_storage_interface::DbReaderWriter;
-use aptos_types::account_address::AccountAddress;
-use aptos_validator_transaction_pool::VTxnPoolState;
+use gaptos::aptos_storage_interface::DbReaderWriter;
+use gaptos::aptos_types::account_address::AccountAddress;
+use gaptos::aptos_validator_transaction_pool::VTxnPoolState;
 use futures::channel::mpsc::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
 use tokio::runtime::Runtime;

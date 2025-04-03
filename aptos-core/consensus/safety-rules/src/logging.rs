@@ -4,8 +4,9 @@
 
 use crate::Error;
 use aptos_consensus_types::common::{Author, Round};
-use aptos_logger::Schema;
-use aptos_types::waypoint::Waypoint;
+use gaptos::aptos_logger as aptos_logger;
+use gaptos::aptos_logger::Schema;
+use gaptos::aptos_types::waypoint::Waypoint;
 use serde::Serialize;
 
 #[derive(Schema)]

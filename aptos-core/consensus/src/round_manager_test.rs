@@ -27,8 +27,8 @@ use crate::{
     },
     util::time_service::{ClockTimeService, TimeService},
 };
-use aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
-use aptos_config::{
+use gaptos::aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_config::{
     config::{ConsensusConfig, QcAggregatorType},
     network_id::{NetworkId, PeerNetworkId},
 };
@@ -45,9 +45,9 @@ use aptos_consensus_types::{
     timeout_2chain::{TwoChainTimeout, TwoChainTimeoutWithPartialSignatures},
     vote_msg::VoteMsg,
 };
-use aptos_crypto::HashValue;
-use aptos_infallible::Mutex;
-use aptos_logger::prelude::info;
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_infallible::Mutex;
+use gaptos::aptos_logger::prelude::info;
 use aptos_network::{
     application::interface::NetworkClient,
     peer_manager::{ConnectionRequestSender, PeerManagerRequestSender},
@@ -60,8 +60,8 @@ use aptos_network::{
     ProtocolId,
 };
 use aptos_safety_rules::{PersistentSafetyStorage, SafetyRulesManager};
-use aptos_secure_storage::Storage;
-use aptos_types::{
+use gaptos::aptos_secure_storage::Storage;
+use gaptos::aptos_types::{
     epoch_state::EpochState,
     jwks::QuorumCertifiedUpdate,
     ledger_info::LedgerInfo,
@@ -121,7 +121,7 @@ impl NodeSetup {
     fn create_round_state(time_service: Arc<dyn TimeService>) -> RoundState {
         let base_timeout = Duration::new(60, 0);
         let time_interval = Box::new(ExponentialTimeInterval::fixed(base_timeout));
-        let (round_timeout_sender, _) = aptos_channels::new_test(1_024);
+        let (round_timeout_sender, _) = gaptos::aptos_channels::new_test(1_024);
         let (delayed_qc_tx, _) = unbounded();
         RoundState::new(
             time_interval,
@@ -196,7 +196,7 @@ impl NodeSetup {
             let (initial_data, storage) = MockStorage::start_for_testing((&validators).into()).await;
 
             let safety_storage = PersistentSafetyStorage::initialize(
-                Storage::from(aptos_secure_storage::InMemoryStorage::new()),
+                Storage::from(gaptos::aptos_secure_storage::InMemoryStorage::new()),
                 signer.author(),
                 signer.private_key().clone(),
                 waypoint,
@@ -245,7 +245,7 @@ impl NodeSetup {
         let (network_reqs_tx, network_reqs_rx) = aptos_channel::new(QueueStyle::FIFO, 8, None);
         let (connection_reqs_tx, _) = aptos_channel::new(QueueStyle::FIFO, 8, None);
         let (consensus_tx, consensus_rx) = aptos_channel::new(QueueStyle::FIFO, 8, None);
-        let (_conn_mgr_reqs_tx, conn_mgr_reqs_rx) = aptos_channels::new_test(8);
+        let (_conn_mgr_reqs_tx, conn_mgr_reqs_rx) = gaptos::aptos_channels::new_test(8);
         let network_sender = network::NetworkSender::new(
             PeerManagerRequestSender::new(network_reqs_tx),
             ConnectionRequestSender::new(connection_reqs_tx),
@@ -264,7 +264,7 @@ impl NodeSetup {
 
         playground.add_node(twin_id, consensus_tx, network_reqs_rx, conn_mgr_reqs_rx);
 
-        let (self_sender, self_receiver) = aptos_channels::new_unbounded_test();
+        let (self_sender, self_receiver) = gaptos::aptos_channels::new_unbounded_test();
         let network = Arc::new(NetworkSender::new(
             author,
             consensus_network_client,
@@ -1621,7 +1621,7 @@ async fn safety_rules_crash() {
 
     fn reset_safety_rules(node: &mut NodeSetup) {
         let safety_storage = PersistentSafetyStorage::initialize(
-            Storage::from(aptos_secure_storage::InMemoryStorage::new()),
+            Storage::from(gaptos::aptos_secure_storage::InMemoryStorage::new()),
             node.signer.author(),
             node.signer.private_key().clone(),
             node.round_manager.consensus_state().waypoint(),

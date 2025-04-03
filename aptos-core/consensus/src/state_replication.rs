@@ -9,9 +9,9 @@ use crate::{
 };
 use anyhow::Result;
 use aptos_consensus_types::{block::Block, pipelined_block::PipelinedBlock};
-use aptos_crypto::HashValue;
+use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::ExecutorResult;
-use aptos_types::{
+use gaptos::aptos_types::{
     block_executor::config::BlockExecutorConfigFromOnchain, epoch_state::EpochState,
     ledger_info::LedgerInfoWithSignatures, randomness::Randomness,
 };

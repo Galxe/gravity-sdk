@@ -20,10 +20,10 @@ use crate::{
     pipeline::execution_client::DummyExecutionClient,
 };
 use aptos_consensus_types::common::{Author, Round};
-use aptos_crypto::HashValue;
-use aptos_reliable_broadcast::RBNetworkSender;
-use aptos_time_service::TimeService;
-use aptos_types::{
+use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_reliable_broadcast::RBNetworkSender;
+use gaptos::aptos_time_service::TimeService;
+use gaptos::aptos_types::{
     aggregate_signature::AggregateSignature,
     block_info::BlockInfo,
     epoch_state::EpochState,

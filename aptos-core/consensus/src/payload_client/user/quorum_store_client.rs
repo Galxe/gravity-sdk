@@ -9,7 +9,7 @@ use aptos_consensus_types::{
     common::{Payload, PayloadFilter},
     request_response::{GetPayloadCommand, GetPayloadResponse},
 };
-use aptos_logger::info;
+use gaptos::aptos_logger::info;
 use fail::fail_point;
 use futures::future::BoxFuture;
 use futures_channel::{mpsc, oneshot};

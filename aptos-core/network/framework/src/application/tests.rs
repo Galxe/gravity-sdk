@@ -25,13 +25,13 @@ use crate::{
     },
     transport::ConnectionMetadata,
 };
-use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_config::{
+use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_config::{
     config::{Peer, PeerRole, PeerSet},
     network_id::{NetworkId, PeerNetworkId},
 };
-use aptos_peer_monitoring_service_types::PeerMonitoringMetadata;
-use aptos_types::{account_address::AccountAddress, PeerId};
+use gaptos::aptos_peer_monitoring_service_types::PeerMonitoringMetadata;
+use gaptos::aptos_types::{account_address::AccountAddress, PeerId};
 use futures_util::StreamExt;
 use maplit::hashmap;
 use serde::{Deserialize, Serialize};

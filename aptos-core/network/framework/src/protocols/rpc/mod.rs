@@ -58,13 +58,13 @@ use crate::{
     ProtocolId,
 };
 use anyhow::anyhow;
-use aptos_channels::aptos_channel;
-use aptos_config::network_id::NetworkContext;
-use aptos_id_generator::{IdGenerator, U32IdGenerator};
-use aptos_logger::prelude::*;
-use aptos_short_hex_str::AsShortHexStr;
-use aptos_time_service::{timeout, TimeService, TimeServiceTrait};
-use aptos_types::PeerId;
+use gaptos::aptos_channels::aptos_channel;
+use gaptos::aptos_config::network_id::NetworkContext;
+use gaptos::aptos_id_generator::{IdGenerator, U32IdGenerator};
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_short_hex_str::AsShortHexStr;
+use gaptos::aptos_time_service::{timeout, TimeService, TimeServiceTrait};
+use gaptos::aptos_types::PeerId;
 use bytes::Bytes;
 use error::RpcError;
 use futures::{

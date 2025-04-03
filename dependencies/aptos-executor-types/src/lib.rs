@@ -2,12 +2,12 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos_crypto::hash::{HashValue, ACCUMULATOR_PLACEHOLDER_HASH};
-use aptos_types::block_executor::config::BlockExecutorConfigFromOnchain;
-use aptos_types::block_executor::partitioner::ExecutableBlock;
-use aptos_types::epoch_state::EpochState;
-use aptos_types::ledger_info::LedgerInfoWithSignatures;
-use aptos_types::transaction::block_epilogue::BlockEndInfo;
+use gaptos::aptos_crypto::hash::{HashValue, ACCUMULATOR_PLACEHOLDER_HASH};
+use gaptos::aptos_types::block_executor::config::BlockExecutorConfigFromOnchain;
+use gaptos::aptos_types::block_executor::partitioner::ExecutableBlock;
+use gaptos::aptos_types::epoch_state::EpochState;
+use gaptos::aptos_types::ledger_info::LedgerInfoWithSignatures;
+use gaptos::aptos_types::transaction::block_epilogue::BlockEndInfo;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use thiserror::Error;
@@ -80,7 +80,6 @@ pub trait BlockExecutorTrait: Send + Sync {
         parent_block_id: HashValue,
     ) -> ExecutorResult<StateComputeResult>;
 
-    #[cfg(any(test, feature = "fuzzing"))]
     fn commit_blocks(
         &self,
         block_ids: Vec<HashValue>,
