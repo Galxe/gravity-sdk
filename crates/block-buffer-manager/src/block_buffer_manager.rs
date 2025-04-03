@@ -373,25 +373,25 @@ impl BlockBufferManager {
                                 id: block_id_num_hash.block_id,
                             };
                         } else {
-                            panic!("There is no Ordered Block but try to push commit block for block {:?}", block_id_num_hash.block_id);
+                            panic!("Block id and number is not equal id: {:?}={:?} num: {:?}", block_id_num_hash.block_id, *id, block_id_num_hash.num);
                         }
                     }
                     BlockState::Committed { hash, compute_res: _, id } => {
                         if !(*id == block_id_num_hash.block_id && *hash == block_id_num_hash.hash) {
-                            panic!("There is no Ordered Block but try to push commit block for block {:?}", block_id_num_hash.block_id);
+                            panic!("Block id and number is not equal id: {:?}={:?} hash: {:?}={:?}", block_id_num_hash.block_id, *id, block_id_num_hash.hash, *hash);
                         }
                     }
                     _ => {
                         panic!(
-                            "There is no Ordered Block but try to push commit block for block {:?}",
-                            block_id_num_hash.block_id
+                            "There is no Ordered Block but try to push commit block for block {:?} num {}",
+                            block_id_num_hash.block_id, block_id_num_hash.num
                         );
                     }
                 }
             } else {
                 panic!(
-                    "There is no Ordered Block but try to push commit block for block {:?}",
-                    block_id_num_hash.block_id
+                    "There is no Block but try to push commit block for block {:?} num {}",
+                    block_id_num_hash.block_id, block_id_num_hash.num
                 );
             }
         }
