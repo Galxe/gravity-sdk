@@ -468,6 +468,7 @@ impl BlockStore {
             && self.block_exists(ledger_info.commit_info().id())
             && self.ordered_root().round() >= ledger_info.commit_info().round()
         {
+            info!("sync_to_highest_commit_cert: block exists between commit root and ordered root {:?}, {:?}", self.commit_root().round(), ledger_info.commit_info().round());
             let proof = ledger_info.clone();
             let network = retriever.network.clone();
             tokio::spawn(async move { network.send_commit_proof(proof).await });
