@@ -180,8 +180,8 @@ impl BlockStore {
         // reproduce the same batches (important for the commit phase)
         let mut certs = self.inner.read().get_all_quorum_certs_with_commit_info();
         certs.sort_unstable_by_key(|qc| qc.commit_info().round());
+        let mut batch = vec![];
         for qc in certs {
-            let mut batch = vec![];
             if qc.commit_info().round() > self.commit_root().round() {
                 info!("sending qc {} to execution", qc.commit_info().round());
                 if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info()).await {
@@ -191,9 +191,12 @@ impl BlockStore {
                 info!("sending qc {} to network", qc.commit_info().round());
                 self.network.send_commit_proof(qc.ledger_info().clone()).await;
             }
-            while self.commit_root().round() < qc.commit_info().round() {
-                info!("waiting for commit root {} to be updated to {}", self.commit_root().round(), qc.commit_info().round());
-                tokio::time::sleep(Duration::from_millis(10)).await;
+            if batch.len() > 10 {
+                while self.inner.read().commit_root().round() < qc.commit_info().round() {
+                    info!("waiting for commit root {} to be updated to {}", self.inner.read().commit_root().round(), qc.commit_info().round());
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+                batch.clear();
             }
         }
     }
