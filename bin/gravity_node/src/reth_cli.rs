@@ -247,8 +247,9 @@ impl RethCli {
             for block_id_num_hash in block_ids {
                 self.send_committed_block_info(block_id_num_hash.block_id, block_id_num_hash.hash.map(|x| B256::from_slice(x.as_slice()))).await.unwrap();
             }
+
             let last_block_number = self.provider.last_block_number().unwrap();
-            get_block_buffer_manager().set_latest_finalized_block_number(last_block_number).await.unwrap();
+            get_block_buffer_manager().set_state(start_commit_num - 1, last_block_number).await.unwrap();
         }
     }
 
