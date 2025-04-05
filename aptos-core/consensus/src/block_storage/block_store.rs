@@ -8,11 +8,19 @@ use crate::{
         pending_blocks::PendingBlocks,
         tracing::{observe_block, BlockStage},
         BlockReader,
-    }, counters, network::NetworkSender, payload_manager::TPayloadManager, persistent_liveness_storage::{PersistentLivenessStorage, RecoveryData, RootInfo}, pipeline::execution_client::TExecutionClient, util::time_service::TimeService
+    },
+    counters,
+    network::NetworkSender,
+    payload_manager::TPayloadManager,
+    persistent_liveness_storage::{PersistentLivenessStorage, RecoveryData, RootInfo},
+    pipeline::execution_client::TExecutionClient,
+    util::time_service::TimeService,
 };
 use anyhow::{bail, ensure, format_err, Context};
 use api_types::{
-    compute_res::ComputeRes, u256_define::{BlockId, Random}, ExternalBlock, ExternalBlockMeta
+    compute_res::ComputeRes,
+    u256_define::{BlockId, Random},
+    ExternalBlock, ExternalBlockMeta,
 };
 use aptos_consensus_types::{
     block::Block,
@@ -33,6 +41,7 @@ use aptos_types::{
     aggregate_signature::AggregateSignature,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
 };
+use block_buffer_manager::{block_buffer_manager::BlockHashRef, get_block_buffer_manager};
 use futures::executor::block_on;
 use sha3::digest::generic_array::typenum::Le;
 
@@ -178,30 +187,14 @@ impl BlockStore {
 
     async fn recover_blocks(&self) {
         // reproduce the same batches (important for the commit phase)
-        let mut certs = {
-            self.inner.read().get_all_quorum_certs_with_commit_info()
-        };
+        let mut certs = self.inner.read().get_all_quorum_certs_with_commit_info();
         certs.sort_unstable_by_key(|qc| qc.commit_info().round());
-        let mut batch = vec![];
         for qc in certs {
             if qc.commit_info().round() > self.commit_root().round() {
-                info!("sending qc {} to execution", qc.commit_info().round());
-                if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info()).await {
+                info!("sending qc {} to execution, current commit round {}", qc.commit_info().round(), self.commit_root().round());
+                if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info(), true).await {
                     error!("Error in try-committing blocks. {}", e.to_string());
                 }
-                batch.push(qc.commit_info().round());
-                info!("sending qc {} to network", qc.commit_info().round());
-                self.network.send_commit_proof(qc.ledger_info().clone()).await;
-            }
-            if batch.len() > 10 {
-                let latest_round = {
-                    self.inner.read().commit_root().round()
-                };
-                while latest_round < qc.commit_info().round() {
-                    info!("waiting for commit root {} to be updated to {}", latest_round, qc.commit_info().round());
-                    tokio::time::sleep(Duration::from_millis(10)).await;
-                }
-                batch.clear();
             }
         }
     }
@@ -289,6 +282,7 @@ impl BlockStore {
     pub async fn send_for_execution(
         &self,
         finality_proof: WrappedLedgerInfo,
+        recovery: bool,
     ) -> anyhow::Result<()> {
         let block_id_to_commit = finality_proof.commit_info().id();
         let block_to_commit = self
@@ -310,25 +304,98 @@ impl BlockStore {
         self.pending_blocks.lock().gc(finality_proof.commit_info().round());
         // This callback is invoked synchronously with and could be used for multiple batches of blocks.
         self.init_block_number(&blocks_to_commit);
-        // TODO(gravity_lightman): Make sure blocks already fetch batches.
-        self.execution_client
-            .finalize_order(
-                &blocks_to_commit,
-                finality_proof.ledger_info().clone(),
-                Box::new(
-                    move |committed_blocks: &[Arc<PipelinedBlock>],
-                            commit_decision: LedgerInfoWithSignatures| {
-                        block_tree.write().commit_callback(
-                            storage,
-                            committed_blocks,
-                            finality_proof,
-                            commit_decision,
-                        );
+        if recovery {
+            for p_block in &blocks_to_commit {
+                let mut txns = vec![];
+                loop {
+                    match self.payload_manager.get_transactions(p_block.block()).await {
+                        Ok((mut txns_, _)) => {
+                            txns.append(&mut txns_);
+                            break;
+                        }
+                        Err(e) => {
+                            warn!("get transaction error {}", e);
+                            if let Some(payload) = p_block.block().payload() {
+                                self.payload_manager.prefetch_payload_data(
+                                    payload,
+                                    p_block.block().timestamp_usecs(),
+                                );
+                            }
+                        }
+                    }
+                }
+                info!("recover block {}, txn_size: {}", p_block.block(), txns.len());
+                let verified_txns: Vec<VerifiedTxn> = txns.iter().map(|txn| txn.into()).collect();
+                let txn_num = verified_txns.len() as u64;
+                let verified_txns = verified_txns.into_iter().map(|txn| txn.into()).collect();
+                let block_number = p_block.block().block_number().unwrap();
+                let block_hash = match self
+                    .storage
+                    .consensus_db()
+                    .ledger_db
+                    .metadata_db()
+                    .get_block_hash(block_number)
+                {
+                    Some(block_hash) => Some(ComputeRes::new(*block_hash, txn_num)),
+                    None => None,
+                };
+                let block = ExternalBlock {
+                    txns: verified_txns,
+                    block_meta: ExternalBlockMeta {
+                        block_id: BlockId(*p_block.block().id()),
+                        block_number,
+                        usecs: p_block.block().timestamp_usecs(),
+                        randomness: p_block
+                            .randomness()
+                            .map(|r| Random::from_bytes(r.randomness())),
+                        block_hash,
                     },
-                ),
-            )
-            .await
-            .expect("Failed to persist commit");
+                };
+                get_block_buffer_manager()
+                    .set_ordered_blocks(BlockId(*p_block.parent_id()), block)
+                    .await
+                    .unwrap();
+                let compute_res = get_block_buffer_manager().get_executed_res(
+                    BlockId(*p_block.id()),
+                    p_block.block().block_number().unwrap(),
+                ).await.unwrap();
+                if let Some(block_hash) = block_hash {
+                    assert_eq!(block_hash.data, compute_res.data);
+                }
+                let commit_block = BlockHashRef {
+                    block_id: BlockId(*p_block.id()),
+                    num: p_block.block().block_number().unwrap(),
+                    hash: Some(compute_res.data),
+                };
+                get_block_buffer_manager().set_commit_blocks(vec![commit_block]).await.unwrap();
+            }
+            let commit_decision = finality_proof.ledger_info().clone();
+            block_tree.write().commit_callback(
+                storage,
+                &blocks_to_commit,
+                finality_proof,
+                commit_decision,
+            );
+        } else {
+            self.execution_client
+                .finalize_order(
+                    &blocks_to_commit,
+                    finality_proof.ledger_info().clone(),
+                    Box::new(
+                        move |committed_blocks: &[Arc<PipelinedBlock>],
+                              commit_decision: LedgerInfoWithSignatures| {
+                            block_tree.write().commit_callback(
+                                storage,
+                                committed_blocks,
+                                finality_proof,
+                                commit_decision,
+                            );
+                        },
+                    ),
+                )
+                .await
+                .expect("Failed to persist commit");
+        }
 
         self.inner.write().update_ordered_root(block_to_commit.id());
         self.inner.write().insert_ordered_cert(finality_proof_clone.clone());
@@ -701,7 +768,7 @@ impl BlockStore {
     pub async fn insert_block_with_qc(&self, block: Block) -> anyhow::Result<Arc<PipelinedBlock>> {
         self.insert_single_quorum_cert(block.quorum_cert().clone(), false)?;
         if self.ordered_root().round() < block.quorum_cert().commit_info().round() {
-            self.send_for_execution(block.quorum_cert().into_wrapped_ledger_info()).await?;
+            self.send_for_execution(block.quorum_cert().into_wrapped_ledger_info(), false).await?;
         }
         self.insert_block(block, false).await
     }

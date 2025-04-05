@@ -2,6 +2,7 @@ use log::{info, warn};
 use std::{
     cell::OnceCell,
     collections::HashMap,
+    ops::Deref,
     sync::{
         atomic::{AtomicU64, AtomicU8, Ordering},
         Arc, OnceLock,
@@ -28,7 +29,7 @@ pub struct BlockHashRef {
 
 pub enum BlockState {
     Ordered { block: ExternalBlock, parent_id: BlockId },
-    Computed{ id: BlockId, compute_res: ComputeRes },
+    Computed { id: BlockId, compute_res: ComputeRes },
     Committed { hash: Option<[u8; 32]>, compute_res: ComputeRes, id: BlockId },
 }
 
@@ -198,7 +199,9 @@ impl BlockBufferManager {
             return Ok(());
         }
         let block_num = block.block_meta.block_number;
-        block_state_machine.blocks.insert(block_num, BlockState::Ordered { block: block.clone(), parent_id });
+        block_state_machine
+            .blocks
+            .insert(block_num, BlockState::Ordered { block: block.clone(), parent_id });
         let _ = block_state_machine.sender.send(());
         Ok(())
     }
@@ -278,7 +281,7 @@ impl BlockBufferManager {
             let block_state_machine = self.block_state_machine.lock().await;
             if let Some(block) = block_state_machine.blocks.get(&block_num) {
                 match block {
-                    BlockState::Computed{ id, compute_res } => {
+                    BlockState::Computed { id, compute_res } => {
                         info!(
                             "get_executed_res done with id {:?} num {:?} res {:?}",
                             block_id, block_num, compute_res
@@ -339,7 +342,7 @@ impl BlockBufferManager {
             let txn_len = block.txns.len();
             block_state_machine.blocks.insert(
                 block_num,
-                BlockState::Computed{
+                BlockState::Computed {
                     id: block_id,
                     compute_res: ComputeRes { data: block_hash, txn_num: txn_len as u64 },
                 },
@@ -365,7 +368,7 @@ impl BlockBufferManager {
             );
             if let Some(state) = block_state_machine.blocks.get_mut(&block_id_num_hash.num) {
                 match state {
-                    BlockState::Computed{ id, compute_res } => {
+                    BlockState::Computed { id, compute_res } => {
                         if *id == block_id_num_hash.block_id {
                             *state = BlockState::Committed {
                                 hash: block_id_num_hash.hash,
@@ -373,7 +376,10 @@ impl BlockBufferManager {
                                 id: block_id_num_hash.block_id,
                             };
                         } else {
-                            panic!("Computed Block id and number is not equal id: {:?}={:?} num: {:?}", block_id_num_hash.block_id, *id, block_id_num_hash.num);
+                            panic!(
+                                "Computed Block id and number is not equal id: {:?}={:?} num: {:?}",
+                                block_id_num_hash.block_id, *id, block_id_num_hash.num
+                            );
                         }
                     }
                     BlockState::Committed { hash, compute_res: _, id } => {
@@ -381,7 +387,7 @@ impl BlockBufferManager {
                             panic!("Commited Block id and number is not equal id: {:?}={:?} hash: {:?}={:?}", block_id_num_hash.block_id, *id, block_id_num_hash.hash, *hash);
                         }
                     }
-                    BlockState::Ordered { block: _, parent_id:_ } => {
+                    BlockState::Ordered { block: _, parent_id: _ } => {
                         panic!(
                             "Set commit block meet ordered block for block id {:?} num {}",
                             block_id_num_hash.block_id, block_id_num_hash.num
@@ -454,12 +460,17 @@ impl BlockBufferManager {
         }
     }
 
-    pub async fn set_latest_finalized_block_number(
+    pub async fn set_state(
         &self,
+        latest_commit_block_number: u64,
         latest_finalized_block_number: u64,
     ) -> Result<(), anyhow::Error> {
-        info!("set_latest_finalized_block_number {:?}", latest_finalized_block_number);
+        info!(
+            "set latest_commit_block_number {}, latest_finalized_block_number {:?}",
+            latest_commit_block_number, latest_finalized_block_number
+        );
         let mut block_state_machine = self.block_state_machine.lock().await;
+        block_state_machine.latest_commit_block_number = latest_commit_block_number;
         block_state_machine.latest_finalized_block_number = latest_finalized_block_number;
         let _ = block_state_machine.sender.send(());
         Ok(())
