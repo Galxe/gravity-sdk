@@ -61,13 +61,14 @@ members = [
     "bin/gravity_sdk_kvstore",
     "crates/coex-bridge",
     "bin/bench",
-    "bin/gravity_node"
-]
+    "bin/gravity_node", 
+    "crates/block-buffer-manager"]
 
 [workspace.dependencies]
 aptos-consensus = { path = "./aptos-core/consensus" }
 
 #  from aptos =======================
+block-buffer-manager = { path = "./crates/block-buffer-manager" }
 aptos-id-generator = { path = "./dependencies/aptos-id-generator" }
 aptos-compression = { path = "./dependencies/aptos-compression" }
 aptos-proptest-helpers = { path = "./dependencies/aptos-proptest-helpers" }

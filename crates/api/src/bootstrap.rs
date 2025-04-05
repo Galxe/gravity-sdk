@@ -5,18 +5,19 @@ use std::{
 };
 
 use crate::network::{build_network_interfaces, consensus_network_configuration, extract_network_ids, mempool_network_configuration};
-use api_types::ExecutionChannel;
+use api_types::{u256_define::BlockId, ExecutionChannel};
+use block_buffer_manager::get_block_buffer_manager;
 use aptos_config::{
     config::{NetworkConfig, NodeConfig, Peer, PeerRole},
     network_id::NetworkId,
 };
-use aptos_consensus::consensusdb::ConsensusDB;
+use aptos_consensus::consensusdb::{BlockNumberSchema, BlockSchema, ConsensusDB};
 use aptos_consensus::{
     gravity_state_computer::ConsensusAdapterArgs, network_interface::ConsensusMsg,
     persistent_liveness_storage::StorageWriteProxy, quorum_store::quorum_store_db::QuorumStoreDB,
 };
 use aptos_consensus_notifications::ConsensusNotifier;
-use aptos_crypto::x25519;
+use aptos_crypto::{hash::GENESIS_BLOCK_ID, x25519, HashValue};
 use aptos_event_notifications::EventSubscriptionService;
 use aptos_mempool::{MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest};
 use aptos_mempool_notifications::MempoolNotificationListener;
@@ -31,6 +32,8 @@ use aptos_validator_transaction_pool::VTxnPoolState;
 use futures::channel::mpsc::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
 use tokio::runtime::Runtime;
+
+const RECENT_BLOCKS_RANGE: u64 = 256;
 
 pub struct ApplicationNetworkInterfaces<T> {
     pub network_client: NetworkClient<T>,
@@ -186,4 +189,27 @@ pub fn init_peers_and_metadata(
     }
     let _ = peers_and_metadata.set_trusted_peers(&NetworkId::Validator, peer_set);
     peers_and_metadata
+}
+
+pub async fn init_block_buffer_manager(
+    consensus_db: &Arc<ConsensusDB>,
+    latest_block_number: u64,
+) {
+    let start_block_number = if latest_block_number > RECENT_BLOCKS_RANGE {
+        latest_block_number - RECENT_BLOCKS_RANGE
+    } else {
+        0
+    };
+    
+    let mut block_number_to_block_id = consensus_db
+            .get_all::<BlockNumberSchema>()
+            .unwrap()
+            .into_iter()
+            .filter(|(_, block_number)| block_number >= &start_block_number)
+            .map(|(block_id, block_number)| (block_number, BlockId::from_bytes(block_id.as_slice())))
+            .collect::<HashMap<u64, BlockId>>();
+    if start_block_number == 0 {
+        block_number_to_block_id.insert(0u64, BlockId::from_bytes(GENESIS_BLOCK_ID.as_slice()));
+    }   
+    get_block_buffer_manager().init(latest_block_number, block_number_to_block_id).await;
 }

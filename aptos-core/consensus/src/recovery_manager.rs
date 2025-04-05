@@ -13,7 +13,6 @@ use crate::{
     round_manager::VerifiedEvent,
 };
 use anyhow::{anyhow, ensure, Context, Result};
-use api_types::ExecutionLayer;
 use aptos_channels::aptos_channel;
 use aptos_consensus_types::{
     common::Author, proposal_msg::ProposalMsg, sync_info::SyncInfo, vote_msg::VoteMsg,
@@ -37,7 +36,6 @@ pub struct RecoveryManager {
     payload_manager: Arc<dyn TPayloadManager>,
     order_vote_enabled: bool,
     pending_blocks: Arc<Mutex<PendingBlocks>>,
-    execution_layer: Option<ExecutionLayer>,
 }
 
 impl RecoveryManager {
@@ -51,7 +49,6 @@ impl RecoveryManager {
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
-        execution_layer: Option<ExecutionLayer>,
     ) -> Self {
         RecoveryManager {
             epoch_state,
@@ -63,7 +60,6 @@ impl RecoveryManager {
             payload_manager,
             order_vote_enabled,
             pending_blocks,
-            execution_layer,
         }
     }
 

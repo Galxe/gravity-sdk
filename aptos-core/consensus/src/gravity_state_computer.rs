@@ -6,7 +6,7 @@ use crate::consensusdb::ConsensusDB;
 use crate::counters::{APTOS_COMMIT_BLOCKS, APTOS_EXECUTION_TXNS};
 use crate::payload_client::user::quorum_store_client::QuorumStoreClient;
 use anyhow::Result;
-use api_types::ExecutionLayer;
+use api_types::u256_define::BlockId;
 use aptos_crypto::HashValue;
 use aptos_executor::block_executor::BlockExecutor;
 use aptos_executor_types::{
@@ -18,21 +18,21 @@ use aptos_types::{
     block_executor::config::BlockExecutorConfigFromOnchain,
     ledger_info::LedgerInfoWithSignatures,
 };
+use block_buffer_manager::block_buffer_manager::BlockHashRef;
+use block_buffer_manager::get_block_buffer_manager;
 use coex_bridge::{get_coex_bridge, Func};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 
 pub struct ConsensusAdapterArgs {
     pub quorum_store_client: Option<Arc<QuorumStoreClient>>,
-    pub execution_layer: Option<ExecutionLayer>,
     pub consensus_db: Option<Arc<ConsensusDB>>,
 }
 
 impl ConsensusAdapterArgs {
-    pub fn new(execution_layer: ExecutionLayer, consensus_db: Arc<ConsensusDB>) -> Self {
+    pub fn new(consensus_db: Arc<ConsensusDB>) -> Self {
         Self {
             quorum_store_client: None,
-            execution_layer: Some(execution_layer),
             consensus_db: Some(consensus_db),
         }
     }
@@ -42,7 +42,7 @@ impl ConsensusAdapterArgs {
     }
 
     pub fn dummy() -> Self {
-        Self { quorum_store_client: None, execution_layer: None, consensus_db: None }
+        Self { quorum_store_client: None, consensus_db: None }
     }
 }
 
@@ -89,19 +89,28 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         ledger_info_with_sigs: LedgerInfoWithSignatures,
     ) -> ExecutorResult<()> {
         if !block_ids.is_empty() {
+            let (block_id, block_hash) = (ledger_info_with_sigs.ledger_info().commit_info().id(), ledger_info_with_sigs.ledger_info().block_hash());
+            let block_num = ledger_info_with_sigs.ledger_info().block_number();
+            assert!(block_ids.last().unwrap().as_slice() == block_id.as_slice());
+            let len = block_ids.len();
             self.runtime.block_on(async move {
-                let call = get_coex_bridge().borrow_func("commit_block_hash");
-                match call {
-                    Some(Func::CommittedBlockHash(call)) => {
-                        info!("call commit_block_hash function");
-                        for block_id in block_ids {
-                            call.call(*block_id).await.unwrap();
+                get_block_buffer_manager()
+                    .set_commit_blocks(block_ids.into_iter()
+                    .enumerate()
+                    .map(|(i, x)| 
+                        {
+                            let mut v = [0u8; 32];
+                            v.copy_from_slice(block_hash.as_ref());
+                            if x == block_id {
+                                BlockHashRef { block_id: BlockId::from_bytes(x.as_slice()), num: block_num + (i - len + 1) as u64, hash: Some(v) }
+                            } else {
+                                // TODO: commit use block num, but here use block id, need to fix
+                                BlockHashRef { block_id: BlockId::from_bytes(x.as_slice()), num: block_num + (i - len + 1) as u64, hash: None }
+                            }
                         }
-                    }
-                    _ => {
-                        info!("no commit_block_hash function");
-                    }
-                }
+                    ).collect())
+                    .await
+                    .unwrap_or_else(|e| panic!("Failed to push commit blocks {}", e));
             });
         }
         self.inner.db.writer.commit_ledger(0, Some(&ledger_info_with_sigs), None);
@@ -117,25 +126,30 @@ impl BlockExecutorTrait for GravityBlockExecutor {
     }
     fn commit_ledger(
         &self,
-        block_ids: Vec<HashValue>,
+        block_ids: Vec<HashValue>,                            
         ledger_info_with_sigs: LedgerInfoWithSignatures,
     ) -> ExecutorResult<()> {
         APTOS_COMMIT_BLOCKS.inc_by(block_ids.len() as u64);
         info!("commit blocks: {:?}", block_ids);
+        let (block_id, block_hash) = (ledger_info_with_sigs.ledger_info().commit_info().id(), ledger_info_with_sigs.ledger_info().block_hash());
+        let block_num = ledger_info_with_sigs.ledger_info().block_number();
+        let len = block_ids.len();
         if !block_ids.is_empty() {
             self.runtime.block_on(async move {
-                let call = get_coex_bridge().borrow_func("commit_block_hash");
-                match call {
-                    Some(Func::CommittedBlockHash(call)) => {
-                        info!("call commit_block_hash function");
-                        for block_id in block_ids {
-                            call.call(*block_id).await.unwrap();
-                        }
+                get_block_buffer_manager().set_commit_blocks(block_ids.into_iter()
+                .enumerate()
+                .map(|(i, x)| {
+                    let mut v = [0u8; 32];
+                    v.copy_from_slice(block_hash.as_ref());
+                    if x == block_id {
+                        BlockHashRef { block_id: BlockId::from_bytes(x.as_slice()), num: block_num - (len - 1 - i) as u64, hash: Some(v) }
+                    } else {
+                        BlockHashRef { block_id: BlockId::from_bytes(x.as_slice()), num: block_num - (len - 1 - i) as u64, hash: None }
                     }
-                    _ => {
-                        info!("no commit_block_hash function");
-                    }
-                }
+                })
+                .collect())
+                .await.unwrap()
+                ;
             });
         }
         self.inner.db.writer.commit_ledger(0, Some(&ledger_info_with_sigs), None);

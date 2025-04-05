@@ -10,6 +10,7 @@ use crate::{
         BlockReader,
     },
     counters,
+    network::NetworkSender,
     payload_manager::TPayloadManager,
     persistent_liveness_storage::{PersistentLivenessStorage, RecoveryData, RootInfo},
     pipeline::execution_client::TExecutionClient,
@@ -19,7 +20,7 @@ use anyhow::{bail, ensure, format_err, Context};
 use api_types::{
     compute_res::ComputeRes,
     u256_define::{BlockId, Random},
-    ExecutionLayer, ExternalBlock, ExternalBlockMeta,
+    ExternalBlock, ExternalBlockMeta,
 };
 use aptos_consensus_types::{
     block::Block,
@@ -35,11 +36,15 @@ use aptos_executor_types::StateComputeResult;
 use aptos_infallible::{Mutex, RwLock};
 use aptos_logger::prelude::*;
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
+use aptos_metrics_core::{register_int_gauge_vec, IntGaugeHelper, IntGaugeVec};
+use aptos_network::application::interface::NetworkClient;
 use aptos_types::{
     aggregate_signature::AggregateSignature,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
 };
+use block_buffer_manager::{block_buffer_manager::BlockHashRef, get_block_buffer_manager};
 use futures::executor::block_on;
+use once_cell::sync::Lazy;
 use sha3::digest::generic_array::typenum::Le;
 
 #[cfg(test)]
@@ -50,12 +55,32 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::{collections::BTreeMap, io::Read, sync::Arc, time::Duration};
 
+use super::BlockRetriever;
+
 #[cfg(test)]
 #[path = "block_store_test.rs"]
 mod block_store_test;
 
 #[path = "sync_manager.rs"]
 pub mod sync_manager;
+
+static CUR_RECOVER_BLOCK_NUMBER_GAUGE: Lazy<IntGaugeVec> = Lazy::new(|| {
+     register_int_gauge_vec!(
+         "aptos_current_recover_block_number",
+         "Current reccover block number",
+         &[]
+     )
+     .unwrap()
+ });
+ 
+ static RECOVERY_GAUGE: Lazy<IntGaugeVec> = Lazy::new(|| {
+     register_int_gauge_vec!(
+         "aptos_recovery",
+         "is recovery or not",
+         &[]
+     )
+     .unwrap()
+ });
 
 fn update_counters_for_ordered_blocks(ordered_blocks: &[Arc<PipelinedBlock>]) {
     for block in ordered_blocks {
@@ -94,7 +119,7 @@ pub struct BlockStore {
     back_pressure_for_test: AtomicBool,
     order_vote_enabled: bool,
     pending_blocks: Arc<Mutex<PendingBlocks>>,
-    execution_layer: Option<ExecutionLayer>,
+    network: Arc<NetworkSender>,
 }
 
 impl BlockStore {
@@ -108,7 +133,7 @@ impl BlockStore {
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
-        execution_layer: Option<ExecutionLayer>,
+        network: Arc<NetworkSender>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -126,7 +151,7 @@ impl BlockStore {
             payload_manager,
             order_vote_enabled,
             pending_blocks,
-            execution_layer,
+            network,
         ));
         block_on(block_store.recover_blocks());
         block_store
@@ -142,7 +167,7 @@ impl BlockStore {
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
-        execution_layer: Option<ExecutionLayer>,
+        network: Arc<NetworkSender>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -160,7 +185,7 @@ impl BlockStore {
             payload_manager,
             order_vote_enabled,
             pending_blocks,
-            execution_layer,
+            network,
         )
         .await;
         block_store.recover_blocks().await;
@@ -181,84 +206,19 @@ impl BlockStore {
     }
 
     async fn recover_blocks(&self) {
+        RECOVERY_GAUGE.set_with(&[], 1);
         // reproduce the same batches (important for the commit phase)
         let mut certs = self.inner.read().get_all_quorum_certs_with_commit_info();
         certs.sort_unstable_by_key(|qc| qc.commit_info().round());
         for qc in certs {
-            info!("trying to recover qc {}, commit_round={}", qc, self.commit_root().round());
             if qc.commit_info().round() > self.commit_root().round() {
-                let block_id_to_recover = qc.commit_info().id();
-                let blocks_to_recover =
-                    self.path_from_ordered_root(block_id_to_recover).unwrap_or_default();
-                self.init_block_number(&blocks_to_recover);
-                assert!(!blocks_to_recover.is_empty());
-                for block_to_recover in blocks_to_recover {
-                    let mut txns = vec![];
-                    loop {
-                        match self.payload_manager.get_transactions(block_to_recover.block()).await {
-                            Ok((mut txns_, _)) => {
-                                txns.append(&mut txns_);
-                                break;
-                            }
-                            Err(e) => {
-                                warn!("get transaction error {}", e);
-                                if let Some(payload) = block_to_recover.block().payload() {
-                                    self.payload_manager
-                                        .prefetch_payload_data(payload, block_to_recover.block().timestamp_usecs());
-                                }
-                            }
-                        }
-                    }
-                    info!(
-                        "recover block {}, txn_size: {}",
-                        block_to_recover.block(),
-                        txns.len()
-                    );
-                    let verified_txns: Vec<VerifiedTxn> =
-                        txns.iter().map(|txn| txn.into()).collect();
-                    let txn_num = verified_txns.len() as u64;
-                    let verified_txns =
-                        verified_txns.into_iter().map(|txn| txn.into()).collect();
-                    let block_number = block_to_recover.block().block_number().unwrap();
-                    let block_hash = match self
-                        .storage
-                        .consensus_db()
-                        .ledger_db
-                        .metadata_db()
-                        .get_block_hash(block_number)
-                    {
-                        Some(block_hash) => Some(ComputeRes::new(*block_hash, txn_num)),
-                        None => None,
-                    };
-                    let block_batch = ExternalBlock {
-                        txns: verified_txns,
-                        block_meta: ExternalBlockMeta {
-                            block_id: BlockId(*block_to_recover.block().id()),
-                            block_number,
-                            usecs: block_to_recover.block().timestamp_usecs(),
-                            randomness: block_to_recover
-                                .randomness()
-                                .map(|r| Random::from_bytes(r.randomness())),
-                            block_hash,
-                        },
-                    };
-                    self.execution_layer
-                        .as_ref()
-                        .unwrap()
-                        .recovery_api
-                        .recover_ordered_block(
-                            BlockId(*block_to_recover.parent_id()),
-                            block_batch,
-                        )
-                        .await
-                        .unwrap();
-                }
-                info!("trying to commit to round {}", qc.commit_info().round());
+                info!("sending qc {} to execution, current commit round {}", qc.commit_info().round(), self.commit_root().round());
                 if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info(), true).await {
                     error!("Error in try-committing blocks. {}", e.to_string());
                 }
             }
         }
+        RECOVERY_GAUGE.set_with(&[], 0);
     }
 
     async fn build(
@@ -274,7 +234,7 @@ impl BlockStore {
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
-        execution_layer: Option<ExecutionLayer>,
+        network: Arc<NetworkSender>,
     ) -> Self {
         let RootInfo(root_block, root_qc, root_ordered_cert, root_commit_cert) = root;
 
@@ -308,7 +268,7 @@ impl BlockStore {
             back_pressure_for_test: AtomicBool::new(false),
             order_vote_enabled,
             pending_blocks,
-            execution_layer,
+            network,
         };
 
         for block in blocks {
@@ -364,25 +324,73 @@ impl BlockStore {
         let storage = self.storage.clone();
         let finality_proof_clone = finality_proof.clone();
         self.pending_blocks.lock().gc(finality_proof.commit_info().round());
+        // This callback is invoked synchronously with and could be used for multiple batches of blocks.
+        self.init_block_number(&blocks_to_commit);
         if recovery {
             for p_block in &blocks_to_commit {
-                info!("recover commit block {}", p_block.block());
-                // TODO(gravity_lightman): Error handle
-                match self
-                    .execution_layer
-                    .as_ref()
-                    .unwrap()
-                    .execution_api
-                    .recv_committed_block_info(BlockId(*p_block.block().id()))
-                    .await
-                {
-                    Ok(_) => {
-                        counters::SEND_TO_RECOVER_BLOCK_COUNTER.inc();
-                    }
-                    Err(e) => {
-                        todo!();
+                let mut txns = vec![];
+                loop {
+                    match self.payload_manager.get_transactions(p_block.block()).await {
+                        Ok((mut txns_, _)) => {
+                            txns.append(&mut txns_);
+                            break;
+                        }
+                        Err(e) => {
+                            warn!("get transaction error {}", e);
+                            if let Some(payload) = p_block.block().payload() {
+                                self.payload_manager.prefetch_payload_data(
+                                    payload,
+                                    p_block.block().timestamp_usecs(),
+                                );
+                            }
+                        }
                     }
                 }
+                info!("recover block {}, txn_size: {}", p_block.block(), txns.len());
+                let verified_txns: Vec<VerifiedTxn> = txns.iter().map(|txn| txn.into()).collect();
+                let txn_num = verified_txns.len() as u64;
+                let verified_txns = verified_txns.into_iter().map(|txn| txn.into()).collect();
+                let block_number = p_block.block().block_number().unwrap();
+                CUR_RECOVER_BLOCK_NUMBER_GAUGE.with_label_values(&[]).set(block_number.try_into().unwrap());
+                let block_hash = match self
+                    .storage
+                    .consensus_db()
+                    .ledger_db
+                    .metadata_db()
+                    .get_block_hash(block_number)
+                {
+                    Some(block_hash) => Some(ComputeRes::new(*block_hash, txn_num)),
+                    None => None,
+                };
+                let block = ExternalBlock {
+                    txns: verified_txns,
+                    block_meta: ExternalBlockMeta {
+                        block_id: BlockId(*p_block.block().id()),
+                        block_number,
+                        usecs: p_block.block().timestamp_usecs(),
+                        randomness: p_block
+                            .randomness()
+                            .map(|r| Random::from_bytes(r.randomness())),
+                        block_hash,
+                    },
+                };
+                get_block_buffer_manager()
+                    .set_ordered_blocks(BlockId(*p_block.parent_id()), block)
+                    .await
+                    .unwrap();
+                let compute_res = get_block_buffer_manager().get_executed_res(
+                    BlockId(*p_block.id()),
+                    p_block.block().block_number().unwrap(),
+                ).await.unwrap();
+                if let Some(block_hash) = block_hash {
+                    assert_eq!(block_hash.data, compute_res.data);
+                }
+                let commit_block = BlockHashRef {
+                    block_id: BlockId(*p_block.id()),
+                    num: p_block.block().block_number().unwrap(),
+                    hash: Some(compute_res.data),
+                };
+                get_block_buffer_manager().set_commit_blocks(vec![commit_block]).await.unwrap();
             }
             let commit_decision = finality_proof.ledger_info().clone();
             block_tree.write().commit_callback(
@@ -392,8 +400,7 @@ impl BlockStore {
                 commit_decision,
             );
         } else {
-            // This callback is invoked synchronously with and could be used for multiple batches of blocks.
-            self.init_block_number(&blocks_to_commit);
+            info!("send the blocks to execution {:?}", blocks_to_commit);
             self.execution_client
                 .finalize_order(
                     &blocks_to_commit,
@@ -443,7 +450,7 @@ impl BlockStore {
             self.payload_manager.clone(),
             self.order_vote_enabled,
             self.pending_blocks.clone(),
-            self.execution_layer.clone(),
+            self.network.clone(),
         )
         .await;
 

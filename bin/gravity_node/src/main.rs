@@ -1,5 +1,7 @@
 use alloy_eips::BlockHashOrNumber;
 use alloy_primitives::TxHash;
+use block_buffer_manager::block_buffer_manager::BlockBufferManager;
+use block_buffer_manager::get_block_buffer_manager;
 use greth::gravity_storage;
 use greth::reth;
 use greth::reth::chainspec::EthereumChainSpecParser;
@@ -30,13 +32,14 @@ use tokio::sync::oneshot;
 use tracing::info;
 mod cli;
 mod consensus;
-mod exec_layer;
 mod reth_cli;
 mod reth_coordinator;
 
 use crate::cli::Cli;
+use std::cell::OnceCell;
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::thread;
 
 use crate::reth_cli::RethCli;
@@ -48,7 +51,7 @@ use reth_provider::providers::BlockchainProvider;
 
 struct ConsensusArgs {
     pub engine_api: AuthServerHandle,
-    pub pipeline_api: PipeExecLayerApi,
+    pub pipeline_api: PipeExecLayerApi<BlockViewStorage<BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>>>,
     pub provider: BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
     pub tx_listener: tokio::sync::mpsc::Receiver<TxHash>,
     pub pool: reth_transaction_pool::Pool<
@@ -126,7 +129,7 @@ fn run_reth(
                     latest_block_hash,
                     BTreeMap::new(),
                 );
-                let pipeline_api_v2 = reth_pipe_exec_layer_ext_v2::new_pipe_exec_layer_api(
+                let pipeline_api_v2: PipeExecLayerApi<BlockViewStorage<BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>>> = reth_pipe_exec_layer_ext_v2::new_pipe_exec_layer_api(
                     chain_spec,
                     storage,
                     latest_block.header,
@@ -152,7 +155,6 @@ fn run_reth(
 
 fn main() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-
     let cli = Cli::parse();
     let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
     let (execution_args_tx, execution_args_rx) = oneshot::channel();
@@ -166,11 +168,9 @@ fn main() {
                 let chain_id = client.chain_id();
                 let coordinator =
                     Arc::new(RethCoordinator::new(client, latest_block_number, execution_args_tx));
-                let cloned = coordinator.clone();
-                tokio::spawn(async move {
-                    cloned.run().await;
-                });
-                AptosConsensus::init(gcei_config, coordinator, chain_id);
+                AptosConsensus::init(gcei_config, coordinator.clone(), chain_id, latest_block_number).await;
+                coordinator.send_execution_args().await;
+                coordinator.run().await;
                 tokio::signal::ctrl_c().await.unwrap();
             }
         });
