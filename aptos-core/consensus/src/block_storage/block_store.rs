@@ -400,6 +400,7 @@ impl BlockStore {
                 commit_decision,
             );
         } else {
+            info!("send the blocks to execution {:?}", blocks_to_commit);
             self.execution_client
                 .finalize_order(
                     &blocks_to_commit,
