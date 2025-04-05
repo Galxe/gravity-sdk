@@ -158,13 +158,14 @@ impl ConsensusDB {
                 }
             }
         });
-        let consensus_qcs = self
+        let consensus_qcs: Vec<_> = self
             .get_all::<QCSchema>()?
             .into_iter()
             .map(|(_, qc)| qc)
             .filter(|qc| qc.certified_block().round() >= start_round)
             .collect();
-
+        info!("consensus_blocks size : {}, consensus_qcs size : {}, block_number_to_block_id size : {}",
+                 consensus_blocks.len(), consensus_qcs.len(), block_number_to_block_id.len());
         println!("qcs : {:?}", consensus_qcs);
         Ok((last_vote, highest_2chain_timeout_certificate, consensus_blocks, consensus_qcs))
     }

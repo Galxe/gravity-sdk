@@ -38,6 +38,7 @@ use aptos_consensus_types::{
 use aptos_crypto::{hash::GENESIS_BLOCK_ID, HashValue};
 use aptos_infallible::Mutex;
 use aptos_logger::prelude::*;
+use aptos_metrics_core::{register_int_gauge_vec, IntGaugeHelper, IntGaugeVec};
 use aptos_schemadb::SchemaBatch;
 use aptos_types::{
     account_address::AccountAddress, epoch_change::EpochChangeProof,
@@ -47,10 +48,29 @@ use fail::fail_point;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use futures_channel::oneshot;
 use num_traits::ToPrimitive;
+use once_cell::sync::Lazy;
 use rand::{prelude::*, Rng};
 use sha3::digest::generic_array::typenum::Le;
 use std::{clone::Clone, cmp::min, sync::Arc, time::Duration};
 use tokio::{time, time::timeout};
+
+static CUR_BLOCK_SYNC_BLOCK_SUM_GAUGE: Lazy<IntGaugeVec> = Lazy::new(|| {
+     register_int_gauge_vec!(
+         "aptos_current_block_sync_block_sum",
+         "Current block_sync block sum",
+         &[]
+     )
+     .unwrap()
+ });
+ 
+ static BLOCK_SYNC_GAUGE: Lazy<IntGaugeVec> = Lazy::new(|| {
+     register_int_gauge_vec!(
+         "aptos_block_sync",
+         "is block_sync or not",
+         &[]
+     )
+     .unwrap()
+ });
 
 #[derive(Debug, PartialEq, Eq)]
 /// Whether we need to do block retrieval if we want to insert a Quorum Cert.
@@ -103,6 +123,7 @@ impl BlockStore {
         sync_info: &SyncInfo,
         mut retriever: BlockRetriever,
     ) -> anyhow::Result<()> {
+        BLOCK_SYNC_GAUGE.set_with(&[], 1);
         self.sync_to_highest_commit_cert(
             sync_info.highest_commit_cert().clone(),
             &mut retriever,
@@ -154,6 +175,7 @@ impl BlockStore {
         if let Some(tc) = sync_info.highest_2chain_timeout_cert() {
             self.insert_2chain_timeout_certificate(Arc::new(tc.clone()))?;
         }
+        BLOCK_SYNC_GAUGE.set_with(&[], 0);
         Ok(())
     }
 
@@ -747,6 +769,7 @@ impl BlockRetriever {
                     }
                     progress += batch.len() as u64;
                     last_block_id = batch.last().expect("Batch should not be empty").parent_id();
+                    CUR_BLOCK_SYNC_BLOCK_SUM_GAUGE.with_label_values(&[]).add(batch.len() as i64);
                     result_blocks.extend(batch);
                     ledger_infos.extend(result.ledger_infos().clone());
                 },
@@ -760,6 +783,7 @@ impl BlockRetriever {
                             payload_manager.prefetch_payload_data(payload, block.timestamp_usecs());
                         }
                     }
+                    CUR_BLOCK_SYNC_BLOCK_SUM_GAUGE.with_label_values(&[]).add(batch.len() as i64);
                     result_blocks.extend(batch);
                     ledger_infos.extend(result.ledger_infos().clone());
                     break;
