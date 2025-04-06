@@ -288,11 +288,20 @@ impl BlockStore {
 
     pub fn init_block_number(&self, ordered_blocks: &Vec<Arc<PipelinedBlock>>) {
         let mut block_numbers = vec![];
+        let mut block_number = 0;
         for p_block in ordered_blocks {
-            if let Some(_) = p_block.block().block_number() {
+            if let Some(parent_block) = self.get_block(p_block.parent_id()) {
+                block_number = parent_block.block().block_number().unwrap() + 1;
+            } else if let Ok(Some(parent_block)) = self.storage.consensus_db().get_block(&p_block.parent_id()) {
+                block_number = parent_block.block_number().unwrap() + 1;
+            } else {
+                panic!("Cannot find the parent_block id {}", p_block.parent_id());
+            }
+            if let Some(cur_block_number) = p_block.block().block_number() {
+                assert_eq!(cur_block_number, block_number);
                 continue;
             }
-            p_block.block().set_block_number(self.storage.fetch_next_block_number());
+            p_block.block().set_block_number(block_number);
             block_numbers.push((p_block.block().block_number().unwrap(), p_block.block().id()));
         }
         if block_numbers.len() != 0 {

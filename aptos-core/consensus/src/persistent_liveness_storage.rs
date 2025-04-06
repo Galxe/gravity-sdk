@@ -76,8 +76,6 @@ pub trait PersistentLivenessStorage: Send + Sync {
     // Returns a handle of the consensus db
     fn consensus_db(&self) -> Arc<ConsensusDB>;
 
-    fn fetch_next_block_number(&self) -> u64;
-
     async fn latest_commit_block_number(&self) -> u64;
 }
 
@@ -126,6 +124,7 @@ impl LedgerRecoveryData {
         let (root_id, latest_ledger_info_sig) = if self.storage_ledger.ledger_info().ends_epoch() {
             let genesis =
                 Block::make_genesis_block_from_ledger_info(self.storage_ledger.ledger_info());
+                genesis.set_block_number(0);
             let genesis_qc = QuorumCert::certificate_for_genesis_from_ledger_info(
                 self.storage_ledger.ledger_info(),
                 genesis.id(),
@@ -371,7 +370,6 @@ impl RecoveryData {
 pub struct StorageWriteProxy {
     db: Arc<ConsensusDB>,
     aptos_db: Arc<dyn DbReader>,
-    next_block_number: AtomicU64,
 }
 
 impl StorageWriteProxy {
@@ -380,22 +378,7 @@ impl StorageWriteProxy {
         aptos_db: Arc<dyn DbReader>,
     ) -> Self {
         // let db = Arc::new(ConsensusDB::new(config.storage.dir()));
-        StorageWriteProxy { db, aptos_db, next_block_number: AtomicU64::new(0) }
-    }
-
-    pub fn init_next_block_number(&self, blocks: &Vec<Block>) {
-        if blocks.len() == 0 {
-            self.next_block_number.store(1, Ordering::SeqCst);
-            return;
-        };
-
-        let mut max_block_number = 0;
-        for block in blocks {
-            if let Some(bn) = block.block_number() {
-                max_block_number = max_block_number.max(bn);
-            }
-        }
-        self.next_block_number.store(max_block_number + 1, Ordering::SeqCst);
+        StorageWriteProxy { db, aptos_db }
     }
 }
 
@@ -441,7 +424,6 @@ impl PersistentLivenessStorage for StorageWriteProxy {
             bcs::from_bytes(&b).expect("unable to deserialize highest 2-chain timeout cert")
         });
         let blocks = raw_data.2;
-        self.init_next_block_number(&blocks);
         let quorum_certs: Vec<_> = raw_data.3;
         let blocks_repr: Vec<String> = blocks.iter().map(|b| format!("\n\t{}", b)).collect();
         info!("The following blocks were restored from ConsensusDB : {}", blocks_repr.concat());
@@ -510,12 +492,6 @@ impl PersistentLivenessStorage for StorageWriteProxy {
 
     fn consensus_db(&self) -> Arc<ConsensusDB> {
         self.db.clone()
-    }
-
-    fn fetch_next_block_number(&self) -> u64 {
-        let next_block_number = self.next_block_number.load(Ordering::SeqCst);
-        self.next_block_number.fetch_add(1, Ordering::SeqCst);
-        next_block_number
     }
 
     async fn latest_commit_block_number(&self) -> u64 {
