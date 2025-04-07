@@ -278,6 +278,7 @@ impl StateComputer for ExecutionProxy {
 
         Box::pin(async move {
             let call = get_coex_bridge().borrow_func("recv_executed_block_hash");
+            let u_ts = meta_data.usecs;
             let compute_result = match call {
                 Some(Func::RecvExecutedBlockHash(call)) => {
                     info!("call recv_executed_block_hash function");
@@ -287,7 +288,7 @@ impl StateComputer for ExecutionProxy {
                     panic!("no recv_executed_block_hash function");
                 }
             };
-            observe_block(block.timestamp_usecs(), BlockStage::EXECUTED);
+            observe_block(u_ts, BlockStage::EXECUTED);
             update_counters_for_compute_res(&compute_result);
             let txn_status = compute_result.txn_status.clone();
             match (*txn_status).as_ref() {
