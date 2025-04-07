@@ -344,7 +344,8 @@ impl BlockBufferManager {
                 block_num,
                 BlockState::Computed {
                     id: block_id,
-                    compute_res: ComputeRes { data: block_hash, txn_num: txn_len as u64 },
+                    // TODO(gravity_jan): Use nekomoto's txn_status like execution_result.txs_info
+                    compute_res: ComputeRes { data: block_hash, txn_num: txn_len as u64, txn_status: Arc::new(None) },
                 },
             );
             let _ = block_state_machine.sender.send(());

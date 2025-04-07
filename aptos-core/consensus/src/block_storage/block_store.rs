@@ -361,14 +361,14 @@ impl BlockStore {
                 let verified_txns = verified_txns.into_iter().map(|txn| txn.into()).collect();
                 let block_number = p_block.block().block_number().unwrap();
                 CUR_RECOVER_BLOCK_NUMBER_GAUGE.with_label_values(&[]).set(block_number.try_into().unwrap());
-                let block_hash = match self
+                let maybe_block_hash = match self
                     .storage
                     .consensus_db()
                     .ledger_db
                     .metadata_db()
                     .get_block_hash(block_number)
                 {
-                    Some(block_hash) => Some(ComputeRes::new(*block_hash, txn_num)),
+                    Some(block_hash) => Some(ComputeRes::new(*block_hash, txn_num, vec![])),
                     None => None,
                 };
                 let block = ExternalBlock {
@@ -380,7 +380,7 @@ impl BlockStore {
                         randomness: p_block
                             .randomness()
                             .map(|r| Random::from_bytes(r.randomness())),
-                        block_hash,
+                        block_hash: maybe_block_hash.clone(),
                     },
                 };
                 get_block_buffer_manager()
@@ -391,7 +391,7 @@ impl BlockStore {
                     BlockId(*p_block.id()),
                     p_block.block().block_number().unwrap(),
                 ).await.unwrap();
-                if let Some(block_hash) = block_hash {
+                if let Some(block_hash) = maybe_block_hash {
                     assert_eq!(block_hash.data, compute_res.data);
                 }
                 let commit_block = BlockHashRef {

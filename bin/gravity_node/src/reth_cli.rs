@@ -221,12 +221,13 @@ impl RethCli {
 
     pub async fn start_commit_vote(&self) -> Result<(), String> {
         loop {
-            let metadata = self.recv_compute_res().await.expect("failed to recv compute res");
+            let execution_result = self.recv_compute_res().await.expect("failed to recv compute res");
             let mut block_hash_data = [0u8; 32];
-            block_hash_data.copy_from_slice(metadata.block_hash.as_slice());
-            let block_id = ExternalBlockId::from_bytes(metadata.block_id.as_slice());
+            block_hash_data.copy_from_slice(execution_result.block_hash.as_slice());
+            let block_id = ExternalBlockId::from_bytes(execution_result.block_id.as_slice());
+            // TODO(gravity_jan): Use nekomoto's block number like execution_result.block_number
             get_block_buffer_manager()
-                .set_compute_res(block_id, block_hash_data, metadata.block_number)
+                .set_compute_res(block_id, block_hash_data, 0)
                 .await
                 .expect("failed to pop ordered block ids");
         }
