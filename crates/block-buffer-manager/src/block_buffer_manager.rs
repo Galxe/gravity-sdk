@@ -12,7 +12,7 @@ use std::{
 use tokio::{sync::Mutex, time::Instant};
 
 use api_types::{
-    compute_res::ComputeRes, u256_define::BlockId, ExternalBlock, VerifiedTxn,
+    compute_res::{ComputeRes, TxnStatus}, u256_define::BlockId, ExternalBlock, VerifiedTxn,
     VerifiedTxnWithAccountSeqNum,
 };
 use itertools::Itertools;
@@ -324,6 +324,7 @@ impl BlockBufferManager {
         block_id: BlockId,
         block_hash: [u8; 32],
         block_num: u64,
+        txn_status: Arc<Option<Vec<TxnStatus>>>,
     ) -> Result<(), anyhow::Error> {
         if !self.is_ready() {
             panic!("Buffer is not ready");
@@ -344,8 +345,7 @@ impl BlockBufferManager {
                 block_num,
                 BlockState::Computed {
                     id: block_id,
-                    // TODO(gravity_jan): Use nekomoto's txn_status like execution_result.txs_info
-                    compute_res: ComputeRes { data: block_hash, txn_num: txn_len as u64, txn_status: Arc::new(None) },
+                    compute_res: ComputeRes { data: block_hash, txn_num: txn_len as u64, txn_status },
                 },
             );
             let _ = block_state_machine.sender.send(());

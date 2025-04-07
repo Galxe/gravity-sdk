@@ -4,16 +4,18 @@ use alloy_primitives::{
     private::alloy_rlp::{Decodable, Encodable},
     Address, TxHash, B256,
 };
-use api_types::{account::{ExternalAccountAddress, ExternalChainId}, GLOBAL_CRYPTO_TXN_HASHER};
 use api_types::u256_define::{BlockId as ExternalBlockId, TxnHash};
 use api_types::{
     account::{ExternalAccountAddress, ExternalChainId},
     compute_res::ComputeRes,
 };
+use api_types::{
+    compute_res::TxnStatus,
+    GLOBAL_CRYPTO_TXN_HASHER,
+};
 use api_types::{ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 use block_buffer_manager::get_block_buffer_manager;
 use core::panic;
-use greth::{gravity_storage::block_view_storage::BlockViewStorage, reth_pipe_exec_layer_ext_v2::ExecutionResult, reth_db::DatabaseEnv, reth_primitives::EthPrimitives, reth_provider::BlockHashReader};
 use greth::reth_ethereum_engine_primitives::EthPayloadAttributes;
 use greth::reth_node_api::NodeTypesWithDBAdapter;
 use greth::reth_node_ethereum::EthereumNode;
@@ -25,6 +27,11 @@ use greth::reth_provider::{
 };
 use greth::reth_transaction_pool::TransactionPool;
 use greth::{
+    gravity_storage::block_view_storage::BlockViewStorage, reth_db::DatabaseEnv,
+    reth_pipe_exec_layer_ext_v2::ExecutionResult, reth_primitives::EthPrimitives,
+    reth_provider::BlockHashReader,
+};
+use greth::{
     reth::rpc::builder::auth::AuthServerHandle, reth_node_core::primitives::SignedTransaction,
 };
 use std::{collections::HashMap, sync::Arc};
@@ -33,7 +40,11 @@ use tracing::*;
 
 pub struct RethCli {
     auth: AuthServerHandle,
-    pipe_api: PipeExecLayerApi<BlockViewStorage<BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>>>,    
+    pipe_api: PipeExecLayerApi<
+        BlockViewStorage<
+            BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
+        >,
+    >,
     chain_id: u64,
     provider: BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
     txn_listener: Mutex<tokio::sync::mpsc::Receiver<TxHash>>,
@@ -83,7 +94,6 @@ impl RethCli {
         self.chain_id
     }
 
-
     fn txn_to_signed(bytes: &mut [u8], chain_id: u64) -> (Address, TransactionSigned) {
         let txn = TransactionSigned::decode_2718(&mut bytes.as_ref()).unwrap();
         (txn.recover_signer().unwrap(), txn)
@@ -126,7 +136,6 @@ impl RethCli {
     }
 
     pub async fn recv_compute_res(&self) -> Result<ExecutionResult, ()> {
-        debug!("recv compute res {:?}", block_id);
         let pipe_api = &self.pipe_api;
         let result = pipe_api
             .pull_executed_block_hash()
@@ -180,10 +189,7 @@ impl RethCli {
                 get_block_buffer_manager().push_txn(vtxn).await;
             }
             if last_time.elapsed().as_secs() > 1 {
-                info!(
-                    "processed {} transactions in last second total {}",
-                    count, total
-                );
+                info!("processed {} transactions in last second total {}", count, total);
                 total += count;
                 count = 0;
                 last_time = std::time::Instant::now();
@@ -198,9 +204,8 @@ impl RethCli {
         let mut start_ordered_block = self.provider.last_block_number().unwrap() + 1;
         loop {
             // max executing block number
-            let exec_blocks = get_block_buffer_manager()
-                .get_ordered_blocks(start_ordered_block, None)
-                .await;
+            let exec_blocks =
+                get_block_buffer_manager().get_ordered_blocks(start_ordered_block, None).await;
             if let Err(e) = exec_blocks {
                 warn!("failed to get ordered blocks: {}", e);
                 continue;
@@ -212,7 +217,10 @@ impl RethCli {
             }
             start_ordered_block = exec_blocks.last().unwrap().0.block_meta.block_number + 1;
             for (block, parent_id) in exec_blocks {
-                info!("send reth ordered block num {:?} id {:?} with parent id {}", block.block_meta.block_number, block.block_meta.block_id, parent_id);
+                info!(
+                    "send reth ordered block num {:?} id {:?} with parent id {}",
+                    block.block_meta.block_number, block.block_meta.block_id, parent_id
+                );
                 let parent_id = B256::from_slice(parent_id.as_bytes());
                 self.push_ordered_block(block, parent_id).await?;
             }
@@ -221,13 +229,28 @@ impl RethCli {
 
     pub async fn start_commit_vote(&self) -> Result<(), String> {
         loop {
-            let execution_result = self.recv_compute_res().await.expect("failed to recv compute res");
+            let execution_result =
+                self.recv_compute_res().await.expect("failed to recv compute res");
             let mut block_hash_data = [0u8; 32];
             block_hash_data.copy_from_slice(execution_result.block_hash.as_slice());
             let block_id = ExternalBlockId::from_bytes(execution_result.block_id.as_slice());
-            // TODO(gravity_jan): Use nekomoto's block number like execution_result.block_number
+            let block_number = execution_result.block_number;
+            let tx_infos = execution_result.txs_info;
+            let txn_status = Arc::new(Some(
+                tx_infos
+                    .iter()
+                    .map(|tx_info| {
+                        TxnStatus {
+                            txn_hash: *tx_info.tx_hash,
+                            sender: convert_account( tx_info.sender).bytes(),
+                            nonce: tx_info.nonce,
+                            is_discarded: tx_info.is_discarded,
+                        }
+                    })
+                    .collect(),
+            ));
             get_block_buffer_manager()
-                .set_compute_res(block_id, block_hash_data, 0)
+                .set_compute_res(block_id, block_hash_data, block_number, txn_status)
                 .await
                 .expect("failed to pop ordered block ids");
         }
@@ -236,9 +259,8 @@ impl RethCli {
     pub async fn start_commit(&self) -> Result<(), String> {
         let mut start_commit_num = self.provider.last_block_number().unwrap() + 1;
         loop {
-            let block_ids = get_block_buffer_manager()
-                .get_committed_blocks(start_commit_num,None)
-                .await;
+            let block_ids =
+                get_block_buffer_manager().get_committed_blocks(start_commit_num, None).await;
             if let Err(e) = block_ids {
                 warn!("failed to get committed blocks: {}", e);
                 continue;
@@ -247,17 +269,29 @@ impl RethCli {
             if block_ids.is_empty() {
                 continue;
             }
-            let block_id = self.pipe_api.get_block_id(block_ids.last().unwrap().num).unwrap_or_else(|| {
-                panic!("commit num {} not found block id", start_commit_num);
-            });
-            assert_eq!(ExternalBlockId::from_bytes(block_id.as_slice()), block_ids.last().unwrap().block_id);
+            let block_id =
+                self.pipe_api.get_block_id(block_ids.last().unwrap().num).unwrap_or_else(|| {
+                    panic!("commit num {} not found block id", start_commit_num);
+                });
+            assert_eq!(
+                ExternalBlockId::from_bytes(block_id.as_slice()),
+                block_ids.last().unwrap().block_id
+            );
             start_commit_num = block_ids.last().unwrap().num + 1;
             for block_id_num_hash in block_ids {
-                self.send_committed_block_info(block_id_num_hash.block_id, block_id_num_hash.hash.map(|x| B256::from_slice(x.as_slice()))).await.unwrap();
+                self.send_committed_block_info(
+                    block_id_num_hash.block_id,
+                    block_id_num_hash.hash.map(|x| B256::from_slice(x.as_slice())),
+                )
+                .await
+                .unwrap();
             }
 
             let last_block_number = self.provider.last_block_number().unwrap();
-            get_block_buffer_manager().set_state(start_commit_num - 1, last_block_number).await.unwrap();
+            get_block_buffer_manager()
+                .set_state(start_commit_num - 1, last_block_number)
+                .await
+                .unwrap();
         }
     }
 
