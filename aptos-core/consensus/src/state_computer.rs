@@ -259,14 +259,15 @@ impl StateComputer for ExecutionProxy {
                     txns: real_txns,
                 })
                 .await.unwrap_or_else(|e| panic!("Failed to push ordered blocks {}", e));
-
+            let u_ts = meta_data.usecs;
             let compute_result = get_block_buffer_manager()
                 .get_executed_res(block_id, meta_data.block_number)
                 .await.unwrap_or_else(|e| panic!("Failed to get executed result {}", e));
 
-            update_counters_for_compute_res(&compute_result);
-            observe_block(block_timestamp, BlockStage::EXECUTED);
 
+            update_counters_for_compute_res(&compute_result);
+           
+            observe_block(u_ts, BlockStage::EXECUTED);
             let txn_status = compute_result.txn_status.clone();
             match (*txn_status).as_ref() {
                 Some(txn_status) => {
