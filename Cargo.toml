@@ -542,3 +542,4 @@ serde-reflection = { git = "https://github.com/aptos-labs/serde-reflection", rev
 merlin = { git = "https://github.com/aptos-labs/merlin" }
 x25519-dalek = { git = "https://github.com/aptos-labs/x25519-dalek", branch = "zeroize_v1" }
 tonic = { git = "https://github.com/aptos-labs/tonic.git", rev = "0da1ba8b1751d6e19eb55be24cccf9ae933c666e" }
+darling = { git = "https://github.com/TedDriggs/darling.git", rev = "v0.20.10"}
