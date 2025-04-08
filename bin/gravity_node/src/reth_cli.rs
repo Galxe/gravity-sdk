@@ -105,6 +105,7 @@ impl RethCli {
         parent_id: B256,
     ) -> Result<(), String> {
         trace!("push ordered block {:?} with parent id {}", block, parent_id);
+        let system_time = Instant::now();
         let pipe_api = &self.pipe_api;
         let mut senders = vec![];
         let mut transactions = vec![];
@@ -119,6 +120,7 @@ impl RethCli {
             Some(randao) => B256::from_slice(randao.0.as_ref()),
             None => B256::ZERO,
         };
+        info!("push ordered block time deserialize {:?}ms", system_time.elapsed().as_millis());
         // TODO: make zero make sense
         pipe_api.push_ordered_block(OrderedBlock {
             parent_id,
