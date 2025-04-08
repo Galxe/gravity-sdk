@@ -311,11 +311,8 @@ impl BlockBufferManager {
                         let profile = block_state_machine.profile.entry(block_num).or_insert_with(BlockProfile::default);
                         profile.get_executed_res_time = Some(SystemTime::now());
                         info!(
-                            "get_executed_res done with id {:?} num {:?} res {:?} and exec time {:?} for {:?} txns",
+                            "get_executed_res done with id {:?} num {:?} res {:?}",
                             block_id, block_num, compute_res_clone, 
-                            profile.get_executed_res_time.unwrap().elapsed().unwrap().as_millis()
-                            - profile.get_ordered_blocks_time.unwrap().elapsed().unwrap().as_millis(),
-                            compute_res_clone.txn_num
                         );
                         return Ok(compute_res_clone);
                     }
@@ -359,12 +356,7 @@ impl BlockBufferManager {
         if !self.is_ready() {
             panic!("Buffer is not ready");
         }
-        info!(
-            "set_compute_res id {:?} num {:?} hash {:?}",
-            block_id,
-            block_num,
-            BlockId::from_bytes(block_hash.as_slice())
-        );
+        
         let mut block_state_machine = self.block_state_machine.lock().await;
         if let Some(BlockState::Ordered { block, parent_id: _ }) =
             block_state_machine.blocks.get(&block_num)
@@ -382,7 +374,15 @@ impl BlockBufferManager {
             // Record time for set_compute_res
             let profile = block_state_machine.profile.entry(block_num).or_insert_with(BlockProfile::default);
             profile.set_compute_res_time = Some(SystemTime::now());
-            
+            info!(
+                "set_compute_res id {:?} num {:?} hash {:?} and exec time {:?}ms for {:?} txns",
+                block_id,
+                block_num,
+                BlockId::from_bytes(block_hash.as_slice()),
+                profile.set_compute_res_time.unwrap().elapsed().unwrap().as_millis()
+                .saturating_sub(profile.get_ordered_blocks_time.unwrap().elapsed().unwrap().as_millis()),
+                txn_len
+            );
             let _ = block_state_machine.sender.send(());
             return Ok(());
         }
