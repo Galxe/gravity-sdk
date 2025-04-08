@@ -1,0 +1,115 @@
+name: Gravity-SDK Aptos Tests
+
+on:
+  push:
+    branches:
+      - main
+#    paths:
+#      - 'aptos-core/**'
+  pull_request:
+    branches:
+      - main
+#    paths:
+#      - 'aptos-core/**'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  test_mempool:
+    name: Test Mempool
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Mempool Tests
+        working-directory: aptos-core/mempool
+        run: |
+          cargo test --all-features -- --nocapture
+        env:
+          RUST_LOG: debug
+
+  test_network:
+    name: Test Network Framework
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Network Tests
+        working-directory: aptos-core/network
+        run: |
+          cargo test --all-features --workspace -- --nocapture
+        env:
+          RUST_LOG: debug
+
+  test_consensus:
+    name: Test Consensus
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Consensus Core Tests
+        working-directory: aptos-core/consensus
+        run: |
+          cargo test --all-features -- --nocapture
+        env:
+          RUST_LOG: debug
+
+      - name: Safety Rules Tests
+        working-directory: aptos-core/consensus/safety-rules
+        run: |
+          cargo test --all-features -- --nocapture
+        env:
+          RUST_LOG: debug
+
+  test_consensus_subsystems:
+    name: Test Consensus Subsystems
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Test State Computer
+        working-directory: aptos-core/consensus
+        run: |
+          cargo test state_computer_tests -- --nocapture
+        env:
+          RUST_LOG: debug
+
+      - name: Test Round Manager
+        working-directory: aptos-core/consensus
+        run: |
+          cargo test round_manager_test -- --nocapture
+        env:
+          RUST_LOG: debug
+
+      - name: Test Quorum Store
+        working-directory: aptos-core/consensus
+        run: |
+          cargo test quorum_store::tests -- --nocapture
+        env:
+          RUST_LOG: debug
