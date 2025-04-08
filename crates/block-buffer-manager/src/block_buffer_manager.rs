@@ -379,8 +379,10 @@ impl BlockBufferManager {
                 block_id,
                 block_num,
                 BlockId::from_bytes(block_hash.as_slice()),
-                profile.set_compute_res_time.unwrap().elapsed().unwrap().as_millis()
-                .saturating_sub(profile.get_ordered_blocks_time.unwrap().elapsed().unwrap().as_millis()),
+                profile.set_compute_res_time.unwrap()
+                    .duration_since(profile.get_ordered_blocks_time.unwrap())
+                    .unwrap_or(Duration::ZERO)
+                    .as_millis(),
                 txn_len
             );
             let _ = block_state_machine.sender.send(());
