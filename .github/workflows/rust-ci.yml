@@ -15,8 +15,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: update darling
-      run: cargo update -p darling --precise 0.20.10
     - name: Build
       run: RUSTFLAGS="--cfg tokio_unstable" cargo build --bin gravity_node --profile quick-release
     # - name: Run tests

@@ -7,7 +7,6 @@ use crate::counters::{APTOS_COMMIT_BLOCKS, APTOS_EXECUTION_TXNS};
 use crate::payload_client::user::quorum_store_client::QuorumStoreClient;
 use anyhow::Result;
 use api_types::u256_define::BlockId;
-use aptos_crypto::HashValue;
 use gaptos::aptos_crypto::HashValue;
 use aptos_executor::block_executor::BlockExecutor;
 use aptos_executor_types::{

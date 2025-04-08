@@ -40,7 +40,7 @@ use gaptos::aptos_types::validator_signer::ValidatorSigner;
 use gaptos::aptos_types::{
     account_address::AccountAddress, block_executor::config::BlockExecutorConfigFromOnchain,
     contract_event::ContractEvent, epoch_state::EpochState, ledger_info::LedgerInfoWithSignatures,
-    randomness::Randomness, transaction::Transaction, DiscardedVMStatus, StatusCode
+    randomness::Randomness, transaction::Transaction, vm_status::{DiscardedVMStatus, StatusCode}
 };
 use block_buffer_manager::get_block_buffer_manager;
 use coex_bridge::{get_coex_bridge, Func};
