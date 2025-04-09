@@ -179,6 +179,7 @@ impl BlockBufferManager {
         max_size: usize,
     ) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, anyhow::Error> {
         let mut txns = self.txn_buffer.txns.lock().await;
+        info!("pop_txns with remain txn {}", txns.len());
 
         if txns.len() <= max_size {
             let result = std::mem::take(&mut *txns);

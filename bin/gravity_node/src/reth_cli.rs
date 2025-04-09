@@ -217,7 +217,6 @@ impl RethCli {
             }
             get_block_buffer_manager().push_txn(vtxn).await;
         }
-
         debug!("end process pending transactions");
         Ok(())
     }
