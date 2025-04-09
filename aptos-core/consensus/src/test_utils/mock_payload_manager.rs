@@ -11,12 +11,12 @@ use aptos_consensus_types::{
     common::{Payload, PayloadFilter},
     request_response::GetPayloadCommand,
 };
-use aptos_types::{
+use gaptos::aptos_types::{
     transaction::{ExecutionStatus, TransactionStatus},
     validator_txn::ValidatorTransaction,
     vm_status::StatusCode,
 };
-use aptos_validator_transaction_pool as vtxn_pool;
+use gaptos::aptos_validator_transaction_pool as vtxn_pool;
 use futures::{channel::mpsc, future::BoxFuture};
 use rand::Rng;
 use std::time::Duration;

@@ -9,9 +9,9 @@ use crate::{
     },
     round_manager::VerifiedEvent,
 };
-use aptos_channels::aptos_channel;
-use aptos_logger::prelude::*;
-use aptos_types::PeerId;
+use gaptos::aptos_channels::aptos_channel;
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_types::PeerId;
 use futures::StreamExt;
 use tokio::sync::mpsc::Sender;
 

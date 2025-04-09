@@ -3,15 +3,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::protocols::wire::handshake::v1::ProtocolId;
-use aptos_config::network_id::NetworkContext;
-use aptos_metrics_core::{
+use gaptos::aptos_config::network_id::NetworkContext;
+use gaptos::aptos_metrics_core::{
     exponential_buckets, register_histogram_vec, register_int_counter_vec, register_int_gauge,
     register_int_gauge_vec, Histogram, HistogramTimer, HistogramVec, IntCounter, IntCounterVec,
     IntGauge, IntGaugeVec,
 };
 use aptos_netcore::transport::ConnectionOrigin;
-use aptos_short_hex_str::AsShortHexStr;
-use aptos_types::PeerId;
+use gaptos::aptos_short_hex_str::AsShortHexStr;
+use gaptos::aptos_types::PeerId;
 use once_cell::sync::Lazy;
 
 // some type labels

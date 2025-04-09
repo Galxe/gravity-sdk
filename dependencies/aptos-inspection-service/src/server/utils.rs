@@ -1,8 +1,8 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos_logger::{error, warn};
-use aptos_metrics_core::{register_int_counter_vec, IntCounterVec};
+use gaptos::aptos_logger::{error, warn};
+use gaptos::aptos_metrics_core::{register_int_counter_vec, IntCounterVec};
 use once_cell::sync::Lazy;
 use prometheus::{
     proto::{MetricFamily, MetricType},
@@ -48,7 +48,7 @@ pub fn get_encoded_metrics(encoder: impl Encoder) -> Vec<u8> {
 
 /// A simple utility function that returns all metric families
 fn get_metric_families() -> Vec<MetricFamily> {
-    let metric_families = aptos_metrics_core::gather();
+    let metric_families = gaptos::aptos_metrics_core::gather();
     let mut total: u64 = 0;
     let mut families_over_1000: u64 = 0;
 

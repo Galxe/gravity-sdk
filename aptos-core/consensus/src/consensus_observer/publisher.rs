@@ -11,9 +11,9 @@ use crate::consensus_observer::{
         ConsensusObserverResponse,
     },
 };
-use aptos_config::{config::ConsensusObserverConfig, network_id::PeerNetworkId};
-use aptos_infallible::RwLock;
-use aptos_logger::{info, warn};
+use gaptos::aptos_config::{config::ConsensusObserverConfig, network_id::PeerNetworkId};
+use gaptos::aptos_infallible::RwLock;
+use gaptos::aptos_logger::{info, warn};
 use aptos_network::application::interface::NetworkClient;
 use futures::{SinkExt, StreamExt};
 use futures_channel::mpsc;
@@ -315,13 +315,13 @@ fn spawn_message_serializer_and_sender(
 mod test {
     use super::*;
     use crate::consensus_observer::network_message::BlockTransactionPayload;
-    use aptos_config::network_id::NetworkId;
-    use aptos_crypto::HashValue;
+    use gaptos::aptos_config::network_id::NetworkId;
+    use gaptos::aptos_crypto::HashValue;
     use aptos_network::{
         application::{metadata::ConnectionState, storage::PeersAndMetadata},
         transport::ConnectionMetadata,
     };
-    use aptos_types::{
+    use gaptos::aptos_types::{
         aggregate_signature::AggregateSignature,
         block_info::BlockInfo,
         ledger_info::{LedgerInfo, LedgerInfoWithSignatures},

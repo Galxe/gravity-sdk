@@ -10,8 +10,8 @@ use crate::{
 };
 use anyhow::ensure;
 use aptos_consensus_types::common::{Author, Round};
-use aptos_logger::warn;
-use aptos_types::randomness::{FullRandMetadata, RandMetadata, Randomness};
+use gaptos::aptos_logger::warn;
+use gaptos::aptos_types::randomness::{FullRandMetadata, RandMetadata, Randomness};
 use itertools::Either;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -339,12 +339,12 @@ mod tests {
         types::{MockShare, PathType, RandConfig},
     };
     use aptos_consensus_types::common::Author;
-    use aptos_crypto::{bls12381, HashValue, Uniform};
-    use aptos_dkg::{
+    use gaptos::aptos_crypto::{bls12381, HashValue, Uniform};
+    use gaptos::aptos_dkg::{
         pvss::{traits::Transcript, Player, WeightedConfig},
         weighted_vuf::traits::WeightedVUF,
     };
-    use aptos_types::{
+    use gaptos::aptos_types::{
         dkg::{real_dkg::maybe_dk_from_bls_sk, DKGSessionMetadata, DKGTrait, DefaultDKG},
         on_chain_config::OnChainRandomnessConfig,
         randomness::{FullRandMetadata, RandKeys, WvufPP, WVUF},

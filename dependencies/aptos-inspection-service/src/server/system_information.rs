@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::server::utils::{CONTENT_TYPE_JSON, CONTENT_TYPE_TEXT};
-use aptos_build_info::build_information;
-use aptos_config::config::NodeConfig;
+use gaptos::aptos_build_info as aptos_build_info;
+use gaptos::aptos_build_info::build_information;
+use gaptos::aptos_config::config::NodeConfig;
 use hyper::{Body, StatusCode};
 
 // The message to display when the system information endpoint is disabled
@@ -31,7 +32,7 @@ pub fn handle_system_information_request(node_config: NodeConfig) -> (StatusCode
 /// Returns a simple JSON formatted string with system information
 fn get_system_information_json() -> String {
     // Get the system and build information
-    // let mut system_information = aptos_telemetry::system_information::get_system_information();
+    // let mut system_information = gaptos::aptos_telemetry::system_information::get_system_information();
     // system_information.extend(build_information!());
 
     // // Return the system information as a JSON string

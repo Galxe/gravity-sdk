@@ -7,11 +7,11 @@ use anyhow::anyhow;
 use aptos_consensus_types::{
     common::Author, pipeline::commit_vote::CommitVote, pipelined_block::PipelinedBlock,
 };
-use aptos_crypto::{bls12381, HashValue};
+use gaptos::aptos_crypto::{bls12381, HashValue};
 use aptos_executor_types::ExecutorResult;
-use aptos_logger::prelude::*;
-use aptos_reliable_broadcast::DropGuard;
-use aptos_types::{
+use gaptos::aptos_logger::prelude::*;
+use gaptos::aptos_reliable_broadcast::DropGuard;
+use gaptos::aptos_types::{
     aggregate_signature::PartialSignatures,
     block_info::BlockInfo,
     ledger_info::{LedgerInfo, LedgerInfoWithPartialSignatures, LedgerInfoWithSignatures},

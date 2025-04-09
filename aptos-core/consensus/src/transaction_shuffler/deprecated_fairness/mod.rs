@@ -12,7 +12,7 @@ use crate::transaction_shuffler::{
     },
     TransactionShuffler,
 };
-use aptos_types::transaction::SignedTransaction;
+use gaptos::aptos_types::transaction::SignedTransaction;
 use itertools::zip_eq;
 use selection_tracker::SelectionTracker;
 use std::collections::BTreeSet;

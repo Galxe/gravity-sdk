@@ -14,14 +14,8 @@ rust-version = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
-aptos-bitvec = { workspace = true }
-aptos-crypto = { workspace = true }
-aptos-crypto-derive = { workspace = true }
+gaptos = { workspace = true }
 aptos-executor-types = { workspace = true }
-aptos-infallible = { workspace = true }
-aptos-logger = { workspace = true }
-aptos-short-hex-str = { workspace = true }
-aptos-types = { workspace = true }
 api-types = { workspace = true }
 bcs = { workspace = true }
 derivative = { workspace = true }
@@ -38,11 +32,10 @@ serde = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
-aptos-types = { workspace = true, features = ["fuzzing"] }
 proptest = { workspace = true }
 serde_json = { workspace = true }
 
 [features]
 default = []
 failpoints = ["fail/failpoints"]
-fuzzing = ["proptest", "aptos-types/fuzzing", "aptos-crypto/fuzzing"]
+fuzzing = ["proptest"]

@@ -10,8 +10,8 @@
 //! and `conn_notifs_channel::Sender` which behave similarly to existing mpsc data structures.
 
 use crate::peer_manager::ConnectionNotification;
-use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_types::PeerId;
+use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_types::PeerId;
 
 pub type Sender = aptos_channel::Sender<PeerId, ConnectionNotification>;
 pub type Receiver = aptos_channel::Receiver<PeerId, ConnectionNotification>;
@@ -24,7 +24,7 @@ pub fn new() -> (Sender, Receiver) {
 mod test {
     use super::*;
     use crate::transport::ConnectionMetadata;
-    use aptos_config::network_id::NetworkId;
+    use gaptos::aptos_config::network_id::NetworkId;
     use futures::{executor::block_on, future::FutureExt, stream::StreamExt};
 
     fn send_new_peer(sender: &mut Sender, connection: ConnectionMetadata) {

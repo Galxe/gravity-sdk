@@ -3,9 +3,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{block::Block, vote_data::VoteData};
-use aptos_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH;
-use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
-use aptos_types::{
+use gaptos::aptos_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH;
+use gaptos::aptos_crypto as aptos_crypto;
+use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
+use gaptos::aptos_types::{
     epoch_state::EpochState,
     proof::accumulator::InMemoryTransactionAccumulator,
 };

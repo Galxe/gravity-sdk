@@ -9,7 +9,7 @@ use aptos_consensus_types::{
     timeout_2chain::TwoChainTimeoutCertificate,
     wrapped_ledger_info::WrappedLedgerInfo,
 };
-use aptos_crypto::HashValue;
+use gaptos::aptos_crypto::HashValue;
 pub use block_store::{
     sync_manager::{BlockRetriever, NeedFetchResult},
     BlockStore,

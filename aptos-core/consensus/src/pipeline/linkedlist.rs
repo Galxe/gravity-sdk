@@ -5,7 +5,7 @@
 // modified from https://rust-unofficial.github.io/too-many-lists/fourth-final.html (MIT License)
 
 // maybe later we can move this to /common
-use aptos_infallible::{Mutex, MutexGuard};
+use gaptos::aptos_infallible::{Mutex, MutexGuard};
 use std::{
     cell::{Ref, RefCell, RefMut},
     rc::Rc,

@@ -8,14 +8,15 @@ use crate::{
     shared_mempool::{start_shared_mempool, types::SharedMempoolNotification},
     tests::common::TestTransaction,
 };
-use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_config::{
+
+use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_config::{
     config::{Identity, NodeConfig, PeerRole, RoleType},
     network_id::{NetworkId, PeerNetworkId},
 };
-use aptos_crypto::{x25519::PrivateKey, Uniform};
-use aptos_event_notifications::{ReconfigNotification, ReconfigNotificationListener};
-use aptos_infallible::{Mutex, MutexGuard};
+use gaptos::aptos_crypto::{x25519::PrivateKey, Uniform};
+use gaptos::aptos_event_notifications::{ReconfigNotification, ReconfigNotificationListener};
+use gaptos::aptos_infallible::{Mutex, MutexGuard};
 use aptos_netcore::transport::ConnectionOrigin;
 use aptos_network::{
     application::{
@@ -32,8 +33,8 @@ use aptos_network::{
     transport::ConnectionMetadata,
     ProtocolId,
 };
-use aptos_storage_interface::mock::MockDbReaderWriter;
-use aptos_types::{
+use gaptos::aptos_storage_interface::mock::MockDbReaderWriter;
+use gaptos::aptos_types::{
     on_chain_config::{InMemoryOnChainConfig, OnChainConfigPayload},
     PeerId,
 };
@@ -571,7 +572,7 @@ fn start_node_mempool(
     let (_ac_endpoint_sender, ac_endpoint_receiver) = mpsc::channel(1_024);
     let (_quorum_store_sender, quorum_store_receiver) = mpsc::channel(1_024);
     let (_mempool_notifier, mempool_listener) =
-        aptos_mempool_notifications::new_mempool_notifier_listener_pair(100);
+        gaptos::aptos_mempool_notifications::new_mempool_notifier_listener_pair(100);
     let (reconfig_sender, reconfig_events) = aptos_channel::new(QueueStyle::LIFO, 1, None);
     let reconfig_event_subscriber = ReconfigNotificationListener {
         notification_receiver: reconfig_events,
@@ -586,7 +587,7 @@ fn start_node_mempool(
         })
         .unwrap();
 
-    let runtime = aptos_runtimes::spawn_named_runtime("shared-mem".into(), None);
+    let runtime = gaptos::aptos_runtimes::spawn_named_runtime("shared-mem".into(), None);
     start_shared_mempool(
         runtime.handle(),
         &config,

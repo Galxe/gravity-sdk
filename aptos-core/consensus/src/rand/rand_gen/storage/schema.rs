@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::rand::rand_gen::types::{AugData, AugDataId, CertifiedAugData, TAugmentedData};
-use aptos_schemadb::{
+use gaptos::aptos_schemadb::{
     define_schema,
     schema::{KeyCodec, Schema, ValueCodec},
     ColumnFamilyName,

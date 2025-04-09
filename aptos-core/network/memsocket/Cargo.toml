@@ -13,7 +13,7 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
-aptos-infallible = { workspace = true }
+gaptos = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
 once_cell = { workspace = true }

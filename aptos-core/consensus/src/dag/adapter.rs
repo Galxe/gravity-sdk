@@ -17,19 +17,19 @@ use crate::{
     pipeline::buffer_manager::OrderedBlocks,
 };
 use anyhow::{anyhow, bail, format_err};
-use aptos_bitvec::BitVec;
+use gaptos::aptos_bitvec::BitVec;
 use aptos_consensus_types::{
     block::Block,
     common::{Author, Payload, Round},
     pipelined_block::PipelinedBlock,
     quorum_cert::QuorumCert,
 };
-use aptos_crypto::HashValue;
+use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::StateComputeResult;
-use aptos_infallible::RwLock;
-use aptos_logger::{error, info};
-use aptos_storage_interface::DbReader;
-use aptos_types::{
+use gaptos::aptos_infallible::RwLock;
+use gaptos::aptos_logger::{error, info};
+use gaptos::aptos_storage_interface::DbReader;
+use gaptos::aptos_types::{
     account_config::NewBlockEvent,
     aggregate_signature::AggregateSignature,
     block_info::BlockInfo,

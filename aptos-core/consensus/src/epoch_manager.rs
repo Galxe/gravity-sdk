@@ -54,9 +54,9 @@ use crate::{
     util::time_service::TimeService,
 };
 use anyhow::{anyhow, bail, ensure, Context};
-use aptos_bounded_executor::BoundedExecutor;
-use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_config::config::{
+use gaptos::aptos_bounded_executor::BoundedExecutor;
+use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_config::config::{
     ConsensusConfig, DagConsensusConfig, ExecutionConfig, NodeConfig, QcAggregatorType,
 };
 use aptos_consensus_types::{
@@ -65,18 +65,18 @@ use aptos_consensus_types::{
     epoch_retrieval::EpochRetrievalRequest,
     proof_of_store::ProofCache,
 };
-use aptos_crypto::bls12381::PrivateKey;
-use aptos_dkg::{
+use gaptos::aptos_crypto::bls12381::PrivateKey;
+use gaptos::aptos_dkg::{
     pvss::{traits::Transcript, Player},
     weighted_vuf::traits::WeightedVUF,
 };
-use aptos_event_notifications::ReconfigNotificationListener;
-use aptos_infallible::{duration_since_epoch, Mutex};
-use aptos_logger::prelude::*;
+use gaptos::aptos_event_notifications::ReconfigNotificationListener;
+use gaptos::aptos_infallible::{duration_since_epoch, Mutex};
+use gaptos::aptos_logger::prelude::*;
 use aptos_mempool::QuorumStoreRequest;
 use aptos_network::{application::interface::NetworkClient, protocols::network::Event};
 use aptos_safety_rules::{safety_rules_manager, PersistentSafetyStorage, SafetyRulesManager};
-use aptos_types::{
+use gaptos::aptos_types::{
     account_address::AccountAddress,
     dkg::{real_dkg::maybe_dk_from_bls_sk, DKGState, DKGTrait, DefaultDKG},
     epoch_change::EpochChangeProof,
@@ -92,7 +92,7 @@ use aptos_types::{
     validator_signer::ValidatorSigner,
     validator_verifier::ValidatorVerifier,
 };
-use aptos_validator_transaction_pool::VTxnPoolState;
+use gaptos::aptos_validator_transaction_pool::VTxnPoolState;
 use fail::fail_point;
 use futures::{
     channel::{
@@ -136,9 +136,9 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     execution_config: ExecutionConfig,
     randomness_override_seq_num: u64,
     time_service: Arc<dyn TimeService>,
-    self_sender: aptos_channels::UnboundedSender<Event<ConsensusMsg>>,
+    self_sender: gaptos::aptos_channels::UnboundedSender<Event<ConsensusMsg>>,
     network_sender: ConsensusNetworkClient<NetworkClient<ConsensusMsg>>,
-    timeout_sender: aptos_channels::Sender<Round>,
+    timeout_sender: gaptos::aptos_channels::Sender<Round>,
     quorum_store_enabled: bool,
     quorum_store_to_mempool_sender: Sender<QuorumStoreRequest>,
     execution_client: Arc<dyn TExecutionClient>,
@@ -166,7 +166,7 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     // recovery_mode is set to true when the recovery manager is spawned
     recovery_mode: bool,
 
-    aptos_time_service: aptos_time_service::TimeService,
+    aptos_time_service: gaptos::aptos_time_service::TimeService,
     dag_rpc_tx: Option<aptos_channel::Sender<AccountAddress, IncomingDAGRequest>>,
     dag_shutdown_tx: Option<oneshot::Sender<oneshot::Sender<()>>>,
     dag_config: DagConsensusConfig,
@@ -183,16 +183,16 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     pub(crate) fn new(
         node_config: &NodeConfig,
         time_service: Arc<dyn TimeService>,
-        self_sender: aptos_channels::UnboundedSender<Event<ConsensusMsg>>,
+        self_sender: gaptos::aptos_channels::UnboundedSender<Event<ConsensusMsg>>,
         network_sender: ConsensusNetworkClient<NetworkClient<ConsensusMsg>>,
-        timeout_sender: aptos_channels::Sender<Round>,
+        timeout_sender: gaptos::aptos_channels::Sender<Round>,
         quorum_store_to_mempool_sender: Sender<QuorumStoreRequest>,
         execution_client: Arc<dyn TExecutionClient>,
         storage: Arc<dyn PersistentLivenessStorage>,
         quorum_store_storage: Arc<dyn QuorumStoreStorage>,
         reconfig_events: ReconfigNotificationListener<P>,
         bounded_executor: BoundedExecutor,
-        aptos_time_service: aptos_time_service::TimeService,
+        aptos_time_service: gaptos::aptos_time_service::TimeService,
         vtxn_pool: VTxnPoolState,
         rand_storage: Arc<dyn RandStorage<AugmentedData>>,
         consensus_publisher: Option<Arc<ConsensusPublisher>>,
@@ -263,7 +263,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     fn create_round_state(
         &self,
         time_service: Arc<dyn TimeService>,
-        timeout_sender: aptos_channels::Sender<Round>,
+        timeout_sender: gaptos::aptos_channels::Sender<Round>,
         delayed_qc_tx: UnboundedSender<DelayedQcMsg>,
         qc_aggregator_type: QcAggregatorType,
     ) -> RoundState {
@@ -836,7 +836,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         
         let maybe_pipeline_builder = if self.config.enable_pipeline {
             info!(epoch = epoch, "Create PipelineBuilder");
-            let signer = Arc::new(ValidatorSigner::new(self.author, consensus_sk));
+            let signer = Arc::new(ValidatorSigner::new(self.author, (*consensus_sk).clone()));
             Some(self.execution_client.pipeline_builder(signer))
         } else {
             None
@@ -855,7 +855,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             payload_manager,
             onchain_consensus_config.order_vote_enabled(),
             self.pending_blocks.clone(),
-            network_sender.clone(),
         ).await);
 
         info!(epoch = epoch, "Create ProposalGenerator");
@@ -1344,7 +1343,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         let epoch = epoch_state.epoch;
         let signer = Arc::new(ValidatorSigner::new(
             self.author,
-            loaded_consensus_key.clone()
+            (*loaded_consensus_key).clone()
         ));
         let commit_signer = Arc::new(DagCommitSigner::new(signer.clone()));
 
@@ -1753,7 +1752,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
     pub async fn start(
         mut self,
-        mut round_timeout_sender_rx: aptos_channels::Receiver<Round>,
+        mut round_timeout_sender_rx: gaptos::aptos_channels::Receiver<Round>,
         mut network_receivers: NetworkReceivers,
     ) {
         // initial start of the processor

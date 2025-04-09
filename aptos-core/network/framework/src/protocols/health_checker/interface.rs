@@ -12,9 +12,9 @@ use crate::{
         network::Event,
     },
 };
-use aptos_config::network_id::PeerNetworkId;
-use aptos_infallible::RwLock;
-use aptos_types::PeerId;
+use gaptos::aptos_config::network_id::PeerNetworkId;
+use gaptos::aptos_infallible::RwLock;
+use gaptos::aptos_types::PeerId;
 use futures::{stream::FusedStream, Stream};
 use std::{
     collections::HashMap,

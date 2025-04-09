@@ -6,10 +6,10 @@ use crate::{
     pending_votes::{PendingVotes, VoteReceptionResult},
     util::time_service::TimeService,
 };
-use aptos_config::config::{DelayedQcAggregatorConfig, QcAggregatorType};
+use gaptos::aptos_config::config::{DelayedQcAggregatorConfig, QcAggregatorType};
 use aptos_consensus_types::{delayed_qc_msg::DelayedQcMsg, vote::Vote};
-use aptos_logger::{error, info};
-use aptos_types::{
+use gaptos::aptos_logger::{error, info};
+use gaptos::aptos_types::{
     ledger_info::LedgerInfoWithPartialSignatures, validator_verifier::ValidatorVerifier,
 };
 use futures::SinkExt;

@@ -3,7 +3,7 @@
 
 #![allow(clippy::unwrap_used)]
 
-use aptos_metrics_core::{
+use gaptos::aptos_metrics_core::{
     exponential_buckets, op_counters::DurationHistogram, register_avg_counter, register_histogram,
     register_histogram_vec, register_int_counter, register_int_counter_vec, Histogram,
     HistogramVec, IntCounter, IntCounterVec,

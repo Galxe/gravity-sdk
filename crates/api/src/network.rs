@@ -1,9 +1,9 @@
-use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_config::{
+use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_config::{
     config::{NetworkConfig, NodeConfig},
     network_id::NetworkId,
 };
-use aptos_crypto::{PrivateKey, Uniform};
+use gaptos::aptos_crypto::{PrivateKey, Uniform};
 use aptos_mempool::MempoolClientRequest;
 use aptos_network::{
     application::{
@@ -17,7 +17,7 @@ use aptos_network::{
     ProtocolId,
 };
 use aptos_network_builder::builder::NetworkBuilder;
-use aptos_types::{
+use gaptos::aptos_types::{
     chain_id::ChainId,
     transaction::{RawTransaction, Script, SignedTransaction},
 };
@@ -90,7 +90,7 @@ pub fn mempool_network_configuration(node_config: &NodeConfig) -> NetworkApplica
 
 // used for UT
 pub async fn mock_mempool_client_sender(mut mc_sender: aptos_mempool::MempoolClientSender) {
-    let addr = aptos_types::account_address::AccountAddress::random();
+    let addr = gaptos::aptos_types::account_address::AccountAddress::random();
     let mut seq_num = 0;
     loop {
         let txn: SignedTransaction = SignedTransaction::new(
@@ -103,8 +103,8 @@ pub async fn mock_mempool_client_sender(mut mc_sender: aptos_mempool::MempoolCli
                 SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() + 60,
                 ChainId::test(),
             ),
-            aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing().public_key(),
-            aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap(),
+            gaptos::aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing().public_key(),
+            gaptos::aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap(),
         );
         seq_num += 1;
         let (sender, receiver) = oneshot::channel();
@@ -202,5 +202,5 @@ pub fn create_network_runtime(network_config: &NetworkConfig) -> Runtime {
     // Create the runtime
     let thread_name =
         format!("network-{}", network_id.as_str().chars().take(3).collect::<String>());
-    aptos_runtimes::spawn_named_runtime(thread_name, network_config.runtime_threads)
+    gaptos::aptos_runtimes::spawn_named_runtime(thread_name, network_config.runtime_threads)
 }
