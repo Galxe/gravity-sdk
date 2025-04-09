@@ -13,7 +13,7 @@ use api_types::{
     compute_res::TxnStatus,
     GLOBAL_CRYPTO_TXN_HASHER,
 };
-use rayon::iter::ParallelIterator;
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use api_types::{ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 use block_buffer_manager::get_block_buffer_manager;
 use rayon::iter::IntoParallelRefMutIterator;
@@ -112,17 +112,38 @@ impl RethCli {
         let system_time = Instant::now();
         let pipe_api = &self.pipe_api;
 
-        let (senders, transactions): (Vec<_>, Vec<_>) = block.txns
-            .par_iter_mut()
-            .map(|txn| {
-                if let Some(txn) = self.txn_cache.lock().unwrap().remove(&(txn.sender.clone(), txn.sequence_number)) {
-                    return (txn.sender(), txn.transaction.transaction().tx().clone());
-                }
-                let (sender, txn) = Self::txn_to_signed(&mut txn.bytes, self.chain_id);
-                (sender, txn)
-            })
-            .unzip();
+                
+        let mut senders = vec![None; block.txns.len()];
+        let mut transactions = vec![None; block.txns.len()];
 
+        {
+            let mut cache = self.txn_cache.lock().unwrap();
+            for (idx, txn) in block.txns.iter().enumerate() {
+                let key = (txn.sender.clone(), txn.sequence_number);
+                if let Some(cached_txn) = cache.remove(&key) {
+                    senders[idx] = Some(cached_txn.sender());
+                    transactions[idx] = Some(cached_txn.transaction.transaction().tx().clone());
+                }
+            }
+        }
+
+        block.txns.par_iter_mut().enumerate()
+            .filter(|(idx, _)| senders[*idx].is_none())
+            .map(|(idx, txn)| {
+                let (sender, transaction) = Self::txn_to_signed(&mut txn.bytes, self.chain_id);
+                (idx, sender, transaction)
+            })
+            .collect::<Vec<(usize, Address, TransactionSigned)>>()
+            .into_iter()
+            .for_each(|(idx, sender, transaction)| {
+                senders[idx] = Some(sender);
+                transactions[idx] = Some(transaction);
+            });
+
+        let senders: Vec<_> = senders.into_iter().map(|x| x.unwrap()).collect();
+        let transactions: Vec<_> = transactions.into_iter().map(|x| x.unwrap()).collect();
+
+        
         let randao = match block.block_meta.randomness {
             Some(randao) => B256::from_slice(randao.0.as_ref()),
             None => B256::ZERO,
