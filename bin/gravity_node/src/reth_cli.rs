@@ -116,16 +116,16 @@ impl RethCli {
         let mut senders = vec![None; block.txns.len()];
         let mut transactions = vec![None; block.txns.len()];
 
-        {
-            let mut cache = self.txn_cache.lock().await;
-            for (idx, txn) in block.txns.iter().enumerate() {
-                let key = (txn.sender.clone(), txn.sequence_number);
-                if let Some(cached_txn) = cache.remove(&key) {
-                    senders[idx] = Some(cached_txn.sender());
-                    transactions[idx] = Some(cached_txn.transaction.transaction().tx().clone());
-                }
-            }
-        }
+        // {
+        //     let mut cache = self.txn_cache.lock().await;
+        //     for (idx, txn) in block.txns.iter().enumerate() {
+        //         let key = (txn.sender.clone(), txn.sequence_number);
+        //         if let Some(cached_txn) = cache.remove(&key) {
+        //             senders[idx] = Some(cached_txn.sender());
+        //             transactions[idx] = Some(cached_txn.transaction.transaction().tx().clone());
+        //         }
+        //     }
+        // }
 
         block.txns.par_iter_mut().enumerate()
             .filter(|(idx, _)| senders[*idx].is_none())
@@ -190,9 +190,6 @@ impl RethCli {
 
     pub async fn start_mempool(&self) -> Result<(), String> {
         debug!("start process pending transactions");
-        let mut count = 0;
-        let mut total = 0;
-        let mut last_time = std::time::Instant::now();
         let mut mut_txn_listener = self.txn_listener.lock().await;
         while let Some(txn_hash) = mut_txn_listener.recv().await {
             let pool_txn = self.pool.get(&txn_hash).unwrap();
@@ -214,16 +211,10 @@ impl RethCli {
                 },
                 account_seq_num: account_nonce,
             };
-            {
-                count += 1;
-                self.txn_cache.lock().await.insert((vtxn.txn.sender().clone(), vtxn.account_seq_num), pool_txn.clone());
+            {       
+                self.txn_cache.lock().await
+                    .insert((vtxn.txn.sender().clone(), vtxn.account_seq_num), pool_txn.clone());
                 get_block_buffer_manager().push_txn(vtxn).await;
-            }
-            if last_time.elapsed().as_secs() > 1 {
-                info!("processed {} transactions in last second total {}", count, total);
-                total += count;
-                count = 0;
-                last_time = std::time::Instant::now();
             }
         }
 
@@ -324,55 +315,5 @@ impl RethCli {
                 .await
                 .unwrap();
         }
-    }
-
-    pub async fn latest_block_number(&self) -> u64 {
-        match self.provider.header_by_number_or_tag(BlockNumberOrTag::Latest).unwrap() {
-            Some(header) => header.number, // The genesis block has a number of zero;
-            None => 0,
-        }
-    }
-
-    pub async fn finalized_block_number(&self) -> u64 {
-        match self.provider.database_provider_ro().unwrap().last_block_number() {
-            Ok(block_number) => {
-                return block_number;
-            }
-            Err(e) => {
-                error!("finalized_block_number error {}", e);
-                return 0;
-            }
-        }
-    }
-
-    async fn recover_execution_blocks(&self, blocks: ExecutionBlocks) {}
-
-    pub fn get_blocks_by_range(
-        &self,
-        start_block_number: u64,
-        end_block_number: u64,
-    ) -> ExecutionBlocks {
-        let result = ExecutionBlocks {
-            latest_block_hash: todo!(),
-            latest_block_number: todo!(),
-            blocks: vec![],
-            latest_ts: todo!(),
-        };
-        for block_number in start_block_number..end_block_number {
-            match self.provider.block_by_number_or_tag(BlockNumberOrTag::Number(block_number)) {
-                Ok(block) => {
-                    assert!(block.is_some());
-                    let block = block.unwrap();
-                    if block_number == end_block_number - 1 {
-                        result.latest_block_hash = *block.hash_slow();
-                        result.latest_block_number = block_number;
-                        result.latest_ts = block.timestamp;
-                    }
-                    result.blocks.push(bincode::serialize(&block).unwrap());
-                }
-                Err(e) => panic!("get_blocks_by_range error {}", e),
-            }
-        }
-        result
     }
 }
