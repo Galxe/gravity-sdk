@@ -116,16 +116,16 @@ impl RethCli {
         let mut senders = vec![None; block.txns.len()];
         let mut transactions = vec![None; block.txns.len()];
 
-        // {
-        //     let mut cache = self.txn_cache.lock().await;
-        //     for (idx, txn) in block.txns.iter().enumerate() {
-        //         let key = (txn.sender.clone(), txn.sequence_number);
-        //         if let Some(cached_txn) = cache.remove(&key) {
-        //             senders[idx] = Some(cached_txn.sender());
-        //             transactions[idx] = Some(cached_txn.transaction.transaction().tx().clone());
-        //         }
-        //     }
-        // }
+        {
+            let mut cache = self.txn_cache.lock().await;
+            for (idx, txn) in block.txns.iter().enumerate() {
+                let key = (txn.sender.clone(), txn.sequence_number);
+                if let Some(cached_txn) = cache.remove(&key) {
+                    senders[idx] = Some(cached_txn.sender());
+                    transactions[idx] = Some(cached_txn.transaction.transaction().tx().clone());
+                }
+            }
+        }
 
         block.txns.par_iter_mut().enumerate()
             .filter(|(idx, _)| senders[*idx].is_none())
@@ -214,8 +214,9 @@ impl RethCli {
             {       
                 self.txn_cache.lock().await
                     .insert((vtxn.txn.sender().clone(), vtxn.account_seq_num), pool_txn.clone());
-                get_block_buffer_manager().push_txn(vtxn).await;
             }
+            info!("push txn to buffer manager");
+            get_block_buffer_manager().push_txn(vtxn).await;
         }
 
         debug!("end process pending transactions");
