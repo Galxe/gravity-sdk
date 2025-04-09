@@ -20,7 +20,7 @@ use gaptos::aptos_event_notifications::ReconfigNotificationListener;
 use gaptos::aptos_infallible::Mutex;
 use gaptos::aptos_logger::prelude::*;
 use gaptos::aptos_mempool_notifications::{MempoolCommitNotification, MempoolNotificationListener};
-use aptos_network::{
+use gaptos::aptos_network::{
     application::{
         interface::{NetworkClientInterface, NetworkServiceEvents},
         storage::PeersAndMetadata,

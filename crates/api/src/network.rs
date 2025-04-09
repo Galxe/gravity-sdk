@@ -5,7 +5,7 @@ use gaptos::aptos_config::{
 };
 use gaptos::aptos_crypto::{PrivateKey, Uniform};
 use aptos_mempool::MempoolClientRequest;
-use aptos_network::{
+use gaptos::aptos_network::{
     application::{
         interface::{NetworkClient, NetworkServiceEvents},
         storage::PeersAndMetadata,
@@ -16,7 +16,7 @@ use aptos_network::{
     },
     ProtocolId,
 };
-use aptos_network_builder::builder::NetworkBuilder;
+use gaptos::aptos_network_builder::builder::NetworkBuilder;
 use gaptos::aptos_types::{
     chain_id::ChainId,
     transaction::{RawTransaction, Script, SignedTransaction},

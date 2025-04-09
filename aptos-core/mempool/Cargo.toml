@@ -16,8 +16,6 @@ rust-version = { workspace = true }
 anyhow = { workspace = true }
 gaptos = { workspace = true }
 aptos-consensus-types = { workspace = true }
-aptos-netcore = { workspace = true }
-aptos-network = { workspace = true }
 
 bcs = { workspace = true }
 fail = { workspace = true }
@@ -40,7 +38,6 @@ block-buffer-manager = { workspace = true }
 
 [dev-dependencies]
 gaptos = { workspace = true }
-aptos-network = { workspace = true, features = ["fuzzing"] }
 enum_dispatch = { workspace = true }
 proptest = { workspace = true }
 

@@ -20,7 +20,6 @@ aptos-executor = { workspace = true }
 aptos-mempool = { workspace = true }
 aptos-consensus-types = { workspace = true }
 aptos-executor-types = { workspace = true }
-aptos-network = { workspace = true }
 aptos-safety-rules = { workspace = true }
 
 async-trait = { workspace = true }
@@ -68,7 +67,6 @@ rocksdb = { workspace = true }
 [dev-dependencies]
 aptos-consensus-types = { workspace = true, features = ["fuzzing"] }
 aptos-mempool = { workspace = true, features = ["fuzzing"] }
-aptos-network = { workspace = true, features = ["fuzzing"] }
 aptos-safety-rules = { workspace = true }
 claims = { workspace = true }
 mockall = { workspace = true }

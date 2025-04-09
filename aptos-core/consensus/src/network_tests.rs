@@ -19,7 +19,7 @@ use aptos_consensus_types::{
     vote_msg::VoteMsg,
 };
 use gaptos::aptos_infallible::{Mutex, RwLock};
-use aptos_network::{
+use gaptos::aptos_network::{
     application::storage::PeersAndMetadata,
     peer_manager::{ConnectionRequestSender, PeerManagerRequest, PeerManagerRequestSender},
     protocols::{
@@ -201,7 +201,7 @@ impl NetworkPlayground {
         twin_id: TwinId,
         consensus_tx: aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>,
         network_reqs_rx: aptos_channel::Receiver<(PeerId, ProtocolId), PeerManagerRequest>,
-        conn_mgr_reqs_rx: gaptos::aptos_channels::Receiver<aptos_network::ConnectivityRequest>,
+        conn_mgr_reqs_rx: gaptos::aptos_channels::Receiver<gaptos::aptos_network::ConnectivityRequest>,
     ) {
         self.node_consensus_txs.lock().insert(twin_id, consensus_tx);
         self.drop_config.write().add_node(twin_id);
@@ -539,7 +539,7 @@ mod tests {
         common::Payload,
     };
     use gaptos::aptos_crypto::HashValue;
-    use aptos_network::{
+    use gaptos::aptos_network::{
         application::{
             interface::{NetworkClient, NetworkServiceEvents},
             storage::PeersAndMetadata,

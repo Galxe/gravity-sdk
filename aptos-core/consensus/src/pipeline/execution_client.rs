@@ -37,7 +37,7 @@ use gaptos::aptos_crypto::bls12381::PrivateKey;
 use aptos_executor_types::ExecutorResult;
 use gaptos::aptos_infallible::RwLock;
 use gaptos::aptos_logger::prelude::*;
-use aptos_network::{application::interface::NetworkClient, protocols::network::Event};
+use gaptos::aptos_network::{application::interface::NetworkClient, protocols::network::Event};
 use gaptos::aptos_types::{
     epoch_state::EpochState,
     ledger_info::LedgerInfoWithSignatures,

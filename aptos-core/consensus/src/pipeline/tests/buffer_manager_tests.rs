@@ -33,7 +33,7 @@ use aptos_consensus_types::{
 };
 use gaptos::aptos_crypto::{hash::ACCUMULATOR_PLACEHOLDER_HASH, HashValue};
 use gaptos::aptos_infallible::Mutex;
-use aptos_network::{
+use gaptos::aptos_network::{
     application::{interface::NetworkClient, storage::PeersAndMetadata},
     peer_manager::{ConnectionRequestSender, PeerManagerRequestSender},
     protocols::{

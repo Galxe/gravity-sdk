@@ -16,7 +16,7 @@ use gaptos::aptos_config::{
 use gaptos::aptos_id_generator::U32IdGenerator;
 use gaptos::aptos_infallible::Mutex;
 use gaptos::aptos_mempool_notifications::MempoolNotifier;
-use aptos_network::{
+use gaptos::aptos_network::{
     application::{
         interface::{NetworkClient, NetworkServiceEvents},
         storage::PeersAndMetadata,

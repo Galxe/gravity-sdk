@@ -24,7 +24,7 @@ use gaptos::aptos_config::config::ReliableBroadcastConfig;
 use aptos_consensus_types::common::{Author, Round};
 use gaptos::aptos_infallible::Mutex;
 use gaptos::aptos_logger::{error, info, spawn_named, trace, warn};
-use aptos_network::{protocols::network::RpcError, ProtocolId};
+use gaptos::aptos_network::{protocols::network::RpcError, ProtocolId};
 use gaptos::aptos_reliable_broadcast::{DropGuard, ReliableBroadcast};
 use gaptos::aptos_time_service::TimeService;
 use gaptos::aptos_types::{

@@ -14,11 +14,6 @@ gaptos = { workspace = true }
 aptos-consensus = { workspace = true }
 aptos-consensus-types = { workspace = true }
 aptos-mempool = { workspace = true }
-aptos-netcore = { workspace = true }
-aptos-network = { workspace = true }
-aptos-network-builder = { workspace = true }
-aptos-network-discovery = { workspace = true }
-aptos-inspection-service = { workspace = true }
 
 serde = { workspace = true }
 tokio = { workspace = true }

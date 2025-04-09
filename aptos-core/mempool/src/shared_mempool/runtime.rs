@@ -16,7 +16,7 @@ use gaptos::aptos_event_notifications::{DbBackedOnChainConfig, ReconfigNotificat
 use gaptos::aptos_infallible::Mutex;
 use gaptos::aptos_logger::{info, warn, Level};
 use gaptos::aptos_mempool_notifications::MempoolNotificationListener;
-use aptos_network::application::{
+use gaptos::aptos_network::application::{
     interface::{NetworkClient, NetworkServiceEvents},
     storage::PeersAndMetadata,
 };

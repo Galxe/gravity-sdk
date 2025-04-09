@@ -11,7 +11,7 @@ use anyhow::{format_err, Result};
 use gaptos::aptos_channels::{self};
 use gaptos::aptos_infallible::Mutex;
 use gaptos::aptos_mempool_notifications::{self, MempoolNotifier};
-use aptos_network::protocols::network::{NewNetworkEvents, NewNetworkSender};
+use gaptos::aptos_network::protocols::network::{NewNetworkEvents, NewNetworkSender};
 use gaptos::aptos_storage_interface::DbReaderWriter;
 use gaptos::aptos_types::{
     mempool_status::MempoolStatusCode,

@@ -15,7 +15,7 @@ use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
 use gaptos::aptos_config::network_id::{NetworkId, PeerNetworkId};
 use aptos_consensus_types::common::Author;
 use gaptos::aptos_logger::debug;
-use aptos_network::{
+use gaptos::aptos_network::{
     application::interface::NetworkClient,
     peer_manager::{ConnectionRequestSender, PeerManagerRequestSender},
     protocols::{

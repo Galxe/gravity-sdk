@@ -5,7 +5,7 @@ use crate::consensus_observer::network_message::{
     ConsensusObserverMessage, ConsensusObserverResponse,
 };
 use gaptos::aptos_config::network_id::{NetworkId, PeerNetworkId};
-use aptos_network::{
+use gaptos::aptos_network::{
     application::interface::NetworkServiceEvents,
     protocols::{
         network::{Event, RpcError},

@@ -34,7 +34,7 @@ use gaptos::aptos_crypto::{bls12381, Genesis};
 use gaptos::aptos_event_notifications::{DbBackedOnChainConfig, ReconfigNotificationListener};
 use gaptos::aptos_infallible::Mutex;
 use gaptos::aptos_logger::{debug, error, info, warn};
-use aptos_network::{
+use gaptos::aptos_network::{
     application::{interface::NetworkClient, metadata::PeerMetadata},
     protocols::wire::handshake::v1::ProtocolId,
 };

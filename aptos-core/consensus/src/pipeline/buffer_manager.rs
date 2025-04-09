@@ -33,7 +33,7 @@ use aptos_consensus_types::{
 use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::ExecutorResult;
 use gaptos::aptos_logger::prelude::*;
-use aptos_network::protocols::{rpc::error::RpcError, wire::handshake::v1::ProtocolId};
+use gaptos::aptos_network::protocols::{rpc::error::RpcError, wire::handshake::v1::ProtocolId};
 use gaptos::aptos_reliable_broadcast::{DropGuard, ReliableBroadcast};
 use gaptos::aptos_time_service::TimeService;
 use gaptos::aptos_types::{

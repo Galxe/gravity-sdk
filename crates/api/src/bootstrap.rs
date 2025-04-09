@@ -22,11 +22,11 @@ use gaptos::aptos_crypto::{hash::GENESIS_BLOCK_ID, x25519, HashValue};
 use gaptos::aptos_event_notifications::EventSubscriptionService;
 use aptos_mempool::{MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest};
 use gaptos::aptos_mempool_notifications::MempoolNotificationListener;
-use aptos_network::application::{
+use gaptos::aptos_network::application::{
     interface::{NetworkClient, NetworkServiceEvents},
     storage::PeersAndMetadata,
 };
-use aptos_network_builder::builder::NetworkBuilder;
+use gaptos::aptos_network_builder::builder::NetworkBuilder;
 use gaptos::aptos_storage_interface::DbReaderWriter;
 use gaptos::aptos_types::account_address::AccountAddress;
 use gaptos::aptos_validator_transaction_pool::VTxnPoolState;
@@ -94,7 +94,7 @@ pub fn start_node_inspection_service(
     node_config: &NodeConfig,
     peers_and_metadata: Arc<PeersAndMetadata>,
 ) {
-    aptos_inspection_service::start_inspection_service(node_config.clone(), peers_and_metadata)
+    gaptos::aptos_inspection_service::start_inspection_service(node_config.clone(), None, peers_and_metadata)
 }
 
 pub fn start_consensus(

@@ -74,7 +74,7 @@ use gaptos::aptos_event_notifications::ReconfigNotificationListener;
 use gaptos::aptos_infallible::{duration_since_epoch, Mutex};
 use gaptos::aptos_logger::prelude::*;
 use aptos_mempool::QuorumStoreRequest;
-use aptos_network::{application::interface::NetworkClient, protocols::network::Event};
+use gaptos::aptos_network::{application::interface::NetworkClient, protocols::network::Event};
 use aptos_safety_rules::{safety_rules_manager, PersistentSafetyStorage, SafetyRulesManager};
 use gaptos::aptos_types::{
     account_address::AccountAddress,

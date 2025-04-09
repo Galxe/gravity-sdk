@@ -13,7 +13,6 @@ members = [
     "aptos-core/consensus",
     "dependencies/aptos-executor-types",
     "dependencies/aptos-executor",
-    "dependencies/aptos-inspection-service",
     "crates/api",
     "crates/api-types",
     "bin/kvstore",
@@ -27,10 +26,9 @@ members = [
 aptos-consensus = { path = "./aptos-core/consensus" }
 
 #  from aptos =======================
-gaptos = { git = "https://github.com/Galxe/gravity-aptos.git", branch = "aptos-node"}
+gaptos = { git = "https://github.com/Galxe/gravity-aptos.git", branch = "aptos-node-0409"}
 aptos-executor-types = { path = "dependencies/aptos-executor-types" }
 aptos-executor = { path = "dependencies/aptos-executor" }
-aptos-inspection-service = { path = "dependencies/aptos-inspection-service" }
 api = { path = "./crates/api" }
 api-types = { path = "./crates/api-types" }
 
@@ -39,12 +37,7 @@ aptos-consensus-types = { path = "./aptos-core/consensus/consensus-types", featu
     "fuzzing",
 ] }
 aptos-mempool = { path = "./aptos-core/mempool", features = ["fuzzing"] }
-aptos-memsocket = { path = "./aptos-core/network/memsocket" }
 aptos-safety-rules = { path = "./aptos-core/consensus/safety-rules" }
-aptos-netcore = { path = "./aptos-core/network/netcore" }
-aptos-network = { path = "./aptos-core/network/framework" }
-aptos-network-builder = { path = "./aptos-core/network/builder" }
-aptos-network-discovery = { path = "./aptos-core/network/discovery" }
 block-buffer-manager = { path = "./crates/block-buffer-manager" }
 
 # from aptos =======================

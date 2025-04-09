@@ -31,7 +31,7 @@ use gaptos::aptos_event_notifications::{DbBackedOnChainConfig, ReconfigNotificat
 use aptos_executor::block_executor::BlockExecutor;
 use gaptos::aptos_logger::prelude::*;
 use aptos_mempool::QuorumStoreRequest;
-use aptos_network::application::interface::{
+use gaptos::aptos_network::application::interface::{
     NetworkClient, NetworkClientInterface, NetworkServiceEvents,
 };
 use gaptos::aptos_storage_interface::DbReaderWriter;

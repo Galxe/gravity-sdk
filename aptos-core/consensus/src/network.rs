@@ -33,7 +33,7 @@ use aptos_consensus_types::{
     vote_msg::VoteMsg,
 };
 use gaptos::aptos_logger::prelude::*;
-use aptos_network::{
+use gaptos::aptos_network::{
     application::interface::{NetworkClient, NetworkServiceEvents},
     protocols::{network::Event, rpc::error::RpcError},
     ProtocolId,

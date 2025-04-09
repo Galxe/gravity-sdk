@@ -23,8 +23,8 @@ use gaptos::aptos_config::{
 };
 use gaptos::aptos_infallible::RwLock;
 use gaptos::aptos_logger::prelude::*;
-use aptos_netcore::transport::ConnectionOrigin;
-use aptos_network::{
+use gaptos::aptos_netcore::transport::ConnectionOrigin;
+use gaptos::aptos_network::{
     application::{error::Error, interface::NetworkClientInterface, metadata::PeerMetadata},
     transport::ConnectionMetadata,
 };

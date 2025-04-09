@@ -16,8 +16,8 @@ use gaptos::aptos_config::{
     config::{NodeConfig, PeerRole},
     network_id::{NetworkId, PeerNetworkId},
 };
-use aptos_netcore::transport::ConnectionOrigin;
-use aptos_network::{
+use gaptos::aptos_netcore::transport::ConnectionOrigin;
+use gaptos::aptos_network::{
     peer_manager::PeerManagerRequest,
     protocols::{
         direct_send::Message,

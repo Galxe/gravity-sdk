@@ -7,8 +7,8 @@ use crate::tests::{
     test_framework::{test_transaction, MempoolNode, MempoolTestFrameworkBuilder},
 };
 use gaptos::aptos_config::network_id::PeerNetworkId;
-use aptos_netcore::transport::ConnectionOrigin;
-use aptos_network::{
+use gaptos::aptos_netcore::transport::ConnectionOrigin;
+use gaptos::aptos_network::{
     testutils::{
         test_framework::TestFramework,
         test_node::{
