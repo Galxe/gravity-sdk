@@ -213,9 +213,8 @@ impl RethCli {
             };
             {       
                 self.txn_cache.lock().await
-                    .insert((vtxn.txn.sender().clone(), vtxn.account_seq_num), pool_txn.clone());
+                    .insert((vtxn.txn.sender().clone(), vtxn.txn.seq_number()), pool_txn.clone());
             }
-            info!("push txn to buffer manager");
             get_block_buffer_manager().push_txn(vtxn).await;
         }
 
