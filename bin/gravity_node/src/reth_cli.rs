@@ -18,7 +18,7 @@ use api_types::{ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAcco
 use block_buffer_manager::get_block_buffer_manager;
 use rayon::iter::IntoParallelRefMutIterator;
 use core::panic;
-use greth::reth_ethereum_engine_primitives::EthPayloadAttributes;
+use greth::{reth_ethereum_engine_primitives::EthPayloadAttributes, reth_transaction_pool::{EthPooledTransaction, ValidPoolTransaction}};
 use greth::reth_node_api::NodeTypesWithDBAdapter;
 use greth::reth_node_ethereum::EthereumNode;
 use greth::reth_pipe_exec_layer_ext_v2::{ExecutedBlockMeta, OrderedBlock, PipeExecLayerApi};
@@ -62,6 +62,7 @@ pub struct RethCli {
         >,
         greth::reth_transaction_pool::blobstore::DiskFileBlobStore,
     >,
+    txn_cache: std::sync::Arc<std::sync::Mutex<HashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>>>,
 }
 
 pub fn convert_account(acc: Address) -> ExternalAccountAddress {
@@ -89,6 +90,7 @@ impl RethCli {
             provider: args.provider,
             txn_listener: Mutex::new(args.tx_listener),
             pool: args.pool,
+            txn_cache: Arc::new(std::sync::Mutex::new(HashMap::new())),
         }
     }
 
@@ -113,6 +115,9 @@ impl RethCli {
         let (senders, transactions): (Vec<_>, Vec<_>) = block.txns
             .par_iter_mut()
             .map(|txn| {
+                if let Some(txn) = self.txn_cache.lock().unwrap().remove(&(txn.sender.clone(), txn.sequence_number)) {
+                    return (txn.sender(), txn.transaction.transaction().tx().clone());
+                }
                 let (sender, txn) = Self::txn_to_signed(&mut txn.bytes, self.chain_id);
                 (sender, txn)
             })
@@ -169,10 +174,10 @@ impl RethCli {
         let mut last_time = std::time::Instant::now();
         let mut mut_txn_listener = self.txn_listener.lock().await;
         while let Some(txn_hash) = mut_txn_listener.recv().await {
-            let txn = self.pool.get(&txn_hash).unwrap();
-            let sender = txn.sender();
-            let nonce = txn.nonce();
-            let txn = txn.transaction.transaction().tx();
+            let pool_txn = self.pool.get(&txn_hash).unwrap();
+            let sender = pool_txn.sender();
+            let nonce = pool_txn.nonce();
+            let txn = pool_txn.transaction.transaction().tx();
             let account_nonce =
                 self.provider.basic_account(&sender).unwrap().map(|x| x.nonce).unwrap_or(nonce);
             // Since the consensus layer might use the bytes to recalculate the hash, we need to encode the transaction
@@ -190,6 +195,7 @@ impl RethCli {
             };
             {
                 count += 1;
+                self.txn_cache.lock().unwrap().insert((vtxn.txn.sender().clone(), vtxn.account_seq_num), pool_txn.clone());
                 get_block_buffer_manager().push_txn(vtxn).await;
             }
             if last_time.elapsed().as_secs() > 1 {
