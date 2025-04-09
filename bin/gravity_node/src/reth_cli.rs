@@ -62,7 +62,7 @@ pub struct RethCli {
         >,
         greth::reth_transaction_pool::blobstore::DiskFileBlobStore,
     >,
-    txn_cache: std::sync::Arc<std::sync::Mutex<HashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>>>,
+    txn_cache: Mutex<HashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>>,
 }
 
 pub fn convert_account(acc: Address) -> ExternalAccountAddress {
@@ -90,7 +90,7 @@ impl RethCli {
             provider: args.provider,
             txn_listener: Mutex::new(args.tx_listener),
             pool: args.pool,
-            txn_cache: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            txn_cache: Mutex::new(HashMap::new()),
         }
     }
 
@@ -117,7 +117,7 @@ impl RethCli {
         let mut transactions = vec![None; block.txns.len()];
 
         {
-            let mut cache = self.txn_cache.lock().unwrap();
+            let mut cache = self.txn_cache.lock().await;
             for (idx, txn) in block.txns.iter().enumerate() {
                 let key = (txn.sender.clone(), txn.sequence_number);
                 if let Some(cached_txn) = cache.remove(&key) {
@@ -216,7 +216,7 @@ impl RethCli {
             };
             {
                 count += 1;
-                self.txn_cache.lock().unwrap().insert((vtxn.txn.sender().clone(), vtxn.account_seq_num), pool_txn.clone());
+                self.txn_cache.lock().await.insert((vtxn.txn.sender().clone(), vtxn.account_seq_num), pool_txn.clone());
                 get_block_buffer_manager().push_txn(vtxn).await;
             }
             if last_time.elapsed().as_secs() > 1 {
