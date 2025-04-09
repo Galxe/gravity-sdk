@@ -37,7 +37,7 @@ async-trait.workspace = true
 api.workspace = true
 api-types.workspace = true
 block-buffer-manager.workspace = true
-
+rayon = "1.7.0"
 [patch.crates-io]
 darling = { git = "https://github.com/TedDriggs/darling.git", rev = "84448b8"}
 

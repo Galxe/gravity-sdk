@@ -13,8 +13,10 @@ use api_types::{
     compute_res::TxnStatus,
     GLOBAL_CRYPTO_TXN_HASHER,
 };
+use rayon::iter::ParallelIterator;
 use api_types::{ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 use block_buffer_manager::get_block_buffer_manager;
+use rayon::iter::IntoParallelRefMutIterator;
 use core::panic;
 use greth::reth_ethereum_engine_primitives::EthPayloadAttributes;
 use greth::reth_node_api::NodeTypesWithDBAdapter;
@@ -107,14 +109,14 @@ impl RethCli {
         trace!("push ordered block {:?} with parent id {}", block, parent_id);
         let system_time = Instant::now();
         let pipe_api = &self.pipe_api;
-        let mut senders = vec![];
-        let mut transactions = vec![];
-        for (sender, txn) in
-            block.txns.iter_mut().map(|txn| Self::txn_to_signed(&mut txn.bytes, self.chain_id))
-        {
-            senders.push(sender);
-            transactions.push(txn);
-        }
+
+        let (senders, transactions): (Vec<_>, Vec<_>) = block.txns
+            .par_iter_mut()
+            .map(|txn| {
+                let (sender, txn) = Self::txn_to_signed(&mut txn.bytes, self.chain_id);
+                (sender, txn)
+            })
+            .unzip();
 
         let randao = match block.block_meta.randomness {
             Some(randao) => B256::from_slice(randao.0.as_ref()),
