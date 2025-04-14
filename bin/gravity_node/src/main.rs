@@ -81,6 +81,8 @@ fn run_reth(
         cli.run(|builder, _| {
             let tx = tx.clone();
             async move {
+                let legacy_state_root = builder.config().engine.legacy_state_root_task_enabled;
+                info!("legacy_state_root is {}", legacy_state_root);
                 let handle = builder
                     .with_types_and_provider::<EthereumNode, BlockchainProvider<_>>()
                     .with_components(EthereumNode::components())
@@ -128,6 +130,7 @@ fn run_reth(
                     latest_block.number,
                     latest_block_hash,
                     BTreeMap::new(),
+                    legacy_state_root,
                 );
                 let pipeline_api_v2: PipeExecLayerApi<BlockViewStorage<BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>>> = reth_pipe_exec_layer_ext_v2::new_pipe_exec_layer_api(
                     chain_spec,
