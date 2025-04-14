@@ -128,6 +128,7 @@ fn run_reth(
                     latest_block.number,
                     latest_block_hash,
                     BTreeMap::new(),
+                    true,
                 );
                 let pipeline_api_v2: PipeExecLayerApi<BlockViewStorage<BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>>> = reth_pipe_exec_layer_ext_v2::new_pipe_exec_layer_api(
                     chain_spec,

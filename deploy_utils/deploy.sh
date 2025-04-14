@@ -21,7 +21,7 @@ declare -A VALID_MODES=(
 # Default settings
 bin_name="gravity_node"
 node_arg=""
-bin_version="release"
+bin_version="debug"
 mode="cluster"
 recover="false"
 
