@@ -7,7 +7,6 @@ use crate::{
         payload_store::BlockPayloadStatus,
         publisher::ConsensusPublisher,
     },
-    counters,
     quorum_store::{batch_store::BatchReader, quorum_store_coordinator::CoordinatorCommand},
 };
 use aptos_consensus_types::{
@@ -32,6 +31,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::oneshot;
+use gaptos::aptos_consensus::counters as counters;
 
 /// A trait that defines the interface for a payload manager. The payload manager is responsible for
 /// resolving the transactions in a block's payload.

@@ -2,7 +2,7 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{counters, network::BroadcastPeerPriority};
+use crate::network::BroadcastPeerPriority;
 use api_types::{
     account::{ExternalAccountAddress, ExternalChainId},
     u256_define::TxnHash,
@@ -21,6 +21,7 @@ use std::{
     sync::{atomic::AtomicUsize, Arc},
     time::SystemTime,
 };
+use gaptos::aptos_mempool::counters as counters;
 
 /// Estimated per-txn size minus the raw transaction
 pub const TXN_FIXED_ESTIMATED_BYTES: usize = size_of::<MempoolTransaction>();

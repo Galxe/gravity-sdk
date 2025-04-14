@@ -8,12 +8,6 @@ use crate::{
         tracing::{observe_block, BlockStage},
         BlockReader, BlockStore,
     },
-    counters::{
-        BLOCKS_FETCHED_FROM_NETWORK_IN_BLOCK_RETRIEVER,
-        BLOCKS_FETCHED_FROM_NETWORK_WHILE_FAST_FORWARD_SYNC,
-        BLOCKS_FETCHED_FROM_NETWORK_WHILE_INSERTING_QUORUM_CERT, LATE_EXECUTION_WITH_ORDER_VOTE_QC,
-        SUCCESSFUL_EXECUTED_WITH_ORDER_VOTE_QC, SUCCESSFUL_EXECUTED_WITH_REGULAR_QC,
-    },
     epoch_manager::LivenessStorageData,
     logging::{LogEvent, LogSchema},
     monitor,
@@ -53,6 +47,12 @@ use rand::{prelude::*, Rng};
 use sha3::digest::generic_array::typenum::Le;
 use std::{clone::Clone, cmp::min, sync::Arc, time::Duration};
 use tokio::{time, time::timeout};
+use gaptos::aptos_consensus::counters::{
+    BLOCKS_FETCHED_FROM_NETWORK_IN_BLOCK_RETRIEVER,
+    BLOCKS_FETCHED_FROM_NETWORK_WHILE_FAST_FORWARD_SYNC,
+    BLOCKS_FETCHED_FROM_NETWORK_WHILE_INSERTING_QUORUM_CERT, LATE_EXECUTION_WITH_ORDER_VOTE_QC,
+    SUCCESSFUL_EXECUTED_WITH_ORDER_VOTE_QC, SUCCESSFUL_EXECUTED_WITH_REGULAR_QC,
+};
 
 static CUR_BLOCK_SYNC_BLOCK_SUM_GAUGE: Lazy<IntGaugeVec> = Lazy::new(|| {
      register_int_gauge_vec!(

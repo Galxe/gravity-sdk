@@ -1,12 +1,11 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use super::{batch_store::BatchStore, counters::PROOF_CREAT_COUNT};
+use super::batch_store::BatchStore;
 use crate::{
     monitor,
     quorum_store::{
         batch_generator::BackPressure,
-        counters,
         utils::{BatchSortKey, ProofQueue},
     },
 };
@@ -26,6 +25,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use gaptos::aptos_consensus::quorum_store::counters as counters;
 
 #[derive(Debug)]
 pub enum ProofManagerCommand {
@@ -161,7 +161,7 @@ impl ProofManager {
     pub(crate) fn receive_proofs(&mut self, proofs: Vec<ProofOfStore>) {
         for proof in proofs.into_iter() {
             self.batch_queue.remove_batch(proof.info());
-            PROOF_CREAT_COUNT.inc();
+            counters::PROOF_CREAT_COUNT.inc();
             self.proofs_for_consensus.push(proof);
         }
         (self.remaining_total_txn_num, self.remaining_total_proof_num) =

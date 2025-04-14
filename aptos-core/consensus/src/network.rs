@@ -4,7 +4,6 @@
 
 use crate::{
     block_storage::tracing::{observe_block, BlockStage},
-    counters,
     dag::{
         DAGMessage, DAGNetworkMessage, DAGRpcResult, ProofNotifier, RpcWithFallback,
         TDAGNetworkSender,
@@ -59,6 +58,7 @@ use std::{
     time::Duration,
 };
 use tokio::time::timeout;
+use gaptos::aptos_consensus::counters as counters;
 
 pub trait TConsensusMsg: Sized + Serialize + DeserializeOwned {
     fn epoch(&self) -> u64;

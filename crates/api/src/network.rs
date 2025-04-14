@@ -66,7 +66,7 @@ pub fn consensus_network_configuration(node_config: &NodeConfig) -> NetworkAppli
         rpc_protocols,
         aptos_channel::Config::new(node_config.consensus.max_network_channel_size)
             .queue_style(QueueStyle::FIFO)
-            .counters(&aptos_consensus::counters::PENDING_CONSENSUS_NETWORK_EVENTS),
+            .counters(&gaptos::aptos_consensus::counters::PENDING_CONSENSUS_NETWORK_EVENTS),
     );
     NetworkApplicationConfig::new(network_client_config, network_service_config)
 }
@@ -83,7 +83,7 @@ pub fn mempool_network_configuration(node_config: &NodeConfig) -> NetworkApplica
         rpc_protocols,
         aptos_channel::Config::new(node_config.mempool.max_network_channel_size)
             .queue_style(QueueStyle::KLAST) // TODO: why is this not FIFO?
-            .counters(&aptos_mempool::counters::PENDING_MEMPOOL_NETWORK_EVENTS),
+            .counters(&gaptos::aptos_mempool::counters::PENDING_MEMPOOL_NETWORK_EVENTS),
     );
     NetworkApplicationConfig::new(network_client_config, network_service_config)
 }

@@ -9,7 +9,6 @@
 //! Votes are automatically dropped when the structure goes out of scope.
 
 use crate::{
-    counters,
     qc_aggregator::{create_qc_aggregator, QcAggregator},
     util::time_service::TimeService,
 };
@@ -35,6 +34,7 @@ use std::{
     fmt,
     sync::Arc,
 };
+use gaptos::aptos_consensus::counters as counters;
 
 /// Result of the vote processing. The failure case (Verification error) is returned
 /// as the Error part of the result.

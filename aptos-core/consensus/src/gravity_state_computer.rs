@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::consensusdb::ConsensusDB;
-use crate::counters::{APTOS_COMMIT_BLOCKS, APTOS_EXECUTION_TXNS};
 use crate::payload_client::user::quorum_store_client::QuorumStoreClient;
 use anyhow::Result;
 use api_types::u256_define::BlockId;
@@ -24,6 +23,7 @@ use gaptos::aptos_storage_interface::state_delta::StateDelta;
 use coex_bridge::{get_coex_bridge, Func};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
+use gaptos::aptos_consensus::counters::{APTOS_COMMIT_BLOCKS, APTOS_EXECUTION_TXNS};
 
 pub struct ConsensusAdapterArgs {
     pub quorum_store_client: Option<Arc<QuorumStoreClient>>,

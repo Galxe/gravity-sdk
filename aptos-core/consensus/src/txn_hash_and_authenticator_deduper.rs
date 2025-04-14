@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    counters::{TXN_DEDUP_FILTERED, TXN_DEDUP_SECONDS},
     transaction_deduper::TransactionDeduper,
 };
 use gaptos::aptos_experimental_runtimes::thread_manager::optimal_min_len;
 use gaptos::aptos_types::transaction::SignedTransaction;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
+use gaptos::aptos_consensus::counters::{TXN_DEDUP_FILTERED, TXN_DEDUP_SECONDS};
 
 /// An implementation of TransactionDeduper. Duplicate filtering is done using the pair
 /// (raw_txn.hash(), authenticator). Both the hash and signature are required because dedup

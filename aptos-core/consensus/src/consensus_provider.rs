@@ -11,7 +11,6 @@ use crate::{
         network_message::ConsensusObserverMessage, observer::ConsensusObserver,
         publisher::ConsensusPublisher,
     },
-    counters,
     epoch_manager::EpochManager,
     network::NetworkTask,
     network_interface::{ConsensusMsg, ConsensusNetworkClient},
@@ -41,6 +40,7 @@ use futures::channel::mpsc;
 use gaptos::move_core_types::account_address::AccountAddress;
 use std::{collections::HashMap, sync::Arc};
 use tokio::runtime::Runtime;
+use gaptos::aptos_consensus::counters as counters;
 
 /// Helper function to start consensus based on configuration and return the runtime
 #[allow(clippy::unwrap_used)]

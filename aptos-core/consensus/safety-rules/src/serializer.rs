@@ -2,7 +2,7 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{counters, logging::LogEntry, ConsensusState, Error, SafetyRules, TSafetyRules};
+use crate::{logging::LogEntry, ConsensusState, Error, SafetyRules, TSafetyRules};
 use aptos_consensus_types::{
     block_data::BlockData,
     order_vote::OrderVote,
@@ -19,6 +19,7 @@ use gaptos::aptos_types::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use gaptos::aptos_safety_rules::counters as counters;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum SafetyRulesInput {

@@ -4,12 +4,13 @@
 use crate::{
     block_preparer::BlockPreparer,
     block_storage::tracing::{observe_block, BlockStage},
-    counters::{self, update_counters_for_block, update_counters_for_compute_res, update_counters_for_compute_result},
+    counters::{update_counters_for_block, update_counters_for_compute_res, update_counters_for_compute_result},
     execution_pipeline::SIG_VERIFY_POOL,
     monitor,
     payload_manager::TPayloadManager,
     txn_notifier::TxnNotifier,
 };
+use gaptos::aptos_consensus::counters as counters;
 use anyhow::anyhow;
 use api_types::{account::{ExternalAccountAddress, ExternalChainId}, u256_define::{BlockId, Random, TxnHash}, ExternalBlock, ExternalBlockMeta};
 use gaptos::aptos_consensus_notifications::ConsensusNotificationSender;

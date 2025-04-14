@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    counters,
     counters::update_counters_for_committed_blocks,
     logging::{LogEvent, LogSchema},
     persistent_liveness_storage::PersistentLivenessStorage,
@@ -23,6 +22,7 @@ use std::{
     collections::{vec_deque::VecDeque, HashMap, HashSet}, fmt::{self, Display}, sync::Arc
 };
 use aptos_consensus_types::common::Payload;
+use gaptos::aptos_consensus::counters as counters;
 
 /// This structure is a wrapper of [`ExecutedBlock`](aptos_consensus_types::pipelined_block::PipelinedBlock)
 /// that adds `children` field to know the parent-child relationship between blocks.

@@ -4,7 +4,7 @@
 
 //! Processes that are directly spawned by shared mempool runtime initialization
 use crate::{
-    core_mempool::CoreMempool, counters, logging::{LogEntry, LogEvent, LogSchema}, network::{BroadcastPeerPriority, MempoolSyncMsg}, shared_mempool::{
+    core_mempool::CoreMempool, logging::{LogEntry, LogEvent, LogSchema}, network::{BroadcastPeerPriority, MempoolSyncMsg}, shared_mempool::{
         tasks::{self, process_committed_transactions},
         types::{
             notify_subscribers, SharedMempool,
@@ -42,6 +42,7 @@ use std::{
 };
 use tokio::{runtime::Handle, time::interval};
 use tokio_stream::wrappers::IntervalStream;
+use gaptos::aptos_mempool::counters as counters;
 
 /// Coordinator that handles inbound network events and outbound txn broadcasts.
 pub(crate) async fn coordinator<NetworkClient, ConfigProvider>(

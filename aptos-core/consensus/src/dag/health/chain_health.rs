@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    counters::CHAIN_HEALTH_BACKOFF_TRIGGERED,
     dag::anchor_election::CommitHistory,
     liveness::{leader_reputation::VotingPowerRatio, proposal_generator::ChainHealthBackoffConfig},
 };
 use gaptos::aptos_config::config::ChainHealthBackoffValues;
 use aptos_consensus_types::common::Round;
 use std::{sync::Arc, time::Duration};
+use gaptos::aptos_consensus::counters::CHAIN_HEALTH_BACKOFF_TRIGGERED;
 
 pub trait TChainHealth: Send + Sync {
     fn get_round_backoff(&self, round: Round) -> Option<Duration>;

@@ -8,7 +8,6 @@ use crate::{
         batch_generator::{BackPressure, BatchGenerator, BatchGeneratorCommand},
         batch_requester::BatchRequester,
         batch_store::{BatchReader, BatchReaderImpl, BatchStore},
-        counters,
         direct_mempool_quorum_store::DirectMempoolQuorumStore,
         network_listener::NetworkListener,
         proof_coordinator::{ProofCoordinator, ProofCoordinatorCommand},
@@ -33,6 +32,7 @@ use gaptos::aptos_types::{
 use futures::StreamExt;
 use futures_channel::mpsc::{Receiver, Sender};
 use std::{sync::Arc, time::Duration};
+use gaptos::aptos_consensus::quorum_store::counters as counters;
 
 pub enum QuorumStoreBuilder {
     DirectMempool(DirectMempoolInnerBuilder),

@@ -6,7 +6,6 @@
 use super::types::MempoolMessageId;
 use crate::{
     core_mempool::{CoreMempool, TimelineState},
-    counters,
     logging::{LogEntry, LogEvent, LogSchema},
     network::{BroadcastError, BroadcastPeerPriority, MempoolSyncMsg},
     shared_mempool::{
@@ -42,6 +41,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::runtime::Handle;
+use gaptos::aptos_mempool::counters as counters;
 
 // ============================== //
 //  broadcast_coordinator tasks  //

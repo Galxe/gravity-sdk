@@ -6,7 +6,7 @@ use crate::{
     monitor,
     network::QuorumStoreSender,
     quorum_store::{
-        batch_generator::BatchGeneratorCommand, batch_store::BatchReader, counters, utils::Timeouts,
+        batch_generator::BatchGeneratorCommand, batch_store::BatchReader, utils::Timeouts,
     },
 };
 use aptos_consensus_types::proof_of_store::{
@@ -26,6 +26,7 @@ use tokio::{
     sync::{mpsc::Receiver, oneshot as TokioOneshot},
     time,
 };
+use gaptos::aptos_consensus::quorum_store::counters as counters;
 
 #[derive(Debug)]
 pub(crate) enum ProofCoordinatorCommand {

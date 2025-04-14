@@ -79,7 +79,7 @@ impl ConsensusEngine {
         let mut runtimes = vec![];
         if let Some(runtime) = start_telemetry_service(
             node_config.clone(),
-            ChainId::new(chain_id as u8),
+            ChainId::new(chain_id),
             build_information!(),
             remote_log_receiver,
             Some(logger_filter_update),

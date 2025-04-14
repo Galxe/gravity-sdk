@@ -4,7 +4,6 @@
 
 use crate::{
     consensus_observer::publisher::ConsensusPublisher,
-    counters,
     error::StateSyncError,
     network::{IncomingCommitRequest, IncomingRandGenRequest, NetworkSender},
     network_interface::{ConsensusMsg, ConsensusNetworkClient},
@@ -54,6 +53,7 @@ use gaptos::move_core_types::account_address::AccountAddress;
 use std::sync::Arc;
 
 use super::pipeline_builder::PipelineBuilder;
+use gaptos::aptos_consensus::counters as counters;
 
 #[async_trait::async_trait]
 pub trait TExecutionClient: Send + Sync {

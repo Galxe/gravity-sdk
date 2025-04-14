@@ -3,7 +3,6 @@
 use crate::{
     monitor, network::{NetworkSender, QuorumStoreSender}, quorum_store::{
         batch_store::BatchWriter,
-        counters,
         quorum_store_db::QuorumStoreStorage,
         types::Batch,
         utils::{MempoolProxy, TimeExpirations},
@@ -26,6 +25,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::time::Interval;
+use gaptos::aptos_consensus::quorum_store::counters as counters;
 
 #[derive(Debug)]
 pub enum BatchGeneratorCommand {

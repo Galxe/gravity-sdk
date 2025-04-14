@@ -4,7 +4,7 @@
 use crate::{
     monitor,
     quorum_store::{
-        batch_coordinator::BatchCoordinatorCommand, counters,
+        batch_coordinator::BatchCoordinatorCommand,
         proof_coordinator::ProofCoordinatorCommand, proof_manager::ProofManagerCommand,
     },
     round_manager::VerifiedEvent,
@@ -14,6 +14,7 @@ use gaptos::aptos_logger::prelude::*;
 use gaptos::aptos_types::PeerId;
 use futures::StreamExt;
 use tokio::sync::mpsc::Sender;
+use gaptos::aptos_consensus::quorum_store::counters as counters;
 
 pub(crate) struct NetworkListener {
     network_msg_rx: aptos_channel::Receiver<PeerId, VerifiedEvent>,

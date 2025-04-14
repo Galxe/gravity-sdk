@@ -2,7 +2,6 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::counters;
 use gaptos::aptos_logger::prelude::*;
 use async_trait::async_trait;
 use futures::{
@@ -11,7 +10,7 @@ use futures::{
 };
 use std::{pin::Pin, time::Duration};
 use tokio::{runtime::Handle, time::sleep};
-
+use gaptos::aptos_consensus::counters as counters;
 /// Time service is an abstraction for operations that depend on time
 /// It supports implementations that can simulated time or depend on actual time
 /// We can use simulated time in tests so tests can run faster and be more stable.

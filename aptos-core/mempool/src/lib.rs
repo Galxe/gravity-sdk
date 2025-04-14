@@ -72,7 +72,6 @@ pub use shared_mempool::{
 pub use tests::{fuzzing, mocks};
 
 pub mod core_mempool;
-pub mod counters;
 mod logging;
 mod shared_mempool;
 pub(crate) mod thread_pool;

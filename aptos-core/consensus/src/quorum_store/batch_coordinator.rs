@@ -6,7 +6,6 @@ use crate::{
     quorum_store::{
         batch_generator::BatchGeneratorCommand,
         batch_store::{BatchStore, BatchWriter},
-        counters,
         proof_manager::ProofManagerCommand,
         types::{Batch, PersistedValue},
     },
@@ -19,6 +18,8 @@ use tokio::sync::{
     mpsc::{Receiver, Sender},
     oneshot,
 };
+use gaptos::aptos_consensus::quorum_store::counters as counters;
+
 
 #[derive(Debug)]
 pub enum BatchCoordinatorCommand {

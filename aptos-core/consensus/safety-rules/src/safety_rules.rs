@@ -4,7 +4,6 @@
 
 use crate::{
     consensus_state::ConsensusState,
-    counters,
     error::Error,
     logging::{LogEntry, LogEvent, SafetyLogSchema},
     persistent_safety_storage::PersistentSafetyStorage,
@@ -33,6 +32,7 @@ use gaptos::aptos_types::{
 };
 use serde::Serialize;
 use std::{cmp::Ordering, sync::Arc};
+use gaptos::aptos_safety_rules::counters as counters;
 
 pub(crate) fn next_round(round: Round) -> Result<Round, Error> {
     u64::checked_add(round, 1).ok_or(Error::IncorrectRound(round))

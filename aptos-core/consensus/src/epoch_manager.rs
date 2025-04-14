@@ -9,7 +9,6 @@ use crate::{
         BlockStore,
     },
     consensus_observer::publisher::ConsensusPublisher,
-    counters,
     dag::{DagBootstrapper, DagCommitSigner, StorageAdapter},
     error::{error_kind, DbError},
     liveness::{
@@ -113,6 +112,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use gaptos::aptos_consensus::counters as counters;
 
 /// Range of rounds (window) that we might be calling proposer election
 /// functions with at any given time, in addition to the proposer history length.

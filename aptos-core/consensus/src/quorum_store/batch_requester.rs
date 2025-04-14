@@ -5,7 +5,6 @@ use crate::{
     monitor,
     network::QuorumStoreSender,
     quorum_store::{
-        counters,
         types::{BatchRequest, BatchResponse, PersistedValue},
     },
 };
@@ -18,6 +17,7 @@ use futures::{stream::FuturesUnordered, StreamExt};
 use rand::Rng;
 use std::{sync::Arc, time::Duration};
 use tokio::{sync::oneshot, time};
+use gaptos::aptos_consensus::quorum_store::counters as counters;
 
 struct BatchRequesterState {
     signers: Vec<PeerId>,
