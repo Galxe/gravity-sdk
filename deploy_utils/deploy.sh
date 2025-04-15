@@ -21,7 +21,7 @@ declare -A VALID_MODES=(
 # Default settings
 bin_name="gravity_node"
 node_arg=""
-bin_version="debug"
+bin_version="release"
 mode="cluster"
 recover="false"
 
@@ -184,6 +184,7 @@ main() {
         log_info "Setting up single node mode"
         cp -r "$SCRIPT_DIR/single_node_config.json" "/tmp/$node_arg/genesis/nodes_config.json"
         cp -r "$SCRIPT_DIR/single_node_discovery" "/tmp/$node_arg/discovery"
+        cp "$SCRIPT_DIR/waypoint_single.txt" "/tmp/$node_arg/genesis/waypoint.txt"
     fi
 
     log_info "Copying program files"

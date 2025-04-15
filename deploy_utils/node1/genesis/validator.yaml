@@ -39,6 +39,9 @@ inspection_service:
   port: 10000
   address: 0.0.0.0
 
+mempool:
+  capacity_per_user: 2000
+
 # https_server_address: "127.0.0.1:1998"
 # https_cert_pem_path: "/absolute_path/cert.pem"
 # https_key_pem_path: "/absolute_path/key.pem"

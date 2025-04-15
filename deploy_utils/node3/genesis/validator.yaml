@@ -38,3 +38,6 @@ log_file_path: "/tmp/node3/consensus_log"
 inspection_service:
   port: 10002
   address: 0.0.0.0
+
+mempool:
+  capacity_per_user: 2000
