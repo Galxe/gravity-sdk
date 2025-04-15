@@ -16,13 +16,13 @@ use aptos_consensus_types::{
     vote_data::VoteData,
     vote_proposal::VoteProposal,
 };
-use gaptos::aptos_crypto::{
+use aptos_crypto::{
     bls12381,
     hash::{HashValue, TransactionAccumulatorHasher},
     test_utils::TEST_SEED,
     traits::{SigningKey, Uniform},
 };
-use gaptos::aptos_types::{
+use aptos_types::{
     account_address::AccountAddress,
     epoch_change::EpochChangeProof,
     epoch_state::EpochState,
@@ -273,8 +273,8 @@ pub mod fuzzing {
         block_data::BlockData, order_vote::OrderVote, order_vote_proposal::OrderVoteProposal,
         timeout_2chain::TwoChainTimeout, vote::Vote, vote_proposal::VoteProposal,
     };
-    use gaptos::aptos_crypto::bls12381;
-    use gaptos::aptos_types::epoch_change::EpochChangeProof;
+    use aptos_crypto::bls12381;
+    use aptos_types::epoch_change::EpochChangeProof;
 
     pub fn fuzz_initialize(proof: EpochChangeProof) -> Result<(), Error> {
         let mut safety_rules = test_utils::test_safety_rules_uninitialized();

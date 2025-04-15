@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::server::utils::CONTENT_TYPE_TEXT;
-use gaptos::aptos_config::config::NodeConfig;
+use aptos_config::config::NodeConfig;
 use hyper::{Body, StatusCode};
 
 // The message to display when the configuration endpoint is disabled

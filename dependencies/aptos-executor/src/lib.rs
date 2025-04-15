@@ -4,12 +4,12 @@ pub mod block_executor {
     use anyhow::{Ok, Result};
     use std::sync::RwLock;
 
-    use gaptos::aptos_crypto::HashValue;
+    use aptos_crypto::HashValue;
     use aptos_executor_types::{
         BlockExecutorTrait, ExecutorResult, StateComputeResult,
     };
-    use gaptos::aptos_storage_interface::DbReaderWriter;
-    use gaptos::aptos_types::{
+    use aptos_storage_interface::DbReaderWriter;
+    use aptos_types::{
         block_executor::{
             config::BlockExecutorConfigFromOnchain,
             partitioner::ExecutableBlock,

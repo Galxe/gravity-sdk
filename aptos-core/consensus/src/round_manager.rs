@@ -33,8 +33,8 @@ use crate::{
     util::is_vtxn_expected,
 };
 use anyhow::{bail, ensure, Context};
-use gaptos::aptos_channels::aptos_channel;
-use gaptos::aptos_config::config::ConsensusConfig;
+use aptos_channels::aptos_channel;
+use aptos_config::config::ConsensusConfig;
 use aptos_consensus_types::{
     block::Block,
     block_data::BlockType,
@@ -51,13 +51,13 @@ use aptos_consensus_types::{
     vote_msg::VoteMsg,
     wrapped_ledger_info::WrappedLedgerInfo,
 };
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_infallible::{checked, Mutex};
-use gaptos::aptos_logger::prelude::*;
+use aptos_crypto::HashValue;
+use aptos_infallible::{checked, Mutex};
+use aptos_logger::prelude::*;
 #[cfg(test)]
 use aptos_safety_rules::ConsensusState;
 use aptos_safety_rules::TSafetyRules;
-use gaptos::aptos_types::{
+use aptos_types::{
     block_info::BlockInfo,
     epoch_state::EpochState,
     on_chain_config::{

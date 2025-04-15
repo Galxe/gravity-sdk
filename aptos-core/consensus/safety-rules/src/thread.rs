@@ -12,7 +12,7 @@ use crate::{
     persistent_safety_storage::PersistentSafetyStorage,
     remote_service::{self, RemoteService},
 };
-use gaptos::aptos_config::utils;
+use aptos_config::utils;
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     thread::{self, JoinHandle},

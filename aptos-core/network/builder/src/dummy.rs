@@ -5,12 +5,12 @@
 //! Integration tests for validator_network.
 
 use crate::builder::NetworkBuilder;
-use gaptos::aptos_channels::aptos_channel;
-use gaptos::aptos_config::{
+use aptos_channels::aptos_channel;
+use aptos_config::{
     config::{Peer, PeerRole, PeerSet, RoleType, NETWORK_CHANNEL_SIZE},
     network_id::{NetworkContext, NetworkId, PeerNetworkId},
 };
-use gaptos::aptos_crypto::{test_utils::TEST_SEED, x25519, Uniform};
+use aptos_crypto::{test_utils::TEST_SEED, x25519, Uniform};
 use aptos_netcore::transport::ConnectionOrigin;
 use aptos_network::{
     application::{interface::NetworkClient, storage::PeersAndMetadata},
@@ -20,8 +20,8 @@ use aptos_network::{
     },
     ProtocolId,
 };
-use gaptos::aptos_time_service::TimeService;
-use gaptos::aptos_types::{chain_id::ChainId, network_address::NetworkAddress, PeerId};
+use aptos_time_service::TimeService;
+use aptos_types::{chain_id::ChainId, network_address::NetworkAddress, PeerId};
 use futures::executor::block_on;
 use maplit::hashmap;
 use rand::{rngs::StdRng, SeedableRng};

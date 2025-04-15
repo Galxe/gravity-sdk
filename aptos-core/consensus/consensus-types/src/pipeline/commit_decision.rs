@@ -4,7 +4,7 @@
 
 use crate::common::Round;
 use anyhow::{ensure, Context};
-use gaptos::aptos_types::{ledger_info::LedgerInfoWithSignatures, validator_verifier::ValidatorVerifier};
+use aptos_types::{ledger_info::LedgerInfoWithSignatures, validator_verifier::ValidatorVerifier};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
 

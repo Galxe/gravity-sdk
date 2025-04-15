@@ -12,9 +12,9 @@ use aptos_consensus_types::{
     pipelined_block::PipelinedBlock,
     quorum_cert::QuorumCert,
 };
-use gaptos::aptos_crypto::HashValue;
+use aptos_crypto::HashValue;
 use aptos_executor_types::StateComputeResult;
-use gaptos::aptos_types::{
+use aptos_types::{
     aggregate_signature::AggregateSignature,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
     randomness::RandMetadata,

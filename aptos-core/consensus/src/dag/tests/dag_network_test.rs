@@ -8,10 +8,10 @@ use crate::dag::{
 };
 use anyhow::{anyhow, bail};
 use aptos_consensus_types::common::Author;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_reliable_broadcast::RBNetworkSender;
-use gaptos::aptos_time_service::{TimeService, TimeServiceTrait};
-use gaptos::aptos_types::validator_verifier::random_validator_verifier;
+use aptos_infallible::Mutex;
+use aptos_reliable_broadcast::RBNetworkSender;
+use aptos_time_service::{TimeService, TimeServiceTrait};
+use aptos_types::validator_verifier::random_validator_verifier;
 use async_trait::async_trait;
 use bytes::Bytes;
 use claims::{assert_err, assert_ok};

@@ -13,26 +13,26 @@ use crate::{
     transport::ConnectionMetadata,
     ProtocolId,
 };
-use gaptos::aptos_config::{
+use aptos_config::{
     config::{PeerRole, RoleType},
     network_id::{NetworkId, PeerNetworkId},
 };
 use aptos_netcore::transport::ConnectionOrigin;
-use gaptos::aptos_types::PeerId;
+use aptos_types::PeerId;
 use async_trait::async_trait;
 use futures::StreamExt;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 /// A sender to a node to mock an inbound network message from [`PeerManager`]
 pub type InboundMessageSender =
-    gaptos::aptos_channels::aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>;
+    aptos_channels::aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>;
 
 /// A sender to a node to mock an inbound connection from [`PeerManager`]
 pub type ConnectionUpdateSender = crate::peer_manager::conn_notifs_channel::Sender;
 
 /// A receiver to get outbound network messages to [`PeerManager`]
 pub type OutboundMessageReceiver =
-    gaptos::aptos_channels::aptos_channel::Receiver<(PeerId, ProtocolId), PeerManagerRequest>;
+    aptos_channels::aptos_channel::Receiver<(PeerId, ProtocolId), PeerManagerRequest>;
 
 /// A connection handle describing the network for a node.
 ///

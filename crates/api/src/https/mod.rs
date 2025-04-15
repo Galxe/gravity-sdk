@@ -4,8 +4,8 @@ mod tx;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
 use api_types::ExecutionChannel;
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_logger::info;
+use aptos_crypto::HashValue;
+use aptos_logger::info;
 use axum::{
     body::Body,
     extract::Path,

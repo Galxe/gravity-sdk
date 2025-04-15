@@ -16,7 +16,7 @@ use crate::{
     util::time_service::TimeService,
 };
 use anyhow::{bail, ensure, format_err, Context};
-use gaptos::aptos_config::config::{
+use aptos_config::config::{
     ChainHealthBackoffValues, ExecutionBackpressureConfig, PipelineBackpressureValues,
 };
 use aptos_consensus_types::{
@@ -26,11 +26,11 @@ use aptos_consensus_types::{
     pipelined_block::ExecutionSummary,
     quorum_cert::QuorumCert,
 };
-use gaptos::aptos_crypto::{hash::CryptoHash, HashValue};
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::{error, info, sample, sample::SampleRate, warn};
-use gaptos::aptos_types::{on_chain_config::ValidatorTxnConfig, validator_txn::ValidatorTransaction};
-use gaptos::aptos_validator_transaction_pool as vtxn_pool;
+use aptos_crypto::{hash::CryptoHash, HashValue};
+use aptos_infallible::Mutex;
+use aptos_logger::{error, info, sample, sample::SampleRate, warn};
+use aptos_types::{on_chain_config::ValidatorTxnConfig, validator_txn::ValidatorTransaction};
+use aptos_validator_transaction_pool as vtxn_pool;
 use futures::future::BoxFuture;
 use itertools::Itertools;
 use std::{

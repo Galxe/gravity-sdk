@@ -2,9 +2,8 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use gaptos::aptos_crypto as aptos_crypto;
-use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
-use gaptos::aptos_types::block_info::BlockInfo;
+use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
+use aptos_types::block_info::BlockInfo;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 

@@ -11,9 +11,9 @@ use crate::{
     test_utils::{create_vec_signed_transactions, mock_quorum_store_sender::MockQuorumStoreSender},
 };
 use aptos_consensus_types::proof_of_store::{BatchId, SignedBatchInfo, SignedBatchInfoMsg};
-use gaptos::aptos_crypto::HashValue;
+use aptos_crypto::HashValue;
 use aptos_executor_types::ExecutorResult;
-use gaptos::aptos_types::{
+use aptos_types::{
     transaction::SignedTransaction, validator_verifier::random_validator_verifier, PeerId,
 };
 use mini_moka::sync::Cache;
@@ -45,7 +45,7 @@ impl BatchReader for MockBatchReader {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_proof_coordinator_basic() {
-    gaptos::aptos_logger::Logger::init_for_testing();
+    aptos_logger::Logger::init_for_testing();
     let (signers, verifier) = random_validator_verifier(4, None, true);
     let (tx, _rx) = channel(100);
     let proof_cache = Cache::builder().build();

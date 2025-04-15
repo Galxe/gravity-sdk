@@ -1,11 +1,10 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use gaptos::aptos_build_info as aptos_build_info;
-use gaptos::aptos_build_info::build_information;
+use aptos_build_info::build_information;
 use futures::channel::mpsc::Receiver;
-use gaptos::aptos_config::config::NodeConfig;
-use gaptos::aptos_logger::{
+use aptos_config::config::NodeConfig;
+use aptos_logger::{
     aptos_logger::FileWriter, info, telemetry_log_writer::TelemetryLog, LoggerFilterUpdater,
 };
 use futures::channel::mpsc;
@@ -33,7 +32,7 @@ pub fn create_logger(
     log_file: Option<PathBuf>,
 ) -> (Option<Receiver<TelemetryLog>>, LoggerFilterUpdater) {
     // Create the logger builder
-    let mut logger_builder = gaptos::aptos_logger::Logger::builder();
+    let mut logger_builder = aptos_logger::Logger::builder();
     let mut remote_log_receiver = None;
     logger_builder
         .channel_size(node_config.logger.chan_size)

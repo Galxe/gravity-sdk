@@ -15,8 +15,8 @@ use crate::dag::{
     types::NodeCertificate,
     NodeId, RpcHandler, Vote,
 };
-use gaptos::aptos_config::config::DagPayloadConfig;
-use gaptos::aptos_types::{
+use aptos_config::config::DagPayloadConfig;
+use aptos_types::{
     aggregate_signature::PartialSignatures,
     epoch_state::EpochState,
     on_chain_config::{OnChainJWKConsensusConfig, OnChainRandomnessConfig, ValidatorTxnConfig},

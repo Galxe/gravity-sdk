@@ -7,9 +7,9 @@ use aptos_consensus_types::{
     common::{Payload, PayloadFilter, TransactionInProgress, TransactionSummary},
     request_response::{GetPayloadCommand, GetPayloadResponse},
 };
-use gaptos::aptos_logger::prelude::*;
+use aptos_logger::prelude::*;
 use aptos_mempool::{QuorumStoreRequest, QuorumStoreResponse};
-use gaptos::aptos_types::transaction::SignedTransaction;
+use aptos_types::transaction::SignedTransaction;
 use futures::{
     channel::{
         mpsc::{Receiver, Sender},

@@ -7,7 +7,7 @@ use aptos_consensus_types::{
     block::{block_test_utils::certificate_for_genesis, Block},
     common::{Author, Payload, Round},
 };
-use gaptos::aptos_types::validator_signer::ValidatorSigner;
+use aptos_types::validator_signer::ValidatorSigner;
 use std::{collections::HashMap, sync::Arc};
 
 struct MockProposerElection {

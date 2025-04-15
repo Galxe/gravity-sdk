@@ -3,8 +3,8 @@
 
 use crate::counters::BLOCK_RETRIEVAL_LOCAL_FULFILL_COUNT;
 use aptos_consensus_types::{block::Block, common::Round};
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_logger::info;
+use aptos_crypto::HashValue;
+use aptos_logger::info;
 use futures_channel::oneshot;
 use std::collections::{BTreeMap, HashMap};
 

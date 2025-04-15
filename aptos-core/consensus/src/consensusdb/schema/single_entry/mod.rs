@@ -16,7 +16,7 @@
 use super::ensure_slice_len_eq;
 use crate::define_schema;
 use anyhow::{format_err, Result};
-use gaptos::aptos_schemadb::{
+use aptos_schemadb::{
     schema::{KeyCodec, ValueCodec},
     ColumnFamilyName,
 };

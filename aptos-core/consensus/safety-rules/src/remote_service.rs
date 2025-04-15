@@ -7,8 +7,8 @@ use crate::{
     serializer::{SafetyRulesInput, SerializerClient, SerializerService, TSerializerClient},
     Error, SafetyRules, TSafetyRules,
 };
-use gaptos::aptos_logger::warn;
-use gaptos::aptos_secure_net::{NetworkClient, NetworkServer};
+use aptos_logger::warn;
+use aptos_secure_net::{NetworkClient, NetworkServer};
 use std::net::SocketAddr;
 
 pub trait RemoteService {

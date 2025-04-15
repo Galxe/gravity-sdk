@@ -12,11 +12,11 @@ use crate::{
     vote_proposal::VoteProposal,
 };
 use anyhow::Error;
-use gaptos::aptos_crypto::hash::{HashValue, ACCUMULATOR_PLACEHOLDER_HASH};
+use aptos_crypto::hash::{HashValue, ACCUMULATOR_PLACEHOLDER_HASH};
 use aptos_executor_types::{ExecutorResult, StateComputeResult};
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::{error, warn};
-use gaptos::aptos_types::{
+use aptos_infallible::Mutex;
+use aptos_logger::{error, warn};
+use aptos_types::{
     block_info::BlockInfo,
     contract_event::ContractEvent,
     ledger_info::LedgerInfoWithSignatures,

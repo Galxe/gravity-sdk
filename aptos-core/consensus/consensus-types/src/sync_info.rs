@@ -7,7 +7,7 @@ use crate::{
     wrapped_ledger_info::WrappedLedgerInfo,
 };
 use anyhow::{ensure, Context};
-use gaptos::aptos_types::{block_info::BlockInfo, validator_verifier::ValidatorVerifier};
+use aptos_types::{block_info::BlockInfo, validator_verifier::ValidatorVerifier};
 use fail::fail_point;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};

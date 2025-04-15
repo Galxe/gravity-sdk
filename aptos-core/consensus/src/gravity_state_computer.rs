@@ -7,20 +7,19 @@ use crate::counters::{APTOS_COMMIT_BLOCKS, APTOS_EXECUTION_TXNS};
 use crate::payload_client::user::quorum_store_client::QuorumStoreClient;
 use anyhow::Result;
 use api_types::u256_define::BlockId;
-use gaptos::aptos_crypto::HashValue;
+use aptos_crypto::HashValue;
 use aptos_executor::block_executor::BlockExecutor;
 use aptos_executor_types::{
     BlockExecutorTrait, ExecutorResult, StateComputeResult,
 };
-use gaptos::aptos_logger::info;
-use gaptos::aptos_types::block_executor::partitioner::ExecutableBlock;
-use gaptos::aptos_types::{
+use aptos_logger::info;
+use aptos_types::block_executor::partitioner::ExecutableBlock;
+use aptos_types::{
     block_executor::config::BlockExecutorConfigFromOnchain,
     ledger_info::LedgerInfoWithSignatures,
 };
 use block_buffer_manager::block_buffer_manager::BlockHashRef;
 use block_buffer_manager::get_block_buffer_manager;
-use gaptos::aptos_storage_interface::state_delta::StateDelta;
 use coex_bridge::{get_coex_bridge, Func};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
@@ -54,7 +53,7 @@ pub struct GravityBlockExecutor {
 
 impl GravityBlockExecutor {
     pub(crate) fn new(inner: BlockExecutor) -> Self {
-        Self { inner, runtime: gaptos::aptos_runtimes::spawn_named_runtime("tmp".into(), None) }
+        Self { inner, runtime: aptos_runtimes::spawn_named_runtime("tmp".into(), None) }
     }
 }
 
@@ -114,8 +113,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                     .unwrap_or_else(|e| panic!("Failed to push commit blocks {}", e));
             });
         }
-        self.inner.db.writer.save_transactions(&vec![], 0, None,
-                Some(&ledger_info_with_sigs), false, StateDelta::new_empty(), None, None);
+        self.inner.db.writer.commit_ledger(0, Some(&ledger_info_with_sigs), None);
         Ok(())
     }
 
@@ -154,8 +152,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                 ;
             });
         }
-        self.inner.db.writer.save_transactions(&vec![], 0, None,
-                Some(&ledger_info_with_sigs), false, StateDelta::new_empty(), None, None);
+        self.inner.db.writer.commit_ledger(0, Some(&ledger_info_with_sigs), None);
         Ok(())
     }
 }

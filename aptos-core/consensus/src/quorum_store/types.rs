@@ -6,8 +6,8 @@ use aptos_consensus_types::{
     common::{BatchPayload, TxnSummaryWithExpiration},
     proof_of_store::{BatchId, BatchInfo},
 };
-use gaptos::aptos_crypto::{hash::CryptoHash, HashValue};
-use gaptos::aptos_types::{ledger_info::LedgerInfoWithSignatures, transaction::SignedTransaction, PeerId};
+use aptos_crypto::{hash::CryptoHash, HashValue};
+use aptos_types::{ledger_info::LedgerInfoWithSignatures, transaction::SignedTransaction, PeerId};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Display, Formatter},
@@ -107,7 +107,7 @@ impl TryFrom<PersistedValue> for Batch {
 
 #[cfg(test)]
 mod tests {
-    use gaptos::aptos_config::config;
+    use aptos_config::config;
 
     #[test]
     fn test_batch_payload_padding() {

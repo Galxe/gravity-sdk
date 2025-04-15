@@ -22,8 +22,8 @@ use crate::{
     ProtocolId,
 };
 use anyhow::anyhow;
-use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use gaptos::aptos_config::{
+use aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use aptos_config::{
     config::{PeerRole, MAX_INBOUND_CONNECTIONS},
     network_id::{NetworkContext, NetworkId},
 };
@@ -31,8 +31,8 @@ use aptos_memsocket::MemorySocket;
 use aptos_netcore::transport::{
     boxed::BoxedTransport, memory::MemoryTransport, ConnectionOrigin, TransportExt,
 };
-use gaptos::aptos_time_service::TimeService;
-use gaptos::aptos_types::{network_address::NetworkAddress, PeerId};
+use aptos_time_service::TimeService;
+use aptos_types::{network_address::NetworkAddress, PeerId};
 use bytes::Bytes;
 use futures::{channel::oneshot, io::AsyncWriteExt, stream::StreamExt};
 use std::error::Error;
@@ -247,7 +247,7 @@ fn create_connection<TSocket: transport::TSocket>(
 
 #[test]
 fn peer_manager_simultaneous_dial_two_inbound() {
-    ::gaptos::aptos_logger::Logger::init_for_testing();
+    ::aptos_logger::Logger::init_for_testing();
     let runtime = ::tokio::runtime::Runtime::new().unwrap();
 
     // Create a list of ordered PeerIds so we can ensure how PeerIds will be compared.
@@ -297,7 +297,7 @@ fn peer_manager_simultaneous_dial_two_inbound() {
 
 #[test]
 fn peer_manager_simultaneous_dial_inbound_outbound_remote_id_larger() {
-    ::gaptos::aptos_logger::Logger::init_for_testing();
+    ::aptos_logger::Logger::init_for_testing();
     let runtime = ::tokio::runtime::Runtime::new().unwrap();
 
     // Create a list of ordered PeerIds so we can ensure how PeerIds will be compared.
@@ -348,7 +348,7 @@ fn peer_manager_simultaneous_dial_inbound_outbound_remote_id_larger() {
 
 #[test]
 fn peer_manager_simultaneous_dial_inbound_outbound_own_id_larger() {
-    ::gaptos::aptos_logger::Logger::init_for_testing();
+    ::aptos_logger::Logger::init_for_testing();
     let runtime = ::tokio::runtime::Runtime::new().unwrap();
 
     // Create a list of ordered PeerIds so we can ensure how PeerIds will be compared.
@@ -399,7 +399,7 @@ fn peer_manager_simultaneous_dial_inbound_outbound_own_id_larger() {
 
 #[test]
 fn peer_manager_simultaneous_dial_outbound_inbound_remote_id_larger() {
-    ::gaptos::aptos_logger::Logger::init_for_testing();
+    ::aptos_logger::Logger::init_for_testing();
     let runtime = ::tokio::runtime::Runtime::new().unwrap();
 
     // Create a list of ordered PeerIds so we can ensure how PeerIds will be compared.
@@ -450,7 +450,7 @@ fn peer_manager_simultaneous_dial_outbound_inbound_remote_id_larger() {
 
 #[test]
 fn peer_manager_simultaneous_dial_outbound_inbound_own_id_larger() {
-    ::gaptos::aptos_logger::Logger::init_for_testing();
+    ::aptos_logger::Logger::init_for_testing();
     let runtime = ::tokio::runtime::Runtime::new().unwrap();
 
     // Create a list of ordered PeerIds so we can ensure how PeerIds will be compared.
@@ -501,7 +501,7 @@ fn peer_manager_simultaneous_dial_outbound_inbound_own_id_larger() {
 
 #[test]
 fn peer_manager_simultaneous_dial_two_outbound() {
-    ::gaptos::aptos_logger::Logger::init_for_testing();
+    ::aptos_logger::Logger::init_for_testing();
     let runtime = ::tokio::runtime::Runtime::new().unwrap();
 
     // Create a list of ordered PeerIds so we can ensure how PeerIds will be compared.
@@ -592,7 +592,7 @@ fn peer_manager_simultaneous_dial_disconnect_event() {
 
 #[test]
 fn test_dial_disconnect() {
-    ::gaptos::aptos_logger::Logger::init_for_testing();
+    ::aptos_logger::Logger::init_for_testing();
     let runtime = ::tokio::runtime::Runtime::new().unwrap();
 
     // Create a list of ordered PeerIds so we can ensure how PeerIds will be compared.

@@ -12,15 +12,15 @@ use aptos_consensus_types::{
     common::Author,
     proof_of_store::{BatchId, ProofOfStore, SignedBatchInfo},
 };
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_types::{
+use aptos_crypto::HashValue;
+use aptos_types::{
     aggregate_signature::PartialSignatures,
     block_info::BlockInfo,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
     validator_signer::ValidatorSigner,
     validator_verifier::{ValidatorConsensusInfo, ValidatorVerifier},
 };
-use gaptos::move_core_types::account_address::AccountAddress;
+use move_core_types::account_address::AccountAddress;
 use std::time::{Duration, Instant};
 use tokio::sync::oneshot;
 

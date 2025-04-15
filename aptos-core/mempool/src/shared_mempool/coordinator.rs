@@ -14,12 +14,12 @@ use crate::{
     }, MempoolClientRequest, MempoolEventsReceiver, QuorumStoreRequest
 };
 use api_types::{ExecTxn, VerifiedTxn};
-use gaptos::aptos_bounded_executor::BoundedExecutor;
-use gaptos::aptos_config::network_id::{NetworkId, PeerNetworkId};
-use gaptos::aptos_event_notifications::ReconfigNotificationListener;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_mempool_notifications::{MempoolCommitNotification, MempoolNotificationListener};
+use aptos_bounded_executor::BoundedExecutor;
+use aptos_config::network_id::{NetworkId, PeerNetworkId};
+use aptos_event_notifications::ReconfigNotificationListener;
+use aptos_infallible::Mutex;
+use aptos_logger::prelude::*;
+use aptos_mempool_notifications::{MempoolCommitNotification, MempoolNotificationListener};
 use aptos_network::{
     application::{
         interface::{NetworkClientInterface, NetworkServiceEvents},
@@ -27,7 +27,7 @@ use aptos_network::{
     },
     protocols::network::Event,
 };
-use gaptos::aptos_types::{
+use aptos_types::{
     on_chain_config::{OnChainConfigPayload, OnChainConfigProvider},
     PeerId,
 };

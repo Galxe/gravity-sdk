@@ -10,7 +10,7 @@ use crate::{
 };
 use aptos_consensus_types::block::Block;
 use aptos_executor_types::ExecutorResult;
-use gaptos::aptos_types::transaction::SignedTransaction;
+use aptos_types::transaction::SignedTransaction;
 use fail::fail_point;
 use std::{sync::Arc, time::Instant};
 

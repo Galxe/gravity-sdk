@@ -3,14 +3,14 @@
 
 use super::types::MempoolSenderBucket;
 use crate::{counters, network::BroadcastPeerPriority};
-use gaptos::aptos_config::{
+use aptos_config::{
     config::{MempoolConfig, NodeType},
     network_id::{NetworkId, PeerNetworkId},
 };
-use gaptos::aptos_infallible::RwLock;
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_peer_monitoring_service_types::PeerMonitoringMetadata;
-use gaptos::aptos_time_service::{TimeService, TimeServiceTrait};
+use aptos_infallible::RwLock;
+use aptos_logger::prelude::*;
+use aptos_peer_monitoring_service_types::PeerMonitoringMetadata;
+use aptos_time_service::{TimeService, TimeServiceTrait};
 use itertools::Itertools;
 use std::{
     cmp::{max, min, Ordering},
@@ -541,14 +541,14 @@ fn compare_validator_distance(
 #[cfg(test)]
 mod test {
     use super::*;
-    use gaptos::aptos_config::{
+    use aptos_config::{
         config::{MempoolConfig, NodeType},
         network_id::{NetworkId, PeerNetworkId},
     };
-    use gaptos::aptos_peer_monitoring_service_types::{
+    use aptos_peer_monitoring_service_types::{
         response::NetworkInformationResponse, PeerMonitoringMetadata,
     };
-    use gaptos::aptos_types::PeerId;
+    use aptos_types::PeerId;
     use core::cmp::Ordering;
     use std::collections::BTreeMap;
 

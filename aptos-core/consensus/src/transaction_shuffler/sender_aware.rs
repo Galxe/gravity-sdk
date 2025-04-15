@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{counters::NUM_SENDERS_IN_BLOCK, transaction_shuffler::TransactionShuffler};
-use gaptos::aptos_types::transaction::SignedTransaction;
-use gaptos::move_core_types::account_address::AccountAddress;
+use aptos_types::transaction::SignedTransaction;
+use move_core_types::account_address::AccountAddress;
 use std::collections::{HashMap, VecDeque};
 
 /// An implementation of transaction shuffler, which tries to spread transactions from same senders
@@ -228,12 +228,12 @@ impl SlidingWindowState {
 #[cfg(test)]
 mod tests {
     use crate::transaction_shuffler::{sender_aware::SenderAwareShuffler, TransactionShuffler};
-    use gaptos::aptos_crypto::{ed25519::Ed25519PrivateKey, PrivateKey, SigningKey, Uniform};
-    use gaptos::aptos_types::{
+    use aptos_crypto::{ed25519::Ed25519PrivateKey, PrivateKey, SigningKey, Uniform};
+    use aptos_types::{
         chain_id::ChainId,
         transaction::{RawTransaction, Script, SignedTransaction, TransactionPayload},
     };
-    use gaptos::move_core_types::account_address::AccountAddress;
+    use move_core_types::account_address::AccountAddress;
     use rand::{rngs::OsRng, Rng};
     use std::{
         collections::{HashMap, HashSet},

@@ -5,7 +5,7 @@
 #[allow(unused_imports)]
 use anyhow::{format_err, Result};
 #[cfg(feature = "failpoints")]
-use gaptos::aptos_logger::prelude::*;
+use aptos_logger::prelude::*;
 use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 

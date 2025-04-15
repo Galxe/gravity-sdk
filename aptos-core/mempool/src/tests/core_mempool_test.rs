@@ -10,10 +10,10 @@ use crate::{
         setup_mempool_with_broadcast_buckets, txn_bytes_len, TestTransaction,
     },
 };
-use gaptos::aptos_config::config::{MempoolConfig, NodeConfig};
+use aptos_config::config::{MempoolConfig, NodeConfig};
 use aptos_consensus_types::common::{TransactionInProgress, TransactionSummary};
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_types::{
+use aptos_crypto::HashValue;
+use aptos_types::{
     transaction::SignedTransaction, vm_status::DiscardedVMStatus,
 };
 use itertools::Itertools;

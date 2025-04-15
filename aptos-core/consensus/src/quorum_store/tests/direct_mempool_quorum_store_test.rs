@@ -39,7 +39,7 @@ async fn test_block_request_no_txns() {
             true,
             PayloadFilter::DirectMempool(vec![]),
             consensus_callback,
-            gaptos::aptos_infallible::duration_since_epoch(),
+            aptos_infallible::duration_since_epoch(),
         ))
         .unwrap();
 

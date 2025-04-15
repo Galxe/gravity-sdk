@@ -4,9 +4,9 @@
 
 use crate::common::{Author, Round};
 use anyhow::Context;
-use gaptos::aptos_crypto::{bls12381, CryptoMaterialError};
-use gaptos::aptos_short_hex_str::AsShortHexStr;
-use gaptos::aptos_types::{
+use aptos_crypto::{bls12381, CryptoMaterialError};
+use aptos_short_hex_str::AsShortHexStr;
+use aptos_types::{
     block_info::BlockInfo, ledger_info::LedgerInfo, validator_signer::ValidatorSigner,
     validator_verifier::ValidatorVerifier,
 };

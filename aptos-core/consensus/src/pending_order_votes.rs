@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use aptos_consensus_types::{common::Author, order_vote::OrderVote};
-use gaptos::aptos_crypto::{hash::CryptoHash, HashValue};
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_types::{
+use aptos_crypto::{hash::CryptoHash, HashValue};
+use aptos_logger::prelude::*;
+use aptos_types::{
     aggregate_signature::PartialSignatures,
     ledger_info::{LedgerInfo, LedgerInfoWithPartialSignatures, LedgerInfoWithSignatures},
     validator_verifier::{ValidatorVerifier, VerifyError},
@@ -158,8 +158,8 @@ impl PendingOrderVotes {
 mod tests {
     use super::{OrderVoteReceptionResult, PendingOrderVotes};
     use aptos_consensus_types::order_vote::OrderVote;
-    use gaptos::aptos_crypto::HashValue;
-    use gaptos::aptos_types::{
+    use aptos_crypto::HashValue;
+    use aptos_types::{
         block_info::BlockInfo, ledger_info::LedgerInfo,
         validator_verifier::random_validator_verifier,
     };
@@ -174,7 +174,7 @@ mod tests {
 
     #[test]
     fn order_vote_aggregation() {
-        ::gaptos::aptos_logger::Logger::init_for_testing();
+        ::aptos_logger::Logger::init_for_testing();
         // set up 4 validators
         let (signers, validator) = random_validator_verifier(4, Some(2), false);
 

@@ -26,19 +26,19 @@ use crate::{
     transaction_shuffler::create_transaction_shuffler,
 };
 use anyhow::Result;
-use gaptos::aptos_bounded_executor::BoundedExecutor;
-use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use gaptos::aptos_config::config::{ConsensusConfig, ConsensusObserverConfig};
+use aptos_bounded_executor::BoundedExecutor;
+use aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use aptos_config::config::{ConsensusConfig, ConsensusObserverConfig};
 use aptos_consensus_types::{
     common::{Author, Round},
     pipelined_block::PipelinedBlock,
 };
-use gaptos::aptos_crypto::bls12381::PrivateKey;
+use aptos_crypto::bls12381::PrivateKey;
 use aptos_executor_types::ExecutorResult;
-use gaptos::aptos_infallible::RwLock;
-use gaptos::aptos_logger::prelude::*;
+use aptos_infallible::RwLock;
+use aptos_logger::prelude::*;
 use aptos_network::{application::interface::NetworkClient, protocols::network::Event};
-use gaptos::aptos_types::{
+use aptos_types::{
     epoch_state::EpochState,
     ledger_info::LedgerInfoWithSignatures,
     on_chain_config::{OnChainConsensusConfig, OnChainExecutionConfig, OnChainRandomnessConfig},
@@ -50,7 +50,7 @@ use futures::{
     SinkExt,
 };
 use futures_channel::mpsc::unbounded;
-use gaptos::move_core_types::account_address::AccountAddress;
+use move_core_types::account_address::AccountAddress;
 use std::sync::Arc;
 
 use super::pipeline_builder::PipelineBuilder;
@@ -151,7 +151,7 @@ pub struct ExecutionProxyClient {
     consensus_config: ConsensusConfig,
     execution_proxy: Arc<ExecutionProxy>,
     author: Author,
-    self_sender: gaptos::aptos_channels::UnboundedSender<Event<ConsensusMsg>>,
+    self_sender: aptos_channels::UnboundedSender<Event<ConsensusMsg>>,
     network_sender: ConsensusNetworkClient<NetworkClient<ConsensusMsg>>,
     bounded_executor: BoundedExecutor,
     // channels to buffer manager
@@ -166,7 +166,7 @@ impl ExecutionProxyClient {
         consensus_config: ConsensusConfig,
         execution_proxy: Arc<ExecutionProxy>,
         author: Author,
-        self_sender: gaptos::aptos_channels::UnboundedSender<Event<ConsensusMsg>>,
+        self_sender: aptos_channels::UnboundedSender<Event<ConsensusMsg>>,
         network_sender: ConsensusNetworkClient<NetworkClient<ConsensusMsg>>,
         bounded_executor: BoundedExecutor,
         rand_storage: Arc<dyn RandStorage<AugmentedData>>,
@@ -222,7 +222,7 @@ impl ExecutionProxyClient {
                 let (rand_ready_block_tx, rand_ready_block_rx) = unbounded::<OrderedBlocks>();
 
                 let (reset_tx_to_rand_manager, reset_rand_manager_rx) = unbounded::<ResetRequest>();
-                let signer = Arc::new(ValidatorSigner::new(self.author, (*consensus_sk).clone()));
+                let signer = Arc::new(ValidatorSigner::new(self.author, consensus_sk));
 
                 let rand_manager = RandManager::<Share, AugmentedData>::new(
                     self.author,

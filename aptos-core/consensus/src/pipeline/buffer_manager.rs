@@ -23,20 +23,20 @@ use crate::{
     },
     state_replication::StateComputerCommitCallBackType,
 };
-use gaptos::aptos_bounded_executor::BoundedExecutor;
-use gaptos::aptos_config::config::ConsensusObserverConfig;
+use aptos_bounded_executor::BoundedExecutor;
+use aptos_config::config::ConsensusObserverConfig;
 use aptos_consensus_types::{
     common::{Author, Round},
     pipeline::commit_vote::CommitVote,
     pipelined_block::PipelinedBlock,
 };
-use gaptos::aptos_crypto::HashValue;
+use aptos_crypto::HashValue;
 use aptos_executor_types::ExecutorResult;
-use gaptos::aptos_logger::prelude::*;
+use aptos_logger::prelude::*;
 use aptos_network::protocols::{rpc::error::RpcError, wire::handshake::v1::ProtocolId};
-use gaptos::aptos_reliable_broadcast::{DropGuard, ReliableBroadcast};
-use gaptos::aptos_time_service::TimeService;
-use gaptos::aptos_types::{
+use aptos_reliable_broadcast::{DropGuard, ReliableBroadcast};
+use aptos_time_service::TimeService;
+use aptos_types::{
     account_address::AccountAddress, epoch_change::EpochChangeProof, epoch_state::EpochState,
     ledger_info::LedgerInfoWithSignatures,
 };
@@ -123,7 +123,7 @@ pub struct BufferManager {
 
     // message received from the network
     commit_msg_rx:
-        Option<gaptos::aptos_channels::aptos_channel::Receiver<AccountAddress, IncomingCommitRequest>>,
+        Option<aptos_channels::aptos_channel::Receiver<AccountAddress, IncomingCommitRequest>>,
 
     persisting_phase_tx: Sender<CountedRequest<PersistingRequest>>,
     persisting_phase_rx: Receiver<ExecutorResult<Round>>,
@@ -173,7 +173,7 @@ impl BufferManager {
         signing_phase_tx: Sender<CountedRequest<SigningRequest>>,
         signing_phase_rx: Receiver<SigningResponse>,
         commit_msg_tx: Arc<NetworkSender>,
-        commit_msg_rx: gaptos::aptos_channels::aptos_channel::Receiver<
+        commit_msg_rx: aptos_channels::aptos_channel::Receiver<
             AccountAddress,
             IncomingCommitRequest,
         >,

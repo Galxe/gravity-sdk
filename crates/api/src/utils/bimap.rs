@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use gaptos::aptos_crypto::HashValue;
+use aptos_crypto::HashValue;
 
 #[derive(Debug)]
 pub struct BiMap {

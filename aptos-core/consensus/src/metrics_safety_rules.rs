@@ -14,11 +14,11 @@ use aptos_consensus_types::{
     vote::Vote,
     vote_proposal::VoteProposal,
 };
-use gaptos::aptos_crypto::bls12381;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::prelude::info;
+use aptos_crypto::bls12381;
+use aptos_infallible::Mutex;
+use aptos_logger::prelude::info;
 use aptos_safety_rules::{ConsensusState, Error, TSafetyRules};
-use gaptos::aptos_types::{
+use aptos_types::{
     epoch_change::EpochChangeProof,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
 };
@@ -172,9 +172,9 @@ mod tests {
         vote::Vote,
         vote_proposal::VoteProposal,
     };
-    use gaptos::aptos_crypto::bls12381;
+    use aptos_crypto::bls12381;
     use aptos_safety_rules::{ConsensusState, Error, TSafetyRules};
-    use gaptos::aptos_types::{
+    use aptos_types::{
         epoch_change::EpochChangeProof,
         ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
     };
@@ -261,7 +261,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_perform_initialize_ok() {
-        ::gaptos::aptos_logger::Logger::init_for_testing();
+        ::aptos_logger::Logger::init_for_testing();
         let (_, mock_storage) = EmptyStorage::start_for_testing().await;
         let mock_safety_rules = MockSafetyRules::new(0, 10, Ok(()));
         let mut metric_safety_rules =
@@ -271,7 +271,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_perform_initialize_error() {
-        ::gaptos::aptos_logger::Logger::init_for_testing();
+        ::aptos_logger::Logger::init_for_testing();
         let (_, mock_storage) = EmptyStorage::start_for_testing().await;
         let mock_safety_rules = MockSafetyRules::new(
             0,

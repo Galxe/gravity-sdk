@@ -15,9 +15,9 @@
 
 use crate::counters::{start_serialization_timer, DESERIALIZATION_LABEL, SERIALIZATION_LABEL};
 use anyhow::anyhow;
-use gaptos::aptos_compression::client::CompressionClient;
-use gaptos::aptos_config::{config::MAX_APPLICATION_MESSAGE_SIZE, network_id::NetworkId};
-use gaptos::aptos_types::chain_id::ChainId;
+use aptos_compression::client::CompressionClient;
+use aptos_config::{config::MAX_APPLICATION_MESSAGE_SIZE, network_id::NetworkId};
+use aptos_types::chain_id::ChainId;
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest_derive::Arbitrary;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -204,7 +204,7 @@ impl ProtocolId {
             Encoding::CompressedBcs(limit) => {
                 let compression_client = self.get_compression_client();
                 let bcs_bytes = self.bcs_encode(value, limit)?;
-                gaptos::aptos_compression::compress(
+                aptos_compression::compress(
                     bcs_bytes,
                     compression_client,
                     MAX_APPLICATION_MESSAGE_SIZE,
@@ -233,7 +233,7 @@ impl ProtocolId {
             Encoding::Bcs(limit) => self.bcs_decode(bytes, limit),
             Encoding::CompressedBcs(limit) => {
                 let compression_client = self.get_compression_client();
-                let raw_bytes = gaptos::aptos_compression::decompress(
+                let raw_bytes = aptos_compression::decompress(
                     &bytes.to_vec(),
                     compression_client,
                     MAX_APPLICATION_MESSAGE_SIZE,
@@ -287,7 +287,7 @@ impl fmt::Display for ProtocolId {
 /// use on a new AptosNet connection.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
-pub struct ProtocolIdSet(gaptos::aptos_bitvec::BitVec);
+pub struct ProtocolIdSet(aptos_bitvec::BitVec);
 
 impl ProtocolIdSet {
     pub fn empty() -> Self {

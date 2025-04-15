@@ -49,9 +49,9 @@ mod tests {
         },
         ProtocolId,
     };
-    use gaptos::aptos_config::network_id::NetworkId;
+    use aptos_config::network_id::NetworkId;
     use aptos_memsocket::MemorySocket;
-    use gaptos::aptos_types::chain_id::ChainId;
+    use aptos_types::chain_id::ChainId;
     use futures::{executor::block_on, future::join};
     use std::{collections::BTreeMap, iter::FromIterator};
 

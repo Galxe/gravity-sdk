@@ -10,6 +10,7 @@ use crate::{
         BlockReader,
     },
     counters,
+    network::NetworkSender,
     payload_manager::TPayloadManager,
     persistent_liveness_storage::{PersistentLivenessStorage, RecoveryData, RootInfo},
     pipeline::execution_client::TExecutionClient,
@@ -30,13 +31,14 @@ use aptos_consensus_types::{
     timeout_2chain::TwoChainTimeoutCertificate,
     wrapped_ledger_info::WrappedLedgerInfo,
 };
-use gaptos::aptos_crypto::HashValue;
+use aptos_crypto::HashValue;
 use aptos_executor_types::StateComputeResult;
-use gaptos::aptos_infallible::{Mutex, RwLock};
-use gaptos::aptos_logger::prelude::*;
+use aptos_infallible::{Mutex, RwLock};
+use aptos_logger::prelude::*;
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
-use gaptos::aptos_metrics_core::{register_int_gauge_vec, IntGaugeHelper, IntGaugeVec};
-use gaptos::aptos_types::{
+use aptos_metrics_core::{register_int_gauge_vec, IntGaugeHelper, IntGaugeVec};
+use aptos_network::application::interface::NetworkClient;
+use aptos_types::{
     aggregate_signature::AggregateSignature,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
 };
@@ -117,6 +119,7 @@ pub struct BlockStore {
     back_pressure_for_test: AtomicBool,
     order_vote_enabled: bool,
     pending_blocks: Arc<Mutex<PendingBlocks>>,
+    network: Arc<NetworkSender>,
 }
 
 impl BlockStore {
@@ -130,6 +133,7 @@ impl BlockStore {
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
+        network: Arc<NetworkSender>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -147,6 +151,7 @@ impl BlockStore {
             payload_manager,
             order_vote_enabled,
             pending_blocks,
+            network,
         ));
         block_on(block_store.recover_blocks());
         block_store
@@ -162,6 +167,7 @@ impl BlockStore {
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
+        network: Arc<NetworkSender>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -179,6 +185,7 @@ impl BlockStore {
             payload_manager,
             order_vote_enabled,
             pending_blocks,
+            network,
         )
         .await;
         block_store.recover_blocks().await;
@@ -227,6 +234,7 @@ impl BlockStore {
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
+        network: Arc<NetworkSender>,
     ) -> Self {
         let RootInfo(root_block, root_qc, root_ordered_cert, root_commit_cert) = root;
 
@@ -260,6 +268,7 @@ impl BlockStore {
             back_pressure_for_test: AtomicBool::new(false),
             order_vote_enabled,
             pending_blocks,
+            network,
         };
 
         for block in blocks {
@@ -450,6 +459,7 @@ impl BlockStore {
             self.payload_manager.clone(),
             self.order_vote_enabled,
             self.pending_blocks.clone(),
+            self.network.clone(),
         )
         .await;
 

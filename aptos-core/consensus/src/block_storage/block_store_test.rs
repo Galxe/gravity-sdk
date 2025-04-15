@@ -10,7 +10,7 @@ use crate::{
     },
     util::mock_time_service::SimulatedTimeService,
 };
-use gaptos::aptos_config::config::QcAggregatorType;
+use aptos_config::config::QcAggregatorType;
 use aptos_consensus_types::{
     block::{
         block_test_utils::{
@@ -23,8 +23,8 @@ use aptos_consensus_types::{
     vote::Vote,
     vote_data::VoteData,
 };
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_types::{
+use aptos_crypto::HashValue;
+use aptos_types::{
     validator_signer::ValidatorSigner, validator_verifier::random_validator_verifier,
 };
 use futures_channel::mpsc::unbounded;
@@ -274,7 +274,7 @@ async fn test_path_from_root() {
 
 #[tokio::test]
 async fn test_insert_vote() {
-    ::gaptos::aptos_logger::Logger::init_for_testing();
+    ::aptos_logger::Logger::init_for_testing();
     // Set up enough different authors to support different votes for the same block.
     let (signers, validator_verifier) = random_validator_verifier(11, Some(10), false);
     let my_signer = signers[10].clone();

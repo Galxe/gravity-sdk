@@ -10,12 +10,12 @@ use crate::dag::{
     RpcHandler, RpcWithFallback,
 };
 use anyhow::{bail, ensure};
-use gaptos::aptos_bitvec::BitVec;
-use gaptos::aptos_config::config::DagFetcherConfig;
+use aptos_bitvec::BitVec;
+use aptos_config::config::DagFetcherConfig;
 use aptos_consensus_types::common::{Author, Round};
-use gaptos::aptos_logger::{debug, error, info};
-use gaptos::aptos_time_service::TimeService;
-use gaptos::aptos_types::epoch_state::EpochState;
+use aptos_logger::{debug, error, info};
+use aptos_time_service::TimeService;
+use aptos_types::epoch_state::EpochState;
 use async_trait::async_trait;
 use futures::{future::Shared, stream::FuturesUnordered, Future, FutureExt, Stream, StreamExt};
 use std::{

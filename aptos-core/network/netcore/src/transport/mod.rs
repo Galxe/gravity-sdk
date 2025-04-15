@@ -12,7 +12,7 @@
 //! [`Transport`]: crate::transport::Transport
 //! [`TransportExt`]: crate::transport::TransportExt
 
-use gaptos::aptos_types::{network_address::NetworkAddress, PeerId};
+use aptos_types::{network_address::NetworkAddress, PeerId};
 use futures::{future::Future, stream::Stream};
 use serde::{Deserialize, Serialize};
 use std::fmt;

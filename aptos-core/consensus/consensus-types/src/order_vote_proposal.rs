@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{block::Block, quorum_cert::QuorumCert};
-use gaptos::aptos_types::block_info::BlockInfo;
+use aptos_types::block_info::BlockInfo;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Display, Formatter},

@@ -1,20 +1,20 @@
-use gaptos::aptos_crypto::bls12381;
-use gaptos::aptos_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH;
-use gaptos::aptos_storage_interface::{DbReader, DbWriter};
-use gaptos::aptos_types::account_address::AccountAddress;
-use gaptos::aptos_types::aggregate_signature::AggregateSignature;
-use gaptos::aptos_types::block_info::BlockInfo;
-use gaptos::aptos_types::epoch_change::EpochChangeProof;
-use gaptos::aptos_types::epoch_state::EpochState;
-use gaptos::aptos_types::ledger_info::{LedgerInfo, LedgerInfoWithSignatures};
-use gaptos::aptos_types::on_chain_config::ValidatorSet;
-use gaptos::aptos_types::on_chain_config::{ConsensusAlgorithmConfig, ProposerElectionType};
-use gaptos::aptos_types::state_proof::StateProof;
-use gaptos::aptos_types::state_store::state_key::inner::StateKeyInner;
-use gaptos::aptos_types::validator_config::ValidatorConfig;
-use gaptos::aptos_types::validator_info::ValidatorInfo;
-use gaptos::aptos_types::validator_verifier::{ValidatorConsensusInfo, ValidatorVerifier};
-use gaptos::aptos_types::{
+use aptos_crypto::bls12381;
+use aptos_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH;
+use aptos_storage_interface::{DbReader, DbWriter};
+use aptos_types::account_address::AccountAddress;
+use aptos_types::aggregate_signature::AggregateSignature;
+use aptos_types::block_info::BlockInfo;
+use aptos_types::epoch_change::EpochChangeProof;
+use aptos_types::epoch_state::EpochState;
+use aptos_types::ledger_info::{LedgerInfo, LedgerInfoWithSignatures};
+use aptos_types::on_chain_config::ValidatorSet;
+use aptos_types::on_chain_config::{ConsensusAlgorithmConfig, ProposerElectionType};
+use aptos_types::state_proof::StateProof;
+use aptos_types::state_store::state_key::inner::StateKeyInner;
+use aptos_types::validator_config::ValidatorConfig;
+use aptos_types::validator_info::ValidatorInfo;
+use aptos_types::validator_verifier::{ValidatorConsensusInfo, ValidatorVerifier};
+use aptos_types::{
     on_chain_config::{ConfigurationResource, OnChainConsensusConfig},
     state_store::{state_key::StateKey, state_value::StateValue},
     transaction::Version,
@@ -171,5 +171,9 @@ impl DbReader for ConsensusDB {
             }
         };
         Ok(Some(StateValue::new_legacy(bytes.into())))
+    }
+
+    fn get_latest_ledger_infos(&self) -> Vec<LedgerInfoWithSignatures> {
+        self.ledger_db.metadata_db().get_latest_ledger_infos()
     }
 }

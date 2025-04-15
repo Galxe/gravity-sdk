@@ -6,7 +6,7 @@ use crate::testutils::{
     test_framework::TestFramework,
     test_node::{NodeId, NodeType, TestNode},
 };
-use gaptos::aptos_config::{
+use aptos_config::{
     config::NodeConfig,
     network_id::{NetworkId, PeerNetworkId},
 };

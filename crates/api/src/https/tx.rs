@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use api_types::{ExecTxn, ExecutionChannel};
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_logger::info;
+use aptos_crypto::HashValue;
+use aptos_logger::info;
 use axum::{http::StatusCode, response::Json as JsonResponse};
 use serde::{Deserialize, Serialize};
 

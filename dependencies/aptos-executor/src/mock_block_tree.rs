@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_types::block_executor::partitioner::ExecutableBlock;
+use aptos_crypto::HashValue;
+use aptos_types::block_executor::partitioner::ExecutableBlock;
 
 pub struct MockBlockTree {
     pub id_to_block: HashMap<HashValue, ExecutableBlock>,

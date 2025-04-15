@@ -10,9 +10,9 @@ use crate::dag::{
     NodeId, Vote,
 };
 use aptos_consensus_types::common::Author;
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_types::{
+use aptos_crypto::HashValue;
+use aptos_infallible::Mutex;
+use aptos_types::{
     epoch_state::EpochState, ledger_info::LedgerInfoWithSignatures,
     validator_signer::ValidatorSigner, validator_verifier::random_validator_verifier,
 };

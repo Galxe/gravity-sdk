@@ -4,11 +4,10 @@
 
 use crate::shared_mempool::types::{MempoolMessageId, QuorumStoreRequest};
 use anyhow::Error;
-use gaptos::aptos_config::network_id::{NetworkId, PeerNetworkId};
-use gaptos::aptos_logger as aptos_logger;
-use gaptos::aptos_logger::Schema;
-use gaptos::aptos_mempool_notifications::MempoolCommitNotification;
-use gaptos::aptos_types::account_address::AccountAddress;
+use aptos_config::network_id::{NetworkId, PeerNetworkId};
+use aptos_logger::Schema;
+use aptos_mempool_notifications::MempoolCommitNotification;
+use aptos_types::account_address::AccountAddress;
 use serde::Serialize;
 use std::{fmt, fmt::Write, time::SystemTime};
 

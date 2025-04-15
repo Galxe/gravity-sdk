@@ -5,7 +5,7 @@ use crate::{
     protocols::wire::handshake::v1::{ProtocolId, ProtocolIdSet},
     transport::ConnectionMetadata,
 };
-use gaptos::aptos_peer_monitoring_service_types::PeerMonitoringMetadata;
+use aptos_peer_monitoring_service_types::PeerMonitoringMetadata;
 use serde::{Deserialize, Serialize};
 
 /// The current connection state of a peer

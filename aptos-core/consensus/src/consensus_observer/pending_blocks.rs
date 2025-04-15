@@ -7,10 +7,10 @@ use crate::consensus_observer::{
     network_message::OrderedBlock,
     payload_store::BlockPayloadStore,
 };
-use gaptos::aptos_config::config::ConsensusObserverConfig;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::{info, warn};
-use gaptos::aptos_types::block_info::Round;
+use aptos_config::config::ConsensusObserverConfig;
+use aptos_infallible::Mutex;
+use aptos_logger::{info, warn};
+use aptos_types::block_info::Round;
 use std::{
     collections::{btree_map::Entry, BTreeMap},
     sync::Arc,
@@ -187,8 +187,8 @@ mod test {
         pipelined_block::PipelinedBlock,
         quorum_cert::QuorumCert,
     };
-    use gaptos::aptos_crypto::HashValue;
-    use gaptos::aptos_types::{
+    use aptos_crypto::HashValue;
+    use aptos_types::{
         aggregate_signature::AggregateSignature,
         block_info::BlockInfo,
         ledger_info::{LedgerInfo, LedgerInfoWithSignatures},

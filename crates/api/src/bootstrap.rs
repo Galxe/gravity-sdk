@@ -7,7 +7,7 @@ use std::{
 use crate::network::{build_network_interfaces, consensus_network_configuration, extract_network_ids, mempool_network_configuration};
 use api_types::{u256_define::BlockId, ExecutionChannel};
 use block_buffer_manager::get_block_buffer_manager;
-use gaptos::aptos_config::{
+use aptos_config::{
     config::{NetworkConfig, NodeConfig, Peer, PeerRole},
     network_id::NetworkId,
 };
@@ -16,20 +16,19 @@ use aptos_consensus::{
     gravity_state_computer::ConsensusAdapterArgs, network_interface::ConsensusMsg,
     persistent_liveness_storage::StorageWriteProxy, quorum_store::quorum_store_db::QuorumStoreDB,
 };
-
-use gaptos::aptos_consensus_notifications::ConsensusNotifier;
-use gaptos::aptos_crypto::{hash::GENESIS_BLOCK_ID, x25519, HashValue};
-use gaptos::aptos_event_notifications::EventSubscriptionService;
+use aptos_consensus_notifications::ConsensusNotifier;
+use aptos_crypto::{hash::GENESIS_BLOCK_ID, x25519, HashValue};
+use aptos_event_notifications::EventSubscriptionService;
 use aptos_mempool::{MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest};
-use gaptos::aptos_mempool_notifications::MempoolNotificationListener;
+use aptos_mempool_notifications::MempoolNotificationListener;
 use aptos_network::application::{
     interface::{NetworkClient, NetworkServiceEvents},
     storage::PeersAndMetadata,
 };
 use aptos_network_builder::builder::NetworkBuilder;
-use gaptos::aptos_storage_interface::DbReaderWriter;
-use gaptos::aptos_types::account_address::AccountAddress;
-use gaptos::aptos_validator_transaction_pool::VTxnPoolState;
+use aptos_storage_interface::DbReaderWriter;
+use aptos_types::account_address::AccountAddress;
+use aptos_validator_transaction_pool::VTxnPoolState;
 use futures::channel::mpsc::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
 use tokio::runtime::Runtime;
@@ -84,7 +83,7 @@ where
         network_id,
         &network_config,
         mempool_network_configuration(node_config),
-        peers_and_metadata.clone(), 
+        peers_and_metadata.clone(),
     );
     (consensus_network_interfaces, mempool_interfaces)
 }

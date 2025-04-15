@@ -9,7 +9,7 @@ use crate::dag::{
     types::{DagSnapshotBitmask, FetchResponse, RemoteFetchRequest},
     RpcHandler,
 };
-use gaptos::aptos_types::{epoch_state::EpochState, validator_verifier::random_validator_verifier};
+use aptos_types::{epoch_state::EpochState, validator_verifier::random_validator_verifier};
 use claims::assert_ok_eq;
 use std::sync::Arc;
 

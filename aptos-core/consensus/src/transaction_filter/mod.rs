@@ -1,9 +1,9 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use gaptos::aptos_config::config::transaction_filter_type::Filter;
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_types::transaction::SignedTransaction;
+use aptos_config::config::transaction_filter_type::Filter;
+use aptos_crypto::HashValue;
+use aptos_types::transaction::SignedTransaction;
 
 pub struct TransactionFilter {
     filter: Filter,
@@ -33,14 +33,14 @@ impl TransactionFilter {
 #[cfg(test)]
 mod test {
     use crate::transaction_filter::TransactionFilter;
-    use gaptos::aptos_config::config::transaction_filter_type::Filter;
-    use gaptos::aptos_crypto::{ed25519::Ed25519PrivateKey, HashValue, PrivateKey, SigningKey, Uniform};
-    use gaptos::aptos_types::{
+    use aptos_config::config::transaction_filter_type::Filter;
+    use aptos_crypto::{ed25519::Ed25519PrivateKey, HashValue, PrivateKey, SigningKey, Uniform};
+    use aptos_types::{
         chain_id::ChainId,
         move_utils::MemberId,
         transaction::{EntryFunction, RawTransaction, SignedTransaction, TransactionPayload},
     };
-    use gaptos::move_core_types::account_address::AccountAddress;
+    use move_core_types::account_address::AccountAddress;
 
     fn create_signed_transaction(function: MemberId) -> SignedTransaction {
         let private_key = Ed25519PrivateKey::generate_for_testing();

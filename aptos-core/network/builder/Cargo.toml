@@ -13,10 +13,16 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+aptos-channels = { workspace = true }
+aptos-config = { workspace = true }
+aptos-crypto = { workspace = true }
+aptos-event-notifications = { workspace = true }
+aptos-logger = { workspace = true }
 aptos-netcore = { workspace = true }
 aptos-network = { workspace = true }
-gaptos = { workspace = true }
 aptos-network-discovery = { workspace = true }
+aptos-time-service = { workspace = true }
+aptos-types = { workspace = true }
 bcs = { workspace = true }
 futures = { workspace = true }
 maplit = { workspace = true }

@@ -13,9 +13,9 @@ use crate::{
         wire::handshake::v1::ProtocolId::HealthCheckerRpc,
     },
 };
-use gaptos::aptos_config::network_id::NetworkContext;
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_time_service::TimeService;
+use aptos_config::network_id::NetworkContext;
+use aptos_logger::prelude::*;
+use aptos_time_service::TimeService;
 use maplit::hashmap;
 use std::{sync::Arc, time::Duration};
 use tokio::runtime::Handle;

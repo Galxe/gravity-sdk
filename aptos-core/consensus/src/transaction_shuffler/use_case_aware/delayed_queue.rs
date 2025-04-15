@@ -6,8 +6,8 @@ use crate::transaction_shuffler::use_case_aware::{
     utils::StrictMap,
     Config,
 };
-use gaptos::aptos_types::transaction::use_case::{UseCaseAwareTransaction, UseCaseKey};
-use gaptos::move_core_types::account_address::AccountAddress;
+use aptos_types::transaction::use_case::{UseCaseAwareTransaction, UseCaseKey};
+use move_core_types::account_address::AccountAddress;
 use std::{
     collections::{hash_map, BTreeMap, HashMap, VecDeque},
     fmt::Debug,

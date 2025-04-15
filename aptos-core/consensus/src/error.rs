@@ -12,8 +12,8 @@ pub struct DbError {
     inner: anyhow::Error,
 }
 
-impl From<gaptos::aptos_storage_interface::AptosDbError> for DbError {
-    fn from(e: gaptos::aptos_storage_interface::AptosDbError) -> Self {
+impl From<aptos_storage_interface::AptosDbError> for DbError {
+    fn from(e: aptos_storage_interface::AptosDbError) -> Self {
         DbError { inner: e.into() }
     }
 }

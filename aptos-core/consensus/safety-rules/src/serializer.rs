@@ -11,9 +11,9 @@ use aptos_consensus_types::{
     vote::Vote,
     vote_proposal::VoteProposal,
 };
-use gaptos::aptos_crypto::bls12381;
-use gaptos::aptos_infallible::RwLock;
-use gaptos::aptos_types::{
+use aptos_crypto::bls12381;
+use aptos_infallible::RwLock;
+use aptos_types::{
     epoch_change::EpochChangeProof,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
 };

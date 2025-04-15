@@ -10,19 +10,37 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-gaptos = { workspace = true }
+aptos-build-info = { workspace = true }
 aptos-consensus = { workspace = true }
 aptos-consensus-types = { workspace = true }
+aptos-crash-handler = { workspace = true }
+aptos-executor-types = { workspace = true, features = ["fuzzing"] }
+aptos-config = { workspace = true }
+aptos-crypto = { workspace = true }
 aptos-mempool = { workspace = true }
+aptos-mempool-notifications = { workspace = true }
+aptos-logger = { workspace = true }
 aptos-netcore = { workspace = true }
 aptos-network = { workspace = true }
 aptos-network-builder = { workspace = true }
 aptos-network-discovery = { workspace = true }
+aptos-event-notifications = { workspace = true }
+aptos-types = { workspace = true }
+aptos-storage-interface = { workspace = true }
+aptos-runtimes = { workspace = true }
+aptos-channels = { workspace = true }
+aptos-peer-monitoring-service-types = { workspace = true }
+aptos-secure-storage = { workspace = true }
+aptos-consensus-notifications = { workspace = true }
+aptos-telemetry = { workspace = true }
+aptos-time-service = { workspace = true }
+aptos-infallible = { workspace = true }
 aptos-inspection-service = { workspace = true }
-
+aptos-schemadb = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
 futures = { workspace = true }
+aptos-validator-transaction-pool = { workspace = true }
 bcs = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
@@ -55,5 +73,5 @@ block-buffer-manager = { workspace = true }
 
 [features]
 default = []
-failpoints = ["fail/failpoints", "aptos-consensus/failpoints", "aptos-mempool/failpoints"]
+failpoints = ["fail/failpoints", "aptos-consensus/failpoints", "aptos-mempool/failpoints", "aptos-config/failpoints"]
 jemalloc-profiling = ["tikv-jemallocator/profiling", "tikv-jemalloc-sys/profiling"]

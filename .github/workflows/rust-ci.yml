@@ -15,10 +15,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Install Sys dependencies
-      run: sudo apt-get update && sudo apt-get install -y libudev-dev
     - name: Build
-      run: RUSTFLAGS="--cfg tokio_unstable" cargo build --bin gravity_node --profile quick-release
+      run: cargo build --bin gravity_node --profile quick-release
     # - name: Run tests
     #   run: cargo test --verbose
     # - name: Check formatting

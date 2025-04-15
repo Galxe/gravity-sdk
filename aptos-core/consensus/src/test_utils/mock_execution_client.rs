@@ -14,16 +14,16 @@ use crate::{
     test_utils::mock_storage::MockStorage,
 };
 use anyhow::{format_err, Result};
-use gaptos::aptos_channels::aptos_channel;
+use aptos_channels::aptos_channel;
 use aptos_consensus_types::{
     common::{Payload, Round},
     pipelined_block::PipelinedBlock,
 };
-use gaptos::aptos_crypto::{bls12381::PrivateKey, HashValue};
+use aptos_crypto::{bls12381::PrivateKey, HashValue};
 use aptos_executor_types::ExecutorResult;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_types::{
+use aptos_infallible::Mutex;
+use aptos_logger::prelude::*;
+use aptos_types::{
     epoch_state::EpochState,
     ledger_info::LedgerInfoWithSignatures,
     on_chain_config::{OnChainConsensusConfig, OnChainExecutionConfig, OnChainRandomnessConfig},
@@ -31,7 +31,7 @@ use gaptos::aptos_types::{
 };
 use futures::{channel::mpsc, SinkExt};
 use futures_channel::mpsc::UnboundedSender;
-use gaptos::move_core_types::account_address::AccountAddress;
+use move_core_types::account_address::AccountAddress;
 use std::{collections::HashMap, sync::Arc};
 
 pub struct MockExecutionClient {

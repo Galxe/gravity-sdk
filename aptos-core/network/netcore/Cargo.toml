@@ -14,7 +14,9 @@ rust-version = { workspace = true }
 
 [dependencies]
 aptos-memsocket = { workspace = true }
-gaptos = { workspace = true }
+aptos-proxy = { workspace = true }
+aptos-types = { workspace = true }
+aptos-logger = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
 pin-project = { workspace = true }
@@ -25,8 +27,9 @@ url = { workspace = true }
 
 [dev-dependencies]
 aptos-memsocket = { workspace = true }
+aptos-types = { workspace = true, features = ["fuzzing"] }
 
 [features]
 default = []
-fuzzing = ["aptos-memsocket/fuzzing"]
+fuzzing = ["aptos-memsocket/fuzzing", "aptos-types/fuzzing"]
 testing = ["aptos-memsocket/testing"]

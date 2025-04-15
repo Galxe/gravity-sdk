@@ -8,11 +8,10 @@ use crate::{
     quorum_cert::QuorumCert,
     vote_data::VoteData,
 };
-use gaptos::aptos_bitvec::BitVec;
-use gaptos::aptos_crypto::hash::HashValue;
-use gaptos::aptos_crypto as aptos_crypto;
-use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
-use gaptos::aptos_types::{
+use aptos_bitvec::BitVec;
+use aptos_crypto::hash::HashValue;
+use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
+use aptos_types::{
     aggregate_signature::AggregateSignature,
     block_info::BlockInfo,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
@@ -362,7 +361,7 @@ impl BlockData {
 
 #[test]
 fn test_reconfiguration_suffix() {
-    use gaptos::aptos_types::{
+    use aptos_types::{
         account_address::AccountAddress, epoch_state::EpochState, on_chain_config::ValidatorSet,
     };
 

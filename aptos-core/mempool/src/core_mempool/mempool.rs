@@ -17,11 +17,11 @@ use crate::{
         MempoolSenderBucket, MultiBucketTimelineIndexIds, TimelineIndexIdentifier,
     },
 };
-use gaptos::aptos_config::config::NodeConfig;
+use aptos_config::config::NodeConfig;
 use aptos_consensus_types::common::{TransactionInProgress, TransactionSummary};
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_types::{
+use aptos_crypto::HashValue;
+use aptos_logger::prelude::*;
+use aptos_types::{
     account_address::AccountAddress,
     mempool_status::{MempoolStatus, MempoolStatusCode},
     transaction::{use_case::UseCaseKey, SignedTransaction},
@@ -255,7 +255,7 @@ impl Mempool {
             );
 
             let insertion_timestamp =
-                gaptos::aptos_infallible::duration_since_epoch_at(&insertion_info.insertion_time);
+                aptos_infallible::duration_since_epoch_at(&insertion_info.insertion_time);
             if let Some(insertion_to_block) = block_timestamp.checked_sub(insertion_timestamp) {
                 counters::core_mempool_txn_commit_latency(
                     counters::COMMIT_ACCEPTED_BLOCK_LABEL,
@@ -318,7 +318,7 @@ impl Mempool {
 
         let submitted_by_label = txn_info.insertion_info().submitted_by_label();
         let status = self.transactions.insert(txn_info);
-        let now = gaptos::aptos_infallible::duration_since_epoch().as_millis() as u64;
+        let now = aptos_infallible::duration_since_epoch().as_millis() as u64;
 
         if status.code == MempoolStatusCode::Accepted {
             counters::MEMPOOL_TXN_ADD_COUNT.inc();

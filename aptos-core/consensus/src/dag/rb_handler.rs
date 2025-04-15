@@ -18,11 +18,11 @@ use crate::{
     util::is_vtxn_expected,
 };
 use anyhow::{bail, ensure};
-use gaptos::aptos_config::config::DagPayloadConfig;
+use aptos_config::config::DagPayloadConfig;
 use aptos_consensus_types::common::{Author, Round};
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::{debug, error};
-use gaptos::aptos_types::{
+use aptos_infallible::Mutex;
+use aptos_logger::{debug, error};
+use aptos_types::{
     epoch_state::EpochState,
     on_chain_config::{OnChainJWKConsensusConfig, OnChainRandomnessConfig, ValidatorTxnConfig},
     validator_signer::ValidatorSigner,

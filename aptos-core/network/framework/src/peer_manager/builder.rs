@@ -17,18 +17,18 @@ use crate::{
     transport::{self, AptosNetTransport, Connection, APTOS_TCP_TRANSPORT},
     ProtocolId,
 };
-use gaptos::aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
-use gaptos::aptos_config::{config::HANDSHAKE_VERSION, network_id::NetworkContext};
-use gaptos::aptos_crypto::x25519;
-use gaptos::aptos_logger::prelude::*;
+use aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
+use aptos_config::{config::HANDSHAKE_VERSION, network_id::NetworkContext};
+use aptos_crypto::x25519;
+use aptos_logger::prelude::*;
 #[cfg(any(test, feature = "testing", feature = "fuzzing"))]
 use aptos_netcore::transport::memory::MemoryTransport;
 use aptos_netcore::transport::{
     tcp::{TCPBufferCfg, TcpSocket, TcpTransport},
     Transport,
 };
-use gaptos::aptos_time_service::TimeService;
-use gaptos::aptos_types::{chain_id::ChainId, network_address::NetworkAddress, PeerId};
+use aptos_time_service::TimeService;
+use aptos_types::{chain_id::ChainId, network_address::NetworkAddress, PeerId};
 use std::{clone::Clone, collections::HashMap, fmt::Debug, sync::Arc};
 use tokio::runtime::Handle;
 
@@ -240,7 +240,7 @@ impl PeerManagerBuilder {
     /// Create the configured transport and start PeerManager.
     /// Return the actual NetworkAddress over which this peer is listening.
     pub fn build(&mut self, executor: &Handle) -> &mut Self {
-        use gaptos::aptos_types::network_address::Protocol::*;
+        use aptos_types::network_address::Protocol::*;
 
         let transport_context = self
             .transport_context

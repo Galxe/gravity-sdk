@@ -7,16 +7,15 @@ use crate::{
     proof_of_store::{BatchInfo, ProofCache, ProofOfStore},
 };
 use anyhow::bail;
-use gaptos::aptos_crypto::{
+use aptos_crypto::{
     hash::{CryptoHash, CryptoHasher},
     HashValue,
 };
-use gaptos::aptos_crypto as aptos_crypto;
-use gaptos::aptos_crypto_derive::CryptoHasher;
+use aptos_crypto_derive::CryptoHasher;
 use aptos_executor_types::ExecutorResult;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_types::{
+use aptos_infallible::Mutex;
+use aptos_logger::prelude::*;
+use aptos_types::{
     account_address::AccountAddress, transaction::SignedTransaction,
     validator_verifier::ValidatorVerifier, vm_status::DiscardedVMStatus, PeerId,
 };

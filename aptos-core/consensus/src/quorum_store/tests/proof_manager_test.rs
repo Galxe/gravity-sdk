@@ -9,8 +9,8 @@ use aptos_consensus_types::{
     proof_of_store::{BatchId, BatchInfo, ProofOfStore},
     request_response::{GetPayloadCommand, GetPayloadResponse},
 };
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_types::{aggregate_signature::AggregateSignature, PeerId};
+use aptos_crypto::HashValue;
+use aptos_types::{aggregate_signature::AggregateSignature, PeerId};
 use futures::channel::oneshot;
 use std::collections::HashSet;
 
@@ -63,7 +63,7 @@ async fn get_proposal(
         true,
         PayloadFilter::InQuorumStore(filter_set),
         callback_tx,
-        gaptos::aptos_infallible::duration_since_epoch(),
+        aptos_infallible::duration_since_epoch(),
     );
     proof_manager.handle_proposal_request(req);
     let GetPayloadResponse::GetPayloadResponse(payload) = callback_rx.await.unwrap().unwrap();

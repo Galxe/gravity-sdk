@@ -10,10 +10,10 @@ use crate::{
     },
 };
 use aptos_consensus_types::proof_of_store::BatchInfo;
-use gaptos::aptos_crypto::HashValue;
+use aptos_crypto::HashValue;
 use aptos_executor_types::*;
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_types::{transaction::SignedTransaction, validator_verifier::ValidatorVerifier, PeerId};
+use aptos_logger::prelude::*;
+use aptos_types::{transaction::SignedTransaction, validator_verifier::ValidatorVerifier, PeerId};
 use futures::{stream::FuturesUnordered, StreamExt};
 use rand::Rng;
 use std::{sync::Arc, time::Duration};

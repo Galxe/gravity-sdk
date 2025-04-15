@@ -2,7 +2,7 @@
 // // SPDX-License-Identifier: Apache-2.0
 
 // use crate::server::utils::CONTENT_TYPE_TEXT;
-// use gaptos::aptos_config::{
+// use aptos_config::{
 //     config::NodeConfig,
 //     network_id::{NetworkId, PeerNetworkId},
 // };

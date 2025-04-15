@@ -4,17 +4,16 @@
 use crate::{
     error::MempoolError, pipeline::pipeline_phase::CountedRequest, state_computer::ExecutionProxy, state_replication::StateComputer, transaction_deduper::NoOpDeduper, transaction_filter::TransactionFilter, transaction_shuffler::NoOpShuffler, txn_notifier::TxnNotifier
 };
-
-use gaptos::aptos_config::config::transaction_filter_type::Filter;
-use gaptos::aptos_consensus_notifications::{ConsensusNotificationSender, Error};
+use aptos_config::config::transaction_filter_type::Filter;
+use aptos_consensus_notifications::{ConsensusNotificationSender, Error};
 use aptos_consensus_types::{block::Block, block_data::BlockData, common::RejectedTransactionSummary};
-use gaptos::aptos_crypto::HashValue;
+use aptos_crypto::HashValue;
 use aptos_executor_types::{
     BlockExecutorTrait, ExecutorResult,
     StateComputeResult,
 };
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_types::{
+use aptos_infallible::Mutex;
+use aptos_types::{
     block_executor::{config::BlockExecutorConfigFromOnchain, partitioner::ExecutableBlock},
     contract_event::ContractEvent,
     epoch_state::EpochState,

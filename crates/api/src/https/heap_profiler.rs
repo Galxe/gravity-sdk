@@ -1,5 +1,5 @@
-use gaptos::aptos_logger::info;
-use gaptos::aptos_logger::warn;
+use aptos_logger::info;
+use aptos_logger::warn;
 use axum::response::IntoResponse;
 use axum::Json;
 use once_cell::sync::Lazy;

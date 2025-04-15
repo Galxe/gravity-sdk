@@ -6,7 +6,7 @@
 
 use crate::peer_manager::PeerManagerError;
 use anyhow::anyhow;
-use gaptos::aptos_types::PeerId;
+use aptos_types::PeerId;
 use futures::channel::{mpsc, oneshot};
 use std::io;
 use thiserror::Error;

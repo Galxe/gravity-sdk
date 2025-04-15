@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::common::{Author, Payload, Round};
-use gaptos::aptos_types::validator_txn::ValidatorTransaction;
+use aptos_types::validator_txn::ValidatorTransaction;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]

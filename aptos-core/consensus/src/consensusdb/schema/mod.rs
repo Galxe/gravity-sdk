@@ -29,7 +29,7 @@ macro_rules! define_schema {
         #[derive(Debug)]
         pub struct $schema_type;
 
-        impl gaptos::aptos_schemadb::schema::Schema for $schema_type {
+        impl aptos_schemadb::schema::Schema for $schema_type {
             type Key = $key_type;
             type Value = $value_type;
 
@@ -38,7 +38,7 @@ macro_rules! define_schema {
     };
 }
 
-use gaptos::aptos_schemadb::ColumnFamilyName;
+use aptos_schemadb::ColumnFamilyName;
 pub use block::BLOCK_CF_NAME;
 pub use dag::{CERTIFIED_NODE_CF_NAME, DAG_VOTE_CF_NAME, NODE_CF_NAME};
 pub use quorum_certificate::QC_CF_NAME;

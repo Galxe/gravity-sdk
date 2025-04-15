@@ -18,7 +18,7 @@ use aptos_consensus_types::{
     block::{block_test_utils::certificate_for_genesis, Block},
     common::Author,
 };
-use gaptos::aptos_types::{on_chain_config::ValidatorTxnConfig, validator_signer::ValidatorSigner};
+use aptos_types::{on_chain_config::ValidatorTxnConfig, validator_signer::ValidatorSigner};
 use futures::{future::BoxFuture, FutureExt};
 use std::{sync::Arc, time::Duration};
 

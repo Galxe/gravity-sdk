@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use aptos_executor_types::{ExecutorResult, StateComputeResult};
-use gaptos::aptos_types::transaction::SignedTransaction;
+use aptos_types::transaction::SignedTransaction;
 use derivative::Derivative;
 use futures::future::BoxFuture;
 use std::time::Duration;

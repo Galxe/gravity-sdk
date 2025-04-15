@@ -13,7 +13,7 @@ use aptos_consensus_types::{
     common::{Author, Payload, Round},
 };
 use aptos_executor_types::ExecutorResult;
-use gaptos::aptos_types::{aggregate_signature::AggregateSignature, transaction::SignedTransaction};
+use aptos_types::{aggregate_signature::AggregateSignature, transaction::SignedTransaction};
 use async_trait::async_trait;
 
 pub(super) const TEST_DAG_WINDOW: u64 = 5;

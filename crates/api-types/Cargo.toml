@@ -10,7 +10,6 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-gaptos = { workspace = true }
 async-trait = { workspace = true }
 futures = { workspace = true }
 tokio = { workspace = true }
@@ -18,5 +17,6 @@ ruint = { workspace = true }
 serde = { workspace = true }
 rand = { workspace = true }
 hex = "0.4.3"
+aptos-crypto = { workspace = true }
 sha2 = { workspace = true }
 once_cell = { workspace = true }

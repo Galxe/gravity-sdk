@@ -12,7 +12,7 @@ use crate::{
 };
 use anyhow::anyhow;
 use api_types::{account::{ExternalAccountAddress, ExternalChainId}, u256_define::{BlockId, Random, TxnHash}, ExternalBlock, ExternalBlockMeta};
-use gaptos::aptos_consensus_notifications::ConsensusNotificationSender;
+use aptos_consensus_notifications::ConsensusNotificationSender;
 use aptos_consensus_types::{
     block::Block,
     common::{RejectedTransactionSummary, Round},
@@ -23,12 +23,12 @@ use aptos_consensus_types::{
         PostPreCommitResult, PreCommitResult, PrepareResult, TaskError, TaskFuture, TaskResult,
     },
 };
-use gaptos::aptos_crypto::HashValue;
+use aptos_crypto::HashValue;
 use aptos_executor_types::{StateComputeResult, BlockExecutorTrait};
-use gaptos::aptos_experimental_runtimes::thread_manager::optimal_min_len;
-use gaptos::aptos_logger::{error, info, warn};
+use aptos_experimental_runtimes::thread_manager::optimal_min_len;
+use aptos_logger::{error, info, warn};
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
-use gaptos::aptos_types::{
+use aptos_types::{
     block_executor::config::BlockExecutorConfigFromOnchain,
     block_metadata_ext::BlockMetadataExt,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
@@ -42,7 +42,7 @@ use block_buffer_manager::get_block_buffer_manager;
 use coex_bridge::{get_coex_bridge, Func};
 use futures::FutureExt;
 use itertools::Itertools;
-use gaptos::move_core_types::account_address::AccountAddress;
+use move_core_types::account_address::AccountAddress;
 use rayon::prelude::*;
 use std::{
     collections::HashMap, future::Future, sync::Arc, time::{Duration, Instant}
@@ -446,7 +446,7 @@ impl PipelineBuilder {
                     txn.bytes().to_vec(),
                     ExternalAccountAddress::new(txn.sender().into_bytes()),
                     txn.sequence_number(),
-                    ExternalChainId::new(txn.chain_id().id() as u64),
+                    ExternalChainId::new(txn.chain_id().id()),
                     TxnHash::from_bytes(&txn.get_hash().to_vec()),
                 )
             })

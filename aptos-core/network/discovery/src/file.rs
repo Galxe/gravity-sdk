@@ -3,11 +3,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::DiscoveryError;
-use gaptos::aptos_config::config::PeerSet;
-use gaptos::aptos_logger::info;
+use aptos_config::config::PeerSet;
+use aptos_logger::info;
 #[cfg(test)]
-use gaptos::aptos_logger::spawn_named;
-use gaptos::aptos_time_service::{Interval, TimeService, TimeServiceTrait};
+use aptos_logger::spawn_named;
+use aptos_time_service::{Interval, TimeService, TimeServiceTrait};
 use futures::Stream;
 use std::{
     path::{Path, PathBuf},
@@ -61,15 +61,15 @@ fn load_file(path: &Path) -> Result<PeerSet, DiscoveryError> {
 mod tests {
     use super::*;
     use crate::DiscoveryChangeListener;
-    use gaptos::aptos_channels::Receiver;
-    use gaptos::aptos_config::{
+    use aptos_channels::Receiver;
+    use aptos_config::{
         config::{Peer, PeerRole},
         network_id::NetworkContext,
     };
-    use gaptos::aptos_event_notifications::DbBackedOnChainConfig;
+    use aptos_event_notifications::DbBackedOnChainConfig;
     use aptos_network::connectivity_manager::{ConnectivityRequest, DiscoverySource};
-    use gaptos::aptos_temppath::TempPath;
-    use gaptos::aptos_types::{network_address::NetworkAddress, PeerId};
+    use aptos_temppath::TempPath;
+    use aptos_types::{network_address::NetworkAddress, PeerId};
     use futures::StreamExt;
     use std::{collections::HashSet, str::FromStr, sync::Arc};
     use tokio::time::sleep;
@@ -78,7 +78,7 @@ mod tests {
         let check_interval = Duration::from_millis(5);
         // TODO: Figure out why mock time doesn't work right
         let time_service = TimeService::real();
-        let (conn_mgr_reqs_tx, conn_mgr_reqs_rx) = gaptos::aptos_channels::new(
+        let (conn_mgr_reqs_tx, conn_mgr_reqs_rx) = aptos_channels::new(
             1,
             &aptos_network::counters::PENDING_CONNECTIVITY_MANAGER_REQUESTS,
         );

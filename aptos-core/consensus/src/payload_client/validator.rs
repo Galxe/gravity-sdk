@@ -1,9 +1,9 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use gaptos::aptos_types::validator_txn::ValidatorTransaction;
-use gaptos::aptos_validator_transaction_pool as vtxn_pool;
-use gaptos::aptos_validator_transaction_pool::VTxnPoolState;
+use aptos_types::validator_txn::ValidatorTransaction;
+use aptos_validator_transaction_pool as vtxn_pool;
+use aptos_validator_transaction_pool::VTxnPoolState;
 use std::{
     ops::Add,
     time::{Duration, Instant},

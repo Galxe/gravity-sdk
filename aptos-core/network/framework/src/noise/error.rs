@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::application;
-use gaptos::aptos_crypto::noise::NoiseError;
-use gaptos::aptos_short_hex_str::ShortHexStr;
-use gaptos::aptos_types::PeerId;
+use aptos_crypto::noise::NoiseError;
+use aptos_short_hex_str::ShortHexStr;
+use aptos_types::PeerId;
 use std::io;
 use thiserror::Error;
 

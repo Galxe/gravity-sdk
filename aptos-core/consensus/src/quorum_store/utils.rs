@@ -6,12 +6,12 @@ use aptos_consensus_types::{
     common::{TransactionInProgress, TransactionSummary, TxnSummaryWithExpiration},
     proof_of_store::{BatchId, BatchInfo, ProofOfStore},
 };
-use gaptos::aptos_logger::prelude::*;
+use aptos_logger::prelude::*;
 use aptos_mempool::{QuorumStoreRequest, QuorumStoreResponse};
-use gaptos::aptos_types::{transaction::SignedTransaction, PeerId};
+use aptos_types::{transaction::SignedTransaction, PeerId};
 use chrono::Utc;
 use futures::channel::{mpsc::Sender, oneshot};
-use gaptos::move_core_types::account_address::AccountAddress;
+use move_core_types::account_address::AccountAddress;
 use rand::{seq::SliceRandom, thread_rng};
 use std::{
     cmp::{Ordering, Reverse},
@@ -398,7 +398,7 @@ impl ProofQueue {
         self.batch_summaries
             .retain(|_, (_, expiration, proof_received)| {
                 *proof_received
-                    || *expiration > (gaptos::aptos_infallible::duration_since_epoch().as_micros() as u64)
+                    || *expiration > (aptos_infallible::duration_since_epoch().as_micros() as u64)
             });
     }
 

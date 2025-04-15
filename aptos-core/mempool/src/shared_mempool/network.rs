@@ -17,19 +17,19 @@ use crate::{
     },
 };
 use api_types::VerifiedTxn;
-use gaptos::aptos_config::{
+use aptos_config::{
     config::{MempoolConfig, NodeType},
     network_id::PeerNetworkId,
 };
-use gaptos::aptos_infallible::RwLock;
-use gaptos::aptos_logger::prelude::*;
+use aptos_infallible::RwLock;
+use aptos_logger::prelude::*;
 use aptos_netcore::transport::ConnectionOrigin;
 use aptos_network::{
     application::{error::Error, interface::NetworkClientInterface, metadata::PeerMetadata},
     transport::ConnectionMetadata,
 };
-use gaptos::aptos_time_service::TimeService;
-use gaptos::aptos_types::transaction::SignedTransaction;
+use aptos_time_service::TimeService;
+use aptos_types::transaction::SignedTransaction;
 // use aptos_vm_validator::vm_validator::TransactionValidation;
 use fail::fail_point;
 use serde::{Deserialize, Serialize};

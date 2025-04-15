@@ -9,13 +9,13 @@ use aptos_consensus_types::{
     block::Block, quorum_cert::QuorumCert, timeout_2chain::TwoChainTimeoutCertificate, vote::Vote,
     vote_data::VoteData, wrapped_ledger_info::WrappedLedgerInfo,
 };
-use gaptos::aptos_crypto::{
+use aptos_crypto::{
     hash::{ACCUMULATOR_PLACEHOLDER_HASH, GENESIS_BLOCK_ID},
     HashValue,
 };
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_storage_interface::DbReader;
-use gaptos::aptos_types::{
+use aptos_logger::prelude::*;
+use aptos_storage_interface::DbReader;
+use aptos_types::{
     block_info::Round, epoch_change::EpochChangeProof, ledger_info::LedgerInfoWithSignatures,
     on_chain_config::ValidatorSet, proof::TransactionAccumulatorSummary, transaction::Version,
 };
@@ -191,7 +191,7 @@ impl RootMetadata {
     #[cfg(any(test, feature = "fuzzing"))]
     pub fn new_empty() -> Self {
         Self {
-            accu_hash: *gaptos::aptos_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH,
+            accu_hash: *aptos_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH,
             frozen_root_hashes: vec![],
             num_leaves: 0,
         }

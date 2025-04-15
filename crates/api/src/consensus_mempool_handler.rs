@@ -1,10 +1,10 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use gaptos::aptos_consensus_notifications::{
+use aptos_consensus_notifications::{
     ConsensusCommitNotification, ConsensusNotification, ConsensusNotificationListener,
 };
-use gaptos::aptos_mempool_notifications::MempoolNotificationSender;
-use gaptos::aptos_types::transaction::Transaction;
+use aptos_mempool_notifications::MempoolNotificationSender;
+use aptos_types::transaction::Transaction;
 use futures::StreamExt;
 
 /// A simple handler for sending notifications to mempool

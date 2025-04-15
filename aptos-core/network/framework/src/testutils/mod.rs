@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::application::storage::PeersAndMetadata;
-use gaptos::aptos_config::network_id::NetworkContext;
-use gaptos::aptos_crypto::x25519::PublicKey;
-use gaptos::aptos_types::PeerId;
+use aptos_config::network_id::NetworkContext;
+use aptos_crypto::x25519::PublicKey;
+use aptos_types::PeerId;
 use std::sync::Arc;
 
 pub mod builder;
@@ -45,7 +45,7 @@ pub fn create_client_server_network_context(
 /// Otherwise, uses a random peer ID.
 fn create_context_for_public_key(public_key: Option<PublicKey>) -> NetworkContext {
     let peer_id = match public_key {
-        Some(public_key) => gaptos::aptos_types::account_address::from_identity_public_key(public_key),
+        Some(public_key) => aptos_types::account_address::from_identity_public_key(public_key),
         None => PeerId::random(),
     };
     NetworkContext::mock_with_peer_id(peer_id)

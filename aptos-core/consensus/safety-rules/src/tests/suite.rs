@@ -14,8 +14,8 @@ use aptos_consensus_types::{
     timeout_2chain::{TwoChainTimeout, TwoChainTimeoutCertificate},
     vote_proposal::VoteProposal,
 };
-use gaptos::aptos_crypto::hash::{HashValue, ACCUMULATOR_PLACEHOLDER_HASH};
-use gaptos::aptos_types::{
+use aptos_crypto::hash::{HashValue, ACCUMULATOR_PLACEHOLDER_HASH};
+use aptos_types::{
     aggregate_signature::AggregateSignature,
     block_info::BlockInfo,
     epoch_state::EpochState,

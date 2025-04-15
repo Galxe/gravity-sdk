@@ -6,8 +6,8 @@
 use crate::core_mempool::transaction::{MempoolTransaction, TimelineState};
 use crate::shared_mempool::types::{MultiBucketTimelineIndexIds, TimelineIndexIdentifier};
 use aptos_consensus_types::common::TransactionSummary;
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_types::account_address::AccountAddress;
+use aptos_crypto::HashValue;
+use aptos_types::account_address::AccountAddress;
 use std::{
     cmp::Ordering,
     collections::{btree_set::Iter, BTreeMap, BTreeSet, HashMap},

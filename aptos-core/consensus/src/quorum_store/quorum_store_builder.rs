@@ -17,16 +17,16 @@ use crate::{
         types::{Batch, BatchResponse},
     }, round_manager::VerifiedEvent
 };
-use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use gaptos::aptos_config::config::{QuorumStoreConfig, SecureBackend};
+use aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use aptos_config::config::{QuorumStoreConfig, SecureBackend};
 use aptos_consensus_types::{
     common::Author, proof_of_store::ProofCache, request_response::GetPayloadCommand,
 };
-use gaptos::aptos_crypto::bls12381::PrivateKey;
-use gaptos::aptos_logger::prelude::*;
+use aptos_crypto::bls12381::PrivateKey;
+use aptos_logger::prelude::*;
 use aptos_mempool::QuorumStoreRequest;
-use gaptos::aptos_storage_interface::DbReader;
-use gaptos::aptos_types::{
+use aptos_storage_interface::DbReader;
+use aptos_types::{
     account_address::AccountAddress, validator_signer::ValidatorSigner,
     validator_verifier::ValidatorVerifier,
 };
@@ -222,7 +222,7 @@ impl InnerBuilder {
     }
 
     fn create_batch_store(&mut self) -> Arc<BatchReaderImpl<NetworkSender>> {
-        let signer = ValidatorSigner::new(self.author, (*self.consensus_key).clone());
+        let signer = ValidatorSigner::new(self.author, self.consensus_key.clone());
 
         let latest_ledger_info_with_sigs = self
             .aptos_db

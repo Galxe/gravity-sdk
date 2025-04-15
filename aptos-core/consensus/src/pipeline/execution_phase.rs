@@ -4,7 +4,7 @@
 
 use crate::{experimental::pipeline_phase::StatelessPipeline, state_replication::StateComputer};
 use aptos_consensus_types::executed_block::ExecutedBlock;
-use gaptos::aptos_crypto::HashValue;
+use aptos_crypto::HashValue;
 use aptos_executor_types::{ExecutorError, ExecutorResult};
 use async_trait::async_trait;
 use std::{

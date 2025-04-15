@@ -4,7 +4,7 @@
 use super::proposer_election::ProposerElection;
 use crate::liveness::cached_proposer_election::CachedProposerElection;
 use aptos_consensus_types::common::{Author, Round};
-use gaptos::aptos_infallible::Mutex;
+use aptos_infallible::Mutex;
 use std::{cell::Cell, sync::Arc};
 
 struct MockProposerElection {

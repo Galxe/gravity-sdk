@@ -8,14 +8,14 @@ use crate::{
     tests::common::{self, TestTransaction},
     MempoolClientRequest, MempoolClientSender, MempoolSyncMsg, QuorumStoreRequest,
 };
-use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use gaptos::aptos_config::{
+use aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use aptos_config::{
     config::NodeConfig,
     network_id::{NetworkId, PeerNetworkId},
 };
-use gaptos::aptos_id_generator::U32IdGenerator;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_mempool_notifications::MempoolNotifier;
+use aptos_id_generator::U32IdGenerator;
+use aptos_infallible::Mutex;
+use aptos_mempool_notifications::MempoolNotifier;
 use aptos_network::{
     application::{
         interface::{NetworkClient, NetworkServiceEvents},
@@ -40,7 +40,7 @@ use aptos_network::{
     },
     ProtocolId,
 };
-use gaptos::aptos_types::{
+use aptos_types::{
     account_address::AccountAddress,
     mempool_status::MempoolStatusCode,
     transaction::SignedTransaction,
@@ -633,7 +633,7 @@ fn setup_mempool(
     // let (ac_endpoint_sender, ac_endpoint_receiver) = mpsc_channel();
     // let (quorum_store_sender, quorum_store_receiver) = mpsc_channel();
     let (mempool_notifier, mempool_listener) =
-        gaptos::aptos_mempool_notifications::new_mempool_notifier_listener_pair(100);
+        aptos_mempool_notifications::new_mempool_notifier_listener_pair(100);
 
     let mempool = Arc::new(Mutex::new(CoreMempool::new(&config)));
     // let vm_validator = Arc::new(RwLock::new(MockVMValidator));

@@ -13,8 +13,8 @@
 use crate::define_schema;
 use anyhow::Result;
 use aptos_consensus_types::block::Block;
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_schemadb::{
+use aptos_crypto::HashValue;
+use aptos_schemadb::{
     schema::{KeyCodec, ValueCodec},
     ColumnFamilyName,
 };

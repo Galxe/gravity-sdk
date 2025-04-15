@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::dag::observability::counters;
-use gaptos::aptos_infallible::duration_since_epoch;
-use gaptos::aptos_metrics_core::HistogramVec;
+use aptos_infallible::duration_since_epoch;
+use aptos_metrics_core::HistogramVec;
 use std::time::Duration;
 
 #[derive(strum_macros::AsRefStr)]

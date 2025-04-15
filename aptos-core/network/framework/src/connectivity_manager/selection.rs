@@ -5,10 +5,10 @@ use crate::{
     connectivity_manager::{DiscoveredPeer, DiscoveredPeerSet},
     logging::NetworkSchema,
 };
-use gaptos::aptos_config::network_id::NetworkContext;
-use gaptos::aptos_infallible::RwLock;
-use gaptos::aptos_logger::error;
-use gaptos::aptos_types::PeerId;
+use aptos_config::network_id::NetworkContext;
+use aptos_infallible::RwLock;
+use aptos_logger::error;
+use aptos_types::PeerId;
 use maplit::hashset;
 use ordered_float::OrderedFloat;
 use rand_latest::prelude::*;
@@ -224,11 +224,11 @@ fn get_unselected_peer_ids(
 #[cfg(test)]
 mod test {
     use super::*;
-    use gaptos::aptos_config::{
+    use aptos_config::{
         config::{PeerRole, RoleType},
         network_id::NetworkId,
     };
-    use gaptos::aptos_types::account_address::AccountAddress;
+    use aptos_types::account_address::AccountAddress;
     use rand::Rng;
     use std::collections::{BinaryHeap, HashMap};
 

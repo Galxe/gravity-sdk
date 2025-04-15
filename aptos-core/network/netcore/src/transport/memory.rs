@@ -4,7 +4,7 @@
 
 use crate::transport::Transport;
 use aptos_memsocket::{MemoryListener, MemorySocket};
-use gaptos::aptos_types::{
+use aptos_types::{
     network_address::{parse_memory, NetworkAddress, Protocol},
     PeerId,
 };
@@ -102,7 +102,7 @@ impl Stream for Listener {
 #[cfg(test)]
 mod test {
     use crate::transport::{memory::MemoryTransport, Transport};
-    use gaptos::aptos_types::PeerId;
+    use aptos_types::PeerId;
     use futures::{
         executor::block_on,
         future::join,

@@ -9,10 +9,10 @@ use crate::{
     tests::common::{batch_add_signed_txn, TestTransaction},
     QuorumStoreRequest,
 };
-use gaptos::aptos_config::config::MempoolConfig;
+use aptos_config::config::MempoolConfig;
 use aptos_consensus_types::common::RejectedTransactionSummary;
-use gaptos::aptos_mempool_notifications::MempoolNotificationSender;
-use gaptos::aptos_types::{transaction::Transaction, vm_status::DiscardedVMStatus};
+use aptos_mempool_notifications::MempoolNotificationSender;
+use aptos_types::{transaction::Transaction, vm_status::DiscardedVMStatus};
 use futures::{channel::oneshot, sink::SinkExt};
 use tokio::time::timeout;
 

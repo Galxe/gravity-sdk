@@ -5,8 +5,8 @@ use crate::{
     counters::{TXN_DEDUP_FILTERED, TXN_DEDUP_SECONDS},
     transaction_deduper::TransactionDeduper,
 };
-use gaptos::aptos_experimental_runtimes::thread_manager::optimal_min_len;
-use gaptos::aptos_types::transaction::SignedTransaction;
+use aptos_experimental_runtimes::thread_manager::optimal_min_len;
+use aptos_types::transaction::SignedTransaction;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
 
@@ -106,14 +106,14 @@ impl TxnHashAndAuthenticatorDeduper {
 //         transaction_deduper::TransactionDeduper,
 //         txn_hash_and_authenticator_deduper::TxnHashAndAuthenticatorDeduper,
 //     };
-//     use gaptos::aptos_cached_packages::aptos_stdlib;
-//     use gaptos::aptos_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
-//     use gaptos::aptos_keygen::KeyGen;
-//     use gaptos::aptos_types::{
+//     use aptos_cached_packages::aptos_stdlib;
+//     use aptos_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
+//     use aptos_keygen::KeyGen;
+//     use aptos_types::{
 //         chain_id::ChainId,
 //         transaction::{RawTransaction, Script, SignedTransaction, TransactionPayload},
 //     };
-//     use gaptos::move_core_types::account_address::AccountAddress;
+//     use move_core_types::account_address::AccountAddress;
 //     use std::time::Instant;
 
 //     struct Account {
@@ -131,7 +131,7 @@ impl TxnHashAndAuthenticatorDeduper {
 //         }
 
 //         pub fn with_keypair(privkey: Ed25519PrivateKey, pubkey: Ed25519PublicKey) -> Self {
-//             let addr = gaptos::aptos_types::account_address::from_public_key(&pubkey);
+//             let addr = aptos_types::account_address::from_public_key(&pubkey);
 //             Account {
 //                 addr,
 //                 privkey,

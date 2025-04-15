@@ -7,8 +7,8 @@ use api_types::{
     account::{ExternalAccountAddress, ExternalChainId},
     u256_define::TxnHash,
 };
-use gaptos::aptos_crypto::{HashValue, Uniform};
-use gaptos::aptos_types::{
+use aptos_crypto::{HashValue, Uniform};
+use aptos_types::{
     account_address::AccountAddress,
     chain_id::{self, ChainId},
     transaction::{RawTransaction, SignedTransaction, TransactionPayload},
@@ -26,14 +26,14 @@ use std::{
 pub const TXN_FIXED_ESTIMATED_BYTES: usize = size_of::<MempoolTransaction>();
 
 // TODO(gravity_byteyue&gravity_jan): consider elegant way for verifiedTxn and signedTransaction
-static GLOBAL_PUBLIC_KEY: Lazy<gaptos::aptos_crypto::ed25519::Ed25519PublicKey> = Lazy::new(|| {
-    gaptos::aptos_crypto::PrivateKey::public_key(
-        &gaptos::aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing(),
+static GLOBAL_PUBLIC_KEY: Lazy<aptos_crypto::ed25519::Ed25519PublicKey> = Lazy::new(|| {
+    aptos_crypto::PrivateKey::public_key(
+        &aptos_crypto::ed25519::Ed25519PrivateKey::generate_for_testing(),
     )
 });
 
-static GLOBAL_SIGNATURE: Lazy<gaptos::aptos_crypto::ed25519::Ed25519Signature> =
-    Lazy::new(|| gaptos::aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap());
+static GLOBAL_SIGNATURE: Lazy<aptos_crypto::ed25519::Ed25519Signature> =
+    Lazy::new(|| aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap());
 
 /// TODO(gravity_byteyue): is this function useful? it seems not right
 impl From<&SignedTransaction> for VerifiedTxn {

@@ -14,10 +14,10 @@ use crate::{
 };
 use anyhow::ensure;
 use aptos_consensus_types::common::Author;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::info;
-use gaptos::aptos_reliable_broadcast::BroadcastStatus;
-use gaptos::aptos_types::{
+use aptos_infallible::Mutex;
+use aptos_logger::info;
+use aptos_reliable_broadcast::BroadcastStatus;
+use aptos_types::{
     aggregate_signature::PartialSignatures, epoch_state::EpochState, randomness::RandMetadata,
 };
 use std::{collections::HashSet, sync::Arc};

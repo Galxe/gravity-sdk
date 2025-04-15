@@ -6,8 +6,8 @@ use crate::{
     pipeline::buffer_manager::OrderedBlocks,
 };
 use aptos_consensus_types::{common::Round, pipelined_block::PipelinedBlock};
-use gaptos::aptos_reliable_broadcast::DropGuard;
-use gaptos::aptos_types::randomness::{FullRandMetadata, Randomness};
+use aptos_reliable_broadcast::DropGuard;
+use aptos_types::randomness::{FullRandMetadata, Randomness};
 use std::collections::{BTreeMap, HashMap};
 
 /// Maintain the ordered blocks received from consensus and corresponding randomness
@@ -158,7 +158,7 @@ mod tests {
         block_queue::{BlockQueue, QueueItem},
         test_utils::create_ordered_blocks,
     };
-    use gaptos::aptos_types::randomness::Randomness;
+    use aptos_types::randomness::Randomness;
     use std::collections::HashSet;
 
     #[test]

@@ -3,7 +3,7 @@
 
 #![allow(clippy::unwrap_used)]
 
-use gaptos::aptos_metrics_core::{
+use aptos_metrics_core::{
     register_histogram, register_histogram_vec, register_int_gauge, Histogram, HistogramVec,
     IntGauge,
 };

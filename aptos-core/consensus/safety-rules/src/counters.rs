@@ -4,7 +4,7 @@
 
 #![allow(clippy::unwrap_used)]
 
-use gaptos::aptos_metrics_core::{
+use aptos_metrics_core::{
     register_histogram_vec, register_int_counter_vec, register_int_gauge_vec, HistogramTimer,
     HistogramVec, IntCounterVec, IntGaugeVec,
 };

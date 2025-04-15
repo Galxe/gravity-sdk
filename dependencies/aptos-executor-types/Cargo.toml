@@ -12,7 +12,8 @@ rust-version.workspace = true
 [dependencies]
 api-types.workspace = true
 serde = { workspace = true }
-gaptos = { workspace = true }
+aptos-crypto = { workspace = true }
+aptos-types = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 itertools = { workspace = true }

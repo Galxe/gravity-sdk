@@ -34,12 +34,12 @@ use crate::{
     },
     ProtocolId,
 };
-use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use gaptos::aptos_config::network_id::{NetworkContext, PeerNetworkId};
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_short_hex_str::AsShortHexStr;
-use gaptos::aptos_time_service::{TimeService, TimeServiceTrait};
-use gaptos::aptos_types::PeerId;
+use aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use aptos_config::network_id::{NetworkContext, PeerNetworkId};
+use aptos_logger::prelude::*;
+use aptos_short_hex_str::AsShortHexStr;
+use aptos_time_service::{TimeService, TimeServiceTrait};
+use aptos_types::PeerId;
 use bytes::Bytes;
 use futures::{
     channel::oneshot,

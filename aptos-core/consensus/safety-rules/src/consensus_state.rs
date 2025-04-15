@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use aptos_consensus_types::{common::Round, safety_data::SafetyData};
-use gaptos::aptos_types::waypoint::Waypoint;
+use aptos_types::waypoint::Waypoint;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 

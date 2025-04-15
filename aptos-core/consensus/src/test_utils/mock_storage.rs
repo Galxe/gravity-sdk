@@ -12,10 +12,10 @@ use anyhow::Result;
 use aptos_consensus_types::{
     block::Block, quorum_cert::QuorumCert, timeout_2chain::TwoChainTimeoutCertificate, vote::Vote,
 };
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_storage_interface::DbReader;
-use gaptos::aptos_types::{
+use aptos_crypto::HashValue;
+use aptos_infallible::Mutex;
+use aptos_storage_interface::DbReader;
+use aptos_types::{
     aggregate_signature::AggregateSignature, epoch_change::EpochChangeProof, ledger_info::{LedgerInfo, LedgerInfoWithSignatures}, on_chain_config::ValidatorSet
 };
 use async_trait::async_trait;

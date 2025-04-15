@@ -10,15 +10,15 @@ use aptos_consensus_types::{
     quorum_cert::QuorumCert,
     vote_proposal::VoteProposal,
 };
-use gaptos::aptos_crypto::{hash::ACCUMULATOR_PLACEHOLDER_HASH, HashValue};
+use aptos_crypto::{hash::ACCUMULATOR_PLACEHOLDER_HASH, HashValue};
 use aptos_executor_types::StateComputeResult;
-use gaptos::aptos_infallible::Mutex;
+use aptos_infallible::Mutex;
 use aptos_safety_rules::{
     test_utils::{make_proposal_with_parent, make_proposal_with_qc},
     PersistentSafetyStorage, SafetyRulesManager,
 };
-use gaptos::aptos_secure_storage::Storage;
-use gaptos::aptos_types::{
+use aptos_secure_storage::Storage;
+use aptos_types::{
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
     validator_signer::ValidatorSigner,
     validator_verifier::random_validator_verifier,
@@ -38,7 +38,7 @@ pub async fn prepare_safety_rules() -> (Arc<Mutex<MetricsSafetyRules>>, Vec<Vali
         Waypoint::new_epoch_boundary(&LedgerInfo::mock_genesis(Some(validator_set))).unwrap();
 
     let safety_storage = PersistentSafetyStorage::initialize(
-        Storage::from(gaptos::aptos_secure_storage::InMemoryStorage::new()),
+        Storage::from(aptos_secure_storage::InMemoryStorage::new()),
         signer.author(),
         signer.private_key().clone(),
         waypoint,

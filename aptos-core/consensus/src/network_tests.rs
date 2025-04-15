@@ -7,8 +7,8 @@ use crate::{
     network_interface::{ConsensusMsg, ConsensusNetworkClient},
     test_utils::{self, consensus_runtime, placeholder_ledger_info, timed_block_on},
 };
-use gaptos::aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
-use gaptos::aptos_config::network_id::{NetworkId, PeerNetworkId};
+use aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
+use aptos_config::network_id::{NetworkId, PeerNetworkId};
 use aptos_consensus_types::{
     block::{block_test_utils::certificate_for_genesis, Block},
     common::Author,
@@ -18,7 +18,7 @@ use aptos_consensus_types::{
     vote_data::VoteData,
     vote_msg::VoteMsg,
 };
-use gaptos::aptos_infallible::{Mutex, RwLock};
+use aptos_infallible::{Mutex, RwLock};
 use aptos_network::{
     application::storage::PeersAndMetadata,
     peer_manager::{ConnectionRequestSender, PeerManagerRequest, PeerManagerRequestSender},
@@ -31,7 +31,7 @@ use aptos_network::{
     },
     ProtocolId,
 };
-use gaptos::aptos_types::{block_info::BlockInfo, PeerId};
+use aptos_types::{block_info::BlockInfo, PeerId};
 use futures::{channel::mpsc, SinkExt, StreamExt};
 use std::{
     collections::{HashMap, HashSet},
@@ -201,7 +201,7 @@ impl NetworkPlayground {
         twin_id: TwinId,
         consensus_tx: aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>,
         network_reqs_rx: aptos_channel::Receiver<(PeerId, ProtocolId), PeerManagerRequest>,
-        conn_mgr_reqs_rx: gaptos::aptos_channels::Receiver<aptos_network::ConnectivityRequest>,
+        conn_mgr_reqs_rx: aptos_channels::Receiver<aptos_network::ConnectivityRequest>,
     ) {
         self.node_consensus_txs.lock().insert(twin_id, consensus_tx);
         self.drop_config.write().add_node(twin_id);
@@ -533,12 +533,12 @@ mod tests {
         network::{IncomingRpcRequest, NetworkTask},
         network_interface::{DIRECT_SEND, RPC},
     };
-    use gaptos::aptos_config::network_id::{NetworkId, PeerNetworkId};
+    use aptos_config::network_id::{NetworkId, PeerNetworkId};
     use aptos_consensus_types::{
         block_retrieval::{BlockRetrievalRequest, BlockRetrievalResponse, BlockRetrievalStatus},
         common::Payload,
     };
-    use gaptos::aptos_crypto::HashValue;
+    use aptos_crypto::HashValue;
     use aptos_network::{
         application::{
             interface::{NetworkClient, NetworkServiceEvents},
@@ -550,7 +550,7 @@ mod tests {
         },
         transport::ConnectionMetadata,
     };
-    use gaptos::aptos_types::validator_verifier::random_validator_verifier;
+    use aptos_types::validator_verifier::random_validator_verifier;
     use bytes::Bytes;
     use futures::{channel::oneshot, future};
     use maplit::hashmap;
@@ -632,7 +632,7 @@ mod tests {
             let (network_reqs_tx, network_reqs_rx) = aptos_channel::new(QueueStyle::FIFO, 8, None);
             let (connection_reqs_tx, _) = aptos_channel::new(QueueStyle::FIFO, 8, None);
             let (consensus_tx, consensus_rx) = aptos_channel::new(QueueStyle::FIFO, 8, None);
-            let (_conn_mgr_reqs_tx, conn_mgr_reqs_rx) = gaptos::aptos_channels::new_test(1024);
+            let (_conn_mgr_reqs_tx, conn_mgr_reqs_rx) = aptos_channels::new_test(1024);
 
             add_peer_to_storage(&peers_and_metadata, peer, &[
                 ProtocolId::ConsensusDirectSendJson,
@@ -658,7 +658,7 @@ mod tests {
             };
             playground.add_node(twin_id, consensus_tx, network_reqs_rx, conn_mgr_reqs_rx);
 
-            let (self_sender, self_receiver) = gaptos::aptos_channels::new_unbounded_test();
+            let (self_sender, self_receiver) = aptos_channels::new_unbounded_test();
             let node = NetworkSender::new(
                 *peer,
                 consensus_network_client,
@@ -748,7 +748,7 @@ mod tests {
             let (network_reqs_tx, network_reqs_rx) = aptos_channel::new(QueueStyle::FIFO, 8, None);
             let (connection_reqs_tx, _) = aptos_channel::new(QueueStyle::FIFO, 8, None);
             let (consensus_tx, consensus_rx) = aptos_channel::new(QueueStyle::FIFO, 8, None);
-            let (_conn_mgr_reqs_tx, conn_mgr_reqs_rx) = gaptos::aptos_channels::new_test(1024);
+            let (_conn_mgr_reqs_tx, conn_mgr_reqs_rx) = aptos_channels::new_test(1024);
             let network_sender = network::NetworkSender::new(
                 PeerManagerRequestSender::new(network_reqs_tx),
                 ConnectionRequestSender::new(connection_reqs_tx),
@@ -774,7 +774,7 @@ mod tests {
             };
             playground.add_node(twin_id, consensus_tx, network_reqs_rx, conn_mgr_reqs_rx);
 
-            let (self_sender, self_receiver) = gaptos::aptos_channels::new_unbounded_test();
+            let (self_sender, self_receiver) = aptos_channels::new_unbounded_test();
             let node = NetworkSender::new(
                 *peer,
                 consensus_network_client.clone(),
@@ -855,7 +855,7 @@ mod tests {
         let network_events = NetworkEvents::new(peer_mgr_notifs_rx, None, true);
         let network_service_events =
             NetworkServiceEvents::new(hashmap! {NetworkId::Validator => network_events});
-        let (self_sender, self_receiver) = gaptos::aptos_channels::new_unbounded_test();
+        let (self_sender, self_receiver) = aptos_channels::new_unbounded_test();
 
         let (network_task, mut network_receivers) =
             NetworkTask::new(network_service_events, self_receiver);

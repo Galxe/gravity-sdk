@@ -23,20 +23,20 @@ use crate::{
     test_utils::{MockPayloadManager, MockStorage},
     util::{mock_time_service::SimulatedTimeService, time_service::TimeService},
 };
-use gaptos::aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
-use gaptos::aptos_config::{
+use aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
+use aptos_config::{
     config::{ConsensusConfig, QcAggregatorType},
     network_id::NetworkId,
 };
 use aptos_consensus_types::proposal_msg::ProposalMsg;
-use gaptos::aptos_infallible::Mutex;
+use aptos_infallible::Mutex;
 use aptos_network::{
     application::{interface::NetworkClient, storage::PeersAndMetadata},
     peer_manager::{ConnectionRequestSender, PeerManagerRequestSender},
     protocols::{network, network::NewNetworkSender},
 };
 use aptos_safety_rules::{test_utils, SafetyRules, TSafetyRules};
-use gaptos::aptos_types::{
+use aptos_types::{
     aggregate_signature::AggregateSignature,
     epoch_change::EpochChangeProof,
     epoch_state::EpochState,
@@ -113,7 +113,7 @@ fn make_initial_epoch_change_proof(signer: &ValidatorSigner) -> EpochChangeProof
 fn create_round_state() -> RoundState {
     let base_timeout = std::time::Duration::new(60, 0);
     let time_interval = Box::new(ExponentialTimeInterval::fixed(base_timeout));
-    let (round_timeout_sender, _) = gaptos::aptos_channels::new_test(1_024);
+    let (round_timeout_sender, _) = aptos_channels::new_test(1_024);
     let (delayed_qc_tx, _) = unbounded();
     let time_service = Arc::new(SimulatedTimeService::new());
 
@@ -158,7 +158,7 @@ fn create_node_for_fuzzing() -> RoundManager {
     );
     let consensus_network_client = ConsensusNetworkClient::new(network_client);
 
-    let (self_sender, _self_receiver) = gaptos::aptos_channels::new_unbounded_test();
+    let (self_sender, _self_receiver) = aptos_channels::new_unbounded_test();
 
     let epoch_state = Arc::new(EpochState {
         epoch: 1,

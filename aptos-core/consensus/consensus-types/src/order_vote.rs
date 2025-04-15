@@ -4,9 +4,9 @@
 
 use crate::common::Author;
 use anyhow::{ensure, Context};
-use gaptos::aptos_crypto::{bls12381, HashValue};
-use gaptos::aptos_short_hex_str::AsShortHexStr;
-use gaptos::aptos_types::{ledger_info::LedgerInfo, validator_verifier::ValidatorVerifier};
+use aptos_crypto::{bls12381, HashValue};
+use aptos_short_hex_str::AsShortHexStr;
+use aptos_types::{ledger_info::LedgerInfo, validator_verifier::ValidatorVerifier};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
 
