@@ -191,7 +191,10 @@ impl RethCli {
     pub async fn start_mempool(&self) -> Result<(), String> {
         debug!("start process pending transactions");
         let mut mut_txn_listener = self.txn_listener.lock().await;
+        let mut start_time = Instant::now();
         while let Some(txn_hash) = mut_txn_listener.recv().await {
+            info!("loop diff = {:?}", start_time.elapsed().as_millis());
+            start_time = Instant::now();
             let pool_txn = self.pool.get(&txn_hash).unwrap();
             let sender = pool_txn.sender();
             let nonce = pool_txn.nonce();
@@ -216,6 +219,7 @@ impl RethCli {
                     .insert((vtxn.txn.sender().clone(), vtxn.txn.seq_number()), pool_txn.clone());
             }
             get_block_buffer_manager().push_txn(vtxn).await;
+            info!("process pending transaction time {:?}ms", start_time.elapsed().as_millis());
         }
         debug!("end process pending transactions");
         Ok(())
