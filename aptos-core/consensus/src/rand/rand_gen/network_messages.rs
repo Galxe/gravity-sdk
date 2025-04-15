@@ -13,7 +13,7 @@ use crate::{
 use anyhow::{bail, ensure};
 use aptos_consensus_types::common::Author;
 use gaptos::aptos_enum_conversion_derive ::EnumConversion;
-use gaptos::aptos_network::{protocols::network::RpcError, ProtocolId};
+use aptos_network::{protocols::network::RpcError, ProtocolId};
 use gaptos::aptos_reliable_broadcast::RBMessage;
 use gaptos::aptos_types::epoch_state::EpochState;
 use bytes::Bytes;

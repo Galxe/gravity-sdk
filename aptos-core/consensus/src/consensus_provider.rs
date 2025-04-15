@@ -11,6 +11,7 @@ use crate::{
         network_message::ConsensusObserverMessage, observer::ConsensusObserver,
         publisher::ConsensusPublisher,
     },
+    counters,
     epoch_manager::EpochManager,
     network::NetworkTask,
     network_interface::{ConsensusMsg, ConsensusNetworkClient},
@@ -30,7 +31,7 @@ use gaptos::aptos_event_notifications::{DbBackedOnChainConfig, ReconfigNotificat
 use aptos_executor::block_executor::BlockExecutor;
 use gaptos::aptos_logger::prelude::*;
 use aptos_mempool::QuorumStoreRequest;
-use gaptos::aptos_network::application::interface::{
+use aptos_network::application::interface::{
     NetworkClient, NetworkClientInterface, NetworkServiceEvents,
 };
 use gaptos::aptos_storage_interface::DbReaderWriter;
@@ -40,7 +41,6 @@ use futures::channel::mpsc;
 use gaptos::move_core_types::account_address::AccountAddress;
 use std::{collections::HashMap, sync::Arc};
 use tokio::runtime::Runtime;
-use gaptos::aptos_consensus::counters as counters;
 
 /// Helper function to start consensus based on configuration and return the runtime
 #[allow(clippy::unwrap_used)]

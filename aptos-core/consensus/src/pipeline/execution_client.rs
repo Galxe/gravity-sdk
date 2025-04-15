@@ -4,6 +4,7 @@
 
 use crate::{
     consensus_observer::publisher::ConsensusPublisher,
+    counters,
     error::StateSyncError,
     network::{IncomingCommitRequest, IncomingRandGenRequest, NetworkSender},
     network_interface::{ConsensusMsg, ConsensusNetworkClient},
@@ -36,7 +37,7 @@ use gaptos::aptos_crypto::bls12381::PrivateKey;
 use aptos_executor_types::ExecutorResult;
 use gaptos::aptos_infallible::RwLock;
 use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_network::{application::interface::NetworkClient, protocols::network::Event};
+use aptos_network::{application::interface::NetworkClient, protocols::network::Event};
 use gaptos::aptos_types::{
     epoch_state::EpochState,
     ledger_info::LedgerInfoWithSignatures,
@@ -53,7 +54,6 @@ use gaptos::move_core_types::account_address::AccountAddress;
 use std::sync::Arc;
 
 use super::pipeline_builder::PipelineBuilder;
-use gaptos::aptos_consensus::counters as counters;
 
 #[async_trait::async_trait]
 pub trait TExecutionClient: Send + Sync {

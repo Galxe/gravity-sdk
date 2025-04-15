@@ -9,6 +9,7 @@ use crate::{
         BlockStore,
     },
     consensus_observer::publisher::ConsensusPublisher,
+    counters,
     dag::{DagBootstrapper, DagCommitSigner, StorageAdapter},
     error::{error_kind, DbError},
     liveness::{
@@ -73,7 +74,7 @@ use gaptos::aptos_event_notifications::ReconfigNotificationListener;
 use gaptos::aptos_infallible::{duration_since_epoch, Mutex};
 use gaptos::aptos_logger::prelude::*;
 use aptos_mempool::QuorumStoreRequest;
-use gaptos::aptos_network::{application::interface::NetworkClient, protocols::network::Event};
+use aptos_network::{application::interface::NetworkClient, protocols::network::Event};
 use aptos_safety_rules::{safety_rules_manager, PersistentSafetyStorage, SafetyRulesManager};
 use gaptos::aptos_types::{
     account_address::AccountAddress,
@@ -112,7 +113,6 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use gaptos::aptos_consensus::counters as counters;
 
 /// Range of rounds (window) that we might be calling proposer election
 /// functions with at any given time, in addition to the proposer history length.

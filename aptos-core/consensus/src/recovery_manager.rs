@@ -3,6 +3,7 @@
 
 use crate::{
     block_storage::{pending_blocks::PendingBlocks, BlockRetriever, BlockStore},
+    counters,
     error::error_kind,
     monitor,
     network::NetworkSender,
@@ -22,7 +23,6 @@ use gaptos::aptos_types::{block_info::Round, epoch_state::EpochState};
 use futures::{FutureExt, StreamExt};
 use futures_channel::oneshot;
 use std::{mem::Discriminant, process, sync::Arc};
-use gaptos::aptos_consensus::counters as counters;
 
 /// If the node can't recover corresponding blocks from local storage, RecoveryManager is responsible
 /// for processing the events carrying sync info and use the info to retrieve blocks from peers

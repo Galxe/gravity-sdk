@@ -96,8 +96,7 @@ impl Drop for IntGaugeGuard {
 #[macro_export]
 macro_rules! monitor {
     ($name:literal, $fn:expr) => {{
-        use $crate::IntGaugeGuard;
-        use gaptos::aptos_consensus::counters::OP_COUNTERS;
+        use $crate::{counters::OP_COUNTERS, IntGaugeGuard};
         let _timer = OP_COUNTERS.timer($name);
         let _guard = IntGaugeGuard::new(OP_COUNTERS.gauge(concat!($name, "_running")));
         $fn

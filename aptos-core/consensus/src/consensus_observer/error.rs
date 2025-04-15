@@ -1,7 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use gaptos::aptos_network::protocols::network::RpcError;
+use aptos_network::protocols::network::RpcError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -47,8 +47,8 @@ impl Error {
     }
 }
 
-impl From<gaptos::aptos_network::application::error::Error> for Error {
-    fn from(error: gaptos::aptos_network::application::error::Error) -> Self {
+impl From<aptos_network::application::error::Error> for Error {
+    fn from(error: aptos_network::application::error::Error) -> Self {
         Error::NetworkError(error.to_string())
     }
 }

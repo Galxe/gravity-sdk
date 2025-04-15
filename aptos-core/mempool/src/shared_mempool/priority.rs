@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::types::MempoolSenderBucket;
-use crate::network::BroadcastPeerPriority;
+use crate::{counters, network::BroadcastPeerPriority};
 use gaptos::aptos_config::{
     config::{MempoolConfig, NodeType},
     network_id::{NetworkId, PeerNetworkId},
@@ -19,7 +19,6 @@ use std::{
     sync::Arc,
     time::Instant,
 };
-use gaptos::aptos_mempool::counters as counters;
 
 /// A simple struct that offers comparisons and ordering for peer prioritization
 #[derive(Clone, Debug)]

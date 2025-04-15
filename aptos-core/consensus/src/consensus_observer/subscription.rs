@@ -7,7 +7,7 @@ use crate::consensus_observer::{
 };
 use gaptos::aptos_config::{config::ConsensusObserverConfig, network_id::PeerNetworkId};
 use gaptos::aptos_logger::warn;
-use gaptos::aptos_network::application::metadata::PeerMetadata;
+use aptos_network::application::metadata::PeerMetadata;
 use gaptos::aptos_storage_interface::DbReader;
 use gaptos::aptos_time_service::{TimeService, TimeServiceTrait};
 use ordered_float::OrderedFloat;
@@ -276,7 +276,7 @@ pub fn sort_peers_by_distance_and_latency(
 #[cfg(test)]
 mod test {
     use super::*;
-    use gaptos::aptos_network::transport::ConnectionMetadata;
+    use aptos_network::transport::ConnectionMetadata;
     use gaptos::aptos_peer_monitoring_service_types::{
         response::NetworkInformationResponse, PeerMonitoringMetadata,
     };

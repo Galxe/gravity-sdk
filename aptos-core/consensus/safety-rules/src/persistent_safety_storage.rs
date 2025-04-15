@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
+    counters,
     logging::{self, LogEntry, LogEvent},
     Error,
 };
@@ -12,7 +13,6 @@ use gaptos::aptos_global_constants::{CONSENSUS_KEY, OWNER_ACCOUNT, SAFETY_DATA, 
 use gaptos::aptos_logger::prelude::*;
 use gaptos::aptos_secure_storage::{KVStorage, Storage};
 use gaptos::aptos_types::waypoint::Waypoint;
-use gaptos::aptos_safety_rules::counters as counters;
 
 /// SafetyRules needs an abstract storage interface to act as a common utility for storing
 /// persistent data to local disk, cloud, secrets managers, or even memory (for tests)

@@ -14,7 +14,7 @@ use crate::consensus_observer::{
 use gaptos::aptos_config::{config::ConsensusObserverConfig, network_id::PeerNetworkId};
 use gaptos::aptos_infallible::RwLock;
 use gaptos::aptos_logger::{info, warn};
-use gaptos::aptos_network::application::interface::NetworkClient;
+use aptos_network::application::interface::NetworkClient;
 use futures::{SinkExt, StreamExt};
 use futures_channel::mpsc;
 use std::{collections::HashSet, sync::Arc, time::Duration};
@@ -317,7 +317,7 @@ mod test {
     use crate::consensus_observer::network_message::BlockTransactionPayload;
     use gaptos::aptos_config::network_id::NetworkId;
     use gaptos::aptos_crypto::HashValue;
-    use gaptos::aptos_network::{
+    use aptos_network::{
         application::{metadata::ConnectionState, storage::PeersAndMetadata},
         transport::ConnectionMetadata,
     };

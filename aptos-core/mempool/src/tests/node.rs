@@ -17,8 +17,8 @@ use gaptos::aptos_config::{
 use gaptos::aptos_crypto::{x25519::PrivateKey, Uniform};
 use gaptos::aptos_event_notifications::{ReconfigNotification, ReconfigNotificationListener};
 use gaptos::aptos_infallible::{Mutex, MutexGuard};
-use gaptos::aptos_netcore::transport::ConnectionOrigin;
-use gaptos::aptos_network::{
+use aptos_netcore::transport::ConnectionOrigin;
+use aptos_network::{
     application::{
         interface::{NetworkClient, NetworkServiceEvents},
         storage::PeersAndMetadata,

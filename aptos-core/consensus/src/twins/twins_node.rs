@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
+    counters,
     epoch_manager::EpochManager,
     network::NetworkTask,
     network_interface::{ConsensusNetworkClient, DIRECT_SEND, RPC},
@@ -14,7 +15,6 @@ use crate::{
     test_utils::{mock_execution_client::MockExecutionClient, MockStorage},
     util::time_service::ClockTimeService,
 };
-use gaptos::aptos_consensus::counters as counters;
 use gaptos::aptos_bounded_executor::BoundedExecutor;
 use gaptos::aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
 use gaptos::aptos_config::{
@@ -25,7 +25,7 @@ use gaptos::aptos_config::{
 use aptos_consensus_types::common::{Author, Round};
 use gaptos::aptos_event_notifications::{ReconfigNotification, ReconfigNotificationListener};
 use aptos_mempool::mocks::MockSharedMempool;
-use gaptos::aptos_network::{
+use aptos_network::{
     application::interface::{NetworkClient, NetworkServiceEvents},
     peer_manager::{ConnectionRequestSender, PeerManagerRequestSender},
     protocols::{

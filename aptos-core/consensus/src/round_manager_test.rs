@@ -48,7 +48,7 @@ use aptos_consensus_types::{
 use gaptos::aptos_crypto::HashValue;
 use gaptos::aptos_infallible::Mutex;
 use gaptos::aptos_logger::prelude::info;
-use gaptos::aptos_network::{
+use aptos_network::{
     application::interface::NetworkClient,
     peer_manager::{ConnectionRequestSender, PeerManagerRequestSender},
     protocols::{

@@ -5,6 +5,7 @@ use crate::{
     network::QuorumStoreSender,
     quorum_store::{
         batch_requester::BatchRequester,
+        counters,
         quorum_store_db::QuorumStoreStorage,
         types::{PersistedValue, StorageMode},
         utils::TimeExpirations,
@@ -30,7 +31,6 @@ use std::{
     time::Duration,
 };
 use tokio::sync::oneshot;
-use gaptos::aptos_consensus::quorum_store::counters as counters;
 
 // Pub(crate) for testing only.
 pub(crate) struct QuotaManager {

@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::proposer_election::ProposerElection;
+use crate::counters::PROPOSER_ELECTION_DURATION;
 use aptos_consensus_types::common::{Author, Round};
 use gaptos::aptos_infallible::Mutex;
 use gaptos::aptos_logger::prelude::info;
 use std::collections::BTreeMap;
-use gaptos::aptos_consensus::counters::PROPOSER_ELECTION_DURATION;
 
 // Wrapper around ProposerElection.
 //

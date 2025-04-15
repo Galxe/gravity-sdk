@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    error::QuorumStoreError, monitor,
+    counters::WAIT_FOR_FULL_BLOCKS_TRIGGERED, error::QuorumStoreError, monitor,
     payload_client::user::UserPayloadClient,
 };
 use aptos_consensus_types::{
@@ -15,7 +15,6 @@ use futures::future::BoxFuture;
 use futures_channel::{mpsc, oneshot};
 use std::time::{Duration, Instant};
 use tokio::time::{sleep, timeout};
-use gaptos::aptos_consensus::counters::WAIT_FOR_FULL_BLOCKS_TRIGGERED;
 
 const NO_TXN_DELAY: u64 = 30;
 

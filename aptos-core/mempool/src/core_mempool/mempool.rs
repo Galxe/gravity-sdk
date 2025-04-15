@@ -10,6 +10,7 @@ use crate::{
         transaction::{InsertionInfo, MempoolTransaction, TimelineState},
         transaction_store::TransactionStore,
     },
+    counters,
     logging::{LogEntry, LogSchema, TxnsLog},
     network::BroadcastPeerPriority,
     shared_mempool::types::{
@@ -33,7 +34,7 @@ use std::{
 };
 
 use super::transaction::VerifiedTxn;
-use gaptos::aptos_mempool::counters as counters;
+
 
 pub struct Mempool {
     // Stores the metadata of all transactions in mempool (of all states).

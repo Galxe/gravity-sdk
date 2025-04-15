@@ -30,7 +30,7 @@ use gaptos::aptos_config::{
 };
 use aptos_consensus_types::proposal_msg::ProposalMsg;
 use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_network::{
+use aptos_network::{
     application::{interface::NetworkClient, storage::PeersAndMetadata},
     peer_manager::{ConnectionRequestSender, PeerManagerRequestSender},
     protocols::{network, network::NewNetworkSender},

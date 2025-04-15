@@ -5,6 +5,7 @@
 //! Interface between Mempool and Network layers.
 
 use crate::{
+    counters,
     logging::{LogEntry, LogSchema},
     shared_mempool::{
         priority::PrioritizedPeersState,
@@ -22,8 +23,8 @@ use gaptos::aptos_config::{
 };
 use gaptos::aptos_infallible::RwLock;
 use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_netcore::transport::ConnectionOrigin;
-use gaptos::aptos_network::{
+use aptos_netcore::transport::ConnectionOrigin;
+use aptos_network::{
     application::{error::Error, interface::NetworkClientInterface, metadata::PeerMetadata},
     transport::ConnectionMetadata,
 };
@@ -40,7 +41,6 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 use thiserror::Error;
-use gaptos::aptos_mempool::counters as counters;
 
 /// Container for exchanging transactions with other Mempools.
 #[derive(Clone, Debug, Deserialize, Serialize)]

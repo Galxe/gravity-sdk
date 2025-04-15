@@ -9,6 +9,7 @@ use crate::{
         tracing::{observe_block, BlockStage},
         BlockReader,
     },
+    counters,
     payload_manager::TPayloadManager,
     persistent_liveness_storage::{PersistentLivenessStorage, RecoveryData, RootInfo},
     pipeline::execution_client::TExecutionClient,
@@ -53,7 +54,6 @@ use std::sync::atomic::Ordering;
 use std::{collections::BTreeMap, io::Read, sync::Arc, time::Duration};
 
 use super::BlockRetriever;
-use gaptos::aptos_consensus::counters as counters;
 
 #[cfg(test)]
 #[path = "block_store_test.rs"]

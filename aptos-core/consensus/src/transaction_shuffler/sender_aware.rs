@@ -1,8 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::transaction_shuffler::TransactionShuffler;
-use gaptos::aptos_consensus::counters::NUM_SENDERS_IN_BLOCK;
+use crate::{counters::NUM_SENDERS_IN_BLOCK, transaction_shuffler::TransactionShuffler};
 use gaptos::aptos_types::transaction::SignedTransaction;
 use gaptos::move_core_types::account_address::AccountAddress;
 use std::collections::{HashMap, VecDeque};

@@ -20,7 +20,7 @@ use aptos_consensus::consensusdb::ConsensusDB;
 use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
 use gaptos::aptos_event_notifications::EventNotificationSender;
 use gaptos::aptos_logger::{info, warn};
-use gaptos::aptos_network_builder::builder::NetworkBuilder;
+use aptos_network_builder::builder::NetworkBuilder;
 use gaptos::aptos_storage_interface::DbReaderWriter;
 use gaptos::aptos_telemetry::service::start_telemetry_service;
 use async_trait::async_trait;
@@ -79,7 +79,7 @@ impl ConsensusEngine {
         let mut runtimes = vec![];
         if let Some(runtime) = start_telemetry_service(
             node_config.clone(),
-            ChainId::new(chain_id),
+            ChainId::new(chain_id as u8),
             build_information!(),
             remote_log_receiver,
             Some(logger_filter_update),

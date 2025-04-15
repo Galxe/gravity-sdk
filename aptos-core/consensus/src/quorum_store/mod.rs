@@ -1,6 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+pub mod counters;
 /// Equivalent to directly fetching blocks from mempool without a quorum store.
 pub mod direct_mempool_quorum_store;
 

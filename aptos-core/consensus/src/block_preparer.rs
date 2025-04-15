@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
+    counters::{self, MAX_TXNS_FROM_BLOCK_TO_EXECUTE, TXN_SHUFFLE_SECONDS},
     payload_manager::TPayloadManager,
     transaction_deduper::TransactionDeduper,
     transaction_filter::TransactionFilter,
@@ -12,8 +13,6 @@ use aptos_executor_types::ExecutorResult;
 use gaptos::aptos_types::transaction::SignedTransaction;
 use fail::fail_point;
 use std::{sync::Arc, time::Instant};
-use gaptos::aptos_consensus::counters as counters;
-use counters::{MAX_TXNS_FROM_BLOCK_TO_EXECUTE, TXN_SHUFFLE_SECONDS};
 
 pub struct BlockPreparer {
     payload_manager: Arc<dyn TPayloadManager>,

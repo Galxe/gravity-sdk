@@ -19,7 +19,7 @@ use aptos_consensus_types::common::{
 };
 use gaptos::aptos_crypto::HashValue;
 use gaptos::aptos_infallible::{Mutex, RwLock};
-use gaptos::aptos_network::application::interface::NetworkClientInterface;
+use aptos_network::application::interface::NetworkClientInterface;
 use gaptos::aptos_storage_interface::DbReader;
 use gaptos::aptos_types::{
     mempool_status::MempoolStatus, transaction::SignedTransaction, vm_status::DiscardedVMStatus,

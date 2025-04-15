@@ -3,10 +3,12 @@
 
 use super::{
     dag_store::DagStore,
+    observability::counters::{NUM_NODES_PER_BLOCK, NUM_ROUNDS_PER_BLOCK},
 };
 use crate::{
     block_storage::tracing::{observe_block, BlockStage},
     consensusdb::{CertifiedNodeSchema, ConsensusDB, DagVoteSchema, NodeSchema},
+    counters,
     counters::update_counters_for_committed_blocks,
     dag::{
         storage::{CommitEvent, DAGStorage},
@@ -44,8 +46,6 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use gaptos::aptos_consensus::dag::observability::counters::{NUM_NODES_PER_BLOCK, NUM_ROUNDS_PER_BLOCK};
-use gaptos::aptos_consensus::counters as counters;
 
 pub trait OrderedNotifier: Send + Sync {
     fn send_ordered_nodes(

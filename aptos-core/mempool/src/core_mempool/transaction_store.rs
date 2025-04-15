@@ -8,6 +8,7 @@ use crate::{
         mempool::Mempool,
         transaction::{InsertionInfo, MempoolTransaction, TimelineState},
     },
+    counters::{self, BROADCAST_BATCHED_LABEL, BROADCAST_READY_LABEL, CONSENSUS_READY_LABEL},
     logging::{LogEntry, LogSchema, TxnsLog},
     network::BroadcastPeerPriority,
     shared_mempool::types::{
@@ -30,8 +31,6 @@ use std::{
 };
 
 use super::index::{MultiBucketTimelineIndex, PriorityIndex, PriorityQueueIter};
-use gaptos::aptos_mempool::counters as counters;
-use counters::{BROADCAST_BATCHED_LABEL, BROADCAST_READY_LABEL, CONSENSUS_READY_LABEL};
 
 /// Estimated per-txn overhead of indexes. Needs to be updated if additional indexes are added.
 pub const TXN_INDEX_ESTIMATED_BYTES: usize = size_of::<crate::core_mempool::index::OrderedQueueKey>() // priority_index

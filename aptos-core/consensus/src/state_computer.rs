@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::block_storage::tracing::{observe_block, BlockStage};
-use crate::counters::update_counters_for_compute_res;
+use crate::counters::{update_counters_for_compute_res, APTOS_EXECUTION_TXNS};
 use crate::pipeline::pipeline_builder::PipelineBuilder;
 use crate::{
     block_preparer::BlockPreparer,
+    counters,
     error::StateSyncError,
     execution_pipeline::ExecutionPipeline,
     monitor,
@@ -47,8 +48,6 @@ use fail::fail_point;
 use futures::{future::BoxFuture, SinkExt, StreamExt};
 use std::{boxed::Box, sync::Arc, time::Duration};
 use tokio::sync::Mutex as AsyncMutex;
-use gaptos::aptos_consensus::counters as counters;
-use counters::APTOS_EXECUTION_TXNS;
 
 pub type StateComputeResultFut = BoxFuture<'static, ExecutorResult<PipelineExecutionResult>>;
 
@@ -244,7 +243,7 @@ impl StateComputer for ExecutionProxy {
                     txn.bytes().to_vec(),
                     ExternalAccountAddress::new(txn.sender().into_bytes()),
                     txn.sequence_number(),
-                    ExternalChainId::new(txn.chain_id().id()),
+                    ExternalChainId::new(txn.chain_id().id() as u64),
                     TxnHash::from_bytes(&txn.get_hash().to_vec()),
                 )
             })

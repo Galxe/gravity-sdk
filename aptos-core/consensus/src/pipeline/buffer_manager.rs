@@ -7,7 +7,7 @@ use crate::{
     consensus_observer::{
         network_message::ConsensusObserverMessage, publisher::ConsensusPublisher,
     },
-    counters::log_executor_error_occurred,
+    counters::{self, log_executor_error_occurred},
     monitor,
     network::{IncomingCommitRequest, NetworkSender},
     network_interface::ConsensusMsg,
@@ -33,7 +33,7 @@ use aptos_consensus_types::{
 use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::ExecutorResult;
 use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_network::protocols::{rpc::error::RpcError, wire::handshake::v1::ProtocolId};
+use aptos_network::protocols::{rpc::error::RpcError, wire::handshake::v1::ProtocolId};
 use gaptos::aptos_reliable_broadcast::{DropGuard, ReliableBroadcast};
 use gaptos::aptos_time_service::TimeService;
 use gaptos::aptos_types::{
@@ -59,7 +59,6 @@ use std::{
 };
 use tokio::time::{Duration, Instant};
 use tokio_retry::strategy::ExponentialBackoff;
-use gaptos::aptos_consensus::counters as counters;
 
 pub const COMMIT_VOTE_BROADCAST_INTERVAL_MS: u64 = 1500;
 pub const COMMIT_VOTE_REBROADCAST_INTERVAL_MS: u64 = 30000;

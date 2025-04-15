@@ -5,7 +5,7 @@ use gaptos::aptos_config::{
 };
 use gaptos::aptos_crypto::{PrivateKey, Uniform};
 use aptos_mempool::MempoolClientRequest;
-use gaptos::aptos_network::{
+use aptos_network::{
     application::{
         interface::{NetworkClient, NetworkServiceEvents},
         storage::PeersAndMetadata,
@@ -16,7 +16,7 @@ use gaptos::aptos_network::{
     },
     ProtocolId,
 };
-use gaptos::aptos_network_builder::builder::NetworkBuilder;
+use aptos_network_builder::builder::NetworkBuilder;
 use gaptos::aptos_types::{
     chain_id::ChainId,
     transaction::{RawTransaction, Script, SignedTransaction},
@@ -66,7 +66,7 @@ pub fn consensus_network_configuration(node_config: &NodeConfig) -> NetworkAppli
         rpc_protocols,
         aptos_channel::Config::new(node_config.consensus.max_network_channel_size)
             .queue_style(QueueStyle::FIFO)
-            .counters(&gaptos::aptos_consensus::counters::PENDING_CONSENSUS_NETWORK_EVENTS),
+            .counters(&aptos_consensus::counters::PENDING_CONSENSUS_NETWORK_EVENTS),
     );
     NetworkApplicationConfig::new(network_client_config, network_service_config)
 }
@@ -83,7 +83,7 @@ pub fn mempool_network_configuration(node_config: &NodeConfig) -> NetworkApplica
         rpc_protocols,
         aptos_channel::Config::new(node_config.mempool.max_network_channel_size)
             .queue_style(QueueStyle::KLAST) // TODO: why is this not FIFO?
-            .counters(&gaptos::aptos_mempool::counters::PENDING_MEMPOOL_NETWORK_EVENTS),
+            .counters(&aptos_mempool::counters::PENDING_MEMPOOL_NETWORK_EVENTS),
     );
     NetworkApplicationConfig::new(network_client_config, network_service_config)
 }

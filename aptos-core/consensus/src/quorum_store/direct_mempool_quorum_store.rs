@@ -1,7 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::monitor;
+use crate::{monitor, quorum_store::counters};
 use anyhow::Result;
 use aptos_consensus_types::{
     common::{Payload, PayloadFilter, TransactionInProgress, TransactionSummary},
@@ -22,7 +22,6 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::time::timeout;
-use gaptos::aptos_consensus::quorum_store::counters as counters;
 
 pub struct DirectMempoolQuorumStore {
     consensus_receiver: Receiver<GetPayloadCommand>,

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
+    counters,
     pending_votes::{PendingVotes, VoteReceptionResult},
     util::time_service::{SendTask, TimeService},
 };
@@ -21,7 +22,6 @@ use futures::future::AbortHandle;
 use futures_channel::mpsc::UnboundedSender;
 use serde::Serialize;
 use std::{fmt, sync::Arc, time::Duration};
-use gaptos::aptos_consensus::counters as counters;
 
 /// A reason for starting a new round: introduced for monitoring / debug purposes.
 #[derive(Serialize, Debug, PartialEq, Eq)]

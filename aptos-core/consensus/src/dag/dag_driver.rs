@@ -8,6 +8,7 @@ use crate::{
         dag_fetcher::TFetchRequester,
         errors::DagDriverError,
         observability::{
+            counters::{self, NODE_PAYLOAD_SIZE, NUM_TXNS_PER_NODE},
             logging::{LogEvent, LogSchema},
             tracing::{observe_node, observe_round, NodeStage, RoundStage},
         },
@@ -41,8 +42,6 @@ use futures::{
 use futures_channel::oneshot;
 use std::{collections::HashSet, sync::Arc, time::Duration};
 use tokio_retry::strategy::ExponentialBackoff;
-use gaptos::aptos_consensus::dag::observability::counters as counters;
-use counters::{NODE_PAYLOAD_SIZE, NUM_TXNS_PER_NODE};
 
 pub(crate) struct DagDriver {
     author: Author,

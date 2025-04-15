@@ -5,7 +5,7 @@
 
 use crate::{
     block_preparer::BlockPreparer,
-    counters::log_executor_error_occurred,
+    counters::{self, log_executor_error_occurred},
     monitor,
     pipeline::pipeline_phase::CountedRequest,
     state_computer::StateComputeResultFut,
@@ -34,7 +34,6 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::{mpsc, oneshot};
-use gaptos::aptos_consensus::counters as counters;
 
 #[allow(clippy::unwrap_used)]
 pub static SIG_VERIFY_POOL: Lazy<Arc<rayon::ThreadPool>> = Lazy::new(|| {

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
+    counters::BUFFER_MANAGER_PHASE_PROCESS_SECONDS,
     pipeline::buffer_manager::{Receiver, Sender},
 };
 use gaptos::aptos_logger::debug;
@@ -12,7 +13,7 @@ use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
     Arc,
 };
-use gaptos::aptos_consensus::counters::BUFFER_MANAGER_PHASE_PROCESS_SECONDS;
+
 #[async_trait]
 pub trait StatelessPipeline: Send + Sync {
     type Request;
