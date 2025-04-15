@@ -13,10 +13,12 @@ use api_types::{
     compute_res::TxnStatus,
     GLOBAL_CRYPTO_TXN_HASHER,
 };
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use api_types::{ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 use block_buffer_manager::get_block_buffer_manager;
+use rayon::iter::IntoParallelRefMutIterator;
 use core::panic;
-use greth::reth_ethereum_engine_primitives::EthPayloadAttributes;
+use greth::{reth_ethereum_engine_primitives::EthPayloadAttributes, reth_transaction_pool::{EthPooledTransaction, ValidPoolTransaction}};
 use greth::reth_node_api::NodeTypesWithDBAdapter;
 use greth::reth_node_ethereum::EthereumNode;
 use greth::reth_pipe_exec_layer_ext_v2::{ExecutedBlockMeta, OrderedBlock, PipeExecLayerApi};
@@ -34,7 +36,7 @@ use greth::{
 use greth::{
     reth::rpc::builder::auth::AuthServerHandle, reth_node_core::primitives::SignedTransaction,
 };
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Instant};
 use tokio::sync::Mutex;
 use tracing::*;
 
@@ -60,6 +62,7 @@ pub struct RethCli {
         >,
         greth::reth_transaction_pool::blobstore::DiskFileBlobStore,
     >,
+    txn_cache: Mutex<HashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>>,
 }
 
 pub fn convert_account(acc: Address) -> ExternalAccountAddress {
@@ -87,6 +90,7 @@ impl RethCli {
             provider: args.provider,
             txn_listener: Mutex::new(args.tx_listener),
             pool: args.pool,
+            txn_cache: Mutex::new(HashMap::new()),
         }
     }
 
@@ -105,20 +109,46 @@ impl RethCli {
         parent_id: B256,
     ) -> Result<(), String> {
         trace!("push ordered block {:?} with parent id {}", block, parent_id);
+        let system_time = Instant::now();
         let pipe_api = &self.pipe_api;
-        let mut senders = vec![];
-        let mut transactions = vec![];
-        for (sender, txn) in
-            block.txns.iter_mut().map(|txn| Self::txn_to_signed(&mut txn.bytes, self.chain_id))
+
+                
+        let mut senders = vec![None; block.txns.len()];
+        let mut transactions = vec![None; block.txns.len()];
+
         {
-            senders.push(sender);
-            transactions.push(txn);
+            let mut cache = self.txn_cache.lock().await;
+            for (idx, txn) in block.txns.iter().enumerate() {
+                let key = (txn.sender.clone(), txn.sequence_number);
+                if let Some(cached_txn) = cache.remove(&key) {
+                    senders[idx] = Some(cached_txn.sender());
+                    transactions[idx] = Some(cached_txn.transaction.transaction().tx().clone());
+                }
+            }
         }
 
+        block.txns.par_iter_mut().enumerate()
+            .filter(|(idx, _)| senders[*idx].is_none())
+            .map(|(idx, txn)| {
+                let (sender, transaction) = Self::txn_to_signed(&mut txn.bytes, self.chain_id);
+                (idx, sender, transaction)
+            })
+            .collect::<Vec<(usize, Address, TransactionSigned)>>()
+            .into_iter()
+            .for_each(|(idx, sender, transaction)| {
+                senders[idx] = Some(sender);
+                transactions[idx] = Some(transaction);
+            });
+
+        let senders: Vec<_> = senders.into_iter().map(|x| x.unwrap()).collect();
+        let transactions: Vec<_> = transactions.into_iter().map(|x| x.unwrap()).collect();
+
+        
         let randao = match block.block_meta.randomness {
             Some(randao) => B256::from_slice(randao.0.as_ref()),
             None => B256::ZERO,
         };
+        info!("push ordered block time deserialize {:?}ms", system_time.elapsed().as_millis());
         // TODO: make zero make sense
         pipe_api.push_ordered_block(OrderedBlock {
             parent_id,
@@ -160,15 +190,12 @@ impl RethCli {
 
     pub async fn start_mempool(&self) -> Result<(), String> {
         debug!("start process pending transactions");
-        let mut count = 0;
-        let mut total = 0;
-        let mut last_time = std::time::Instant::now();
         let mut mut_txn_listener = self.txn_listener.lock().await;
         while let Some(txn_hash) = mut_txn_listener.recv().await {
-            let txn = self.pool.get(&txn_hash).unwrap();
-            let sender = txn.sender();
-            let nonce = txn.nonce();
-            let txn = txn.transaction.transaction().tx();
+            let pool_txn = self.pool.get(&txn_hash).unwrap();
+            let sender = pool_txn.sender();
+            let nonce = pool_txn.nonce();
+            let txn = pool_txn.transaction.transaction().tx();
             let account_nonce =
                 self.provider.basic_account(&sender).unwrap().map(|x| x.nonce).unwrap_or(nonce);
             // Since the consensus layer might use the bytes to recalculate the hash, we need to encode the transaction
@@ -184,18 +211,12 @@ impl RethCli {
                 },
                 account_seq_num: account_nonce,
             };
-            {
-                count += 1;
-                get_block_buffer_manager().push_txn(vtxn).await;
+            {       
+                self.txn_cache.lock().await
+                    .insert((vtxn.txn.sender().clone(), vtxn.txn.seq_number()), pool_txn.clone());
             }
-            if last_time.elapsed().as_secs() > 1 {
-                info!("processed {} transactions in last second total {}", count, total);
-                total += count;
-                count = 0;
-                last_time = std::time::Instant::now();
-            }
+            get_block_buffer_manager().push_txn(vtxn).await;
         }
-
         debug!("end process pending transactions");
         Ok(())
     }
@@ -293,55 +314,5 @@ impl RethCli {
                 .await
                 .unwrap();
         }
-    }
-
-    pub async fn latest_block_number(&self) -> u64 {
-        match self.provider.header_by_number_or_tag(BlockNumberOrTag::Latest).unwrap() {
-            Some(header) => header.number, // The genesis block has a number of zero;
-            None => 0,
-        }
-    }
-
-    pub async fn finalized_block_number(&self) -> u64 {
-        match self.provider.database_provider_ro().unwrap().last_block_number() {
-            Ok(block_number) => {
-                return block_number;
-            }
-            Err(e) => {
-                error!("finalized_block_number error {}", e);
-                return 0;
-            }
-        }
-    }
-
-    async fn recover_execution_blocks(&self, blocks: ExecutionBlocks) {}
-
-    pub fn get_blocks_by_range(
-        &self,
-        start_block_number: u64,
-        end_block_number: u64,
-    ) -> ExecutionBlocks {
-        let result = ExecutionBlocks {
-            latest_block_hash: todo!(),
-            latest_block_number: todo!(),
-            blocks: vec![],
-            latest_ts: todo!(),
-        };
-        for block_number in start_block_number..end_block_number {
-            match self.provider.block_by_number_or_tag(BlockNumberOrTag::Number(block_number)) {
-                Ok(block) => {
-                    assert!(block.is_some());
-                    let block = block.unwrap();
-                    if block_number == end_block_number - 1 {
-                        result.latest_block_hash = *block.hash_slow();
-                        result.latest_block_number = block_number;
-                        result.latest_ts = block.timestamp;
-                    }
-                    result.blocks.push(bincode::serialize(&block).unwrap());
-                }
-                Err(e) => panic!("get_blocks_by_range error {}", e),
-            }
-        }
-        result
     }
 }

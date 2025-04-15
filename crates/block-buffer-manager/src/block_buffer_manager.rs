@@ -7,12 +7,12 @@ use std::{
         atomic::{AtomicU64, AtomicU8, Ordering},
         Arc, OnceLock,
     },
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 use tokio::{sync::Mutex, time::Instant};
 
 use api_types::{
-    compute_res::{ComputeRes, TxnStatus}, u256_define::BlockId, ExternalBlock, VerifiedTxn,
+    compute_res::{self, ComputeRes, TxnStatus}, u256_define::BlockId, ExternalBlock, VerifiedTxn,
     VerifiedTxnWithAccountSeqNum,
 };
 use itertools::Itertools;
@@ -40,9 +40,20 @@ pub enum BufferState {
     Ready,
 }
 
+#[derive(Default)]
+pub struct BlockProfile {
+    pub set_ordered_block_time: Option<SystemTime>,
+    pub get_ordered_blocks_time: Option<SystemTime>,
+    pub set_compute_res_time: Option<SystemTime>,
+    pub get_executed_res_time: Option<SystemTime>,
+    pub set_commit_blocks_time: Option<SystemTime>,
+    pub get_committed_blocks_time: Option<SystemTime>,
+}
+
 pub struct BlockStateMachine {
     sender: tokio::sync::broadcast::Sender<()>,
     blocks: HashMap<u64, BlockState>,
+    profile: HashMap<u64, BlockProfile>,
     latest_commit_block_number: u64,
     latest_finalized_block_number: u64,
     block_number_to_block_id: HashMap<u64, BlockId>,
@@ -84,6 +95,7 @@ impl BlockBufferManager {
                 latest_commit_block_number: 0,
                 latest_finalized_block_number: 0,
                 block_number_to_block_id: HashMap::new(),
+                profile: HashMap::new(),
             }),
             buffer_state: AtomicU8::new(BufferState::Uninitialized as u8),
             config,
@@ -112,6 +124,7 @@ impl BlockBufferManager {
             latest_persist_block_num,
         );
         block_state_machine.blocks.retain(|num, _| *num > latest_persist_block_num);
+        block_state_machine.profile.retain(|num, _| *num > latest_persist_block_num);
         let _ = block_state_machine.sender.send(());
         Ok(())
     }
@@ -166,6 +179,7 @@ impl BlockBufferManager {
         max_size: usize,
     ) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, anyhow::Error> {
         let mut txns = self.txn_buffer.txns.lock().await;
+        info!("pop_txns with remain txn {}", txns.len());
 
         if txns.len() <= max_size {
             let result = std::mem::take(&mut *txns);
@@ -202,6 +216,11 @@ impl BlockBufferManager {
         block_state_machine
             .blocks
             .insert(block_num, BlockState::Ordered { block: block.clone(), parent_id });
+        
+        // Record time for set_ordered_blocks
+        let profile = block_state_machine.profile.entry(block_num).or_insert_with(BlockProfile::default);
+        profile.set_ordered_block_time = Some(SystemTime::now());
+        
         let _ = block_state_machine.sender.send(());
         Ok(())
     }
@@ -225,7 +244,7 @@ impl BlockBufferManager {
                 ));
             }
 
-            let block_state_machine = self.block_state_machine.lock().await;
+            let mut block_state_machine = self.block_state_machine.lock().await;
             // get block num, block num + 1
             let mut result = Vec::new();
             let mut current_num = start_num;
@@ -233,6 +252,9 @@ impl BlockBufferManager {
                 match block {
                     BlockState::Ordered { block, parent_id } => {
                         result.push((block.clone(), *parent_id));
+                        // Record time for get_ordered_blocks
+                        let profile = block_state_machine.profile.entry(current_num).or_insert_with(BlockProfile::default);
+                        profile.get_ordered_blocks_time = Some(SystemTime::now());
                     }
                     _ => {
                         panic!("There is no Ordered Block but try to get ordered blocks for block {:?}", current_num);
@@ -278,16 +300,22 @@ impl BlockBufferManager {
                 ));
             }
 
-            let block_state_machine = self.block_state_machine.lock().await;
+            let mut block_state_machine = self.block_state_machine.lock().await;
             if let Some(block) = block_state_machine.blocks.get(&block_num) {
                 match block {
                     BlockState::Computed { id, compute_res } => {
+                        
+                        assert_eq!(id, &block_id);
+                        
+                        // Record time for get_executed_res
+                        let compute_res_clone = compute_res.clone();
+                        let profile = block_state_machine.profile.entry(block_num).or_insert_with(BlockProfile::default);
+                        profile.get_executed_res_time = Some(SystemTime::now());
                         info!(
                             "get_executed_res done with id {:?} num {:?} res {:?}",
-                            block_id, block_num, compute_res
+                            block_id, block_num, compute_res_clone, 
                         );
-                        assert_eq!(id, &block_id);
-                        return Ok(compute_res.clone());
+                        return Ok(compute_res_clone);
                     }
                     BlockState::Ordered { .. } => {
                         // Release lock before waiting
@@ -329,12 +357,7 @@ impl BlockBufferManager {
         if !self.is_ready() {
             panic!("Buffer is not ready");
         }
-        info!(
-            "set_compute_res id {:?} num {:?} hash {:?}",
-            block_id,
-            block_num,
-            BlockId::from_bytes(block_hash.as_slice())
-        );
+        
         let mut block_state_machine = self.block_state_machine.lock().await;
         if let Some(BlockState::Ordered { block, parent_id: _ }) =
             block_state_machine.blocks.get(&block_num)
@@ -347,6 +370,21 @@ impl BlockBufferManager {
                     id: block_id,
                     compute_res: ComputeRes { data: block_hash, txn_num: txn_len as u64, txn_status },
                 },
+            );
+            
+            // Record time for set_compute_res
+            let profile = block_state_machine.profile.entry(block_num).or_insert_with(BlockProfile::default);
+            profile.set_compute_res_time = Some(SystemTime::now());
+            info!(
+                "set_compute_res id {:?} num {:?} hash {:?} and exec time {:?}ms for {:?} txns",
+                block_id,
+                block_num,
+                BlockId::from_bytes(block_hash.as_slice()),
+                profile.set_compute_res_time.unwrap()
+                    .duration_since(profile.get_ordered_blocks_time.unwrap())
+                    .unwrap_or(Duration::ZERO)
+                    .as_millis(),
+                txn_len
             );
             let _ = block_state_machine.sender.send(());
             return Ok(());
@@ -376,6 +414,10 @@ impl BlockBufferManager {
                                 compute_res: compute_res.clone(),
                                 id: block_id_num_hash.block_id,
                             };
+                            
+                            // Record time for set_commit_blocks
+                            let profile = block_state_machine.profile.entry(block_id_num_hash.num).or_insert_with(BlockProfile::default);
+                            profile.set_commit_blocks_time = Some(SystemTime::now());
                         } else {
                             panic!(
                                 "Computed Block id and number is not equal id: {:?}={:?} num: {:?}",
@@ -433,6 +475,10 @@ impl BlockBufferManager {
                 match block {
                     BlockState::Committed { hash, compute_res: _, id } => {
                         result.push(BlockHashRef { block_id: *id, num: current_num, hash: *hash });
+                        
+                        // Record time for get_committed_blocks
+                        let profile = block_state_machine.profile.entry(current_num).or_insert_with(BlockProfile::default);
+                        profile.get_committed_blocks_time = Some(SystemTime::now());
                     }
                     _ => {
                         break;
