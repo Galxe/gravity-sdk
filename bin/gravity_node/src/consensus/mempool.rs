@@ -41,7 +41,7 @@ impl Mempool {
         let mut next = None;
         
         for (account, txns) in self.txns.iter() {
-            let next_nonce = self.next_sequence_numbers.get(account).unwrap_or(&1);
+            let next_nonce = self.next_sequence_numbers.get(account).unwrap_or(&0);
             info!("txns range {:?} - {:?} next nonce {}", txns.keys().min(), txns.keys().max(), next_nonce);
             if self.processed_txns.contains(&(account.clone(), *next_nonce)) {
                 continue;
@@ -54,8 +54,8 @@ impl Mempool {
         }
 
         if let Some((account, txn)) = &next {
-            self.processed_txns.insert((account.clone(), txn.txn.sequence_number + 1));
-            self.next_sequence_numbers.insert(account.clone(), txn.txn.sequence_number);
+            self.processed_txns.insert((account.clone(), txn.txn.sequence_number));
+            self.next_sequence_numbers.insert(account.clone(), txn.txn.sequence_number + 1);
         }
 
         next
