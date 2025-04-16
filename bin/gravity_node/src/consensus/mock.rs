@@ -6,38 +6,35 @@ use std::{
 
 use super::mempool::Mempool;
 use api_types::{
-    u256_define::BlockId, ExecutionChannel, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr,
-    VerifiedTxn,
+    compute_res::TxnStatus, u256_define::BlockId, ExecutionChannel, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn
 };
 
 use alloy_primitives::B256;
+use block_buffer_manager::{block_buffer_manager::BlockHashRef, get_block_buffer_manager};
 use tracing::debug;
 
 pub struct MockConsensus {
-    exec_api: Arc<dyn ExecutionChannel>,
     parent_meta: ExternalBlockMeta,
     pending_txns: Mempool,
     block_number_water_mark: u64,
-    gensis: [u8; 32],
 }
 
 impl MockConsensus {
-    pub fn new(exec_api: Arc<dyn ExecutionChannel>, gensis: B256) -> Self {
-        let mut bytes = [0u8; 32];
-        bytes.copy_from_slice(gensis.as_slice());
+    pub fn new() -> Self {
         let parent_meta = ExternalBlockMeta {
-            block_id: BlockId(bytes),
+            block_id: BlockId([
+                141, 91, 216, 66, 168, 139, 218, 32, 132, 186, 161, 251, 250, 51, 34, 197, 38, 71, 196,
+                135, 49, 116, 247, 25, 67, 147, 163, 137, 28, 58, 62, 73,
+            ]),
             block_number: 0,
             usecs: 0,
             randomness: None,
             block_hash: None,
         };
         Self {
-            exec_api,
             parent_meta,
             pending_txns: Mempool::new(),
             block_number_water_mark: 0,
-            gensis: bytes,
         }
     }
 
@@ -79,13 +76,7 @@ impl MockConsensus {
             }
             let txn = self.pending_txns.get_next();
             if let Some((_, txn)) = txn {
-                println!("txn is {:?}", txn);
-                let res = self
-                    .exec_api
-                    .check_block_txns(attr.clone(), vec![txn.txn.clone()])
-                    .await
-                    .unwrap();
-                if res {
+                if txns.len() < 5000 {
                     txns.push(txn.txn);
                 } else {
                     return self.construct_block(txns, attr);
@@ -101,7 +92,7 @@ impl MockConsensus {
         };
         loop {
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            let txns = self.exec_api.send_pending_txns().await.unwrap();
+            let txns = get_block_buffer_manager().pop_txns(usize::MAX).await.unwrap();
             for txn in txns {
                 self.pending_txns.add(txn);
             }
@@ -110,16 +101,33 @@ impl MockConsensus {
             if let Some(block) = block {
                 let head = block.block_meta.clone();
                 let commit_txns = block.txns.clone();
-                self.exec_api.recv_ordered_block(self.parent_meta.block_id, block).await.unwrap();
+                get_block_buffer_manager().set_ordered_blocks(self.parent_meta.block_id, block).await.unwrap();
                 attr.ts =
                     SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
 
                 block_txns.clear();
-                let _ = self.exec_api.send_executed_block_hash(head.clone()).await.unwrap();
+                let mut block_hash = [0u8; 32];
+                block_hash.copy_from_slice(head.block_hash.clone().unwrap().data.as_slice());
+                let _ = get_block_buffer_manager().set_compute_res(head.block_id.clone(),
+                    block_hash,
+                    head.block_number,
+                    Arc::new(Some(commit_txns.iter().map(|txn| TxnStatus {
+                        txn_hash: txn.committed_hash(),
+                        nonce: txn.sequence_number,
+                        sender: txn.sender().bytes(),
+                        is_discarded: false,
+                    }).collect())),
+            ).await.unwrap();
                 for txn in commit_txns {
                     self.pending_txns.commit(&txn.sender, txn.sequence_number);
                 }
-                self.exec_api.recv_committed_block_info(head.block_id.clone()).await.unwrap();
+                get_block_buffer_manager().set_commit_blocks(vec![
+                    BlockHashRef {
+                        block_id: head.block_id.clone(),
+                        num: head.block_number,
+                        hash: Some(block_hash),
+                    }
+                ]).await.unwrap();
                 self.parent_meta = head;
             }
         }
