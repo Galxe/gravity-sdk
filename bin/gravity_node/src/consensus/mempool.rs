@@ -36,13 +36,17 @@ impl Mempool {
     }
 
     pub fn get_next(&mut self) -> Option<(ExternalAccountAddress, VerifiedTxnWithAccountSeqNum)> {
-        let next = self.txns.iter().find_map(|(account, txns)| {
+        let mut next = None;
+        for (account, txns) in self.txns.iter() {
             let current_seq = self.get_current_sequence_number(account);
             if self.processed_txns.contains(&(account.clone(), current_seq)) {
-                return None;
+                continue;
             }
-            txns.get(&current_seq).map(|txn| (account.clone(), txn.clone()))
-        });
+            let txn = txns.get(&current_seq).map(|txn| (account.clone(), txn.clone()));
+            if let Some(txn) = txn {
+                next = Some(txn);
+            }
+        }
 
         if let Some((account, txn)) = &next {
             self.processed_txns.insert((account.clone(), txn.txn.sequence_number));
