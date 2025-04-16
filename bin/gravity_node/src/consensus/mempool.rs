@@ -8,7 +8,7 @@ pub struct Mempool {
     txns: HashMap<ExternalAccountAddress, BTreeMap<u64, VerifiedTxnWithAccountSeqNum>>,
     /// AccountAddress -> current_sequence_number
     commit_sequence_numbers: HashMap<ExternalAccountAddress, u64>,
-    process_sequence_numbers: HashMap<ExternalAccountAddress, u64>,
+    next_sequence_numbers: HashMap<ExternalAccountAddress, u64>,
     /// (account, sequence_number)
     processed_txns: HashSet<(ExternalAccountAddress, u64)>,
 }
@@ -17,7 +17,7 @@ impl Mempool {
     pub fn new() -> Self {
         Self {
             txns: HashMap::new(),
-            process_sequence_numbers: HashMap::new(),
+            next_sequence_numbers: HashMap::new(),
             commit_sequence_numbers: HashMap::new(),
             processed_txns: HashSet::new(),
         }
@@ -40,19 +40,19 @@ impl Mempool {
     pub fn get_next(&mut self) -> Option<(ExternalAccountAddress, VerifiedTxnWithAccountSeqNum)> {
         let mut next = None;
         for (account, txns) in self.txns.iter() {
-            let current_seq = self.process_sequence_numbers.get(account).unwrap_or(&0);
-            if self.processed_txns.contains(&(account.clone(), current_seq + 1)) {
+            let next_nonce = self.next_sequence_numbers.get(account).unwrap_or(&0);
+            if self.processed_txns.contains(&(account.clone(), *next_nonce)) {
                 continue;
             }
-            let txn = txns.get(&current_seq).map(|txn| (account.clone(), txn.clone()));
+            let txn = txns.get(&next_nonce).map(|txn| (account.clone(), txn.clone()));
             if let Some(txn) = txn {
                 next = Some(txn);
             }
         }
 
         if let Some((account, txn)) = &next {
-            self.processed_txns.insert((account.clone(), txn.txn.sequence_number));
-            self.process_sequence_numbers.insert(account.clone(), txn.txn.sequence_number);
+            self.processed_txns.insert((account.clone(), txn.txn.sequence_number + 1));
+            self.next_sequence_numbers.insert(account.clone(), txn.txn.sequence_number);
         }
 
         next
