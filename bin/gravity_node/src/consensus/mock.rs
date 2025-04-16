@@ -80,6 +80,9 @@ impl MockConsensus {
             for txn in pop_txns {
                 txns.push(txn.1.txn);
             }
+            if pop_txns.len() == 0 {
+                return self.construct_block(txns, attr);
+            }
             if txns.len() > 5000 {
                 return self.construct_block(txns, attr);
             }
