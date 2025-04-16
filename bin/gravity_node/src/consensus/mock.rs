@@ -13,7 +13,7 @@ use tracing::debug;
 
 pub struct MockConsensus {
     parent_meta: ExternalBlockMeta,
-    pending_txns: Mempool,
+    pool: Mempool,
     block_number_water_mark: u64,
 }
 
@@ -35,7 +35,7 @@ impl MockConsensus {
         get_block_buffer_manager().init(0, block_number_to_block_id).await;
         Self {
             parent_meta,
-            pending_txns: Mempool::new(),
+            pool: Mempool::new(),
             block_number_water_mark: 0,
         }
     }
@@ -76,7 +76,7 @@ impl MockConsensus {
             if time_gap > 1 {
                 return self.construct_block(txns, attr);
             }
-            while let Some(txn) = self.pending_txns.get_next() {
+            while let Some(txn) = self.pool.get_next() {
                 if txns.len() < 5000 {
                     txns.push(txn.1.txn);
                 } else {
@@ -95,7 +95,7 @@ impl MockConsensus {
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             let txns = get_block_buffer_manager().pop_txns(usize::MAX).await.unwrap();
             for txn in txns {
-                self.pending_txns.add(txn);
+                self.pool.add(txn);
             }
             debug!("pending txns size is {:?}", block_txns.len());
             let block = self.check_and_construct_block(&mut block_txns, attr.clone()).await;
@@ -111,7 +111,7 @@ impl MockConsensus {
                     head.block_number,
                     ).await.unwrap();
                 for txn in commit_txns {
-                    self.pending_txns.commit(&txn.sender, txn.sequence_number);
+                    self.pool.commit(&txn.sender, txn.sequence_number);
                 }
                 get_block_buffer_manager().set_commit_blocks(vec![
                     BlockHashRef {
