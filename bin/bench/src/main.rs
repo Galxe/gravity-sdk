@@ -7,7 +7,7 @@ use std::{sync::Arc, thread};
 
 use api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
 use api_types::{
-    account::ExternalAccountAddress, default_recover::DefaultRecovery, ConsensusApi, ExecTxn, ExecutionChannel, ExecutionLayer
+    account::ExternalAccountAddress, ConsensusApi, ExecTxn, ExecutionChannel, ExecutionLayer
 };
 use clap::Parser;
 use cli::Cli;
@@ -26,7 +26,7 @@ struct TestConsensusLayer {
 }
 
 impl TestConsensusLayer {
-    fn new(node_config: NodeConfig, execution_client: Arc<dyn ExecutionChannel>) -> Self {
+    async fn new(node_config: NodeConfig, execution_client: Arc<dyn ExecutionChannel>) -> Self {
         let safe_hash = [0u8; 32];
         let head_hash = [0u8; 32];
         let finalized_hash = [0u8; 32];
@@ -35,10 +35,10 @@ impl TestConsensusLayer {
                 node_config,
                 ExecutionLayer{
                     execution_api: execution_client.clone(),
-                    recovery_api: Arc::new(DefaultRecovery {}),
                 },
                 1337,
-            ),
+                0,
+            ).await,
             execution_api: execution_client,
         }
     }
@@ -132,8 +132,10 @@ async fn main() {
             let execution_api = Arc::new(KvStore::new());
             let execution = execution_api.clone();
             let _ = thread::spawn(move || {
-                let cl = TestConsensusLayer::new(gcei_config, execution.clone());
-                tokio::runtime::Runtime::new().unwrap().block_on(cl.run());
+                tokio::runtime::Runtime::new().unwrap().block_on(async move {
+                    let cl = TestConsensusLayer::new(gcei_config, execution).await;
+                    cl.run()
+                });
             });
 
             if *IS_LEADER.get().expect("No is leader") {
