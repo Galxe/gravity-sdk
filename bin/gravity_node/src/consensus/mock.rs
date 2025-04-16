@@ -4,7 +4,7 @@ use std::{
 
 use super::mempool::Mempool;
 use api_types::{
-    compute_res::TxnStatus, u256_define::BlockId, ExecutionChannel, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn
+    compute_res::{ComputeRes, TxnStatus}, u256_define::BlockId, ExecutionChannel, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn
 };
 
 use alloy_primitives::B256;
@@ -108,18 +108,9 @@ impl MockConsensus {
                     SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
 
                 block_txns.clear();
-                let mut block_hash = [0u8; 32];
-                block_hash.copy_from_slice(head.block_hash.clone().unwrap().data.as_slice());
-                let _ = get_block_buffer_manager().set_compute_res(head.block_id.clone(),
-                    block_hash,
+                let res = get_block_buffer_manager().get_executed_res(head.block_id.clone(),
                     head.block_number,
-                    Arc::new(Some(commit_txns.iter().map(|txn| TxnStatus {
-                        txn_hash: txn.committed_hash(),
-                        nonce: txn.sequence_number,
-                        sender: txn.sender().bytes(),
-                        is_discarded: false,
-                    }).collect())),
-            ).await.unwrap();
+                    ).await.unwrap();
                 for txn in commit_txns {
                     self.pending_txns.commit(&txn.sender, txn.sequence_number);
                 }
@@ -127,7 +118,7 @@ impl MockConsensus {
                     BlockHashRef {
                         block_id: head.block_id.clone(),
                         num: head.block_number,
-                        hash: Some(block_hash),
+                        hash: None,
                     }
                 ]).await.unwrap();
                 self.parent_meta = head;

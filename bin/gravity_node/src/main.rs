@@ -168,9 +168,11 @@ fn main() {
                 let chain_id = client.chain_id();
                 let coordinator =
                     Arc::new(RethCoordinator::new(client, latest_block_number, execution_args_tx));
-                if std::env::var("MOCK").unwrap().parse::<bool>().unwrap() {
+                if std::env::var("MOCK").unwrap_or("false".to_string()).parse::<bool>().unwrap() {
                     let mock = MockConsensus::new().await;
-                    mock.run().await;
+                    tokio::spawn(async move {
+                        mock.run().await;
+                    });
                 } else {
                     AptosConsensus::init(gcei_config, coordinator.clone(), chain_id, latest_block_number).await;
                 }
