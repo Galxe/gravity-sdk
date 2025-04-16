@@ -7,7 +7,8 @@ pub struct Mempool {
     /// AccountAddress -> (sequence_number -> transaction)
     txns: HashMap<ExternalAccountAddress, BTreeMap<u64, VerifiedTxnWithAccountSeqNum>>,
     /// AccountAddress -> current_sequence_number
-    current_sequence_numbers: HashMap<ExternalAccountAddress, u64>,
+    commit_sequence_numbers: HashMap<ExternalAccountAddress, u64>,
+    process_sequence_numbers: HashMap<ExternalAccountAddress, u64>,
     /// (account, sequence_number)
     processed_txns: HashSet<(ExternalAccountAddress, u64)>,
 }
@@ -16,7 +17,7 @@ impl Mempool {
     pub fn new() -> Self {
         Self {
             txns: HashMap::new(),
-            current_sequence_numbers: HashMap::new(),
+            commit_sequence_numbers: HashMap::new(),
             processed_txns: HashSet::new(),
         }
     }
@@ -38,8 +39,8 @@ impl Mempool {
     pub fn get_next(&mut self) -> Option<(ExternalAccountAddress, VerifiedTxnWithAccountSeqNum)> {
         let mut next = None;
         for (account, txns) in self.txns.iter() {
-            let current_seq = self.get_current_sequence_number(account);
-            if self.processed_txns.contains(&(account.clone(), current_seq)) {
+            let current_seq = self.process_sequence_numbers.get(account).unwrap_or(&0);
+            if self.processed_txns.contains(&(account.clone(), current_seq + 1)) {
                 continue;
             }
             let txn = txns.get(&current_seq).map(|txn| (account.clone(), txn.clone()));
@@ -50,6 +51,7 @@ impl Mempool {
 
         if let Some((account, txn)) = &next {
             self.processed_txns.insert((account.clone(), txn.txn.sequence_number));
+            self.process_sequence_numbers.insert(account.clone(), txn.txn.sequence_number);
         }
 
         next
@@ -59,7 +61,7 @@ impl Mempool {
         if let Some(txns) = self.txns.get_mut(account) {
             txns.remove(&sequence_number);
 
-            self.current_sequence_numbers.insert(account.clone(), sequence_number + 1);
+            self.commit_sequence_numbers.insert(account.clone(), sequence_number + 1);
 
             if txns.is_empty() {
                 self.txns.remove(account);
@@ -69,7 +71,7 @@ impl Mempool {
     }
 
     pub fn get_current_sequence_number(&self, account: &ExternalAccountAddress) -> u64 {
-        *self.current_sequence_numbers.get(account).unwrap_or(&0)
+        *self.commit_sequence_numbers.get(account).unwrap_or(&0)
     }
 
     pub fn set_current_sequence_number(
@@ -77,7 +79,7 @@ impl Mempool {
         account: ExternalAccountAddress,
         sequence_number: u64,
     ) {
-        self.current_sequence_numbers.insert(account, sequence_number);
+        self.commit_sequence_numbers.insert(account, sequence_number);
     }
 
     pub fn size(&self) -> usize {
