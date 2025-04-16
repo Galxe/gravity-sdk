@@ -76,10 +76,17 @@ impl MockConsensus {
             if time_gap > 1 {
                 return self.construct_block(txns, attr);
             }
-            let txn = self.pending_txns.get_next();
-            if let Some((_, txn)) = txn {
+            // let txn = self.pending_txns.get_next();
+            // if let Some((_, txn)) = txn {
+            //     if txns.len() < 5000 {
+            //         txns.push(txn.txn);
+            //     } else {
+            //         return self.construct_block(txns, attr);
+            //     }
+            // }
+            while let Some(txn) = self.pending_txns.get_next() {
                 if txns.len() < 5000 {
-                    txns.push(txn.txn);
+                    txns.push(txn.1.txn);
                 } else {
                     return self.construct_block(txns, attr);
                 }
@@ -118,7 +125,7 @@ impl MockConsensus {
                     BlockHashRef {
                         block_id: head.block_id.clone(),
                         num: head.block_number,
-                        hash: None,
+                        hash: Some(res.data),
                     }
                 ]).await.unwrap();
                 self.parent_meta = head;
