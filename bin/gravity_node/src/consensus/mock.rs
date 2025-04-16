@@ -1,7 +1,5 @@
 use std::{
-    hash::{DefaultHasher, Hash, Hasher},
-    sync::Arc,
-    time::SystemTime,
+    collections::HashMap, hash::{DefaultHasher, Hash, Hasher}, sync::Arc, time::SystemTime
 };
 
 use super::mempool::Mempool;
@@ -20,17 +18,21 @@ pub struct MockConsensus {
 }
 
 impl MockConsensus {
-    pub fn new() -> Self {
+    pub async fn new() -> Self {
+        let genesis_block_id = [
+            141, 91, 216, 66, 168, 139, 218, 32, 132, 186, 161, 251, 250, 51, 34, 197, 38, 71, 196,
+            135, 49, 116, 247, 25, 67, 147, 163, 137, 28, 58, 62, 73,
+        ];
         let parent_meta = ExternalBlockMeta {
-            block_id: BlockId([
-                141, 91, 216, 66, 168, 139, 218, 32, 132, 186, 161, 251, 250, 51, 34, 197, 38, 71, 196,
-                135, 49, 116, 247, 25, 67, 147, 163, 137, 28, 58, 62, 73,
-            ]),
+            block_id: BlockId(genesis_block_id),
             block_number: 0,
             usecs: 0,
             randomness: None,
             block_hash: None,
         };
+        let mut block_number_to_block_id = HashMap::new();
+        block_number_to_block_id.insert(0u64, BlockId(genesis_block_id));
+        get_block_buffer_manager().init(0, block_number_to_block_id).await;
         Self {
             parent_meta,
             pending_txns: Mempool::new(),
