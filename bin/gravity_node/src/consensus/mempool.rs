@@ -42,7 +42,6 @@ impl Mempool {
         
         for (account, txns) in self.txns.iter() {
             let next_nonce = self.next_sequence_numbers.get(account).unwrap_or(&0);
-            info!("txns range {:?} - {:?} next nonce {}", txns.keys().min(), txns.keys().max(), next_nonce);
             if self.processed_txns.contains(&(account.clone(), *next_nonce)) {
                 continue;
             }
