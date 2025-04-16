@@ -77,12 +77,13 @@ impl MockConsensus {
                 return self.construct_block(txns, attr);
             }
             let pop_txns = self.pool.get_txns();
-            for txn in pop_txns {
-                txns.push(txn.1.txn);
-            }
             if pop_txns.len() == 0 {
                 return self.construct_block(txns, attr);
             }
+            for txn in pop_txns {
+                txns.push(txn.1.txn);
+            }
+            
             if txns.len() > 5000 {
                 return self.construct_block(txns, attr);
             }
