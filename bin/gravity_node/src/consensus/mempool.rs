@@ -37,8 +37,8 @@ impl Mempool {
         self.txns.entry(account).or_default().insert(seq_num, txn);
     }
 
-    pub fn get_next(&mut self) -> Option<(ExternalAccountAddress, VerifiedTxnWithAccountSeqNum)> {
-        let mut next = None;
+    pub fn get_txns(&mut self) -> Vec<(ExternalAccountAddress, VerifiedTxnWithAccountSeqNum)> {
+        let mut next = Vec::new();
         
         for (account, txns) in self.txns.iter() {
             let next_nonce = self.next_sequence_numbers.get(account).unwrap_or(&0);
@@ -47,14 +47,13 @@ impl Mempool {
             }
             let txn = txns.get(&next_nonce).map(|txn| (account.clone(), txn.clone()));
             if let Some(txn) = txn {
-                next = Some(txn);
-                break;
+               next.push(txn);
             }
         }
 
-        if let Some((account, txn)) = &next {
-            self.processed_txns.insert((account.clone(), txn.txn.sequence_number));
-            self.next_sequence_numbers.insert(account.clone(), txn.txn.sequence_number + 1);
+        for txn in next.iter_mut() {
+            self.processed_txns.insert((txn.0.clone(), txn.1.txn.sequence_number));
+            self.next_sequence_numbers.insert(txn.0.clone(), txn.1.txn.sequence_number + 1);
         }
 
         next

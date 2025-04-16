@@ -76,12 +76,9 @@ impl MockConsensus {
             if time_gap > 1 {
                 return self.construct_block(txns, attr);
             }
-            while let Some(txn) = self.pool.get_next() {
-                if txns.len() < 5000 {
-                    txns.push(txn.1.txn);
-                } else {
-                    return self.construct_block(txns, attr);
-                }
+            let pop_txns = self.pool.get_txns();
+            for txn in pop_txns {
+                txns.push(txn.1.txn);
             }
         }
     }
@@ -92,7 +89,7 @@ impl MockConsensus {
             ts: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs(),
         };
         loop {
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
             let txns = get_block_buffer_manager().pop_txns(usize::MAX).await.unwrap();
             for txn in txns {
                 self.pool.add(txn);
