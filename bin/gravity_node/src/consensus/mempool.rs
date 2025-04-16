@@ -17,6 +17,7 @@ impl Mempool {
     pub fn new() -> Self {
         Self {
             txns: HashMap::new(),
+            process_sequence_numbers: HashMap::new(),
             commit_sequence_numbers: HashMap::new(),
             processed_txns: HashSet::new(),
         }
