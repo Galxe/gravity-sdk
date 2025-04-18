@@ -1,22 +1,17 @@
-use gaptos::aptos_types::{transaction::TransactionToCommit, state_store::ShardedStateUpdates};
-use gaptos::aptos_storage_interface::{state_delta::StateDelta, cached_state_view::ShardedStateCache};
+use gaptos::aptos_storage_interface::chunk_to_commit::ChunkToCommit;
+
 impl DbWriter for ConsensusDB {
     fn save_transactions(
         &self,
-        txns_to_commit: &[TransactionToCommit],
-        first_version: Version,
-        base_state_version: Option<Version>,
+        chunk: Option<ChunkToCommit>,
         ledger_info_with_sigs: Option<&LedgerInfoWithSignatures>,
         sync_commit: bool,
-        latest_in_memory_state: StateDelta,
-        state_updates_until_last_checkpoint: Option<ShardedStateUpdates>,
-        sharded_state_cache: Option<&ShardedStateCache>,
     ) -> std::result::Result<(), AptosDbError> {
         // let old_committed_ver = self.get_and_check_commit_range(version)?;
-        let ledger_batch = SchemaBatch::new();
+        let mut ledger_batch = SchemaBatch::new();
         // Write down LedgerInfo if provided.
         if let Some(li) = ledger_info_with_sigs {
-            self.put_ledger_info(first_version, li, &ledger_batch)?;
+            self.put_ledger_info(0, li, &mut ledger_batch)?;
         }
         self.ledger_db.metadata_db().write_schemas(ledger_batch)?;
         // Notify the pruners, invoke the indexer, and update in-memory ledger info.
@@ -28,7 +23,7 @@ impl ConsensusDB {
         &self,
         version: Version,
         ledger_info_with_sig: &LedgerInfoWithSignatures,
-        ledger_batch: &SchemaBatch,
+        ledger_batch: &mut SchemaBatch,
     ) -> Result<()> {
         self.ledger_db
             .metadata_db()

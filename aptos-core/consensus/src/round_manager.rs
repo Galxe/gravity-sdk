@@ -75,7 +75,7 @@ use tokio::{
 use gaptos::aptos_consensus::counters as counters;
 use counters::{
     ORDER_CERT_CREATED_WITHOUT_BLOCK_IN_BLOCK_STORE, ORDER_VOTE_ADDED,
-    ORDER_VOTE_BROADCASTED, ORDER_VOTE_OTHER_ERRORS, ORDER_VOTE_VERY_OLD, PROPOSAL_VOTE_ADDED,
+    ORDER_VOTE_BROADCASTED, ORDER_VOTE_OTHER_ERRORS, PROPOSAL_VOTE_ADDED,
     PROPOSAL_VOTE_BROADCASTED, PROPOSED_VTXN_BYTES, PROPOSED_VTXN_COUNT,
     QC_AGGREGATED_FROM_VOTES, SYNC_INFO_RECEIVED_WITH_NEWER_CERT,
 };
@@ -1106,7 +1106,6 @@ impl RoundManager {
                 self.process_order_vote_reception_result(vote_reception_result)
                     .await?;
             } else {
-                ORDER_VOTE_VERY_OLD.inc();
                 info!(
                     "Received old order vote. Order vote round: {:?}, Highest ordered round: {:?}",
                     order_vote_msg.order_vote().ledger_info().round(),

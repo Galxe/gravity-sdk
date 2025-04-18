@@ -1,11 +1,11 @@
 use gaptos::aptos_crypto::HashValue;
 use gaptos::aptos_logger::info;
-use gaptos::aptos_schemadb::{schema::KeyCodec, SchemaBatch, DB};
+use gaptos::aptos_schemadb::{schema::KeyCodec, batch::SchemaBatch, DB};
 use gaptos::aptos_storage_interface::{AptosDbError, Result};
 use gaptos::aptos_types::ledger_info::LedgerInfoWithSignatures;
 use arc_swap::{access::Access, ArcSwap};
 use rocksdb::ReadOptions;
-use crate::consensusdb::schema::ledger_info::{LedgerInfoSchema};
+use crate::consensusdb::schema::ledger_info::LedgerInfoSchema;
 use std::sync::Arc;
 
 const MAX_LEDGER_INFOS: u32 = 256;
@@ -130,7 +130,7 @@ impl LedgerMetadataDb {
     pub(crate) fn put_ledger_info(
         &self,
         ledger_info_with_sigs: &LedgerInfoWithSignatures,
-        batch: &SchemaBatch,
+        batch: &mut SchemaBatch,
     ) -> Result<()> {
         let ledger_info = ledger_info_with_sigs.ledger_info();
         batch.put::<LedgerInfoSchema>(&ledger_info.block_number(), ledger_info_with_sigs)

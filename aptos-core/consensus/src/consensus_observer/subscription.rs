@@ -71,30 +71,31 @@ impl ConsensusObserverSubscription {
         &mut self,
         peers_and_metadata: HashMap<PeerNetworkId, PeerMetadata>,
     ) -> Result<(), Error> {
+        // TODO(gravity_lightman): Only need by observer
         // Check if we need to perform the peer optimality check
-        let time_now = self.time_service.now();
-        let duration_since_last_check = time_now.duration_since(self.last_peer_optimality_check);
-        if duration_since_last_check
-            < Duration::from_millis(
-                self.consensus_observer_config
-                    .peer_optimality_check_interval_ms,
-            )
-        {
-            return Ok(()); // We don't need to check the peer optimality yet
-        }
+        // let time_now = self.time_service.now();
+        // let duration_since_last_check = time_now.duration_since(self.last_peer_optimality_check);
+        // if duration_since_last_check
+        //     < Duration::from_millis(
+        //         self.consensus_observer_config
+        //             .peer_optimality_check_interval_ms,
+        //     )
+        // {
+        //     return Ok(()); // We don't need to check the peer optimality yet
+        // }
 
-        // Update the last peer optimality check time
-        self.last_peer_optimality_check = time_now;
+        // // Update the last peer optimality check time
+        // self.last_peer_optimality_check = time_now;
 
-        // Verify that we're subscribed to the most optimal peer
-        if let Some(optimal_peer) = sort_peers_by_distance_and_latency(peers_and_metadata).first() {
-            if *optimal_peer != self.peer_network_id {
-                return Err(Error::SubscriptionSuboptimal(format!(
-                    "Subscription to peer: {} is no longer optimal! New optimal peer: {}",
-                    self.peer_network_id, optimal_peer
-                )));
-            }
-        }
+        // // Verify that we're subscribed to the most optimal peer
+        // if let Some(optimal_peer) = sort_peers_by_distance_and_latency(peers_and_metadata).first() {
+        //     if *optimal_peer != self.peer_network_id {
+        //         return Err(Error::SubscriptionSuboptimal(format!(
+        //             "Subscription to peer: {} is no longer optimal! New optimal peer: {}",
+        //             self.peer_network_id, optimal_peer
+        //         )));
+        //     }
+        // }
 
         Ok(())
     }
@@ -121,39 +122,40 @@ impl ConsensusObserverSubscription {
 
     /// Verifies that the DB is continuing to sync and commit new data
     pub fn check_syncing_progress(&mut self) -> Result<(), Error> {
+        // TODO(gravity_lightman): Only need by observer
         // Get the current synced version from storage
-        let current_synced_version =
-            self.db_reader
-                .get_latest_ledger_info_version()
-                .map_err(|error| {
-                    Error::UnexpectedError(format!(
-                        "Failed to read highest synced version: {:?}",
-                        error
-                    ))
-                })?;
+        // let current_synced_version =
+        //     self.db_reader
+        //         .get_latest_ledger_info_version()
+        //         .map_err(|error| {
+        //             Error::UnexpectedError(format!(
+        //                 "Failed to read highest synced version: {:?}",
+        //                 error
+        //             ))
+        //         })?;
 
-        // Verify that the synced version is increasing appropriately
-        let (highest_synced_version, highest_version_timestamp) =
-            self.highest_synced_version_and_time;
-        if current_synced_version <= highest_synced_version {
-            // The synced version hasn't increased. Check if we should terminate
-            // the subscription based on the last time the highest synced version was seen.
-            let time_now = self.time_service.now();
-            let duration_since_highest_seen = time_now.duration_since(highest_version_timestamp);
-            if duration_since_highest_seen
-                > Duration::from_millis(
-                    self.consensus_observer_config.max_synced_version_timeout_ms,
-                )
-            {
-                return Err(Error::SubscriptionProgressStopped(format!(
-                    "The DB is not making sync progress! Highest synced version: {}, elapsed: {:?}",
-                    highest_synced_version, duration_since_highest_seen
-                )));
-            }
-        }
+        // // Verify that the synced version is increasing appropriately
+        // let (highest_synced_version, highest_version_timestamp) =
+        //     self.highest_synced_version_and_time;
+        // if current_synced_version <= highest_synced_version {
+        //     // The synced version hasn't increased. Check if we should terminate
+        //     // the subscription based on the last time the highest synced version was seen.
+        //     let time_now = self.time_service.now();
+        //     let duration_since_highest_seen = time_now.duration_since(highest_version_timestamp);
+        //     if duration_since_highest_seen
+        //         > Duration::from_millis(
+        //             self.consensus_observer_config.max_synced_version_timeout_ms,
+        //         )
+        //     {
+        //         return Err(Error::SubscriptionProgressStopped(format!(
+        //             "The DB is not making sync progress! Highest synced version: {}, elapsed: {:?}",
+        //             highest_synced_version, duration_since_highest_seen
+        //         )));
+        //     }
+        // }
 
-        // Update the highest synced version and time
-        self.highest_synced_version_and_time = (current_synced_version, self.time_service.now());
+        // // Update the highest synced version and time
+        // self.highest_synced_version_and_time = (current_synced_version, self.time_service.now());
 
         Ok(())
     }

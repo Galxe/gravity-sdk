@@ -1128,7 +1128,7 @@ impl ConsensusObserver {
 
         // Start the new epoch
         let sk = Arc::new(bls12381::PrivateKey::genesis());
-        let signer = Arc::new(ValidatorSigner::new(AccountAddress::ZERO, (*sk).clone()));
+        let signer = Arc::new(ValidatorSigner::new(AccountAddress::ZERO, sk.clone()));
         let dummy_signer = Arc::new(DagCommitSigner::new(signer.clone()));
         let (_, rand_msg_rx) =
             aptos_channel::new::<AccountAddress, IncomingRandGenRequest>(QueueStyle::FIFO, 1, None);
@@ -1297,7 +1297,7 @@ async fn extract_on_chain_configs(
         .expect("Failed to get the validator set from the on-chain configs!");
     let epoch_state = Arc::new(EpochState {
         epoch: on_chain_configs.epoch(),
-        verifier: (&validator_set).into(),
+        verifier: Arc::new((&validator_set).into()),
     });
 
     // Extract the consensus config (or use the default if it's missing)

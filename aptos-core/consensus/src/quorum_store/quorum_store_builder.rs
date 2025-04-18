@@ -120,7 +120,7 @@ pub struct InnerBuilder {
     mempool_txn_pull_timeout_ms: u64,
     aptos_db: Arc<dyn DbReader>,
     network_sender: NetworkSender,
-    verifier: ValidatorVerifier,
+    verifier: Arc<ValidatorVerifier>,
     proof_cache: ProofCache,
     backend: SecureBackend,
     coordinator_tx: Sender<CoordinatorCommand>,
@@ -156,7 +156,7 @@ impl InnerBuilder {
         mempool_txn_pull_timeout_ms: u64,
         aptos_db: Arc<dyn DbReader>,
         network_sender: NetworkSender,
-        verifier: ValidatorVerifier,
+        verifier: Arc<ValidatorVerifier>,
         proof_cache: ProofCache,
         backend: SecureBackend,
         quorum_store_storage: Arc<dyn QuorumStoreStorage>,
@@ -222,7 +222,7 @@ impl InnerBuilder {
     }
 
     fn create_batch_store(&mut self) -> Arc<BatchReaderImpl<NetworkSender>> {
-        let signer = ValidatorSigner::new(self.author, (*self.consensus_key).clone());
+        let signer = ValidatorSigner::new(self.author, self.consensus_key.clone());
 
         let latest_ledger_info_with_sigs = self
             .aptos_db

@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use gaptos::aptos_schemadb::{SchemaBatch, DB};
+use gaptos::aptos_schemadb::{batch::SchemaBatch, DB};
 use gaptos::aptos_storage_interface::Result;
 use ledger_metadata_db::LedgerMetadataDb;
 

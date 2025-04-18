@@ -319,7 +319,7 @@ impl SafetyRules {
                     match self.persistent_storage.consensus_sk_by_pk(expected_key) {
                         Ok(consensus_key) => {
                             self.validator_signer =
-                                Some(ValidatorSigner::new(author, consensus_key));
+                                Some(ValidatorSigner::new(author, Arc::new(consensus_key)));
                             Ok(())
                         },
                         Err(Error::SecureStorageMissingDataError(error)) => {

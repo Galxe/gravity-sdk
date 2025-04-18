@@ -6,24 +6,20 @@ use crate::consensusdb::ConsensusDB;
 use crate::payload_client::user::quorum_store_client::QuorumStoreClient;
 use anyhow::Result;
 use api_types::u256_define::BlockId;
-use gaptos::aptos_crypto::HashValue;
 use aptos_executor::block_executor::BlockExecutor;
-use aptos_executor_types::{
-    BlockExecutorTrait, ExecutorResult, StateComputeResult,
-};
+use aptos_executor_types::{BlockExecutorTrait, ExecutorResult, StateComputeResult};
+use block_buffer_manager::block_buffer_manager::BlockHashRef;
+use block_buffer_manager::get_block_buffer_manager;
+use coex_bridge::{get_coex_bridge, Func};
+use gaptos::aptos_consensus::counters::{APTOS_COMMIT_BLOCKS, APTOS_EXECUTION_TXNS};
+use gaptos::aptos_crypto::HashValue;
 use gaptos::aptos_logger::info;
 use gaptos::aptos_types::block_executor::partitioner::ExecutableBlock;
 use gaptos::aptos_types::{
-    block_executor::config::BlockExecutorConfigFromOnchain,
-    ledger_info::LedgerInfoWithSignatures,
+    block_executor::config::BlockExecutorConfigFromOnchain, ledger_info::LedgerInfoWithSignatures,
 };
-use block_buffer_manager::block_buffer_manager::BlockHashRef;
-use block_buffer_manager::get_block_buffer_manager;
-use gaptos::aptos_storage_interface::state_delta::StateDelta;
-use coex_bridge::{get_coex_bridge, Func};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
-use gaptos::aptos_consensus::counters::{APTOS_COMMIT_BLOCKS, APTOS_EXECUTION_TXNS};
 
 pub struct ConsensusAdapterArgs {
     pub quorum_store_client: Option<Arc<QuorumStoreClient>>,
@@ -32,10 +28,7 @@ pub struct ConsensusAdapterArgs {
 
 impl ConsensusAdapterArgs {
     pub fn new(consensus_db: Arc<ConsensusDB>) -> Self {
-        Self {
-            quorum_store_client: None,
-            consensus_db: Some(consensus_db),
-        }
+        Self { quorum_store_client: None, consensus_db: Some(consensus_db) }
     }
 
     pub fn set_quorum_store_client(&mut self, quorum_store_client: Option<Arc<QuorumStoreClient>>) {
@@ -90,72 +83,98 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         ledger_info_with_sigs: LedgerInfoWithSignatures,
     ) -> ExecutorResult<()> {
         if !block_ids.is_empty() {
-            let (block_id, block_hash) = (ledger_info_with_sigs.ledger_info().commit_info().id(), ledger_info_with_sigs.ledger_info().block_hash());
+            let (block_id, block_hash) = (
+                ledger_info_with_sigs.ledger_info().commit_info().id(),
+                ledger_info_with_sigs.ledger_info().block_hash(),
+            );
             let block_num = ledger_info_with_sigs.ledger_info().block_number();
             assert!(block_ids.last().unwrap().as_slice() == block_id.as_slice());
             let len = block_ids.len();
             self.runtime.block_on(async move {
                 get_block_buffer_manager()
-                    .set_commit_blocks(block_ids.into_iter()
-                    .enumerate()
-                    .map(|(i, x)| 
-                        {
-                            let mut v = [0u8; 32];
-                            v.copy_from_slice(block_hash.as_ref());
-                            if x == block_id {
-                                BlockHashRef { block_id: BlockId::from_bytes(x.as_slice()), num: block_num + (i - len + 1) as u64, hash: Some(v) }
-                            } else {
-                                // TODO: commit use block num, but here use block id, need to fix
-                                BlockHashRef { block_id: BlockId::from_bytes(x.as_slice()), num: block_num + (i - len + 1) as u64, hash: None }
-                            }
-                        }
-                    ).collect())
+                    .set_commit_blocks(
+                        block_ids
+                            .into_iter()
+                            .enumerate()
+                            .map(|(i, x)| {
+                                let mut v = [0u8; 32];
+                                v.copy_from_slice(block_hash.as_ref());
+                                if x == block_id {
+                                    BlockHashRef {
+                                        block_id: BlockId::from_bytes(x.as_slice()),
+                                        num: block_num + (i - len + 1) as u64,
+                                        hash: Some(v),
+                                    }
+                                } else {
+                                    // TODO: commit use block num, but here use block id, need to fix
+                                    BlockHashRef {
+                                        block_id: BlockId::from_bytes(x.as_slice()),
+                                        num: block_num + (i - len + 1) as u64,
+                                        hash: None,
+                                    }
+                                }
+                            })
+                            .collect(),
+                    )
                     .await
                     .unwrap_or_else(|e| panic!("Failed to push commit blocks {}", e));
             });
         }
-        self.inner.db.writer.save_transactions(&vec![], 0, None,
-                Some(&ledger_info_with_sigs), false, StateDelta::new_empty(), None, None);
+        self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
         Ok(())
     }
 
     fn finish(&self) {
         self.inner.finish()
     }
-    
+
     fn pre_commit_block(&self, block_id: HashValue) -> ExecutorResult<()> {
         Ok(())
     }
     fn commit_ledger(
         &self,
-        block_ids: Vec<HashValue>,                            
+        block_ids: Vec<HashValue>,
         ledger_info_with_sigs: LedgerInfoWithSignatures,
     ) -> ExecutorResult<()> {
         APTOS_COMMIT_BLOCKS.inc_by(block_ids.len() as u64);
         info!("commit blocks: {:?}", block_ids);
-        let (block_id, block_hash) = (ledger_info_with_sigs.ledger_info().commit_info().id(), ledger_info_with_sigs.ledger_info().block_hash());
+        let (block_id, block_hash) = (
+            ledger_info_with_sigs.ledger_info().commit_info().id(),
+            ledger_info_with_sigs.ledger_info().block_hash(),
+        );
         let block_num = ledger_info_with_sigs.ledger_info().block_number();
         let len = block_ids.len();
         if !block_ids.is_empty() {
             self.runtime.block_on(async move {
-                get_block_buffer_manager().set_commit_blocks(block_ids.into_iter()
-                .enumerate()
-                .map(|(i, x)| {
-                    let mut v = [0u8; 32];
-                    v.copy_from_slice(block_hash.as_ref());
-                    if x == block_id {
-                        BlockHashRef { block_id: BlockId::from_bytes(x.as_slice()), num: block_num - (len - 1 - i) as u64, hash: Some(v) }
-                    } else {
-                        BlockHashRef { block_id: BlockId::from_bytes(x.as_slice()), num: block_num - (len - 1 - i) as u64, hash: None }
-                    }
-                })
-                .collect())
-                .await.unwrap()
-                ;
+                get_block_buffer_manager()
+                    .set_commit_blocks(
+                        block_ids
+                            .into_iter()
+                            .enumerate()
+                            .map(|(i, x)| {
+                                let mut v = [0u8; 32];
+                                v.copy_from_slice(block_hash.as_ref());
+                                if x == block_id {
+                                    BlockHashRef {
+                                        block_id: BlockId::from_bytes(x.as_slice()),
+                                        num: block_num - (len - 1 - i) as u64,
+                                        hash: Some(v),
+                                    }
+                                } else {
+                                    BlockHashRef {
+                                        block_id: BlockId::from_bytes(x.as_slice()),
+                                        num: block_num - (len - 1 - i) as u64,
+                                        hash: None,
+                                    }
+                                }
+                            })
+                            .collect(),
+                    )
+                    .await
+                    .unwrap();
             });
         }
-        self.inner.db.writer.save_transactions(&vec![], 0, None,
-                Some(&ledger_info_with_sigs), false, StateDelta::new_empty(), None, None);
+        self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
         Ok(())
     }
 }
