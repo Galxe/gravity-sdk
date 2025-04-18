@@ -836,7 +836,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         
         let maybe_pipeline_builder = if self.config.enable_pipeline {
             info!(epoch = epoch, "Create PipelineBuilder");
-            let signer = Arc::new(ValidatorSigner::new(self.author, (*consensus_sk).clone()));
+            let signer = Arc::new(ValidatorSigner::new(self.author, consensus_sk.clone()));
             Some(self.execution_client.pipeline_builder(signer))
         } else {
             None
@@ -1095,7 +1095,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .expect("failed to get ValidatorSet from payload");
         let epoch_state = Arc::new(EpochState {
             epoch: payload.epoch(),
-            verifier: (&validator_set).into(),
+            verifier: Arc::new((&validator_set).into()),
         });
 
         self.epoch_state = Some(epoch_state.clone());
@@ -1343,7 +1343,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         let epoch = epoch_state.epoch;
         let signer = Arc::new(ValidatorSigner::new(
             self.author,
-            (*loaded_consensus_key).clone()
+            loaded_consensus_key.clone()
         ));
         let commit_signer = Arc::new(DagCommitSigner::new(signer.clone()));
 

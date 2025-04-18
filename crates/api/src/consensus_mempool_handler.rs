@@ -56,7 +56,7 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
         consensus_commit_notification: ConsensusCommitNotification,
     ) -> anyhow::Result<()> {
         // Handle the commit notification
-        let committed_transactions = consensus_commit_notification.transactions.clone();
+        let committed_transactions = consensus_commit_notification.get_transactions().clone();
 
         // TODO(gravity_byteyue): the block timestamp usecs should be modified
         self.mempool_notification_handler
@@ -66,7 +66,7 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
             )
             .await?;
         self.consensus_notification_listener
-        .respond_to_commit_notification(consensus_commit_notification, Ok(())).await
+        .respond_to_commit_notification(consensus_commit_notification, Ok(()))
         .map_err(|e| anyhow::anyhow!(e))
     }
 
@@ -79,6 +79,7 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
             ConsensusNotification::SyncToTarget(sync_notification) => {
                 panic!("receive consensus sync notification {:?}", sync_notification);
             }
+            ConsensusNotification::SyncForDuration(consensus_sync_duration_notification) => todo!(),
         };
         
         // Log any errors from notification handling

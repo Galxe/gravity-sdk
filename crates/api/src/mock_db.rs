@@ -150,7 +150,8 @@ impl DbReader for MockStorage {
                         match &mut consensus_conf {
                             OnChainConsensusConfig::V1(_) => {}
                             OnChainConsensusConfig::V2(_) => {}
-                            OnChainConsensusConfig::V3 { alg, vtxn } => match alg {
+                            OnChainConsensusConfig::V3 { alg, vtxn} => {}
+                            OnChainConsensusConfig::V4 { alg, vtxn, window_size } => match alg {
                                 ConsensusAlgorithmConfig::Jolteon {
                                     main,
                                     quorum_store_enabled,

@@ -7,7 +7,7 @@ use gaptos::aptos_crypto::{hash::CryptoHash, HashValue};
 use gaptos::aptos_logger::prelude::*;
 use gaptos::aptos_types::{
     aggregate_signature::PartialSignatures,
-    ledger_info::{LedgerInfo, LedgerInfoWithPartialSignatures, LedgerInfoWithSignatures},
+    ledger_info::{LedgerInfo, LedgerInfoWithVerifiedSignatures, LedgerInfoWithSignatures},
     validator_verifier::{ValidatorVerifier, VerifyError},
 };
 use std::collections::HashMap;
@@ -32,7 +32,7 @@ pub enum OrderVoteReceptionResult {
 #[derive(Debug, PartialEq, Eq)]
 enum OrderVoteStatus {
     EnoughVotes(LedgerInfoWithSignatures),
-    NotEnoughVotes(LedgerInfoWithPartialSignatures),
+    NotEnoughVotes(LedgerInfoWithVerifiedSignatures),
 }
 
 /// A PendingVotes structure keep track of order votes for the last few rounds
@@ -63,7 +63,7 @@ impl PendingOrderVotes {
         // obtain the ledger info with signatures associated to the order vote's ledger info
         let status = self.li_digest_to_votes.entry(li_digest).or_insert_with(|| {
             // if the ledger info with signatures doesn't exist yet, create it
-            OrderVoteStatus::NotEnoughVotes(LedgerInfoWithPartialSignatures::new(
+            OrderVoteStatus::NotEnoughVotes(LedgerInfoWithVerifiedSignatures::new(
                 order_vote.ledger_info().clone(),
                 PartialSignatures::empty(),
             ))

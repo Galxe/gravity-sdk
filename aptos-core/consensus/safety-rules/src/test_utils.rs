@@ -24,7 +24,7 @@ use gaptos::aptos_types::{
     block_info::BlockInfo,
     epoch_change::EpochChangeProof,
     epoch_state::EpochState,
-    ledger_info::{LedgerInfo, LedgerInfoWithPartialSignatures, LedgerInfoWithSignatures},
+    ledger_info::{LedgerInfo, LedgerInfoWithVerifiedSignatures, LedgerInfoWithSignatures},
     on_chain_config::ValidatorSet,
     proof::AccumulatorExtensionProof,
     validator_info::ValidatorInfo,
@@ -139,7 +139,7 @@ pub fn make_proposal_with_parent_and_overrides(
     )
     .unwrap();
     
-    let mut ledger_info_with_signatures = LedgerInfoWithPartialSignatures::new(
+    let mut ledger_info_with_signatures = LedgerInfoWithVerifiedSignatures::new(
         vote.ledger_info().clone(),
         PartialSignatures::empty(),
     );

@@ -222,7 +222,7 @@ impl ExecutionProxyClient {
                 let (rand_ready_block_tx, rand_ready_block_rx) = unbounded::<OrderedBlocks>();
 
                 let (reset_tx_to_rand_manager, reset_rand_manager_rx) = unbounded::<ResetRequest>();
-                let signer = Arc::new(ValidatorSigner::new(self.author, (*consensus_sk).clone()));
+                let signer = Arc::new(ValidatorSigner::new(self.author, consensus_sk.clone()));
 
                 let rand_manager = RandManager::<Share, AugmentedData>::new(
                     self.author,

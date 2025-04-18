@@ -33,7 +33,7 @@ use gaptos::aptos_metrics_core::{register_int_gauge_vec, IntGaugeHelper, IntGaug
 use gaptos::aptos_crypto::{hash::GENESIS_BLOCK_ID, HashValue};
 use gaptos::aptos_infallible::Mutex;
 use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_schemadb::SchemaBatch;
+use gaptos::aptos_schemadb::batch::SchemaBatch;
 use gaptos::aptos_types::{
     account_address::AccountAddress, epoch_change::EpochChangeProof,
     ledger_info::{self, LedgerInfoWithSignatures},
@@ -462,9 +462,9 @@ impl BlockStore {
             .collect::<Vec<(u64, HashValue)>>();
         storage.save_tree(blocks.clone(), quorum_certs.clone(), block_numbers)?;
         if !ledger_infos.is_empty() {
-            let ledger_info_batch = SchemaBatch::new();
+            let mut ledger_info_batch = SchemaBatch::new();
             for ledger_info in ledger_infos {
-                storage.consensus_db().ledger_db.metadata_db().put_ledger_info(&ledger_info, &ledger_info_batch);
+                storage.consensus_db().ledger_db.metadata_db().put_ledger_info(&ledger_info, &mut ledger_info_batch);
             }
             storage.consensus_db().ledger_db.metadata_db().write_schemas(ledger_info_batch);
         }

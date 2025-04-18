@@ -158,6 +158,8 @@ impl PipelineBackpressureConfig {
         max_block_txns: u64,
     ) -> Option<u64> {
         self.execution.as_ref().and_then(|config| {
+            let txn_limit = config.txn_limit.as_ref().unwrap();
+            let lookback_config = &txn_limit.lookback_config;
             let sizes = block_execution_times
                 .iter()
                 .flat_map(|summary| {
@@ -166,7 +168,7 @@ impl PipelineBackpressureConfig {
                     let execution_time_ms = summary.execution_time.as_millis();
                     // Only block above the time threshold are considered giving enough signal to support calibration
                     // so we filter out shorter locks
-                    if execution_time_ms > config.min_block_time_ms_to_activate as u128
+                    if execution_time_ms > lookback_config.min_block_time_ms_to_activate as u128
                         && summary.payload_len > 0
                     {
                         // TODO: After cost of "retries" is reduced with execution pool, we
@@ -181,7 +183,7 @@ impl PipelineBackpressureConfig {
                         // For the rest, only `summary.to_commit` fraction of `summary.to_commit + summary.to_retry`
                         // was executed. And so assuming same discard rate, we scale `summary.payload_len` with it.
                         Some(
-                            ((config.target_block_time_ms as f64 / execution_time_ms as f64
+                            ((lookback_config.target_block_time_ms as f64 / execution_time_ms as f64
                                 * (summary.to_commit as f64
                                     / (summary.to_commit + summary.to_retry) as f64)
                                 * summary.payload_len as f64)
@@ -194,11 +196,15 @@ impl PipelineBackpressureConfig {
                 })
                 .sorted()
                 .collect::<Vec<_>>();
-            if sizes.len() >= config.min_blocks_to_activate {
+            if sizes.len() >= lookback_config.min_blocks_to_activate {
+                let percentile = match lookback_config.metric {
+                    gaptos::aptos_config::config::ExecutionBackpressureMetric::Mean => 0.5,
+                    gaptos::aptos_config::config::ExecutionBackpressureMetric::Percentile(percentile) => percentile,
+                };
                 let calibrated_block_size = (*sizes
-                    .get(((config.percentile * sizes.len() as f64) as usize).min(sizes.len() - 1))
+                    .get(((percentile * sizes.len() as f64) as usize).min(sizes.len() - 1))
                     .expect("guaranteed to be within vector size"))
-                .max(config.min_calibrated_txns_per_block);
+                .max(txn_limit.min_calibrated_txns_per_block);
                 PROPOSER_ESTIMATED_CALIBRATED_BLOCK_TXNS.observe(calibrated_block_size as f64);
                 // Check if calibrated block size is reduction in size, to turn on backpressure.
                 if max_block_txns > calibrated_block_size {
@@ -558,7 +564,7 @@ impl ProposalGenerator {
                 .get_execution_block_size_backoff(
                     &self
                         .block_store
-                        .get_recent_block_execution_times(config.num_blocks_to_look_at),
+                        .get_recent_block_execution_times(config.txn_limit.as_ref().unwrap().lookback_config.num_blocks_to_look_at),
                     self.max_block_txns_after_filtering,
                 );
             if let Some(execution_backpressure_block_size) = execution_backpressure {
