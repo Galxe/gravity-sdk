@@ -76,7 +76,7 @@ impl MockConsensus {
             if time_gap > 1 {
                 return self.construct_block(txns, attr);
             }
-            let has_new_txn = self.pool.get_txns(txns);
+            let has_new_txn = self.pool.get_txns(txns).await;
             if !has_new_txn {
                 if txns.len() > 0 {
                     return self.construct_block(txns, attr);
@@ -97,12 +97,15 @@ impl MockConsensus {
         let mut attr = ExternalPayloadAttr {
             ts: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs(),
         };
-        loop {
-            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-            let txns = get_block_buffer_manager().pop_txns(usize::MAX).await.unwrap();
-            for txn in txns {
-                self.pool.add(txn);
+        let pool_txns = self.pool.pool_txns.clone();
+        tokio::spawn(async move {
+            loop {
+                let txns = get_block_buffer_manager().pop_txns(usize::MAX).await.unwrap();
+                Mempool::add(&pool_txns, txns).await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
             }
+        });
+        loop {
             debug!("pending txns size is {:?}", block_txns.len());
             let block = self.check_and_construct_block(&mut block_txns, attr.clone()).await;
             if let Some(block) = block {
@@ -116,9 +119,8 @@ impl MockConsensus {
                 let res = get_block_buffer_manager().get_executed_res(head.block_id.clone(),
                     head.block_number,
                     ).await.unwrap();
-                for txn in commit_txns {
-                    self.pool.commit(&txn.sender, txn.sequence_number);
-                }
+                self.pool.commit(&commit_txns).await;
+                
                 get_block_buffer_manager().set_commit_blocks(vec![
                     BlockHashRef {
                         block_id: head.block_id.clone(),
