@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use api_types::{account::ExternalAccountAddress, VerifiedTxnWithAccountSeqNum};
+use api_types::{account::ExternalAccountAddress, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 use tracing::*;
 
 pub struct Mempool {
@@ -37,9 +37,8 @@ impl Mempool {
         self.txns.entry(account).or_default().insert(seq_num, txn);
     }
 
-    pub fn get_txns(&mut self) -> Vec<(ExternalAccountAddress, VerifiedTxnWithAccountSeqNum)> {
-        let mut next = Vec::new();
-        
+    pub fn get_txns(&mut self, block_txns: &mut Vec<VerifiedTxn>) -> bool {
+        let mut has_new_txn = false;
         for (account, txns) in self.txns.iter() {
             let next_nonce = self.next_sequence_numbers.get(account).unwrap_or(&0);
             if self.processed_txns.contains(&(account.clone(), *next_nonce)) {
@@ -47,16 +46,14 @@ impl Mempool {
             }
             let txn = txns.get(&next_nonce).map(|txn| (account.clone(), txn.clone()));
             if let Some(txn) = txn {
-               next.push(txn);
+                block_txns.push(txn.1.txn.clone());
+                self.processed_txns.insert((txn.0.clone(), txn.1.txn.sequence_number));
+                self.next_sequence_numbers.insert(txn.0.clone(), txn.1.txn.sequence_number + 1);
+                has_new_txn = true;
             }
         }
 
-        for txn in next.iter_mut() {
-            self.processed_txns.insert((txn.0.clone(), txn.1.txn.sequence_number));
-            self.next_sequence_numbers.insert(txn.0.clone(), txn.1.txn.sequence_number + 1);
-        }
-
-        next
+        has_new_txn
     }
 
     pub fn commit(&mut self, account: &ExternalAccountAddress, sequence_number: u64) {

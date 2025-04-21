@@ -76,12 +76,14 @@ impl MockConsensus {
             if time_gap > 1 {
                 return self.construct_block(txns, attr);
             }
-            let pop_txns = self.pool.get_txns();
-            if pop_txns.len() == 0 {
-                return self.construct_block(txns, attr);
-            }
-            for txn in pop_txns {
-                txns.push(txn.1.txn);
+            let has_new_txn = self.pool.get_txns(txns);
+            if !has_new_txn {
+                if txns.len() > 0 {
+                    return self.construct_block(txns, attr);
+                } else {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    continue;
+                }
             }
             
             if txns.len() > 5000 {
