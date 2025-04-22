@@ -28,9 +28,11 @@ use reth_provider::BlockHashReader;
 use reth_provider::BlockNumReader;
 use reth_provider::BlockReader;
 use reth_transaction_pool::TransactionPool;
+use tikv_jemalloc_ctl::raw;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tracing::info;
+use tracing::warn;
 mod cli;
 mod consensus;
 mod reth_cli;
@@ -154,11 +156,37 @@ fn run_reth(
     }
 }
 
+const PROF_ACTIVE: &[u8] = b"prof.active\0";
+const PROF_THREAD_ACTIVE_INIT: &[u8] = b"prof.thread_active_init\0";
+
+pub fn set_prof_active(prof: bool) -> Result<(), String> {
+    if let Err(err) = unsafe { raw::write(PROF_ACTIVE, prof) } {
+        let err = String::from(format!("jemalloc heap profiling active failed: {}", err));
+        warn!("{}", err);
+        return Err(err);
+    }
+    if let Err(err) = unsafe { raw::write(PROF_THREAD_ACTIVE_INIT, prof) } {
+        let err =
+            String::from(format!("jemalloc heap profiling thread_active_init failed: {}", err));
+        warn!("{}", err);
+        return Err(err);
+    }
+    if prof {
+        info!("jemalloc heap profiling started");
+    } else {
+        info!("jemalloc heap profiling stopped");
+    }
+    Ok(())
+}
+
 #[cfg(unix)]
 #[global_allocator]
 static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 fn main() {
+    if std::env::var("MEM_PROFILING").unwrap_or("false".to_string()).parse::<bool>().unwrap() {
+        set_prof_active(true).unwrap();
+    }
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
     let cli = Cli::parse();
     let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
