@@ -28,9 +28,7 @@ use aptos_types::chain_id::ChainId;
 use futures::channel::mpsc;
 use tokio::runtime::Runtime;
 
-#[cfg(unix)]
-#[global_allocator]
-static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
 
 pub struct ConsensusEngine {
     address: String,
