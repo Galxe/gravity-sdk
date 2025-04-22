@@ -7,7 +7,7 @@
       shell: |
         bash stop.sh
       args:
-        chdir: "/tmp/{{ reth_node_id }}/script"
+        chdir: "{{ reth_install_dir }}/{{ reth_node_id }}/script"
       register: stop_log
     
     - name: Append stop logs to collection
