@@ -81,7 +81,7 @@ impl MockConsensus {
                 if txns.len() > 0 {
                     return self.construct_block(txns, attr);
                 } else {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
                     continue;
                 }
             }
