@@ -110,16 +110,13 @@ impl MockConsensus {
             let block = self.check_and_construct_block(&mut block_txns, attr.clone()).await;
             if let Some(block) = block {
                 let head = block.block_meta.clone();
-                let commit_txns = block.txns.clone();
                 get_block_buffer_manager().set_ordered_blocks(self.parent_meta.block_id, block).await.unwrap();
                 attr.ts =
                     SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
-
-                block_txns.clear();
+               
                 let res = get_block_buffer_manager().get_executed_res(head.block_id.clone(),
                     head.block_number,
                     ).await.unwrap();
-                self.pool.commit(&commit_txns).await;
                 
                 get_block_buffer_manager().set_commit_blocks(vec![
                     BlockHashRef {
@@ -128,6 +125,8 @@ impl MockConsensus {
                         hash: Some(res.data),
                     }
                 ]).await.unwrap();
+                self.pool.commit(&block_txns).await;
+                block_txns.clear();
                 self.parent_meta = head;
             }
         }
