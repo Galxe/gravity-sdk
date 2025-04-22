@@ -24,7 +24,7 @@ node_arg=""
 bin_version="release"
 mode="cluster"
 recover="false"
-install_dir=""
+install_dir="/tmp"
 
 # Logging functions
 log_info() {
