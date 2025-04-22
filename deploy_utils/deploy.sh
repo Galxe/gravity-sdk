@@ -24,6 +24,7 @@ node_arg=""
 bin_version="release"
 mode="cluster"
 recover="false"
+install_dir=""
 
 # Logging functions
 log_info() {
@@ -54,6 +55,7 @@ show_help() {
         echo "                      - $m (${VALID_MODES[$m]})"
     done
     echo "  -r, --recover          Preserve existing data (default: false)"
+    echo "  -i, --install_dir DIR   Specify installation directory (required)"
     echo "  -h, --help             Show this help message"
     echo
     echo "Examples:"
@@ -78,6 +80,27 @@ check_prerequisites() {
 
 # Validate parameters
 validate_params() {
+    if [[ -z "$install_dir" ]]; then
+        log_error "--install_dir parameter is required"
+        show_help
+        exit 1
+    fi
+
+    # Check if install_dir exists or can be created
+    if [[ ! -d "$install_dir" ]]; then
+        if ! mkdir -p "$install_dir" 2>/dev/null; then
+            log_error "Cannot create directory: $install_dir (Permission denied)"
+            exit 1
+        fi
+    else
+        # Check write permission by attempting to create a temp file
+        if ! touch "$install_dir/.write_test" 2>/dev/null; then
+            log_error "No write permission in directory: $install_dir"
+            exit 1
+        fi
+        rm "$install_dir/.write_test"
+    fi
+
     if [[ -z "${VALID_VERSIONS[$bin_version]}" ]]; then
         log_error "Invalid version: '$bin_version'"
         echo "Available versions:"
@@ -130,6 +153,10 @@ while [[ "$#" -gt 0 ]]; do
     -r|--recover)
         recover="true"
         ;;
+    -i|--install_dir)
+        install_dir="$2"
+        shift
+        ;;
     -h|--help)
         show_help
         exit 0
@@ -162,42 +189,42 @@ main() {
 
     # Prepare directories
     if [[ "$recover" != "true" ]]; then
-        log_info "Cleaning directory /tmp/$node_arg"
-        rm -rf "/tmp/$node_arg"
+        log_info "Cleaning directory $install_dir/$node_arg"
+        rm -rf "$install_dir/$node_arg"
     else
         log_warn "Preserving existing data"
     fi
 
     log_info "Creating required directories"
-    mkdir -p "/tmp/$node_arg"/{genesis,bin,data,logs,script}
+    mkdir -p "$install_dir/$node_arg"/{genesis,bin,data,logs,script}
 
     # Copy files
     log_info "Copying configuration files"
 
-    cp -r "$SCRIPT_DIR/$node_arg/genesis" "/tmp/$node_arg"
+    cp -r "$SCRIPT_DIR/$node_arg/genesis" "$install_dir/$node_arg"
 
     if [[ "$mode" == "cluster" ]]; then
         log_info "Setting up cluster mode"
-        cp -r "$SCRIPT_DIR/four_nodes_config.json" "/tmp/$node_arg/genesis/nodes_config.json"
-        cp -r "$SCRIPT_DIR/four_nodes_discovery" "/tmp/$node_arg/discovery"
+        cp -r "$SCRIPT_DIR/four_nodes_config.json" "$install_dir/$node_arg/genesis/nodes_config.json"
+        cp -r "$SCRIPT_DIR/four_nodes_discovery" "$install_dir/$node_arg/discovery"
     else
         log_info "Setting up single node mode"
-        cp -r "$SCRIPT_DIR/single_node_config.json" "/tmp/$node_arg/genesis/nodes_config.json"
-        cp -r "$SCRIPT_DIR/single_node_discovery" "/tmp/$node_arg/discovery"
-        cp "$SCRIPT_DIR/waypoint_single.txt" "/tmp/$node_arg/genesis/waypoint.txt"
+        cp -r "$SCRIPT_DIR/single_node_config.json" "$install_dir/$node_arg/genesis/nodes_config.json"
+        cp -r "$SCRIPT_DIR/single_node_discovery" "$install_dir/$node_arg/discovery"
+        cp "$SCRIPT_DIR/waypoint_single.txt" "$install_dir/$node_arg/genesis/waypoint.txt"
     fi
 
     log_info "Copying program files"
-    cp "$TARGET_DIR/$bin_version/$bin_name" "/tmp/$node_arg/bin"
-    cp "$SCRIPT_DIR/start.sh" "/tmp/$node_arg/script"
-    cp "$SCRIPT_DIR/stop.sh" "/tmp/$node_arg/script"
+    cp "$TARGET_DIR/$bin_version/$bin_name" "$install_dir/$node_arg/bin"
+    cp "$SCRIPT_DIR/start.sh" "$install_dir/$node_arg/script"
+    cp "$SCRIPT_DIR/stop.sh" "$install_dir/$node_arg/script"
 
     log_info "Deployment completed!"
     log_info "Configuration summary:"
     echo "  - Node: $node_arg"
     echo "  - Version: $bin_version (${VALID_VERSIONS[$bin_version]})"
     echo "  - Mode: $mode (${VALID_MODES[$mode]})"
-    echo "  - Path: /tmp/$node_arg"
+    echo "  - Path: $install_dir/$node_arg"
 }
 
 # Execute main program
