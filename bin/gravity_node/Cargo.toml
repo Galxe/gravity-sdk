@@ -32,7 +32,9 @@ reqwest = "0.12.9"
 alloy-primitives = { version = "0.8.20", default-features = false, features = ["map-foldhash"] }
 alloy-eips = { version = "0.11.1", default-features = false }
 alloy-consensus = { version = "0.11.1", default-features = false }
-
+tikv-jemallocator.workspace = true
+tikv-jemalloc-ctl.workspace = true
+tikv-jemalloc-sys.workspace = true
 async-trait.workspace = true
 api.workspace = true
 api-types.workspace = true
