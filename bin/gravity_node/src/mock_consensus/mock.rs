@@ -15,11 +15,20 @@ use block_buffer_manager::{block_buffer_manager::BlockHashRef, get_block_buffer_
 
 pub struct MockConsensus {
     pool: Arc<tokio::sync::Mutex<Mempool>>,
+    genesis_block_id: BlockId,
 }
 
 impl MockConsensus {
     pub async fn new() -> Self {
-        Self { pool: Arc::new(tokio::sync::Mutex::new(Mempool::new())) }
+        let genesis_block_id = BlockId([
+            141, 91, 216, 66, 168, 139, 218, 32, 132, 186, 161, 251, 250, 51, 34, 197, 38, 71, 196,
+            135, 49, 116, 247, 25, 67, 147, 163, 137, 28, 58, 62, 73,
+        ]);
+        let mut block_number_to_block_id = HashMap::new();
+        block_number_to_block_id.insert(0u64, genesis_block_id.clone());
+        get_block_buffer_manager().init(0, block_number_to_block_id).await;
+
+        Self { pool: Arc::new(tokio::sync::Mutex::new(Mempool::new())), genesis_block_id }
     }
 
     fn construct_block(
@@ -75,14 +84,6 @@ impl MockConsensus {
     }
 
     pub async fn run(self) {
-        let genesis_block_id = BlockId([
-            141, 91, 216, 66, 168, 139, 218, 32, 132, 186, 161, 251, 250, 51, 34, 197, 38, 71, 196,
-            135, 49, 116, 247, 25, 67, 147, 163, 137, 28, 58, 62, 73,
-        ]);
-        let mut block_number_to_block_id = HashMap::new();
-        block_number_to_block_id.insert(0u64, genesis_block_id.clone());
-        get_block_buffer_manager().init(0, block_number_to_block_id).await;
-
         tokio::spawn({
             let pool = self.pool.clone();
             async move {
@@ -99,9 +100,9 @@ impl MockConsensus {
         let (block_meta_tx, mut block_meta_rx) = tokio::sync::mpsc::channel(8);
         tokio::spawn({
             let pool = self.pool.clone();
+            let mut parent_id = self.genesis_block_id;
             async move {
                 let mut block_number = 0;
-                let mut parent_id = genesis_block_id;
                 loop {
                     block_number += 1;
                     let attr = ExternalPayloadAttr {
