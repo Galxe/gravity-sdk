@@ -160,19 +160,15 @@ impl BlockBufferManager {
         unimplemented!()
     }
 
-    pub async fn push_txns(&self, txn: Vec<VerifiedTxnWithAccountSeqNum>) {
-        let mut txns = self.txn_buffer.txns.lock().await;
-        txns.extend(txn);
+    pub async fn push_txns(&self, txns: &mut Vec<VerifiedTxnWithAccountSeqNum>) {
+        let mut pool_txns = self.txn_buffer.txns.lock().await;
+        pool_txns.extend(txns.drain(..));
     }
 
     pub fn is_ready(&self) -> bool {
         self.buffer_state.load(Ordering::SeqCst) == BufferState::Ready as u8
     }
 
-    pub async fn push_txn(&self, txn: VerifiedTxnWithAccountSeqNum) {
-        let mut txns = self.txn_buffer.txns.lock().await;
-        txns.push(txn);
-    }
 
     pub async fn pop_txns(
         &self,

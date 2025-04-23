@@ -87,7 +87,7 @@ async fn retrieve_from_execution_routine(
 ) {
     info!("start retrieve_from_execution_routine");
     loop {
-        match get_block_buffer_manager().pop_txns(usize::MAX).await {
+        match get_block_buffer_manager().pop_txns(20000).await {
             Ok(txns) => {
                 let mut lock_mempool = mempool.lock();
                 let start_time = Instant::now();
