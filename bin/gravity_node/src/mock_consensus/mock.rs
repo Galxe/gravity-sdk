@@ -92,7 +92,7 @@ impl MockConsensus {
                     let mut pool = pool.lock().await;
                     pool.add_txns(txns);
                     drop(pool);
-                    tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                 }
             }
         });
