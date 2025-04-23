@@ -2,7 +2,7 @@ use alloy_eips::BlockHashOrNumber;
 use alloy_primitives::TxHash;
 use block_buffer_manager::block_buffer_manager::BlockBufferManager;
 use block_buffer_manager::get_block_buffer_manager;
-use consensus::mock::MockConsensus;
+use mock_consensus::mock::MockConsensus;
 use greth::gravity_storage;
 use greth::reth;
 use greth::reth::chainspec::EthereumChainSpecParser;
@@ -17,7 +17,7 @@ use greth::reth_provider;
 use greth::reth_transaction_pool;
 
 use api::check_bootstrap_config;
-use consensus::aptos::AptosConsensus;
+use mock_consensus::aptos::AptosConsensus;
 use gravity_storage::block_view_storage::BlockViewStorage;
 use reth::rpc::builder::auth::AuthServerHandle;
 use reth_coordinator::RethCoordinator;
@@ -34,7 +34,7 @@ use tokio::sync::oneshot;
 use tracing::info;
 use tracing::warn;
 mod cli;
-mod consensus;
+mod mock_consensus;
 mod reth_cli;
 mod reth_coordinator;
 
