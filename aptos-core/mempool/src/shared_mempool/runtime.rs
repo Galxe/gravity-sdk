@@ -21,10 +21,10 @@ use aptos_network::application::{
     storage::PeersAndMetadata,
 };
 use aptos_storage_interface::DbReader;
-use aptos_types::on_chain_config::OnChainConfigProvider;
+use aptos_types::{mempool_status::{MempoolStatus, MempoolStatusCode}, on_chain_config::OnChainConfigProvider};
 use block_buffer_manager::get_block_buffer_manager;
 use futures::channel::mpsc::{Receiver, UnboundedSender};
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 use tokio::runtime::{Handle, Runtime};
 
 /// Bootstrap of SharedMempool.
@@ -89,22 +89,17 @@ async fn retrieve_from_execution_routine(
     loop {
         match get_block_buffer_manager().pop_txns(usize::MAX).await {
             Ok(txns) => {
-                info!("the recv_pending_txns size is {:?}", txns.len());
-                txns.into_iter().for_each(|txn_with_number| {
-                    let r = mempool.lock().send_user_txn(
-                        txn_with_number.txn.into(),
-                        txn_with_number.account_seq_num,
-                        TimelineState::NotReady,
-                        true,
-                        None,
-                        Some(BroadcastPeerPriority::Primary),
-                    );
-                    match r.code{
-                        aptos_types::mempool_status::MempoolStatusCode::Accepted => {},
-                        _ => panic!("{:?}", r),
+                let mut lock_mempool = mempool.lock();
+                let start_time = Instant::now();
+                let txns_len = txns.len();
+                let status = lock_mempool.add_user_txns_batch(txns, true, TimelineState::NotReady, None);
+                for s in status {
+                    if s.code != MempoolStatusCode::Accepted {
+                        panic!("invalid seq number {:?}", s);
                     }
-                    // TODO(gravity_byteyue): handle error msg
-                });
+                }
+    
+                info!("the recv_pending_txns size is {:?} take {:?} ms", txns_len, start_time.elapsed().as_millis());
             }
             Err(e) => {
                 warn!("Error when recv peding txns {:?}", e);
