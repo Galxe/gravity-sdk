@@ -92,7 +92,7 @@ impl MockConsensus {
                     let mut pool = pool.lock().await;
                     pool.add_txns(txns);
                     drop(pool);
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
                 }
             }
         });
@@ -118,6 +118,7 @@ impl MockConsensus {
                     get_block_buffer_manager().set_ordered_blocks(parent_id, block).await.unwrap();
                     parent_id = head_meta.block_id.clone();
                     let _ = block_meta_tx.send(head_meta).await;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
                 }
             }
         });
