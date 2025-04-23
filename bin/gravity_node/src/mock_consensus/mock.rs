@@ -123,6 +123,17 @@ impl MockConsensus {
             }
         });
 
+        let (commit_txns_tx, mut commit_txns_rx) =
+            tokio::sync::mpsc::unbounded_channel::<Vec<TxnId>>();
+        tokio::spawn({
+            let pool = self.pool.clone();
+            async move {
+                while let Some(txns) = commit_txns_rx.recv().await {
+                    pool.lock().await.commit_txns(&txns);
+                }
+            }
+        });
+
         while let Some(block_meta) = block_meta_rx.recv().await {
             let block_id = block_meta.block_id;
             let block_number = block_meta.block_number;
@@ -138,18 +149,18 @@ impl MockConsensus {
                 .await
                 .unwrap();
 
-            self.pool.lock().await.commit_txns(
-                &res.txn_status
-                    .as_ref()
-                    .as_ref()
-                    .unwrap()
-                    .iter()
-                    .map(|tx| TxnId {
-                        sender: ExternalAccountAddress::new(tx.sender),
-                        seq_num: tx.nonce,
-                    })
-                    .collect::<Vec<_>>(),
-            );
+            let committed_txns = res
+                .txn_status
+                .as_ref()
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|tx| TxnId {
+                    sender: ExternalAccountAddress::new(tx.sender),
+                    seq_num: tx.nonce,
+                })
+                .collect::<Vec<_>>();
+            let _ = commit_txns_tx.send(committed_txns);
         }
     }
 }
