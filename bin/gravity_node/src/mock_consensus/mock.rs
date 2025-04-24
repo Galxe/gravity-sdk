@@ -12,11 +12,19 @@ use api_types::{
 };
 
 use block_buffer_manager::{block_buffer_manager::BlockHashRef, get_block_buffer_manager};
+use once_cell::sync::Lazy;
 
 pub struct MockConsensus {
     pool: Arc<tokio::sync::Mutex<Mempool>>,
     genesis_block_id: BlockId,
 }
+
+static SET_ORDERED_INTERVAL_MS: Lazy<u64> = Lazy::new(|| {
+    std::env::var("MOCK_SET_ORDERED_INTERVAL_MS")
+        .unwrap_or_else(|_| "200".to_string())
+        .parse()
+        .unwrap_or(200)
+});
 
 impl MockConsensus {
     pub async fn new() -> Self {
@@ -118,7 +126,10 @@ impl MockConsensus {
                     get_block_buffer_manager().set_ordered_blocks(parent_id, block).await.unwrap();
                     parent_id = head_meta.block_id.clone();
                     let _ = block_meta_tx.send(head_meta).await;
-                    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(
+                        *SET_ORDERED_INTERVAL_MS,
+                    ))
+                    .await;
                 }
             }
         });
