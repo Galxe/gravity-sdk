@@ -67,7 +67,8 @@ impl MockConsensus {
         block_number: u64,
         attr: ExternalPayloadAttr,
     ) -> ExternalBlock {
-        let mut txns = Vec::with_capacity(5000);
+        const MAX_TXN_NUM: usize = 5000;
+        let mut txns = Vec::with_capacity(MAX_TXN_NUM);
         loop {
             let time_gap =
                 SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() -
@@ -85,7 +86,7 @@ impl MockConsensus {
                 }
             }
 
-            if txns.len() > 5000 {
+            if txns.len() > MAX_TXN_NUM {
                 return Self::construct_block(block_number, txns, attr);
             }
         }
