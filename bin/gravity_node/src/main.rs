@@ -68,6 +68,94 @@ struct ConsensusArgs {
     >,
 }
 
+fn run_reth(
+    tx: mpsc::Sender<(ConsensusArgs, u64)>,
+    cli: Cli<EthereumChainSpecParser>,
+    execution_args_rx: oneshot::Receiver<ExecutionArgs>,
+) {
+    reth_cli_util::sigsegv_handler::install();
+
+    if std::env::var_os("RUST_BACKTRACE").is_none() {
+        std::env::set_var("RUST_BACKTRACE", "1");
+    }
+
+    if let Err(err) = {
+        cli.run(|builder, _| {
+            let tx = tx.clone();
+            async move {
+                let handle = builder
+                    .with_types_and_provider::<EthereumNode, BlockchainProvider<_>>()
+                    .with_components(EthereumNode::components())
+                    .with_add_ons(EthereumAddOns::default())
+                    .launch_with_fn(|builder| {
+                        let launcher = EngineNodeLauncher::new(
+                            builder.task_executor().clone(),
+                            builder.config().datadir(),
+                            engine_tree_config::TreeConfig::default(),
+                        );
+                        builder.launch_with(launcher)
+                    })
+                    .await?;
+                let chain_spec = handle.node.chain_spec();
+                let pending_listener: tokio::sync::mpsc::Receiver<TxHash> =
+                    handle.node.pool.pending_transactions_listener();
+                let engine_cli = handle.node.auth_server_handle().clone();
+                let provider: BlockchainProvider<
+                    reth_node_api::NodeTypesWithDBAdapter<EthereumNode, Arc<reth_db::DatabaseEnv>>,
+                > = handle.node.provider;
+                let latest_block_number = provider.last_block_number().unwrap();
+                info!("The latest_block_number is {}", latest_block_number);
+                let latest_block_hash = provider.block_hash(latest_block_number).unwrap().unwrap();
+                let latest_block = provider
+                    .block(BlockHashOrNumber::Number(latest_block_number))
+                    .unwrap()
+                    .unwrap();
+                let pool: reth_transaction_pool::Pool<
+                    reth_transaction_pool::TransactionValidationTaskExecutor<
+                        reth_transaction_pool::EthTransactionValidator<
+                            BlockchainProvider<
+                                NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>,
+                            >,
+                            reth_transaction_pool::EthPooledTransaction,
+                        >,
+                    >,
+                    reth_transaction_pool::CoinbaseTipOrdering<
+                        reth_transaction_pool::EthPooledTransaction,
+                    >,
+                    reth_transaction_pool::blobstore::DiskFileBlobStore,
+                > = handle.node.pool;
+
+                let storage = BlockViewStorage::new(
+                    provider.clone(),
+                    latest_block.number,
+                    latest_block_hash,
+                    BTreeMap::new(),
+                );
+                let pipeline_api_v2: PipeExecLayerApi<BlockViewStorage<BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>>> = reth_pipe_exec_layer_ext_v2::new_pipe_exec_layer_api(
+                    chain_spec,
+                    storage,
+                    latest_block.header,
+                    latest_block_hash,
+                    execution_args_rx,
+                );
+                let args = ConsensusArgs {
+                    engine_api: engine_cli,
+                    pipeline_api: pipeline_api_v2,
+                    provider,
+                    tx_listener: pending_listener,
+                    pool,
+                };
+                tx.send((args, latest_block_number)).await.ok();
+                handle.node_exit_future.await
+            }
+        })
+    } {
+        eprintln!("Error: {err:?}");
+        std::process::exit(1);
+    }
+}
+
+
 fn main() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
     let cli = Cli::parse();
