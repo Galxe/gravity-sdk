@@ -16,6 +16,7 @@ use crate::{
         MempoolSenderBucket, MultiBucketTimelineIndexIds, TimelineIndexIdentifier,
     },
 };
+use api_types::VerifiedTxnWithAccountSeqNum;
 use gaptos::aptos_config::config::NodeConfig;
 use aptos_consensus_types::common::{TransactionInProgress, TransactionSummary};
 use gaptos::aptos_crypto::HashValue;
@@ -271,6 +272,112 @@ impl Mempool {
 
     pub(crate) fn get_by_hash(&self, hash: HashValue) -> Option<SignedTransaction> {
         self.transactions.get_by_hash(hash)
+    }
+
+    pub(crate) fn add_user_txns_batch(
+        &mut self,
+        txns_with_numbers: Vec<VerifiedTxnWithAccountSeqNum>,
+        client_submitted: bool,
+        timeline_state: TimelineState,
+        priority: Option<BroadcastPeerPriority>,
+    ) -> Vec<MempoolStatus> {
+        let batch_size = txns_with_numbers.len();
+        if batch_size == 0 {
+            return vec![];
+        }
+
+        let mut results: Vec<Option<MempoolStatus>> = vec![None; batch_size];
+        let mut valid_txns_to_insert: Vec<(usize, MempoolTransaction)> = Vec::with_capacity(batch_size);
+
+        let now_system = SystemTime::now(); // Get time once for the batch
+        let now_epoch_millis = gaptos::aptos_infallible::duration_since_epoch().as_millis() as u64; // Get epoch time once
+
+        const ZERO_RANKING_SCORE: u64 = 10; // Use existing constant ranking score
+
+        // --- 1. Validation and Preparation Phase ---
+        // Iterate through input, validate, and prepare MempoolTransaction objects
+        for (index, txn_with_number) in txns_with_numbers.into_iter().enumerate() {
+            let txn = txn_with_number.txn; // VerifiedTxn
+            let db_sequence_number = txn_with_number.account_seq_num;
+            let sender = txn.sender();
+
+            // Basic Validation (Sequence Number Check)
+            if txn.seq_number() < db_sequence_number {
+                let status = MempoolStatus::new(MempoolStatusCode::InvalidSeqNumber).with_message(format!(
+                    "transaction sequence number is {}, current sequence number is {}",
+                    txn.seq_number(),
+                    db_sequence_number,
+                ));
+                // Record validation failure status immediately
+                results[index] = Some(status.clone());
+                continue; // Skip to the next transaction
+            }
+
+            // Prepare MempoolTransaction for valid ones
+            let insertion_info = InsertionInfo::new(now_system, client_submitted, timeline_state);
+
+            // TODO: Add bytes calculation if needed (as mentioned in original TODO)
+            let mempool_txn = MempoolTransaction::new(
+                txn.into(), // Takes ownership of txn
+                timeline_state,
+                insertion_info,
+                priority.clone(), // Clone priority for each transaction
+                ZERO_RANKING_SCORE, // Use the constant ranking score
+                db_sequence_number,
+            );
+
+            // Store the prepared transaction along with its original index
+            valid_txns_to_insert.push((index, mempool_txn));
+        }
+
+        // --- 2. Batch Insertion Phase ---
+        if !valid_txns_to_insert.is_empty() {
+            // Extract just the MempoolTransaction objects for the batch call
+            let mempool_txns_batch: Vec<MempoolTransaction> = valid_txns_to_insert
+                .iter()
+                .map(|(_, txn)| txn.clone()) // Clone if insert_batch needs owned values
+                .collect();
+
+            // *** The Core Optimization ***
+            // Call the hypothetical batch insertion method on the transaction store.
+            // This assumes `self.transactions.insert_batch` locks ONCE internally.
+            let insert_statuses = self.transactions.insert_batch(mempool_txns_batch);
+
+            // --- 3. Process Results and Update Counters for the Batch ---
+            let mut accepted_count = 0;
+
+            // Iterate through the results of the batch insertion
+            for ((original_index, processed_txn), status) in valid_txns_to_insert.iter().zip(insert_statuses.iter()) {
+                // Store the result status from the insertion attempt
+                results[*original_index] = Some(status.clone());
+
+                let sender = processed_txn.sender();
+                let ranking_score = processed_txn.ranking_score(); // Use score from MempoolTransaction
+                let bucket = self.transactions.get_bucket(ranking_score, &sender);
+
+                // Update counters based on insertion result
+                if status.code == MempoolStatusCode::Accepted {
+                    accepted_count += 1;
+                }
+
+                // Ranking score metric (for all attempts passed validation)
+                 counters::core_mempool_txn_ranking_score(
+                    counters::INSERT_LABEL,
+                    status.code.to_string().as_str(),
+                    bucket.as_str(),
+                    ranking_score,
+                );
+            }
+
+            // Increment the total added count by the number accepted in this batch
+            counters::MEMPOOL_TXN_ADD_COUNT.inc_by(accepted_count as u64);
+        }
+
+        // --- 4. Finalize Results ---
+        // Ensure all entries in results have a status (either from validation or insertion)
+        results.into_iter().map(|opt_status| {
+            opt_status.expect("Internal error: Transaction status should have been set")
+        }).collect()
     }
 
     /// Used to add a transaction to the Mempool.
