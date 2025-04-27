@@ -91,3 +91,4 @@ book/site/*
 deploy_utils/ansible/server_confs
 
 gravity.json
+start.sh

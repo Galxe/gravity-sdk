@@ -79,6 +79,7 @@ function start_node() {
             --http.corsdomain "*" \
             --http.api "debug,eth,net,trace,txpool,web3,rpc" \
             --http.addr 0.0.0.0 \
+	        --http.disable_compression \
             --dev \
             --port ${reth_rpc_port} \
             --authrpc.port ${authrpc_port} \
