@@ -2,6 +2,7 @@ use alloy_eips::BlockHashOrNumber;
 use alloy_primitives::TxHash;
 use block_buffer_manager::block_buffer_manager::BlockBufferManager;
 use block_buffer_manager::get_block_buffer_manager;
+use consensus::mock_consensus::mock::MockConsensus;
 use greth::gravity_storage;
 use greth::reth;
 use greth::reth::chainspec::EthereumChainSpecParser;
@@ -27,6 +28,7 @@ use reth_provider::BlockHashReader;
 use reth_provider::BlockNumReader;
 use reth_provider::BlockReader;
 use reth_transaction_pool::TransactionPool;
+use tikv_jemalloc_ctl::raw;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tracing::info;
@@ -153,6 +155,7 @@ fn run_reth(
     }
 }
 
+
 fn main() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
     let cli = Cli::parse();
@@ -168,7 +171,14 @@ fn main() {
                 let chain_id = client.chain_id();
                 let coordinator =
                     Arc::new(RethCoordinator::new(client, latest_block_number, execution_args_tx));
-                AptosConsensus::init(gcei_config, coordinator.clone(), chain_id, latest_block_number).await;
+                if std::env::var("MOCK_CONSENSUS").unwrap_or("false".to_string()).parse::<bool>().unwrap() {
+                    let mock = MockConsensus::new().await;
+                    tokio::spawn(async move {
+                        mock.run().await;
+                    });
+                } else {
+                    AptosConsensus::init(gcei_config, coordinator.clone(), chain_id, latest_block_number).await;
+                }
                 coordinator.send_execution_args().await;
                 coordinator.run().await;
                 tokio::signal::ctrl_c().await.unwrap();

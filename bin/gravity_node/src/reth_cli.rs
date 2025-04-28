@@ -63,6 +63,8 @@ pub struct RethCli {
         greth::reth_transaction_pool::blobstore::DiskFileBlobStore,
     >,
     txn_cache: Mutex<HashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>>,
+    txn_batch_size: usize,
+    txn_check_interval: tokio::time::Duration,
 }
 
 pub fn convert_account(acc: Address) -> ExternalAccountAddress {
@@ -91,6 +93,8 @@ impl RethCli {
             txn_listener: Mutex::new(args.tx_listener),
             pool: args.pool,
             txn_cache: Mutex::new(HashMap::new()),
+            txn_batch_size: 2000,
+            txn_check_interval: std::time::Duration::from_millis(50),
         }
     }
 
@@ -189,35 +193,81 @@ impl RethCli {
     }
 
     pub async fn start_mempool(&self) -> Result<(), String> {
-        debug!("start process pending transactions");
+        info!("start process pending transactions with timeout");
         let mut mut_txn_listener = self.txn_listener.lock().await;
-        while let Some(txn_hash) = mut_txn_listener.recv().await {
-            let pool_txn = self.pool.get(&txn_hash).unwrap();
-            let sender = pool_txn.sender();
-            let nonce = pool_txn.nonce();
-            let txn = pool_txn.transaction.transaction().tx();
-            let account_nonce =
-                self.provider.basic_account(&sender).unwrap().map(|x| x.nonce).unwrap_or(nonce);
-            // Since the consensus layer might use the bytes to recalculate the hash, we need to encode the transaction
-            let bytes = txn.encoded_2718();
 
-            let vtxn = VerifiedTxnWithAccountSeqNum {
-                txn: VerifiedTxn {
-                    bytes,
-                    sender: convert_account(sender),
-                    sequence_number: nonce,
-                    chain_id: ExternalChainId::new(0),
-                    committed_hash: TxnHash::from_bytes(txn.hash().as_slice()).into(),
-                },
-                account_seq_num: account_nonce,
-            };
-            {       
-                self.txn_cache.lock().await
-                    .insert((vtxn.txn.sender().clone(), vtxn.txn.seq_number()), pool_txn.clone());
+        let batch_size: usize = self.txn_batch_size;
+        let timeout_duration = self.txn_check_interval;
+        let mut buffer = Vec::with_capacity(batch_size);
+
+        let sleep = tokio::time::sleep(timeout_duration);
+        tokio::pin!(sleep);
+
+        loop {
+            tokio::select! {
+                biased;
+                maybe_txn_hash = mut_txn_listener.recv() => {
+                    match maybe_txn_hash {
+                        Some(txn_hash) => {
+                            let pool_txn = match self.pool.get(&txn_hash) {
+                                Some(txn) => txn,
+                                None => {
+                                    log::warn!("Transaction hash {:?} received but not found in pool, skipping.", txn_hash);
+                                    continue;
+                                }
+                            };
+                            let sender = pool_txn.sender();
+                            let nonce = pool_txn.nonce();
+                            let txn = pool_txn.transaction.transaction().tx();
+                            let account_nonce = self.provider.basic_account(&sender)
+                                .map_err(|e| format!("Failed to get basic account for {}: {:?}", sender, e))?
+                                .map(|x| x.nonce)
+                                .unwrap_or(nonce);
+
+                            let bytes = txn.encoded_2718();
+
+                            let vtxn = VerifiedTxnWithAccountSeqNum {
+                                txn: VerifiedTxn {
+                                    bytes,
+                                    sender: convert_account(sender),
+                                    sequence_number: nonce,
+                                    chain_id: ExternalChainId::new(0),
+                                    committed_hash: TxnHash::from_bytes(txn.hash().as_slice()).into(),
+                                },
+                                account_seq_num: account_nonce,
+                            };
+                            {
+
+                                self.txn_cache.lock().await
+                                    .insert((vtxn.txn.sender().clone(), vtxn.txn.seq_number()), pool_txn.clone());
+                            }
+                            buffer.push(vtxn);
+
+                            if buffer.len() >= batch_size {
+                                debug!("Buffer full ({} items), pushing transactions.", buffer.len());
+                                get_block_buffer_manager().push_txns(&mut buffer).await;
+                                buffer.clear();
+                                sleep.as_mut().reset(tokio::time::Instant::now() + timeout_duration);
+                            } else {
+                                sleep.as_mut().reset(tokio::time::Instant::now() + timeout_duration);
+                            }
+                        }
+                        None => {
+                            panic!("Transaction listener channel closed.");
+                        }
+                    }
+                }
+
+                _ = &mut sleep => {
+                    if !buffer.is_empty() {
+                        debug!("Timeout reached, pushing {} buffered transactions.", buffer.len());
+                        get_block_buffer_manager().push_txns(&mut buffer).await;
+                        buffer.clear();
+                    }
+                    sleep.as_mut().reset(tokio::time::Instant::now() + timeout_duration);
+                }
             }
-            get_block_buffer_manager().push_txn(vtxn).await;
         }
-        debug!("end process pending transactions");
         Ok(())
     }
 

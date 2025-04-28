@@ -24,7 +24,7 @@ use gaptos::aptos_types::{
 };
 use std::{
     cmp::max,
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     mem::size_of,
     time::{Instant, SystemTime},
 };
@@ -185,6 +185,137 @@ impl TransactionStore {
 
     pub(crate) fn get_sequence_number(&self, address: &AccountAddress) -> Option<&u64> {
         self.sequence_numbers.get(address)
+    }
+
+    pub(crate) fn insert_batch(&mut self, txns: Vec<MempoolTransaction>) -> Vec<MempoolStatus> {
+        let batch_size = txns.len();
+        if batch_size == 0 {
+            return vec![];
+        }
+
+        // Initialize results with a default state (e.g., Accepted, will be overwritten on failure)
+        // Using Option allows us to ensure every original index gets a status.
+        let mut results: Vec<Option<MempoolStatus>> = vec![None; batch_size];
+
+        // Group transactions by sender address, preserving original index and the transaction itself.
+        // Using BTreeMap for sender groups ensures deterministic processing order (optional but good practice).
+        let mut grouped_txns: BTreeMap<AccountAddress, Vec<(usize, MempoolTransaction)>> = BTreeMap::new();
+        for (index, txn) in txns.into_iter().enumerate() {
+            grouped_txns.entry(txn.sender()).or_default().push((index, txn));
+        }
+
+        // --- Main Processing Loop (Iterate through senders) ---
+        // This loop implicitly benefits if `&mut self` provides exclusive access,
+        // minimizing lock contention if internal fields use shared locking.
+        for (address, sender_txns_with_indices) in grouped_txns {
+
+            // Sort transactions for the current sender by sequence number.
+            // This is important for correct gas replacement and readiness checks.
+            let mut sorted_sender_txns = sender_txns_with_indices;
+            sorted_sender_txns.sort_by_key(|(_, txn)| txn.sequence_number());
+
+            // Fetch sender-specific state ONCE before processing their transactions
+            let mut highest_known_seq_num = self.get_sequence_number(&address).map_or(0, |v| *v);
+            let initial_sender_txn_count = self.transactions.get(&address).map_or(0, |txns| txns.len());
+            let mut added_count_this_batch = 0; // Track additions for this sender within the batch
+
+            // Get a mutable reference to the sender's transaction map, creating if needed.
+             // We need this mutable reference early for gas upgrade logic and later insertions.
+            let sender_storage_entry = self.transactions.entry(address).or_default();
+
+            // --- Process Transactions for the Current Sender ---
+            for (original_index, mut txn) in sorted_sender_txns {
+                let txn_seq_num = txn.sequence_number();
+
+                // 1. Check Existing Transaction (Gas Upgrade/Duplicate)
+                if let Some(existing_txn) = sender_storage_entry.get_mut(&txn_seq_num) {
+                     if existing_txn.verified_txn().gas_unit_price() < txn.verified_txn().gas_unit_price() {
+                         panic!("right now we don't support gas upgrade");
+                     } else {
+                         // Existing txn with >= gas price found. Reject the incoming one.
+                         results[original_index] = Some(
+                             MempoolStatus::new(MempoolStatusCode::InvalidSeqNumber).with_message( // Or a different status code?
+                                 format!(
+                                     "Transaction {}:{} already exists in mempool with >= gas price",
+                                     address, txn_seq_num,
+                                 ),
+                            )
+                         );
+                         continue; // Skip to next transaction in the batch for this sender
+                    }
+                }
+                // If we reach here, either the txn is new or it's replacing an older one.
+
+                // 2. Determine/Update Account Sequence Number (based on highest seen *so far*)
+                let effective_acc_seq_num = max(txn.account_sequence_number(), highest_known_seq_num);
+                txn.set_account_sequence_number(effective_acc_seq_num); // Update the txn object
+
+                // 3. Check Mempool Full (after potential eviction)
+                // NOTE: Calling this per-transaction might still be necessary if eviction logic is complex.
+                // Optimization: If we could estimate size impact reliably and check *once* per sender,
+                // or *once* per batch, that would be better, but depends heavily on `check_is_full_after_eviction` impl.
+                if self.size_bytes >= self.capacity_bytes {
+                     results[original_index] = Some(
+                        MempoolStatus::new(MempoolStatusCode::MempoolIsFull).with_message(format!(
+                            "Mempool is full trying to insert {}:{}. Mempool size: {}, Capacity: {}",
+                            address, txn_seq_num, self.size_bytes, self.capacity,
+                        ))
+                    );
+                    continue; // Skip to next transaction
+                }
+
+                // 4. Check Per-User Capacity (considering additions in *this batch* for this sender)
+                // Check against initial count + count added so far in this batch for this sender.
+                if initial_sender_txn_count + added_count_this_batch >= self.capacity_per_user {
+                     results[original_index] = Some(
+                        MempoolStatus::new(MempoolStatusCode::TooManyTransactions).with_message(format!(
+                            "Mempool capacity exceeded for account {} ({} existing + {} in batch >= {} limit)",
+                            address, initial_sender_txn_count, added_count_this_batch, self.capacity_per_user,
+                        ))
+                    );
+                    continue; // Skip to next transaction
+                }
+
+                // --- All Checks Passed - Prepare for Insertion ---
+
+                // Update highest known sequence number *for this sender* based on this transaction
+                highest_known_seq_num = max(highest_known_seq_num, effective_acc_seq_num);
+
+                // Insert into main storage (we already have the mutable entry `sender_storage_entry`)
+                // Also update indexes and size.
+                self.hash_index.insert(txn.get_hash(), (txn.sender(), txn_seq_num));
+                self.size_bytes += txn.get_estimated_bytes();
+                sender_storage_entry.insert(txn_seq_num, txn); // Insert the (potentially updated) txn
+
+                // Mark as accepted (for now, might change later?)
+                results[original_index] = Some(MempoolStatus::new(MempoolStatusCode::Accepted));
+                added_count_this_batch += 1; // Increment count for per-user capacity check
+
+            } // End loop over sender's transactions
+
+            // --- Post-Processing for Sender (After handling all their txns in the batch) ---
+            if added_count_this_batch > 0 || highest_known_seq_num > self.get_sequence_number(&address).map_or(0, |v| *v) {
+                 // Only perform these if transactions were added or sequence number increased for this sender.
+
+                 // Update the persistent sequence number for the account *once*
+                 self.sequence_numbers.insert(address, highest_known_seq_num);
+
+                 // Clean committed transactions *once* for the sender using the highest seq num seen
+                 self.clean_committed_transactions(&address, highest_known_seq_num);
+
+                 // Process readiness *once* for the sender
+                 self.process_ready_transactions(&address, highest_known_seq_num);
+            }
+
+        } // End loop over senders
+
+        // --- Final Batch-Level Updates ---
+        // Call track_indices once after all insertions/updates if it summarizes state.
+        // If it needs to be called per-insertion, it should be inside the inner loop.
+        self.track_indices();
+
+        // Fill in any potentially remaining None values (shouldn't happen if logic is correct)
+        results.into_iter().map(|res| res.expect("Result should have been set for every transaction")).collect()
     }
 
     /// Insert transaction into TransactionStore. Performs validation checks and updates indexes.
