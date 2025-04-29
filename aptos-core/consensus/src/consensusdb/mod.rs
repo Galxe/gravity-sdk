@@ -288,7 +288,14 @@ impl ConsensusDB {
             if block.block_number().is_none() {
                 let block_number = self.get::<BlockNumberSchema>(block_id)?;
                 match block_number {
-                    Some(block_number) => block.set_block_number(block_number),
+                    Some(block_number) => {
+                        info!(
+                            "get block number from db, block id is {}, block number is {}",
+                            block.id(),
+                            block_number
+                        );
+                        block.set_block_number(block_number)
+                    }
                     None => (),
                 }
             }
