@@ -294,10 +294,19 @@ impl ConsensusDB {
     pub fn get_block(&self, epoch: u64, block_id: HashValue) -> Result<Option<Block>, DbError> {
         let block = self.get::<BlockSchema>(&(epoch, block_id))?;
         if let Some(block) = &block {
-            let block_number = self.get::<BlockNumberSchema>(&(epoch, block_id))?;
-            match block_number {
-                Some(block_number) => block.set_block_number(block_number),
-                None => (),
+            if block.block_number().is_none() {
+                let block_number = self.get::<BlockNumberSchema>(&(epoch, block_id))?;
+                match block_number {
+                    Some(block_number) => {
+                        info!(
+                            "get block number from db, block id is {}, block number is {}",
+                            block.id(),
+                            block_number
+                        );
+                        block.set_block_number(block_number)
+                    }
+                    None => (),
+                }
             }
         }
         Ok(block)
