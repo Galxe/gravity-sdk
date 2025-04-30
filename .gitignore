@@ -92,3 +92,6 @@ deploy_utils/ansible/server_confs
 
 gravity.json
 start.sh
+*.pb
+*.svg
+/profile/*

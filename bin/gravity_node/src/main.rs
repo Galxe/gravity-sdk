@@ -14,11 +14,13 @@ use greth::reth_node_ethereum;
 use greth::reth_pipe_exec_layer_ext_v2;
 use greth::reth_pipe_exec_layer_ext_v2::ExecutionArgs;
 use greth::reth_provider;
+use greth::reth_tracing::tracing_subscriber::Registry;
 use greth::reth_transaction_pool;
-
+use pprof::protos::Message;
 use api::check_bootstrap_config;
 use consensus::aptos::AptosConsensus;
 use gravity_storage::block_view_storage::BlockViewStorage;
+use pprof::ProfilerGuard;
 use reth::rpc::builder::auth::AuthServerHandle;
 use reth_coordinator::RethCoordinator;
 use reth_db::DatabaseEnv;
@@ -32,6 +34,8 @@ use tikv_jemalloc_ctl::raw;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tracing::info;
+use tracing_flame::FlameLayer;
+use tracing_subscriber::layer::SubscriberExt;
 mod cli;
 mod consensus;
 mod reth_cli;
@@ -40,9 +44,13 @@ mod reth_coordinator;
 use crate::cli::Cli;
 use std::cell::OnceCell;
 use std::collections::BTreeMap;
+use std::fs::File;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::thread;
+use std::time::Duration;
+use std::time::Instant;
 
 use crate::reth_cli::RethCli;
 use clap::Parser;
@@ -156,7 +164,103 @@ fn run_reth(
 }
 
 
+struct ProfilingState {
+    guard: Option<ProfilerGuard<'static>>,
+    profile_count: usize,
+}
+
+fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
+    // 创建一个共享的状态，用于管理 profiler
+    let profiling_state = Arc::new(Mutex::new(ProfilingState {
+        guard: None,
+        profile_count: 0,
+    }));
+    
+    // 克隆状态的引用，用于后台线程
+    let profiling_state_clone = profiling_state.clone();
+    
+    // 启动后台线程来管理分析
+    thread::spawn(move || {
+        // 初始配置
+        let config = 99;
+        
+        let start = Instant::now();
+        let max_duration = Duration::from_secs(60 * 30); // 最多运行30min
+        
+        while start.elapsed() < max_duration {
+            // 每10分钟生成一次分析报告
+            let profile_duration = Duration::from_secs(3 * 60);
+            
+            // 创建新的 profiler
+            {
+                let mut state = profiling_state_clone.lock().unwrap();
+                // 启动新的性能分析器
+                state.guard = Some(ProfilerGuard::new(config).unwrap());
+                println!("Started profiling session #{}", state.profile_count + 1);
+            }
+            
+            // 等待指定的分析时间
+            thread::sleep(profile_duration);
+            
+            // 结束当前分析会话并生成报告
+            {
+                let mut state = profiling_state_clone.lock().unwrap();
+                if let Some(guard) = state.guard.take() {
+                    if let Ok(report) = guard.report().build() {
+                        // 生成文件名，包含时间戳
+                        let timestamp = std::time::SystemTime::now();
+                        let count = state.profile_count;
+                        
+                        // 生成火焰图
+                        let flamegraph_path = format!("profile_{}_flame_{:?}.svg", count, timestamp);
+                        if let Ok(file) = File::create(&flamegraph_path) {
+                            if let Err(e) = report.flamegraph(file) {
+                                eprintln!("Failed to write flamegraph: {}", e);
+                            } else {
+                                println!("Wrote flamegraph to {}", flamegraph_path);
+                            }
+                        }
+                        
+                        // 生成protobuf文件 (可以用 pprof 工具查看)
+                        let proto_path = format!("profile_{}_proto_{:?}.pb", count, timestamp);
+                        if let Ok(mut file) = File::create(&proto_path) {
+                            if let Ok(profile) = report.pprof() {
+                                let mut content = Vec::new();
+                                if profile.write_to_vec(&mut content).is_ok() {
+                                    if std::io::Write::write_all(&mut file, &content).is_ok() {
+                                        println!("Wrote protobuf to {}", proto_path);
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // 生成文本报告
+                        let text_path = format!("profile_{}_text_{:?}.svg", count, timestamp);
+                        if let Ok(file) = File::create(&text_path) {
+                            if let Err(e) = report.flamegraph(file) {
+                                eprintln!("Failed to write text summary: {}", e);
+                            } else {
+                                println!("Wrote text summary to {}", text_path);
+                            }
+                        }
+                        
+                        // 更新计数器
+                        state.profile_count += 1;
+                    }
+                }
+            }
+            
+            // 短暂休息，然后开始下一轮采样
+            thread::sleep(Duration::from_secs(5));
+        }
+    });
+    
+    profiling_state
+}
+
+
 fn main() {
+    // let _profiling_state = setup_pprof_profiler();
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
     let cli = Cli::parse();
     let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());

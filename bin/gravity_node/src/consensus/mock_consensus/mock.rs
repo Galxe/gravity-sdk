@@ -69,7 +69,7 @@ impl MockConsensus {
         block_number: u64,
         attr: ExternalPayloadAttr,
     ) -> ExternalBlock {
-        const MAX_TXN_NUM: usize = 5000;
+        const MAX_TXN_NUM: usize = 7000;
         let mut txns = Vec::with_capacity(MAX_TXN_NUM);
         loop {
             let time_gap =

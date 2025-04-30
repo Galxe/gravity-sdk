@@ -403,6 +403,16 @@ lto = false
 incremental = true
 panic = "abort"
 
+[profile.profile]
+inherits = "release"
+opt-level = 1
+debug = true
+debug-assertions = false
+codegen-units = 256
+lto = false
+incremental = true
+panic = "abort"
+
 
 # The performance build is not currently recommended
 # for production deployments. It has not been widely tested.
