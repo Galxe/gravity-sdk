@@ -403,7 +403,7 @@ lto = false
 incremental = true
 panic = "abort"
 
-[profile.profile]
+[profile.pprof]
 inherits = "release"
 opt-level = 1
 debug = true

@@ -44,6 +44,7 @@ mod reth_coordinator;
 use crate::cli::Cli;
 use std::cell::OnceCell;
 use std::collections::BTreeMap;
+use std::fmt::Debug;
 use std::fs::File;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -170,49 +171,46 @@ struct ProfilingState {
 }
 
 fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
-    // 创建一个共享的状态，用于管理 profiler
     let profiling_state = Arc::new(Mutex::new(ProfilingState {
         guard: None,
         profile_count: 0,
     }));
     
-    // 克隆状态的引用，用于后台线程
     let profiling_state_clone = profiling_state.clone();
     
-    // 启动后台线程来管理分析
     thread::spawn(move || {
-        // 初始配置
         let config = 99;
         
         let start = Instant::now();
         let max_duration = Duration::from_secs(60 * 30); // 最多运行30min
         
         while start.elapsed() < max_duration {
-            // 每10分钟生成一次分析报告
             let profile_duration = Duration::from_secs(3 * 60);
             
-            // 创建新的 profiler
             {
                 let mut state = profiling_state_clone.lock().unwrap();
-                // 启动新的性能分析器
                 state.guard = Some(ProfilerGuard::new(config).unwrap());
                 println!("Started profiling session #{}", state.profile_count + 1);
             }
             
-            // 等待指定的分析时间
             thread::sleep(profile_duration);
-            
-            // 结束当前分析会话并生成报告
+            // 
             {
                 let mut state = profiling_state_clone.lock().unwrap();
                 if let Some(guard) = state.guard.take() {
                     if let Ok(report) = guard.report().build() {
-                        // 生成文件名，包含时间戳
                         let timestamp = std::time::SystemTime::now();
                         let count = state.profile_count;
                         
-                        // 生成火焰图
-                        let flamegraph_path = format!("profile_{}_flame_{:?}.svg", count, timestamp);
+                        let now = std::time::SystemTime::now();
+                        let formatted_time = {
+                            let elapsed = now.duration_since(std::time::UNIX_EPOCH).unwrap();
+                            let secs = elapsed.as_secs();
+                            let time = time::OffsetDateTime::from_unix_timestamp(secs as i64).unwrap();
+                            format!("{:02}-{:02}-{:02}-{:02}", 
+                                time.day(), time.hour(), time.minute(), time.second())
+                        };
+                        let flamegraph_path = format!("profile_{}_flame_{}.svg", count, formatted_time);
                         if let Ok(file) = File::create(&flamegraph_path) {
                             if let Err(e) = report.flamegraph(file) {
                                 eprintln!("Failed to write flamegraph: {}", e);
@@ -221,7 +219,7 @@ fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
                             }
                         }
                         
-                        // 生成protobuf文件 (可以用 pprof 工具查看)
+
                         let proto_path = format!("profile_{}_proto_{:?}.pb", count, timestamp);
                         if let Ok(mut file) = File::create(&proto_path) {
                             if let Ok(profile) = report.pprof() {
@@ -233,24 +231,11 @@ fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
                                 }
                             }
                         }
-                        
-                        // 生成文本报告
-                        let text_path = format!("profile_{}_text_{:?}.svg", count, timestamp);
-                        if let Ok(file) = File::create(&text_path) {
-                            if let Err(e) = report.flamegraph(file) {
-                                eprintln!("Failed to write text summary: {}", e);
-                            } else {
-                                println!("Wrote text summary to {}", text_path);
-                            }
-                        }
-                        
-                        // 更新计数器
                         state.profile_count += 1;
                     }
                 }
             }
             
-            // 短暂休息，然后开始下一轮采样
             thread::sleep(Duration::from_secs(5));
         }
     });
@@ -260,7 +245,11 @@ fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
 
 
 fn main() {
-    // let _profiling_state = setup_pprof_profiler();
+    let _profiling_state = if std::env::var("ENABLE_PPROF").is_ok() {
+        Some(setup_pprof_profiler())
+    } else {
+        None
+    };
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
     let cli = Cli::parse();
     let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
