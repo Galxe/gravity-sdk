@@ -4,7 +4,7 @@ pub mod simple_hash;
 pub mod u256_define;
 pub mod compute_res;
 use crate::account::{ExternalAccountAddress, ExternalChainId};
-use gaptos::aptos_crypto::HashValue;
+use crate::u256_define::HashValue;
 use async_trait::async_trait;
 use compute_res::ComputeRes;
 use core::str;
