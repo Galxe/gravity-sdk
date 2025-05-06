@@ -3,6 +3,8 @@ pub mod mock_execution_layer;
 pub mod simple_hash;
 pub mod u256_define;
 pub mod compute_res;
+pub mod events;
+pub mod on_chain_config;
 use crate::account::{ExternalAccountAddress, ExternalChainId};
 use crate::u256_define::HashValue;
 use async_trait::async_trait;
