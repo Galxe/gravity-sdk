@@ -10,7 +10,7 @@ use crate::{
     },
     QuorumStoreRequest,
 };
-use api_types::ExecutionChannel;
+use gaptos::api_types::ExecutionChannel;
 use gaptos::{aptos_config::config::{NodeConfig, NodeType}, aptos_types::mempool_status::MempoolStatusCode};
 use gaptos::aptos_event_notifications::{DbBackedOnChainConfig, ReconfigNotificationListener};
 use gaptos::aptos_infallible::Mutex;

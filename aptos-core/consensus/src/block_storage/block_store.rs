@@ -15,7 +15,7 @@ use crate::{
     util::time_service::TimeService,
 };
 use anyhow::{bail, ensure, format_err, Context};
-use api_types::{
+use gaptos::api_types::{
     compute_res::ComputeRes,
     u256_define::{BlockId, Random},
     ExternalBlock, ExternalBlockMeta,

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::network::BroadcastPeerPriority;
-use api_types::{
+use gaptos::api_types::{
     account::{ExternalAccountAddress, ExternalChainId},
     u256_define::TxnHash,
 };
@@ -127,8 +127,8 @@ impl std::fmt::Debug for VerifiedTxn {
     }
 }
 
-impl From<api_types::VerifiedTxn> for VerifiedTxn {
-    fn from(value: api_types::VerifiedTxn) -> Self {
+impl From<gaptos::api_types::VerifiedTxn> for VerifiedTxn {
+    fn from(value: gaptos::api_types::VerifiedTxn) -> Self {
         let committed_hash = HashValue::new(value.committed_hash());
         VerifiedTxn {
             bytes: value.bytes,
@@ -140,9 +140,9 @@ impl From<api_types::VerifiedTxn> for VerifiedTxn {
     }
 }
 
-impl From<VerifiedTxn> for api_types::VerifiedTxn {
+impl From<VerifiedTxn> for gaptos::api_types::VerifiedTxn {
     fn from(value: VerifiedTxn) -> Self {
-        api_types::VerifiedTxn::new(
+        gaptos::api_types::VerifiedTxn::new(
             value.bytes,
             ExternalAccountAddress::new(value.sender.into_bytes()),
             value.sequence_number,

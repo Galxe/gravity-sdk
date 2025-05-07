@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
-use api_types::{account::ExternalAccountAddress, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
+use gaptos::api_types::{account::ExternalAccountAddress, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 use tracing::*;
 
 pub struct Mempool {

@@ -11,7 +11,7 @@ use crate::{
         },
     }
 };
-use api_types::VerifiedTxn;
+use gaptos::api_types::VerifiedTxn;
 use gaptos::aptos_config::{
     config::{NodeConfig, PeerRole},
     network_id::{NetworkId, PeerNetworkId},

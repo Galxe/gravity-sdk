@@ -1,4 +1,4 @@
-use api_types::{
+use gaptos::api_types::{
     account::{ExternalAccountAddress, ExternalChainId}, compute_res::ComputeRes, simple_hash::hash_to_fixed_array, u256_define::TxnHash, VerifiedTxn
 };
 use futures::channel::oneshot::Sender;

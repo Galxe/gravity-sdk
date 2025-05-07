@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use api_types::{account::ExternalAccountAddress, ExecTxn, ExecutionChannel};
+use gaptos::api_types::{account::ExternalAccountAddress, ExecTxn, ExecutionChannel};
 use log::warn;
 use rand::Rng;
 use tokio::{

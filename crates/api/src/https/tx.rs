@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use api_types::{ExecTxn, ExecutionChannel};
+use gaptos::api_types::{ExecTxn, ExecutionChannel};
 use gaptos::aptos_crypto::HashValue;
 use gaptos::aptos_logger::info;
 use axum::{http::StatusCode, response::Json as JsonResponse};

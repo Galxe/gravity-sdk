@@ -35,7 +35,8 @@ alloy-consensus = { version = "0.11.1", default-features = false }
 
 async-trait.workspace = true
 api.workspace = true
-api-types.workspace = true
+gaptos.workspace = true
+# api-types.workspace = true
 block-buffer-manager.workspace = true
 rayon = "1.7.0"
 tracing-flame = "0.2"

@@ -14,7 +14,7 @@ members = [
     "dependencies/aptos-executor-types",
     "dependencies/aptos-executor",
     "crates/api",
-    "crates/api-types",
+    # "crates/api-types",
     "bin/kvstore",
     "bin/gravity_sdk_kvstore",
     "crates/coex-bridge",
@@ -26,11 +26,11 @@ members = [
 aptos-consensus = { path = "./aptos-core/consensus" }
 
 #  from aptos =======================
-gaptos = { git = "https://github.com/Galxe/gravity-aptos.git", branch = "aptos-node"}
+gaptos = { git = "https://github.com/Galxe/gravity-aptos.git", branch = "onchain-config-dev"}
 aptos-executor-types = { path = "dependencies/aptos-executor-types" }
 aptos-executor = { path = "dependencies/aptos-executor" }
 api = { path = "./crates/api" }
-api-types = { path = "./crates/api-types" }
+# api-types = { path = "./crates/api-types" }
 
 # core ----
 aptos-consensus-types = { path = "./aptos-core/consensus/consensus-types", features = [

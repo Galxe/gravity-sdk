@@ -15,7 +15,7 @@ use crate::{
         },
     },
 };
-use api_types::VerifiedTxn;
+use gaptos::api_types::VerifiedTxn;
 use gaptos::aptos_config::{
     config::{MempoolConfig, NodeType},
     network_id::PeerNetworkId,
@@ -49,7 +49,7 @@ pub enum MempoolSyncMsg {
     BroadcastTransactionsRequest {
         /// Unique id of sync request. Can be used by sender for rebroadcast analysis
         // message_id: MempoolMessageId,
-        transactions: Vec<api_types::VerifiedTxn>,
+        transactions: Vec<gaptos::api_types::VerifiedTxn>,
     },
     /// Broadcast ack issued by the receiver.
     BroadcastTransactionsResponse {
@@ -68,7 +68,7 @@ pub enum MempoolSyncMsg {
         /// in the current node in millis since epoch. The upstream node can then calculate
         /// (SystemTime::now() - ready_time) to calculate the time it took for the transaction
         /// to reach the upstream node.
-        transactions: Vec<(api_types::VerifiedTxn, u64, BroadcastPeerPriority)>,
+        transactions: Vec<(gaptos::api_types::VerifiedTxn, u64, BroadcastPeerPriority)>,
     },
 }
 
