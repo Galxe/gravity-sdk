@@ -10,12 +10,17 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-gaptos = { workspace = true }
+anyhow = { workspace = true }
 async-trait = { workspace = true }
+bcs = { workspace = true }
 futures = { workspace = true }
 tokio = { workspace = true }
 ruint = { workspace = true }
 serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_json = { workspace = true }
+serde_with = { workspace = true }
+serde_yaml = { workspace = true }
 rand = { workspace = true }
 hex = "0.4.3"
 sha2 = { workspace = true }
