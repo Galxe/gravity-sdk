@@ -4,13 +4,12 @@
 
 use crate::{consensusdb::ConsensusDB, epoch_manager::LivenessStorageData, error::DbError};
 use anyhow::{format_err, Result};
-use api_types::ExecutionArgs;
 use aptos_consensus_types::{
     block::Block, quorum_cert::QuorumCert, timeout_2chain::TwoChainTimeoutCertificate, vote::Vote,
     vote_data::VoteData, wrapped_ledger_info::WrappedLedgerInfo,
 };
 use gaptos::aptos_crypto::{
-    hash::{ACCUMULATOR_PLACEHOLDER_HASH, GENESIS_BLOCK_ID},
+    hash::ACCUMULATOR_PLACEHOLDER_HASH,
     HashValue,
 };
 use gaptos::aptos_logger::prelude::*;
@@ -24,12 +23,9 @@ use block_buffer_manager::get_block_buffer_manager;
 use itertools::Itertools;
 use std::{
     cmp::max,
-    collections::{BTreeMap, HashSet},
+    collections::HashSet,
     fmt::Debug,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    },
+    sync::Arc,
 };
 
 /// PersistentLivenessStorage is essential for maintaining liveness when a node crashes.  Specifically,
