@@ -18,6 +18,8 @@ use std::hash::Hash;
 use std::{fmt::Debug, hash::Hasher, sync::Arc};
 use u256_define::{BlockId, Random, TxnHash};
 
+pub type Round = u64;
+
 #[async_trait]
 pub trait ConsensusApi: Send + Sync {
     async fn send_ordered_block(&self, parent_id: [u8; 32], ordered_block: ExternalBlock);
