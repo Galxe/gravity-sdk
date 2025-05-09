@@ -11,7 +11,7 @@ use std::{
 };
 use tokio::{sync::Mutex, time::Instant};
 
-use api_types::{
+use gaptos::api_types::{
     compute_res::{self, ComputeRes, TxnStatus}, u256_define::BlockId, ExternalBlock, VerifiedTxn,
     VerifiedTxnWithAccountSeqNum,
 };

@@ -1,5 +1,5 @@
-use api_types::VerifiedTxn;
-use api_types::{
+use gaptos::api_types::VerifiedTxn;
+use gaptos::api_types::{
     account::{ExternalAccountAddress, ExternalChainId},
     simple_hash,
     u256_define::TxnHash,

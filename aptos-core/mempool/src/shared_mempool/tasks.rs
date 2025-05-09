@@ -18,7 +18,7 @@ use crate::{
     thread_pool::IO_POOL,
     QuorumStoreRequest, QuorumStoreResponse,
 };
-use api_types::VerifiedTxn;
+use gaptos::api_types::VerifiedTxn;
 use gaptos::aptos_config::network_id::PeerNetworkId;
 use aptos_consensus_types::common::RejectedTransactionSummary;
 use gaptos::aptos_crypto::HashValue;

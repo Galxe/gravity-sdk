@@ -6,7 +6,7 @@ mod txn;
 use std::{sync::Arc, thread};
 
 use api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
-use api_types::{
+use gaptos::api_types::{
     account::ExternalAccountAddress, ConsensusApi, ExecTxn, ExecutionChannel, ExecutionLayer
 };
 use clap::Parser;
