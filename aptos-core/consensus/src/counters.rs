@@ -8,7 +8,7 @@ use crate::{
     block_storage::tracing::{observe_block, BlockStage},
     quorum_store,
 };
-use api_types::compute_res::ComputeRes;
+use gaptos::api_types::compute_res::ComputeRes;
 use aptos_consensus_types::{block::Block, pipelined_block::PipelinedBlock};
 use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::{StateComputeResult, ExecutorError};

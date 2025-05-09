@@ -1,4 +1,4 @@
-use api_types::{ExecTxn, ExecutionChannel};
+use gaptos::api_types::{ExecTxn, ExecutionChannel};
 use hex::decode;
 use log::info;
 use poem::{

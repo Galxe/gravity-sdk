@@ -13,7 +13,7 @@ use crate::{
         use_case_history::UseCaseHistory,
     }, MempoolClientRequest, MempoolEventsReceiver, QuorumStoreRequest
 };
-use api_types::{ExecTxn, VerifiedTxn};
+use gaptos::api_types::{ExecTxn, VerifiedTxn};
 use gaptos::aptos_bounded_executor::BoundedExecutor;
 use gaptos::aptos_config::network_id::{NetworkId, PeerNetworkId};
 use gaptos::aptos_event_notifications::ReconfigNotificationListener;

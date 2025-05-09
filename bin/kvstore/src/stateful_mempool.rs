@@ -1,8 +1,8 @@
 use log::warn;
 use tokio::sync::mpsc::error::TryRecvError;
 use crate::txn::RawTxn;
-use api_types::{account::ExternalAccountAddress, VerifiedTxnWithAccountSeqNum};
-use api_types::VerifiedTxn;
+use gaptos::api_types::{account::ExternalAccountAddress, VerifiedTxnWithAccountSeqNum};
+use gaptos::api_types::VerifiedTxn;
 use tokio::sync::mpsc::Sender;
 use std::collections::{BTreeMap, HashMap};
 use tokio::sync::Mutex;

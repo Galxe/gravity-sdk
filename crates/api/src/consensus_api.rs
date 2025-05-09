@@ -9,7 +9,7 @@ use crate::{
     logger,
     network::{create_network_runtime, extract_network_configs},
 };
-use api_types::{
+use gaptos::api_types::{
     compute_res::ComputeRes, u256_define::BlockId, ConsensusApi, ExecError, ExecutionLayer,
     ExternalBlock, ExternalBlockMeta,
 };
@@ -27,7 +27,7 @@ use async_trait::async_trait;
 
 use gaptos::aptos_types::chain_id::ChainId;
 use futures::channel::mpsc;
-use tokio::runtime::Runtime;
+use tokio::{runtime::Runtime, sync::Mutex};
 
 #[cfg(unix)]
 #[global_allocator]
@@ -133,18 +133,6 @@ impl ConsensusEngine {
         let (consensus_to_mempool_sender, consensus_to_mempool_receiver) = mpsc::channel(1);
         let (notification_sender, notification_receiver) = mpsc::channel(1);
 
-        // Create notification senders and listeners for mempool, consensus and the storage service
-        // For Gravity we only use it to notify the mempool for the committed txn gc logic
-        let mempool_notifier =
-            gaptos::aptos_mempool_notifications::MempoolNotifier::new(notification_sender);
-        let mempool_notification_handler = MempoolNotificationHandler::new(mempool_notifier);
-        let mut consensus_mempool_handler =
-            ConsensusToMempoolHandler::new(mempool_notification_handler, consensus_listener);
-        let runtime = gaptos::aptos_runtimes::spawn_named_runtime("Con2Mempool".into(), None);
-        runtime.spawn(async move {
-            consensus_mempool_handler.start().await;
-        });
-        runtimes.push(runtime);
         let mempool_listener =
             gaptos::aptos_mempool_notifications::MempoolNotificationListener::new(notification_receiver);
         let (_mempool_client_sender, _mempool_client_receiver) = mpsc::channel(1);
@@ -172,6 +160,19 @@ impl ConsensusEngine {
             &mut args,
         );
         runtimes.push(consensus_runtime);
+        // Create notification senders and listeners for mempool, consensus and the storage service
+        // For Gravity we only use it to notify the mempool for the committed txn gc logic
+        let mempool_notifier =
+            gaptos::aptos_mempool_notifications::MempoolNotifier::new(notification_sender);
+        let mempool_notification_handler = MempoolNotificationHandler::new(mempool_notifier);
+        let event_subscription_service = Arc::new(Mutex::new(event_subscription_service));
+        let mut consensus_mempool_handler =
+            ConsensusToMempoolHandler::new(mempool_notification_handler, consensus_listener, event_subscription_service.clone());
+        let runtime = gaptos::aptos_runtimes::spawn_named_runtime("Con2Mempool".into(), None);
+        runtime.spawn(async move {
+            consensus_mempool_handler.start().await;
+        });
+        runtimes.push(runtime);
         // trigger this to make epoch manager invoke new epoch
         let args = HttpsServerArgs {
             address: node_config.https_server_address,
@@ -199,7 +200,7 @@ impl ConsensusEngine {
         });
         crate::coex::register_hook_func(arc_consensus_engine.clone());
         // process new round should be after init retƒh hash
-        let _ = event_subscription_service.notify_initial_configs(1_u64);
+        let _ = event_subscription_service.lock().await.notify_initial_configs(1_u64);
         arc_consensus_engine
     }
 }

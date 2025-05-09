@@ -2,7 +2,7 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use api_types::compute_res::{ComputeRes, TxnStatus};
+use gaptos::api_types::compute_res::{ComputeRes, TxnStatus};
 use gaptos::aptos_crypto::hash::{HashValue, ACCUMULATOR_PLACEHOLDER_HASH};
 use gaptos::aptos_types::{block_executor::config::BlockExecutorConfigFromOnchain, transaction::Transaction};
 use gaptos::aptos_types::block_executor::partitioner::ExecutableBlock;

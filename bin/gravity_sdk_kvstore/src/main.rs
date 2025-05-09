@@ -1,5 +1,5 @@
-use api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
-use api_types::{default_recover::DefaultRecovery, ConsensusApi, ExecutionChannel, ExecutionLayer};
+use gaptos::api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
+use gaptos::api_types::{default_recover::DefaultRecovery, ConsensusApi, ExecutionChannel, ExecutionLayer};
 use clap::Parser;
 use cli::Cli;
 use execution_channel::ExecutionChannelImpl;

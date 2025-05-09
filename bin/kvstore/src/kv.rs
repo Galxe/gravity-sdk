@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use api_types::compute_res::ComputeRes;
-use api_types::u256_define::TxnHash;
+use gaptos::api_types::compute_res::ComputeRes;
+use gaptos::api_types::u256_define::TxnHash;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Mutex;
-use api_types::{u256_define::BlockId, ExecError, ExecTxn, ExecutionChannel, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
+use gaptos::api_types::{u256_define::BlockId, ExecError, ExecTxn, ExecutionChannel, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 use crate::stateful_mempool::Mempool;
 use crate::txn::RawTxn;
 use async_trait::async_trait;

@@ -3,7 +3,7 @@ mod set_failpoints;
 mod tx;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
-use api_types::ExecutionChannel;
+use gaptos::api_types::ExecutionChannel;
 use gaptos::aptos_crypto::HashValue;
 use gaptos::aptos_logger::info;
 use axum::{
@@ -91,7 +91,7 @@ pub async fn https_server(args: HttpsServerArgs) {
 
 #[cfg(test)]
 mod test {
-    use api_types::mock_execution_layer::MockExecutionApi;
+    use gaptos::api_types::mock_execution_layer::MockExecutionApi;
     use fail::fail_point;
     use rcgen::generate_simple_self_signed;
     use reqwest::ClientBuilder;

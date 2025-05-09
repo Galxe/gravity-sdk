@@ -1,6 +1,6 @@
 use tokio::sync::mpsc::error::TryRecvError;
 use crate::txn::RawTxn;
-use api_types::{VerifiedTxn, VerifiedTxnWithAccountSeqNum};
+use gaptos::api_types::{VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
 
