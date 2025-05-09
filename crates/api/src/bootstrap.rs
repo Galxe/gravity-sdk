@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::network::{build_network_interfaces, consensus_network_configuration, extract_network_ids, mempool_network_configuration};
-use api_types::{u256_define::BlockId, ExecutionChannel};
+use gaptos::api_types::{u256_define::BlockId, ExecutionChannel};
 use block_buffer_manager::get_block_buffer_manager;
 use gaptos::aptos_config::{
     config::{NetworkConfig, NodeConfig, Peer, PeerRole},
@@ -32,7 +32,7 @@ use gaptos::aptos_types::account_address::AccountAddress;
 use gaptos::aptos_validator_transaction_pool::VTxnPoolState;
 use futures::channel::mpsc::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
-use tokio::runtime::Runtime;
+use tokio::{runtime::Runtime, sync::Mutex};
 
 const RECENT_BLOCKS_RANGE: u64 = 256;
 

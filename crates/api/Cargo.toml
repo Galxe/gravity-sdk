@@ -31,7 +31,7 @@ arc-swap = { workspace = true }
 byteorder = { workspace = true }
 rocksdb = { workspace = true }
 itertools = { workspace = true }
-api-types = { workspace = true }
+# api-types = { workspace = true }
 fail = { workspace = true }
 axum="0.7.9"
 axum-server = { version = "0.7", features = ["tls-rustls"] }

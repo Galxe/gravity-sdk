@@ -4,17 +4,17 @@ use alloy_eips::{eip4895::Withdrawals, BlockId, BlockNumberOrTag, Decodable2718,
 use alloy_primitives::{
     private::alloy_rlp::{Decodable, Encodable}, Address, FixedBytes, TxHash, B256
 };
-use api_types::u256_define::{BlockId as ExternalBlockId, TxnHash};
-use api_types::{
+use gaptos::api_types::u256_define::{BlockId as ExternalBlockId, TxnHash};
+use gaptos::api_types::{
     account::{ExternalAccountAddress, ExternalChainId},
     compute_res::ComputeRes,
 };
-use api_types::{
+use gaptos::api_types::{
     compute_res::TxnStatus,
     GLOBAL_CRYPTO_TXN_HASHER,
 };
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
-use api_types::{ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
+use gaptos::api_types::{ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
 use block_buffer_manager::get_block_buffer_manager;
 use rayon::iter::IntoParallelRefMutIterator;
 use core::panic;
@@ -185,7 +185,7 @@ impl RethCli {
 
     pub async fn send_committed_block_info(
         &self,
-        block_id: api_types::u256_define::BlockId,
+        block_id: gaptos::api_types::u256_define::BlockId,
         block_hash: Option<B256>,
     ) -> Result<(), String> {
         debug!("commit block {:?} with hash {:?}", block_id, block_hash);

@@ -5,9 +5,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::reth_cli::{convert_account, RethCli};
-use api_types::compute_res::{ComputeRes, TxnStatus};
-use api_types::u256_define::TxnHash;
-use api_types::{
+use gaptos::api_types::compute_res::{ComputeRes, TxnStatus};
+use gaptos::api_types::u256_define::TxnHash;
+use gaptos::api_types::{
     u256_define::BlockId, ExecError, ExecTxn, ExecutionChannel, ExternalBlock, ExternalBlockMeta,
     ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
 };

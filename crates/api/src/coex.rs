@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use api_types::{compute_res::ComputeRes, ConsensusApi, ExternalBlockMeta};
+use gaptos::api_types::{compute_res::ComputeRes, ConsensusApi, ExternalBlockMeta};
 use async_trait::async_trait;
 
-use api_types::ExternalBlock;
+use gaptos::api_types::ExternalBlock;
 use coex_bridge::{
     call::{self, AsyncCallImplTrait},
     get_coex_bridge, Func,

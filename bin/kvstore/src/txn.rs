@@ -1,8 +1,8 @@
-use api_types::{
+use gaptos::api_types::{
     account::{ExternalAccountAddress, ExternalChainId},
     u256_define::TxnHash,
 };
-use api_types::{simple_hash::hash_to_fixed_array, VerifiedTxn};
+use gaptos::api_types::{simple_hash::hash_to_fixed_array, VerifiedTxn};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -61,7 +61,7 @@ impl RawTxn {
 
 #[cfg(test)]
 mod test {
-    use api_types::account::ExternalAccountAddress;
+    use gaptos::api_types::account::ExternalAccountAddress;
 
     use crate::txn::RawTxn;
 

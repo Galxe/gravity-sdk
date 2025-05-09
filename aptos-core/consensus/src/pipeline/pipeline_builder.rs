@@ -12,7 +12,7 @@ use crate::{
 };
 use gaptos::aptos_consensus::counters as counters;
 use anyhow::anyhow;
-use api_types::{account::{ExternalAccountAddress, ExternalChainId}, u256_define::{BlockId, Random, TxnHash}, ExternalBlock, ExternalBlockMeta};
+use gaptos::api_types::{account::{ExternalAccountAddress, ExternalChainId}, u256_define::{BlockId, Random, TxnHash}, ExternalBlock, ExternalBlockMeta};
 use gaptos::aptos_consensus_notifications::ConsensusNotificationSender;
 use aptos_consensus_types::{
     block::Block,
@@ -443,7 +443,7 @@ impl PipelineBuilder {
         let real_txns = vtxns
             .into_iter()
             .map(|txn| {
-                api_types::VerifiedTxn::new(
+                gaptos::api_types::VerifiedTxn::new(
                     txn.bytes().to_vec(),
                     ExternalAccountAddress::new(txn.sender().into_bytes()),
                     txn.sequence_number(),
@@ -678,7 +678,7 @@ impl PipelineBuilder {
         if let Err(e) = monitor!(
             "notify_state_sync",
             state_sync_notifier
-                .notify_new_commit(commit_txns, subscribable_events)
+                .notify_new_commit(commit_txns, subscribable_events, block.block_number().unwrap_or_else(|| panic!("No block number")))
                 .await
         ) {
             error!(error = ?e, "Failed to notify state synchronizer");

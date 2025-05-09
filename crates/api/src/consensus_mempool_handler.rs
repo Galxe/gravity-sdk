@@ -1,11 +1,14 @@
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use futures::StreamExt;
 use gaptos::aptos_consensus_notifications::{
     ConsensusCommitNotification, ConsensusNotification, ConsensusNotificationListener,
 };
 use gaptos::aptos_mempool_notifications::MempoolNotificationSender;
 use gaptos::aptos_types::transaction::Transaction;
-use futures::StreamExt;
+use gaptos::aptos_event_notifications::{EventNotificationSender, EventSubscriptionService};
+use tokio::sync::Mutex;
 
 /// A simple handler for sending notifications to mempool
 #[derive(Clone)]
@@ -40,14 +43,20 @@ impl<M: MempoolNotificationSender> MempoolNotificationHandler<M> {
 pub struct ConsensusToMempoolHandler<M: MempoolNotificationSender> {
     mempool_notification_handler: MempoolNotificationHandler<M>,
     consensus_notification_listener: ConsensusNotificationListener,
+    event_subscription_service: Arc<Mutex<EventSubscriptionService>>,
 }
 
 impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
     pub fn new(
         mempool_notification_handler: MempoolNotificationHandler<M>,
         consensus_notification_listener: ConsensusNotificationListener,
+        event_subscription_service: Arc<Mutex<EventSubscriptionService>>,
     ) -> Self {
-        Self { mempool_notification_handler, consensus_notification_listener }
+        Self {
+            mempool_notification_handler,
+            consensus_notification_listener,
+            event_subscription_service,
+        }
     }
 
     /// Handles a commit notification sent by consensus
@@ -65,9 +74,13 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
                 SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
             )
             .await?;
+        let block_number = consensus_commit_notification.get_block_number();
+        let events = consensus_commit_notification.get_subscribable_events().clone();
+        let mut event_subscription_service = self.event_subscription_service.lock().await;
+        event_subscription_service.notify_events(block_number, events);
         self.consensus_notification_listener
-        .respond_to_commit_notification(consensus_commit_notification, Ok(()))
-        .map_err(|e| anyhow::anyhow!(e))
+            .respond_to_commit_notification(consensus_commit_notification, Ok(()))
+            .map_err(|e| anyhow::anyhow!(e))
     }
 
     async fn handle_consensus_notification(&mut self, notification: ConsensusNotification) {
@@ -81,7 +94,7 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
             }
             ConsensusNotification::SyncForDuration(consensus_sync_duration_notification) => todo!(),
         };
-        
+
         // Log any errors from notification handling
         if let Err(error) = result {
             // warn!(LogSchema::new(LogEntry::ConsensusNotification)

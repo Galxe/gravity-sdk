@@ -10,7 +10,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-api-types.workspace = true
+# api-types.workspace = true
 serde = { workspace = true }
 gaptos = { workspace = true }
 anyhow = { workspace = true }

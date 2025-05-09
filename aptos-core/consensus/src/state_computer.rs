@@ -19,9 +19,9 @@ use crate::{
     txn_notifier::TxnNotifier,
 };
 use anyhow::Result;
-use api_types::account::{ExternalAccountAddress, ExternalChainId};
-use api_types::u256_define::{BlockId, Random, TxnHash};
-use api_types::{ExternalBlock, ExternalBlockMeta};
+use gaptos::api_types::account::{ExternalAccountAddress, ExternalChainId};
+use gaptos::api_types::u256_define::{BlockId, Random, TxnHash};
+use gaptos::api_types::{ExternalBlock, ExternalBlockMeta};
 use aptos_consensus_types::common::RejectedTransactionSummary;
 use gaptos::aptos_consensus_notifications::ConsensusNotificationSender;
 use aptos_consensus_types::{
@@ -45,6 +45,7 @@ use block_buffer_manager::get_block_buffer_manager;
 use coex_bridge::{get_coex_bridge, Func};
 use fail::fail_point;
 use futures::{future::BoxFuture, SinkExt, StreamExt};
+use std::iter::once;
 use std::{boxed::Box, sync::Arc, time::Duration};
 use tokio::sync::Mutex as AsyncMutex;
 use gaptos::aptos_consensus::counters as counters;
@@ -56,6 +57,7 @@ type NotificationType = (
     Box<dyn FnOnce() + Send + Sync>,
     Vec<Transaction>,
     Vec<ContractEvent>, // Subscribable events, e.g. NewEpochEvent, DKGStartEvent
+    u64, // block number
 );
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
@@ -126,10 +128,10 @@ impl ExecutionProxy {
             gaptos::aptos_channels::new::<NotificationType>(10, &counters::PENDING_STATE_SYNC_NOTIFICATION);
         let notifier = state_sync_notifier.clone();
         handle.spawn(async move {
-            while let Some((callback, txns, subscribable_events)) = rx.next().await {
+            while let Some((callback, txns, subscribable_events, block_number)) = rx.next().await {
                 if let Err(e) = monitor!(
                     "notify_state_sync",
-                    notifier.notify_new_commit(txns, subscribable_events).await
+                    notifier.notify_new_commit(txns, subscribable_events, block_number).await
                 ) {
                     error!(error = ?e, "Failed to notify state synchronizer");
                 }
@@ -177,9 +179,12 @@ impl ExecutionProxy {
         // TODO(gravity_byteyue): We manually skipped the validator txns and metadata here.
         // we might need to re-add them back
         // Adds StateCheckpoint/BlockEpilogue transaction if needed.
-        executed_block
-            .compute_result()
-            .transactions_to_commit(user_txns.into_iter().map(Transaction::UserTransaction).collect())
+        once(Transaction::from(metadata))
+            .chain(user_txns.into_iter().map(Transaction::UserTransaction))
+            .collect()
+        // executed_block
+        //     .compute_result()
+        //     .transactions_to_commit(user_txns.into_iter().map(Transaction::UserTransaction).collect())
         // input_txns
     }
 
@@ -237,10 +242,10 @@ impl StateComputer for ExecutionProxy {
         // We would export the empty block detail to the outside GCEI caller
         let vtxns =
             txns.iter().map(|txn| Into::<VerifiedTxn>::into(&txn.clone())).collect::<Vec<_>>();
-        let real_txns: Vec<api_types::VerifiedTxn> = vtxns
+        let real_txns: Vec<gaptos::api_types::VerifiedTxn> = vtxns
             .into_iter()
             .map(|txn| {
-                api_types::VerifiedTxn::new(
+                gaptos::api_types::VerifiedTxn::new(
                     txn.bytes().to_vec(),
                     ExternalAccountAddress::new(txn.sender().into_bytes()),
                     txn.sequence_number(),
@@ -359,13 +364,14 @@ impl StateComputer for ExecutionProxy {
         .expect("spawn_blocking failed");
 
         let blocks = blocks.to_vec();
+        let block_number = blocks.last().unwrap().block().block_number().unwrap_or_else(|| panic!("No block number"));
         let wrapped_callback = move || {
             payload_manager.notify_commit(block_timestamp, payloads);
             callback(&blocks, finality_proof);
         };
         self.async_state_sync_notifier
             .clone()
-            .send((Box::new(wrapped_callback), txns, subscribable_txn_events))
+            .send((Box::new(wrapped_callback), txns, subscribable_txn_events, block_number))
             .await
             .expect("Failed to send async state sync notification");
         // tokio::time::sleep(Duration::from_millis(1)).await;
@@ -546,6 +552,7 @@ async fn test_commit_sync_race() {
             &self,
             _transactions: Vec<Transaction>,
             _subscribable_events: Vec<ContractEvent>,
+            _block_number: u64,
         ) -> std::result::Result<(), Error> {
             Ok(())
         }
