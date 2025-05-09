@@ -10,6 +10,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+gaptos.workspace = true
 api.workspace = true
 # api-types.workspace = true
 tokio.workspace = true

@@ -1,28 +1,27 @@
-use gaptos::api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
-use gaptos::api_types::{default_recover::DefaultRecovery, ConsensusApi, ExecutionChannel, ExecutionLayer};
+use api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
 use clap::Parser;
 use cli::Cli;
 use execution_channel::ExecutionChannelImpl;
 use flexi_logger::{detailed_format, FileSpec, Logger, WriteMode};
+use gaptos::api_types::{ExecutionChannel, ExecutionLayer};
 use gravity_sdk_kvstore::*;
 use secp256k1::SecretKey;
 use server::ServerApp;
 use std::{error::Error, sync::Arc, thread};
 
 struct TestConsensusLayer {
-    consensus_engine: Arc<dyn ConsensusApi>,
+    node_config: NodeConfig,
+    execution_layer: ExecutionLayer,
 }
 
 impl TestConsensusLayer {
     fn new(node_config: NodeConfig, execution_client: Arc<dyn ExecutionChannel>) -> Self {
-        let execution_layer = ExecutionLayer {
-            execution_api: execution_client,
-            recovery_api: Arc::new(DefaultRecovery {}),
-        };
-        Self { consensus_engine: ConsensusEngine::init(node_config, execution_layer, 1337) }
+        Self { node_config, execution_layer: ExecutionLayer { execution_api: execution_client } }
     }
 
     async fn run(self) {
+        let _consensus_engine =
+            ConsensusEngine::init(self.node_config, self.execution_layer, 1337, 0).await;
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         }
