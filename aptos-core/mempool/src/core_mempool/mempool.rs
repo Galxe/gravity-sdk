@@ -16,7 +16,7 @@ use crate::{
         MempoolSenderBucket, MultiBucketTimelineIndexIds, TimelineIndexIdentifier,
     },
 };
-use api_types::VerifiedTxnWithAccountSeqNum;
+use gaptos::api_types::VerifiedTxnWithAccountSeqNum;
 use gaptos::aptos_config::config::NodeConfig;
 use aptos_consensus_types::common::{TransactionInProgress, TransactionSummary};
 use gaptos::aptos_crypto::HashValue;

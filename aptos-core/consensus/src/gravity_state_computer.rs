@@ -5,7 +5,7 @@
 use crate::consensusdb::ConsensusDB;
 use crate::payload_client::user::quorum_store_client::QuorumStoreClient;
 use anyhow::Result;
-use api_types::u256_define::BlockId;
+use gaptos::api_types::u256_define::BlockId;
 use aptos_executor::block_executor::BlockExecutor;
 use aptos_executor_types::{BlockExecutorTrait, ExecutorResult, StateComputeResult};
 use block_buffer_manager::block_buffer_manager::BlockHashRef;

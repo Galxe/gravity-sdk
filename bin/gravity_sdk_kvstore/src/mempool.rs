@@ -1,6 +1,6 @@
-use api_types::u256_define::TxnHash;
-use api_types::VerifiedTxn;
-use api_types::{account::ExternalAccountAddress, VerifiedTxnWithAccountSeqNum};
+use gaptos::api_types::u256_define::TxnHash;
+use gaptos::api_types::VerifiedTxn;
+use gaptos::api_types::{account::ExternalAccountAddress, VerifiedTxnWithAccountSeqNum};
 use log::warn;
 use std::collections::{BTreeMap, HashMap};
 use tokio::sync::mpsc::error::TryRecvError;

@@ -1,5 +1,5 @@
 use super::*;
-use api_types::compute_res::ComputeRes;
+use gaptos::api_types::compute_res::ComputeRes;
 use futures::channel::oneshot::{channel, Sender};
 use futures::channel::{mpsc, oneshot};
 use futures::future::BoxFuture;

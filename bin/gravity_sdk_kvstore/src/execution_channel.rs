@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use api_types::{
+use gaptos::api_types::{
     compute_res::ComputeRes,
     u256_define::{BlockId, TxnHash},
     ExecError, ExecTxn, ExecutionChannel, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr,

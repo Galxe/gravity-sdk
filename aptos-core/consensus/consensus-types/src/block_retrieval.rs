@@ -4,7 +4,7 @@
 
 use crate::block::Block;
 use anyhow::ensure;
-use api_types::ExecutionBlocks;
+use gaptos::api_types::ExecutionBlocks;
 use gaptos::aptos_crypto::hash::{HashValue, GENESIS_BLOCK_ID};
 use gaptos::aptos_short_hex_str::AsShortHexStr;
 use gaptos::aptos_types::{ledger_info::LedgerInfoWithSignatures, validator_verifier::ValidatorVerifier};

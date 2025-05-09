@@ -6,7 +6,7 @@ use std::{
 };
 
 use super::mempool::{Mempool, TxnId};
-use api_types::{
+use gaptos::api_types::{
     account::ExternalAccountAddress, u256_define::BlockId, ExternalBlock, ExternalBlockMeta,
     ExternalPayloadAttr, VerifiedTxn,
 };

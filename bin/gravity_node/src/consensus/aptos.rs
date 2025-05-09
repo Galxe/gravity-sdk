@@ -1,6 +1,6 @@
 use api::{consensus_api::ConsensusEngine, NodeConfig};
-use api_types::compute_res::ComputeRes;
-use api_types::{ConsensusApi, ExecutionChannel, ExecutionLayer};
+use gaptos::api_types::compute_res::ComputeRes;
+use gaptos::api_types::{ConsensusApi, ExecutionChannel, ExecutionLayer};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
