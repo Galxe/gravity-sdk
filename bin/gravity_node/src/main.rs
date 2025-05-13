@@ -210,17 +210,8 @@ fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
                             format!("{:02}-{:02}-{:02}-{:02}", 
                                 time.day(), time.hour(), time.minute(), time.second())
                         };
-                        let flamegraph_path = format!("profile_{}_flame_{}.svg", count, formatted_time);
-                        if let Ok(file) = File::create(&flamegraph_path) {
-                            if let Err(e) = report.flamegraph(file) {
-                                eprintln!("Failed to write flamegraph: {}", e);
-                            } else {
-                                println!("Wrote flamegraph to {}", flamegraph_path);
-                            }
-                        }
-                        
 
-                        let proto_path = format!("profile_{}_proto_{:?}.pb", count, timestamp);
+                        let proto_path = format!("profile_{}_proto_{:?}.pb", count, formatted_time);
                         if let Ok(mut file) = File::create(&proto_path) {
                             if let Ok(profile) = report.pprof() {
                                 let mut content = Vec::new();
@@ -245,7 +236,7 @@ fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
 
 
 fn main() {
-    let _profiling_state = if std::env::var("ENABLE_PPROF").is_ok() {
+    let _profiling_state: Option<Arc<Mutex<ProfilingState>>> = if std::env::var("ENABLE_PPROF").is_ok() {
         Some(setup_pprof_profiler())
     } else {
         None

@@ -88,7 +88,7 @@ async fn retrieve_from_execution_routine(
 ) {
     info!("start retrieve_from_execution_routine");
     loop {
-        match get_block_buffer_manager().pop_txns(usize::MAX).await {
+        match get_block_buffer_manager().pop_txns(10000).await {
             Ok(txns) => {
                 let mut lock_mempool = mempool.lock();
                 let start_time = Instant::now();
@@ -99,7 +99,7 @@ async fn retrieve_from_execution_routine(
                         panic!("invalid seq number {:?}", s);
                     }
                 }
-                info!("the recv_pending_txns size is {:?} take {:?} ms", txns_len, start_time.elapsed().as_millis());
+                info!("the recv_pending_txns size is {:?} take {:?} ms with size {:?} txns", txns_len, start_time.elapsed().as_millis(), lock_mempool.txn_size());
             }
             Err(e) => {
                 warn!("Error when recv peding txns {:?}", e);

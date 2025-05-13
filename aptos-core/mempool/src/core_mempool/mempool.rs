@@ -497,7 +497,6 @@ impl Mempool {
         let start_time = Instant::now();
         let exclude_size = exclude_transactions.len();
         let mut inserted = HashSet::new();
-
         let gas_end_time = start_time.elapsed();
 
         let mut result = vec![];
@@ -675,6 +674,10 @@ impl Mempool {
     #[cfg(test)]
     pub fn get_transaction_store(&self) -> &TransactionStore {
         &self.transactions
+    }
+
+    pub fn txn_size(&self) -> usize {
+        self.transactions.txn_size()
     }
 
     pub fn gen_snapshot(&self) -> Vec<SignedTransaction> {
