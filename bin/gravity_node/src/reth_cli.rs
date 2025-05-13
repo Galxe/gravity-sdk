@@ -1,8 +1,7 @@
 use crate::ConsensusArgs;
 use alloy_eips::{eip4895::Withdrawals, BlockId, BlockNumberOrTag, Decodable2718, Encodable2718};
 use alloy_primitives::{
-    private::alloy_rlp::{Decodable, Encodable},
-    Address, TxHash, B256,
+    private::alloy_rlp::{Decodable, Encodable}, Address, FixedBytes, TxHash, B256
 };
 use api_types::u256_define::{BlockId as ExternalBlockId, TxnHash};
 use api_types::{
@@ -36,7 +35,7 @@ use greth::{
 use greth::{
     reth::rpc::builder::auth::AuthServerHandle, reth_node_core::primitives::SignedTransaction,
 };
-use std::{collections::HashMap, sync::Arc, time::Instant};
+use std::{collections::{HashMap, HashSet}, sync::Arc, time::Instant};
 use tokio::sync::Mutex;
 use tracing::*;
 
@@ -63,8 +62,10 @@ pub struct RethCli {
         greth::reth_transaction_pool::blobstore::DiskFileBlobStore,
     >,
     txn_cache: Mutex<HashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>>,
+    max_nonce_cache: Mutex<HashMap<Address, u64>>,
     txn_batch_size: usize,
     txn_check_interval: tokio::time::Duration,
+    address_init_nonce_cache: Mutex<HashMap<Address, u64>>,
 }
 
 pub fn convert_account(acc: Address) -> ExternalAccountAddress {
@@ -95,6 +96,8 @@ impl RethCli {
             txn_cache: Mutex::new(HashMap::new()),
             txn_batch_size: 2000,
             txn_check_interval: std::time::Duration::from_millis(50),
+            max_nonce_cache: Mutex::new(HashMap::new()),
+            address_init_nonce_cache: Mutex::new(HashMap::new()),
         }
     }
 
@@ -195,79 +198,124 @@ impl RethCli {
     pub async fn start_mempool(&self) -> Result<(), String> {
         info!("start process pending transactions with timeout");
         let mut mut_txn_listener = self.txn_listener.lock().await;
-
+    
         let batch_size: usize = self.txn_batch_size;
         let timeout_duration = self.txn_check_interval;
-        let mut buffer = Vec::with_capacity(batch_size);
-
+        let mut tx_hash_vec = Vec::with_capacity(batch_size);
+    
         let sleep = tokio::time::sleep(timeout_duration);
         tokio::pin!(sleep);
-
+    
         loop {
             tokio::select! {
                 biased;
-                maybe_txn_hash = mut_txn_listener.recv() => {
-                    match maybe_txn_hash {
-                        Some(txn_hash) => {
-                            let pool_txn = match self.pool.get(&txn_hash) {
-                                Some(txn) => txn,
-                                None => {
-                                    log::warn!("Transaction hash {:?} received but not found in pool, skipping.", txn_hash);
-                                    continue;
-                                }
-                            };
-                            let sender = pool_txn.sender();
-                            let nonce = pool_txn.nonce();
-                            let txn = pool_txn.transaction.transaction().tx();
-                            let account_nonce = self.provider.basic_account(&sender)
-                                .map_err(|e| format!("Failed to get basic account for {}: {:?}", sender, e))?
-                                .map(|x| x.nonce)
-                                .unwrap_or(nonce);
-
-                            let bytes = txn.encoded_2718();
-
-                            let vtxn = VerifiedTxnWithAccountSeqNum {
-                                txn: VerifiedTxn {
-                                    bytes,
-                                    sender: convert_account(sender),
-                                    sequence_number: nonce,
-                                    chain_id: ExternalChainId::new(0),
-                                    committed_hash: TxnHash::from_bytes(txn.hash().as_slice()).into(),
-                                },
-                                account_seq_num: account_nonce,
-                            };
-                            {
-
-                                self.txn_cache.lock().await
-                                    .insert((vtxn.txn.sender().clone(), vtxn.txn.seq_number()), pool_txn.clone());
-                            }
-                            buffer.push(vtxn);
-
-                            if buffer.len() >= batch_size {
-                                debug!("Buffer full ({} items), pushing transactions.", buffer.len());
-                                get_block_buffer_manager().push_txns(&mut buffer).await;
-                                buffer.clear();
-                                sleep.as_mut().reset(tokio::time::Instant::now() + timeout_duration);
-                            } else {
-                                sleep.as_mut().reset(tokio::time::Instant::now() + timeout_duration);
-                            }
-                        }
-                        None => {
-                            panic!("Transaction listener channel closed.");
-                        }
+                _size = mut_txn_listener.recv_many(&mut tx_hash_vec, batch_size * 100) => {
+                    if tx_hash_vec.len() >= batch_size {
+                        debug!("Hash buffer full ({} hashes), pushing transactions.", tx_hash_vec.len());
+                        self.process_transaction_hashes(&mut tx_hash_vec).await?;
+                        tx_hash_vec.clear();
+                        sleep.as_mut().reset(tokio::time::Instant::now() + timeout_duration);
                     }
                 }
-
                 _ = &mut sleep => {
-                    if !buffer.is_empty() {
-                        debug!("Timeout reached, pushing {} buffered transactions.", buffer.len());
-                        get_block_buffer_manager().push_txns(&mut buffer).await;
-                        buffer.clear();
+                    if !tx_hash_vec.is_empty() {
+                        debug!("Timeout reached, processing {} buffered transaction hashes.", tx_hash_vec.len());
+                        self.process_transaction_hashes(&mut tx_hash_vec).await?;
+                        tx_hash_vec.clear();
                     }
                     sleep.as_mut().reset(tokio::time::Instant::now() + timeout_duration);
                 }
             }
         }
+    }
+    
+
+    async fn process_transaction_hashes(&self, tx_hash_vec: &mut Vec<TxHash>) -> Result<(), String> {
+        let mut max_nonce_cache = self.max_nonce_cache.lock().await;
+        let mut buffer = Vec::with_capacity(tx_hash_vec.len());
+        let mut pool_txns = self.pool.get_all(tx_hash_vec.drain(..).collect());
+        let mut tx_gap = HashSet::new();
+        pool_txns = pool_txns.into_iter().filter(|txn| {
+            let sender = txn.sender();
+            let nonce = txn.nonce();
+            if let Some(max_nonce) = max_nonce_cache.get_mut(&sender) {
+                if nonce <= *max_nonce {
+                    return false;
+                }
+            }
+            true
+        }).collect();
+        pool_txns.iter().for_each(|txn| {
+            let sender = txn.sender();
+            let nonce = txn.nonce();
+            if let Some(max_nonce) = max_nonce_cache.get_mut(&sender) {
+                if nonce != *max_nonce + 1 {
+                    for i in *max_nonce + 1..nonce {
+                        tx_gap.insert((sender.clone(), i));
+                    }
+                }
+                if nonce > *max_nonce {
+                    *max_nonce = nonce;
+                }
+                if tx_gap.contains(&(sender.clone(), nonce)) {
+                    tx_gap.remove(&(sender.clone(), nonce));
+                }
+            } else {
+                max_nonce_cache.insert(sender, nonce);
+            }
+        });
+        tx_gap.iter().for_each(|(sender, nonce)| {
+            let txn = self.pool.get_pending_transactions_by_sender(sender.clone())
+                .iter()
+                .find(|txn| txn.nonce() == *nonce)
+                .map(|txn| txn.clone());
+            info!("filter sender {:?} nonce {:?} is_some {:?}", sender, nonce, txn.is_some());
+            if let Some(txn) = txn {
+                pool_txns.push(txn);
+            }
+        });
+        
+        for pool_txn in pool_txns {
+            let sender = pool_txn.sender();
+            let nonce = pool_txn.nonce();
+            let txn = pool_txn.transaction.transaction().tx();
+            let account_nonce = {
+                let mut init_nonce_cache = self.address_init_nonce_cache.lock().await;
+                if !init_nonce_cache.contains_key(&sender) {
+                    let account_nonce = self.provider.basic_account(&sender)
+                        .map_err(|e| format!("Failed to get basic account for {}: {:?}", sender, e))?
+                        .map(|x| x.nonce)
+                        .unwrap_or(nonce);
+                    init_nonce_cache.insert(sender, account_nonce);
+                }
+                *init_nonce_cache.get(&sender).unwrap()
+            };
+
+            debug!("recv sender {:?} nonce {:?}, account nonce {:?} hash {:?}", sender, nonce, account_nonce, txn.hash());
+            let bytes = txn.encoded_2718();
+    
+            let vtxn = VerifiedTxnWithAccountSeqNum {
+                txn: VerifiedTxn {
+                    bytes,
+                    sender: convert_account(sender),
+                    sequence_number: nonce,
+                    chain_id: ExternalChainId::new(0),
+                    committed_hash: TxnHash::from_bytes(txn.hash().as_slice()).into(),
+                },
+                account_seq_num: account_nonce,
+            };
+            
+            {
+                self.txn_cache.lock().await
+                    .insert((vtxn.txn.sender().clone(), vtxn.txn.seq_number()), pool_txn.clone());
+            }
+            buffer.push(vtxn);
+        }
+        
+        if !buffer.is_empty() {
+            get_block_buffer_manager().push_txns(buffer).await;
+        }
+        
         Ok(())
     }
 
