@@ -40,7 +40,7 @@ inspection_service:
   address: 0.0.0.0
 
 mempool:
-  capacity_per_user: 100000
+  capacity_per_user: 20000
 
 # https_server_address: "127.0.0.1:1998"
 # https_cert_pem_path: "/absolute_path/cert.pem"
