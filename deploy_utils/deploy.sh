@@ -11,6 +11,7 @@ declare -A VALID_VERSIONS=(
     ["release"]="Release Version"
     ["debug"]="Debug Version"
     ["quick-release"]="Quick Relase Version"
+    ["pprof"]="PProf Version"
 )
 
 declare -A VALID_MODES=(
