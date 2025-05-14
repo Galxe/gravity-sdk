@@ -40,4 +40,4 @@ inspection_service:
   address: 0.0.0.0
 
 mempool:
-  capacity_per_user: 2000
+  capacity_per_user: 20000
