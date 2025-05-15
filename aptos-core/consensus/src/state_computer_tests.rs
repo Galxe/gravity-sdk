@@ -23,6 +23,7 @@ use gaptos::aptos_types::{
     validator_txn::ValidatorTransaction,
 };
 use std::sync::{atomic::AtomicU64, Arc};
+use std::time::Duration;
 use tokio::runtime::Handle;
 
 struct DummyStateSyncNotifier {
@@ -52,6 +53,13 @@ impl ConsensusNotificationSender for DummyStateSyncNotifier {
 
     async fn sync_to_target(&self, _target: LedgerInfoWithSignatures) -> Result<(), Error> {
         unreachable!()
+    }
+
+    async fn sync_for_duration(
+        &self,
+        _duration: Duration,
+    ) -> Result<LedgerInfoWithSignatures, Error> {
+        todo!()
     }
 }
 

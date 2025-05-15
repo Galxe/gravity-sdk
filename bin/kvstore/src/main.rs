@@ -7,7 +7,7 @@ mod txn;
 use std::{sync::Arc, thread};
 
 use api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
-use api_types::{default_recover::DefaultRecovery, ConsensusApi, ExecutionChannel, ExecutionLayer};
+use api_types::{ConsensusApi, ExecutionChannel, ExecutionLayer};
 use clap::Parser;
 use cli::Cli;
 use server::Server;
@@ -21,15 +21,15 @@ impl TestConsensusLayer {
     fn new(node_config: NodeConfig, execution_client: Arc<dyn ExecutionChannel>) -> Self {
         let execution_layer = ExecutionLayer {
             execution_api: execution_client,
-            recovery_api: Arc::new(DefaultRecovery{}),
         };
-        Self {
-            consensus_engine: ConsensusEngine::init(
-                node_config,
-                execution_layer,
-                1337,
-            ),
-        }
+        todo!()
+        // Self {
+        //     consensus_engine: ConsensusEngine::init(
+        //         node_config,
+        //         execution_layer,
+        //         1337,
+        //     ),
+        // }
     }
 
     async fn run(self) {

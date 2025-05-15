@@ -562,6 +562,13 @@ async fn test_commit_sync_race() {
             *self.time.lock() = logical_time;
             Ok(())
         }
+
+        async fn sync_for_duration(
+            &self,
+            _duration: Duration,
+        ) -> Result<LedgerInfoWithSignatures, Error> {
+            todo!()
+        }
     }
 
     let callback = Box::new(move |_a: &[Arc<PipelinedBlock>], _b: LedgerInfoWithSignatures| {});
