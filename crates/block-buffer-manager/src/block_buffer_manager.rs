@@ -185,9 +185,12 @@ impl BlockBufferManager {
         let mut count = 0;
         let split_point = txn_buffer.iter()
             .position(|item| {
+                if total_gas_limit + item.gas_limit > gas_limit || count >= max_size {
+                    return true;
+                }
                 total_gas_limit += item.gas_limit;
                 count += 1;
-                total_gas_limit <= gas_limit && count <= max_size
+                false
             })
             .unwrap_or(txn_buffer.len());
 
