@@ -7,7 +7,6 @@ mod txn;
 use std::{sync::Arc, thread};
 
 use api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
-use api_types::{ConsensusApi, ExecutionChannel, ExecutionLayer};
 use clap::Parser;
 use cli::Cli;
 use flexi_logger::{FileSpec, Logger, WriteMode};

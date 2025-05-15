@@ -47,6 +47,7 @@ tikv-jemalloc-ctl.workspace = true
 tikv-jemalloc-sys.workspace = true
 once_cell = { workspace = true }
 block-buffer-manager = { workspace = true }
+bytes = { workspace = true }
 
 [features]
 default = []

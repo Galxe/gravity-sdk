@@ -91,6 +91,8 @@ impl ConsensusEngine {
             gaptos::aptos_event_notifications::EventSubscriptionService::new(Arc::new(
                 gaptos::aptos_infallible::RwLock::new(db.clone()),
             ));
+        // 将config_storage给塞到event_subscription_service里面
+        // event_subscription_service.set_config_storage(gravity_storage);
         let network_configs = extract_network_configs(&node_config);
 
         let network_config = network_configs.get(0).unwrap();

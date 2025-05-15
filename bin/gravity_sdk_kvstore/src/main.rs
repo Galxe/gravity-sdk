@@ -1,5 +1,4 @@
 use api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
-use api_types::{ConsensusApi, ExecutionChannel, ExecutionLayer};
 use clap::Parser;
 use cli::Cli;
 use execution_channel::ExecutionChannelImpl;

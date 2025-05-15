@@ -159,7 +159,7 @@ impl DbReader for MockStorage {
                                     main.proposer_election_type = ProposerElectionType::FixedProposer(1);
                                     *quorum_store_enabled = false;
                                 }
-                                ConsensusAlgorithmConfig::DAG(_) => {}
+                                // ConsensusAlgorithmConfig::DAG(_) => {}
                                 ConsensusAlgorithmConfig::JolteonV2 {
                                     main,
                                     quorum_store_enabled,

@@ -139,7 +139,7 @@ impl DbReader for ConsensusDB {
                                     };
                                     *quorum_store_enabled = enable_quorum_store();
                                 }
-                                ConsensusAlgorithmConfig::DAG(_) => {}
+                                // ConsensusAlgorithmConfig::DAG(_) => {}
                                 ConsensusAlgorithmConfig::JolteonV2 {
                                     main,
                                     quorum_store_enabled,
