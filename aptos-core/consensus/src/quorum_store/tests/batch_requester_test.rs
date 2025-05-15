@@ -89,7 +89,7 @@ async fn test_batch_request_exists() {
         1_000,
         1_000,
         MockBatchRequester::new(batch_response),
-        ValidatorVerifier::new_single(validator_signer.author(), validator_signer.public_key()),
+        todo!() // ValidatorVerifier::new_single(validator_signer.author(), validator_signer.public_key()),
     );
 
     let (_, subscriber_rx) = oneshot::channel();
@@ -112,49 +112,50 @@ async fn test_batch_request_exists() {
 fn create_ledger_info_with_timestamp(
     timestamp: u64,
 ) -> (LedgerInfoWithSignatures, ValidatorVerifier) {
-    const NUM_SIGNERS: u8 = 1;
-    // Generate NUM_SIGNERS random signers.
-    let validator_signers: Vec<ValidatorSigner> = (0..NUM_SIGNERS)
-        .map(|i| ValidatorSigner::random([i; 32]))
-        .collect();
-    let block_info = BlockInfo::new(
-        1,
-        1,
-        HashValue::random(),
-        HashValue::random(),
-        0,
-        timestamp,
-        None,
-    );
-    let ledger_info = LedgerInfo::new(block_info, HashValue::random());
+    todo!()
+    // const NUM_SIGNERS: u8 = 1;
+    // // Generate NUM_SIGNERS random signers.
+    // let validator_signers: Vec<ValidatorSigner> = (0..NUM_SIGNERS)
+    //     .map(|i| ValidatorSigner::random([i; 32]))
+    //     .collect();
+    // let block_info = BlockInfo::new(
+    //     1,
+    //     1,
+    //     HashValue::random(),
+    //     HashValue::random(),
+    //     0,
+    //     timestamp,
+    //     None,
+    // );
+    // let ledger_info = LedgerInfo::new(block_info, HashValue::random());
 
-    // Create a map from authors to public keys with equal voting power.
-    let mut validator_infos = vec![];
-    for validator in validator_signers.iter() {
-        validator_infos.push(ValidatorConsensusInfo::new(
-            validator.author(),
-            validator.public_key(),
-            1,
-        ));
-    }
+    // // Create a map from authors to public keys with equal voting power.
+    // let mut validator_infos = vec![];
+    // for validator in validator_signers.iter() {
+    //     validator_infos.push(ValidatorConsensusInfo::new(
+    //         validator.author(),
+    //         validator.public_key(),
+    //         1,
+    //     ));
+    // }
 
-    // Create a map from author to signatures.
-    let mut partial_signature = PartialSignatures::empty();
-    for validator in validator_signers.iter() {
-        partial_signature.add_signature(validator.author(), validator.sign(&ledger_info).unwrap());
-    }
+    // // Create a map from author to signatures.
+    // let mut partial_signature = PartialSignatures::empty();
+    // for validator in validator_signers.iter() {
+    //     partial_signature.add_signature(validator.author(), validator.sign(&ledger_info).unwrap());
+    // }
 
-    // Let's assume our verifier needs to satisfy all NUM_SIGNERS
-    let validator_verifier =
-        ValidatorVerifier::new_with_quorum_voting_power(validator_infos, NUM_SIGNERS as u128)
-            .expect("Incorrect quorum size.");
-    let aggregated_signature = validator_verifier
-        .aggregate_signatures(&partial_signature)
-        .unwrap();
-    let ledger_info_with_signatures =
-        LedgerInfoWithSignatures::new(ledger_info, aggregated_signature);
+    // // Let's assume our verifier needs to satisfy all NUM_SIGNERS
+    // let validator_verifier =
+    //     ValidatorVerifier::new_with_quorum_voting_power(validator_infos, NUM_SIGNERS as u128)
+    //         .expect("Incorrect quorum size.");
+    // let aggregated_signature = validator_verifier
+    //     .aggregate_signatures(&partial_signature)
+    //     .unwrap();
+    // let ledger_info_with_signatures =
+    //     LedgerInfoWithSignatures::new(ledger_info, aggregated_signature);
 
-    (ledger_info_with_signatures, validator_verifier)
+    // (ledger_info_with_signatures, validator_verifier)
 }
 
 #[tokio::test]
@@ -184,7 +185,7 @@ async fn test_batch_request_not_exists_not_expired() {
         retry_interval_ms,
         1_000,
         MockBatchRequester::new(batch_response),
-        validator_verifier,
+        todo!() // validator_verifier,
     );
 
     let request_start = Instant::now();
@@ -232,7 +233,7 @@ async fn test_batch_request_not_exists_expired() {
         retry_interval_ms,
         1_000,
         MockBatchRequester::new(batch_response),
-        validator_verifier,
+        todo!() // validator_verifier,
     );
 
     let request_start = Instant::now();

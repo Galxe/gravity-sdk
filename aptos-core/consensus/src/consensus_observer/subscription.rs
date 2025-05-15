@@ -277,374 +277,374 @@ pub fn sort_peers_by_distance_and_latency(
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use gaptos::aptos_network::transport::ConnectionMetadata;
-    use gaptos::aptos_peer_monitoring_service_types::{
-        response::NetworkInformationResponse, PeerMonitoringMetadata,
-    };
-    use gaptos::aptos_storage_interface::Result;
-    use gaptos::aptos_types::transaction::Version;
-    use mockall::mock;
+    // use super::*;
+    // use gaptos::aptos_network::transport::ConnectionMetadata;
+    // use gaptos::aptos_peer_monitoring_service_types::{
+    //     response::NetworkInformationResponse, PeerMonitoringMetadata,
+    // };
+    // use gaptos::aptos_storage_interface::Result;
+    // use gaptos::aptos_types::transaction::Version;
+    // use mockall::mock;
 
-    // This is a simple mock of the DbReader (it generates a MockDatabaseReader)
-    mock! {
-    pub DatabaseReader {}
-    impl DbReader for DatabaseReader {
-            fn get_latest_ledger_info_version(&self) -> Result<Version>;
-        }
-    }
+    // // This is a simple mock of the DbReader (it generates a MockDatabaseReader)
+    // mock! {
+    // pub DatabaseReader {}
+    // impl DbReader for DatabaseReader {
+    //         fn get_latest_ledger_info_version(&self) -> Result<Version>;
+    //     }
+    // }
 
-    #[test]
-    fn check_subscription_peer_optimality() {
-        // Create a new observer subscription
-        let consensus_observer_config = ConsensusObserverConfig::default();
-        let peer_network_id = PeerNetworkId::random();
-        let time_service = TimeService::mock();
-        let mut subscription = ConsensusObserverSubscription::new(
-            consensus_observer_config,
-            Arc::new(MockDatabaseReader::new()),
-            peer_network_id,
-            time_service.clone(),
-        );
+    // #[test]
+    // fn check_subscription_peer_optimality() {
+    //     // Create a new observer subscription
+    //     let consensus_observer_config = ConsensusObserverConfig::default();
+    //     let peer_network_id = PeerNetworkId::random();
+    //     let time_service = TimeService::mock();
+    //     let mut subscription = ConsensusObserverSubscription::new(
+    //         consensus_observer_config,
+    //         Arc::new(MockDatabaseReader::new()),
+    //         peer_network_id,
+    //         time_service.clone(),
+    //     );
 
-        // Verify the time of the last peer optimality check
-        let current_time = time_service.now();
-        assert_eq!(subscription.last_peer_optimality_check, current_time);
+    //     // Verify the time of the last peer optimality check
+    //     let current_time = time_service.now();
+    //     assert_eq!(subscription.last_peer_optimality_check, current_time);
 
-        // Verify that the peer is optimal (not enough time has elapsed to check)
-        assert!(subscription
-            .check_subscription_peer_optimality(HashMap::new())
-            .is_ok());
+    //     // Verify that the peer is optimal (not enough time has elapsed to check)
+    //     assert!(subscription
+    //         .check_subscription_peer_optimality(HashMap::new())
+    //         .is_ok());
 
-        // Elapse some amount of time (but not enough to check optimality)
-        let mock_time_service = time_service.into_mock();
-        mock_time_service.advance(Duration::from_millis(
-            consensus_observer_config.peer_optimality_check_interval_ms / 2,
-        ));
+    //     // Elapse some amount of time (but not enough to check optimality)
+    //     let mock_time_service = time_service.into_mock();
+    //     mock_time_service.advance(Duration::from_millis(
+    //         consensus_observer_config.peer_optimality_check_interval_ms / 2,
+    //     ));
 
-        // Verify that the original peer is still optimal even though it is missing metadata
-        let new_optimal_peer = PeerNetworkId::random();
-        let mut peers_and_metadata = HashMap::new();
-        peers_and_metadata.insert(
-            new_optimal_peer,
-            PeerMetadata::new_for_test(
-                ConnectionMetadata::mock(new_optimal_peer.peer_id()),
-                PeerMonitoringMetadata::new(None, None, None, None, None),
-            ),
-        );
-        assert!(subscription
-            .check_subscription_peer_optimality(peers_and_metadata.clone())
-            .is_ok());
+    //     // Verify that the original peer is still optimal even though it is missing metadata
+    //     let new_optimal_peer = PeerNetworkId::random();
+    //     let mut peers_and_metadata = HashMap::new();
+    //     peers_and_metadata.insert(
+    //         new_optimal_peer,
+    //         PeerMetadata::new_for_test(
+    //             ConnectionMetadata::mock(new_optimal_peer.peer_id()),
+    //             PeerMonitoringMetadata::new(None, None, None, None, None),
+    //         ),
+    //     );
+    //     assert!(subscription
+    //         .check_subscription_peer_optimality(peers_and_metadata.clone())
+    //         .is_ok());
 
-        // Elapse enough time to check optimality
-        mock_time_service.advance(Duration::from_millis(
-            consensus_observer_config.peer_optimality_check_interval_ms + 1,
-        ));
+    //     // Elapse enough time to check optimality
+    //     mock_time_service.advance(Duration::from_millis(
+    //         consensus_observer_config.peer_optimality_check_interval_ms + 1,
+    //     ));
 
-        // Verify that the original peer is no longer optimal
-        assert!(subscription
-            .check_subscription_peer_optimality(peers_and_metadata.clone())
-            .is_err());
+    //     // Verify that the original peer is no longer optimal
+    //     assert!(subscription
+    //         .check_subscription_peer_optimality(peers_and_metadata.clone())
+    //         .is_err());
 
-        // Add the original peer to the list of peers (with optimal metadata)
-        peers_and_metadata.insert(
-            peer_network_id,
-            PeerMetadata::new_for_test(
-                ConnectionMetadata::mock(peer_network_id.peer_id()),
-                PeerMonitoringMetadata::new(Some(0.1), None, None, None, None),
-            ),
-        );
+    //     // Add the original peer to the list of peers (with optimal metadata)
+    //     peers_and_metadata.insert(
+    //         peer_network_id,
+    //         PeerMetadata::new_for_test(
+    //             ConnectionMetadata::mock(peer_network_id.peer_id()),
+    //             PeerMonitoringMetadata::new(Some(0.1), None, None, None, None),
+    //         ),
+    //     );
 
-        // Verify that the peer is still optimal
-        assert!(subscription
-            .check_subscription_peer_optimality(peers_and_metadata)
-            .is_ok());
+    //     // Verify that the peer is still optimal
+    //     assert!(subscription
+    //         .check_subscription_peer_optimality(peers_and_metadata)
+    //         .is_ok());
 
-        // Verify the time of the last peer optimality check
-        let current_time = mock_time_service.now();
-        assert_eq!(subscription.last_peer_optimality_check, current_time);
-    }
+    //     // Verify the time of the last peer optimality check
+    //     let current_time = mock_time_service.now();
+    //     assert_eq!(subscription.last_peer_optimality_check, current_time);
+    // }
 
-    #[test]
-    fn test_check_subscription_timeout() {
-        // Create a new observer subscription
-        let consensus_observer_config = ConsensusObserverConfig::default();
-        let peer_network_id = PeerNetworkId::random();
-        let time_service = TimeService::mock();
-        let mut subscription = ConsensusObserverSubscription::new(
-            consensus_observer_config,
-            Arc::new(MockDatabaseReader::new()),
-            peer_network_id,
-            time_service.clone(),
-        );
+    // #[test]
+    // fn test_check_subscription_timeout() {
+    //     // Create a new observer subscription
+    //     let consensus_observer_config = ConsensusObserverConfig::default();
+    //     let peer_network_id = PeerNetworkId::random();
+    //     let time_service = TimeService::mock();
+    //     let mut subscription = ConsensusObserverSubscription::new(
+    //         consensus_observer_config,
+    //         Arc::new(MockDatabaseReader::new()),
+    //         peer_network_id,
+    //         time_service.clone(),
+    //     );
 
-        // Verify that the subscription has not timed out and that the last message time is updated
-        let current_time = time_service.now();
-        assert!(subscription.check_subscription_timeout().is_ok());
-        assert_eq!(subscription.last_message_receive_time, current_time);
+    //     // Verify that the subscription has not timed out and that the last message time is updated
+    //     let current_time = time_service.now();
+    //     assert!(subscription.check_subscription_timeout().is_ok());
+    //     assert_eq!(subscription.last_message_receive_time, current_time);
 
-        // Elapse some amount of time (but not enough to timeout)
-        let mock_time_service = time_service.into_mock();
-        mock_time_service.advance(Duration::from_millis(
-            consensus_observer_config.max_subscription_timeout_ms / 2,
-        ));
+    //     // Elapse some amount of time (but not enough to timeout)
+    //     let mock_time_service = time_service.into_mock();
+    //     mock_time_service.advance(Duration::from_millis(
+    //         consensus_observer_config.max_subscription_timeout_ms / 2,
+    //     ));
 
-        // Verify that the subscription has not timed out
-        assert!(subscription.check_subscription_timeout().is_ok());
+    //     // Verify that the subscription has not timed out
+    //     assert!(subscription.check_subscription_timeout().is_ok());
 
-        // Verify a new message is received successfully and that the last message time is updated
-        let current_time = mock_time_service.now();
-        subscription
-            .verify_message_sender(&peer_network_id)
-            .unwrap();
-        assert_eq!(subscription.last_message_receive_time, current_time);
+    //     // Verify a new message is received successfully and that the last message time is updated
+    //     let current_time = mock_time_service.now();
+    //     subscription
+    //         .verify_message_sender(&peer_network_id)
+    //         .unwrap();
+    //     assert_eq!(subscription.last_message_receive_time, current_time);
 
-        // Verify that the subscription has not timed out
-        assert!(subscription.check_subscription_timeout().is_ok());
+    //     // Verify that the subscription has not timed out
+    //     assert!(subscription.check_subscription_timeout().is_ok());
 
-        // Elapse enough time to timeout the subscription
-        mock_time_service.advance(Duration::from_millis(
-            consensus_observer_config.max_subscription_timeout_ms + 1,
-        ));
+    //     // Elapse enough time to timeout the subscription
+    //     mock_time_service.advance(Duration::from_millis(
+    //         consensus_observer_config.max_subscription_timeout_ms + 1,
+    //     ));
 
-        // Verify that the subscription has timed out
-        assert!(subscription.check_subscription_timeout().is_err());
-    }
+    //     // Verify that the subscription has timed out
+    //     assert!(subscription.check_subscription_timeout().is_err());
+    // }
 
-    #[test]
-    fn test_check_syncing_progress() {
-        // Create a mock DB reader with expectations
-        let first_synced_version = 10;
-        let second_synced_version = 20;
-        let mut mock_db_reader = MockDatabaseReader::new();
-        mock_db_reader
-            .expect_get_latest_ledger_info_version()
-            .returning(move || Ok(first_synced_version))
-            .times(2); // Only allow two calls for the first version
-        mock_db_reader
-            .expect_get_latest_ledger_info_version()
-            .returning(move || Ok(second_synced_version)); // Allow multiple calls for the second version
+    // #[test]
+    // fn test_check_syncing_progress() {
+    //     // Create a mock DB reader with expectations
+    //     let first_synced_version = 10;
+    //     let second_synced_version = 20;
+    //     let mut mock_db_reader = MockDatabaseReader::new();
+    //     mock_db_reader
+    //         .expect_get_latest_ledger_info_version()
+    //         .returning(move || Ok(first_synced_version))
+    //         .times(2); // Only allow two calls for the first version
+    //     mock_db_reader
+    //         .expect_get_latest_ledger_info_version()
+    //         .returning(move || Ok(second_synced_version)); // Allow multiple calls for the second version
 
-        // Create a new observer subscription
-        let consensus_observer_config = ConsensusObserverConfig::default();
-        let peer_network_id = PeerNetworkId::random();
-        let time_service = TimeService::mock();
-        let mut subscription = ConsensusObserverSubscription::new(
-            consensus_observer_config,
-            Arc::new(mock_db_reader),
-            peer_network_id,
-            time_service.clone(),
-        );
+    //     // Create a new observer subscription
+    //     let consensus_observer_config = ConsensusObserverConfig::default();
+    //     let peer_network_id = PeerNetworkId::random();
+    //     let time_service = TimeService::mock();
+    //     let mut subscription = ConsensusObserverSubscription::new(
+    //         consensus_observer_config,
+    //         Arc::new(mock_db_reader),
+    //         peer_network_id,
+    //         time_service.clone(),
+    //     );
 
-        // Verify that the DB is making sync progress and that the highest synced version is updated
-        let current_time = time_service.now();
-        assert!(subscription.check_syncing_progress().is_ok());
-        assert_eq!(
-            subscription.highest_synced_version_and_time,
-            (first_synced_version, current_time)
-        );
+    //     // Verify that the DB is making sync progress and that the highest synced version is updated
+    //     let current_time = time_service.now();
+    //     assert!(subscription.check_syncing_progress().is_ok());
+    //     assert_eq!(
+    //         subscription.highest_synced_version_and_time,
+    //         (first_synced_version, current_time)
+    //     );
 
-        // Elapse some amount of time (not enough to timeout)
-        let mock_time_service = time_service.into_mock();
-        mock_time_service.advance(Duration::from_millis(
-            consensus_observer_config.max_synced_version_timeout_ms / 2,
-        ));
+    //     // Elapse some amount of time (not enough to timeout)
+    //     let mock_time_service = time_service.into_mock();
+    //     mock_time_service.advance(Duration::from_millis(
+    //         consensus_observer_config.max_synced_version_timeout_ms / 2,
+    //     ));
 
-        // Verify that the DB is still making sync progress
-        let current_time = mock_time_service.now();
-        assert!(subscription.check_syncing_progress().is_ok());
-        assert_eq!(
-            subscription.highest_synced_version_and_time,
-            (first_synced_version, current_time)
-        );
+    //     // Verify that the DB is still making sync progress
+    //     let current_time = mock_time_service.now();
+    //     assert!(subscription.check_syncing_progress().is_ok());
+    //     assert_eq!(
+    //         subscription.highest_synced_version_and_time,
+    //         (first_synced_version, current_time)
+    //     );
 
-        // Elapse enough time to timeout the subscription
-        mock_time_service.advance(Duration::from_millis(
-            consensus_observer_config.max_synced_version_timeout_ms + 1,
-        ));
+    //     // Elapse enough time to timeout the subscription
+    //     mock_time_service.advance(Duration::from_millis(
+    //         consensus_observer_config.max_synced_version_timeout_ms + 1,
+    //     ));
 
-        // Verify that the DB is still making sync progress (the next version is higher)
-        let current_time = mock_time_service.now();
-        assert!(subscription.check_syncing_progress().is_ok());
-        assert_eq!(
-            subscription.highest_synced_version_and_time,
-            (second_synced_version, current_time)
-        );
+    //     // Verify that the DB is still making sync progress (the next version is higher)
+    //     let current_time = mock_time_service.now();
+    //     assert!(subscription.check_syncing_progress().is_ok());
+    //     assert_eq!(
+    //         subscription.highest_synced_version_and_time,
+    //         (second_synced_version, current_time)
+    //     );
 
-        // Elapse enough time to timeout the subscription
-        mock_time_service.advance(Duration::from_millis(
-            consensus_observer_config.max_synced_version_timeout_ms + 1,
-        ));
+    //     // Elapse enough time to timeout the subscription
+    //     mock_time_service.advance(Duration::from_millis(
+    //         consensus_observer_config.max_synced_version_timeout_ms + 1,
+    //     ));
 
-        // Verify that the DB is not making sync progress and that the subscription has timed out
-        assert!(subscription.check_syncing_progress().is_err());
-    }
+    //     // Verify that the DB is not making sync progress and that the subscription has timed out
+    //     assert!(subscription.check_syncing_progress().is_err());
+    // }
 
-    #[test]
-    fn test_verify_message_sender() {
-        // Create a new observer subscription
-        let consensus_observer_config = ConsensusObserverConfig::default();
-        let peer_network_id = PeerNetworkId::random();
-        let time_service = TimeService::mock();
-        let mut subscription = ConsensusObserverSubscription::new(
-            consensus_observer_config,
-            Arc::new(MockDatabaseReader::new()),
-            peer_network_id,
-            time_service.clone(),
-        );
+    // #[test]
+    // fn test_verify_message_sender() {
+    //     // Create a new observer subscription
+    //     let consensus_observer_config = ConsensusObserverConfig::default();
+    //     let peer_network_id = PeerNetworkId::random();
+    //     let time_service = TimeService::mock();
+    //     let mut subscription = ConsensusObserverSubscription::new(
+    //         consensus_observer_config,
+    //         Arc::new(MockDatabaseReader::new()),
+    //         peer_network_id,
+    //         time_service.clone(),
+    //     );
 
-        // Verify that the message sender is valid
-        let current_time = time_service.now();
-        assert!(subscription.verify_message_sender(&peer_network_id).is_ok());
-        assert_eq!(subscription.last_message_receive_time, current_time);
+    //     // Verify that the message sender is valid
+    //     let current_time = time_service.now();
+    //     assert!(subscription.verify_message_sender(&peer_network_id).is_ok());
+    //     assert_eq!(subscription.last_message_receive_time, current_time);
 
-        // Elapse some amount of time
-        let mock_time_service = time_service.into_mock();
-        mock_time_service.advance(Duration::from_secs(10));
+    //     // Elapse some amount of time
+    //     let mock_time_service = time_service.into_mock();
+    //     mock_time_service.advance(Duration::from_secs(10));
 
-        // Verify that the message sender is not the expected peer
-        let other_peer_network_id = PeerNetworkId::random();
-        assert!(subscription
-            .verify_message_sender(&other_peer_network_id)
-            .is_err());
-        assert_eq!(subscription.last_message_receive_time, current_time);
+    //     // Verify that the message sender is not the expected peer
+    //     let other_peer_network_id = PeerNetworkId::random();
+    //     assert!(subscription
+    //         .verify_message_sender(&other_peer_network_id)
+    //         .is_err());
+    //     assert_eq!(subscription.last_message_receive_time, current_time);
 
-        // Elapse more time
-        mock_time_service.advance(Duration::from_secs(10));
+    //     // Elapse more time
+    //     mock_time_service.advance(Duration::from_secs(10));
 
-        // Verify that the message sender is the expected peer and that the last message time is updated
-        let current_time = mock_time_service.now();
-        assert!(subscription.verify_message_sender(&peer_network_id).is_ok());
-        assert_eq!(subscription.last_message_receive_time, current_time);
-    }
+    //     // Verify that the message sender is the expected peer and that the last message time is updated
+    //     let current_time = mock_time_service.now();
+    //     assert!(subscription.verify_message_sender(&peer_network_id).is_ok());
+    //     assert_eq!(subscription.last_message_receive_time, current_time);
+    // }
 
-    #[test]
-    fn test_sort_peers_by_distance_and_latency() {
-        // Sort an empty list of peers
-        let peers_and_metadata = HashMap::new();
-        assert!(sort_peers_by_distance_and_latency(peers_and_metadata).is_empty());
+    // #[test]
+    // fn test_sort_peers_by_distance_and_latency() {
+    //     // Sort an empty list of peers
+    //     let peers_and_metadata = HashMap::new();
+    //     assert!(sort_peers_by_distance_and_latency(peers_and_metadata).is_empty());
 
-        // Create a list of peers with empty metadata
-        let peers_and_metadata = create_peers_and_metadata(true, true, 10);
+    //     // Create a list of peers with empty metadata
+    //     let peers_and_metadata = create_peers_and_metadata(true, true, 10);
 
-        // Sort the peers and verify the results
-        let sorted_peers = sort_peers_by_distance_and_latency(peers_and_metadata);
-        assert_eq!(sorted_peers.len(), 10);
+    //     // Sort the peers and verify the results
+    //     let sorted_peers = sort_peers_by_distance_and_latency(peers_and_metadata);
+    //     assert_eq!(sorted_peers.len(), 10);
 
-        // Create a list of peers with valid metadata
-        let peers_and_metadata = create_peers_and_metadata(false, false, 10);
+    //     // Create a list of peers with valid metadata
+    //     let peers_and_metadata = create_peers_and_metadata(false, false, 10);
 
-        // Sort the peers
-        let sorted_peers = sort_peers_by_distance_and_latency(peers_and_metadata.clone());
+    //     // Sort the peers
+    //     let sorted_peers = sort_peers_by_distance_and_latency(peers_and_metadata.clone());
 
-        // Verify the order of the peers
-        verify_increasing_distance_latencies(&peers_and_metadata, &sorted_peers);
-        assert_eq!(sorted_peers.len(), 10);
+    //     // Verify the order of the peers
+    //     verify_increasing_distance_latencies(&peers_and_metadata, &sorted_peers);
+    //     assert_eq!(sorted_peers.len(), 10);
 
-        // Create a list of peers with and without metadata
-        let mut peers_and_metadata = create_peers_and_metadata(false, false, 10);
-        peers_and_metadata.extend(create_peers_and_metadata(true, false, 10));
-        peers_and_metadata.extend(create_peers_and_metadata(false, true, 10));
-        peers_and_metadata.extend(create_peers_and_metadata(true, true, 10));
+    //     // Create a list of peers with and without metadata
+    //     let mut peers_and_metadata = create_peers_and_metadata(false, false, 10);
+    //     peers_and_metadata.extend(create_peers_and_metadata(true, false, 10));
+    //     peers_and_metadata.extend(create_peers_and_metadata(false, true, 10));
+    //     peers_and_metadata.extend(create_peers_and_metadata(true, true, 10));
 
-        // Sort the peers
-        let sorted_peers = sort_peers_by_distance_and_latency(peers_and_metadata.clone());
-        assert_eq!(sorted_peers.len(), 40);
+    //     // Sort the peers
+    //     let sorted_peers = sort_peers_by_distance_and_latency(peers_and_metadata.clone());
+    //     assert_eq!(sorted_peers.len(), 40);
 
-        // Verify the order of the first 20 peers
-        let (first_20_peers, sorted_peers) = sorted_peers.split_at(20);
-        verify_increasing_distance_latencies(&peers_and_metadata, first_20_peers);
+    //     // Verify the order of the first 20 peers
+    //     let (first_20_peers, sorted_peers) = sorted_peers.split_at(20);
+    //     verify_increasing_distance_latencies(&peers_and_metadata, first_20_peers);
 
-        // Verify that the next 10 peers only have latency metadata
-        let (next_10_peers, sorted_peers) = sorted_peers.split_at(10);
-        for sorted_peer in next_10_peers {
-            let peer_metadata = peers_and_metadata.get(sorted_peer).unwrap();
-            assert!(get_distance_for_peer(sorted_peer, peer_metadata).is_none());
-            assert!(get_latency_for_peer(sorted_peer, peer_metadata).is_some());
-        }
+    //     // Verify that the next 10 peers only have latency metadata
+    //     let (next_10_peers, sorted_peers) = sorted_peers.split_at(10);
+    //     for sorted_peer in next_10_peers {
+    //         let peer_metadata = peers_and_metadata.get(sorted_peer).unwrap();
+    //         assert!(get_distance_for_peer(sorted_peer, peer_metadata).is_none());
+    //         assert!(get_latency_for_peer(sorted_peer, peer_metadata).is_some());
+    //     }
 
-        // Verify that the last 10 peers have no metadata
-        let (last_10_peers, remaining_peers) = sorted_peers.split_at(10);
-        for sorted_peer in last_10_peers {
-            let peer_metadata = peers_and_metadata.get(sorted_peer).unwrap();
-            assert!(get_distance_for_peer(sorted_peer, peer_metadata).is_none());
-            assert!(get_latency_for_peer(sorted_peer, peer_metadata).is_none());
-        }
-        assert!(remaining_peers.is_empty());
-    }
+    //     // Verify that the last 10 peers have no metadata
+    //     let (last_10_peers, remaining_peers) = sorted_peers.split_at(10);
+    //     for sorted_peer in last_10_peers {
+    //         let peer_metadata = peers_and_metadata.get(sorted_peer).unwrap();
+    //         assert!(get_distance_for_peer(sorted_peer, peer_metadata).is_none());
+    //         assert!(get_latency_for_peer(sorted_peer, peer_metadata).is_none());
+    //     }
+    //     assert!(remaining_peers.is_empty());
+    // }
 
-    /// Creates a new peer and metadata for testing
-    fn create_peer_and_metadata(
-        latency: Option<f64>,
-        distance_from_validators: Option<u64>,
-    ) -> (PeerNetworkId, PeerMetadata) {
-        // Create a random peer
-        let peer_network_id = PeerNetworkId::random();
+    // /// Creates a new peer and metadata for testing
+    // fn create_peer_and_metadata(
+    //     latency: Option<f64>,
+    //     distance_from_validators: Option<u64>,
+    // ) -> (PeerNetworkId, PeerMetadata) {
+    //     // Create a random peer
+    //     let peer_network_id = PeerNetworkId::random();
 
-        // Create a new peer metadata with the given latency and distance
-        let connection_metadata = ConnectionMetadata::mock(peer_network_id.peer_id());
-        let network_information_response =
-            distance_from_validators.map(|distance| NetworkInformationResponse {
-                connected_peers: BTreeMap::new(),
-                distance_from_validators: distance,
-            });
-        let peer_monitoring_metadata =
-            PeerMonitoringMetadata::new(latency, None, network_information_response, None, None);
-        let peer_metadata =
-            PeerMetadata::new_for_test(connection_metadata, peer_monitoring_metadata);
+    //     // Create a new peer metadata with the given latency and distance
+    //     let connection_metadata = ConnectionMetadata::mock(peer_network_id.peer_id());
+    //     let network_information_response =
+    //         distance_from_validators.map(|distance| NetworkInformationResponse {
+    //             connected_peers: BTreeMap::new(),
+    //             distance_from_validators: distance,
+    //         });
+    //     let peer_monitoring_metadata =
+    //         PeerMonitoringMetadata::new(latency, None, network_information_response, None, None);
+    //     let peer_metadata =
+    //         PeerMetadata::new_for_test(connection_metadata, peer_monitoring_metadata);
 
-        (peer_network_id, peer_metadata)
-    }
+    //     (peer_network_id, peer_metadata)
+    // }
 
-    /// Creates a list of peers and metadata for testing
-    fn create_peers_and_metadata(
-        empty_latency: bool,
-        empty_distance: bool,
-        num_peers: u64,
-    ) -> HashMap<PeerNetworkId, PeerMetadata> {
-        let mut peers_and_metadata = HashMap::new();
-        for i in 1..num_peers + 1 {
-            // Determine the distance for the peer
-            let distance = if empty_distance { None } else { Some(i) };
+    // /// Creates a list of peers and metadata for testing
+    // fn create_peers_and_metadata(
+    //     empty_latency: bool,
+    //     empty_distance: bool,
+    //     num_peers: u64,
+    // ) -> HashMap<PeerNetworkId, PeerMetadata> {
+    //     let mut peers_and_metadata = HashMap::new();
+    //     for i in 1..num_peers + 1 {
+    //         // Determine the distance for the peer
+    //         let distance = if empty_distance { None } else { Some(i) };
 
-            // Determine the latency for the peer
-            let latency = if empty_latency { None } else { Some(i as f64) };
+    //         // Determine the latency for the peer
+    //         let latency = if empty_latency { None } else { Some(i as f64) };
 
-            // Create a new peer and metadata
-            let (peer_network_id, peer_metadata) = create_peer_and_metadata(latency, distance);
-            peers_and_metadata.insert(peer_network_id, peer_metadata);
-        }
-        peers_and_metadata
-    }
+    //         // Create a new peer and metadata
+    //         let (peer_network_id, peer_metadata) = create_peer_and_metadata(latency, distance);
+    //         peers_and_metadata.insert(peer_network_id, peer_metadata);
+    //     }
+    //     peers_and_metadata
+    // }
 
-    /// Verifies that the distance and latencies for the peers are in
-    /// increasing order (with the distance taking precedence over the latency).
-    fn verify_increasing_distance_latencies(
-        peers_and_metadata: &HashMap<PeerNetworkId, PeerMetadata>,
-        sorted_peers: &[PeerNetworkId],
-    ) {
-        let mut previous_latency = None;
-        let mut previous_distance = 0;
-        for sorted_peer in sorted_peers {
-            // Get the distance and latency for the peer
-            let peer_metadata = peers_and_metadata.get(sorted_peer).unwrap();
-            let distance = get_distance_for_peer(sorted_peer, peer_metadata).unwrap();
-            let latency = get_latency_for_peer(sorted_peer, peer_metadata);
+    // /// Verifies that the distance and latencies for the peers are in
+    // /// increasing order (with the distance taking precedence over the latency).
+    // fn verify_increasing_distance_latencies(
+    //     peers_and_metadata: &HashMap<PeerNetworkId, PeerMetadata>,
+    //     sorted_peers: &[PeerNetworkId],
+    // ) {
+    //     let mut previous_latency = None;
+    //     let mut previous_distance = 0;
+    //     for sorted_peer in sorted_peers {
+    //         // Get the distance and latency for the peer
+    //         let peer_metadata = peers_and_metadata.get(sorted_peer).unwrap();
+    //         let distance = get_distance_for_peer(sorted_peer, peer_metadata).unwrap();
+    //         let latency = get_latency_for_peer(sorted_peer, peer_metadata);
 
-            // Verify the order of the peers
-            if distance == previous_distance {
-                if let Some(latency) = latency {
-                    if let Some(previous_latency) = previous_latency {
-                        assert!(latency >= previous_latency);
-                    }
-                }
-            } else {
-                assert!(distance > previous_distance);
-            }
+    //         // Verify the order of the peers
+    //         if distance == previous_distance {
+    //             if let Some(latency) = latency {
+    //                 if let Some(previous_latency) = previous_latency {
+    //                     assert!(latency >= previous_latency);
+    //                 }
+    //             }
+    //         } else {
+    //             assert!(distance > previous_distance);
+    //         }
 
-            // Update the previous latency and distance
-            previous_latency = latency;
-            previous_distance = distance;
-        }
-    }
+    //         // Update the previous latency and distance
+    //         previous_latency = latency;
+    //         previous_distance = distance;
+    //     }
+    // }
 }

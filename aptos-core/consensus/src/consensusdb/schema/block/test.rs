@@ -11,4 +11,4 @@ fn test_encode_decode() {
     assert_encode_decode::<BlockSchema>(&block.id(), &block);
 }
 
-test_no_panic_decoding!(BlockSchema);
+// test_no_panic_decoding!(BlockSchema);

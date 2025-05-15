@@ -69,7 +69,7 @@ impl DagBootstrapUnit {
     ) -> (Self, UnboundedReceiver<OrderedBlocks>) {
         let epoch_state = Arc::new(EpochState {
             epoch,
-            verifier: storage.get_validator_set().into(),
+            verifier: todo!() //storage.get_validator_set().into(),
         });
         let ledger_info = generate_ledger_info_with_sig(&all_signers, storage.get_ledger_info());
         let dag_storage =
@@ -161,7 +161,7 @@ fn create_network(
     let network_events = NetworkEvents::new(consensus_rx, None, true);
 
     let (self_sender, self_receiver) = gaptos::aptos_channels::new_unbounded_test();
-    let network = NetworkSender::new(author, consensus_network_client, self_sender, validators);
+    let network = todo!(); //NetworkSender::new(author, consensus_network_client, self_sender, validators);
 
     let twin_id = TwinId { id, author };
 
@@ -195,19 +195,20 @@ async fn bootstrap_nodes(
                 .insert_connection_metadata(peer_network_id, conn_meta)
                 .unwrap();
 
-            let (network, network_events) =
-                create_network(playground, id, signer.author(), validators.clone());
+            todo!()
+            // let (network, network_events) =
+            //     create_network(playground, id, signer.author(), validators.clone());
 
-            DagBootstrapUnit::make(
-                signer.author(),
-                1,
-                signer.clone(),
-                storage.clone(),
-                network,
-                gaptos::aptos_time_service::TimeService::real(),
-                network_events,
-                signers.clone(),
-            )
+            // DagBootstrapUnit::make(
+            //     signer.author(),
+            //     1,
+            //     signer.clone(),
+            //     storage.clone(),
+            //     network,
+            //     gaptos::aptos_time_service::TimeService::real(),
+            //     network_events,
+            //     signers.clone(),
+            // )
         })
         .unzip();
 

@@ -267,7 +267,7 @@ impl EmptyStorage {
 
 #[async_trait]
 impl PersistentLivenessStorage for EmptyStorage {
-    async fn latest_block_number(&self) -> u64 {
+    async fn latest_commit_block_number(&self) -> u64 {
         unimplemented!("")
     }
 

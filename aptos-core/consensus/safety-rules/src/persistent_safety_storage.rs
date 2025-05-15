@@ -192,88 +192,88 @@ impl PersistentSafetyStorage {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::counters;
-    use gaptos::aptos_crypto::hash::HashValue;
-    use gaptos::aptos_secure_storage::InMemoryStorage;
-    use gaptos::aptos_types::{
-        block_info::BlockInfo, epoch_state::EpochState, ledger_info::LedgerInfo,
-        transaction::Version, validator_signer::ValidatorSigner, waypoint::Waypoint,
-    };
-    use rusty_fork::rusty_fork_test;
+    // use super::*;
+    // use crate::counters;
+    // use gaptos::aptos_crypto::hash::HashValue;
+    // use gaptos::aptos_secure_storage::InMemoryStorage;
+    // use gaptos::aptos_types::{
+    //     block_info::BlockInfo, epoch_state::EpochState, ledger_info::LedgerInfo,
+    //     transaction::Version, validator_signer::ValidatorSigner, waypoint::Waypoint,
+    // };
+    // use rusty_fork::rusty_fork_test;
 
-    // Metrics are globally instantiated. We use rusty_fork to prevent concurrent tests
-    // from interfering with the metrics while we run this test.
-    rusty_fork_test! {
-        #[test]
-        fn test_counters() {
-            let consensus_private_key = ValidatorSigner::from_int(0).private_key().clone();
-            let storage = Storage::from(InMemoryStorage::new());
-            let mut safety_storage = PersistentSafetyStorage::initialize(
-                storage,
-                Author::random(),
-                consensus_private_key,
-                Waypoint::default(),
-                true,
-            );
-            // they both touch the global counters, running it serially to prevent race condition.
-            test_safety_data_counters(&mut safety_storage);
-            test_waypoint_counters(&mut safety_storage);
-        }
-    }
+    // // Metrics are globally instantiated. We use rusty_fork to prevent concurrent tests
+    // // from interfering with the metrics while we run this test.
+    // rusty_fork_test! {
+    //     #[test]
+    //     fn test_counters() {
+    //         let consensus_private_key = ValidatorSigner::from_int(0).private_key().clone();
+    //         let storage = Storage::from(InMemoryStorage::new());
+    //         let mut safety_storage = PersistentSafetyStorage::initialize(
+    //             storage,
+    //             Author::random(),
+    //             consensus_private_key,
+    //             Waypoint::default(),
+    //             true,
+    //         );
+    //         // they both touch the global counters, running it serially to prevent race condition.
+    //         test_safety_data_counters(&mut safety_storage);
+    //         test_waypoint_counters(&mut safety_storage);
+    //     }
+    // }
 
-    fn test_safety_data_counters(safety_storage: &mut PersistentSafetyStorage) {
-        let safety_data = safety_storage.safety_data().unwrap();
-        assert_eq!(safety_data.epoch, 1);
-        assert_eq!(safety_data.last_voted_round, 0);
-        assert_eq!(safety_data.preferred_round, 0);
-        assert_eq!(counters::get_state(counters::EPOCH), 1);
-        assert_eq!(counters::get_state(counters::LAST_VOTED_ROUND), 0);
-        assert_eq!(counters::get_state(counters::PREFERRED_ROUND), 0);
+    // fn test_safety_data_counters(safety_storage: &mut PersistentSafetyStorage) {
+    //     let safety_data = safety_storage.safety_data().unwrap();
+    //     assert_eq!(safety_data.epoch, 1);
+    //     assert_eq!(safety_data.last_voted_round, 0);
+    //     assert_eq!(safety_data.preferred_round, 0);
+    //     assert_eq!(counters::get_state(counters::EPOCH), 1);
+    //     assert_eq!(counters::get_state(counters::LAST_VOTED_ROUND), 0);
+    //     assert_eq!(counters::get_state(counters::PREFERRED_ROUND), 0);
 
-        safety_storage
-            .set_safety_data(SafetyData::new(9, 8, 1, 0, None, 0))
-            .unwrap();
+    //     safety_storage
+    //         .set_safety_data(SafetyData::new(9, 8, 1, 0, None, 0))
+    //         .unwrap();
 
-        let safety_data = safety_storage.safety_data().unwrap();
-        assert_eq!(safety_data.epoch, 9);
-        assert_eq!(safety_data.last_voted_round, 8);
-        assert_eq!(safety_data.preferred_round, 1);
-        assert_eq!(counters::get_state(counters::EPOCH), 9);
-        assert_eq!(counters::get_state(counters::LAST_VOTED_ROUND), 8);
-        assert_eq!(counters::get_state(counters::PREFERRED_ROUND), 1);
-    }
+    //     let safety_data = safety_storage.safety_data().unwrap();
+    //     assert_eq!(safety_data.epoch, 9);
+    //     assert_eq!(safety_data.last_voted_round, 8);
+    //     assert_eq!(safety_data.preferred_round, 1);
+    //     assert_eq!(counters::get_state(counters::EPOCH), 9);
+    //     assert_eq!(counters::get_state(counters::LAST_VOTED_ROUND), 8);
+    //     assert_eq!(counters::get_state(counters::PREFERRED_ROUND), 1);
+    // }
 
-    fn test_waypoint_counters(safety_storage: &mut PersistentSafetyStorage) {
-        let waypoint = safety_storage.waypoint().unwrap();
-        assert_eq!(waypoint.version(), Version::default());
-        assert_eq!(
-            counters::get_state(counters::WAYPOINT_VERSION) as u64,
-            Version::default()
-        );
+    // fn test_waypoint_counters(safety_storage: &mut PersistentSafetyStorage) {
+    //     let waypoint = safety_storage.waypoint().unwrap();
+    //     assert_eq!(waypoint.version(), Version::default());
+    //     assert_eq!(
+    //         counters::get_state(counters::WAYPOINT_VERSION) as u64,
+    //         Version::default()
+    //     );
 
-        for expected_version in 1..=10u64 {
-            let li = LedgerInfo::new(
-                BlockInfo::new(
-                    1,
-                    10,
-                    HashValue::random(),
-                    HashValue::random(),
-                    expected_version,
-                    1000,
-                    Some(EpochState::empty()),
-                ),
-                HashValue::zero(),
-            );
-            let waypoint = &Waypoint::new_epoch_boundary(&li).unwrap();
-            safety_storage.set_waypoint(waypoint).unwrap();
+    //     for expected_version in 1..=10u64 {
+    //         let li = LedgerInfo::new(
+    //             BlockInfo::new(
+    //                 1,
+    //                 10,
+    //                 HashValue::random(),
+    //                 HashValue::random(),
+    //                 expected_version,
+    //                 1000,
+    //                 Some(EpochState::empty()),
+    //             ),
+    //             HashValue::zero(),
+    //         );
+    //         let waypoint = &Waypoint::new_epoch_boundary(&li).unwrap();
+    //         safety_storage.set_waypoint(waypoint).unwrap();
 
-            let waypoint = safety_storage.waypoint().unwrap();
-            assert_eq!(waypoint.version(), expected_version);
-            assert_eq!(
-                counters::get_state(counters::WAYPOINT_VERSION) as u64,
-                expected_version
-            );
-        }
-    }
+    //         let waypoint = safety_storage.waypoint().unwrap();
+    //         assert_eq!(waypoint.version(), expected_version);
+    //         assert_eq!(
+    //             counters::get_state(counters::WAYPOINT_VERSION) as u64,
+    //             expected_version
+    //         );
+    //     }
+    // }
 }

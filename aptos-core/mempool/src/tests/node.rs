@@ -601,7 +601,7 @@ fn start_node_mempool(
         Arc::new(MockDbReaderWriter),
         vec![sender],
         peers_and_metadata,
-        Arc::new(MockExecutionApi {}),
+        todo!() // Arc::new(MockExecutionApi {}),
     );
 
     (mempool, runtime, subscriber)

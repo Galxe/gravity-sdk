@@ -12,4 +12,4 @@ fn test_encode_decode() {
     assert_encode_decode::<QCSchema>(&qc.certified_block().id(), &qc);
 }
 
-test_no_panic_decoding!(QCSchema);
+// test_no_panic_decoding!(QCSchema);

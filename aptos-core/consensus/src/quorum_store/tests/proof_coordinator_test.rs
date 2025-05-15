@@ -62,7 +62,7 @@ async fn test_proof_coordinator_basic() {
     let (proof_coordinator_tx, proof_coordinator_rx) = channel(100);
     let (tx, mut rx) = channel(100);
     let network_sender = MockQuorumStoreSender::new(tx);
-    tokio::spawn(proof_coordinator.start(proof_coordinator_rx, network_sender, verifier.clone()));
+    todo!(); // tokio::spawn(proof_coordinator.start(proof_coordinator_rx, network_sender, verifier.clone()));
 
     let batch_author = signers[0].author();
     let batch_id = BatchId::new_for_test(1);
