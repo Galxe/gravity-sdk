@@ -17,8 +17,14 @@ use api_types::{
 };
 use itertools::Itertools;
 
+pub struct TxnItem {
+    pub txns: Vec<VerifiedTxnWithAccountSeqNum>,
+    pub gas_limit: u64,
+}
+
 pub struct TxnBuffer {
-    txns: Mutex<Vec<VerifiedTxnWithAccountSeqNum>>,
+    // (txns, gas_limit)
+    txns: Mutex<Vec<TxnItem>>,
 }
 
 pub struct BlockHashRef {
@@ -160,35 +166,38 @@ impl BlockBufferManager {
         unimplemented!()
     }
 
-    pub async fn push_txns(&self, txns: Vec<VerifiedTxnWithAccountSeqNum>) {
+    pub async fn push_txns(&self, txns: &mut Vec<VerifiedTxnWithAccountSeqNum>, gas_limit: u64) {
         let mut pool_txns = self.txn_buffer.txns.lock().await;
-        pool_txns.extend(txns);
+        pool_txns.push(TxnItem { txns: std::mem::take(txns), gas_limit });
     }
 
     pub fn is_ready(&self) -> bool {
         self.buffer_state.load(Ordering::SeqCst) == BufferState::Ready as u8
     }
 
-    pub async fn push_txn(&self, txn: VerifiedTxnWithAccountSeqNum) {
-        let mut txns = self.txn_buffer.txns.lock().await;
-        txns.push(txn);
-    }
-
     pub async fn pop_txns(
         &self,
         max_size: usize,
+        gas_limit: u64,
     ) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, anyhow::Error> {
-        let mut txns = self.txn_buffer.txns.lock().await;
-        info!("pop_txns with remain txn {}", txns.len());
+        let mut txn_buffer = self.txn_buffer.txns.lock().await;
+        let mut total_gas_limit = 0;
+        let mut count = 0;
+        let split_point = txn_buffer.iter()
+            .position(|item| {
+                total_gas_limit += item.gas_limit;
+                count += 1;
+                total_gas_limit <= gas_limit && count <= max_size
+            })
+            .unwrap_or(txn_buffer.len());
 
-        if txns.len() <= max_size {
-            let result = std::mem::take(&mut *txns);
-            return Ok(result);
-        } else {
-            // take 0..max_size
-            let result = txns.drain(0..max_size).collect();
-            return Ok(result);
+        let valid_item = txn_buffer.drain(0..split_point).collect::<Vec<_>>();
+        drop(txn_buffer);
+        let mut result = Vec::new();
+        for mut item in valid_item {
+            result.extend(std::mem::take(&mut item.txns));
         }
+        Ok(result)
     }
 
     pub async fn set_ordered_blocks(

@@ -99,7 +99,7 @@ impl MockConsensus {
             let pool = self.pool.clone();
             async move {
                 loop {
-                    let txns = get_block_buffer_manager().pop_txns(usize::MAX).await.unwrap();
+                    let txns = get_block_buffer_manager().pop_txns(usize::MAX, u64::MAX).await.unwrap();
                     let mut pool = pool.lock().await;
                     pool.add_txns(txns);
                     drop(pool);

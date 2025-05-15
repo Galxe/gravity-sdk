@@ -1,4 +1,5 @@
 use crate::ConsensusArgs;
+use alloy_consensus::Transaction;
 use alloy_eips::{eip4895::Withdrawals, BlockId, BlockNumberOrTag, Decodable2718, Encodable2718};
 use alloy_primitives::{
     private::alloy_rlp::{Decodable, Encodable}, Address, FixedBytes, TxHash, B256
@@ -201,11 +202,9 @@ impl RethCli {
     
         let batch_size: usize = self.txn_batch_size;
         let timeout_duration = self.txn_check_interval;
-        let mut tx_hash_vec = Vec::with_capacity(batch_size);
-    
         let sleep = tokio::time::sleep(timeout_duration);
         tokio::pin!(sleep);
-    
+        let mut tx_hash_vec = Vec::with_capacity(batch_size * 100);
         loop {
             tokio::select! {
                 biased;
@@ -274,7 +273,7 @@ impl RethCli {
                 pool_txns.push(txn);
             }
         });
-        
+        let mut gas_limit = 0;
         for pool_txn in pool_txns {
             let sender = pool_txn.sender();
             let nonce = pool_txn.nonce();
@@ -290,7 +289,7 @@ impl RethCli {
                 }
                 *init_nonce_cache.get(&sender).unwrap()
             };
-
+            gas_limit += txn.gas_limit();
             debug!("recv sender {:?} nonce {:?}, account nonce {:?} hash {:?}", sender, nonce, account_nonce, txn.hash());
             let bytes = txn.encoded_2718();
     
@@ -313,7 +312,7 @@ impl RethCli {
         }
         
         if !buffer.is_empty() {
-            get_block_buffer_manager().push_txns(buffer).await;
+            get_block_buffer_manager().push_txns(&mut buffer, gas_limit).await;
         }
         
         Ok(())
