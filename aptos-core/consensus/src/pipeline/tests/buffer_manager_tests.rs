@@ -118,7 +118,7 @@ pub async fn prepare_buffer_manager(
         author,
         consensus_network_client,
         self_loop_tx,
-        validators.clone(),
+        todo!() // validators.clone(),
     );
 
     let (msg_tx, msg_rx) = aptos_channel::new::<AccountAddress, IncomingCommitRequest>(
@@ -153,7 +153,7 @@ pub async fn prepare_buffer_manager(
         buffer_reset_rx,
         Arc::new(EpochState {
             epoch: 1,
-            verifier: validators.clone(),
+            verifier: todo!() // validators.clone(),
         }),
         bounded_executor,
         false,

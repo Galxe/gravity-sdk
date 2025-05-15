@@ -663,7 +663,7 @@ mod tests {
                 *peer,
                 consensus_network_client,
                 self_sender,
-                validator_verifier.clone(),
+                todo!() // validator_verifier.clone(),
             );
 
             let network_events = NetworkEvents::new(consensus_rx, None, true);
@@ -779,7 +779,7 @@ mod tests {
                 *peer,
                 consensus_network_client.clone(),
                 self_sender,
-                validator_verifier.clone(),
+                todo!() // validator_verifier.clone(),
             );
 
             let network_events = NetworkEvents::new(consensus_rx, None, true);

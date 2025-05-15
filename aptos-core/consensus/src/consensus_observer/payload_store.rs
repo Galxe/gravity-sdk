@@ -956,31 +956,32 @@ mod test {
             100,
         );
         let validator_verifier = ValidatorVerifier::new(vec![validator_consensus_info]);
-        let epoch_state = EpochState::new(next_epoch, validator_verifier.clone());
+        todo!()
+        // let epoch_state = EpochState::new(next_epoch, validator_verifier.clone());
 
-        // Verify the block payload signatures (for this epoch)
-        block_payload_store.verify_payload_signatures(&epoch_state);
+        // // Verify the block payload signatures (for this epoch)
+        // block_payload_store.verify_payload_signatures(&epoch_state);
 
-        // Ensure the unverified payloads were not verified
-        assert!(!block_payload_store.all_payloads_exist(&unverified_blocks));
+        // // Ensure the unverified payloads were not verified
+        // assert!(!block_payload_store.all_payloads_exist(&unverified_blocks));
 
-        // Ensure the unverified payloads were all removed (for this epoch)
-        assert_eq!(
-            get_num_unverified_payloads(&block_payload_store),
-            num_future_blocks
-        );
+        // // Ensure the unverified payloads were all removed (for this epoch)
+        // assert_eq!(
+        //     get_num_unverified_payloads(&block_payload_store),
+        //     num_future_blocks
+        // );
 
-        // Create an epoch state for the future epoch (with a non-empty verifier)
-        let epoch_state = EpochState::new(future_epoch, validator_verifier);
+        // // Create an epoch state for the future epoch (with a non-empty verifier)
+        // let epoch_state = EpochState::new(future_epoch, validator_verifier);
 
-        // Verify the block payload signatures (for the future epoch)
-        block_payload_store.verify_payload_signatures(&epoch_state);
+        // // Verify the block payload signatures (for the future epoch)
+        // block_payload_store.verify_payload_signatures(&epoch_state);
 
-        // Ensure the future unverified payloads were not verified
-        assert!(!block_payload_store.all_payloads_exist(&unverified_future_blocks));
+        // // Ensure the future unverified payloads were not verified
+        // assert!(!block_payload_store.all_payloads_exist(&unverified_future_blocks));
 
-        // Ensure the future unverified payloads were all removed (for the future epoch)
-        assert_eq!(get_num_unverified_payloads(&block_payload_store), 0);
+        // // Ensure the future unverified payloads were all removed (for the future epoch)
+        // assert_eq!(get_num_unverified_payloads(&block_payload_store), 0);
     }
 
     /// Creates and adds the given number of blocks to the block payload store

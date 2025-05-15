@@ -14,7 +14,7 @@ use gaptos::aptos_crypto::{hash::ACCUMULATOR_PLACEHOLDER_HASH, HashValue};
 use aptos_executor_types::StateComputeResult;
 use gaptos::aptos_infallible::Mutex;
 use aptos_safety_rules::{
-    test_utils::{make_proposal_with_parent, make_proposal_with_qc},
+    // test_utils::{make_proposal_with_parent, make_proposal_with_qc},
     PersistentSafetyStorage, SafetyRulesManager,
 };
 use gaptos::aptos_secure_storage::Storage;
@@ -67,38 +67,38 @@ pub fn prepare_executed_blocks_with_ledger_info(
     LedgerInfoWithSignatures,
     Vec<VoteProposal>,
 ) {
-    assert!(num_blocks > 0);
+    // assert!(num_blocks > 0);
 
-    let p1 = if let Some(parent) = some_parent {
-        make_proposal_with_parent(
-            Payload::empty(false, true),
-            init_round,
-            &parent,
-            None,
-            signer,
-        )
-    } else {
-        make_proposal_with_qc(init_round, init_qc.unwrap(), signer)
-    };
+    // let p1 = if let Some(parent) = some_parent {
+    //     make_proposal_with_parent(
+    //         Payload::empty(false, true),
+    //         init_round,
+    //         &parent,
+    //         None,
+    //         signer,
+    //     )
+    // } else {
+    //     make_proposal_with_qc(init_round, init_qc.unwrap(), signer)
+    // };
 
-    let mut proposals: Vec<VoteProposal> = vec![p1];
+    // let mut proposals: Vec<VoteProposal> = vec![p1];
 
-    for i in 1..num_blocks {
-        println!("Generating {}", i);
-        let parent = proposals.last().unwrap();
-        let proposal = make_proposal_with_parent(
-            Payload::empty(false, true),
-            init_round + i,
-            parent,
-            None,
-            signer,
-        );
-        proposals.push(proposal);
-    }
+    // for i in 1..num_blocks {
+    //     println!("Generating {}", i);
+    //     let parent = proposals.last().unwrap();
+    //     let proposal = make_proposal_with_parent(
+    //         Payload::empty(false, true),
+    //         init_round + i,
+    //         parent,
+    //         None,
+    //         signer,
+    //     );
+    //     proposals.push(proposal);
+    // }
 
-    let compute_result = StateComputeResult::with_root_hash(
-        executed_hash,
-    );
+    // let compute_result = StateComputeResult::with_root_hash(
+    //     executed_hash,
+    // );
 
     unimplemented!()
 

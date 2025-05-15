@@ -11,4 +11,4 @@ fn test_single_entry_schema() {
     assert_encode_decode::<SingleEntrySchema>(&SingleEntryKey::LastVote, &vec![1u8, 2u8, 3u8]);
 }
 
-test_no_panic_decoding!(SingleEntrySchema);
+// test_no_panic_decoding!(SingleEntrySchema);

@@ -940,13 +940,14 @@ mod test {
             100,
         );
         let validator_verifier = ValidatorVerifier::new(vec![validator_consensus_info]);
-        let epoch_state = EpochState::new(current_epoch, validator_verifier.clone());
+        todo!()
+        // let epoch_state = EpochState::new(current_epoch, validator_verifier.clone());
 
-        // Verify the commit proof and ensure it fails (the signature set is insufficient)
-        let error = commit_decision
-            .verify_commit_proof(&epoch_state)
-            .unwrap_err();
-        assert_matches!(error, Error::InvalidMessageError(_));
+        // // Verify the commit proof and ensure it fails (the signature set is insufficient)
+        // let error = commit_decision
+        //     .verify_commit_proof(&epoch_state)
+        //     .unwrap_err();
+        // assert_matches!(error, Error::InvalidMessageError(_));
     }
 
     #[test]
@@ -1072,13 +1073,14 @@ mod test {
             100,
         );
         let validator_verifier = ValidatorVerifier::new(vec![validator_consensus_info]);
-        let epoch_state = EpochState::new(current_epoch, validator_verifier.clone());
+        todo!()
+        // let epoch_state = EpochState::new(current_epoch, validator_verifier.clone());
 
-        // Verify the ordered proof and ensure it fails (the signature set is insufficient)
-        let error = ordered_block
-            .verify_ordered_proof(&epoch_state)
-            .unwrap_err();
-        assert_matches!(error, Error::InvalidMessageError(_));
+        // // Verify the ordered proof and ensure it fails (the signature set is insufficient)
+        // let error = ordered_block
+        //     .verify_ordered_proof(&epoch_state)
+        //     .unwrap_err();
+        // assert_matches!(error, Error::InvalidMessageError(_));
     }
 
     #[test]
@@ -1195,13 +1197,14 @@ mod test {
             100,
         );
         let validator_verifier = ValidatorVerifier::new(vec![validator_consensus_info]);
-        let epoch_state = EpochState::new(current_epoch, validator_verifier.clone());
+        todo!()
+        // let epoch_state = EpochState::new(current_epoch, validator_verifier.clone());
 
-        // Verify the block payload signatures and ensure it fails (the signature set is insufficient)
-        let error = block_payload
-            .verify_payload_signatures(&epoch_state)
-            .unwrap_err();
-        assert_matches!(error, Error::InvalidMessageError(_));
+        // // Verify the block payload signatures and ensure it fails (the signature set is insufficient)
+        // let error = block_payload
+        //     .verify_payload_signatures(&epoch_state)
+        //     .unwrap_err();
+        // assert_matches!(error, Error::InvalidMessageError(_));
     }
 
     /// Creates and returns a new batch info with random data

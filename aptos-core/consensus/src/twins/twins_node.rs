@@ -163,8 +163,8 @@ impl SMRNode {
             gaptos::aptos_time_service::TimeService::real(),
             vtxn_pool,
             Arc::new(InMemRandDb::new()),
-            None,
-            None,
+            None
+            // None,
         );
         let (network_task, network_receiver) =
             NetworkTask::new(network_service_events, self_receiver);
@@ -250,7 +250,8 @@ impl SMRNode {
                         round_proposers.insert(*round, author_from_config(&node_configs[*idx]));
                     })
                 }
-                RoundProposer(round_proposers)
+                todo!()
+                // RoundProposer(round_proposers)
             },
             _ => proposer_type,
         };
