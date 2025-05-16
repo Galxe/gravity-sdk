@@ -134,7 +134,6 @@ pub fn init_mempool(
     consensus_to_mempool_receiver: Receiver<QuorumStoreRequest>,
     mempool_listener: MempoolNotificationListener,
     peers_and_metadata: Arc<PeersAndMetadata>,
-    execution_api: Arc<dyn ExecutionChannel>,
 ) -> Vec<Runtime> {
     let mempool_reconfig_subscription = event_subscription_service
         .subscribe_to_reconfigurations()
@@ -149,7 +148,6 @@ pub fn init_mempool(
         mempool_listener,
         mempool_reconfig_subscription,
         peers_and_metadata,
-        execution_api,
     )
 }
 

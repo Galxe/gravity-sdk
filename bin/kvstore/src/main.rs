@@ -10,22 +10,20 @@ use api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
 use clap::Parser;
 use cli::Cli;
 use flexi_logger::{FileSpec, Logger, WriteMode};
-use gaptos::api_types::{ConsensusApi, ExecutionChannel, ExecutionLayer};
 use server::Server;
 
 struct TestConsensusLayer {
     node_config: NodeConfig,
-    execution_layer: ExecutionLayer,
 }
 
 impl TestConsensusLayer {
-    fn new(node_config: NodeConfig, execution_client: Arc<dyn ExecutionChannel>) -> Self {
-        Self { node_config, execution_layer: ExecutionLayer { execution_api: execution_client } }
+    fn new(node_config: NodeConfig) -> Self {
+        Self { node_config }
     }
 
     async fn run(self) {
         let _consensus_engine =
-            ConsensusEngine::init(self.node_config, self.execution_layer, 1337, 0).await;
+            ConsensusEngine::init(self.node_config, 1337, 0).await;
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         }
@@ -47,9 +45,8 @@ async fn main() {
     cli.run(move || {
         tokio::spawn(async move {
             let server = Arc::new(Server::new());
-            let execution_api = server.execution_client().await;
             let _ = thread::spawn(move || {
-                let cl = TestConsensusLayer::new(gcei_config, execution_api);
+                let cl = TestConsensusLayer::new(gcei_config);
                 tokio::runtime::Runtime::new().unwrap().block_on(cl.run());
             });
 

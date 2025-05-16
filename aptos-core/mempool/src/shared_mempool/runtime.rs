@@ -46,7 +46,6 @@ pub(crate) fn start_shared_mempool<ConfigProvider>(
     db: Arc<dyn DbReader>,
     subscribers: Vec<UnboundedSender<SharedMempoolNotification>>,
     peers_and_metadata: Arc<PeersAndMetadata>,
-    execution_api: Arc<dyn ExecutionChannel>,
 ) where
     ConfigProvider: OnChainConfigProvider,
 {
@@ -60,7 +59,6 @@ pub(crate) fn start_shared_mempool<ConfigProvider>(
             db,
             subscribers,
             node_type,
-            execution_api.clone(),
         );
 
     executor.spawn(coordinator(
@@ -120,7 +118,6 @@ pub fn bootstrap(
     mempool_listener: MempoolNotificationListener,
     mempool_reconfig_events: ReconfigNotificationListener<DbBackedOnChainConfig>,
     peers_and_metadata: Arc<PeersAndMetadata>,
-    execution_api: Arc<dyn ExecutionChannel>,
 ) -> Vec<Runtime> {
     let runtime = gaptos::aptos_runtimes::spawn_named_runtime("shared-mem".into(), None);
     let retrive_runtime = gaptos::aptos_runtimes::spawn_named_runtime("retrive".into(), None);
@@ -139,7 +136,6 @@ pub fn bootstrap(
         db,
         vec![],
         peers_and_metadata,
-        execution_api,
     );
     vec![runtime, retrive_runtime]
 }

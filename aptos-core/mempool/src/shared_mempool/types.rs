@@ -55,7 +55,6 @@ pub(crate) struct SharedMempool<NetworkClient> {
     pub subscribers: Vec<UnboundedSender<SharedMempoolNotification>>,
     pub broadcast_within_validator_network: Arc<RwLock<bool>>,
     pub use_case_history: Arc<Mutex<UseCaseHistory>>,
-    pub execution_api: Arc<dyn ExecutionChannel>,
 }
 
 impl<
@@ -69,7 +68,6 @@ impl<
         db: Arc<dyn DbReader>,
         subscribers: Vec<UnboundedSender<SharedMempoolNotification>>,
         node_type: NodeType,
-        execution_api: Arc<dyn ExecutionChannel>
     ) -> Self {
         let network_interface =
             MempoolNetworkInterface::new(network_client, node_type, config.clone());
@@ -85,7 +83,6 @@ impl<
             subscribers,
             broadcast_within_validator_network: Arc::new(RwLock::new(true)),
             use_case_history: Arc::new(Mutex::new(use_case_history)),
-            execution_api: execution_api,
         }
     }
 

@@ -10,7 +10,7 @@ use crate::{
     network::{create_network_runtime, extract_network_configs},
 };
 use gaptos::api_types::{
-    compute_res::ComputeRes, u256_define::BlockId, ConsensusApi, ExecError, ExecutionLayer,
+    compute_res::ComputeRes, u256_define::BlockId, ExecError,
     ExternalBlock, ExternalBlockMeta,
 };
 use gaptos::aptos_build_info as aptos_build_info;
@@ -35,7 +35,6 @@ static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 pub struct ConsensusEngine {
     address: String,
-    execution_layer: ExecutionLayer,
     runtimes: Vec<Runtime>,
 }
 
@@ -63,7 +62,6 @@ fn fail_point_check(node_config: &NodeConfig) {
 impl ConsensusEngine {
     pub async fn init(
         node_config: NodeConfig,
-        execution_layer: ExecutionLayer,
         chain_id: u64,
         latest_block_number: u64,
     ) -> Arc<Self> {
@@ -147,7 +145,6 @@ impl ConsensusEngine {
             consensus_to_mempool_receiver,
             mempool_listener,
             peers_and_metadata,
-            execution_layer.execution_api.clone(),
         );
         runtimes.extend(mempool_runtime);
         init_block_buffer_manager(&consensus_db, latest_block_number).await;
@@ -178,7 +175,6 @@ impl ConsensusEngine {
         // trigger this to make epoch manager invoke new epoch
         let args = HttpsServerArgs {
             address: node_config.https_server_address,
-            execution_api: execution_layer.execution_api.clone(),
             cert_pem: node_config
                 .https_cert_pem_path
                 .clone()
@@ -197,45 +193,10 @@ impl ConsensusEngine {
         runtimes.push(runtime);
         let arc_consensus_engine = Arc::new(Self {
             address: node_config.validator_network.as_ref().unwrap().listen_address.to_string(),
-            execution_layer: execution_layer.clone(),
             runtimes,
         });
-        crate::coex::register_hook_func(arc_consensus_engine.clone());
         // process new round should be after init retƒh hash
         let _ = event_subscription_service.lock().await.notify_initial_configs(1_u64);
         arc_consensus_engine
-    }
-}
-
-#[async_trait]
-impl ConsensusApi for ConsensusEngine {
-    async fn send_ordered_block(&self, parent_id: [u8; 32], ordered_block: ExternalBlock) {
-        info!("send_order_block {:?}", ordered_block);
-        match self
-            .execution_layer
-            .execution_api
-            .recv_ordered_block(BlockId(parent_id), ordered_block)
-            .await
-        {
-            Ok(_) => {}
-            Err(ExecError::DuplicateExecError) => {}
-            Err(_) => panic!("send_ordered_block should not fail"),
-        }
-    }
-
-    async fn recv_executed_block_hash(&self, head: ExternalBlockMeta) -> ComputeRes {
-        info!("recv_executed_block_hash");
-        let res = match self.execution_layer.execution_api.send_executed_block_hash(head).await {
-            Ok(r) => r,
-            Err(_) => panic!("send_ordered_block should not fail"),
-        };
-        res
-    }
-
-    async fn commit_block_hash(&self, head: [u8; 32]) {
-        match self.execution_layer.execution_api.recv_committed_block_info(BlockId(head)).await {
-            Ok(_) => {}
-            Err(_) => panic!("commit_block_hash should not fail"),
-        }
     }
 }
