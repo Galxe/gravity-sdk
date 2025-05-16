@@ -1,7 +1,5 @@
 use alloy_eips::BlockHashOrNumber;
 use alloy_primitives::TxHash;
-use block_buffer_manager::block_buffer_manager::BlockBufferManager;
-use block_buffer_manager::get_block_buffer_manager;
 use consensus::mock_consensus::mock::MockConsensus;
 use greth::gravity_storage;
 use greth::reth;
@@ -14,7 +12,6 @@ use greth::reth_node_ethereum;
 use greth::reth_pipe_exec_layer_ext_v2;
 use greth::reth_pipe_exec_layer_ext_v2::ExecutionArgs;
 use greth::reth_provider;
-use greth::reth_tracing::tracing_subscriber::Registry;
 use greth::reth_transaction_pool;
 use pprof::protos::Message;
 use api::check_bootstrap_config;
@@ -30,25 +27,19 @@ use reth_provider::BlockHashReader;
 use reth_provider::BlockNumReader;
 use reth_provider::BlockReader;
 use reth_transaction_pool::TransactionPool;
-use tikv_jemalloc_ctl::raw;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tracing::info;
-use tracing_flame::FlameLayer;
-use tracing_subscriber::layer::SubscriberExt;
 mod cli;
 mod consensus;
 mod reth_cli;
 mod reth_coordinator;
 
 use crate::cli::Cli;
-use std::cell::OnceCell;
 use std::collections::BTreeMap;
-use std::fmt::Debug;
 use std::fs::File;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::OnceLock;
 use std::thread;
 use std::time::Duration;
 use std::time::Instant;
@@ -270,7 +261,7 @@ fn main() {
                         mock.run().await;
                     });
                 } else {
-                    AptosConsensus::init(gcei_config, coordinator.clone(), chain_id, latest_block_number).await;
+                    AptosConsensus::init(gcei_config, chain_id, latest_block_number).await;
                 }
                 coordinator.send_execution_args().await;
                 coordinator.run().await;

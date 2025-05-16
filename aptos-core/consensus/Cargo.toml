@@ -59,7 +59,6 @@ tokio = { workspace = true }
 tokio-retry = { workspace = true }
 tokio-stream = { workspace = true }
 # api-types.workspace = true
-coex-bridge.workspace = true
 arc-swap = "1.7.1"
 rocksdb = { workspace = true }
 

@@ -1,17 +1,10 @@
-use crate::should_produce_txn;
 use crate::stateful_mempool::Mempool;
-use crate::txn::RawTxn;
-use gaptos::api_types::compute_res::ComputeRes;
-use gaptos::api_types::u256_define::TxnHash;
 use gaptos::api_types::{
-    u256_define::BlockId, ExecError, ExecTxn, ExecutionChannel, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum
+    u256_define::BlockId, ExternalPayloadAttr
 };
-use async_trait::async_trait;
 use log::info;
-use std::collections::{HashMap, HashSet};
-use std::hash::{DefaultHasher, Hash, Hasher};
-use std::sync::atomic::{AtomicU64, Ordering};
-use tokio::sync::mpsc::Receiver;
+use std::collections::HashMap;
+use std::sync::atomic::AtomicU64;
 use tokio::sync::Mutex;
 use tokio::time::Instant;
 

@@ -7,7 +7,7 @@ use std::{sync::Arc, thread};
 
 use api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
 use gaptos::api_types::{
-    account::ExternalAccountAddress, ConsensusApi, ExecTxn, ExecutionChannel, ExecutionLayer
+    account::ExternalAccountAddress, ExecTxn
 };
 use clap::Parser;
 use cli::Cli;
@@ -21,25 +21,20 @@ use txn::RawTxn;
 use warp::Filter;
 
 struct TestConsensusLayer {
-    consensus_engine: Arc<dyn ConsensusApi>,
-    execution_api: Arc<dyn ExecutionChannel>,
+    consensus_engine: Arc<ConsensusEngine>,
 }
 
 impl TestConsensusLayer {
-    async fn new(node_config: NodeConfig, execution_client: Arc<dyn ExecutionChannel>) -> Self {
+    async fn new(node_config: NodeConfig) -> Self {
         let safe_hash = [0u8; 32];
         let head_hash = [0u8; 32];
         let finalized_hash = [0u8; 32];
         Self {
             consensus_engine: ConsensusEngine::init(
                 node_config,
-                ExecutionLayer{
-                    execution_api: execution_client.clone(),
-                },
                 1337,
                 0,
             ).await,
-            execution_api: execution_client,
         }
     }
 
@@ -64,9 +59,8 @@ impl TestConsensusLayer {
                     std::env::var("BLOCK_TXN_NUMS").map(|s| s.parse().unwrap()).unwrap_or(1000);
                 TestConsensusLayer::random_txns(txn_num_in_block).await.into_iter().for_each(
                     |txn| {
-                        let execution = self.execution_api.clone();
                         tokio::spawn(async move {
-                            let _ = execution.send_user_txn(txn).await;
+                            todo!()
                         });
                     },
                 );
@@ -133,7 +127,7 @@ async fn main() {
             let execution = execution_api.clone();
             let _ = thread::spawn(move || {
                 tokio::runtime::Runtime::new().unwrap().block_on(async move {
-                    let cl = TestConsensusLayer::new(gcei_config, execution).await;
+                    let cl = TestConsensusLayer::new(gcei_config).await;
                     cl.run()
                 });
             });

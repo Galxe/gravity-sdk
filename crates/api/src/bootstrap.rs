@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::network::{build_network_interfaces, consensus_network_configuration, extract_network_ids, mempool_network_configuration};
-use gaptos::api_types::{u256_define::BlockId, ExecutionChannel};
+use gaptos::api_types::u256_define::BlockId;
 use block_buffer_manager::get_block_buffer_manager;
 use gaptos::aptos_config::{
     config::{NetworkConfig, NodeConfig, Peer, PeerRole},

@@ -313,7 +313,7 @@ impl RethCli {
         }
         
         if !buffer.is_empty() {
-            get_block_buffer_manager().push_txns(&mut buffer).await;
+            get_block_buffer_manager().push_txns(buffer).await;
         }
         
         Ok(())

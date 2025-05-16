@@ -9,7 +9,6 @@ use crate::{
     shared_mempool::use_case_history::UseCaseHistory,
 };
 use anyhow::Result;
-use gaptos::api_types::ExecutionChannel;
 use gaptos::aptos_config::{
     config::{MempoolConfig, NodeType},
     network_id::PeerNetworkId,

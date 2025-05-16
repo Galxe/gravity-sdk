@@ -3,7 +3,6 @@ mod set_failpoints;
 mod tx;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
-use gaptos::api_types::ExecutionChannel;
 use gaptos::aptos_crypto::HashValue;
 use gaptos::aptos_logger::info;
 use axum::{

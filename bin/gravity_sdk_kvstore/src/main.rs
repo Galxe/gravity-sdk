@@ -3,7 +3,6 @@ use clap::Parser;
 use cli::Cli;
 use execution_channel::ExecutionChannelImpl;
 use flexi_logger::{detailed_format, FileSpec, Logger, WriteMode};
-use gaptos::api_types::{ExecutionChannel, ExecutionLayer};
 use gravity_sdk_kvstore::*;
 use secp256k1::SecretKey;
 use server::ServerApp;
@@ -11,17 +10,16 @@ use std::{error::Error, sync::Arc, thread};
 
 struct TestConsensusLayer {
     node_config: NodeConfig,
-    execution_layer: ExecutionLayer,
 }
 
 impl TestConsensusLayer {
-    fn new(node_config: NodeConfig, execution_client: Arc<dyn ExecutionChannel>) -> Self {
-        Self { node_config, execution_layer: ExecutionLayer { execution_api: execution_client } }
+    fn new(node_config: NodeConfig) -> Self {
+        Self { node_config }
     }
 
     async fn run(self) {
         let _consensus_engine =
-            ConsensusEngine::init(self.node_config, self.execution_layer, 1337, 0).await;
+            ConsensusEngine::init(self.node_config, 1337, 0).await;
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         }
@@ -57,14 +55,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let (ordered_block_sender, ordered_block_receiver) = futures::channel::mpsc::channel(10);
     blockchain.process_blocks_pipeline(ordered_block_receiver).await?;
-    let execution_channel = Arc::new(ExecutionChannelImpl::new(ordered_block_sender));
     let listen_url = cli.listen_url.clone();
 
     cli.run(move || {
         tokio::spawn(async move {
-            let server = ServerApp::new(execution_channel.clone(), blockchain.state(), storage);
+            let server = ServerApp::new(blockchain.state(), storage);
             let _ = thread::spawn(move || {
-                let cl = TestConsensusLayer::new(gcei_config, execution_channel);
+                let cl = TestConsensusLayer::new(gcei_config);
                 tokio::runtime::Runtime::new().unwrap().block_on(cl.run());
             });
             server.start(listen_url.as_str()).await.unwrap();
