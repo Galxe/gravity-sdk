@@ -1,4 +1,3 @@
-use gaptos::api_types::{ExecTxn, ExecutionChannel};
 use hex::decode;
 use log::info;
 use poem::{
@@ -81,7 +80,6 @@ impl ResponseError for TransactionError {
 
 #[derive(Clone)]
 struct Context {
-    pub execution_channel: Arc<dyn ExecutionChannel>,
     pub state: Arc<RwLock<State>>,
     pub storage: Arc<dyn Storage>,
 }
@@ -98,12 +96,7 @@ async fn add_txn(
     let txn_with_account = TransactionWithAccount { txn: transaction, address: account_address };
     match serde_json::to_string(&txn_with_account) {
         Ok(raw_txn) => {
-            let txn_hash = context
-                .execution_channel
-                .send_user_txn(ExecTxn::RawTxn(raw_txn.into()))
-                .await
-                .map_err(|_| TransactionError::InvalidTransactionHash)?;
-            Ok(Json(json!({ "txn_hash": txn_hash })))
+            todo!()
         }
         Err(err) => Err(TransactionError::SerializationError(err).into()),
     }
@@ -160,11 +153,10 @@ pub struct ServerApp {
 
 impl ServerApp {
     pub fn new(
-        execution_channel: Arc<dyn ExecutionChannel>,
         state: Arc<RwLock<State>>,
         storage: Arc<dyn Storage>,
     ) -> Self {
-        Self { context: Arc::new(Context { execution_channel, state, storage }) }
+        Self { context: Arc::new(Context { state, storage }) }
     }
 
     pub async fn start(&self, addr: &str) -> Result<(), Box<dyn std::error::Error>> {

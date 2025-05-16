@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use gaptos::api_types::{ExecTxn, ExecutionChannel};
 use gaptos::aptos_crypto::HashValue;
 use gaptos::aptos_logger::info;
 use axum::{http::StatusCode, response::Json as JsonResponse};
@@ -30,24 +29,14 @@ pub struct TxResponse {
 // curl -X POST -H "Content-Type:application/json" -d '{"tx": [1, 2, 3, 4]}' https://127.0.0.1:1998/tx/submit_tx
 pub async fn submit_tx(
     request: TxRequest,
-    execution_api: Arc<dyn ExecutionChannel>,
 ) -> Result<JsonResponse<SubmitResponse>, StatusCode> {
-    match execution_api.send_user_txn(ExecTxn::RawTxn(request.tx)).await {
-        Ok(hash) => {
-            Ok(JsonResponse(SubmitResponse { hash: hash.bytes() } ))
-        },
-        Err(e) => {
-            info!("submit tx error {:?}", e);
-            Err(StatusCode::from_u16(1).unwrap())
-        },
-    }
+    todo!()
 }
 
 // example:
 // curl https://127.0.0.1:1998/tx/get_tx_by_hash/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 pub async fn get_tx_by_hash(
     request: HashValue,
-    execution_api: Arc<dyn ExecutionChannel>,
 ) -> Result<JsonResponse<TxResponse>, StatusCode> {
     info!("get transaction by hash {}", request);
     Ok(JsonResponse(TxResponse { tx: vec![] }))

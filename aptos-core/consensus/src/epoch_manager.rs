@@ -396,8 +396,12 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 let default_proposer = proposers
                     .first()
                     .expect("INVARIANT VIOLATION: proposers is empty");
+                // TODO(gravity_alex): optimize this
+                let proposers = round_proposers.iter()
+                    .map(|(round, author)| (*round, AccountAddress::from_bytes(author.bytes()).unwrap()))
+                    .collect();
                 Arc::new(RoundProposer::new(
-                    round_proposers.clone(),
+                    proposers,
                     *default_proposer,
                 ))
             },

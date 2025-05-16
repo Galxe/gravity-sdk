@@ -5,16 +5,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::reth_cli::{convert_account, RethCli};
-use gaptos::api_types::compute_res::{ComputeRes, TxnStatus};
-use gaptos::api_types::u256_define::TxnHash;
-use gaptos::api_types::{
-    u256_define::BlockId, ExecError, ExecTxn, ExecutionChannel, ExternalBlock, ExternalBlockMeta,
-    ExternalPayloadAttr, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
-};
-use async_trait::async_trait;
 use block_buffer_manager::get_block_buffer_manager;
-use greth::reth::revm::db::components::block_hash;
-use greth::reth_pipe_exec_layer_ext_v2::{ExecutionArgs, ExecutionResult};
+use greth::reth_pipe_exec_layer_ext_v2::ExecutionArgs;
 use alloy_primitives::B256;
 use state::State;
 use tokio::sync::Mutex;
@@ -77,44 +69,44 @@ impl RethCoordinator {
     }
 }
 
-#[async_trait]
-impl ExecutionChannel for RethCoordinator {
-    async fn send_user_txn(&self, _bytes: ExecTxn) -> Result<TxnHash, ExecError> {
-        panic!("Reth Coordinator does not support add_txn");
-    }
+// #[async_trait]
+// impl ExecutionChannel for RethCoordinator {
+//     async fn send_user_txn(&self, _bytes: ExecTxn) -> Result<TxnHash, ExecError> {
+//         panic!("Reth Coordinator does not support add_txn");
+//     }
 
-    async fn recv_unbroadcasted_txn(&self) -> Result<Vec<VerifiedTxn>, ExecError> {
-        panic!("Reth Coordinator does not support recv_unbroadcasted_txn");
-    }
+//     async fn recv_unbroadcasted_txn(&self) -> Result<Vec<VerifiedTxn>, ExecError> {
+//         panic!("Reth Coordinator does not support recv_unbroadcasted_txn");
+//     }
 
-    async fn check_block_txns(
-        &self,
-        payload_attr: ExternalPayloadAttr,
-        txns: Vec<VerifiedTxn>,
-    ) -> Result<bool, ExecError> {
-        panic!("Reth Coordinator does not support check_block_txns");
-    }
+//     async fn check_block_txns(
+//         &self,
+//         payload_attr: ExternalPayloadAttr,
+//         txns: Vec<VerifiedTxn>,
+//     ) -> Result<bool, ExecError> {
+//         panic!("Reth Coordinator does not support check_block_txns");
+//     }
 
-    async fn send_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
-        panic!("Reth Coordinator does not support send_pending_txns");
-    }
+//     async fn send_pending_txns(&self) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, ExecError> {
+//         panic!("Reth Coordinator does not support send_pending_txns");
+//     }
 
-    async fn recv_ordered_block(
-        &self,
-        parent_id: BlockId,
-        mut ordered_block: ExternalBlock,
-    ) -> Result<(), ExecError> {
-        panic!("Reth Coordinator does not support recv_ordered_block");
-    }
+//     async fn recv_ordered_block(
+//         &self,
+//         parent_id: BlockId,
+//         mut ordered_block: ExternalBlock,
+//     ) -> Result<(), ExecError> {
+//         panic!("Reth Coordinator does not support recv_ordered_block");
+//     }
 
-    async fn send_executed_block_hash(
-        &self,
-        head: ExternalBlockMeta,
-    ) -> Result<ComputeRes, ExecError> {
-        panic!("Reth Coordinator does not support send_executed_block_hash");
-    }
+//     async fn send_executed_block_hash(
+//         &self,
+//         head: ExternalBlockMeta,
+//     ) -> Result<ComputeRes, ExecError> {
+//         panic!("Reth Coordinator does not support send_executed_block_hash");
+//     }
 
-    async fn recv_committed_block_info(&self, block_id: BlockId) -> Result<(), ExecError> {
-        panic!("Reth Coordinator does not support recv_committed_block_info")
-    }
-}
+//     async fn recv_committed_block_info(&self, block_id: BlockId) -> Result<(), ExecError> {
+//         panic!("Reth Coordinator does not support recv_committed_block_info")
+//     }
+// }

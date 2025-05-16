@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use gaptos::api_types::{account::ExternalAccountAddress, ExecTxn, ExecutionChannel};
+use gaptos::api_types::account::ExternalAccountAddress;
 use log::warn;
 use rand::Rng;
 use tokio::{
@@ -40,10 +40,6 @@ impl Server {
         }
     }
 
-    pub async fn execution_client(&self) -> Arc<dyn ExecutionChannel> {
-        self.kv_store.clone()
-    }
-
     /// Handles a single client connection
     async fn handle_client(kv_store: Arc<KvStore>, stream: TcpStream) -> tokio::io::Result<()> {
         let mut reader = BufReader::new(stream);
@@ -63,10 +59,11 @@ impl Server {
                     let val = parts.next().unwrap_or("").to_string();
                     let raw_txn =
                         RawTxn { account: generate_random_address(), sequence_number: 1, key, val };
-                    match kv_store.send_user_txn(ExecTxn::RawTxn(raw_txn.to_bytes())).await {
-                        Ok(_) => reader.get_mut().write_all(b"OK\n").await?,
-                        Err(_) => reader.get_mut().write_all(b"FAILED TO SET\n").await?,
-                    }
+                    todo!()
+                    // match kv_store.send_user_txn(ExecTxn::RawTxn(raw_txn.to_bytes())).await {
+                    //     Ok(_) => reader.get_mut().write_all(b"OK\n").await?,
+                    //     Err(_) => reader.get_mut().write_all(b"FAILED TO SET\n").await?,
+                    // }
                 }
                 Some("GET") => {
                     let key = parts.next().unwrap_or("").to_string();

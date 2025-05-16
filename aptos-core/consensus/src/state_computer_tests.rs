@@ -44,6 +44,7 @@ impl ConsensusNotificationSender for DummyStateSyncNotifier {
         &self,
         transactions: Vec<Transaction>,
         subscribable_events: Vec<ContractEvent>,
+        _block_number: u64,
     ) -> Result<(), Error> {
         self.invocations
             .lock()
