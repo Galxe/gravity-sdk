@@ -42,7 +42,6 @@ use gaptos::aptos_types::{
     randomness::Randomness, transaction::Transaction, vm_status::{DiscardedVMStatus, StatusCode}
 };
 use block_buffer_manager::get_block_buffer_manager;
-use coex_bridge::{get_coex_bridge, Func};
 use fail::fail_point;
 use futures::{future::BoxFuture, SinkExt, StreamExt};
 use std::iter::once;

@@ -3,7 +3,6 @@ mod set_failpoints;
 mod tx;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
-use gaptos::api_types::ExecutionChannel;
 use gaptos::aptos_crypto::HashValue;
 use gaptos::aptos_logger::info;
 use axum::{
@@ -22,7 +21,6 @@ use tx::{get_tx_by_hash, submit_tx, TxRequest};
 
 pub struct HttpsServerArgs {
     pub address: String,
-    pub execution_api: Arc<dyn ExecutionChannel>,
     pub cert_pem: Option<PathBuf>,
     pub key_pem: Option<PathBuf>,
 }
@@ -36,14 +34,12 @@ async fn ensure_https(req: Request<Body>, next: Next) -> Response {
 
 pub async fn https_server(args: HttpsServerArgs) {
     rustls::crypto::ring::default_provider().install_default().unwrap();
-    let execution_api_clone = args.execution_api.clone();
     let submit_tx_lambda = |Json(request): Json<TxRequest>| async move {
-        submit_tx(request, execution_api_clone).await
+        submit_tx(request).await
     };
 
-    let execution_api_clone = args.execution_api.clone();
     let get_tx_by_hash_lambda = |Path(request): Path<HashValue>| async move {
-        get_tx_by_hash(request, execution_api_clone).await
+        get_tx_by_hash(request).await
     };
 
     let set_fail_point_lambda =
@@ -123,7 +119,6 @@ mod test {
 
         let args = HttpsServerArgs {
             address: "127.0.0.1:5425".to_owned(),
-            execution_api: Arc::new(MockExecutionApi {}),
             cert_pem: Some(PathBuf::from(dir.clone() + "/src/https/test/cert.pem")),
             key_pem: Some(PathBuf::from(dir.clone() + "/src/https/test/key.pem")),
         };

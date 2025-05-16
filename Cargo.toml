@@ -17,7 +17,6 @@ members = [
     # "crates/api-types",
     "bin/kvstore",
     "bin/gravity_sdk_kvstore",
-    "crates/coex-bridge",
     "bin/bench",
     "bin/gravity_node", 
     "crates/block-buffer-manager"]
@@ -387,7 +386,6 @@ whoami = "1.5.0"
 x25519-dalek = "1.2.0"
 z3tracer = "0.8.0"
 ruint = "1.12.3"
-coex-bridge = { path = "./crates/coex-bridge" }
 
 [profile.release]
 debug = true

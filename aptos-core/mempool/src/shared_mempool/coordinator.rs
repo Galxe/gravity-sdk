@@ -270,13 +270,14 @@ async fn process_received_txns<NetworkClient>(
 ) where
     NetworkClient: NetworkClientInterface<MempoolSyncMsg> + 'static,
 {
-    for (txn, _, _) in transactions {
-        let _r = smp.execution_api.as_ref().send_user_txn(
-            ExecTxn::VerifiedTxn(txn)
-        ).await;
-        info!("add_txn result is {:?}", _r);
-        // TODO(gravity_byteyue): handle error msg
-    }
+    unimplemented!("Currently no support")
+    // for (txn, _, _) in transactions {
+    //     let _r = smp.execution_api.as_ref().send_user_txn(
+    //         ExecTxn::VerifiedTxn(txn)
+    //     ).await;
+    //     info!("add_txn result is {:?}", _r);
+    //     // TODO(gravity_byteyue): handle error msg
+    // }
 }
 
 /// Handles all network messages.
@@ -361,16 +362,17 @@ async fn handle_update_peers<NetworkClient>(
             counters::shared_mempool_event_inc("peer_update");
             notify_subscribers(SharedMempoolNotification::PeerStateChange, &smp.subscribers);
         }
-        let transactions = smp.execution_api.as_ref().recv_unbroadcasted_txn().await.unwrap();
-        if transactions.is_empty() {
-            info!("No txns to broadcast");
-            return ;
-        }
-        for peer in &newly_added_upstream {
-            debug!(LogSchema::new(LogEntry::NewPeer).peer(peer));
-            tasks::execute_broadcast(*peer, false, smp, executor.clone(), transactions.clone())
-                .await;
-        }
+        // TODO(gravity_byteyue): maybe we should consider providing broadcasting interface later
+        // let transactions = smp.execution_api.as_ref().recv_unbroadcasted_txn().await.unwrap();
+        // if transactions.is_empty() {
+        //     info!("No txns to broadcast");
+        //     return ;
+        // }
+        // for peer in &newly_added_upstream {
+        //     debug!(LogSchema::new(LogEntry::NewPeer).peer(peer));
+        //     tasks::execute_broadcast(*peer, false, smp, executor.clone(), transactions.clone())
+        //         .await;
+        // }
         for peer in &disabled {
             debug!(LogSchema::new(LogEntry::LostPeer).peer(peer));
         }

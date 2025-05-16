@@ -40,7 +40,6 @@ use gaptos::aptos_types::{
     validator_signer::ValidatorSigner, vm_status::{DiscardedVMStatus, StatusCode},
 };
 use block_buffer_manager::get_block_buffer_manager;
-use coex_bridge::{get_coex_bridge, Func};
 use futures::FutureExt;
 use itertools::Itertools;
 use gaptos::move_core_types::account_address::AccountAddress;

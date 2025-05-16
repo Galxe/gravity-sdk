@@ -17,7 +17,6 @@ use crate::{
     persistent_liveness_storage::{PersistentLivenessStorage, RecoveryData},
 };
 use anyhow::{anyhow, bail};
-use gaptos::api_types::{u256_define::BlockId, ExecutionChannel};
 use aptos_consensus_types::{
     block::Block,
     block_retrieval::{

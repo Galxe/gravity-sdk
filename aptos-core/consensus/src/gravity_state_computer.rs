@@ -10,7 +10,6 @@ use aptos_executor::block_executor::BlockExecutor;
 use aptos_executor_types::{BlockExecutorTrait, ExecutorResult, StateComputeResult};
 use block_buffer_manager::block_buffer_manager::BlockHashRef;
 use block_buffer_manager::get_block_buffer_manager;
-use coex_bridge::{get_coex_bridge, Func};
 use gaptos::aptos_consensus::counters::{APTOS_COMMIT_BLOCKS, APTOS_EXECUTION_TXNS};
 use gaptos::aptos_crypto::HashValue;
 use gaptos::aptos_logger::info;
