@@ -380,7 +380,7 @@ impl BlockBufferManager {
                 block_num,
                 BlockState::Computed {
                     id: block_id,
-                    compute_res: ComputeRes { data: block_hash, txn_num: txn_len as u64, txn_status },
+                    compute_res: ComputeRes { data: block_hash, txn_num: txn_len as u64, txn_status, events: vec![] },
                 },
             );
             

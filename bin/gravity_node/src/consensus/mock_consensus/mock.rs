@@ -57,6 +57,7 @@ impl MockConsensus {
                 block_id: BlockId(bytes),
                 block_number,
                 usecs: attr.ts,
+                epoch: 0,
                 randomness: None,
                 block_hash: None,
             },

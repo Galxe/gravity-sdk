@@ -378,7 +378,8 @@ impl PipelinedBlock {
     pub fn subscribable_events(&self) -> Vec<ContractEvent> {
         // reconfiguration suffix don't count, the state compute result is carried over from parents
         // TODO(gravity_byteyue): we should have a better way to identify reconfiguration suffix
-        vec![]
+        // reconfiguration event之后的block是不应该被执行的. 在gravity-sdk的模型中暂时不会有这个问题 但是可能需要仔细考虑
+        self.state_compute_result.events()
     }
 
     /// The block is suffix of a reconfiguration block if the state result carries over the epoch state

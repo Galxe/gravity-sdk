@@ -4,11 +4,14 @@
 
 use gaptos::api_types::compute_res::{ComputeRes, TxnStatus};
 use gaptos::aptos_crypto::hash::{HashValue, ACCUMULATOR_PLACEHOLDER_HASH};
-use gaptos::aptos_types::{block_executor::config::BlockExecutorConfigFromOnchain, transaction::Transaction};
 use gaptos::aptos_types::block_executor::partitioner::ExecutableBlock;
+use gaptos::aptos_types::contract_event::ContractEvent;
 use gaptos::aptos_types::epoch_state::EpochState;
 use gaptos::aptos_types::ledger_info::LedgerInfoWithSignatures;
 use gaptos::aptos_types::transaction::block_epilogue::BlockEndInfo;
+use gaptos::aptos_types::{
+    block_executor::config::BlockExecutorConfigFromOnchain, transaction::Transaction,
+};
 use serde::{Deserialize, Serialize};
 use std::{fmt::Display, sync::Arc};
 use thiserror::Error;
@@ -133,11 +136,16 @@ impl StateComputeResult {
     /// this function is used in RandomComputeResultStateComputer to assert that the compute
     /// function is really called.
     pub fn with_root_hash(root_hash: HashValue) -> Self {
-        Self { execution_output: ComputeRes {
-            data: root_hash.to_vec().try_into().unwrap(),
-            txn_num: 0,
-            txn_status: Arc::new(None),
-        }, epoch_state: None, block_end_info: None }
+        Self {
+            execution_output: ComputeRes {
+                data: root_hash.to_vec().try_into().unwrap(),
+                txn_num: 0,
+                txn_status: Arc::new(None),
+                events: vec![],
+            },
+            epoch_state: None,
+            block_end_info: None,
+        }
     }
 
     pub fn root_hash(&self) -> HashValue {
@@ -167,7 +175,16 @@ impl StateComputeResult {
         // assert_eq!(status_len, input_txns.len());
         let status = txn_status.as_ref().as_ref().unwrap();
         // for the corresponding status, if it is discarded, then remove the txn from the input_txns
-        input_txns.into_iter().zip(status.iter()).filter(|(_, status)| !status.is_discarded).map(|(txn, _)| txn).collect()
+        input_txns
+            .into_iter()
+            .zip(status.iter())
+            .filter(|(_, status)| !status.is_discarded)
+            .map(|(txn, _)| txn)
+            .collect()
+    }
+
+    pub fn events(&self) -> Vec<ContractEvent> {
+        self.execution_output.events.iter().map(|event| event.clone().into()).collect()
     }
 }
 

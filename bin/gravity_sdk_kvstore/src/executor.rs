@@ -1,10 +1,10 @@
 use super::*;
-use gaptos::api_types::compute_res::ComputeRes;
 use futures::channel::oneshot::{channel, Sender};
 use futures::channel::{mpsc, oneshot};
 use futures::future::BoxFuture;
 use futures::{stream::FuturesUnordered, StreamExt};
 use futures::{FutureExt, SinkExt};
+use gaptos::api_types::compute_res::ComputeRes;
 use log::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
@@ -316,7 +316,12 @@ impl PipelineExecutor {
 
         let state_root = state_guard.compute_state_root()?;
 
-        let compute_res = ComputeRes { data: state_root.0, txn_num: result.receipts.len() as u64, txn_status: Arc::new(None) };
+        let compute_res = ComputeRes {
+            data: state_root.0,
+            txn_num: result.receipts.len() as u64,
+            txn_status: Arc::new(None),
+            events: vec![],
+        };
         let send_computes_res_sender =
             self.compute_res_senders.remove(&result.block_number).unwrap();
 
