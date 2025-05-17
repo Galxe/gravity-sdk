@@ -455,6 +455,7 @@ impl PipelineBuilder {
             block_id: BlockId(*block.id()),
             block_number: block.block_number().unwrap_or_else(|| panic!("No block number")),
             usecs: block.timestamp_usecs(),
+            epoch: block.epoch(),
             randomness: maybe_rand.map(|r| Random::from_bytes(r.randomness())),
             block_hash: None,
         };

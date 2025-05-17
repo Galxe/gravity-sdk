@@ -9,10 +9,6 @@ use crate::{
     logger,
     network::{create_network_runtime, extract_network_configs},
 };
-use gaptos::api_types::{
-    compute_res::ComputeRes, u256_define::BlockId, ExecError,
-    ExternalBlock, ExternalBlockMeta,
-};
 use gaptos::aptos_build_info as aptos_build_info;
 use gaptos::aptos_build_info::build_information;
 use gaptos::aptos_config::{config::NodeConfig, network_id::NetworkId};
@@ -23,8 +19,6 @@ use gaptos::aptos_logger::{info, warn};
 use gaptos::aptos_network_builder::builder::NetworkBuilder;
 use gaptos::aptos_storage_interface::DbReaderWriter;
 use gaptos::aptos_telemetry::service::start_telemetry_service;
-use async_trait::async_trait;
-
 use gaptos::aptos_types::chain_id::ChainId;
 use futures::channel::mpsc;
 use tokio::{runtime::Runtime, sync::Mutex};

@@ -359,7 +359,7 @@ impl BlockStore {
                     .metadata_db()
                     .get_block_hash(block_number)
                 {
-                    Some(block_hash) => Some(ComputeRes::new(*block_hash, txn_num, vec![])),
+                    Some(block_hash) => Some(ComputeRes::new(*block_hash, txn_num, vec![], vec![])),
                     None => None,
                 };
                 let block = ExternalBlock {
@@ -368,6 +368,7 @@ impl BlockStore {
                         block_id: BlockId(*p_block.block().id()),
                         block_number,
                         usecs: p_block.block().timestamp_usecs(),
+                        epoch: p_block.block().epoch(),
                         randomness: p_block
                             .randomness()
                             .map(|r| Random::from_bytes(r.randomness())),

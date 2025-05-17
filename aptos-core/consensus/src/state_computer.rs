@@ -230,10 +230,12 @@ impl StateComputer for ExecutionProxy {
     ) -> StateComputeResultFut {
         assert!(block.block_number().is_some());
         let txns = self.get_block_txns(block).await;
+        // pass epoch
         let meta_data = ExternalBlockMeta {
             block_id: BlockId(*block.id()),
             block_number: block.block_number().unwrap_or_else(|| panic!("No block number")),
             usecs: block.timestamp_usecs(),
+            epoch: block.epoch(),
             randomness: randomness.map(|r| Random::from_bytes(r.randomness())),
             block_hash: None,
         };

@@ -87,7 +87,6 @@ pub async fn https_server(args: HttpsServerArgs) {
 
 #[cfg(test)]
 mod test {
-    use gaptos::api_types::mock_execution_layer::MockExecutionApi;
     use fail::fail_point;
     use rcgen::generate_simple_self_signed;
     use reqwest::ClientBuilder;
