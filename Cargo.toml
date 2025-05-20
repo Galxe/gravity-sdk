@@ -29,7 +29,6 @@ gaptos = { git = "https://github.com/Galxe/gravity-aptos.git", branch = "onchain
 aptos-executor-types = { path = "dependencies/aptos-executor-types" }
 aptos-executor = { path = "dependencies/aptos-executor" }
 api = { path = "./crates/api" }
-# api-types = { path = "./crates/api-types" }
 
 # core ----
 aptos-consensus-types = { path = "./aptos-core/consensus/consensus-types", features = [
