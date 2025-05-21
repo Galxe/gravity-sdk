@@ -290,8 +290,7 @@ impl Mempool {
         let mut valid_txns_to_insert: Vec<(usize, MempoolTransaction)> = Vec::with_capacity(batch_size);
 
         let now_system = SystemTime::now(); // Get time once for the batch
-        let now_epoch_millis = gaptos::aptos_infallible::duration_since_epoch().as_millis() as u64; // Get epoch time once
-
+        
         const ZERO_RANKING_SCORE: u64 = 10; // Use existing constant ranking score
 
         // --- 1. Validation and Preparation Phase ---
@@ -299,8 +298,7 @@ impl Mempool {
         for (index, txn_with_number) in txns_with_numbers.into_iter().enumerate() {
             let txn = txn_with_number.txn; // VerifiedTxn
             let db_sequence_number = txn_with_number.account_seq_num;
-            let sender = txn.sender();
-
+            
             // Basic Validation (Sequence Number Check)
             if txn.seq_number() < db_sequence_number {
                 let status = MempoolStatus::new(MempoolStatusCode::InvalidSeqNumber).with_message(format!(
@@ -624,6 +622,14 @@ impl Mempool {
             self.log_consensus_pulled_latency(transaction.sender(), transaction.sequence_number());
         }
         block
+    }
+
+    pub(crate) fn get_txn_count(&self) -> usize {
+        self.transactions.txn_size()
+    }
+
+    pub(crate) fn priority_index_size(&self) -> usize {
+        self.transactions.priority_index_size()
     }
 
     /// Returns block of transactions and new last_timeline_id. For each transaction, the output includes

@@ -698,8 +698,24 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         let quorum_store_config = if consensus_config.is_dag_enabled() {
             self.dag_config.quorum_store.clone()
         } else {
-            self.config.quorum_store.clone()
+            let mut qs_config = self.config.quorum_store.clone();
+            let batch_max_txns = std::env::var("BATCH_MAX_TXNS").unwrap_or_default().parse::<usize>().unwrap_or(3000);
+            let max_txn_per_s = std::env::var("MAX_TXN_PER_S").unwrap_or_default().parse::<usize>().unwrap_or(12000);
+            qs_config.back_pressure.dynamic_max_txn_per_s = max_txn_per_s as u64;
+            qs_config.receiver_max_batch_bytes = usize::MAX;
+            qs_config.sender_max_batch_bytes = usize::MAX;
+            qs_config.sender_max_total_bytes = usize::MAX;
+            qs_config.receiver_max_total_bytes = usize::MAX;
+            qs_config.memory_quota = std::env::var("MEMORY_QUOTA").unwrap_or_default().parse::<usize>().unwrap_or(1024 * 1024 * 1024 * 16);
+            qs_config.db_quota = qs_config.memory_quota;
+            qs_config.receiver_max_total_txns = batch_max_txns;
+            qs_config.sender_max_total_txns = batch_max_txns;
+            qs_config.back_pressure.backlog_per_validator_batch_limit_count = 1000;
+            qs_config.back_pressure.backlog_txn_limit_count = 100000;
+            qs_config.batch_generation_min_non_empty_interval_ms = std::env::var("BATCH_GENERATION_MIN_NON_EMPTY_INTERVAL_MS").unwrap_or_default().parse::<usize>().unwrap_or(200);
+            qs_config
         };
+        self.config.vote_back_pressure_limit = 20;
 
         let mut quorum_store_builder = if self.quorum_store_enabled {
             info!("Building QuorumStore");

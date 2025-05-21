@@ -18,7 +18,7 @@ use gaptos::api_types::{ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxn
 use block_buffer_manager::get_block_buffer_manager;
 use rayon::iter::IntoParallelRefMutIterator;
 use core::panic;
-use greth::{reth_ethereum_engine_primitives::EthPayloadAttributes, reth_transaction_pool::{EthPooledTransaction, ValidPoolTransaction}};
+use greth::{reth_ethereum_engine_primitives::EthPayloadAttributes, reth_node_core::primitives::account, reth_transaction_pool::{EthPooledTransaction, TransactionOrigin, ValidPoolTransaction}};
 use greth::reth_node_api::NodeTypesWithDBAdapter;
 use greth::reth_node_ethereum::EthereumNode;
 use greth::reth_pipe_exec_layer_ext_v2::{ExecutedBlockMeta, OrderedBlock, PipeExecLayerApi};
@@ -205,6 +205,7 @@ impl RethCli {
         let sleep = tokio::time::sleep(timeout_duration);
         tokio::pin!(sleep);
         let mut tx_hash_vec = Vec::with_capacity(batch_size * 100);
+        let mut empty_txn_num = 0;
         loop {
             tokio::select! {
                 biased;
@@ -217,8 +218,15 @@ impl RethCli {
                     }
                 }
                 _ = &mut sleep => {
-                    if !tx_hash_vec.is_empty() {
-                        debug!("Timeout reached, processing {} buffered transaction hashes.", tx_hash_vec.len());
+                    if tx_hash_vec.is_empty() {
+                        empty_txn_num += 1;
+                        // if empty_txn_num > 20 {
+                        //     self.update_account_nonce().await?;
+                        //     self.process_transaction_hashes(&mut tx_hash_vec).await?;
+                        //     tx_hash_vec.clear();
+                        // }
+                    } else {
+                        empty_txn_num = 0;
                         self.process_transaction_hashes(&mut tx_hash_vec).await?;
                         tx_hash_vec.clear();
                     }
@@ -229,9 +237,27 @@ impl RethCli {
     }
     
 
+    async fn update_account_nonce(&self) -> Result<(), String> {
+        let mut pending_txns = self.pool
+            .get_pending_transactions_by_origin(TransactionOrigin::Local);
+        let external_pending_txns = self.pool
+            .get_pending_transactions_by_origin(TransactionOrigin::External);
+        let private_pending_txns = self.pool
+            .get_pending_transactions_by_origin(TransactionOrigin::Private);
+        pending_txns.extend(external_pending_txns);
+        pending_txns.extend(private_pending_txns);
+        let mut max_nonce_cache = self.max_nonce_cache.lock().await;
+        for txn in &pending_txns {
+            max_nonce_cache.insert(txn.sender(), txn.nonce());
+        }
+        drop(max_nonce_cache);
+        info!("update account nonce valid pending txns count {:?}", pending_txns.len());
+        self.process_pool_transactions(pending_txns).await?;
+        Ok(())
+    }
+
     async fn process_transaction_hashes(&self, tx_hash_vec: &mut Vec<TxHash>) -> Result<(), String> {
         let mut max_nonce_cache = self.max_nonce_cache.lock().await;
-        let mut buffer = Vec::with_capacity(tx_hash_vec.len());
         let mut pool_txns = self.pool.get_all(tx_hash_vec.drain(..).collect());
         let mut tx_gap = HashSet::new();
         pool_txns = pool_txns.into_iter().filter(|txn| {
@@ -273,6 +299,12 @@ impl RethCli {
                 pool_txns.push(txn);
             }
         });
+        self.process_pool_transactions(pool_txns).await?;
+        Ok(())
+    }
+
+    async fn process_pool_transactions(&self, pool_txns: Vec<Arc<ValidPoolTransaction<EthPooledTransaction>>>) -> Result<(), String> {
+        let mut buffer = Vec::with_capacity(pool_txns.len());
         let mut gas_limit = 0;
         for pool_txn in pool_txns {
             let txn_hash = pool_txn.hash();
@@ -319,7 +351,6 @@ impl RethCli {
         if !buffer.is_empty() {
             get_block_buffer_manager().push_txns(&mut buffer, gas_limit).await;
         }
-        
         Ok(())
     }
 

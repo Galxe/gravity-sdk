@@ -300,10 +300,6 @@ impl BatchGenerator {
         match removed {
             Some(batch_in_progress) => {
                 for txn in batch_in_progress.txns {
-                    info!(
-                        "QS: removing txn from txns_in_progress_sorted: {:?}",
-                        txn
-                    );
                     if let Entry::Occupied(mut o) = self.txns_in_progress_sorted.entry(txn) {
                         let info = o.get_mut();
                         if info.decrement() == 0 {
@@ -344,8 +340,13 @@ impl BatchGenerator {
             .await
             .unwrap_or_default();
 
+<<<<<<< HEAD
         trace!("QS: pulled_txns len: {:?}", pulled_txns.len());
         
+=======
+        info!("QS: batches pulled_txns len: {:?}", pulled_txns.len());
+
+>>>>>>> f102621 (2wtps)
         if pulled_txns.is_empty() {
             counters::PULLED_EMPTY_TXNS_COUNT.inc();
             // Quorum store metrics
@@ -404,7 +405,6 @@ impl BatchGenerator {
         let mut dynamic_pull_txn_per_s = (self.config.back_pressure.dynamic_min_txn_per_s
             + self.config.back_pressure.dynamic_max_txn_per_s)
             / 2;
-
         loop {
             let _timer = counters::BATCH_GENERATOR_MAIN_LOOP.start_timer();
             counters::PROCESS_TXN_IN_BATCH_GENERATOR.reset();
@@ -414,7 +414,6 @@ impl BatchGenerator {
                     self.back_pressure = updated_back_pressure;
                 },
                 _ = interval.tick() => monitor!("batch_generator_handle_tick", {
-
                     let tick_start = Instant::now();
                     // TODO: refactor back_pressure logic into its own function
                     if self.back_pressure.txn_count {
@@ -451,8 +450,9 @@ impl BatchGenerator {
                     } else {
                         counters::QS_BACKPRESSURE_PROOF_COUNT.observe(0.0);
                     }
+                    let actual_since_last_non_empty_pull_ms = tick_start.duration_since(last_non_empty_pull).as_millis();
                     let since_last_non_empty_pull_ms = std::cmp::min(
-                        tick_start.duration_since(last_non_empty_pull).as_millis(),
+                        actual_since_last_non_empty_pull_ms,
                         self.config.batch_generation_max_interval_ms as u128
                     ) as usize;
                     if (!self.back_pressure.proof_count
@@ -462,11 +462,20 @@ impl BatchGenerator {
                         let dynamic_pull_max_txn = std::cmp::max(
                             (since_last_non_empty_pull_ms as f64 / 1000.0 * dynamic_pull_txn_per_s as f64) as u64, 1);
                         let pull_max_txn = std::cmp::min(
-                            dynamic_pull_max_txn,
-                            self.config.sender_max_total_txns as u64,
-                        );
+                                dynamic_pull_max_txn,
+                                self.config.sender_max_total_txns as u64,
+                            );
                         let batches = self.handle_scheduled_pull(pull_max_txn).await;
                         if !batches.is_empty() {
+                            info!("QS: batches {:?} take {:?}[{:?}]({:?}) ms, dynamic_pull_max_txn {:?}, dynamic_pull_txn_per_s {:?}, pull_max_txn {:?}, batch in progress {:?}", 
+                                batches.len(), 
+                                since_last_non_empty_pull_ms, 
+                                actual_since_last_non_empty_pull_ms,
+                                tick_start.elapsed().as_millis(),
+                                dynamic_pull_max_txn, 
+                                dynamic_pull_txn_per_s, 
+                                pull_max_txn,
+                                self.batches_in_progress.len());
                             last_non_empty_pull = tick_start;
                         
                             let persist_start = Instant::now();
@@ -492,6 +501,7 @@ impl BatchGenerator {
                     }
                 }),
                 Some(cmd) = cmd_rx.recv() => monitor!("batch_generator_handle_command", {
+                    info!("QS: batches cmd: {:?}", cmd);
                     match cmd {
                         BatchGeneratorCommand::CommitNotification(block_timestamp, batches) => {
                             trace!(

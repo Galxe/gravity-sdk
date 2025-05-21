@@ -485,11 +485,11 @@ impl ProofQueue {
             }
         }
 
+        let batch_count = self.author_to_batches.iter().map(|(_, batches)| batches.len()).sum::<usize>();
         let mut iters = vec![];
         for (_, batches) in self.author_to_batches.iter() {
             iters.push(batches.iter().rev());
         }
-
         while !iters.is_empty() {
             iters.shuffle(&mut thread_rng());
             iters.retain_mut(|iter| {
@@ -560,6 +560,12 @@ impl ProofQueue {
         }
         info!(
             // before non full check
+            remaining_proofs = self.remaining_proofs,
+            remaining_local_proofs = self.remaining_local_proofs,
+            remaining_txns = self.remaining_txns_with_duplicates,
+            remaining_local_txns = self.remaining_local_txns,
+            batch_count = batch_count,
+            excluded_batches_len = excluded_batches.len(),
             byte_size = cur_bytes,
             block_total_txns = cur_all_txns,
             block_unique_txns = cur_unique_txns,
