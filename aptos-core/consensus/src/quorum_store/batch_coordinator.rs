@@ -141,14 +141,17 @@ impl BatchCoordinator {
 
         let mut persist_requests = vec![];
         for batch in batches.into_iter() {
-            // TODO: maybe don't message batch generator if the persist is unsuccessful?
-            if let Err(e) = self
-                .sender_to_batch_generator
-                .send(BatchGeneratorCommand::RemoteBatch(batch.clone()))
-                .await
-            {
-                warn!("Failed to send batch to batch generator: {}", e);
+            if batch.author() != self.my_peer_id {
+                // TODO: maybe don't message batch generator if the persist is unsuccessful?
+                if let Err(e) = self
+                        .sender_to_batch_generator
+                        .send(BatchGeneratorCommand::RemoteBatch(batch.clone()))
+                        .await
+                    {
+                        warn!("Failed to send batch to batch generator: {}", e);
+                    }
             }
+            
             persist_requests.push(batch.into());
         }
         counters::RECEIVED_BATCH_COUNT.inc_by(persist_requests.len() as u64);

@@ -183,7 +183,9 @@ impl BlockBufferManager {
         let mut txn_buffer = self.txn_buffer.txns.lock().await;
         let mut total_gas_limit = 0;
         let mut count = 0;
-        let split_point = txn_buffer.iter()
+        let total_txn = txn_buffer.iter().map(|item| item.txns.len()).sum::<usize>();
+        info!("pop_txns total_txn: {:?}", total_txn);
+        let mut split_point = txn_buffer.iter()
             .position(|item| {
                 if total_gas_limit + item.gas_limit > gas_limit || count >= max_size {
                     return true;
@@ -193,7 +195,9 @@ impl BlockBufferManager {
                 false
             })
             .unwrap_or(txn_buffer.len());
-
+        if split_point == 0 && txn_buffer.len() > 0 {
+            split_point = 1;
+        }
         let valid_item = txn_buffer.drain(0..split_point).collect::<Vec<_>>();
         drop(txn_buffer);
         let mut result = Vec::new();

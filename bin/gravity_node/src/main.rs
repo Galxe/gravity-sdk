@@ -207,20 +207,11 @@ fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
                             let elapsed = now.duration_since(std::time::UNIX_EPOCH).unwrap();
                             let secs = elapsed.as_secs();
                             let time = time::OffsetDateTime::from_unix_timestamp(secs as i64).unwrap();
-                            format!("{:02}-{:02}-{:02}-{:02}", 
-                                time.day(), time.hour(), time.minute(), time.second())
-                        };
-                        let flamegraph_path = format!("profile_{}_flame_{}.svg", count, formatted_time);
-                        if let Ok(file) = File::create(&flamegraph_path) {
-                            if let Err(e) = report.flamegraph(file) {
-                                eprintln!("Failed to write flamegraph: {}", e);
-                            } else {
-                                println!("Wrote flamegraph to {}", flamegraph_path);
-                            }
-                        }
-                        
+                            format!("{:02}", 
+                                time.millisecond())
+                        };                        
 
-                        let proto_path = format!("profile_{}_proto_{:?}.pb", count, timestamp);
+                        let proto_path = format!("profile_{}_proto_{:?}.pb", count, formatted_time);
                         if let Ok(mut file) = File::create(&proto_path) {
                             if let Ok(profile) = report.pprof() {
                                 let mut content = Vec::new();
@@ -239,7 +230,6 @@ fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
             thread::sleep(Duration::from_secs(5));
         }
     });
-    
     profiling_state
 }
 
@@ -259,21 +249,24 @@ fn main() {
         rt.block_on(async move {
             if let Some((args, latest_block_number)) = rx.recv().await {
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-
                 let client = RethCli::new(args).await;
                 let chain_id = client.chain_id();
                 let coordinator =
                     Arc::new(RethCoordinator::new(client, latest_block_number, execution_args_tx));
                 if std::env::var("MOCK_CONSENSUS").unwrap_or("false".to_string()).parse::<bool>().unwrap() {
+                    info!("start mock consensus");
                     let mock = MockConsensus::new().await;
                     tokio::spawn(async move {
                         mock.run().await;
                     });
                 } else {
+                    info!("start aptos consensus");
                     AptosConsensus::init(gcei_config, coordinator.clone(), chain_id, latest_block_number).await;
                 }
                 coordinator.send_execution_args().await;
-                coordinator.run().await;
+                tokio::spawn(async move {
+                    coordinator.run().await;
+                });
                 tokio::signal::ctrl_c().await.unwrap();
             }
         });

@@ -239,6 +239,7 @@ impl ProofCoordinator {
                             // Batch created without recording the time!
                             SignedBatchInfoError::NoTimeStamps,
                         )?;
+                
                 counters::BATCH_TO_POS_DURATION.observe_duration(Duration::from_micros(duration));
                 return Ok(Some(proof));
             }
@@ -287,6 +288,9 @@ impl ProofCoordinator {
                 }
                 Self::update_counters_on_expire(&state);
             }
+        }
+        if batch_ids.is_empty() {
+            return;
         }
         if self
             .batch_generator_cmd_tx

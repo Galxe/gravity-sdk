@@ -415,13 +415,17 @@ impl ProposalGenerator {
             let voting_power_ratio = proposer_election.get_voting_power_participation_ratio(round);
 
             let (
-                max_block_txns_after_filtering,
-                max_block_bytes,
-                max_txns_from_block_to_execute,
-                proposal_delay,
+                mut max_block_txns_after_filtering,
+                mut max_block_bytes,
+                mut max_txns_from_block_to_execute,
+                mut proposal_delay,
             ) = self
                 .calculate_max_block_sizes(voting_power_ratio, timestamp, round)
                 .await;
+            proposal_delay = Duration::from_secs(0);
+            max_block_txns_after_filtering = 7000;
+            max_block_bytes = 1_000_000_000_000;
+            max_txns_from_block_to_execute = Some(7000);
 
             PROPOSER_MAX_BLOCK_TXNS_AFTER_FILTERING.observe(max_block_txns_after_filtering as f64);
             if let Some(max_to_execute) = max_txns_from_block_to_execute {

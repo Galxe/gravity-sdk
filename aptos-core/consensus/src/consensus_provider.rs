@@ -57,6 +57,7 @@ pub fn start_consensus(
     gravity_args: &mut ConsensusAdapterArgs,
 ) -> (Runtime, Arc<StorageWriteProxy>, Arc<QuorumStoreDB>) {
     let runtime = gaptos::aptos_runtimes::spawn_named_runtime("consensus".into(), None);
+    info!("QS: spawn_named_runtime consensus: {:?}", runtime.handle().metrics().num_workers());
     let storage = Arc::new(StorageWriteProxy::new(
         gravity_args.consensus_db.as_ref().unwrap().clone(),
         aptos_db.reader.clone(),
