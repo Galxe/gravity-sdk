@@ -19,7 +19,7 @@ members = [
     "bin/gravity_sdk_kvstore",
     "bin/bench",
     "bin/gravity_node", 
-    "crates/block-buffer-manager"]
+    "crates/block-buffer-manager", "crates/txn_metrics"]
 
 [workspace.dependencies]
 aptos-consensus = { path = "./aptos-core/consensus" }
@@ -29,7 +29,7 @@ gaptos = { git = "https://github.com/Galxe/gravity-aptos.git", branch = "onchain
 aptos-executor-types = { path = "dependencies/aptos-executor-types" }
 aptos-executor = { path = "dependencies/aptos-executor" }
 api = { path = "./crates/api" }
-
+txn_metrics = {path = "crates/txn_metrics"}
 # core ----
 aptos-consensus-types = { path = "./aptos-core/consensus/consensus-types", features = [
     "fuzzing",

@@ -86,6 +86,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                 ledger_info_with_sigs.ledger_info().commit_info().id(),
                 ledger_info_with_sigs.ledger_info().block_hash(),
             );
+            txn_metrics::TxnLifeTime::get_txn_life_time().record_block_committed(block_id.clone());
             let block_num = ledger_info_with_sigs.ledger_info().block_number();
             assert!(block_ids.last().unwrap().as_slice() == block_id.as_slice());
             let len = block_ids.len();

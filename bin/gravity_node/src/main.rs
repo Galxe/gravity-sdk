@@ -34,6 +34,7 @@ mod cli;
 mod consensus;
 mod reth_cli;
 mod reth_coordinator;
+mod metrics;
 
 use crate::cli::Cli;
 use std::collections::BTreeMap;
@@ -255,13 +256,14 @@ fn main() {
                 let chain_id = client.chain_id();
                 let coordinator =
                     Arc::new(RethCoordinator::new(client, latest_block_number, execution_args_tx));
+                let mut _engine = None;
                 if std::env::var("MOCK_CONSENSUS").unwrap_or("false".to_string()).parse::<bool>().unwrap() {
                     let mock = MockConsensus::new().await;
                     tokio::spawn(async move {
                         mock.run().await;
                     });
                 } else {
-                    AptosConsensus::init(gcei_config, chain_id, latest_block_number).await;
+                    _engine = Some(AptosConsensus::init(gcei_config, chain_id, latest_block_number).await);
                 }
                 coordinator.send_execution_args().await;
                 coordinator.run().await;

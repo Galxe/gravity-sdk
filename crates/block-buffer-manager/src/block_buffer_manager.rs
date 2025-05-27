@@ -20,6 +20,7 @@ use itertools::Itertools;
 pub struct TxnItem {
     pub txns: Vec<VerifiedTxnWithAccountSeqNum>,
     pub gas_limit: u64,
+    pub insert_time: SystemTime,
 }
 
 pub struct TxnBuffer {
@@ -168,7 +169,7 @@ impl BlockBufferManager {
 
     pub async fn push_txns(&self, txns: &mut Vec<VerifiedTxnWithAccountSeqNum>, gas_limit: u64) {
         let mut pool_txns = self.txn_buffer.txns.lock().await;
-        pool_txns.push(TxnItem { txns: std::mem::take(txns), gas_limit });
+        pool_txns.push(TxnItem { txns: std::mem::take(txns), gas_limit, insert_time: SystemTime::now() });
     }
 
     pub fn is_ready(&self) -> bool {

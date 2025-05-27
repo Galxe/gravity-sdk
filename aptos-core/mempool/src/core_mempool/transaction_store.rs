@@ -225,6 +225,7 @@ impl TransactionStore {
 
             // --- Process Transactions for the Current Sender ---
             for (original_index, mut txn) in sorted_sender_txns {
+                txn_metrics::TxnLifeTime::get_txn_life_time().record_added(txn.get_hash());
                 let txn_seq_num = txn.sequence_number();
 
                 // 1. Check Existing Transaction (Gas Upgrade/Duplicate)
@@ -602,6 +603,7 @@ impl TransactionStore {
                     transaction.verified_txn().sender(),
                     transaction.verified_txn().sequence_number(),
                 );
+                txn_metrics::TxnLifeTime::get_txn_life_time().record_committed(transaction.get_hash());
                 self.index_remove(transaction);
             }
             trace!(

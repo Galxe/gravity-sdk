@@ -184,7 +184,7 @@ impl BatchGenerator {
 
         counters::CREATED_BATCHES_COUNT.inc();
         counters::num_txn_per_batch(bucket_start.to_string().as_str(), txns.len());
-
+        txn_metrics::TxnLifeTime::get_txn_life_time().record_batch(batch_id, &txns);
         Batch::new(
             batch_id,
             txns,
@@ -345,7 +345,7 @@ impl BatchGenerator {
             .unwrap_or_default();
 
         trace!("QS: pulled_txns len: {:?}", pulled_txns.len());
-
+        
         if pulled_txns.is_empty() {
             counters::PULLED_EMPTY_TXNS_COUNT.inc();
             // Quorum store metrics
@@ -468,7 +468,7 @@ impl BatchGenerator {
                         let batches = self.handle_scheduled_pull(pull_max_txn).await;
                         if !batches.is_empty() {
                             last_non_empty_pull = tick_start;
-
+                        
                             let persist_start = Instant::now();
                             let mut persist_requests = vec![];
                             for batch in batches.clone().into_iter() {

@@ -6,11 +6,12 @@ pub struct AptosConsensus {
 }
 
 impl AptosConsensus {
-    pub async fn init(node_config: NodeConfig, chain_id: u64, latest_block_number: u64) {
+    pub async fn init(node_config: NodeConfig, chain_id: u64, latest_block_number: u64) -> Arc<ConsensusEngine> {
         let consensus_engine = ConsensusEngine::init(
             node_config,
             chain_id, // Chain ID
             latest_block_number
         ).await;
+        consensus_engine
     }
 }

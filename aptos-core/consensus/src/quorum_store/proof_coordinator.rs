@@ -226,6 +226,7 @@ impl ProofCoordinator {
             value.add_signature(&signed_batch_info, validator_verifier)?;
             if !value.completed && value.ready(validator_verifier) {
                 let proof = value.take(validator_verifier);
+                txn_metrics::TxnLifeTime::get_txn_life_time().record_proof(proof.info().batch_id());
                 // proof validated locally, so adding to cache
                 self.proof_cache
                     .insert(proof.info().clone(), proof.multi_signature().clone());

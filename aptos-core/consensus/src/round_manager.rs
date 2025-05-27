@@ -531,6 +531,8 @@ impl RoundManager {
         let signature = safety_rules.lock().sign_proposal(&proposal)?;
         let signed_proposal =
             Block::new_proposal_from_block_data_and_signature(proposal, signature);
+        txn_metrics::TxnLifeTime::get_txn_life_time().record_block(signed_proposal.payload(), signed_proposal.id());
+        
         observe_block(signed_proposal.timestamp_usecs(), BlockStage::SIGNED);
         info!(
             Self::new_log_with_round_epoch(LogEvent::Propose, new_round_event.round, epoch),
