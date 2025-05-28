@@ -2,67 +2,85 @@ use crate::{metrics::{fetch_reth_txn_metrics}, ConsensusArgs};
 use alloy_consensus::Transaction;
 use alloy_eips::{eip4895::Withdrawals, BlockId, BlockNumberOrTag, Decodable2718, Encodable2718};
 use alloy_primitives::{
-    private::alloy_rlp::{Decodable, Encodable}, Address, FixedBytes, TxHash, B256
+    private::alloy_rlp::{Decodable, Encodable},
+    Address, FixedBytes, TxHash, B256,
 };
-use gaptos::api_types::u256_define::{BlockId as ExternalBlockId, TxnHash};
+use block_buffer_manager::get_block_buffer_manager;
+use core::panic;
 use gaptos::api_types::{
     account::{ExternalAccountAddress, ExternalChainId},
-    compute_res::ComputeRes,
-};
-use gaptos::api_types::{
-    compute_res::TxnStatus,
+    compute_res::{ComputeRes, TxnStatus},
+    u256_define::{BlockId as ExternalBlockId, TxnHash},
+    ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
     GLOBAL_CRYPTO_TXN_HASHER,
 };
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
-use gaptos::api_types::{ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
-use block_buffer_manager::get_block_buffer_manager;
-use rayon::iter::IntoParallelRefMutIterator;
-use core::panic;
-use greth::{reth_ethereum_engine_primitives::EthPayloadAttributes, reth_node_core::primitives::account, reth_transaction_pool::{EthPooledTransaction, TransactionOrigin, ValidPoolTransaction}};
-use greth::reth_node_api::NodeTypesWithDBAdapter;
-use greth::reth_node_ethereum::EthereumNode;
-use greth::reth_pipe_exec_layer_ext_v2::{ExecutedBlockMeta, OrderedBlock, PipeExecLayerApi};
-use greth::reth_primitives::TransactionSigned;
-use greth::reth_provider::providers::BlockchainProvider;
-use greth::reth_provider::{
-    AccountReader, BlockNumReader, BlockReaderIdExt, ChainSpecProvider, DatabaseProviderFactory,
-};
-use greth::reth_transaction_pool::TransactionPool;
+
 use greth::{
-    gravity_storage::block_view_storage::BlockViewStorage, reth_db::DatabaseEnv,
-    reth_pipe_exec_layer_ext_v2::ExecutionResult, reth_primitives::EthPrimitives,
-    reth_provider::BlockHashReader,
+    gravity_storage::block_view_storage::BlockViewStorage,
+    reth::rpc::builder::auth::AuthServerHandle,
+    reth_db::DatabaseEnv,
+    reth_ethereum_engine_primitives::EthPayloadAttributes,
+    reth_node_api::NodeTypesWithDBAdapter,
+    reth_node_core::primitives::SignedTransaction,
+    reth_node_ethereum::EthereumNode,
+    reth_pipe_exec_layer_ext_v2::{
+        ExecutedBlockMeta, ExecutionResult, OrderedBlock, PipeExecLayerApi,
+    },
+    reth_primitives::{EthPrimitives, TransactionSigned},
+    reth_provider::{
+        providers::BlockchainProvider, AccountReader, BlockHashReader, BlockNumReader,
+        BlockReaderIdExt, ChainSpecProvider, DatabaseProviderFactory,
+    },
+    reth_transaction_pool::{EthPooledTransaction, TransactionPool, ValidPoolTransaction},
 };
-use greth::{
-    reth::rpc::builder::auth::AuthServerHandle, reth_node_core::primitives::SignedTransaction,
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator,
 };
-use std::{collections::{HashMap, HashSet, VecDeque}, sync::Arc, time::{Instant, SystemTime}};
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    sync::Arc,
+    time::{Instant, SystemTime},
+};
+
 use tokio::sync::Mutex;
 use tracing::*;
 
-pub struct RethCli {
-    auth: AuthServerHandle,
-    pipe_api: PipeExecLayerApi<
-        BlockViewStorage<
-            BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
-        >,
-    >,
-    chain_id: u64,
-    provider: BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
-    txn_listener: Mutex<tokio::sync::mpsc::Receiver<TxHash>>,
-    pool: greth::reth_transaction_pool::Pool<
-        greth::reth_transaction_pool::TransactionValidationTaskExecutor<
-            greth::reth_transaction_pool::EthTransactionValidator<
-                BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
-                greth::reth_transaction_pool::EthPooledTransaction,
-            >,
-        >,
-        greth::reth_transaction_pool::CoinbaseTipOrdering<
+pub(crate) type RethBlockChainProvider =
+    BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>;
+
+pub(crate) type RethTransactionPool = greth::reth_transaction_pool::Pool<
+    greth::reth_transaction_pool::TransactionValidationTaskExecutor<
+        greth::reth_transaction_pool::EthTransactionValidator<
+            RethBlockChainProvider,
             greth::reth_transaction_pool::EthPooledTransaction,
         >,
-        greth::reth_transaction_pool::blobstore::DiskFileBlobStore,
     >,
-    txn_cache: Mutex<HashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>>,
+    greth::reth_transaction_pool::CoinbaseTipOrdering<
+        greth::reth_transaction_pool::EthPooledTransaction,
+    >,
+    greth::reth_transaction_pool::blobstore::DiskFileBlobStore,
+>;
+
+pub(crate) type RethPipeExecLayerApi = PipeExecLayerApi<
+    BlockViewStorage<RethBlockChainProvider>,
+    greth::reth_rpc::EthApi<
+        RethBlockChainProvider,
+        RethTransactionPool,
+        greth::reth_network::NetworkHandle,
+        greth::reth_evm_ethereum::EthEvmConfig,
+    >,
+>;
+
+pub struct RethCli {
+    auth: AuthServerHandle,
+    pipe_api: RethPipeExecLayerApi,
+    chain_id: u64,
+    provider: RethBlockChainProvider,
+    txn_listener: Mutex<tokio::sync::mpsc::Receiver<TxHash>>,
+    pool: RethTransactionPool,
+    txn_cache: Mutex<
+        HashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>,
+    >,
     txn_batch_size: usize,
     txn_check_interval: tokio::time::Duration,
     txn_pool_interval: tokio::time::Duration,
@@ -120,7 +138,6 @@ impl RethCli {
         let system_time = Instant::now();
         let pipe_api = &self.pipe_api;
 
-                
         let mut senders = vec![None; block.txns.len()];
         let mut transactions = vec![None; block.txns.len()];
 
@@ -135,7 +152,10 @@ impl RethCli {
             }
         }
 
-        block.txns.par_iter_mut().enumerate()
+        block
+            .txns
+            .par_iter_mut()
+            .enumerate()
             .filter(|(idx, _)| senders[*idx].is_none())
             .map(|(idx, txn)| {
                 let (sender, transaction) = Self::txn_to_signed(&mut txn.bytes, self.chain_id);
@@ -151,7 +171,6 @@ impl RethCli {
         let senders: Vec<_> = senders.into_iter().map(|x| x.unwrap()).collect();
         let transactions: Vec<_> = transactions.into_iter().map(|x| x.unwrap()).collect();
 
-        
         let randao = match block.block_meta.randomness {
             Some(randao) => B256::from_slice(randao.0.as_ref()),
             None => B256::ZERO,
@@ -169,6 +188,7 @@ impl RethCli {
             withdrawals: Withdrawals::new(Vec::new()),
             transactions,
             senders,
+            epoch: block.block_meta.epoch,
         });
         Ok(())
     }
@@ -342,13 +362,11 @@ impl RethCli {
             let txn_status = Arc::new(Some(
                 tx_infos
                     .iter()
-                    .map(|tx_info| {
-                        TxnStatus {
-                            txn_hash: *tx_info.tx_hash,
-                            sender: convert_account( tx_info.sender).bytes(),
-                            nonce: tx_info.nonce,
-                            is_discarded: tx_info.is_discarded,
-                        }
+                    .map(|tx_info| TxnStatus {
+                        txn_hash: *tx_info.tx_hash,
+                        sender: convert_account(tx_info.sender).bytes(),
+                        nonce: tx_info.nonce,
+                        is_discarded: tx_info.is_discarded,
                     })
                     .collect(),
             ));
