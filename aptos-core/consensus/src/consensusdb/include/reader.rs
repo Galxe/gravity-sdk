@@ -19,8 +19,9 @@ use gaptos::aptos_types::{
     state_store::{state_key::StateKey, state_value::StateValue},
     transaction::Version,
 };
-
 use once_cell::sync::OnceCell;
+
+static VALIDATOR_SET: OnceCell<Vec<ValidatorInfo>> = OnceCell::new();
 
 impl ConsensusDB {
     pub fn mock_validators(&self) -> Vec<ValidatorInfo> {
@@ -30,7 +31,6 @@ impl ConsensusDB {
     pub fn calculate_validator_set(
         node_config_set: &BTreeMap<String, GravityNodeConfig>,
     ) -> Vec<ValidatorInfo> {
-        static VALIDATOR_SET: OnceCell<Vec<ValidatorInfo>> = OnceCell::new();
         VALIDATOR_SET
             .get_or_init(|| {
                 let mut result = vec![];
@@ -57,6 +57,10 @@ impl ConsensusDB {
                 result
             })
             .to_vec()
+    }
+
+    pub fn get_validator_set_for_test() -> Vec<ValidatorInfo> {
+        VALIDATOR_SET.get().unwrap().clone()
     }
 }
 
@@ -136,8 +140,8 @@ impl DbReader for ConsensusDB {
                         match &mut consensus_conf {
                             OnChainConsensusConfig::V1(_) => {}
                             OnChainConsensusConfig::V2(_) => {}
-                            OnChainConsensusConfig::V3 {alg, vtxn } => {}
-                            OnChainConsensusConfig::V4 {alg,vtxn, window_size } => match alg {
+                            OnChainConsensusConfig::V3 { alg, vtxn } => {}
+                            OnChainConsensusConfig::V4 { alg, vtxn, window_size } => match alg {
                                 ConsensusAlgorithmConfig::Jolteon {
                                     main,
                                     quorum_store_enabled,
