@@ -46,6 +46,7 @@ tikv-jemallocator.workspace = true
 tikv-jemalloc-ctl.workspace = true
 tikv-jemalloc-sys.workspace = true
 pprof = { version = "0.14", features = ["flamegraph", "protobuf-codec"] }
+bytes.workspace = true
 
 [patch.crates-io]
 darling = { git = "https://github.com/TedDriggs/darling.git", rev = "84448b8"}

@@ -1,4 +1,4 @@
-use api::{consensus_api::ConsensusEngine, NodeConfig};
+use api::consensus_api::{ConsensusEngine, ConsensusEngineArgs};
 use std::sync::Arc;
 pub struct AptosConsensus {
     /// The consensus engine
@@ -6,11 +6,7 @@ pub struct AptosConsensus {
 }
 
 impl AptosConsensus {
-    pub async fn init(node_config: NodeConfig, chain_id: u64, latest_block_number: u64) {
-        let consensus_engine = ConsensusEngine::init(
-            node_config,
-            chain_id, // Chain ID
-            latest_block_number
-        ).await;
+    pub async fn init(args: ConsensusEngineArgs) {
+        let consensus_engine = ConsensusEngine::init(args).await;
     }
 }

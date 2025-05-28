@@ -1,7 +1,6 @@
-use api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
+use api::{check_bootstrap_config, consensus_api::{ConsensusEngine, ConsensusEngineArgs}, NodeConfig};
 use clap::Parser;
 use cli::Cli;
-use execution_channel::ExecutionChannelImpl;
 use flexi_logger::{detailed_format, FileSpec, Logger, WriteMode};
 use gravity_sdk_kvstore::*;
 use secp256k1::SecretKey;
@@ -18,8 +17,12 @@ impl TestConsensusLayer {
     }
 
     async fn run(self) {
-        let _consensus_engine =
-            ConsensusEngine::init(self.node_config, 1337, 0).await;
+        let _consensus_engine = ConsensusEngine::init(ConsensusEngineArgs {
+            node_config: self.node_config,
+            chain_id: 1337,
+            latest_block_number: 0,
+            config_storage: None,
+        }).await;
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         }

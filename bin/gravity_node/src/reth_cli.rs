@@ -1,39 +1,38 @@
 use crate::ConsensusArgs;
+use bytes::Bytes;
 use alloy_consensus::Transaction;
-use alloy_eips::{eip4895::Withdrawals, BlockId, BlockNumberOrTag, Decodable2718, Encodable2718};
+use alloy_eips::{eip4895::Withdrawals, Decodable2718, Encodable2718};
 use alloy_primitives::{
-    private::alloy_rlp::{Decodable, Encodable},
-    Address, FixedBytes, TxHash, B256,
+    Address, TxHash, B256,
 };
 use block_buffer_manager::get_block_buffer_manager;
 use core::panic;
 use gaptos::api_types::{
     account::{ExternalAccountAddress, ExternalChainId},
-    compute_res::{ComputeRes, TxnStatus},
+    compute_res::TxnStatus,
     u256_define::{BlockId as ExternalBlockId, TxnHash},
-    ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
+    ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
     GLOBAL_CRYPTO_TXN_HASHER,
 };
+use gaptos::api_types::config_storage::{ConfigStorage, OnChainConfig};
 use greth::{
     gravity_storage::block_view_storage::BlockViewStorage,
     reth::rpc::builder::auth::AuthServerHandle,
     reth_db::DatabaseEnv,
-    reth_ethereum_engine_primitives::EthPayloadAttributes,
     reth_node_api::NodeTypesWithDBAdapter,
     reth_node_core::primitives::SignedTransaction,
     reth_node_ethereum::EthereumNode,
     reth_pipe_exec_layer_ext_v2::{
-        ExecutedBlockMeta, ExecutionResult, OrderedBlock, PipeExecLayerApi,
+        ExecutionResult, OrderedBlock, PipeExecLayerApi,
     },
-    reth_primitives::{EthPrimitives, TransactionSigned},
+    reth_primitives::TransactionSigned,
     reth_provider::{
-        providers::BlockchainProvider, AccountReader, BlockHashReader, BlockNumReader,
-        BlockReaderIdExt, ChainSpecProvider, DatabaseProviderFactory,
+        providers::BlockchainProvider, AccountReader, BlockNumReader, ChainSpecProvider,
     },
     reth_transaction_pool::{EthPooledTransaction, TransactionPool, ValidPoolTransaction},
 };
 use rayon::iter::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator,
+    IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -446,5 +445,21 @@ impl RethCli {
                 .await
                 .unwrap();
         }
+    }
+}
+
+pub struct RethCliConfigStorage {
+    reth_cli: Arc<RethCli>,
+}
+
+impl RethCliConfigStorage {
+    pub fn new(reth_cli: Arc<RethCli>) -> Self {
+        Self { reth_cli }
+    }
+}
+
+impl ConfigStorage for RethCliConfigStorage {
+    fn fetch_config_bytes(&self, config_name: OnChainConfig, block_number: u64) -> Option<Bytes> {
+        self.reth_cli.pipe_api.fetch_config_bytes(config_name, block_number)
     }
 }
