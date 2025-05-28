@@ -14,7 +14,9 @@ use greth::{
 };
 use pprof::{protos::Message, ProfilerGuard};
 use reth::rpc::builder::auth::AuthServerHandle;
-use reth_cli::{RethBlockChainProvider, RethPipeExecLayerApi, RethTransactionPool};
+use reth_cli::{
+    RethBlockChainProvider, RethCliConfigStorage, RethPipeExecLayerApi, RethTransactionPool,
+};
 use reth_coordinator::RethCoordinator;
 use reth_provider::{BlockHashReader, BlockNumReader, BlockReader};
 use tokio::sync::{mpsc, oneshot};
@@ -217,10 +219,14 @@ fn main() {
             if let Some((args, latest_block_number)) = rx.recv().await {
                 tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
-                let client = RethCli::new(args).await;
+                let client = Arc::new(RethCli::new(args).await);
                 let chain_id = client.chain_id();
-                let coordinator =
-                    Arc::new(RethCoordinator::new(client, latest_block_number, execution_args_tx));
+
+                let coordinator = Arc::new(RethCoordinator::new(
+                    client.clone(),
+                    latest_block_number,
+                    execution_args_tx,
+                ));
                 let mut _engine = None;
                 if std::env::var("MOCK_CONSENSUS")
                     .unwrap_or("false".to_string())
@@ -232,12 +238,13 @@ fn main() {
                         mock.run().await;
                     });
                 } else {
-                    _engine = Some(ConsensusEngine::init(ConsensusEngineArgs {
+                    AptosConsensus::init(ConsensusEngineArgs {
                         node_config: gcei_config,
                         chain_id,
                         latest_block_number,
+                        config_storage: Some(Arc::new(RethCliConfigStorage::new(client))),
                     })
-                    .await);
+                    .await;
                 }
                 coordinator.send_execution_args().await;
                 coordinator.run().await;
