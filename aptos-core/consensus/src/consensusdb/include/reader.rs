@@ -20,28 +20,43 @@ use gaptos::aptos_types::{
     transaction::Version,
 };
 
+use once_cell::sync::OnceCell;
+
 impl ConsensusDB {
     pub fn mock_validators(&self) -> Vec<ValidatorInfo> {
-        let mut result = vec![];
-        for (i, (addr, node_config)) in self.node_config_set.iter().enumerate() {
-            // let x = hex::decode(node_config.consensus_public_key.as_bytes()).unwrap();
-            let public_key = bls12381::PublicKey::try_from(
-                hex::decode(node_config.consensus_public_key.as_bytes()).unwrap().as_slice()
-            )
-            .unwrap();
-            let config = ValidatorConfig::new(
-                public_key,
-                bcs::to_bytes(&vec![addr.clone()]).unwrap(),
-                bcs::to_bytes(&vec![addr.clone()]).unwrap(),
-                i as u64,
-            );
-            result.push(ValidatorInfo::new(
-                AccountAddress::try_from(node_config.account_address.clone()).unwrap(),
-                node_config.voting_power,
-                config,
-            ));
-        }
-        result
+        ConsensusDB::calculate_validator_set(&self.node_config_set)
+    }
+
+    pub fn calculate_validator_set(
+        node_config_set: &BTreeMap<String, GravityNodeConfig>,
+    ) -> Vec<ValidatorInfo> {
+        static VALIDATOR_SET: OnceCell<Vec<ValidatorInfo>> = OnceCell::new();
+        VALIDATOR_SET
+            .get_or_init(|| {
+                let mut result = vec![];
+                for (i, (addr, node_config)) in node_config_set.iter().enumerate() {
+                    // let x = hex::decode(node_config.consensus_public_key.as_bytes()).unwrap();
+                    let public_key = bls12381::PublicKey::try_from(
+                        hex::decode(node_config.consensus_public_key.as_bytes())
+                            .unwrap()
+                            .as_slice(),
+                    )
+                    .unwrap();
+                    let config = ValidatorConfig::new(
+                        public_key,
+                        bcs::to_bytes(&vec![addr.clone()]).unwrap(),
+                        bcs::to_bytes(&vec![addr.clone()]).unwrap(),
+                        i as u64,
+                    );
+                    result.push(ValidatorInfo::new(
+                        AccountAddress::try_from(node_config.account_address.clone()).unwrap(),
+                        node_config.voting_power,
+                        config,
+                    ));
+                }
+                result
+            })
+            .to_vec()
     }
 }
 
