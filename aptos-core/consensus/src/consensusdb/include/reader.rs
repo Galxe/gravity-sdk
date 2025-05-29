@@ -19,29 +19,43 @@ use gaptos::aptos_types::{
     state_store::{state_key::StateKey, state_value::StateValue},
     transaction::Version,
 };
+use once_cell::sync::OnceCell;
 
 impl ConsensusDB {
     pub fn mock_validators(&self) -> Vec<ValidatorInfo> {
-        let mut result = vec![];
-        for (i, (addr, node_config)) in self.node_config_set.iter().enumerate() {
-            // let x = hex::decode(node_config.consensus_public_key.as_bytes()).unwrap();
-            let public_key = bls12381::PublicKey::try_from(
-                hex::decode(node_config.consensus_public_key.as_bytes()).unwrap().as_slice()
-            )
-            .unwrap();
-            let config = ValidatorConfig::new(
-                public_key,
-                bcs::to_bytes(&vec![addr.clone()]).unwrap(),
-                bcs::to_bytes(&vec![addr.clone()]).unwrap(),
-                i as u64,
-            );
-            result.push(ValidatorInfo::new(
-                AccountAddress::try_from(node_config.account_address.clone()).unwrap(),
-                node_config.voting_power,
-                config,
-            ));
-        }
-        result
+        ConsensusDB::calculate_validator_set(&self.node_config_set)
+    }
+
+    pub fn calculate_validator_set(
+        node_config_set: &BTreeMap<String, GravityNodeConfig>,
+    ) -> Vec<ValidatorInfo> {
+        static VALIDATOR_SET: OnceCell<Vec<ValidatorInfo>> = OnceCell::new();
+        VALIDATOR_SET
+            .get_or_init(|| {
+                let mut result = vec![];
+                for (i, (addr, node_config)) in node_config_set.iter().enumerate() {
+                    // let x = hex::decode(node_config.consensus_public_key.as_bytes()).unwrap();
+                    let public_key = bls12381::PublicKey::try_from(
+                        hex::decode(node_config.consensus_public_key.as_bytes())
+                            .unwrap()
+                            .as_slice(),
+                    )
+                    .unwrap();
+                    let config = ValidatorConfig::new(
+                        public_key,
+                        bcs::to_bytes(&vec![addr.clone()]).unwrap(),
+                        bcs::to_bytes(&vec![addr.clone()]).unwrap(),
+                        i as u64,
+                    );
+                    result.push(ValidatorInfo::new(
+                        AccountAddress::try_from(node_config.account_address.clone()).unwrap(),
+                        node_config.voting_power,
+                        config,
+                    ));
+                }
+                result
+            })
+            .to_vec()
     }
 }
 
@@ -121,8 +135,8 @@ impl DbReader for ConsensusDB {
                         match &mut consensus_conf {
                             OnChainConsensusConfig::V1(_) => {}
                             OnChainConsensusConfig::V2(_) => {}
-                            OnChainConsensusConfig::V3 {alg, vtxn } => {}
-                            OnChainConsensusConfig::V4 {alg,vtxn, window_size } => match alg {
+                            OnChainConsensusConfig::V3 { alg, vtxn } => {}
+                            OnChainConsensusConfig::V4 { alg, vtxn, window_size } => match alg {
                                 ConsensusAlgorithmConfig::Jolteon {
                                     main,
                                     quorum_store_enabled,
