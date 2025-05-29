@@ -31,8 +31,9 @@ pub mod fuzzing_utils;
 #[cfg(any(test, feature = "fuzzing"))]
 pub use crate::fuzzing_utils::fuzzing;
 
-#[cfg(any(test, feature = "testing"))]
+// #[cfg(any(test, feature = "testing"))]
 pub mod test_utils;
 
 #[cfg(test)]
 mod tests;
+mod counters;

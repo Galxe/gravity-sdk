@@ -69,7 +69,7 @@ impl DagBootstrapUnit {
     ) -> (Self, UnboundedReceiver<OrderedBlocks>) {
         let epoch_state = Arc::new(EpochState {
             epoch,
-            verifier: storage.get_validator_set().into(),
+            verifier: Arc::new(storage.get_validator_set().into()),
         });
         let ledger_info = generate_ledger_info_with_sig(&all_signers, storage.get_ledger_info());
         let dag_storage =
@@ -136,7 +136,7 @@ fn create_network(
     playground: &mut NetworkPlayground,
     id: usize,
     author: Author,
-    validators: ValidatorVerifier,
+    validators: Arc<ValidatorVerifier>,
 ) -> (
     NetworkSender,
     Box<
@@ -161,7 +161,7 @@ fn create_network(
     let network_events = NetworkEvents::new(consensus_rx, None, true);
 
     let (self_sender, self_receiver) = gaptos::aptos_channels::new_unbounded_test();
-    let network = NetworkSender::new(author, consensus_network_client, self_sender, validators);
+    let network = NetworkSender::new(author, consensus_network_client, self_sender, validators.into());
 
     let twin_id = TwinId { id, author };
 
@@ -175,10 +175,10 @@ fn create_network(
 async fn bootstrap_nodes(
     playground: &mut NetworkPlayground,
     signers: Vec<ValidatorSigner>,
-    validators: ValidatorVerifier,
+    validators: Arc<ValidatorVerifier>,
 ) -> (Vec<DagBootstrapUnit>, Vec<UnboundedReceiver<OrderedBlocks>>) {
     let peers_and_metadata = playground.peer_protocols();
-    let (_, storage) = MockStorage::start_for_testing((&validators).into()).await;
+    let (_, storage) = MockStorage::start_for_testing((&(*validators)).into()).await;
     let (nodes, ordered_node_receivers) = signers
         .iter()
         .enumerate()
@@ -220,7 +220,7 @@ async fn test_dag_e2e() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let (signers, validators) = random_validator_verifier(num_nodes, None, false);
-    let (nodes, mut ordered_node_receivers) = bootstrap_nodes(&mut playground, signers, validators).await;
+    let (nodes, mut ordered_node_receivers) = bootstrap_nodes(&mut playground, signers, validators.into()).await;
     let tasks: Vec<_> = nodes
         .into_iter()
         .map(|node| runtime.spawn(node.start()))

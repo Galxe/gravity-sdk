@@ -550,6 +550,10 @@ async fn test_commit_sync_race() {
             Ok(())
         }
 
+        async fn sync_for_duration(&self, duration: Duration) -> std::result::Result<LedgerInfoWithSignatures, Error> {
+            todo!()
+        }
+
         async fn sync_to_target(
             &self,
             target: LedgerInfoWithSignatures,
@@ -562,6 +566,7 @@ async fn test_commit_sync_race() {
             *self.time.lock() = logical_time;
             Ok(())
         }
+        // fn sync_for_duration<'async_trait, 'life0>(&'life0 self, _: std::time::Duration) -> Pin<Box<(dyn futures::Future<Output = std::result::Result<gaptos::aptos_types::ledger_info::LedgerInfoWithSignatures, gaptos::aptos_consensus_notifications::Error>> + std::marker::Send + 'async_trait)>> { todo!() }
     }
 
     let callback = Box::new(move |_a: &[Arc<PipelinedBlock>], _b: LedgerInfoWithSignatures| {});

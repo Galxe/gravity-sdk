@@ -23,6 +23,7 @@ use gaptos::aptos_types::{
     validator_txn::ValidatorTransaction,
 };
 use std::sync::{atomic::AtomicU64, Arc};
+use std::time::Duration;
 use tokio::runtime::Handle;
 
 struct DummyStateSyncNotifier {
@@ -50,9 +51,14 @@ impl ConsensusNotificationSender for DummyStateSyncNotifier {
         Ok(())
     }
 
+    async fn sync_for_duration(&self, duration: Duration) -> Result<LedgerInfoWithSignatures, Error> {
+        todo!()
+    }
+
     async fn sync_to_target(&self, _target: LedgerInfoWithSignatures) -> Result<(), Error> {
         unreachable!()
     }
+// fn sync_for_duration(&'life0 self, _: std::time::Duration) -> Pin<Box<(dyn futures::Future<Output = std::result::Result<gaptos::aptos_types::ledger_info::LedgerInfoWithSignatures, gaptos::aptos_consensus_notifications::Error>> + std::marker::Send + 'async_trait)>> { todo!() }
 }
 
 struct DummyTxnNotifier {}

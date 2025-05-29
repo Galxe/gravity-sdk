@@ -2,6 +2,8 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::ops::Deref;
+use std::ptr::copy;
 use crate::{
     metrics_safety_rules::MetricsSafetyRules,
     network::{IncomingCommitRequest, NetworkSender},
@@ -72,7 +74,7 @@ pub async fn prepare_buffer_manager(
     HashValue,
     Vec<ValidatorSigner>,
     Receiver<OrderedBlocks>,
-    ValidatorVerifier,
+    Arc<ValidatorVerifier>,
 ) {
     let num_nodes = 1;
     let channel_size = 30;
@@ -114,6 +116,7 @@ pub async fn prepare_buffer_manager(
     let consensus_network_client = ConsensusNetworkClient::new(network_client);
 
     let (self_loop_tx, self_loop_rx) = gaptos::aptos_channels::new_unbounded_test();
+    let validators = Arc::new(validators);
     let network = NetworkSender::new(
         author,
         consensus_network_client,
@@ -162,6 +165,8 @@ pub async fn prepare_buffer_manager(
         None,
     );
 
+
+
     (
         buffer_manager,
         block_tx,
@@ -175,7 +180,7 @@ pub async fn prepare_buffer_manager(
         hash_val,
         signers,
         result_rx,
-        validators,
+        validators.clone(),
     )
 }
 
@@ -188,7 +193,7 @@ pub async fn launch_buffer_manager() -> (
     Runtime,
     Vec<ValidatorSigner>,
     Receiver<OrderedBlocks>,
-    ValidatorVerifier,
+    Arc<ValidatorVerifier>,
 ) {
     let runtime = consensus_runtime();
 

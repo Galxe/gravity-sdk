@@ -596,7 +596,7 @@ fn test_validator_not_in_set(safety_rules: &Callback) {
     next_epoch_state.epoch = 1;
     let rand_signer = ValidatorSigner::random([0xFu8; 32]);
     next_epoch_state.verifier =
-        ValidatorVerifier::new_single(rand_signer.author(), rand_signer.public_key());
+        ValidatorVerifier::new_single(rand_signer.author(), rand_signer.public_key()).into();
     let a2 = test_utils::make_proposal_with_parent_and_overrides(
         Payload::empty(false, true),
         round + 2,
@@ -634,7 +634,7 @@ fn test_key_not_in_store(safety_rules: &Callback) {
     next_epoch_state.epoch = 1;
     let rand_signer = ValidatorSigner::random([0xFu8; 32]);
     next_epoch_state.verifier =
-        ValidatorVerifier::new_single(signer.author(), rand_signer.public_key());
+        ValidatorVerifier::new_single(signer.author(), rand_signer.public_key()).into();
     let a2 = test_utils::make_proposal_with_parent_and_overrides(
         Payload::empty(false, true),
         round + 2,
@@ -907,6 +907,9 @@ fn test_sign_commit_vote(constructor: &Callback) {
         ledger_info_with_sigs.ledger_info().consensus_data_hash(),
     );
 
+    println!("act_val: {}", safety_rules
+        .sign_commit_vote(ledger_info_with_sigs.clone(), bad_ledger_info.clone(),)
+        .unwrap_err());
     assert!(matches!(
         safety_rules
             .sign_commit_vote(ledger_info_with_sigs.clone(), bad_ledger_info,)

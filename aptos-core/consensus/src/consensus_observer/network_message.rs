@@ -922,16 +922,16 @@ mod test {
         // Create a ledger info with an empty signature set
         let current_epoch = 0;
         let ledger_info = create_empty_ledger_info(current_epoch);
-
+    
         // Create an epoch state for the current epoch (with an empty verifier)
         let epoch_state = EpochState::new(current_epoch, ValidatorVerifier::new(vec![]));
-
+    
         // Create a commit decision message with the ledger info
         let commit_decision = CommitDecision::new(ledger_info);
-
+    
         // Verify the commit proof and ensure it passes
         commit_decision.verify_commit_proof(&epoch_state).unwrap();
-
+    
         // Create an epoch state for the current epoch (with a non-empty verifier)
         let validator_signer = ValidatorSigner::random(None);
         let validator_consensus_info = ValidatorConsensusInfo::new(
@@ -940,8 +940,8 @@ mod test {
             100,
         );
         let validator_verifier = ValidatorVerifier::new(vec![validator_consensus_info]);
-        let epoch_state = EpochState::new(current_epoch, validator_verifier.clone());
-
+        let epoch_state = EpochState::new(current_epoch, validator_verifier);
+    
         // Verify the commit proof and ensure it fails (the signature set is insufficient)
         let error = commit_decision
             .verify_commit_proof(&epoch_state)
@@ -1054,16 +1054,16 @@ mod test {
         // Create a ledger info with an empty signature set
         let current_epoch = 100;
         let ledger_info = create_empty_ledger_info(current_epoch);
-
+    
         // Create an epoch state for the current epoch (with an empty verifier)
         let epoch_state = EpochState::new(current_epoch, ValidatorVerifier::new(vec![]));
-
+    
         // Create an ordered block message with an empty block and ordered proof
         let ordered_block = OrderedBlock::new(vec![], ledger_info);
-
+    
         // Verify the ordered proof and ensure it passes
         ordered_block.verify_ordered_proof(&epoch_state).unwrap();
-
+    
         // Create an epoch state for the current epoch (with a non-empty verifier)
         let validator_signer = ValidatorSigner::random(None);
         let validator_consensus_info = ValidatorConsensusInfo::new(
@@ -1072,8 +1072,8 @@ mod test {
             100,
         );
         let validator_verifier = ValidatorVerifier::new(vec![validator_consensus_info]);
-        let epoch_state = EpochState::new(current_epoch, validator_verifier.clone());
-
+        let epoch_state = EpochState::new(current_epoch, validator_verifier);
+    
         // Verify the ordered proof and ensure it fails (the signature set is insufficient)
         let error = ordered_block
             .verify_ordered_proof(&epoch_state)
@@ -1165,7 +1165,7 @@ mod test {
             let proof = ProofOfStore::new(batch_info, AggregateSignature::empty());
             proofs.push(proof);
         }
-
+    
         // Create a transaction payload (with the proofs)
         let transaction_payload = BlockTransactionPayload::new_quorum_store_inline_hybrid(
             vec![],
@@ -1173,20 +1173,20 @@ mod test {
             None,
             vec![],
         );
-
+    
         // Create a block payload
         let current_epoch = 50;
         let block_info = create_block_info(current_epoch, HashValue::random());
         let block_payload = BlockPayload::new(block_info, transaction_payload);
-
+    
         // Create an epoch state for the current epoch (with an empty verifier)
         let epoch_state = EpochState::new(current_epoch, ValidatorVerifier::new(vec![]));
-
+    
         // Verify the block payload signatures and ensure it passes
         block_payload
             .verify_payload_signatures(&epoch_state)
             .unwrap();
-
+    
         // Create an epoch state for the current epoch (with a non-empty verifier)
         let validator_signer = ValidatorSigner::random(None);
         let validator_consensus_info = ValidatorConsensusInfo::new(
@@ -1195,8 +1195,8 @@ mod test {
             100,
         );
         let validator_verifier = ValidatorVerifier::new(vec![validator_consensus_info]);
-        let epoch_state = EpochState::new(current_epoch, validator_verifier.clone());
-
+        let epoch_state = EpochState::new(current_epoch, validator_verifier);
+    
         // Verify the block payload signatures and ensure it fails (the signature set is insufficient)
         let error = block_payload
             .verify_payload_signatures(&epoch_state)

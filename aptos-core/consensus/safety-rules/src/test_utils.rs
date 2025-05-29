@@ -68,7 +68,7 @@ pub fn make_proposal_with_qc_and_proof(
         )
         .unwrap(),
         None,
-        false,
+        true,
     )
 }
 

@@ -2,6 +2,7 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::tests::common::send_user_txn;
 use crate::{
     core_mempool::{sender_bucket, CoreMempool, SubmittedBy, TimelineState},
     network::BroadcastPeerPriority,
@@ -860,7 +861,6 @@ fn test_parking_lot_evict_only_for_ready_txn_insertion() {
 }
 
 #[test]
-
 fn test_gc_ready_transaction() {
     // let mut pool = setup_mempool().0;
     // send_user_txn(&mut pool, TestTransaction::new(1, 0, 1)).unwrap();

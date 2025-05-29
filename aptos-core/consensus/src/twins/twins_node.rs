@@ -164,7 +164,6 @@ impl SMRNode {
             vtxn_pool,
             Arc::new(InMemRandDb::new()),
             None,
-            None,
         );
         let (network_task, network_receiver) =
             NetworkTask::new(network_service_events, self_receiver);

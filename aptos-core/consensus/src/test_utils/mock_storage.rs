@@ -267,9 +267,9 @@ impl EmptyStorage {
 
 #[async_trait]
 impl PersistentLivenessStorage for EmptyStorage {
-    async fn latest_block_number(&self) -> u64 {
-        unimplemented!("")
-    }
+    // async fn latest_block_number(&self) -> u64 {
+    //     unimplemented!("")
+    // }
 
     fn save_tree(&self, _: Vec<Block>, _: Vec<QuorumCert>, _: Vec<(u64, HashValue)>) -> Result<()> {
         Ok(())
@@ -322,5 +322,9 @@ impl PersistentLivenessStorage for EmptyStorage {
 
     fn consensus_db(&self) -> Arc<crate::consensusdb::ConsensusDB> {
         unimplemented!()
+    }
+
+    async fn latest_commit_block_number(&self) -> u64 {
+        todo!()
     }
 }

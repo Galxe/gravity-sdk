@@ -239,7 +239,7 @@ impl NodeSetup {
         let _entered_runtime = executor.enter();
         let epoch_state = Arc::new(EpochState {
             epoch: 1,
-            verifier: storage.get_validator_set().into(),
+            verifier: Arc::new(storage.get_validator_set().into()),
         });
         let validators = epoch_state.verifier.clone();
         let (network_reqs_tx, network_reqs_rx) = aptos_channel::new(QueueStyle::FIFO, 8, None);
@@ -294,7 +294,6 @@ impl NodeSetup {
             Arc::from(DirectMempoolPayloadManager::new()),
             false,
             Arc::new(Mutex::new(PendingBlocks::new())),
-            None,
         ));
 
         let proposer_election = Self::create_proposer_election(proposers.clone());

@@ -206,7 +206,7 @@ prop_compose! {
         if include_epoch_state {
             Some(EpochState {
                 epoch,
-                verifier
+                verifier: verifier.into()
             })
         } else {
             None

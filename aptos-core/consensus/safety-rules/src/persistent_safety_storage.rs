@@ -12,7 +12,8 @@ use gaptos::aptos_global_constants::{CONSENSUS_KEY, OWNER_ACCOUNT, SAFETY_DATA, 
 use gaptos::aptos_logger::prelude::*;
 use gaptos::aptos_secure_storage::{KVStorage, Storage};
 use gaptos::aptos_types::waypoint::Waypoint;
-use gaptos::aptos_safety_rules::counters as counters;
+use crate::counters;
+// use gaptos::aptos_safety_rules::counters;
 
 /// SafetyRules needs an abstract storage interface to act as a common utility for storing
 /// persistent data to local disk, cloud, secrets managers, or even memory (for tests)
@@ -193,7 +194,6 @@ impl PersistentSafetyStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::counters;
     use gaptos::aptos_crypto::hash::HashValue;
     use gaptos::aptos_secure_storage::InMemoryStorage;
     use gaptos::aptos_types::{
@@ -216,6 +216,7 @@ mod tests {
                 Waypoint::default(),
                 true,
             );
+            
             // they both touch the global counters, running it serially to prevent race condition.
             test_safety_data_counters(&mut safety_storage);
             test_waypoint_counters(&mut safety_storage);

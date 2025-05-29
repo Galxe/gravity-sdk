@@ -655,7 +655,7 @@ fn test_extract_epoch_to_proposers_impl() {
                     .iter()
                     .map(|author| ValidatorConsensusInfo::new(*author, public_key.clone(), 1))
                     .collect::<Vec<_>>(),
-            ),
+            ).into(),
         }
     }
 

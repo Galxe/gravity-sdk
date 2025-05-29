@@ -306,22 +306,23 @@ mod test {
             peer_network_id,
             time_service.clone(),
         );
-
+    
         // Verify the time of the last peer optimality check
         let current_time = time_service.now();
         assert_eq!(subscription.last_peer_optimality_check, current_time);
-
+    
         // Verify that the peer is optimal (not enough time has elapsed to check)
         assert!(subscription
             .check_subscription_peer_optimality(HashMap::new())
             .is_ok());
-
+    
         // Elapse some amount of time (but not enough to check optimality)
         let mock_time_service = time_service.into_mock();
+        let peer_optimality_check_interval_ms = 60_000;
         mock_time_service.advance(Duration::from_millis(
-            consensus_observer_config.peer_optimality_check_interval_ms / 2,
+            peer_optimality_check_interval_ms / 2,
         ));
-
+    
         // Verify that the original peer is still optimal even though it is missing metadata
         let new_optimal_peer = PeerNetworkId::random();
         let mut peers_and_metadata = HashMap::new();
@@ -335,17 +336,17 @@ mod test {
         assert!(subscription
             .check_subscription_peer_optimality(peers_and_metadata.clone())
             .is_ok());
-
+    
         // Elapse enough time to check optimality
         mock_time_service.advance(Duration::from_millis(
-            consensus_observer_config.peer_optimality_check_interval_ms + 1,
+            peer_optimality_check_interval_ms + 1,
         ));
-
+    
         // Verify that the original peer is no longer optimal
         assert!(subscription
             .check_subscription_peer_optimality(peers_and_metadata.clone())
             .is_err());
-
+    
         // Add the original peer to the list of peers (with optimal metadata)
         peers_and_metadata.insert(
             peer_network_id,
@@ -354,12 +355,12 @@ mod test {
                 PeerMonitoringMetadata::new(Some(0.1), None, None, None, None),
             ),
         );
-
+    
         // Verify that the peer is still optimal
         assert!(subscription
             .check_subscription_peer_optimality(peers_and_metadata)
             .is_ok());
-
+    
         // Verify the time of the last peer optimality check
         let current_time = mock_time_service.now();
         assert_eq!(subscription.last_peer_optimality_check, current_time);
@@ -424,7 +425,7 @@ mod test {
         mock_db_reader
             .expect_get_latest_ledger_info_version()
             .returning(move || Ok(second_synced_version)); // Allow multiple calls for the second version
-
+    
         // Create a new observer subscription
         let consensus_observer_config = ConsensusObserverConfig::default();
         let peer_network_id = PeerNetworkId::random();
@@ -435,7 +436,7 @@ mod test {
             peer_network_id,
             time_service.clone(),
         );
-
+    
         // Verify that the DB is making sync progress and that the highest synced version is updated
         let current_time = time_service.now();
         assert!(subscription.check_syncing_progress().is_ok());
@@ -443,13 +444,14 @@ mod test {
             subscription.highest_synced_version_and_time,
             (first_synced_version, current_time)
         );
-
+    
         // Elapse some amount of time (not enough to timeout)
         let mock_time_service = time_service.into_mock();
+        let max_synced_version_timeout_ms = 60_000;
         mock_time_service.advance(Duration::from_millis(
-            consensus_observer_config.max_synced_version_timeout_ms / 2,
+            max_synced_version_timeout_ms / 2,
         ));
-
+    
         // Verify that the DB is still making sync progress
         let current_time = mock_time_service.now();
         assert!(subscription.check_syncing_progress().is_ok());
@@ -457,12 +459,12 @@ mod test {
             subscription.highest_synced_version_and_time,
             (first_synced_version, current_time)
         );
-
+    
         // Elapse enough time to timeout the subscription
         mock_time_service.advance(Duration::from_millis(
-            consensus_observer_config.max_synced_version_timeout_ms + 1,
+            max_synced_version_timeout_ms + 1,
         ));
-
+    
         // Verify that the DB is still making sync progress (the next version is higher)
         let current_time = mock_time_service.now();
         assert!(subscription.check_syncing_progress().is_ok());
@@ -470,12 +472,12 @@ mod test {
             subscription.highest_synced_version_and_time,
             (second_synced_version, current_time)
         );
-
+    
         // Elapse enough time to timeout the subscription
         mock_time_service.advance(Duration::from_millis(
-            consensus_observer_config.max_synced_version_timeout_ms + 1,
+            max_synced_version_timeout_ms + 1,
         ));
-
+    
         // Verify that the DB is not making sync progress and that the subscription has timed out
         assert!(subscription.check_syncing_progress().is_err());
     }

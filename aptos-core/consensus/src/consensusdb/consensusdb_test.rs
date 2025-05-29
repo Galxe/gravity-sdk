@@ -39,7 +39,7 @@ fn test_put_get() {
     let vote = vec![2u8, 1, 0];
     db.save_vote(vote.clone()).unwrap();
 
-    let (vote_1, tc_1, blocks_1, qc_1) = db.get_data().unwrap();
+    let (vote_1, tc_1, blocks_1, qc_1) = db.get_data(0).unwrap();
     assert_eq!(blocks, blocks_1);
     assert_eq!(qcs, qc_1);
     assert_eq!(Some(tc), tc_1);

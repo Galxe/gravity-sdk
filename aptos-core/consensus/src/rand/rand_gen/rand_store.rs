@@ -356,6 +356,7 @@ mod tests {
     use futures_channel::mpsc::unbounded;
     use rand::thread_rng;
     use std::str::FromStr;
+    use std::sync::Arc;
 
     /// Captures important data items across the whole DKG-WVUF flow.
     struct TestContext {

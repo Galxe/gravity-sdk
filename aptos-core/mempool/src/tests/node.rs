@@ -2,6 +2,7 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use api_types::mock_execution_layer::MockExecutionApi;
 use crate::{
     core_mempool::{CoreMempool, TimelineState},
     network::{BroadcastPeerPriority, MempoolSyncMsg},
