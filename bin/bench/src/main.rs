@@ -5,7 +5,7 @@ mod txn;
 
 use std::{sync::Arc, thread};
 
-use api::{check_bootstrap_config, consensus_api::ConsensusEngine, NodeConfig};
+use api::{check_bootstrap_config, consensus_api::{ConsensusEngine, ConsensusEngineArgs}, NodeConfig};
 use gaptos::api_types::{
     account::ExternalAccountAddress, ExecTxn
 };
@@ -26,15 +26,12 @@ struct TestConsensusLayer {
 
 impl TestConsensusLayer {
     async fn new(node_config: NodeConfig) -> Self {
-        let safe_hash = [0u8; 32];
-        let head_hash = [0u8; 32];
-        let finalized_hash = [0u8; 32];
         Self {
-            consensus_engine: ConsensusEngine::init(
+            consensus_engine: ConsensusEngine::init(ConsensusEngineArgs {
                 node_config,
-                1337,
-                0,
-            ).await,
+                chain_id: 1337,
+                latest_block_number: 0,
+            }).await,
         }
     }
 

@@ -53,12 +53,15 @@ fn fail_point_check(node_config: &NodeConfig) {
     }
 }
 
+pub struct ConsensusEngineArgs {
+    pub node_config: NodeConfig,
+    pub chain_id: u64,
+    pub latest_block_number: u64,
+}
+
 impl ConsensusEngine {
-    pub async fn init(
-        node_config: NodeConfig,
-        chain_id: u64,
-        latest_block_number: u64,
-    ) -> Arc<Self> {
+    pub async fn init(args: ConsensusEngineArgs) -> Arc<Self> {
+        let ConsensusEngineArgs { node_config, chain_id, latest_block_number } = args;
         // Setup panic handler
         gaptos::aptos_crash_handler::setup_panic_handler();
 

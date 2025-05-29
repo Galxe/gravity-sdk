@@ -14,8 +14,9 @@ use greth::reth_pipe_exec_layer_ext_v2::ExecutionArgs;
 use greth::reth_provider;
 use greth::reth_transaction_pool;
 use pprof::protos::Message;
-use api::check_bootstrap_config;
-use consensus::aptos::AptosConsensus;
+use api::{
+    check_bootstrap_config, consensus_api::{ConsensusEngine, ConsensusEngineArgs},
+};
 use gravity_storage::block_view_storage::BlockViewStorage;
 use pprof::ProfilerGuard;
 use reth::rpc::builder::auth::AuthServerHandle;
@@ -263,7 +264,12 @@ fn main() {
                         mock.run().await;
                     });
                 } else {
-                    _engine = Some(AptosConsensus::init(gcei_config, chain_id, latest_block_number).await);
+                    _engine = Some(ConsensusEngine::init(ConsensusEngineArgs {
+                        node_config: gcei_config,
+                        chain_id,
+                        latest_block_number,
+                    })
+                    .await);
                 }
                 coordinator.send_execution_args().await;
                 coordinator.run().await;
