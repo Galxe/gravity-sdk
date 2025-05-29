@@ -19,6 +19,7 @@ use gaptos::aptos_types::{
     state_store::{state_key::StateKey, state_value::StateValue},
     transaction::Version,
 };
+use once_cell::sync::OnceCell;
 
 use once_cell::sync::OnceCell;
 
@@ -136,8 +137,8 @@ impl DbReader for ConsensusDB {
                         match &mut consensus_conf {
                             OnChainConsensusConfig::V1(_) => {}
                             OnChainConsensusConfig::V2(_) => {}
-                            OnChainConsensusConfig::V3 {alg, vtxn } => {}
-                            OnChainConsensusConfig::V4 {alg,vtxn, window_size } => match alg {
+                            OnChainConsensusConfig::V3 { alg, vtxn } => {}
+                            OnChainConsensusConfig::V4 { alg, vtxn, window_size } => match alg {
                                 ConsensusAlgorithmConfig::Jolteon {
                                     main,
                                     quorum_store_enabled,
