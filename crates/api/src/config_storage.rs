@@ -1,8 +1,7 @@
-use gaptos::api_types::config_storage::ConfigStorage;
-use bytes::Bytes;
+use gaptos::{api_types::config_storage::{ConfigStorage, OnChainConfig, OnChainConfigResType}, aptos_logger::info};
 use std::sync::Arc;
 
-struct ConfigStorageWrapper {
+pub struct ConfigStorageWrapper {
     config_storage: Arc<dyn ConfigStorage>,
 }
 
@@ -15,17 +14,18 @@ impl ConfigStorageWrapper {
 impl ConfigStorage for ConfigStorageWrapper {
     fn fetch_config_bytes(
         &self,
-        config_name: gaptos::api_types::config_storage::OnChainConfig,
+        config_name: OnChainConfig,
         block_number: u64,
-    ) -> Option<Bytes> {
+    ) -> Option<OnChainConfigResType> {
+        info!("fetch_config_bytes: {:?}, block_number: {:?}", config_name, block_number);
         match config_name {
-            gaptos::api_types::config_storage::OnChainConfig::ConsensusConfig => {
+            OnChainConfig::ConsensusConfig | OnChainConfig::Epoch => {
                 self.config_storage.fetch_config_bytes(config_name, block_number)
-            },
+            }
             _ => {
                 // Return None so the caller can use default config for dev debug
                 None
-            }, 
+            }
         }
     }
 }
