@@ -31,6 +31,19 @@ fn get_txn_added_to_batch_histogram() -> &'static Histogram {
     })
 }
 
+static TXN_ADDED_TO_AFTER_BATCH_PERSIST_TIME_HISTOGRAM: std::sync::OnceLock<Histogram> =
+    std::sync::OnceLock::new();
+fn get_txn_added_to_batch_persist_histogram() -> &'static Histogram {
+    TXN_ADDED_TO_AFTER_BATCH_PERSIST_TIME_HISTOGRAM.get_or_init(|| {
+        register_histogram!(
+            "aptos_txn_added_to_after_batch_persist_time_seconds",
+            "Time from transaction added to proof generated (seconds)",
+            vec![0.0, 0.01, 0.02, 0.03, 0.05, 0.1, 0.2, 0.3, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0]
+        )
+        .unwrap()
+    })
+}
+
 static TXN_ADDED_TO_PROOF_TIME_HISTOGRAM: std::sync::OnceLock<Histogram> =
     std::sync::OnceLock::new();
 fn get_txn_added_to_proof_histogram() -> &'static Histogram {
@@ -147,6 +160,20 @@ impl TxnLifeTime {
         }
         if !current_batch_txn_hashes.is_empty() {
             self.txn_batch_id.insert(batch_id, current_batch_txn_hashes);
+        }
+    }
+
+    pub fn record_after_persist(&self, batch_id: BatchId) {
+        let now = SystemTime::now();
+        if let Some(txn_hashes_entry) = self.txn_batch_id.get(&batch_id) {
+            for &txn_hash in txn_hashes_entry.value().iter() {
+                if let Some(initial_add_time_entry) = self.txn_initial_add_time.get(&txn_hash) {
+                    if let Ok(duration) = now.duration_since(*initial_add_time_entry.value()) {
+                        get_txn_added_to_batch_persist_histogram().observe(duration.as_secs_f64());
+                    }
+                }
+                // No state update needed in txn_time anymore
+            }
         }
     }
 

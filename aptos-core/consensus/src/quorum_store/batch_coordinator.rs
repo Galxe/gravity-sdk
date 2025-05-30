@@ -90,6 +90,9 @@ impl BatchCoordinator {
                     .send_signed_batch_info_msg(signed_batch_infos, vec![peer_id])
                     .await;
             }
+            for batch in batches.iter() {
+                txn_metrics::TxnLifeTime::get_txn_life_time().record_after_persist(batch.batch_id());
+            }
             let _ = sender_to_proof_manager
                 .send(ProofManagerCommand::ReceiveBatches(batches))
                 .await;

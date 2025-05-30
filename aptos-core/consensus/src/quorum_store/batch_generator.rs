@@ -340,13 +340,8 @@ impl BatchGenerator {
             .await
             .unwrap_or_default();
 
-<<<<<<< HEAD
         trace!("QS: pulled_txns len: {:?}", pulled_txns.len());
         
-=======
-        info!("QS: batches pulled_txns len: {:?}", pulled_txns.len());
-
->>>>>>> f102621 (2wtps)
         if pulled_txns.is_empty() {
             counters::PULLED_EMPTY_TXNS_COUNT.inc();
             // Quorum store metrics
