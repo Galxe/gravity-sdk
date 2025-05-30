@@ -4,7 +4,7 @@ mod logger;
 mod network;
 mod https;
 pub mod consensus_api;
-mod config_storage;
+pub mod config_storage;
 
 pub use gaptos::aptos_config::config::NodeConfig;
 pub use bootstrap::check_bootstrap_config;
