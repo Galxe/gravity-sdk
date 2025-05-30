@@ -1,17 +1,18 @@
-use crate::{metrics::{fetch_reth_txn_metrics}, ConsensusArgs};
+use crate::{metrics::fetch_reth_txn_metrics, ConsensusArgs};
+use bytes::Bytes;
 use alloy_consensus::Transaction;
-use alloy_eips::{eip4895::Withdrawals, BlockId, BlockNumberOrTag, Decodable2718, Encodable2718};
+use alloy_eips::{eip4895::Withdrawals, Decodable2718, Encodable2718};
 use alloy_primitives::{
-    private::alloy_rlp::{Decodable, Encodable},
-    Address, FixedBytes, TxHash, B256,
+    Address, TxHash, B256,
 };
 use block_buffer_manager::get_block_buffer_manager;
 use core::panic;
 use gaptos::api_types::{
     account::{ExternalAccountAddress, ExternalChainId},
-    compute_res::{ComputeRes, TxnStatus},
+    config_storage::{ConfigStorage, OnChainConfig, OnChainConfigResType},
+    compute_res::TxnStatus,
     u256_define::{BlockId as ExternalBlockId, TxnHash},
-    ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
+    ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
     GLOBAL_CRYPTO_TXN_HASHER,
 };
 
@@ -19,22 +20,20 @@ use greth::{
     gravity_storage::block_view_storage::BlockViewStorage,
     reth::rpc::builder::auth::AuthServerHandle,
     reth_db::DatabaseEnv,
-    reth_ethereum_engine_primitives::EthPayloadAttributes,
     reth_node_api::NodeTypesWithDBAdapter,
     reth_node_core::primitives::SignedTransaction,
     reth_node_ethereum::EthereumNode,
     reth_pipe_exec_layer_ext_v2::{
-        ExecutedBlockMeta, ExecutionResult, OrderedBlock, PipeExecLayerApi,
+        ExecutionResult, OrderedBlock, PipeExecLayerApi,
     },
-    reth_primitives::{EthPrimitives, TransactionSigned},
+    reth_primitives::TransactionSigned,
     reth_provider::{
-        providers::BlockchainProvider, AccountReader, BlockHashReader, BlockNumReader,
-        BlockReaderIdExt, ChainSpecProvider, DatabaseProviderFactory,
+        providers::BlockchainProvider, AccountReader, BlockNumReader, ChainSpecProvider,
     },
     reth_transaction_pool::{EthPooledTransaction, TransactionPool, ValidPoolTransaction},
 };
 use rayon::iter::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator,
+    IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -312,6 +311,7 @@ impl RethCli {
             if let Some(txn_insert_time) = txn_insert_time {
                 fetch_reth_txn_metrics().txn_time.record((SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64 - txn_insert_time) as f64);
             }
+
             let sender = pool_txn.sender();
             let nonce = pool_txn.nonce();
             let txn = pool_txn.transaction.transaction().tx();
@@ -413,8 +413,9 @@ impl RethCli {
                     })
                     .collect(),
             ));
+            let events = execution_result.gravity_events;
             get_block_buffer_manager()
-                .set_compute_res(block_id, block_hash_data, block_number, txn_status)
+                .set_compute_res(block_id, block_hash_data, block_number, txn_status, events)
                 .await
                 .expect("failed to pop ordered block ids");
         }
@@ -457,5 +458,20 @@ impl RethCli {
                 .await
                 .unwrap();
         }
+    }
+}
+pub struct RethCliConfigStorage {
+    reth_cli: Arc<RethCli>,
+}
+
+impl RethCliConfigStorage {
+    pub fn new(reth_cli: Arc<RethCli>) -> Self {
+        Self { reth_cli }
+    }
+}
+
+impl ConfigStorage for RethCliConfigStorage {
+    fn fetch_config_bytes(&self, config_name: OnChainConfig, block_number: u64) -> Option<OnChainConfigResType> {
+        self.reth_cli.pipe_api.fetch_config_bytes(config_name, block_number)
     }
 }

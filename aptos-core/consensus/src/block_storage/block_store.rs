@@ -230,7 +230,7 @@ impl BlockStore {
     ) -> Self {
         let RootInfo(root_block, root_qc, root_ordered_cert, root_commit_cert) = root;
 
-        // TODO(gravity_lightman)
+        // TODO(gravity_lightman): How to handle the events?
         let result = StateComputeResult::with_root_hash(root_block.id());
 
         let pipelined_root_block = PipelinedBlock::new(

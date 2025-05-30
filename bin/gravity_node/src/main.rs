@@ -1,19 +1,23 @@
 use alloy_eips::BlockHashOrNumber;
 use alloy_primitives::TxHash;
+
 use api::{
-    check_bootstrap_config, consensus_api::{ConsensusEngine, ConsensusEngineArgs},
+    check_bootstrap_config, config_storage::ConfigStorageWrapper,
+    consensus_api::{ConsensusEngine, ConsensusEngineArgs},
 };
 use consensus::mock_consensus::mock::MockConsensus;
 use gravity_storage::block_view_storage::BlockViewStorage;
 use greth::{
-    gravity_storage, reth, reth::chainspec::EthereumChainSpecParser, reth_cli_util, reth_node_api,
+    gravity_storage, reth, reth::chainspec::EthereumChainSpecParser, reth_cli_util,
     reth_node_builder, reth_node_ethereum, reth_pipe_exec_layer_ext_v2,
     reth_pipe_exec_layer_ext_v2::ExecutionArgs, reth_provider,
     reth_transaction_pool::TransactionPool,
 };
 use pprof::{protos::Message, ProfilerGuard};
 use reth::rpc::builder::auth::AuthServerHandle;
-use reth_cli::{RethBlockChainProvider, RethPipeExecLayerApi, RethTransactionPool};
+use reth_cli::{
+    RethBlockChainProvider, RethCliConfigStorage, RethPipeExecLayerApi, RethTransactionPool,
+};
 use reth_coordinator::RethCoordinator;
 use reth_provider::{BlockHashReader, BlockNumReader, BlockReader};
 use tokio::sync::{mpsc, oneshot};
@@ -199,10 +203,16 @@ fn main() {
         rt.block_on(async move {
             if let Some((args, latest_block_number)) = rx.recv().await {
                 tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-                let client = RethCli::new(args).await;
+
+                let client = Arc::new(RethCli::new(args).await);
                 let chain_id = client.chain_id();
-                let coordinator =
-                    Arc::new(RethCoordinator::new(client, latest_block_number, execution_args_tx));
+
+                let coordinator = Arc::new(RethCoordinator::new(
+                    client.clone(),
+                    latest_block_number,
+                    execution_args_tx,
+                ));
+                let mut _engine = None;
                 if std::env::var("MOCK_CONSENSUS")
                     .unwrap_or("false".to_string())
                     .parse::<bool>()
@@ -218,6 +228,9 @@ fn main() {
                         node_config: gcei_config,
                         chain_id,
                         latest_block_number,
+                        config_storage: Some(Arc::new(ConfigStorageWrapper::new(Arc::new(
+                            RethCliConfigStorage::new(client),
+                        )))),
                     })
                     .await);
                 }
