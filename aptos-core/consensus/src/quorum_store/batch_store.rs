@@ -435,10 +435,6 @@ impl BatchWriter for BatchStore {
         //     }
         // }
         // signed_infos
-        for req in persist_requests.iter() {
-            let batch_id = req.batch_info().batch_id();
-            txn_metrics::TxnLifeTime::get_txn_life_time().record_before_persist(batch_id.clone());
-        }
         let res = persist_requests
             .into_iter()
             .filter_map(|req| {

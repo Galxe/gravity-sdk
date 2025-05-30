@@ -480,7 +480,10 @@ impl BatchGenerator {
                             }
                             self.batch_writer.persist(persist_requests);
                             counters::BATCH_CREATION_PERSIST_LATENCY.observe_duration(persist_start.elapsed());
-
+                            for req in batches.iter() {
+                                let batch_id = req.batch_info().batch_id();
+                                txn_metrics::TxnLifeTime::get_txn_life_time().record_broadcast_batch(batch_id.clone());
+                            }
                             network_sender.broadcast_batch_msg(batches).await;
                         } else if tick_start.elapsed() > interval.period().checked_div(2).unwrap_or(Duration::ZERO) {
                             // If the pull takes too long, it's also accounted as a non-empty pull to avoid pulling too often.

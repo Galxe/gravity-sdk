@@ -175,6 +175,10 @@ impl BatchCoordinator {
                     break;
                 },
                 BatchCoordinatorCommand::NewBatches(author, batches) => {
+                    for req in batches.iter() {
+                        let batch_id = req.batch_info().batch_id();
+                        txn_metrics::TxnLifeTime::get_txn_life_time().record_before_persist(batch_id.clone());
+                    }
                     self.handle_batches_msg(author, batches).await;
                 },
             }
