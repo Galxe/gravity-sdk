@@ -311,15 +311,19 @@ impl BatchStore {
     }
 
     fn persist_inner(&self, persist_request: PersistedValue) -> Option<SignedBatchInfo> {
+        
         match self.save(&persist_request) {
             Ok(needs_db) => {
                 let batch_info = persist_request.batch_info().clone();
                 trace!("QS: sign digest {}", persist_request.digest());
                 if needs_db {
+                    let batch_id = persist_request.batch_info().batch_id();
                     #[allow(clippy::unwrap_in_result)]
                     self.db
                         .save_batch(persist_request)
                         .expect("Could not write to DB");
+                    txn_metrics::TxnLifeTime::get_txn_life_time().record_after_persist(batch_id);
+                    
                 }
                 SignedBatchInfo::new(batch_info, &self.validator_signer).ok()
             },
@@ -431,8 +435,12 @@ impl BatchWriter for BatchStore {
         //     }
         // }
         // signed_infos
+        for req in persist_requests.iter() {
+            let batch_id = req.batch_info().batch_id();
+            txn_metrics::TxnLifeTime::get_txn_life_time().record_before_persist(batch_id.clone());
+        }
         let res = persist_requests
-            .into_par_iter()
+            .into_iter()
             .filter_map(|req| {
                 let signed_info_opt = self.persist_inner(req.clone());
                 signed_info_opt.map(|si| (req, si))

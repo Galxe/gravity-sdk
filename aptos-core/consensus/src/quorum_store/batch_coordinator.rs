@@ -65,7 +65,7 @@ impl BatchCoordinator {
         }
     }
 
-    fn persist_and_send_digests(&self, persist_requests: Vec<PersistedValue>) {
+    async fn persist_and_send_digests(&self, persist_requests: Vec<PersistedValue>) {
         if persist_requests.is_empty() {
             return;
         }
@@ -73,7 +73,8 @@ impl BatchCoordinator {
         let batch_store = self.batch_store.clone();
         let network_sender = self.network_sender.clone();
         let sender_to_proof_manager = self.sender_to_proof_manager.clone();
-        tokio::spawn(async move {
+        // tokio::spawn(async move {
+            let start = std::time::Instant::now();
             let peer_id = persist_requests[0].author();
             let batches = persist_requests
                 .iter()
@@ -84,19 +85,19 @@ impl BatchCoordinator {
                     )
                 })
                 .collect();
+            let end = std::time::Instant::now();
+            info!("QS: persist_and_send_digests time: {:?}", end.duration_since(start));
             let signed_batch_infos = batch_store.persist(persist_requests);
             if !signed_batch_infos.is_empty() {
                 network_sender
                     .send_signed_batch_info_msg(signed_batch_infos, vec![peer_id])
                     .await;
             }
-            for batch in batches.iter() {
-                txn_metrics::TxnLifeTime::get_txn_life_time().record_after_persist(batch.batch_id());
-            }
+            
             let _ = sender_to_proof_manager
                 .send(ProofManagerCommand::ReceiveBatches(batches))
                 .await;
-        });
+        // });
     }
 
     fn ensure_max_limits(&self, batches: &[Batch]) -> anyhow::Result<()> {
@@ -161,7 +162,7 @@ impl BatchCoordinator {
         if author != self.my_peer_id {
             counters::RECEIVED_REMOTE_BATCH_COUNT.inc_by(persist_requests.len() as u64);
         }
-        self.persist_and_send_digests(persist_requests);
+        self.persist_and_send_digests(persist_requests).await;
     }
 
     pub(crate) async fn start(mut self, mut command_rx: Receiver<BatchCoordinatorCommand>) {
