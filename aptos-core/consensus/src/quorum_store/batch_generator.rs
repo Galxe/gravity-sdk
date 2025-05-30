@@ -176,9 +176,9 @@ impl BatchGenerator {
     ) -> Batch {
         let batch_id = self.batch_id;
         self.batch_id.increment();
-        self.db
-            .save_batch_id(self.epoch, self.batch_id)
-            .expect("Could not save to db");
+        // self.db
+        //     .save_batch_id(self.epoch, self.batch_id)
+        //     .expect("Could not save to db");
 
         self.insert_batch(self.my_peer_id, batch_id, txns.clone(), expiry_time);
 
