@@ -14,6 +14,10 @@ use gaptos::api_types::{
     ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
     GLOBAL_CRYPTO_TXN_HASHER,
 };
+<<<<<<< HEAD
+=======
+use gaptos::api_types::config_storage::{ConfigStorage, OnChainConfig, OnChainConfigResType};
+>>>>>>> 8748275 (use new config storage of gaptos)
 use greth::{
     gravity_storage::block_view_storage::BlockViewStorage,
     reth::rpc::builder::auth::AuthServerHandle,
@@ -451,5 +455,20 @@ impl RethCli {
                 .await
                 .unwrap();
         }
+    }
+}
+pub struct RethCliConfigStorage {
+    reth_cli: Arc<RethCli>,
+}
+
+impl RethCliConfigStorage {
+    pub fn new(reth_cli: Arc<RethCli>) -> Self {
+        Self { reth_cli }
+    }
+}
+
+impl ConfigStorage for RethCliConfigStorage {
+    fn fetch_config_bytes(&self, config_name: OnChainConfig, block_number: u64) -> Option<OnChainConfigResType> {
+        self.reth_cli.pipe_api.fetch_config_bytes(config_name, block_number)
     }
 }
