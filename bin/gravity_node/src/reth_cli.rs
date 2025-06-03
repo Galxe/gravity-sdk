@@ -9,15 +9,12 @@ use block_buffer_manager::get_block_buffer_manager;
 use core::panic;
 use gaptos::api_types::{
     account::{ExternalAccountAddress, ExternalChainId},
+    api_types::config_storage::{ConfigStorage, OnChainConfig, OnChainConfigResType},
     compute_res::{ComputeRes, TxnStatus},
     u256_define::{BlockId as ExternalBlockId, TxnHash},
     ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
     GLOBAL_CRYPTO_TXN_HASHER,
 };
-<<<<<<< HEAD
-=======
-use gaptos::api_types::config_storage::{ConfigStorage, OnChainConfig, OnChainConfigResType};
->>>>>>> 8748275 (use new config storage of gaptos)
 use greth::{
     gravity_storage::block_view_storage::BlockViewStorage,
     reth::rpc::builder::auth::AuthServerHandle,

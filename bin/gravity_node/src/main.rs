@@ -1,30 +1,13 @@
 use alloy_eips::BlockHashOrNumber;
 use alloy_primitives::TxHash;
-<<<<<<< HEAD
-use consensus::mock_consensus::mock::MockConsensus;
-use greth::gravity_storage;
-use greth::reth;
-use greth::reth::chainspec::EthereumChainSpecParser;
-use greth::reth_cli_util;
-use greth::reth_db;
-use greth::reth_node_api;
-use greth::reth_node_builder;
-use greth::reth_node_ethereum;
-use greth::reth_pipe_exec_layer_ext_v2;
-use greth::reth_pipe_exec_layer_ext_v2::ExecutionArgs;
-use greth::reth_provider;
-use greth::reth_transaction_pool;
-use pprof::protos::Message;
+
 use api::{
     check_bootstrap_config, consensus_api::{ConsensusEngine, ConsensusEngineArgs},
 };
-=======
-use api::check_bootstrap_config;
-use consensus::{aptos::AptosConsensus, mock_consensus::mock::MockConsensus};
->>>>>>> 7c66185 (update greth)
+use consensus::mock_consensus::mock::MockConsensus;
 use gravity_storage::block_view_storage::BlockViewStorage;
 use greth::{
-    gravity_storage, reth, reth::chainspec::EthereumChainSpecParser, reth_cli_util, reth_node_api,
+    gravity_storage, reth, reth::chainspec::EthereumChainSpecParser, reth_cli_util,
     reth_node_builder, reth_node_ethereum, reth_pipe_exec_layer_ext_v2,
     reth_pipe_exec_layer_ext_v2::ExecutionArgs, reth_provider,
     reth_transaction_pool::TransactionPool,
@@ -129,6 +112,7 @@ fn run_reth(
                     tx_listener: pending_listener,
                     pool,
                 };
+                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
                 tx.send((args, latest_block_number)).await.ok();
                 handle.node_exit_future.await
             }
@@ -231,7 +215,7 @@ fn main() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
             if let Some((args, latest_block_number)) = rx.recv().await {
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
                 let client = RethCli::new(args).await;
                 let chain_id = client.chain_id();
