@@ -221,6 +221,7 @@ fn main() {
                 let chain_id = client.chain_id();
                 let coordinator =
                     Arc::new(RethCoordinator::new(client, latest_block_number, execution_args_tx));
+                let mut _engine = None;
                 if std::env::var("MOCK_CONSENSUS")
                     .unwrap_or("false".to_string())
                     .parse::<bool>()

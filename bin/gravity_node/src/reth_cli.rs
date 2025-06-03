@@ -9,7 +9,7 @@ use block_buffer_manager::get_block_buffer_manager;
 use core::panic;
 use gaptos::api_types::{
     account::{ExternalAccountAddress, ExternalChainId},
-    api_types::config_storage::{ConfigStorage, OnChainConfig, OnChainConfigResType},
+    config_storage::{ConfigStorage, OnChainConfig, OnChainConfigResType},
     compute_res::{ComputeRes, TxnStatus},
     u256_define::{BlockId as ExternalBlockId, TxnHash},
     ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
@@ -302,10 +302,10 @@ impl RethCli {
         let mut gas_limit = 0;
         for pool_txn in pool_txns {
             let txn_hash = pool_txn.hash();
-            let txn_insert_time = self.pool.txn_insert_time(*txn_hash);
-            if let Some(txn_insert_time) = txn_insert_time {
-                TXN_TO_BLOCK_BUFFER_MANAGER.observe(txn_insert_time as f64);
-            }
+            // let txn_insert_time = self.pool.txn_insert_time(*txn_hash);
+            // if let Some(txn_insert_time) = txn_insert_time {
+            //     TXN_TO_BLOCK_BUFFER_MANAGER.observe(txn_insert_time as f64);
+            // }
             let sender = pool_txn.sender();
             let nonce = pool_txn.nonce();
             let txn = pool_txn.transaction.transaction().tx();
