@@ -1,12 +1,13 @@
 use alloy_eips::BlockHashOrNumber;
 use alloy_primitives::TxHash;
+
 use api::{
     check_bootstrap_config, consensus_api::{ConsensusEngine, ConsensusEngineArgs},
 };
 use consensus::mock_consensus::mock::MockConsensus;
 use gravity_storage::block_view_storage::BlockViewStorage;
 use greth::{
-    gravity_storage, reth, reth::chainspec::EthereumChainSpecParser, reth_cli_util, reth_node_api,
+    gravity_storage, reth, reth::chainspec::EthereumChainSpecParser, reth_cli_util,
     reth_node_builder, reth_node_ethereum, reth_pipe_exec_layer_ext_v2,
     reth_pipe_exec_layer_ext_v2::ExecutionArgs, reth_provider,
     reth_transaction_pool::TransactionPool,
@@ -203,6 +204,7 @@ fn main() {
                 let chain_id = client.chain_id();
                 let coordinator =
                     Arc::new(RethCoordinator::new(client, latest_block_number, execution_args_tx));
+                let mut _engine = None;
                 if std::env::var("MOCK_CONSENSUS")
                     .unwrap_or("false".to_string())
                     .parse::<bool>()

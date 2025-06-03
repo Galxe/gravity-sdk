@@ -9,12 +9,12 @@ use block_buffer_manager::get_block_buffer_manager;
 use core::panic;
 use gaptos::api_types::{
     account::{ExternalAccountAddress, ExternalChainId},
+    config_storage::{ConfigStorage, OnChainConfig, OnChainConfigResType},
     compute_res::{ComputeRes, TxnStatus},
     u256_define::{BlockId as ExternalBlockId, TxnHash},
     ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
     GLOBAL_CRYPTO_TXN_HASHER,
 };
-use gaptos::api_types::config_storage::{ConfigStorage, OnChainConfig, OnChainConfigResType};
 
 use greth::{
     gravity_storage::block_view_storage::BlockViewStorage,
@@ -313,6 +313,7 @@ impl RethCli {
             if let Some(txn_insert_time) = txn_insert_time {
                 fetch_reth_txn_metrics().txn_time.record((SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64 - txn_insert_time) as f64);
             }
+
             let sender = pool_txn.sender();
             let nonce = pool_txn.nonce();
             let txn = pool_txn.transaction.transaction().tx();
