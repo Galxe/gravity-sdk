@@ -77,7 +77,7 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
         let block_number = consensus_commit_notification.get_block_number();
         let events = consensus_commit_notification.get_subscribable_events().clone();
         let mut event_subscription_service = self.event_subscription_service.lock().await;
-        event_subscription_service.notify_events(block_number, events);
+        event_subscription_service.notify_events(block_number, events).unwrap();
         self.consensus_notification_listener
             .respond_to_commit_notification(consensus_commit_notification, Ok(()))
             .map_err(|e| anyhow::anyhow!(e))

@@ -147,6 +147,7 @@ fn run_reth(
                     tx_listener: pending_listener,
                     pool,
                 };
+                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
                 tx.send((args, latest_block_number)).await.ok();
                 handle.node_exit_future.await
             }
@@ -251,7 +252,7 @@ fn main() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
             if let Some((args, latest_block_number)) = rx.recv().await {
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
                 let client = RethCli::new(args).await;
                 let chain_id = client.chain_id();
