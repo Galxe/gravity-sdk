@@ -2,7 +2,8 @@ use alloy_eips::BlockHashOrNumber;
 use alloy_primitives::TxHash;
 
 use api::{
-    check_bootstrap_config, consensus_api::{ConsensusEngine, ConsensusEngineArgs},
+    check_bootstrap_config, config_storage::ConfigStorageWrapper,
+    consensus_api::{ConsensusEngine, ConsensusEngineArgs},
 };
 use consensus::mock_consensus::mock::MockConsensus;
 use gravity_storage::block_view_storage::BlockViewStorage;
@@ -238,13 +239,15 @@ fn main() {
                         mock.run().await;
                     });
                 } else {
-                    AptosConsensus::init(ConsensusEngineArgs {
+                    _engine = Some(ConsensusEngine::init(ConsensusEngineArgs {
                         node_config: gcei_config,
                         chain_id,
                         latest_block_number,
-                        config_storage: Some(Arc::new(RethCliConfigStorage::new(client))),
+                        config_storage: Some(Arc::new(ConfigStorageWrapper::new(Arc::new(
+                            RethCliConfigStorage::new(client),
+                        )))),
                     })
-                    .await;
+                    .await);
                 }
                 coordinator.send_execution_args().await;
                 coordinator.run().await;

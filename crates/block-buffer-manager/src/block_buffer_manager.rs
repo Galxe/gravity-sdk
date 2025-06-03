@@ -12,10 +12,8 @@ use std::{
 use tokio::{sync::Mutex, time::Instant};
 
 use gaptos::api_types::{
-    compute_res::{self, ComputeRes, TxnStatus}, u256_define::BlockId, ExternalBlock, VerifiedTxn,
-    VerifiedTxnWithAccountSeqNum,
+    compute_res::{self, ComputeRes, TxnStatus}, events::contract_event::GravityEvent, u256_define::BlockId, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum
 };
-use itertools::Itertools;
 
 pub struct TxnItem {
     pub txns: Vec<VerifiedTxnWithAccountSeqNum>,
@@ -366,6 +364,7 @@ impl BlockBufferManager {
         block_hash: [u8; 32],
         block_num: u64,
         txn_status: Arc<Option<Vec<TxnStatus>>>,
+        events: Vec<GravityEvent>,
     ) -> Result<(), anyhow::Error> {
         if !self.is_ready() {
             panic!("Buffer is not ready");
@@ -377,19 +376,21 @@ impl BlockBufferManager {
         {
             assert_eq!(block.block_meta.block_id, block_id);
             let txn_len = block.txns.len();
+            let events_len = events.len();
             block_state_machine.blocks.insert(
                 block_num,
                 BlockState::Computed {
                     id: block_id,
-                    compute_res: ComputeRes { data: block_hash, txn_num: txn_len as u64, txn_status, events: vec![] },
+                    compute_res: ComputeRes { data: block_hash, txn_num: txn_len as u64, txn_status, events },
                 },
             );
             
             // Record time for set_compute_res
             let profile = block_state_machine.profile.entry(block_num).or_insert_with(BlockProfile::default);
             profile.set_compute_res_time = Some(SystemTime::now());
+            // TODO(gravity_alex): 按照aptos的实现，在compute res中就要拿到next epoch state(包括epoch和validator set)
             info!(
-                "set_compute_res id {:?} num {:?} hash {:?} and exec time {:?}ms for {:?} txns",
+                "set_compute_res id {:?} num {:?} hash {:?} and exec time {:?}ms for {:?} txns and {:?} events",
                 block_id,
                 block_num,
                 BlockId::from_bytes(block_hash.as_slice()),
@@ -397,7 +398,8 @@ impl BlockBufferManager {
                     .duration_since(profile.get_ordered_blocks_time.unwrap())
                     .unwrap_or(Duration::ZERO)
                     .as_millis(),
-                txn_len
+                txn_len,
+                events_len,
             );
             let _ = block_state_machine.sender.send(());
             return Ok(());

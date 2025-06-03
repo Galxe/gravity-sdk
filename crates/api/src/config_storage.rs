@@ -17,7 +17,7 @@ impl ConfigStorage for ConfigStorageWrapper {
         config_name: OnChainConfig,
         block_number: u64,
     ) -> Option<OnChainConfigResType> {
-        info!("fetch_config_bytes: {:?}", config_name);
+        info!("fetch_config_bytes: {:?}, block_number: {:?}", config_name, block_number);
         match config_name {
             OnChainConfig::ConsensusConfig | OnChainConfig::Epoch => {
                 self.config_storage.fetch_config_bytes(config_name, block_number)

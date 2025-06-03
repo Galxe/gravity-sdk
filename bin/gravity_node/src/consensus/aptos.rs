@@ -6,7 +6,7 @@ pub struct AptosConsensus {
 }
 
 impl AptosConsensus {
-    pub async fn init(args: ConsensusEngineArgs) {
-        let consensus_engine = ConsensusEngine::init(args).await;
+    pub async fn init(args: ConsensusEngineArgs) -> Arc<ConsensusEngine> {
+        ConsensusEngine::init(args).await
     }
 }

@@ -407,8 +407,9 @@ impl RethCli {
                     })
                     .collect(),
             ));
+            let events = execution_result.gravity_events;
             get_block_buffer_manager()
-                .set_compute_res(block_id, block_hash_data, block_number, txn_status)
+                .set_compute_res(block_id, block_hash_data, block_number, txn_status, events)
                 .await
                 .expect("failed to pop ordered block ids");
         }

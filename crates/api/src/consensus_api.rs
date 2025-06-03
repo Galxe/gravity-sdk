@@ -203,7 +203,7 @@ impl ConsensusEngine {
             runtimes,
         });
         // process new round should be after init retƒh hash
-        let _ = event_subscription_service.lock().await.notify_initial_configs(1_u64);
+        let _ = event_subscription_service.lock().await.notify_initial_configs(0_u64);
         arc_consensus_engine
     }
 }
