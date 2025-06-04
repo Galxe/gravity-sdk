@@ -1296,7 +1296,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         fast_rand_config: Option<RandConfig>,
         rand_msg_rx: aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
     ) {
-        match self.storage.start(consensus_config.order_vote_enabled()).await {
+        match self.storage.start(consensus_config.order_vote_enabled(), epoch_state.epoch).await {
             LivenessStorageData::FullRecoveryData(initial_data) => {
                 self.recovery_mode = false;
                 info!("init data {:?}", initial_data.root_block());

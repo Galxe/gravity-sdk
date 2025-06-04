@@ -190,7 +190,7 @@ impl Block {
             id: block_data.hash(),
             block_data,
             signature: None,
-            block_number: OnceCell::new(),
+            block_number: ledger_info.block_number(),
         }
     }
 
