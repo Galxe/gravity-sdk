@@ -125,6 +125,7 @@ impl ConsensusDB {
     pub fn get_data(
         &self,
         latest_block_number: u64,
+        epoch: u64,
     ) -> Result<(Option<Vec<u8>>, Option<Vec<u8>>, Vec<Block>, Vec<QuorumCert>)> {
         let last_vote = self.get_last_vote()?;
         let highest_2chain_timeout_certificate = self.get_highest_2chain_timeout_certificate()?;
@@ -134,22 +135,25 @@ impl ConsensusDB {
             .filter(|(_, block_number)| block_number >= &latest_block_number)
             .map(|(block_id, block_number)| (block_number, block_id))
             .collect::<HashMap<u64, HashValue>>();
+        let (start_epoch, start_round) = if block_number_to_block_id.contains_key(&latest_block_number) {
+            let block = self.get::<BlockSchema>(&block_number_to_block_id[&latest_block_number])?
+                .unwrap();
+            (block.epoch(), block.round())
+        } else {
+            (1, 0)
+        };
+        if epoch > start_epoch {
+            return Ok((last_vote, highest_2chain_timeout_certificate, vec![], vec![]));
+        }
         let block_id_to_block_number = block_number_to_block_id
             .iter()
             .map(|(block_number, block_id)| (*block_id, *block_number))
             .collect::<HashMap<HashValue, u64>>();
-        let start_round = if block_number_to_block_id.contains_key(&latest_block_number) {
-            self.get::<BlockSchema>(&block_number_to_block_id[&latest_block_number])?
-                .unwrap()
-                .round()
-        } else {
-            0
-        };
         let mut consensus_blocks: Vec<_> = self
             .get_all::<BlockSchema>()?
             .into_iter()
             .map(|(_, block)| block)
-            .filter(|block| block.round() >= start_round)
+            .filter(|block| block.epoch() == start_epoch && block.round() >= start_round)
             .collect();
         consensus_blocks.iter_mut().for_each(|block| {
             if block.block_number().is_none() {
@@ -162,7 +166,7 @@ impl ConsensusDB {
             .get_all::<QCSchema>()?
             .into_iter()
             .map(|(_, qc)| qc)
-            .filter(|qc| qc.certified_block().round() >= start_round)
+            .filter(|qc| qc.certified_block().epoch() == start_epoch && qc.certified_block().round() >= start_round)
             .collect();
         info!("consensus_blocks size : {}, consensus_qcs size : {}, block_number_to_block_id size : {}, start_round : {}",
                  consensus_blocks.len(), consensus_qcs.len(), block_number_to_block_id.len(), start_round);

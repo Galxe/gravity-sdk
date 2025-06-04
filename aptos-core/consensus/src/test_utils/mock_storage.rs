@@ -205,7 +205,7 @@ impl PersistentLivenessStorage for MockStorage {
         self.get_ledger_recovery_data()
     }
 
-    async fn start(&self, order_vote_enabled: bool) -> LivenessStorageData {
+    async fn start(&self, order_vote_enabled: bool, epoch: u64) -> LivenessStorageData {
         match self.try_start(order_vote_enabled) {
             Ok(recovery_data) => LivenessStorageData::FullRecoveryData(recovery_data),
             Err(_) => LivenessStorageData::PartialRecoveryData(self.recover_from_ledger()),
@@ -290,7 +290,7 @@ impl PersistentLivenessStorage for EmptyStorage {
         ))
     }
 
-    async fn start(&self, order_vote_enabled: bool) -> LivenessStorageData {
+    async fn start(&self, order_vote_enabled: bool, epoch: u64) -> LivenessStorageData {
         match RecoveryData::new(
             None,
             self.recover_from_ledger(),
