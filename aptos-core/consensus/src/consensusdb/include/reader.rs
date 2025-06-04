@@ -94,29 +94,11 @@ impl DbReader for ConsensusDB {
     }
 
     fn get_state_proof(&self, known_version: u64) -> Result<StateProof, AptosDbError> {
-        let infos = self
-            .mock_validators()
-            .iter()
-            .map(|v| {
-                ValidatorConsensusInfo::new(
-                    v.account_address,
-                    v.consensus_public_key().clone(),
-                    v.consensus_voting_power(),
-                )
-            })
-            .collect();
-        let verifier = ValidatorVerifier::new(infos);
-        let epoch_state = EpochState::new(1, verifier);
-        let block_info =
-            BlockInfo::new(1, 0, HashValue::zero(), HashValue::zero(), 0, 0, Some(epoch_state));
-        let ledger_info = LedgerInfo::new(block_info, HashValue::zero());
+        let ledger_info = self.get_latest_ledger_info()?;
         Ok(StateProof::new(
-            LedgerInfoWithSignatures::genesis(
-                *ACCUMULATOR_PLACEHOLDER_HASH,
-                ValidatorSet::new(self.mock_validators()),
-            ),
+            ledger_info.clone(),
             EpochChangeProof::new(
-                vec![LedgerInfoWithSignatures::new(ledger_info, AggregateSignature::empty())],
+                vec![(ledger_info)],
                 false,
             ),
         ))
