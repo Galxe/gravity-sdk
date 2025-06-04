@@ -183,14 +183,11 @@ impl Block {
     /// We carry over most fields except round and block id
     pub fn make_genesis_block_from_ledger_info(ledger_info: &LedgerInfo) -> Self {
         let block_data = BlockData::new_genesis_from_ledger_info(ledger_info);
-        assert!(*GENESIS_BLOCK_ID == block_data.hash(),
-            "The GENESIS_BLOCK_ID must be equal to block_data.hash() {:?}",
-            *block_data.hash());
         Block {
             id: block_data.hash(),
             block_data,
             signature: None,
-            block_number: OnceCell::new(),
+            block_number: OnceCell::with_value(ledger_info.block_number()),
         }
     }
 
