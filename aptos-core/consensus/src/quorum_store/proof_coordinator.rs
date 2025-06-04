@@ -289,6 +289,9 @@ impl ProofCoordinator {
                 Self::update_counters_on_expire(&state);
             }
         }
+        if batch_ids.is_empty() {
+            return;
+        }
         if self
             .batch_generator_cmd_tx
             .send(BatchGeneratorCommand::ProofExpiration(batch_ids))

@@ -85,7 +85,8 @@ impl QuorumStoreStorage for QuorumStoreDB {
             batch.digest(),
             batch.expiration()
         );
-        Ok(self.db.put::<BatchSchema>(batch.digest(), &batch)?)
+        // Ok(self.db.put::<BatchSchema>(batch.digest(), &batch)?)
+        Ok(())
     }
 
     fn get_batch(&self, digest: &HashValue) -> Result<Option<PersistedValue>, DbError> {

@@ -313,7 +313,7 @@ impl TransactionStore {
         // --- Final Batch-Level Updates ---
         // Call track_indices once after all insertions/updates if it summarizes state.
         // If it needs to be called per-insertion, it should be inside the inner loop.
-        self.track_indices();
+        // self.track_indices();
 
         // Fill in any potentially remaining None values (shouldn't happen if logic is correct)
         results.into_iter().map(|res| res.expect("Result should have been set for every transaction")).collect()
@@ -378,7 +378,7 @@ impl TransactionStore {
             self.sequence_numbers.insert(address, acc_seq_num);
             self.size_bytes += txn.get_estimated_bytes();
             txns.insert(txn_seq_num, txn);
-            self.track_indices();
+            // self.track_indices();
         }
         self.process_ready_transactions(&address, acc_seq_num);
         MempoolStatus::new(MempoolStatusCode::Accepted)
@@ -541,24 +541,24 @@ impl TransactionStore {
                 }
 
                 if process_ready {
-                    let bucket = self
-                        .timeline_index
-                        .get(&sender_bucket)
-                        .unwrap()
-                        .get_bucket(txn.ranking_score())
-                        .to_string();
-                    let bucket = format!("{}_{}", sender_bucket, bucket);
-                    let priority = txn.priority_of_sender().clone();
-                    Self::log_ready_transaction(
-                        txn.ranking_score(),
-                        bucket.as_str(),
-                        &mut txn.get_mut_insertion_info(),
-                        process_broadcast_ready,
-                        priority
-                            .clone()
-                            .map_or_else(|| "Unknown".to_string(), |priority| priority.to_string())
-                            .as_str(),
-                    );
+                    // let bucket = self
+                    //     .timeline_index
+                    //     .get(&sender_bucket)
+                    //     .unwrap()
+                    //     .get_bucket(txn.ranking_score())
+                    //     .to_string();
+                    // let bucket = format!("{}_{}", sender_bucket, bucket);
+                    // let priority = txn.priority_of_sender().clone();
+                    // Self::log_ready_transaction(
+                    //     txn.ranking_score(),
+                    //     bucket.as_str(),
+                    //     &mut txn.get_mut_insertion_info(),
+                    //     process_broadcast_ready,
+                    //     priority
+                    //         .clone()
+                    //         .map_or_else(|| "Unknown".to_string(), |priority| priority.to_string())
+                    //         .as_str(),
+                    // );
                 }
 
                 // Remove txn from parking lot after it has been promoted to
@@ -579,7 +579,7 @@ impl TransactionStore {
                 last_ready_seq_num = min_seq,
                 num_parked_txns = parking_lot_txns,
             );
-            self.track_indices();
+            // self.track_indices();
         }
     }
 
@@ -688,7 +688,7 @@ impl TransactionStore {
             // }
         }
 
-        self.track_indices();
+        // self.track_indices();
     }
 
     /// Read at most `count` transactions from timeline since `timeline_id`.
@@ -813,5 +813,9 @@ impl TransactionStore {
             count += txns.len();
         }
         count
+    }
+
+    pub(crate) fn priority_index_size(&self) -> usize {
+        self.priority_index.size()
     }
 }

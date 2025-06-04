@@ -1,4 +1,4 @@
-use crate::{metrics::TXN_TO_BLOCK_BUFFER_MANAGER, ConsensusArgs};
+use crate::{metrics::{fetch_reth_txn_metrics}, ConsensusArgs};
 use alloy_consensus::Transaction;
 use alloy_eips::{eip4895::Withdrawals, BlockId, BlockNumberOrTag, Decodable2718, Encodable2718};
 use alloy_primitives::{
@@ -18,7 +18,7 @@ use gaptos::api_types::{ExecutionBlocks, ExternalBlock, VerifiedTxn, VerifiedTxn
 use block_buffer_manager::get_block_buffer_manager;
 use rayon::iter::IntoParallelRefMutIterator;
 use core::panic;
-use greth::{reth_ethereum_engine_primitives::EthPayloadAttributes, reth_transaction_pool::{EthPooledTransaction, ValidPoolTransaction}};
+use greth::{reth_ethereum_engine_primitives::EthPayloadAttributes, reth_node_core::primitives::account, reth_transaction_pool::{EthPooledTransaction, TransactionOrigin, ValidPoolTransaction}};
 use greth::reth_node_api::NodeTypesWithDBAdapter;
 use greth::reth_node_ethereum::EthereumNode;
 use greth::reth_pipe_exec_layer_ext_v2::{ExecutedBlockMeta, OrderedBlock, PipeExecLayerApi};
@@ -36,7 +36,7 @@ use greth::{
 use greth::{
     reth::rpc::builder::auth::AuthServerHandle, reth_node_core::primitives::SignedTransaction,
 };
-use std::{collections::{HashMap, HashSet}, sync::Arc, time::Instant};
+use std::{collections::{HashMap, HashSet}, sync::Arc, time::{Instant, SystemTime}};
 use tokio::sync::Mutex;
 use tracing::*;
 
@@ -227,11 +227,10 @@ impl RethCli {
             }
         }
     }
-    
+
 
     async fn process_transaction_hashes(&self, tx_hash_vec: &mut Vec<TxHash>) -> Result<(), String> {
         let mut max_nonce_cache = self.max_nonce_cache.lock().await;
-        let mut buffer = Vec::with_capacity(tx_hash_vec.len());
         let mut pool_txns = self.pool.get_all(tx_hash_vec.drain(..).collect());
         let mut tx_gap = HashSet::new();
         pool_txns = pool_txns.into_iter().filter(|txn| {
@@ -273,12 +272,18 @@ impl RethCli {
                 pool_txns.push(txn);
             }
         });
+        self.process_pool_transactions(pool_txns).await?;
+        Ok(())
+    }
+
+    async fn process_pool_transactions(&self, pool_txns: Vec<Arc<ValidPoolTransaction<EthPooledTransaction>>>) -> Result<(), String> {
+        let mut buffer = Vec::with_capacity(pool_txns.len());
         let mut gas_limit = 0;
         for pool_txn in pool_txns {
             let txn_hash = pool_txn.hash();
             let txn_insert_time = self.pool.txn_insert_time(*txn_hash);
             if let Some(txn_insert_time) = txn_insert_time {
-                TXN_TO_BLOCK_BUFFER_MANAGER.observe(txn_insert_time as f64);
+                fetch_reth_txn_metrics().txn_time.record((SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64 - txn_insert_time) as f64);
             }
             let sender = pool_txn.sender();
             let nonce = pool_txn.nonce();
@@ -319,7 +324,6 @@ impl RethCli {
         if !buffer.is_empty() {
             get_block_buffer_manager().push_txns(&mut buffer, gas_limit).await;
         }
-        
         Ok(())
     }
 
