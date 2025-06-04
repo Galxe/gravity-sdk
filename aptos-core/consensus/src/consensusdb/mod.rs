@@ -143,7 +143,7 @@ impl ConsensusDB {
             (1, 0)
         };
         if epoch > start_epoch {
-            Ok((last_vote, highest_2chain_timeout_certificate, vec![], vec![]))
+            return Ok((last_vote, highest_2chain_timeout_certificate, vec![], vec![]));
         }
         let block_id_to_block_number = block_number_to_block_id
             .iter()
