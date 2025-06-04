@@ -16,6 +16,14 @@ use gaptos::{ // Assuming these are correct and available in your gaptos crate
     aptos_types::transaction::SignedTransaction,
 };
 
+const BUCKETS: [f64; 46] = [
+    0.0001, 0.0002, 0.0003, 0.0004, 0.0005, 0.0006, 0.0007, 0.0008, 0.0009, 
+    0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 
+    0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 
+    0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 
+    1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0
+];
+
 // --- Histograms (All "Added to X" focus) ---
 
 static TXN_ADDED_TO_BATCH_TIME_HISTOGRAM: std::sync::OnceLock<Histogram> =
@@ -25,7 +33,33 @@ fn get_txn_added_to_batch_histogram() -> &'static Histogram {
         register_histogram!(
             "aptos_txn_added_to_batch_time_seconds",
             "Time from transaction added to included in a batch (seconds)",
-            vec![0.0, 0.01, 0.02, 0.03, 0.05, 0.1, 0.2, 0.3, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0]
+            BUCKETS.to_vec()
+        )
+        .unwrap()
+    })
+}
+
+static TXN_ADDED_TO_BEFORE_BATCH_PERSIST_TIME_HISTOGRAM: std::sync::OnceLock<Histogram> =
+    std::sync::OnceLock::new();
+fn get_txn_added_to_before_batch_persist_histogram() -> &'static Histogram {
+    TXN_ADDED_TO_BEFORE_BATCH_PERSIST_TIME_HISTOGRAM.get_or_init(|| {
+        register_histogram!(
+            "aptos_txn_added_to_before_batch_persist_time_seconds",
+            "Time from transaction added to proof generated (seconds)",
+            BUCKETS.to_vec()
+        )
+        .unwrap()
+    })
+}
+
+static TXN_ADDED_TO_AFTER_BATCH_PERSIST_TIME_HISTOGRAM: std::sync::OnceLock<Histogram> =
+    std::sync::OnceLock::new();
+fn get_txn_added_to_batch_persist_histogram() -> &'static Histogram {
+    TXN_ADDED_TO_AFTER_BATCH_PERSIST_TIME_HISTOGRAM.get_or_init(|| {
+        register_histogram!(
+            "aptos_txn_added_to_after_batch_persist_time_seconds",
+            "Time from transaction added to proof generated (seconds)",
+            BUCKETS.to_vec()
         )
         .unwrap()
     })
@@ -38,7 +72,7 @@ fn get_txn_added_to_proof_histogram() -> &'static Histogram {
         register_histogram!(
             "aptos_txn_added_to_proof_time_seconds",
             "Time from transaction added to proof generated (seconds)",
-            vec![0.0, 0.01, 0.02, 0.03, 0.05, 0.1, 0.2, 0.3, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0]
+            BUCKETS.to_vec()
         )
         .unwrap()
     })
@@ -77,7 +111,7 @@ fn get_txn_added_to_executing_histogram() -> &'static Histogram {
         register_histogram!(
             "aptos_txn_added_to_executing_time_seconds",
             "Time from transaction added to executing (seconds)",
-            vec![0.0, 0.01, 0.02, 0.03, 0.05, 0.1, 0.2, 0.3, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0]
+            BUCKETS.to_vec()
         )
         .unwrap()
     })
@@ -90,7 +124,20 @@ fn get_txn_added_to_executed_histogram() -> &'static Histogram {
         register_histogram!(
             "aptos_txn_added_to_executed_time_seconds",
             "Time from transaction added to executed (seconds)",
-            vec![0.0, 0.01, 0.02, 0.03, 0.05, 0.1, 0.2, 0.3, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0]
+            BUCKETS.to_vec()
+        )
+        .unwrap()
+    })
+}
+
+static TXN_ADDED_TO_BROADCAST_BATCH_TIME_HISTOGRAM: std::sync::OnceLock<Histogram> =
+    std::sync::OnceLock::new();
+fn get_txn_added_to_broadcast_batch_histogram() -> &'static Histogram {
+    TXN_ADDED_TO_BROADCAST_BATCH_TIME_HISTOGRAM.get_or_init(|| {
+        register_histogram!(
+            "aptos_txn_added_to_broadcast_batch_time_seconds",
+            "Time from transaction added to broadcast batch (seconds)",
+            BUCKETS.to_vec()
         )
         .unwrap()
     })
@@ -103,7 +150,7 @@ fn get_txn_added_to_block_committed_histogram() -> &'static Histogram {
         register_histogram!(
             "aptos_txn_added_to_block_committed_time_seconds",
             "Time from transaction added to block committed (seconds)",
-            vec![0.0, 0.01, 0.02, 0.03, 0.05, 0.1, 0.2, 0.3, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0]
+            BUCKETS.to_vec()
         )
         .unwrap()
     })
@@ -147,6 +194,48 @@ impl TxnLifeTime {
         }
         if !current_batch_txn_hashes.is_empty() {
             self.txn_batch_id.insert(batch_id, current_batch_txn_hashes);
+        }
+    }
+
+    pub fn record_broadcast_batch(&self, batch_id: BatchId) {
+        let now = SystemTime::now();
+        if let Some(txn_hashes_entry) = self.txn_batch_id.get(&batch_id) {
+            for &txn_hash in txn_hashes_entry.value().iter() {
+                if let Some(initial_add_time_entry) = self.txn_initial_add_time.get(&txn_hash) {
+                    if let Ok(duration) = now.duration_since(*initial_add_time_entry.value()) {
+                        get_txn_added_to_broadcast_batch_histogram().observe(duration.as_secs_f64());
+                    }
+                }
+                // No state update needed in txn_time anymore
+            }
+        }
+    }
+
+    pub fn record_before_persist(&self, batch_id: BatchId) {
+        let now = SystemTime::now();
+        if let Some(txn_hashes_entry) = self.txn_batch_id.get(&batch_id) {
+            for &txn_hash in txn_hashes_entry.value().iter() {
+                if let Some(initial_add_time_entry) = self.txn_initial_add_time.get(&txn_hash) {
+                    if let Ok(duration) = now.duration_since(*initial_add_time_entry.value()) {
+                        get_txn_added_to_before_batch_persist_histogram().observe(duration.as_secs_f64());
+                    }
+                }
+                // No state update needed in txn_time anymore
+            }
+        }
+    }
+
+    pub fn record_after_persist(&self, batch_id: BatchId) {
+        let now = SystemTime::now();
+        if let Some(txn_hashes_entry) = self.txn_batch_id.get(&batch_id) {
+            for &txn_hash in txn_hashes_entry.value().iter() {
+                if let Some(initial_add_time_entry) = self.txn_initial_add_time.get(&txn_hash) {
+                    if let Ok(duration) = now.duration_since(*initial_add_time_entry.value()) {
+                        get_txn_added_to_batch_persist_histogram().observe(duration.as_secs_f64());
+                    }
+                }
+                // No state update needed in txn_time anymore
+            }
         }
     }
 

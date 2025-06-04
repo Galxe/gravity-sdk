@@ -300,7 +300,7 @@ impl Mempool {
             let txn = txn_with_number.txn; // VerifiedTxn
             let db_sequence_number = txn_with_number.account_seq_num;
             let sender = txn.sender();
-
+            
             // Basic Validation (Sequence Number Check)
             if txn.seq_number() < db_sequence_number {
                 let status = MempoolStatus::new(MempoolStatusCode::InvalidSeqNumber).with_message(format!(
@@ -624,6 +624,14 @@ impl Mempool {
             self.log_consensus_pulled_latency(transaction.sender(), transaction.sequence_number());
         }
         block
+    }
+
+    pub(crate) fn get_txn_count(&self) -> usize {
+        self.transactions.txn_size()
+    }
+
+    pub(crate) fn priority_index_size(&self) -> usize {
+        self.transactions.priority_index_size()
     }
 
     /// Returns block of transactions and new last_timeline_id. For each transaction, the output includes

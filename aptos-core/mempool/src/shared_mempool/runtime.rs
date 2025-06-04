@@ -84,26 +84,28 @@ async fn retrieve_from_execution_routine(
     mempool: Arc<Mutex<CoreMempool>>,
 ) {
     info!("start retrieve_from_execution_routine");
+    let mempool_retrieve_duration = std::env::var("MEMPOOL_RETRIEVE_DURATION").unwrap_or_default().parse::<u64>().unwrap_or(1000);
+        
     loop {
-        match get_block_buffer_manager().pop_txns(30000, 1_000_000_000).await {
+        match get_block_buffer_manager().pop_txns(30000, 10_000_000_000).await {
             Ok(txns) => {
                 let mut lock_mempool = mempool.lock();
                 let start_time = Instant::now();
                 let txns_len = txns.len();
                 let status = lock_mempool.add_user_txns_batch(txns, true, TimelineState::NotReady, None);
                 for s in status {
-                    if s.code != MempoolStatusCode::Accepted {
+                    if !(s.code == MempoolStatusCode::Accepted || s.code == MempoolStatusCode::InvalidSeqNumber) {
                         panic!("invalid seq number {:?}", s);
                     }
                 }
-                info!("the recv_pending_txns size is {:?} take {:?} ms", txns_len, start_time.elapsed().as_millis());
+                info!("the recv_pending_txns size is {:?} take {:?} ms mempool size {:?} priority_index_size {:?}", txns_len, start_time.elapsed().as_millis(), lock_mempool.get_txn_count(), lock_mempool.priority_index_size());
             }
             Err(e) => {
                 warn!("Error when recv peding txns {:?}", e);
                 continue;
             }
         }
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(mempool_retrieve_duration)).await;
     }
 }
 

@@ -65,7 +65,7 @@ impl BatchCoordinator {
         }
     }
 
-    fn persist_and_send_digests(&self, persist_requests: Vec<PersistedValue>) {
+    async fn persist_and_send_digests(&self, persist_requests: Vec<PersistedValue>) {
         if persist_requests.is_empty() {
             return;
         }
@@ -73,7 +73,8 @@ impl BatchCoordinator {
         let batch_store = self.batch_store.clone();
         let network_sender = self.network_sender.clone();
         let sender_to_proof_manager = self.sender_to_proof_manager.clone();
-        tokio::spawn(async move {
+        // tokio::spawn(async move {
+            let start = std::time::Instant::now();
             let peer_id = persist_requests[0].author();
             let batches = persist_requests
                 .iter()
@@ -84,16 +85,19 @@ impl BatchCoordinator {
                     )
                 })
                 .collect();
+            let end = std::time::Instant::now();
+            info!("QS: persist_and_send_digests time: {:?}", end.duration_since(start));
             let signed_batch_infos = batch_store.persist(persist_requests);
             if !signed_batch_infos.is_empty() {
                 network_sender
                     .send_signed_batch_info_msg(signed_batch_infos, vec![peer_id])
                     .await;
             }
+            
             let _ = sender_to_proof_manager
                 .send(ProofManagerCommand::ReceiveBatches(batches))
                 .await;
-        });
+        // });
     }
 
     fn ensure_max_limits(&self, batches: &[Batch]) -> anyhow::Result<()> {
@@ -141,21 +145,24 @@ impl BatchCoordinator {
 
         let mut persist_requests = vec![];
         for batch in batches.into_iter() {
-            // TODO: maybe don't message batch generator if the persist is unsuccessful?
-            if let Err(e) = self
-                .sender_to_batch_generator
-                .send(BatchGeneratorCommand::RemoteBatch(batch.clone()))
-                .await
-            {
-                warn!("Failed to send batch to batch generator: {}", e);
+            if batch.author() != self.my_peer_id {
+                // TODO: maybe don't message batch generator if the persist is unsuccessful?
+                if let Err(e) = self
+                        .sender_to_batch_generator
+                        .send(BatchGeneratorCommand::RemoteBatch(batch.clone()))
+                        .await
+                    {
+                        warn!("Failed to send batch to batch generator: {}", e);
+                    }
             }
+            
             persist_requests.push(batch.into());
         }
         counters::RECEIVED_BATCH_COUNT.inc_by(persist_requests.len() as u64);
         if author != self.my_peer_id {
             counters::RECEIVED_REMOTE_BATCH_COUNT.inc_by(persist_requests.len() as u64);
         }
-        self.persist_and_send_digests(persist_requests);
+        self.persist_and_send_digests(persist_requests).await;
     }
 
     pub(crate) async fn start(mut self, mut command_rx: Receiver<BatchCoordinatorCommand>) {
@@ -168,6 +175,10 @@ impl BatchCoordinator {
                     break;
                 },
                 BatchCoordinatorCommand::NewBatches(author, batches) => {
+                    for req in batches.iter() {
+                        let batch_id = req.batch_info().batch_id();
+                        txn_metrics::TxnLifeTime::get_txn_life_time().record_before_persist(batch_id.clone());
+                    }
                     self.handle_batches_msg(author, batches).await;
                 },
             }

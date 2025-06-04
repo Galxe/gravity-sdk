@@ -120,7 +120,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                     .unwrap_or_else(|e| panic!("Failed to push commit blocks {}", e));
             });
         }
-        self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
+        // self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
         Ok(())
     }
 
@@ -174,7 +174,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                     .unwrap();
             });
         }
-        self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
+        // self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
         Ok(())
     }
 }
