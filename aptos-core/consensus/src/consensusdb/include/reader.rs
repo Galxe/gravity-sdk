@@ -94,11 +94,15 @@ impl DbReader for ConsensusDB {
     }
 
     fn get_state_proof(&self, known_version: u64) -> Result<StateProof, AptosDbError> {
+        info!("get_state_proof");
+        let mut ledger_infos = self.ledger_db.metadata_db().get_ledger_infos_by_range((known_version, known_version + 1));
         let ledger_info = self.get_latest_ledger_info()?;
+        ledger_infos.push(ledger_info.clone());
+        info!("get_state_proof ledger_info is {:?}", ledger_info);
         Ok(StateProof::new(
-            ledger_info.clone(),
+            ledger_info,
             EpochChangeProof::new(
-                vec![(ledger_info)],
+                ledger_infos,
                 false,
             ),
         ))
