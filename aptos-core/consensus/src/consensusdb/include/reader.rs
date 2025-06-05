@@ -2,18 +2,14 @@ use gaptos::aptos_crypto::bls12381;
 use gaptos::aptos_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH;
 use gaptos::aptos_storage_interface::{DbReader, DbWriter};
 use gaptos::aptos_types::account_address::AccountAddress;
-use gaptos::aptos_types::aggregate_signature::AggregateSignature;
-use gaptos::aptos_types::block_info::BlockInfo;
 use gaptos::aptos_types::epoch_change::EpochChangeProof;
-use gaptos::aptos_types::epoch_state::EpochState;
-use gaptos::aptos_types::ledger_info::{LedgerInfo, LedgerInfoWithSignatures};
+use gaptos::aptos_types::ledger_info::LedgerInfoWithSignatures;
 use gaptos::aptos_types::on_chain_config::ValidatorSet;
 use gaptos::aptos_types::on_chain_config::{ConsensusAlgorithmConfig, ProposerElectionType};
 use gaptos::aptos_types::state_proof::StateProof;
 use gaptos::aptos_types::state_store::state_key::inner::StateKeyInner;
 use gaptos::aptos_types::validator_config::ValidatorConfig;
 use gaptos::aptos_types::validator_info::ValidatorInfo;
-use gaptos::aptos_types::validator_verifier::{ValidatorConsensusInfo, ValidatorVerifier};
 use gaptos::aptos_types::{
     on_chain_config::{ConfigurationResource, OnChainConsensusConfig},
     state_store::{state_key::StateKey, state_value::StateValue},
@@ -90,11 +86,24 @@ impl DbReader for ConsensusDB {
     }
 
     fn get_state_proof(&self, known_version: u64) -> Result<StateProof, AptosDbError> {
+        info!("get_state_proof");
+        let mut ledger_infos = self.ledger_db.metadata_db().get_ledger_infos_by_range((known_version, known_version + 1));
+        if known_version == 0 {
+            ledger_infos.push(LedgerInfoWithSignatures::genesis(
+                    *ACCUMULATOR_PLACEHOLDER_HASH,
+                    ValidatorSet::new(self.mock_validators()),
+                )
+            );
+        }
         let ledger_info = self.get_latest_ledger_info()?;
+        if ledger_info.ledger_info().version() != 0 {
+            ledger_infos.push(ledger_info.clone());
+        }
+        info!("get_state_proof ledger_info is {:?}", ledger_info);
         Ok(StateProof::new(
-            ledger_info.clone(),
+            ledger_info,
             EpochChangeProof::new(
-                vec![(ledger_info)],
+                ledger_infos,
                 false,
             ),
         ))

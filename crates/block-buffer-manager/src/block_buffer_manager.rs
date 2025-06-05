@@ -1,4 +1,4 @@
-use log::{info, warn};
+use gaptos::aptos_logger::{info, warn};
 use std::{
     cell::OnceCell,
     collections::HashMap,
@@ -218,7 +218,7 @@ impl BlockBufferManager {
         );
         let mut block_state_machine = self.block_state_machine.lock().await;
         if block_state_machine.blocks.contains_key(&block.block_meta.block_number) {
-            log::warn!(
+            warn!(
                 "set_ordered_blocks block {:?} block num {} already exists",
                 block.block_meta.block_id,
                 block.block_meta.block_number
@@ -341,7 +341,7 @@ impl BlockBufferManager {
                         }
                     }
                     BlockState::Committed { hash: _, compute_res, id } => {
-                        log::warn!(
+                        warn!(
                             "get_executed_res done with id {:?} num {:?} res {:?}",
                             block_id,
                             id,
