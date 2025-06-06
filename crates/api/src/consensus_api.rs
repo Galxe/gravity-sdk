@@ -2,25 +2,26 @@ use std::sync::Arc;
 
 use crate::{
     bootstrap::{
-        init_block_buffer_manager, init_mempool, init_network_interfaces, init_peers_and_metadata, start_consensus, start_node_inspection_service
+        init_block_buffer_manager, init_mempool, init_network_interfaces, init_peers_and_metadata,
+        start_consensus, start_node_inspection_service,
     },
     consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler},
     https::{https_server, HttpsServerArgs},
     logger,
     network::{create_network_runtime, extract_network_configs},
 };
-use gaptos::aptos_build_info as aptos_build_info;
-use gaptos::aptos_build_info::build_information;
-use gaptos::aptos_config::{config::NodeConfig, network_id::NetworkId};
 use aptos_consensus::consensusdb::ConsensusDB;
 use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
+use futures::channel::mpsc;
+use gaptos::aptos_build_info::build_information;
+use gaptos::aptos_config::{config::NodeConfig, network_id::NetworkId};
 use gaptos::aptos_event_notifications::EventNotificationSender;
 use gaptos::aptos_logger::{info, warn};
 use gaptos::aptos_network_builder::builder::NetworkBuilder;
 use gaptos::aptos_storage_interface::DbReaderWriter;
 use gaptos::aptos_telemetry::service::start_telemetry_service;
 use gaptos::aptos_types::chain_id::ChainId;
-use futures::channel::mpsc;
+use gaptos::{api_types::config_storage::ConfigStorage, aptos_build_info};
 use tokio::{runtime::Runtime, sync::Mutex};
 
 #[cfg(unix)]
@@ -57,11 +58,13 @@ pub struct ConsensusEngineArgs {
     pub node_config: NodeConfig,
     pub chain_id: u64,
     pub latest_block_number: u64,
+    pub config_storage: Option<Arc<dyn ConfigStorage>>,
 }
 
 impl ConsensusEngine {
     pub async fn init(args: ConsensusEngineArgs) -> Arc<Self> {
-        let ConsensusEngineArgs { node_config, chain_id, latest_block_number } = args;
+        let ConsensusEngineArgs { node_config, chain_id, latest_block_number, config_storage } =
+            args;
         // Setup panic handler
         gaptos::aptos_crash_handler::setup_panic_handler();
 
@@ -86,8 +89,10 @@ impl ConsensusEngine {
             gaptos::aptos_event_notifications::EventSubscriptionService::new(Arc::new(
                 gaptos::aptos_infallible::RwLock::new(db.clone()),
             ));
-        // 将config_storage给塞到event_subscription_service里面
-        // event_subscription_service.set_config_storage(gravity_storage);
+        // It seems stupid, refactor when debugging finished
+        if config_storage.is_some() {
+            event_subscription_service.set_config_storage(config_storage);
+        }
         let network_configs = extract_network_configs(&node_config);
 
         let network_config = network_configs.get(0).unwrap();
@@ -131,7 +136,9 @@ impl ConsensusEngine {
         let (notification_sender, notification_receiver) = mpsc::channel(1);
 
         let mempool_listener =
-            gaptos::aptos_mempool_notifications::MempoolNotificationListener::new(notification_receiver);
+            gaptos::aptos_mempool_notifications::MempoolNotificationListener::new(
+                notification_receiver,
+            );
         let (_mempool_client_sender, _mempool_client_receiver) = mpsc::channel(1);
         let mempool_runtime = init_mempool(
             &node_config,
@@ -162,8 +169,11 @@ impl ConsensusEngine {
             gaptos::aptos_mempool_notifications::MempoolNotifier::new(notification_sender);
         let mempool_notification_handler = MempoolNotificationHandler::new(mempool_notifier);
         let event_subscription_service = Arc::new(Mutex::new(event_subscription_service));
-        let mut consensus_mempool_handler =
-            ConsensusToMempoolHandler::new(mempool_notification_handler, consensus_listener, event_subscription_service.clone());
+        let mut consensus_mempool_handler = ConsensusToMempoolHandler::new(
+            mempool_notification_handler,
+            consensus_listener,
+            event_subscription_service.clone(),
+        );
         let runtime = gaptos::aptos_runtimes::spawn_named_runtime("Con2Mempool".into(), None);
         runtime.spawn(async move {
             consensus_mempool_handler.start().await;
@@ -193,7 +203,7 @@ impl ConsensusEngine {
             runtimes,
         });
         // process new round should be after init retƒh hash
-        let _ = event_subscription_service.lock().await.notify_initial_configs(1_u64);
+        let _ = event_subscription_service.lock().await.notify_initial_configs(0_u64);
         arc_consensus_engine
     }
 }
