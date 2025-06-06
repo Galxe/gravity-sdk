@@ -470,7 +470,7 @@ impl BlockStore {
         // we do not need to update block_tree.highest_commit_decision_ledger_info here
         // because the block_tree is going to rebuild itself.
 
-        let recovery_data = match storage.start(order_vote_enabled).await {
+        let recovery_data = match storage.start(order_vote_enabled, highest_quorum_cert.certified_block().epoch()).await {
             LivenessStorageData::FullRecoveryData(recovery_data) => recovery_data,
             _ => panic!("Failed to construct recovery data after fast forward sync"),
         };

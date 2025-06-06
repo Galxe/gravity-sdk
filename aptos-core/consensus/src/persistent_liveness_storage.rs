@@ -53,7 +53,7 @@ pub trait PersistentLivenessStorage: Send + Sync {
     fn recover_from_ledger(&self) -> LedgerRecoveryData;
 
     /// Construct necessary data to start consensus.
-    async fn start(&self, order_vote_enabled: bool) -> LivenessStorageData;
+    async fn start(&self, order_vote_enabled: bool, epoch: u64) -> LivenessStorageData;
 
     /// Persist the highest 2chain timeout certificate for improved liveness - proof for other replicas
     /// to jump to this round
@@ -120,7 +120,6 @@ impl LedgerRecoveryData {
         let (root_id, latest_ledger_info_sig) = if self.storage_ledger.ledger_info().ends_epoch() {
             let genesis =
                 Block::make_genesis_block_from_ledger_info(self.storage_ledger.ledger_info());
-                genesis.set_block_number(0);
             let genesis_qc = QuorumCert::certificate_for_genesis_from_ledger_info(
                 self.storage_ledger.ledger_info(),
                 genesis.id(),
@@ -405,12 +404,12 @@ impl PersistentLivenessStorage for StorageWriteProxy {
         LedgerRecoveryData::new(latest_ledger_info)
     }
 
-    async fn start(&self, order_vote_enabled: bool) -> LivenessStorageData {
+    async fn start(&self, order_vote_enabled: bool, epoch: u64) -> LivenessStorageData {
         info!("Start consensus recovery.");
         let latest_block_number = self.latest_commit_block_number().await;
         info!("The execution_latest_block_number is {}", latest_block_number);
         let raw_data =
-            self.db.get_data(latest_block_number).expect("unable to recover consensus data");
+            self.db.get_data(latest_block_number, epoch).expect("unable to recover consensus data");
 
         let last_vote = raw_data
             .0
@@ -426,10 +425,7 @@ impl PersistentLivenessStorage for StorageWriteProxy {
         let qc_repr: Vec<String> = quorum_certs.iter().map(|qc| format!("\n\t{}", qc)).collect();
         info!("The following quorum certs were restored from ConsensusDB: {}", qc_repr.concat());
         // only use when latest_block_number is zero
-        let latest_ledger_info = LedgerInfoWithSignatures::genesis(
-            *ACCUMULATOR_PLACEHOLDER_HASH,
-            ValidatorSet::new(self.consensus_db().mock_validators()),
-        );
+        let latest_ledger_info = self.aptos_db.get_latest_ledger_info().unwrap();
         let ledger_recovery_data = LedgerRecoveryData::new(latest_ledger_info);
         match RecoveryData::new(
             last_vote,

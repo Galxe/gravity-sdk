@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::block_storage::tracing::{observe_block, BlockStage};
+use crate::consensusdb::ConsensusDB;
 use crate::counters::update_counters_for_compute_res;
 use crate::pipeline::pipeline_builder::PipelineBuilder;
 use crate::{
@@ -20,6 +21,7 @@ use crate::{
 };
 use anyhow::Result;
 use gaptos::api_types::account::{ExternalAccountAddress, ExternalChainId};
+use gaptos::api_types::events::contract_event::GravityEvent;
 use gaptos::api_types::u256_define::{BlockId, Random, TxnHash};
 use gaptos::api_types::{ExternalBlock, ExternalBlockMeta};
 use aptos_consensus_types::common::RejectedTransactionSummary;
@@ -34,6 +36,7 @@ use gaptos::aptos_infallible::RwLock;
 use gaptos::aptos_logger::prelude::*;
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 
+use gaptos::aptos_types::on_chain_config::ValidatorSet;
 use gaptos::aptos_types::transaction::SignedTransaction;
 use gaptos::aptos_types::validator_signer::ValidatorSigner;
 use gaptos::aptos_types::{
@@ -128,6 +131,7 @@ impl ExecutionProxy {
         let notifier = state_sync_notifier.clone();
         handle.spawn(async move {
             while let Some((callback, txns, subscribable_events, block_number)) = rx.next().await {
+                info!("start to notify commit for block number: {:?}", block_number);
                 if let Err(e) = monitor!(
                     "notify_state_sync",
                     notifier.notify_new_commit(txns, subscribable_events, block_number).await
@@ -294,7 +298,21 @@ impl StateComputer for ExecutionProxy {
                 }
                 None => {}
             }
-            let result = StateComputeResult::new(compute_result, None, None);
+            let mut new_epoch_state = None;
+            if compute_result.events.len() > 0 {
+                // 现在肯定是new epoch event
+                // 读取其中的信息
+                // aptos是执行层执行完的时候算出了这个epoch state. 畜生啊
+                let new_epoch_event = compute_result.events[0].clone();
+                let new_epoch = match new_epoch_event {
+                    GravityEvent::NewEpoch(new_epoch) => new_epoch,
+                    _ => todo!(),
+                };
+                let validator_info = ConsensusDB::get_validator_set_for_test();
+                let validator_set = ValidatorSet::new(validator_info);
+                new_epoch_state = Some(EpochState::new(new_epoch, (&validator_set).into()));
+            }
+            let result = StateComputeResult::new(compute_result, new_epoch_state, None);
 
             let pre_commit_fut: BoxFuture<'static, ExecutorResult<()>> =
                     {
@@ -313,9 +331,10 @@ impl StateComputer for ExecutionProxy {
         finality_proof: LedgerInfoWithSignatures,
         callback: StateComputerCommitCallBackType,
     ) -> ExecutorResult<()> {
+        let block_id_num = blocks.iter().map(|block| (block.id(), block.block().block_number())).collect::<Vec<_>>();
         info!(
             "Received a commit request for blocks {:?} at round {}",
-            blocks.iter().map(|block| block.id()).collect::<Vec<_>>(),
+            block_id_num,
             finality_proof.ledger_info().round()
         );
         let mut latest_logical_time = self.write_mutex.lock().await;
@@ -348,6 +367,14 @@ impl StateComputer for ExecutionProxy {
             pre_commit_futs.push(block.take_pre_commit_fut());
             block_ids.push(block.id());
         }
+        info!(
+            "commit blocks: {:?}, events {:?}",
+            blocks
+                .iter()
+                .map(|block| (block.id(), block.block().block_number()))
+                .collect::<Vec<_>>(),
+            subscribable_txn_events
+        );
 
         // wait until all blocks are committed
         for pre_commit_fut in pre_commit_futs {
@@ -394,6 +421,7 @@ impl StateComputer for ExecutionProxy {
         self.executor.finish();
 
         // The pipeline phase already committed beyond the target block timestamp, just return.
+        // round 1在这里提前返回了
         if *latest_logical_time >= logical_time {
             warn!(
                 "State sync target {:?} is lower than already committed logical time {:?}",

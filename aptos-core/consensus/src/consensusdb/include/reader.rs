@@ -2,25 +2,22 @@ use gaptos::aptos_crypto::bls12381;
 use gaptos::aptos_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH;
 use gaptos::aptos_storage_interface::{DbReader, DbWriter};
 use gaptos::aptos_types::account_address::AccountAddress;
-use gaptos::aptos_types::aggregate_signature::AggregateSignature;
-use gaptos::aptos_types::block_info::BlockInfo;
 use gaptos::aptos_types::epoch_change::EpochChangeProof;
-use gaptos::aptos_types::epoch_state::EpochState;
-use gaptos::aptos_types::ledger_info::{LedgerInfo, LedgerInfoWithSignatures};
+use gaptos::aptos_types::ledger_info::LedgerInfoWithSignatures;
 use gaptos::aptos_types::on_chain_config::ValidatorSet;
 use gaptos::aptos_types::on_chain_config::{ConsensusAlgorithmConfig, ProposerElectionType};
 use gaptos::aptos_types::state_proof::StateProof;
 use gaptos::aptos_types::state_store::state_key::inner::StateKeyInner;
 use gaptos::aptos_types::validator_config::ValidatorConfig;
 use gaptos::aptos_types::validator_info::ValidatorInfo;
-use gaptos::aptos_types::validator_verifier::{ValidatorConsensusInfo, ValidatorVerifier};
 use gaptos::aptos_types::{
     on_chain_config::{ConfigurationResource, OnChainConsensusConfig},
     state_store::{state_key::StateKey, state_value::StateValue},
     transaction::Version,
 };
-
 use once_cell::sync::OnceCell;
+
+static VALIDATOR_SET: OnceCell<Vec<ValidatorInfo>> = OnceCell::new();
 
 impl ConsensusDB {
     pub fn mock_validators(&self) -> Vec<ValidatorInfo> {
@@ -30,7 +27,6 @@ impl ConsensusDB {
     pub fn calculate_validator_set(
         node_config_set: &BTreeMap<String, GravityNodeConfig>,
     ) -> Vec<ValidatorInfo> {
-        static VALIDATOR_SET: OnceCell<Vec<ValidatorInfo>> = OnceCell::new();
         VALIDATOR_SET
             .get_or_init(|| {
                 let mut result = vec![];
@@ -57,6 +53,10 @@ impl ConsensusDB {
                 result
             })
             .to_vec()
+    }
+
+    pub fn get_validator_set_for_test() -> Vec<ValidatorInfo> {
+        VALIDATOR_SET.get().unwrap().clone()
     }
 }
 
@@ -90,29 +90,24 @@ impl DbReader for ConsensusDB {
     }
 
     fn get_state_proof(&self, known_version: u64) -> Result<StateProof, AptosDbError> {
-        let infos = self
-            .mock_validators()
-            .iter()
-            .map(|v| {
-                ValidatorConsensusInfo::new(
-                    v.account_address,
-                    v.consensus_public_key().clone(),
-                    v.consensus_voting_power(),
+        info!("get_state_proof");
+        let mut ledger_infos = self.ledger_db.metadata_db().get_ledger_infos_by_range((known_version, known_version + 1));
+        if known_version == 0 {
+            ledger_infos.push(LedgerInfoWithSignatures::genesis(
+                    *ACCUMULATOR_PLACEHOLDER_HASH,
+                    ValidatorSet::new(self.mock_validators()),
                 )
-            })
-            .collect();
-        let verifier = ValidatorVerifier::new(infos);
-        let epoch_state = EpochState::new(1, verifier);
-        let block_info =
-            BlockInfo::new(1, 0, HashValue::zero(), HashValue::zero(), 0, 0, Some(epoch_state));
-        let ledger_info = LedgerInfo::new(block_info, HashValue::zero());
+            );
+        }
+        let ledger_info = self.get_latest_ledger_info()?;
+        if ledger_info.ledger_info().version() != 0 {
+            ledger_infos.push(ledger_info.clone());
+        }
+        info!("get_state_proof ledger_info is {:?}", ledger_info);
         Ok(StateProof::new(
-            LedgerInfoWithSignatures::genesis(
-                *ACCUMULATOR_PLACEHOLDER_HASH,
-                ValidatorSet::new(self.mock_validators()),
-            ),
+            ledger_info,
             EpochChangeProof::new(
-                vec![LedgerInfoWithSignatures::new(ledger_info, AggregateSignature::empty())],
+                ledger_infos,
                 false,
             ),
         ))
@@ -136,8 +131,8 @@ impl DbReader for ConsensusDB {
                         match &mut consensus_conf {
                             OnChainConsensusConfig::V1(_) => {}
                             OnChainConsensusConfig::V2(_) => {}
-                            OnChainConsensusConfig::V3 {alg, vtxn } => {}
-                            OnChainConsensusConfig::V4 {alg,vtxn, window_size } => match alg {
+                            OnChainConsensusConfig::V3 { alg, vtxn } => {}
+                            OnChainConsensusConfig::V4 { alg, vtxn, window_size } => match alg {
                                 ConsensusAlgorithmConfig::Jolteon {
                                     main,
                                     quorum_store_enabled,

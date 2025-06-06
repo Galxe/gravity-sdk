@@ -417,6 +417,7 @@ impl BufferManager {
                     .await
                     .expect("Failed to send persist request");
                 // this needs to be done after creating the persisting request to avoid it being lost
+                // TODO(gravity_alex): Move into persisting phase like aptos
                 if commit_proof.ledger_info().ends_epoch() {
                     self.commit_msg_tx
                         .send_epoch_change(EpochChangeProof::new(vec![commit_proof], false))
