@@ -31,6 +31,7 @@ impl TestConsensusLayer {
                 node_config,
                 chain_id: 1337,
                 latest_block_number: 0,
+                config_storage: None,
             }).await,
         }
     }

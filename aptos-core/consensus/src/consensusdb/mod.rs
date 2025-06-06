@@ -74,7 +74,7 @@ pub struct GravityNodeConfig {
 pub type GravityNodeConfigSet = BTreeMap<String, GravityNodeConfig>;
 
 /// Loads a config configuration file
-fn load_file(path: &Path) -> GravityNodeConfigSet {
+pub fn load_file(path: &Path) -> GravityNodeConfigSet {
     let contents = std::fs::read_to_string(path).unwrap();
     serde_yaml::from_str(&contents).unwrap()
 }
@@ -168,9 +168,8 @@ impl ConsensusDB {
             .map(|(_, qc)| qc)
             .filter(|qc| qc.certified_block().epoch() == start_epoch && qc.certified_block().round() >= start_round)
             .collect();
-        info!("consensus_blocks size : {}, consensus_qcs size : {}, block_number_to_block_id size : {}",
-                 consensus_blocks.len(), consensus_qcs.len(), block_number_to_block_id.len());
-        println!("qcs : {:?}", consensus_qcs);
+        info!("consensus_blocks size : {}, consensus_qcs size : {}, block_number_to_block_id size : {}, start_round : {}",
+                 consensus_blocks.len(), consensus_qcs.len(), block_number_to_block_id.len(), start_round);
         Ok((last_vote, highest_2chain_timeout_certificate, consensus_blocks, consensus_qcs))
     }
 
