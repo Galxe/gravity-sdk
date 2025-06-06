@@ -69,7 +69,16 @@ fn generate_executed_item_from_ordered(
     let block = executed_blocks
             .last()
             .expect("execute_blocks should not be empty!");
-    let mut commit_ledger_info = generate_commit_ledger_info(&commit_info, &ordered_proof, order_vote_enabled);
+    let new_commit_info = BlockInfo::new(
+        commit_info.epoch(),
+        commit_info.round(),
+        commit_info.id(),
+        commit_info.executed_state_id(),
+        block.block().block_number().unwrap(),
+        block.timestamp_usecs(),
+        commit_info.next_epoch_state().cloned(),
+    );
+    let mut commit_ledger_info = generate_commit_ledger_info(&new_commit_info, &ordered_proof, order_vote_enabled);
     commit_ledger_info.set_block_hash(block.compute_result().root_hash());
     commit_ledger_info.set_block_number(block.block().block_number().unwrap());
     let partial_commit_proof = LedgerInfoWithVerifiedSignatures::new(
