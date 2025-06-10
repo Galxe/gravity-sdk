@@ -243,6 +243,7 @@ impl StateComputer for ExecutionProxy {
             randomness: randomness.map(|r| Random::from_bytes(r.randomness())),
             block_hash: None,
         };
+        info!("schedule block, epoch {}, round {}, number {}", block.epoch(), block.round(), block.block_number().unwrap());
 
         // We would export the empty block detail to the outside GCEI caller
         let vtxns =
@@ -278,10 +279,10 @@ impl StateComputer for ExecutionProxy {
                 .await.unwrap_or_else(|e| panic!("Failed to get executed result {}", e));
 
             txn_metrics::TxnLifeTime::get_txn_life_time().record_executed(block_id_hashvalue);
-            update_counters_for_compute_res(&compute_result);
+            update_counters_for_compute_res(&compute_result.execution_output);
            
             observe_block(u_ts, BlockStage::EXECUTED);
-            let txn_status = compute_result.txn_status.clone();
+            let txn_status = compute_result.execution_output.txn_status.clone();
             match (*txn_status).as_ref() {
                 Some(txn_status) => {
                     let rejected_txns = txn_status.iter().filter(|txn| txn.is_discarded).map(|discard_txn_info| {
@@ -298,21 +299,6 @@ impl StateComputer for ExecutionProxy {
                 }
                 None => {}
             }
-            let mut new_epoch_state = None;
-            if compute_result.events.len() > 0 {
-                // 现在肯定是new epoch event
-                // 读取其中的信息
-                // aptos是执行层执行完的时候算出了这个epoch state. 畜生啊
-                let new_epoch_event = compute_result.events[0].clone();
-                let new_epoch = match new_epoch_event {
-                    GravityEvent::NewEpoch(new_epoch) => new_epoch,
-                    _ => todo!(),
-                };
-                let validator_info = ConsensusDB::get_validator_set_for_test();
-                let validator_set = ValidatorSet::new(validator_info);
-                new_epoch_state = Some(EpochState::new(new_epoch, (&validator_set).into()));
-            }
-            let result = StateComputeResult::new(compute_result, new_epoch_state, None);
 
             let pre_commit_fut: BoxFuture<'static, ExecutorResult<()>> =
                     {
@@ -320,7 +306,7 @@ impl StateComputer for ExecutionProxy {
                             Ok(())
                         })
                     };
-            Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO, pre_commit_fut))
+            Ok(PipelineExecutionResult::new(txns, compute_result, Duration::ZERO, pre_commit_fut))
         })
     }
 
