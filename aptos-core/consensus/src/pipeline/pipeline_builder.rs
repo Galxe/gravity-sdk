@@ -485,6 +485,7 @@ impl PipelineBuilder {
             .get_executed_res(BlockId::from_bytes(block_id.as_slice()), block_number.unwrap())
             .await
             .unwrap_or_else(|e| panic!("Failed to get executed result {}", e));
+        let hash = hash.execution_output;
         update_counters_for_compute_res(&hash);
         let result = StateComputeResult::new(hash, None, None);
         observe_block(timestamp, BlockStage::EXECUTED);

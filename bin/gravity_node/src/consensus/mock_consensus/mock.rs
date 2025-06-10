@@ -164,6 +164,7 @@ impl MockConsensus {
             let block_number = block_meta.block_number;
             let res =
                 get_block_buffer_manager().get_executed_res(block_id, block_number).await.unwrap();
+            let res = res.execution_output;
 
             get_block_buffer_manager()
                 .set_commit_blocks(vec![BlockHashRef {

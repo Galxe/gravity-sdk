@@ -383,6 +383,7 @@ impl BlockStore {
                     BlockId(*p_block.id()),
                     p_block.block().block_number().unwrap(),
                 ).await.unwrap();
+                let compute_res = compute_res.execution_output;
                 if let Some(block_hash) = maybe_block_hash {
                     assert_eq!(block_hash.data, compute_res.data);
                 }
