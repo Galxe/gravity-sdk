@@ -34,10 +34,21 @@ pub struct BlockHashRef {
     pub hash: Option<[u8; 32]>,
 }
 
+#[derive(Debug)]
 pub enum BlockState {
     Ordered { block: ExternalBlock, parent_id: BlockId },
     Computed { id: BlockId, compute_res: ComputeRes },
     Committed { hash: Option<[u8; 32]>, compute_res: ComputeRes, id: BlockId },
+}
+
+impl BlockState {
+    pub fn get_block_id(&self) -> BlockId {
+        match self {
+            BlockState::Ordered { block, .. } => block.block_meta.block_id,
+            BlockState::Computed { id, .. } => *id,
+            BlockState::Committed { id, .. } => *id,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -130,8 +141,8 @@ impl BlockBufferManager {
             block_state_machine.latest_finalized_block_number,
             latest_persist_block_num,
         );
-        block_state_machine.blocks.retain(|num, _| *num > latest_persist_block_num);
-        block_state_machine.profile.retain(|num, _| *num > latest_persist_block_num);
+        block_state_machine.blocks.retain(|num, _| *num >= latest_persist_block_num);
+        block_state_machine.profile.retain(|num, _| *num >= latest_persist_block_num);
         let _ = block_state_machine.sender.send(());
         Ok(())
     }
@@ -225,6 +236,26 @@ impl BlockBufferManager {
             );
             return Ok(());
         }
+        let block_num = block.block_meta.block_number;
+        let actual_parent = block_state_machine.blocks.get(&(block.block_meta.block_number - 1));
+        let actual_parent_id = match (block_num, actual_parent) {
+            (1, None) => {
+                parent_id
+            }
+            (_, Some(state)) => {
+                state.get_block_id()
+            },
+            _ => {
+                panic!("set_ordered_blocks block num {} actual_parent is {:?}", block_num, actual_parent);
+            }
+        };
+        let parent_id = if actual_parent_id == parent_id {
+            parent_id
+        } else {
+            // TODO(gravity_alex): assert epoch
+            warn!("set_ordered_blocks parent_id is not the same as actual_parent_id {:?} {:?}, might be epoch change", parent_id, actual_parent_id);
+            actual_parent_id
+        };
         let block_num = block.block_meta.block_number;
         block_state_machine
             .blocks

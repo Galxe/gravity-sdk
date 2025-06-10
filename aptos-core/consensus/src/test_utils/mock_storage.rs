@@ -140,7 +140,7 @@ impl MockStorage {
         let shared_storage = Arc::new(MockSharedStorage::new(validator_set.clone()));
         let genesis_li = LedgerInfo::mock_genesis(Some(validator_set));
         let storage = Self::new_with_ledger_info(shared_storage, genesis_li);
-        let recovery_data = match storage.start(false).await {
+        let recovery_data = match storage.start(false, 0).await {
             LivenessStorageData::FullRecoveryData(recovery_data) => recovery_data,
             _ => panic!("Mock storage should never fail constructing recovery data"),
         };
@@ -257,7 +257,7 @@ impl EmptyStorage {
 
     pub async fn start_for_testing() -> (RecoveryData, Arc<Self>) {
         let storage = Arc::new(EmptyStorage::new());
-        let recovery_data = match storage.start(false).await {
+        let recovery_data = match storage.start(false, 0).await {
             LivenessStorageData::FullRecoveryData(recovery_data) => recovery_data,
             _ => panic!("Mock storage should never fail constructing recovery data"),
         };
