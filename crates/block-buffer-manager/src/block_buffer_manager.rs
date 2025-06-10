@@ -256,7 +256,6 @@ impl BlockBufferManager {
             warn!("set_ordered_blocks parent_id is not the same as actual_parent_id {:?} {:?}, might be epoch change", parent_id, actual_parent_id);
             actual_parent_id
         };
-        let block_num = block.block_meta.block_number;
         block_state_machine
             .blocks
             .insert(block_num, BlockState::Ordered { block: block.clone(), parent_id });
