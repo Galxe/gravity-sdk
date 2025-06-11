@@ -176,9 +176,9 @@ impl BatchGenerator {
     ) -> Batch {
         let batch_id = self.batch_id;
         self.batch_id.increment();
-        // self.db
-        //     .save_batch_id(self.epoch, self.batch_id)
-        //     .expect("Could not save to db");
+        self.db
+            .save_batch_id(self.epoch, self.batch_id)
+            .expect("Could not save to db");
 
         self.insert_batch(self.my_peer_id, batch_id, txns.clone(), expiry_time);
 
@@ -300,6 +300,10 @@ impl BatchGenerator {
         match removed {
             Some(batch_in_progress) => {
                 for txn in batch_in_progress.txns {
+                    debug!(
+                        "QS: removing txn from txns_in_progress_sorted: {:?}",
+                        txn
+                    );
                     if let Entry::Occupied(mut o) = self.txns_in_progress_sorted.entry(txn) {
                         let info = o.get_mut();
                         if info.decrement() == 0 {
@@ -499,7 +503,6 @@ impl BatchGenerator {
                     }
                 }),
                 Some(cmd) = cmd_rx.recv() => monitor!("batch_generator_handle_command", {
-                    info!("QS: batches cmd: {:?}", cmd);
                     match cmd {
                         BatchGeneratorCommand::CommitNotification(block_timestamp, batches) => {
                             trace!(

@@ -380,8 +380,8 @@ impl StorageWriteProxy {
 #[async_trait]
 impl PersistentLivenessStorage for StorageWriteProxy {
     fn save_tree(&self, blocks: Vec<Block>, quorum_certs: Vec<QuorumCert>, block_numbers: Vec<(u64, HashValue)>) -> Result<()> {
-        // self.db.save_blocks_and_quorum_certificates(blocks, quorum_certs)?;
-        // self.db.save_block_numbers(block_numbers)?;
+        self.db.save_blocks_and_quorum_certificates(blocks, quorum_certs)?;
+        self.db.save_block_numbers(block_numbers)?;
         Ok(())
     }
 

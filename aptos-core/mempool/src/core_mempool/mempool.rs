@@ -300,7 +300,6 @@ impl Mempool {
             let txn = txn_with_number.txn; // VerifiedTxn
             let db_sequence_number = txn_with_number.account_seq_num;
             let sender = txn.sender();
-            
             // Basic Validation (Sequence Number Check)
             if txn.seq_number() < db_sequence_number {
                 let status = MempoolStatus::new(MempoolStatusCode::InvalidSeqNumber).with_message(format!(
