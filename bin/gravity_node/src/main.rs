@@ -242,7 +242,7 @@ fn main() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
             if let Some((args, latest_block_number)) = rx.recv().await {
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
                 let client = RethCli::new(args).await;
                 let chain_id = client.chain_id();
                 let coordinator =
