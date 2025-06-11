@@ -79,7 +79,6 @@ function start_node() {
             --http.corsdomain "*" \
             --http.api "debug,eth,net,trace,txpool,web3,rpc" \
             --http.addr 0.0.0.0 \
-	        --http.disable_compression \
             --dev \
             --port ${reth_rpc_port} \
             --authrpc.port ${authrpc_port} \
@@ -99,7 +98,8 @@ function start_node() {
             --txpool.basefee-max-size 17592186044415 \
             --txpool.queued-max-count 18446744073709551615 \
             --txpool.queued-max-size 17592186044415 \
-            > ${WORKSPACE}/logs/debug.log &
+             --http.disable_compression \
+	    > ${WORKSPACE}/logs/debug.log &
         echo $!
     )
     echo $pid >${WORKSPACE}/script/node.pid

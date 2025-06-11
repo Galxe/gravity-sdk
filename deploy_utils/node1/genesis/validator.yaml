@@ -18,8 +18,8 @@ consensus:
   max_sending_block_txns_after_filtering: 15000
   max_sending_block_txns: 15000
   max_receiving_block_txns: 15000
-  # max_sending_block_bytes: 5242880 
-  # max_receiving_block_bytes: 5242880 
+  max_sending_block_bytes: 31457280 
+  max_receiving_block_bytes: 31457280 
   quorum_store:
     receiver_max_total_txns: 7000
     sender_max_total_txns: 7000
