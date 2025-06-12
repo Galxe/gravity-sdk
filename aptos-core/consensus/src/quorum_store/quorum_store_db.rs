@@ -73,10 +73,11 @@ impl QuorumStoreStorage for QuorumStoreDB {
     }
 
     fn get_all_batches(&self) -> Result<HashMap<HashValue, PersistedValue>> {
-        let mut iter = self.db.iter::<BatchSchema>()?;
-        iter.seek_to_first();
-        iter.map(|res| res.map_err(Into::into))
-            .collect::<Result<HashMap<HashValue, PersistedValue>>>()
+        // let mut iter = self.db.iter::<BatchSchema>()?;
+        // iter.seek_to_first();
+        // iter.map(|res| res.map_err(Into::into))
+        // .collect::<Result<HashMap<HashValue, PersistedValue>>>()
+        Ok(HashMap::new())
     }
 
     fn save_batch(&self, batch: PersistedValue) -> Result<(), DbError> {
@@ -85,11 +86,12 @@ impl QuorumStoreStorage for QuorumStoreDB {
             batch.digest(),
             batch.expiration()
         );
-        Ok(self.db.put::<BatchSchema>(batch.digest(), &batch)?)
+        Ok(self.db.put::<BatchSchema>(&batch.batch_id().id, &batch)?)
     }
 
     fn get_batch(&self, digest: &HashValue) -> Result<Option<PersistedValue>, DbError> {
-        Ok(self.db.get::<BatchSchema>(digest)?)
+        // Ok(self.db.get::<BatchSchema>(digest)?)
+        todo!()
     }
 
     fn delete_batch_id(&self, epoch: u64) -> Result<(), DbError> {
