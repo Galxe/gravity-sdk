@@ -478,11 +478,11 @@ impl BatchGenerator {
                             last_non_empty_pull = tick_start;
                         
                             let persist_start = Instant::now();
-                            // let mut persist_requests = vec![];
-                            // for batch in batches.clone().into_iter() {
-                            //     persist_requests.push(batch.into());
-                            // }
-                            // self.batch_writer.persist(persist_requests);
+                            let mut persist_requests = vec![];
+                            for batch in batches.clone().into_iter() {
+                                persist_requests.push(batch.into());
+                            }
+                            self.batch_writer.persist(persist_requests);
                             counters::BATCH_CREATION_PERSIST_LATENCY.observe_duration(persist_start.elapsed());
                             for req in batches.iter() {
                                 let batch_id = req.batch_info().batch_id();
