@@ -29,7 +29,11 @@ members = [
 aptos-consensus = { path = "./aptos-core/consensus" }
 
 #  from aptos =======================
+<<<<<<< HEAD
 gaptos = { git = "https://github.com/Galxe/gravity-aptos.git", rev = "0af964690c39d6456c8d127f90a8f40a3e714c0c"}
+=======
+gaptos = { git = "https://github.com/Galxe/gravity-aptos.git", branch = "reth-v1.4.8"}
+>>>>>>> d10308e (use greth merge-v1.4.8)
 aptos-executor-types = { path = "dependencies/aptos-executor-types" }
 aptos-executor = { path = "dependencies/aptos-executor" }
 api = { path = "./crates/api" }
@@ -325,7 +329,7 @@ serde-generate = { git = "https://github.com/aptos-labs/serde-reflection", rev =
 serde-reflection = { git = "https://github.com/aptos-labs/serde-reflection", rev = "73b6bbf748334b71ff6d7d09d06a29e3062ca075" }
 serde_with = "3.4.0"
 serde_yaml = "0.8.24"
-shadow-rs = "0.16.2"
+shadow-rs = "1.2.0"
 simplelog = "0.9.0"
 smallbitvec = "2.5.1"
 smallvec = "1.8.0"
