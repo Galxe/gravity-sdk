@@ -1,5 +1,5 @@
-use crate::{metrics::{fetch_reth_txn_metrics}, ConsensusArgs};
-use alloy_consensus::Transaction;
+use crate::{metrics::fetch_reth_txn_metrics, ConsensusArgs};
+use alloy_consensus::{Transaction, transaction::SignerRecoverable};
 use alloy_eips::{eip4895::Withdrawals, BlockId, BlockNumberOrTag, Decodable2718, Encodable2718};
 use alloy_primitives::{
     private::alloy_rlp::{Decodable, Encodable}, Address, FixedBytes, TxHash, B256
@@ -130,7 +130,7 @@ impl RethCli {
                 let key = (txn.sender.clone(), txn.sequence_number);
                 if let Some(cached_txn) = cache.remove(&key) {
                     senders[idx] = Some(cached_txn.sender());
-                    transactions[idx] = Some(cached_txn.transaction.transaction().tx().clone());
+                    transactions[idx] = Some(cached_txn.transaction.transaction().inner().clone());
                 }
             }
         }
@@ -287,7 +287,7 @@ impl RethCli {
             }
             let sender = pool_txn.sender();
             let nonce = pool_txn.nonce();
-            let txn = pool_txn.transaction.transaction().tx();
+            let txn = pool_txn.transaction.transaction().inner();
             let account_nonce = {
                 let mut init_nonce_cache = self.address_init_nonce_cache.lock().await;
                 if !init_nonce_cache.contains_key(&sender) {

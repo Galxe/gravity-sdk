@@ -1,16 +1,18 @@
 use api::GravityNodeArgs;
 use clap::{value_parser, Parser};
-use greth::reth::{chainspec::EthereumChainSpecParser, cli::Commands};
-use greth::reth_chainspec::ChainSpec;
-use greth::reth_cli::chainspec::ChainSpecParser;
-use greth::reth_cli_commands::node::NoArgs;
-use greth::reth_cli_runner::CliRunner;
-use greth::reth_db::DatabaseEnv;
-use greth::reth_network::EthNetworkPrimitives;
-use greth::reth_node_builder::{NodeBuilder, WithLaunchContext};
-use greth::reth_node_core::args::LogArgs;
-use greth::reth_node_ethereum::{consensus::EthBeaconConsensus, EthExecutorProvider, EthereumNode};
-use greth::reth_tracing::FileWorkerGuard;
+use greth::{
+    reth::{chainspec::EthereumChainSpecParser, cli::Commands},
+    reth_chainspec::ChainSpec,
+    reth_cli::chainspec::ChainSpecParser,
+    reth_cli_commands::{launcher::FnLauncher, node::NoArgs},
+    reth_cli_runner::CliRunner,
+    reth_db::DatabaseEnv,
+    reth_network::EthNetworkPrimitives,
+    reth_node_builder::{NodeBuilder, WithLaunchContext},
+    reth_node_core::args::LogArgs,
+    reth_node_ethereum::{consensus::EthBeaconConsensus, EthExecutorProvider, EthereumNode},
+    reth_tracing::FileWorkerGuard,
+};
 use std::{
     ffi::OsString,
     fmt::{self},
@@ -140,14 +142,16 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
         let _guard = self.init_tracing()?;
         debug!(target: "reth::cli", "Initialized tracing, log directory: {}, log level {:?}", self.logs.log_file_directory, self.logs.verbosity);
 
-        let runner = CliRunner::default();
+        let runner = CliRunner::try_default_runtime()?;
         let components = |spec: Arc<C::ChainSpec>| {
             (EthExecutorProvider::ethereum(spec.clone()), EthBeaconConsensus::new(spec))
         };
         match self.command {
             Commands::Node(command) => {
                 println!("Running node command, {:?}", command.dev);
-                runner.run_command_until_exit(|ctx| command.execute(ctx, launcher))
+                runner.run_command_until_exit(|ctx| {
+                    command.execute(ctx, FnLauncher::new::<EthereumChainSpecParser, _>(launcher))
+                })
             }
             Commands::Init(command) => {
                 println!("Running init command");
@@ -179,6 +183,8 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
                 runner.run_command_until_exit(|ctx| command.execute::<EthereumNode>(ctx))
             }
             Commands::Prune(command) => runner.run_until_ctrl_c(command.execute::<EthereumNode>()),
+            Commands::ImportEra(import_era_command) => todo!(),
+            Commands::Download(download_command) => todo!(),
         }
     }
 
