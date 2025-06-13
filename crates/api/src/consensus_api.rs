@@ -13,7 +13,7 @@ use crate::{
 use aptos_consensus::consensusdb::ConsensusDB;
 use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
 use futures::channel::mpsc;
-use gaptos::aptos_build_info::build_information;
+use gaptos::{api_types::config_storage::GLOBAL_CONFIG_STORAGE, aptos_build_info::build_information};
 use gaptos::aptos_config::{config::NodeConfig, network_id::NetworkId};
 use gaptos::aptos_event_notifications::EventNotificationSender;
 use gaptos::aptos_logger::{info, warn};
@@ -91,7 +91,12 @@ impl ConsensusEngine {
             ));
         // It seems stupid, refactor when debugging finished
         if config_storage.is_some() {
-            event_subscription_service.set_config_storage(config_storage);
+            match GLOBAL_CONFIG_STORAGE.set(config_storage.unwrap()) {
+                Ok(_) => {}
+                Err(_) => {
+                    panic!("Failed to set config storage");
+                }
+            }
         }
         let network_configs = extract_network_configs(&node_config);
 
