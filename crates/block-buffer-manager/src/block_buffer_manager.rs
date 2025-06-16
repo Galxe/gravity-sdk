@@ -1,4 +1,7 @@
-use gaptos::aptos_logger::{info, warn};
+use anyhow::{anyhow, format_err};
+use bytes::Bytes;
+use gaptos::{api_types::config_storage::{OnChainConfig, GLOBAL_CONFIG_STORAGE}, aptos_logger::{info, warn}, aptos_types::{epoch_state::EpochState, on_chain_config::ValidatorSet}};
+use aptos_executor_types::StateComputeResult;
 use std::{
     cell::OnceCell,
     collections::HashMap,
@@ -36,8 +39,8 @@ pub struct BlockHashRef {
 #[derive(Debug)]
 pub enum BlockState {
     Ordered { block: ExternalBlock, parent_id: BlockId },
-    Computed { id: BlockId, compute_res: ComputeRes },
-    Committed { hash: Option<[u8; 32]>, compute_res: ComputeRes, id: BlockId },
+    Computed { id: BlockId, compute_result: StateComputeResult },
+    Committed { hash: Option<[u8; 32]>, compute_result: StateComputeResult, id: BlockId },
 }
 
 impl BlockState {
@@ -331,7 +334,7 @@ impl BlockBufferManager {
         &self,
         block_id: BlockId,
         block_num: u64,
-    ) -> Result<ComputeRes, anyhow::Error> {
+    ) -> Result<StateComputeResult, anyhow::Error> {
         if !self.is_ready() {
             panic!("Buffer is not ready");
         }
@@ -350,12 +353,12 @@ impl BlockBufferManager {
             let mut block_state_machine = self.block_state_machine.lock().await;
             if let Some(block) = block_state_machine.blocks.get(&block_num) {
                 match block {
-                    BlockState::Computed { id, compute_res } => {
+                    BlockState::Computed { id, compute_result } => {
                         
                         assert_eq!(id, &block_id);
                         
                         // Record time for get_executed_res
-                        let compute_res_clone = compute_res.clone();
+                        let compute_res_clone = compute_result.clone();
                         let profile = block_state_machine.profile.entry(block_num).or_insert_with(BlockProfile::default);
                         profile.get_executed_res_time = Some(SystemTime::now());
                         info!(
@@ -374,15 +377,15 @@ impl BlockBufferManager {
                             Err(_) => continue, // Timeout on the wait, retry
                         }
                     }
-                    BlockState::Committed { hash: _, compute_res, id } => {
+                    BlockState::Committed { hash: _, compute_result, id } => {
                         warn!(
                             "get_executed_res done with id {:?} num {:?} res {:?}",
                             block_id,
                             id,
-                            compute_res
+                            compute_result
                         );
                         assert_eq!(id, &block_id);
-                        return Ok(compute_res.clone());
+                        return Ok(compute_result.clone());
                     }
                 }
             } else {
@@ -413,11 +416,31 @@ impl BlockBufferManager {
             assert_eq!(block.block_meta.block_id, block_id);
             let txn_len = block.txns.len();
             let events_len = events.len();
+            let mut new_epoch_state = None;
+            if events.len() > 0 {
+                let new_epoch_event = events[0].clone();
+                let (new_epoch, bytes) = match new_epoch_event {
+                    GravityEvent::NewEpoch(new_epoch, bytes) => (new_epoch, bytes),
+                    _ => todo!(),
+                };
+                info!("set_compute_res set epoch state for new_epoch: {:?}", new_epoch);
+                info!("get validator set bytes from new epoch event {:?}", bytes);
+                let validator_set = bcs::from_bytes::<ValidatorSet>(&bytes).map_err(|e| {
+                    format_err!("[on-chain config] Failed to deserialize into config: {}", e)
+                })?;
+                info!("get validator set from new epoch event {:?}", validator_set);
+                new_epoch_state = Some(EpochState::new(new_epoch, (&validator_set).into()));
+            }
+            let compute_result = StateComputeResult::new(
+                ComputeRes { data: block_hash, txn_num: txn_len as u64, txn_status, events },
+                new_epoch_state,
+                None,
+            );
             block_state_machine.blocks.insert(
                 block_num,
                 BlockState::Computed {
                     id: block_id,
-                    compute_res: ComputeRes { data: block_hash, txn_num: txn_len as u64, txn_status, events },
+                    compute_result,
                 },
             );
             
@@ -458,11 +481,11 @@ impl BlockBufferManager {
             );
             if let Some(state) = block_state_machine.blocks.get_mut(&block_id_num_hash.num) {
                 match state {
-                    BlockState::Computed { id, compute_res } => {
+                    BlockState::Computed { id, compute_result } => {
                         if *id == block_id_num_hash.block_id {
                             *state = BlockState::Committed {
                                 hash: block_id_num_hash.hash,
-                                compute_res: compute_res.clone(),
+                                compute_result: compute_result.clone(),
                                 id: block_id_num_hash.block_id,
                             };
                             
@@ -476,7 +499,7 @@ impl BlockBufferManager {
                             );
                         }
                     }
-                    BlockState::Committed { hash, compute_res: _, id } => {
+                    BlockState::Committed { hash, compute_result: _, id } => {
                         if *id != block_id_num_hash.block_id {
                             panic!("Commited Block id and number is not equal id: {:?}={:?} hash: {:?}={:?}", block_id_num_hash.block_id, *id, block_id_num_hash.hash, *hash);
                         }
@@ -524,7 +547,7 @@ impl BlockBufferManager {
             let mut current_num = start_num;
             while let Some(block) = block_state_machine.blocks.get(&current_num) {
                 match block {
-                    BlockState::Committed { hash, compute_res: _, id } => {
+                    BlockState::Committed { hash, compute_result: _, id } => {
                         result.push(BlockHashRef { block_id: *id, num: current_num, hash: *hash });
                         
                         // Record time for get_committed_blocks
