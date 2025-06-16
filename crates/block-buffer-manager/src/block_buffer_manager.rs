@@ -1,7 +1,11 @@
 use anyhow::{anyhow, format_err};
-use bytes::Bytes;
-use gaptos::{api_types::config_storage::{OnChainConfig, GLOBAL_CONFIG_STORAGE}, aptos_logger::{info, warn}, aptos_types::{epoch_state::EpochState, on_chain_config::ValidatorSet}};
 use aptos_executor_types::StateComputeResult;
+use bytes::Bytes;
+use gaptos::{
+    api_types::config_storage::{OnChainConfig, GLOBAL_CONFIG_STORAGE},
+    aptos_logger::{info, warn},
+    aptos_types::{epoch_state::EpochState, on_chain_config::ValidatorSet},
+};
 use std::{
     cell::OnceCell,
     collections::HashMap,
@@ -15,8 +19,10 @@ use std::{
 use tokio::{sync::Mutex, time::Instant};
 
 use gaptos::api_types::{
-    compute_res::{self, ComputeRes, TxnStatus}, events::contract_event::GravityEvent,
-    u256_define::BlockId, ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum
+    compute_res::{self, ComputeRes, TxnStatus},
+    events::contract_event::GravityEvent,
+    u256_define::BlockId,
+    ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
 };
 
 pub struct TxnItem {
@@ -182,7 +188,11 @@ impl BlockBufferManager {
 
     pub async fn push_txns(&self, txns: &mut Vec<VerifiedTxnWithAccountSeqNum>, gas_limit: u64) {
         let mut pool_txns = self.txn_buffer.txns.lock().await;
-        pool_txns.push(TxnItem { txns: std::mem::take(txns), gas_limit, insert_time: SystemTime::now() });
+        pool_txns.push(TxnItem {
+            txns: std::mem::take(txns),
+            gas_limit,
+            insert_time: SystemTime::now(),
+        });
     }
 
     pub fn is_ready(&self) -> bool {
@@ -199,7 +209,8 @@ impl BlockBufferManager {
         let mut count = 0;
         let total_txn = txn_buffer.iter().map(|item| item.txns.len()).sum::<usize>();
         info!("pop_txns total_txn: {:?}", total_txn);
-        let split_point = txn_buffer.iter()
+        let split_point = txn_buffer
+            .iter()
             .position(|item| {
                 if total_gas_limit == 0 {
                     return false;
@@ -237,22 +248,17 @@ impl BlockBufferManager {
         if block_state_machine.blocks.contains_key(&block.block_meta.block_number) {
             warn!(
                 "set_ordered_blocks block {:?} block num {} already exists",
-                block.block_meta.block_id,
-                block.block_meta.block_number
+                block.block_meta.block_id, block.block_meta.block_number
             );
             return Ok(());
         }
         let block_num = block.block_meta.block_number;
         let actual_parent = block_state_machine.blocks.get(&(block.block_meta.block_number - 1));
         let actual_parent_id = match (block_num, actual_parent) {
-            (1, None) => {
+            (_, Some(state)) => state.get_block_id(),
+            (block_number, None) => {
+                info!("block number {} with no parent", block_number);
                 parent_id
-            }
-            (_, Some(state)) => {
-                state.get_block_id()
-            },
-            _ => {
-                panic!("set_ordered_blocks block num {} actual_parent is {:?}", block_num, actual_parent);
             }
         };
         let parent_id = if actual_parent_id == parent_id {
@@ -266,11 +272,12 @@ impl BlockBufferManager {
         block_state_machine
             .blocks
             .insert(block_num, BlockState::Ordered { block: block.clone(), parent_id });
-        
+
         // Record time for set_ordered_blocks
-        let profile = block_state_machine.profile.entry(block_num).or_insert_with(BlockProfile::default);
+        let profile =
+            block_state_machine.profile.entry(block_num).or_insert_with(BlockProfile::default);
         profile.set_ordered_block_time = Some(SystemTime::now());
-        
+
         let _ = block_state_machine.sender.send(());
         Ok(())
     }
@@ -303,7 +310,10 @@ impl BlockBufferManager {
                     BlockState::Ordered { block, parent_id } => {
                         result.push((block.clone(), *parent_id));
                         // Record time for get_ordered_blocks
-                        let profile = block_state_machine.profile.entry(current_num).or_insert_with(BlockProfile::default);
+                        let profile = block_state_machine
+                            .profile
+                            .entry(current_num)
+                            .or_insert_with(BlockProfile::default);
                         profile.get_ordered_blocks_time = Some(SystemTime::now());
                     }
                     _ => {
@@ -354,16 +364,18 @@ impl BlockBufferManager {
             if let Some(block) = block_state_machine.blocks.get(&block_num) {
                 match block {
                     BlockState::Computed { id, compute_result } => {
-                        
                         assert_eq!(id, &block_id);
-                        
+
                         // Record time for get_executed_res
                         let compute_res_clone = compute_result.clone();
-                        let profile = block_state_machine.profile.entry(block_num).or_insert_with(BlockProfile::default);
+                        let profile = block_state_machine
+                            .profile
+                            .entry(block_num)
+                            .or_insert_with(BlockProfile::default);
                         profile.get_executed_res_time = Some(SystemTime::now());
                         info!(
                             "get_executed_res done with id {:?} num {:?} res {:?}",
-                            block_id, block_num, compute_res_clone, 
+                            block_id, block_num, compute_res_clone,
                         );
                         return Ok(compute_res_clone);
                     }
@@ -380,9 +392,7 @@ impl BlockBufferManager {
                     BlockState::Committed { hash: _, compute_result, id } => {
                         warn!(
                             "get_executed_res done with id {:?} num {:?} res {:?}",
-                            block_id,
-                            id,
-                            compute_result
+                            block_id, id, compute_result
                         );
                         assert_eq!(id, &block_id);
                         return Ok(compute_result.clone());
@@ -408,7 +418,7 @@ impl BlockBufferManager {
         if !self.is_ready() {
             panic!("Buffer is not ready");
         }
-        
+
         let mut block_state_machine = self.block_state_machine.lock().await;
         if let Some(BlockState::Ordered { block, parent_id: _ }) =
             block_state_machine.blocks.get(&block_num)
@@ -436,16 +446,13 @@ impl BlockBufferManager {
                 new_epoch_state,
                 None,
             );
-            block_state_machine.blocks.insert(
-                block_num,
-                BlockState::Computed {
-                    id: block_id,
-                    compute_result,
-                },
-            );
-            
+            block_state_machine
+                .blocks
+                .insert(block_num, BlockState::Computed { id: block_id, compute_result });
+
             // Record time for set_compute_res
-            let profile = block_state_machine.profile.entry(block_num).or_insert_with(BlockProfile::default);
+            let profile =
+                block_state_machine.profile.entry(block_num).or_insert_with(BlockProfile::default);
             profile.set_compute_res_time = Some(SystemTime::now());
             // TODO(gravity_alex): 按照aptos的实现，在compute res中就要拿到next epoch state(包括epoch和validator set)
             info!(
@@ -488,9 +495,12 @@ impl BlockBufferManager {
                                 compute_result: compute_result.clone(),
                                 id: block_id_num_hash.block_id,
                             };
-                            
+
                             // Record time for set_commit_blocks
-                            let profile = block_state_machine.profile.entry(block_id_num_hash.num).or_insert_with(BlockProfile::default);
+                            let profile = block_state_machine
+                                .profile
+                                .entry(block_id_num_hash.num)
+                                .or_insert_with(BlockProfile::default);
                             profile.set_commit_blocks_time = Some(SystemTime::now());
                         } else {
                             panic!(
@@ -549,9 +559,12 @@ impl BlockBufferManager {
                 match block {
                     BlockState::Committed { hash, compute_result: _, id } => {
                         result.push(BlockHashRef { block_id: *id, num: current_num, hash: *hash });
-                        
+
                         // Record time for get_committed_blocks
-                        let profile = block_state_machine.profile.entry(current_num).or_insert_with(BlockProfile::default);
+                        let profile = block_state_machine
+                            .profile
+                            .entry(current_num)
+                            .or_insert_with(BlockProfile::default);
                         profile.get_committed_blocks_time = Some(SystemTime::now());
                     }
                     _ => {
