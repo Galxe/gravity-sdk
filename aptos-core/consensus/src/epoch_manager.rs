@@ -7,7 +7,7 @@ use crate::{
         pending_blocks::PendingBlocks,
         tracing::{observe_block, BlockStage},
         BlockStore,
-    }, consensus_observer::publisher::ConsensusPublisher, consensusdb::ConsensusDB, dag::{DagBootstrapper, DagCommitSigner, StorageAdapter}, error::{error_kind, DbError}, liveness::{
+    }, consensus_observer::publisher::ConsensusPublisher, dag::{DagBootstrapper, DagCommitSigner, StorageAdapter}, error::{error_kind, DbError}, liveness::{
         cached_proposer_election::CachedProposerElection,
         leader_reputation::{
             extract_epoch_to_proposers, AptosDBBackend, LeaderReputation,
@@ -158,7 +158,6 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     consensus_publisher: Option<Arc<ConsensusPublisher>>,
     pending_blocks: Arc<Mutex<PendingBlocks>>,
     key_storage: PersistentSafetyStorage,
-    validator_set: ValidatorSet,
 }
 
 impl<P: OnChainConfigProvider> EpochManager<P> {
@@ -187,15 +186,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         let sr_config = &node_config.consensus.safety_rules;
         let safety_rules_manager = SafetyRulesManager::new(sr_config);
         let key_storage = safety_rules_manager::storage(sr_config);
-        // TODO(gravity_alex): only for debug, to be removed
-        let mut node_config_set = BTreeMap::new();
-        let node_config_path = node_config.node_config_path.clone();
-        if node_config_path.to_str().is_some() && !node_config_path.to_str().unwrap().is_empty() {
-            node_config_set = crate::consensusdb::load_file(node_config_path.as_path());
-        }
-        let validator_set = ValidatorSet::new(ConsensusDB::calculate_validator_set(
-            &node_config_set
-        ));
+
         Self {
             author,
             config,
@@ -239,7 +230,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             consensus_publisher,
             pending_blocks: Arc::new(Mutex::new(PendingBlocks::new())),
             key_storage,
-            validator_set,
         }
     }
 
@@ -1092,7 +1082,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .expect("failed to get ValidatorSet from payload");
         info!("validator_set read from config storage is : {:?}", validator_set);
         
-        // let validator_set = self.validator_set.clone();
         let epoch_state = Arc::new(EpochState {
             epoch: payload.epoch(),
             verifier: Arc::new((&validator_set).into()),
