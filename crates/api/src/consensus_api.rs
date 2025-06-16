@@ -13,7 +13,6 @@ use crate::{
 use aptos_consensus::consensusdb::ConsensusDB;
 use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
 use futures::channel::mpsc;
-use gaptos::{api_types::config_storage::GLOBAL_CONFIG_STORAGE, aptos_build_info::build_information};
 use gaptos::aptos_config::{config::NodeConfig, network_id::NetworkId};
 use gaptos::aptos_event_notifications::EventNotificationSender;
 use gaptos::aptos_logger::{info, warn};
@@ -22,6 +21,9 @@ use gaptos::aptos_storage_interface::DbReaderWriter;
 use gaptos::aptos_telemetry::service::start_telemetry_service;
 use gaptos::aptos_types::chain_id::ChainId;
 use gaptos::{api_types::config_storage::ConfigStorage, aptos_build_info};
+use gaptos::{
+    api_types::config_storage::GLOBAL_CONFIG_STORAGE, aptos_build_info::build_information,
+};
 use tokio::{runtime::Runtime, sync::Mutex};
 
 #[cfg(unix)]
@@ -208,7 +210,8 @@ impl ConsensusEngine {
             runtimes,
         });
         // process new round should be after init retƒh hash
-        let _ = event_subscription_service.lock().await.notify_initial_configs(0_u64);
+        info!("pass latest_block_number: {:?} to event_subscription_service", latest_block_number);
+        let _ = event_subscription_service.lock().await.notify_initial_configs(latest_block_number);
         arc_consensus_engine
     }
 }
