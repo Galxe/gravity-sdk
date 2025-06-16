@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::block::Block;
+use crate::quorum_cert::QuorumCert;
 use anyhow::ensure;
 use gaptos::api_types::ExecutionBlocks;
 use gaptos::aptos_crypto::hash::{HashValue, GENESIS_BLOCK_ID};
@@ -22,6 +23,7 @@ pub struct BlockRetrievalRequest {
     block_id: HashValue,
     num_blocks: u64,
     target_block_id: Option<HashValue>,
+    epoch: Option<u64>,
 }
 
 impl BlockRetrievalRequest {
@@ -30,6 +32,7 @@ impl BlockRetrievalRequest {
             block_id,
             num_blocks,
             target_block_id: None,
+            epoch: None,
         }
     }
 
@@ -42,6 +45,21 @@ impl BlockRetrievalRequest {
             block_id,
             num_blocks,
             target_block_id: Some(target_block_id),
+            epoch: None,
+        }
+    }
+
+    pub fn new_with_epoch(
+        block_id: HashValue,
+        num_blocks: u64,
+        target_block_id: HashValue,
+        epoch: u64,
+    ) -> Self {
+        Self {
+            block_id,
+            num_blocks,
+            target_block_id: Some(target_block_id),
+            epoch: Some(epoch),
         }
     }
 
@@ -59,6 +77,10 @@ impl BlockRetrievalRequest {
 
     pub fn match_target_id(&self, hash_value: HashValue) -> bool {
         self.target_block_id.map_or(false, |id| id == hash_value)
+    }
+
+    pub fn epoch(&self) -> Option<u64> {
+        self.epoch
     }
 }
 
@@ -90,11 +112,12 @@ pub struct BlockRetrievalResponse {
     status: BlockRetrievalStatus,
     blocks: Vec<Block>,
     ledger_infos: Vec<LedgerInfoWithSignatures>,
+    quorum_certs: Vec<QuorumCert>,
 }
 
 impl BlockRetrievalResponse {
-    pub fn new(status: BlockRetrievalStatus, blocks: Vec<Block>, ledger_infos: Vec<LedgerInfoWithSignatures>) -> Self {
-        Self { status, blocks, ledger_infos }
+    pub fn new(status: BlockRetrievalStatus, blocks: Vec<Block>, quorum_certs: Vec<QuorumCert>, ledger_infos: Vec<LedgerInfoWithSignatures>) -> Self {
+        Self { status, blocks, quorum_certs, ledger_infos }
     }
 
     pub fn status(&self) -> BlockRetrievalStatus {
@@ -109,6 +132,10 @@ impl BlockRetrievalResponse {
         &self.ledger_infos
     }
 
+    pub fn quorum_certs(&self) -> &Vec<QuorumCert> {
+        &self.quorum_certs
+    }
+
     pub fn verify(
         &self,
         retrieval_request: BlockRetrievalRequest,
@@ -121,21 +148,21 @@ impl BlockRetrievalResponse {
             retrieval_request.num_blocks(),
             self.blocks.len(),
         );
-        ensure!(
-            self.status != BlockRetrievalStatus::SucceededWithTarget
-                || self
-                    .blocks
-                    .last()
-                    .map_or(false, |block| {
-                        if retrieval_request.match_target_id(*GENESIS_BLOCK_ID) {
-                            retrieval_request.match_target_id(block.parent_id())
-                        } else {
-                            retrieval_request.match_target_id(block.id())
-                        }
-                    }),
-            "target not found in blocks returned, expect {:?}",
-            retrieval_request.target_block_id(),
-        );
+        // ensure!(
+        //     self.status != BlockRetrievalStatus::SucceededWithTarget
+        //         || self
+        //             .blocks
+        //             .last()
+        //             .map_or(false, |block| {
+        //                 if retrieval_request.match_target_id(*GENESIS_BLOCK_ID) {
+        //                     retrieval_request.match_target_id(block.parent_id())
+        //                 } else {
+        //                     retrieval_request.match_target_id(block.id())
+        //                 }
+        //             }),
+        //     "target not found in blocks returned, expect {:?}",
+        //     retrieval_request.target_block_id(),
+        // );
         self.blocks
             .iter()
             .try_fold(retrieval_request.block_id(), |expected_id, block| {

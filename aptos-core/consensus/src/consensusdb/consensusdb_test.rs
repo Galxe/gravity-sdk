@@ -64,6 +64,7 @@ fn test_delete_block_and_qc() {
 
     let blocks = vec![Block::make_genesis_block()];
     let block_id = blocks[0].id();
+    let epoch = blocks[0].epoch();
 
     let qcs = vec![certificate_for_genesis()];
     let qc_id = qcs[0].certified_block().id();
@@ -73,7 +74,7 @@ fn test_delete_block_and_qc() {
     assert_eq!(db.get_all::<QCSchema>().unwrap().len(), 1);
 
     // Start to delete
-    db.delete_blocks_and_quorum_certificates(vec![block_id, qc_id])
+    db.delete_blocks_and_quorum_certificates(vec![(epoch, block_id), qc_id])
         .unwrap();
     assert_eq!(db.get_all::<BlockSchema>().unwrap().len(), 0);
     assert_eq!(db.get_all::<QCSchema>().unwrap().len(), 0);

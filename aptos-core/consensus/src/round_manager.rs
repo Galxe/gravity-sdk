@@ -214,6 +214,8 @@ pub enum VerifiedEvent {
     LocalTimeout(Round),
     // Shutdown the NetworkListener
     Shutdown(TokioOneshot::Sender<()>),
+    // change epoch
+    EpochChange(u64),
 }
 
 #[cfg(test)]
@@ -252,6 +254,7 @@ pub struct RoundManager {
     // which we recently broadcasted fast shares.
     blocks_with_broadcasted_fast_shares: LruCache<HashValue, ()>,
     futures: FuturesUnordered<Pin<Box<dyn Future<Output = (anyhow::Result<()>, Block)> + Send>>>,
+    wait_change_epoch_flag: bool,
 }
 
 impl RoundManager {
@@ -301,6 +304,7 @@ impl RoundManager {
             pending_order_votes: PendingOrderVotes::new(),
             blocks_with_broadcasted_fast_shares: LruCache::new(5),
             futures: FuturesUnordered::new(),
+            wait_change_epoch_flag: false,
         }
     }
 
@@ -1544,6 +1548,19 @@ impl RoundManager {
                             "process_local_timeout",
                             self.process_local_timeout(round).await
                         ),
+                        VerifiedEvent::EpochChange(epoch) => {
+                            info!("lightman0617 epoch change {} wait_change_epoch_flag {}", epoch, self.wait_change_epoch_flag);
+                            if !self.wait_change_epoch_flag {
+                                if let Err(e) = self.block_store.fast_forward_sync_by_epoch(self.create_block_retriever(peer_id), epoch).await {
+                                    Err(e)
+                                } else {
+                                    self.wait_change_epoch_flag = true;
+                                    Ok(())
+                                }
+                            } else {
+                                Ok(())
+                            }
+                        }
                         unexpected_event => unreachable!("Unexpected event: {:?}", unexpected_event),
                     }
                     .with_context(|| format!("from peer {}", peer_id));

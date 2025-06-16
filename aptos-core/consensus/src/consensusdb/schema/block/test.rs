@@ -8,7 +8,7 @@ use gaptos::aptos_schemadb::{schema::fuzzing::assert_encode_decode, test_no_pani
 #[test]
 fn test_encode_decode() {
     let block = Block::make_genesis_block();
-    assert_encode_decode::<BlockSchema>(&block.id(), &block);
+    assert_encode_decode::<BlockSchema>(&(block.epoch(), block.id()), &block);
 }
 
 // test_no_panic_decoding!(BlockSchema);

@@ -503,21 +503,28 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             },
             // We request proof to join higher epoch
             Ordering::Greater => {
-                let request = EpochRetrievalRequest {
-                    start_epoch: self.epoch(),
-                    end_epoch: different_epoch,
-                };
-                let msg = ConsensusMsg::EpochRetrievalRequest(Box::new(request));
-                if let Err(err) = self.network_sender.send_to(peer_id, msg) {
-                    warn!(
-                        "[EpochManager] Failed to send epoch retrieval to {}, {:?}",
-                        peer_id, err
-                    );
-                    counters::EPOCH_MANAGER_ISSUES_DETAILS
-                        .with_label_values(&["failed_to_send_epoch_retrieval"])
-                        .inc();
-                }
 
+                // let request = EpochRetrievalRequest {
+                //     start_epoch: self.epoch(),
+                //     end_epoch: different_epoch,
+                // };
+                // let msg = ConsensusMsg::EpochRetrievalRequest(Box::new(request));
+                // if let Err(err) = self.network_sender.send_to(peer_id, msg) {
+                //     warn!(
+                //         "[EpochManager] Failed to send epoch retrieval to {}, {:?}",
+                //         peer_id, err
+                //     );
+                //     counters::EPOCH_MANAGER_ISSUES_DETAILS
+                //         .with_label_values(&["failed_to_send_epoch_retrieval"])
+                //         .inc();
+                // }
+                let epoch = self.epoch();
+                let sender = self.round_manager_tx.as_mut().unwrap();
+
+                let event = VerifiedEvent::EpochChange(epoch);
+                if let Err(e) = sender.push((peer_id, discriminant(&event)), (peer_id, event)) {
+                    error!("Failed to send event to round manager {:?}", e);
+                }
                 Ok(())
             },
             Ordering::Equal => {
@@ -548,6 +555,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 ledger_info
             ))
             .expect("Failed to sync to new epoch");
+        info!("lightman0618 initiate_new_epoch");
         monitor!("reconfig", self.await_reconfig_notification().await);
         Ok(())
     }
@@ -1742,6 +1750,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .next()
             .await
             .expect("Reconfig sender dropped, unable to start new epoch");
+        info!("lightman0618 initiate_new_epoch await_reconfig_notification");
         self.start_new_epoch(reconfig_notification.on_chain_configs)
             .await;
     }
