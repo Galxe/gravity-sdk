@@ -1086,11 +1086,13 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     }
 
     async fn start_new_epoch(&mut self, payload: OnChainConfigPayload<P>) {
-        // let validator_set: ValidatorSet = payload
-        //     .get()
-        //     .expect("failed to get ValidatorSet from payload");
         info!("start to start new epoch for epoch: {:?}", payload.epoch());
-        let validator_set = self.validator_set.clone();
+        let validator_set: ValidatorSet = payload
+            .get()
+            .expect("failed to get ValidatorSet from payload");
+        info!("validator_set read from config storage is : {:?}", validator_set);
+        
+        // let validator_set = self.validator_set.clone();
         let epoch_state = Arc::new(EpochState {
             epoch: payload.epoch(),
             verifier: Arc::new((&validator_set).into()),

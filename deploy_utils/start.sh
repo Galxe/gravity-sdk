@@ -73,7 +73,7 @@ function start_node() {
 
     pid=$(
         ${WORKSPACE}/bin/${bin_name} node \
-            --chain ${chain} \
+            --chain /home/jingyue/projects/gravity-sdk/new_gravity.json \
             --http \
             --http.port ${http_port} \
             --http.corsdomain "*" \
@@ -99,7 +99,8 @@ function start_node() {
             --txpool.queued-max-count 18446744073709551615 \
             --txpool.queued-max-size 17592186044415 \
              --http.disable_compression \
-	    > ${WORKSPACE}/logs/debug.log &
+             --ipcpath /tmp/node2.ipc \
+	        > ${WORKSPACE}/logs/debug.log &
         echo $!
     )
     echo $pid >${WORKSPACE}/script/node.pid

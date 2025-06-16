@@ -243,6 +243,7 @@ impl StateComputer for ExecutionProxy {
             randomness: randomness.map(|r| Random::from_bytes(r.randomness())),
             block_hash: None,
         };
+        info!("schedule block, epoch {}, round {}, number {}", block.epoch(), block.round(), block.block_number().unwrap());
 
         // We would export the empty block detail to the outside GCEI caller
         let vtxns =

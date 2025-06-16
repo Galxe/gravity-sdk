@@ -419,20 +419,16 @@ impl BlockBufferManager {
             let mut new_epoch_state = None;
             if events.len() > 0 {
                 let new_epoch_event = events[0].clone();
-                let new_epoch = match new_epoch_event {
-                    GravityEvent::NewEpoch(new_epoch) => new_epoch,
+                let (new_epoch, bytes) = match new_epoch_event {
+                    GravityEvent::NewEpoch(new_epoch, bytes) => (new_epoch, bytes),
                     _ => todo!(),
                 };
-                let resp = GLOBAL_CONFIG_STORAGE
-                    .get()
-                    .unwrap()
-                    .as_ref()
-                    .fetch_config_bytes(OnChainConfig::ValidatorSet, block_num)
-                    .unwrap();
-                let bytes : Bytes = resp.try_into().unwrap();
+                info!("set_compute_res set epoch state for new_epoch: {:?}", new_epoch);
+                info!("get validator set bytes from new epoch event {:?}", bytes);
                 let validator_set = bcs::from_bytes::<ValidatorSet>(&bytes).map_err(|e| {
                     format_err!("[on-chain config] Failed to deserialize into config: {}", e)
                 })?;
+                info!("get validator set from new epoch event {:?}", validator_set);
                 new_epoch_state = Some(EpochState::new(new_epoch, (&validator_set).into()));
             }
             let compute_result = StateComputeResult::new(

@@ -42,7 +42,7 @@ impl Default for Inner {
 
 pub type GravityNodeConfigSet = BTreeMap<String, GravityNodeConfig>;
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Default, Deserialize, Serialize, Debug)]
 #[serde(default)]
 pub struct GravityNodeConfig {
     pub consensus_private_key: Vec<u8>,
@@ -69,12 +69,15 @@ impl MockStorage {
 
     pub fn mock_validators(&self) -> Vec<ValidatorInfo> {
         let mut result = vec![];
+        println!("node_config_set is {:?}", self.node_config_set);
         for (i, (addr, node_config)) in self.node_config_set.iter().enumerate() {
-            let private_key: bls12381::PrivateKey =
-                bls12381::PrivateKey::try_from(node_config.consensus_private_key.as_slice())
-                    .unwrap();
+            // let x = hex::decode(node_config.consensus_public_key.as_bytes()).unwrap();
+            let public_key = bls12381::PublicKey::try_from(
+                hex::decode(node_config.consensus_public_key.as_bytes()).unwrap().as_slice(),
+            )
+            .unwrap();
             let config = ValidatorConfig::new(
-                (&private_key).into(),
+                public_key,
                 bcs::to_bytes(&vec![addr.clone()]).unwrap(),
                 bcs::to_bytes(&vec![addr.clone()]).unwrap(),
                 i as u64,
@@ -150,13 +153,14 @@ impl DbReader for MockStorage {
                         match &mut consensus_conf {
                             OnChainConsensusConfig::V1(_) => {}
                             OnChainConsensusConfig::V2(_) => {}
-                            OnChainConsensusConfig::V3 { alg, vtxn} => {}
+                            OnChainConsensusConfig::V3 { alg, vtxn } => {}
                             OnChainConsensusConfig::V4 { alg, vtxn, window_size } => match alg {
                                 ConsensusAlgorithmConfig::Jolteon {
                                     main,
                                     quorum_store_enabled,
                                 } => {
-                                    main.proposer_election_type = ProposerElectionType::FixedProposer(1);
+                                    main.proposer_election_type =
+                                        ProposerElectionType::FixedProposer(1);
                                     *quorum_store_enabled = false;
                                 }
                                 // ConsensusAlgorithmConfig::DAG(_) => {}
@@ -165,7 +169,8 @@ impl DbReader for MockStorage {
                                     quorum_store_enabled,
                                     order_vote_enabled,
                                 } => {
-                                    main.proposer_election_type = ProposerElectionType::FixedProposer(1);
+                                    main.proposer_election_type =
+                                        ProposerElectionType::FixedProposer(1);
                                     *quorum_store_enabled = false;
                                     *order_vote_enabled = false;
                                 }
@@ -187,3 +192,35 @@ impl DbReader for MockStorage {
 }
 
 impl DbWriter for MockStorage {}
+
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_mock_db() {
+        // RUSTFLAGS="--cfg tokio_unstable" cargo test -p api -- --nocapture test::test_mock_db
+        let four_nodes_config_path =
+            Path::new("four_nodes_config.json");
+        let mock_db = MockStorage::new(four_nodes_config_path);
+        let validator_info = mock_db.mock_validators();
+        let validator_set = ValidatorSet::new(validator_info);
+        // bcs serialize
+        let bytes = bcs::to_bytes(&validator_set).unwrap();
+        // hex encode
+        let hex = hex::encode(bytes);
+        println!("four hex is {:?}", hex);
+        println!("four validator_set is {:?}", validator_set);
+
+        let single_node_config_path =
+            Path::new("single_node_config.json");
+        let mock_db = MockStorage::new(single_node_config_path);
+        let validator_info = mock_db.mock_validators();
+        let validator_set = ValidatorSet::new(validator_info);
+        // bcs serialize
+        let bytes = bcs::to_bytes(&validator_set).unwrap();
+        // hex encode
+        let hex = hex::encode(bytes);
+        println!("single hex is {:?}", hex);
+        println!("single validator_set is {:?}", validator_set);
+    }
+}
