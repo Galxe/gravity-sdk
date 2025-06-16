@@ -40,11 +40,11 @@ pub trait PersistentLivenessStorage: Send + Sync {
         &self,
         blocks: Vec<Block>,
         quorum_certs: Vec<QuorumCert>,
-        block_numbers: Vec<(u64, HashValue)>
+        block_numbers: Vec<(u64, u64, HashValue)>
     ) -> Result<()>;
 
     /// Delete the corresponding blocks and quorum certs atomically.
-    fn prune_tree(&self, block_ids: Vec<HashValue>) -> Result<()>;
+    fn prune_tree(&self, block_keys: Vec<(u64, HashValue)>) -> Result<()>;
 
     /// Persist consensus' state
     fn save_vote(&self, vote: &Vote) -> Result<()>;
@@ -278,7 +278,7 @@ impl RecoveryData {
         info!("blocks in db: {:?}", blocks.len());
         info!("quorum certs in db: {:?}", quorum_certs.len());
         let root;
-        if !blocks.is_empty() && execution_latest_block_num != 0 {
+        if !blocks.is_empty() && execution_latest_block_num != ledger_recovery_data.storage_ledger.ledger_info().block_number() {
             root = Self::find_root_by_block_number(
                 execution_latest_block_num,
                 &mut blocks,
@@ -379,17 +379,17 @@ impl StorageWriteProxy {
 
 #[async_trait]
 impl PersistentLivenessStorage for StorageWriteProxy {
-    fn save_tree(&self, blocks: Vec<Block>, quorum_certs: Vec<QuorumCert>, block_numbers: Vec<(u64, HashValue)>) -> Result<()> {
+    fn save_tree(&self, blocks: Vec<Block>, quorum_certs: Vec<QuorumCert>, block_numbers: Vec<(u64, u64, HashValue)>) -> Result<()> {
         self.db.save_blocks_and_quorum_certificates(blocks, quorum_certs)?;
         self.db.save_block_numbers(block_numbers)?;
         Ok(())
     }
 
-    fn prune_tree(&self, block_ids: Vec<HashValue>) -> Result<()> {
+    fn prune_tree(&self, block_keys: Vec<(u64, HashValue)>) -> Result<()> {
         panic!("Can't delete blocks");
-        if !block_ids.is_empty() {
+        if !block_keys.is_empty() {
             // quorum certs that certified the block_ids will get removed
-            self.db.delete_blocks_and_quorum_certificates(block_ids)?;
+            self.db.delete_blocks_and_quorum_certificates(block_keys)?;
         }
         Ok(())
     }
@@ -407,7 +407,7 @@ impl PersistentLivenessStorage for StorageWriteProxy {
     async fn start(&self, order_vote_enabled: bool, epoch: u64) -> LivenessStorageData {
         info!("Start consensus recovery.");
         let latest_block_number = self.latest_commit_block_number().await;
-        info!("The execution_latest_block_number is {}", latest_block_number);
+        info!("The execution_latest_block_number is {}, epoch is {}", latest_block_number, epoch);
         let raw_data =
             self.db.get_data(latest_block_number, epoch).expect("unable to recover consensus data");
 
@@ -424,7 +424,6 @@ impl PersistentLivenessStorage for StorageWriteProxy {
         info!("The following blocks were restored from ConsensusDB : {}", blocks_repr.concat());
         let qc_repr: Vec<String> = quorum_certs.iter().map(|qc| format!("\n\t{}", qc)).collect();
         info!("The following quorum certs were restored from ConsensusDB: {}", qc_repr.concat());
-        // only use when latest_block_number is zero
         let latest_ledger_info = self.aptos_db.get_latest_ledger_info().unwrap();
         let ledger_recovery_data = LedgerRecoveryData::new(latest_ledger_info);
         match RecoveryData::new(

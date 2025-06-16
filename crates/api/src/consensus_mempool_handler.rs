@@ -5,9 +5,9 @@ use futures::StreamExt;
 use gaptos::aptos_consensus_notifications::{
     ConsensusCommitNotification, ConsensusNotification, ConsensusNotificationListener,
 };
+use gaptos::aptos_event_notifications::{EventNotificationSender, EventSubscriptionService};
 use gaptos::aptos_mempool_notifications::MempoolNotificationSender;
 use gaptos::aptos_types::transaction::Transaction;
-use gaptos::aptos_event_notifications::{EventNotificationSender, EventSubscriptionService};
 use tokio::sync::Mutex;
 
 /// A simple handler for sending notifications to mempool
@@ -90,8 +90,17 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
                 self.handle_consensus_commit_notification(commit_notification).await
             }
             ConsensusNotification::SyncToTarget(sync_notification) => {
-                panic!("receive consensus sync notification {:?}", sync_notification);
-            }
+                self
+                    .event_subscription_service
+                    .lock()
+                    .await
+                    .notify_initial_configs(sync_notification.get_target().ledger_info().block_number())
+                    .unwrap();
+                self.consensus_notification_listener
+                    .respond_to_sync_target_notification(sync_notification, Ok(()))
+                    .map_err(|e| anyhow::anyhow!(e));
+                Ok(())
+            },
             ConsensusNotification::SyncForDuration(consensus_sync_duration_notification) => todo!(),
         };
 
