@@ -126,8 +126,8 @@ validate_params() {
         exit 1
     fi
 
-    if [[ "$mode" == "single" && "$node_arg" != "node1" ]]; then
-        log_error "Single mode only supports 'node1'"
+    if [[ "$mode" == "single" && "$node_arg" != "node1" && "$node_arg" != "node2" ]]; then
+        log_error "Single mode only supports 'node1' or 'node2'"
         exit 1
     fi
 }

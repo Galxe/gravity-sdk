@@ -109,7 +109,7 @@ pub trait BlockExecutorTrait: Send + Sync {
 
 #[derive(Debug, Default, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StateComputeResult {
-    execution_output: ComputeRes,
+    pub execution_output: ComputeRes,
     epoch_state: Option<EpochState>,
     block_end_info: Option<BlockEndInfo>,
 }
