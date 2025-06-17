@@ -126,8 +126,8 @@ validate_params() {
         exit 1
     fi
 
-    if [[ "$mode" == "single" && "$node_arg" != "node1" ]]; then
-        log_error "Single mode only supports 'node1'"
+    if [[ "$mode" == "single" && "$node_arg" != "node1" && "$node_arg" != "node2" ]]; then
+        log_error "Single mode only supports 'node1' or 'node2'"
         exit 1
     fi
 }
@@ -188,37 +188,36 @@ main() {
         exit 1
     fi
 
-    # Prepare directories
-    if [[ "$recover" != "true" ]]; then
+    if [[ "$recover" == "true" ]]; then
+        log_warn "Preserving existing data"
+    else
         log_info "Cleaning directory $install_dir/$node_arg"
         rm -rf "$install_dir/$node_arg"
-    else
-        log_warn "Preserving existing data"
+        
+        # Prepare directories
+        log_info "Creating required directories"
+        mkdir -p "$install_dir/$node_arg"/{genesis,bin,data,logs,script}
+
+        # Copy files
+        log_info "Copying configuration files"
+        cp -r "$SCRIPT_DIR/$node_arg/genesis" "$install_dir/$node_arg"
+
+        if [[ "$mode" == "cluster" ]]; then
+            log_info "Setting up cluster mode"
+            cp -r "$SCRIPT_DIR/four_nodes_config.json" "$install_dir/$node_arg/genesis/nodes_config.json"
+            cp -r "$SCRIPT_DIR/four_nodes_discovery" "$install_dir/$node_arg/discovery"
+        else
+            log_info "Setting up single node mode"
+            cp -r "$SCRIPT_DIR/single_node_config.json" "$install_dir/$node_arg/genesis/nodes_config.json"
+            cp -r "$SCRIPT_DIR/single_node_discovery" "$install_dir/$node_arg/discovery"
+            cp "$SCRIPT_DIR/waypoint_single.txt" "$install_dir/$node_arg/genesis/waypoint.txt"
+        fi
+
+        log_info "Copying program files"
+        cp "$TARGET_DIR/$bin_version/$bin_name" "$install_dir/$node_arg/bin"
+        cp "$SCRIPT_DIR/start.sh" "$install_dir/$node_arg/script"
+        cp "$SCRIPT_DIR/stop.sh" "$install_dir/$node_arg/script"
     fi
-
-    log_info "Creating required directories"
-    mkdir -p "$install_dir/$node_arg"/{genesis,bin,data,logs,script}
-
-    # Copy files
-    log_info "Copying configuration files"
-
-    cp -r "$SCRIPT_DIR/$node_arg/genesis" "$install_dir/$node_arg"
-
-    if [[ "$mode" == "cluster" ]]; then
-        log_info "Setting up cluster mode"
-        cp -r "$SCRIPT_DIR/four_nodes_config.json" "$install_dir/$node_arg/genesis/nodes_config.json"
-        cp -r "$SCRIPT_DIR/four_nodes_discovery" "$install_dir/$node_arg/discovery"
-    else
-        log_info "Setting up single node mode"
-        cp -r "$SCRIPT_DIR/single_node_config.json" "$install_dir/$node_arg/genesis/nodes_config.json"
-        cp -r "$SCRIPT_DIR/single_node_discovery" "$install_dir/$node_arg/discovery"
-        cp "$SCRIPT_DIR/waypoint_single.txt" "$install_dir/$node_arg/genesis/waypoint.txt"
-    fi
-
-    log_info "Copying program files"
-    cp "$TARGET_DIR/$bin_version/$bin_name" "$install_dir/$node_arg/bin"
-    cp "$SCRIPT_DIR/start.sh" "$install_dir/$node_arg/script"
-    cp "$SCRIPT_DIR/stop.sh" "$install_dir/$node_arg/script"
 
     log_info "Deployment completed!"
     log_info "Configuration summary:"
