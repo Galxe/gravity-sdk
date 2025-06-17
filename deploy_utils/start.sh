@@ -51,24 +51,6 @@ function start_node() {
     http_port=$3
     metric_port=$4
 
-    # temporarily set these two round to zero
-    jq 'walk(
-        if type == "object" and (
-            .last_voted_round? // 
-            .highest_timeout_round? // 
-            .preferred_round? // 
-            .one_chain_round?
-        ) then 
-            .last_voted_round |= 0 | 
-            .preferred_round |= 0 | 
-            .one_chain_round |= 0 | 
-            .highest_timeout_round |= 0 
-        else 
-            . 
-        end
-    )' ${WORKSPACE}/data/secure_storage.json > ${WORKSPACE}/data/secure_storage.json
-
-
     echo ${WORKSPACE}
 
     pid=$(

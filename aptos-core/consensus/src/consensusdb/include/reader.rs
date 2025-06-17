@@ -100,7 +100,7 @@ impl DbReader for ConsensusDB {
             );
         }
         let ledger_info = self.get_latest_ledger_info()?;
-        if ledger_info.ledger_info().version() != 0 {
+        if ledger_info.ledger_info().version() != 0 && ledger_info.ledger_info().ends_epoch() {
             ledger_infos.push(ledger_info.clone());
         }
         info!("get_state_proof ledger_info is {:?}", ledger_info);
