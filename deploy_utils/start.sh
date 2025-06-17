@@ -50,7 +50,7 @@ function start_node() {
     authrpc_port=$2
     http_port=$3
     metric_port=$4
-    
+
     echo ${WORKSPACE}
 
     pid=$(
