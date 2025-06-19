@@ -29,7 +29,7 @@ use schema::{
     block::BLOCK_NUMBER_CF_NAME,
     single_entry::{SingleEntryKey, SingleEntrySchema},
     BLOCK_CF_NAME, CERTIFIED_NODE_CF_NAME, DAG_VOTE_CF_NAME, LEDGER_INFO_CF_NAME, NODE_CF_NAME,
-    QC_CF_NAME, SINGLE_ENTRY_CF_NAME,
+    QC_CF_NAME, SINGLE_ENTRY_CF_NAME, EPOCH_BY_BLOCK_NUMBER_CF_NAME,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -97,6 +97,7 @@ impl ConsensusDB {
             DAG_VOTE_CF_NAME,
             LEDGER_INFO_CF_NAME,
             BLOCK_NUMBER_CF_NAME,
+            EPOCH_BY_BLOCK_NUMBER_CF_NAME,
             "ordered_anchor_id", // deprecated CF
         ];
 
@@ -271,6 +272,17 @@ impl ConsensusDB {
 
     pub fn get_all<S: Schema>(&self) -> Result<Vec<(S::Key, S::Value)>, DbError> {
         let mut iter = self.db.iter::<S>()?;
+        iter.seek_to_first();
+        Ok(iter.collect::<Result<Vec<(S::Key, S::Value)>, AptosDbError>>()?)
+    }
+
+    pub fn get_range<S: Schema>(&self, start_key: &S::Key, end_key: &S::Key) -> Result<Vec<(S::Key, S::Value)>, DbError> {
+        let mut option = ReadOptions::default();
+        let lower_bound = <S::Key as KeyCodec<S>>::encode_key(start_key).unwrap();
+        option.set_iterate_lower_bound(lower_bound);
+        let upper_bound = <S::Key as KeyCodec<S>>::encode_key(end_key).unwrap();
+        option.set_iterate_upper_bound(upper_bound);
+        let mut iter = self.db.iter_with_opts::<S>(option)?;
         iter.seek_to_first();
         Ok(iter.collect::<Result<Vec<(S::Key, S::Value)>, AptosDbError>>()?)
     }

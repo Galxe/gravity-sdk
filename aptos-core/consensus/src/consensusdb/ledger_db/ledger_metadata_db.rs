@@ -5,7 +5,7 @@ use gaptos::aptos_storage_interface::{AptosDbError, Result};
 use gaptos::aptos_types::ledger_info::LedgerInfoWithSignatures;
 use arc_swap::{access::Access, ArcSwap};
 use rocksdb::ReadOptions;
-use crate::consensusdb::schema::ledger_info::LedgerInfoSchema;
+use crate::consensusdb::schema::{ledger_info::LedgerInfoSchema, epoch_by_block_number::EpochByBlockNumberSchema};
 use std::sync::Arc;
 
 const MAX_LEDGER_INFOS: u32 = 256;
@@ -133,6 +133,10 @@ impl LedgerMetadataDb {
         batch: &mut SchemaBatch,
     ) -> Result<()> {
         let ledger_info = ledger_info_with_sigs.ledger_info();
+        if ledger_info.ends_epoch() {
+            // This is the last version of the current epoch, update the epoch by version index.
+            batch.put::<EpochByBlockNumberSchema>(&ledger_info.block_number(),&ledger_info.epoch())?;
+        }
         batch.put::<LedgerInfoSchema>(&ledger_info.block_number(), ledger_info_with_sigs)
     }
 
