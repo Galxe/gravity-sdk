@@ -9,7 +9,7 @@ use crate::{
         BlockReader, BlockStore,
     },
     consensusdb::schema::{
-        block_number_by_epoch::BlockNumberByEpochSchema, ledger_info::LedgerInfoSchema,
+        epoch_by_block_number::EpochByBlockNumberSchema, ledger_info::LedgerInfoSchema,
     },
     epoch_manager::LivenessStorageData,
     logging::{LogEvent, LogSchema},
@@ -311,10 +311,6 @@ impl BlockStore {
         let highest_commit_cert = self.highest_commit_cert();
         let payload_manager = self.payload_manager.clone();
         let storage = self.storage.clone();
-        info!(
-            "lightman0617 fast_forward_sync_by_epoch 1 peers {}",
-            retriever.validator_addresses().len()
-        );
         let (blocks, mut quorum_certs, ledger_infos) = retriever
             .retrieve_block_by_epoch(
                 epoch,
@@ -323,13 +319,6 @@ impl BlockStore {
                 payload_manager.clone(),
             )
             .await?;
-        info!("lightman0617 fast_forward_sync_by_epoch 2 blocks {}", blocks.len());
-        for block in blocks.iter() {
-            info!("lightman0618 block {}", block);
-        }
-        for qc in quorum_certs.iter() {
-            info!("lightman0618 qc {}", qc);
-        }
 
         for (i, block) in blocks.iter().enumerate() {
             assert_eq!(block.id(), quorum_certs[i].certified_block().id());
@@ -354,17 +343,14 @@ impl BlockStore {
             }
             storage.consensus_db().ledger_db.metadata_db().write_schemas(ledger_info_batch);
         }
-        info!("lightman0617 fast_forward_sync_by_epoch 3");
         let (root, blocks, quorum_certs) =
             match storage.start(false, ledger_infos.last().unwrap().ledger_info().epoch()).await {
                 LivenessStorageData::FullRecoveryData(recovery_data) => recovery_data,
                 _ => panic!("Failed to construct recovery data after fast forward sync"),
             }
             .take();
-        info!("lightman0617 fast_forward_sync_by_epoch 4");
         self.rebuild(root, blocks, quorum_certs).await;
         storage.consensus_db().ledger_db.metadata_db().set_latest_ledger_info(ledger_infos.last().unwrap().clone());
-        info!("lightman0617 fast_forward_sync_by_epoch 5");
         
         if ledger_infos.last().unwrap().ledger_info().ends_epoch() {
             retriever
@@ -375,7 +361,6 @@ impl BlockStore {
                 ))
                 .await;
         }
-        info!("lightman0617 fast_forward_sync_by_epoch 6");
         Ok(())
     }
 
@@ -598,8 +583,11 @@ impl BlockStore {
             let target_block_number = self
                 .storage
                 .consensus_db()
-                .get::<BlockNumberByEpochSchema>(&epoch)
+                .get_all::<EpochByBlockNumberSchema>()
                 .unwrap()
+                .into_iter()
+                .find(|(_, eppch_)| *eppch_ == epoch)
+                .map(|(block_number, _)| block_number)
                 .unwrap();
             let end_block_id = self
                 .storage

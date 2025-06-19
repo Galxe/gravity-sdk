@@ -555,7 +555,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 ledger_info
             ))
             .expect("Failed to sync to new epoch");
-        info!("lightman0618 initiate_new_epoch");
         monitor!("reconfig", self.await_reconfig_notification().await);
         Ok(())
     }
@@ -1750,7 +1749,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .next()
             .await
             .expect("Reconfig sender dropped, unable to start new epoch");
-        info!("lightman0618 initiate_new_epoch await_reconfig_notification");
         self.start_new_epoch(reconfig_notification.on_chain_configs)
             .await;
     }

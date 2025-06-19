@@ -1549,7 +1549,6 @@ impl RoundManager {
                             self.process_local_timeout(round).await
                         ),
                         VerifiedEvent::EpochChange(epoch) => {
-                            info!("lightman0617 epoch change {} wait_change_epoch_flag {}", epoch, self.wait_change_epoch_flag);
                             if !self.wait_change_epoch_flag {
                                 if let Err(e) = self.block_store.fast_forward_sync_by_epoch(self.create_block_retriever(peer_id), epoch).await {
                                     Err(e)
