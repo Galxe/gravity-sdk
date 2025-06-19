@@ -93,23 +93,28 @@ impl DbReader for ConsensusDB {
     }
 
     fn get_state_proof(&self, known_version: u64) -> Result<StateProof, AptosDbError> {
-        let mut ledger_infos: Vec<_> = self
-            .get_range::<EpochByBlockNumberSchema>(&known_version, &u64::MAX)
-            .unwrap()
-            .into_iter()
-            .map(|(block_number, _)| {
-                self.get::<LedgerInfoSchema>(&block_number).unwrap().unwrap()
-            }).collect();
+        let mut ledger_infos = vec![];
         if known_version == 0 {
             ledger_infos.push(LedgerInfoWithSignatures::genesis(
                 *ACCUMULATOR_PLACEHOLDER_HASH,
                 ValidatorSet::new(self.mock_validators()),
             ));
         }
+        ledger_infos.extend(self
+            .get_range::<EpochByBlockNumberSchema>(&known_version, &u64::MAX)
+            .unwrap()
+            .into_iter()
+            .map(|(block_number, _)| {
+                info!("get_state_proof block_number: {:?}", block_number);
+                self.get::<LedgerInfoSchema>(&block_number).unwrap().unwrap()
+            }));
         let ledger_info = self.get_latest_ledger_info()?;
-        if ledger_info.ledger_info().version() != 0 && ledger_info.ledger_info().ends_epoch() {
-            ledger_infos.push(ledger_info.clone());
-        }
+        // if ledger_info.ledger_info().version() != 0
+        //     && ledger_info.ledger_info().version() != known_version
+        //     && ledger_info.ledger_info().ends_epoch()
+        // {
+        //     ledger_infos.push(ledger_info.clone());
+        // }
         Ok(StateProof::new(ledger_info, EpochChangeProof::new(ledger_infos, false)))
     }
 
