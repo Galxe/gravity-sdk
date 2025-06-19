@@ -727,8 +727,10 @@ impl RoundManager {
             bail!("[RoundManager] sync_only flag is set, broadcasting SyncInfo");
         }
 
+        info!("process_local_timeout round: {:?}", round);
         let (is_nil_vote, mut timeout_vote) = match self.round_state.vote_sent() {
             Some(vote) if vote.vote_data().proposed().round() == round => {
+                info!("local timeout already voted: {:?}", vote);
                 (vote.vote_data().is_for_nil(), vote)
             },
             _ => {
@@ -761,6 +763,7 @@ impl RoundManager {
 
         self.round_state.record_vote(timeout_vote.clone());
         let timeout_vote_msg = VoteMsg::new(timeout_vote, self.block_store.sync_info());
+        info!("broadcast timeout vote: {:?}", timeout_vote_msg);
         self.network.broadcast_timeout_vote(timeout_vote_msg).await;
         warn!(
             round = round,
@@ -1075,6 +1078,8 @@ impl RoundManager {
         self.storage
             .save_vote(&vote)
             .context("[RoundManager] Fail to persist last vote")?;
+
+        info!("generate one vote: {:?}", vote);
 
         Ok(vote)
     }
