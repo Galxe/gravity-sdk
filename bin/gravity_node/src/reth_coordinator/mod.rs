@@ -22,7 +22,7 @@ impl RethCoordinator {
         execution_args_tx: oneshot::Sender<ExecutionArgs>,
     ) -> Self {
         Self {
-            reth_cli: Arc::new(reth_cli),
+            reth_cli,
             execution_args_tx: Arc::new(Mutex::new(Some(execution_args_tx))),
         }
     }
