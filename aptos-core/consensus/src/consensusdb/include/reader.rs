@@ -1,15 +1,13 @@
-use gaptos::aptos_crypto::bls12381;
+use bytes::Bytes;
+use gaptos::api_types::config_storage::{OnChainConfig, GLOBAL_CONFIG_STORAGE};
 use gaptos::aptos_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH;
 use gaptos::aptos_storage_interface::{DbReader, DbWriter};
-use gaptos::aptos_types::account_address::AccountAddress;
 use gaptos::aptos_types::epoch_change::EpochChangeProof;
 use gaptos::aptos_types::ledger_info::LedgerInfoWithSignatures;
 use gaptos::aptos_types::on_chain_config::ValidatorSet;
 use gaptos::aptos_types::on_chain_config::{ConsensusAlgorithmConfig, ProposerElectionType};
 use gaptos::aptos_types::state_proof::StateProof;
 use gaptos::aptos_types::state_store::state_key::inner::StateKeyInner;
-use gaptos::aptos_types::validator_config::ValidatorConfig;
-use gaptos::aptos_types::validator_info::ValidatorInfo;
 use gaptos::aptos_types::{
     on_chain_config::{ConfigurationResource, OnChainConsensusConfig},
     state_store::{state_key::StateKey, state_value::StateValue},
@@ -20,46 +18,19 @@ use once_cell::sync::OnceCell;
 use crate::consensusdb::schema::epoch_by_block_number::EpochByBlockNumberSchema;
 use crate::consensusdb::schema::ledger_info::LedgerInfoSchema;
 
-static VALIDATOR_SET: OnceCell<Vec<ValidatorInfo>> = OnceCell::new();
+static VALIDATOR_SET: OnceCell<ValidatorSet> = OnceCell::new();
 
 impl ConsensusDB {
-    pub fn mock_validators(&self) -> Vec<ValidatorInfo> {
-        ConsensusDB::calculate_validator_set(&self.node_config_set)
-    }
-
-    pub fn calculate_validator_set(
-        node_config_set: &BTreeMap<String, GravityNodeConfig>,
-    ) -> Vec<ValidatorInfo> {
+    pub fn validator_set(&self) -> ValidatorSet {
         VALIDATOR_SET
             .get_or_init(|| {
-                let mut result = vec![];
-                for (i, (addr, node_config)) in node_config_set.iter().enumerate() {
-                    // let x = hex::decode(node_config.consensus_public_key.as_bytes()).unwrap();
-                    let public_key = bls12381::PublicKey::try_from(
-                        hex::decode(node_config.consensus_public_key.as_bytes())
-                            .unwrap()
-                            .as_slice(),
-                    )
-                    .unwrap();
-                    let config = ValidatorConfig::new(
-                        public_key,
-                        bcs::to_bytes(&vec![addr.clone()]).unwrap(),
-                        bcs::to_bytes(&vec![addr.clone()]).unwrap(),
-                        i as u64,
-                    );
-                    result.push(ValidatorInfo::new(
-                        AccountAddress::try_from(node_config.account_address.clone()).unwrap(),
-                        node_config.voting_power,
-                        config,
-                    ));
-                }
-                result
+                let validator_set_config =
+                    GLOBAL_CONFIG_STORAGE.get().unwrap().fetch_config_bytes(OnChainConfig::ValidatorSet, 0);
+                let validator_bytes = TryInto::<Bytes>::try_into(validator_set_config.unwrap()).unwrap();
+                let validator_set: ValidatorSet = bcs::from_bytes(&validator_bytes).unwrap();
+                validator_set
             })
-            .to_vec()
-    }
-
-    pub fn get_validator_set_for_test() -> Vec<ValidatorInfo> {
-        VALIDATOR_SET.get().unwrap().clone()
+            .clone()
     }
 }
 
@@ -84,7 +55,7 @@ impl DbReader for ConsensusDB {
             None => {
                 let genesis = LedgerInfoWithSignatures::genesis(
                     *ACCUMULATOR_PLACEHOLDER_HASH,
-                    ValidatorSet::new(self.mock_validators()),
+                    self.validator_set(),
                 );
                 info!("genesis is {:?}", genesis);
                 Ok(genesis)
@@ -97,7 +68,7 @@ impl DbReader for ConsensusDB {
         if known_version == 0 {
             ledger_infos.push(LedgerInfoWithSignatures::genesis(
                 *ACCUMULATOR_PLACEHOLDER_HASH,
-                ValidatorSet::new(self.mock_validators()),
+                self.validator_set(),
             ));
         }
         ledger_infos.extend(self
@@ -109,12 +80,6 @@ impl DbReader for ConsensusDB {
                 self.get::<LedgerInfoSchema>(&block_number).unwrap().unwrap()
             }));
         let ledger_info = self.get_latest_ledger_info()?;
-        // if ledger_info.ledger_info().version() != 0
-        //     && ledger_info.ledger_info().version() != known_version
-        //     && ledger_info.ledger_info().ends_epoch()
-        // {
-        //     ledger_infos.push(ledger_info.clone());
-        // }
         Ok(StateProof::new(ledger_info, EpochChangeProof::new(ledger_infos, false)))
     }
 
@@ -129,7 +94,7 @@ impl DbReader for ConsensusDB {
                 StateKeyInner::AccessPath(p) => {
                     let path = p.to_string();
                     if path.contains("Validator") {
-                        bcs::to_bytes(&ValidatorSet::new(self.mock_validators()))?
+                        bcs::to_bytes(&self.validator_set())?
                     } else if path.contains("consensus") {
                         let mut consensus_conf = OnChainConsensusConfig::default();
                         // todo(gravity_byteyue): currently we set quorum_store_enabled=false
