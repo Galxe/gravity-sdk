@@ -723,8 +723,10 @@ impl RoundManager {
             bail!("[RoundManager] sync_only flag is set, broadcasting SyncInfo");
         }
 
+        info!("process_local_timeout round: {:?}", round);
         let (is_nil_vote, mut timeout_vote) = match self.round_state.vote_sent() {
             Some(vote) if vote.vote_data().proposed().round() == round => {
+                info!("local timeout already voted: {:?}", vote);
                 (vote.vote_data().is_for_nil(), vote)
             },
             _ => {
@@ -757,6 +759,7 @@ impl RoundManager {
 
         self.round_state.record_vote(timeout_vote.clone());
         let timeout_vote_msg = VoteMsg::new(timeout_vote, self.block_store.sync_info());
+        info!("broadcast timeout vote: {:?}", timeout_vote_msg);
         self.network.broadcast_timeout_vote(timeout_vote_msg).await;
         warn!(
             round = round,
@@ -1071,6 +1074,8 @@ impl RoundManager {
         self.storage
             .save_vote(&vote)
             .context("[RoundManager] Fail to persist last vote")?;
+
+        info!("generate one vote: {:?}", vote);
 
         Ok(vote)
     }
@@ -1395,8 +1400,13 @@ impl RoundManager {
             .round_state
             .process_certificates(self.block_store.sync_info())
             .expect("Can not jump start a round_state from existing certificates.");
-        if let Some(vote) = last_vote_sent {
-            self.round_state.record_vote(vote);
+        let author = self.proposal_generator.author();
+        if let Some(vote) = last_vote_sent{
+            if vote.author() != author {
+                error!("last vote sent is not for the current author, ignore");
+            } else {
+                self.round_state.record_vote(vote);
+            }
         }
         if let Err(e) = self.process_new_round_event(new_round_event).await {
             warn!(error = ?e, "[RoundManager] Error during start");
