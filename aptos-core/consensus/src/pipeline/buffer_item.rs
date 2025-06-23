@@ -421,6 +421,15 @@ impl BufferItem {
             .id()
     }
 
+    pub fn commit_info(&self) -> &BlockInfo {
+        match self {
+            Self::Ordered(ordered) => ordered.ordered_proof.commit_info(),
+            Self::Executed(executed) => &executed.commit_info,
+            Self::Signed(signed) => signed.partial_commit_proof.commit_info(),
+            Self::Aggregated(aggregated) => &aggregated.commit_proof.commit_info(),
+        }
+    }
+
     pub fn add_signature_if_matched(&mut self, vote: CommitVote) -> anyhow::Result<()> {
         let target_commit_info = vote.commit_info();
         let author = vote.author();

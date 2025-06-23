@@ -51,11 +51,10 @@ use futures::{
 };
 use once_cell::sync::OnceCell;
 use std::{
-    collections::HashMap,
-    sync::{
+    collections::HashMap, f32::consts::E, sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
-    },
+    }
 };
 use tokio::time::{Duration, Instant};
 use tokio_retry::strategy::ExponentialBackoff;
@@ -598,7 +597,12 @@ impl BufferManager {
     ) {
         if let Some(cache) = self.commit_vote_cache.get(target_block_id) {
             cache.iter().for_each(|(_, vote)| {
-                item.add_signature_if_matched(vote.clone());
+                match item.add_signature_if_matched(vote.clone()) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        error!(commit_info = ?item.commit_info(), target_block_id = ?target_block_id, vote = ?vote, "Failed to add commit vote from cache");
+                    }
+                }
             });
             self.commit_vote_cache.remove(target_block_id);
         }

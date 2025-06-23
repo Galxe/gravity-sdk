@@ -146,6 +146,7 @@ impl ConsensusDB {
         } else {
             (epoch, 0)
         };
+
         let block_id_to_block_number = block_number_to_block_id
             .iter()
             .map(|(block_number, block_id)| (*block_id, *block_number))
