@@ -144,6 +144,7 @@ impl ConsensusDB {
             (1, 0)
         };
         if epoch > start_epoch {
+            info!("epoch > start_epoch, epoch : {}, start_epoch : {}, block_number_to_block_id : {:?}", epoch, start_epoch, block_number_to_block_id);
             return Ok((last_vote, highest_2chain_timeout_certificate, vec![], vec![]));
         }
         let block_id_to_block_number = block_number_to_block_id
