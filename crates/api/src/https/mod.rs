@@ -45,6 +45,8 @@ pub async fn https_server(args: HttpsServerArgs) {
     let set_fail_point_lambda =
         |Json(request): Json<FailpointConf>| async move { set_failpoint(request).await };
 
+    PROFILER.set_prof_active(true);
+
     let control_profiler_lambda = |Json(request): Json<heap_profiler::ControlProfileRequest>| async move {
         control_profiler(request).await
     };

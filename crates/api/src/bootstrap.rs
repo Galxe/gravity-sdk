@@ -200,13 +200,28 @@ pub async fn init_block_buffer_manager(
         0
     };
     
-    let mut block_number_to_block_id = consensus_db
-            .get_all::<BlockNumberSchema>()
-            .unwrap()
-            .into_iter()
-            .filter(|(_, block_number)| block_number >= &start_block_number)
-            .map(|(block_id, block_number)| (block_number, BlockId::from_bytes(block_id.as_slice())))
-            .collect::<HashMap<u64, BlockId>>();
+    let mut block_number_to_block_id = HashMap::new();
+    consensus_db
+        .get_all::<BlockNumberSchema>()
+        .unwrap()
+        .into_iter()
+        .filter(|(_, block_number)| block_number >= &start_block_number)
+        .for_each(|((epoch, block_id), block_number)| {
+            if !block_number_to_block_id.contains_key(&block_number) {
+                block_number_to_block_id
+                    .insert(block_number, (epoch, BlockId::from_bytes(block_id.as_slice())));
+            } else {
+                let (cur_epoch, _) = block_number_to_block_id.get(&block_number).unwrap();
+                if *cur_epoch < epoch {
+                    block_number_to_block_id
+                        .insert(block_number, (epoch, BlockId::from_bytes(block_id.as_slice())));
+                }
+            }
+        });
+    let mut block_number_to_block_id: HashMap<_, _> = block_number_to_block_id
+        .into_iter()
+        .map(|(block_number, (_, block_id))| (block_number, block_id))
+        .collect();
     if start_block_number == 0 {
         block_number_to_block_id.insert(0u64, BlockId::from_bytes(GENESIS_BLOCK_ID.as_slice()));
     }   

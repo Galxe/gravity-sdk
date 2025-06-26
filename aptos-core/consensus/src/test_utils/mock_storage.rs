@@ -182,8 +182,8 @@ impl PersistentLivenessStorage for MockStorage {
         Ok(())
     }
 
-    fn prune_tree(&self, block_id: Vec<HashValue>) -> Result<()> {
-        for id in block_id {
+    fn prune_tree(&self, block_keys: Vec<(u64, HashValue)>) -> Result<()> {
+        for id in block_keys {
             self.shared_storage.block.lock().remove(&id);
             self.shared_storage.qc.lock().remove(&id);
         }
@@ -275,7 +275,7 @@ impl PersistentLivenessStorage for EmptyStorage {
         Ok(())
     }
 
-    fn prune_tree(&self, _: Vec<HashValue>) -> Result<()> {
+    fn prune_tree(&self, block_keys: Vec<(u64, HashValue)>) -> Result<()> {
         Ok(())
     }
 

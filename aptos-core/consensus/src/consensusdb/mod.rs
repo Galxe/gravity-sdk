@@ -5,7 +5,7 @@
 #[cfg(test)]
 mod consensusdb_test;
 mod ledger_db;
-mod schema;
+pub mod schema;
 
 use crate::error::DbError;
 use anyhow::Result;
@@ -29,7 +29,7 @@ use schema::{
     block::BLOCK_NUMBER_CF_NAME,
     single_entry::{SingleEntryKey, SingleEntrySchema},
     BLOCK_CF_NAME, CERTIFIED_NODE_CF_NAME, DAG_VOTE_CF_NAME, LEDGER_INFO_CF_NAME, NODE_CF_NAME,
-    QC_CF_NAME, SINGLE_ENTRY_CF_NAME,
+    QC_CF_NAME, SINGLE_ENTRY_CF_NAME, EPOCH_BY_BLOCK_NUMBER_CF_NAME,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -97,6 +97,7 @@ impl ConsensusDB {
             DAG_VOTE_CF_NAME,
             LEDGER_INFO_CF_NAME,
             BLOCK_NUMBER_CF_NAME,
+            EPOCH_BY_BLOCK_NUMBER_CF_NAME,
             "ordered_anchor_id", // deprecated CF
         ];
 
@@ -129,31 +130,31 @@ impl ConsensusDB {
     ) -> Result<(Option<Vec<u8>>, Option<Vec<u8>>, Vec<Block>, Vec<QuorumCert>)> {
         let last_vote = self.get_last_vote()?;
         let highest_2chain_timeout_certificate = self.get_highest_2chain_timeout_certificate()?;
+        let start_key = (epoch, HashValue::zero());
+        let end_key = (epoch, HashValue::new([u8::MAX; HashValue::LENGTH]));
         let block_number_to_block_id = self
-            .get_all::<BlockNumberSchema>()?
+            .get_range::<BlockNumberSchema>(&start_key, &end_key)?
             .into_iter()
             .filter(|(_, block_number)| block_number >= &latest_block_number)
-            .map(|(block_id, block_number)| (block_number, block_id))
+            .map(|((_, block_id), block_number)| (block_number, block_id))
             .collect::<HashMap<u64, HashValue>>();
         let (start_epoch, start_round) = if block_number_to_block_id.contains_key(&latest_block_number) {
-            let block = self.get::<BlockSchema>(&block_number_to_block_id[&latest_block_number])?
+            let block = self.get::<BlockSchema>(&(epoch, block_number_to_block_id[&latest_block_number]))?
                 .unwrap();
             (block.epoch(), block.round())
         } else {
-            (1, 0)
+            (epoch, 0)
         };
-        if epoch > start_epoch {
-            return Ok((last_vote, highest_2chain_timeout_certificate, vec![], vec![]));
-        }
+
         let block_id_to_block_number = block_number_to_block_id
             .iter()
             .map(|(block_number, block_id)| (*block_id, *block_number))
             .collect::<HashMap<HashValue, u64>>();
         let mut consensus_blocks: Vec<_> = self
-            .get_all::<BlockSchema>()?
+            .get_range::<BlockSchema>(&start_key, &end_key)?
             .into_iter()
             .map(|(_, block)| block)
-            .filter(|block| block.epoch() == start_epoch && block.round() >= start_round)
+            .filter(|block| block.round() >= start_round)
             .collect();
         consensus_blocks.iter_mut().for_each(|block| {
             if block.block_number().is_none() {
@@ -163,10 +164,10 @@ impl ConsensusDB {
             }
         });
         let consensus_qcs: Vec<_> = self
-            .get_all::<QCSchema>()?
+            .get_range::<QCSchema>(&start_key, &end_key)?
             .into_iter()
             .map(|(_, qc)| qc)
-            .filter(|qc| qc.certified_block().epoch() == start_epoch && qc.certified_block().round() >= start_round)
+            .filter(|qc| qc.certified_block().round() >= start_round)
             .collect();
         info!("consensus_blocks size : {}, consensus_qcs size : {}, block_number_to_block_id size : {}",
                  consensus_blocks.len(), consensus_qcs.len(), block_number_to_block_id.len());
@@ -196,31 +197,31 @@ impl ConsensusDB {
             return Ok(());
         }
         let mut batch = SchemaBatch::new();
-        block_data.iter().try_for_each(|block| batch.put::<BlockSchema>(&block.id(), block))?;
-        qc_data.iter().try_for_each(|qc| batch.put::<QCSchema>(&qc.certified_block().id(), qc))?;
+        block_data.iter().try_for_each(|block| batch.put::<BlockSchema>(&(block.epoch(), block.id()), block))?;
+        qc_data.iter().try_for_each(|qc| batch.put::<QCSchema>(&(qc.certified_block().epoch(), qc.certified_block().id()), qc))?;
         self.commit(batch)
     }
 
-    pub fn save_block_numbers(&self, block_numbers: Vec<(u64, HashValue)>) -> Result<(), DbError> {
+    pub fn save_block_numbers(&self, block_numbers: Vec<(u64, u64, HashValue)>) -> Result<(), DbError> {
         if block_numbers.is_empty() {
             return Ok(());
         }
         let mut batch = SchemaBatch::new();
-        block_numbers.iter().try_for_each(|(block_number, block_id)| {
-            batch.put::<BlockNumberSchema>(block_id, block_number)
+        block_numbers.iter().try_for_each(|(epoch, block_number, block_id)| {
+            batch.put::<BlockNumberSchema>(&(*epoch, *block_id), block_number)
         })?;
         self.commit(batch)
     }
 
     pub fn delete_blocks_and_quorum_certificates(
         &self,
-        block_ids: Vec<HashValue>,
+        block_keys: Vec<(u64, HashValue)>,
     ) -> Result<(), DbError> {
-        if block_ids.is_empty() {
+        if block_keys.is_empty() {
             return Err(anyhow::anyhow!("Consensus block ids is empty!").into());
         }
         let mut batch = SchemaBatch::new();
-        block_ids.iter().try_for_each(|hash| {
+        block_keys.iter().try_for_each(|hash| {
             batch.delete::<BlockSchema>(hash)?;
             batch.delete::<QCSchema>(hash)
         })?;
@@ -280,16 +281,35 @@ impl ConsensusDB {
         Ok(self.db.get::<S>(key)?)
     }
 
-    pub fn get_block(&self, block_id: &HashValue) -> Result<Option<Block>, DbError> {
-        let block = self.get::<BlockSchema>(block_id)?;
+    pub fn get_range<S: Schema>(&self, start_key: &S::Key, end_key: &S::Key) -> Result<Vec<(S::Key, S::Value)>, DbError> {
+        let mut option = ReadOptions::default();
+        let lower_bound = <S::Key as KeyCodec<S>>::encode_key(start_key).unwrap();
+        option.set_iterate_lower_bound(lower_bound);
+        let upper_bound = <S::Key as KeyCodec<S>>::encode_key(end_key).unwrap();
+        option.set_iterate_upper_bound(upper_bound);
+        let mut iter = self.db.iter_with_opts::<S>(option)?;
+        iter.seek_to_first();
+        Ok(iter.collect::<Result<Vec<(S::Key, S::Value)>, AptosDbError>>()?)
+    }
+
+    pub fn get_block(&self, epoch: u64, block_id: HashValue) -> Result<Option<Block>, DbError> {
+        let block = self.get::<BlockSchema>(&(epoch, block_id))?;
         if let Some(block) = &block {
-            let block_number = self.get::<BlockNumberSchema>(block_id)?;
+            let block_number = self.get::<BlockNumberSchema>(&(epoch, block_id))?;
             match block_number {
                 Some(block_number) => block.set_block_number(block_number),
                 None => (),
             }
         }
         Ok(block)
+    }
+
+    pub fn get_qc(&self, epoch: u64, block_id: HashValue) -> Result<Option<QuorumCert>, DbError> {
+        self.get::<QCSchema>(&(epoch, block_id))
+    }
+
+    pub fn get_qc_range(&self, start_key: &(u64, HashValue), end_key: &(u64, HashValue)) -> Result<Vec<QuorumCert>, DbError> {
+        Ok(self.get_range::<QCSchema>(start_key, end_key)?.into_iter().map(|(_, value)| value).collect())
     }
 }
 

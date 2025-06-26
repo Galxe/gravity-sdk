@@ -3,11 +3,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::block::Block;
+use crate::quorum_cert::QuorumCert;
 use anyhow::ensure;
 use gaptos::api_types::ExecutionBlocks;
 use gaptos::aptos_crypto::hash::{HashValue, GENESIS_BLOCK_ID};
 use gaptos::aptos_short_hex_str::AsShortHexStr;
-use gaptos::aptos_types::{ledger_info::LedgerInfoWithSignatures, validator_verifier::ValidatorVerifier};
+use gaptos::aptos_types::{
+    ledger_info::LedgerInfoWithSignatures, validator_verifier::ValidatorVerifier,
+};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -22,15 +25,12 @@ pub struct BlockRetrievalRequest {
     block_id: HashValue,
     num_blocks: u64,
     target_block_id: Option<HashValue>,
+    epoch: Option<u64>,
 }
 
 impl BlockRetrievalRequest {
     pub fn new(block_id: HashValue, num_blocks: u64) -> Self {
-        Self {
-            block_id,
-            num_blocks,
-            target_block_id: None,
-        }
+        Self { block_id, num_blocks, target_block_id: None, epoch: None }
     }
 
     pub fn new_with_target_block_id(
@@ -38,11 +38,16 @@ impl BlockRetrievalRequest {
         num_blocks: u64,
         target_block_id: HashValue,
     ) -> Self {
-        Self {
-            block_id,
-            num_blocks,
-            target_block_id: Some(target_block_id),
-        }
+        Self { block_id, num_blocks, target_block_id: Some(target_block_id), epoch: None }
+    }
+
+    pub fn new_with_epoch(
+        block_id: HashValue,
+        num_blocks: u64,
+        target_block_id: HashValue,
+        epoch: u64,
+    ) -> Self {
+        Self { block_id, num_blocks, target_block_id: Some(target_block_id), epoch: Some(epoch) }
     }
 
     pub fn block_id(&self) -> HashValue {
@@ -59,6 +64,10 @@ impl BlockRetrievalRequest {
 
     pub fn match_target_id(&self, hash_value: HashValue) -> bool {
         self.target_block_id.map_or(false, |id| id == hash_value)
+    }
+
+    pub fn epoch(&self) -> Option<u64> {
+        self.epoch
     }
 }
 
@@ -90,11 +99,17 @@ pub struct BlockRetrievalResponse {
     status: BlockRetrievalStatus,
     blocks: Vec<Block>,
     ledger_infos: Vec<LedgerInfoWithSignatures>,
+    quorum_certs: Vec<QuorumCert>,
 }
 
 impl BlockRetrievalResponse {
-    pub fn new(status: BlockRetrievalStatus, blocks: Vec<Block>, ledger_infos: Vec<LedgerInfoWithSignatures>) -> Self {
-        Self { status, blocks, ledger_infos }
+    pub fn new(
+        status: BlockRetrievalStatus,
+        blocks: Vec<Block>,
+        quorum_certs: Vec<QuorumCert>,
+        ledger_infos: Vec<LedgerInfoWithSignatures>,
+    ) -> Self {
+        Self { status, blocks, ledger_infos, quorum_certs }
     }
 
     pub fn status(&self) -> BlockRetrievalStatus {
@@ -107,6 +122,10 @@ impl BlockRetrievalResponse {
 
     pub fn ledger_infos(&self) -> &Vec<LedgerInfoWithSignatures> {
         &self.ledger_infos
+    }
+
+    pub fn quorum_certs(&self) -> &Vec<QuorumCert> {
+        &self.quorum_certs
     }
 
     pub fn verify(
@@ -123,16 +142,9 @@ impl BlockRetrievalResponse {
         );
         ensure!(
             self.status != BlockRetrievalStatus::SucceededWithTarget
-                || self
-                    .blocks
-                    .last()
-                    .map_or(false, |block| {
-                        if retrieval_request.match_target_id(*GENESIS_BLOCK_ID) {
-                            retrieval_request.match_target_id(block.parent_id())
-                        } else {
-                            retrieval_request.match_target_id(block.id())
-                        }
-                    }),
+                || self.blocks.last().map_or(false, |block| {
+                    retrieval_request.match_target_id(block.parent_id())
+                }),
             "target not found in blocks returned, expect {:?}",
             retrieval_request.target_block_id(),
         );
@@ -164,12 +176,10 @@ impl fmt::Display for BlockRetrievalResponse {
                     self.blocks().len(),
                 )?;
 
-                f.debug_list()
-                    .entries(self.blocks.iter().map(|b| b.id().short_str()))
-                    .finish()?;
+                f.debug_list().entries(self.blocks.iter().map(|b| b.id().short_str())).finish()?;
 
                 write!(f, "]")
-            },
+            }
             _ => write!(f, "[BlockRetrievalResponse: status: {:?}]", self.status()),
         }
     }

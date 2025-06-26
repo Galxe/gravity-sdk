@@ -18,6 +18,10 @@ use gaptos::aptos_types::{
 
 use once_cell::sync::OnceCell;
 
+
+use crate::consensusdb::schema::epoch_by_block_number::EpochByBlockNumberSchema;
+use crate::consensusdb::schema::ledger_info::LedgerInfoSchema;
+
 impl ConsensusDB {
     pub fn mock_validators(&self) -> Vec<ValidatorInfo> {
         ConsensusDB::calculate_validator_set(&self.node_config_set)
@@ -86,8 +90,7 @@ impl DbReader for ConsensusDB {
     }
 
     fn get_state_proof(&self, known_version: u64) -> Result<StateProof, AptosDbError> {
-        info!("get_state_proof");
-        let mut ledger_infos = self.ledger_db.metadata_db().get_ledger_infos_by_range((known_version, known_version + 1));
+        let mut ledger_infos = vec![];
         if known_version == 0 {
             ledger_infos.push(LedgerInfoWithSignatures::genesis(
                     *ACCUMULATOR_PLACEHOLDER_HASH,
@@ -95,11 +98,14 @@ impl DbReader for ConsensusDB {
                 )
             );
         }
+        ledger_infos.extend(self
+            .get_range::<EpochByBlockNumberSchema>(&known_version, &u64::MAX)
+            .unwrap()
+            .into_iter()
+            .map(|(block_number, _)| {
+                self.get::<LedgerInfoSchema>(&block_number).unwrap().unwrap()
+            }));
         let ledger_info = self.get_latest_ledger_info()?;
-        if ledger_info.ledger_info().version() != 0 && ledger_info.ledger_info().ends_epoch() {
-            ledger_infos.push(ledger_info.clone());
-        }
-        info!("get_state_proof ledger_info is {:?}", ledger_info);
         Ok(StateProof::new(
             ledger_info,
             EpochChangeProof::new(
