@@ -276,7 +276,7 @@ impl StateComputer for ExecutionProxy {
             let u_ts = meta_data.usecs;
             let compute_result = get_block_buffer_manager()
                 .get_executed_res(block_id, meta_data.block_number)
-                .await.unwrap_or_else(|e| panic!("Failed to get executed result {}", e));
+                .await?;
 
             txn_metrics::TxnLifeTime::get_txn_life_time().record_executed(block_id_hashvalue);
             update_counters_for_compute_res(&compute_result.execution_output);

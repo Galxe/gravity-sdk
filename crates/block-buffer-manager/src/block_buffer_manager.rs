@@ -109,6 +109,7 @@ pub struct BlockBufferManager {
     block_state_machine: Mutex<BlockStateMachine>,
     buffer_state: AtomicU8,
     config: BlockBufferManagerConfig,
+    latest_epoch_change_block_number: Mutex<u64>,
 }
 
 impl BlockBufferManager {
@@ -126,6 +127,7 @@ impl BlockBufferManager {
             }),
             buffer_state: AtomicU8::new(BufferState::Uninitialized as u8),
             config,
+            latest_epoch_change_block_number: Mutex::new(0),
         };
         let block_buffer_manager = Arc::new(block_buffer_manager);
         let clone = block_buffer_manager.clone();
@@ -435,13 +437,12 @@ impl BlockBufferManager {
                     GravityEvent::NewEpoch(new_epoch, bytes) => (new_epoch, bytes),
                     _ => todo!(),
                 };
-                info!("set_compute_res set epoch state for new_epoch: {:?}", new_epoch);
-                info!("get validator set bytes from new epoch event {:?}", bytes);
                 let validator_set = bcs::from_bytes::<ValidatorSet>(&bytes).map_err(|e| {
                     format_err!("[on-chain config] Failed to deserialize into config: {}", e)
                 })?;
-                info!("get validator set from new epoch event {:?}", validator_set);
+                info!("block number {} get validator set from new epoch {} event {:?}", block_num, new_epoch, validator_set);
                 new_epoch_state = Some(EpochState::new(new_epoch, (&validator_set).into()));
+                *self.latest_epoch_change_block_number.lock().await = block_num;
             }
             let compute_result = StateComputeResult::new(
                 ComputeRes { data: block_hash, txn_num: txn_len as u64, txn_status, events },
@@ -623,5 +624,17 @@ impl BlockBufferManager {
         }
         let block_state_machine = self.block_state_machine.lock().await;
         block_state_machine.block_number_to_block_id.clone()
+    }
+
+    pub async fn release_inflight_blocks(&self) {
+        let mut block_state_machine = self.block_state_machine.lock().await;
+        let latest_epoch_change_block_number = *self.latest_epoch_change_block_number.lock().await;
+        block_state_machine
+            .blocks
+            .retain(|block_num, _| *block_num <= latest_epoch_change_block_number);
+        block_state_machine
+            .profile
+            .retain(|block_num, _| *block_num <= latest_epoch_change_block_number);
+        let _ = block_state_machine.sender.send(());
     }
 }
