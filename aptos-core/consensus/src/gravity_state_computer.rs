@@ -90,6 +90,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             let block_num = ledger_info_with_sigs.ledger_info().block_number();
             assert!(block_ids.last().unwrap().as_slice() == block_id.as_slice());
             let len = block_ids.len();
+            let _ = self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
             self.runtime.block_on(async move {
                 get_block_buffer_manager()
                     .set_commit_blocks(
@@ -120,7 +121,6 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                     .unwrap_or_else(|e| panic!("Failed to push commit blocks {}", e));
             });
         }
-        self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
         Ok(())
     }
 
@@ -144,37 +144,36 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         );
         let block_num = ledger_info_with_sigs.ledger_info().block_number();
         let len = block_ids.len();
-        if !block_ids.is_empty() {
-            self.runtime.block_on(async move {
-                get_block_buffer_manager()
-                    .set_commit_blocks(
-                        block_ids
-                            .into_iter()
-                            .enumerate()
-                            .map(|(i, x)| {
-                                let mut v = [0u8; 32];
-                                v.copy_from_slice(block_hash.as_ref());
-                                if x == block_id {
-                                    BlockHashRef {
-                                        block_id: BlockId::from_bytes(x.as_slice()),
-                                        num: block_num - (len - 1 - i) as u64,
-                                        hash: Some(v),
-                                    }
-                                } else {
-                                    BlockHashRef {
-                                        block_id: BlockId::from_bytes(x.as_slice()),
-                                        num: block_num - (len - 1 - i) as u64,
-                                        hash: None,
-                                    }
+        assert!(!block_ids.is_empty(), "commit_ledger block_ids is empty");
+        let _ = self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
+        self.runtime.block_on(async move {
+            get_block_buffer_manager()
+                .set_commit_blocks(
+                    block_ids
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, x)| {
+                            let mut v = [0u8; 32];
+                            v.copy_from_slice(block_hash.as_ref());
+                            if x == block_id {
+                                BlockHashRef {
+                                    block_id: BlockId::from_bytes(x.as_slice()),
+                                    num: block_num - (len - 1 - i) as u64,
+                                    hash: Some(v),
                                 }
-                            })
-                            .collect(),
-                    )
-                    .await
-                    .unwrap();
-            });
-        }
-        self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
+                            } else {
+                                BlockHashRef {
+                                    block_id: BlockId::from_bytes(x.as_slice()),
+                                    num: block_num - (len - 1 - i) as u64,
+                                    hash: None,
+                                }
+                            }
+                        })
+                        .collect(),
+                )
+                .await
+                .unwrap();
+        });
         Ok(())
     }
 }
