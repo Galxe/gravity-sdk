@@ -55,7 +55,7 @@ function start_node() {
 
     pid=$(
         ${WORKSPACE}/bin/${bin_name} node \
-            --chain /home/jingyue/projects/gravity-sdk/new_gravity.json \
+            --chain ${chain} \
             --http \
             --http.port ${http_port} \
             --http.corsdomain "*" \
