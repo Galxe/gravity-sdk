@@ -169,6 +169,31 @@ impl BlockBufferManager {
         block_state_machine.latest_commit_block_number = latest_commit_block_number;
         block_state_machine.latest_finalized_block_number = latest_commit_block_number;
         block_state_machine.block_number_to_block_id = block_number_to_block_id;
+        if !block_state_machine.block_number_to_block_id.is_empty() {
+            let id = block_state_machine
+                .block_number_to_block_id
+                .get(&latest_commit_block_number)
+                .unwrap()
+                .clone();
+            block_state_machine.blocks.insert(
+                latest_commit_block_number,
+                BlockState::Committed {
+                    hash: None,
+                    compute_result: StateComputeResult::new(
+                        ComputeRes {
+                            data: [0; 32],
+                            txn_num: 0,
+                            txn_status: Arc::new(None),
+                            events: vec![],
+                        },
+                        None,
+                        None,
+                    ),
+                    id,
+                },
+            );
+            *self.latest_epoch_change_block_number.lock().await = latest_commit_block_number;
+        }
         self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
     }
 
@@ -249,7 +274,15 @@ impl BlockBufferManager {
             block.block_meta.block_id, block.block_meta.block_number
         );
         let mut block_state_machine = self.block_state_machine.lock().await;
+        // TODO(gravity_alex): 如果不是同一个epoch，新的epoch更大，也应该能set
         if block_state_machine.blocks.contains_key(&block.block_meta.block_number) {
+            // if block.block_meta.epoch > block_state_machine.blocks.get(&block.block_meta.block_number).unwrap().get_block_id().epoch {
+            //     warn!(
+            //         "set_ordered_blocks block {:?} block num {} already exists",
+            //         block.block_meta.block_id, block.block_meta.block_number
+            //     );
+            //     return Ok(());
+            // }
             warn!(
                 "set_ordered_blocks block {:?} block num {} already exists",
                 block.block_meta.block_id, block.block_meta.block_number
@@ -403,10 +436,17 @@ impl BlockBufferManager {
                     }
                 }
             } else {
-                panic!(
-                    "There is no Ordered Block but try to get executed result for block {:?}",
-                    block_id
-                )
+                // 拿不到的时候是epoch change被去掉了 能不能保证这个invariant
+                // panic!(
+                //     "There is no Ordered Block but try to get executed result for block {:?}",
+                //     block_id
+                // )
+                let latest_epoch_change_block_number =
+                    *self.latest_epoch_change_block_number.lock().await;
+                let msg = format!("There is no Ordered Block but try to get executed result for block {:?} and block num {:?}, 
+                                            latest epoch change block number {:?}", block_id, block_num, latest_epoch_change_block_number);
+                warn!("{}", msg);
+                return Err(anyhow::anyhow!("{}", msg));
             }
         }
     }
