@@ -26,12 +26,13 @@ serde_json = "1.0.128"
 bincode = "1.3"
 time = "0.3.36"
 anyhow = "1.0.87"
-greth = { git = "https://github.com/Galxe/gravity-reth", rev = "a9914e1c92d5ea70fbd40e5d4fa89178792273f5" }
+greth = { git = "https://github.com/Galxe/gravity-reth", rev = "1d24757b41c8e4ce0edc8f4a523f483cc2fb6e11" }
 # greth = { git = "https://github.com/Galxe/gravity-reth", branch = "dev-refactor-gcei" }
 reqwest = "0.12.9"
-alloy-primitives = { version = "1.1.0", default-features = false, features = ["map-foldhash"] }
+alloy-primitives = { version = "=1.1.2", default-features = false, features = ["map-foldhash"] }
 alloy-eips = { version = "1.0.9", default-features = false }
 alloy-consensus = { version = "1.0.9", default-features = false }
+alloy-transport-http = "=1.0.9"
 
 async-trait.workspace = true
 api.workspace = true
