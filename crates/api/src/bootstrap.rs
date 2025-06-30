@@ -4,23 +4,27 @@ use std::{
     sync::Arc,
 };
 
-use crate::network::{build_network_interfaces, consensus_network_configuration, extract_network_ids, mempool_network_configuration};
-use gaptos::api_types::u256_define::BlockId;
-use block_buffer_manager::get_block_buffer_manager;
-use gaptos::aptos_config::{
-    config::{NetworkConfig, NodeConfig, Peer, PeerRole},
-    network_id::NetworkId,
+use crate::network::{
+    build_network_interfaces, consensus_network_configuration, extract_network_ids,
+    mempool_network_configuration,
 };
 use aptos_consensus::consensusdb::{BlockNumberSchema, BlockSchema, ConsensusDB};
 use aptos_consensus::{
     gravity_state_computer::ConsensusAdapterArgs, network_interface::ConsensusMsg,
     persistent_liveness_storage::StorageWriteProxy, quorum_store::quorum_store_db::QuorumStoreDB,
 };
+use block_buffer_manager::get_block_buffer_manager;
+use gaptos::api_types::u256_define::BlockId;
+use gaptos::aptos_config::{
+    config::{NetworkConfig, NodeConfig, Peer, PeerRole},
+    network_id::NetworkId,
+};
 
+use aptos_mempool::{MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest};
+use futures::channel::mpsc::{Receiver, Sender};
 use gaptos::aptos_consensus_notifications::ConsensusNotifier;
 use gaptos::aptos_crypto::{hash::GENESIS_BLOCK_ID, x25519, HashValue};
 use gaptos::aptos_event_notifications::EventSubscriptionService;
-use aptos_mempool::{MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest};
 use gaptos::aptos_mempool_notifications::MempoolNotificationListener;
 use gaptos::aptos_network::application::{
     interface::{NetworkClient, NetworkServiceEvents},
@@ -30,7 +34,6 @@ use gaptos::aptos_network_builder::builder::NetworkBuilder;
 use gaptos::aptos_storage_interface::DbReaderWriter;
 use gaptos::aptos_types::account_address::AccountAddress;
 use gaptos::aptos_validator_transaction_pool::VTxnPoolState;
-use futures::channel::mpsc::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
 use tokio::{runtime::Runtime, sync::Mutex};
 
@@ -84,7 +87,7 @@ where
         network_id,
         &network_config,
         mempool_network_configuration(node_config),
-        peers_and_metadata.clone(), 
+        peers_and_metadata.clone(),
     );
     (consensus_network_interfaces, mempool_interfaces)
 }
@@ -94,7 +97,11 @@ pub fn start_node_inspection_service(
     node_config: &NodeConfig,
     peers_and_metadata: Arc<PeersAndMetadata>,
 ) {
-    gaptos::aptos_inspection_service::start_inspection_service(node_config.clone(), None, peers_and_metadata)
+    gaptos::aptos_inspection_service::start_inspection_service(
+        node_config.clone(),
+        None,
+        peers_and_metadata,
+    )
 }
 
 pub fn start_consensus(
@@ -160,25 +167,37 @@ pub fn init_peers_and_metadata(
     peers_and_metadata
 }
 
-pub async fn init_block_buffer_manager(
-    consensus_db: &Arc<ConsensusDB>,
-    latest_block_number: u64,
-) {
+pub async fn init_block_buffer_manager(consensus_db: &Arc<ConsensusDB>, latest_block_number: u64) {
     let start_block_number = if latest_block_number > RECENT_BLOCKS_RANGE {
         latest_block_number - RECENT_BLOCKS_RANGE
     } else {
         0
     };
-    
-    let mut block_number_to_block_id = consensus_db
-            .get_all::<BlockNumberSchema>()
-            .unwrap()
-            .into_iter()
-            .filter(|(_, block_number)| block_number >= &start_block_number)
-            .map(|(block_id, block_number)| (block_number, BlockId::from_bytes(block_id.as_slice())))
-            .collect::<HashMap<u64, BlockId>>();
+
+    let mut block_number_to_block_id = HashMap::new();
+    consensus_db
+        .get_all::<BlockNumberSchema>()
+        .unwrap()
+        .into_iter()
+        .filter(|(_, block_number)| block_number >= &start_block_number)
+        .for_each(|((epoch, block_id), block_number)| {
+            if !block_number_to_block_id.contains_key(&block_number) {
+                block_number_to_block_id
+                    .insert(block_number, (epoch, BlockId::from_bytes(block_id.as_slice())));
+            } else {
+                let (cur_epoch, _) = block_number_to_block_id.get(&block_number).unwrap();
+                if *cur_epoch < epoch {
+                    block_number_to_block_id
+                        .insert(block_number, (epoch, BlockId::from_bytes(block_id.as_slice())));
+                }
+            }
+        });
+    let mut block_number_to_block_id: HashMap<_, _> = block_number_to_block_id
+        .into_iter()
+        .map(|(block_number, (_, block_id))| (block_number, block_id))
+        .collect();
     if start_block_number == 0 {
         block_number_to_block_id.insert(0u64, BlockId::from_bytes(GENESIS_BLOCK_ID.as_slice()));
-    }   
+    }
     get_block_buffer_manager().init(latest_block_number, block_number_to_block_id).await;
 }

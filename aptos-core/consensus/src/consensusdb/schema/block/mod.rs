@@ -25,15 +25,23 @@ use super::ensure_slice_len_eq;
 pub const BLOCK_CF_NAME: ColumnFamilyName = "block";
 pub const BLOCK_NUMBER_CF_NAME: ColumnFamilyName = "block_number";
 
-define_schema!(BlockSchema, HashValue, Block, BLOCK_CF_NAME);
+define_schema!(BlockSchema, (u64, HashValue), Block, BLOCK_CF_NAME);
 
-impl KeyCodec<BlockSchema> for HashValue {
+impl KeyCodec<BlockSchema> for (u64, HashValue) {
     fn encode_key(&self) -> Result<Vec<u8>> {
-        Ok(self.to_vec())
+        let (seq_num, hash_value) = self;
+        let mut key_bytes = Vec::with_capacity(8 + hash_value.to_vec().len());
+        key_bytes.extend_from_slice(&seq_num.to_be_bytes());
+        key_bytes.extend_from_slice(&hash_value.to_vec());
+        Ok(key_bytes)
     }
 
     fn decode_key(data: &[u8]) -> Result<Self> {
-        Ok(HashValue::from_slice(data)?)
+        let seq_num_bytes: [u8; 8] = data[0..8].try_into()?;
+        let seq_num = u64::from_be_bytes(seq_num_bytes);
+        let hash_value_data = &data[8..]; 
+        let hash_value = HashValue::from_slice(hash_value_data)?;
+        Ok((seq_num, hash_value))
     }
 }
 
@@ -47,15 +55,23 @@ impl ValueCodec<BlockSchema> for Block {
     }
 }
 
-define_schema!(BlockNumberSchema, HashValue, u64, BLOCK_NUMBER_CF_NAME);
+define_schema!(BlockNumberSchema, (u64, HashValue), u64, BLOCK_NUMBER_CF_NAME);
 
-impl KeyCodec<BlockNumberSchema> for HashValue {
+impl KeyCodec<BlockNumberSchema> for (u64, HashValue) {
     fn encode_key(&self) -> Result<Vec<u8>> {
-        Ok(self.to_vec())
+        let (seq_num, hash_value) = self;
+        let mut key_bytes = Vec::with_capacity(8 + hash_value.to_vec().len());
+        key_bytes.extend_from_slice(&seq_num.to_be_bytes());
+        key_bytes.extend_from_slice(&hash_value.to_vec());
+        Ok(key_bytes)
     }
 
     fn decode_key(data: &[u8]) -> Result<Self> {
-        Ok(HashValue::from_slice(data)?)
+        let seq_num_bytes: [u8; 8] = data[0..8].try_into()?;
+        let seq_num = u64::from_be_bytes(seq_num_bytes);
+        let hash_value_data = &data[8..]; 
+        let hash_value = HashValue::from_slice(hash_value_data)?;
+        Ok((seq_num, hash_value))
     }
 }
 
