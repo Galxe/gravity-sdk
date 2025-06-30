@@ -1,6 +1,6 @@
 base:
   role: "validator"
-  data_dir: "/tmp/node1/data"
+  data_dir: "/tmp/node2/data"
   waypoint:
     from_file: "/tmp/node2/genesis/waypoint.txt"
 

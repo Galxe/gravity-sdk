@@ -1,5 +1,4 @@
 pub mod queue;
-pub mod state;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -8,7 +7,6 @@ use crate::reth_cli::{convert_account, RethCli};
 use block_buffer_manager::get_block_buffer_manager;
 use greth::reth_pipe_exec_layer_ext_v2::ExecutionArgs;
 use alloy_primitives::B256;
-use state::State;
 use tokio::sync::Mutex;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::{sleep, Sleep};
@@ -16,7 +14,6 @@ use tracing::{debug, info};
 
 pub struct RethCoordinator {
     reth_cli: Arc<RethCli>,
-    state: Arc<Mutex<State>>,
     execution_args_tx: Arc<Mutex<Option<oneshot::Sender<ExecutionArgs>>>>,
 }
 
@@ -26,10 +23,8 @@ impl RethCoordinator {
         latest_block_number: u64,
         execution_args_tx: oneshot::Sender<ExecutionArgs>,
     ) -> Self {
-        let state = State::new(latest_block_number);
         Self {
             reth_cli: Arc::new(reth_cli),
-            state: Arc::new(Mutex::new(state)),
             execution_args_tx: Arc::new(Mutex::new(Some(execution_args_tx))),
         }
     }

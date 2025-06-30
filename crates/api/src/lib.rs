@@ -1,10 +1,8 @@
 mod bootstrap;
 mod consensus_mempool_handler;
 mod logger;
-mod mock_db;
 mod network;
 mod https;
-mod utils;
 pub mod consensus_api;
 
 pub use gaptos::aptos_config::config::NodeConfig;
