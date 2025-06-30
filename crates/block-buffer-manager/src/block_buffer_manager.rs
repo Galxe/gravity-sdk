@@ -1,4 +1,4 @@
-use gaptos::aptos_logger::{info, warn};
+use tracing::{info, warn};
 use std::{
     cell::OnceCell,
     collections::HashMap,
