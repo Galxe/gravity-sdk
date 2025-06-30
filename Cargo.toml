@@ -19,7 +19,10 @@ members = [
     "bin/gravity_sdk_kvstore",
     "bin/bench",
     "bin/gravity_node", 
-    "crates/block-buffer-manager", "crates/txn_metrics"]
+    "crates/block-buffer-manager",
+    "crates/txn_metrics",
+    "crates/build-info"
+]
 
 [workspace.dependencies]
 aptos-consensus = { path = "./aptos-core/consensus" }
@@ -37,6 +40,7 @@ aptos-consensus-types = { path = "./aptos-core/consensus/consensus-types", featu
 aptos-mempool = { path = "./aptos-core/mempool", features = ["fuzzing"] }
 aptos-safety-rules = { path = "./aptos-core/consensus/safety-rules" }
 block-buffer-manager = { path = "./crates/block-buffer-manager" }
+build-info = { path = "./crates/build-info" }
 
 # from aptos =======================
 

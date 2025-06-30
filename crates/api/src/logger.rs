@@ -1,8 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use gaptos::aptos_build_info as aptos_build_info;
-use gaptos::aptos_build_info::build_information;
+use build_info::build_information;
 use futures::channel::mpsc::Receiver;
 use gaptos::aptos_config::config::NodeConfig;
 use gaptos::aptos_logger::{
