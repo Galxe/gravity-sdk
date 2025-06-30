@@ -146,7 +146,6 @@ impl ConsensusDB {
         } else {
             (epoch, 0)
         };
-
         let block_id_to_block_number = block_number_to_block_id
             .iter()
             .map(|(block_number, block_id)| (*block_id, *block_number))
@@ -275,6 +274,10 @@ impl ConsensusDB {
         let mut iter = self.db.iter::<S>()?;
         iter.seek_to_first();
         Ok(iter.collect::<Result<Vec<(S::Key, S::Value)>, AptosDbError>>()?)
+    }
+
+    pub fn get<S: Schema>(&self, key: &S::Key) -> Result<Option<S::Value>, DbError> {
+        Ok(self.db.get::<S>(key)?)
     }
 
     pub fn get_range<S: Schema>(&self, start_key: &S::Key, end_key: &S::Key) -> Result<Vec<(S::Key, S::Value)>, DbError> {
