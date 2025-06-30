@@ -283,7 +283,7 @@ impl BlockStore {
         for p_block in ordered_blocks {
             if let Some(parent_block) = self.get_block(p_block.parent_id()) {
                 block_number = parent_block.block().block_number().unwrap() + 1;
-            } else if let Ok(Some(parent_block)) = self.storage.consensus_db().get_block(&p_block.parent_id()) {
+            } else if let Ok(Some(parent_block)) = self.storage.consensus_db().get_block(p_block.epoch(), p_block.parent_id()) {
                 block_number = parent_block.block_number().unwrap() + 1;
             } else {
                 panic!("Cannot find the parent_block id {}", p_block.parent_id());
@@ -293,7 +293,7 @@ impl BlockStore {
                 continue;
             }
             p_block.block().set_block_number(block_number);
-            block_numbers.push((p_block.block().block_number().unwrap(), p_block.block().id()));
+            block_numbers.push((p_block.block().epoch(), p_block.block().block_number().unwrap(), p_block.block().id()));
         }
         if block_numbers.len() != 0 {
             self.storage.save_tree(vec![], vec![], block_numbers).unwrap();
@@ -509,6 +509,7 @@ impl BlockStore {
 
     /// Validates quorum certificates and inserts it into block tree assuming dependencies exist.
     pub fn insert_single_quorum_cert(&self, qc: QuorumCert, rebuild: bool) -> anyhow::Result<()> {
+        info!("insert qc {}", qc);
         // If the parent block is not the root block (i.e not None), ensure the executed state
         // of a block is consistent with its QuorumCert, otherwise persist the QuorumCert's
         // state and on restart, a new execution will agree with it.  A new execution will match
