@@ -1,8 +1,9 @@
+use tracing::{info, warn};
 use std::{
     collections::HashMap,
     hash::{DefaultHasher, Hash, Hasher},
-    sync::{Arc, Once, OnceLock},
-    time::SystemTime,
+    sync::{Arc, Condvar, Mutex, Once, OnceLock},
+    time::{Instant, SystemTime},
 };
 
 use super::mempool::{Mempool, TxnId};
@@ -16,6 +17,7 @@ use block_buffer_manager::{block_buffer_manager::BlockHashRef, get_block_buffer_
 pub struct MockConsensus {
     pool: Arc<tokio::sync::Mutex<Mempool>>,
     genesis_block_id: BlockId,
+    executed_jam_wait: Arc<(Mutex<u64>, Condvar)>,
 }
 
 static ORDERED_INTERVAL_MS: OnceLock<u64> = OnceLock::new();
@@ -25,6 +27,16 @@ fn get_ordered_interval_ms() -> u64 {
             .unwrap_or_else(|_| "200".to_string())
             .parse()
             .unwrap_or(200)
+    })
+}
+
+static MAX_EXECUTED_GAP: OnceLock<u64> = OnceLock::new();
+fn get_max_executed_gap() -> u64 {
+    *MAX_EXECUTED_GAP.get_or_init(|| {
+        std::env::var("MAX_EXECUTED_GAP")
+            .unwrap_or_else(|_| "16".to_string())
+            .parse()
+            .unwrap_or(16)
     })
 }
 
@@ -38,7 +50,11 @@ impl MockConsensus {
         block_number_to_block_id.insert(0u64, genesis_block_id.clone());
         get_block_buffer_manager().init(0, block_number_to_block_id).await;
 
-        Self { pool: Arc::new(tokio::sync::Mutex::new(Mempool::new())), genesis_block_id }
+        Self {
+            pool: Arc::new(tokio::sync::Mutex::new(Mempool::new())),
+            genesis_block_id,
+            executed_jam_wait: Arc::new((Mutex::new(0), Condvar::new()))
+        }
     }
 
     fn construct_block(
@@ -116,6 +132,7 @@ impl MockConsensus {
         tokio::spawn({
             let pool = self.pool.clone();
             let mut parent_id = self.genesis_block_id;
+            let executed_jam_wait = self.executed_jam_wait.clone();
             async move {
                 let mut block_number = 0;
                 loop {
@@ -133,6 +150,19 @@ impl MockConsensus {
                     get_block_buffer_manager().set_ordered_blocks(parent_id, block).await.unwrap();
                     parent_id = head_meta.block_id.clone();
                     let _ = block_meta_tx.send(head_meta).await;
+                    // wait if there's large gap between executed block and ordered block
+                    {
+                        let (lock, cvar) = executed_jam_wait.as_ref();
+                        let mut executed_number = lock.lock().unwrap();
+                        let large_gap = block_number - *executed_number;
+                        let start = Instant::now();
+                        while (block_number - *executed_number) > get_max_executed_gap() {
+                            executed_number = cvar.wait(executed_number).unwrap();
+                        }
+                        if large_gap > get_max_executed_gap() {
+                            info!("large executed gap = {}, wait more {}ms", large_gap, start.elapsed().as_millis());
+                        }
+                    }
                     tokio::time::sleep(tokio::time::Duration::from_millis(
                         get_ordered_interval_ms(),
                     ))
@@ -155,8 +185,28 @@ impl MockConsensus {
         while let Some(block_meta) = block_meta_rx.recv().await {
             let block_id = block_meta.block_id;
             let block_number = block_meta.block_number;
-            let res =
-                get_block_buffer_manager().get_executed_res(block_id, block_number).await.unwrap();
+
+            let res = loop {
+                match get_block_buffer_manager().get_executed_res(block_id, block_number).await {
+                    Ok(r) => {
+                        break r;
+                    },
+                    Err(e) => {
+                        let msg = format!("{}", e);
+                        warn!("get executed result failed: {}", msg);
+                        if !msg.contains("get_executed_res timeout") {
+                            panic!("get executed result failed: {}", msg);
+                        }
+                    },
+                }
+            };
+
+            {
+                let (lock, cvar) = self.executed_jam_wait.as_ref();
+                let mut executed_number = lock.lock().unwrap();
+                *executed_number = block_number;
+                cvar.notify_all();
+            }
 
             get_block_buffer_manager()
                 .set_commit_blocks(vec![BlockHashRef {
