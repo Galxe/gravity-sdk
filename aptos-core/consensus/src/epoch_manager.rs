@@ -186,7 +186,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         let sr_config = &node_config.consensus.safety_rules;
         let safety_rules_manager = SafetyRulesManager::new(sr_config);
         let key_storage = safety_rules_manager::storage(sr_config);
-
         Self {
             author,
             config,
@@ -1082,7 +1081,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         self.epoch_state = Some(epoch_state.clone());
 
         let onchain_consensus_config: anyhow::Result<OnChainConsensusConfig> = payload.get();
-        info!("read onchain_consensus_config: {:?}", onchain_consensus_config);
         // use default for following configs to debug
         let onchain_execution_config: anyhow::Result<OnChainExecutionConfig> = payload.get();
         let onchain_randomness_config_seq_num: anyhow::Result<RandomnessConfigSeqNum> =
@@ -1200,10 +1198,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 network_sender,
                 payload_client,
                 payload_manager,
-                // rand_config,
-                // fast_rand_config,
-                None,
-                None,
+                None, // rand_config,
+                None, // fast_rand_config,
                 rand_msg_rx,
             )
             .await
@@ -1218,10 +1214,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 network_sender,
                 payload_client,
                 payload_manager,
-                // rand_config,
-                // fast_rand_config,
-                None,
-                None,
+                None, // rand_config,
+                None, // fast_rand_config,
                 rand_msg_rx,
             )
             .await
@@ -1533,7 +1527,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             },
             ConsensusMsg::EpochChangeProof(proof) => {
                 let msg_epoch = proof.epoch()?;
-                info!(
+                debug!(
                     LogSchema::new(LogEvent::ReceiveEpochChangeProof)
                         .remote_peer(peer_id)
                         .epoch(self.epoch()),

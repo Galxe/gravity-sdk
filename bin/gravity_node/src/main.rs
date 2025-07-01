@@ -132,7 +132,10 @@ struct ProfilingState {
 }
 
 fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
-    let profiling_state = Arc::new(Mutex::new(ProfilingState { guard: None, profile_count: 0 }));
+    let profiling_state = Arc::new(Mutex::new(ProfilingState {
+        guard: None,
+        profile_count: 0,
+    }));
 
     let profiling_state_clone = profiling_state.clone();
 
@@ -140,7 +143,7 @@ fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
         let config = 99;
 
         let start = Instant::now();
-        let max_duration = Duration::from_secs(60 * 30); // 最多运行30min
+        let max_duration = Duration::from_secs(60 * 30);
 
         while start.elapsed() < max_duration {
             let profile_duration = Duration::from_secs(3 * 60);
@@ -152,7 +155,7 @@ fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
             }
 
             thread::sleep(profile_duration);
-            //
+
             {
                 let mut state = profiling_state_clone.lock().unwrap();
                 if let Some(guard) = state.guard.take() {
@@ -192,8 +195,11 @@ fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
 }
 
 fn main() {
-    let _profiling_state =
-        if std::env::var("ENABLE_PPROF").is_ok() { Some(setup_pprof_profiler()) } else { None };
+    let _profiling_state = if std::env::var("ENABLE_PPROF").is_ok() {
+        Some(setup_pprof_profiler())
+    } else {
+        None
+    };
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
     let cli = Cli::parse();
     let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
@@ -213,11 +219,7 @@ fn main() {
                     execution_args_tx,
                 ));
                 let mut _engine = None;
-                if std::env::var("MOCK_CONSENSUS")
-                    .unwrap_or("false".to_string())
-                    .parse::<bool>()
-                    .unwrap()
-                {
+                if std::env::var("MOCK_CONSENSUS").unwrap_or("false".to_string()).parse::<bool>().unwrap() {
                     info!("start mock consensus");
                     let mock = MockConsensus::new().await;
                     tokio::spawn(async move {

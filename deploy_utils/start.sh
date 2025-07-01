@@ -81,7 +81,6 @@ function start_node() {
             --txpool.queued-max-count 18446744073709551615 \
             --txpool.queued-max-size 17592186044415 \
              --http.disable_compression \
-             --ipcpath /tmp/node2.ipc \
 	        > ${WORKSPACE}/logs/debug.log &
         echo $!
     )

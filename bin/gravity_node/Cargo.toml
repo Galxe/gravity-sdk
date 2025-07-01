@@ -27,8 +27,7 @@ bincode = "1.3"
 time = "0.3.36"
 anyhow = "1.0.87"
 
-greth = { git = "https://github.com/Galxe/gravity-reth", branch = "onchain-config-dev" }
-# greth = { git = "https://github.com/Galxe/gravity-reth", branch = "dev-refactor-gcei" }
+greth = { git = "https://github.com/Galxe/gravity-reth", rev = "a493452879b04fdacf3a8b8efb4f32dd562c80e9" }
 reqwest = "0.12.9"
 alloy-primitives = { version = "0.8.20", default-features = false, features = ["map-foldhash"] }
 alloy-eips = { version = "0.11.1", default-features = false }

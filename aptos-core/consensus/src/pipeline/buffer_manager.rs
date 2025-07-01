@@ -443,7 +443,6 @@ impl BufferManager {
         // purge the incoming blocks queue
         while let Ok(Some(_)) = self.block_rx.try_next() {}
         // Wait for ongoing tasks to finish before sending back ack.
-        // 让block buffer manager也直接把结果处理了
         get_block_buffer_manager().release_inflight_blocks().await;
         while self.ongoing_tasks.load(Ordering::SeqCst) > 0 {
             tokio::time::sleep(Duration::from_millis(10)).await;

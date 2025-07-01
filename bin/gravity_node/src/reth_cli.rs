@@ -151,10 +151,7 @@ impl RethCli {
             }
         }
 
-        block
-            .txns
-            .par_iter_mut()
-            .enumerate()
+        block.txns.par_iter_mut().enumerate()
             .filter(|(idx, _)| senders[*idx].is_none())
             .map(|(idx, txn)| {
                 let (sender, transaction) = Self::txn_to_signed(&mut txn.bytes, self.chain_id);
@@ -215,6 +212,17 @@ impl RethCli {
         Ok(())
     }
 
+    pub async fn wait_for_block_persistence(
+        &self,
+        block_number: u64,
+    ) -> Result<(), String> {
+        debug!("wait for block persistence {:?}", block_number);
+        let pipe_api = &self.pipe_api;
+        pipe_api.wait_for_block_persistence(block_number).await;
+        debug!("wait for block persistence done");
+        Ok(())
+    }
+
     pub async fn start_mempool(&self) -> Result<(), String> {
         info!("start process pending transactions with timeout");
         let mut mut_txn_listener = self.txn_listener.lock().await;
@@ -247,26 +255,20 @@ impl RethCli {
         }
     }
 
-    async fn process_transaction_hashes(
-        &self,
-        tx_hash_vec: &mut Vec<TxHash>,
-    ) -> Result<(), String> {
+    async fn process_transaction_hashes(&self, tx_hash_vec: &mut Vec<TxHash>) -> Result<(), String> {
         let mut max_nonce_cache = self.max_nonce_cache.lock().await;
         let mut pool_txns = self.pool.get_all(tx_hash_vec.drain(..).collect());
         let mut tx_gap = HashSet::new();
-        pool_txns = pool_txns
-            .into_iter()
-            .filter(|txn| {
-                let sender = txn.sender();
-                let nonce = txn.nonce();
-                if let Some(max_nonce) = max_nonce_cache.get_mut(&sender) {
-                    if nonce <= *max_nonce {
-                        return false;
-                    }
+        pool_txns = pool_txns.into_iter().filter(|txn| {
+            let sender = txn.sender();
+            let nonce = txn.nonce();
+            if let Some(max_nonce) = max_nonce_cache.get_mut(&sender) {
+                if nonce <= *max_nonce {
+                    return false;
                 }
-                true
-            })
-            .collect();
+            }
+            true
+        }).collect();
         pool_txns.iter().for_each(|txn| {
             let sender = txn.sender();
             let nonce = txn.nonce();
@@ -287,9 +289,7 @@ impl RethCli {
             }
         });
         tx_gap.iter().for_each(|(sender, nonce)| {
-            let txn = self
-                .pool
-                .get_pending_transactions_by_sender(sender.clone())
+            let txn = self.pool.get_pending_transactions_by_sender(sender.clone())
                 .iter()
                 .find(|txn| txn.nonce() == *nonce)
                 .map(|txn| txn.clone());
@@ -318,12 +318,8 @@ impl RethCli {
             let account_nonce = {
                 let mut init_nonce_cache = self.address_init_nonce_cache.lock().await;
                 if !init_nonce_cache.contains_key(&sender) {
-                    let account_nonce = self
-                        .provider
-                        .basic_account(&sender)
-                        .map_err(|e| {
-                            format!("Failed to get basic account for {}: {:?}", sender, e)
-                        })?
+                    let account_nonce = self.provider.basic_account(&sender)
+                        .map_err(|e| format!("Failed to get basic account for {}: {:?}", sender, e))?
                         .map(|x| x.nonce)
                         .unwrap_or(nonce);
                     init_nonce_cache.insert(sender, account_nonce);
@@ -331,13 +327,7 @@ impl RethCli {
                 *init_nonce_cache.get(&sender).unwrap()
             };
             gas_limit += txn.gas_limit();
-            debug!(
-                "recv sender {:?} nonce {:?}, account nonce {:?} hash {:?}",
-                sender,
-                nonce,
-                account_nonce,
-                txn.hash()
-            );
+            debug!("recv sender {:?} nonce {:?}, account nonce {:?} hash {:?}", sender, nonce, account_nonce, txn.hash());
             let bytes = txn.encoded_2718();
 
             let vtxn = VerifiedTxnWithAccountSeqNum {
@@ -352,9 +342,7 @@ impl RethCli {
             };
 
             {
-                self.txn_cache
-                    .lock()
-                    .await
+                self.txn_cache.lock().await
                     .insert((vtxn.txn.sender().clone(), vtxn.txn.seq_number()), pool_txn.clone());
             }
             buffer.push(vtxn);
@@ -405,11 +393,13 @@ impl RethCli {
             let txn_status = Arc::new(Some(
                 tx_infos
                     .iter()
-                    .map(|tx_info| TxnStatus {
-                        txn_hash: *tx_info.tx_hash,
-                        sender: convert_account(tx_info.sender).bytes(),
-                        nonce: tx_info.nonce,
-                        is_discarded: tx_info.is_discarded,
+                    .map(|tx_info| {
+                        TxnStatus {
+                            txn_hash: *tx_info.tx_hash,
+                            sender: convert_account( tx_info.sender).bytes(),
+                            nonce: tx_info.nonce,
+                            is_discarded: tx_info.is_discarded,
+                        }
                     })
                     .collect(),
             ));
@@ -443,6 +433,7 @@ impl RethCli {
                 block_ids.last().unwrap().block_id
             );
             start_commit_num = block_ids.last().unwrap().num + 1;
+            let mut persist_notifiers = Vec::new();
             for block_id_num_hash in block_ids {
                 self.send_committed_block_info(
                     block_id_num_hash.block_id,
@@ -450,6 +441,9 @@ impl RethCli {
                 )
                 .await
                 .unwrap();
+                if let Some(persist_notifier) = block_id_num_hash.persist_notifier {
+                    persist_notifiers.push((block_id_num_hash.num, persist_notifier));
+                }
             }
 
             let last_block_number = self.provider.last_block_number().unwrap();
@@ -457,6 +451,11 @@ impl RethCli {
                 .set_state(start_commit_num - 1, last_block_number)
                 .await
                 .unwrap();
+            for (block_number, persist_notifier) in persist_notifiers {
+                info!("wait_for_block_persistence num {:?} send persist_notifier", block_number);
+                self.wait_for_block_persistence(block_number).await.unwrap();
+                let _ = persist_notifier.send(());
+            }
         }
     }
 }
