@@ -1395,8 +1395,13 @@ impl RoundManager {
             .round_state
             .process_certificates(self.block_store.sync_info())
             .expect("Can not jump start a round_state from existing certificates.");
-        if let Some(vote) = last_vote_sent {
-            self.round_state.record_vote(vote);
+        let author = self.proposal_generator.author();
+        if let Some(vote) = last_vote_sent{
+            if vote.author() != author {
+                error!("last vote sent is not for the current author, ignore");
+            } else {
+                self.round_state.record_vote(vote);
+            }
         }
         if let Err(e) = self.process_new_round_event(new_round_event).await {
             warn!(error = ?e, "[RoundManager] Error during start");

@@ -89,7 +89,7 @@ fn generate_executed_item_from_ordered(
         executed_blocks,
         partial_commit_proof,
         callback,
-        commit_info,
+        commit_info: new_commit_info,
         ordered_proof,
     }))
 }
