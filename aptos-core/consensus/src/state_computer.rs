@@ -131,7 +131,6 @@ impl ExecutionProxy {
         let notifier = state_sync_notifier.clone();
         handle.spawn(async move {
             while let Some((callback, txns, subscribable_events, block_number)) = rx.next().await {
-                info!("start to notify commit for block number: {:?}", block_number);
                 if let Err(e) = monitor!(
                     "notify_state_sync",
                     notifier.notify_new_commit(txns, subscribable_events, block_number).await
@@ -243,7 +242,6 @@ impl StateComputer for ExecutionProxy {
             randomness: randomness.map(|r| Random::from_bytes(r.randomness())),
             block_hash: None,
         };
-        info!("schedule block, epoch {}, round {}, number {}", block.epoch(), block.round(), block.block_number().unwrap());
 
         // We would export the empty block detail to the outside GCEI caller
         let vtxns =
@@ -353,14 +351,6 @@ impl StateComputer for ExecutionProxy {
             pre_commit_futs.push(block.take_pre_commit_fut());
             block_ids.push(block.id());
         }
-        info!(
-            "commit blocks: {:?}, events {:?}",
-            blocks
-                .iter()
-                .map(|block| (block.id(), block.block().block_number()))
-                .collect::<Vec<_>>(),
-            subscribable_txn_events
-        );
 
         // wait until all blocks are committed
         for pre_commit_fut in pre_commit_futs {
@@ -407,7 +397,6 @@ impl StateComputer for ExecutionProxy {
         self.executor.finish();
 
         // The pipeline phase already committed beyond the target block timestamp, just return.
-        // round 1在这里提前返回了
         if *latest_logical_time >= logical_time {
             warn!(
                 "State sync target {:?} is lower than already committed logical time {:?}",

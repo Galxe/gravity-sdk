@@ -291,21 +291,6 @@ impl ConsensusDB {
         Ok(iter.collect::<Result<Vec<(S::Key, S::Value)>, AptosDbError>>()?)
     }
 
-    pub fn get<S: Schema>(&self, key: &S::Key) -> Result<Option<S::Value>, DbError> {
-        Ok(self.db.get::<S>(key)?)
-    }
-
-    pub fn get_range<S: Schema>(&self, start_key: &S::Key, end_key: &S::Key) -> Result<Vec<(S::Key, S::Value)>, DbError> {
-        let mut option = ReadOptions::default();
-        let lower_bound = <S::Key as KeyCodec<S>>::encode_key(start_key).unwrap();
-        option.set_iterate_lower_bound(lower_bound);
-        let upper_bound = <S::Key as KeyCodec<S>>::encode_key(end_key).unwrap();
-        option.set_iterate_upper_bound(upper_bound);
-        let mut iter = self.db.iter_with_opts::<S>(option)?;
-        iter.seek_to_first();
-        Ok(iter.collect::<Result<Vec<(S::Key, S::Value)>, AptosDbError>>()?)
-    }
-
     pub fn get_block(&self, epoch: u64, block_id: HashValue) -> Result<Option<Block>, DbError> {
         let block = self.get::<BlockSchema>(&(epoch, block_id))?;
         if let Some(block) = &block {

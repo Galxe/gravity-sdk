@@ -21,10 +21,7 @@ use gaptos::aptos_network_builder::builder::NetworkBuilder;
 use gaptos::aptos_storage_interface::DbReaderWriter;
 use gaptos::aptos_telemetry::service::start_telemetry_service;
 use gaptos::aptos_types::chain_id::ChainId;
-use gaptos::{api_types::config_storage::ConfigStorage, aptos_build_info};
-use gaptos::{
-    api_types::config_storage::GLOBAL_CONFIG_STORAGE, aptos_build_info::build_information,
-};
+use gaptos::api_types::config_storage::{ConfigStorage, GLOBAL_CONFIG_STORAGE};
 use tokio::{runtime::Runtime, sync::Mutex};
 
 #[cfg(unix)]

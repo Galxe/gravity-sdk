@@ -151,10 +151,7 @@ impl RethCli {
             }
         }
 
-        block
-            .txns
-            .par_iter_mut()
-            .enumerate()
+        block.txns.par_iter_mut().enumerate()
             .filter(|(idx, _)| senders[*idx].is_none())
             .map(|(idx, txn)| {
                 let (sender, transaction) = Self::txn_to_signed(&mut txn.bytes, self.chain_id);
@@ -212,6 +209,17 @@ impl RethCli {
         let pipe_api = &self.pipe_api;
         pipe_api.commit_executed_block_hash(block_id, block_hash);
         debug!("commit block done");
+        Ok(())
+    }
+
+    pub async fn wait_for_block_persistence(
+        &self,
+        block_number: u64,
+    ) -> Result<(), String> {
+        debug!("wait for block persistence {:?}", block_number);
+        let pipe_api = &self.pipe_api;
+        pipe_api.wait_for_block_persistence(block_number).await;
+        debug!("wait for block persistence done");
         Ok(())
     }
 
@@ -362,11 +370,13 @@ impl RethCli {
             let txn_status = Arc::new(Some(
                 tx_infos
                     .iter()
-                    .map(|tx_info| TxnStatus {
-                        txn_hash: *tx_info.tx_hash,
-                        sender: convert_account(tx_info.sender).bytes(),
-                        nonce: tx_info.nonce,
-                        is_discarded: tx_info.is_discarded,
+                    .map(|tx_info| {
+                        TxnStatus {
+                            txn_hash: *tx_info.tx_hash,
+                            sender: convert_account( tx_info.sender).bytes(),
+                            nonce: tx_info.nonce,
+                            is_discarded: tx_info.is_discarded,
+                        }
                     })
                     .collect(),
             ));
@@ -400,6 +410,7 @@ impl RethCli {
                 block_ids.last().unwrap().block_id
             );
             start_commit_num = block_ids.last().unwrap().num + 1;
+            let mut persist_notifiers = Vec::new();
             for block_id_num_hash in block_ids {
                 self.send_committed_block_info(
                     block_id_num_hash.block_id,
@@ -407,6 +418,9 @@ impl RethCli {
                 )
                 .await
                 .unwrap();
+                if let Some(persist_notifier) = block_id_num_hash.persist_notifier {
+                    persist_notifiers.push((block_id_num_hash.num, persist_notifier));
+                }
             }
 
             let last_block_number = self.provider.last_block_number().unwrap();
@@ -414,6 +428,11 @@ impl RethCli {
                 .set_state(start_commit_num - 1, last_block_number)
                 .await
                 .unwrap();
+            for (block_number, persist_notifier) in persist_notifiers {
+                info!("wait_for_block_persistence num {:?} send persist_notifier", block_number);
+                self.wait_for_block_persistence(block_number).await.unwrap();
+                let _ = persist_notifier.send(());
+            }
         }
     }
 }

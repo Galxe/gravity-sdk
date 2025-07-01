@@ -148,7 +148,6 @@ impl BlockRetrievalResponse {
             retrieval_request.num_blocks(),
             self.blocks.len(),
         );
-
         self.blocks
             .iter()
             .try_fold(retrieval_request.block_id(), |expected_id, block| {
