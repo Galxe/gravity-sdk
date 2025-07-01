@@ -92,7 +92,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             let len = block_ids.len();
             let _ = self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
             self.runtime.block_on(async move {
-                get_block_buffer_manager()
+                let mut persist_notifiers = get_block_buffer_manager()
                     .set_commit_blocks(
                         block_ids
                             .into_iter()
@@ -100,25 +100,20 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                             .map(|(i, x)| {
                                 let mut v = [0u8; 32];
                                 v.copy_from_slice(block_hash.as_ref());
-                                if x == block_id {
-                                    BlockHashRef {
-                                        block_id: BlockId::from_bytes(x.as_slice()),
-                                        num: block_num + (i - len + 1) as u64,
-                                        hash: Some(v),
-                                    }
-                                } else {
-                                    // TODO: commit use block num, but here use block id, need to fix
-                                    BlockHashRef {
-                                        block_id: BlockId::from_bytes(x.as_slice()),
-                                        num: block_num + (i - len + 1) as u64,
-                                        hash: None,
-                                    }
+                                BlockHashRef {
+                                    block_id: BlockId::from_bytes(x.as_slice()),
+                                    num: block_num - (len - 1 - i) as u64,
+                                    hash: if x == block_id { Some(v) } else { None },
+                                    persist_notifier: None,
                                 }
                             })
                             .collect(),
                     )
                     .await
                     .unwrap_or_else(|e| panic!("Failed to push commit blocks {}", e));
+                for notifier in persist_notifiers.iter_mut() {
+                    let _ = notifier.recv().await;
+                }
             });
         }
         Ok(())
@@ -147,7 +142,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         assert!(!block_ids.is_empty(), "commit_ledger block_ids is empty");
         let _ = self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
         self.runtime.block_on(async move {
-            get_block_buffer_manager()
+            let mut persist_notifiers = get_block_buffer_manager()
                 .set_commit_blocks(
                     block_ids
                         .into_iter()
@@ -155,24 +150,20 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                         .map(|(i, x)| {
                             let mut v = [0u8; 32];
                             v.copy_from_slice(block_hash.as_ref());
-                            if x == block_id {
-                                BlockHashRef {
-                                    block_id: BlockId::from_bytes(x.as_slice()),
-                                    num: block_num - (len - 1 - i) as u64,
-                                    hash: Some(v),
-                                }
-                            } else {
-                                BlockHashRef {
-                                    block_id: BlockId::from_bytes(x.as_slice()),
-                                    num: block_num - (len - 1 - i) as u64,
-                                    hash: None,
-                                }
+                            BlockHashRef {
+                                block_id: BlockId::from_bytes(x.as_slice()),
+                                num: block_num - (len - 1 - i) as u64,
+                                hash: if x == block_id { Some(v) } else { None },
+                                persist_notifier: None,
                             }
                         })
                         .collect(),
                 )
                 .await
                 .unwrap();
+            for notifier in persist_notifiers.iter_mut() {
+                let _ = notifier.recv().await;
+            }
         });
         Ok(())
     }

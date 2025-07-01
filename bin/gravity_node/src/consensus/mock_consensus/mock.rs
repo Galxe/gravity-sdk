@@ -164,6 +164,7 @@ impl MockConsensus {
                     block_id,
                     num: block_number,
                     hash: Some(res.data),
+                    persist_notifier: None,
                 }])
                 .await
                 .unwrap();

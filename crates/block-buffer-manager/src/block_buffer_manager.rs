@@ -16,7 +16,7 @@ use std::{
     },
     time::{Duration, SystemTime},
 };
-use tokio::{sync::Mutex, time::Instant};
+use tokio::{sync::{mpsc::{self, Receiver, Sender}, Mutex}, time::Instant};
 
 use gaptos::api_types::{
     compute_res::{self, ComputeRes, TxnStatus},
@@ -40,13 +40,14 @@ pub struct BlockHashRef {
     pub block_id: BlockId,
     pub num: u64,
     pub hash: Option<[u8; 32]>,
+    pub persist_notifier: Option<Sender<()>>,
 }
 
 #[derive(Debug)]
 pub enum BlockState {
     Ordered { block: ExternalBlock, parent_id: BlockId },
     Computed { id: BlockId, compute_result: StateComputeResult },
-    Committed { hash: Option<[u8; 32]>, compute_result: StateComputeResult, id: BlockId },
+    Committed { hash: Option<[u8; 32]>, compute_result: StateComputeResult, id: BlockId, persist_notifier: Option<Sender<()>> },
 }
 
 impl BlockState {
@@ -189,6 +190,7 @@ impl BlockBufferManager {
                         None,
                     ),
                     id,
+                    persist_notifier: None,
                 },
             );
             *self.latest_epoch_change_block_number.lock().await = latest_commit_block_number;
@@ -424,7 +426,7 @@ impl BlockBufferManager {
                             Err(_) => continue, // Timeout on the wait, retry
                         }
                     }
-                    BlockState::Committed { hash: _, compute_result, id } => {
+                    BlockState::Committed { hash: _, compute_result, id, persist_notifier: _ } => {
                         warn!(
                             "get_executed_res done with id {:?} num {:?} res {:?}",
                             block_id, id, compute_result
@@ -517,10 +519,11 @@ impl BlockBufferManager {
     pub async fn set_commit_blocks(
         &self,
         block_ids: Vec<BlockHashRef>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<Vec<Receiver<()>>, anyhow::Error> {
         if !self.is_ready() {
             panic!("Buffer is not ready");
         }
+        let mut persist_notifiers = Vec::new();
         let mut block_state_machine = self.block_state_machine.lock().await;
         for block_id_num_hash in block_ids {
             info!(
@@ -531,10 +534,18 @@ impl BlockBufferManager {
                 match state {
                     BlockState::Computed { id, compute_result } => {
                         if *id == block_id_num_hash.block_id {
+                            let mut persist_notifier = None;
+                            if compute_result.epoch_state().is_some() {
+                                info!("push_commit_blocks num {:?} push persist_notifier", block_id_num_hash.num);
+                                let (tx, rx) = mpsc::channel(1);
+                                persist_notifier = Some(tx);
+                                persist_notifiers.push(rx);
+                            }
                             *state = BlockState::Committed {
                                 hash: block_id_num_hash.hash,
                                 compute_result: compute_result.clone(),
                                 id: block_id_num_hash.block_id,
+                                persist_notifier,
                             };
 
                             // Record time for set_commit_blocks
@@ -550,7 +561,7 @@ impl BlockBufferManager {
                             );
                         }
                     }
-                    BlockState::Committed { hash, compute_result: _, id } => {
+                    BlockState::Committed { hash, compute_result: _, id, persist_notifier: _ } => {
                         if *id != block_id_num_hash.block_id {
                             panic!("Commited Block id and number is not equal id: {:?}={:?} hash: {:?}={:?}", block_id_num_hash.block_id, *id, block_id_num_hash.hash, *hash);
                         }
@@ -570,7 +581,7 @@ impl BlockBufferManager {
             }
         }
         let _ = block_state_machine.sender.send(());
-        Ok(())
+        Ok(persist_notifiers)
     }
 
     pub async fn get_committed_blocks(
@@ -593,13 +604,14 @@ impl BlockBufferManager {
                 ));
             }
 
-            let mut block_state_machine = self.block_state_machine.lock().await;
+            let mut block_state_machine_guard = self.block_state_machine.lock().await;
+            let block_state_machine = &mut *block_state_machine_guard;
             let mut result = Vec::new();
             let mut current_num = start_num;
-            while let Some(block) = block_state_machine.blocks.get(&current_num) {
+            while let Some(block) = block_state_machine.blocks.get_mut(&current_num) {
                 match block {
-                    BlockState::Committed { hash, compute_result: _, id } => {
-                        result.push(BlockHashRef { block_id: *id, num: current_num, hash: *hash });
+                    BlockState::Committed { hash, compute_result: _, id, persist_notifier } => {
+                        result.push(BlockHashRef { block_id: *id, num: current_num, hash: *hash, persist_notifier: persist_notifier.take() });
 
                         // Record time for get_committed_blocks
                         let profile = block_state_machine
@@ -619,7 +631,7 @@ impl BlockBufferManager {
             }
             if result.is_empty() {
                 // Release lock before waiting
-                drop(block_state_machine);
+                drop(block_state_machine_guard);
                 // Wait for changes and try again
                 match self.wait_for_change(self.config.wait_for_change_timeout).await {
                     Ok(_) => continue,
@@ -667,6 +679,7 @@ impl BlockBufferManager {
     pub async fn release_inflight_blocks(&self) {
         let mut block_state_machine = self.block_state_machine.lock().await;
         let latest_epoch_change_block_number = *self.latest_epoch_change_block_number.lock().await;
+        info!("release_inflight_blocks latest_epoch_change_block_number: {:?}", latest_epoch_change_block_number);
         block_state_machine
             .blocks
             .retain(|block_num, _| *block_num <= latest_epoch_change_block_number);

@@ -215,6 +215,17 @@ impl RethCli {
         Ok(())
     }
 
+    pub async fn wait_for_block_persistence(
+        &self,
+        block_number: u64,
+    ) -> Result<(), String> {
+        debug!("wait for block persistence {:?}", block_number);
+        let pipe_api = &self.pipe_api;
+        pipe_api.wait_for_block_persistence(block_number).await;
+        debug!("wait for block persistence done");
+        Ok(())
+    }
+
     pub async fn start_mempool(&self) -> Result<(), String> {
         info!("start process pending transactions with timeout");
         let mut mut_txn_listener = self.txn_listener.lock().await;
@@ -443,6 +454,7 @@ impl RethCli {
                 block_ids.last().unwrap().block_id
             );
             start_commit_num = block_ids.last().unwrap().num + 1;
+            let mut persist_notifiers = Vec::new();
             for block_id_num_hash in block_ids {
                 self.send_committed_block_info(
                     block_id_num_hash.block_id,
@@ -450,6 +462,9 @@ impl RethCli {
                 )
                 .await
                 .unwrap();
+                if let Some(persist_notifier) = block_id_num_hash.persist_notifier {
+                    persist_notifiers.push((block_id_num_hash.num, persist_notifier));
+                }
             }
 
             let last_block_number = self.provider.last_block_number().unwrap();
@@ -457,6 +472,11 @@ impl RethCli {
                 .set_state(start_commit_num - 1, last_block_number)
                 .await
                 .unwrap();
+            for (block_number, persist_notifier) in persist_notifiers {
+                info!("wait_for_block_persistence num {:?} send persist_notifier", block_number);
+                self.wait_for_block_persistence(block_number).await.unwrap();
+                let _ = persist_notifier.send(());
+            }
         }
     }
 }
