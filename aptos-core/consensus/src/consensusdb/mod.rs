@@ -29,7 +29,7 @@ use schema::{
     block::BLOCK_NUMBER_CF_NAME,
     single_entry::{SingleEntryKey, SingleEntrySchema},
     BLOCK_CF_NAME, CERTIFIED_NODE_CF_NAME, DAG_VOTE_CF_NAME, LEDGER_INFO_CF_NAME, NODE_CF_NAME,
-    QC_CF_NAME, SINGLE_ENTRY_CF_NAME,
+    QC_CF_NAME, SINGLE_ENTRY_CF_NAME, EPOCH_BY_BLOCK_NUMBER_CF_NAME,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -97,6 +97,7 @@ impl ConsensusDB {
             DAG_VOTE_CF_NAME,
             LEDGER_INFO_CF_NAME,
             BLOCK_NUMBER_CF_NAME,
+            EPOCH_BY_BLOCK_NUMBER_CF_NAME,
             "ordered_anchor_id", // deprecated CF
         ];
 

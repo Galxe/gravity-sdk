@@ -7,10 +7,14 @@ pub(crate) mod dag;
 pub(crate) mod quorum_certificate;
 pub(crate) mod single_entry;
 pub(crate) mod ledger_info;
+pub(crate) mod epoch_by_block_number;
+
 
 use anyhow::{ensure, Result};
 
 pub const LEDGER_INFO_CF_NAME: ColumnFamilyName = "ledger_info";
+pub const EPOCH_BY_BLOCK_NUMBER_CF_NAME: ColumnFamilyName = "epoch_by_block_number";
+
 
 pub(crate) fn ensure_slice_len_eq(data: &[u8], len: usize) -> Result<()> {
     ensure!(
