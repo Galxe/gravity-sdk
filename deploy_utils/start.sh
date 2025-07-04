@@ -9,6 +9,7 @@ bin_name="gravity_node"
 node_arg=""
 chain="dev"
 log_level="info"
+JSON_FILE="test.json"
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
@@ -44,6 +45,43 @@ if [ -e ${WORKSPACE}/script/node.pid ]; then
     fi
 fi
 
+# 1. Check if jq is installed
+check_jq_installed() {
+    if ! command -v jq &> /dev/null; then
+        echo "Error: 'jq' is required but not installed. Please install 'jq' first."
+        exit 1
+    fi
+}
+
+check_jq_installed
+
+# 2. Check if JSON config file exists
+check_json_file_exists() {
+    local json_file="$1"
+    if [ ! -f "$json_file" ]; then
+        echo "Error: JSON config file '$json_file' not found."
+        exit 1
+    fi
+}
+
+check_json_file_exists "$JSON_FILE"
+
+# 3. Parse JSON and build argument array
+parse_json_args() {
+    local json_file="$1"
+    json_args=()
+    while IFS= read -r key && IFS= read -r value; do
+        if [ -z "$value" ] || [ "$value" == "null" ]; then
+            json_args+=( "--${key}" )
+        else
+            json_args+=( "--${key}" "${value}" )
+        fi
+    done < <(jq -r '. | to_entries[] | .key, .value' "$json_file")
+}
+
+echo "Parsing arguments from $JSON_FILE ..."
+parse_json_args "$JSON_FILE"
+
 function start_node() {
     export RUST_BACKTRACE=1
     reth_rpc_port=$1
@@ -55,32 +93,7 @@ function start_node() {
 
     pid=$(
         ${WORKSPACE}/bin/${bin_name} node \
-            --chain ${chain} \
-            --http \
-            --http.port ${http_port} \
-            --http.corsdomain "*" \
-            --http.api "debug,eth,net,trace,txpool,web3,rpc" \
-            --http.addr 0.0.0.0 \
-            --dev \
-            --port ${reth_rpc_port} \
-            --authrpc.port ${authrpc_port} \
-            --authrpc.addr 0.0.0.0 \
-            --metrics 0.0.0.0:${metric_port} \
-            --log.file.filter ${log_level} \
-            --datadir ${WORKSPACE}/data/reth \
-            --datadir.static-files ${WORKSPACE}/data/reth \
-            --gravity_node_config ${WORKSPACE}/genesis/validator.yaml \
-            --log.file.directory ${WORKSPACE}/execution_logs/ \
-            --rpc.max-subscriptions-per-connection 20000 \
-            --rpc.max-connections 20000 \
-            --txpool.max-pending-txns 1000000 \
-            --txpool.pending-max-count 18446744073709551615 \
-            --txpool.pending-max-size 17592186044415 \
-            --txpool.basefee-max-count 18446744073709551615 \
-            --txpool.basefee-max-size 17592186044415 \
-            --txpool.queued-max-count 18446744073709551615 \
-            --txpool.queued-max-size 17592186044415 \
-             --http.disable_compression \
+            "${json_args[@]}" \
 	    > ${WORKSPACE}/logs/debug.log &
         echo $!
     )
