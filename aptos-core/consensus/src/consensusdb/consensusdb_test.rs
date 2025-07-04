@@ -74,7 +74,7 @@ fn test_delete_block_and_qc() {
     assert_eq!(db.get_all::<QCSchema>().unwrap().len(), 1);
 
     // Start to delete
-    db.delete_blocks_and_quorum_certificates(vec![(epoch, block_id), qc_id])
+    db.delete_blocks_and_quorum_certificates(vec![(epoch, block_id), (epoch, qc_id)])
         .unwrap();
     assert_eq!(db.get_all::<BlockSchema>().unwrap().len(), 0);
     assert_eq!(db.get_all::<QCSchema>().unwrap().len(), 0);

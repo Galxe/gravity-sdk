@@ -319,6 +319,21 @@ impl BlockStore {
         Ok(())
     }
 
+    /// Fast-forwards the local consensus state by synchronizing blocks and ledger infos for a given epoch.
+    /// 
+    /// This function retrieves all blocks, quorum certificates, and ledger infos for the specified epoch
+    /// from a remote retriever. It then prefetches payload data for each block, saves the blocks and
+    /// certificates to local storage, and updates the ledger info in the database. After updating storage,
+    /// it attempts to recover the consensus state from the latest ledger info and rebuilds the in-memory
+    /// state. If the epoch ends, it sends an epoch change proof to the network.
+    /// 
+    /// # Arguments
+    /// * `retriever` - The block retriever used to fetch blocks and related data.
+    /// * `epoch` - The epoch to fast-forward to.
+    /// 
+    /// # Returns
+    /// * `Ok(())` if the synchronization and state rebuild succeed.
+    /// * `Err` if any step fails.
     pub async fn fast_forward_sync_by_epoch(
         &self,
         mut retriever: BlockRetriever,
@@ -355,9 +370,9 @@ impl BlockStore {
                     .consensus_db()
                     .ledger_db
                     .metadata_db()
-                    .put_ledger_info(ledger_info, &mut ledger_info_batch);
+                    .put_ledger_info(ledger_info, &mut ledger_info_batch)?;
             }
-            storage.consensus_db().ledger_db.metadata_db().write_schemas(ledger_info_batch);
+            storage.consensus_db().ledger_db.metadata_db().write_schemas(ledger_info_batch)?;
         }
         let (root, blocks, quorum_certs) =
             match storage.start(false, ledger_infos.last().unwrap().ledger_info().epoch()).await {
@@ -447,8 +462,7 @@ impl BlockStore {
         if !ledger_infos.is_empty() {
             let mut ledger_info_batch = SchemaBatch::new();
             for ledger_info in ledger_infos {
-                                storage.consensus_db().ledger_db.metadata_db().put_ledger_info(&ledger_info, &mut ledger_info_batch);
-
+                storage.consensus_db().ledger_db.metadata_db().put_ledger_info(&ledger_info, &mut ledger_info_batch);
             }
             storage.consensus_db().ledger_db.metadata_db().write_schemas(ledger_info_batch);
         }
@@ -479,7 +493,7 @@ impl BlockStore {
             let network = retriever.network.clone();
             tokio::spawn(async move { network.send_commit_proof(proof).await });
             return Ok(());
-        } else if self.ordered_root().round() < ledger_info.commit_info().round()
+        } else if self.ordered_root().round() < ledger_info.commit_info().round() 
             && !self.block_exists(ledger_info.commit_info().id()) {
             // if the block doesnt exist after ordered root
             let highest_commit_cert = highest_commit_cert.into_quorum_cert(self.order_vote_enabled).unwrap();
@@ -625,18 +639,14 @@ impl BlockStore {
         }
         let mut ledger_infs = vec![];
         if upper != 0 {
-            ledger_infs = self
-                .storage
-                .consensus_db()
-                .ledger_db
-                .metadata_db()
-                .get_ledger_infos_by_range((lower, upper));
+            ledger_infs = self.storage.consensus_db().ledger_db.metadata_db().get_ledger_infos_by_range((lower, upper));
+
         }
         info!("process block retrieval done. status={:?}, block size={}", status, blocks.len());
-        let response =
-            Box::new(BlockRetrievalResponse::new(status, blocks, quorum_certs, ledger_infs));
-        let response_bytes =
-            request.protocol.to_bytes(&ConsensusMsg::BlockRetrievalResponse(response))?;
+        let response = Box::new(BlockRetrievalResponse::new(status, blocks, quorum_certs, ledger_infs));
+        let response_bytes = request
+            .protocol
+            .to_bytes(&ConsensusMsg::BlockRetrievalResponse(response))?;
         request
             .response_sender
             .send(Ok(response_bytes.into()))
@@ -856,6 +866,23 @@ impl BlockRetriever {
         Ok((result_blocks, quorum_certs, ledger_infos))
     }
 
+    /// Retrieves all blocks, quorum certificates, and ledger infos for a given epoch from peers.
+    ///
+    /// This function first attempts to retrieve a batch of blocks for the specified epoch using
+    /// `retrieve_block_for_id_chunk`. If more blocks are needed, it continues to fetch the remaining
+    /// chain using `retrieve_block_for_id`. For each block, it prefetches the payload data if present.
+    /// The function accumulates all blocks, quorum certificates, and ledger infos into vectors and
+    /// returns them as a tuple.
+    ///
+    /// # Arguments
+    /// * `epoch` - The epoch to retrieve blocks for.
+    /// * `target_block_id` - The target block id to stop retrieval.
+    /// * `peers` - The list of peer addresses to fetch blocks from.
+    /// * `payload_manager` - The payload manager used to prefetch payload data.
+    ///
+    /// # Returns
+    /// * `Ok((blocks, quorum_certs, ledger_infos))` on success, containing all retrieved data.
+    /// * `Err` if the retrieval fails at any step.
     async fn retrieve_block_by_epoch(
         &mut self,
         epoch: u64,

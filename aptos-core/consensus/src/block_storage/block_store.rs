@@ -566,7 +566,7 @@ impl BlockStore {
     ///
     /// Returns the block ids of the blocks removed.
     #[cfg(test)]
-    fn prune_tree(&self, next_root_id: HashValue) -> VecDeque<HashValue> {
+    fn prune_tree(&self, next_root_id: HashValue) -> VecDeque<(u64, HashValue)> {
         let id_to_remove = self.inner.read().find_blocks_to_prune(next_root_id);
         if let Err(e) = self.storage.prune_tree(id_to_remove.clone().into_iter().collect()) {
             // it's fine to fail here, as long as the commit succeeds, the next restart will clean

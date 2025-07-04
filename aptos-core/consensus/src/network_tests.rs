@@ -819,7 +819,7 @@ mod tests {
                     .wait_for_messages(2, NetworkPlayground::votes_only)
                     .await;
                 let response =
-                    BlockRetrievalResponse::new(BlockRetrievalStatus::IdNotFound, vec![], vec![]);
+                    BlockRetrievalResponse::new(BlockRetrievalStatus::IdNotFound, vec![], vec![], vec![]);
                 let response = ConsensusMsg::BlockRetrievalResponse(Box::new(response));
                 let bytes = Bytes::from(serde_json::to_vec(&response).unwrap());
                 match request {
