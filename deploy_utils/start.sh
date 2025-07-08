@@ -6,27 +6,11 @@ WORKSPACE=$SCRIPT_DIR/..
 log_suffix=$(date +"%Y-%d-%m:%H:%M:%S")
 
 bin_name="gravity_node"
-node_arg=""
-chain="dev"
-log_level="info"
-JSON_FILE="test.json"
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
     --bin_name)
         bin_name="$2"
-        shift
-        ;;
-    --node)
-        node_arg="$2"
-        shift
-        ;;
-    --chain)
-        chain="$2"
-        shift
-        ;;
-    --log_level)
-        log_level="$2"
         shift
         ;;
     *)
@@ -45,6 +29,8 @@ if [ -e ${WORKSPACE}/script/node.pid ]; then
     fi
 fi
 
+reth_config="${WORKSPACE}/config/reth_config.json"
+
 # 1. Check if jq is installed
 check_jq_installed() {
     if ! command -v jq &> /dev/null; then
@@ -57,74 +43,56 @@ check_jq_installed
 
 # 2. Check if JSON config file exists
 check_json_file_exists() {
-    local json_file="$1"
-    if [ ! -f "$json_file" ]; then
-        echo "Error: JSON config file '$json_file' not found."
+    local reth_config="$1"
+    if [ ! -f "$reth_config" ]; then
+        echo "Error: JSON config file '$reth_config' not found."
         exit 1
     fi
 }
 
-check_json_file_exists "$JSON_FILE"
+check_json_file_exists "$reth_config"
 
 # 3. Parse JSON and build argument array
 parse_json_args() {
-    local json_file="$1"
-    json_args=()
+    local reth_config="$1"
+    
+    # Parse reth_args
+    reth_args_array=()
     while IFS= read -r key && IFS= read -r value; do
         if [ -z "$value" ] || [ "$value" == "null" ]; then
-            json_args+=( "--${key}" )
+            reth_args_array+=( "--${key}" )
         else
-            json_args+=( "--${key}" "${value}" )
+            reth_args_array+=( "--${key}=${value}" )
         fi
-    done < <(jq -r '. | to_entries[] | .key, .value' "$json_file")
+    done < <(jq -r '.reth_args | to_entries[] | .key, .value' "$reth_config")
+    reth_args_str="${reth_args_array[*]}"
+    
+    # Parse env_vars
+    env_vars_array=()
+    while IFS= read -r key && IFS= read -r value; do
+        if [ -n "$value" ] && [ "$value" != "null" ]; then
+            env_vars_array+=( "${key}=${value}" )
+        fi
+    done < <(jq -r '.env_vars | to_entries[] | .key, .value' "$reth_config")
+    env_vars_str="${env_vars_array[*]}"
 }
 
-echo "Parsing arguments from $JSON_FILE ..."
-parse_json_args "$JSON_FILE"
+echo "Parsing arguments from $reth_config ..."
+parse_json_args "$reth_config"
 
 function start_node() {
     export RUST_BACKTRACE=1
-    reth_rpc_port=$1
-    authrpc_port=$2
-    http_port=$3
-    metric_port=$4
     
     echo ${WORKSPACE}
 
     pid=$(
-        ${WORKSPACE}/bin/${bin_name} node \
-            "${json_args[@]}" \
+        env ${env_vars_str} ${WORKSPACE}/bin/${bin_name} node \
+            ${reth_args_str} \
 	    > ${WORKSPACE}/logs/debug.log &
         echo $!
     )
     echo $pid >${WORKSPACE}/script/node.pid
 }
 
-port1="12024"
-port2="8551"
-port3="8545"
-port4="9001"
-if [ "$node_arg" == "node1" ]; then
-    port1="12024"
-    port2="8551"
-    port3="8545"
-    port4="9001"
-elif [ "$node_arg" == "node2" ]; then
-    port1="12025"
-    port2="8552"
-    port3="8546"
-    port4="9002"
-elif [ "$node_arg" == "node3" ]; then
-    port1="12026"
-    port2="8553"
-    port3="8547"
-    port4="9003"
-elif [ "$node_arg" == "node4" ]; then
-    port1="16180"
-    port2="8554"
-    port3="8548"
-    port4="9004"
-fi
-
-echo "start $node_arg ${port1} ${port2} ${port3} ${port4} ${bin_name}"
-start_node ${port1} ${port2} ${port3} ${port4}
+echo "start ${bin_name}"
+start_node
