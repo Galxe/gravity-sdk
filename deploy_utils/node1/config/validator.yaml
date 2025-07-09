@@ -2,7 +2,7 @@ base:
   role: "validator"
   data_dir: "/tmp/node1/data"
   waypoint:
-    from_file: "/tmp/node1/genesis/waypoint.txt"
+    from_file: "/tmp/node1/config/waypoint.txt"
 
 consensus:
   safety_rules:
@@ -12,8 +12,8 @@ consensus:
     initial_safety_rules_config:
       from_file:
         waypoint:
-          from_file: /tmp/node1/genesis/waypoint.txt
-        identity_blob_path: /tmp/node1/genesis/validator-identity.yaml
+          from_file: /tmp/node1/config/waypoint.txt
+        identity_blob_path: /tmp/node1/config/validator-identity.yaml
   enable_pipeline: true
   max_sending_block_txns_after_filtering: 15000
   max_sending_block_txns: 15000
@@ -44,12 +44,12 @@ validator_network:
   mutual_authentication: true
   identity:
     type: "from_file"
-    path: /tmp/node1/genesis/validator-identity.yaml
+    path: /tmp/node1/config/validator-identity.yaml
 
 storage:
   dir: "/tmp/node1/data"
 
-node_config_path: "/tmp/node1/genesis/nodes_config.json"
+node_config_path: "/tmp/node1/config/nodes_config.json"
 
 log_file_path: "/tmp/node1/consensus_log"
 
