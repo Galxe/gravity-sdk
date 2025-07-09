@@ -28,7 +28,6 @@
         "http.disable_compression": ""
     },
     "env_vars": {
-        "MOCK_CONSENSUS": true,
         "BATCH_INSERT_TIME": 20
     }
 }
