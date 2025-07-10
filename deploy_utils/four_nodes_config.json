@@ -4,11 +4,11 @@
         "account_address": "2d86b40a1d692c0749a0a0426e2021ee24e2430da0f5bb9c2ae6c586bf3e0a0f",
         "network_public_key": "2d86b40a1d692c0749a0a0426e2021ee24e2430da0f5bb9c2ae6c586bf3e0a0f",
         "trusted_peers_map": [
-            "/ip4/127.0.0.1/tcp/6180",
-            "/ip4/127.0.0.1/tcp/2025",
-            "/ip4/127.0.0.1/tcp/2026"
+            "/ip4/10.128.0.40/tcp/6180",
+            "/ip4/10.128.0.38/tcp/2025",
+            "/ip4/10.128.0.39/tcp/2026"
         ],
-        "public_ip_address": "/ip4/127.0.0.1/tcp/2024",
+        "public_ip_address": "/ip4/10.128.0.28/tcp/2024",
         "voting_power": 1
     },
     "/ip4/127.0.0.1/tcp/2025": {
@@ -16,35 +16,35 @@
         "account_address": "caafc5b658f0590d7e31de91edde7f05ae91961d0804ec634d7535969b7d171f",
         "network_public_key": "caafc5b658f0590d7e31de91edde7f05ae91961d0804ec634d7535969b7d171f",
         "trusted_peers_map": [
-            "/ip4/127.0.0.1/tcp/2024",
-            "/ip4/127.0.0.1/tcp/6180",
-            "/ip4/127.0.0.1/tcp/2026"
+            "/ip4/10.128.0.28/tcp/2024",
+            "/ip4/10.128.0.40/tcp/6180",
+            "/ip4/10.128.0.39/tcp/2026"
         ],
-        "public_ip_address": "/ip4/127.0.0.1/tcp/2025",
+        "public_ip_address": "/ip4/10.128.0.38/tcp/2025",
         "voting_power": 1
     },
-    "/ip4/127.0.0.1/tcp/2026": {
+    "/ip4/10.128.0.39/tcp/2026": {
         "consensus_public_key": "b7a931fa544c2d1d54dee27619edfb70cc801bc599dd7a3f56f641a588cee4600b63e35d0d35fe69f2e454462b0ce9b2",
         "account_address": "99d1c7709b14777edbdbe0c602eb0186ea845ed75b01740726e581215de8625b",
         "network_public_key": "99d1c7709b14777edbdbe0c602eb0186ea845ed75b01740726e581215de8625b",
         "trusted_peers_map": [
-            "/ip4/127.0.0.1/tcp/2024",
-            "/ip4/127.0.0.1/tcp/2025",
-            "/ip4/127.0.0.1/tcp/6180"
+            "/ip4/10.128.0.28/tcp/2024",
+            "/ip4/10.128.0.38/tcp/2025",
+            "/ip4/10.128.0.40/tcp/6180"
         ],
-        "public_ip_address": "/ip4/127.0.0.1/tcp/2026",
+        "public_ip_address": "/ip4/10.128.0.39/tcp/2026",
         "voting_power": 1
     },
-    "/ip4/127.0.0.1/tcp/6180": {
+    "/ip4/10.128.0.40/tcp/6180": {
         "consensus_public_key": "958a9e1e0aef70cc5d99f22403c5cf9de35f8d818553f499b6f29a975aa3b70a95fcb45281f04070e516ad7acd9c7c99",
         "account_address": "7682dbbb2efe6a3e005b7fa13872e99f21165874b20cb9c8c877f8a0a0c5b779",
         "network_public_key": "7682dbbb2efe6a3e005b7fa13872e99f21165874b20cb9c8c877f8a0a0c5b779",
         "trusted_peers_map": [
-            "/ip4/127.0.0.1/tcp/2024",
-            "/ip4/127.0.0.1/tcp/2025",
-            "/ip4/127.0.0.1/tcp/2026"
+            "/ip4/10.128.0.28/tcp/2024",
+            "/ip4/10.128.0.38/tcp/2025",
+            "/ip4/10.128.0.39/tcp/2026"
         ],
-        "public_ip_address": "/ip4/127.0.0.1/tcp/6180",
+        "public_ip_address": "/ip4/10.128.0.40/tcp/6180",
         "voting_power": 1
     }
 }
