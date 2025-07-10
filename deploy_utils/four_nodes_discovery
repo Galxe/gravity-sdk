@@ -13,13 +13,13 @@
   role: Validator
 caafc5b658f0590d7e31de91edde7f05ae91961d0804ec634d7535969b7d171f:
   addresses:
-    - /ip4/10.128.0.39/tcp/2025/noise-ik/caafc5b658f0590d7e31de91edde7f05ae91961d0804ec634d7535969b7d171f/handshake/0
+    - /ip4/10.128.0.38/tcp/2025/noise-ik/caafc5b658f0590d7e31de91edde7f05ae91961d0804ec634d7535969b7d171f/handshake/0
   keys:
     - "caafc5b658f0590d7e31de91edde7f05ae91961d0804ec634d7535969b7d171f"
   role: Validator
 99d1c7709b14777edbdbe0c602eb0186ea845ed75b01740726e581215de8625b:
   addresses:
-    - /ip4/10.128.0.40/tcp/2026/noise-ik/99d1c7709b14777edbdbe0c602eb0186ea845ed75b01740726e581215de8625b/handshake/0
+    - /ip4/10.128.0.39/tcp/2026/noise-ik/99d1c7709b14777edbdbe0c602eb0186ea845ed75b01740726e581215de8625b/handshake/0
   keys:
     - "99d1c7709b14777edbdbe0c602eb0186ea845ed75b01740726e581215de8625b"
   role: Validator
