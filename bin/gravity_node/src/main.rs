@@ -64,19 +64,18 @@ struct ConsensusArgs {
 }
 
 fn run_reth(
-    tx: mpsc::Sender<(ConsensusArgs, u64)>,
     cli: Cli<EthereumChainSpecParser>,
-    execution_args_rx: oneshot::Receiver<ExecutionArgs>,
 ) {
     reth_cli_util::sigsegv_handler::install();
-
+    let (execution_args_tx, execution_args_rx) = oneshot::channel();
+    let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
+    
     if std::env::var_os("RUST_BACKTRACE").is_none() {
         std::env::set_var("RUST_BACKTRACE", "1");
     }
 
     if let Err(err) = {
         cli.run(|builder, _| {
-            let tx = tx.clone();
             async move {
                 let handle = builder
                     .with_types_and_provider::<EthereumNode, BlockchainProvider<_>>()
@@ -140,7 +139,33 @@ fn run_reth(
                     pool,
                 };
                 tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-                tx.send((args, latest_block_number)).await.ok();
+                let client = RethCli::new(args).await;
+                let chain_id = client.chain_id();
+                let coordinator =
+                    Arc::new(RethCoordinator::new(client, latest_block_number, execution_args_tx));
+                let mut _engine = None;
+                if std::env::var("MOCK_CONSENSUS")
+                    .unwrap_or("false".to_string())
+                    .parse::<bool>()
+                    .unwrap()
+                {
+                    info!("start mock consensus");
+                    let mock = MockConsensus::new().await;
+                    tokio::spawn(async move {
+                        mock.run().await;
+                    });
+                } else {
+                    _engine = Some(
+                        ConsensusEngine::init(ConsensusEngineArgs {
+                            node_config: gcei_config,
+                            chain_id,
+                            latest_block_number,
+                        })
+                        .await,
+                    );
+                }
+                coordinator.send_execution_args().await;
+                coordinator.run().await;
                 handle.node_exit_future.await
             }
         })
@@ -218,45 +243,6 @@ fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
 fn main() {
     let _profiling_state =
         if std::env::var("ENABLE_PPROF").is_ok() { Some(setup_pprof_profiler()) } else { None };
-    let (tx, mut rx) = tokio::sync::mpsc::channel(1);
     let cli = Cli::parse();
-    let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
-    let (execution_args_tx, execution_args_rx) = oneshot::channel();
-    thread::spawn(move || {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async move {
-            if let Some((args, latest_block_number)) = rx.recv().await {
-                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-                let client = RethCli::new(args).await;
-                let chain_id = client.chain_id();
-                let coordinator =
-                    Arc::new(RethCoordinator::new(client, latest_block_number, execution_args_tx));
-                let mut _engine = None;
-                if std::env::var("MOCK_CONSENSUS")
-                    .unwrap_or("false".to_string())
-                    .parse::<bool>()
-                    .unwrap()
-                {
-                    info!("start mock consensus");
-                    let mock = MockConsensus::new().await;
-                    tokio::spawn(async move {
-                        mock.run().await;
-                    });
-                } else {
-                    _engine = Some(
-                        ConsensusEngine::init(ConsensusEngineArgs {
-                            node_config: gcei_config,
-                            chain_id,
-                            latest_block_number,
-                        })
-                        .await,
-                    );
-                }
-                coordinator.send_execution_args().await;
-                coordinator.run().await;
-                tokio::signal::ctrl_c().await.unwrap();
-            }
-        });
-    });
-    run_reth(tx, cli, execution_args_rx);
+    run_reth(cli);
 }
