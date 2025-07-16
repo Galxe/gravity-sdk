@@ -26,7 +26,7 @@ mod consensus;
 mod metrics;
 mod reth_cli;
 mod reth_coordinator;
-
+mod mempool_processor;
 use crate::cli::Cli;
 use std::{
     collections::BTreeMap,
