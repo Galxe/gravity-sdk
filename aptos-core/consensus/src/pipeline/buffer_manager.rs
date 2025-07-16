@@ -23,6 +23,7 @@ use crate::{
     },
     state_replication::StateComputerCommitCallBackType,
 };
+use block_buffer_manager::get_block_buffer_manager;
 use gaptos::aptos_bounded_executor::BoundedExecutor;
 use gaptos::aptos_config::config::ConsensusObserverConfig;
 use aptos_consensus_types::{
@@ -51,11 +52,10 @@ use futures::{
 };
 use once_cell::sync::OnceCell;
 use std::{
-    collections::HashMap,
-    sync::{
+    collections::HashMap, f32::consts::E, sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
-    },
+    }
 };
 use tokio::time::{Duration, Instant};
 use tokio_retry::strategy::ExponentialBackoff;
@@ -443,6 +443,7 @@ impl BufferManager {
         // purge the incoming blocks queue
         while let Ok(Some(_)) = self.block_rx.try_next() {}
         // Wait for ongoing tasks to finish before sending back ack.
+        get_block_buffer_manager().release_inflight_blocks().await;
         while self.ongoing_tasks.load(Ordering::SeqCst) > 0 {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
@@ -598,7 +599,12 @@ impl BufferManager {
     ) {
         if let Some(cache) = self.commit_vote_cache.get(target_block_id) {
             cache.iter().for_each(|(_, vote)| {
-                item.add_signature_if_matched(vote.clone());
+                match item.add_signature_if_matched(vote.clone()) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        error!(commit_info = ?item.commit_info(), target_block_id = ?target_block_id, vote = ?vote, "Failed to add commit vote from cache");
+                    }
+                }
             });
             self.commit_vote_cache.remove(target_block_id);
         }

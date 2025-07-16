@@ -20,9 +20,7 @@ validator_network:
   network_id: validator
   listen_address: "/ip4/127.0.0.1/tcp/2025"
   discovery_method: 
-    file:
-      path: "/tmp/node2/discovery"
-      interval_secs: 3600
+    onchain
   mutual_authentication: true
   identity:
     type: "from_file"

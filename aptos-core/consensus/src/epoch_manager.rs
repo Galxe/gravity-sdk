@@ -7,11 +7,7 @@ use crate::{
         pending_blocks::PendingBlocks,
         tracing::{observe_block, BlockStage},
         BlockStore,
-    },
-    consensus_observer::publisher::ConsensusPublisher,
-    dag::{DagBootstrapper, DagCommitSigner, StorageAdapter},
-    error::{error_kind, DbError},
-    liveness::{
+    }, consensus_observer::publisher::ConsensusPublisher, dag::{DagBootstrapper, DagCommitSigner, StorageAdapter}, error::{error_kind, DbError}, liveness::{
         cached_proposer_election::CachedProposerElection,
         leader_reputation::{
             extract_epoch_to_proposers, AptosDBBackend, LeaderReputation,
@@ -24,33 +20,19 @@ use crate::{
         rotating_proposer_election::{choose_leader, RotatingProposer},
         round_proposer_election::RoundProposer,
         round_state::{ExponentialTimeInterval, RoundState},
-    },
-    logging::{LogEvent, LogSchema},
-    metrics_safety_rules::MetricsSafetyRules,
-    monitor,
-    network::{
+    }, logging::{LogEvent, LogSchema}, metrics_safety_rules::MetricsSafetyRules, monitor, network::{
         IncomingBatchRetrievalRequest, IncomingBlockRetrievalRequest, IncomingDAGRequest,
         IncomingRandGenRequest, IncomingRpcRequest, NetworkReceivers, NetworkSender,
-    },
-    network_interface::{ConsensusMsg, ConsensusNetworkClient},
-    payload_client::{
+    }, network_interface::{ConsensusMsg, ConsensusNetworkClient}, payload_client::{
         mixed::MixedPayloadClient, user::quorum_store_client::QuorumStoreClient, PayloadClient,
-    },
-    payload_manager::{DirectMempoolPayloadManager, TPayloadManager},
-    persistent_liveness_storage::{LedgerRecoveryData, PersistentLivenessStorage, RecoveryData},
-    pipeline::execution_client::TExecutionClient,
-    quorum_store::{
+    }, payload_manager::{DirectMempoolPayloadManager, TPayloadManager}, persistent_liveness_storage::{LedgerRecoveryData, PersistentLivenessStorage, RecoveryData}, pipeline::execution_client::TExecutionClient, quorum_store::{
         quorum_store_builder::{DirectMempoolInnerBuilder, InnerBuilder, QuorumStoreBuilder},
         quorum_store_coordinator::CoordinatorCommand,
         quorum_store_db::QuorumStoreStorage,
-    },
-    rand::rand_gen::{
+    }, rand::rand_gen::{
         storage::interface::RandStorage,
         types::{AugmentedData, RandConfig},
-    },
-    recovery_manager::RecoveryManager,
-    round_manager::{RoundManager, UnverifiedEvent, VerifiedEvent},
-    util::time_service::TimeService,
+    }, recovery_manager::RecoveryManager, round_manager::{RoundManager, UnverifiedEvent, VerifiedEvent}, util::time_service::TimeService
 };
 use anyhow::{anyhow, bail, ensure, Context};
 use gaptos::aptos_bounded_executor::BoundedExecutor;
@@ -106,7 +88,7 @@ use mini_moka::sync::Cache;
 use rand::{prelude::StdRng, thread_rng, SeedableRng};
 use std::{
     cmp::Ordering,
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     hash::Hash,
     mem::{discriminant, Discriminant},
     sync::Arc,
@@ -557,7 +539,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 ledger_info
             ))
             .expect("Failed to sync to new epoch");
-
         monitor!("reconfig", self.await_reconfig_notification().await);
         Ok(())
     }
@@ -1086,9 +1067,12 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     }
 
     async fn start_new_epoch(&mut self, payload: OnChainConfigPayload<P>) {
+        info!("start to start new epoch for epoch: {:?}", payload.epoch());
         let validator_set: ValidatorSet = payload
             .get()
             .expect("failed to get ValidatorSet from payload");
+        info!("validator_set read from config storage is : {:?}", validator_set);
+        
         let epoch_state = Arc::new(EpochState {
             epoch: payload.epoch(),
             verifier: Arc::new((&validator_set).into()),
@@ -1097,13 +1081,14 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         self.epoch_state = Some(epoch_state.clone());
 
         let onchain_consensus_config: anyhow::Result<OnChainConsensusConfig> = payload.get();
+        // use default for following configs to debug
         let onchain_execution_config: anyhow::Result<OnChainExecutionConfig> = payload.get();
         let onchain_randomness_config_seq_num: anyhow::Result<RandomnessConfigSeqNum> =
             payload.get();
         let randomness_config_move_struct: anyhow::Result<RandomnessConfigMoveStruct> =
             payload.get();
         let onchain_jwk_consensus_config: anyhow::Result<OnChainJWKConsensusConfig> = payload.get();
-        let dkg_state = payload.get::<DKGState>();
+        // let dkg_state = payload.get::<DKGState>();
 
         if let Err(error) = &onchain_consensus_config {
             error!("Failed to read on-chain consensus config {}", error);
@@ -1153,38 +1138,39 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             },
         };
 
-        let rand_configs = self.try_get_rand_config_for_new_epoch(
-            loaded_consensus_key.clone(),
-            &epoch_state,
-            &onchain_randomness_config,
-            dkg_state,
-            &consensus_config,
-        );
+        // let rand_configs = self.try_get_rand_config_for_new_epoch(
+        //     loaded_consensus_key.clone(),
+        //     &epoch_state,
+        //     &onchain_randomness_config,
+        //     dkg_state,
+        //     &consensus_config,
+        // );
 
-        let (rand_config, fast_rand_config) = match rand_configs {
-            Ok((rand_config, fast_rand_config)) => (Some(rand_config), fast_rand_config),
-            Err(reason) => {
-                if onchain_randomness_config.randomness_enabled() {
-                    if epoch_state.epoch > 2 {
-                        error!(
-                            "Failed to get randomness config for new epoch [{}]: {:?}",
-                            epoch_state.epoch, reason
-                        );
-                    } else {
-                        warn!(
-                            "Failed to get randomness config for new epoch [{}]: {:?}",
-                            epoch_state.epoch, reason
-                        );
-                    }
-                }
-                (None, None)
-            },
-        };
+        // let (rand_config, fast_rand_config) = match rand_configs {
+        //     Ok((rand_config, fast_rand_config)) => (Some(rand_config), fast_rand_config),
+        //     Err(reason) => {
+        //         if onchain_randomness_config.randomness_enabled() {
+        //             if epoch_state.epoch > 2 {
+        //                 error!(
+        //                     "Failed to get randomness config for new epoch [{}]: {:?}",
+        //                     epoch_state.epoch, reason
+        //                 );
+        //             } else {
+        //                 warn!(
+        //                     "Failed to get randomness config for new epoch [{}]: {:?}",
+        //                     epoch_state.epoch, reason
+        //                 );
+        //             }
+        //         }
+        //         (None, None)
+        //     },
+        // };
 
-        info!(
-            "[Randomness] start_new_epoch: epoch={}, rand_config={:?}, fast_rand_config={:?}",
-            epoch_state.epoch, rand_config, fast_rand_config
-        );
+        // info!(
+        //     "[Randomness] start_new_epoch: epoch={}, rand_config={:?}, fast_rand_config={:?}",
+        //     epoch_state.epoch, rand_config, fast_rand_config
+        // );
+        info!("start to initialize shared component epoch {}", epoch_state.epoch);
 
         let (network_sender, payload_client, payload_manager) = self
             .initialize_shared_component(
@@ -1212,8 +1198,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 network_sender,
                 payload_client,
                 payload_manager,
-                rand_config,
-                fast_rand_config,
+                None, // rand_config,
+                None, // fast_rand_config,
                 rand_msg_rx,
             )
             .await
@@ -1228,8 +1214,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 network_sender,
                 payload_client,
                 payload_manager,
-                rand_config,
-                fast_rand_config,
+                None, // rand_config,
+                None, // fast_rand_config,
                 rand_msg_rx,
             )
             .await
@@ -1791,9 +1777,10 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     fn equivalent_jwk_consensus_config_from_deprecated_resources(
         payload: &OnChainConfigPayload<P>,
     ) -> OnChainJWKConsensusConfig {
-        let features = payload.get::<Features>().ok();
-        let oidc_providers = payload.get::<SupportedOIDCProviders>().ok();
-        OnChainJWKConsensusConfig::from((features, oidc_providers))
+        // let features = payload.get::<Features>().ok();
+        // let oidc_providers = payload.get::<SupportedOIDCProviders>().ok();
+        // OnChainJWKConsensusConfig::from((features, oidc_providers))
+        OnChainJWKConsensusConfig::Off
     }
 
     fn load_consensus_key(&self, vv: &ValidatorVerifier) -> anyhow::Result<PrivateKey> {

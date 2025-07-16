@@ -4,23 +4,27 @@ use std::{
     sync::Arc,
 };
 
-use crate::network::{build_network_interfaces, consensus_network_configuration, extract_network_ids, mempool_network_configuration};
-use gaptos::api_types::u256_define::BlockId;
-use block_buffer_manager::get_block_buffer_manager;
-use gaptos::aptos_config::{
-    config::{NetworkConfig, NodeConfig, Peer, PeerRole},
-    network_id::NetworkId,
+use crate::network::{
+    build_network_interfaces, consensus_network_configuration, extract_network_ids,
+    mempool_network_configuration,
 };
 use aptos_consensus::consensusdb::{BlockNumberSchema, BlockSchema, ConsensusDB};
 use aptos_consensus::{
     gravity_state_computer::ConsensusAdapterArgs, network_interface::ConsensusMsg,
     persistent_liveness_storage::StorageWriteProxy, quorum_store::quorum_store_db::QuorumStoreDB,
 };
+use block_buffer_manager::get_block_buffer_manager;
+use gaptos::api_types::u256_define::BlockId;
+use gaptos::aptos_config::{
+    config::{NetworkConfig, NodeConfig, Peer, PeerRole},
+    network_id::NetworkId,
+};
 
+use aptos_mempool::{MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest};
+use futures::channel::mpsc::{Receiver, Sender};
 use gaptos::aptos_consensus_notifications::ConsensusNotifier;
 use gaptos::aptos_crypto::{hash::GENESIS_BLOCK_ID, x25519, HashValue};
 use gaptos::aptos_event_notifications::EventSubscriptionService;
-use aptos_mempool::{MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest};
 use gaptos::aptos_mempool_notifications::MempoolNotificationListener;
 use gaptos::aptos_network::application::{
     interface::{NetworkClient, NetworkServiceEvents},
@@ -30,7 +34,6 @@ use gaptos::aptos_network_builder::builder::NetworkBuilder;
 use gaptos::aptos_storage_interface::DbReaderWriter;
 use gaptos::aptos_types::account_address::AccountAddress;
 use gaptos::aptos_validator_transaction_pool::VTxnPoolState;
-use futures::channel::mpsc::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
 use tokio::{runtime::Runtime, sync::Mutex};
 
@@ -84,7 +87,7 @@ where
         network_id,
         &network_config,
         mempool_network_configuration(node_config),
-        peers_and_metadata.clone(), 
+        peers_and_metadata.clone(),
     );
     (consensus_network_interfaces, mempool_interfaces)
 }
@@ -94,7 +97,11 @@ pub fn start_node_inspection_service(
     node_config: &NodeConfig,
     peers_and_metadata: Arc<PeersAndMetadata>,
 ) {
-    gaptos::aptos_inspection_service::start_inspection_service(node_config.clone(), None, peers_and_metadata)
+    gaptos::aptos_inspection_service::start_inspection_service(
+        node_config.clone(),
+        None,
+        peers_and_metadata,
+    )
 }
 
 pub fn start_consensus(
@@ -155,45 +162,12 @@ pub fn init_peers_and_metadata(
     node_config: &NodeConfig,
     consensus_db: &Arc<ConsensusDB>,
 ) -> Arc<PeersAndMetadata> {
-    let listen_address = node_config.validator_network.as_ref().unwrap().listen_address.to_string();
-    let gravity_node_config = consensus_db
-        .node_config_set
-        .get(&listen_address)
-        .expect(&format!("addr {:?} has no config", listen_address));
     let network_ids = extract_network_ids(node_config);
     let peers_and_metadata = PeersAndMetadata::new(&network_ids);
-    let mut peer_set = HashMap::new();
-    for trusted_peer in &gravity_node_config.trusted_peers_map {
-        let trusted_peer_config = consensus_db
-            .node_config_set
-            .get(trusted_peer)
-            .or_else(|| {
-                consensus_db
-                    .node_config_set
-                    .iter()
-                    .map(|(_, config)| config)
-                    .find(|config| config.public_ip_address == *trusted_peer)
-            })
-            .expect(&format!("NodeConfig for {:?} not found", trusted_peer));
-        let mut set = HashSet::new();
-        let public_key = x25519::PublicKey::try_from(
-            hex::decode(trusted_peer_config.network_public_key.as_bytes()).unwrap().as_slice(),
-        ).unwrap();
-        set.insert(public_key);
-        let trust_peer = Peer::new(vec![trusted_peer.parse().unwrap()], set, PeerRole::Validator);
-        peer_set.insert(
-            AccountAddress::try_from(trusted_peer_config.account_address.clone()).unwrap(),
-            trust_peer,
-        );
-    }
-    let _ = peers_and_metadata.set_trusted_peers(&NetworkId::Validator, peer_set);
     peers_and_metadata
 }
 
-pub async fn init_block_buffer_manager(
-    consensus_db: &Arc<ConsensusDB>,
-    latest_block_number: u64,
-) {
+pub async fn init_block_buffer_manager(consensus_db: &Arc<ConsensusDB>, latest_block_number: u64) {
     let start_block_number = if latest_block_number > RECENT_BLOCKS_RANGE {
         latest_block_number - RECENT_BLOCKS_RANGE
     } else {

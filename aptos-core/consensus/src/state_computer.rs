@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::block_storage::tracing::{observe_block, BlockStage};
+use crate::consensusdb::ConsensusDB;
 use crate::counters::update_counters_for_compute_res;
 use crate::pipeline::pipeline_builder::PipelineBuilder;
 use crate::{
@@ -20,6 +21,7 @@ use crate::{
 };
 use anyhow::Result;
 use gaptos::api_types::account::{ExternalAccountAddress, ExternalChainId};
+use gaptos::api_types::events::contract_event::GravityEvent;
 use gaptos::api_types::u256_define::{BlockId, Random, TxnHash};
 use gaptos::api_types::{ExternalBlock, ExternalBlockMeta};
 use aptos_consensus_types::common::RejectedTransactionSummary;
@@ -34,6 +36,7 @@ use gaptos::aptos_infallible::RwLock;
 use gaptos::aptos_logger::prelude::*;
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 
+use gaptos::aptos_types::on_chain_config::ValidatorSet;
 use gaptos::aptos_types::transaction::SignedTransaction;
 use gaptos::aptos_types::validator_signer::ValidatorSigner;
 use gaptos::aptos_types::{
@@ -271,13 +274,13 @@ impl StateComputer for ExecutionProxy {
             let u_ts = meta_data.usecs;
             let compute_result = get_block_buffer_manager()
                 .get_executed_res(block_id, meta_data.block_number)
-                .await.unwrap_or_else(|e| panic!("Failed to get executed result {}", e));
+                .await?;
 
             txn_metrics::TxnLifeTime::get_txn_life_time().record_executed(block_id_hashvalue);
-            update_counters_for_compute_res(&compute_result);
+            update_counters_for_compute_res(&compute_result.execution_output);
            
             observe_block(u_ts, BlockStage::EXECUTED);
-            let txn_status = compute_result.txn_status.clone();
+            let txn_status = compute_result.execution_output.txn_status.clone();
             match (*txn_status).as_ref() {
                 Some(txn_status) => {
                     let rejected_txns = txn_status.iter().filter(|txn| txn.is_discarded).map(|discard_txn_info| {
@@ -294,7 +297,6 @@ impl StateComputer for ExecutionProxy {
                 }
                 None => {}
             }
-            let result = StateComputeResult::new(compute_result, None, None);
 
             let pre_commit_fut: BoxFuture<'static, ExecutorResult<()>> =
                     {
@@ -302,7 +304,7 @@ impl StateComputer for ExecutionProxy {
                             Ok(())
                         })
                     };
-            Ok(PipelineExecutionResult::new(txns, result, Duration::ZERO, pre_commit_fut))
+            Ok(PipelineExecutionResult::new(txns, compute_result, Duration::ZERO, pre_commit_fut))
         })
     }
 
@@ -313,9 +315,10 @@ impl StateComputer for ExecutionProxy {
         finality_proof: LedgerInfoWithSignatures,
         callback: StateComputerCommitCallBackType,
     ) -> ExecutorResult<()> {
+        let block_id_num = blocks.iter().map(|block| (block.id(), block.block().block_number())).collect::<Vec<_>>();
         info!(
             "Received a commit request for blocks {:?} at round {}",
-            blocks.iter().map(|block| block.id()).collect::<Vec<_>>(),
+            block_id_num,
             finality_proof.ledger_info().round()
         );
         let mut latest_logical_time = self.write_mutex.lock().await;

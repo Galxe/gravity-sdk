@@ -230,7 +230,6 @@ impl BlockStore {
     ) -> Self {
         let RootInfo(root_block, root_qc, root_ordered_cert, root_commit_cert) = root;
 
-        // TODO(gravity_lightman)
         let result = StateComputeResult::with_root_hash(root_block.id());
 
         let pipelined_root_block = PipelinedBlock::new(
@@ -383,6 +382,7 @@ impl BlockStore {
                     BlockId(*p_block.id()),
                     p_block.block().block_number().unwrap(),
                 ).await.unwrap();
+                let compute_res = compute_res.execution_output;
                 if let Some(block_hash) = maybe_block_hash {
                     assert_eq!(block_hash.data, compute_res.data);
                 }
@@ -390,6 +390,7 @@ impl BlockStore {
                     block_id: BlockId(*p_block.id()),
                     num: p_block.block().block_number().unwrap(),
                     hash: Some(compute_res.data),
+                    persist_notifier: None,
                 };
                 get_block_buffer_manager().set_commit_blocks(vec![commit_block]).await.unwrap();
             }
