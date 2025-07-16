@@ -1,26 +1,25 @@
-use tracing::{info, warn};
 use anyhow::{anyhow, format_err};
 use aptos_executor_types::StateComputeResult;
-use bytes::Bytes;
-use gaptos::{
-    api_types::config_storage::{OnChainConfig, GLOBAL_CONFIG_STORAGE},
-    aptos_logger::{info, warn},
-    aptos_types::{epoch_state::EpochState, on_chain_config::ValidatorSet},
-};
+use gaptos::aptos_types::{epoch_state::EpochState, on_chain_config::ValidatorSet};
 use std::{
-    cell::OnceCell,
     collections::HashMap,
-    ops::Deref,
     sync::{
-        atomic::{AtomicU64, AtomicU8, Ordering},
-        Arc, OnceLock,
+        atomic::{AtomicU8, Ordering},
+        Arc,
     },
     time::{Duration, SystemTime},
 };
-use tokio::{sync::{mpsc::{self, Receiver, Sender}, Mutex}, time::Instant};
+use tokio::{
+    sync::{
+        mpsc::{self, Receiver, Sender},
+        Mutex,
+    },
+    time::Instant,
+};
+use tracing::{info, warn};
 
 use gaptos::api_types::{
-    compute_res::{self, ComputeRes, TxnStatus},
+    compute_res::{ComputeRes, TxnStatus},
     events::contract_event::GravityEvent,
     u256_define::BlockId,
     ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
@@ -46,9 +45,20 @@ pub struct BlockHashRef {
 
 #[derive(Debug)]
 pub enum BlockState {
-    Ordered { block: ExternalBlock, parent_id: BlockId },
-    Computed { id: BlockId, compute_result: StateComputeResult },
-    Committed { hash: Option<[u8; 32]>, compute_result: StateComputeResult, id: BlockId, persist_notifier: Option<Sender<()>> },
+    Ordered {
+        block: ExternalBlock,
+        parent_id: BlockId,
+    },
+    Computed {
+        id: BlockId,
+        compute_result: StateComputeResult,
+    },
+    Committed {
+        hash: Option<[u8; 32]>,
+        compute_result: StateComputeResult,
+        id: BlockId,
+        persist_notifier: Option<Sender<()>>,
+    },
 }
 
 impl BlockState {
@@ -219,7 +229,11 @@ impl BlockBufferManager {
     pub async fn push_txns(&self, txns: &mut Vec<VerifiedTxnWithAccountSeqNum>, gas_limit: u64) {
         tracing::info!("push_txns txns len: {:?}", txns.len());
         let mut pool_txns = self.txn_buffer.txns.lock().await;
-        pool_txns.push(TxnItem { txns: std::mem::take(txns), gas_limit, insert_time: SystemTime::now() });
+        pool_txns.push(TxnItem {
+            txns: std::mem::take(txns),
+            gas_limit,
+            insert_time: SystemTime::now(),
+        });
     }
 
     pub fn is_ready(&self) -> bool {
@@ -309,7 +323,8 @@ impl BlockBufferManager {
             .insert(block_num, BlockState::Ordered { block: block.clone(), parent_id });
 
         // Record time for set_ordered_blocks
-        let profile = block_state_machine.profile.entry(block_num).or_insert_with(BlockProfile::default);
+        let profile =
+            block_state_machine.profile.entry(block_num).or_insert_with(BlockProfile::default);
         profile.set_ordered_block_time = Some(SystemTime::now());
 
         let _ = block_state_machine.sender.send(());
@@ -344,7 +359,10 @@ impl BlockBufferManager {
                     BlockState::Ordered { block, parent_id } => {
                         result.push((block.clone(), *parent_id));
                         // Record time for get_ordered_blocks
-                        let profile = block_state_machine.profile.entry(current_num).or_insert_with(BlockProfile::default);
+                        let profile = block_state_machine
+                            .profile
+                            .entry(current_num)
+                            .or_insert_with(BlockProfile::default);
                         profile.get_ordered_blocks_time = Some(SystemTime::now());
                     }
                     _ => {
@@ -399,7 +417,10 @@ impl BlockBufferManager {
 
                         // Record time for get_executed_res
                         let compute_res_clone = compute_result.clone();
-                        let profile = block_state_machine.profile.entry(block_num).or_insert_with(BlockProfile::default);
+                        let profile = block_state_machine
+                            .profile
+                            .entry(block_num)
+                            .or_insert_with(BlockProfile::default);
                         profile.get_executed_res_time = Some(SystemTime::now());
                         info!(
                             "get_executed_res done with id {:?} num {:?} res {:?}",
@@ -471,7 +492,10 @@ impl BlockBufferManager {
                 let validator_set = bcs::from_bytes::<ValidatorSet>(&bytes).map_err(|e| {
                     format_err!("[on-chain config] Failed to deserialize into config: {}", e)
                 })?;
-                info!("block number {} get validator set from new epoch {} event {:?}", block_num, new_epoch, validator_set);
+                info!(
+                    "block number {} get validator set from new epoch {} event {:?}",
+                    block_num, new_epoch, validator_set
+                );
                 new_epoch_state = Some(EpochState::new(new_epoch, (&validator_set).into()));
                 *self.latest_epoch_change_block_number.lock().await = block_num;
             }
@@ -485,7 +509,8 @@ impl BlockBufferManager {
                 .insert(block_num, BlockState::Computed { id: block_id, compute_result });
 
             // Record time for set_compute_res
-            let profile = block_state_machine.profile.entry(block_num).or_insert_with(BlockProfile::default);
+            let profile =
+                block_state_machine.profile.entry(block_num).or_insert_with(BlockProfile::default);
             profile.set_compute_res_time = Some(SystemTime::now());
             info!(
                 "set_compute_res id {:?} num {:?} hash {:?} and exec time {:?}ms for {:?} txns and {:?} events",
@@ -525,7 +550,10 @@ impl BlockBufferManager {
                         if *id == block_id_num_hash.block_id {
                             let mut persist_notifier = None;
                             if compute_result.epoch_state().is_some() {
-                                info!("push_commit_blocks num {:?} push persist_notifier", block_id_num_hash.num);
+                                info!(
+                                    "push_commit_blocks num {:?} push persist_notifier",
+                                    block_id_num_hash.num
+                                );
                                 let (tx, rx) = mpsc::channel(1);
                                 persist_notifier = Some(tx);
                                 persist_notifiers.push(rx);
@@ -538,7 +566,10 @@ impl BlockBufferManager {
                             };
 
                             // Record time for set_commit_blocks
-                            let profile = block_state_machine.profile.entry(block_id_num_hash.num).or_insert_with(BlockProfile::default);
+                            let profile = block_state_machine
+                                .profile
+                                .entry(block_id_num_hash.num)
+                                .or_insert_with(BlockProfile::default);
                             profile.set_commit_blocks_time = Some(SystemTime::now());
                         } else {
                             panic!(
@@ -597,10 +628,18 @@ impl BlockBufferManager {
             while let Some(block) = block_state_machine.blocks.get_mut(&current_num) {
                 match block {
                     BlockState::Committed { hash, compute_result: _, id, persist_notifier } => {
-                        result.push(BlockHashRef { block_id: *id, num: current_num, hash: *hash, persist_notifier: persist_notifier.take() });
+                        result.push(BlockHashRef {
+                            block_id: *id,
+                            num: current_num,
+                            hash: *hash,
+                            persist_notifier: persist_notifier.take(),
+                        });
 
                         // Record time for get_committed_blocks
-                        let profile = block_state_machine.profile.entry(current_num).or_insert_with(BlockProfile::default);
+                        let profile = block_state_machine
+                            .profile
+                            .entry(current_num)
+                            .or_insert_with(BlockProfile::default);
                         profile.get_committed_blocks_time = Some(SystemTime::now());
                     }
                     _ => {
@@ -662,7 +701,10 @@ impl BlockBufferManager {
     pub async fn release_inflight_blocks(&self) {
         let mut block_state_machine = self.block_state_machine.lock().await;
         let latest_epoch_change_block_number = *self.latest_epoch_change_block_number.lock().await;
-        info!("release_inflight_blocks latest_epoch_change_block_number: {:?}", latest_epoch_change_block_number);
+        info!(
+            "release_inflight_blocks latest_epoch_change_block_number: {:?}",
+            latest_epoch_change_block_number
+        );
         block_state_machine
             .blocks
             .retain(|block_num, _| *block_num <= latest_epoch_change_block_number);

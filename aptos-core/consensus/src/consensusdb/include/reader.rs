@@ -1,11 +1,13 @@
 use bytes::Bytes;
-use gaptos::api_types::config_storage::{OnChainConfig, GLOBAL_CONFIG_STORAGE};
+use gaptos::api_types::config_storage::{
+    OnChainConfig as GravityOnChainConfig, GLOBAL_CONFIG_STORAGE,
+};
 use gaptos::aptos_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH;
 use gaptos::aptos_storage_interface::{DbReader, DbWriter};
 use gaptos::aptos_types::epoch_change::EpochChangeProof;
 use gaptos::aptos_types::ledger_info::LedgerInfoWithSignatures;
-use gaptos::aptos_types::on_chain_config::ValidatorSet;
 use gaptos::aptos_types::on_chain_config::{ConsensusAlgorithmConfig, ProposerElectionType};
+use gaptos::aptos_types::on_chain_config::{OnChainConfig, ValidatorSet};
 use gaptos::aptos_types::state_proof::StateProof;
 use gaptos::aptos_types::state_store::state_key::inner::StateKeyInner;
 use gaptos::aptos_types::{
@@ -24,10 +26,14 @@ impl ConsensusDB {
     pub fn validator_set(&self) -> ValidatorSet {
         VALIDATOR_SET
             .get_or_init(|| {
-                let validator_set_config =
-                    GLOBAL_CONFIG_STORAGE.get().unwrap().fetch_config_bytes(OnChainConfig::ValidatorSet, 0);
-                let validator_bytes = TryInto::<Bytes>::try_into(validator_set_config.unwrap()).unwrap();
-                let validator_set: ValidatorSet = bcs::from_bytes(&validator_bytes).unwrap();
+                let validator_set_config = GLOBAL_CONFIG_STORAGE
+                    .get()
+                    .unwrap()
+                    .fetch_config_bytes(GravityOnChainConfig::ValidatorSet, 0);
+                let validator_bytes =
+                    TryInto::<Bytes>::try_into(validator_set_config.unwrap()).unwrap();
+                let validator_set =
+                    ValidatorSet::deserialize_into_config(&validator_bytes).unwrap();
                 validator_set
             })
             .clone()
@@ -71,14 +77,15 @@ impl DbReader for ConsensusDB {
                 self.validator_set(),
             ));
         }
-        ledger_infos.extend(self
-            .get_range::<EpochByBlockNumberSchema>(&known_version, &u64::MAX)
-            .unwrap()
-            .into_iter()
-            .map(|(block_number, _)| {
-                info!("get_state_proof block_number: {:?}", block_number);
-                self.get::<LedgerInfoSchema>(&block_number).unwrap().unwrap()
-            }));
+        ledger_infos.extend(
+            self.get_range::<EpochByBlockNumberSchema>(&known_version, &u64::MAX)
+                .unwrap()
+                .into_iter()
+                .map(|(block_number, _)| {
+                    info!("get_state_proof block_number: {:?}", block_number);
+                    self.get::<LedgerInfoSchema>(&block_number).unwrap().unwrap()
+                }),
+        );
         let ledger_info = self.get_latest_ledger_info()?;
         Ok(StateProof::new(ledger_info, EpochChangeProof::new(ledger_infos, false)))
     }
