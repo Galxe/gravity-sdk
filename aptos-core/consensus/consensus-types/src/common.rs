@@ -569,6 +569,7 @@ impl CryptoHash for BatchPayload {
         // state.update(&bytes);
         // state.finish()
         for txn in &self.txns {
+            info!("lightman0719 committed_hash {}", txn.committed_hash())
             state.update(txn.committed_hash().as_ref());
         }
         state.finish()
