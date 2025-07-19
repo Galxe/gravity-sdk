@@ -137,7 +137,7 @@ impl Batch {
         gas_bucket_start: u64,
     ) -> Self {
         let payload = BatchPayload::new(batch_author, payload);
-        info!("lightman0719 batch_author {}, payload {:?}", batch_author, payload);
+        info!("lightman0719 payload {:?} {}", payload, payload.hash());
         let batch_info = BatchInfo::new(
             batch_author,
             batch_id,
