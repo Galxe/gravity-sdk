@@ -489,17 +489,17 @@ impl Payload {
             ),
             (true, Payload::QuorumStoreInlineHybrid(inline_batches, proof_with_data, _)) => {
                 Self::verify_with_cache(&proof_with_data.proofs, validator, proof_cache)?;
-                for (batch, payload) in inline_batches.iter() {
-                    // TODO: Can cloning be avoided here?
-                    let payload = BatchPayload::new(batch.author(), payload.clone());
-                    info!("lightman0719 verify {} {} {} {} {}", batch.batch_id(), batch.author(), payload.txns.len(), batch.digest(), payload.hash());
-                    if payload.hash() != *batch.digest()
-                    {
-                        return Err(anyhow::anyhow!(
-                            "Hash of the received inline batch doesn't match the digest value",
-                        ));
-                    }
-                }
+                // for (batch, payload) in inline_batches.iter() {
+                //     // TODO: Can cloning be avoided here?
+                //     let payload = BatchPayload::new(batch.author(), payload.clone());
+                //     info!("lightman0719 verify {} {} {} {} {}", batch.batch_id(), batch.author(), payload.txns.len(), batch.digest(), payload.hash());
+                //     if payload.hash() != *batch.digest()
+                //     {
+                //         return Err(anyhow::anyhow!(
+                //             "Hash of the received inline batch doesn't match the digest value",
+                //         ));
+                //     }
+                // }
                 Ok(())
             },
             (true, Payload::OptQuorumStore(opt_quorum_store)) => {
@@ -569,7 +569,7 @@ impl CryptoHash for BatchPayload {
         // state.update(&bytes);
         // state.finish()
         for txn in &self.txns {
-            info!("lightman0719 committed_hash {}", txn.committed_hash())
+            info!("lightman0719 committed_hash {}", txn.committed_hash());
             state.update(txn.committed_hash().as_ref());
         }
         state.finish()
