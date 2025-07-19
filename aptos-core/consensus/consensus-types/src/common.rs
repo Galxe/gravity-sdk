@@ -492,7 +492,7 @@ impl Payload {
                 for (batch, payload) in inline_batches.iter() {
                     // TODO: Can cloning be avoided here?
                     let payload = BatchPayload::new(batch.author(), payload.clone());
-                    info!("lightman0719 verify {:?} {}", payload, payload.hash());
+                    info!("lightman0719 verify {} {} {} {} {}", batch.batch_id(), batch.author(), payload.txns.len(), batch.digest(), payload.hash());
                     if payload.hash() != *batch.digest()
                     {
                         return Err(anyhow::anyhow!(
