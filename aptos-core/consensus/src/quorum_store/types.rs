@@ -6,7 +6,7 @@ use aptos_consensus_types::{
     common::{BatchPayload, TxnSummaryWithExpiration},
     proof_of_store::{BatchId, BatchInfo},
 };
-use gaptos::aptos_crypto::{hash::CryptoHash, HashValue};
+use gaptos::{aptos_crypto::{hash::CryptoHash, HashValue}, aptos_logger::info};
 use gaptos::aptos_types::{ledger_info::LedgerInfoWithSignatures, transaction::SignedTransaction, PeerId};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -137,6 +137,7 @@ impl Batch {
         gas_bucket_start: u64,
     ) -> Self {
         let payload = BatchPayload::new(batch_author, payload);
+        info!("lightman0719 batch_author {}, payload {:?}", batch_author, payload);
         let batch_info = BatchInfo::new(
             batch_author,
             batch_id,
