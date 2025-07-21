@@ -564,16 +564,16 @@ impl CryptoHash for BatchPayload {
 
     fn hash(&self) -> HashValue {
         let mut state = Self::Hasher::new();
-        // let bytes = bcs::to_bytes(&self).expect("Unable to serialize batch payload");
-        // self.num_bytes.get_or_init(|| bytes.len());
-        // state.update(&bytes);
-        // state.finish()
-        for txn in &self.txns {
-            txn.txn_bytes_len();
-            info!("lightman0719 committed_hash {}", txn.committed_hash());
-            state.update(txn.committed_hash().as_ref());
-        }
+        let bytes = bcs::to_bytes(&self).expect("Unable to serialize batch payload");
+        self.num_bytes.get_or_init(|| bytes.len());
+        state.update(&bytes);
         state.finish()
+        // for txn in &self.txns {
+        //     txn.txn_bytes_len();
+        //     info!("lightman0719 committed_hash {}", txn.committed_hash());
+        //     state.update(txn.committed_hash().as_ref());
+        // }
+        // state.finish()
     }
 }
 
