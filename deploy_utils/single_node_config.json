@@ -1,10 +1,10 @@
 {
-    "/ip4/127.0.0.1/tcp/2025": {
-        "consensus_public_key": "99ff89f453d9a9bf273e3ae8b61b99a2b336edc7b6eb9b8e308249fd59f3b76211771d7e0daaa97fad11518c4ad8eabd",
-        "account_address": "caafc5b658f0590d7e31de91edde7f05ae91961d0804ec634d7535969b7d171f",
-        "network_public_key": "caafc5b658f0590d7e31de91edde7f05ae91961d0804ec634d7535969b7d171f",
+    "/ip4/127.0.0.1/tcp/2024/noise-ik/2d86b40a1d692c0749a0a0426e2021ee24e2430da0f5bb9c2ae6c586bf3e0a0f/handshake/0": {
+        "consensus_public_key": "851d41932d866f5fabed6673898e15473e6a0adcf5033d2c93816c6b115c85ad3451e0bac61d570d5ed9f23e1e7f77c4",
+        "account_address": "2d86b40a1d692c0749a0a0426e2021ee24e2430da0f5bb9c2ae6c586bf3e0a0f",
+        "network_public_key": "2d86b40a1d692c0749a0a0426e2021ee24e2430da0f5bb9c2ae6c586bf3e0a0f",
         "trusted_peers_map": [],
-        "public_ip_address": "/ip4/127.0.0.1/tcp/2025",
+        "public_ip_address": "/ip4/127.0.0.1/tcp/2024",
         "voting_power": 1
     }
 }
