@@ -7,8 +7,8 @@ use command::{Command, Executable};
 fn main() {
     let cmd = Command::parse();
     match cmd.genesis {
-        genesis::GenesisCommand::GenerateKey(gk) => {
-            if let Err(e) = gk.execute() {
+ genesis::GenesisCommand::GenerateKey(gck) => {
+            if let Err(e) = gck.execute() {
                 eprintln!("Error: {:?}", e);
             }
         }
@@ -17,5 +17,10 @@ fn main() {
                 eprintln!("Error: {:?}", e);
             }
         }
+        genesis::GenesisCommand::GenerateAccount(generate_account) => {
+            if let Err(e) = generate_account.execute() {
+                eprintln!("Error: {:?}", e);
+            }
+        },
     }
 }

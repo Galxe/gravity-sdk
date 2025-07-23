@@ -21,3 +21,7 @@ serde_yaml.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 bcs.workspace = true
+sha3.workspace = true
+rand_core = { version = "0.6", features = ["std"] }
+k256 = { version = "0.13.0", features = ["ecdsa"] }
+
