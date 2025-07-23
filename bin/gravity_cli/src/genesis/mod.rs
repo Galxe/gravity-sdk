@@ -1,11 +1,14 @@
-mod key;
+mod consensus_key;
+mod account;
 
 use clap::Subcommand;
 
-use crate::genesis::key::GenerateKey;
+use crate::genesis::consensus_key::GenerateConsensusKey;
+use crate::genesis::account::GenerateAccount;
 
 
 #[derive(Subcommand, Debug)]
 pub enum GenesisCommand {
-    GenerateKey(GenerateKey),
+    GenerateConsensusKey(GenerateConsensusKey),
+    GenerateAccount(GenerateAccount),
 }

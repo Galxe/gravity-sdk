@@ -22,7 +22,7 @@ struct ValidatorIndentity {
 }
 
 #[derive(Debug, Parser)]
-pub struct GenerateKey {
+pub struct GenerateConsensusKey {
     /// The seed used for key generation, should be a 64 character hex string and only used for testing
     ///
     /// If a predictable random seed is used, the key that is produced will be insecure and easy
@@ -35,7 +35,7 @@ pub struct GenerateKey {
     pub output_file: PathBuf,
 }
 
-impl GenerateKey {
+impl GenerateConsensusKey {
     /// Returns a key generator with the seed if given
     pub fn key_generator(&self) -> Result<KeyGen, anyhow::Error> {
         if let Some(ref seed) = self.random_seed {
@@ -52,7 +52,7 @@ impl GenerateKey {
 }
 
 // TODO(gravity_lightman): account_private_key is aptos key， not reth
-impl Executable for GenerateKey {
+impl Executable for GenerateConsensusKey {
     fn execute(self) -> Result<(), anyhow::Error> {
         info!("--- Generate Key Start ---");
         let mut key_gen = self.key_generator()?;
