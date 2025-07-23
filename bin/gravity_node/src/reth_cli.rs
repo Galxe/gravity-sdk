@@ -237,7 +237,7 @@ impl RethCli {
                 biased;
                 _size = mut_txn_listener.recv_many(&mut tx_hash_vec, batch_size * 100) => {
                     if tx_hash_vec.len() >= batch_size {
-                        debug!("Hash buffer full ({} hashes), pushing transactions.", tx_hash_vec.len());
+                        info!("Hash buffer full ({} hashes), pushing transactions.", tx_hash_vec.len());
                         self.process_transaction_hashes(&mut tx_hash_vec).await?;
                         tx_hash_vec.clear();
                         sleep.as_mut().reset(tokio::time::Instant::now() + timeout_duration);
@@ -245,7 +245,7 @@ impl RethCli {
                 }
                 _ = &mut sleep => {
                     if !tx_hash_vec.is_empty() {
-                        debug!("Timeout reached, processing {} buffered transaction hashes.", tx_hash_vec.len());
+                        info!("Timeout reached, processing {} buffered transaction hashes.", tx_hash_vec.len());
                         self.process_transaction_hashes(&mut tx_hash_vec).await?;
                         tx_hash_vec.clear();
                     }
