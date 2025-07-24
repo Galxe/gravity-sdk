@@ -1,19 +1,19 @@
 base:
   role: "validator"
-  data_dir: "/tmp/node1/data"
+  data_dir: "/gravity_node/data"
   waypoint:
-    from_file: "/tmp/node1/genesis/waypoint.txt"
+    from_file: "/gravity_node/config/waypoint.txt"
 
 consensus:
   safety_rules:
     backend:
       type: "on_disk_storage"
-      path: /tmp/node1/data/secure_storage.json
+      path: /gravity_node/data/secure_storage.json
     initial_safety_rules_config:
       from_file:
         waypoint:
-          from_file: /tmp/node1/genesis/waypoint.txt
-        identity_blob_path: /tmp/node1/genesis/validator-identity.yaml
+          from_file: /gravity_node/config/waypoint.txt
+        identity_blob_path: /gravity_node/config/identity.yaml
   enable_pipeline: true
   max_sending_block_txns_after_filtering: 15000
   max_sending_block_txns: 15000
@@ -39,19 +39,19 @@ validator_network:
   listen_address: "/ip4/127.0.0.1/tcp/2024"
   discovery_method: 
     file:
-      path: "/tmp/node1/discovery"
+      path: "/gravity_node/discovery"
       interval_secs: 3600
   mutual_authentication: true
   identity:
     type: "from_file"
-    path: /tmp/node1/genesis/validator-identity.yaml
+    path: /gravity_node/config/identity.yaml
 
 storage:
-  dir: "/tmp/node1/data"
+  dir: "/gravity_node/data"
 
-node_config_path: "/tmp/node1/genesis/nodes_config.json"
+node_config_path: "/gravity_node/config/nodes_config.json"
 
-log_file_path: "/tmp/node1/consensus_log"
+log_file_path: "/gravity_node/consensus_log"
 
 inspection_service:
   port: 10000
@@ -59,11 +59,3 @@ inspection_service:
 
 mempool:
   capacity_per_user: 20000
-
-
-
-
-
-# https_server_address: "127.0.0.1:1998"
-# https_cert_pem_path: "/absolute_path/cert.pem"
-# https_key_pem_path: "/absolute_path/key.pem"

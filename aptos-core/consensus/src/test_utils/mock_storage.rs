@@ -156,7 +156,7 @@ impl PersistentLivenessStorage for MockStorage {
         unimplemented!("")
     }
 
-    fn save_tree(&self, blocks: Vec<Block>, quorum_certs: Vec<QuorumCert>, block_numbers: Vec<(u64, HashValue)>) -> Result<()> {
+    fn save_tree(&self, blocks: Vec<Block>, quorum_certs: Vec<QuorumCert>, block_numbers: Vec<(u64, u64, HashValue)>) -> Result<()> {
         // When the shared storage is empty, we are expected to not able to construct an block tree
         // from it. During test we will intentionally clear shared_storage to simulate the situation
         // of restarting from an empty consensusDB
@@ -182,8 +182,8 @@ impl PersistentLivenessStorage for MockStorage {
         Ok(())
     }
 
-    fn prune_tree(&self, block_id: Vec<HashValue>) -> Result<()> {
-        for id in block_id {
+    fn prune_tree(&self, block_keys: Vec<(u64, HashValue)>) -> Result<()> {
+        for (_, id) in block_keys {
             self.shared_storage.block.lock().remove(&id);
             self.shared_storage.qc.lock().remove(&id);
         }
@@ -271,11 +271,11 @@ impl PersistentLivenessStorage for EmptyStorage {
         unimplemented!("")
     }
 
-    fn save_tree(&self, _: Vec<Block>, _: Vec<QuorumCert>, _: Vec<(u64, HashValue)>) -> Result<()> {
+    fn save_tree(&self, _: Vec<Block>, _: Vec<QuorumCert>, _: Vec<(u64, u64, HashValue)>) -> Result<()> {
         Ok(())
     }
 
-    fn prune_tree(&self, _: Vec<HashValue>) -> Result<()> {
+    fn prune_tree(&self, block_keys: Vec<(u64, HashValue)>) -> Result<()> {
         Ok(())
     }
 

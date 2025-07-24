@@ -615,7 +615,7 @@ impl BufferManager {
                 let author = vote.author();
                 let commit_info = vote.commit_info().clone();
                 info!("Receive commit vote {} from {}", commit_info, author);
-                if commit_info.round() > self.latest_round {
+                if commit_info.round() >= self.latest_round {
                     if !self.commit_vote_cache.contains_key(&commit_info.id()) {
                         self.commit_vote_cache.insert(commit_info.id(), HashMap::new());
                     }

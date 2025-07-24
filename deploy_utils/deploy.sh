@@ -22,7 +22,7 @@ declare -A VALID_MODES=(
 # Default settings
 bin_name="gravity_node"
 node_arg=""
-bin_version="release"
+bin_version="debug"
 mode="cluster"
 recover="false"
 install_dir="/tmp"
@@ -196,21 +196,21 @@ main() {
         
         # Prepare directories
         log_info "Creating required directories"
-        mkdir -p "$install_dir/$node_arg"/{genesis,bin,data,logs,script}
+        mkdir -p "$install_dir/$node_arg"/{config,bin,data,logs,script}
 
         # Copy files
         log_info "Copying configuration files"
-        cp -r "$SCRIPT_DIR/$node_arg/genesis" "$install_dir/$node_arg"
+        cp -r "$SCRIPT_DIR/$node_arg/config" "$install_dir/$node_arg"
 
         if [[ "$mode" == "cluster" ]]; then
             log_info "Setting up cluster mode"
-            cp -r "$SCRIPT_DIR/four_nodes_config.json" "$install_dir/$node_arg/genesis/nodes_config.json"
+            cp -r "$SCRIPT_DIR/four_nodes_config.json" "$install_dir/$node_arg/config/nodes_config.json"
             cp -r "$SCRIPT_DIR/four_nodes_discovery" "$install_dir/$node_arg/discovery"
         else
             log_info "Setting up single node mode"
-            cp -r "$SCRIPT_DIR/single_node_config.json" "$install_dir/$node_arg/genesis/nodes_config.json"
+            cp -r "$SCRIPT_DIR/single_node_config.json" "$install_dir/$node_arg/config/nodes_config.json"
             cp -r "$SCRIPT_DIR/single_node_discovery" "$install_dir/$node_arg/discovery"
-            cp "$SCRIPT_DIR/waypoint_single.txt" "$install_dir/$node_arg/genesis/waypoint.txt"
+            cp "$SCRIPT_DIR/waypoint_single.txt" "$install_dir/$node_arg/config/waypoint.txt"
         fi
 
         log_info "Copying program files"

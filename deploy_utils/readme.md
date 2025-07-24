@@ -109,6 +109,113 @@ Just change the `--node` parameter to corresponding `nodeX`.
 
 The startup process for node3 and node4 is the same as node1/2.
 
+## Docker & deploy_new.sh Deployment
+
+### 1. Deploy with deploy_new.sh
+
+#### Deploy Node
+
+Assuming you have prepared the config directory (e.g., `my_config/`) and built the binary:
+
+```
+./deploy_utils/deploy_new.sh --config_dir ./my_config --deploy_dir /tmp/gravity_node
+```
+- `--config_dir`: Directory containing identity.yaml, validator.yaml, reth_config.json, etc.
+- `--deploy_dir`: Target deployment directory, should match the path in your config files (e.g., `/tmp/gravity_node`)
+
+#### Start Node
+
+```
+cd /tmp/gravity_node
+./script/start.sh
+```
+
+#### Stop Node
+
+```
+cd /tmp/gravity_node
+./script/stop.sh
+```
+
+### 2. Deploy with Docker or Docker Compose
+
+#### Build Docker Image
+
+From the project root directory:
+
+```
+docker build -f docker/gravity_node/validator.Dockerfile -t gravity_node:latest .
+```
+
+#### Prepare Host Directories
+
+Before starting, create the required host directories:
+
+```
+mkdir -p /tmp/node1/data /tmp/node1/logs /tmp/node1/execution_logs /tmp/node1/consensus_log
+```
+
+#### Start with Docker
+
+```
+docker run -d \
+  --name gravity_node1 \
+  -v /tmp/node1/data:/gravity_node/data \
+  -v /tmp/node1/logs:/gravity_node/logs \
+  -v /tmp/node1/execution_logs:/gravity_node/execution_logs \
+  -v /tmp/node1/consensus_log:/gravity_node/consensus_log \
+  -v /your/config/dir:/gravity_node/config \
+  -p 8545:8545 -p 8551:8551 -p 9001:9001 \
+  gravity_node:latest
+```
+- `/your/config/dir` should contain identity.yaml, validator.yaml, reth_config.json, etc.
+
+#### Start with Docker Compose
+
+Example `docker-compose.yaml`:
+
+```yaml
+version: '3.8'
+services:
+  gravity_node1:
+    build:
+      context: .
+      dockerfile: docker/gravity_node/validator.Dockerfile
+    container_name: gravity_node1
+    volumes:
+      - /tmp/node1/data:/gravity_node/data
+      - /tmp/node1/logs:/gravity_node/logs
+      - /tmp/node1/execution_logs:/gravity_node/execution_logs
+      - /tmp/node1/consensus_log:/gravity_node/consensus_log
+      - ./docker/gravity_node/config:/gravity_node/config
+    environment:
+      - RUST_LOG=info
+    ports:
+      - "8545:8545"
+      - "8551:8551"
+      - "9001:9001"
+    command: ["/gravity_node/script/start.sh"]
+```
+
+Start the service:
+
+```
+docker compose -f docker/gravity_node/docker-compose.yaml up -d
+```
+
+Stop the service:
+
+```
+docker compose -f docker/gravity_node/docker-compose.yaml down
+```
+
+### Notes
+
+1. Ensure all config file paths are correct before starting the nodes.
+2. For multi-node deployment, prepare separate data/logs/config directories for each node and add multiple service blocks in the compose file.
+3. If port conflicts occur, adjust the host ports in the `ports` section.
+4. Log files are separated into `consensus_log` (Aptos) and `execution_logs` (Reth). You can configure log file locations via config files and command-line parameters.
+
 ## Important Notes
 
 1. Ensure all paths in configuration files are correctly modified before starting the nodes.

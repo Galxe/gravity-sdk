@@ -35,7 +35,7 @@ impl Mempool {
         }
     }
 
-    pub fn get_txns(&mut self, block_txns: &mut Vec<VerifiedTxn>) -> bool {
+    pub fn get_txns(&mut self, block_txns: &mut Vec<VerifiedTxn>, max_block_size: usize) -> bool {
         let mut has_new_txn = false;
         for (account, txns) in self.pool_txns.iter() {
             let next_nonce = self.next_sequence_numbers.get(account).unwrap_or(&0);
@@ -44,6 +44,9 @@ impl Mempool {
                 block_txns.push(txn.1.txn.clone());
                 self.next_sequence_numbers.insert(txn.0.clone(), txn.1.txn.sequence_number + 1);
                 has_new_txn = true;
+                if block_txns.len() >= max_block_size {
+                    break;
+                }
             }
         }
 

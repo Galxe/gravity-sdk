@@ -1,0 +1,20 @@
+version: '3.8'
+services:
+  gravity_node:
+    build:
+      context: ../..
+      dockerfile: docker/gravity_node/validator.Dockerfile
+    container_name: gravity_node
+    volumes:
+      - /tmp/gravity_node/data:/gravity_node/data
+      - /tmp/gravity_node/logs:/gravity_node/logs
+      - /tmp/gravity_node/execution_logs:/gravity_node/execution_logs
+      - /tmp/gravity_node/consensus_log:/gravity_node/consensus_log
+    ports:
+      - "8545:8545"    # reth http.port
+      - "8551:8551"    # reth authrpc.port
+      - "9001:9001"    # reth metrics
+      - "12024:12024"  # reth port
+      - "2024:2024"    # gravity-sdk network.port
+      - "10000:10000"  # gravity-sdk inspection_service.port
+    command: sh -c "/gravity_node/script/start.sh && tail -f /dev/null"

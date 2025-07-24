@@ -1,0 +1,33 @@
+{
+    "reth_args": {
+        "chain": "dev",
+        "http": "",
+        "http.port": 8545,
+        "http.corsdomain": "*",
+        "http.api": "debug,eth,net,trace,txpool,web3,rpc",
+        "http.addr": "0.0.0.0",
+        "dev": "",
+        "port": 12024,
+        "authrpc.port": 8551,
+        "authrpc.addr": "0.0.0.0",
+        "metrics": "0.0.0.0:9001",
+        "log.file.filter": "info",
+        "datadir": "/tmp/node1/data/reth",
+        "datadir.static-files": "/tmp/node1/data/reth",
+        "gravity_node_config": "/tmp/node1/config/validator.yaml",
+        "log.file.directory": "/tmp/node1/execution_logs/",
+        "rpc.max-subscriptions-per-connection": 20000,
+        "rpc.max-connections": 20000,
+        "txpool.max-pending-txns": 1000000,
+        "txpool.pending-max-count": 18446744073709551615,
+        "txpool.pending-max-size": 17592186044415,
+        "txpool.basefee-max-count": 18446744073709551615,
+        "txpool.basefee-max-size": 17592186044415,
+        "txpool.queued-max-count": 18446744073709551615,
+        "txpool.queued-max-size": 17592186044415,
+        "http.disable_compression": ""
+    },
+    "env_vars": {
+        "BATCH_INSERT_TIME": 20
+    }
+}

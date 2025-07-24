@@ -214,6 +214,8 @@ pub enum VerifiedEvent {
     LocalTimeout(Round),
     // Shutdown the NetworkListener
     Shutdown(TokioOneshot::Sender<()>),
+    // change epoch
+    EpochChange(u64),
 }
 
 #[cfg(test)]
@@ -252,6 +254,7 @@ pub struct RoundManager {
     // which we recently broadcasted fast shares.
     blocks_with_broadcasted_fast_shares: LruCache<HashValue, ()>,
     futures: FuturesUnordered<Pin<Box<dyn Future<Output = (anyhow::Result<()>, Block)> + Send>>>,
+    wait_change_epoch_flag: bool,
 }
 
 impl RoundManager {
@@ -301,6 +304,7 @@ impl RoundManager {
             pending_order_votes: PendingOrderVotes::new(),
             blocks_with_broadcasted_fast_shares: LruCache::new(5),
             futures: FuturesUnordered::new(),
+            wait_change_epoch_flag: false,
         }
     }
 
@@ -1395,8 +1399,13 @@ impl RoundManager {
             .round_state
             .process_certificates(self.block_store.sync_info())
             .expect("Can not jump start a round_state from existing certificates.");
-        if let Some(vote) = last_vote_sent {
-            self.round_state.record_vote(vote);
+        let author = self.proposal_generator.author();
+        if let Some(vote) = last_vote_sent{
+            if vote.author() != author {
+                error!("last vote sent is not for the current author, ignore");
+            } else {
+                self.round_state.record_vote(vote);
+            }
         }
         if let Err(e) = self.process_new_round_event(new_round_event).await {
             warn!(error = ?e, "[RoundManager] Error during start");
@@ -1544,6 +1553,18 @@ impl RoundManager {
                             "process_local_timeout",
                             self.process_local_timeout(round).await
                         ),
+                        VerifiedEvent::EpochChange(epoch) => {
+                            if !self.wait_change_epoch_flag {
+                                if let Err(e) = self.block_store.fast_forward_sync_by_epoch(self.create_block_retriever(peer_id), epoch).await {
+                                    Err(e)
+                                } else {
+                                    self.wait_change_epoch_flag = true;
+                                    Ok(())
+                                }
+                            } else {
+                                Ok(())
+                            }
+                        }
                         unexpected_event => unreachable!("Unexpected event: {:?}", unexpected_event),
                     }
                     .with_context(|| format!("from peer {}", peer_id));

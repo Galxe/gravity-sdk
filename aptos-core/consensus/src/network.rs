@@ -19,7 +19,7 @@ use crate::{
     },
 };
 use anyhow::{anyhow, bail, ensure};
-use gaptos::aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
+use gaptos::{aptos_channels::{self, aptos_channel, message_queues::QueueStyle}, aptos_crypto::HashValue};
 use gaptos::aptos_config::network_id::NetworkId;
 use aptos_consensus_types::{
     block_retrieval::{BlockRetrievalRequest, BlockRetrievalResponse},
@@ -243,16 +243,18 @@ impl NetworkSender {
             ConsensusMsg::BlockRetrievalResponse(resp) => *resp,
             _ => return Err(anyhow!("Invalid response to request")),
         };
-        response
-            .verify(retrieval_request, &self.validators)
-            .map_err(|e| {
-                error!(
-                    SecurityEvent::InvalidRetrievedBlock,
-                    request_block_response = response,
-                    error = ?e,
-                );
-                e
-            })?;
+        if retrieval_request.block_id() != HashValue::zero() {
+            response
+                .verify(retrieval_request, &self.validators)
+                .map_err(|e| {
+                    error!(
+                        SecurityEvent::InvalidRetrievedBlock,
+                        request_block_response = response,
+                        error = ?e,
+                    );
+                    e
+                })?;
+            }
 
         Ok(response)
     }

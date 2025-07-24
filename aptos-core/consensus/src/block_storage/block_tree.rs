@@ -412,7 +412,7 @@ impl BlockTree {
     /// B3--> B4, root = B3
     ///
     /// Note this function is read-only, use with process_pruned_blocks to do the actual prune.
-    pub(super) fn find_blocks_to_prune(&self, next_root_id: HashValue) -> VecDeque<HashValue> {
+    pub(super) fn find_blocks_to_prune(&self, next_root_id: HashValue) -> VecDeque<(u64, HashValue)> {
         // Nothing to do if this is the commit root
         if next_root_id == self.commit_root_id {
             return VecDeque::new();
@@ -432,7 +432,7 @@ impl BlockTree {
                 );
             }
             // Track all the block ids removed
-            blocks_pruned.push_back(block_to_remove.id());
+            blocks_pruned.push_back((block_to_remove.executed_block().epoch(), block_to_remove.id()));
         }
         blocks_pruned
     }
@@ -456,12 +456,12 @@ impl BlockTree {
     /// Note that we do not necessarily remove the pruned blocks: they're kept in a separate buffer
     /// for some time in order to enable other peers to retrieve the blocks even after they've
     /// been committed.
-    pub(super) fn process_pruned_blocks(&mut self, mut newly_pruned_blocks: VecDeque<HashValue>) {
+    pub(super) fn process_pruned_blocks(&mut self, mut newly_pruned_blocks: VecDeque<(u64, HashValue)>) {
         counters::NUM_BLOCKS_IN_TREE.sub(newly_pruned_blocks.len() as i64);
         // The newly pruned blocks are pushed back to the deque pruned_block_ids.
         // In case the overall number of the elements is greater than the predefined threshold,
         // the oldest elements (in the front of the deque) are removed from the tree.
-        self.pruned_block_ids.append(&mut newly_pruned_blocks);
+        newly_pruned_blocks.into_iter().for_each(|(_, block_id)| self.pruned_block_ids.push_back(block_id));
         if self.pruned_block_ids.len() > self.max_pruned_blocks_in_mem {
             let num_blocks_to_remove = self.pruned_block_ids.len() - self.max_pruned_blocks_in_mem;
             for _ in 0..num_blocks_to_remove {

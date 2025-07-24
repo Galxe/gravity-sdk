@@ -9,8 +9,7 @@ use crate::{
     logger,
     network::{create_network_runtime, extract_network_configs},
 };
-use gaptos::aptos_build_info as aptos_build_info;
-use gaptos::aptos_build_info::build_information;
+use build_info::build_information;
 use gaptos::aptos_config::{config::NodeConfig, network_id::NetworkId};
 use aptos_consensus::consensusdb::ConsensusDB;
 use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
