@@ -28,6 +28,13 @@ fn get_ordered_interval_ms() -> u64 {
     })
 }
 
+fn get_max_txn_num() -> usize {
+    std::env::var("MOCK_MAX_BLOCK_SIZE")
+        .unwrap_or_else(|_| "7000".to_string())
+        .parse()
+        .unwrap_or(7000)
+}
+
 impl MockConsensus {
     pub async fn new() -> Self {
         let genesis_block_id = BlockId([
@@ -70,8 +77,8 @@ impl MockConsensus {
         block_number: u64,
         attr: ExternalPayloadAttr,
     ) -> ExternalBlock {
-        const MAX_TXN_NUM: usize = 7000;
-        let mut txns = Vec::with_capacity(MAX_TXN_NUM);
+        let max_txn_num: usize = get_max_txn_num();
+        let mut txns = Vec::with_capacity(max_txn_num);
         loop {
             let time_gap =
                 SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() -
@@ -79,7 +86,7 @@ impl MockConsensus {
             if time_gap > 1 {
                 return Self::construct_block(block_number, txns, attr);
             }
-            let has_new_txn = pool.lock().await.get_txns(&mut txns);
+            let has_new_txn = pool.lock().await.get_txns(&mut txns, max_txn_num);
             if !has_new_txn {
                 if txns.len() > 0 {
                     return Self::construct_block(block_number, txns, attr);
@@ -89,7 +96,7 @@ impl MockConsensus {
                 }
             }
 
-            if txns.len() > MAX_TXN_NUM {
+            if txns.len() > max_txn_num {
                 return Self::construct_block(block_number, txns, attr);
             }
         }
