@@ -423,25 +423,12 @@ impl BatchStore {
 
 impl BatchWriter for BatchStore {
     fn persist(&self, persist_requests: Vec<PersistedValue>) -> Vec<SignedBatchInfo> {
-        // let mut signed_infos = vec![];
-        // for persist_request in persist_requests.into_iter() {
-        //     if let Some(signed_info) = self.persist_inner(persist_request.clone()) {
-        //         self.notify_subscribers(persist_request);
-        //         signed_infos.push(signed_info);
-        //     }
-        // }
-        // signed_infos
-        let res = persist_requests
-            .into_par_iter()
-            .filter_map(|req| {
-                let signed_info_opt = self.persist_inner(req.clone());
-                signed_info_opt.map(|si| (req, si))
-            })
-            .collect::<Vec<(PersistedValue, SignedBatchInfo)>>();
         let mut signed_infos = vec![];
-        for (req, si) in res {
-            self.notify_subscribers(req);
-            signed_infos.push(si);
+        for persist_request in persist_requests.into_iter() {
+            if let Some(signed_info) = self.persist_inner(persist_request.clone()) {
+                self.notify_subscribers(persist_request);
+                signed_infos.push(signed_info);
+            }
         }
         signed_infos
     }
