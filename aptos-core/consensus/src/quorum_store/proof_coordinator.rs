@@ -362,7 +362,7 @@ impl ProofCoordinator {
                                         if peer_id == self.peer_id {
                                             info!("QS: could not add signature from self, digest = {}, batch_id = {}, err = {:?}", digest, batch_id, e);
                                         } else {
-                                            debug!("QS: could not add signature from peer {}, digest = {}, batch_id = {}, err = {:?}", peer_id, digest, batch_id, e);
+                                            info!("QS: could not add signature from peer {}, digest = {}, batch_id = {}, err = {:?}", peer_id, digest, batch_id, e);
                                         }
                                     },
                                 }
