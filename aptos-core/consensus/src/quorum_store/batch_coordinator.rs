@@ -138,12 +138,13 @@ impl BatchCoordinator {
     }
 
     async fn handle_batches_msg(&mut self, author: PeerId, batches: Vec<Batch>) {
+        info!("lightman0725 handle_batches_msg1 {} {}", author, batches.len());
         if let Err(e) = self.ensure_max_limits(&batches) {
             error!("Batch from {}: {}", author, e);
             counters::RECEIVED_BATCH_MAX_LIMIT_FAILED.inc();
             return;
         }
-
+        info!("lightman0725 handle_batches_msg2");
         let mut persist_requests = vec![];
         for batch in batches.into_iter() {
             if batch.author() != self.my_peer_id {
@@ -159,6 +160,7 @@ impl BatchCoordinator {
             
             persist_requests.push(batch.into());
         }
+        info!("lightman0725 handle_batches_msg3");
         counters::RECEIVED_BATCH_COUNT.inc_by(persist_requests.len() as u64);
         if author != self.my_peer_id {
             counters::RECEIVED_REMOTE_BATCH_COUNT.inc_by(persist_requests.len() as u64);

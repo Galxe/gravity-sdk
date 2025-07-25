@@ -553,6 +553,7 @@ impl BatchGenerator {
                             }
                         },
                         BatchGeneratorCommand::RemoteBatch(batch) => {
+                            info!("lightman0725 BatchGeneratorCommand::RemoteBatch {} {}", batch.author(), batch.batch_id());
                             self.handle_remote_batch(batch.author(), batch.batch_id(), batch.into_transactions());
                         },
                         BatchGeneratorCommand::Shutdown(ack_tx) => {
