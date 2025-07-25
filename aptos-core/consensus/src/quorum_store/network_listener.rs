@@ -62,7 +62,7 @@ impl NetworkListener {
                         let author = batch_msg.author();
                         let batches = batch_msg.take();
                         counters::RECEIVED_BATCH_MSG_COUNT.inc();
-
+                        info!("lightman0725 BatchMsg {} {}", author, batches.len());
                         let idx =
                             author.to_vec()[0] as usize % self.remote_batch_coordinator_tx.len();
                         trace!(
