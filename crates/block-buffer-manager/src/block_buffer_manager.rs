@@ -1,5 +1,3 @@
-use tracing::{info, warn};
-
 use anyhow::{anyhow, format_err};
 use aptos_executor_types::StateComputeResult;
 use bytes::Bytes;
@@ -218,7 +216,7 @@ impl BlockBufferManager {
     }
 
     pub async fn push_txns(&self, txns: &mut Vec<VerifiedTxnWithAccountSeqNum>, gas_limit: u64) {
-        tracing::info!("push_txns txns len: {:?}", txns.len());
+        info!("push_txns txns len: {:?}", txns.len());
         let mut pool_txns = self.txn_buffer.txns.lock().await;
         pool_txns.push(TxnItem { txns: std::mem::take(txns), gas_limit, insert_time: SystemTime::now() });
     }
@@ -236,7 +234,7 @@ impl BlockBufferManager {
         let mut total_gas_limit = 0;
         let mut count = 0;
         let total_txn = txn_buffer.iter().map(|item| item.txns.len()).sum::<usize>();
-        tracing::info!("pop_txns total_txn: {:?}", total_txn);
+        info!("pop_txns total_txn: {:?}", total_txn);
         let split_point = txn_buffer.iter()
             .position(|item| {
                 if total_gas_limit == 0 {
