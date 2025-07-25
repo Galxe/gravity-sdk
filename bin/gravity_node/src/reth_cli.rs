@@ -196,22 +196,23 @@ impl RethCli {
         Ok(())
     }
 
-    pub async fn start_mempool(&self) -> Result<(), String> {
+    pub async fn start_mempool(self: Arc<Self>) -> Result<(), String> {
         info!("start process pending transactions with timeout");
-        let mut mut_txn_listener = self.txn_listener.lock().await;
-    
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let batch_size: usize = self.txn_batch_size;
         let timeout_duration = self.txn_check_interval;
         let sleep = tokio::time::sleep(timeout_duration);
-        tokio::pin!(sleep);
-        let mut tx_hash_vec = Vec::with_capacity(batch_size * 100);
-        loop {
-            tokio::select! {
+        let self_clone = self.clone();
+        tokio::spawn(async move {
+            tokio::pin!(sleep);
+            loop {
+                let mut tx_hash_vec = Vec::with_capacity(batch_size * 100);
+                tokio::select! {
                 biased;
-                _size = mut_txn_listener.recv_many(&mut tx_hash_vec, batch_size * 100) => {
+                _size = rx.recv_many(&mut tx_hash_vec, batch_size * 100) => {
                     if tx_hash_vec.len() >= batch_size {
                         debug!("Hash buffer full ({} hashes), pushing transactions.", tx_hash_vec.len());
-                        self.process_transaction_hashes(&mut tx_hash_vec).await?;
+                        self_clone.process_transaction_hashes(&mut tx_hash_vec).await;
                         tx_hash_vec.clear();
                         sleep.as_mut().reset(tokio::time::Instant::now() + timeout_duration);
                     }
@@ -219,17 +220,24 @@ impl RethCli {
                 _ = &mut sleep => {
                     if !tx_hash_vec.is_empty() {
                         debug!("Timeout reached, processing {} buffered transaction hashes.", tx_hash_vec.len());
-                        self.process_transaction_hashes(&mut tx_hash_vec).await?;
+                        self_clone.process_transaction_hashes(&mut tx_hash_vec).await;
                         tx_hash_vec.clear();
                     }
                     sleep.as_mut().reset(tokio::time::Instant::now() + timeout_duration);
                 }
             }
+            }
+        });
+        loop {
+            let penging_txns = self.pool.best_transactions();
+            for txn in penging_txns {
+                tx.send(txn.hash().clone()).unwrap();
+            }
         }
     }
 
 
-    async fn process_transaction_hashes(&self, tx_hash_vec: &mut Vec<TxHash>) -> Result<(), String> {
+    async fn process_transaction_hashes(&self, tx_hash_vec: &mut Vec<TxHash>) {
         let mut max_nonce_cache = self.max_nonce_cache.lock().await;
         let mut pool_txns = self.pool.get_all(tx_hash_vec.drain(..).collect());
         let mut tx_gap = HashSet::new();
@@ -272,11 +280,10 @@ impl RethCli {
                 pool_txns.push(txn);
             }
         });
-        self.process_pool_transactions(pool_txns).await?;
-        Ok(())
+        self.process_pool_transactions(pool_txns).await;
     }
 
-    async fn process_pool_transactions(&self, pool_txns: Vec<Arc<ValidPoolTransaction<EthPooledTransaction>>>) -> Result<(), String> {
+    async fn process_pool_transactions(&self, pool_txns: Vec<Arc<ValidPoolTransaction<EthPooledTransaction>>>) {
         let mut buffer = Vec::with_capacity(pool_txns.len());
         let mut gas_limit = 0;
         for pool_txn in pool_txns {
@@ -292,8 +299,8 @@ impl RethCli {
                 let mut init_nonce_cache = self.address_init_nonce_cache.lock().await;
                 if !init_nonce_cache.contains_key(&sender) {
                     let account_nonce = self.provider.basic_account(&sender)
-                        .map_err(|e| format!("Failed to get basic account for {}: {:?}", sender, e))?
-                        .map(|x| x.nonce)
+                        .map(|x| x.map(|x| x.nonce))
+                        .unwrap_or(Some(nonce))
                         .unwrap_or(nonce);
                     init_nonce_cache.insert(sender, account_nonce);
                 }
@@ -324,7 +331,6 @@ impl RethCli {
         if !buffer.is_empty() {
             get_block_buffer_manager().push_txns(&mut buffer, gas_limit).await;
         }
-        Ok(())
     }
 
     pub async fn start_execution(&self) -> Result<(), String> {
