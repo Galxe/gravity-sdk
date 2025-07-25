@@ -246,7 +246,7 @@ impl RethCli {
                 count += 1; 
             }
             info!("send txn hash vec len {}", count);
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         }
     }
 
