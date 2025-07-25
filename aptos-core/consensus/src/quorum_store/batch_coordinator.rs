@@ -92,7 +92,8 @@ impl BatchCoordinator {
                     .send_signed_batch_info_msg(signed_batch_infos, vec![peer_id])
                     .await;
             }
-            
+            info!("lightman0725 ReceiveBatches {}", batches.len());
+
             let _ = sender_to_proof_manager
                 .send(ProofManagerCommand::ReceiveBatches(batches))
                 .await;
