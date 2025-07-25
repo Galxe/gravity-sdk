@@ -517,6 +517,7 @@ impl QuorumStoreSender for NetworkSender {
 
     async fn broadcast_proof_of_store_msg(&mut self, proofs: Vec<ProofOfStore>) {
         fail_point!("consensus::send::proof_of_store", |_| ());
+        info!("lightman0725 broadcast_proof_of_store_msg {}", proofs.len());
         let msg = ConsensusMsg::ProofOfStoreMsg(Box::new(ProofOfStoreMsg::new(proofs)));
         self.broadcast(msg).await
     }
