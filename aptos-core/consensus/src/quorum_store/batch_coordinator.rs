@@ -87,6 +87,7 @@ impl BatchCoordinator {
                 .collect();
             let signed_batch_infos = batch_store.persist(persist_requests);
             if !signed_batch_infos.is_empty() {
+                info!("lightman0725 persist_and_send_digests {} {}", peer_id, signed_batch_infos.len());
                 network_sender
                     .send_signed_batch_info_msg(signed_batch_infos, vec![peer_id])
                     .await;
