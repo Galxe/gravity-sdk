@@ -18,4 +18,4 @@ anyhow.workspace = true
 tokio.workspace = true
 itertools = "0.14"
 aptos-executor-types = { workspace = true }
-tracing.workspace = ture
+tracing.workspace = true
