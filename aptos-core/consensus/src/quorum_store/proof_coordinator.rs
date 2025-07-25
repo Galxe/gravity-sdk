@@ -346,6 +346,7 @@ impl ProofCoordinator {
                                 let peer_id = signed_batch_info.signer();
                                 let digest = *signed_batch_info.digest();
                                 let batch_id = signed_batch_info.batch_id();
+                                info!("lightman0725 AppendSignature {} {} {}", peer_id, digest, batch_id);
                                 match self.add_signature(signed_batch_info, &validator_verifier) {
                                     Ok(result) => {
                                         if let Some(proof) = result {
