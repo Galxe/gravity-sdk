@@ -36,7 +36,7 @@ use greth::{
 use greth::{
     reth::rpc::builder::auth::AuthServerHandle, reth_node_core::primitives::SignedTransaction,
 };
-use std::{collections::{HashMap, HashSet}, sync::Arc, time::{Instant, SystemTime}};
+use std::{collections::{HashMap, HashSet, VecDeque}, sync::Arc, time::{Instant, SystemTime}};
 use tokio::sync::Mutex;
 use tracing::*;
 
@@ -63,7 +63,6 @@ pub struct RethCli {
         greth::reth_transaction_pool::blobstore::DiskFileBlobStore,
     >,
     txn_cache: Mutex<HashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>>,
-    max_nonce_cache: Mutex<HashMap<Address, u64>>,
     txn_batch_size: usize,
     txn_check_interval: tokio::time::Duration,
     address_init_nonce_cache: Mutex<HashMap<Address, u64>>,
@@ -97,7 +96,6 @@ impl RethCli {
             txn_cache: Mutex::new(HashMap::new()),
             txn_batch_size: 2000,
             txn_check_interval: std::time::Duration::from_millis(50),
-            max_nonce_cache: Mutex::new(HashMap::new()),
             address_init_nonce_cache: Mutex::new(HashMap::new()),
         }
     }
@@ -228,15 +226,27 @@ impl RethCli {
             }
             }
         });
-        let mut penging_txns = self.pool.best_transactions();
         let mut count = 0;
+        let mut visited = HashMap::new();
+        let mut address_queue = VecDeque::new();
         loop {
+            let mut penging_txns = self.pool.best_transactions();
             while let Some(txn) = penging_txns.next() {
+                if visited.get(&txn.sender()).unwrap_or(&0) > &txn.nonce() {
+                    continue;
+                }
+                address_queue.push_back(txn.sender().clone());
+                if address_queue.len() > 100000 {
+                    if let Some(address) = address_queue.pop_front() {
+                        visited.remove(&address);
+                    }
+                }
+                visited.insert(txn.sender().clone(), txn.nonce());
                 tx.send(txn).expect("failed to send txn hash");
                 count += 1; 
             }
             info!("send txn hash vec len {}", count);
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
     }
 

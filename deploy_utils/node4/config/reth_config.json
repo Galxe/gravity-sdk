@@ -18,6 +18,7 @@
         "log.file.directory": "/tmp/node4/execution_logs/",
         "rpc.max-subscriptions-per-connection": 20000,
         "rpc.max-connections": 20000,
+        "txpool.max-new-pending-txs-notifications": 1000000,
         "txpool.max-pending-txns": 1000000,
         "txpool.pending-max-count": 18446744073709551615,
         "txpool.pending-max-size": 17592186044415,
