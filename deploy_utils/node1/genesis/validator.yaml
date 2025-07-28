@@ -15,9 +15,9 @@ consensus:
           from_file: /tmp/node1/genesis/waypoint.txt
         identity_blob_path: /tmp/node1/genesis/validator-identity.yaml
   enable_pipeline: true
-  max_sending_block_txns_after_filtering: 15000
-  max_sending_block_txns: 15000
-  max_receiving_block_txns: 15000
+  max_sending_block_txns_after_filtering: 7000
+  max_sending_block_txns: 7000
+  max_receiving_block_txns: 7000
   max_sending_block_bytes: 31457280 
   max_receiving_block_bytes: 31457280 
   quorum_store:
