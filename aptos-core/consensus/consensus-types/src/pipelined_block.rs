@@ -12,7 +12,7 @@ use crate::{
     vote_proposal::VoteProposal,
 };
 use anyhow::Error;
-use gaptos::aptos_crypto::hash::{HashValue, ACCUMULATOR_PLACEHOLDER_HASH};
+use gaptos::{aptos_crypto::hash::{HashValue, ACCUMULATOR_PLACEHOLDER_HASH}, aptos_logger::info};
 use aptos_executor_types::{ExecutorResult, StateComputeResult};
 use gaptos::aptos_infallible::Mutex;
 use gaptos::aptos_logger::{error, warn};
@@ -202,6 +202,7 @@ impl PipelinedBlock {
         self.state_compute_result = result;
         self.input_transactions = input_txns;
         self.pre_commit_fut = Arc::new(Mutex::new(Some(pre_commit_fut)));
+        info!("lightman0728 set pre_commit_fut {}", self.block.block_number().unwrap());
 
         let mut to_commit = 0;
         let to_retry = 0;
