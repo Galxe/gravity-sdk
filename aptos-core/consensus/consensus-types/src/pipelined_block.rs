@@ -223,25 +223,22 @@ impl PipelinedBlock {
 
         // We might be retrying execution, so it might have already been set.
         // Because we use this for statistics, it's ok that we drop the newer value.
-        if let Some(previous) = self.execution_summary.get() {
-            if previous.root_hash == execution_summary.root_hash
-                || previous.root_hash == *ACCUMULATOR_PLACEHOLDER_HASH
-            {
-                warn!(
-                    "Skipping re-inserting execution result, from {:?} to {:?}",
-                    previous, execution_summary
-                );
-            } else {
-                error!(
-                    "Re-inserting execution result with different root hash: from {:?} to {:?}",
-                    previous, execution_summary
-                );
-            }
+        let previous = self.execution_summary.get_or_init(|| execution_summary.clone());
+
+        if previous.root_hash == execution_summary.root_hash
+            || previous.root_hash == *ACCUMULATOR_PLACEHOLDER_HASH
+        {
+            warn!(
+                "Skipping re-inserting execution result, from {:?} to {:?}",
+                previous, execution_summary
+            );
         } else {
-            self.execution_summary
-                .set(execution_summary)
-                .expect("inserting into empty execution summary");
+            error!(
+                "Re-inserting execution result with different root hash: from {:?} to {:?}",
+                previous, execution_summary
+            );
         }
+
 
         self
     }
