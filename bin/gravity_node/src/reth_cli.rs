@@ -65,6 +65,7 @@ pub struct RethCli {
     txn_cache: Mutex<HashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>>,
     txn_batch_size: usize,
     txn_check_interval: tokio::time::Duration,
+    txn_pool_interval: tokio::time::Duration,
     address_init_nonce_cache: Mutex<HashMap<Address, u64>>,
 }
 
@@ -96,6 +97,7 @@ impl RethCli {
             txn_cache: Mutex::new(HashMap::new()),
             txn_batch_size: 2000,
             txn_check_interval: std::time::Duration::from_millis(50),
+            txn_pool_interval: std::time::Duration::from_secs(2),
             address_init_nonce_cache: Mutex::new(HashMap::new()),
         }
     }
@@ -246,7 +248,7 @@ impl RethCli {
                 count += 1; 
             }
             info!("send txn hash vec len {}", count);
-            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            tokio::time::sleep(self.txn_pool_interval).await;
         }
     }
 
