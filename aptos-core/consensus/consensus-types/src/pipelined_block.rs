@@ -263,7 +263,7 @@ impl PipelinedBlock {
         self.pre_commit_fut
             .lock()
             .take()
-            .expect("pre_commit_result_rx missing.")
+            .expect(&("pre_commit_result_rx missing. block_number=".to_string() + &self.block.block_number().unwrap().to_string()))
     }
 }
 
