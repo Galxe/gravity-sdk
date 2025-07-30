@@ -7,9 +7,10 @@ use api::{
 use consensus::mock_consensus::mock::MockConsensus;
 use gravity_storage::block_view_storage::BlockViewStorage;
 use greth::{
-    gravity_storage, reth, reth::chainspec::EthereumChainSpecParser, reth_cli_util, reth_db,
+    gravity_storage, reth, reth::chainspec::EthereumChainSpecParser, reth_cli_util,
     reth_node_api, reth_node_builder, reth_node_ethereum, reth_pipe_exec_layer_ext_v2,
     reth_pipe_exec_layer_ext_v2::ExecutionArgs, reth_provider,
+    reth_transaction_pool::TransactionPool,
 };
 use pprof::{protos::Message, ProfilerGuard};
 use reth::rpc::builder::auth::AuthServerHandle;
@@ -37,7 +38,7 @@ use std::{
 
 use crate::reth_cli::RethCli;
 use clap::Parser;
-use reth_node_builder::{engine_tree_config, EngineNodeLauncher};
+use reth_node_builder::EngineNodeLauncher;
 use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
 use reth_provider::providers::BlockchainProvider;
 
@@ -92,12 +93,7 @@ fn run_reth(
                     .unwrap();
                 let pool: RethTransactionPool = handle.node.pool;
 
-                let storage = BlockViewStorage::new(
-                    provider.clone(),
-                    latest_block.number,
-                    latest_block_hash,
-                    BTreeMap::new(),
-                );
+                let storage = BlockViewStorage::new(provider.clone());
                 let pipeline_api_v2 = reth_pipe_exec_layer_ext_v2::new_pipe_exec_layer_api(
                     chain_spec,
                     storage,
@@ -157,7 +153,6 @@ fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
                 let mut state = profiling_state_clone.lock().unwrap();
                 if let Some(guard) = state.guard.take() {
                     if let Ok(report) = guard.report().build() {
-                        let timestamp = std::time::SystemTime::now();
                         let count = state.profile_count;
 
                         let now = std::time::SystemTime::now();

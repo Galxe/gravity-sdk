@@ -219,13 +219,14 @@ impl MockConsensus {
                 .set_commit_blocks(vec![BlockHashRef {
                     block_id,
                     num: block_number,
-                    hash: Some(res.data),
+                    hash: Some(res.execution_output.data),
                     persist_notifier: None,
                 }])
                 .await
                 .unwrap();
 
             let committed_txns = res
+                .execution_output
                 .txn_status
                 .as_ref()
                 .as_ref()

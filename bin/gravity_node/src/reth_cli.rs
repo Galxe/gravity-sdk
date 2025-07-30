@@ -1,12 +1,7 @@
 use crate::{metrics::fetch_reth_txn_metrics, ConsensusArgs};
-<<<<<<< HEAD
-use bytes::Bytes;
 use alloy_consensus::Transaction;
+use alloy_consensus::transaction::SignerRecoverable;
 use alloy_eips::{eip4895::Withdrawals, Decodable2718, Encodable2718};
-=======
-use alloy_consensus::{Transaction, transaction::SignerRecoverable};
-use alloy_eips::{eip4895::Withdrawals, BlockId, BlockNumberOrTag, Decodable2718, Encodable2718};
->>>>>>> d10308e (use greth merge-v1.4.8)
 use alloy_primitives::{
     Address, TxHash, B256,
 };
