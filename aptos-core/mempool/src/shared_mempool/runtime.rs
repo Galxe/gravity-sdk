@@ -92,13 +92,6 @@ async fn retrieve_from_execution_routine(
                 let mut lock_mempool = mempool.lock();
                 let start_time = Instant::now();
                 let txns_len = txns.len();
-                if txns_len > 0 {
-                    info!("start print into mempool");
-                    txns.iter().for_each(|txn| {
-                        info!("aptosacc: {:?}, nonce {:?}", txn.txn.sender, txn.txn.sequence_number);
-                    });
-                    info!("finish print into mempool");
-                }
                 let status = lock_mempool.add_user_txns_batch(txns, true, TimelineState::NotReady, None);
                 for s in status {
                     if !(s.code == MempoolStatusCode::Accepted || s.code == MempoolStatusCode::InvalidSeqNumber) {
