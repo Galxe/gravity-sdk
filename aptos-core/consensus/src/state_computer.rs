@@ -265,13 +265,6 @@ impl StateComputer for ExecutionProxy {
             let block_id = meta_data.block_id;
             let block_timestamp = meta_data.usecs;
             txn_metrics::TxnLifeTime::get_txn_life_time().record_executing(block_id_hashvalue.clone());
-            if !real_txns.is_empty() {
-                info!("print real txn for block number: {:?}", meta_data.block_number);
-                real_txns.iter().for_each(|txn| {
-                    info!("account: {:?}, nonce: {:?}", txn.sender, txn.sequence_number);
-                });
-                info!("finish print real txn for block number: {:?}", meta_data.block_number);
-            }
             get_block_buffer_manager()
                 .set_ordered_blocks(BlockId::from_bytes(parent_block_id.as_slice()), ExternalBlock {
                     block_meta: meta_data.clone(),
