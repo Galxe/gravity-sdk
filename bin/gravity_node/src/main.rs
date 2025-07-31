@@ -1,23 +1,27 @@
 use alloy_eips::BlockHashOrNumber;
 use alloy_primitives::TxHash;
 use api::{
-    check_bootstrap_config, config_storage::ConfigStorageWrapper,
+    check_bootstrap_config,
+    config_storage::ConfigStorageWrapper,
     consensus_api::{ConsensusEngine, ConsensusEngineArgs},
 };
 use consensus::mock_consensus::mock::MockConsensus;
 use gravity_storage::block_view_storage::BlockViewStorage;
 use greth::{
-    gravity_storage, reth, reth::chainspec::EthereumChainSpecParser, reth_cli_util,
-    reth_node_api, reth_node_builder, reth_node_ethereum, reth_pipe_exec_layer_ext_v2,
-    reth_pipe_exec_layer_ext_v2::ExecutionArgs, reth_provider,
-    reth_transaction_pool::TransactionPool,
+    gravity_storage, reth, reth::chainspec::EthereumChainSpecParser,
+    reth_cli::chainspec::ChainSpecParser, reth_cli_util, reth_db, reth_node_api, reth_node_builder,
+    reth_node_ethereum, reth_pipe_exec_layer_ext_v2, reth_pipe_exec_layer_ext_v2::ExecutionArgs,
+    reth_provider, reth_transaction_pool::TransactionPool,
 };
 use pprof::{protos::Message, ProfilerGuard};
 use reth::rpc::builder::auth::AuthServerHandle;
 use reth_cli::{
-    RethBlockChainProvider, RethCliConfigStorage, RethPipeExecLayerApi, RethTransactionPool,
+    RethBlockChainProvider, RethCliConfigStorage, RethEthCall, RethPipeExecLayerApi,
+    RethTransactionPool,
 };
 use reth_coordinator::RethCoordinator;
+use reth_db::DatabaseEnv;
+use reth_node_builder::{NodeBuilder, WithLaunchContext};
 use reth_provider::{BlockHashReader, BlockNumReader, BlockReader};
 use tokio::sync::{mpsc, oneshot};
 use tracing::info;
@@ -29,7 +33,6 @@ mod reth_coordinator;
 
 use crate::cli::Cli;
 use std::{
-    collections::BTreeMap,
     fs::File,
     sync::{Arc, Mutex},
     thread,
@@ -42,82 +45,98 @@ use reth_node_builder::EngineNodeLauncher;
 use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
 use reth_provider::providers::BlockchainProvider;
 
-struct ConsensusArgs {
+struct ConsensusArgs<EthApi: RethEthCall> {
     pub engine_api: AuthServerHandle,
-    pub pipeline_api: RethPipeExecLayerApi,
+    pub pipeline_api: RethPipeExecLayerApi<EthApi>,
     pub provider: RethBlockChainProvider,
     pub tx_listener: tokio::sync::mpsc::Receiver<TxHash>,
     pub pool: RethTransactionPool,
 }
 
+/// Run the reth node in a separate thread and return the consensus args and the latest block number
 fn run_reth(
-    tx: mpsc::Sender<(ConsensusArgs, u64)>,
     cli: Cli<EthereumChainSpecParser>,
     execution_args_rx: oneshot::Receiver<ExecutionArgs>,
-) {
+) -> (ConsensusArgs<impl RethEthCall>, u64) {
     reth_cli_util::sigsegv_handler::install();
 
     if std::env::var_os("RUST_BACKTRACE").is_none() {
         std::env::set_var("RUST_BACKTRACE", "1");
     }
 
-    if let Err(err) = {
-        cli.run(|builder, _| {
-            let tx = tx.clone();
-            async move {
-                let handle = builder
-                    .with_types_and_provider::<EthereumNode, BlockchainProvider<_>>()
-                    .with_components(EthereumNode::components())
-                    .with_add_ons(EthereumAddOns::default())
-                    .launch_with_fn(|builder| {
-                        let launcher = EngineNodeLauncher::new(
-                            builder.task_executor().clone(),
-                            builder.config().datadir(),
-                            reth_node_api::TreeConfig::default(),
-                        );
-                        builder.launch_with(launcher)
-                    })
-                    .await?;
-                let chain_spec = handle.node.chain_spec();
-                let eth_api = handle.node.rpc_registry.eth_api().clone();
-                let pending_listener: tokio::sync::mpsc::Receiver<TxHash> =
-                    handle.node.pool.pending_transactions_listener();
-                let engine_cli = handle.node.auth_server_handle().clone();
-                let provider: RethBlockChainProvider = handle.node.provider;
-                let latest_block_number = provider.last_block_number().unwrap();
-                info!("The latest_block_number is {}", latest_block_number);
-                let latest_block_hash = provider.block_hash(latest_block_number).unwrap().unwrap();
-                let latest_block = provider
-                    .block(BlockHashOrNumber::Number(latest_block_number))
-                    .unwrap()
-                    .unwrap();
-                let pool: RethTransactionPool = handle.node.pool;
+    let (tx, rx) = std::sync::mpsc::sync_channel(1);
 
-                let storage = BlockViewStorage::new(provider.clone());
-                let pipeline_api_v2 = reth_pipe_exec_layer_ext_v2::new_pipe_exec_layer_api(
-                    chain_spec,
-                    storage,
-                    latest_block.header,
-                    latest_block_hash,
-                    execution_args_rx,
-                    eth_api,
-                );
-                let args = ConsensusArgs {
-                    engine_api: engine_cli,
-                    pipeline_api: pipeline_api_v2,
-                    provider,
-                    tx_listener: pending_listener,
-                    pool,
-                };
-                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-                tx.send((args, latest_block_number)).await.ok();
-                handle.node_exit_future.await
-            }
-        })
-    } {
-        eprintln!("Error: {err:?}");
-        std::process::exit(1);
-    }
+    std::thread::spawn(move || {
+        // Trick code to ensure the `rx.recv` won't panic before the error message is printed
+        let _tx = tx.clone();
+        let res = cli.run(
+            |builder: WithLaunchContext<
+                NodeBuilder<
+                    Arc<DatabaseEnv>,
+                    <EthereumChainSpecParser as ChainSpecParser>::ChainSpec,
+                >,
+            >,
+             _| {
+                async move {
+                    let handle = builder
+                        .with_types_and_provider::<EthereumNode, BlockchainProvider<_>>()
+                        .with_components(EthereumNode::components())
+                        .with_add_ons(EthereumAddOns::default())
+                        .launch_with_fn(|builder| {
+                            let launcher = EngineNodeLauncher::new(
+                                builder.task_executor().clone(),
+                                builder.config().datadir(),
+                                reth_node_api::TreeConfig::default(),
+                            );
+                            builder.launch_with(launcher)
+                        })
+                        .await?;
+                    let chain_spec = handle.node.chain_spec();
+                    let eth_api = handle.node.rpc_registry.eth_api().clone();
+                    let pending_listener: tokio::sync::mpsc::Receiver<TxHash> =
+                        handle.node.pool.pending_transactions_listener();
+                    let engine_cli = handle.node.auth_server_handle().clone();
+                    let provider = handle.node.provider;
+                    let latest_block_number = provider.last_block_number().unwrap();
+                    info!("The latest_block_number is {}", latest_block_number);
+                    let latest_block_hash =
+                        provider.block_hash(latest_block_number).unwrap().unwrap();
+                    let latest_block = provider
+                        .block(BlockHashOrNumber::Number(latest_block_number))
+                        .unwrap()
+                        .unwrap();
+                    let pool = handle.node.pool;
+
+                    let storage = BlockViewStorage::new(provider.clone());
+                    let pipeline_api_v2 = reth_pipe_exec_layer_ext_v2::new_pipe_exec_layer_api(
+                        chain_spec,
+                        storage,
+                        latest_block.header,
+                        latest_block_hash,
+                        execution_args_rx,
+                        eth_api,
+                    );
+                    // wait for reth event loop to start
+                    tokio::time::sleep(Duration::from_secs(3)).await;
+                    let args = ConsensusArgs {
+                        engine_api: engine_cli,
+                        pipeline_api: pipeline_api_v2,
+                        provider,
+                        tx_listener: pending_listener,
+                        pool,
+                    };
+                    let _ = tx.send((args, latest_block_number));
+                    handle.node_exit_future.await
+                }
+            },
+        );
+        if let Err(err) = res {
+            eprintln!("Error: {err:?}");
+            std::process::exit(1);
+        }
+    });
+
+    rx.recv().unwrap()
 }
 
 struct ProfilingState {
@@ -126,10 +145,7 @@ struct ProfilingState {
 }
 
 fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
-    let profiling_state = Arc::new(Mutex::new(ProfilingState {
-        guard: None,
-        profile_count: 0,
-    }));
+    let profiling_state = Arc::new(Mutex::new(ProfilingState { guard: None, profile_count: 0 }));
 
     let profiling_state_clone = profiling_state.clone();
 
@@ -189,51 +205,39 @@ fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
 fn main() {
     let _profiling_state =
         if std::env::var("ENABLE_PPROF").is_ok() { Some(setup_pprof_profiler()) } else { None };
-    let (tx, mut rx) = tokio::sync::mpsc::channel(1);
     let cli = Cli::parse();
     let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
     let (execution_args_tx, execution_args_rx) = oneshot::channel();
-    thread::spawn(move || {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async move {
-            if let Some((args, latest_block_number)) = rx.recv().await {
-                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+    let (consensus_args, latest_block_number) = run_reth(cli, execution_args_rx);
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async move {
+        let client = Arc::new(RethCli::new(consensus_args).await);
+        let chain_id = client.chain_id();
 
-                let client = Arc::new(RethCli::new(args).await);
-                let chain_id = client.chain_id();
-
-                let coordinator = Arc::new(RethCoordinator::new(
-                    client.clone(),
+        let coordinator =
+            Arc::new(RethCoordinator::new(client.clone(), latest_block_number, execution_args_tx));
+        let mut _engine = None;
+        if std::env::var("MOCK_CONSENSUS").unwrap_or("false".to_string()).parse::<bool>().unwrap() {
+            info!("start mock consensus");
+            let mock = MockConsensus::new().await;
+            tokio::spawn(async move {
+                mock.run().await;
+            });
+        } else {
+            _engine = Some(
+                ConsensusEngine::init(ConsensusEngineArgs {
+                    node_config: gcei_config,
+                    chain_id,
                     latest_block_number,
-                    execution_args_tx,
-                ));
-                let mut _engine = None;
-                if std::env::var("MOCK_CONSENSUS")
-                    .unwrap_or("false".to_string())
-                    .parse::<bool>()
-                    .unwrap()
-                {
-                    info!("start mock consensus");
-                    let mock = MockConsensus::new().await;
-                    tokio::spawn(async move {
-                        mock.run().await;
-                    });
-                } else {
-                    _engine = Some(ConsensusEngine::init(ConsensusEngineArgs {
-                        node_config: gcei_config,
-                        chain_id,
-                        latest_block_number,
-                        config_storage: Some(Arc::new(ConfigStorageWrapper::new(Arc::new(
-                            RethCliConfigStorage::new(client),
-                        )))),
-                    })
-                    .await);
-                }
-                coordinator.send_execution_args().await;
-                coordinator.run().await;
-                tokio::signal::ctrl_c().await.unwrap();
-            }
-        });
+                    config_storage: Some(Arc::new(ConfigStorageWrapper::new(Arc::new(
+                        RethCliConfigStorage::new(client),
+                    )))),
+                })
+                .await,
+            );
+        }
+        coordinator.send_execution_args().await;
+        coordinator.run().await;
+        tokio::signal::ctrl_c().await.unwrap();
     });
-    run_reth(tx, cli, execution_args_rx);
 }

@@ -7,16 +7,14 @@ use greth::{
     reth_cli_commands::{launcher::FnLauncher, node::NoArgs},
     reth_cli_runner::CliRunner,
     reth_db::DatabaseEnv,
-    reth_network::EthNetworkPrimitives,
     reth_node_builder::{NodeBuilder, WithLaunchContext},
     reth_node_core::args::LogArgs,
-    reth_node_ethereum::{consensus::EthBeaconConsensus, EthExecutorProvider, EthereumNode},
+    reth_node_ethereum::{consensus::EthBeaconConsensus, EthEvmConfig, EthereumNode},
     reth_tracing::FileWorkerGuard,
 };
 use std::{
     ffi::OsString,
     fmt::{self},
-    future::Future,
     sync::Arc,
 };
 use tracing::debug;
@@ -130,11 +128,13 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
     ///     })
     ///     .unwrap();
     /// ````
-    pub(crate) fn run<L, Fut>(mut self, launcher: L) -> eyre::Result<()>
-    where
-        L: FnOnce(WithLaunchContext<NodeBuilder<Arc<DatabaseEnv>, C::ChainSpec>>, Ext) -> Fut,
-        Fut: Future<Output = eyre::Result<()>>,
-    {
+    pub(crate) fn run(
+        mut self,
+        launcher: impl AsyncFnOnce(
+            WithLaunchContext<NodeBuilder<Arc<DatabaseEnv>, C::ChainSpec>>,
+            Ext,
+        ) -> eyre::Result<()>,
+    ) -> eyre::Result<()> {
         // add network name to logs dir
         self.logs.log_file_directory =
             self.logs.log_file_directory.join(self.chain.chain.to_string());
@@ -144,7 +144,7 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
 
         let runner = CliRunner::try_default_runtime()?;
         let components = |spec: Arc<C::ChainSpec>| {
-            (EthExecutorProvider::ethereum(spec.clone()), EthBeaconConsensus::new(spec))
+            (EthEvmConfig::ethereum(spec.clone()), EthBeaconConsensus::new(spec))
         };
         match self.command {
             Commands::Node(command) => {
@@ -161,30 +161,23 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
                 runner.run_blocking_until_ctrl_c(command.execute::<EthereumNode>())
             }
             Commands::Import(command) => {
-                runner.run_blocking_until_ctrl_c(command.execute::<EthereumNode, _, _>(components))
+                runner.run_blocking_until_ctrl_c(command.execute::<EthereumNode, _>(components))
             }
             Commands::DumpGenesis(command) => runner.run_blocking_until_ctrl_c(command.execute()),
             Commands::Db(command) => {
                 runner.run_blocking_until_ctrl_c(command.execute::<EthereumNode>())
             }
-            Commands::Stage(command) => runner.run_command_until_exit(|ctx| {
-                command.execute::<EthereumNode, _, _, EthNetworkPrimitives>(ctx, components)
-            }),
-            Commands::P2P(command) => {
-                runner.run_until_ctrl_c(command.execute::<EthNetworkPrimitives>())
-            }
+            Commands::Stage(command) => runner
+                .run_command_until_exit(|ctx| command.execute::<EthereumNode, _>(ctx, components)),
+            Commands::P2P(command) => runner.run_until_ctrl_c(command.execute::<EthereumNode>()),
             #[cfg(feature = "dev")]
             Commands::TestVectors(command) => runner.run_until_ctrl_c(command.execute()),
             Commands::Config(command) => runner.run_until_ctrl_c(command.execute()),
-            Commands::Debug(command) => {
-                runner.run_command_until_exit(|ctx| command.execute::<EthereumNode>(ctx))
-            }
             Commands::Recover(command) => {
                 runner.run_command_until_exit(|ctx| command.execute::<EthereumNode>(ctx))
             }
             Commands::Prune(command) => runner.run_until_ctrl_c(command.execute::<EthereumNode>()),
-            Commands::ImportEra(import_era_command) => todo!(),
-            Commands::Download(download_command) => todo!(),
+            _ => todo!(),
         }
     }
 

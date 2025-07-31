@@ -1,30 +1,25 @@
 pub mod queue;
-use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::reth_cli::RethCli;
+use crate::reth_cli::{RethCli, RethEthCall};
+use alloy_primitives::B256;
 use block_buffer_manager::get_block_buffer_manager;
 use greth::reth_pipe_exec_layer_ext_v2::ExecutionArgs;
-use alloy_primitives::B256;
-use tokio::sync::Mutex;
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, Mutex};
 use tracing::info;
 
-pub struct RethCoordinator {
-    reth_cli: Arc<RethCli>,
+pub struct RethCoordinator<EthApi: RethEthCall> {
+    reth_cli: Arc<RethCli<EthApi>>,
     execution_args_tx: Arc<Mutex<Option<oneshot::Sender<ExecutionArgs>>>>,
 }
 
-impl RethCoordinator {
+impl<EthApi: RethEthCall> RethCoordinator<EthApi> {
     pub fn new(
-        reth_cli: Arc<RethCli>,
+        reth_cli: Arc<RethCli<EthApi>>,
         latest_block_number: u64,
         execution_args_tx: oneshot::Sender<ExecutionArgs>,
     ) -> Self {
-        Self {
-            reth_cli,
-            execution_args_tx: Arc::new(Mutex::new(Some(execution_args_tx))),
-        }
+        Self { reth_cli, execution_args_tx: Arc::new(Mutex::new(Some(execution_args_tx))) }
     }
 
     pub async fn send_execution_args(&self) {
@@ -32,7 +27,8 @@ impl RethCoordinator {
         let execution_args_tx = guard.take();
         if let Some(execution_args_tx) = execution_args_tx {
             let block_number_to_block_id = get_block_buffer_manager()
-                .block_number_to_block_id().await
+                .block_number_to_block_id()
+                .await
                 .into_iter()
                 .map(|(block_number, block_id)| (block_number, B256::new(block_id.bytes())))
                 .collect();
