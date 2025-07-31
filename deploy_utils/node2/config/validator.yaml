@@ -14,7 +14,7 @@ consensus:
         waypoint:
           from_file: /tmp/node2/config/waypoint.txt
         identity_blob_path: /tmp/node2/config/validator-identity.yaml
-  enable_pipeline: true
+  # enable_pipeline: true
   max_sending_block_txns_after_filtering: 15000
   max_sending_block_txns: 5000
   max_receiving_block_txns: 5000
