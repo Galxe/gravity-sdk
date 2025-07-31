@@ -15,6 +15,24 @@ consensus:
           from_file: /tmp/node3/config/waypoint.txt
         identity_blob_path: /tmp/node3/config/validator-identity.yaml
   enable_pipeline: true
+  max_sending_block_txns_after_filtering: 15000
+  max_sending_block_txns: 15000
+  max_receiving_block_txns: 15000
+  max_sending_block_bytes: 31457280 
+  max_receiving_block_bytes: 31457280 
+  quorum_store:
+    receiver_max_total_txns: 7000
+    sender_max_total_txns: 7000
+    receiver_max_batch_bytes: 1048736 
+    sender_max_batch_bytes: 1048736 
+    sender_max_total_bytes: 1073741824 
+    receiver_max_total_bytes: 1073741824 
+    memory_quota: 1073741824 # 1GB
+    db_quota: 1073741824 # 1GB
+    back_pressure:
+      dynamic_max_txn_per_s: 30000
+      backlog_txn_limit_count: 50000
+      backlog_per_validator_batch_limit_count: 2000
 
 validator_network:
   network_id: validator

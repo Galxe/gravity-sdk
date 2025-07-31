@@ -1,6 +1,6 @@
 {
     "reth_args": {
-        "chain": "dev",
+        "chain": "/home/gravity/projects/gravity-sdk/new_gravity.json",
         "http": "",
         "http.port": 8546,
         "http.corsdomain": "*",
@@ -26,7 +26,7 @@
         "txpool.basefee-max-size": 17592186044415,
         "txpool.queued-max-count": 17592186044415,
         "txpool.queued-max-size": 17592186044415,
-        "http.disable_compression": ""
+        "http.disable-compression": ""
     },
     "env_vars": {
         "BATCH_INSERT_TIME": 20
