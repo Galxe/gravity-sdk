@@ -25,7 +25,7 @@
         "txpool.basefee-max-size": 17592186044415,
         "txpool.queued-max-count": 17592186044415,
         "txpool.queued-max-size": 17592186044415,
-        "http.disable_compression": ""
+        "http.disable-compression": ""
     },
     "env_vars": {
         "BATCH_INSERT_TIME": 20
