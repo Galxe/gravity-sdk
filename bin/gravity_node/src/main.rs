@@ -7,15 +7,17 @@ use api::{
 use consensus::mock_consensus::mock::MockConsensus;
 use gravity_storage::block_view_storage::BlockViewStorage;
 use greth::{
-    gravity_storage, reth, reth::chainspec::EthereumChainSpecParser, reth_cli_util, reth_db,
-    reth_node_api, reth_node_builder, reth_node_ethereum, reth_pipe_exec_layer_ext_v2,
-    reth_pipe_exec_layer_ext_v2::ExecutionArgs, reth_provider, reth_transaction_pool,
+    gravity_storage, reth, reth::chainspec::EthereumChainSpecParser,
+    reth_cli::chainspec::ChainSpecParser, reth_cli_util, reth_db, reth_node_api, reth_node_builder,
+    reth_node_ethereum, reth_pipe_exec_layer_ext_v2, reth_pipe_exec_layer_ext_v2::ExecutionArgs,
+    reth_provider, reth_transaction_pool,
 };
 use pprof::{protos::Message, ProfilerGuard};
 use reth::rpc::builder::auth::AuthServerHandle;
 use reth_coordinator::RethCoordinator;
 use reth_db::DatabaseEnv;
 use reth_node_api::NodeTypesWithDBAdapter;
+use reth_node_builder::{NodeBuilder, WithLaunchContext};
 use reth_pipe_exec_layer_ext_v2::PipeExecLayerApi;
 use reth_provider::{BlockHashReader, BlockNumReader, BlockReader};
 use reth_transaction_pool::TransactionPool;
@@ -75,75 +77,89 @@ fn run_reth(
     }
 
     if let Err(err) = {
-        cli.run(|builder, _| {
-            let tx = tx.clone();
-            async move {
-                let handle = builder
-                    .with_types_and_provider::<EthereumNode, BlockchainProvider<_>>()
-                    .with_components(EthereumNode::components())
-                    .with_add_ons(EthereumAddOns::default())
-                    .launch_with_fn(|builder| {
-                        let launcher = EngineNodeLauncher::new(
-                            builder.task_executor().clone(),
-                            builder.config().datadir(),
-                            reth_node_api::TreeConfig::default(),
-                        );
-                        builder.launch_with(launcher)
-                    })
-                    .await?;
-                let chain_spec = handle.node.chain_spec();
-                let pending_listener: tokio::sync::mpsc::Receiver<TxHash> =
-                    handle.node.pool.pending_transactions_listener();
-                let engine_cli = handle.node.auth_server_handle().clone();
-                let provider: BlockchainProvider<
-                    reth_node_api::NodeTypesWithDBAdapter<EthereumNode, Arc<reth_db::DatabaseEnv>>,
-                > = handle.node.provider;
-                let latest_block_number = provider.last_block_number().unwrap();
-                info!("The latest_block_number is {}", latest_block_number);
-                let latest_block_hash = provider.block_hash(latest_block_number).unwrap().unwrap();
-                let latest_block = provider
-                    .block(BlockHashOrNumber::Number(latest_block_number))
-                    .unwrap()
-                    .unwrap();
-                let pool: reth_transaction_pool::Pool<
-                    reth_transaction_pool::TransactionValidationTaskExecutor<
-                        reth_transaction_pool::EthTransactionValidator<
+        cli.run(
+            |builder: WithLaunchContext<
+                NodeBuilder<
+                    Arc<DatabaseEnv>,
+                    <EthereumChainSpecParser as ChainSpecParser>::ChainSpec,
+                >,
+            >,
+             _| {
+                let tx = tx.clone();
+                async move {
+                    let handle = builder
+                        .with_types_and_provider::<EthereumNode, BlockchainProvider<_>>()
+                        .with_components(EthereumNode::components())
+                        .with_add_ons(EthereumAddOns::default())
+                        .launch_with_fn(|builder| {
+                            let launcher = EngineNodeLauncher::new(
+                                builder.task_executor().clone(),
+                                builder.config().datadir(),
+                                reth_node_api::TreeConfig::default(),
+                            );
+                            builder.launch_with(launcher)
+                        })
+                        .await?;
+                    let chain_spec = handle.node.chain_spec();
+                    let pending_listener: tokio::sync::mpsc::Receiver<TxHash> =
+                        handle.node.pool.pending_transactions_listener();
+                    let engine_cli = handle.node.auth_server_handle().clone();
+                    let provider: BlockchainProvider<
+                        reth_node_api::NodeTypesWithDBAdapter<
+                            EthereumNode,
+                            Arc<reth_db::DatabaseEnv>,
+                        >,
+                    > = handle.node.provider;
+                    let latest_block_number = provider.last_block_number().unwrap();
+                    info!("The latest_block_number is {}", latest_block_number);
+                    let latest_block_hash =
+                        provider.block_hash(latest_block_number).unwrap().unwrap();
+                    let latest_block = provider
+                        .block(BlockHashOrNumber::Number(latest_block_number))
+                        .unwrap()
+                        .unwrap();
+                    let pool: reth_transaction_pool::Pool<
+                        reth_transaction_pool::TransactionValidationTaskExecutor<
+                            reth_transaction_pool::EthTransactionValidator<
+                                BlockchainProvider<
+                                    NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>,
+                                >,
+                                reth_transaction_pool::EthPooledTransaction,
+                            >,
+                        >,
+                        reth_transaction_pool::CoinbaseTipOrdering<
+                            reth_transaction_pool::EthPooledTransaction,
+                        >,
+                        reth_transaction_pool::blobstore::DiskFileBlobStore,
+                    > = handle.node.pool;
+
+                    let storage = BlockViewStorage::new(provider.clone());
+                    let pipeline_api_v2: PipeExecLayerApi<
+                        BlockViewStorage<
                             BlockchainProvider<
                                 NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>,
                             >,
-                            reth_transaction_pool::EthPooledTransaction,
                         >,
-                    >,
-                    reth_transaction_pool::CoinbaseTipOrdering<
-                        reth_transaction_pool::EthPooledTransaction,
-                    >,
-                    reth_transaction_pool::blobstore::DiskFileBlobStore,
-                > = handle.node.pool;
-
-                let storage = BlockViewStorage::new(provider.clone());
-                let pipeline_api_v2: PipeExecLayerApi<
-                    BlockViewStorage<
-                        BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
-                    >,
-                > = reth_pipe_exec_layer_ext_v2::new_pipe_exec_layer_api(
-                    chain_spec,
-                    storage,
-                    latest_block.header,
-                    latest_block_hash,
-                    execution_args_rx,
-                );
-                let args = ConsensusArgs {
-                    engine_api: engine_cli,
-                    pipeline_api: pipeline_api_v2,
-                    provider,
-                    tx_listener: pending_listener,
-                    pool,
-                };
-                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-                tx.send((args, latest_block_number)).await.ok();
-                handle.node_exit_future.await
-            }
-        })
+                    > = reth_pipe_exec_layer_ext_v2::new_pipe_exec_layer_api(
+                        chain_spec,
+                        storage,
+                        latest_block.header,
+                        latest_block_hash,
+                        execution_args_rx,
+                    );
+                    let args = ConsensusArgs {
+                        engine_api: engine_cli,
+                        pipeline_api: pipeline_api_v2,
+                        provider,
+                        tx_listener: pending_listener,
+                        pool,
+                    };
+                    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                    tx.send((args, latest_block_number)).await.ok();
+                    handle.node_exit_future.await
+                }
+            },
+        )
     } {
         eprintln!("Error: {err:?}");
         std::process::exit(1);
