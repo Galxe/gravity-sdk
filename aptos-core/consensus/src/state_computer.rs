@@ -20,38 +20,43 @@ use crate::{
     txn_notifier::TxnNotifier,
 };
 use anyhow::Result;
-use gaptos::api_types::account::{ExternalAccountAddress, ExternalChainId};
-use gaptos::api_types::events::contract_event::GravityEvent;
-use gaptos::api_types::u256_define::{BlockId, Random, TxnHash};
-use gaptos::api_types::{ExternalBlock, ExternalBlockMeta};
 use aptos_consensus_types::common::RejectedTransactionSummary;
-use gaptos::aptos_consensus_notifications::ConsensusNotificationSender;
 use aptos_consensus_types::{
     block::Block, common::Round, pipeline_execution_result::PipelineExecutionResult,
     pipelined_block::PipelinedBlock,
 };
-use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::{BlockExecutorTrait, ExecutorResult, StateComputeResult};
+use aptos_mempool::core_mempool::transaction::VerifiedTxn;
+use gaptos::api_types::account::{ExternalAccountAddress, ExternalChainId};
+use gaptos::api_types::events::contract_event::GravityEvent;
+use gaptos::api_types::u256_define::{BlockId, Random, TxnHash};
+use gaptos::api_types::{ExternalBlock, ExternalBlockMeta};
+use gaptos::aptos_consensus_notifications::ConsensusNotificationSender;
+use gaptos::aptos_crypto::HashValue;
 use gaptos::aptos_infallible::RwLock;
 use gaptos::aptos_logger::prelude::*;
-use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 
+use block_buffer_manager::get_block_buffer_manager;
+use counters::APTOS_EXECUTION_TXNS;
+use fail::fail_point;
+use futures::{future::BoxFuture, SinkExt, StreamExt};
+use gaptos::aptos_consensus::counters;
 use gaptos::aptos_types::on_chain_config::ValidatorSet;
 use gaptos::aptos_types::transaction::SignedTransaction;
 use gaptos::aptos_types::validator_signer::ValidatorSigner;
 use gaptos::aptos_types::{
-    account_address::AccountAddress, block_executor::config::BlockExecutorConfigFromOnchain,
-    contract_event::ContractEvent, epoch_state::EpochState, ledger_info::LedgerInfoWithSignatures,
-    randomness::Randomness, transaction::Transaction, vm_status::{DiscardedVMStatus, StatusCode}
+    account_address::AccountAddress,
+    block_executor::config::BlockExecutorConfigFromOnchain,
+    contract_event::ContractEvent,
+    epoch_state::EpochState,
+    ledger_info::LedgerInfoWithSignatures,
+    randomness::Randomness,
+    transaction::Transaction,
+    vm_status::{DiscardedVMStatus, StatusCode},
 };
-use block_buffer_manager::get_block_buffer_manager;
-use fail::fail_point;
-use futures::{future::BoxFuture, SinkExt, StreamExt};
 use std::iter::once;
 use std::{boxed::Box, sync::Arc, time::Duration};
 use tokio::sync::Mutex as AsyncMutex;
-use gaptos::aptos_consensus::counters as counters;
-use counters::APTOS_EXECUTION_TXNS;
 
 pub type StateComputeResultFut = BoxFuture<'static, ExecutorResult<PipelineExecutionResult>>;
 
@@ -59,7 +64,7 @@ type NotificationType = (
     Box<dyn FnOnce() + Send + Sync>,
     Vec<Transaction>,
     Vec<ContractEvent>, // Subscribable events, e.g. NewEpochEvent, DKGStartEvent
-    u64, // block number
+    u64,                // block number
 );
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
@@ -126,8 +131,10 @@ impl ExecutionProxy {
         txn_filter: TransactionFilter,
         enable_pre_commit: bool,
     ) -> Self {
-        let (tx, mut rx) =
-            gaptos::aptos_channels::new::<NotificationType>(10, &counters::PENDING_STATE_SYNC_NOTIFICATION);
+        let (tx, mut rx) = gaptos::aptos_channels::new::<NotificationType>(
+            10,
+            &counters::PENDING_STATE_SYNC_NOTIFICATION,
+        );
         let notifier = state_sync_notifier.clone();
         handle.spawn(async move {
             while let Some((callback, txns, subscribable_events, block_number)) = rx.next().await {
@@ -264,13 +271,15 @@ impl StateComputer for ExecutionProxy {
         Box::pin(async move {
             let block_id = meta_data.block_id;
             let block_timestamp = meta_data.usecs;
-            txn_metrics::TxnLifeTime::get_txn_life_time().record_executing(block_id_hashvalue.clone());
+            txn_metrics::TxnLifeTime::get_txn_life_time()
+                .record_executing(block_id_hashvalue.clone());
             get_block_buffer_manager()
-                .set_ordered_blocks(BlockId::from_bytes(parent_block_id.as_slice()), ExternalBlock {
-                    block_meta: meta_data.clone(),
-                    txns: real_txns,
-                })
-                .await.unwrap_or_else(|e| panic!("Failed to push ordered blocks {}", e));
+                .set_ordered_blocks(
+                    BlockId::from_bytes(parent_block_id.as_slice()),
+                    ExternalBlock { block_meta: meta_data.clone(), txns: real_txns },
+                )
+                .await
+                .unwrap_or_else(|e| panic!("Failed to push ordered blocks {}", e));
             let u_ts = meta_data.usecs;
             let compute_result = get_block_buffer_manager()
                 .get_executed_res(block_id, meta_data.block_number)
@@ -278,19 +287,21 @@ impl StateComputer for ExecutionProxy {
 
             txn_metrics::TxnLifeTime::get_txn_life_time().record_executed(block_id_hashvalue);
             update_counters_for_compute_res(&compute_result.execution_output);
-           
+
             observe_block(u_ts, BlockStage::EXECUTED);
             let txn_status = compute_result.execution_output.txn_status.clone();
             match (*txn_status).as_ref() {
                 Some(txn_status) => {
-                    let rejected_txns = txn_status.iter().filter(|txn| txn.is_discarded).map(|discard_txn_info| {
-                        RejectedTransactionSummary {
+                    let rejected_txns = txn_status
+                        .iter()
+                        .filter(|txn| txn.is_discarded)
+                        .map(|discard_txn_info| RejectedTransactionSummary {
                             sender: discard_txn_info.sender.into(),
                             sequence_number: discard_txn_info.nonce,
                             hash: HashValue::new(discard_txn_info.txn_hash),
                             reason: DiscardedVMStatus::from(StatusCode::SEQUENCE_NONCE_INVALID),
-                        }
-                    }).collect::<Vec<_>>();
+                        })
+                        .collect::<Vec<_>>();
                     if let Err(e) = txn_notifier.notify_failed_txn(rejected_txns).await {
                         error!(error = ?e, "Failed to notify mempool of rejected txns");
                     }
@@ -299,11 +310,7 @@ impl StateComputer for ExecutionProxy {
             }
 
             let pre_commit_fut: BoxFuture<'static, ExecutorResult<()>> =
-                    {
-                        Box::pin(async move {
-                            Ok(())
-                        })
-                    };
+                { Box::pin(async move { Ok(()) }) };
             Ok(PipelineExecutionResult::new(txns, compute_result, Duration::ZERO, pre_commit_fut))
         })
     }
@@ -315,7 +322,10 @@ impl StateComputer for ExecutionProxy {
         finality_proof: LedgerInfoWithSignatures,
         callback: StateComputerCommitCallBackType,
     ) -> ExecutorResult<()> {
-        let block_id_num = blocks.iter().map(|block| (block.id(), block.block().block_number())).collect::<Vec<_>>();
+        let block_id_num = blocks
+            .iter()
+            .map(|block| (block.id(), block.block().block_number()))
+            .collect::<Vec<_>>();
         info!(
             "Received a commit request for blocks {:?} at round {}",
             block_id_num,
@@ -348,7 +358,10 @@ impl StateComputer for ExecutionProxy {
                 txns.extend(commit_transactions);
             }
             subscribable_txn_events.extend(block.subscribable_events());
-            pre_commit_futs.push(block.take_pre_commit_fut());
+            // TODO(gravity_lightman): The take_pre_commit_fut will cause a coredump. 
+            // The reason has not been found yet, 
+            // but this asynchronous function is an empty one and can be skipped
+            // pre_commit_futs.push(block.take_pre_commit_fut());
             block_ids.push(block.id());
         }
 
@@ -370,7 +383,12 @@ impl StateComputer for ExecutionProxy {
         .expect("spawn_blocking failed");
 
         let blocks = blocks.to_vec();
-        let block_number = blocks.last().unwrap().block().block_number().unwrap_or_else(|| panic!("No block number"));
+        let block_number = blocks
+            .last()
+            .unwrap()
+            .block()
+            .block_number()
+            .unwrap_or_else(|| panic!("No block number"));
         let wrapped_callback = move || {
             payload_manager.notify_commit(block_timestamp, payloads);
             callback(&blocks, finality_proof);
@@ -473,7 +491,7 @@ async fn test_commit_sync_race() {
 
     use gaptos::aptos_config::config::transaction_filter_type::Filter;
     use gaptos::aptos_consensus_notifications::Error;
-    
+
     use gaptos::aptos_infallible::Mutex;
     use gaptos::aptos_types::{
         aggregate_signature::AggregateSignature,
