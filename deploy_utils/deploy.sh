@@ -22,10 +22,10 @@ declare -A VALID_MODES=(
 # Default settings
 bin_name="gravity_node"
 node_arg=""
-bin_version="debug"
+bin_version="quick-release"
 mode="cluster"
 recover="false"
-install_dir="/tmp"
+install_dir="/home/gravity"
 
 # Logging functions
 log_info() {
