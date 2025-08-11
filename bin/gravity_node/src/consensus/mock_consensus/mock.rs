@@ -83,6 +83,7 @@ impl MockConsensus {
                 epoch: 0,
                 randomness: None,
                 block_hash: None,
+                proposer: None,
             },
             txns,
         };

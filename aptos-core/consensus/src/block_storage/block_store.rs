@@ -16,9 +16,7 @@ use crate::{
 };
 use anyhow::{bail, ensure, format_err, Context};
 use gaptos::api_types::{
-    compute_res::ComputeRes,
-    u256_define::{BlockId, Random},
-    ExternalBlock, ExternalBlockMeta,
+    account::ExternalAccountAddress, compute_res::ComputeRes, u256_define::{BlockId, Random}, ExternalBlock, ExternalBlockMeta
 };
 use aptos_consensus_types::{
     block::Block,
@@ -372,6 +370,7 @@ impl BlockStore {
                             .randomness()
                             .map(|r| Random::from_bytes(r.randomness())),
                         block_hash: maybe_block_hash.clone(),
+                        proposer: p_block.block().author().map(|author| ExternalAccountAddress::new(author.into_bytes())),
                     },
                 };
                 get_block_buffer_manager()

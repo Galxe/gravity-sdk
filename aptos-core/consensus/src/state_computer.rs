@@ -241,6 +241,7 @@ impl StateComputer for ExecutionProxy {
             epoch: block.epoch(),
             randomness: randomness.map(|r| Random::from_bytes(r.randomness())),
             block_hash: None,
+            proposer: block.author().map(|author| ExternalAccountAddress::new(author.into_bytes())),
         };
 
         // We would export the empty block detail to the outside GCEI caller

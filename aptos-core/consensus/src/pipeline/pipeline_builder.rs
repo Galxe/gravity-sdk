@@ -458,6 +458,7 @@ impl PipelineBuilder {
             epoch: block.epoch(),
             randomness: maybe_rand.map(|r| Random::from_bytes(r.randomness())),
             block_hash: None,
+            proposer: block.author().map(|author| ExternalAccountAddress::new(author.into_bytes())),
         };
         get_block_buffer_manager()
             .set_ordered_blocks(BlockId::from_bytes(block.parent_id().as_slice()), ExternalBlock { block_meta: meta_data, txns: real_txns })

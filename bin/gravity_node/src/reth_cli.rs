@@ -1,19 +1,16 @@
 use crate::{metrics::fetch_reth_txn_metrics, ConsensusArgs};
-use alloy_consensus::Transaction;
 use alloy_consensus::transaction::SignerRecoverable;
+use alloy_consensus::Transaction;
 use alloy_eips::{eip4895::Withdrawals, Decodable2718, Encodable2718};
-use alloy_primitives::{
-    Address, TxHash, B256,
-};
+use alloy_primitives::{Address, TxHash, B256};
 use block_buffer_manager::get_block_buffer_manager;
 use core::panic;
 use gaptos::api_types::{
     account::{ExternalAccountAddress, ExternalChainId},
-    config_storage::{ConfigStorage, OnChainConfig, OnChainConfigResType},
     compute_res::TxnStatus,
+    config_storage::{ConfigStorage, OnChainConfig, OnChainConfigResType},
     u256_define::{BlockId as ExternalBlockId, TxnHash},
-    ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
-    GLOBAL_CRYPTO_TXN_HASHER,
+    ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum, GLOBAL_CRYPTO_TXN_HASHER,
 };
 
 use greth::{
@@ -23,18 +20,14 @@ use greth::{
     reth_node_api::NodeTypesWithDBAdapter,
     reth_node_core::primitives::SignedTransaction,
     reth_node_ethereum::EthereumNode,
-    reth_pipe_exec_layer_ext_v2::{
-        ExecutionResult, OrderedBlock, PipeExecLayerApi,
-    },
+    reth_pipe_exec_layer_ext_v2::{ExecutionResult, OrderedBlock, PipeExecLayerApi},
     reth_primitives::TransactionSigned,
     reth_provider::{
         providers::BlockchainProvider, AccountReader, BlockNumReader, ChainSpecProvider,
     },
     reth_transaction_pool::{EthPooledTransaction, TransactionPool, ValidPoolTransaction},
 };
-use rayon::iter::{
-    IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator,
-};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     sync::Arc,
@@ -151,7 +144,10 @@ impl RethCli {
             }
         }
 
-        block.txns.par_iter_mut().enumerate()
+        block
+            .txns
+            .par_iter_mut()
+            .enumerate()
             .filter(|(idx, _)| senders[*idx].is_none())
             .map(|(idx, txn)| {
                 let (sender, transaction) = Self::txn_to_signed(&mut txn.bytes, self.chain_id);
@@ -185,6 +181,10 @@ impl RethCli {
             transactions,
             senders,
             epoch: block.block_meta.epoch,
+            proposer: block
+                .block_meta
+                .proposer
+                .map(|x| Address::from_word(x.bytes().into())),
         });
         Ok(())
     }
@@ -212,10 +212,7 @@ impl RethCli {
         Ok(())
     }
 
-    pub async fn wait_for_block_persistence(
-        &self,
-        block_number: u64,
-    ) -> Result<(), String> {
+    pub async fn wait_for_block_persistence(&self, block_number: u64) -> Result<(), String> {
         debug!("wait for block persistence {:?}", block_number);
         let pipe_api = &self.pipe_api;
         pipe_api.wait_for_block_persistence(block_number).await;
@@ -235,24 +232,24 @@ impl RethCli {
             let mut txns = Vec::with_capacity(batch_size);
             loop {
                 tokio::select! {
-                biased;
-                _size = rx.recv_many(&mut txns, batch_size ) => {
-                    debug!("recv txns len {}", txns.len());
-                    if txns.len() >= batch_size {
-                        debug!("Hash buffer full ({} hashes), pushing transactions.", txns.len());
-                        self_clone.process_pool_transactions(std::mem::take(&mut txns)).await;
+                    biased;
+                    _size = rx.recv_many(&mut txns, batch_size ) => {
+                        debug!("recv txns len {}", txns.len());
+                        if txns.len() >= batch_size {
+                            debug!("Hash buffer full ({} hashes), pushing transactions.", txns.len());
+                            self_clone.process_pool_transactions(std::mem::take(&mut txns)).await;
+                            sleep.as_mut().reset(tokio::time::Instant::now() + timeout_duration);
+                        }
+                    }
+                    _ = &mut sleep => {
+                        debug!("sleep");
+                        if !txns.is_empty() {
+                            debug!("Timeout reached, processing {} buffered transaction hashes.", txns.len());
+                            self_clone.process_pool_transactions(std::mem::take(&mut txns)).await;
+                        }
                         sleep.as_mut().reset(tokio::time::Instant::now() + timeout_duration);
                     }
                 }
-                _ = &mut sleep => {
-                    debug!("sleep");
-                    if !txns.is_empty() {
-                        debug!("Timeout reached, processing {} buffered transaction hashes.", txns.len());
-                        self_clone.process_pool_transactions(std::mem::take(&mut txns)).await;
-                    }
-                    sleep.as_mut().reset(tokio::time::Instant::now() + timeout_duration);
-                }
-            }
             }
         });
         let mut count = 0;
@@ -272,14 +269,17 @@ impl RethCli {
                 }
                 visited.insert(txn.sender().clone(), txn.nonce());
                 tx.send(txn).expect("failed to send txn hash");
-                count += 1; 
+                count += 1;
             }
             info!("send txn hash vec len {}", count);
             tokio::time::sleep(self.txn_pool_interval).await;
         }
     }
 
-    async fn process_pool_transactions(&self, pool_txns: Vec<Arc<ValidPoolTransaction<EthPooledTransaction>>>) {
+    async fn process_pool_transactions(
+        &self,
+        pool_txns: Vec<Arc<ValidPoolTransaction<EthPooledTransaction>>>,
+    ) {
         let mut buffer = Vec::with_capacity(pool_txns.len());
         let mut gas_limit = 0;
         debug!("process pool txns len {}", pool_txns.len());
@@ -287,7 +287,11 @@ impl RethCli {
             let txn_hash = pool_txn.hash();
             let txn_insert_time = self.pool.txn_insert_time(*txn_hash);
             if let Some(txn_insert_time) = txn_insert_time {
-                fetch_reth_txn_metrics().txn_time.record((SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64 - txn_insert_time) as f64);
+                fetch_reth_txn_metrics().txn_time.record(
+                    (SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis()
+                        as u64
+                        - txn_insert_time) as f64,
+                );
             }
 
             let sender = pool_txn.sender();
@@ -296,7 +300,9 @@ impl RethCli {
             let account_nonce = {
                 let mut init_nonce_cache = self.address_init_nonce_cache.lock().await;
                 if !init_nonce_cache.contains_key(&sender) {
-                    let account_nonce = self.provider.basic_account(&sender)
+                    let account_nonce = self
+                        .provider
+                        .basic_account(&sender)
                         .map(|x| x.map(|x| x.nonce))
                         .unwrap_or(Some(nonce))
                         .unwrap_or(nonce);
@@ -305,9 +311,15 @@ impl RethCli {
                 *init_nonce_cache.get(&sender).unwrap()
             };
             gas_limit += txn.gas_limit();
-            debug!("recv sender {:?} nonce {:?}, account nonce {:?} hash {:?}", sender, nonce, account_nonce, txn.hash());
+            debug!(
+                "recv sender {:?} nonce {:?}, account nonce {:?} hash {:?}",
+                sender,
+                nonce,
+                account_nonce,
+                txn.hash()
+            );
             let bytes = txn.encoded_2718();
-    
+
             let vtxn = VerifiedTxnWithAccountSeqNum {
                 txn: VerifiedTxn {
                     bytes,
@@ -318,14 +330,16 @@ impl RethCli {
                 },
                 account_seq_num: account_nonce,
             };
-            
+
             {
-                self.txn_cache.lock().await
+                self.txn_cache
+                    .lock()
+                    .await
                     .insert((vtxn.txn.sender().clone(), vtxn.txn.seq_number()), pool_txn.clone());
             }
             buffer.push(vtxn);
         }
-        
+
         if !buffer.is_empty() {
             get_block_buffer_manager().push_txns(&mut buffer, gas_limit).await;
         }
@@ -370,13 +384,11 @@ impl RethCli {
             let txn_status = Arc::new(Some(
                 tx_infos
                     .iter()
-                    .map(|tx_info| {
-                        TxnStatus {
-                            txn_hash: *tx_info.tx_hash,
-                            sender: convert_account( tx_info.sender).bytes(),
-                            nonce: tx_info.nonce,
-                            is_discarded: tx_info.is_discarded,
-                        }
+                    .map(|tx_info| TxnStatus {
+                        txn_hash: *tx_info.tx_hash,
+                        sender: convert_account(tx_info.sender).bytes(),
+                        nonce: tx_info.nonce,
+                        is_discarded: tx_info.is_discarded,
                     })
                     .collect(),
             ));
@@ -447,7 +459,11 @@ impl RethCliConfigStorage {
 }
 
 impl ConfigStorage for RethCliConfigStorage {
-    fn fetch_config_bytes(&self, config_name: OnChainConfig, block_number: u64) -> Option<OnChainConfigResType> {
+    fn fetch_config_bytes(
+        &self,
+        config_name: OnChainConfig,
+        block_number: u64,
+    ) -> Option<OnChainConfigResType> {
         self.reth_cli.pipe_api.fetch_config_bytes(config_name, block_number)
     }
 }
