@@ -614,18 +614,6 @@ impl BlockStore {
             }
         }
 
-        if let Some(executed_block) = self.get_block(id) {
-                quorum_certs.push((*self.get_quorum_cert_for_block(id).unwrap()).clone());
-                blocks.push(executed_block.block().clone());
-        } else if let Ok(Some(executed_block)) =
-            self.storage.consensus_db().get_block(retrieval_epoch, id)
-        {
-            quorum_certs.push(
-                self.storage.consensus_db().get_qc(retrieval_epoch, id).unwrap().unwrap(),
-            );
-            blocks.push(executed_block.clone());
-        }
-
         let mut lower = 0;
         let mut upper = 0;
         for block in &blocks {
