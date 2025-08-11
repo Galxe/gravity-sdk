@@ -334,7 +334,10 @@ impl StateComputer for ExecutionProxy {
         let MutableState { payload_manager, validators, is_randomness_enabled, .. } =
             self.state.read().as_ref().cloned().expect("must be set within an epoch");
         let mut committed_block_ids = vec![];
-        let mut pre_commit_futs = Vec::with_capacity(blocks.len());
+        // TODO(gravity_lightman): The take_pre_commit_fut will cause a coredump. 
+        // The reason has not been found yet, 
+        // but this asynchronous function is an empty one and can be skipped
+        // let mut pre_commit_futs = Vec::with_capacity(blocks.len());
         let mut block_ids = vec![];
         for block in blocks {
             if let Some(payload) = block.block().payload() {
@@ -348,14 +351,14 @@ impl StateComputer for ExecutionProxy {
                 txns.extend(commit_transactions);
             }
             subscribable_txn_events.extend(block.subscribable_events());
-            pre_commit_futs.push(block.take_pre_commit_fut());
+            // pre_commit_futs.push(block.take_pre_commit_fut());
             block_ids.push(block.id());
         }
 
         // wait until all blocks are committed
-        for pre_commit_fut in pre_commit_futs {
-            pre_commit_fut.await?
-        }
+        // for pre_commit_fut in pre_commit_futs {
+        //     pre_commit_fut.await?
+        // }
 
         let executor = self.executor.clone();
         let proof = finality_proof.clone();
