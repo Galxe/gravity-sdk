@@ -1,6 +1,9 @@
 use anyhow::{anyhow, format_err};
 use aptos_executor_types::StateComputeResult;
-use gaptos::aptos_types::{epoch_state::EpochState, on_chain_config::ValidatorSet};
+use gaptos::{
+    api_types,
+    aptos_types::{epoch_state::EpochState, idl::convert_validator_set},
+};
 use std::{
     collections::HashMap,
     sync::{
@@ -489,8 +492,14 @@ impl BlockBufferManager {
                     GravityEvent::NewEpoch(new_epoch, bytes) => (new_epoch, bytes),
                     _ => todo!(),
                 };
-                let validator_set = bcs::from_bytes::<ValidatorSet>(&bytes).map_err(|e| {
+                let api_validator_set = bcs::from_bytes::<
+                    api_types::on_chain_config::validator_set::ValidatorSet,
+                >(&bytes)
+                .map_err(|e| {
                     format_err!("[on-chain config] Failed to deserialize into config: {}", e)
+                })?;
+                let validator_set = convert_validator_set(api_validator_set).map_err(|e| {
+                    format_err!("[on-chain config] Failed to convert validator set: {}", e)
                 })?;
                 info!(
                     "block number {} get validator set from new epoch {} event {:?}",
