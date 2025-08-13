@@ -341,6 +341,7 @@ impl BlockStore {
         mut retriever: BlockRetriever,
         epoch: u64,
     ) -> anyhow::Result<()> {
+        info!("[Fast_Forward_sync] epoch {}", epoch);
         let highest_commit_cert = self.highest_commit_cert();
         let payload_manager = self.payload_manager.clone();
         let storage = self.storage.clone();
