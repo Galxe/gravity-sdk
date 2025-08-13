@@ -259,7 +259,9 @@ impl BlockStore {
                     self.payload_manager.clone(),
                 )
                 .await?;
-            // retrieve_blocks_in_range guarantees that blocks has exactly 1 element
+            if blocks.is_empty() {
+                break;
+            }
             let block = blocks.remove(0);
             retrieve_qc = block.quorum_cert().clone();
             pending.push(block);
