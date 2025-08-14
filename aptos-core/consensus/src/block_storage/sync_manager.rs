@@ -345,7 +345,7 @@ impl BlockStore {
         let highest_commit_cert = self.highest_commit_cert();
         let payload_manager = self.payload_manager.clone();
         let storage = self.storage.clone();
-        let (blocks, mut quorum_certs, ledger_infos) = retriever
+        let (blocks, mut quorum_certs, mut ledger_infos) = retriever
             .retrieve_block_by_epoch(
                 epoch,
                 highest_commit_cert.commit_info().id(),
@@ -367,6 +367,7 @@ impl BlockStore {
             .collect::<Vec<(u64, u64, HashValue)>>();
         storage.save_tree(blocks, quorum_certs, block_numbers)?;
         if !ledger_infos.is_empty() {
+            ledger_infos.reverse();
             let mut ledger_info_batch = SchemaBatch::new();
             for ledger_info in &ledger_infos {
                 storage
@@ -387,12 +388,12 @@ impl BlockStore {
         storage.consensus_db().ledger_db.metadata_db().set_latest_ledger_info(ledger_infos.last().unwrap().clone());
         info!("lightman0814 send_epoch_change {} {:?}", ledger_infos.len(), ledger_infos.last().unwrap().ledger_info());
 
-        if ledger_infos.first().unwrap().ledger_info().ends_epoch() {
+        if ledger_infos.last().unwrap().ledger_info().ends_epoch() {
             info!("lightman0814 send_epoch_change");
             retriever
                 .network
                 .send_epoch_change(EpochChangeProof::new(
-                    vec![ledger_infos.first().unwrap().clone()],
+                    vec![ledger_infos.last().unwrap().clone()],
                     /* more = */ false,
                 ))
                 .await;
