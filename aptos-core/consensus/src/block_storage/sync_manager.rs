@@ -539,54 +539,58 @@ impl BlockStore {
         let mut quorum_certs = vec![];
         let mut status = BlockRetrievalStatus::Succeeded;
         let (retrieval_epoch, mut id) = if let Some(epoch) = request.req.epoch() {
-            let target_block_number = self
-                .storage
-                .consensus_db()
-                .get_all::<EpochByBlockNumberSchema>()
-                .unwrap()
-                .into_iter()
-                .find(|(_, eppch_)| *eppch_ == epoch)
-                .map(|(block_number, _)| block_number)
-                .unwrap();
-            let end_block_id = self
-                .storage
-                .consensus_db()
-                .get::<LedgerInfoSchema>(&target_block_number)
-                .unwrap()
-                .unwrap()
-                .ledger_info()
-                .consensus_block_id();
-
-            let start_key = (epoch, HashValue::zero());
-            let end_key = (epoch, HashValue::new([u8::MAX; HashValue::LENGTH]));
-            let qc = self
-                .storage
-                .consensus_db()
-                .get_qc_range(&start_key, &end_key)
-                .unwrap()
-                .into_iter()
-                .find(|qc| qc.commit_info().id() == end_block_id)
-                .unwrap()
-                .clone();
-            let block = self
-                .storage
-                .consensus_db()
-                .get_block(epoch, qc.certified_block().id())
-                .unwrap()
-                .unwrap();
-            quorum_certs.push(qc);
-            blocks.push(block);
-
-            (
-                epoch,
-                self.storage
+            if request.req.block_id() != HashValue::zero() {
+                (epoch, request.req.block_id())
+            } else {
+                let target_block_number = self
+                    .storage
+                    .consensus_db()
+                    .get_all::<EpochByBlockNumberSchema>()
+                    .unwrap()
+                    .into_iter()
+                    .find(|(_, eppch_)| *eppch_ == epoch)
+                    .map(|(block_number, _)| block_number)
+                    .unwrap();
+                let end_block_id = self
+                    .storage
                     .consensus_db()
                     .get::<LedgerInfoSchema>(&target_block_number)
                     .unwrap()
                     .unwrap()
                     .ledger_info()
-                    .consensus_block_id(),
-            )
+                    .consensus_block_id();
+
+                let start_key = (epoch, HashValue::zero());
+                let end_key = (epoch, HashValue::new([u8::MAX; HashValue::LENGTH]));
+                let qc = self
+                    .storage
+                    .consensus_db()
+                    .get_qc_range(&start_key, &end_key)
+                    .unwrap()
+                    .into_iter()
+                    .find(|qc| qc.commit_info().id() == end_block_id)
+                    .unwrap()
+                    .clone();
+                let block = self
+                    .storage
+                    .consensus_db()
+                    .get_block(epoch, qc.certified_block().id())
+                    .unwrap()
+                    .unwrap();
+                quorum_certs.push(qc);
+                blocks.push(block);
+
+                (
+                    epoch,
+                    self.storage
+                        .consensus_db()
+                        .get::<LedgerInfoSchema>(&target_block_number)
+                        .unwrap()
+                        .unwrap()
+                        .ledger_info()
+                        .consensus_block_id(),
+                )
+            }
         } else {
             (self.ordered_root().epoch(), request.req.block_id())
         };
@@ -781,6 +785,7 @@ impl BlockRetriever {
         peers: Vec<AccountAddress>,
         num_blocks: u64,
         payload_manager: Arc<dyn TPayloadManager>,
+        epoch: Option<u64>,
     ) -> anyhow::Result<(Vec<Block>, Vec<QuorumCert>, Vec<LedgerInfoWithSignatures>)> {
         info!(
             "Retrieving blocks starting from {}, the total number is {}",
@@ -810,7 +815,7 @@ impl BlockRetriever {
                     target_block_id,
                     retrieve_batch_size,
                     peers.clone(),
-                    None,
+                    epoch,
                 )
                 .await;
             match response {
@@ -912,6 +917,7 @@ impl BlockRetriever {
                         peers,
                         u64::MAX,
                         payload_manager,
+                        Some(epoch),
                     )
                     .await?;
 
@@ -948,7 +954,7 @@ impl BlockRetriever {
         payload_manager: Arc<dyn TPayloadManager>,
     ) -> anyhow::Result<(Vec<Block>, Vec<QuorumCert>, Vec<LedgerInfoWithSignatures>)> {
         BLOCKS_FETCHED_FROM_NETWORK_IN_BLOCK_RETRIEVER.inc_by(num_blocks);
-        self.retrieve_block_for_id(initial_block_id, target_block_id, peers, num_blocks, payload_manager)
+        self.retrieve_block_for_id(initial_block_id, target_block_id, peers, num_blocks, payload_manager, None)
             .await
     }
 
