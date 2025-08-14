@@ -634,13 +634,13 @@ impl BlockStore {
             }
             lower = block.block_number().unwrap();
         }
-        let mut ledger_infs = vec![];
+        let mut ledger_infos = vec![];
         if upper != 0 {
-            ledger_infs = self.storage.consensus_db().ledger_db.metadata_db().get_ledger_infos_by_range((lower, upper));
-
+            ledger_infos = self.storage.consensus_db().ledger_db.metadata_db().get_ledger_infos_by_range((lower, upper));
+            ledger_infos.reverse();
         }
         info!("process block retrieval done. status={:?}, block size={}", status, blocks.len());
-        let response = Box::new(BlockRetrievalResponse::new(status, blocks, quorum_certs, ledger_infs));
+        let response = Box::new(BlockRetrievalResponse::new(status, blocks, quorum_certs, ledger_infos));
         let response_bytes = request
             .protocol
             .to_bytes(&ConsensusMsg::BlockRetrievalResponse(response))?;
