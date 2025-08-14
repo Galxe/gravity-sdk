@@ -258,10 +258,10 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         let mut count = 0;
         let mut visited = HashMap::new();
         let mut address_queue = VecDeque::new();
+        let mut penging_txns = self.pool.best_transactions();
         loop {
-            let mut penging_txns = self.pool.best_transactions();
             while let Some(txn) = penging_txns.next() {
-                if visited.get(&txn.sender()).unwrap_or(&0) > &txn.nonce() {
+                if visited.get(&txn.sender()).map(|x| x >= &txn.nonce()).unwrap_or(false) {
                     continue;
                 }
                 address_queue.push_back(txn.sender().clone());
