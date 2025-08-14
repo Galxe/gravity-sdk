@@ -385,7 +385,7 @@ impl BlockStore {
             .take();
         self.rebuild(root, blocks, quorum_certs).await;
         storage.consensus_db().ledger_db.metadata_db().set_latest_ledger_info(ledger_infos.last().unwrap().clone());
-        info!("lightman0814 send_epoch_change {:?}", ledger_infos.last().unwrap().ledger_info().next_epoch_state());
+        info!("lightman0814 send_epoch_change {:?}", ledger_infos.last().unwrap().ledger_info());
 
         if ledger_infos.last().unwrap().ledger_info().ends_epoch() {
             info!("lightman0814 send_epoch_change");
