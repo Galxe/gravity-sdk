@@ -387,12 +387,12 @@ impl BlockStore {
         storage.consensus_db().ledger_db.metadata_db().set_latest_ledger_info(ledger_infos.last().unwrap().clone());
         info!("lightman0814 send_epoch_change {} {:?}", ledger_infos.len(), ledger_infos.last().unwrap().ledger_info());
 
-        if ledger_infos.last().unwrap().ledger_info().ends_epoch() {
+        if ledger_infos.first().unwrap().ledger_info().ends_epoch() {
             info!("lightman0814 send_epoch_change");
             retriever
                 .network
                 .send_epoch_change(EpochChangeProof::new(
-                    vec![ledger_infos.last().unwrap().clone()],
+                    vec![ledger_infos.first().unwrap().clone()],
                     /* more = */ false,
                 ))
                 .await;
