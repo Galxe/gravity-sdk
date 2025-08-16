@@ -25,7 +25,7 @@ node_arg=""
 bin_version="debug"
 mode="cluster"
 recover="false"
-install_dir="/home/gravity"
+install_dir="/tmp"
 
 # Logging functions
 log_info() {

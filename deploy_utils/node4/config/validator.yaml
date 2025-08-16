@@ -15,14 +15,14 @@ consensus:
           from_file: /tmp/node4/config/waypoint.txt
         identity_blob_path: /tmp/node4/config/validator-identity.yaml
   enable_pipeline: true
-  max_sending_block_txns_after_filtering: 1000
-  max_sending_block_txns: 1000
-  max_receiving_block_txns: 1000
+  max_sending_block_txns_after_filtering: 5000
+  max_sending_block_txns: 5000
+  max_receiving_block_txns: 5000
   max_sending_block_bytes: 31457280 
   max_receiving_block_bytes: 31457280 
   quorum_store:
-    receiver_max_total_txns: 1000
-    sender_max_total_txns: 1000
+    receiver_max_total_txns: 7000
+    sender_max_total_txns: 7000
     receiver_max_batch_bytes: 1048736 
     sender_max_batch_bytes: 1048736 
     sender_max_total_bytes: 1073741824 
