@@ -259,7 +259,9 @@ impl BlockStore {
                     self.payload_manager.clone(),
                 )
                 .await?;
-            // retrieve_blocks_in_range guarantees that blocks has exactly 1 element
+            if blocks.is_empty() {
+                break;
+            }
             let block = blocks.remove(0);
             retrieve_qc = block.quorum_cert().clone();
             pending.push(block);
@@ -339,10 +341,11 @@ impl BlockStore {
         mut retriever: BlockRetriever,
         epoch: u64,
     ) -> anyhow::Result<()> {
+        info!("[Fast_Forward_sync] epoch {}", epoch);
         let highest_commit_cert = self.highest_commit_cert();
         let payload_manager = self.payload_manager.clone();
         let storage = self.storage.clone();
-        let (blocks, mut quorum_certs, ledger_infos) = retriever
+        let (blocks, mut quorum_certs, mut ledger_infos) = retriever
             .retrieve_block_by_epoch(
                 epoch,
                 highest_commit_cert.commit_info().id(),
@@ -364,6 +367,7 @@ impl BlockStore {
             .collect::<Vec<(u64, u64, HashValue)>>();
         storage.save_tree(blocks, quorum_certs, block_numbers)?;
         if !ledger_infos.is_empty() {
+            ledger_infos.reverse();
             let mut ledger_info_batch = SchemaBatch::new();
             for ledger_info in &ledger_infos {
                 storage
@@ -382,7 +386,7 @@ impl BlockStore {
             .take();
         self.rebuild(root, blocks, quorum_certs).await;
         storage.consensus_db().ledger_db.metadata_db().set_latest_ledger_info(ledger_infos.last().unwrap().clone());
-        
+
         if ledger_infos.last().unwrap().ledger_info().ends_epoch() {
             retriever
                 .network
@@ -532,63 +536,67 @@ impl BlockStore {
         fail_point!("consensus::process_block_retrieval", |_| {
             Err(anyhow::anyhow!("Injected error in process_block_retrieval"))
         });
-        info!("process_block_retrieval origin_block_id {}, target_block_id {}",
-                request.req.block_id(), request.req.target_block_id().unwrap());
         let mut blocks = vec![];
         let mut quorum_certs = vec![];
         let mut status = BlockRetrievalStatus::Succeeded;
         let (retrieval_epoch, mut id) = if let Some(epoch) = request.req.epoch() {
-            let target_block_number = self
-                .storage
-                .consensus_db()
-                .get_all::<EpochByBlockNumberSchema>()
-                .unwrap()
-                .into_iter()
-                .find(|(_, eppch_)| *eppch_ == epoch)
-                .map(|(block_number, _)| block_number)
-                .unwrap();
-            let end_block_id = self
-                .storage
-                .consensus_db()
-                .get::<LedgerInfoSchema>(&target_block_number)
-                .unwrap()
-                .unwrap()
-                .ledger_info()
-                .consensus_block_id();
-
-            let start_key = (epoch, HashValue::zero());
-            let end_key = (epoch, HashValue::new([u8::MAX; HashValue::LENGTH]));
-            let qc = self
-                .storage
-                .consensus_db()
-                .get_qc_range(&start_key, &end_key)
-                .unwrap()
-                .into_iter()
-                .find(|qc| qc.commit_info().id() == end_block_id)
-                .unwrap()
-                .clone();
-            let block = self
-                .storage
-                .consensus_db()
-                .get_block(epoch, qc.certified_block().id())
-                .unwrap()
-                .unwrap();
-            quorum_certs.push(qc);
-            blocks.push(block);
-
-            (
-                epoch,
-                self.storage
+            if request.req.block_id() != HashValue::zero() {
+                (epoch, request.req.block_id())
+            } else {
+                let target_block_number = self
+                    .storage
+                    .consensus_db()
+                    .get_all::<EpochByBlockNumberSchema>()
+                    .unwrap()
+                    .into_iter()
+                    .find(|(_, eppch_)| *eppch_ == epoch)
+                    .map(|(block_number, _)| block_number)
+                    .unwrap();
+                let end_block_id = self
+                    .storage
                     .consensus_db()
                     .get::<LedgerInfoSchema>(&target_block_number)
                     .unwrap()
                     .unwrap()
                     .ledger_info()
-                    .consensus_block_id(),
-            )
+                    .consensus_block_id();
+
+                let start_key = (epoch, HashValue::zero());
+                let end_key = (epoch, HashValue::new([u8::MAX; HashValue::LENGTH]));
+                let qc = self
+                    .storage
+                    .consensus_db()
+                    .get_qc_range(&start_key, &end_key)
+                    .unwrap()
+                    .into_iter()
+                    .find(|qc| qc.commit_info().id() == end_block_id)
+                    .unwrap()
+                    .clone();
+                let block = self
+                    .storage
+                    .consensus_db()
+                    .get_block(epoch, qc.certified_block().id())
+                    .unwrap()
+                    .unwrap();
+                quorum_certs.push(qc);
+                blocks.push(block);
+
+                (
+                    epoch,
+                    self.storage
+                        .consensus_db()
+                        .get::<LedgerInfoSchema>(&target_block_number)
+                        .unwrap()
+                        .unwrap()
+                        .ledger_info()
+                        .consensus_block_id(),
+                )
+            }
         } else {
             (self.ordered_root().epoch(), request.req.block_id())
         };
+        info!("process_block_retrieval origin_block_id {}, target_block_id {}, retrieval_epoch {}",
+                request.req.block_id(), request.req.target_block_id().unwrap(), retrieval_epoch);
 
         while (blocks.len() as u64) < request.req.num_blocks() {
             if request.req.match_target_id(id) {
@@ -625,13 +633,13 @@ impl BlockStore {
             }
             lower = block.block_number().unwrap();
         }
-        let mut ledger_infs = vec![];
+        let mut ledger_infos = vec![];
         if upper != 0 {
-            ledger_infs = self.storage.consensus_db().ledger_db.metadata_db().get_ledger_infos_by_range((lower, upper));
-
+            ledger_infos = self.storage.consensus_db().ledger_db.metadata_db().get_ledger_infos_by_range((lower, upper));
+            ledger_infos.reverse();
         }
         info!("process block retrieval done. status={:?}, block size={}", status, blocks.len());
-        let response = Box::new(BlockRetrievalResponse::new(status, blocks, quorum_certs, ledger_infs));
+        let response = Box::new(BlockRetrievalResponse::new(status, blocks, quorum_certs, ledger_infos));
         let response_bytes = request
             .protocol
             .to_bytes(&ConsensusMsg::BlockRetrievalResponse(response))?;
@@ -778,6 +786,7 @@ impl BlockRetriever {
         peers: Vec<AccountAddress>,
         num_blocks: u64,
         payload_manager: Arc<dyn TPayloadManager>,
+        epoch: Option<u64>,
     ) -> anyhow::Result<(Vec<Block>, Vec<QuorumCert>, Vec<LedgerInfoWithSignatures>)> {
         info!(
             "Retrieving blocks starting from {}, the total number is {}",
@@ -807,7 +816,7 @@ impl BlockRetriever {
                     target_block_id,
                     retrieve_batch_size,
                     peers.clone(),
-                    None,
+                    epoch,
                 )
                 .await;
             match response {
@@ -909,6 +918,7 @@ impl BlockRetriever {
                         peers,
                         u64::MAX,
                         payload_manager,
+                        Some(epoch),
                     )
                     .await?;
 
@@ -945,7 +955,7 @@ impl BlockRetriever {
         payload_manager: Arc<dyn TPayloadManager>,
     ) -> anyhow::Result<(Vec<Block>, Vec<QuorumCert>, Vec<LedgerInfoWithSignatures>)> {
         BLOCKS_FETCHED_FROM_NETWORK_IN_BLOCK_RETRIEVER.inc_by(num_blocks);
-        self.retrieve_block_for_id(initial_block_id, target_block_id, peers, num_blocks, payload_manager)
+        self.retrieve_block_for_id(initial_block_id, target_block_id, peers, num_blocks, payload_manager, None)
             .await
     }
 
