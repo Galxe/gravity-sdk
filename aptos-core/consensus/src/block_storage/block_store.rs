@@ -289,6 +289,7 @@ impl BlockStore {
                 assert_eq!(cur_block_number, block_number);
                 continue;
             }
+            info!("init block {}, block number is {}", p_block.block().id(), block_number);
             p_block.block().set_block_number(block_number);
             block_numbers.push((p_block.block().epoch(), p_block.block().block_number().unwrap(), p_block.block().id()));
         }
