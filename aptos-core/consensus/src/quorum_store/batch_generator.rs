@@ -8,7 +8,7 @@ use crate::{
         utils::{MempoolProxy, TimeExpirations},
     }
 };
-use gaptos::aptos_config::config::QuorumStoreConfig;
+use gaptos::{ aptos_config::config::QuorumStoreConfig};
 use aptos_consensus_types::{
     common::{TransactionInProgress, TransactionSummary},
     proof_of_store::{BatchId, BatchInfo},
@@ -20,9 +20,7 @@ use gaptos::aptos_types::{transaction::SignedTransaction, PeerId};
 use futures_channel::mpsc::Sender;
 use rayon::prelude::*;
 use std::{
-    collections::{btree_map::Entry, BTreeMap, HashMap},
-    sync::Arc,
-    time::{Duration, Instant},
+    collections::{btree_map::Entry, BTreeMap, HashMap, HashSet}, hash::Hash, sync::Arc, time::{Duration, Instant}
 };
 use tokio::time::Interval;
 use gaptos::aptos_consensus::quorum_store::counters as counters;
@@ -64,6 +62,7 @@ pub struct BatchGenerator {
     config: QuorumStoreConfig,
     mempool_proxy: MempoolProxy,
     batches_in_progress: HashMap<(PeerId, BatchId), BatchInProgress>,
+    commited_txns_buffer: Vec<(TransactionSummary, TransactionInProgress)>,
     txns_in_progress_sorted: BTreeMap<TransactionSummary, TransactionInProgress>,
     batch_expirations: TimeExpirations<(PeerId, BatchId)>,
     latest_block_timestamp: u64,
@@ -104,6 +103,7 @@ impl BatchGenerator {
             batch_id,
             db,
             batch_writer,
+            commited_txns_buffer: Vec::new(),
             config,
             mempool_proxy: MempoolProxy::new(mempool_tx, mempool_txn_pull_timeout_ms),
             batches_in_progress: HashMap::new(),
@@ -333,13 +333,16 @@ impl BatchGenerator {
             "QS: excluding txs len: {:?}",
             self.txns_in_progress_sorted.len()
         );
-
+        let mut exclude_transactions = self.txns_in_progress_sorted.clone();
+        for (txn_summary, txn_in_progress) in self.commited_txns_buffer.iter() {
+            exclude_transactions.insert(txn_summary.clone(), txn_in_progress.clone());
+        }
         let mut pulled_txns = self
             .mempool_proxy
             .pull_internal(
                 max_count,
                 self.config.sender_max_total_bytes as u64,
-                self.txns_in_progress_sorted.clone(),
+                exclude_transactions,
             )
             .await
             .unwrap_or_default();
@@ -514,8 +517,18 @@ impl BatchGenerator {
                                 "Decreasing block timestamp"
                             );
                             self.latest_block_timestamp = block_timestamp;
-
+                            
+                            // keep the last commited txn for each sender to avoid duplicate txn
+                            self.commited_txns_buffer.clear();
                             for (author, batch_id) in batches.iter().map(|b| (b.author(), b.batch_id())) {
+                                if let Some(batch_in_progress) = self.batches_in_progress.get(&(author, batch_id)) {
+                                    for txn_summary in &batch_in_progress.txns {
+                                        if let Some(txn_in_progress) = self.txns_in_progress_sorted.get(txn_summary) {
+                                            self.commited_txns_buffer.push((txn_summary.clone(), txn_in_progress.clone()));
+                                        }
+                                    }
+                                }
+                                
                                 if self.remove_batch_in_progress(author, batch_id) {
                                     counters::BATCH_IN_PROGRESS_COMMITTED.inc();
                                 }
