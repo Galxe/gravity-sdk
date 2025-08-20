@@ -13,11 +13,25 @@ use aptos_consensus::{
     gravity_state_computer::ConsensusAdapterArgs, network_interface::ConsensusMsg,
     persistent_liveness_storage::StorageWriteProxy, quorum_store::quorum_store_db::QuorumStoreDB,
 };
+
 use block_buffer_manager::{get_block_buffer_manager, TxPool};
-use gaptos::{api_types::u256_define::BlockId, aptos_logger::info};
-use gaptos::aptos_config::{
-    config::{NetworkConfig, NodeConfig, Peer, PeerRole},
-    network_id::NetworkId,
+use gaptos::{
+    api_types::u256_define::BlockId,
+    aptos_event_notifications::{
+        DbBackedOnChainConfig, EventNotificationListener, ReconfigNotificationListener,
+    },
+    aptos_logger::info,
+};
+use gaptos::{
+    aptos_channels::{aptos_channel, message_queues::QueueStyle},
+    aptos_config::{
+        config::{NetworkConfig, NodeConfig, Peer, PeerRole},
+        network_id::NetworkId,
+    },
+    aptos_network::{
+        protocols::network::{NetworkApplicationConfig, NetworkClientConfig, NetworkServiceConfig},
+        ProtocolId,
+    },
 };
 
 use aptos_mempool::{MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest};
@@ -64,16 +78,37 @@ pub fn check_bootstrap_config(node_config_path: Option<PathBuf>) -> NodeConfig {
     })
 }
 
-pub fn init_network_interfaces<T, E>(
+pub fn jwk_consensus_network_configuration(node_config: &NodeConfig) -> NetworkApplicationConfig {
+    let direct_send_protocols: Vec<ProtocolId> =
+        gaptos::aptos_jwk_consensus::network_interface::DIRECT_SEND.into();
+    let rpc_protocols: Vec<ProtocolId> = gaptos::aptos_jwk_consensus::network_interface::RPC.into();
+
+    let network_client_config =
+        NetworkClientConfig::new(direct_send_protocols.clone(), rpc_protocols.clone());
+    let network_service_config = NetworkServiceConfig::new(
+        direct_send_protocols,
+        rpc_protocols,
+        aptos_channel::Config::new(node_config.jwk_consensus.max_network_channel_size)
+            .queue_style(QueueStyle::FIFO),
+    );
+    NetworkApplicationConfig::new(network_client_config, network_service_config)
+}
+
+pub fn init_network_interfaces<T, E, J>(
     network_builder: &mut NetworkBuilder,
     network_id: NetworkId,
     network_config: &NetworkConfig,
     node_config: &NodeConfig,
     peers_and_metadata: Arc<PeersAndMetadata>,
-) -> (ApplicationNetworkInterfaces<T>, ApplicationNetworkInterfaces<E>)
+) -> (
+    ApplicationNetworkInterfaces<T>,
+    ApplicationNetworkInterfaces<E>,
+    ApplicationNetworkInterfaces<J>,
+)
 where
     T: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
     E: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
+    J: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
 {
     let consensus_network_interfaces = build_network_interfaces::<T>(
         network_builder,
@@ -89,7 +124,14 @@ where
         mempool_network_configuration(node_config),
         peers_and_metadata.clone(),
     );
-    (consensus_network_interfaces, mempool_interfaces)
+    let jwk_consensus_network_interfaces = build_network_interfaces::<J>(
+        network_builder,
+        network_id,
+        &network_config,
+        jwk_consensus_network_configuration(node_config),
+        peers_and_metadata.clone(),
+    );
+    (consensus_network_interfaces, mempool_interfaces, jwk_consensus_network_interfaces)
 }
 
 /// Spawns a new thread for the node inspection service
@@ -129,6 +171,62 @@ pub fn start_consensus(
         vtxn_pool,
         None,
         arg,
+    )
+}
+
+pub fn start_jwk_consensus_runtime(
+    node_config: &NodeConfig,
+    jwk_consensus_subscriptions: Option<(
+        ReconfigNotificationListener<DbBackedOnChainConfig>,
+        EventNotificationListener,
+    )>,
+    jwk_consensus_network_interfaces: Option<
+        ApplicationNetworkInterfaces<gaptos::aptos_jwk_consensus::types::JWKConsensusMsg>,
+    >,
+) -> Runtime {
+    let vtxn_pool = VTxnPoolState::default();
+    let jwk_consensus_runtime = match jwk_consensus_network_interfaces {
+        Some(interfaces) => {
+            let ApplicationNetworkInterfaces { network_client, network_service_events } =
+                interfaces;
+            let (reconfig_events, onchain_jwk_updated_events) = jwk_consensus_subscriptions.expect(
+                "JWK consensus needs to listen to NewEpochEvents and OnChainJWKMapUpdated events.",
+            );
+            let my_addr = node_config.validator_network.as_ref().unwrap().peer_id();
+            let jwk_consensus_runtime = gaptos::aptos_jwk_consensus::start_jwk_consensus_runtime(
+                my_addr,
+                &node_config.consensus.safety_rules,
+                network_client,
+                network_service_events,
+                reconfig_events,
+                onchain_jwk_updated_events,
+                vtxn_pool.clone(),
+            );
+            Some(jwk_consensus_runtime)
+        }
+        _ => None,
+    };
+    jwk_consensus_runtime.expect("JWK consensus runtime must be started")
+}
+
+pub fn init_jwk_consensus(
+    node_config: &NodeConfig,
+    event_subscription_service: &mut EventSubscriptionService,
+    jwk_consensus_network_interfaces: ApplicationNetworkInterfaces<
+        gaptos::aptos_jwk_consensus::types::JWKConsensusMsg,
+    >,
+) -> Runtime {
+    // TODO(gravity): only valdiator should subscribe the reconf events
+    let reconfig_events = event_subscription_service
+        .subscribe_to_reconfigurations()
+        .expect("JWK consensus must subscribe to reconfigurations");
+    let jwk_updated_events = event_subscription_service
+        .subscribe_to_events(vec![], vec!["0x1::jwks::ObservedJWKsUpdated".to_string()])
+        .expect("JWK consensus must subscribe to DKG events");
+    start_jwk_consensus_runtime(
+        node_config,
+        Some((reconfig_events, jwk_updated_events)),
+        Some(jwk_consensus_network_interfaces),
     )
 }
 
