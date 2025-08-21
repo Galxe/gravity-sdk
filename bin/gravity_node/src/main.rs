@@ -5,13 +5,21 @@ use api::{
     config_storage::ConfigStorageWrapper,
     consensus_api::{ConsensusEngine, ConsensusEngineArgs},
 };
+use async_trait::async_trait;
 use consensus::mock_consensus::mock::MockConsensus;
+use gaptos::api_types::{
+    relayer::{Relayer, GLOBAL_RELAYER},
+    ExecError,
+};
 use gravity_storage::block_view_storage::BlockViewStorage;
 use greth::{
-    gravity_storage, reth, reth::chainspec::EthereumChainSpecParser,
-    reth_cli::chainspec::ChainSpecParser, reth_cli_util, reth_db, reth_node_api, reth_node_builder,
-    reth_node_ethereum, reth_pipe_exec_layer_ext_v2, reth_pipe_exec_layer_ext_v2::ExecutionArgs,
-    reth_provider, reth_transaction_pool::TransactionPool,
+    gravity_storage,
+    reth::{self, chainspec::EthereumChainSpecParser},
+    reth_cli::chainspec::ChainSpecParser,
+    reth_cli_util, reth_db, reth_node_api, reth_node_builder, reth_node_ethereum,
+    reth_pipe_exec_layer_ext_v2::{self, ExecutionArgs, ObserveState, RelayerManager},
+    reth_provider,
+    reth_transaction_pool::TransactionPool,
 };
 use pprof::{protos::Message, ProfilerGuard};
 use reth::rpc::builder::auth::AuthServerHandle;
@@ -144,6 +152,42 @@ struct ProfilingState {
     profile_count: usize,
 }
 
+struct RelayerWrapper {
+    manager: RelayerManager,
+}
+
+impl RelayerWrapper {
+    pub fn new() -> Self {
+        let manager = RelayerManager::new();
+        Self { manager }
+    }
+}
+
+#[async_trait]
+impl Relayer for RelayerWrapper {
+    async fn add_uri(
+        &self,
+        uri: &str,
+        rpc_url: &str,
+        last_state: Vec<u8>,
+    ) -> Result<(), ExecError> {
+        let last_state = serde_json::from_slice::<ObserveState>(&last_state)
+            .map_err(|e| ExecError::Other(e.to_string()))?;
+        self.manager
+            .add_uri(uri, rpc_url, last_state)
+            .await
+            .map_err(|e| ExecError::Other(e.to_string()))
+    }
+
+    async fn get_last_state(&self, uri: &str) -> Result<Vec<u8>, ExecError> {
+        self.manager
+            .poll_uri(uri)
+            .await
+            .map(|state| serde_json::to_vec(&state).expect("failed to serialize state"))
+            .map_err(|e| ExecError::Other(e.to_string()))
+    }
+}
+
 fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
     let profiling_state = Arc::new(Mutex::new(ProfilingState { guard: None, profile_count: 0 }));
 
@@ -226,6 +270,12 @@ fn main() {
                 mock.run().await;
             });
         } else {
+            match GLOBAL_RELAYER.set(Arc::new(RelayerWrapper::new())) {
+                Ok(_) => {}
+                Err(_) => {
+                    panic!("failed to set global relayer");
+                }
+            }
             _engine = Some(
                 ConsensusEngine::init(ConsensusEngineArgs {
                     node_config: gcei_config,
