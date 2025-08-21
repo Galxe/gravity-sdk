@@ -20,7 +20,7 @@ CARGO_FEATURES := $(if $(FEATURE),--features $(FEATURE),)
 all: $(BINARY)
 
 gravity_node:
-	cargo build -p gravity_node $(CARGO_FLAGS) $(CARGO_FEATURES)
+	RUSTFLAGS="--cfg tokio_unstable" cargo build -p gravity_node $(CARGO_FLAGS) $(CARGO_FEATURES)
 
 bench:
 	cargo build -p bench $(CARGO_FLAGS) $(CARGO_FEATURES)
