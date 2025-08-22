@@ -99,6 +99,8 @@ function start_node() {
             --txpool.queued-max-count 18446744073709551615 \
             --txpool.queued-max-size 17592186044415 \
             --http.disable-compression \
+            --gravity.cache.max_persist_gap 1024 \
+            --gravity.cache.capacity 6000000 \
 	    > ${WORKSPACE}/logs/debug.log &
         echo $!
     )
