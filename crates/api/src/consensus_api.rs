@@ -160,7 +160,7 @@ impl ConsensusEngine {
             pool,
         );
         runtimes.extend(mempool_runtime);
-        let jwk_consensus_runtime = init_jwk_consensus(
+        let (jwk_consensus_runtime, vtxn_pool) = init_jwk_consensus(
             &node_config,
             &mut event_subscription_service,
             jwk_consensus_network_interfaces,
@@ -176,6 +176,7 @@ impl ConsensusEngine {
             consensus_to_mempool_sender,
             db,
             &mut args,
+            vtxn_pool,
         );
         runtimes.push(consensus_runtime);
         // Create notification senders and listeners for mempool, consensus and the storage service
