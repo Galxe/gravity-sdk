@@ -154,11 +154,11 @@ pub fn start_consensus(
     consensus_to_mempool_sender: Sender<QuorumStoreRequest>,
     db: DbReaderWriter,
     arg: &mut ConsensusAdapterArgs,
+    vtxn_pool: VTxnPoolState,
 ) -> (Runtime, Arc<StorageWriteProxy>, Arc<QuorumStoreDB>) {
     let consensus_reconfig_subscription = event_subscription_service
         .subscribe_to_reconfigurations()
         .expect("Consensus must subscribe to reconfigurations");
-    let vtxn_pool = VTxnPoolState::default();
     // TODO(gravity_byteyue: return quorum store client also)
     aptos_consensus::consensus_provider::start_consensus(
         &node_config,
@@ -183,7 +183,7 @@ pub fn start_jwk_consensus_runtime(
     jwk_consensus_network_interfaces: Option<
         ApplicationNetworkInterfaces<gaptos::aptos_jwk_consensus::types::JWKConsensusMsg>,
     >,
-) -> Runtime {
+) -> (Runtime, VTxnPoolState) {
     let vtxn_pool = VTxnPoolState::default();
     let jwk_consensus_runtime = match jwk_consensus_network_interfaces {
         Some(interfaces) => {
@@ -206,7 +206,7 @@ pub fn start_jwk_consensus_runtime(
         }
         _ => None,
     };
-    jwk_consensus_runtime.expect("JWK consensus runtime must be started")
+    (jwk_consensus_runtime.expect("JWK consensus runtime must be started"), vtxn_pool)
 }
 
 pub fn init_jwk_consensus(
@@ -215,7 +215,7 @@ pub fn init_jwk_consensus(
     jwk_consensus_network_interfaces: ApplicationNetworkInterfaces<
         gaptos::aptos_jwk_consensus::types::JWKConsensusMsg,
     >,
-) -> Runtime {
+) -> (Runtime, VTxnPoolState) {
     // TODO(gravity): only valdiator should subscribe the reconf events
     let reconfig_events = event_subscription_service
         .subscribe_to_reconfigurations()
