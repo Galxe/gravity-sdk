@@ -134,9 +134,8 @@ impl ConsensusDB {
         let end_key = (epoch, HashValue::new([u8::MAX; HashValue::LENGTH]));
 
         let block_number_to_block_id = self
-            .get_range::<BlockNumberSchema>(&start_key, &end_key)?
+            .get_range_with_filter::<BlockNumberSchema, _>(&start_key, &end_key, |(_, block_number)| *block_number >= latest_block_number)?
             .into_iter()
-            .filter(|(_, block_number)| block_number >= &latest_block_number)
             .map(|((_, block_id), block_number)| (block_number, block_id))
             .collect::<HashMap<u64, HashValue>>();
         let (start_epoch, start_round) = if block_number_to_block_id.contains_key(&latest_block_number) {
@@ -151,10 +150,9 @@ impl ConsensusDB {
             .map(|(block_number, block_id)| (*block_id, *block_number))
             .collect::<HashMap<HashValue, u64>>();
         let mut consensus_blocks: Vec<_> = self
-            .get_range::<BlockSchema>(&start_key, &end_key)?
+            .get_range_with_filter::<BlockSchema, _>(&start_key, &end_key, |(_, block)| block.round() >= start_round)?
             .into_iter()
             .map(|(_, block)| block)
-            .filter(|block| block.round() >= start_round)
             .collect();
         consensus_blocks.iter_mut().for_each(|block| {
             if block.block_number().is_none() {
@@ -164,10 +162,9 @@ impl ConsensusDB {
             }
         });
         let consensus_qcs: Vec<_> = self
-            .get_range::<QCSchema>(&start_key, &end_key)?
+            .get_range_with_filter::<QCSchema, _>(&start_key, &end_key, |(_, qc)| qc.certified_block().round() >= start_round)?
             .into_iter()
             .map(|(_, qc)| qc)
-            .filter(|qc| qc.certified_block().round() >= start_round)
             .collect();
         info!("consensus_blocks size : {}, consensus_qcs size : {}, block_number_to_block_id size : {}, start_round : {}",
                  consensus_blocks.len(), consensus_qcs.len(), block_number_to_block_id.len(), start_round);
@@ -291,6 +288,24 @@ impl ConsensusDB {
         Ok(iter.collect::<Result<Vec<(S::Key, S::Value)>, AptosDbError>>()?)
     }
 
+    pub fn get_range_with_filter<S: Schema, F>(&self, start_key: &S::Key, end_key: &S::Key, filter: F) -> Result<Vec<(S::Key, S::Value)>, DbError>
+    where
+        F: FnMut(&(S::Key, S::Value)) -> bool,
+    {
+        let mut option = ReadOptions::default();
+        let lower_bound = <S::Key as KeyCodec<S>>::encode_key(start_key).unwrap();
+        option.set_iterate_lower_bound(lower_bound);
+        let upper_bound = <S::Key as KeyCodec<S>>::encode_key(end_key).unwrap();
+        option.set_iterate_upper_bound(upper_bound);
+        let mut iter = self.db.iter_with_opts::<S>(option)?;
+        iter.seek_to_first();
+        Ok(iter
+            .collect::<Result<Vec<(S::Key, S::Value)>, AptosDbError>>()?
+            .into_iter()
+            .filter(filter)
+            .collect())
+    }
+
     pub fn get_block(&self, epoch: u64, block_id: HashValue) -> Result<Option<Block>, DbError> {
         let block = self.get::<BlockSchema>(&(epoch, block_id))?;
         if let Some(block) = &block {
@@ -318,6 +333,15 @@ impl ConsensusDB {
 
     pub fn get_qc_range(&self, start_key: &(u64, HashValue), end_key: &(u64, HashValue)) -> Result<Vec<QuorumCert>, DbError> {
         Ok(self.get_range::<QCSchema>(start_key, end_key)?.into_iter().map(|(_, value)| value).collect())
+    }
+
+    pub fn get_max_epoch(&self) -> u64 {
+        let mut iter = self.db.rev_iter::<BlockSchema>().unwrap();
+        let max_epoch = match iter.next() {
+            Some(Ok(((epoch, _), _))) => epoch,
+            _ => 1,
+        };
+        max_epoch
     }
 }
 
