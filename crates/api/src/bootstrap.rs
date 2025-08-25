@@ -14,7 +14,7 @@ use aptos_consensus::{
     persistent_liveness_storage::StorageWriteProxy, quorum_store::quorum_store_db::QuorumStoreDB,
 };
 use block_buffer_manager::get_block_buffer_manager;
-use gaptos::api_types::u256_define::BlockId;
+use gaptos::{api_types::u256_define::BlockId, aptos_logger::info};
 use gaptos::aptos_config::{
     config::{NetworkConfig, NodeConfig, Peer, PeerRole},
     network_id::NetworkId,
@@ -174,24 +174,36 @@ pub async fn init_block_buffer_manager(consensus_db: &Arc<ConsensusDB>, latest_b
         0
     };
 
+    let max_epoch = consensus_db.get_max_epoch();
+
     let mut block_number_to_block_id = HashMap::new();
-    consensus_db
-        .get_all::<BlockNumberSchema>()
-        .unwrap()
-        .into_iter()
-        .filter(|(_, block_number)| block_number >= &start_block_number)
-        .for_each(|((epoch, block_id), block_number)| {
-            if !block_number_to_block_id.contains_key(&block_number) {
-                block_number_to_block_id
-                    .insert(block_number, (epoch, BlockId::from_bytes(block_id.as_slice())));
-            } else {
-                let (cur_epoch, _) = block_number_to_block_id.get(&block_number).unwrap();
-                if *cur_epoch < epoch {
+    for epoch_i in (1..=max_epoch).rev() {
+        let mut has_large = false;
+        let start_key = (epoch_i, HashValue::zero());
+        let end_key = (epoch_i, HashValue::new([u8::MAX; HashValue::LENGTH]));
+        consensus_db
+            .get_range_with_filter::<BlockNumberSchema, _>(&start_key, &end_key, |(_, block_number)| *block_number >= start_block_number && *block_number <= latest_block_number)
+            .unwrap()
+            .into_iter()
+            .for_each(|((epoch, block_id), block_number)| {
+                has_large = true;
+                if !block_number_to_block_id.contains_key(&block_number) {
                     block_number_to_block_id
                         .insert(block_number, (epoch, BlockId::from_bytes(block_id.as_slice())));
+                } else {
+                    let (cur_epoch, _) = block_number_to_block_id.get(&block_number).unwrap();
+                    if *cur_epoch < epoch {
+                        block_number_to_block_id
+                            .insert(block_number, (epoch, BlockId::from_bytes(block_id.as_slice())));
+                    }
                 }
-            }
-        });
+            });
+        if !has_large {
+            break;
+        }
+    }
+    info!("init_block_buffer_manager get_max_epoch {}", max_epoch);
+
     let mut block_number_to_block_id: HashMap<_, _> = block_number_to_block_id
         .into_iter()
         .map(|(block_number, (_, block_id))| (block_number, block_id))
