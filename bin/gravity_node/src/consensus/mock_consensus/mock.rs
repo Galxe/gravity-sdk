@@ -94,6 +94,7 @@ impl MockConsensus {
             },
             jwks_extra_data: vec![],
             txns,
+            jwks_extra_data: Vec::new(),
         };
     }
 

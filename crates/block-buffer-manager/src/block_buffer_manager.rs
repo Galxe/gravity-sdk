@@ -498,6 +498,44 @@ impl BlockBufferManager {
         }
     }
 
+    async fn calculate_new_epoch_state(
+        &self,
+        events: &Vec<GravityEvent>,
+        block_num: u64,
+    ) -> Result<Option<EpochState>, anyhow::Error> {
+        if events.is_empty() {
+            return Ok(None);
+        }
+        let new_epoch_event = events.iter().find(|event| match event {
+            GravityEvent::NewEpoch(_, _) => true,
+            GravityEvent::ObservedJWKsUpdated(number, bytes) => {
+                info!("ObservedJWKsUpdated number: {:?} bytes: {:?}", number, bytes);
+                false
+            }
+            _ => false,
+        });
+        if new_epoch_event.is_none() {
+            return Ok(None);
+        }
+        let new_epoch_event = new_epoch_event.unwrap();
+        let (new_epoch, bytes) = match new_epoch_event {
+            GravityEvent::NewEpoch(new_epoch, bytes) => (new_epoch, bytes),
+            _ => return Err(anyhow::anyhow!("New epoch event is not NewEpoch")),
+        };
+        let api_validator_set = bcs::from_bytes::<
+            api_types::on_chain_config::validator_set::ValidatorSet,
+        >(&bytes)
+        .map_err(|e| format_err!("[on-chain config] Failed to deserialize into config: {}", e))?;
+        let validator_set = convert_validator_set(api_validator_set)
+            .map_err(|e| format_err!("[on-chain config] Failed to convert validator set: {}", e))?;
+        info!(
+            "block number {} get validator set from new epoch {} event {:?}",
+            block_num, new_epoch, validator_set
+        );
+        *self.latest_epoch_change_block_number.lock().await = block_num;
+        Ok(Some(EpochState::new(*new_epoch, (&validator_set).into())))
+    }
+
     pub async fn set_compute_res(
         &self,
         block_id: BlockId,
@@ -517,29 +555,7 @@ impl BlockBufferManager {
             assert_eq!(block.block_meta.block_id, block_id);
             let txn_len = block.txns.len();
             let events_len = events.len();
-            let mut new_epoch_state = None;
-            if events.len() > 0 {
-                let new_epoch_event = events[0].clone();
-                let (new_epoch, bytes) = match new_epoch_event {
-                    GravityEvent::NewEpoch(new_epoch, bytes) => (new_epoch, bytes),
-                    _ => todo!(),
-                };
-                let api_validator_set = bcs::from_bytes::<
-                    api_types::on_chain_config::validator_set::ValidatorSet,
-                >(&bytes)
-                .map_err(|e| {
-                    format_err!("[on-chain config] Failed to deserialize into config: {}", e)
-                })?;
-                let validator_set = convert_validator_set(api_validator_set).map_err(|e| {
-                    format_err!("[on-chain config] Failed to convert validator set: {}", e)
-                })?;
-                info!(
-                    "block number {} get validator set from new epoch {} event {:?}",
-                    block_num, new_epoch, validator_set
-                );
-                new_epoch_state = Some(EpochState::new(new_epoch, (&validator_set).into()));
-                *self.latest_epoch_change_block_number.lock().await = block_num;
-            }
+            let new_epoch_state = self.calculate_new_epoch_state(&events, block_num).await?;
             let compute_result = StateComputeResult::new(
                 ComputeRes { data: block_hash, txn_num: txn_len as u64, txn_status, events },
                 new_epoch_state,
