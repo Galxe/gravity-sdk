@@ -460,8 +460,9 @@ impl PipelineBuilder {
             block_hash: None,
             proposer: block.author().map(|author| ExternalAccountAddress::new(author.into_bytes())),
         };
+        // TODO: add jwks_extra_data
         get_block_buffer_manager()
-            .set_ordered_blocks(BlockId::from_bytes(block.parent_id().as_slice()), ExternalBlock { block_meta: meta_data, txns: real_txns })
+            .set_ordered_blocks(BlockId::from_bytes(block.parent_id().as_slice()), ExternalBlock { block_meta: meta_data, txns: real_txns, jwks_extra_data: Vec::new() })
             .await
             .unwrap_or_else(|e| panic!("Failed to push ordered blocks {}", e));
         Ok(())
