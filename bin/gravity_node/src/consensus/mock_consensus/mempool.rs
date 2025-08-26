@@ -25,6 +25,13 @@ impl Mempool {
         }
     }
 
+    pub fn reset_epoch(&mut self) {
+        self.next_sequence_numbers.clear();
+        for (account, seq_num) in self.commit_sequence_numbers.iter() {
+            self.next_sequence_numbers.insert(account.clone(), *seq_num + 1);
+        }
+    }
+
     pub fn add_txns(&mut self, txns: Vec<VerifiedTxnWithAccountSeqNum>) {
         for txn in txns {
             let account = txn.txn.sender.clone();
