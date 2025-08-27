@@ -144,40 +144,42 @@ impl BatchStore {
             validator_signer,
             persist_subscribers: DashMap::new(),
         };
-        let db_content = db_clone
-            .get_all_batches()
-            .expect("failed to read data from db");
-        let mut expired_keys = Vec::new();
-        trace!(
-            "QS: Batchreader {} {} {}",
-            db_content.len(),
-            epoch,
-            last_certified_time
-        );
-        for (digest, value) in db_content {
-            let expiration = value.expiration();
+        // @lightman removed the batch deletion function for block sync.
+        // Skipping cache initialization to avoid scanning all batches.
+        // let db_content = db_clone
+        //     .get_all_batches()
+        //     .expect("failed to read data from db");
+        // let mut expired_keys = Vec::new();
+        // trace!(
+        //     "QS: Batchreader {} {} {}",
+        //     db_content.len(),
+        //     epoch,
+        //     last_certified_time
+        // );
+        // for (digest, value) in db_content {
+        //     let expiration = value.expiration();
 
-            trace!(
-                "QS: Batchreader recovery content exp {:?}, digest {}",
-                expiration,
-                digest
-            );
+        //     trace!(
+        //         "QS: Batchreader recovery content exp {:?}, digest {}",
+        //         expiration,
+        //         digest
+        //     );
 
-            if last_certified_time >= expiration {
-                expired_keys.push(digest);
-            } else {
-                batch_store
-                    .insert_to_cache(&value)
-                    .expect("Storage limit exceeded upon BatchReader construction");
-            }
-        }
-        trace!(
-            "QS: Batchreader recovery expired keys len {}",
-            expired_keys.len()
-        );
-        db_clone
-            .delete_batches(expired_keys)
-            .expect("Deletion of expired keys should not fail");
+        //     if last_certified_time >= expiration {
+        //         expired_keys.push(digest);
+        //     } else {
+        //         batch_store
+        //             .insert_to_cache(&value)
+        //             .expect("Storage limit exceeded upon BatchReader construction");
+        //     }
+        // }
+        // trace!(
+        //     "QS: Batchreader recovery expired keys len {}",
+        //     expired_keys.len()
+        // );
+        // db_clone
+        //     .delete_batches(expired_keys)
+        //     .expect("Deletion of expired keys should not fail");
 
         batch_store
     }
