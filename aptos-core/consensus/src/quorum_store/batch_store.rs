@@ -144,7 +144,7 @@ impl BatchStore {
             validator_signer,
             persist_subscribers: DashMap::new(),
         };
-        // The batch deletion is removed function for block sync.
+        // The batch deletion is removed for block sync function.
         // Skipping cache initialization to avoid scanning all batches.
         // let db_content = db_clone
         //     .get_all_batches()
