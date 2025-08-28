@@ -95,6 +95,7 @@ pub struct BlockStateMachine {
     sender: tokio::sync::broadcast::Sender<()>,
     blocks: HashMap<u64, BlockState>,
     profile: HashMap<u64, BlockProfile>,
+    next_executed_block_number: u64,
     latest_commit_block_number: u64,
     latest_finalized_block_number: u64,
     block_number_to_block_id: HashMap<u64, BlockId>,
@@ -134,6 +135,7 @@ impl BlockBufferManager {
             block_state_machine: Mutex::new(BlockStateMachine {
                 sender,
                 blocks: HashMap::new(),
+                next_executed_block_number: 1,
                 latest_commit_block_number: 0,
                 latest_finalized_block_number: 0,
                 block_number_to_block_id: HashMap::new(),
@@ -180,6 +182,7 @@ impl BlockBufferManager {
         info!("init block_buffer_manager with latest_commit_block_number: {:?} block_number_to_block_id: {:?}", latest_commit_block_number, block_number_to_block_id);
         let mut block_state_machine = self.block_state_machine.lock().await;
         // When init, the latest_finalized_block_number is the same as latest_commit_block_number
+        block_state_machine.next_executed_block_number = latest_commit_block_number + 1;
         block_state_machine.latest_commit_block_number = latest_commit_block_number;
         block_state_machine.latest_finalized_block_number = latest_commit_block_number;
         block_state_machine.block_number_to_block_id = block_number_to_block_id;
@@ -336,51 +339,53 @@ impl BlockBufferManager {
 
     pub async fn get_ordered_blocks(
         &self,
-        start_num: u64,
         max_size: Option<usize>,
     ) -> Result<Vec<(ExternalBlock, BlockId)>, anyhow::Error> {
         if !self.is_ready() {
             panic!("Buffer is not ready");
         }
         let start = Instant::now();
-        info!("call get_ordered_blocks start_num: {:?} max_size: {:?}", start_num, max_size);
+
         loop {
+            let mut block_state_machine = self.block_state_machine.lock().await;
+            let start_num = block_state_machine.next_executed_block_number;
             if start.elapsed() > self.config.max_wait_timeout {
                 return Err(anyhow::anyhow!(
                     "Timeout waiting for ordered blocks after {:?} block_number: {:?}",
                     start.elapsed(),
-                    start_num
+                    block_state_machine.next_executed_block_number
                 ));
             }
 
-            let mut block_state_machine = self.block_state_machine.lock().await;
             // get block num, block num + 1
             let mut result = Vec::new();
-            let mut current_num = start_num;
-            while let Some(block) = block_state_machine.blocks.get(&current_num) {
+            while let Some(block) = block_state_machine.blocks.get(&block_state_machine.next_executed_block_number) {
                 match block {
                     BlockState::Ordered { block, parent_id } => {
                         result.push((block.clone(), *parent_id));
                         // Record time for get_ordered_blocks
+                        let block_num = block.block_meta.block_number;
                         let profile = block_state_machine
                             .profile
-                            .entry(current_num)
+                            .entry(block_num)
                             .or_insert_with(BlockProfile::default);
                         profile.get_ordered_blocks_time = Some(SystemTime::now());
                     }
                     _ => {
-                        panic!("There is no Ordered Block but try to get ordered blocks for block {:?}", current_num);
+                        panic!("There is no Ordered Block but try to get ordered blocks for block {:?}", block_state_machine.next_executed_block_number);
                     }
                 }
                 if result.len() >= max_size.unwrap_or(usize::MAX) {
                     break;
                 }
-                current_num += 1;
+                block_state_machine.next_executed_block_number += 1;
             }
+            let end_num = block_state_machine.next_executed_block_number;
+            // Release lock before waiting
+            drop(block_state_machine);
+            info!("call get_ordered_blocks start_num: {:?} end_num: {:?} max_size: {:?}", start_num, end_num, max_size);
 
             if result.is_empty() {
-                // Release lock before waiting
-                drop(block_state_machine);
                 // Wait for changes and try again
                 match self.wait_for_change(self.config.wait_for_change_timeout).await {
                     Ok(_) => continue,
@@ -717,6 +722,7 @@ impl BlockBufferManager {
         block_state_machine
             .blocks
             .retain(|block_num, _| *block_num <= latest_epoch_change_block_number);
+        block_state_machine.next_executed_block_number = latest_epoch_change_block_number + 1;
         block_state_machine
             .profile
             .retain(|block_num, _| *block_num <= latest_epoch_change_block_number);

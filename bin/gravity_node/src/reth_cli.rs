@@ -349,11 +349,10 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
     }
 
     pub async fn start_execution(&self) -> Result<(), String> {
-        let mut start_ordered_block = self.provider.last_block_number().unwrap() + 1;
         loop {
             // max executing block number
             let exec_blocks =
-                get_block_buffer_manager().get_ordered_blocks(start_ordered_block, None).await;
+                get_block_buffer_manager().get_ordered_blocks(None).await;
             if let Err(e) = exec_blocks {
                 warn!("failed to get ordered blocks: {}", e);
                 continue;
@@ -363,7 +362,6 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                 info!("no ordered blocks");
                 continue;
             }
-            start_ordered_block = exec_blocks.last().unwrap().0.block_meta.block_number + 1;
             for (block, parent_id) in exec_blocks {
                 info!(
                     "send reth ordered block num {:?} id {:?} with parent id {}",
