@@ -80,6 +80,7 @@ pub struct RethCli<EthApi: RethEthCall> {
     txn_check_interval: tokio::time::Duration,
     txn_pool_interval: tokio::time::Duration,
     address_init_nonce_cache: Mutex<HashMap<Address, u64>>,
+    no_txn_count_threshold: usize,
 }
 
 pub fn convert_account(acc: Address) -> ExternalAccountAddress {
@@ -112,6 +113,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             txn_check_interval: std::time::Duration::from_millis(50),
             txn_pool_interval: std::time::Duration::from_millis(50),
             address_init_nonce_cache: Mutex::new(HashMap::new()),
+            no_txn_count_threshold: 100,
         }
     }
 
@@ -276,7 +278,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                 count += 1;
             }
             none_count += 1;
-            if none_count > 100 {
+            if none_count > self.no_txn_count_threshold {
                 info!("none_count {}", none_count);
                 penging_txns = self.pool.best_transactions();
             }
