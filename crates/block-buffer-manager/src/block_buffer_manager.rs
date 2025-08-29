@@ -79,6 +79,7 @@ impl BlockState {
 pub enum BufferState {
     Uninitialized,
     Ready,
+    EpochChange,
 }
 
 #[derive(Default)]
@@ -243,6 +244,14 @@ impl BlockBufferManager {
         self.buffer_state.load(Ordering::SeqCst) == BufferState::Ready as u8
     }
 
+    pub fn is_epoch_change(&self) -> bool {
+        self.buffer_state.load(Ordering::SeqCst) == BufferState::EpochChange as u8
+    }
+
+    pub fn consume_epoch_change(&self) {
+        self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
+    }
+
     pub async fn pop_txns(
         &self,
         max_size: usize,
@@ -342,6 +351,11 @@ impl BlockBufferManager {
         if !self.is_ready() {
             panic!("Buffer is not ready");
         }
+
+        if self.is_epoch_change() {
+            return Err(anyhow::anyhow!("Buffer is in epoch change"));
+        }
+
         let start = Instant::now();
         info!("call get_ordered_blocks start_num: {:?} max_size: {:?}", start_num, max_size);
         loop {
@@ -717,6 +731,7 @@ impl BlockBufferManager {
         block_state_machine
             .blocks
             .retain(|block_num, _| *block_num <= latest_epoch_change_block_number);
+        self.buffer_state.store(BufferState::EpochChange as u8, Ordering::SeqCst);
         block_state_machine
             .profile
             .retain(|block_num, _| *block_num <= latest_epoch_change_block_number);
