@@ -355,7 +355,14 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             let exec_blocks =
                 get_block_buffer_manager().get_ordered_blocks(start_ordered_block, None).await;
             if let Err(e) = exec_blocks {
-                warn!("failed to get ordered blocks: {}", e);
+                let from = start_ordered_block;
+                if e.to_string().contains("Buffer is in epoch change") {
+                    get_block_buffer_manager().consume_epoch_change();
+                    start_ordered_block = self.provider.last_block_number().unwrap() + 1;
+                    warn!("Buffer is in epoch change, reset start_ordered_block from {} to {}", from, start_ordered_block);
+                } else {
+                    warn!("failed to get ordered blocks: {}", e);
+                }
                 continue;
             }
             let exec_blocks = exec_blocks.unwrap();
