@@ -241,7 +241,7 @@ impl BlockBufferManager {
     }
 
     pub fn is_ready(&self) -> bool {
-        self.buffer_state.load(Ordering::SeqCst) == BufferState::Ready as u8
+        self.buffer_state.load(Ordering::SeqCst) != BufferState::Uninitialized as u8
     }
 
     pub fn is_epoch_change(&self) -> bool {
