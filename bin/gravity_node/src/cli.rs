@@ -1,4 +1,5 @@
 use api::GravityNodeArgs;
+use build_info::{build_information, BUILD_PKG_VERSION};
 use clap::{value_parser, Parser};
 use greth::{
     reth::{chainspec::EthereumChainSpecParser, cli::Commands},
@@ -13,17 +14,40 @@ use greth::{
     reth_tracing::FileWorkerGuard,
 };
 use std::{
-    ffi::OsString,
-    fmt::{self},
-    sync::Arc,
+    collections::BTreeMap, ffi::OsString, fmt::{self}, sync::Arc
 };
 use tracing::debug;
+
+static BUILD_INFO: std::sync::OnceLock<BTreeMap<String, String>> = std::sync::OnceLock::new();
+static LONG_VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+fn short_version() -> &'static str {
+    BUILD_INFO.get_or_init(|| {
+        let build_info = build_information!();
+        build_info
+    })
+    .get(BUILD_PKG_VERSION).map(|s| s.as_str()).unwrap_or("unknown")
+}
+
+fn long_version() -> &'static str {
+    LONG_VERSION.get_or_init(|| {
+        let build_info = BUILD_INFO.get_or_init(|| {
+            let build_info = build_information!();
+            build_info
+        });
+        build_info
+            .iter()
+            .map(|(k, v)| format!("{}: {}", k, v))
+            .collect::<Vec<String>>()
+            .join("\n")
+    })
+}
 
 /// The main reth cli interface.
 ///
 /// This is the entrypoint to the executable.
 #[derive(Debug, Parser)]
-#[command(author, about = "Reth", long_about = None)]
+#[command(author, about = "Gravity Node", long_about = None, version=short_version(), long_version=long_version())]
 pub(crate) struct Cli<
     C: ChainSpecParser = EthereumChainSpecParser,
     Ext: clap::Args + fmt::Debug = NoArgs,
