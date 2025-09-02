@@ -13,7 +13,7 @@ use aptos_consensus::{
     gravity_state_computer::ConsensusAdapterArgs, network_interface::ConsensusMsg,
     persistent_liveness_storage::StorageWriteProxy, quorum_store::quorum_store_db::QuorumStoreDB,
 };
-use block_buffer_manager::get_block_buffer_manager;
+use block_buffer_manager::{get_block_buffer_manager, TxPool};
 use gaptos::{api_types::u256_define::BlockId, aptos_logger::info};
 use gaptos::aptos_config::{
     config::{NetworkConfig, NodeConfig, Peer, PeerRole},
@@ -141,6 +141,7 @@ pub fn init_mempool(
     consensus_to_mempool_receiver: Receiver<QuorumStoreRequest>,
     mempool_listener: MempoolNotificationListener,
     peers_and_metadata: Arc<PeersAndMetadata>,
+    pool: Box<dyn TxPool>,
 ) -> Vec<Runtime> {
     let mempool_reconfig_subscription = event_subscription_service
         .subscribe_to_reconfigurations()
@@ -155,6 +156,7 @@ pub fn init_mempool(
         mempool_listener,
         mempool_reconfig_subscription,
         peers_and_metadata,
+        pool,
     )
 }
 

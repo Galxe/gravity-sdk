@@ -19,6 +19,7 @@ use rand::Rng;
 use tokio::sync::RwLock;
 use txn::RawTxn;
 use warp::Filter;
+use block_buffer_manager::block_buffer_manager::EmptyTxPool;
 
 struct TestConsensusLayer {
     consensus_engine: Arc<ConsensusEngine>,
@@ -32,7 +33,9 @@ impl TestConsensusLayer {
                 chain_id: 1337,
                 latest_block_number: 0,
                 config_storage: None,
-            }).await,
+            },
+            EmptyTxPool::new(),
+        ).await,
         }
     }
 

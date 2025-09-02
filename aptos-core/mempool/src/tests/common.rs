@@ -7,6 +7,7 @@ use crate::{
     network::{BroadcastPeerPriority, MempoolSyncMsg},
 };
 use anyhow::{format_err, Result};
+use block_buffer_manager::block_buffer_manager::EmptyTxPool;
 use gaptos::aptos_compression::client::CompressionClient;
 use gaptos::aptos_config::config::{NodeConfig, MAX_APPLICATION_MESSAGE_SIZE};
 use aptos_consensus_types::common::{TransactionInProgress, TransactionSummary};
@@ -25,7 +26,7 @@ use std::collections::BTreeMap;
 pub(crate) fn setup_mempool() -> (CoreMempool, ConsensusMock) {
     let mut config = NodeConfig::generate_random_config();
     config.mempool.broadcast_buckets = vec![0];
-    (CoreMempool::new(&config), ConsensusMock::new())
+    (CoreMempool::new(&config, EmptyTxPool::new()), ConsensusMock::new())
 }
 
 pub(crate) fn setup_mempool_with_broadcast_buckets(
@@ -33,7 +34,7 @@ pub(crate) fn setup_mempool_with_broadcast_buckets(
 ) -> (CoreMempool, ConsensusMock) {
     let mut config = NodeConfig::generate_random_config();
     config.mempool.broadcast_buckets = buckets;
-    (CoreMempool::new(&config), ConsensusMock::new())
+    (CoreMempool::new(&config, EmptyTxPool::new()), ConsensusMock::new())
 }
 
 static ACCOUNTS: Lazy<Vec<AccountAddress>> = Lazy::new(|| {

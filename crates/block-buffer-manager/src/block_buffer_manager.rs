@@ -1,7 +1,7 @@
 use anyhow::{anyhow, format_err};
 use aptos_executor_types::StateComputeResult;
 use gaptos::{
-    api_types,
+    api_types::{self, account::ExternalAccountAddress, u256_define::{HashValue, TxnHash}},
     aptos_types::{epoch_state::EpochState, idl::convert_validator_set},
 };
 use std::{
@@ -32,6 +32,24 @@ pub struct TxnItem {
     pub txns: Vec<VerifiedTxnWithAccountSeqNum>,
     pub gas_limit: u64,
     pub insert_time: SystemTime,
+}
+
+pub trait TxPool: Send + Sync + 'static {
+    fn best_txns(&self, filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>) -> Box<dyn Iterator<Item = VerifiedTxn>>;
+}
+
+pub struct EmptyTxPool {}
+
+impl EmptyTxPool {
+    pub fn new() -> Box<dyn TxPool> {
+        Box::new(Self {})
+    }
+}
+
+impl TxPool for EmptyTxPool {
+    fn best_txns(&self, _filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>) -> Box<dyn Iterator<Item = VerifiedTxn>> {
+        Box::new(vec![].into_iter())
+    }
 }
 
 pub struct TxnBuffer {
@@ -130,7 +148,7 @@ pub struct BlockBufferManager {
 impl BlockBufferManager {
     pub fn new(config: BlockBufferManagerConfig) -> Arc<Self> {
         let (sender, _recv) = tokio::sync::broadcast::channel(1024);
-        let block_buffer_manager = Self {
+            let block_buffer_manager = Self {
             txn_buffer: TxnBuffer { txns: Mutex::new(Vec::new()) },
             block_state_machine: Mutex::new(BlockStateMachine {
                 sender,

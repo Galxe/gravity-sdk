@@ -362,7 +362,7 @@ impl TestHarness {
                 .get_batch(100, 102400, true, btreemap![]);
             for txn in transactions.iter() {
                 let vtxn : crate::core_mempool::transaction::VerifiedTxn = txn.clone().into();
-                let stxn : SignedTransaction = (&vtxn).into();
+                let stxn : SignedTransaction = (vtxn).into();
                 assert!(block.contains(&stxn));
             }
         }

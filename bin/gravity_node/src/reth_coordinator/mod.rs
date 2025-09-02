@@ -41,10 +41,6 @@ impl<EthApi: RethEthCall> RethCoordinator<EthApi> {
     pub async fn run(&self) {
         let reth_cli = self.reth_cli.clone();
         tokio::spawn(async move {
-            reth_cli.start_mempool().await.unwrap();
-        });
-        let reth_cli = self.reth_cli.clone();
-        tokio::spawn(async move {
             reth_cli.start_execution().await.unwrap();
         });
         let reth_cli = self.reth_cli.clone();

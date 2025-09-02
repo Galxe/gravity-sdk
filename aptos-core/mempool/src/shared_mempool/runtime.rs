@@ -22,7 +22,7 @@ use gaptos::aptos_network::application::{
 
 use gaptos::aptos_storage_interface::DbReader;
 use gaptos::aptos_types::on_chain_config::OnChainConfigProvider;
-use block_buffer_manager::get_block_buffer_manager;
+use block_buffer_manager::{get_block_buffer_manager, TxPool};
 use futures::channel::mpsc::{Receiver, UnboundedSender};
 use std::{sync::Arc, time::Instant};
 use tokio::runtime::{Handle, Runtime};
@@ -83,30 +83,30 @@ pub(crate) fn start_shared_mempool<ConfigProvider>(
 async fn retrieve_from_execution_routine(
     mempool: Arc<Mutex<CoreMempool>>,
 ) {
-    info!("start retrieve_from_execution_routine");
-    let mempool_retrieve_duration = std::env::var("MEMPOOL_RETRIEVE_DURATION").unwrap_or_default().parse::<u64>().unwrap_or(1000);
+    // info!("start retrieve_from_execution_routine");
+    // let mempool_retrieve_duration = std::env::var("MEMPOOL_RETRIEVE_DURATION").unwrap_or_default().parse::<u64>().unwrap_or(1000);
         
-    loop {
-        match get_block_buffer_manager().pop_txns(30000, 10_000_000_000).await {
-            Ok(txns) => {
-                let mut lock_mempool = mempool.lock();
-                let start_time = Instant::now();
-                let txns_len = txns.len();
-                let status = lock_mempool.add_user_txns_batch(txns, true, TimelineState::NotReady, None);
-                for s in status {
-                    if !(s.code == MempoolStatusCode::Accepted || s.code == MempoolStatusCode::InvalidSeqNumber) {
-                        panic!("invalid seq number {:?}", s);
-                    }
-                }
-                info!("the recv_pending_txns size is {:?} take {:?} ms mempool size {:?} priority_index_size {:?}", txns_len, start_time.elapsed().as_millis(), lock_mempool.get_txn_count(), lock_mempool.priority_index_size());
-            }
-            Err(e) => {
-                warn!("Error when recv peding txns {:?}", e);
-                continue;
-            }
-        }
-        tokio::time::sleep(tokio::time::Duration::from_millis(mempool_retrieve_duration)).await;
-    }
+    // loop {
+    //     match get_block_buffer_manager().pop_txns(30000, 10_000_000_000).await {
+    //         Ok(txns) => {
+    //             let mut lock_mempool = mempool.lock();
+    //             let start_time = Instant::now();
+    //             let txns_len = txns.len();
+    //             let status = lock_mempool.add_user_txns_batch(txns, true, TimelineState::NotReady, None);
+    //             for s in status {
+    //                 if !(s.code == MempoolStatusCode::Accepted || s.code == MempoolStatusCode::InvalidSeqNumber) {
+    //                     panic!("invalid seq number {:?}", s);
+    //                 }
+    //             }
+    //             info!("the recv_pending_txns size is {:?} take {:?} ms mempool size {:?} priority_index_size {:?}", txns_len, start_time.elapsed().as_millis(), lock_mempool.get_txn_count(), lock_mempool.priority_index_size());
+    //         }
+    //         Err(e) => {
+    //             warn!("Error when recv peding txns {:?}", e);
+    //             continue;
+    //         }
+    //     }
+    //     tokio::time::sleep(tokio::time::Duration::from_millis(mempool_retrieve_duration)).await;
+    // }
 }
 
 pub fn bootstrap(
@@ -119,11 +119,11 @@ pub fn bootstrap(
     mempool_listener: MempoolNotificationListener,
     mempool_reconfig_events: ReconfigNotificationListener<DbBackedOnChainConfig>,
     peers_and_metadata: Arc<PeersAndMetadata>,
+    pool: Box<dyn TxPool>,
 ) -> Vec<Runtime> {
     let runtime = gaptos::aptos_runtimes::spawn_named_runtime("shared-mem".into(), None);
     let retrive_runtime = gaptos::aptos_runtimes::spawn_named_runtime("retrive".into(), None);
-    let mempool = Arc::new(Mutex::new(CoreMempool::new(config)));
-    retrive_runtime.handle().spawn(retrieve_from_execution_routine(mempool.clone()));
+    let mempool = Arc::new(Mutex::new(CoreMempool::new(config, pool)));
     start_shared_mempool(
         runtime.handle(),
         config,

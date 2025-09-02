@@ -10,3 +10,5 @@ pub fn get_block_buffer_manager() -> &'static Arc<BlockBufferManager> {
         BlockBufferManager::new(block_buffer_manager::BlockBufferManagerConfig::default())
     })
 }
+
+pub use block_buffer_manager::TxPool;

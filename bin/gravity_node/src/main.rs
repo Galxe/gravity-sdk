@@ -30,8 +30,8 @@ mod consensus;
 mod metrics;
 mod reth_cli;
 mod reth_coordinator;
-
-use crate::cli::Cli;
+mod mempool;
+use crate::{cli::Cli, mempool::Mempool};
 use std::{
     fs::File,
     sync::{Arc, Mutex},
@@ -210,8 +210,10 @@ fn main() {
     let (execution_args_tx, execution_args_rx) = oneshot::channel();
     let (consensus_args, latest_block_number) = run_reth(cli, execution_args_rx);
     let rt = tokio::runtime::Runtime::new().unwrap();
+    let pool = Box::new(Mempool::new(consensus_args.pool.clone()));
+    let txn_cache = pool.tx_cache();
     rt.block_on(async move {
-        let client = Arc::new(RethCli::new(consensus_args).await);
+        let client = Arc::new(RethCli::new(consensus_args, txn_cache).await);
         let chain_id = client.chain_id();
 
         let coordinator =
@@ -232,7 +234,8 @@ fn main() {
                     config_storage: Some(Arc::new(ConfigStorageWrapper::new(Arc::new(
                         RethCliConfigStorage::new(client),
                     )))),
-                })
+                }, 
+                pool,)
                 .await,
             );
         }

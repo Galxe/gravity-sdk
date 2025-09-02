@@ -54,7 +54,7 @@ impl From<&SignedTransaction> for VerifiedTxn {
     }
 }
 
-impl Into<SignedTransaction> for &VerifiedTxn {
+impl Into<SignedTransaction> for VerifiedTxn {
     fn into(self) -> SignedTransaction {
         let raw_txn = RawTransaction::new(
             self.sender,
@@ -173,7 +173,7 @@ impl MempoolTransaction {
     ) -> Self {
         let txn_sequence_number = verified_txn.sequence_number;
         Self {
-            verified_txn: (&verified_txn).into(),
+            verified_txn: (verified_txn).into(),
             timeline_state,
             insertion_info,
             priority_of_sender,

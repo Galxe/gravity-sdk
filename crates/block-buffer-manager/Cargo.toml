@@ -19,3 +19,4 @@ tokio.workspace = true
 itertools = "0.14"
 tracing.workspace = true
 aptos-executor-types = { workspace = true }
+async-trait.workspace = true

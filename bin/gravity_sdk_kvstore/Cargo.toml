@@ -30,3 +30,4 @@ clap = { version = "4.3.9", features = ["derive", "env", "unstable-styles"] }
 clap-verbosity-flag = "2.1.1"
 clap_complete = "4.4.1"
 clap_derive = "4.5.18"
+block-buffer-manager.workspace = true

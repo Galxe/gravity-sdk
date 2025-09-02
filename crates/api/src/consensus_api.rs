@@ -10,6 +10,7 @@ use crate::{
     logger,
     network::{create_network_runtime, extract_network_configs},
 };
+use block_buffer_manager::TxPool;
 use build_info::build_information;
 use aptos_consensus::consensusdb::ConsensusDB;
 use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
@@ -62,7 +63,7 @@ pub struct ConsensusEngineArgs {
 }
 
 impl ConsensusEngine {
-    pub async fn init(args: ConsensusEngineArgs) -> Arc<Self> {
+    pub async fn init(args: ConsensusEngineArgs, pool: Box<dyn TxPool>) -> Arc<Self> {
         let ConsensusEngineArgs { node_config, chain_id, latest_block_number, config_storage } =
             args;
         // Setup panic handler
@@ -154,6 +155,7 @@ impl ConsensusEngine {
             consensus_to_mempool_receiver,
             mempool_listener,
             peers_and_metadata,
+            pool,
         );
         runtimes.extend(mempool_runtime);
         init_block_buffer_manager(&consensus_db, latest_block_number).await;

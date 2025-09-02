@@ -11,6 +11,7 @@ use clap::Parser;
 use cli::Cli;
 use flexi_logger::{FileSpec, Logger, WriteMode};
 use server::Server;
+use block_buffer_manager::block_buffer_manager::EmptyTxPool;
 
 struct TestConsensusLayer {
     node_config: NodeConfig,
@@ -27,7 +28,7 @@ impl TestConsensusLayer {
             chain_id: 1337,
             latest_block_number: 0,
             config_storage: None,
-        }).await;
+        }, EmptyTxPool::new()).await;
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         }

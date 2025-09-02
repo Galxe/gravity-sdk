@@ -9,6 +9,7 @@ use crate::{
     tests::common::TestTransaction,
 };
 
+use block_buffer_manager::block_buffer_manager::EmptyTxPool;
 use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
 use gaptos::aptos_config::{
     config::{Identity, NodeConfig, PeerRole, RoleType},
@@ -567,7 +568,7 @@ fn start_node_mempool(
     Runtime,
     UnboundedReceiver<SharedMempoolNotification>,
 ) {
-    let mempool = Arc::new(Mutex::new(CoreMempool::new(&config)));
+    let mempool = Arc::new(Mutex::new(CoreMempool::new(&config, EmptyTxPool::new())));
     let (sender, subscriber) = unbounded();
     let (_ac_endpoint_sender, ac_endpoint_receiver) = mpsc::channel(1_024);
     let (_quorum_store_sender, quorum_store_receiver) = mpsc::channel(1_024);
