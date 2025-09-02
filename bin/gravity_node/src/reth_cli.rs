@@ -80,6 +80,7 @@ pub struct RethCli<EthApi: RethEthCall> {
     txn_check_interval: tokio::time::Duration,
     txn_pool_interval: tokio::time::Duration,
     address_init_nonce_cache: Mutex<HashMap<Address, u64>>,
+    no_txn_count_threshold: usize,
 }
 
 pub fn convert_account(acc: Address) -> ExternalAccountAddress {
@@ -110,8 +111,9 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             txn_cache: Mutex::new(HashMap::new()),
             txn_batch_size: 2000,
             txn_check_interval: std::time::Duration::from_millis(50),
-            txn_pool_interval: std::time::Duration::from_secs(2),
+            txn_pool_interval: std::time::Duration::from_millis(200),
             address_init_nonce_cache: Mutex::new(HashMap::new()),
+            no_txn_count_threshold: 100,
         }
     }
 
@@ -257,6 +259,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             }
         });
         let mut count = 0;
+        let mut none_count = 0;
         let mut visited = HashMap::new();
         let mut address_queue = VecDeque::new();
         let mut penging_txns = self.pool.best_transactions();
@@ -274,6 +277,11 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                 visited.insert(txn.sender().clone(), txn.nonce());
                 tx.send(txn).expect("failed to send txn hash");
                 count += 1;
+            }
+            none_count += 1;
+            if none_count > self.no_txn_count_threshold {
+                info!("none_count {}", none_count);
+                penging_txns = self.pool.best_transactions();
             }
             info!("send txn hash vec len {}", count);
             tokio::time::sleep(self.txn_pool_interval).await;
