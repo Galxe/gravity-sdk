@@ -182,7 +182,7 @@ pub async fn init_block_buffer_manager(consensus_db: &Arc<ConsensusDB>, latest_b
         let start_key = (epoch_i, HashValue::zero());
         let end_key = (epoch_i, HashValue::new([u8::MAX; HashValue::LENGTH]));
         consensus_db
-            .get_range_with_filter::<BlockNumberSchema, _>(&start_key, &end_key, |(_, block_number)| *block_number >= start_block_number && *block_number <= latest_block_number)
+            .get_range_with_filter::<BlockNumberSchema, _>(&start_key, &end_key, |_, block_number| *block_number >= start_block_number && *block_number <= latest_block_number)
             .unwrap()
             .into_iter()
             .for_each(|((epoch, block_id), block_number)| {

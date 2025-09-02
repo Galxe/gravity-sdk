@@ -134,7 +134,7 @@ impl ConsensusDB {
         let end_key = (epoch, HashValue::new([u8::MAX; HashValue::LENGTH]));
 
         let block_number_to_block_id = self
-            .get_range_with_filter::<BlockNumberSchema, _>(&start_key, &end_key, |(_, block_number)| *block_number >= latest_block_number)?
+            .get_range_with_filter::<BlockNumberSchema, _>(&start_key, &end_key, |_, block_number| *block_number >= latest_block_number)?
             .into_iter()
             .map(|((_, block_id), block_number)| (block_number, block_id))
             .collect::<HashMap<u64, HashValue>>();
@@ -150,7 +150,7 @@ impl ConsensusDB {
             .map(|(block_number, block_id)| (*block_id, *block_number))
             .collect::<HashMap<HashValue, u64>>();
         let mut consensus_blocks: Vec<_> = self
-            .get_range_with_filter::<BlockSchema, _>(&start_key, &end_key, |(_, block)| block.round() >= start_round)?
+            .get_range_with_filter::<BlockSchema, _>(&start_key, &end_key, |_, block| block.round() >= start_round)?
             .into_iter()
             .map(|(_, block)| block)
             .collect();
@@ -162,7 +162,7 @@ impl ConsensusDB {
             }
         });
         let consensus_qcs: Vec<_> = self
-            .get_range_with_filter::<QCSchema, _>(&start_key, &end_key, |(_, qc)| qc.certified_block().round() >= start_round)?
+            .get_range_with_filter::<QCSchema, _>(&start_key, &end_key, |_, qc| qc.certified_block().round() >= start_round)?
             .into_iter()
             .map(|(_, qc)| qc)
             .collect();
@@ -288,9 +288,9 @@ impl ConsensusDB {
         Ok(iter.collect::<Result<Vec<(S::Key, S::Value)>, AptosDbError>>()?)
     }
 
-    pub fn get_range_with_filter<S: Schema, F>(&self, start_key: &S::Key, end_key: &S::Key, filter: F) -> Result<Vec<(S::Key, S::Value)>, DbError>
+    pub fn get_range_with_filter<S: Schema, F>(&self, start_key: &S::Key, end_key: &S::Key, mut filter: F) -> Result<Vec<(S::Key, S::Value)>, DbError>
     where
-        F: FnMut(&(S::Key, S::Value)) -> bool,
+        F: FnMut(&S::Key, &S::Value) -> bool,
     {
         let mut option = ReadOptions::default();
         let lower_bound = <S::Key as KeyCodec<S>>::encode_key(start_key).unwrap();
@@ -299,11 +299,19 @@ impl ConsensusDB {
         option.set_iterate_upper_bound(upper_bound);
         let mut iter = self.db.iter_with_opts::<S>(option)?;
         iter.seek_to_first();
-        Ok(iter
-            .collect::<Result<Vec<(S::Key, S::Value)>, AptosDbError>>()?
-            .into_iter()
-            .filter(filter)
-            .collect())
+        
+        let mut result = Vec::new();
+        loop {
+            match iter.next().transpose() {
+                Ok(Some((key, value))) => {
+                    if filter(&key, &value) {
+                        result.push((key, value));
+                    }
+                }
+                _ => break,
+            }
+        }
+        Ok(result)
     }
 
     pub fn get_block(&self, epoch: u64, block_id: HashValue) -> Result<Option<Block>, DbError> {
