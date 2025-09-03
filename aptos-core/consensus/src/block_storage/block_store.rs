@@ -15,9 +15,9 @@ use crate::{
     util::time_service::TimeService,
 };
 use anyhow::{bail, ensure, format_err, Context};
-use gaptos::api_types::{
+use gaptos::{api_types::{
     account::ExternalAccountAddress, compute_res::ComputeRes, u256_define::{BlockId, Random}, ExternalBlock, ExternalBlockMeta
-};
+}, aptos_types::{jwks, validator_txn::ValidatorTransaction}};
 use aptos_consensus_types::{
     block::Block,
     common::Round,
@@ -360,6 +360,36 @@ impl BlockStore {
                     Some(block_hash) => Some(ComputeRes::new(*block_hash, txn_num, vec![], vec![])),
                     None => None,
                 };
+                
+                let validator_txns = p_block.block().validator_txns();
+                let mut jwks_extra_data = Vec::new();
+                if let Some(validator_txns) = validator_txns {
+                    info!("validator_txns is : {:?}", validator_txns);
+                    jwks_extra_data = validator_txns.iter().map(|txn| {
+                        let jwk_txn = match txn {
+                            ValidatorTransaction::DKGResult(_) => {
+                                todo!()
+                            },
+                            ValidatorTransaction::ObservedJWKUpdate(jwks::QuorumCertifiedUpdate { update, multi_sig }) => {
+                                // TODO(Gravity): Check the signature here instread of execution layer
+                                let gaptos_provider_jwk = gaptos::api_types::on_chain_config::jwks::ProviderJWKs {
+                                    issuer: update.issuer.clone(),
+                                    version: update.version,
+                                    jwks: update.jwks.iter().map(|jwk| {
+                                        gaptos::api_types::on_chain_config::jwks::JWKStruct {
+                                            type_name: jwk.variant.type_name.clone(),
+                                            data: jwk.variant.data.clone(),
+                                        }
+                                    }).collect(),
+                                };
+                                let bcs_data = bcs::to_bytes(&gaptos_provider_jwk).unwrap();
+                                bcs_data
+                            }
+                        };
+                        jwk_txn
+                    }).collect();
+                }
+
                 let block = ExternalBlock {
                     txns: verified_txns,
                     block_meta: ExternalBlockMeta {
@@ -373,7 +403,7 @@ impl BlockStore {
                         block_hash: maybe_block_hash.clone(),
                         proposer: p_block.block().author().map(|author| ExternalAccountAddress::new(author.into_bytes())),
                     },
-                    jwks_extra_data: vec![], // TODO: add jwks_extra_data
+                    jwks_extra_data, // TODO: add jwks_extra_data
                 };
                 get_block_buffer_manager()
                     .set_ordered_blocks(BlockId(*p_block.parent_id()), block)
