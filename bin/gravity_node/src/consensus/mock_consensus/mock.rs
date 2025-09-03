@@ -9,7 +9,7 @@ use gaptos::api_types::{
     account::ExternalAccountAddress, events::contract_event::GravityEvent, u256_define::BlockId, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn
 };
 
-use block_buffer_manager::{block_buffer_manager::BlockHashRef, get_block_buffer_manager};
+use block_buffer_manager::{block_buffer_manager::BlockHashRef, get_block_buffer_manager, TxPool};
 
 pub struct MockConsensus {
     pool: Arc<tokio::sync::Mutex<Mempool>>,
@@ -47,7 +47,7 @@ fn get_max_executed_gap() -> u64 {
 }
 
 impl MockConsensus {
-    pub async fn new() -> Self {
+    pub async fn new(pool: Box<dyn TxPool>) -> Self {
         let genesis_block_id = BlockId([
             141, 91, 216, 66, 168, 139, 218, 32, 132, 186, 161, 251, 250, 51, 34, 197, 38, 71, 196,
             135, 49, 116, 247, 25, 67, 147, 163, 137, 28, 58, 62, 73,
@@ -57,7 +57,7 @@ impl MockConsensus {
         get_block_buffer_manager().init(0, block_number_to_block_id).await;
 
         Self {
-            pool: Arc::new(tokio::sync::Mutex::new(Mempool::new())),
+            pool: Arc::new(tokio::sync::Mutex::new(Mempool::new(pool))),
             genesis_block_id,
             executed_jam_wait: Arc::new((Mutex::new(0), Condvar::new())),
             epoch: Arc::new(AtomicU64::new(1)),
@@ -128,22 +128,6 @@ impl MockConsensus {
     }
 
     pub async fn run(mut self) {
-        tokio::spawn({
-            let pool = self.pool.clone();
-            async move {
-                loop {
-                    let txns = get_block_buffer_manager().pop_txns(usize::MAX, u64::MAX).await.unwrap();
-                    let mut pool = pool.lock().await;
-                    pool.add_txns(txns);
-                    drop(pool);
-                    tokio::time::sleep(tokio::time::Duration::from_millis(
-                        get_ordered_interval_ms(),
-                    ))
-                    .await;
-                }
-            }
-        });
-
         let (block_meta_tx, mut block_meta_rx) = tokio::sync::mpsc::channel(8);
         let epoch_start_block_number = self.epoch_start_block_number.clone();
         tokio::spawn({

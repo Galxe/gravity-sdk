@@ -221,7 +221,7 @@ fn main() {
         let mut _engine = None;
         if std::env::var("MOCK_CONSENSUS").unwrap_or("false".to_string()).parse::<bool>().unwrap() {
             info!("start mock consensus");
-            let mock = MockConsensus::new().await;
+            let mock = MockConsensus::new(pool).await;
             tokio::spawn(async move {
                 mock.run().await;
             });
