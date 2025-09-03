@@ -17,7 +17,7 @@ use greth::{
     reth::{self, chainspec::EthereumChainSpecParser},
     reth_cli::chainspec::ChainSpecParser,
     reth_cli_util, reth_db, reth_node_api, reth_node_builder, reth_node_ethereum,
-    reth_pipe_exec_layer_ext_v2::{self, ExecutionArgs, ObserveState, RelayerManager},
+    reth_pipe_exec_layer_ext_v2::{self, ExecutionArgs, ObserveState, ObservedValue, RelayerManager},
     reth_provider,
     reth_transaction_pool::TransactionPool,
 };
@@ -163,27 +163,31 @@ impl RelayerWrapper {
     }
 }
 
+// aptos必须要在启动前就读到链上的对应的这些jwk的初始状态
+// 因为jwk observer那里默认是直接rest请求拿到最新数据
 #[async_trait]
 impl Relayer for RelayerWrapper {
     async fn add_uri(
         &self,
         uri: &str,
         rpc_url: &str,
-        last_state: Vec<u8>,
     ) -> Result<(), ExecError> {
-        let last_state = serde_json::from_slice::<ObserveState>(&last_state)
-            .map_err(|e| ExecError::Other(e.to_string()))?;
+        info!("add_uri: {:?}, {:?}", uri, rpc_url);
         self.manager
-            .add_uri(uri, rpc_url, last_state)
+            .add_uri(uri, rpc_url)
             .await
             .map_err(|e| ExecError::Other(e.to_string()))
     }
 
     async fn get_last_state(&self, uri: &str) -> Result<Vec<u8>, ExecError> {
+        info!("get_last_state: {:?}", uri);
         self.manager
             .poll_uri(uri)
             .await
-            .map(|state| serde_json::to_vec(&state).expect("failed to serialize state"))
+            .map(|state| {
+                info!("get_last_state return : {:?}", state);
+                serde_json::to_vec(&state).expect("failed to serialize state")
+            })
             .map_err(|e| ExecError::Other(e.to_string()))
     }
 }
