@@ -39,6 +39,7 @@ api.workspace = true
 gaptos.workspace = true
 # api-types.workspace = true
 block-buffer-manager.workspace = true
+build-info.workspace = true
 rayon = "1.7.0"
 tracing-flame = "0.2"
 tracing-timing = "0.6"
@@ -50,6 +51,9 @@ pprof = { version = "0.14", features = ["flamegraph", "protobuf-codec"] }
 once_cell.workspace = true
 bytes.workspace = true
 dashmap.workspace = true
+
+[build-dependencies]
+shadow-rs.workspace = true
 
 [patch.crates-io]
 darling = { git = "https://github.com/TedDriggs/darling.git", rev = "84448b8"}
