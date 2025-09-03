@@ -93,6 +93,7 @@ impl MockConsensus {
                 ),
             },
             txns,
+            jwks_extra_data: vec![],
         };
     }
 
