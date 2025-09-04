@@ -337,6 +337,7 @@ impl ConsensusDB {
 
     pub fn get_max_epoch(&self) -> u64 {
         let mut iter = self.db.rev_iter::<BlockSchema>().unwrap();
+        iter.seek_to_last();
         let max_epoch = match iter.next() {
             Some(Ok(((epoch, _), _))) => epoch,
             _ => 1,
