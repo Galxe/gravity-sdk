@@ -173,6 +173,8 @@ impl Relayer for RelayerWrapper {
         rpc_url: &str,
     ) -> Result<(), ExecError> {
         info!("add_uri: {:?}, {:?}", uri, rpc_url);
+        // 在这里调用GLOABL EXECUTE获取对应的uri的last state. 来计算从哪儿个block number开始
+        // 需要在合约中新增一个接口通过
         self.manager
             .add_uri(uri, rpc_url)
             .await
