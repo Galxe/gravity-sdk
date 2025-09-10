@@ -181,16 +181,30 @@ impl Relayer for RelayerWrapper {
             .map_err(|e| ExecError::Other(e.to_string()))
     }
 
-    async fn get_last_state(&self, uri: &str) -> Result<Vec<u8>, ExecError> {
+    async fn get_last_state(&self, uri: &str) -> Result<Vec<JWKStruct>, ExecError> {
         info!("get_last_state: {:?}", uri);
-        self.manager
+        let mut jwk_structs = Vec::new();
+        let observed_state = self.manager
             .poll_uri(uri)
             .await
-            .map(|state| {
-                info!("get_last_state return : {:?}", state);
-                serde_json::to_vec(&state).expect("failed to serialize state")
-            })
-            .map_err(|e| ExecError::Other(e.to_string()))
+            .unwrap();
+        match observed_state.observed_value {
+            ObservedValue::Events { logs } => {
+                jwk_structs = logs.iter().map(|log| {
+                    JWKStruct {
+                        type_name: log.data_type.to_string() + ":" + &observed_state.block_number.to_string(),
+                        data: log.data.clone(),
+                    }
+                }).collect();
+            }
+            _ => {
+                jwk_structs = vec![JWKStruct {
+                    type_name: "0".to_string(),
+                    data: serde_json::to_vec(&observed_state).expect("failed to serialize state"),
+                }];
+            }
+        }
+        Ok(jwk_structs)
     }
 }
 
