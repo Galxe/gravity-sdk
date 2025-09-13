@@ -14,7 +14,6 @@ use block_buffer_manager::TxPool;
 use build_info::build_information;
 use aptos_consensus::consensusdb::ConsensusDB;
 use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
-use build_info::build_information;
 use futures::channel::mpsc;
 use gaptos::api_types::config_storage::{ConfigStorage, GLOBAL_CONFIG_STORAGE};
 use gaptos::aptos_config::{config::NodeConfig, network_id::NetworkId};

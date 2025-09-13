@@ -8,8 +8,7 @@ use api::{
 use async_trait::async_trait;
 use consensus::mock_consensus::mock::MockConsensus;
 use gaptos::api_types::{
-    relayer::{Relayer, GLOBAL_RELAYER},
-    ExecError,
+    on_chain_config::jwks::JWKStruct, relayer::{Relayer, GLOBAL_RELAYER}, ExecError
 };
 use gravity_storage::block_view_storage::BlockViewStorage;
 use greth::{
@@ -192,7 +191,7 @@ impl Relayer for RelayerWrapper {
             ObservedValue::Events { logs } => {
                 jwk_structs = logs.iter().map(|log| {
                     JWKStruct {
-                        type_name: log.data_type.to_string() + ":" + &observed_state.block_number.to_string(),
+                        type_name: log.data_type.to_string(),
                         data: log.data.clone(),
                     }
                 }).collect();
