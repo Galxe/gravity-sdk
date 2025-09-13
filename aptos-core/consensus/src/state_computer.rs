@@ -36,9 +36,12 @@ use gaptos::aptos_infallible::RwLock;
 use gaptos::aptos_logger::prelude::*;
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 
+use gaptos::aptos_types::jwks;
+use gaptos::aptos_types::jwks::jwk::JWK;
 use gaptos::aptos_types::on_chain_config::ValidatorSet;
 use gaptos::aptos_types::transaction::SignedTransaction;
 use gaptos::aptos_types::validator_signer::ValidatorSigner;
+use gaptos::aptos_types::validator_txn::ValidatorTransaction;
 use gaptos::aptos_types::{
     account_address::AccountAddress, block_executor::config::BlockExecutorConfigFromOnchain,
     contract_event::ContractEvent, epoch_state::EpochState, ledger_info::LedgerInfoWithSignatures,
@@ -233,7 +236,47 @@ impl StateComputer for ExecutionProxy {
     ) -> StateComputeResultFut {
         assert!(block.block_number().is_some());
         let txns = self.get_block_txns(block).await;
-        // pass epoch
+        let validator_txns = block.validator_txns();
+        let mut jwks_extra_data = Vec::new();
+        if let Some(validator_txns) = validator_txns {
+            info!("validator_txns is : {:?}", validator_txns);
+            jwks_extra_data = validator_txns.iter().map(|txn| {
+                let jwk_txn = match txn {
+                    ValidatorTransaction::DKGResult(_) => {
+                        todo!()
+                    }
+                    ValidatorTransaction::ObservedJWKUpdate(jwks::QuorumCertifiedUpdate { update, multi_sig }) => {
+                        // TODO(Gravity): Check the signature here instread of execution layer
+                        let gaptos_provider_jwk = gaptos::api_types::on_chain_config::jwks::ProviderJWKs {
+                            issuer: update.issuer.clone(),
+                            version: update.version,
+                            jwks: update.jwks.iter().map(|jwk| {
+                                // 把jwkmovestruct转换成UnsupportedJWK
+                                let aptos_jwk = JWK::try_from(jwk).unwrap();
+                                match aptos_jwk {
+                                    JWK::RSA(rsa_jwk) => {
+                                        gaptos::api_types::on_chain_config::jwks::JWKStruct {
+                                            type_name: "0".to_string(),
+                                            data: serde_json::to_vec(&rsa_jwk).unwrap(),
+                                        }
+                                    }
+                                    JWK::Unsupported(unsupported_jwk) => {
+                                        gaptos::api_types::on_chain_config::jwks::JWKStruct {
+                                            type_name: "1".to_string(),
+                                            data: unsupported_jwk.payload,
+                                        }
+                                    }
+                                }
+                            }).collect(),
+                        };
+                        let bcs_data = bcs::to_bytes(&gaptos_provider_jwk).unwrap();
+                        bcs_data
+                    }
+                };
+                jwk_txn
+            }).collect();
+        }
+        
         let meta_data = ExternalBlockMeta {
             block_id: BlockId(*block.id()),
             block_number: block.block_number().unwrap_or_else(|| panic!("No block number")),
@@ -270,6 +313,7 @@ impl StateComputer for ExecutionProxy {
                 .set_ordered_blocks(BlockId::from_bytes(parent_block_id.as_slice()), ExternalBlock {
                     block_meta: meta_data.clone(),
                     txns: real_txns,
+                    jwks_extra_data,
                 })
                 .await.unwrap_or_else(|e| panic!("Failed to push ordered blocks {}", e));
             let u_ts = meta_data.usecs;

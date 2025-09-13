@@ -5,13 +5,20 @@ use api::{
     config_storage::ConfigStorageWrapper,
     consensus_api::{ConsensusEngine, ConsensusEngineArgs},
 };
+use async_trait::async_trait;
 use consensus::mock_consensus::mock::MockConsensus;
+use gaptos::api_types::{
+    on_chain_config::jwks::JWKStruct, relayer::{Relayer, GLOBAL_RELAYER}, ExecError
+};
 use gravity_storage::block_view_storage::BlockViewStorage;
 use greth::{
-    gravity_storage, reth, reth::chainspec::EthereumChainSpecParser,
-    reth_cli::chainspec::ChainSpecParser, reth_cli_util, reth_db, reth_node_api, reth_node_builder,
-    reth_node_ethereum, reth_pipe_exec_layer_ext_v2, reth_pipe_exec_layer_ext_v2::ExecutionArgs,
-    reth_provider, reth_transaction_pool::TransactionPool,
+    gravity_storage,
+    reth::{self, chainspec::EthereumChainSpecParser},
+    reth_cli::chainspec::ChainSpecParser,
+    reth_cli_util, reth_db, reth_node_api, reth_node_builder, reth_node_ethereum,
+    reth_pipe_exec_layer_ext_v2::{self, ExecutionArgs, ObserveState, ObservedValue, RelayerManager},
+    reth_provider,
+    reth_transaction_pool::TransactionPool,
 };
 use pprof::{protos::Message, ProfilerGuard};
 use reth::rpc::builder::auth::AuthServerHandle;
@@ -144,6 +151,62 @@ struct ProfilingState {
     profile_count: usize,
 }
 
+struct RelayerWrapper {
+    manager: RelayerManager,
+}
+
+impl RelayerWrapper {
+    pub fn new() -> Self {
+        let manager = RelayerManager::new();
+        Self { manager }
+    }
+}
+
+// aptos必须要在启动前就读到链上的对应的这些jwk的初始状态
+// 因为jwk observer那里默认是直接rest请求拿到最新数据
+#[async_trait]
+impl Relayer for RelayerWrapper {
+    async fn add_uri(
+        &self,
+        uri: &str,
+        rpc_url: &str,
+    ) -> Result<(), ExecError> {
+        info!("add_uri: {:?}, {:?}", uri, rpc_url);
+        // 在这里调用GLOABL EXECUTE获取对应的uri的last state. 来计算从哪儿个block number开始
+        // 需要在合约中新增一个接口通过
+        self.manager
+            .add_uri(uri, rpc_url)
+            .await
+            .map_err(|e| ExecError::Other(e.to_string()))
+    }
+
+    async fn get_last_state(&self, uri: &str) -> Result<Vec<JWKStruct>, ExecError> {
+        info!("get_last_state: {:?}", uri);
+        let mut jwk_structs = Vec::new();
+        let observed_state = self.manager
+            .poll_uri(uri)
+            .await
+            .unwrap();
+        match observed_state.observed_value {
+            ObservedValue::Events { logs } => {
+                jwk_structs = logs.iter().map(|log| {
+                    JWKStruct {
+                        type_name: log.data_type.to_string(),
+                        data: log.data.clone(),
+                    }
+                }).collect();
+            }
+            _ => {
+                jwk_structs = vec![JWKStruct {
+                    type_name: "0".to_string(),
+                    data: serde_json::to_vec(&observed_state).expect("failed to serialize state"),
+                }];
+            }
+        }
+        Ok(jwk_structs)
+    }
+}
+
 fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
     let profiling_state = Arc::new(Mutex::new(ProfilingState { guard: None, profile_count: 0 }));
 
@@ -226,6 +289,12 @@ fn main() {
                 mock.run().await;
             });
         } else {
+            match GLOBAL_RELAYER.set(Arc::new(RelayerWrapper::new())) {
+                Ok(_) => {}
+                Err(_) => {
+                    panic!("failed to set global relayer");
+                }
+            }
             _engine = Some(
                 ConsensusEngine::init(ConsensusEngineArgs {
                     node_config: gcei_config,
