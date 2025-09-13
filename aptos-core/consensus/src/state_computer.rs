@@ -37,6 +37,7 @@ use gaptos::aptos_logger::prelude::*;
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 
 use gaptos::aptos_types::jwks;
+use gaptos::aptos_types::jwks::jwk::JWK;
 use gaptos::aptos_types::on_chain_config::ValidatorSet;
 use gaptos::aptos_types::transaction::SignedTransaction;
 use gaptos::aptos_types::validator_signer::ValidatorSigner;
@@ -250,9 +251,21 @@ impl StateComputer for ExecutionProxy {
                             issuer: update.issuer.clone(),
                             version: update.version,
                             jwks: update.jwks.iter().map(|jwk| {
-                                gaptos::api_types::on_chain_config::jwks::JWKStruct {
-                                    type_name: jwk.variant.type_name.clone(),
-                                    data: jwk.variant.data.clone(),
+                                // 把jwkmovestruct转换成UnsupportedJWK
+                                let aptos_jwk = JWK::try_from(jwk).unwrap();
+                                match aptos_jwk {
+                                    JWK::RSA(rsa_jwk) => {
+                                        gaptos::api_types::on_chain_config::jwks::JWKStruct {
+                                            type_name: "0".to_string(),
+                                            data: serde_json::to_vec(&rsa_jwk).unwrap(),
+                                        }
+                                    }
+                                    JWK::Unsupported(unsupported_jwk) => {
+                                        gaptos::api_types::on_chain_config::jwks::JWKStruct {
+                                            type_name: "1".to_string(),
+                                            data: unsupported_jwk.payload,
+                                        }
+                                    }
                                 }
                             }).collect(),
                         };
