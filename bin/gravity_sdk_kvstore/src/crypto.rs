@@ -5,7 +5,7 @@ use secp256k1::{
 };
 use sha3::{Digest, Keccak256};
 
-use crate::{Transaction, UnsignedTransaction};
+use crate::txpool::{Transaction, UnsignedTransaction};
 
 #[derive(Debug)]
 pub struct KeyPair {

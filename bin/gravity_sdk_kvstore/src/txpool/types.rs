@@ -2,11 +2,10 @@ use gaptos::api_types::{
     account::{ExternalAccountAddress, ExternalChainId}, compute_res::ComputeRes, simple_hash::hash_to_fixed_array, u256_define::TxnHash, VerifiedTxn
 };
 use futures::channel::oneshot::Sender;
-use hex::decode;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+use std::{collections::{HashMap, HashSet}, hash::{DefaultHasher, Hasher}};
+use std::hash::Hash;
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct AccountId(pub String);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -145,6 +144,7 @@ pub struct TransactionReceipt {
     pub transaction_hash: [u8; 32],
     pub status: bool,
     pub gas_used: u64,
+    pub state_updates: Vec<(AccountId, AccountState)>,
     pub logs: Vec<Log>,
 }
 
@@ -155,11 +155,22 @@ pub struct Log {
     pub data: Vec<u8>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct AccountState {
     pub nonce: u64,
     pub balance: u64,
     pub kv_store: HashMap<String, String>,
+}
+
+impl Hash for AccountState {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.nonce.hash(state);
+        self.balance.hash(state);
+        self.kv_store.iter().for_each(|(k, v)| {
+            k.hash(state);
+            v.hash(state);
+        });
+    }
 }
 
 #[derive(Debug)]
@@ -175,11 +186,21 @@ pub struct TransactionWithLocation {
     pub tx_index: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StateRoot(pub [u8; 32]);
 
 impl StateRoot {
     pub fn to_hex(&self) -> String {
         hex::encode(self.0)
+    }
+
+    pub fn update(&self, other_hash: u64) -> Self {
+        let mut hasher = DefaultHasher::new();
+        hasher.write_u64(other_hash);
+        hasher.write(&self.0);
+        let res = hasher.finish().to_be_bytes();
+        let mut state_root = [0u8; 32];
+        state_root[0..8].copy_from_slice(&res);
+        Self(state_root)
     }
 }

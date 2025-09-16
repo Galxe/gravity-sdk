@@ -1,3 +1,5 @@
+use crate::{AccountId, AccountState, ExecutableBlock, PipelineExecutor};
+
 use super::*;
 use std::sync::Arc;
 use futures::channel::mpsc::Receiver;
@@ -17,17 +19,6 @@ impl Blockchain {
         self.state.clone()
     }
 
-    pub async fn process_blocks_pipeline(&mut self, ordered_block_receicer: Receiver<ExecutableBlock>) -> Result<(), String> {
-        let start_block = self.state.read().await.get_current_block_number() + 1;
-        let state = self.state.clone();
-        let storage = self.storage.clone();
-        tokio::spawn(async move {
-            let executor = PipelineExecutor::new(state, start_block, ordered_block_receicer);
-            executor.start(storage).await;
-        });
-        Ok(())
-    }
-
     pub async fn get_account_state(
         &self,
         account_id: &AccountId,
@@ -45,8 +36,13 @@ impl Blockchain {
     }
 
     pub async fn run(&self) {
-        loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-        }
+        let start_block = self.state.read().await.get_current_block_number() + 1;
+        let state = self.state.clone();
+        let storage = self.storage.clone();
+        PipelineExecutor::run(
+            start_block,
+            storage,
+            state,
+        ).await;
     }
 }
