@@ -182,7 +182,7 @@ impl ProofCoordinator {
         }
         let batch_author = self
             .batch_reader
-            .exists(signed_batch_info.digest())
+            .exists(&(signed_batch_info.epoch(), *signed_batch_info.digest()))
             .ok_or(SignedBatchInfoError::NotFound)?;
         if batch_author != signed_batch_info.author() {
             return Err(SignedBatchInfoError::WrongAuthor);

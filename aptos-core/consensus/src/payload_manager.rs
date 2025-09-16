@@ -140,7 +140,7 @@ impl QuorumStorePayloadManager {
                 receivers.push((
                     *batch_info.digest(),
                     batch_reader.get_batch(
-                        *batch_info.digest(),
+                        (batch_info.epoch(), *batch_info.digest()),
                         batch_info.expiration(),
                         responders,
                     ),
@@ -299,7 +299,7 @@ impl TPayloadManager for QuorumStorePayloadManager {
             Payload::QuorumStoreInlineHybrid(_, _, _) => true,
             Payload::OptQuorumStore(opt_qs_payload) => {
                 for batch in opt_qs_payload.opt_batches().deref() {
-                    if self.batch_reader.exists(batch.digest()).is_none() {
+                    if self.batch_reader.exists(&(batch.epoch(), *batch.digest())).is_none() {
                         return false;
                     }
                 }
