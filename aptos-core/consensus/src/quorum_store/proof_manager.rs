@@ -105,7 +105,7 @@ impl BatchQueue {
                         && num_bytes + batch.num_bytes() <= max_bytes
                     {
                         if let Ok(mut persisted_value) =
-                            self.batch_store.get_batch_from_local(batch.digest())
+                            self.batch_store.get_batch_from_local(&(batch.epoch(), batch.digest().clone()))
                         {
                             if let Some(txns) = persisted_value.take_payload() {
                                 num_txns += batch.num_txns();

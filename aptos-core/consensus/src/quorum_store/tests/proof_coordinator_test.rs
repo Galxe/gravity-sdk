@@ -25,13 +25,13 @@ pub struct MockBatchReader {
 }
 
 impl BatchReader for MockBatchReader {
-    fn exists(&self, _digest: &HashValue) -> Option<PeerId> {
+    fn exists(&self, _key: &(u64, HashValue)) -> Option<PeerId> {
         Some(self.peer)
     }
 
     fn get_batch(
         &self,
-        _digest: HashValue,
+        _key: (u64, HashValue),
         _expiration: u64,
         _signers: Vec<PeerId>,
     ) -> tokio::sync::oneshot::Receiver<ExecutorResult<Vec<SignedTransaction>>> {

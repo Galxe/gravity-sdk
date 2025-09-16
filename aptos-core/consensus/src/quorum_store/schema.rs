@@ -17,19 +17,27 @@ pub(crate) const BATCH_ID_CF_NAME: ColumnFamilyName = "batch_ID";
 pub(crate) struct BatchSchema;
 
 impl Schema for BatchSchema {
-    type Key = HashValue;
+    type Key = (u64, HashValue);
     type Value = PersistedValue;
 
     const COLUMN_FAMILY_NAME: gaptos::aptos_schemadb::ColumnFamilyName = BATCH_CF_NAME;
 }
 
-impl KeyCodec<BatchSchema> for HashValue {
+impl KeyCodec<BatchSchema> for (u64, HashValue) {
     fn encode_key(&self) -> Result<Vec<u8>> {
-        Ok(self.to_vec())
+        let (epoch, digest) = self;
+        let mut key_bytes = Vec::with_capacity(8 + digest.to_vec().len());
+        key_bytes.extend_from_slice(&epoch.to_be_bytes());
+        key_bytes.extend_from_slice(&digest.to_vec());
+        Ok(key_bytes)
     }
 
     fn decode_key(data: &[u8]) -> Result<Self> {
-        Ok(HashValue::from_slice(data)?)
+        let epoch_bytes: [u8; 8] = data[0..8].try_into()?;
+        let epoch = u64::from_be_bytes(epoch_bytes);
+        let digest_data = &data[8..];
+        let digest = HashValue::from_slice(digest_data)?;
+        Ok((epoch, digest))
     }
 }
 

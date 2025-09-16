@@ -99,7 +99,7 @@ async fn test_batch_request_exists() {
     let (_, subscriber_rx) = oneshot::channel();
     let result = batch_requester
         .request_batch(
-            *batch.digest(),
+            (1, *batch.digest()),
             batch.expiration(),
             vec![AccountAddress::random()],
             tx,
@@ -196,7 +196,7 @@ async fn test_batch_request_not_exists_not_expired() {
     let (_, subscriber_rx) = oneshot::channel();
     let result = batch_requester
         .request_batch(
-            *batch.digest(),
+            (1, *batch.digest()),
             batch.expiration(),
             vec![AccountAddress::random()],
             tx,
@@ -244,7 +244,7 @@ async fn test_batch_request_not_exists_expired() {
     let (_, subscriber_rx) = oneshot::channel();
     let result = batch_requester
         .request_batch(
-            *batch.digest(),
+            (1, *batch.digest()),
             batch.expiration(),
             vec![AccountAddress::random()],
             tx,

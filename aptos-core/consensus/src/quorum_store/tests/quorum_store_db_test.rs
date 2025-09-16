@@ -26,7 +26,7 @@ fn test_db_for_data() {
     assert!(db.save_batch(clone_1).is_ok());
 
     assert_eq!(
-        db.get_batch(persist_request_1.digest())
+        db.get_batch(&(persist_request_1.epoch(), *persist_request_1.digest()))
             .expect("could not read from db")
             .unwrap(),
         persist_request_1
@@ -44,18 +44,18 @@ fn test_db_for_data() {
     let clone_3 = persist_request_3.clone();
     assert_ok!(db.save_batch(clone_3));
 
-    let batches = vec![*persist_request_3.digest()];
+    let batches = vec![(persist_request_3.epoch(), *persist_request_3.digest())];
     assert_ok!(db.delete_batches(batches));
     assert_eq!(
-        db.get_batch(persist_request_3.digest())
+        db.get_batch(&(persist_request_3.epoch(), *persist_request_3.digest()))
             .expect("could not read from db"),
         None
     );
 
     let all_batches = db.get_all_batches().expect("could not read from db");
     assert_eq!(all_batches.len(), 2);
-    assert!(all_batches.contains_key(persist_request_1.digest()));
-    assert!(all_batches.contains_key(persist_request_2.digest()));
+    assert!(all_batches.contains_key(&(persist_request_1.epoch(), *persist_request_1.digest())));
+    assert!(all_batches.contains_key(&(persist_request_2.epoch(), *persist_request_2.digest())));
 }
 
 #[test]
