@@ -1,8 +1,8 @@
 use crate::{AccountId, AccountState, ExecutableBlock, PipelineExecutor};
 
 use super::*;
-use std::sync::Arc;
 use futures::channel::mpsc::Receiver;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub struct Blockchain {
@@ -39,10 +39,6 @@ impl Blockchain {
         let start_block = self.state.read().await.get_current_block_number() + 1;
         let state = self.state.clone();
         let storage = self.storage.clone();
-        PipelineExecutor::run(
-            start_block,
-            storage,
-            state,
-        ).await;
+        PipelineExecutor::run(start_block, storage, state).await;
     }
 }

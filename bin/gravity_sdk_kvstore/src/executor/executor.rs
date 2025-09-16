@@ -1,4 +1,7 @@
-use crate::{compute_transaction_hash, verify_signature, AccountId, AccountState, Block, State, StateRoot, Storage, Transaction, TransactionKind, TransactionReceipt, TransactionWithAccount};
+use crate::{
+    compute_transaction_hash, verify_signature, AccountId, AccountState, Block, State, StateRoot,
+    Storage, Transaction, TransactionKind, TransactionReceipt, TransactionWithAccount,
+};
 
 use super::*;
 use block_buffer_manager::get_block_buffer_manager;
@@ -18,11 +21,7 @@ use tokio::sync::RwLock;
 pub struct PipelineExecutor;
 
 impl PipelineExecutor {
-    pub async fn run(
-        start_num: u64,
-        storage: Arc<dyn Storage>,
-        state: Arc<RwLock<State>>,
-    )  {
+    pub async fn run(start_num: u64, storage: Arc<dyn Storage>, state: Arc<RwLock<State>>) {
         let pending_blocks = Arc::new(Mutex::new(HashMap::new()));
         let pending_blocks_clone = pending_blocks.clone();
         tokio::spawn(async move {
@@ -33,10 +32,15 @@ impl PipelineExecutor {
         });
     }
 
-    pub async fn execute_task(start_num: u64, max_size: Option<usize>, state: Arc<RwLock<State>>, pending_blocks: Arc<Mutex<HashMap<u64, (StateRoot, Block)>>>) {
+    pub async fn execute_task(
+        start_num: u64,
+        max_size: Option<usize>,
+        state: Arc<RwLock<State>>,
+        pending_blocks: Arc<Mutex<HashMap<u64, (StateRoot, Block)>>>,
+    ) {
         loop {
-            let ordered_blocks = get_block_buffer_manager()
-                .get_ordered_blocks(start_num, max_size).await;
+            let ordered_blocks =
+                get_block_buffer_manager().get_ordered_blocks(start_num, max_size).await;
             if let Err(e) = ordered_blocks {
                 warn!("failed to get ordered blocks: {}", e);
                 continue;
@@ -46,13 +50,9 @@ impl PipelineExecutor {
                 let block_num = block.block_meta.block_number;
                 let block_id = block.block_meta.block_id;
                 let exec_res = Self::execute_block(block, &state).await;
-                let res = get_block_buffer_manager().set_compute_res(
-                    block_id, 
-                    exec_res,
-                    block_num, 
-                    Arc::new(None), 
-                    vec![]
-                ).await;
+                let res = get_block_buffer_manager()
+                    .set_compute_res(block_id, exec_res, block_num, Arc::new(None), vec![])
+                    .await;
                 if let Err(e) = res {
                     warn!("failed to set compute res: {}", e);
                 }
@@ -63,7 +63,7 @@ impl PipelineExecutor {
     async fn execute_block(block: ExternalBlock, state: &Arc<RwLock<State>>) -> [u8; 32] {
         // TODO: implement account dependencies when enable pipeline
         let mut state = state.write().await;
-        
+
         for tx in block.txns {
             let tx_with_account = TransactionWithAccount::from(tx);
             let receipt = Self::execute_transaction(&tx_with_account.txn, &state).unwrap();
@@ -72,14 +72,9 @@ impl PipelineExecutor {
             }
         }
         state.get_state_root().0
-        
     }
 
-    
-    fn execute_transaction(
-        tx: &Transaction,
-        state: &State,
-    ) -> Result<TransactionReceipt, String> {
+    fn execute_transaction(tx: &Transaction, state: &State) -> Result<TransactionReceipt, String> {
         let sender = verify_signature(tx)?;
         let sender_id = AccountId(sender.clone());
         let mut updates = vec![];
@@ -143,19 +138,24 @@ impl PipelineExecutor {
         })
     }
 
-    pub async fn commit_task(start_num: u64, max_size: Option<usize>, 
-        storage: Arc<dyn Storage>, 
-        pending_blocks: Arc<Mutex<HashMap<u64, (StateRoot, Block)>>>) {
+    pub async fn commit_task(
+        start_num: u64,
+        max_size: Option<usize>,
+        storage: Arc<dyn Storage>,
+        pending_blocks: Arc<Mutex<HashMap<u64, (StateRoot, Block)>>>,
+    ) {
         loop {
-            let committed_blocks = get_block_buffer_manager()
-                .get_committed_blocks(start_num, max_size).await;
+            let committed_blocks =
+                get_block_buffer_manager().get_committed_blocks(start_num, max_size).await;
             if let Err(e) = committed_blocks {
                 warn!("failed to get committed blocks: {}", e);
                 continue;
             }
             let committed_blocks = committed_blocks.unwrap();
             for block_id_num_hash in committed_blocks {
-                let res = Self::persist_block(block_id_num_hash.num, &pending_blocks, storage.as_ref()).await;
+                let res =
+                    Self::persist_block(block_id_num_hash.num, &pending_blocks, storage.as_ref())
+                        .await;
                 if let Err(e) = res {
                     warn!("failed to persist block: {}", e);
                 }

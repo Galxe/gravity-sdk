@@ -1,5 +1,10 @@
 use sha3::Digest;
-use std::{collections::HashMap, fs::File, hash::{DefaultHasher, Hash, Hasher}, io::BufReader};
+use std::{
+    collections::HashMap,
+    fs::File,
+    hash::{DefaultHasher, Hash, Hasher},
+    io::BufReader,
+};
 
 use crate::{AccountId, AccountState, StateRoot};
 
@@ -20,11 +25,7 @@ impl State {
             HashMap::new()
         };
 
-        Self {
-            accounts,
-            block_number: 0,
-            state_root: StateRoot::default(),
-        }
+        Self { accounts, block_number: 0, state_root: StateRoot::default() }
     }
 
     pub fn get_state_root(&self) -> &StateRoot {
@@ -47,10 +48,7 @@ impl State {
         let mut hasher = DefaultHasher::new();
         hasher.write(account_id.0.as_bytes());
         state_state.hash(&mut hasher);
-        self.accounts.insert(
-            account_id.0.clone(),
-            state_state,
-        );
+        self.accounts.insert(account_id.0.clone(), state_state);
         self.state_root = self.state_root.update(hasher.finish());
         Ok(())
     }

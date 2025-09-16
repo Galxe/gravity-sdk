@@ -14,8 +14,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::{
-    verify_signature, State, Storage, Transaction, TransactionReceipt,
-    TransactionWithAccount,
+    verify_signature, State, Storage, Transaction, TransactionReceipt, TransactionWithAccount,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -152,10 +151,7 @@ pub struct ServerApp {
 }
 
 impl ServerApp {
-    pub fn new(
-        state: Arc<RwLock<State>>,
-        storage: Arc<dyn Storage>,
-    ) -> Self {
+    pub fn new(state: Arc<RwLock<State>>, storage: Arc<dyn Storage>) -> Self {
         Self { context: Arc::new(Context { state, storage }) }
     }
 
