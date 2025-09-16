@@ -1,7 +1,7 @@
 use clap::Parser;
 use gaptos::{
     api_types::u256_define::AccountAddress,
-    aptos_crypto::{ed25519::{self, Ed25519PublicKey}, ValidCryptoMaterial},
+    aptos_crypto::{ed25519::{self, Ed25519PublicKey}, PrivateKey, ValidCryptoMaterial},
     aptos_keygen::KeyGen,
     aptos_types::transaction::authenticator::AuthenticationKey,
 };
@@ -54,18 +54,16 @@ impl GenerateKey {
 // TODO(gravity_lightman): account_private_key is aptos key， not reth
 impl Executable for GenerateKey {
     fn execute(self) -> Result<(), anyhow::Error> {
-        info!("--- Generate Key Start ---");
+        println!("--- Generate Key Start ---");
         let mut key_gen = self.key_generator()?;
         let network_private_key = key_gen.generate_x25519_private_key()?;
-        info!("The network_private_key is {:?}", network_private_key);
         let consensus_private_key = key_gen.generate_bls12381_private_key();
-        info!("The consensus_private_key is {:?}", consensus_private_key);
+        println!("The consensus_public_key is {:?}", consensus_private_key.public_key());
 
         let account_private_key = key_gen.generate_ed25519_private_key();
-        info!("The account_private_key is {:?}", account_private_key);
-        let account_address =
-            account_address_from_public_key(&ed25519::Ed25519PublicKey::from(&account_private_key));
-        info!("The account_address is {:?}", account_address);
+        let account_address = network_private_key.public_key();
+        println!("The account_address is {}", account_address);
+        println!("The last 20bit account_address is 0x{}", hex::encode(&account_address.as_slice()[12..]));
         let indentity = ValidatorIndentity {
             account_address: account_address.to_string(),
             account_private_key: hex::encode(account_private_key.to_bytes()),
@@ -73,19 +71,11 @@ impl Executable for GenerateKey {
             network_private_key: hex::encode(network_private_key.to_bytes()),
         };
 
-        info!("--- Write Output File ---");
+        println!("--- Write Output File ---");
         let yaml_string = serde_yaml::to_string(&indentity)?;
         fs::write(self.output_file, yaml_string)?;
-        info!("--- Generate Key Success ---");
+        println!("--- Generate Key Success ---");
         Ok(())
     }
 }
 
-pub fn account_address_from_public_key(public_key: &Ed25519PublicKey) -> AccountAddress {
-    let auth_key = AuthenticationKey::ed25519(public_key);
-    account_address_from_auth_key(&auth_key)
-}
-
-pub fn account_address_from_auth_key(auth_key: &AuthenticationKey) -> AccountAddress {
-    AccountAddress::new(*auth_key.account_address())
-}
