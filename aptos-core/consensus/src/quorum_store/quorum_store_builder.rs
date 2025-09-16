@@ -392,7 +392,7 @@ impl InnerBuilder {
             while let Some(rpc_request) = batch_retrieval_rx.next().await {
                 counters::RECEIVED_BATCH_REQUEST_COUNT.inc();
                 let response = if let Ok(value) =
-                    batch_store.get_batch_from_local(&rpc_request.req.digest())
+                    batch_store.get_batch_from_local(&(rpc_request.req.epoch(), rpc_request.req.digest()))
                 {
                     let batch: Batch = value.try_into().unwrap();
                     BatchResponse::Batch(batch)
