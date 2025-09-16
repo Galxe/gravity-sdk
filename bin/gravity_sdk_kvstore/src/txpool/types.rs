@@ -114,10 +114,9 @@ impl TransactionWithAccount {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlockHeader {
     pub number: u64,
-    pub parent_hash: [u8; 32],
+    pub parent_state_root: [u8; 32],
     pub state_root: [u8; 32],
-    pub transactions_root: [u8; 32],
-    pub timestamp: u64,
+    pub usecs: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

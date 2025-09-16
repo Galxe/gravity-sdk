@@ -1,6 +1,5 @@
 use crate::{
-    compute_transaction_hash, verify_signature, AccountId, AccountState, Block, State, StateRoot,
-    Storage, Transaction, TransactionKind, TransactionReceipt, TransactionWithAccount,
+    compute_transaction_hash, verify_signature, AccountId, AccountState, Block, BlockHeader, State, StateRoot, Storage, Transaction, TransactionKind, TransactionReceipt, TransactionWithAccount
 };
 
 use super::*;
@@ -49,7 +48,7 @@ impl PipelineExecutor {
             for (block, _) in ordered_blocks {
                 let block_num = block.block_meta.block_number;
                 let block_id = block.block_meta.block_id;
-                let exec_res = Self::execute_block(block, &state).await;
+                let exec_res = Self::execute_block(block, &state, &pending_blocks).await;
                 let res = get_block_buffer_manager()
                     .set_compute_res(block_id, exec_res, block_num, Arc::new(None), vec![])
                     .await;
@@ -60,17 +59,33 @@ impl PipelineExecutor {
         }
     }
 
-    async fn execute_block(block: ExternalBlock, state: &Arc<RwLock<State>>) -> [u8; 32] {
+    async fn execute_block(block: ExternalBlock, state: &Arc<RwLock<State>>, pending_blocks: &Arc<Mutex<HashMap<u64, (StateRoot, Block)>>>) -> [u8; 32] {
         // TODO: implement account dependencies when enable pipeline
         let mut state = state.write().await;
-
-        for tx in block.txns {
-            let tx_with_account = TransactionWithAccount::from(tx);
-            let receipt = Self::execute_transaction(&tx_with_account.txn, &state).unwrap();
+        let block_txns = block.txns
+            .into_iter()
+            .map(|tx| TransactionWithAccount::from(tx))
+            .map(|tx| tx.txn)
+            .collect::<Vec<_>>();
+        let parent_state_root = state.get_state_root().clone().0;
+        for tx in &block_txns {
+            let receipt = Self::execute_transaction(tx, &state).unwrap();
             for (account_id, state_update) in receipt.state_updates {
                 state.update_account_state(&account_id, state_update).await.unwrap();
             }
         }
+        let current_state_root = state.get_state_root().0;
+        let block = Block {
+            header: BlockHeader {
+                number: block.block_meta.block_number,
+                parent_state_root: parent_state_root,
+                state_root: current_state_root,
+                usecs: block.block_meta.usecs,
+            },
+            transactions: block_txns,
+        };
+        let mut pending_blocks = pending_blocks.lock().await;
+        pending_blocks.insert(block.header.number, (StateRoot(current_state_root), block));
         state.get_state_root().0
     }
 
