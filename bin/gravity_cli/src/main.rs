@@ -12,5 +12,10 @@ fn main() {
                 eprintln!("Error: {:?}", e);
             }
         }
+        genesis::GenesisCommand::GenerateWaypoint(gw) => {
+            if let Err(e) = gw.execute() {
+                eprintln!("Error: {:?}", e);
+            }
+        }
     }
 }
