@@ -1681,7 +1681,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 }
             },
             IncomingRpcRequest::BatchRetrieval(request) => {
-                info!("lightman0917 epoch {} batch retrieval {:?}", self.epoch(), request);
                 if let Some(tx) = &self.batch_retrieval_tx {
                     tx.push(peer_id, request)
                 } else {
