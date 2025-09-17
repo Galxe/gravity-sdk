@@ -141,7 +141,7 @@ pub enum IncomingRpcRequest {
 impl IncomingRpcRequest {
     pub fn epoch(&self) -> Option<u64> {
         match self {
-            IncomingRpcRequest::BatchRetrieval(req) => Some(req.req.epoch()),
+            IncomingRpcRequest::BatchRetrieval(_) => None,
             IncomingRpcRequest::DAGRequest(req) => Some(req.req.epoch()),
             IncomingRpcRequest::RandGenRequest(req) => Some(req.req.epoch()),
             IncomingRpcRequest::CommitRequest(req) => req.req.epoch(),

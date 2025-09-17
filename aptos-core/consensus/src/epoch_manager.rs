@@ -1665,7 +1665,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 return Ok(());
             },
             None => {
-                ensure!(matches!(request, IncomingRpcRequest::BlockRetrieval(_)));
+                ensure!(matches!(request, IncomingRpcRequest::BlockRetrieval(_))
+                            || matches!(request, IncomingRpcRequest::BatchRetrieval(_)));
             },
             _ => {},
         }
@@ -1680,6 +1681,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 }
             },
             IncomingRpcRequest::BatchRetrieval(request) => {
+                info!("lightman0917 epoch {} batch retrieval {:?}", self.epoch(), request);
                 if let Some(tx) = &self.batch_retrieval_tx {
                     tx.push(peer_id, request)
                 } else {
