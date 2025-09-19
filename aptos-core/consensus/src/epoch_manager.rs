@@ -1665,7 +1665,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 return Ok(());
             },
             None => {
-                ensure!(matches!(request, IncomingRpcRequest::BlockRetrieval(_)));
+                ensure!(matches!(request, IncomingRpcRequest::BlockRetrieval(_))
+                            || matches!(request, IncomingRpcRequest::BatchRetrieval(_)));
             },
             _ => {},
         }
