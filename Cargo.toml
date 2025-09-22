@@ -11,6 +11,7 @@ rust-version = { workspace = true }
 [dependencies]
 api.workspace = true
 block-buffer-manager.workspace = true
+gaptos.workspace = true
 
 [workspace.package]
 authors = ["Gravity Team"]
