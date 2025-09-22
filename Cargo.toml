@@ -1,3 +1,17 @@
+[package]
+name = "gaptos"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+publish = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+api.workspace = true
+block-buffer-manager.workspace = true
+
 [workspace.package]
 authors = ["Gravity Team"]
 edition = "2021"
