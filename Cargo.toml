@@ -1,5 +1,5 @@
 [package]
-name = "gaptos"
+name = "gravity-sdk"
 authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }
