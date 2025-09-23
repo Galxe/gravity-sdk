@@ -213,6 +213,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             buffered_proposal_tx: None,
             epoch_state: None,
             block_retrieval_tx: None,
+            sync_info_request_tx: None,
             quorum_store_msg_tx: None,
             quorum_store_coordinator_tx: None,
             quorum_store_storage,
@@ -508,7 +509,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             // We request proof to join higher epoch
             Ordering::Greater => {
                 let epoch = self.epoch();
-                let sender = self.round_manager_tx.as_mut().unwrap();
+                let sender = self.round_manager_tx.as_ref().unwrap();
 
                 let event = VerifiedEvent::EpochChange(epoch);
                 if let Err(e) = sender.push((peer_id, discriminant(&event)), (peer_id, event)) {
@@ -594,7 +595,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             while let Some(request) = request_rx.next().await {
                 let response = Box::new(block_store.sync_info());
                 let response_bytes =
-                    request.protocol.to_bytes(&ConsensusMsg::SyncInfo(response))?;
+                    request.protocol.to_bytes(&ConsensusMsg::SyncInfo(response)).unwrap();
                 request
                     .response_sender
                     .send(Ok(response_bytes.into()))
@@ -1759,7 +1760,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         let response_msg = self
             .network_sender
             .send_rpc(peer, ConsensusMsg::SyncInfoRequest, Duration::from_millis(500))
-            .await?;
+            .await
+            .map_err(|e| anyhow!("{peer}: {e}"))?;
         let response = match response_msg {
             ConsensusMsg::SyncInfo(resp) => resp,
             _ => return Err(anyhow!("Invalid response to request")),
@@ -1772,39 +1774,46 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         if self.is_validator {
             return
         }
-    
-        let (peer_id, sync_info) = if let Ok((peer, resp)) = self.request_sync_info().await {
-            debug!("Requested sync info from {peer_id}, response: {resp}");
-            (peer, resp)
-        } else {
-            warn!("Failed to request sync info from {peer_id}");
-            return;
+
+        let (peer_id, sync_info) = match self.request_sync_info().await {
+            Ok((peer_id, sync_info)) => {
+                debug!("Requested sync info from {peer_id}, response: {sync_info}");
+                (peer_id, sync_info)
+            }
+            Err(e) => {
+                error!("Failed to request sync info: {e}");
+                return;
+            }
         };
 
         let self_epoch = self.epoch();
         match sync_info.epoch().cmp(&self_epoch) {
             Ordering::Greater => {
-                let sender = self.round_manager_tx.as_mut().unwrap();
+                let sender = self.round_manager_tx.as_ref().unwrap();
                 let event = VerifiedEvent::EpochChange(self_epoch);
                 if let Err(e) = sender.push((peer_id, discriminant(&event)), (peer_id, event)) {
                     error!("Failed to send event to round manager {:?}", e);
                 }
-            },
+            }
             Ordering::Equal => {
-                let sender = self.round_manager_tx.as_mut().unwrap();
+                let sender = self.round_manager_tx.as_ref().unwrap();
                 let event = VerifiedEvent::UnverifiedSyncInfo(sync_info);
                 if let Err(e) = sender.push((peer_id, discriminant(&event)), (peer_id, event)) {
                     error!("Failed to send event to round manager {:?}", e);
                 }
-            },
+            }
             Ordering::Less => {
-                info!("fullnode received sync info in a lower epoch ({}) than self epoch ({})", sync_info.epoch(), self_epoch);
-            },
+                info!(
+                    "fullnode received sync info in a lower epoch ({}) than self epoch ({})",
+                    sync_info.epoch(),
+                    self_epoch
+                );
+            }
         }
     }
 
     fn process_local_timeout(&mut self, round: u64) {
-        let Some(sender) = self.round_manager_tx.as_mut() else {
+        let Some(sender) = self.round_manager_tx.as_ref() else {
             warn!(
                 "Received local timeout for round {} without Round Manager",
                 round
