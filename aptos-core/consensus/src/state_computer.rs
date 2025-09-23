@@ -270,6 +270,7 @@ impl StateComputer for ExecutionProxy {
                 .set_ordered_blocks(BlockId::from_bytes(parent_block_id.as_slice()), ExternalBlock {
                     block_meta: meta_data.clone(),
                     txns: real_txns,
+                    jwks_extra_data: vec![],
                 })
                 .await.unwrap_or_else(|e| panic!("Failed to push ordered blocks {}", e));
             let u_ts = meta_data.usecs;
