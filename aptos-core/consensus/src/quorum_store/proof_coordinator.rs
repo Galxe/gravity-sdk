@@ -6,7 +6,7 @@ use crate::{
     monitor,
     network::QuorumStoreSender,
     quorum_store::{
-        batch_generator::BatchGeneratorCommand, batch_store::BatchReader, utils::Timeouts,
+        batch_generator::BatchGeneratorCommand, batch_store::BatchReader, types::BatchKey, utils::Timeouts
     },
 };
 use aptos_consensus_types::proof_of_store::{
@@ -182,7 +182,7 @@ impl ProofCoordinator {
         }
         let batch_author = self
             .batch_reader
-            .exists(&(signed_batch_info.epoch(), *signed_batch_info.digest()))
+            .exists(&BatchKey::new(signed_batch_info.epoch(), *signed_batch_info.digest()))
             .ok_or(SignedBatchInfoError::NotFound)?;
         if batch_author != signed_batch_info.author() {
             return Err(SignedBatchInfoError::WrongAuthor);

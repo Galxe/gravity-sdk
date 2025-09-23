@@ -14,6 +14,31 @@ use std::{
     ops::Deref,
 };
 
+/// Wrapper for batch key containing epoch and digest
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct BatchKey {
+    pub epoch: u64,
+    pub digest: HashValue,
+}
+
+impl BatchKey {
+    pub fn new(epoch: u64, digest: HashValue) -> Self {
+        Self { epoch, digest }
+    }
+}
+
+impl From<(u64, HashValue)> for BatchKey {
+    fn from((epoch, digest): (u64, HashValue)) -> Self {
+        Self { epoch, digest }
+    }
+}
+
+impl From<BatchKey> for (u64, HashValue) {
+    fn from(key: BatchKey) -> Self {
+        (key.epoch, key.digest)
+    }
+}
+
 #[derive(Clone, Eq, Deserialize, Serialize, PartialEq, Debug)]
 pub struct PersistedValue {
     info: BatchInfo,

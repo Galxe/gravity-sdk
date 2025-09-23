@@ -7,7 +7,7 @@ use crate::{
     consensusdb::ConsensusDB,
     quorum_store::{
         quorum_store_db::{QuorumStoreDB, QuorumStoreStorage},
-        types::PersistedValue,
+        types::{BatchKey, PersistedValue},
     },
 };
 use anyhow::{bail, Result};
@@ -63,11 +63,12 @@ impl Command {
 
 fn extract_txns_from_quorum_store(
     digests: impl Iterator<Item = (u64, HashValue)>,
-    all_batches: &HashMap<(u64, HashValue), PersistedValue>,
+    all_batches: &HashMap<BatchKey, PersistedValue>,
 ) -> anyhow::Result<Vec<&SignedTransaction>> {
     let mut block_txns = Vec::new();
     for (epoch, digest) in digests {
-        if let Some(batch) = all_batches.get(&(epoch, digest)) {
+        let key = BatchKey::new(epoch, digest);
+        if let Some(batch) = all_batches.get(&key) {
             if let Some(txns) = batch.payload() {
                 block_txns.extend(txns);
             } else {
@@ -82,7 +83,7 @@ fn extract_txns_from_quorum_store(
 
 pub fn extract_txns_from_block<'a>(
     block: &'a Block,
-    all_batches: &'a HashMap<(u64, HashValue), PersistedValue>,
+    all_batches: &'a HashMap<BatchKey, PersistedValue>,
 ) -> anyhow::Result<Vec<&'a SignedTransaction>> {
     match block.payload().as_ref() {
         Some(payload) => match payload {
