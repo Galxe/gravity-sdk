@@ -130,12 +130,19 @@ pub struct IncomingRandGenRequest {
 }
 
 #[derive(Debug)]
+pub struct IncomingSyncInfoRequest {
+    pub protocol: ProtocolId,
+    pub response_sender: oneshot::Sender<Result<Bytes, RpcError>>,
+}
+
+#[derive(Debug)]
 pub enum IncomingRpcRequest {
     BlockRetrieval(IncomingBlockRetrievalRequest),
     BatchRetrieval(IncomingBatchRetrievalRequest),
     DAGRequest(IncomingDAGRequest),
     CommitRequest(IncomingCommitRequest),
     RandGenRequest(IncomingRandGenRequest),
+    SyncInfoRequest(IncomingSyncInfoRequest),
 }
 
 impl IncomingRpcRequest {
@@ -146,6 +153,7 @@ impl IncomingRpcRequest {
             IncomingRpcRequest::RandGenRequest(req) => Some(req.req.epoch()),
             IncomingRpcRequest::CommitRequest(req) => req.req.epoch(),
             IncomingRpcRequest::BlockRetrieval(_) => None,
+            IncomingRpcRequest::SyncInfoRequest(_) => None,
         }
     }
 }
@@ -845,6 +853,12 @@ impl NetworkTask {
                             IncomingRpcRequest::RandGenRequest(IncomingRandGenRequest {
                                 req,
                                 sender: peer_id,
+                                protocol,
+                                response_sender: callback,
+                            })
+                        },
+                        ConsensusMsg::SyncInfoRequest => {
+                            IncomingRpcRequest::SyncInfoRequest(IncomingSyncInfoRequest {
                                 protocol,
                                 response_sender: callback,
                             })

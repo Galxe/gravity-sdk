@@ -4,9 +4,7 @@
 
 use crate::{
     block_storage::{
-        pending_blocks::PendingBlocks,
-        tracing::{observe_block, BlockStage},
-        BlockStore,
+        pending_blocks::PendingBlocks, tracing::{observe_block, BlockStage}, BlockReader, BlockStore
     }, consensus_observer::publisher::ConsensusPublisher, dag::{DagBootstrapper, DagCommitSigner, StorageAdapter}, error::{error_kind, DbError}, liveness::{
         cached_proposer_election::CachedProposerElection,
         leader_reputation::{
@@ -20,10 +18,13 @@ use crate::{
         rotating_proposer_election::{choose_leader, RotatingProposer},
         round_proposer_election::RoundProposer,
         round_state::{ExponentialTimeInterval, RoundState},
-    }, logging::{LogEvent, LogSchema}, metrics_safety_rules::MetricsSafetyRules, monitor, network::{
+    }, logging::{LogEvent, LogSchema}, metrics_safety_rules::MetricsSafetyRules, monitor,
+    network::{
         IncomingBatchRetrievalRequest, IncomingBlockRetrievalRequest, IncomingDAGRequest,
-        IncomingRandGenRequest, IncomingRpcRequest, NetworkReceivers, NetworkSender,
-    }, network_interface::{ConsensusMsg, ConsensusNetworkClient}, payload_client::{
+        IncomingRandGenRequest, IncomingRpcRequest, IncomingSyncInfoRequest, NetworkReceivers,
+        NetworkSender,
+    },
+    network_interface::{ConsensusMsg, ConsensusNetworkClient}, payload_client::{
         mixed::MixedPayloadClient, user::quorum_store_client::QuorumStoreClient, PayloadClient,
     }, payload_manager::{DirectMempoolPayloadManager, TPayloadManager}, persistent_liveness_storage::{LedgerRecoveryData, PersistentLivenessStorage, RecoveryData}, pipeline::execution_client::TExecutionClient, quorum_store::{
         quorum_store_builder::{DirectMempoolInnerBuilder, InnerBuilder, QuorumStoreBuilder},
@@ -140,6 +141,8 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     epoch_state: Option<Arc<EpochState>>,
     block_retrieval_tx:
         Option<aptos_channel::Sender<AccountAddress, IncomingBlockRetrievalRequest>>,
+    sync_info_request_tx:
+        Option<aptos_channel::Sender<AccountAddress, IncomingSyncInfoRequest>>,
     quorum_store_msg_tx: Option<aptos_channel::Sender<AccountAddress, VerifiedEvent>>,
     quorum_store_coordinator_tx: Option<Sender<CoordinatorCommand>>,
     quorum_store_storage: Arc<dyn QuorumStoreStorage>,
@@ -580,6 +583,28 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         tokio::spawn(task);
     }
 
+    fn spawn_sync_info_retrieval_task(
+        &mut self,
+        epoch_state: Arc<EpochState>,
+        block_store: Arc<BlockStore>,
+    ) {
+        let (request_tx, mut request_rx) =
+            aptos_channel::new::<_, IncomingSyncInfoRequest>(QueueStyle::KLAST, 10, None);
+        let task = async move {
+            while let Some(request) = request_rx.next().await {
+                let response = Box::new(block_store.sync_info());
+                let response_bytes =
+                    request.protocol.to_bytes(&ConsensusMsg::SyncInfo(response))?;
+                request
+                    .response_sender
+                    .send(Ok(response_bytes.into()))
+                    .map_err(|_| anyhow::anyhow!("Failed to send sync info response"));
+            }
+        };
+        self.sync_info_request_tx = Some(request_tx);
+        tokio::spawn(task);
+    }
+
     async fn shutdown_current_processor(&mut self) {
         if let Some(close_tx) = self.round_manager_close_tx.take() {
             // Release the previous RoundManager, especially the SafetyRule client
@@ -879,7 +904,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .max_blocks_per_receiving_request(onchain_consensus_config.quorum_store_enabled());
 
         let mut round_manager = RoundManager::new(
-            epoch_state,
+            epoch_state.clone(),
             block_store.clone(),
             round_state,
             proposer_election,
@@ -906,7 +931,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             close_rx,
         ));
 
-        self.spawn_block_retrieval_task(epoch, block_store, max_blocks_allowed);
+        self.spawn_block_retrieval_task(epoch, block_store.clone(), max_blocks_allowed);
+        self.spawn_sync_info_retrieval_task(epoch_state, block_store);
     }
 
     fn start_quorum_store(&mut self, quorum_store_builder: QuorumStoreBuilder) {
@@ -1704,6 +1730,14 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     tx.push(peer_id, request)
                 } else {
                     bail!("Rand manager not started");
+                }
+            },
+            IncomingRpcRequest::SyncInfoRequest(request) => {
+                if let Some(tx) = &self.sync_info_request_tx {
+                    tx.push(peer_id, request)
+                } else {
+                    error!("Round manager not started");
+                    Ok(())
                 }
             },
         }
