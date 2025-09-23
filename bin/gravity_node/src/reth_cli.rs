@@ -182,6 +182,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                 .block_meta
                 .proposer
                 .map(|x| Address::from_word(x.bytes().into())),
+            jwk_extra_data: vec![],
         });
         Ok(())
     }

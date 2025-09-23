@@ -92,6 +92,7 @@ impl MockConsensus {
                     ExternalAccountAddress::new(proposer)
                 ),
             },
+            jwks_extra_data: vec![],
             txns,
         };
     }
