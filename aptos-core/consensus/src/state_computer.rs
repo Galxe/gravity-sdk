@@ -239,7 +239,6 @@ impl StateComputer for ExecutionProxy {
         let validator_txns = block.validator_txns();
         let mut jwks_extra_data = Vec::new();
         if let Some(validator_txns) = validator_txns {
-            info!("validator_txns is : {:?}", validator_txns);
             jwks_extra_data = validator_txns.iter().map(|txn| {
                 let jwk_txn = match txn {
                     ValidatorTransaction::DKGResult(_) => {
@@ -251,7 +250,6 @@ impl StateComputer for ExecutionProxy {
                             issuer: update.issuer.clone(),
                             version: update.version,
                             jwks: update.jwks.iter().map(|jwk| {
-                                // 把jwkmovestruct转换成UnsupportedJWK
                                 let aptos_jwk = JWK::try_from(jwk).unwrap();
                                 match aptos_jwk {
                                     JWK::RSA(rsa_jwk) => {

@@ -508,8 +508,8 @@ impl BlockBufferManager {
         }
         let new_epoch_event = events.iter().find(|event| match event {
             GravityEvent::NewEpoch(_, _) => true,
-            GravityEvent::ObservedJWKsUpdated(number, bytes) => {
-                info!("ObservedJWKsUpdated number: {:?} bytes: {:?}", number, bytes);
+            GravityEvent::ObservedJWKsUpdated(number, _) => {
+                info!("ObservedJWKsUpdated number: {:?}", number);
                 false
             }
             _ => false,

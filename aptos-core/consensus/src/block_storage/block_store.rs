@@ -364,7 +364,6 @@ impl BlockStore {
                 let validator_txns = p_block.block().validator_txns();
                 let mut jwks_extra_data = Vec::new();
                 if let Some(validator_txns) = validator_txns {
-                    info!("validator_txns is : {:?}", validator_txns);
                     jwks_extra_data = validator_txns.iter().map(|txn| {
                         let jwk_txn = match txn {
                             ValidatorTransaction::DKGResult(_) => {
@@ -403,7 +402,7 @@ impl BlockStore {
                         block_hash: maybe_block_hash.clone(),
                         proposer: p_block.block().author().map(|author| ExternalAccountAddress::new(author.into_bytes())),
                     },
-                    jwks_extra_data, // TODO: add jwks_extra_data
+                    jwks_extra_data,
                 };
                 get_block_buffer_manager()
                     .set_ordered_blocks(BlockId(*p_block.parent_id()), block)

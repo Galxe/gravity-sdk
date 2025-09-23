@@ -162,8 +162,8 @@ impl RelayerWrapper {
     }
 }
 
-// aptos必须要在启动前就读到链上的对应的这些jwk的初始状态
-// 因为jwk observer那里默认是直接rest请求拿到最新数据
+// TODO: Aptos must read the initial state of corresponding JWKs from the chain before startup
+// because the JWK observer defaults to directly getting the latest data via REST requests
 #[async_trait]
 impl Relayer for RelayerWrapper {
     async fn add_uri(
@@ -172,15 +172,15 @@ impl Relayer for RelayerWrapper {
         rpc_url: &str,
     ) -> Result<(), ExecError> {
         info!("add_uri: {:?}, {:?}", uri, rpc_url);
-        // 在这里调用GLOABL EXECUTE获取对应的uri的last state. 来计算从哪儿个block number开始
-        // 需要在合约中新增一个接口通过
+        // TODO: Call GLOBAL EXECUTE here to get the last state of the corresponding URI to calculate which block number to start from
+        // TODO: Need to add a new interface in the contract to pass through
         self.manager
             .add_uri(uri, rpc_url)
             .await
             .map_err(|e| ExecError::Other(e.to_string()))
     }
 
-    // 都是gravity://开头的uri 一定是UnsupportedJWK
+    // TODO: All URIs starting with gravity:// are definitely UnsupportedJWK
     async fn get_last_state(&self, uri: &str) -> Result<Vec<JWKStruct>, ExecError> {
         info!("get_last_state: {:?}", uri);
         self.manager
