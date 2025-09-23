@@ -180,30 +180,13 @@ impl Relayer for RelayerWrapper {
             .map_err(|e| ExecError::Other(e.to_string()))
     }
 
+    // 都是gravity://开头的uri 一定是UnsupportedJWK
     async fn get_last_state(&self, uri: &str) -> Result<Vec<JWKStruct>, ExecError> {
         info!("get_last_state: {:?}", uri);
-        let mut jwk_structs = Vec::new();
-        let observed_state = self.manager
+        self.manager
             .poll_uri(uri)
             .await
-            .unwrap();
-        match observed_state.observed_value {
-            ObservedValue::Events { logs } => {
-                jwk_structs = logs.iter().map(|log| {
-                    JWKStruct {
-                        type_name: log.data_type.to_string(),
-                        data: log.data.clone(),
-                    }
-                }).collect();
-            }
-            _ => {
-                jwk_structs = vec![JWKStruct {
-                    type_name: "0".to_string(),
-                    data: serde_json::to_vec(&observed_state).expect("failed to serialize state"),
-                }];
-            }
-        }
-        Ok(jwk_structs)
+            .map_err(|e| ExecError::Other(e.to_string()))
     }
 }
 
