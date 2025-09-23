@@ -4,16 +4,7 @@
 use super::quorum_store_db::QuorumStoreStorage;
 use crate::{
     consensus_observer::publisher::ConsensusPublisher, error::error_kind, network::{IncomingBatchRetrievalRequest, NetworkSender}, network_interface::ConsensusMsg, payload_manager::{DirectMempoolPayloadManager, QuorumStorePayloadManager, TPayloadManager}, quorum_store::{
-        batch_coordinator::{BatchCoordinator, BatchCoordinatorCommand},
-        batch_generator::{BackPressure, BatchGenerator, BatchGeneratorCommand},
-        batch_requester::BatchRequester,
-        batch_store::{BatchReader, BatchReaderImpl, BatchStore},
-        direct_mempool_quorum_store::DirectMempoolQuorumStore,
-        network_listener::NetworkListener,
-        proof_coordinator::{ProofCoordinator, ProofCoordinatorCommand},
-        proof_manager::{ProofManager, ProofManagerCommand},
-        quorum_store_coordinator::{CoordinatorCommand, QuorumStoreCoordinator},
-        types::{Batch, BatchResponse},
+        self, batch_coordinator::{BatchCoordinator, BatchCoordinatorCommand}, batch_generator::{BackPressure, BatchGenerator, BatchGeneratorCommand}, batch_requester::BatchRequester, batch_store::{BatchReader, BatchReaderImpl, BatchStore}, direct_mempool_quorum_store::DirectMempoolQuorumStore, network_listener::NetworkListener, proof_coordinator::{ProofCoordinator, ProofCoordinatorCommand}, proof_manager::{ProofManager, ProofManagerCommand}, quorum_store_coordinator::{CoordinatorCommand, QuorumStoreCoordinator}, types::{Batch, BatchResponse}
     }, round_manager::VerifiedEvent
 };
 use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
@@ -392,7 +383,7 @@ impl InnerBuilder {
             while let Some(rpc_request) = batch_retrieval_rx.next().await {
                 counters::RECEIVED_BATCH_REQUEST_COUNT.inc();
                 let response = if let Ok(value) =
-                    batch_store.get_batch_from_local(&(rpc_request.req.epoch(), rpc_request.req.digest()))
+                    batch_store.get_batch_from_local(&quorum_store::types::BatchKey::new(rpc_request.req.epoch(), rpc_request.req.digest()))
                 {
                     let batch: Batch = value.try_into().unwrap();
                     BatchResponse::Batch(batch)
