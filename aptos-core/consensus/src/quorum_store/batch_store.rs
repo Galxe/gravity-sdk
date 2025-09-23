@@ -6,7 +6,7 @@ use crate::{
     quorum_store::{
         batch_requester::BatchRequester,
         quorum_store_db::QuorumStoreStorage,
-        types::{PersistedValue, StorageMode},
+        types::{BatchKey, PersistedValue, StorageMode},
         utils::TimeExpirations,
     },
 };
@@ -22,7 +22,7 @@ use dashmap::{
 };
 use fail::fail_point;
 use once_cell::sync::OnceCell;
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::{
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -117,7 +117,7 @@ pub struct BatchStore {
     db_quota: usize,
     batch_quota: usize,
     validator_signer: ValidatorSigner,
-    persist_subscribers: DashMap<(u64, HashValue), Vec<oneshot::Sender<PersistedValue>>>,
+    persist_subscribers: DashMap<BatchKey, Vec<oneshot::Sender<PersistedValue>>>,
 }
 
 impl BatchStore {
@@ -285,7 +285,7 @@ impl BatchStore {
 
     // pub(crate) for testing
     #[allow(clippy::unwrap_used)]
-    pub(crate) fn clear_expired_payload(&self, certified_time: u64) -> Vec<(u64, HashValue)> {
+    pub(crate) fn clear_expired_payload(&self, certified_time: u64) -> Vec<BatchKey> {
         let expired_digests = self.expirations.lock().unwrap().expire(certified_time);
         let mut ret = Vec::new();
         for h in expired_digests {
@@ -295,7 +295,8 @@ impl BatchStore {
                     // digest with a higher expiration would update the persisted value and
                     // effectively extend the expiration.
                     if entry.get().expiration() <= certified_time {
-                        self.persist_subscribers.remove(&(entry.get().epoch(), entry.get().digest().clone()));
+                        let key = BatchKey::new(entry.get().epoch(), entry.get().digest().clone());
+                        self.persist_subscribers.remove(&key);
                         Some(entry.remove())
                     } else {
                         None
@@ -305,7 +306,7 @@ impl BatchStore {
             };
             // No longer holding the lock on db_cache entry.
             if let Some(value) = removed_value {
-                ret.push((value.epoch(), h));
+                ret.push(BatchKey::new(value.epoch(), h));
                 self.free_quota(value);
             }
         }
@@ -357,13 +358,13 @@ impl BatchStore {
         self.last_certified_time.load(Ordering::Relaxed)
     }
 
-    fn get_batch_from_db(&self, key: &(u64, HashValue)) -> ExecutorResult<PersistedValue> {
+    fn get_batch_from_db(&self, key: &BatchKey) -> ExecutorResult<PersistedValue> {
         counters::GET_BATCH_FROM_DB_COUNT.inc();
 
         match self.db.get_batch(key) {
             Ok(Some(value)) => Ok(value),
             Ok(None) => {
-                warn!("Could not get batch from db because the key {} doesnt exist", key.1);
+                warn!("Could not get batch from db because the key {} doesnt exist", key.digest);
                 Err(ExecutorError::CouldNotGetData)
             }
             Err(e) => { 
@@ -375,9 +376,9 @@ impl BatchStore {
 
     pub(crate) fn get_batch_from_local(
         &self,
-        key: &(u64, HashValue),
+        key: &BatchKey,
     ) -> ExecutorResult<PersistedValue> {
-        if let Some(value) = self.db_cache.get(&key.1) {
+        if let Some(value) = self.db_cache.get(&key.digest) {
             if value.payload_storage_mode() == StorageMode::PersistedOnly {
                 return self.get_batch_from_db(key);
             } else {
@@ -387,7 +388,7 @@ impl BatchStore {
         };
         match self.get_batch_from_db(key) {
             Ok(value) => {
-                info!("QS: get_batch_from_db success {}", key.1);
+                info!("QS: get_batch_from_db success {}", key.digest);
                 Ok(value)
             },
             Err(e) => {
@@ -401,7 +402,7 @@ impl BatchStore {
     /// This can be useful in cases where there are multiple flows to add a batch (like
     /// direct from author batch / batch requester fetch) to the batch store and either
     /// flow needs to subscribe to the other.
-    fn subscribe(&self, key: &(u64, HashValue)) -> oneshot::Receiver<PersistedValue> {
+    fn subscribe(&self, key: &BatchKey) -> oneshot::Receiver<PersistedValue> {
         let (tx, rx) = oneshot::channel();
         self.persist_subscribers.entry(key.clone()).or_default().push(tx);
 
@@ -413,9 +414,12 @@ impl BatchStore {
 
         rx
     }
-
     fn notify_subscribers(&self, value: PersistedValue) {
-        if let Some((_, subscribers)) = self.persist_subscribers.remove(&(value.epoch(), value.digest().clone())) {
+        let key = BatchKey {
+            epoch: value.epoch(),
+            digest: value.digest().clone(),
+        };
+        if let Some((_, subscribers)) = self.persist_subscribers.remove(&key) {
             for subscriber in subscribers {
                 subscriber.send(value.clone()).ok();
             }
@@ -451,11 +455,11 @@ impl BatchWriter for BatchStore {
 
 pub trait BatchReader: Send + Sync {
     /// Check if the batch corresponding to the digest exists, return the batch author if true
-    fn exists(&self, key: &(u64, HashValue)) -> Option<PeerId>;
+    fn exists(&self, key: &BatchKey) -> Option<PeerId>;
 
     fn get_batch(
         &self,
-        key: (u64, HashValue),
+        key: BatchKey,
         expiration: u64,
         signers: Vec<PeerId>,
     ) -> oneshot::Receiver<ExecutorResult<Vec<SignedTransaction>>>;
@@ -478,7 +482,7 @@ impl<T: QuorumStoreSender + Clone + Send + Sync + 'static> BatchReaderImpl<T> {
 }
 
 impl<T: QuorumStoreSender + Clone + Send + Sync + 'static> BatchReader for BatchReaderImpl<T> {
-    fn exists(&self, key: &(u64, HashValue)) -> Option<PeerId> {
+    fn exists(&self, key: &BatchKey) -> Option<PeerId> {
         self.batch_store
             .get_batch_from_local(key)
             .map(|v| v.author())
@@ -487,7 +491,7 @@ impl<T: QuorumStoreSender + Clone + Send + Sync + 'static> BatchReader for Batch
 
     fn get_batch(
         &self,
-        key: (u64, HashValue),
+        key: BatchKey,
         expiration: u64,
         signers: Vec<PeerId>,
     ) -> oneshot::Receiver<ExecutorResult<Vec<SignedTransaction>>> {
@@ -502,7 +506,7 @@ impl<T: QuorumStoreSender + Clone + Send + Sync + 'static> BatchReader for Batch
                 {
                     debug!(
                         "Receiver of local batch not available for digest {}",
-                        key.1,
+                        key.digest,
                     )
                 };
             } else {
