@@ -45,6 +45,7 @@ use aptos_consensus_types::{
     delayed_qc_msg::DelayedQcMsg,
     epoch_retrieval::EpochRetrievalRequest,
     proof_of_store::ProofCache,
+    sync_info::SyncInfo,
 };
 use gaptos::aptos_crypto::bls12381::PrivateKey;
 use gaptos::aptos_dkg::{
@@ -85,7 +86,7 @@ use futures::{
 };
 use itertools::Itertools;
 use mini_moka::sync::Cache;
-use rand::{prelude::StdRng, thread_rng, SeedableRng};
+use rand::{prelude::StdRng, thread_rng, Rng, SeedableRng};
 use std::{
     cmp::Ordering,
     collections::{BTreeMap, HashMap},
@@ -147,7 +148,7 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     bounded_executor: BoundedExecutor,
     // recovery_mode is set to true when the recovery manager is spawned
     recovery_mode: bool,
-
+    is_validator: bool,
     aptos_time_service: gaptos::aptos_time_service::TimeService,
     dag_rpc_tx: Option<aptos_channel::Sender<AccountAddress, IncomingDAGRequest>>,
     dag_shutdown_tx: Option<oneshot::Sender<oneshot::Sender<()>>>,
@@ -215,6 +216,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             batch_retrieval_tx: None,
             bounded_executor,
             recovery_mode: false,
+            is_validator: node_config.base.role.is_validator(),
             dag_rpc_tx: None,
             dag_shutdown_tx: None,
             aptos_time_service,
@@ -1703,6 +1705,66 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 } else {
                     bail!("Rand manager not started");
                 }
+            },
+        }
+    }
+
+    /// Request the sync info from from other peers.
+    async fn request_sync_info(&self) -> anyhow::Result<(Author, Box<SyncInfo>)> {
+        // pick a peer from validators
+        let mut other_validators: Vec<_> = self
+            .epoch_state()
+            .verifier
+            .get_ordered_account_addresses_iter()
+            .filter(|author| author != &self.author)
+            .collect();
+        // random select one peer
+        // TODO(nekomoto): more efficient way to select a peer
+        let peer = other_validators[rand::thread_rng().gen_range(0, other_validators.len())];
+        debug!("Requesting sync info from peer {}", peer);
+        let response_msg = self
+            .network_sender
+            .send_rpc(peer, ConsensusMsg::SyncInfoRequest, Duration::from_millis(500))
+            .await?;
+        let response = match response_msg {
+            ConsensusMsg::SyncInfo(resp) => resp,
+            _ => return Err(anyhow!("Invalid response to request")),
+        };
+        Ok((peer, response))
+    }
+
+    /// Advance the block sync progress for fullnode.
+    async fn advance_block_sync(&self) {
+        if self.is_validator {
+            return
+        }
+    
+        let (peer_id, sync_info) = if let Ok((peer, resp)) = self.request_sync_info().await {
+            debug!("Requested sync info from {peer_id}, response: {resp}");
+            (peer, resp)
+        } else {
+            warn!("Failed to request sync info from {peer_id}");
+            return;
+        };
+
+        let self_epoch = self.epoch();
+        match sync_info.epoch().cmp(&self_epoch) {
+            Ordering::Greater => {
+                let sender = self.round_manager_tx.as_mut().unwrap();
+                let event = VerifiedEvent::EpochChange(self_epoch);
+                if let Err(e) = sender.push((peer_id, discriminant(&event)), (peer_id, event)) {
+                    error!("Failed to send event to round manager {:?}", e);
+                }
+            },
+            Ordering::Equal => {
+                let sender = self.round_manager_tx.as_mut().unwrap();
+                let event = VerifiedEvent::UnverifiedSyncInfo(sync_info);
+                if let Err(e) = sender.push((peer_id, discriminant(&event)), (peer_id, event)) {
+                    error!("Failed to send event to round manager {:?}", e);
+                }
+            },
+            Ordering::Less => {
+                info!("fullnode received sync info in a lower epoch ({}) than self epoch ({})", sync_info.epoch(), self_epoch);
             },
         }
     }

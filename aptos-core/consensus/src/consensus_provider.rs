@@ -2,9 +2,6 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::gravity_state_computer::{
-    ConsensusAdapterArgs, GravityBlockExecutor,
-};
 use crate::{
     consensus_observer::{
         network_client::ConsensusObserverClient, network_events::ConsensusObserverNetworkEvents,
@@ -12,6 +9,7 @@ use crate::{
         publisher::ConsensusPublisher,
     },
     epoch_manager::EpochManager,
+    gravity_state_computer::{ConsensusAdapterArgs, GravityBlockExecutor},
     network::NetworkTask,
     network_interface::{ConsensusMsg, ConsensusNetworkClient},
     persistent_liveness_storage::StorageWriteProxy,
@@ -23,24 +21,26 @@ use crate::{
     txn_notifier::MempoolNotifier,
     util::time_service::ClockTimeService,
 };
-use gaptos::aptos_bounded_executor::BoundedExecutor;
-use gaptos::aptos_config::config::NodeConfig;
-use gaptos::aptos_consensus_notifications::ConsensusNotificationSender;
-use gaptos::aptos_event_notifications::{DbBackedOnChainConfig, ReconfigNotificationListener};
 use aptos_executor::block_executor::BlockExecutor;
-use gaptos::aptos_logger::prelude::*;
 use aptos_mempool::QuorumStoreRequest;
-use gaptos::aptos_network::application::interface::{
-    NetworkClient, NetworkClientInterface, NetworkServiceEvents,
-};
-use gaptos::aptos_storage_interface::DbReaderWriter;
-use gaptos::aptos_time_service::TimeService;
-use gaptos::aptos_validator_transaction_pool::VTxnPoolState;
 use futures::channel::mpsc;
-use gaptos::move_core_types::account_address::AccountAddress;
+use gaptos::{
+    aptos_bounded_executor::BoundedExecutor,
+    aptos_config::config::NodeConfig,
+    aptos_consensus::counters,
+    aptos_consensus_notifications::ConsensusNotificationSender,
+    aptos_event_notifications::{DbBackedOnChainConfig, ReconfigNotificationListener},
+    aptos_logger::prelude::*,
+    aptos_network::application::interface::{
+        NetworkClient, NetworkClientInterface, NetworkServiceEvents,
+    },
+    aptos_storage_interface::DbReaderWriter,
+    aptos_time_service::TimeService,
+    aptos_validator_transaction_pool::VTxnPoolState,
+    move_core_types::account_address::AccountAddress,
+};
 use std::{collections::HashMap, sync::Arc};
 use tokio::runtime::Runtime;
-use gaptos::aptos_consensus::counters as counters;
 
 /// Helper function to start consensus based on configuration and return the runtime
 #[allow(clippy::unwrap_used)]
@@ -95,7 +95,12 @@ pub fn start_consensus(
     let execution_client = Arc::new(ExecutionProxyClient::new(
         node_config.consensus.clone(),
         Arc::new(execution_proxy),
-        node_config.validator_network.as_ref().unwrap().peer_id(),
+        if node_config.base.role.is_validator() {
+            node_config.validator_network.as_ref().unwrap().peer_id()
+        } else {
+            // dummy address for full node
+            AccountAddress::ONE
+        },
         self_sender.clone(),
         consensus_network_client.clone(),
         bounded_executor.clone(),

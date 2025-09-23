@@ -80,6 +80,8 @@ pub enum ConsensusMsg {
     /// OrderVoteMsg is the struct that is broadcasted by a validator on receiving quorum certificate
     /// on a block.
     OrderVoteMsg(Box<OrderVoteMsg>),
+    /// Request to get the sync info from the destination peer.
+    SyncInfoRequest,
 }
 
 /// Network type for consensus
@@ -107,6 +109,7 @@ impl ConsensusMsg {
             ConsensusMsg::CommitMessage(_) => "CommitMessage",
             ConsensusMsg::RandGenMessage(_) => "RandGenMessage",
             ConsensusMsg::BatchResponseV2(_) => "BatchResponseV2",
+            ConsensusMsg::SyncInfoRequest => "SyncInfoRequest",
         }
     }
 }
