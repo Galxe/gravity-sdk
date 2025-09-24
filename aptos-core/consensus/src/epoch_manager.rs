@@ -33,7 +33,8 @@ use crate::{
     }, rand::rand_gen::{
         storage::interface::RandStorage,
         types::{AugmentedData, RandConfig},
-    }, recovery_manager::RecoveryManager, round_manager::{RoundManager, UnverifiedEvent, VerifiedEvent}, util::time_service::TimeService
+    }, recovery_manager::RecoveryManager, round_manager::{self, RoundManager, UnverifiedEvent, VerifiedEvent}, util::time_service::TimeService,
+    liveness::unequivocal_proposer_election::UnequivocalProposerElection,
 };
 use anyhow::{anyhow, bail, ensure, Context};
 use gaptos::aptos_bounded_executor::BoundedExecutor;
@@ -272,6 +273,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             timeout_sender,
             delayed_qc_tx,
             qc_aggregator_type,
+            self.is_validator,
         )
     }
 
@@ -818,9 +820,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             self.config.qc_aggregator_type.clone(),
         );
 
-        info!(epoch = epoch, "Create ProposerElection");
-        let proposer_election =
-            self.create_proposer_election(&epoch_state, &onchain_consensus_config);
         let chain_health_backoff_config =
             ChainHealthBackoffConfig::new(self.config.chain_health_backoff.clone());
         let pipeline_backpressure_config = PipelineBackpressureConfig::new(
@@ -870,55 +869,65 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             self.pending_blocks.clone(),
         ).await);
 
-        info!(epoch = epoch, "Create ProposalGenerator");
-        // txn manager is required both by proposal generator (to pull the proposers)
-        // and by event processor (to update their status).
-        let proposal_generator = ProposalGenerator::new(
-            self.author,
-            block_store.clone(),
-            payload_client,
-            self.time_service.clone(),
-            Duration::from_millis(self.config.quorum_store_poll_time_ms),
-            self.config.max_sending_block_txns,
-            self.config.max_sending_block_txns_after_filtering,
-            self.config.max_sending_block_bytes,
-            self.config.max_sending_inline_txns,
-            self.config.max_sending_inline_bytes,
-            onchain_consensus_config.max_failed_authors_to_store(),
-            self.config
-                .min_max_txns_in_block_after_filtering_from_backpressure,
-            pipeline_backpressure_config,
-            chain_health_backoff_config,
-            self.quorum_store_enabled,
-            onchain_consensus_config.effective_validator_txn_config(),
-            self.config
-                .quorum_store
-                .allow_batches_without_pos_in_proposal,
-        );
         let (round_manager_tx, round_manager_rx) = aptos_channel::new(
             QueueStyle::KLAST,
             10,
             Some(&counters::ROUND_MANAGER_CHANNEL_MSGS),
         );
 
+        self.round_manager_tx = Some(round_manager_tx.clone());
+        let max_blocks_allowed = self
+            .config
+            .max_blocks_per_receiving_request(onchain_consensus_config.quorum_store_enabled());
+
+        let validator_components = if self.is_validator {
+            info!(epoch = epoch, "Create ProposerElection");
+            let proposer_election =
+                self.create_proposer_election(&epoch_state, &onchain_consensus_config);
+            info!(epoch = epoch, "Create ProposalGenerator");
+            // txn manager is required both by proposal generator (to pull the proposers)
+            // and by event processor (to update their status).
+            let proposal_generator = ProposalGenerator::new(
+                self.author,
+                block_store.clone(),
+                payload_client,
+                self.time_service.clone(),
+                Duration::from_millis(self.config.quorum_store_poll_time_ms),
+                self.config.max_sending_block_txns,
+                self.config.max_sending_block_txns_after_filtering,
+                self.config.max_sending_block_bytes,
+                self.config.max_sending_inline_txns,
+                self.config.max_sending_inline_bytes,
+                onchain_consensus_config.max_failed_authors_to_store(),
+                self.config
+                    .min_max_txns_in_block_after_filtering_from_backpressure,
+                pipeline_backpressure_config,
+                chain_health_backoff_config,
+                self.quorum_store_enabled,
+                onchain_consensus_config.effective_validator_txn_config(),
+                self.config
+                    .quorum_store
+                    .allow_batches_without_pos_in_proposal,
+            );
+            Some(round_manager::ValidatorComponents::new(
+                Arc::new(UnequivocalProposerElection::new(proposer_election)),
+                Arc::new(proposal_generator),
+                safety_rules_container,
+            ))
+        } else {
+            None
+        };
+
         let (buffered_proposal_tx, buffered_proposal_rx) = aptos_channel::new(
             QueueStyle::KLAST,
             10,
             Some(&counters::ROUND_MANAGER_CHANNEL_MSGS),
         );
-        self.round_manager_tx = Some(round_manager_tx.clone());
         self.buffered_proposal_tx = Some(buffered_proposal_tx.clone());
-        let max_blocks_allowed = self
-            .config
-            .max_blocks_per_receiving_request(onchain_consensus_config.quorum_store_enabled());
-
         let mut round_manager = RoundManager::new(
             epoch_state.clone(),
             block_store.clone(),
             round_state,
-            proposer_election,
-            proposal_generator,
-            safety_rules_container,
             network_sender,
             self.storage.clone(),
             onchain_consensus_config,
@@ -927,6 +936,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             onchain_randomness_config,
             onchain_jwk_consensus_config,
             fast_rand_config,
+            validator_components,
         );
 
         round_manager.init(last_vote).await;
