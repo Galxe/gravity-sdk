@@ -667,11 +667,12 @@ impl NetworkTask {
 
         // Verify the network events have been constructed correctly
         let network_and_events = network_service_events.into_network_and_events();
-        if (network_and_events.values().len() != 1)
-            || !network_and_events.contains_key(&NetworkId::Validator)
-        {
-            panic!("The network has not been setup correctly for consensus!");
-        }
+        /// TODO(nekomoto): fullnode does not have validator network events, but it still needs to handle sync info requests.
+        //if (network_and_events.values().len() != 1)
+        //    || !network_and_events.contains_key(&NetworkId::Validator)
+        //{
+        //    panic!("The network has not been setup correctly for consensus!");
+        //}
 
         // Collect all the network events into a single stream
         let network_events: Vec<_> = network_and_events.into_values().collect();

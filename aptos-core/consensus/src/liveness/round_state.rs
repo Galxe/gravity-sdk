@@ -167,6 +167,7 @@ pub struct RoundState {
     // Self sender to send delayed QC aggregation events to the round manager.
     delayed_qc_tx: UnboundedSender<DelayedQcMsg>,
     qc_aggregator_type: QcAggregatorType,
+    is_validator: bool,
 }
 
 #[derive(Default, Schema)]
@@ -197,6 +198,7 @@ impl RoundState {
         timeout_sender: gaptos::aptos_channels::Sender<Round>,
         delayed_qc_tx: UnboundedSender<DelayedQcMsg>,
         qc_aggregator_type: QcAggregatorType,
+        is_validator: bool,
     ) -> Self {
         // Our counters are initialized lazily, so they're not going to appear in
         // Prometheus if some conditions never happen. Invoking get() function enforces creation.
@@ -222,6 +224,7 @@ impl RoundState {
             abort_handle: None,
             delayed_qc_tx,
             qc_aggregator_type,
+            is_validator,
         }
     }
 
@@ -243,7 +246,7 @@ impl RoundState {
     /// In case the local timeout corresponds to the current round, reset the timeout and
     /// return true. Otherwise ignore and return false.
     pub fn process_local_timeout(&mut self, round: Round) -> bool {
-        if round != self.current_round {
+        if !self.is_validator || round != self.current_round {
             return false;
         }
         warn!(round = round, "Local timeout");
@@ -264,7 +267,7 @@ impl RoundState {
             "Processing certificates With SyncInfo",
         );
         let new_round = sync_info.highest_round() + 1;
-        if new_round > self.current_round {
+        if self.is_validator && new_round > self.current_round {
             let (prev_round_votes, prev_round_timeout_votes) = self.pending_votes.drain_votes();
 
             // Start a new round.
@@ -333,6 +336,7 @@ impl RoundState {
 
     /// Setup the timeout task and return the duration of the current timeout
     fn setup_timeout(&mut self, multiplier: u32) -> Duration {
+        debug_assert!(self.is_validator, "setup_timeout: not validator");
         let timeout_sender = self.timeout_sender.clone();
         let timeout = self.setup_deadline(multiplier * 2);
         trace!(

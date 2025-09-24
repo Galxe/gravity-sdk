@@ -235,9 +235,6 @@ pub struct RoundManager {
     epoch_state: Arc<EpochState>,
     block_store: Arc<BlockStore>,
     round_state: RoundState,
-    proposer_election: Arc<UnequivocalProposerElection>,
-    proposal_generator: Arc<ProposalGenerator>,
-    safety_rules: Arc<Mutex<MetricsSafetyRules>>,
     network: Arc<NetworkSender>,
     storage: Arc<dyn PersistentLivenessStorage>,
     onchain_config: OnChainConsensusConfig,
@@ -255,6 +252,23 @@ pub struct RoundManager {
     blocks_with_broadcasted_fast_shares: LruCache<HashValue, ()>,
     futures: FuturesUnordered<Pin<Box<dyn Future<Output = (anyhow::Result<()>, Block)> + Send>>>,
     wait_change_epoch_flag: bool,
+    validator_components: Option<ValidatorComponents>,
+}
+
+pub(crate) struct ValidatorComponents {
+    proposer_election: Arc<UnequivocalProposerElection>,
+    proposal_generator: Arc<ProposalGenerator>,
+    safety_rules: Arc<Mutex<MetricsSafetyRules>>,
+}
+
+impl ValidatorComponents {
+    pub(crate) fn new(
+        proposer_election: Arc<UnequivocalProposerElection>,
+        proposal_generator: Arc<ProposalGenerator>,
+        safety_rules: Arc<Mutex<MetricsSafetyRules>>,
+    ) -> Self {
+        ValidatorComponents { proposer_election, proposal_generator, safety_rules }
+    }
 }
 
 impl RoundManager {
@@ -263,9 +277,6 @@ impl RoundManager {
         epoch_state: Arc<EpochState>,
         block_store: Arc<BlockStore>,
         round_state: RoundState,
-        proposer_election: Arc<dyn ProposerElection + Send + Sync>,
-        proposal_generator: ProposalGenerator,
-        safety_rules: Arc<Mutex<MetricsSafetyRules>>,
         network: Arc<NetworkSender>,
         storage: Arc<dyn PersistentLivenessStorage>,
         onchain_config: OnChainConsensusConfig,
@@ -274,6 +285,7 @@ impl RoundManager {
         randomness_config: OnChainRandomnessConfig,
         jwk_consensus_config: OnChainJWKConsensusConfig,
         fast_rand_config: Option<RandConfig>,
+        validator_components: Option<ValidatorComponents>,
     ) -> Self {
         // when decoupled execution is false,
         // the counter is still static.
@@ -289,9 +301,6 @@ impl RoundManager {
             epoch_state,
             block_store,
             round_state,
-            proposer_election: Arc::new(UnequivocalProposerElection::new(proposer_election)),
-            proposal_generator: Arc::new(proposal_generator),
-            safety_rules,
             network,
             storage,
             onchain_config,
@@ -305,7 +314,12 @@ impl RoundManager {
             blocks_with_broadcasted_fast_shares: LruCache::new(5),
             futures: FuturesUnordered::new(),
             wait_change_epoch_flag: false,
+            validator_components,
         }
+    }
+
+    fn is_validator(&self) -> bool {
+        self.validator_components.is_some()
     }
 
     // TODO: Evaluate if creating a block retriever is slow and cache this if needed.
@@ -339,6 +353,10 @@ impl RoundManager {
         &mut self,
         new_round_event: NewRoundEvent,
     ) -> anyhow::Result<()> {
+        if !self.is_validator() {
+            return Err(anyhow::anyhow!("Not validator, skip process_new_round_event: {new_round_event}"));
+        }
+
         tokio::time::sleep(Duration::from_millis(
             // try get env
             std::env::var("APTOS_PROPOSER_SLEEP_MS").map(|s| s.parse().unwrap()).unwrap_or(200)
@@ -360,17 +378,18 @@ impl RoundManager {
         self.pending_order_votes
             .garbage_collect(self.block_store.sync_info().highest_ordered_round());
 
-        if self
+        let validator_components = self.validator_components.as_ref().unwrap();
+        if validator_components
             .proposer_election
-            .is_valid_proposer(self.proposal_generator.author(), new_round_event.round)
+            .is_valid_proposer(validator_components.proposal_generator.author(), new_round_event.round)
         {
-            info!("valid proposer, round {:?}, author: {}", new_round_event.round, self.proposal_generator.author());
+            info!("valid proposer, round {:?}, author: {}", new_round_event.round, validator_components.proposal_generator.author());
             let epoch_state = self.epoch_state.clone();
             let network = self.network.clone();
             let sync_info = self.block_store.sync_info();
-            let proposal_generator = self.proposal_generator.clone();
-            let safety_rules = self.safety_rules.clone();
-            let proposer_election = self.proposer_election.clone();
+            let proposal_generator = validator_components.proposal_generator.clone();
+            let safety_rules = validator_components.safety_rules.clone();
+            let proposer_election = validator_components.proposer_election.clone();
             tokio::spawn(async move {
                 if let Err(e) = Self::generate_and_send_proposal(
                     epoch_state,
@@ -716,6 +735,10 @@ impl RoundManager {
     /// Note this function returns Err even if messages are broadcasted successfully because timeout
     /// is considered as error. It only returns Ok(()) when the timeout is stale.
     pub async fn process_local_timeout(&mut self, round: Round) -> anyhow::Result<()> {
+        if !self.is_validator() {
+            return Err(anyhow::anyhow!("Not validator, skip process_local_timeout: {round}"));
+        }
+
         if !self.round_state.process_local_timeout(round) {
             return Ok(());
         }
@@ -733,22 +756,25 @@ impl RoundManager {
             },
             _ => {
                 // Didn't vote in this round yet, generate a backup vote
-                let nil_block = self
+                let validator_components = self.validator_components.as_ref().unwrap();
+                let nil_block = validator_components
                     .proposal_generator
-                    .generate_nil_block(round, self.proposer_election.clone())?;
+                    .generate_nil_block(round, validator_components.proposer_election.clone())?;
                 info!(
                     self.new_log(LogEvent::VoteNIL),
                     "Planning to vote for a NIL block {}", nil_block
                 );
                 counters::VOTE_NIL_COUNT.inc();
+                drop(validator_components);
                 let nil_vote = self.vote_block(nil_block).await?;
                 (true, nil_vote)
             },
         };
+        let validator_components = self.validator_components.as_ref().unwrap();
         if !timeout_vote.is_timeout() {
             let timeout = timeout_vote
                 .generate_2chain_timeout(self.block_store.highest_quorum_cert().as_ref().clone());
-            let signature = self
+            let signature = validator_components
                 .safety_rules
                 .lock()
                 .sign_timeout_with_qc(
@@ -764,7 +790,7 @@ impl RoundManager {
         self.network.broadcast_timeout_vote(timeout_vote_msg).await;
         warn!(
             round = round,
-            remote_peer = self.proposer_election.get_valid_proposer(round),
+            remote_peer = validator_components.proposer_election.get_valid_proposer(round),
             voted_nil = is_nil_vote,
             event = LogEvent::Timeout,
         );
@@ -775,7 +801,9 @@ impl RoundManager {
     async fn process_certificates(&mut self) -> anyhow::Result<()> {
         let sync_info = self.block_store.sync_info();
         if let Some(new_round_event) = self.round_state.process_certificates(sync_info) {
-            self.process_new_round_event(new_round_event).await?;
+            if self.is_validator() {
+                self.process_new_round_event(new_round_event).await?;
+            }
         }
         Ok(())
     }
@@ -790,6 +818,13 @@ impl RoundManager {
         let author = proposal
             .author()
             .expect("Proposal should be verified having an author");
+
+        if !self.is_validator() {
+            return Err(anyhow::anyhow!(
+                "not validator, skip process_proposal: {}",
+                proposal.id()
+            ));
+        }
 
         if !self.vtxn_config.enabled()
             && matches!(
@@ -866,20 +901,22 @@ impl RoundManager {
             payload_size,
             self.local_config.max_receiving_block_bytes,
         );
+        
+        let validator_components = self.validator_components.as_ref().unwrap();
 
         ensure!(
-            self.proposer_election.is_valid_proposal(&proposal),
+            validator_components.proposer_election.is_valid_proposal(&proposal),
             "[RoundManager] Proposer {} for block {} is not a valid proposer for this round or created duplicate proposal",
             author,
             proposal,
         );
 
         // Validate that failed_authors list is correctly specified in the block.
-        let expected_failed_authors = self.proposal_generator.compute_failed_authors(
+        let expected_failed_authors = validator_components.proposal_generator.compute_failed_authors(
             proposal.round(),
             proposal.quorum_cert().certified_block().round(),
             false,
-            self.proposer_election.clone(),
+            validator_components.proposer_election.clone(),
         );
         ensure!(
             proposal.block_data().failed_authors().map_or(false, |failed_authors| *failed_authors == expected_failed_authors),
@@ -927,6 +964,10 @@ impl RoundManager {
         let author = proposal
             .author()
             .expect("Proposal should be verified having an author");
+
+        if !self.is_validator() {
+            return Err(anyhow::anyhow!("not validator, skip check_backpressure_and_process_proposal: {}", proposal.id()));
+        }
 
         if self.block_store.vote_back_pressure() {
             counters::CONSENSUS_WITHOLD_VOTE_BACKPRESSURE_TRIGGERED.observe(1.0);
@@ -1007,6 +1048,10 @@ impl RoundManager {
     }
 
     pub async fn process_verified_proposal(&mut self, proposal: Block) -> anyhow::Result<()> {
+        if !self.is_validator() {
+            return Err(anyhow::anyhow!("Not validator, skip process_verified_proposal: {proposal}"));
+        }
+
         let proposal_round = proposal.round();
         let vote = self
             .vote_block(proposal)
@@ -1024,7 +1069,7 @@ impl RoundManager {
             self.network.broadcast_vote(vote_msg).await;
         } else {
             let recipient = self
-                .proposer_election
+                .validator_components.as_ref().unwrap().proposer_election
                 .get_valid_proposer(proposal_round + 1);
             info!(
                 self.new_log(LogEvent::Vote).remote_peer(recipient),
@@ -1041,6 +1086,8 @@ impl RoundManager {
     /// * save the updated state to consensus DB
     /// * return a VoteMsg with the LedgerInfo to be committed in case the vote gathers QC.
     async fn vote_block(&mut self, proposed_block: Block) -> anyhow::Result<Vote> {
+        debug_assert!(self.is_validator(), "{}", proposed_block.id());
+
         let block_arc = self
             .block_store
             .insert_block(proposed_block, false)
@@ -1060,7 +1107,8 @@ impl RoundManager {
         );
 
         let vote_proposal = block_arc.vote_proposal();
-        let vote_result = self.safety_rules.lock().construct_and_sign_vote_two_chain(
+        let validator_components = self.validator_components.as_ref().unwrap();
+        let vote_result = validator_components.safety_rules.lock().construct_and_sign_vote_two_chain(
             &vote_proposal,
             self.block_store.highest_2chain_timeout_cert().as_deref(),
         );
@@ -1127,10 +1175,12 @@ impl RoundManager {
         vote: &Vote,
         qc: Arc<QuorumCert>,
     ) -> anyhow::Result<()> {
+        debug_assert!(self.is_validator(), "{}", vote.vote_data().proposed().id());
         if let Some(proposed_block) = self.block_store.get_block(vote.vote_data().proposed().id()) {
             // Generate an order vote with ledger_info = proposed_block
             let order_vote_proposal = proposed_block.order_vote_proposal(qc.clone());
-            let order_vote_result = self
+            let validator_components = self.validator_components.as_ref().unwrap();
+            let order_vote_result = validator_components
                 .safety_rules
                 .lock()
                 .construct_and_sign_order_vote(&order_vote_proposal);
@@ -1165,6 +1215,11 @@ impl RoundManager {
         fail_point!("consensus::process_vote_msg", |_| {
             Err(anyhow::anyhow!("Injected error in process_vote_msg"))
         });
+
+        if !self.is_validator() {
+            return Err(anyhow::anyhow!("Not validator, skip process_vote_msg"))
+        }
+
         // Check whether this validator is a valid recipient of the vote.
         if self
             .ensure_round_and_sync_up(
@@ -1187,6 +1242,7 @@ impl RoundManager {
     /// 1) fetch missing dependencies if required, and then
     /// 2) call process_certificates(), which will start a new round in return.
     async fn process_vote(&mut self, vote: &Vote) -> anyhow::Result<()> {
+        debug_assert!(self.is_validator(), "{}", vote.vote_data().proposed().id());
         let round = vote.vote_data().proposed().round();
 
         if vote.is_timeout() {
@@ -1213,9 +1269,10 @@ impl RoundManager {
         if !self.local_config.broadcast_vote && !vote.is_timeout() {
             // Unlike timeout votes regular votes are sent to the leaders of the next round only.
             let next_round = round + 1;
+            let validator_components = self.validator_components.as_ref().unwrap();
             ensure!(
-                self.proposer_election
-                    .is_valid_proposer(self.proposal_generator.author(), next_round),
+                validator_components.proposer_election
+                    .is_valid_proposer(validator_components.proposal_generator.author(), next_round),
                 "[RoundManager] Received {}, but I am not a valid proposer for round {}, ignore.",
                 vote,
                 next_round
@@ -1243,6 +1300,7 @@ impl RoundManager {
         vote: &Vote,
         result: VoteReceptionResult,
     ) -> anyhow::Result<()> {
+        debug_assert!(self.is_validator(), "{}", vote.vote_data().proposed().id());
         let round = vote.vote_data().proposed().round();
         match result {
             VoteReceptionResult::NewQuorumCertificate(qc) => {
@@ -1399,7 +1457,12 @@ impl RoundManager {
             .round_state
             .process_certificates(self.block_store.sync_info())
             .expect("Can not jump start a round_state from existing certificates.");
-        let author = self.proposal_generator.author();
+        if !self.is_validator() {
+            return
+        }
+
+        let validator_components = self.validator_components.as_ref().unwrap();
+        let author = validator_components.proposal_generator.author();
         if let Some(vote) = last_vote_sent{
             if vote.author() != author {
                 error!("last vote sent is not for the current author, ignore");
