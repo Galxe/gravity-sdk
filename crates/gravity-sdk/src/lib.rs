@@ -1,3 +1,3 @@
-pub mod block_buffer_manager;
-pub mod api;
-pub mod gaptos;
+pub use block_buffer_manager;
+pub use api;
+pub use gaptos;
