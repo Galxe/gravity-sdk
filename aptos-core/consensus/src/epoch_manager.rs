@@ -183,7 +183,13 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         rand_storage: Arc<dyn RandStorage<AugmentedData>>,
         consensus_publisher: Option<Arc<ConsensusPublisher>>,
     ) -> Self {
-        let author = node_config.validator_network.as_ref().unwrap().peer_id();
+        let is_validator = node_config.base.role.is_validator();
+        let author = if is_validator {
+            node_config.validator_network.as_ref().unwrap().peer_id()
+        } else {
+            // dummy address for full node
+            AccountAddress::ONE
+        };
         let config = node_config.consensus.clone();
         let execution_config = node_config.execution.clone();
         let dag_config = node_config.dag_consensus.clone();
@@ -220,7 +226,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             batch_retrieval_tx: None,
             bounded_executor,
             recovery_mode: false,
-            is_validator: node_config.base.role.is_validator(),
+            is_validator,
             dag_rpc_tx: None,
             dag_shutdown_tx: None,
             aptos_time_service,
@@ -586,12 +592,13 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
     fn spawn_sync_info_retrieval_task(
         &mut self,
-        epoch_state: Arc<EpochState>,
+        epoch: u64,
         block_store: Arc<BlockStore>,
     ) {
         let (request_tx, mut request_rx) =
             aptos_channel::new::<_, IncomingSyncInfoRequest>(QueueStyle::KLAST, 10, None);
         let task = async move {
+            info!(epoch = epoch, "Sync info retrieval task starts");
             while let Some(request) = request_rx.next().await {
                 let response = Box::new(block_store.sync_info());
                 let response_bytes =
@@ -601,6 +608,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     .send(Ok(response_bytes.into()))
                     .map_err(|_| anyhow::anyhow!("Failed to send sync info response"));
             }
+            info!(epoch = epoch, "Sync info retrieval task stops");
         };
         self.sync_info_request_tx = Some(request_tx);
         tokio::spawn(task);
@@ -933,7 +941,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         ));
 
         self.spawn_block_retrieval_task(epoch, block_store.clone(), max_blocks_allowed);
-        self.spawn_sync_info_retrieval_task(epoch_state, block_store);
+        self.spawn_sync_info_retrieval_task(epoch, block_store);
     }
 
     fn start_quorum_store(&mut self, quorum_store_builder: QuorumStoreBuilder) {
