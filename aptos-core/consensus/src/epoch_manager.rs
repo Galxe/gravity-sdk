@@ -1845,6 +1845,12 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     ) {
         // initial start of the processor
         self.await_reconfig_notification().await;
+        let mut block_sync_interval = if self.is_validator {
+            // never awake
+            tokio::time::interval(Duration::from_secs(u64::MAX))
+        } else {
+            tokio::time::interval(Duration::from_secs(1))
+        };
         loop {
             tokio::select! {
                 (peer, msg) = network_receivers.consensus_messages.select_next_some() => {
@@ -1870,6 +1876,9 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     monitor!("epoch_manager_process_round_timeout",
                     self.process_local_timeout(round));
                 },
+                _ = block_sync_interval.tick() => {
+                    self.advance_block_sync().await;
+                }
             }
             // Continually capture the time of consensus process to ensure that clock skew between
             // validators is reasonable and to find any unusual (possibly byzantine) clock behavior.
