@@ -33,6 +33,7 @@ use gaptos::{
         ProtocolId,
     },
 };
+use gaptos::aptos_dkg_runtime::start_dkg_runtime;
 
 use aptos_mempool::{MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest};
 use futures::channel::mpsc::{Receiver, Sender};
@@ -144,6 +145,45 @@ pub fn start_node_inspection_service(
         None,
         peers_and_metadata,
     )
+}
+
+/// Creates and starts the DKG runtime (if enabled)
+pub fn create_dkg_runtime(
+    node_config: &mut NodeConfig,
+    dkg_subscriptions: Option<(
+        ReconfigNotificationListener<DbBackedOnChainConfig>,
+        EventNotificationListener,
+    )>,
+    dkg_network_interfaces: Option<ApplicationNetworkInterfaces<DKGMessage>>,
+) -> (VTxnPoolState, Option<Runtime>) {
+    let vtxn_pool = VTxnPoolState::default();
+    let dkg_runtime = match dkg_network_interfaces {
+        Some(interfaces) => {
+            let ApplicationNetworkInterfaces {
+                network_client,
+                network_service_events,
+            } = interfaces;
+            let (reconfig_events, dkg_start_events) = dkg_subscriptions
+                .expect("DKG needs to listen to NewEpochEvents events and DKGStartEvents");
+            let my_addr = node_config.validator_network.as_ref().unwrap().peer_id();
+            let rb_config = node_config.consensus.rand_rb_config.clone();
+            let dkg_runtime = start_dkg_runtime(
+                my_addr,
+                &node_config.consensus.safety_rules,
+                network_client,
+                network_service_events,
+                reconfig_events,
+                dkg_start_events,
+                vtxn_pool.clone(),
+                rb_config,
+                node_config.randomness_override_seq_num,
+            );
+            Some(dkg_runtime)
+        },
+        _ => None,
+    };
+
+    (vtxn_pool, dkg_runtime)
 }
 
 pub fn start_consensus(

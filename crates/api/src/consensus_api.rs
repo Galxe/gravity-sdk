@@ -178,6 +178,9 @@ impl ConsensusEngine {
             vtxn_pool,
         );
         runtimes.push(consensus_runtime);
+        let (vtxn_pool, dkg_runtime) =
+            create_dkg_runtime(&mut node_config, dkg_subscriptions, dkg_network_interfaces);
+
         // Create notification senders and listeners for mempool, consensus and the storage service
         // For Gravity we only use it to notify the mempool for the committed txn gc logic
         let mempool_notifier =
