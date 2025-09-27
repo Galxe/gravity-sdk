@@ -836,7 +836,7 @@ impl NetworkTask {
                             })
                         },
                         ConsensusMsg::BatchRequestMsg(request) => {
-                            info!(
+                            debug!(
                                 remote_peer = peer_id,
                                 event = LogEvent::ReceiveBatchRetrieval,
                                 "{}",
