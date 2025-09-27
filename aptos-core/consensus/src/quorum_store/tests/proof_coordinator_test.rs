@@ -6,7 +6,7 @@ use crate::{
     quorum_store::{
         batch_store::BatchReader,
         proof_coordinator::{ProofCoordinator, ProofCoordinatorCommand},
-        types::Batch,
+        types::{Batch, BatchKey},
     },
     test_utils::{create_vec_signed_transactions, mock_quorum_store_sender::MockQuorumStoreSender},
 };
@@ -25,13 +25,13 @@ pub struct MockBatchReader {
 }
 
 impl BatchReader for MockBatchReader {
-    fn exists(&self, _digest: &HashValue) -> Option<PeerId> {
+    fn exists(&self, _key: &BatchKey) -> Option<PeerId> {
         Some(self.peer)
     }
 
     fn get_batch(
         &self,
-        _digest: HashValue,
+        _key: BatchKey,
         _expiration: u64,
         _signers: Vec<PeerId>,
     ) -> tokio::sync::oneshot::Receiver<ExecutorResult<Vec<SignedTransaction>>> {
