@@ -253,8 +253,8 @@ pub fn start_jwk_consensus_runtime(
     jwk_consensus_network_interfaces: Option<
         ApplicationNetworkInterfaces<gaptos::aptos_jwk_consensus::types::JWKConsensusMsg>,
     >,
+    vtxn_pool: VTxnPoolState,
 ) -> (Runtime, VTxnPoolState) {
-    let vtxn_pool = VTxnPoolState::default();
     let jwk_consensus_runtime = match jwk_consensus_network_interfaces {
         Some(interfaces) => {
             let ApplicationNetworkInterfaces { network_client, network_service_events } =
@@ -285,6 +285,7 @@ pub fn init_jwk_consensus(
     jwk_consensus_network_interfaces: ApplicationNetworkInterfaces<
         gaptos::aptos_jwk_consensus::types::JWKConsensusMsg,
     >,
+    vtxn_pool: VTxnPoolState,
 ) -> (Runtime, VTxnPoolState) {
     // TODO(gravity): only valdiator should subscribe the reconf events
     let reconfig_events = event_subscription_service
@@ -297,6 +298,7 @@ pub fn init_jwk_consensus(
         node_config,
         Some((reconfig_events, jwk_updated_events)),
         Some(jwk_consensus_network_interfaces),
+        vtxn_pool,
     )
 }
 
