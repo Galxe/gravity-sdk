@@ -115,7 +115,10 @@ impl ConsensusEngine {
             peers_and_metadata.clone(),
         );
         let network_id: NetworkId = network_config.network_id;
-        let (consensus_network_interfaces, mempool_interfaces, jwk_consensus_network_interfaces) =
+        let (consensus_network_interfaces, 
+            mempool_interfaces, 
+            jwk_consensus_network_interfaces,
+            dkg_network_interfaces) =
             init_network_interfaces(
                 &mut network_builder,
                 network_id,
@@ -158,6 +161,14 @@ impl ConsensusEngine {
             pool,
         );
         runtimes.extend(mempool_runtime);
+
+        // Create the DKG runtime and get the VTxn pool
+        let (vtxn_pool, dkg_runtime) =
+        create_dkg_runtime(&mut node_config.clone(), &mut event_subscription_service, Some(dkg_network_interfaces));
+        if let Some(dkg_runtime) = dkg_runtime {
+            runtimes.push(dkg_runtime);
+        }
+
         let (jwk_consensus_runtime, vtxn_pool) = init_jwk_consensus(
             &node_config,
             &mut event_subscription_service,
@@ -177,9 +188,6 @@ impl ConsensusEngine {
             vtxn_pool,
         );
         runtimes.push(consensus_runtime);
-        let (vtxn_pool, dkg_runtime) =
-            create_dkg_runtime(&mut node_config, dkg_subscriptions, dkg_network_interfaces);
-
         // Create notification senders and listeners for mempool, consensus and the storage service
         // For Gravity we only use it to notify the mempool for the committed txn gc logic
         let mempool_notifier =
