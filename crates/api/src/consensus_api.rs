@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     bootstrap::{
-        init_block_buffer_manager, init_jwk_consensus, init_mempool, init_network_interfaces,
-        init_peers_and_metadata, start_consensus, start_node_inspection_service,
+        create_dkg_runtime, init_block_buffer_manager, init_jwk_consensus, init_mempool, init_network_interfaces, init_peers_and_metadata, start_consensus, start_node_inspection_service
     },
     consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler},
     https::{https_server, HttpsServerArgs},
@@ -116,7 +115,10 @@ impl ConsensusEngine {
             peers_and_metadata.clone(),
         );
         let network_id: NetworkId = network_config.network_id;
-        let (consensus_network_interfaces, mempool_interfaces, jwk_consensus_network_interfaces) =
+        let (consensus_network_interfaces, 
+            mempool_interfaces, 
+            jwk_consensus_network_interfaces,
+            dkg_network_interfaces) =
             init_network_interfaces(
                 &mut network_builder,
                 network_id,
@@ -159,6 +161,14 @@ impl ConsensusEngine {
             pool,
         );
         runtimes.extend(mempool_runtime);
+
+        // Create the DKG runtime and get the VTxn pool
+        let (vtxn_pool, dkg_runtime) =
+        create_dkg_runtime(&mut node_config.clone(), &mut event_subscription_service, Some(dkg_network_interfaces));
+        if let Some(dkg_runtime) = dkg_runtime {
+            runtimes.push(dkg_runtime);
+        }
+
         let (jwk_consensus_runtime, vtxn_pool) = init_jwk_consensus(
             &node_config,
             &mut event_subscription_service,
