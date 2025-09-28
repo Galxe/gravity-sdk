@@ -174,8 +174,8 @@ pub fn create_dkg_runtime(
     node_config: &mut NodeConfig,
     event_subscription_service: &mut EventSubscriptionService,
     dkg_network_interfaces: Option<ApplicationNetworkInterfaces<DKGMessage>>,
-    vtxn_pool: Option<VTxnPoolState>,
-) -> (VTxnPoolState, Option<Runtime>) {
+    vtxn_pool: &VTxnPoolState,
+) -> Option<Runtime> {
     let dkg_subscriptions = if node_config.base.role.is_validator() {
         let reconfig_events = event_subscription_service
             .subscribe_to_reconfigurations()
@@ -187,7 +187,6 @@ pub fn create_dkg_runtime(
     } else {
         None
     };
-    let vtxn_pool = vtxn_pool.unwrap_or_else(|| VTxnPoolState::default());
     let dkg_runtime = match dkg_network_interfaces {
         Some(interfaces) => {
             let ApplicationNetworkInterfaces {
@@ -214,7 +213,7 @@ pub fn create_dkg_runtime(
         _ => None,
     };
 
-    (vtxn_pool, dkg_runtime)
+    dkg_runtime
 }
 
 
@@ -255,9 +254,8 @@ pub fn start_jwk_consensus_runtime(
     jwk_consensus_network_interfaces: Option<
         ApplicationNetworkInterfaces<gaptos::aptos_jwk_consensus::types::JWKConsensusMsg>,
     >,
-    vtxn_pool: Option<VTxnPoolState>,
-) -> (Runtime, VTxnPoolState) {
-    let vtxn_pool = vtxn_pool.unwrap_or_else(|| VTxnPoolState::default());
+    vtxn_pool: VTxnPoolState,
+) -> Runtime {
     let jwk_consensus_runtime = match jwk_consensus_network_interfaces {
         Some(interfaces) => {
             let ApplicationNetworkInterfaces { network_client, network_service_events } =
@@ -279,7 +277,7 @@ pub fn start_jwk_consensus_runtime(
         }
         _ => None,
     };
-    (jwk_consensus_runtime.expect("JWK consensus runtime must be started"), vtxn_pool)
+    jwk_consensus_runtime.expect("JWK consensus runtime must be started")
 }
 
 pub fn init_jwk_consensus(
@@ -288,8 +286,8 @@ pub fn init_jwk_consensus(
     jwk_consensus_network_interfaces: ApplicationNetworkInterfaces<
         gaptos::aptos_jwk_consensus::types::JWKConsensusMsg,
     >,
-    vtxn_pool: Option<VTxnPoolState>,
-) -> (Runtime, VTxnPoolState) {
+    vtxn_pool: &VTxnPoolState,
+) -> Runtime {
     // TODO(gravity): only valdiator should subscribe the reconf events
     let reconfig_events = event_subscription_service
         .subscribe_to_reconfigurations()
@@ -297,12 +295,11 @@ pub fn init_jwk_consensus(
     let jwk_updated_events = event_subscription_service
         .subscribe_to_events(vec![], vec!["0x1::jwks::ObservedJWKsUpdated".to_string()])
         .expect("JWK consensus must subscribe to DKG events");
-    let vtxn_pool = vtxn_pool.unwrap_or_else(|| VTxnPoolState::default());
     start_jwk_consensus_runtime(
         node_config,
         Some((reconfig_events, jwk_updated_events)),
         Some(jwk_consensus_network_interfaces),
-        Some(vtxn_pool.clone()),
+        vtxn_pool,
     )
 }
 
