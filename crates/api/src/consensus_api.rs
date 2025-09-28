@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use crate::{
     bootstrap::{
-        init_block_buffer_manager, init_jwk_consensus, init_mempool, init_peers_and_metadata,
-        start_consensus, start_node_inspection_service,
+        init_block_buffer_manager, init_mempool, init_peers_and_metadata,
+        start_consensus, start_node_inspection_service, dkg_network_configuration,
+        create_dkg_runtime, init_jwk_consensus
     },
     consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler},
     https::{https_server, HttpsServerArgs},
@@ -12,23 +13,25 @@ use crate::{
         consensus_network_configuration, create_network_interfaces, create_network_runtime,
         extract_network_configs, jwk_consensus_network_configuration,
         mempool_network_configuration, register_client_and_service_with_network,
+        ApplicationNetworkHandle,
     },
 };
 use aptos_consensus::{consensusdb::ConsensusDB, gravity_state_computer::ConsensusAdapterArgs};
 use block_buffer_manager::TxPool;
 use build_info::build_information;
 use futures::channel::mpsc;
-use gaptos::{
-    api_types::config_storage::{ConfigStorage, GLOBAL_CONFIG_STORAGE},
-    aptos_config::{config::NodeConfig, network_id::NetworkId},
-    aptos_event_notifications::EventNotificationSender,
-    aptos_logger::{info, warn},
-    aptos_network_builder::builder::NetworkBuilder,
-    aptos_storage_interface::DbReaderWriter,
-    aptos_telemetry::service::start_telemetry_service,
-    aptos_types::chain_id::ChainId,
-    aptos_validator_transaction_pool::VTxnPoolState,
-};
+use gaptos::aptos_dkg_runtime::DKGMessage;
+use     gaptos::{
+        api_types::config_storage::{ConfigStorage, GLOBAL_CONFIG_STORAGE},
+        aptos_config::config::NodeConfig,
+        aptos_event_notifications::EventNotificationSender,
+        aptos_logger::{info, warn},
+        aptos_network_builder::builder::NetworkBuilder,
+        aptos_storage_interface::DbReaderWriter,
+        aptos_telemetry::service::start_telemetry_service,
+        aptos_types::chain_id::ChainId,
+        aptos_validator_transaction_pool::VTxnPoolState,
+    };
 use tokio::{runtime::Runtime, sync::Mutex};
 
 #[cfg(unix)]
@@ -109,6 +112,7 @@ impl ConsensusEngine {
 
         // Create each network and register the application handles
         let mut jwk_consensus_network_handle = None;
+        let mut dkg_network_handle: Option<ApplicationNetworkHandle<DKGMessage>> = None;
         let mut consensus_network_handles = vec![];
         let mut mempool_network_handles = vec![];
         for network_config in network_configs.into_iter() {
@@ -143,6 +147,14 @@ impl ConsensusEngine {
                     jwk_consensus_network_handle = Some(network_handle);
                 }
             }
+     
+            dkg_network_handle = Some(register_client_and_service_with_network::<DKGMessage>(
+                &mut network_builder,
+                network_id,
+                &network_config,
+                dkg_network_configuration(&node_config),
+                false,
+            ));
 
             // Register consensus (both client and server) with the network
             let network_handle = register_client_and_service_with_network(
@@ -189,6 +201,14 @@ impl ConsensusEngine {
             peers_and_metadata.clone(),
         );
 
+        let dkg_interfaces = dkg_network_handle.map(|handle| {
+            create_network_interfaces(
+                vec![handle],
+                dkg_network_configuration(&node_config),
+                peers_and_metadata.clone(),
+            )
+        });
+
         let state_sync_config = node_config.state_sync;
         // The consensus_listener would listenes the request sent by ExecutionProxy's commit
         // function And then send NotifyCommit request to mempool which is named
@@ -220,16 +240,33 @@ impl ConsensusEngine {
             pool,
         );
         runtimes.extend(mempool_runtime);
+
+        // Create shared VTxn pool first
+        let vtxn_pool = VTxnPoolState::default();
+
+        // Create DKG runtime with shared VTxn pool
+        let (vtxn_pool, dkg_runtime) = create_dkg_runtime(
+            &mut node_config.clone(), 
+            &mut event_subscription_service, 
+            dkg_interfaces,
+            Some(vtxn_pool)
+        );
+        if let Some(dkg_runtime) = dkg_runtime {
+            runtimes.push(dkg_runtime);
+        }
+
+        // Create JWK consensus runtime with shared VTxn pool
         let vtxn_pool = if let Some(jwk_consensus_interfaces) = jwk_consensus_interfaces {
             let (jwk_consensus_runtime, vtxn_pool) = init_jwk_consensus(
                 &node_config,
                 &mut event_subscription_service,
                 jwk_consensus_interfaces,
+                Some(vtxn_pool),
             );
             runtimes.push(jwk_consensus_runtime);
             vtxn_pool
         } else {
-            VTxnPoolState::default()
+            vtxn_pool
         };
         init_block_buffer_manager(&consensus_db, latest_block_number).await;
         let mut args = ConsensusAdapterArgs::new(consensus_db);
