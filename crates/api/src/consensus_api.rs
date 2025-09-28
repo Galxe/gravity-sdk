@@ -255,29 +255,24 @@ impl ConsensusEngine {
         let vtxn_pool = VTxnPoolState::default();
 
         // Create DKG runtime with shared VTxn pool
-        let (vtxn_pool, dkg_runtime) = create_dkg_runtime(
+        let dkg_runtime = create_dkg_runtime(
             &mut node_config.clone(), 
             &mut event_subscription_service, 
             dkg_interfaces,
-            Some(vtxn_pool)
+            &vtxn_pool
         );
         if let Some(dkg_runtime) = dkg_runtime {
             runtimes.push(dkg_runtime);
         }
-
-        // Create JWK consensus runtime with shared VTxn pool
-        let vtxn_pool = if let Some(jwk_consensus_interfaces) = jwk_consensus_interfaces {
-            let (jwk_consensus_runtime, vtxn_pool) = init_jwk_consensus(
+        if let Some(jwk_consensus_interfaces) = jwk_consensus_interfaces {
+            let jwk_consensus_runtime = init_jwk_consensus(
                 &node_config,
                 &mut event_subscription_service,
                 jwk_consensus_interfaces,
-                Some(vtxn_pool),
+                &vtxn_pool,
             );
             runtimes.push(jwk_consensus_runtime);
-            vtxn_pool
-        } else {
-            vtxn_pool
-        };
+        }
         init_block_buffer_manager(&consensus_db, latest_block_number).await;
         let mut args = ConsensusAdapterArgs::new(consensus_db);
         let (consensus_runtime, _, _) = start_consensus(
