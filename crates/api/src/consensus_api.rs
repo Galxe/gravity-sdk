@@ -173,6 +173,7 @@ impl ConsensusEngine {
             &node_config,
             &mut event_subscription_service,
             jwk_consensus_network_interfaces,
+            vtxn_pool,
         );
         runtimes.push(jwk_consensus_runtime);
         init_block_buffer_manager(&consensus_db, latest_block_number).await;
