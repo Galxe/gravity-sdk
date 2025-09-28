@@ -16,11 +16,9 @@ use aptos_consensus::{
 
 use block_buffer_manager::{get_block_buffer_manager, TxPool};
 use gaptos::{
-    api_types::u256_define::BlockId,
-    aptos_event_notifications::{
+    api_types::u256_define::BlockId, aptos_dkg_runtime::DKGMessage, aptos_event_notifications::{
         DbBackedOnChainConfig, EventNotificationListener, ReconfigNotificationListener,
-    },
-    aptos_logger::info,
+    }, aptos_logger::info
 };
 use gaptos::{
     aptos_channels::{aptos_channel, message_queues::QueueStyle},

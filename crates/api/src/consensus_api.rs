@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     bootstrap::{
-        init_block_buffer_manager, init_jwk_consensus, init_mempool, init_network_interfaces,
-        init_peers_and_metadata, start_consensus, start_node_inspection_service,
+        create_dkg_runtime, init_block_buffer_manager, init_jwk_consensus, init_mempool, init_network_interfaces, init_peers_and_metadata, start_consensus, start_node_inspection_service
     },
     consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler},
     https::{https_server, HttpsServerArgs},
