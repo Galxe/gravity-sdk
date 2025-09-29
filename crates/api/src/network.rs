@@ -88,6 +88,23 @@ pub fn mempool_network_configuration(node_config: &NodeConfig) -> NetworkApplica
     NetworkApplicationConfig::new(network_client_config, network_service_config)
 }
 
+/// Returns the network application config for the JWK consensus client and service
+pub fn jwk_consensus_network_configuration(node_config: &NodeConfig) -> NetworkApplicationConfig {
+    let direct_send_protocols: Vec<ProtocolId> =
+        gaptos::aptos_jwk_consensus::network_interface::DIRECT_SEND.into();
+    let rpc_protocols: Vec<ProtocolId> = gaptos::aptos_jwk_consensus::network_interface::RPC.into();
+
+    let network_client_config =
+        NetworkClientConfig::new(direct_send_protocols.clone(), rpc_protocols.clone());
+    let network_service_config = NetworkServiceConfig::new(
+        direct_send_protocols,
+        rpc_protocols,
+        aptos_channel::Config::new(node_config.jwk_consensus.max_network_channel_size)
+            .queue_style(QueueStyle::FIFO),
+    );
+    NetworkApplicationConfig::new(network_client_config, network_service_config)
+}
+
 // used for UT
 pub async fn mock_mempool_client_sender(mut mc_sender: aptos_mempool::MempoolClientSender) {
     let addr = gaptos::aptos_types::account_address::AccountAddress::random();
@@ -113,7 +130,7 @@ pub async fn mock_mempool_client_sender(mut mc_sender: aptos_mempool::MempoolCli
     }
 }
 
-struct ApplicationNetworkHandle<T> {
+pub struct ApplicationNetworkHandle<T> {
     pub network_id: NetworkId,
     pub network_sender: NetworkSender<T>,
     pub network_events: NetworkEvents<T>,
@@ -121,7 +138,7 @@ struct ApplicationNetworkHandle<T> {
 
 /// Creates an application network inteface using the given
 /// handles and config.
-fn create_network_interfaces<
+pub fn create_network_interfaces<
     T: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
 >(
     network_handles: Vec<ApplicationNetworkHandle<T>>,
@@ -154,7 +171,7 @@ fn create_network_interfaces<
 }
 
 /// Registers a new application client and service with the network
-fn register_client_and_service_with_network<
+pub fn register_client_and_service_with_network<
     T: Serialize + for<'de> Deserialize<'de> + Send + Sync + 'static,
 >(
     network_builder: &mut NetworkBuilder,

@@ -1455,11 +1455,12 @@ impl RoundManager {
     pub async fn init(&mut self, last_vote_sent: Option<Vote>) {
         let new_round_event = self
             .round_state
-            .process_certificates(self.block_store.sync_info())
-            .expect("Can not jump start a round_state from existing certificates.");
+            .process_certificates(self.block_store.sync_info());
         if !self.is_validator() {
             return
         }
+
+        let new_round_event = new_round_event.expect("Can not jump start a round_state from existing certificates.");
 
         let validator_components = self.validator_components.as_ref().unwrap();
         let author = validator_components.proposal_generator.author();
