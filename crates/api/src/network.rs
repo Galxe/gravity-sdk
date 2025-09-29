@@ -113,7 +113,7 @@ pub async fn mock_mempool_client_sender(mut mc_sender: aptos_mempool::MempoolCli
     }
 }
 
-struct ApplicationNetworkHandle<T> {
+pub struct ApplicationNetworkHandle<T> {
     pub network_id: NetworkId,
     pub network_sender: NetworkSender<T>,
     pub network_events: NetworkEvents<T>,
@@ -121,7 +121,7 @@ struct ApplicationNetworkHandle<T> {
 
 /// Creates an application network inteface using the given
 /// handles and config.
-fn create_network_interfaces<
+pub fn create_network_interfaces<
     T: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
 >(
     network_handles: Vec<ApplicationNetworkHandle<T>>,
@@ -154,7 +154,7 @@ fn create_network_interfaces<
 }
 
 /// Registers a new application client and service with the network
-fn register_client_and_service_with_network<
+pub fn register_client_and_service_with_network<
     T: Serialize + for<'de> Deserialize<'de> + Send + Sync + 'static,
 >(
     network_builder: &mut NetworkBuilder,

@@ -2,27 +2,32 @@ use std::sync::Arc;
 
 use crate::{
     bootstrap::{
-        init_block_buffer_manager, init_mempool, init_network_interfaces, init_peers_and_metadata,
+        init_block_buffer_manager, init_mempool, init_peers_and_metadata,
         start_consensus, start_node_inspection_service,
     },
     consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler},
     https::{https_server, HttpsServerArgs},
     logger,
-    network::{create_network_runtime, extract_network_configs},
+    network::{
+        consensus_network_configuration, create_network_interfaces, create_network_runtime,
+        extract_network_configs, mempool_network_configuration,
+        register_client_and_service_with_network,
+    },
 };
+use aptos_consensus::{consensusdb::ConsensusDB, gravity_state_computer::ConsensusAdapterArgs};
 use block_buffer_manager::TxPool;
 use build_info::build_information;
-use aptos_consensus::consensusdb::ConsensusDB;
-use aptos_consensus::gravity_state_computer::ConsensusAdapterArgs;
 use futures::channel::mpsc;
-use gaptos::aptos_config::{config::NodeConfig, network_id::NetworkId};
-use gaptos::aptos_event_notifications::EventNotificationSender;
-use gaptos::aptos_logger::{info, warn};
-use gaptos::aptos_network_builder::builder::NetworkBuilder;
-use gaptos::aptos_storage_interface::DbReaderWriter;
-use gaptos::aptos_telemetry::service::start_telemetry_service;
-use gaptos::aptos_types::chain_id::ChainId;
-use gaptos::api_types::config_storage::{ConfigStorage, GLOBAL_CONFIG_STORAGE};
+use gaptos::{
+    api_types::config_storage::{ConfigStorage, GLOBAL_CONFIG_STORAGE},
+    aptos_config::{config::NodeConfig, network_id::NetworkId},
+    aptos_event_notifications::EventNotificationSender,
+    aptos_logger::{info, warn},
+    aptos_network_builder::builder::NetworkBuilder,
+    aptos_storage_interface::DbReaderWriter,
+    aptos_telemetry::service::start_telemetry_service,
+    aptos_types::chain_id::ChainId,
+};
 use tokio::{runtime::Runtime, sync::Mutex};
 
 #[cfg(unix)]
@@ -30,7 +35,6 @@ use tokio::{runtime::Runtime, sync::Mutex};
 static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 pub struct ConsensusEngine {
-    address: String,
     runtimes: Vec<Runtime>,
 }
 
@@ -99,41 +103,75 @@ impl ConsensusEngine {
                 }
             }
         }
+        let chain_id = ChainId::from(chain_id);
         let network_configs = extract_network_configs(&node_config);
 
-        let network_config = network_configs.get(0).unwrap();
-        // Create a network runtime for the config
-        let runtime = create_network_runtime(&network_config);
-        // Entering gives us a runtime to instantiate all the pieces of the builder
-        let _enter = runtime.enter();
-        let chain_id = ChainId::from(chain_id);
-        let mut network_builder = NetworkBuilder::create(
-            chain_id,
-            node_config.base.role,
-            &network_config,
-            gaptos::aptos_time_service::TimeService::real(),
-            Some(&mut event_subscription_service),
+        // Create each network and register the application handles
+        let mut consensus_network_handles = vec![];
+        let mut mempool_network_handles = vec![];
+        for network_config in network_configs.into_iter() {
+            // Create a network runtime for the config
+            let runtime = create_network_runtime(&network_config);
+
+            // Entering gives us a runtime to instantiate all the pieces of the builder
+            let _enter = runtime.enter();
+
+            // Create a new network builder
+            let mut network_builder = NetworkBuilder::create(
+                chain_id,
+                node_config.base.role,
+                &network_config,
+                gaptos::aptos_time_service::TimeService::real(),
+                Some(&mut event_subscription_service),
+                peers_and_metadata.clone(),
+            );
+
+            // Register consensus (both client and server) with the network
+            let network_handle = register_client_and_service_with_network(
+                &mut network_builder,
+                network_config.network_id,
+                &network_config,
+                consensus_network_configuration(&node_config),
+                true,
+            );
+            consensus_network_handles.push(network_handle);
+
+            // Register mempool (both client and server) with the network
+            let mempool_network_handle = register_client_and_service_with_network(
+                &mut network_builder,
+                network_config.network_id,
+                &network_config,
+                mempool_network_configuration(&node_config),
+                true,
+            );
+            mempool_network_handles.push(mempool_network_handle);
+
+            // Build and start the network on the runtime
+            network_builder.build(runtime.handle().clone());
+            network_builder.start();
+            runtimes.push(runtime);
+        }
+
+        // Transform all network handles into application interfaces
+        let consensus_interfaces = create_network_interfaces(
+            consensus_network_handles,
+            consensus_network_configuration(&node_config),
             peers_and_metadata.clone(),
         );
-        let network_id: NetworkId = network_config.network_id;
-        let (consensus_network_interfaces, mempool_interfaces) = init_network_interfaces(
-            &mut network_builder,
-            network_id,
-            &network_config,
-            &node_config,
+        let mempool_interfaces = create_network_interfaces(
+            mempool_network_handles,
+            mempool_network_configuration(&node_config),
             peers_and_metadata.clone(),
         );
+
         let state_sync_config = node_config.state_sync;
-        // The consensus_listener would listenes the request sent by ExecutionProxy's commit function
-        // And then send NotifyCommit request to mempool which is named consensus_to_mempool_sender in Gravity
+        // The consensus_listener would listenes the request sent by ExecutionProxy's commit
+        // function And then send NotifyCommit request to mempool which is named
+        // consensus_to_mempool_sender in Gravity
         let (consensus_notifier, consensus_listener) =
             gaptos::aptos_consensus_notifications::new_consensus_notifier_listener_pair(
                 state_sync_config.state_sync_driver.commit_notification_timeout_ms,
             );
-        // Build and start the network on the runtime
-        network_builder.build(runtime.handle().clone());
-        network_builder.start();
-        runtimes.push(runtime);
 
         // Start the node inspection service
         start_node_inspection_service(&node_config, peers_and_metadata.clone());
@@ -163,7 +201,7 @@ impl ConsensusEngine {
         let (consensus_runtime, _, _) = start_consensus(
             &node_config,
             &mut event_subscription_service,
-            consensus_network_interfaces,
+            consensus_interfaces,
             consensus_notifier,
             consensus_to_mempool_sender,
             db,
@@ -205,10 +243,7 @@ impl ConsensusEngine {
         let runtime = gaptos::aptos_runtimes::spawn_named_runtime("Http".into(), None);
         runtime.spawn(async move { https_server(args) });
         runtimes.push(runtime);
-        let arc_consensus_engine = Arc::new(Self {
-            address: node_config.validator_network.as_ref().unwrap().listen_address.to_string(),
-            runtimes,
-        });
+        let arc_consensus_engine = Arc::new(Self { runtimes });
         // process new round should be after init retƒh hash
         info!("pass latest_block_number: {:?} to event_subscription_service", latest_block_number);
         let _ = event_subscription_service.lock().await.notify_initial_configs(latest_block_number);

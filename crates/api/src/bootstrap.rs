@@ -64,34 +64,6 @@ pub fn check_bootstrap_config(node_config_path: Option<PathBuf>) -> NodeConfig {
     })
 }
 
-pub fn init_network_interfaces<T, E>(
-    network_builder: &mut NetworkBuilder,
-    network_id: NetworkId,
-    network_config: &NetworkConfig,
-    node_config: &NodeConfig,
-    peers_and_metadata: Arc<PeersAndMetadata>,
-) -> (ApplicationNetworkInterfaces<T>, ApplicationNetworkInterfaces<E>)
-where
-    T: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
-    E: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
-{
-    let consensus_network_interfaces = build_network_interfaces::<T>(
-        network_builder,
-        network_id,
-        &network_config,
-        consensus_network_configuration(node_config),
-        peers_and_metadata.clone(),
-    );
-    let mempool_interfaces = build_network_interfaces::<E>(
-        network_builder,
-        network_id,
-        &network_config,
-        mempool_network_configuration(node_config),
-        peers_and_metadata.clone(),
-    );
-    (consensus_network_interfaces, mempool_interfaces)
-}
-
 /// Spawns a new thread for the node inspection service
 pub fn start_node_inspection_service(
     node_config: &NodeConfig,
