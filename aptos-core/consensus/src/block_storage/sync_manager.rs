@@ -32,6 +32,7 @@ use aptos_consensus_types::{
     wrapped_ledger_info::WrappedLedgerInfo,
 };
 use gaptos::aptos_metrics_core::{register_int_gauge_vec, IntGaugeHelper, IntGaugeVec};
+use gaptos::aptos_config::network_id::{NetworkId, PeerNetworkId};
 use gaptos::aptos_crypto::HashValue;
 use gaptos::aptos_infallible::Mutex;
 use gaptos::aptos_logger::prelude::*;
@@ -254,8 +255,11 @@ impl BlockStore {
                     retrieve_qc.certified_block().id(),
                     1,
                     retrieve_qc.certified_block().id(),
-                    qc.ledger_info()
-                        .get_voters(&retriever.validator_addresses()),
+                    if self.is_validator {
+                        qc.ledger_info().get_voters(&retriever.available_peers)
+                    } else {
+                        retriever.available_peers.clone()
+                    },
                     self.payload_manager.clone(),
                 )
                 .await?;
@@ -298,6 +302,7 @@ impl BlockStore {
             self.storage.clone(),
             self.payload_manager.clone(),
             self.order_vote_enabled,
+            self.is_validator,
         )
         .await?
         .take();
@@ -349,7 +354,7 @@ impl BlockStore {
             .retrieve_block_by_epoch(
                 epoch,
                 highest_commit_cert.commit_info().id(),
-                retriever.validator_addresses(),
+                retriever.available_peers.clone(),
                 payload_manager.clone(),
             )
             .await?;
@@ -406,6 +411,7 @@ impl BlockStore {
         storage: Arc<dyn PersistentLivenessStorage>,
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
+        is_validator: bool,
     ) -> anyhow::Result<RecoveryData> {
         info!(
             LogSchema::new(LogEvent::StateSync).remote_peer(retriever.preferred_peer),
@@ -428,9 +434,13 @@ impl BlockStore {
                 highest_quorum_cert.certified_block().id(),
                 num_blocks,
                 highest_commit_cert.commit_info().id(),
-                highest_quorum_cert
-                    .ledger_info()
-                    .get_voters(&retriever.validator_addresses()),
+                if is_validator {
+                    highest_quorum_cert
+                        .ledger_info()
+                        .get_voters(&retriever.available_peers)
+                } else {
+                    retriever.available_peers.clone()
+                },
                 payload_manager.clone(),
             )
             .await?;
@@ -508,6 +518,7 @@ impl BlockStore {
                 self.storage.clone(),
                 self.payload_manager.clone(),
                 self.order_vote_enabled,
+                self.is_validator,
             )
             .await?
             .take();
@@ -652,32 +663,31 @@ impl BlockStore {
 
 /// BlockRetriever is used internally to retrieve blocks
 pub struct BlockRetriever {
+    network_id: NetworkId,
     network: Arc<NetworkSender>,
     preferred_peer: Author,
-    validator_addresses: Vec<AccountAddress>,
+    available_peers: Vec<AccountAddress>,
     max_blocks_to_request: u64,
     pending_blocks: Arc<Mutex<PendingBlocks>>,
 }
 
 impl BlockRetriever {
     pub fn new(
+        network_id: NetworkId,
         network: Arc<NetworkSender>,
         preferred_peer: Author,
-        validator_addresses: Vec<AccountAddress>,
+        available_peers: Vec<AccountAddress>,
         max_blocks_to_request: u64,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
     ) -> Self {
         Self {
+            network_id,
             network,
             preferred_peer,
-            validator_addresses,
+            available_peers,
             max_blocks_to_request,
             pending_blocks,
         }
-    }
-
-    pub fn validator_addresses(&self) -> Vec<AccountAddress> {
-        self.validator_addresses.clone()
     }
 
     async fn retrieve_block_for_id_chunk(
@@ -745,7 +755,7 @@ impl BlockRetriever {
                             let remote_peer = peer;
                             let future = self.network.request_block(
                                 request.clone(),
-                                peer,
+                                PeerNetworkId::new(self.network_id, peer),
                                 rpc_timeout,
                             );
                             futures.push(async move { (remote_peer, future.await) }.boxed());

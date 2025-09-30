@@ -123,8 +123,8 @@ impl ConsensusMsg {
 /// makes the most sense to make the rpc call on a separate async task, which
 /// requires the `ConsensusNetworkClient` to be `Clone` and `Send`.
 #[derive(Clone)]
-pub struct ConsensusNetworkClient<NetworkClient> {
-    network_client: NetworkClient,
+pub struct ConsensusNetworkClient<NetworkClient: NetworkClientInterface<ConsensusMsg>> {
+    pub(crate) network_client: NetworkClient,
 }
 
 /// Supported protocols in preferred order (from highest priority to lowest).
@@ -213,32 +213,5 @@ impl<NetworkClient: NetworkClientInterface<ConsensusMsg>> ConsensusNetworkClient
     pub fn sort_peers_by_latency(&self, peers: &mut [PeerId]) {
         self.network_client
             .sort_peers_by_latency(NetworkId::Validator, peers);
-    }
-
-    /// Request the sync info from from other peers.
-    pub async fn request_sync_info(&self) -> Result<(PeerId, Box<SyncInfo>), Error> {
-        let peers = self.network_client.get_available_peers()?;
-        let mut vfn_peers = peers
-            .iter()
-            .filter(|peer| peer.network_id() == NetworkId::Vfn)
-            .map(|peer| peer.peer_id())
-            .collect::<Vec<_>>();
-        if vfn_peers.is_empty() {
-            return Err(Error::NetworkError("No vfn peers available".to_string()));
-        }
-        self.network_client.sort_peers_by_latency(NetworkId::Vfn, &mut vfn_peers);
-        let peer = vfn_peers[0];
-        let sync_info = self
-            .network_client
-            .send_to_peer_rpc(
-                ConsensusMsg::SyncInfoRequest,
-                Duration::from_secs(5),
-                PeerNetworkId::new(NetworkId::Vfn, peer),
-            )
-            .await?;
-        match sync_info {
-            ConsensusMsg::SyncInfo(sync_info) => Ok((peer, sync_info)),
-            _ => Err(Error::UnexpectedError("Invalid response to request".to_string())),
-        }
     }
 }

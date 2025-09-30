@@ -114,6 +114,7 @@ pub struct BlockStore {
     #[cfg(any(test, feature = "fuzzing"))]
     back_pressure_for_test: AtomicBool,
     order_vote_enabled: bool,
+    is_validator: bool,
     pending_blocks: Arc<Mutex<PendingBlocks>>,
 }
 
@@ -127,6 +128,7 @@ impl BlockStore {
         vote_back_pressure_limit: Round,
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
+        is_validator: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
@@ -144,6 +146,7 @@ impl BlockStore {
             vote_back_pressure_limit,
             payload_manager,
             order_vote_enabled,
+            is_validator,
             pending_blocks,
         ));
         block_on(block_store.recover_blocks());
@@ -159,6 +162,7 @@ impl BlockStore {
         vote_back_pressure_limit: Round,
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
+        is_validator: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
@@ -176,6 +180,7 @@ impl BlockStore {
             vote_back_pressure_limit,
             payload_manager,
             order_vote_enabled,
+            is_validator,
             pending_blocks,
         )
         .await;
@@ -224,6 +229,7 @@ impl BlockStore {
         vote_back_pressure_limit: Round,
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
+        is_validator: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
     ) -> Self {
         let RootInfo(root_block, root_qc, root_ordered_cert, root_commit_cert) = root;
@@ -256,6 +262,7 @@ impl BlockStore {
             #[cfg(any(test, feature = "fuzzing"))]
             back_pressure_for_test: AtomicBool::new(false),
             order_vote_enabled,
+            is_validator,
             pending_blocks,
         };
 
@@ -481,6 +488,7 @@ impl BlockStore {
             self.vote_back_pressure_limit,
             self.payload_manager.clone(),
             self.order_vote_enabled,
+            self.is_validator,
             self.pending_blocks.clone(),
         )
         .await;
