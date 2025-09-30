@@ -28,7 +28,8 @@ use crate::{
 };
 use anyhow::{bail, ensure, Context};
 use gaptos::aptos_channels::aptos_channel;
-use gaptos::aptos_config::config::ConsensusConfig;
+use gaptos::aptos_config::{config::ConsensusConfig, network_id::NetworkId};
+use gaptos::aptos_network::application::interface::NetworkClientInterface;
 use aptos_consensus_types::{
     block::Block,
     block_data::BlockType,
@@ -324,13 +325,35 @@ impl RoundManager {
 
     // TODO: Evaluate if creating a block retriever is slow and cache this if needed.
     fn create_block_retriever(&self, author: Author) -> BlockRetriever {
+        let (network_id, available_peers) = if self.is_validator() {
+            (
+                NetworkId::Validator,
+                self.epoch_state.verifier.get_ordered_account_addresses_iter().collect(),
+            )
+        } else {
+            let available_peers = self
+                .network
+                .consensus_network_client
+                .network_client
+                .get_available_peers()
+                .map(|peers| {
+                    peers
+                        .iter()
+                        .filter(|peer| peer.network_id() == NetworkId::Vfn)
+                        .map(|peer| peer.peer_id())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_else(|e| {
+                    error!("Failed to get available peers: {:?}", e);
+                    vec![]
+                });
+            (NetworkId::Vfn, available_peers)
+        };
         BlockRetriever::new(
+            network_id,
             self.network.clone(),
             author,
-            self.epoch_state
-                .verifier
-                .get_ordered_account_addresses_iter()
-                .collect(),
+            available_peers,
             self.local_config
                 .max_blocks_per_sending_request(self.onchain_config.quorum_store_enabled()),
             self.block_store.pending_blocks(),

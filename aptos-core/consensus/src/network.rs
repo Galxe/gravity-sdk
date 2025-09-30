@@ -20,7 +20,7 @@ use crate::{
 };
 use anyhow::{anyhow, bail, ensure};
 use gaptos::{aptos_channels::{self, aptos_channel, message_queues::QueueStyle}, aptos_crypto::HashValue};
-use gaptos::aptos_config::network_id::NetworkId;
+use gaptos::aptos_config::network_id::{NetworkId, PeerNetworkId};
 use aptos_consensus_types::{
     block_retrieval::{BlockRetrievalRequest, BlockRetrievalResponse},
     common::Author,
@@ -33,7 +33,7 @@ use aptos_consensus_types::{
 };
 use gaptos::aptos_logger::prelude::*;
 use gaptos::aptos_network::{
-    application::interface::{NetworkClient, NetworkServiceEvents},
+    application::interface::{NetworkClient, NetworkClientInterface, NetworkServiceEvents},
     protocols::{network::Event, rpc::error::RpcError},
     ProtocolId,
 };
@@ -231,7 +231,7 @@ impl NetworkSender {
     pub async fn request_block(
         &self,
         retrieval_request: BlockRetrievalRequest,
-        from: Author,
+        from: PeerNetworkId,
         timeout: Duration,
     ) -> anyhow::Result<BlockRetrievalResponse> {
         fail_point!("consensus::send::any", |_| {
@@ -241,28 +241,29 @@ impl NetworkSender {
             Err(anyhow::anyhow!("Injected error in request_block"))
         });
 
-        ensure!(from != self.author, "Retrieve block from self");
+        ensure!(from.peer_id() != self.author, "Retrieve block from self");
         let msg = ConsensusMsg::BlockRetrievalRequest(Box::new(retrieval_request.clone()));
         counters::CONSENSUS_SENT_MSGS
             .with_label_values(&[msg.name()])
             .inc();
-        let response_msg = monitor!("block_retrieval", self.send_rpc(from, msg, timeout).await)?;
+        let response_msg = monitor!(
+            "block_retrieval",
+            self.consensus_network_client.network_client.send_to_peer_rpc(msg, timeout, from).await
+        )?;
         let response = match response_msg {
             ConsensusMsg::BlockRetrievalResponse(resp) => *resp,
             _ => return Err(anyhow!("Invalid response to request")),
         };
         if retrieval_request.block_id() != HashValue::zero() {
-            response
-                .verify(retrieval_request, &self.validators)
-                .map_err(|e| {
-                    error!(
-                        SecurityEvent::InvalidRetrievedBlock,
-                        request_block_response = response,
-                        error = ?e,
-                    );
-                    e
-                })?;
-            }
+            response.verify(retrieval_request, &self.validators).map_err(|e| {
+                error!(
+                    SecurityEvent::InvalidRetrievedBlock,
+                    request_block_response = response,
+                    error = ?e,
+                );
+                e
+            })?;
+        }
 
         Ok(response)
     }

@@ -39,8 +39,11 @@ use crate::{
 use anyhow::{anyhow, bail, ensure, Context};
 use gaptos::aptos_bounded_executor::BoundedExecutor;
 use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use gaptos::aptos_config::config::{
-    ConsensusConfig, DagConsensusConfig, ExecutionConfig, NodeConfig, QcAggregatorType,
+use gaptos::aptos_config::{
+    config::{
+        ConsensusConfig, DagConsensusConfig, ExecutionConfig, NodeConfig, QcAggregatorType,
+    },
+    network_id::{NetworkId, PeerNetworkId},
 };
 use aptos_consensus_types::{
     common::{Author, Round},
@@ -58,7 +61,7 @@ use gaptos::aptos_event_notifications::ReconfigNotificationListener;
 use gaptos::aptos_infallible::{duration_since_epoch, Mutex};
 use gaptos::aptos_logger::prelude::*;
 use aptos_mempool::QuorumStoreRequest;
-use gaptos::aptos_network::{application::interface::NetworkClient, protocols::network::Event};
+use gaptos::aptos_network::{application::interface::{NetworkClient, NetworkClientInterface}, protocols::network::Event};
 use aptos_safety_rules::{safety_rules_manager, PersistentSafetyStorage, SafetyRulesManager};
 use gaptos::aptos_types::{
     account_address::AccountAddress,
@@ -866,6 +869,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             self.config.vote_back_pressure_limit,
             payload_manager,
             onchain_consensus_config.order_vote_enabled(),
+            self.is_validator,
             self.pending_blocks.clone(),
         ).await);
 
@@ -1763,13 +1767,42 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         }
     }
 
+    /// Request the sync info from from other peers.
+    async fn request_sync_info(&self) -> anyhow::Result<(Author, Box<SyncInfo>)> {
+        debug_assert!(!self.is_validator);
+        let peers = self.network_sender.network_client.get_available_peers()?;
+        let mut vfn_peers = peers
+            .iter()
+            .filter(|peer| peer.network_id() == NetworkId::Vfn)
+            .map(|peer| peer.peer_id())
+            .collect::<Vec<_>>();
+        if vfn_peers.is_empty() {
+            return Err(anyhow::anyhow!("No vfn peers available"));
+        }
+        self.network_sender.network_client.sort_peers_by_latency(NetworkId::Vfn, &mut vfn_peers);
+        let peer = vfn_peers[0];
+        let sync_info = self
+            .network_sender
+            .network_client
+            .send_to_peer_rpc(
+                ConsensusMsg::SyncInfoRequest,
+                Duration::from_secs(5),
+                PeerNetworkId::new(NetworkId::Vfn, peer),
+            )
+            .await?;
+        match sync_info {
+            ConsensusMsg::SyncInfo(sync_info) => Ok((peer, sync_info)),
+            _ => Err(anyhow::anyhow!("Invalid response to request")),
+        }
+    }
+
     /// Advance the block sync progress for fullnode.
     async fn advance_block_sync(&self) {
         if self.is_validator {
             return
         }
 
-        let (peer_id, sync_info) = match self.network_sender.request_sync_info().await {
+        let (peer_id, sync_info) = match self.request_sync_info().await {
             Ok((peer_id, sync_info)) => {
                 debug!("Requested sync info from {peer_id}, response: {sync_info}");
                 (peer_id, sync_info)

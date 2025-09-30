@@ -16,6 +16,7 @@ use gaptos::aptos_channels::aptos_channel;
 use aptos_consensus_types::{
     common::Author, proposal_msg::ProposalMsg, sync_info::SyncInfo, vote_msg::VoteMsg,
 };
+use gaptos::aptos_config::network_id::NetworkId;
 use gaptos::aptos_infallible::Mutex;
 use gaptos::aptos_logger::prelude::*;
 use gaptos::aptos_types::{block_info::Round, epoch_state::EpochState};
@@ -89,6 +90,7 @@ impl RecoveryManager {
             "[RecoveryManager] Received sync info is in different epoch than committed block"
         );
         let mut retriever = BlockRetriever::new(
+            NetworkId::Validator,
             self.network.clone(),
             peer,
             self.epoch_state
@@ -105,6 +107,7 @@ impl RecoveryManager {
             self.storage.clone(),
             self.payload_manager.clone(),
             self.order_vote_enabled,
+            true,
         )
         .await?;
 
