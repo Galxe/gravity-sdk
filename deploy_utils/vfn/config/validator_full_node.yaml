@@ -1,0 +1,58 @@
+base:
+  role: "full_node"
+  data_dir: "/tmp/vfn/data"
+  waypoint:
+    from_file: "/tmp/vfn/config/waypoint.txt"
+
+consensus:
+  safety_rules:
+    backend:
+      type: "on_disk_storage"
+      path: /tmp/vfn/data/secure_storage.json
+    initial_safety_rules_config:
+      from_file:
+        waypoint:
+          from_file: /tmp/vfn/config/waypoint.txt
+        identity_blob_path: /tmp/vfn/config/vfn-identity.yaml
+  enable_pipeline: true
+  max_sending_block_txns_after_filtering: 5000
+  max_sending_block_txns: 5000
+  max_receiving_block_txns: 5000
+  max_sending_block_bytes: 31457280 
+  max_receiving_block_bytes: 31457280 
+  quorum_store:
+    receiver_max_total_txns: 7000
+    sender_max_total_txns: 7000
+    receiver_max_batch_bytes: 1048736 
+    sender_max_batch_bytes: 1048736 
+    sender_max_total_bytes: 1073741824 
+    receiver_max_total_bytes: 1073741824 
+    memory_quota: 1073741824 # 1GB
+    db_quota: 1073741824 # 1GB
+    back_pressure:
+      dynamic_max_txn_per_s: 30000
+      backlog_txn_limit_count: 50000
+      backlog_per_validator_batch_limit_count: 2000
+
+full_node_networks:
+  - network_id:
+      private: "vfn"
+    listen_address: "/ip4/127.0.0.1/tcp/2044"
+    seeds:
+      4992d8fa579c7b7fa5de5b254ca160be28aa6f7aa72fb4a2b243e1d2f7d5a829:
+        addresses:
+        - "/ip4/127.0.0.1/tcp/2034/noise-ik/4992d8fa579c7b7fa5de5b254ca160be28aa6f7aa72fb4a2b243e1d2f7d5a829/handshake/0"
+        role: "Validator"
+
+storage:
+  dir: "/tmp/vfn/data"
+
+node_config_path: "/tmp/vfn/config/nodes_config.json"
+
+log_file_path: "/tmp/vfn/consensus_log"
+
+mempool:
+  capacity_per_user: 20000
+
+logger:
+  level: DEBUG
