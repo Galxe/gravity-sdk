@@ -1713,7 +1713,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             },
             None => {
                 ensure!(matches!(request, IncomingRpcRequest::BlockRetrieval(_))
-                            || matches!(request, IncomingRpcRequest::BatchRetrieval(_)));
+                            || matches!(request, IncomingRpcRequest::BatchRetrieval(_))
+                            || matches!(request, IncomingRpcRequest::SyncInfoRequest(_)));
             },
             _ => {},
         }
@@ -1762,38 +1763,13 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         }
     }
 
-    /// Request the sync info from from other peers.
-    async fn request_sync_info(&self) -> anyhow::Result<(Author, Box<SyncInfo>)> {
-        // pick a peer from validators
-        let mut other_validators: Vec<_> = self
-            .epoch_state()
-            .verifier
-            .get_ordered_account_addresses_iter()
-            .filter(|author| author != &self.author)
-            .collect();
-        // random select one peer
-        // TODO(nekomoto): more efficient way to select a peer
-        let peer = other_validators[rand::thread_rng().gen_range(0, other_validators.len())];
-        debug!("Requesting sync info from peer {}", peer);
-        let response_msg = self
-            .network_sender
-            .send_rpc(peer, ConsensusMsg::SyncInfoRequest, Duration::from_millis(500))
-            .await
-            .map_err(|e| anyhow!("{peer}: {e}"))?;
-        let response = match response_msg {
-            ConsensusMsg::SyncInfo(resp) => resp,
-            _ => return Err(anyhow!("Invalid response to request")),
-        };
-        Ok((peer, response))
-    }
-
     /// Advance the block sync progress for fullnode.
     async fn advance_block_sync(&self) {
         if self.is_validator {
             return
         }
 
-        let (peer_id, sync_info) = match self.request_sync_info().await {
+        let (peer_id, sync_info) = match self.network_sender.request_sync_info().await {
             Ok((peer_id, sync_info)) => {
                 debug!("Requested sync info from {peer_id}, response: {sync_info}");
                 (peer_id, sync_info)
