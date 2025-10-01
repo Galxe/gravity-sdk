@@ -6,22 +6,24 @@ use crate::{
     pending_votes::{PendingVotes, VoteReceptionResult},
     util::time_service::{SendTask, TimeService},
 };
-use gaptos::aptos_config::config::QcAggregatorType;
 use aptos_consensus_types::{
     common::Round, delayed_qc_msg::DelayedQcMsg, sync_info::SyncInfo,
     timeout_2chain::TwoChainTimeoutWithPartialSignatures, vote::Vote,
 };
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_logger as aptos_logger;
-use gaptos::aptos_logger::{prelude::*, Schema};
-use gaptos::aptos_types::{
-    ledger_info::LedgerInfoWithVerifiedSignatures, validator_verifier::ValidatorVerifier,
-};
 use futures::future::AbortHandle;
 use futures_channel::mpsc::UnboundedSender;
+use gaptos::{
+    aptos_config::config::QcAggregatorType,
+    aptos_consensus::counters,
+    aptos_crypto::HashValue,
+    aptos_logger,
+    aptos_logger::{prelude::*, Schema},
+    aptos_types::{
+        ledger_info::LedgerInfoWithVerifiedSignatures, validator_verifier::ValidatorVerifier,
+    },
+};
 use serde::Serialize;
 use std::{fmt, sync::Arc, time::Duration};
-use gaptos::aptos_consensus::counters as counters;
 
 /// A reason for starting a new round: introduced for monitoring / debug purposes.
 #[derive(Serialize, Debug, PartialEq, Eq)]
@@ -101,10 +103,7 @@ impl ExponentialTimeInterval {
     }
 
     pub fn new(base: Duration, exponent_base: f64, max_exponent: usize) -> Self {
-        assert!(
-            max_exponent < 32,
-            "max_exponent for RoundStateTimeInterval should be <32"
-        );
+        assert!(max_exponent < 32, "max_exponent for RoundStateTimeInterval should be <32");
         assert!(
             exponent_base.powf(max_exponent as f64).ceil() < f64::from(std::u32::MAX),
             "Maximum interval multiplier should be less then u32::Max"
@@ -267,11 +266,14 @@ impl RoundState {
             "Processing certificates With SyncInfo",
         );
         let new_round = sync_info.highest_round() + 1;
-        if self.is_validator && new_round > self.current_round {
-            let (prev_round_votes, prev_round_timeout_votes) = self.pending_votes.drain_votes();
-
-            // Start a new round.
+        if new_round > self.current_round {
             self.current_round = new_round;
+            if !self.is_validator {
+                return None;
+            }
+
+            let (prev_round_votes, prev_round_timeout_votes) = self.pending_votes.drain_votes();
+            // Start a new round.
             self.pending_votes = PendingVotes::new(
                 self.time_service.clone(),
                 self.delayed_qc_tx.clone(),
@@ -326,8 +328,7 @@ impl RoundState {
         msg: DelayedQcMsg,
     ) -> VoteReceptionResult {
         let DelayedQcMsg { vote } = msg;
-        self.pending_votes
-            .process_delayed_qc(validator_verifier, vote)
+        self.pending_votes.process_delayed_qc(validator_verifier, vote)
     }
 
     pub fn vote_sent(&self) -> Option<Vote> {
@@ -339,11 +340,7 @@ impl RoundState {
         debug_assert!(self.is_validator, "setup_timeout: not validator");
         let timeout_sender = self.timeout_sender.clone();
         let timeout = self.setup_deadline(multiplier * 2);
-        trace!(
-            "Scheduling timeout of {} ms for round {}",
-            timeout.as_millis(),
-            self.current_round
-        );
+        trace!("Scheduling timeout of {} ms for round {}", timeout.as_millis(), self.current_round);
         let abort_handle = self
             .time_service
             .run_after(timeout, SendTask::make(timeout_sender, self.current_round));
@@ -366,10 +363,8 @@ impl RoundState {
                 self.current_round - self.highest_ordered_round - 3
             }
         } as usize;
-        let timeout = self
-            .time_interval
-            .get_round_duration(round_index_after_ordered_round)
-            * multiplier;
+        let timeout =
+            self.time_interval.get_round_duration(round_index_after_ordered_round) * multiplier;
         let now = self.time_service.get_current_timestamp();
         debug!(
             round = self.current_round,
@@ -377,10 +372,7 @@ impl RoundState {
             now.checked_sub(self.current_round_deadline)
                 .map_or("0 ms".to_string(), |v| format!("{:?}", v))
         );
-        debug!(
-            round = self.current_round,
-            "Set round deadline to {:?} from now", timeout
-        );
+        debug!(round = self.current_round, "Set round deadline to {:?} from now", timeout);
         self.current_round_deadline = now + timeout;
         timeout
     }
