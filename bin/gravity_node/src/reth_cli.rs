@@ -181,7 +181,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             proposer: block
                 .block_meta
                 .proposer
-                .map(|x| x.bytes()),
+                .map(|x| x.bytes().into()),
             jwk_extra_data: block.jwks_extra_data,
         });
         Ok(())

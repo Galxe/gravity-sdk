@@ -5,18 +5,15 @@ use api::{
     config_storage::ConfigStorageWrapper,
     consensus_api::{ConsensusEngine, ConsensusEngineArgs},
 };
-use async_trait::async_trait;
 use consensus::mock_consensus::mock::MockConsensus;
-use gaptos::api_types::{
-    on_chain_config::jwks::JWKStruct, relayer::{PollResult, Relayer, GLOBAL_RELAYER}, ExecError
-};
+use gaptos::api_types::relayer::GLOBAL_RELAYER;
 use gravity_storage::block_view_storage::BlockViewStorage;
 use greth::{
     gravity_storage,
     reth::{self, chainspec::EthereumChainSpecParser},
     reth_cli::chainspec::ChainSpecParser,
     reth_cli_util, reth_db, reth_node_api, reth_node_builder, reth_node_ethereum,
-    reth_pipe_exec_layer_ext_v2::{self, ExecutionArgs, ObserveState, ObservedValue, RelayerManager},
+    reth_pipe_exec_layer_ext_v2::{self, ExecutionArgs},
     reth_provider,
     reth_transaction_pool::TransactionPool,
 };
@@ -34,11 +31,12 @@ use tokio::sync::{mpsc, oneshot};
 use tracing::info;
 mod cli;
 mod consensus;
+mod mempool;
 mod metrics;
+pub mod relayer;
 mod reth_cli;
 mod reth_coordinator;
-mod mempool;
-use crate::{cli::Cli, mempool::Mempool};
+use crate::{cli::Cli, mempool::Mempool, relayer::RelayerWrapper};
 use std::{
     fs::File,
     sync::{Arc, Mutex},
@@ -149,45 +147,6 @@ fn run_reth(
 struct ProfilingState {
     guard: Option<ProfilerGuard<'static>>,
     profile_count: usize,
-}
-
-struct RelayerWrapper {
-    manager: RelayerManager,
-}
-
-impl RelayerWrapper {
-    pub fn new() -> Self {
-        let manager = RelayerManager::new();
-        Self { manager }
-    }
-}
-
-// TODO: Aptos must read the initial state of corresponding JWKs from the chain before startup
-// because the JWK observer defaults to directly getting the latest data via REST requests
-#[async_trait]
-impl Relayer for RelayerWrapper {
-    async fn add_uri(
-        &self,
-        uri: &str,
-        rpc_url: &str,
-    ) -> Result<(), ExecError> {
-        info!("add_uri: {:?}, {:?}", uri, rpc_url);
-        // TODO: Call GLOBAL EXECUTE here to get the last state of the corresponding URI to calculate which block number to start from
-        // TODO: Need to add a new interface in the contract to pass through
-        self.manager
-            .add_uri(uri, rpc_url)
-            .await
-            .map_err(|e| ExecError::Other(e.to_string()))
-    }
-
-    // TODO: All URIs starting with gravity:// are definitely UnsupportedJWK
-    async fn get_last_state(&self, uri: &str) -> Result<PollResult, ExecError> {
-        info!("get_last_state: {:?}", uri);
-        self.manager
-            .poll_uri(uri)
-            .await
-            .map_err(|e| ExecError::Other(e.to_string()))
-    }
 }
 
 fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
