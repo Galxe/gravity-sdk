@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::block_storage::tracing::{observe_block, BlockStage};
-use crate::consensusdb::ConsensusDB;
 use crate::counters::update_counters_for_compute_res;
 use crate::pipeline::pipeline_builder::PipelineBuilder;
 use crate::{
@@ -21,7 +20,6 @@ use crate::{
 };
 use anyhow::Result;
 use gaptos::api_types::account::{ExternalAccountAddress, ExternalChainId};
-use gaptos::api_types::events::contract_event::GravityEvent;
 use gaptos::api_types::u256_define::{BlockId, Random, TxnHash};
 use gaptos::api_types::{ExternalBlock, ExternalBlockMeta};
 use aptos_consensus_types::common::RejectedTransactionSummary;
@@ -36,9 +34,8 @@ use gaptos::aptos_infallible::RwLock;
 use gaptos::aptos_logger::prelude::*;
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 
-use gaptos::aptos_types::jwks;
 use gaptos::aptos_types::jwks::jwk::JWK;
-use gaptos::aptos_types::on_chain_config::ValidatorSet;
+use gaptos::aptos_types::jwks::{self, ProviderJWKs};
 use gaptos::aptos_types::transaction::SignedTransaction;
 use gaptos::aptos_types::validator_signer::ValidatorSigner;
 use gaptos::aptos_types::validator_txn::ValidatorTransaction;
@@ -221,6 +218,85 @@ impl ExecutionProxy {
             self.txn_notifier.clone(),
         )
     }
+
+    /// Process JWK transactions and extract extra data for execution
+    fn process_jwk_transactions(
+        &self,
+        validator_txns: Option<&[ValidatorTransaction]>,
+        block: &Block,
+    ) -> Vec<Vec<u8>> {
+        let mut jwks_extra_data = Vec::new();
+        
+        if let Some(validator_txns) = validator_txns {
+            jwks_extra_data = validator_txns
+                .iter()
+                .map(|txn| self.process_single_jwk_transaction(txn, block))
+                .collect();
+        }
+        
+        jwks_extra_data
+    }
+
+    /// Process a single JWK transaction and return the serialized data
+    fn process_single_jwk_transaction(
+        &self,
+        txn: &ValidatorTransaction,
+        block: &Block,
+    ) -> Vec<u8> {
+        match txn {
+            ValidatorTransaction::DKGResult(_) => {
+                todo!()
+            }
+            ValidatorTransaction::ObservedJWKUpdate(jwks::QuorumCertifiedUpdate {
+                update,
+                multi_sig,
+            }) => {
+                self.process_jwk_update(&update, block)
+            }
+        }
+    }
+
+    /// Process JWK update and convert to gaptos format
+    fn process_jwk_update(
+        &self,
+        update: &ProviderJWKs,
+        block: &Block,
+    ) -> Vec<u8> {
+        use gaptos::api_types::on_chain_config::jwks::{JWKStruct, ProviderJWKs};
+        // TODO(Gravity): Check the signature here instead of execution layer
+        info!(
+            "jwk txn block number {} , {:?}",
+            block.block_number().unwrap_or_else(|| panic!("No block number")),
+            update.version
+        );
+
+        let gaptos_provider_jwk = ProviderJWKs {
+            issuer: update.issuer.clone(),
+            version: update.version,
+            jwks: update
+                .jwks
+                .iter()
+                .map(|jwk| {
+                    let aptos_jwk = JWK::try_from(jwk).unwrap();
+                    match aptos_jwk {
+                        JWK::RSA(rsa_jwk) => JWKStruct {
+                            type_name: "0".to_string(),
+                            data: serde_json::to_vec(&rsa_jwk).unwrap(),
+                        },
+                        JWK::Unsupported(unsupported_jwk) => {
+                            JWKStruct {
+                                type_name: "1".to_string(),
+                                data: unsupported_jwk.payload,
+                            }
+                        }
+                    }
+                })
+                .collect(),
+        };
+
+        bcs::to_bytes(&gaptos_provider_jwk).unwrap()
+    }
+
 }
 
 #[async_trait::async_trait]
@@ -237,44 +313,8 @@ impl StateComputer for ExecutionProxy {
         assert!(block.block_number().is_some());
         let txns = self.get_block_txns(block).await;
         let validator_txns = block.validator_txns();
-        let mut jwks_extra_data = Vec::new();
-        if let Some(validator_txns) = validator_txns {
-            jwks_extra_data = validator_txns.iter().map(|txn| {
-                let jwk_txn = match txn {
-                    ValidatorTransaction::DKGResult(_) => {
-                        todo!()
-                    }
-                    ValidatorTransaction::ObservedJWKUpdate(jwks::QuorumCertifiedUpdate { update, multi_sig }) => {
-                        // TODO(Gravity): Check the signature here instread of execution layer
-                        let gaptos_provider_jwk = gaptos::api_types::on_chain_config::jwks::ProviderJWKs {
-                            issuer: update.issuer.clone(),
-                            version: update.version,
-                            jwks: update.jwks.iter().map(|jwk| {
-                                let aptos_jwk = JWK::try_from(jwk).unwrap();
-                                match aptos_jwk {
-                                    JWK::RSA(rsa_jwk) => {
-                                        gaptos::api_types::on_chain_config::jwks::JWKStruct {
-                                            type_name: "0".to_string(),
-                                            data: serde_json::to_vec(&rsa_jwk).unwrap(),
-                                        }
-                                    }
-                                    JWK::Unsupported(unsupported_jwk) => {
-                                        gaptos::api_types::on_chain_config::jwks::JWKStruct {
-                                            type_name: "1".to_string(),
-                                            data: unsupported_jwk.payload,
-                                        }
-                                    }
-                                }
-                            }).collect(),
-                        };
-                        let bcs_data = bcs::to_bytes(&gaptos_provider_jwk).unwrap();
-                        bcs_data
-                    }
-                };
-                jwk_txn
-            }).collect();
-        }
-        
+        let jwks_extra_data = self.process_jwk_transactions(validator_txns.map(|v| &**v), block);
+
         let meta_data = ExternalBlockMeta {
             block_id: BlockId(*block.id()),
             block_number: block.block_number().unwrap_or_else(|| panic!("No block number")),
