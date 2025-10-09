@@ -181,7 +181,7 @@ pub trait QuorumStoreSender: Send + Clone {
     async fn request_batch(
         &self,
         request: BatchRequest,
-        recipient: Author,
+        recipient: PeerNetworkId,
         timeout: Duration,
     ) -> anyhow::Result<BatchResponse>;
 
@@ -196,6 +196,8 @@ pub trait QuorumStoreSender: Send + Clone {
     async fn broadcast_proof_of_store_msg(&mut self, proof_of_stores: Vec<ProofOfStore>);
 
     async fn send_proof_of_store_msg_to_self(&mut self, proof_of_stores: Vec<ProofOfStore>);
+
+    fn get_available_peers(&self) -> anyhow::Result<Vec<PeerNetworkId>>;
 }
 
 /// Implements the actual networking support for all consensus messaging.
@@ -484,12 +486,17 @@ impl QuorumStoreSender for NetworkSender {
     async fn request_batch(
         &self,
         request: BatchRequest,
-        recipient: Author,
+        recipient: PeerNetworkId,
         timeout: Duration,
     ) -> anyhow::Result<BatchResponse> {
+        debug!("NetworkSender: request_batch, digest:{}", request.digest());
         let request_digest = request.digest();
         let msg = ConsensusMsg::BatchRequestMsg(Box::new(request));
-        let response = self.send_rpc(recipient, msg, timeout).await?;
+        let response = self
+            .consensus_network_client
+            .network_client
+            .send_to_peer_rpc(msg, timeout, recipient)
+            .await?;
         match response {
             // TODO: deprecated, remove after another release (likely v1.11)
             ConsensusMsg::BatchResponse(batch) => {
@@ -534,6 +541,13 @@ impl QuorumStoreSender for NetworkSender {
         fail_point!("consensus::send::proof_of_store", |_| ());
         let msg = ConsensusMsg::ProofOfStoreMsg(Box::new(ProofOfStoreMsg::new(proofs)));
         self.send(msg, vec![self.author]).await
+    }
+
+    fn get_available_peers(&self) -> anyhow::Result<Vec<PeerNetworkId>> {
+        self.consensus_network_client
+            .network_client
+            .get_available_peers()
+            .map_err(|e| anyhow!("failed to get available peers: {}", e))
     }
 }
 

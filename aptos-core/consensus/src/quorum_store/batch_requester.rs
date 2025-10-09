@@ -9,6 +9,7 @@ use crate::{
     },
 };
 use aptos_consensus_types::proof_of_store::BatchInfo;
+use gaptos::aptos_config::network_id::{NetworkId, PeerNetworkId};
 use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::*;
 use gaptos::aptos_logger::prelude::*;
@@ -43,6 +44,10 @@ impl BatchRequesterState {
     }
 
     fn next_request_peers(&mut self, num_peers: usize) -> Option<Vec<PeerId>> {
+        if self.signers.len() <= num_peers {
+            return Some(self.signers.clone());
+        }
+
         if self.num_retries == 0 {
             let mut rng = rand::thread_rng();
             // make sure nodes request from the different set of nodes
@@ -96,7 +101,7 @@ impl BatchRequesterState {
 
 pub(crate) struct BatchRequester<T> {
     epoch: u64,
-    my_peer_id: PeerId,
+    my_peer_id: PeerNetworkId,
     request_num_peers: usize,
     retry_limit: usize,
     retry_interval_ms: usize,
@@ -108,7 +113,7 @@ pub(crate) struct BatchRequester<T> {
 impl<T: QuorumStoreSender + Sync + 'static> BatchRequester<T> {
     pub(crate) fn new(
         epoch: u64,
-        my_peer_id: PeerId,
+        my_peer_id: PeerNetworkId,
         request_num_peers: usize,
         retry_limit: usize,
         retry_interval_ms: usize,
@@ -136,8 +141,33 @@ impl<T: QuorumStoreSender + Sync + 'static> BatchRequester<T> {
         ret_tx: oneshot::Sender<ExecutorResult<Vec<SignedTransaction>>>,
         mut subscriber_rx: oneshot::Receiver<PersistedValue>,
     ) -> Option<(BatchInfo, Vec<SignedTransaction>)> {
+        debug!("QS: request_batch, digest:{}", digest);
         let validator_verifier = self.validator_verifier.clone();
-        let mut request_state = BatchRequesterState::new(signers, ret_tx, self.retry_limit);
+        let available_peers = if self.my_peer_id.network_id() == NetworkId::Validator {
+            signers
+        } else {
+            self
+            .network_sender
+            .get_available_peers()
+            .map(|peers| {
+                peers
+                    .iter()
+                    .filter(|peer| peer.network_id() == self.my_peer_id.network_id())
+                    .map(|peer| peer.peer_id())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_else(|e| {
+                error!("Failed to get available peers: {:?}", e);
+                vec![]
+            })
+        };
+        if available_peers.is_empty() {
+            warn!("No available peers to request batch");
+            return None;
+        }
+        debug!("QS: available_peers: {:?}", available_peers);
+
+        let mut request_state = BatchRequesterState::new(available_peers, ret_tx, self.retry_limit);
         let network_sender = self.network_sender.clone();
         let request_num_peers = self.request_num_peers;
         let my_peer_id = self.my_peer_id;
@@ -147,15 +177,17 @@ impl<T: QuorumStoreSender + Sync + 'static> BatchRequester<T> {
 
         monitor!("batch_request", {
             let mut interval = time::interval(retry_interval);
+            debug!("QS: retry_interval: {:?}", retry_interval);
             let mut futures = FuturesUnordered::new();
-            let request = BatchRequest::new(my_peer_id, epoch, digest);
+            let request = BatchRequest::new(my_peer_id.peer_id(), epoch, digest);
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
                         // send batch request to a set of peers of size request_num_peers
                         if let Some(request_peers) = request_state.next_request_peers(request_num_peers) {
+                            debug!("QS: request_peers: {:?}", request_peers);
                             for peer in request_peers {
-                                futures.push(network_sender.request_batch(request.clone(), peer, rpc_timeout));
+                                futures.push(network_sender.request_batch(request.clone(), PeerNetworkId::new(my_peer_id.network_id(), peer), rpc_timeout));
                             }
                         } else if futures.is_empty() {
                             // end the loop when the futures are drained
