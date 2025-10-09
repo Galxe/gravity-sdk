@@ -17,7 +17,10 @@ use crate::{
     }, round_manager::VerifiedEvent
 };
 use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use gaptos::aptos_config::config::{QuorumStoreConfig, SecureBackend};
+use gaptos::aptos_config::{
+    config::{QuorumStoreConfig, SecureBackend},
+    network_id::PeerNetworkId,
+};
 use aptos_consensus_types::{
     common::Author, proof_of_store::ProofCache, request_response::GetPayloadCommand,
 };
@@ -112,7 +115,7 @@ impl DirectMempoolInnerBuilder {
 // TODO: push most things to config
 pub struct InnerBuilder {
     epoch: u64,
-    author: Author,
+    author: PeerNetworkId,
     num_validators: u64,
     config: QuorumStoreConfig,
     consensus_to_quorum_store_receiver: Receiver<GetPayloadCommand>,
@@ -148,7 +151,7 @@ impl InnerBuilder {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         epoch: u64,
-        author: Author,
+        author: PeerNetworkId,
         num_validators: u64,
         config: QuorumStoreConfig,
         consensus_to_quorum_store_receiver: Receiver<GetPayloadCommand>,
@@ -222,7 +225,7 @@ impl InnerBuilder {
     }
 
     fn create_batch_store(&mut self) -> Arc<BatchReaderImpl<NetworkSender>> {
-        let signer = ValidatorSigner::new(self.author, self.consensus_key.clone());
+        let signer = ValidatorSigner::new(self.author.peer_id(), self.consensus_key.clone());
 
         let latest_ledger_info_with_sigs = self
             .aptos_db
@@ -268,9 +271,10 @@ impl InnerBuilder {
             self.config.batch_generation_poll_interval_ms as u64,
         ));
 
+        // TODO(nekomoto): skip quorum_store_coordinator for fullnode
         let coordinator_rx = self.coordinator_rx.take().unwrap();
         let quorum_store_coordinator = QuorumStoreCoordinator::new(
-            self.author,
+            self.author.peer_id(),
             self.batch_generator_cmd_tx.clone(),
             self.remote_batch_coordinator_cmd_tx.clone(),
             self.proof_coordinator_cmd_tx.clone(),
@@ -282,11 +286,12 @@ impl InnerBuilder {
             quorum_store_coordinator.start(coordinator_rx)
         );
 
+        // TODO(nekomoto): skip batch_generator for fullnode
         let batch_generator_cmd_rx = self.batch_generator_cmd_rx.take().unwrap();
         let back_pressure_rx = self.back_pressure_rx.take().unwrap();
         let batch_generator = BatchGenerator::new(
             self.epoch,
-            self.author,
+            self.author.peer_id(),
             self.config.clone(),
             self.quorum_store_storage.clone(),
             self.batch_store.clone().unwrap(),
@@ -307,7 +312,7 @@ impl InnerBuilder {
             self.remote_batch_coordinator_cmd_rx.into_iter().enumerate()
         {
             let batch_coordinator = BatchCoordinator::new(
-                self.author,
+                self.author.peer_id(),
                 self.network_sender.clone(),
                 self.proof_manager_cmd_tx.clone(),
                 self.batch_generator_cmd_tx.clone(),
@@ -328,7 +333,7 @@ impl InnerBuilder {
         let proof_coordinator_cmd_rx = self.proof_coordinator_cmd_rx.take().unwrap();
         let proof_coordinator = ProofCoordinator::new(
             self.config.proof_timeout_ms,
-            self.author,
+            self.author.peer_id(),
             self.batch_reader.clone().unwrap(),
             self.batch_generator_cmd_tx.clone(),
             self.proof_cache,
@@ -345,7 +350,7 @@ impl InnerBuilder {
 
         let proof_manager_cmd_rx = self.proof_manager_cmd_rx.take().unwrap();
         let proof_manager = ProofManager::new(
-            self.author,
+            self.author.peer_id(),
             self.config.back_pressure.backlog_txn_limit_count,
             self.config
                 .back_pressure

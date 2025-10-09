@@ -719,7 +719,10 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             info!("Building QuorumStore");
             QuorumStoreBuilder::QuorumStore(InnerBuilder::new(
                 self.epoch(),
-                self.author,
+                PeerNetworkId::new(
+                    if self.is_validator { NetworkId::Validator } else { NetworkId::Vfn },
+                    self.author,
+                ),
                 epoch_state.verifier.len() as u64,
                 quorum_store_config,
                 consensus_to_quorum_store_rx,
