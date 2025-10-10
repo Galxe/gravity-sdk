@@ -1162,7 +1162,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         let randomness_config_move_struct: anyhow::Result<RandomnessConfigMoveStruct> =
             payload.get();
         let onchain_jwk_consensus_config: anyhow::Result<OnChainJWKConsensusConfig> = payload.get();
-        // let dkg_state = payload.get::<DKGState>();
+        let dkg_state = payload.get::<DKGState>();
 
         if let Err(error) = &onchain_consensus_config {
             error!("Failed to read on-chain consensus config {}", error);
@@ -1212,38 +1212,39 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             },
         };
 
-        // let rand_configs = self.try_get_rand_config_for_new_epoch(
-        //     loaded_consensus_key.clone(),
-        //     &epoch_state,
-        //     &onchain_randomness_config,
-        //     dkg_state,
-        //     &consensus_config,
-        // );
+        let rand_configs = self.try_get_rand_config_for_new_epoch(
+            loaded_consensus_key.clone(),
+            &epoch_state,
+            &onchain_randomness_config,
+            dkg_state,
+            &consensus_config,
+        );
 
-        // let (rand_config, fast_rand_config) = match rand_configs {
-        //     Ok((rand_config, fast_rand_config)) => (Some(rand_config), fast_rand_config),
-        //     Err(reason) => {
-        //         if onchain_randomness_config.randomness_enabled() {
-        //             if epoch_state.epoch > 2 {
-        //                 error!(
-        //                     "Failed to get randomness config for new epoch [{}]: {:?}",
-        //                     epoch_state.epoch, reason
-        //                 );
-        //             } else {
-        //                 warn!(
-        //                     "Failed to get randomness config for new epoch [{}]: {:?}",
-        //                     epoch_state.epoch, reason
-        //                 );
-        //             }
-        //         }
-        //         (None, None)
-        //     },
-        // };
+        let (rand_config, fast_rand_config) = match rand_configs {
+            Ok((rand_config, fast_rand_config)) => (Some(rand_config), fast_rand_config),
+            Err(reason) => {
+                if onchain_randomness_config.randomness_enabled() {
+                    if epoch_state.epoch > 2 {
+                        error!(
+                            "Failed to get randomness config for new epoch [{}]: {:?}",
+                            epoch_state.epoch, reason
+                        );
+                    } else {
+                        warn!(
+                            "Failed to get randomness config for new epoch [{}]: {:?}",
+                            epoch_state.epoch, reason
+                        );
+                    }
+                }
+                (None, None)
+            },
+        };
 
-        // info!(
-        //     "[Randomness] start_new_epoch: epoch={}, rand_config={:?}, fast_rand_config={:?}",
-        //     epoch_state.epoch, rand_config, fast_rand_config
-        // );
+        info!(
+            "[Randomness] start_new_epoch: epoch={}, rand_config={:?}, fast_rand_config={:?}",
+            epoch_state.epoch, rand_config, fast_rand_config
+        );
+
         info!("start to initialize shared component epoch {}", epoch_state.epoch);
 
         let (network_sender, payload_client, payload_manager) = self

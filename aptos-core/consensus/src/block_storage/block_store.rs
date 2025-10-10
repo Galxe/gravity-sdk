@@ -369,32 +369,10 @@ impl BlockStore {
                 };
                 
                 let validator_txns = p_block.block().validator_txns();
-                let mut jwks_extra_data = Vec::new();
-                if let Some(validator_txns) = validator_txns {
-                    jwks_extra_data = validator_txns.iter().map(|txn| {
-                        let jwk_txn = match txn {
-                            ValidatorTransaction::DKGResult(_) => {
-                                todo!()
-                            },
-                            ValidatorTransaction::ObservedJWKUpdate(jwks::QuorumCertifiedUpdate { update, multi_sig }) => {
-                                // TODO(Gravity): Check the signature here instread of execution layer
-                                let gaptos_provider_jwk = gaptos::api_types::on_chain_config::jwks::ProviderJWKs {
-                                    issuer: update.issuer.clone(),
-                                    version: update.version,
-                                    jwks: update.jwks.iter().map(|jwk| {
-                                        gaptos::api_types::on_chain_config::jwks::JWKStruct {
-                                            type_name: jwk.variant.type_name.clone(),
-                                            data: jwk.variant.data.clone(),
-                                        }
-                                    }).collect(),
-                                };
-                                let bcs_data = bcs::to_bytes(&gaptos_provider_jwk).unwrap();
-                                bcs_data
-                            }
-                        };
-                        jwk_txn
-                    }).collect();
-                }
+                let jwks_extra_data = crate::state_computer::process_jwk_transactions_util(
+                    validator_txns.map(|v| &**v), 
+                    p_block.block()
+                );
 
                 let block = ExternalBlock {
                     txns: verified_txns,
