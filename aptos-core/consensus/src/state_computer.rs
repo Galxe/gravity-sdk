@@ -244,8 +244,15 @@ impl ExecutionProxy {
         block: &Block,
     ) -> Vec<u8> {
         match txn {
-            ValidatorTransaction::DKGResult(_) => {
-                todo!()
+            ValidatorTransaction::DKGResult(transcript) => {
+                let transcript = gaptos::api_types::on_chain_config::dkg::DKGTranscript {
+                    metadata: gaptos::api_types::on_chain_config::dkg::DKGTranscriptMetadata {
+                        epoch: transcript.metadata.epoch,
+                        author: ExternalAccountAddress::new(transcript.metadata.author.into_bytes()),
+                    },
+                    transcript_bytes: transcript.transcript_bytes.clone(),
+                };
+                bcs::to_bytes(&transcript).unwrap()
             }
             ValidatorTransaction::ObservedJWKUpdate(jwks::QuorumCertifiedUpdate {
                 update,
@@ -296,7 +303,88 @@ impl ExecutionProxy {
 
         bcs::to_bytes(&gaptos_provider_jwk).unwrap()
     }
+}
 
+/// Public utility function to process JWK transactions
+pub fn process_jwk_transactions_util(
+    validator_txns: Option<&[ValidatorTransaction]>,
+    block: &Block,
+) -> Vec<Vec<u8>> {
+    let mut jwks_extra_data = Vec::new();
+    
+    if let Some(validator_txns) = validator_txns {
+        jwks_extra_data = validator_txns
+            .iter()
+            .map(|txn| process_single_jwk_transaction_util(txn, block))
+            .collect();
+    }
+    
+    jwks_extra_data
+}
+
+/// Public utility function to process a single JWK transaction
+pub fn process_single_jwk_transaction_util(
+    txn: &ValidatorTransaction,
+    block: &Block,
+) -> Vec<u8> {
+    match txn {
+        ValidatorTransaction::DKGResult(transcript) => {
+            let transcript = gaptos::api_types::on_chain_config::dkg::DKGTranscript {
+                metadata: gaptos::api_types::on_chain_config::dkg::DKGTranscriptMetadata {
+                    epoch: transcript.metadata.epoch,
+                    author: ExternalAccountAddress::new(transcript.metadata.author.into_bytes()),
+                },
+                transcript_bytes: transcript.transcript_bytes.clone(),
+            };
+            bcs::to_bytes(&transcript).unwrap()
+        }
+        ValidatorTransaction::ObservedJWKUpdate(jwks::QuorumCertifiedUpdate {
+            update,
+            multi_sig,
+        }) => {
+            process_jwk_update_util(&update, block)
+        }
+    }
+}
+
+/// Public utility function to process JWK update
+pub fn process_jwk_update_util(
+    update: &ProviderJWKs,
+    block: &Block,
+) -> Vec<u8> {
+    use gaptos::api_types::on_chain_config::jwks::{JWKStruct, ProviderJWKs};
+    // TODO(Gravity): Check the signature here instead of execution layer
+    info!(
+        "jwk txn block number {} , {:?}",
+        block.block_number().unwrap_or_else(|| panic!("No block number")),
+        update.version
+    );
+
+    let gaptos_provider_jwk = ProviderJWKs {
+        issuer: update.issuer.clone(),
+        version: update.version,
+        jwks: update
+            .jwks
+            .iter()
+            .map(|jwk| {
+                let aptos_jwk = JWK::try_from(jwk).unwrap();
+                match aptos_jwk {
+                    JWK::RSA(rsa_jwk) => JWKStruct {
+                        type_name: "0".to_string(),
+                        data: serde_json::to_vec(&rsa_jwk).unwrap(),
+                    },
+                    JWK::Unsupported(unsupported_jwk) => {
+                        JWKStruct {
+                            type_name: "1".to_string(),
+                            data: unsupported_jwk.payload,
+                        }
+                    }
+                }
+            })
+            .collect(),
+    };
+
+    bcs::to_bytes(&gaptos_provider_jwk).unwrap()
 }
 
 #[async_trait::async_trait]
@@ -314,7 +402,7 @@ impl StateComputer for ExecutionProxy {
         let txns = self.get_block_txns(block).await;
         let validator_txns = block.validator_txns();
         let jwks_extra_data = self.process_jwk_transactions(validator_txns.map(|v| &**v), block);
-
+        
         let meta_data = ExternalBlockMeta {
             block_id: BlockId(*block.id()),
             block_number: block.block_number().unwrap_or_else(|| panic!("No block number")),
