@@ -366,8 +366,15 @@ impl BlockStore {
                 if let Some(validator_txns) = validator_txns {
                     jwks_extra_data = validator_txns.iter().map(|txn| {
                         let jwk_txn = match txn {
-                            ValidatorTransaction::DKGResult(_) => {
-                                todo!()
+                            ValidatorTransaction::DKGResult(transcript) => {
+                                let transcript = gaptos::api_types::on_chain_config::dkg::DKGTranscript {
+                                    metadata: gaptos::api_types::on_chain_config::dkg::DKGTranscriptMetadata {
+                                        epoch: transcript.metadata.epoch,
+                                        author: ExternalAccountAddress::new(transcript.metadata.author.into_bytes()),
+                                    },
+                                    transcript_bytes: transcript.transcript_bytes.clone(),
+                                };
+                                bcs::to_bytes(&transcript).unwrap()
                             },
                             ValidatorTransaction::ObservedJWKUpdate(jwks::QuorumCertifiedUpdate { update, multi_sig }) => {
                                 // TODO(Gravity): Check the signature here instread of execution layer
