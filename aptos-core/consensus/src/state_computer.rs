@@ -245,6 +245,10 @@ impl StateComputer for ExecutionProxy {
                         todo!()
                     }
                     ValidatorTransaction::ObservedJWKUpdate(jwks::QuorumCertifiedUpdate { update, multi_sig }) => {
+                        info!(
+                            "ObservedJWKUpdate: {:?}, {:?}",
+                            update.issuer, update.version
+                        );
                         // TODO(Gravity): Check the signature here instread of execution layer
                         let gaptos_provider_jwk = gaptos::api_types::on_chain_config::jwks::ProviderJWKs {
                             issuer: update.issuer.clone(),
