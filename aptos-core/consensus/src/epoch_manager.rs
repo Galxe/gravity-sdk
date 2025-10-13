@@ -1879,7 +1879,10 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             // never awake
             tokio::time::interval(Duration::from_secs(u64::MAX))
         } else {
-            tokio::time::interval(Duration::from_secs(1))
+            tokio::time::interval(Duration::from_millis(
+                std::env::var("GRAVITY_ADVANCE_BLOCK_SYNC_INTERVAL_MS")
+                    .map_or(1000, |s| s.parse::<u64>().unwrap()),
+            ))
         };
         loop {
             tokio::select! {
