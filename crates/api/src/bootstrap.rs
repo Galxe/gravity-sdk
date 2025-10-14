@@ -34,7 +34,7 @@ use gaptos::{
     },
 };
 
-use aptos_mempool::{MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest};
+use aptos_mempool::{core_mempool::CoreMempool, shared_mempool::types::CoreMempoolTrait, MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest};
 use futures::channel::mpsc::{Receiver, Sender};
 use gaptos::aptos_consensus_notifications::ConsensusNotifier;
 use gaptos::aptos_crypto::{hash::GENESIS_BLOCK_ID, x25519, HashValue};
@@ -244,7 +244,8 @@ pub fn init_mempool(
     let mempool_reconfig_subscription = event_subscription_service
         .subscribe_to_reconfigurations()
         .expect("Mempool must subscribe to reconfigurations");
-    aptos_mempool::bootstrap(
+    let mempool = Box::new(CoreMempool::new(node_config, pool));
+    vec![aptos_mempool::bootstrap(
         &node_config,
         Arc::clone(&db.reader),
         mempool_interfaces.network_client,
@@ -254,8 +255,8 @@ pub fn init_mempool(
         mempool_listener,
         mempool_reconfig_subscription,
         peers_and_metadata,
-        pool,
-    )
+        mempool,
+    )]
 }
 
 pub fn init_peers_and_metadata(

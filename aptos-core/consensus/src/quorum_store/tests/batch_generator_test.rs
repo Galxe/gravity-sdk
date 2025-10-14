@@ -74,6 +74,11 @@ async fn queue_mempool_batch_response(
             .send(Ok(QuorumStoreResponse::GetBatchResponse(ret)))
             .unwrap();
         exclude_txns
+            .into_iter()
+            .map(|(txn, txn_in_progress)| (
+                TransactionSummary::new(txn.sender, txn.sequence_number, txn.hash), 
+                TransactionInProgress::new(txn_in_progress.gas_unit_price)))
+            .collect()
     } else {
         panic!("Unexpected variant")
     }

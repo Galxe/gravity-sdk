@@ -16,9 +16,8 @@ use crate::{
         MempoolSenderBucket, MultiBucketTimelineIndexIds, TimelineIndexIdentifier,
     },
 };
-use gaptos::api_types::{account::ExternalAccountAddress, u256_define::TxnHash, VerifiedTxnWithAccountSeqNum};
-use gaptos::aptos_config::config::NodeConfig;
 use aptos_consensus_types::common::{TransactionInProgress, TransactionSummary};
+use gaptos::aptos_config::config::NodeConfig;
 use gaptos::aptos_crypto::HashValue;
 use gaptos::aptos_logger::prelude::*;
 use gaptos::aptos_types::{
@@ -27,26 +26,131 @@ use gaptos::aptos_types::{
     transaction::{use_case::UseCaseKey, SignedTransaction},
     vm_status::DiscardedVMStatus,
 };
+use gaptos::{
+    api_types::{
+        account::ExternalAccountAddress, u256_define::TxnHash, VerifiedTxnWithAccountSeqNum,
+    },
+    aptos_mempool::shared_mempool::types::CoreMempoolTrait,
+};
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
-    sync::{atomic::Ordering},
+    sync::atomic::Ordering,
     time::{Duration, Instant, SystemTime},
 };
 
 use super::transaction::VerifiedTxn;
-use gaptos::aptos_mempool::counters as counters;
 use block_buffer_manager::TxPool;
+use gaptos::aptos_mempool::counters;
 
 pub struct Mempool {
     // Stores the metadata of all transactions in mempool (of all states).
     pool: Box<dyn TxPool>,
 }
 
+impl CoreMempoolTrait for Mempool {
+    fn timeline_range(
+        &self,
+        sender_bucket: MempoolSenderBucket,
+        start_end_pairs: HashMap<TimelineIndexIdentifier, (u64, u64)>,
+    ) -> Vec<(SignedTransaction, u64)> {
+        todo!()
+    }
+
+    fn timeline_range_of_message(
+        &self,
+        sender_start_end_pairs: HashMap<
+            MempoolSenderBucket,
+            HashMap<TimelineIndexIdentifier, (u64, u64)>,
+        >,
+    ) -> Vec<(SignedTransaction, u64)> {
+        todo!()
+    }
+
+    fn get_parking_lot_addresses(&self) -> Vec<(AccountAddress, u64)> {
+        todo!()
+    }
+
+    fn read_timeline(
+        &self,
+        sender_bucket: MempoolSenderBucket,
+        timeline_id: &MultiBucketTimelineIndexIds,
+        count: usize,
+        before: Option<Instant>,
+        priority_of_receiver: BroadcastPeerPriority,
+    ) -> (Vec<(SignedTransaction, u64)>, MultiBucketTimelineIndexIds) {
+        todo!()
+    }
+
+    fn gc(&mut self) {
+        todo!()
+    }
+
+    fn gen_snapshot(&self) -> gaptos::aptos_mempool::logging::TxnsLog {
+        todo!()
+    }
+
+    fn get_by_hash(&self, hash: HashValue) -> Option<SignedTransaction> {
+        todo!()
+    }
+
+    fn add_txn(
+        &mut self,
+        txn: SignedTransaction,
+        ranking_score: u64,
+        sequence_info: u64,
+        timeline_state: gaptos::aptos_mempool::core_mempool::TimelineState,
+        client_submitted: bool,
+        ready_time_at_sender: Option<u64>,
+        priority: Option<BroadcastPeerPriority>,
+    ) -> MempoolStatus {
+        todo!()
+    }
+
+    fn gc_by_expiration_time(&mut self, block_time: Duration) {
+        todo!()
+    }
+
+    fn get_batch(
+        &self,
+        max_txns: u64,
+        max_bytes: u64,
+        return_non_full: bool,
+        exclude_transactions: BTreeMap<
+            gaptos::aptos_consensus_types::common::TransactionSummary,
+            gaptos::aptos_consensus_types::common::TransactionInProgress,
+        >,
+    ) -> Vec<SignedTransaction> {
+        todo!()
+    }
+
+    fn reject_transaction(
+        &mut self,
+        sender: &AccountAddress,
+        sequence_number: u64,
+        hash: &HashValue,
+        reason: &DiscardedVMStatus,
+    ) {
+        todo!()
+    }
+
+    fn commit_transaction(&mut self, sender: &AccountAddress, sequence_number: u64) {
+        todo!()
+    }
+
+    fn log_commit_transaction(
+        &self,
+        sender: &AccountAddress,
+        sequence_number: u64,
+        tracked_use_case: Option<(UseCaseKey, &String)>,
+        block_timestamp: Duration,
+    ) {
+        todo!()
+    }
+}
+
 impl Mempool {
     pub fn new(_config: &NodeConfig, pool: Box<dyn TxPool>) -> Self {
-        Self {
-            pool,
-        }
+        Self { pool }
     }
 
     /// This function will be called once the transaction has been stored.
@@ -68,7 +172,6 @@ impl Mempool {
         _hash: &HashValue,
         _reason: &DiscardedVMStatus,
     ) {
-        
     }
 
     pub(crate) fn get_by_hash(&self, _hash: HashValue) -> Option<SignedTransaction> {
@@ -135,11 +238,11 @@ impl Mempool {
         exclude_transactions: BTreeMap<TransactionSummary, TransactionInProgress>,
     ) -> Vec<SignedTransaction> {
         let filter = Box::new(move |txn: (ExternalAccountAddress, u64, TxnHash)| {
-            let summary = TransactionSummary { 
-                sender: AccountAddress::new(txn.0.bytes()), 
-                sequence_number: txn.1, 
-                hash: HashValue::new(txn.2.0)
-             };
+            let summary = TransactionSummary {
+                sender: AccountAddress::new(txn.0.bytes()),
+                sequence_number: txn.1,
+                hash: HashValue::new(txn.2 .0),
+            };
             !exclude_transactions.contains_key(&summary)
         });
         let mut transactions = vec![];

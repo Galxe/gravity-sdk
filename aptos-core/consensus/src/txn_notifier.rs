@@ -65,6 +65,15 @@ impl TxnNotifier for MempoolNotifier {
             return Ok(());
         }
 
+        let rejected_txns = rejected_txns.iter().map(|txn| {
+            gaptos::aptos_consensus_types::common::RejectedTransactionSummary {
+                sender: txn.sender,
+                sequence_number: txn.sequence_number,
+                hash: txn.hash,
+                reason: txn.reason,
+            }
+        }).collect::<Vec<_>>();
+
         let (callback, callback_rcv) = oneshot::channel();
         let req = QuorumStoreRequest::RejectNotification(rejected_txns, callback);
 

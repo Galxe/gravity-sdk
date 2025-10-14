@@ -59,6 +59,15 @@
 #[cfg(any(test, feature = "fuzzing"))]
 mod tests;
 
+
+#[cfg(any(test, feature = "fuzzing"))]
+pub use tests::{mocks};
+
+pub mod core_mempool;
+mod logging;
+pub use gaptos::aptos_mempool::shared_mempool as shared_mempool;
+pub(crate) mod thread_pool;
+
 pub use shared_mempool::{
     bootstrap, network,
     network::MempoolSyncMsg,
@@ -67,11 +76,3 @@ pub use shared_mempool::{
         QuorumStoreResponse, SubmissionStatus,
     },
 };
-
-#[cfg(any(test, feature = "fuzzing"))]
-pub use tests::{fuzzing, mocks};
-
-pub mod core_mempool;
-mod logging;
-mod shared_mempool;
-pub(crate) mod thread_pool;
