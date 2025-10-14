@@ -67,7 +67,8 @@ impl CoreMempoolTrait for Mempool {
     }
 
     fn get_parking_lot_addresses(&self) -> Vec<(AccountAddress, u64)> {
-        todo!()
+        // don't need to implement
+        vec![]
     }
 
     fn read_timeline(
@@ -78,19 +79,19 @@ impl CoreMempoolTrait for Mempool {
         before: Option<Instant>,
         priority_of_receiver: BroadcastPeerPriority,
     ) -> (Vec<(SignedTransaction, u64)>, MultiBucketTimelineIndexIds) {
-        todo!()
+        panic!("don't need to implement")
     }
 
     fn gc(&mut self) {
-        todo!()
+        // don't need to implement
     }
 
     fn gen_snapshot(&self) -> gaptos::aptos_mempool::logging::TxnsLog {
-        todo!()
+        panic!("don't need to implement")
     }
 
     fn get_by_hash(&self, hash: HashValue) -> Option<SignedTransaction> {
-        todo!()
+        panic!("don't need to implement")
     }
 
     fn add_txn(
@@ -107,7 +108,7 @@ impl CoreMempoolTrait for Mempool {
     }
 
     fn gc_by_expiration_time(&mut self, block_time: Duration) {
-        todo!()
+        // don't need to implement
     }
 
     fn get_batch(
@@ -120,7 +121,7 @@ impl CoreMempoolTrait for Mempool {
             gaptos::aptos_consensus_types::common::TransactionInProgress,
         >,
     ) -> Vec<SignedTransaction> {
-        todo!()
+        self.get_batch_inner(max_txns, max_bytes, return_non_full, exclude_transactions)
     }
 
     fn reject_transaction(
@@ -130,11 +131,11 @@ impl CoreMempoolTrait for Mempool {
         hash: &HashValue,
         reason: &DiscardedVMStatus,
     ) {
-        todo!()
+        self.pool.
     }
 
     fn commit_transaction(&mut self, sender: &AccountAddress, sequence_number: u64) {
-        todo!()
+        // don't need to implement
     }
 
     fn log_commit_transaction(
@@ -144,7 +145,7 @@ impl CoreMempoolTrait for Mempool {
         tracked_use_case: Option<(UseCaseKey, &String)>,
         block_timestamp: Duration,
     ) {
-        todo!()
+        // don't need to implement
     }
 }
 
@@ -230,15 +231,17 @@ impl Mempool {
     /// `exclude_transactions` - transactions that were sent to Consensus but were not committed yet
     ///  mempool should filter out such transactions.
     #[allow(clippy::explicit_counter_loop)]
-    pub(crate) fn get_batch(
+    pub(crate) fn get_batch_inner(
         &self,
         max_txns: u64,
         max_bytes: u64,
         return_non_full: bool,
-        exclude_transactions: BTreeMap<TransactionSummary, TransactionInProgress>,
+        exclude_transactions: BTreeMap<
+        gaptos::aptos_consensus_types::common::TransactionSummary, 
+        gaptos::aptos_consensus_types::common::TransactionInProgress>,
     ) -> Vec<SignedTransaction> {
         let filter = Box::new(move |txn: (ExternalAccountAddress, u64, TxnHash)| {
-            let summary = TransactionSummary {
+            let summary = gaptos::aptos_consensus_types::common::TransactionSummary {
                 sender: AccountAddress::new(txn.0.bytes()),
                 sequence_number: txn.1,
                 hash: HashValue::new(txn.2 .0),
