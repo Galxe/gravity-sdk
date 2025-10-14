@@ -17,12 +17,10 @@ use crate::{
         proposer_election::ProposerElection,
         rotating_proposer_election::{choose_leader, RotatingProposer},
         round_proposer_election::RoundProposer,
-        round_state::{ExponentialTimeInterval, RoundState},
+        round_state::{ExponentialTimeInterval, RoundState}, unequivocal_proposer_election::UnequivocalProposerElection,
     }, logging::{LogEvent, LogSchema}, metrics_safety_rules::MetricsSafetyRules, monitor,
     network::{
-        IncomingBatchRetrievalRequest, IncomingBlockRetrievalRequest, IncomingDAGRequest,
-        IncomingRandGenRequest, IncomingRpcRequest, IncomingSyncInfoRequest, NetworkReceivers,
-        NetworkSender,
+        self, IncomingBatchRetrievalRequest, IncomingBlockRetrievalRequest, IncomingDAGRequest, IncomingRandGenRequest, IncomingRpcRequest, IncomingSyncInfoRequest, NetworkReceivers, NetworkSender
     },
     network_interface::{ConsensusMsg, ConsensusNetworkClient}, payload_client::{
         mixed::MixedPayloadClient, user::quorum_store_client::QuorumStoreClient, PayloadClient,
@@ -34,7 +32,6 @@ use crate::{
         storage::interface::RandStorage,
         types::{AugmentedData, RandConfig},
     }, recovery_manager::RecoveryManager, round_manager::{self, RoundManager, UnverifiedEvent, VerifiedEvent}, util::time_service::TimeService,
-    liveness::unequivocal_proposer_election::UnequivocalProposerElection,
 };
 use anyhow::{anyhow, bail, ensure, Context};
 use gaptos::aptos_bounded_executor::BoundedExecutor;
@@ -191,8 +188,14 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         let author = if is_validator {
             node_config.validator_network.as_ref().unwrap().peer_id()
         } else {
-            // dummy address for full node
-            AccountAddress::ONE
+            let mut vfn_peer_id = None;
+            for network in node_config.full_node_networks.iter() {
+                if network.network_id == NetworkId::Vfn {
+                    vfn_peer_id = Some(network.peer_id());
+                    break;
+                }
+            }
+            vfn_peer_id.expect("VFN must have a VFN network")
         };
         let config = node_config.consensus.clone();
         let execution_config = node_config.execution.clone();
