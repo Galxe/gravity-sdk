@@ -35,6 +35,7 @@ alloy-serde = { version = "=1.0.24" }
 alloy-tx-macros = { version = "=1.0.24" }
 alloy-transport-http = "=1.0.24"
 alloy-rpc-types-eth = "=1.0.24"
+serde = "=1.0.219"
 async-trait.workspace = true
 api.workspace = true
 gaptos.workspace = true
