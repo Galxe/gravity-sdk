@@ -53,7 +53,9 @@ impl CoreMempoolTrait for Mempool {
         sender_bucket: MempoolSenderBucket,
         start_end_pairs: HashMap<TimelineIndexIdentifier, (u64, u64)>,
     ) -> Vec<(SignedTransaction, u64)> {
-        todo!()
+        self.pool.get_broadcast_txns(None)
+            .map(|txn| (VerifiedTxn::from(txn).into(), 0))
+            .collect()
     }
 
     fn timeline_range_of_message(
@@ -63,7 +65,9 @@ impl CoreMempoolTrait for Mempool {
             HashMap<TimelineIndexIdentifier, (u64, u64)>,
         >,
     ) -> Vec<(SignedTransaction, u64)> {
-        todo!()
+        self.pool.get_broadcast_txns(None)
+            .map(|txn| (VerifiedTxn::from(txn).into(), 0))
+            .collect()
     }
 
     fn get_parking_lot_addresses(&self) -> Vec<(AccountAddress, u64)> {
@@ -104,7 +108,8 @@ impl CoreMempoolTrait for Mempool {
         ready_time_at_sender: Option<u64>,
         priority: Option<BroadcastPeerPriority>,
     ) -> MempoolStatus {
-        todo!()
+        // TODO: implement
+        MempoolStatus::new(MempoolStatusCode::Accepted)
     }
 
     fn gc_by_expiration_time(&mut self, block_time: Duration) {
@@ -131,7 +136,7 @@ impl CoreMempoolTrait for Mempool {
         hash: &HashValue,
         reason: &DiscardedVMStatus,
     ) {
-        self.pool.
+        // TODO: implement
     }
 
     fn commit_transaction(&mut self, sender: &AccountAddress, sequence_number: u64) {
