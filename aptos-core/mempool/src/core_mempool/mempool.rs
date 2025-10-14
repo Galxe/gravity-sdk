@@ -34,7 +34,7 @@ use gaptos::{
 };
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
-    sync::{atomic::Ordering, Mutex},
+    sync::{atomic::Ordering, Arc, Mutex},
     time::{Duration, Instant, SystemTime},
 };
 
@@ -42,12 +42,39 @@ use super::transaction::VerifiedTxn;
 use block_buffer_manager::TxPool;
 use gaptos::aptos_mempool::counters;
 
+pub struct TxnCache {
+    old_cache: HashSet<TxnHash>,
+    cache: HashSet<TxnHash>,
+    size: usize
+}
+
+impl TxnCache {
+    fn new(size: usize) -> Self {
+        Self {
+            old_cache: HashSet::new(),
+            cache: HashSet::new(),
+            size,
+        }
+    }
+
+    fn insert(&mut self, txn_hash: TxnHash) {
+        self.cache.insert(txn_hash);
+        if self.cache.len() > self.size {
+            self.old_cache = self.cache.clone();
+            self.cache.clear();
+        }
+    }
+
+    fn is_contains(&self, txn_hash: &TxnHash) -> bool {
+        self.cache.contains(txn_hash)
+    }
+
+}
+
 pub struct Mempool {
     // Stores the metadata of all transactions in mempool (of all states).
     pool: Box<dyn TxPool>,
-    broacasted_txns: Mutex<HashSet<TxnHash>>,
-    old_broacasted_txns: Mutex<HashSet<TxnHash>>,
-    limit_of_broacasted_txns: usize,
+    txn_cache: Arc<Mutex<TxnCache>>,
 }
 
 #[async_trait::async_trait]
@@ -57,26 +84,19 @@ impl CoreMempoolTrait for Mempool {
         sender_bucket: MempoolSenderBucket,
         start_end_pairs: HashMap<TimelineIndexIdentifier, (u64, u64)>,
     ) -> Vec<(SignedTransaction, u64)> {
-        let mut visited_broacasted_txns = self.broacasted_txns.lock().unwrap();
-        let mut old_visited_broacasted_txns = self.old_broacasted_txns.lock().unwrap();
-        let mut visited = visited_broacasted_txns.clone();
-        visited.extend(old_visited_broacasted_txns.clone());
+        let visited = self.txn_cache.clone();
         let filter = Box::new(move |txn: (ExternalAccountAddress, u64, TxnHash)| {
-            !visited.contains(&txn.2)
+            !visited.lock().unwrap().is_contains(&txn.2)
         });
         let iter = self.pool.get_broadcast_txns(Some(filter));
         let mut broacasted_txns = vec![];
+        let mut visited_cache = self.txn_cache.lock().unwrap();
         for txn in iter {   
-            visited_broacasted_txns.insert(TxnHash::from_bytes(txn.committed_hash().as_slice()));
+            visited_cache.insert(TxnHash::from_bytes(txn.committed_hash().as_slice()));
             broacasted_txns.push((
                 VerifiedTxn::from(txn).into(),
                 0,
             ));
-        }
-        if visited_broacasted_txns.len() > self.limit_of_broacasted_txns {
-            old_visited_broacasted_txns.clear();
-            old_visited_broacasted_txns.extend(visited_broacasted_txns.clone());
-            visited_broacasted_txns.clear();
         }
         broacasted_txns
     }
@@ -88,26 +108,19 @@ impl CoreMempoolTrait for Mempool {
             HashMap<TimelineIndexIdentifier, (u64, u64)>,
         >,
     ) -> Vec<(SignedTransaction, u64)> {
-        let mut visited_broacasted_txns = self.broacasted_txns.lock().unwrap();
-        let mut old_visited_broacasted_txns = self.old_broacasted_txns.lock().unwrap();
-        let mut visited = visited_broacasted_txns.clone();
-        visited.extend(old_visited_broacasted_txns.clone());
+        let visited = self.txn_cache.clone();
         let filter = Box::new(move |txn: (ExternalAccountAddress, u64, TxnHash)| {
-            !visited.contains(&txn.2)
+            !visited.lock().unwrap().is_contains(&txn.2)
         });
         let iter = self.pool.get_broadcast_txns(Some(filter));
         let mut broacasted_txns = vec![];
+        let mut visited_cache = self.txn_cache.lock().unwrap();
         for txn in iter {   
-            visited_broacasted_txns.insert(TxnHash::from_bytes(txn.committed_hash().as_slice()));
+            visited_cache.insert(TxnHash::from_bytes(txn.committed_hash().as_slice()));
             broacasted_txns.push((
                 VerifiedTxn::from(txn).into(),
                 0,
             ));
-        }
-        if visited_broacasted_txns.len() > self.limit_of_broacasted_txns {
-            old_visited_broacasted_txns.clear();
-            old_visited_broacasted_txns.extend(visited_broacasted_txns.clone());
-            visited_broacasted_txns.clear();
         }
         broacasted_txns
     }
@@ -207,9 +220,7 @@ impl Mempool {
     pub fn new(_config: &NodeConfig, pool: Box<dyn TxPool>) -> Self {
         Self {
             pool,
-            broacasted_txns: Mutex::new(HashSet::new()),
-            old_broacasted_txns: Mutex::new(HashSet::new()),
-            limit_of_broacasted_txns: 10000,
+            txn_cache: Arc::new(Mutex::new(TxnCache::new(100000))),
         }
     }
 
