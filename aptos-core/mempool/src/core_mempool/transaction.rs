@@ -152,6 +152,23 @@ impl From<VerifiedTxn> for gaptos::api_types::VerifiedTxn {
     }
 }
 
+impl From<SignedTransaction> for VerifiedTxn {
+    fn from(value: SignedTransaction) -> Self {
+        let committed_hash = value.committed_hash();
+        let bytes = match value.payload() {
+            TransactionPayload::GTxnBytes(bytes) => bytes.clone(),
+            _ => panic!("Unexpected TransactionPayload type"),
+        };
+        VerifiedTxn {
+            bytes,
+            sender: AccountAddress::new(value.sender().into_bytes()),
+            sequence_number: value.sequence_number(),
+            chain_id: value.chain_id(),
+            committed_hash,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct MempoolTransaction {
     verified_txn: SignedTransaction,

@@ -117,22 +117,21 @@ impl TxPool for Mempool {
         Box::new(iter.into_iter())
     }
 
-    async fn add_external_txns(&self, txns: Vec<VerifiedTxn>) {
-        let mut eth_txns = Vec::with_capacity(txns.len());
-        for txn in txns {
-            let txn = TransactionSigned::decode_2718(&mut txn.bytes.as_ref());
-            match txn {
-                Ok(txn) => {
-                    let signer = txn.recover_signer().unwrap();
-                    let len = txn.encode_2718_len();
-                    let recovered = Recovered::new_unchecked(txn, signer);
-                    let pool_txn = EthPooledTransaction::new(recovered, len);
-                    eth_txns.push(pool_txn);
-                }
-                Err(e) => tracing::error!("Failed to decode transaction: {}", e),
+    async fn add_external_txn(&self, txn: VerifiedTxn) -> bool {
+        let txn = TransactionSigned::decode_2718(&mut txn.bytes.as_ref());
+        match txn {
+            Ok(txn) => {
+                let signer = txn.recover_signer().unwrap();
+                let len = txn.encode_2718_len();
+                let recovered = Recovered::new_unchecked(txn, signer);
+                let pool_txn = EthPooledTransaction::new(recovered, len);
+                self.pool.add_external_transaction(pool_txn).await.is_ok()
+            }
+            Err(e) => {
+                tracing::error!("Failed to decode transaction: {}", e);
+                false
             }
         }
-        self.pool.add_external_transactions(eth_txns).await;
     }
 
     async fn remove_txns(&self, txns: Vec<VerifiedTxn>) {

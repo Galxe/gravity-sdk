@@ -34,7 +34,7 @@ use gaptos::{
 };
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
-    sync::atomic::Ordering,
+    sync::{atomic::Ordering, Mutex},
     time::{Duration, Instant, SystemTime},
 };
 
@@ -45,17 +45,40 @@ use gaptos::aptos_mempool::counters;
 pub struct Mempool {
     // Stores the metadata of all transactions in mempool (of all states).
     pool: Box<dyn TxPool>,
+    broacasted_txns: Mutex<HashSet<TxnHash>>,
+    old_broacasted_txns: Mutex<HashSet<TxnHash>>,
+    limit_of_broacasted_txns: usize,
 }
 
+#[async_trait::async_trait]
 impl CoreMempoolTrait for Mempool {
     fn timeline_range(
         &self,
         sender_bucket: MempoolSenderBucket,
         start_end_pairs: HashMap<TimelineIndexIdentifier, (u64, u64)>,
     ) -> Vec<(SignedTransaction, u64)> {
-        self.pool.get_broadcast_txns(None)
-            .map(|txn| (VerifiedTxn::from(txn).into(), 0))
-            .collect()
+        let mut visited_broacasted_txns = self.broacasted_txns.lock().unwrap();
+        let mut old_visited_broacasted_txns = self.old_broacasted_txns.lock().unwrap();
+        let mut visited = visited_broacasted_txns.clone();
+        visited.extend(old_visited_broacasted_txns.clone());
+        let filter = Box::new(move |txn: (ExternalAccountAddress, u64, TxnHash)| {
+            !visited.contains(&txn.2)
+        });
+        let iter = self.pool.get_broadcast_txns(Some(filter));
+        let mut broacasted_txns = vec![];
+        for txn in iter {   
+            visited_broacasted_txns.insert(TxnHash::from_bytes(txn.committed_hash().as_slice()));
+            broacasted_txns.push((
+                VerifiedTxn::from(txn).into(),
+                0,
+            ));
+        }
+        if visited_broacasted_txns.len() > self.limit_of_broacasted_txns {
+            old_visited_broacasted_txns.clear();
+            old_visited_broacasted_txns.extend(visited_broacasted_txns.clone());
+            visited_broacasted_txns.clear();
+        }
+        broacasted_txns
     }
 
     fn timeline_range_of_message(
@@ -65,9 +88,28 @@ impl CoreMempoolTrait for Mempool {
             HashMap<TimelineIndexIdentifier, (u64, u64)>,
         >,
     ) -> Vec<(SignedTransaction, u64)> {
-        self.pool.get_broadcast_txns(None)
-            .map(|txn| (VerifiedTxn::from(txn).into(), 0))
-            .collect()
+        let mut visited_broacasted_txns = self.broacasted_txns.lock().unwrap();
+        let mut old_visited_broacasted_txns = self.old_broacasted_txns.lock().unwrap();
+        let mut visited = visited_broacasted_txns.clone();
+        visited.extend(old_visited_broacasted_txns.clone());
+        let filter = Box::new(move |txn: (ExternalAccountAddress, u64, TxnHash)| {
+            !visited.contains(&txn.2)
+        });
+        let iter = self.pool.get_broadcast_txns(Some(filter));
+        let mut broacasted_txns = vec![];
+        for txn in iter {   
+            visited_broacasted_txns.insert(TxnHash::from_bytes(txn.committed_hash().as_slice()));
+            broacasted_txns.push((
+                VerifiedTxn::from(txn).into(),
+                0,
+            ));
+        }
+        if visited_broacasted_txns.len() > self.limit_of_broacasted_txns {
+            old_visited_broacasted_txns.clear();
+            old_visited_broacasted_txns.extend(visited_broacasted_txns.clone());
+            visited_broacasted_txns.clear();
+        }
+        broacasted_txns
     }
 
     fn get_parking_lot_addresses(&self) -> Vec<(AccountAddress, u64)> {
@@ -98,7 +140,7 @@ impl CoreMempoolTrait for Mempool {
         panic!("don't need to implement")
     }
 
-    fn add_txn(
+    async fn add_txn(
         &mut self,
         txn: SignedTransaction,
         ranking_score: u64,
@@ -108,8 +150,15 @@ impl CoreMempoolTrait for Mempool {
         ready_time_at_sender: Option<u64>,
         priority: Option<BroadcastPeerPriority>,
     ) -> MempoolStatus {
-        // TODO: implement
-        MempoolStatus::new(MempoolStatusCode::Accepted)
+        let verfited_txn = crate::core_mempool::transaction::VerifiedTxn::from(txn);
+        let res = self.pool.add_external_txn(
+            verfited_txn.into(),
+        ).await;
+        if res {
+            MempoolStatus::new(MempoolStatusCode::Accepted)
+        } else {
+            MempoolStatus::new(MempoolStatusCode::UnknownStatus)
+        }
     }
 
     fn gc_by_expiration_time(&mut self, block_time: Duration) {
@@ -129,14 +178,14 @@ impl CoreMempoolTrait for Mempool {
         self.get_batch_inner(max_txns, max_bytes, return_non_full, exclude_transactions)
     }
 
-    fn reject_transaction(
+    async fn reject_transaction(
         &mut self,
         sender: &AccountAddress,
         sequence_number: u64,
         hash: &HashValue,
         reason: &DiscardedVMStatus,
     ) {
-        // TODO: implement
+        // don't need to implement
     }
 
     fn commit_transaction(&mut self, sender: &AccountAddress, sequence_number: u64) {
@@ -156,7 +205,12 @@ impl CoreMempoolTrait for Mempool {
 
 impl Mempool {
     pub fn new(_config: &NodeConfig, pool: Box<dyn TxPool>) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            broacasted_txns: Mutex::new(HashSet::new()),
+            old_broacasted_txns: Mutex::new(HashSet::new()),
+            limit_of_broacasted_txns: 10000,
+        }
     }
 
     /// This function will be called once the transaction has been stored.
@@ -242,8 +296,9 @@ impl Mempool {
         max_bytes: u64,
         return_non_full: bool,
         exclude_transactions: BTreeMap<
-        gaptos::aptos_consensus_types::common::TransactionSummary, 
-        gaptos::aptos_consensus_types::common::TransactionInProgress>,
+            gaptos::aptos_consensus_types::common::TransactionSummary,
+            gaptos::aptos_consensus_types::common::TransactionInProgress,
+        >,
     ) -> Vec<SignedTransaction> {
         let filter = Box::new(move |txn: (ExternalAccountAddress, u64, TxnHash)| {
             let summary = gaptos::aptos_consensus_types::common::TransactionSummary {

@@ -34,6 +34,7 @@ tokio = { workspace = true }
 tokio-stream = { workspace = true }
 # api-types = { workspace = true }
 block-buffer-manager = { workspace = true }
+async-trait = { workspace = true }
 
 [dev-dependencies]
 gaptos = { workspace = true }
