@@ -51,6 +51,10 @@ node_config_path: "/tmp/vfn/config/nodes_config.json"
 
 log_file_path: "/tmp/vfn/consensus_log"
 
+inspection_service:
+  port: 10011
+  address: 0.0.0.0
+
 mempool:
   capacity_per_user: 20000
 
