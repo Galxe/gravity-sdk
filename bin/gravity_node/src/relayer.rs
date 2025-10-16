@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use async_trait::async_trait;
 use block_buffer_manager::get_block_buffer_manager;
@@ -10,8 +11,32 @@ use gaptos::api_types::{
     ExecError,
 };
 use greth::reth_pipe_exec_layer_ext_v2::RelayerManager;
+use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tracing::{info, warn};
+
+/// Relayer configuration that maps URIs to their RPC URLs
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RelayerConfig {
+    /// Map from URI to RPC URL
+    pub uri_mappings: HashMap<String, String>,
+}
+
+impl RelayerConfig {
+    /// Load configuration from a JSON file
+    pub fn from_file(path: &PathBuf) -> Result<Self, String> {
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| format!("Failed to read relayer config file: {}", e))?;
+        
+        serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse relayer config JSON: {}", e))
+    }
+    
+    /// Get RPC URL for a given URI
+    pub fn get_url(&self, uri: &str) -> Option<&str> {
+        self.uri_mappings.get(uri).map(|s| s.as_str())
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 struct ProviderState {
@@ -62,6 +87,7 @@ impl ProviderProgressTracker {
 pub struct RelayerWrapper {
     manager: RelayerManager,
     tracker: ProviderProgressTracker,
+    config: RelayerConfig,
 }
 
 // 初始化的时候之类也要拿到所有的provider和他对应的onchain number
@@ -74,11 +100,27 @@ pub struct RelayerWrapper {
 // 甚至要监听用的URL都应该从这里直接传递给jwk 的epoch manager 不然一点都不好写 就全部用全局变量就行
 
 impl RelayerWrapper {
-    pub fn new() -> Self {
+    pub fn new(config_path: Option<PathBuf>) -> Self {
+        let config = config_path
+            .and_then(|path| {
+                match RelayerConfig::from_file(&path) {
+                    Ok(cfg) => {
+                        info!("Loaded relayer config from {:?}", path);
+                        Some(cfg)
+                    }
+                    Err(e) => {
+                        warn!("Failed to load relayer config: {}. Using empty config.", e);
+                        None
+                    }
+                }
+            })
+            .unwrap_or_default();
+        
         let manager = RelayerManager::new();
         Self {
             manager,
             tracker: ProviderProgressTracker::new(),
+            config,
         }
     }
 
@@ -139,7 +181,19 @@ impl RelayerWrapper {
 #[async_trait]
 impl Relayer for RelayerWrapper {
     async fn add_uri(&self, uri: &str, rpc_url: &str) -> Result<(), ExecError> {
-        info!("Adding URI: {}, RPC URL: {}", uri, rpc_url);
+        // Use local config URL if available, otherwise fall back to the provided rpc_url
+        let actual_url = self.config.get_url(uri).unwrap_or(rpc_url);
+        
+        info!(
+            "Adding URI: {}, RPC URL: {} ({})",
+            uri,
+            actual_url,
+            if self.config.get_url(uri).is_some() {
+                "from local config"
+            } else {
+                "from parameter"
+            }
+        );
 
         let active_providers = Self::get_active_providers().await;
         if let Some(provider) = active_providers.iter().find(|p| p.name == uri) {
@@ -148,7 +202,7 @@ impl Relayer for RelayerWrapper {
         }
 
         self.manager
-            .add_uri(uri, rpc_url)
+            .add_uri(uri, actual_url)
             .await
             .map_err(|e| ExecError::Other(e.to_string()))
     }

@@ -27,7 +27,7 @@ use reth_coordinator::RethCoordinator;
 use reth_db::DatabaseEnv;
 use reth_node_builder::{NodeBuilder, WithLaunchContext};
 use reth_provider::{BlockHashReader, BlockNumReader, BlockReader};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::oneshot;
 use tracing::info;
 mod cli;
 mod consensus;
@@ -211,6 +211,7 @@ fn main() {
     let _profiling_state =
         if std::env::var("ENABLE_PPROF").is_ok() { Some(setup_pprof_profiler()) } else { None };
     let cli = Cli::parse();
+    let relayer_config_path = cli.gravity_node_config.relayer_config_path.clone();
     let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
     let (execution_args_tx, execution_args_rx) = oneshot::channel();
     let (consensus_args, latest_block_number) = run_reth(cli, execution_args_rx);
@@ -231,7 +232,8 @@ fn main() {
                 mock.run().await;
             });
         } else {
-            match GLOBAL_RELAYER.set(Arc::new(RelayerWrapper::new())) {
+            let relayer = Arc::new(RelayerWrapper::new(relayer_config_path));
+            match GLOBAL_RELAYER.set(relayer) {
                 Ok(_) => {}
                 Err(_) => {
                     panic!("failed to set global relayer");
