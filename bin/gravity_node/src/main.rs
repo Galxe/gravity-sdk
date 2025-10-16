@@ -8,7 +8,7 @@ use api::{
 use async_trait::async_trait;
 use consensus::mock_consensus::mock::MockConsensus;
 use gaptos::api_types::{
-    on_chain_config::jwks::JWKStruct, relayer::{Relayer, GLOBAL_RELAYER}, ExecError
+    on_chain_config::jwks::JWKStruct, relayer::{PollResult, Relayer, GLOBAL_RELAYER}, ExecError
 };
 use gravity_storage::block_view_storage::BlockViewStorage;
 use greth::{
@@ -181,7 +181,7 @@ impl Relayer for RelayerWrapper {
     }
 
     // TODO: All URIs starting with gravity:// are definitely UnsupportedJWK
-    async fn get_last_state(&self, uri: &str) -> Result<Vec<JWKStruct>, ExecError> {
+    async fn get_last_state(&self, uri: &str) -> Result<PollResult, ExecError> {
         info!("get_last_state: {:?}", uri);
         self.manager
             .poll_uri(uri)

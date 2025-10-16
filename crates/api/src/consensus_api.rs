@@ -138,7 +138,6 @@ impl ConsensusEngine {
 
         // Start the node inspection service
         start_node_inspection_service(&node_config, peers_and_metadata.clone());
-
         let (consensus_to_mempool_sender, consensus_to_mempool_receiver) = mpsc::channel(1);
         let (notification_sender, notification_receiver) = mpsc::channel(1);
 

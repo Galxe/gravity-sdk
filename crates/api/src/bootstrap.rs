@@ -269,6 +269,7 @@ pub fn init_peers_and_metadata(
 }
 
 pub async fn init_block_buffer_manager(consensus_db: &Arc<ConsensusDB>, latest_block_number: u64) {
+    info!("init_block_buffer_manager start");
     let start_block_number = if latest_block_number > RECENT_BLOCKS_RANGE {
         latest_block_number - RECENT_BLOCKS_RANGE
     } else {
