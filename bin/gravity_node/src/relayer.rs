@@ -27,11 +27,11 @@ impl RelayerConfig {
     pub fn from_file(path: &PathBuf) -> Result<Self, String> {
         let content = std::fs::read_to_string(path)
             .map_err(|e| format!("Failed to read relayer config file: {}", e))?;
-        
+
         serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse relayer config JSON: {}", e))
     }
-    
+
     /// Get RPC URL for a given URI
     pub fn get_url(&self, uri: &str) -> Option<&str> {
         self.uri_mappings.get(uri).map(|s| s.as_str())
@@ -40,9 +40,9 @@ impl RelayerConfig {
 
 #[derive(Debug, Clone, Default)]
 struct ProviderState {
-    /// 上次 fetch 的 block number
+    /// Last fetched block number
     fetched_block_number: u64,
-    /// 上次 poll 是否返回了数据
+    /// Whether the last poll returned data
     last_had_update: bool,
 }
 
@@ -52,9 +52,7 @@ struct ProviderProgressTracker {
 
 impl ProviderProgressTracker {
     fn new() -> Self {
-        Self {
-            states: Mutex::new(HashMap::new()),
-        }
+        Self { states: Mutex::new(HashMap::new()) }
     }
 
     async fn get_state(&self, name: &str) -> ProviderState {
@@ -66,21 +64,16 @@ impl ProviderProgressTracker {
         let mut guard = self.states.lock().await;
         guard.insert(
             name.to_string(),
-            ProviderState {
-                fetched_block_number: block_number,
-                last_had_update: had_update,
-            },
+            ProviderState { fetched_block_number: block_number, last_had_update: had_update },
         );
     }
 
     async fn init_block_number(&self, name: &str, block_number: u64) {
         let mut guard = self.states.lock().await;
-        guard
-            .entry(name.to_string())
-            .or_insert_with(|| ProviderState {
-                fetched_block_number: block_number,
-                last_had_update: false,
-            });
+        guard.entry(name.to_string()).or_insert_with(|| ProviderState {
+            fetched_block_number: block_number,
+            last_had_update: false,
+        });
     }
 }
 
@@ -90,38 +83,23 @@ pub struct RelayerWrapper {
     config: RelayerConfig,
 }
 
-// 初始化的时候之类也要拿到所有的provider和他对应的onchain number
-// 接下来在fetch的时候  需要记录block number. 如果没有推进到下一个block number 不应该有动静
-// 当然这里需要event里面记录上block number才能做到 我感觉是可以的
-// 比如初始化的时候block number从100开始. 现在一次fetch返回的是(logs, 150)
-// 那么下一次fetch的时候 要先活动active provider上的数据拿到最新的链上的block number. 如果还是没变那就不应该推进
-// 如果变了那可以从150开始 因为150是已经被get logs过的. 因为中间的event可能是140这个block发出来的.
-// 所以相当于是每次要记录上一次请求是从多少开始的，如果返回的logs是空，就把游标改成随着空logs返回的block number即可. 要把relayer实现在这才行
-// 甚至要监听用的URL都应该从这里直接传递给jwk 的epoch manager 不然一点都不好写 就全部用全局变量就行
-
 impl RelayerWrapper {
     pub fn new(config_path: Option<PathBuf>) -> Self {
         let config = config_path
-            .and_then(|path| {
-                match RelayerConfig::from_file(&path) {
-                    Ok(cfg) => {
-                        info!("Loaded relayer config from {:?}", path);
-                        Some(cfg)
-                    }
-                    Err(e) => {
-                        warn!("Failed to load relayer config: {}. Using empty config.", e);
-                        None
-                    }
+            .and_then(|path| match RelayerConfig::from_file(&path) {
+                Ok(cfg) => {
+                    info!("Loaded relayer config from {:?}", path);
+                    Some(cfg)
+                }
+                Err(e) => {
+                    warn!("Failed to load relayer config: {}. Using empty config.", e);
+                    None
                 }
             })
             .unwrap_or_default();
-        
+
         let manager = RelayerManager::new();
-        Self {
-            manager,
-            tracker: ProviderProgressTracker::new(),
-            config,
-        }
+        Self { manager, tracker: ProviderProgressTracker::new(), config }
     }
 
     async fn get_active_providers() -> Vec<OIDCProvider> {
@@ -131,7 +109,7 @@ impl RelayerWrapper {
             .unwrap()
             .fetch_config_bytes(OnChainConfig::JWKConsensusConfig, block_number)
             .unwrap();
-        
+
         let bytes: Bytes = config_bytes.try_into().unwrap();
         let jwk_config =
             bcs::from_bytes::<gaptos::api_types::on_chain_config::jwks::JWKConsensusConfig>(&bytes)
@@ -140,10 +118,7 @@ impl RelayerWrapper {
         jwk_config.oidc_providers
     }
 
-    fn should_block_poll(
-        state: &ProviderState,
-        onchain_block_number: u64,
-    ) -> bool {
+    fn should_block_poll(state: &ProviderState, onchain_block_number: u64) -> bool {
         state.last_had_update && state.fetched_block_number == onchain_block_number
     }
 
@@ -158,16 +133,11 @@ impl RelayerWrapper {
             uri, onchain_block_number, state.fetched_block_number, state.last_had_update
         );
 
-        let result = self
-            .manager
-            .poll_uri(uri)
-            .await
-            .map_err(|e| ExecError::Other(e.to_string()))?;
+        let result =
+            self.manager.poll_uri(uri).await.map_err(|e| ExecError::Other(e.to_string()))?;
 
         let has_update = result.updated;
-        self.tracker
-            .update_state(uri, result.max_block_number, has_update)
-            .await;
+        self.tracker.update_state(uri, result.max_block_number, has_update).await;
 
         info!(
             "Poll completed for uri: {} - block_number: {}, has_update: {}",
@@ -183,16 +153,12 @@ impl Relayer for RelayerWrapper {
     async fn add_uri(&self, uri: &str, rpc_url: &str) -> Result<(), ExecError> {
         // Use local config URL if available, otherwise fall back to the provided rpc_url
         let actual_url = self.config.get_url(uri).unwrap_or(rpc_url);
-        
+
         info!(
             "Adding URI: {}, RPC URL: {} ({})",
             uri,
             actual_url,
-            if self.config.get_url(uri).is_some() {
-                "from local config"
-            } else {
-                "from parameter"
-            }
+            if self.config.get_url(uri).is_some() { "from local config" } else { "from parameter" }
         );
 
         let active_providers = Self::get_active_providers().await;
@@ -201,22 +167,16 @@ impl Relayer for RelayerWrapper {
             self.tracker.init_block_number(&provider.name, block_number).await;
         }
 
-        self.manager
-            .add_uri(uri, actual_url)
-            .await
-            .map_err(|e| ExecError::Other(e.to_string()))
+        self.manager.add_uri(uri, actual_url).await.map_err(|e| ExecError::Other(e.to_string()))
     }
 
-    // TODO: All URIs starting with gravity:// are definitely UnsupportedJWK
+    // All URIs starting with gravity:// are definitely UnsupportedJWK
     async fn get_last_state(&self, uri: &str) -> Result<PollResult, ExecError> {
         let active_providers = Self::get_active_providers().await;
-        
-        let provider = active_providers
-            .iter()
-            .find(|p| p.name == uri)
-            .ok_or_else(|| {
-                ExecError::Other(format!("Provider {} not found in active providers", uri))
-            })?;
+
+        let provider = active_providers.iter().find(|p| p.name == uri).ok_or_else(|| {
+            ExecError::Other(format!("Provider {} not found in active providers", uri))
+        })?;
 
         let onchain_block_number = provider.onchain_block_number.unwrap_or(0);
         let state = self.tracker.get_state(uri).await;
@@ -237,7 +197,6 @@ impl Relayer for RelayerWrapper {
             )));
         }
 
-        // 执行 poll 并更新状态
         self.poll_and_update_state(uri, onchain_block_number, &state).await
     }
 }
