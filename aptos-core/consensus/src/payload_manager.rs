@@ -215,7 +215,6 @@ impl TPayloadManager for QuorumStorePayloadManager {
                 if proof_with_status.status.lock().is_some() {
                     return;
                 }
-                debug!("neko: prefetching data 1. block_timestamp: {}", timestamp);
                 let receivers = Self::request_transactions(
                     proof_with_status
                         .proofs
@@ -239,7 +238,6 @@ impl TPayloadManager for QuorumStorePayloadManager {
             if data_pointer.status.lock().is_some() {
                 return;
             }
-            debug!("neko: prefetching data 2. block_timestamp: {}", timestamp);
             let receivers = QuorumStorePayloadManager::request_transactions(
                 data_pointer
                     .batch_summary
@@ -585,7 +583,7 @@ async fn process_payload(
             let mut vec_ret = Vec::new();
             if !receivers.is_empty() {
                 debug!(
-                    "neko: waiting for data on {} receivers, block_round {}, block_timestamp {}",
+                    "QSE: waiting for data on {} receivers, block_round {}, block_timestamp {}",
                     receivers.len(),
                     block.round(),
                     block.timestamp_usecs(),
@@ -615,11 +613,9 @@ async fn process_payload(
                         return Err(DataNotFound(digest));
                     },
                     Ok(Ok(data)) => {
-                        debug!("neko: received data. digest: {:?}, round: {}, time: {}", digest, block.round(), start.elapsed().as_millis());
                         vec_ret.push(data);
                     },
                     Ok(Err(e)) => {
-                        debug!("neko: received data error. digest: {:?}, round: {}, time: {}", digest, block.round(), start.elapsed().as_millis());
                         let new_receivers = QuorumStorePayloadManager::request_transactions(
                             proof_with_data.proofs.iter().map(|proof| {
                                 (proof.info(), proof.shuffled_signers(ordered_authors))
@@ -636,7 +632,6 @@ async fn process_payload(
                     },
                 }
             }
-            debug!("neko: received data on {} receivers, block_round {}, time: {}", vec_ret.len(), block.round(), start.elapsed().as_millis());
             let ret: Vec<SignedTransaction> = vec_ret.into_iter().flatten().collect();
             // execution asks for the data twice, so data is cached here for the second time.
             proof_with_data

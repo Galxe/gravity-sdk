@@ -391,11 +391,9 @@ impl InnerBuilder {
             info!(epoch = epoch, "Batch retrieval task starts");
             while let Some(rpc_request) = batch_retrieval_rx.next().await {
                 counters::RECEIVED_BATCH_REQUEST_COUNT.inc();
-                debug!("neko: Received batch request digest: {:?}", rpc_request.req.digest());
                 let response = if let Ok(value) =
                     batch_store.get_batch_from_local(&rpc_request.req.digest())
                 {
-                    debug!("neko: get batch from local success. digest: {:?}", rpc_request.req.digest());
                     let batch: Batch = value.try_into().unwrap();
                     BatchResponse::Batch(batch)
                 } else {
