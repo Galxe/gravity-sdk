@@ -138,7 +138,9 @@ impl CoreMempoolTrait for Mempool {
         before: Option<Instant>,
         priority_of_receiver: BroadcastPeerPriority,
     ) -> (Vec<(SignedTransaction, u64)>, MultiBucketTimelineIndexIds) {
-        panic!("don't need to implement")
+        let txns = self.timeline_range(sender_bucket, HashMap::new());
+        let txns_len = txns.len();
+        (txns, MultiBucketTimelineIndexIds { id_per_bucket: vec![0; txns_len] })
     }
 
     fn gc(&mut self) {
@@ -245,10 +247,6 @@ impl Mempool {
     ) {
     }
 
-    pub(crate) fn get_by_hash(&self, _hash: HashValue) -> Option<SignedTransaction> {
-        panic!()
-    }
-
     pub(crate) fn log_txn_latency(
         _insertion_info: &InsertionInfo,
         _bucket: &str,
@@ -338,55 +336,6 @@ impl Mempool {
 
     pub(crate) fn priority_index_size(&self) -> usize {
         // self.transactions.priority_index_size()
-        todo!()
-    }
-
-    /// Returns block of transactions and new last_timeline_id. For each transaction, the output includes
-    /// the transaction ready time in millis since epoch
-    pub(crate) fn read_timeline(
-        &self,
-        sender_bucket: MempoolSenderBucket,
-        timeline_id: &MultiBucketTimelineIndexIds,
-        count: usize,
-        before: Option<Instant>,
-        priority_of_receiver: BroadcastPeerPriority,
-    ) -> (Vec<(SignedTransaction, u64)>, MultiBucketTimelineIndexIds) {
-        // self.transactions.read_timeline(
-        //     sender_bucket,
-        //     timeline_id,
-        //     count,
-        //     before,
-        //     priority_of_receiver,
-        // )
-        panic!()
-    }
-
-    /// Read transactions from timeline from `start_id` (exclusive) to `end_id` (inclusive),
-    /// along with their ready times in millis since poch
-    pub(crate) fn timeline_range(
-        &self,
-        sender_bucket: MempoolSenderBucket,
-        start_end_pairs: HashMap<TimelineIndexIdentifier, (u64, u64)>,
-    ) -> Vec<(SignedTransaction, u64)> {
-        // self.transactions
-        //     .timeline_range(sender_bucket, start_end_pairs)
-        todo!()
-    }
-
-    pub(crate) fn timeline_range_of_message(
-        &self,
-        sender_start_end_pairs: HashMap<
-            MempoolSenderBucket,
-            HashMap<TimelineIndexIdentifier, (u64, u64)>,
-        >,
-    ) -> Vec<(SignedTransaction, u64)> {
-        // sender_start_end_pairs
-        //     .iter()
-        //     .flat_map(|(sender_bucket, start_end_pairs)| {
-        //         self.transactions
-        //             .timeline_range(*sender_bucket, start_end_pairs.clone())
-        //     })
-        //     .collect()
         todo!()
     }
 
