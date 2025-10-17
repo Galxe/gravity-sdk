@@ -2,16 +2,16 @@ use std::sync::Arc;
 
 use crate::{
     bootstrap::{
-        init_block_buffer_manager, init_jwk_consensus, init_mempool, init_network_interfaces,
-        init_peers_and_metadata, start_consensus, start_node_inspection_service,
+        init_block_buffer_manager, init_jwk_consensus, init_mempool, init_peers_and_metadata,
+        start_consensus, start_node_inspection_service,
     },
     consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler},
     https::{https_server, HttpsServerArgs},
     logger,
     network::{
         consensus_network_configuration, create_network_interfaces, create_network_runtime,
-        extract_network_configs, jwk_consensus_network_configuration, mempool_network_configuration,
-        register_client_and_service_with_network,
+        extract_network_configs, jwk_consensus_network_configuration,
+        mempool_network_configuration, register_client_and_service_with_network,
     },
 };
 use aptos_consensus::{consensusdb::ConsensusDB, gravity_state_computer::ConsensusAdapterArgs};
@@ -27,6 +27,7 @@ use gaptos::{
     aptos_storage_interface::DbReaderWriter,
     aptos_telemetry::service::start_telemetry_service,
     aptos_types::chain_id::ChainId,
+    aptos_validator_transaction_pool::VTxnPoolState,
 };
 use tokio::{runtime::Runtime, sync::Mutex};
 
@@ -219,27 +220,30 @@ impl ConsensusEngine {
             pool,
         );
         runtimes.extend(mempool_runtime);
-        let (jwk_consensus_runtime, vtxn_pool) = init_jwk_consensus(
-            &node_config,
-            &mut event_subscription_service,
-            jwk_consensus_network_interfaces,
-        );
-        runtimes.push(jwk_consensus_runtime);
-        init_block_buffer_manager(&consensus_db, latest_block_number).await;
-        let mut args = ConsensusAdapterArgs::new(consensus_db);
-        if let Some(jwk_consensus_interfaces) = jwk_consensus_interfaces {
-            let (consensus_runtime, _, _) = start_consensus(
+        let vtxn_pool = if let Some(jwk_consensus_interfaces) = jwk_consensus_interfaces {
+            let (jwk_consensus_runtime, vtxn_pool) = init_jwk_consensus(
                 &node_config,
                 &mut event_subscription_service,
                 jwk_consensus_interfaces,
-                consensus_notifier,
-                consensus_to_mempool_sender,
-                db,
-                &mut args,
-                vtxn_pool,
             );
-            runtimes.push(consensus_runtime);
-        }
+            runtimes.push(jwk_consensus_runtime);
+            vtxn_pool
+        } else {
+            VTxnPoolState::default()
+        };
+        init_block_buffer_manager(&consensus_db, latest_block_number).await;
+        let mut args = ConsensusAdapterArgs::new(consensus_db);
+        let (consensus_runtime, _, _) = start_consensus(
+            &node_config,
+            &mut event_subscription_service,
+            consensus_interfaces,
+            consensus_notifier,
+            consensus_to_mempool_sender,
+            db,
+            &mut args,
+            vtxn_pool,
+        );
+        runtimes.push(consensus_runtime);
         // Create notification senders and listeners for mempool, consensus and the storage service
         // For Gravity we only use it to notify the mempool for the committed txn gc logic
         let mempool_notifier =
