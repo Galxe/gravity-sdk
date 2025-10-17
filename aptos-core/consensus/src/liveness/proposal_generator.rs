@@ -497,6 +497,7 @@ impl ProposalGenerator {
         );
 
         let block = if self.vtxn_config.enabled() {
+            info!("lightman1015: new_proposal_ext round {} validator_txns: {:?}", round, validator_txns);
             BlockData::new_proposal_ext(
                 validator_txns,
                 payload,

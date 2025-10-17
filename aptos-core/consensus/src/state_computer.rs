@@ -401,7 +401,7 @@ impl StateComputer for ExecutionProxy {
         assert!(block.block_number().is_some());
         let txns = self.get_block_txns(block).await;
         let validator_txns = block.validator_txns();
-        let jwks_extra_data = self.process_jwk_transactions(validator_txns.map(|v| &**v), block);
+        let jwks_extra_data = process_jwk_transactions_util(validator_txns.map(|v| &**v), block);
         
         let meta_data = ExternalBlockMeta {
             block_id: BlockId(*block.id()),
@@ -446,7 +446,6 @@ impl StateComputer for ExecutionProxy {
             let compute_result = get_block_buffer_manager()
                 .get_executed_res(block_id, meta_data.block_number)
                 .await?;
-
             txn_metrics::TxnLifeTime::get_txn_life_time().record_executed(block_id_hashvalue);
             update_counters_for_compute_res(&compute_result.execution_output);
            
