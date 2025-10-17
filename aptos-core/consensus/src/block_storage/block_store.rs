@@ -466,6 +466,20 @@ impl BlockStore {
         Ok(())
     }
 
+    pub async fn append_blocks_for_sync(&self, blocks: Vec<Block>, quorum_certs: Vec<QuorumCert>) {
+        for block in blocks {
+            self.insert_block(block, true).await.unwrap_or_else(|e| {
+                panic!("[BlockStore] failed to insert block during append blocks for sync {:?}", e)
+            });
+        }
+        for qc in quorum_certs {
+            self.insert_single_quorum_cert(qc, true).unwrap_or_else(|e| {
+                panic!("[BlockStore] failed to insert quorum during append blocks for sync {:?}", e)
+            });
+        }
+        self.recover_blocks().await;
+    }
+
     pub async fn rebuild(&self, root: RootInfo, blocks: Vec<Block>, quorum_certs: Vec<QuorumCert>) {
         info!(
             "Rebuilding block tree. root {:?}, blocks {:?}, qcs {:?}",

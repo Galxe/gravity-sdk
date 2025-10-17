@@ -100,18 +100,18 @@ impl RecoveryManager {
             self.max_blocks_to_request,
             self.pending_blocks.clone(),
         );
-        let recovery_data = BlockStore::fast_forward_sync(
-            sync_info.highest_quorum_cert(),
-            sync_info.highest_commit_cert(),
-            &mut retriever,
-            self.storage.clone(),
-            self.payload_manager.clone(),
-            self.order_vote_enabled,
-            true,
-        )
-        .await?;
 
-        Ok(recovery_data)
+        todo!("implement recovery manager fast forward sync");
+        // let recovery_data = BlockStore::fast_forward_sync(
+        //     sync_info.highest_quorum_cert(),
+        //     sync_info.highest_commit_cert(),
+        //     &mut retriever,
+        //     self.storage.clone(),
+        //     self.payload_manager.clone(),
+        //     self.order_vote_enabled,
+        // )
+        // .await?;
+        // Ok(recovery_data)
     }
 
     pub async fn start(

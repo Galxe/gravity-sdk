@@ -295,7 +295,7 @@ impl BlockStore {
         if !self.need_sync_to_highest_quorum_cert(&highest_quorum_cert) {
             return Ok(());
         }
-        let (root, blocks, quorum_certs) = Self::fast_forward_sync(
+        let (blocks, quorum_certs) = Self::fast_forward_sync(
             &highest_quorum_cert,
             &highest_commit_cert,
             retriever,
@@ -304,14 +304,9 @@ impl BlockStore {
             self.order_vote_enabled,
             self.is_validator,
         )
-        .await?
-        .take();
-        info!(
-            LogSchema::new(LogEvent::CommitViaSync).round(self.ordered_root().round()),
-            committed_round = root.0.round(),
-            block_id = root.0.id(),
-        );
-        self.rebuild(root, blocks, quorum_certs)
+        .await?;
+
+        self.append_blocks_for_sync(blocks, quorum_certs)
             .await;
 
         if highest_commit_cert.ledger_info().ledger_info().ends_epoch() {
@@ -412,7 +407,7 @@ impl BlockStore {
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
         is_validator: bool,
-    ) -> anyhow::Result<RecoveryData> {
+    ) -> anyhow::Result<(Vec<Block>, Vec<QuorumCert>)> {
         info!(
             LogSchema::new(LogEvent::StateSync).remote_peer(retriever.preferred_peer),
             "Start block sync to commit cert: {}, quorum cert: {}",
@@ -480,14 +475,11 @@ impl BlockStore {
             }
             storage.consensus_db().ledger_db.metadata_db().write_schemas(ledger_info_batch);
         }
-        // we do not need to update block_tree.highest_commit_decision_ledger_info here
-        // because the block_tree is going to rebuild itself.
-
-        let recovery_data = match storage.start(order_vote_enabled, highest_quorum_cert.certified_block().epoch()).await {
-            LivenessStorageData::FullRecoveryData(recovery_data) => recovery_data,
-            _ => panic!("Failed to construct recovery data after fast forward sync"),
-        };
-        Ok(recovery_data)
+            // we do not need to update block_tree.highest_commit_decision_ledger_info here
+            // because the block_tree is going to rebuild itself.
+        blocks.reverse();
+        quorum_certs.reverse();
+        Ok((blocks, quorum_certs))
     }
 
     /// Fast forward in the decoupled-execution pipeline if the block exists there
@@ -511,7 +503,7 @@ impl BlockStore {
             && !self.block_exists(ledger_info.commit_info().id()) {
             // if the block doesnt exist after ordered root
             let highest_commit_cert = highest_commit_cert.into_quorum_cert(self.order_vote_enabled).unwrap();
-            let (root, blocks, quorum_certs) = Self::fast_forward_sync(
+            let (blocks, quorum_certs) = Self::fast_forward_sync(
                 &highest_commit_cert,
                 &self.highest_ordered_cert(),
                 retriever,
@@ -520,14 +512,9 @@ impl BlockStore {
                 self.order_vote_enabled,
                 self.is_validator,
             )
-            .await?
-            .take();
-            info!(
-                LogSchema::new(LogEvent::CommitViaSync).round(self.ordered_root().round()),
-                committed_round = root.0.round(),
-                block_id = root.0.id(),
-            );
-            self.rebuild(root, blocks, quorum_certs)
+            .await?;
+
+            self.append_blocks_for_sync(blocks, quorum_certs)
                 .await;
             return Ok(());
         }
