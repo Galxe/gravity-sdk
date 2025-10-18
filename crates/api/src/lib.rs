@@ -18,4 +18,8 @@ pub struct GravityNodeArgs {
     #[arg(long = "gravity_node_config", value_name = "CONFIG", global = true)]
     /// Path to node configuration file (or template for local test mode).
     pub node_config_path: Option<PathBuf>,
+    
+    #[arg(long = "relayer_config", value_name = "RELAYER_CONFIG", global = true)]
+    /// Path to relayer configuration file (JSON format with URI to RPC URL mappings).
+    pub relayer_config_path: Option<PathBuf>,
 }
