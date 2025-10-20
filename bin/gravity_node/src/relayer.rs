@@ -153,7 +153,9 @@ impl RelayerWrapper {
 impl Relayer for RelayerWrapper {
     async fn add_uri(&self, uri: &str, rpc_url: &str) -> Result<(), ExecError> {
         // Use local config URL if available, otherwise fall back to the provided rpc_url
-        let actual_url = self.config.get_url(uri).unwrap_or(rpc_url);
+        let actual_url = self.config.get_url(uri).ok_or_else(|| {
+            ExecError::Other(format!("Provider {} not found in local config", uri))
+        })?;
 
         info!(
             "Adding URI: {}, RPC URL: {} ({})",
@@ -168,10 +170,16 @@ impl Relayer for RelayerWrapper {
             self.tracker.init_block_number(&provider.name, block_number).await;
             block_number
         } else {
-            return Err(ExecError::Other(format!("Provider {} not found in active providers", uri)));
+            return Err(ExecError::Other(format!(
+                "Provider {} not found in active providers",
+                uri
+            )));
         };
 
-        self.manager.add_uri(uri, actual_url, from_block).await.map_err(|e| ExecError::Other(e.to_string()))
+        self.manager
+            .add_uri(uri, actual_url, from_block)
+            .await
+            .map_err(|e| ExecError::Other(e.to_string()))
     }
 
     // All URIs starting with gravity:// are definitely UnsupportedJWK

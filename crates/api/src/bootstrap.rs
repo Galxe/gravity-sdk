@@ -233,7 +233,6 @@ pub async fn init_block_buffer_manager(consensus_db: &Arc<ConsensusDB>, latest_b
             .unwrap()
             .into_iter()
             .for_each(|((epoch, block_id), block_number)| {
-                info!("init_block_buffer_manager epoch {} block_number {}", epoch, block_number);
                 // has_large = true;
                 if !block_number_to_block_id.contains_key(&block_number) {
                     block_number_to_block_id
