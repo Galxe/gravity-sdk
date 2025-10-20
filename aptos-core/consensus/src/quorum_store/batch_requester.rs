@@ -5,7 +5,7 @@ use crate::{
     monitor,
     network::QuorumStoreSender,
     quorum_store::{
-        types::{BatchRequest, BatchResponse, PersistedValue},
+        types::{BatchKey, BatchRequest, BatchResponse, PersistedValue},
     },
 };
 use aptos_consensus_types::proof_of_store::BatchInfo;
@@ -135,7 +135,7 @@ impl<T: QuorumStoreSender + Sync + 'static> BatchRequester<T> {
 
     pub(crate) async fn request_batch(
         &self,
-        digest: HashValue,
+        key: BatchKey,
         expiration: u64,
         signers: Vec<PeerId>,
         ret_tx: oneshot::Sender<ExecutorResult<Vec<SignedTransaction>>>,
@@ -171,7 +171,7 @@ impl<T: QuorumStoreSender + Sync + 'static> BatchRequester<T> {
         let network_sender = self.network_sender.clone();
         let request_num_peers = self.request_num_peers;
         let my_peer_id = self.my_peer_id;
-        let epoch = self.epoch;
+        let epoch = key.epoch;
         let retry_interval = Duration::from_millis(self.retry_interval_ms as u64);
         let rpc_timeout = Duration::from_millis(self.rpc_timeout_ms as u64);
 
@@ -179,7 +179,8 @@ impl<T: QuorumStoreSender + Sync + 'static> BatchRequester<T> {
             let mut interval = time::interval(retry_interval);
             debug!("QS: retry_interval: {:?}", retry_interval);
             let mut futures = FuturesUnordered::new();
-            let request = BatchRequest::new(my_peer_id.peer_id(), epoch, digest);
+
+            let request = BatchRequest::new(my_peer_id.peer_id(), epoch, key.digest);
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
@@ -212,14 +213,14 @@ impl<T: QuorumStoreSender + Sync + 'static> BatchRequester<T> {
                                     && ledger_info.verify_signatures(&validator_verifier).is_ok()
                                 {
                                     counters::RECEIVED_BATCH_EXPIRED_COUNT.inc();
-                                    debug!("QS: batch request expired, digest:{}", digest);
-                                    request_state.serve_request(digest, None);
+                                    error!("QS: batch request expired, digest:{}", key.digest);
+                                    request_state.serve_request(key.digest, None);
                                     return None;
                                 }
                             }
                             Err(e) => {
                                 counters::RECEIVED_BATCH_RESPONSE_ERROR_COUNT.inc();
-                                debug!("QS: batch request error, digest:{}, error:{:?}", digest, e);
+                                error!("QS: batch request error, digest:{}, error:{:?}", key.digest, e);
                             }
                         }
                     },
@@ -239,8 +240,8 @@ impl<T: QuorumStoreSender + Sync + 'static> BatchRequester<T> {
                 }
             }
             counters::RECEIVED_BATCH_REQUEST_TIMEOUT_COUNT.inc();
-            debug!("QS: batch request timed out, digest:{}", digest);
-            request_state.serve_request(digest, None);
+            debug!("QS: batch request timed out, digest:{}", key.digest);
+            request_state.serve_request(key.digest, None);
             None
         })
     }
