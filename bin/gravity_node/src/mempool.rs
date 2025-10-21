@@ -24,11 +24,12 @@ pub struct Mempool {
     txn_cache: Arc<
         DashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>,
     >,
+    runtime: tokio::runtime::Runtime,
 }
 
 impl Mempool {
     pub fn new(pool: RethTransactionPool) -> Self {
-        Self { pool, txn_cache: Arc::new(DashMap::new()) }
+        Self { pool, txn_cache: Arc::new(DashMap::new()), runtime: tokio::runtime::Runtime::new().unwrap() }
     }
 
     pub fn tx_cache(
@@ -71,7 +72,6 @@ fn to_verified_txn_from_recovered_txn(pool_txn: Recovered<TransactionSigned>) ->
     }
 }
 
-#[async_trait::async_trait]
 impl TxPool for Mempool {
     fn best_txns(
         &self,
@@ -117,7 +117,7 @@ impl TxPool for Mempool {
         Box::new(iter.into_iter())
     }
 
-    async fn add_external_txn(&self, txn: VerifiedTxn) -> bool {
+    fn add_external_txn(&self, txn: VerifiedTxn) -> bool {
         let txn = TransactionSigned::decode_2718(&mut txn.bytes.as_ref());
         match txn {
             Ok(txn) => {
@@ -125,7 +125,11 @@ impl TxPool for Mempool {
                 let len = txn.encode_2718_len();
                 let recovered = Recovered::new_unchecked(txn, signer);
                 let pool_txn = EthPooledTransaction::new(recovered, len);
-                self.pool.add_external_transaction(pool_txn).await.is_ok()
+                let pool = self.pool.clone();
+                self.runtime.spawn(async move {
+                    pool.add_external_transaction(pool_txn).await.is_ok()
+                });
+                true
             }
             Err(e) => {
                 tracing::error!("Failed to decode transaction: {}", e);
@@ -134,7 +138,7 @@ impl TxPool for Mempool {
         }
     }
 
-    async fn remove_txns(&self, txns: Vec<VerifiedTxn>) {
+    fn remove_txns(&self, txns: Vec<VerifiedTxn>) {
         let mut eth_txn_hashes = Vec::with_capacity(txns.len());
         for txn in txns {
             let txn = TransactionSigned::decode_2718(&mut txn.bytes.as_ref());

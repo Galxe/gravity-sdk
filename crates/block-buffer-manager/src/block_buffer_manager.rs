@@ -34,16 +34,15 @@ pub struct TxnItem {
     pub insert_time: SystemTime,
 }
 
-#[async_trait::async_trait]
 pub trait TxPool: Send + Sync + 'static {
     fn best_txns(&self, filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>) -> Box<dyn Iterator<Item = VerifiedTxn>>;
 
     fn get_broadcast_txns(&self, filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>) -> Box<dyn Iterator<Item = VerifiedTxn>>;
 
     // add external txns to the tx pool
-    async fn add_external_txn(&self, txns: VerifiedTxn) -> bool;
+    fn add_external_txn(&self, txns: VerifiedTxn) -> bool;
 
-    async fn remove_txns(&self, txns: Vec<VerifiedTxn>);
+    fn remove_txns(&self, txns: Vec<VerifiedTxn>);
 }
 
 pub struct EmptyTxPool {}
@@ -54,7 +53,7 @@ impl EmptyTxPool {
     }
 }
 
-#[async_trait::async_trait]
+
 impl TxPool for EmptyTxPool {
     fn best_txns(&self, _filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>) -> Box<dyn Iterator<Item = VerifiedTxn>> {
         Box::new(vec![].into_iter())
@@ -64,11 +63,11 @@ impl TxPool for EmptyTxPool {
         Box::new(vec![].into_iter())
     }
 
-    async fn add_external_txn(&self, _txns: VerifiedTxn) -> bool {
+    fn add_external_txn(&self, _txns: VerifiedTxn) -> bool {
         false
     }
     
-    async fn remove_txns(&self, _txns: Vec<VerifiedTxn>) {
+    fn remove_txns(&self, _txns: Vec<VerifiedTxn>) {
     }
 }
 

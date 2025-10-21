@@ -77,7 +77,7 @@ pub struct Mempool {
     txn_cache: Arc<Mutex<TxnCache>>,
 }
 
-#[async_trait::async_trait]
+
 impl CoreMempoolTrait for Mempool {
     fn timeline_range(
         &self,
@@ -140,6 +140,7 @@ impl CoreMempoolTrait for Mempool {
     ) -> (Vec<(SignedTransaction, u64)>, MultiBucketTimelineIndexIds) {
         let txns = self.timeline_range(sender_bucket, HashMap::new());
         let txns_len = txns.len();
+        info!("read_timeline txns_len: {}", txns_len);
         (txns, MultiBucketTimelineIndexIds { id_per_bucket: vec![0; txns_len] })
     }
 
@@ -155,7 +156,7 @@ impl CoreMempoolTrait for Mempool {
         panic!("don't need to implement")
     }
 
-    async fn add_txn(
+    fn add_txn(
         &mut self,
         txn: SignedTransaction,
         ranking_score: u64,
@@ -165,10 +166,11 @@ impl CoreMempoolTrait for Mempool {
         ready_time_at_sender: Option<u64>,
         priority: Option<BroadcastPeerPriority>,
     ) -> MempoolStatus {
+        info!("add_txn sequence_info: {}", txn.sequence_number());
         let verfited_txn = crate::core_mempool::transaction::VerifiedTxn::from(txn);
         let res = self.pool.add_external_txn(
             verfited_txn.into(),
-        ).await;
+        );
         if res {
             MempoolStatus::new(MempoolStatusCode::Accepted)
         } else {
@@ -193,7 +195,7 @@ impl CoreMempoolTrait for Mempool {
         self.get_batch_inner(max_txns, max_bytes, return_non_full, exclude_transactions)
     }
 
-    async fn reject_transaction(
+    fn reject_transaction(
         &mut self,
         sender: &AccountAddress,
         sequence_number: u64,
