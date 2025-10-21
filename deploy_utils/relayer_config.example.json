@@ -2,7 +2,7 @@
   "uri_mappings": {
     "https://accounts.google.com": "https://eth-mainnet.g.alchemy.com/v2/your-api-key",
     "https://example-provider.com": "https://eth-sepolia.g.alchemy.com/v2/your-api-key",
-    "gravity://custom-provider": "http://localhost:8545"
+    "gravity://31337/event?address=0x5FbDB2315678afecb367f032d93F642f64180aa3&topic0=0xd53bfb630c04654c6d1da5020f14674f190f92c257c92d9b15d8ecb405057c14&fromBlock=100": "http://localhost:8543"
   }
 }
 

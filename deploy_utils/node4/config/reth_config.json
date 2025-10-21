@@ -1,6 +1,6 @@
 {
     "reth_args": {
-        "chain": "dev",
+        "chain": "/home/gravity/gravity-genesis-contract/genesis.json",
         "http": "",
         "http.port": 8548,
         "http.corsdomain": "*",
@@ -20,6 +20,7 @@
         "rpc.max-connections": 20000,
         "txpool.max-new-pending-txs-notifications": 1000000,
         "txpool.max-pending-txns": 1000000,
+        "relayer_config": "/home/gravity/gravity-sdk/deploy_utils/relayer_config.example.json",
         "txpool.pending-max-count": 17592186044415,
         "txpool.pending-max-size": 17592186044415,
         "txpool.basefee-max-count": 17592186044415,
