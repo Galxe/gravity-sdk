@@ -66,3 +66,6 @@ inspection_service:
 
 mempool:
   capacity_per_user: 20000
+
+logger:
+  level: "DEBUG"

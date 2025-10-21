@@ -11,7 +11,7 @@
         "authrpc.port": 8554,
         "authrpc.addr": "0.0.0.0",
         "metrics": "0.0.0.0:9004",
-        "log.file.filter": "info",
+        "log.file.filter": "debug",
         "datadir": "/tmp/node4/data/reth",
         "datadir.static-files": "/tmp/node4/data/reth",
         "gravity_node_config": "/tmp/node4/config/validator.yaml",
