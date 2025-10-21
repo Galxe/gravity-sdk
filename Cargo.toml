@@ -201,7 +201,8 @@ ipnet = "2.5.0"
 itertools = "0.13"
 tikv-jemalloc-ctl = "0.6"
 tikv-jemallocator = { version = "0.6" }
-tikv-jemalloc-sys = { version = "0.6" }
+# Configure jemalloc to reduce TLS usage
+tikv-jemalloc-sys = { version = "0.6", features = ["disable_initial_exec_tls"] }
 json-patch = "0.2.6"
 jsonwebtoken = "8.1"
 jwt = "0.16.0"
@@ -385,6 +386,13 @@ whoami = "1.5.0"
 x25519-dalek = "1.2.0"
 z3tracer = "0.8.0"
 ruint = "1.12.3"
+
+[profile.dev]
+opt-level = 1              # Prevent TLS from becoming too large and causing startup crashes
+debug = 2
+overflow-checks = true
+debug-assertions = true
+incremental = true
 
 [profile.release]
 debug = true
