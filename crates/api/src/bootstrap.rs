@@ -299,7 +299,7 @@ pub fn init_jwk_consensus(
         node_config,
         Some((reconfig_events, jwk_updated_events)),
         Some(jwk_consensus_network_interfaces),
-        vtxn_pool,
+        vtxn_pool.clone(),
     )
 }
 

@@ -82,6 +82,7 @@ pub struct OrderedBlocks {
     pub ordered_blocks: Vec<PipelinedBlock>,
     pub ordered_proof: LedgerInfoWithSignatures,
     pub callback: StateComputerCommitCallBackType,
+    pub recover_randomness: bool,
 }
 
 impl OrderedBlocks {
@@ -288,7 +289,7 @@ impl BufferManager {
     /// process incoming ordered blocks
     /// push them into the buffer and update the roots if they are none.
     async fn process_ordered_blocks(&mut self, ordered_blocks: OrderedBlocks) {
-        let OrderedBlocks { ordered_blocks, ordered_proof, callback } = ordered_blocks;
+        let OrderedBlocks { ordered_blocks, ordered_proof, callback, .. } = ordered_blocks;
 
         info!(
             "Receive ordered block {}, the queue size is {}",

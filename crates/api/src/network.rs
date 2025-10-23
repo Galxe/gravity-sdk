@@ -222,5 +222,3 @@ pub fn create_network_runtime(network_config: &NetworkConfig) -> Runtime {
     gaptos::aptos_runtimes::spawn_named_runtime(thread_name, network_config.runtime_threads)
 }
 
-// Re-export ApplicationNetworkHandle for use in other modules
-pub use ApplicationNetworkHandle;

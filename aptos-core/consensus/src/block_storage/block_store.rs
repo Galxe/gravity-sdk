@@ -332,6 +332,14 @@ impl BlockStore {
         // This callback is invoked synchronously with and could be used for multiple batches of blocks.
         self.init_block_number(&blocks_to_commit);
         if recovery {
+            // Send blocks for randomness recovery
+            if let Err(e) = self.execution_client.send_for_randomness_recovery(
+                &blocks_to_commit,
+                finality_proof.ledger_info().clone(),
+            ).await {
+                error!("Failed to send blocks for randomness recovery: {}", e);
+            }
+
             for p_block in &blocks_to_commit {
                 let mut txns = vec![];
                 loop {
@@ -374,6 +382,10 @@ impl BlockStore {
                     p_block.block()
                 );
 
+                // In recover mode, randomness will be handled by the recovery process
+                // No need to check randomness here as it's already sent for recovery
+                let randomness = p_block.randomness().map(|r| Random::from_bytes(r.randomness()));
+
                 let block = ExternalBlock {
                     txns: verified_txns,
                     block_meta: ExternalBlockMeta {
@@ -381,9 +393,7 @@ impl BlockStore {
                         block_number,
                         usecs: p_block.block().timestamp_usecs(),
                         epoch: p_block.block().epoch(),
-                        randomness: p_block
-                            .randomness()
-                            .map(|r| Random::from_bytes(r.randomness())),
+                        randomness,
                         block_hash: maybe_block_hash.clone(),
                         proposer: p_block.block().author().map(|author| ExternalAccountAddress::new(author.into_bytes())),
                     },
@@ -635,6 +645,7 @@ impl BlockStore {
     pub fn check_payload(&self, proposal: &Block) -> bool {
         self.payload_manager.check_payload_availability(proposal)
     }
+
 }
 
 impl BlockReader for BlockStore {
@@ -823,6 +834,7 @@ impl BlockStore {
     pub(super) fn pruned_blocks_in_mem(&self) -> usize {
         self.inner.read().pruned_blocks_in_mem()
     }
+
 
     /// Helper function to insert the block with the qc together
     pub async fn insert_block_with_qc(&self, block: Block) -> anyhow::Result<Arc<PipelinedBlock>> {
