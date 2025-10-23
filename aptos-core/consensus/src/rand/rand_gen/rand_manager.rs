@@ -60,6 +60,7 @@ pub struct RandManager<S: TShare, D: TAugmentedData> {
     decision_rx: Receiver<Randomness>,
     // downstream channels
     outgoing_blocks: Sender<OrderedBlocks>,
+    recover_outgoing_blocks: Sender<OrderedBlocks>,
     // local state
     rand_store: Arc<Mutex<RandStore<S>>>,
     aug_data_store: AugDataStore<D>,
@@ -77,6 +78,7 @@ impl<S: TShare, D: TAugmentedData> RandManager<S, D> {
         config: RandConfig,
         fast_config: Option<RandConfig>,
         outgoing_blocks: Sender<OrderedBlocks>,
+        recover_outgoing_blocks: Sender<OrderedBlocks>,
         network_sender: Arc<NetworkSender>,
         db: Arc<dyn RandStorage<D>>,
         bounded_executor: BoundedExecutor,
@@ -120,6 +122,7 @@ impl<S: TShare, D: TAugmentedData> RandManager<S, D> {
 
             decision_rx,
             outgoing_blocks,
+            recover_outgoing_blocks,
 
             rand_store,
             aug_data_store,
@@ -132,6 +135,10 @@ impl<S: TShare, D: TAugmentedData> RandManager<S, D> {
     fn process_incoming_blocks(&mut self, blocks: OrderedBlocks) {
         let rounds: Vec<u64> = blocks.ordered_blocks.iter().map(|b| b.round()).collect();
         info!(rounds = rounds, "Processing incoming blocks.");
+        
+        // Process randomness metadata for both normal and recover modes
+        // For recover mode, we still need to process randomness metadata
+        // because the blocks don't have randomness data and we need to regenerate it
         let broadcast_handles: Vec<_> = blocks
             .ordered_blocks
             .iter()
@@ -177,7 +184,13 @@ impl<S: TShare, D: TAugmentedData> RandManager<S, D> {
         info!(rounds = rounds, "Processing rand-ready blocks.");
 
         for blocks in ready_blocks {
-            let _ = self.outgoing_blocks.unbounded_send(blocks);
+            if blocks.recover_randomness {
+                // Send to recover channel if it's a recover block
+                let _ = self.recover_outgoing_blocks.unbounded_send(blocks);
+            } else {
+                // Send to normal channel
+                let _ = self.outgoing_blocks.unbounded_send(blocks);
+            }
         }
     }
 
@@ -198,6 +211,7 @@ impl<S: TShare, D: TAugmentedData> RandManager<S, D> {
     fn process_randomness(&mut self, randomness: Randomness) {
         info!(
             metadata = randomness.metadata(),
+            randomness = randomness.randomness(),
             "Processing decisioned randomness."
         );
         if let Some(block) = self.block_queue.item_mut(randomness.round()) {
@@ -352,6 +366,7 @@ impl<S: TShare, D: TAugmentedData> RandManager<S, D> {
         mut reset_rx: Receiver<ResetRequest>,
         bounded_executor: BoundedExecutor,
         highest_known_round: Round,
+        mut recover_incoming_blocks: Receiver<OrderedBlocks>,
     ) {
         info!("RandManager started");
         let (verified_msg_tx, mut verified_msg_rx) = unbounded();
@@ -378,6 +393,9 @@ impl<S: TShare, D: TAugmentedData> RandManager<S, D> {
         while !self.stop {
             tokio::select! {
                 Some(blocks) = incoming_blocks.next(), if self.aug_data_store.my_certified_aug_data_exists() => {
+                    self.process_incoming_blocks(blocks);
+                }
+                Some(blocks) = recover_incoming_blocks.next(), if self.aug_data_store.my_certified_aug_data_exists() => {
                     self.process_incoming_blocks(blocks);
                 }
                 Some(reset) = reset_rx.next() => {

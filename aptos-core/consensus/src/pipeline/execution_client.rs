@@ -24,7 +24,7 @@ use crate::{
     transaction_deduper::create_transaction_deduper,
     transaction_shuffler::create_transaction_shuffler,
 };
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use gaptos::aptos_bounded_executor::BoundedExecutor;
 use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
 use gaptos::aptos_config::config::{ConsensusConfig, ConsensusObserverConfig};
@@ -48,7 +48,7 @@ use futures::{
     channel::{mpsc::UnboundedSender, oneshot},
     SinkExt,
 };
-use futures_channel::mpsc::unbounded;
+use futures_channel::mpsc::{unbounded, UnboundedReceiver};
 use gaptos::move_core_types::account_address::AccountAddress;
 use std::sync::Arc;
 
@@ -101,6 +101,13 @@ pub trait TExecutionClient: Send + Sync {
 
     /// Returns a pipeline builder for the current epoch.
     fn pipeline_builder(&self, signer: Arc<ValidatorSigner>) -> PipelineBuilder;
+
+    /// Send blocks for randomness recovery in recover mode.
+    async fn send_for_randomness_recovery(
+        &self,
+        blocks: &[Arc<PipelinedBlock>],
+        ordered_proof: LedgerInfoWithSignatures,
+    ) -> anyhow::Result<()>;
 }
 
 struct BufferManagerHandle {
@@ -108,15 +115,21 @@ struct BufferManagerHandle {
     pub commit_tx: Option<aptos_channel::Sender<AccountAddress, IncomingCommitRequest>>,
     pub reset_tx_to_buffer_manager: Option<UnboundedSender<ResetRequest>>,
     pub reset_tx_to_rand_manager: Option<UnboundedSender<ResetRequest>>,
+
+    pub recover_ordered_block_tx: UnboundedSender<OrderedBlocks>,
+    pub recover_ready_block_rx: UnboundedReceiver<OrderedBlocks>,
 }
 
 impl BufferManagerHandle {
     pub fn new() -> Self {
+        let (recover_ordered_block_tx, recover_ready_block_rx) = unbounded();
         Self {
             execute_tx: None,
             commit_tx: None,
             reset_tx_to_buffer_manager: None,
             reset_tx_to_rand_manager: None,
+            recover_ordered_block_tx,
+            recover_ready_block_rx,
         }
     }
 
@@ -216,11 +229,13 @@ impl ExecutionProxyClient {
                 Some(&counters::BUFFER_MANAGER_MSGS),
             );
 
-        let (execution_ready_block_tx, execution_ready_block_rx, maybe_reset_tx_to_rand_manager) =
+        let (execution_ready_block_tx, execution_ready_block_rx, maybe_reset_tx_to_rand_manager, recover_ordered_block_tx, recover_ready_block_rx) =
             if let Some(rand_config) = rand_config {
                 let (ordered_block_tx, ordered_block_rx) = unbounded::<OrderedBlocks>();
                 let (rand_ready_block_tx, rand_ready_block_rx) = unbounded::<OrderedBlocks>();
-
+                let (recover_ordered_block_tx, recover_ordered_block_rx) = unbounded::<OrderedBlocks>();
+                let (recover_ready_block_tx, recover_ready_block_rx) = unbounded::<OrderedBlocks>();
+                
                 let (reset_tx_to_rand_manager, reset_rand_manager_rx) = unbounded::<ResetRequest>();
                 let signer = Arc::new(ValidatorSigner::new(self.author, consensus_sk.clone()));
 
@@ -231,6 +246,7 @@ impl ExecutionProxyClient {
                     rand_config,
                     fast_rand_config,
                     rand_ready_block_tx,
+                    recover_ready_block_tx,
                     Arc::new(network_sender.clone()),
                     self.rand_storage.clone(),
                     self.bounded_executor.clone(),
@@ -243,16 +259,20 @@ impl ExecutionProxyClient {
                     reset_rand_manager_rx,
                     self.bounded_executor.clone(),
                     highest_committed_round,
+                    recover_ordered_block_rx,
                 ));
 
                 (
                     ordered_block_tx,
                     rand_ready_block_rx,
                     Some(reset_tx_to_rand_manager),
+                    recover_ordered_block_tx,
+                    recover_ready_block_rx,
                 )
             } else {
                 let (ordered_block_tx, ordered_block_rx) = unbounded();
-                (ordered_block_tx, ordered_block_rx, None)
+                let (recover_ordered_block_tx, recover_ready_block_rx) = unbounded();
+                (ordered_block_tx, ordered_block_rx, None, recover_ordered_block_tx, recover_ready_block_rx)
             };
 
         self.handle.write().init(
@@ -374,6 +394,7 @@ impl TExecutionClient for ExecutionProxyClient {
                     .collect::<Vec<PipelinedBlock>>(),
                 ordered_proof,
                 callback,
+                recover_randomness: false,
             })
             .await
             .is_err()
@@ -487,6 +508,34 @@ impl TExecutionClient for ExecutionProxyClient {
     fn pipeline_builder(&self, signer: Arc<ValidatorSigner>) -> PipelineBuilder {
         self.execution_proxy.pipeline_builder(signer)
     }
+
+    async fn send_for_randomness_recovery(
+        &self,
+        blocks: &[Arc<PipelinedBlock>],
+        ordered_proof: LedgerInfoWithSignatures,
+    ) -> anyhow::Result<()> {
+        let recover_tx = {
+            let handle = self.handle.read();
+            handle.recover_ordered_block_tx.clone()
+        };
+        
+        let ordered_blocks = OrderedBlocks {
+            ordered_blocks: blocks.iter().map(|b| (**b).clone()).collect(),
+            ordered_proof,
+            callback: Box::new(|_, _| {}),
+            recover_randomness: true,
+        };
+        
+        // Send blocks for randomness recovery
+        recover_tx.unbounded_send(ordered_blocks).map_err(|e| anyhow!("Failed to send blocks for randomness recovery: {}", e))?;
+        
+        // Note: We can't easily wait for the result here because UnboundedReceiver
+        // can't be cloned and we can't hold the lock across await points.
+        // The caller should handle the result through other means.
+        info!("Sent blocks for randomness recovery, processing will happen asynchronously");
+        
+        Ok(())
+    }
 }
 
 pub struct DummyExecutionClient;
@@ -538,5 +587,13 @@ impl TExecutionClient for DummyExecutionClient {
 
     fn pipeline_builder(&self, signer: Arc<ValidatorSigner>) -> PipelineBuilder {
         todo!()
+    }
+
+    async fn send_for_randomness_recovery(
+        &self,
+        _: &[Arc<PipelinedBlock>],
+        _: LedgerInfoWithSignatures,
+    ) -> anyhow::Result<()> {
+        Ok(())
     }
 }

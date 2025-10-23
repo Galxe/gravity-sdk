@@ -1257,8 +1257,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 network_sender,
                 payload_client,
                 payload_manager,
-                None, // rand_config,
-                None, // fast_rand_config,
+                rand_config,
+                fast_rand_config,
                 rand_msg_rx,
             )
             .await
@@ -1273,8 +1273,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 network_sender,
                 payload_client,
                 payload_manager,
-                None, // rand_config,
-                None, // fast_rand_config,
+                rand_config,
+                fast_rand_config,
                 rand_msg_rx,
             )
             .await

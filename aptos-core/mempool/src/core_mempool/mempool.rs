@@ -140,7 +140,7 @@ impl CoreMempoolTrait for Mempool {
     ) -> (Vec<(SignedTransaction, u64)>, MultiBucketTimelineIndexIds) {
         let txns = self.timeline_range(sender_bucket, HashMap::new());
         let txns_len = txns.len();
-        info!("read_timeline txns_len: {}", txns_len);
+        // info!("read_timeline txns_len: {}", txns_len);
         (txns, MultiBucketTimelineIndexIds { id_per_bucket: vec![0; txns_len] })
     }
 

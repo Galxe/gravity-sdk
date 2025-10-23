@@ -1,7 +1,7 @@
 use crate::{metrics::fetch_reth_txn_metrics, ConsensusArgs};
 use alloy_consensus::{transaction::SignerRecoverable, Transaction};
 use alloy_eips::{eip4895::Withdrawals, Decodable2718, Encodable2718};
-use alloy_primitives::{Address, TxHash, B256};
+use alloy_primitives::{Address, TxHash, B256, U256};
 use block_buffer_manager::get_block_buffer_manager;
 use dashmap::DashMap;
 use core::panic;
@@ -160,10 +160,11 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         let senders: Vec<_> = senders.into_iter().map(|x| x.unwrap()).collect();
         let transactions: Vec<_> = transactions.into_iter().map(|x| x.unwrap()).collect();
 
-        let randao = match block.block_meta.randomness {
-            Some(randao) => B256::from_slice(randao.0.as_ref()),
-            None => B256::ZERO,
+        let (randao, randomness) = match block.block_meta.randomness {
+            Some(randao) => (B256::from_slice(randao.0.as_ref()), U256::from_be_slice(randao.0.as_ref())),
+            None => (B256::ZERO, U256::from(0)),
         };
+
         info!("push ordered block time deserialize {:?}ms", system_time.elapsed().as_millis());
         // TODO: make zero make sense
         pipe_api.push_ordered_block(OrderedBlock {
@@ -183,6 +184,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                 .proposer
                 .map(|x| x.bytes().into()),
             jwk_extra_data: block.jwks_extra_data,
+            randomness,
         });
         Ok(())
     }
