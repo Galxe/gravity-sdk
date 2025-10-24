@@ -119,7 +119,6 @@ impl CoreMempoolTrait for Mempool {
         let mut visited_cache = self.txn_cache.lock().unwrap();
         for txn in iter {   
             visited_cache.insert(TxnHash::from_bytes(txn.committed_hash().as_slice()));
-            info!("timeline_range txn: {:?} {:?}", txn.sender(), txn.seq_number());
             broacasted_txns.push((
                 VerifiedTxn::from(txn).into(),
                 0,
