@@ -220,7 +220,7 @@ impl ExecutionProxyClient {
             if let Some(rand_config) = rand_config {
                 let (ordered_block_tx, ordered_block_rx) = unbounded::<OrderedBlocks>();
                 let (rand_ready_block_tx, rand_ready_block_rx) = unbounded::<OrderedBlocks>();
-
+                
                 let (reset_tx_to_rand_manager, reset_rand_manager_rx) = unbounded::<ResetRequest>();
                 let signer = Arc::new(ValidatorSigner::new(self.author, consensus_sk.clone()));
 
@@ -487,6 +487,7 @@ impl TExecutionClient for ExecutionProxyClient {
     fn pipeline_builder(&self, signer: Arc<ValidatorSigner>) -> PipelineBuilder {
         self.execution_proxy.pipeline_builder(signer)
     }
+
 }
 
 pub struct DummyExecutionClient;

@@ -18,6 +18,8 @@ use anyhow::{bail, ensure, format_err, Context};
 use gaptos::{api_types::{
     account::ExternalAccountAddress, compute_res::ComputeRes, u256_define::{BlockId, Random}, ExternalBlock, ExternalBlockMeta
 }, aptos_types::{jwks, validator_txn::ValidatorTransaction}};
+use aptos_mempool::core_mempool::transaction::VerifiedTxn;
+use block_buffer_manager::{block_buffer_manager::BlockHashRef, get_block_buffer_manager};
 use aptos_consensus_types::{
     block::Block,
     common::Round,
@@ -31,16 +33,13 @@ use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::StateComputeResult;
 use gaptos::aptos_infallible::{Mutex, RwLock};
 use gaptos::aptos_logger::prelude::*;
-use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 use gaptos::aptos_metrics_core::{register_int_gauge_vec, IntGaugeHelper, IntGaugeVec};
 use gaptos::aptos_types::{
     aggregate_signature::AggregateSignature,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
 };
-use block_buffer_manager::{block_buffer_manager::BlockHashRef, get_block_buffer_manager};
 use futures::executor::block_on;
 use once_cell::sync::Lazy;
-use sha3::digest::generic_array::typenum::Le;
 
 #[cfg(test)]
 use std::collections::VecDeque;
@@ -50,7 +49,6 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::{collections::BTreeMap, io::Read, sync::Arc, time::Duration};
 
-use super::BlockRetriever;
 use gaptos::aptos_consensus::counters as counters;
 
 #[cfg(test)]
@@ -332,6 +330,7 @@ impl BlockStore {
         // This callback is invoked synchronously with and could be used for multiple batches of blocks.
         self.init_block_number(&blocks_to_commit);
         if recovery {
+            // Recovery mode: process blocks directly without going through execution pipeline
             for p_block in &blocks_to_commit {
                 let mut txns = vec![];
                 loop {
@@ -369,32 +368,13 @@ impl BlockStore {
                 };
                 
                 let validator_txns = p_block.block().validator_txns();
-                let mut jwks_extra_data = Vec::new();
-                if let Some(validator_txns) = validator_txns {
-                    jwks_extra_data = validator_txns.iter().map(|txn| {
-                        let jwk_txn = match txn {
-                            ValidatorTransaction::DKGResult(_) => {
-                                todo!()
-                            },
-                            ValidatorTransaction::ObservedJWKUpdate(jwks::QuorumCertifiedUpdate { update, multi_sig }) => {
-                                // TODO(Gravity): Check the signature here instread of execution layer
-                                let gaptos_provider_jwk = gaptos::api_types::on_chain_config::jwks::ProviderJWKs {
-                                    issuer: update.issuer.clone(),
-                                    version: update.version,
-                                    jwks: update.jwks.iter().map(|jwk| {
-                                        gaptos::api_types::on_chain_config::jwks::JWKStruct {
-                                            type_name: jwk.variant.type_name.clone(),
-                                            data: jwk.variant.data.clone(),
-                                        }
-                                    }).collect(),
-                                };
-                                let bcs_data = bcs::to_bytes(&gaptos_provider_jwk).unwrap();
-                                bcs_data
-                            }
-                        };
-                        jwk_txn
-                    }).collect();
-                }
+                let jwks_extra_data = crate::state_computer::process_jwk_transactions_util(
+                    validator_txns.map(|v| &**v), 
+                    p_block.block()
+                );
+
+                // In recovery mode, use existing randomness from the block
+                let randomness = p_block.randomness().map(|r| Random::from_bytes(r.randomness()));
 
                 let block = ExternalBlock {
                     txns: verified_txns,
@@ -403,9 +383,7 @@ impl BlockStore {
                         block_number,
                         usecs: p_block.block().timestamp_usecs(),
                         epoch: p_block.block().epoch(),
-                        randomness: p_block
-                            .randomness()
-                            .map(|r| Random::from_bytes(r.randomness())),
+                        randomness,
                         block_hash: maybe_block_hash.clone(),
                         proposer: p_block.block().author().map(|author| ExternalAccountAddress::new(author.into_bytes())),
                     },
@@ -653,6 +631,7 @@ impl BlockStore {
     pub fn check_payload(&self, proposal: &Block) -> bool {
         self.payload_manager.check_payload_availability(proposal)
     }
+
 }
 
 impl BlockReader for BlockStore {
@@ -841,6 +820,7 @@ impl BlockStore {
     pub(super) fn pruned_blocks_in_mem(&self) -> usize {
         self.inner.read().pruned_blocks_in_mem()
     }
+
 
     /// Helper function to insert the block with the qc together
     pub async fn insert_block_with_qc(&self, block: Block) -> anyhow::Result<Arc<PipelinedBlock>> {

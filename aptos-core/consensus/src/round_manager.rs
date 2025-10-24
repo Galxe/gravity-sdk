@@ -577,6 +577,7 @@ impl RoundManager {
         let signature = safety_rules.lock().sign_proposal(&proposal)?;
         let signed_proposal =
             Block::new_proposal_from_block_data_and_signature(proposal, signature);
+        info!("lightman1015: test_commit_sync_race signed_proposal: {:?}", signed_proposal);
         txn_metrics::TxnLifeTime::get_txn_life_time().record_block(signed_proposal.payload(), signed_proposal.id());
         
         observe_block(signed_proposal.timestamp_usecs(), BlockStage::SIGNED);
@@ -849,6 +850,8 @@ impl RoundManager {
             ));
         }
 
+        info!("lightman1015: test_commit_sync_race process_proposal proposal: {:?}", proposal.validator_txns());
+        
         if !self.vtxn_config.enabled()
             && matches!(
                 proposal.block_data().block_type(),
@@ -859,15 +862,15 @@ impl RoundManager {
             bail!("ProposalExt unexpected while the feature is disabled.");
         }
 
-        if let Some(vtxns) = proposal.validator_txns() {
-            for vtxn in vtxns {
-                ensure!(
-                    is_vtxn_expected(&self.randomness_config, &self.jwk_consensus_config, vtxn),
-                    "unexpected validator txn: {:?}",
-                    vtxn.topic()
-                );
-            }
-        }
+        // if let Some(vtxns) = proposal.validator_txns() {
+        //     for vtxn in vtxns {
+        //         ensure!(
+        //             is_vtxn_expected(&self.randomness_config, &self.jwk_consensus_config, vtxn),
+        //             "unexpected validator txn: {:?}",
+        //             vtxn.topic()
+        //         );
+        //     }
+        // }
 
         let (num_validator_txns, validator_txns_total_bytes): (usize, usize) =
             proposal.validator_txns().map_or((0, 0), |txns| {

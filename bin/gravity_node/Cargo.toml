@@ -23,10 +23,11 @@ tempfile = "3.12.0"
 jsonrpsee = "0.24"
 hex = "0.4.3"
 serde_json = "1.0.128"
+serde = "=1.0.219"
 bincode = "1.3"
 time = "0.3.36"
 anyhow = "1.0.87"
-greth = { git = "https://github.com/Galxe/gravity-reth.git", rev = "22863d2" }
+greth = { git = "https://github.com/Galxe/gravity-reth", branch = "dev-0929-dkg" }
 reqwest = "0.12.9"
 alloy-primitives = { version = "=1.3.0", default-features = false, features = ["map-foldhash"] }
 alloy-eips = { version = "=1.0.24", default-features = false }
