@@ -1212,7 +1212,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 panic!("load_consensus_key failed: {e}");
             },
         };
-        info!("lightman1015: dkg_state: {:?}", dkg_state);
 
         let rand_configs = self.try_get_rand_config_for_new_epoch(
             loaded_consensus_key.clone(),
@@ -1225,7 +1224,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         let (rand_config, fast_rand_config) = match rand_configs {
             Ok((rand_config, fast_rand_config)) => (Some(rand_config), fast_rand_config),
             Err(reason) => {
-                if true {
+                if onchain_randomness_config.randomness_enabled() {
                     if epoch_state.epoch > 2 {
                         error!(
                             "Failed to get randomness config for new epoch [{}]: {:?}",
