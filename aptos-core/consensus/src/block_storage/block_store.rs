@@ -18,6 +18,8 @@ use anyhow::{bail, ensure, format_err, Context};
 use gaptos::{api_types::{
     account::ExternalAccountAddress, compute_res::ComputeRes, u256_define::{BlockId, Random}, ExternalBlock, ExternalBlockMeta
 }, aptos_types::{jwks, validator_txn::ValidatorTransaction}};
+use aptos_mempool::core_mempool::transaction::VerifiedTxn;
+use block_buffer_manager::{block_buffer_manager::BlockHashRef, get_block_buffer_manager};
 use aptos_consensus_types::{
     block::Block,
     common::Round,
@@ -31,16 +33,13 @@ use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::StateComputeResult;
 use gaptos::aptos_infallible::{Mutex, RwLock};
 use gaptos::aptos_logger::prelude::*;
-use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 use gaptos::aptos_metrics_core::{register_int_gauge_vec, IntGaugeHelper, IntGaugeVec};
 use gaptos::aptos_types::{
     aggregate_signature::AggregateSignature,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
 };
-use block_buffer_manager::{block_buffer_manager::BlockHashRef, get_block_buffer_manager};
 use futures::executor::block_on;
 use once_cell::sync::Lazy;
-use sha3::digest::generic_array::typenum::Le;
 
 #[cfg(test)]
 use std::collections::VecDeque;
@@ -50,7 +49,6 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::{collections::BTreeMap, io::Read, sync::Arc, time::Duration};
 
-use super::BlockRetriever;
 use gaptos::aptos_consensus::counters as counters;
 
 #[cfg(test)]
@@ -332,14 +330,7 @@ impl BlockStore {
         // This callback is invoked synchronously with and could be used for multiple batches of blocks.
         self.init_block_number(&blocks_to_commit);
         if recovery {
-            // Send blocks for randomness recovery
-            if let Err(e) = self.execution_client.send_for_randomness_recovery(
-                &blocks_to_commit,
-                finality_proof.ledger_info().clone(),
-            ).await {
-                error!("Failed to send blocks for randomness recovery: {}", e);
-            }
-
+            // Recovery mode: process blocks directly without going through execution pipeline
             for p_block in &blocks_to_commit {
                 let mut txns = vec![];
                 loop {
@@ -382,8 +373,7 @@ impl BlockStore {
                     p_block.block()
                 );
 
-                // In recover mode, randomness will be handled by the recovery process
-                // No need to check randomness here as it's already sent for recovery
+                // In recovery mode, use existing randomness from the block
                 let randomness = p_block.randomness().map(|r| Random::from_bytes(r.randomness()));
 
                 let block = ExternalBlock {
