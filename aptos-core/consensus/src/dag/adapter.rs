@@ -229,7 +229,6 @@ impl OrderedNotifier for OrderedNotifierAdapter {
                     update_counters_for_committed_blocks(committed_blocks);
                 },
             ),
-            recover_randomness: false,
         };
         if self
             .executor_channel
