@@ -4,10 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::network::{
-    build_network_interfaces, consensus_network_configuration, extract_network_ids,
-    mempool_network_configuration,
-};
+use crate::network::extract_network_ids;
 use aptos_consensus::consensusdb::{BlockNumberSchema, BlockSchema, ConsensusDB};
 use aptos_consensus::{
     gravity_state_computer::ConsensusAdapterArgs, network_interface::ConsensusMsg,
