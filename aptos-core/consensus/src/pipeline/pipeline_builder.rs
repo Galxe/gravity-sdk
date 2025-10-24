@@ -398,6 +398,7 @@ impl PipelineBuilder {
             .map_err(|_| anyhow!("randomness tx cancelled"))?;
 
         let _tracker = Tracker::new("execute", &block);
+        // TODO(gravity_lightman_dkg)
         // let metadata_txn = if is_randomness_enabled {
         //     block.new_metadata_with_randomness(&validator, maybe_rand)
         // } else {
@@ -462,7 +463,7 @@ impl PipelineBuilder {
         };
         // TODO: add jwks_extra_data
         get_block_buffer_manager()
-            .set_ordered_blocks(BlockId::from_bytes(block.parent_id().as_slice()), ExternalBlock { block_meta: meta_data, txns: real_txns, jwks_extra_data: vec![] })
+            .set_ordered_blocks(BlockId::from_bytes(block.parent_id().as_slice()), ExternalBlock { block_meta: meta_data, txns: real_txns, jwks_extra_data: vec![], enable_randomness: is_randomness_enabled })
             .await
             .unwrap_or_else(|e| panic!("Failed to push ordered blocks {}", e));
         Ok(())

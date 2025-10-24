@@ -114,6 +114,7 @@ pub struct BlockStore {
     order_vote_enabled: bool,
     is_validator: bool,
     pending_blocks: Arc<Mutex<PendingBlocks>>,
+    enable_randomness: bool,
 }
 
 impl BlockStore {
@@ -128,6 +129,7 @@ impl BlockStore {
         order_vote_enabled: bool,
         is_validator: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
+        enable_randomness: bool,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -146,6 +148,7 @@ impl BlockStore {
             order_vote_enabled,
             is_validator,
             pending_blocks,
+            enable_randomness,
         ));
         block_on(block_store.recover_blocks());
         block_store
@@ -162,6 +165,7 @@ impl BlockStore {
         order_vote_enabled: bool,
         is_validator: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
+        enable_randomness: bool,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -180,6 +184,7 @@ impl BlockStore {
             order_vote_enabled,
             is_validator,
             pending_blocks,
+            enable_randomness,
         )
         .await;
         block_store.recover_blocks().await;
@@ -229,6 +234,7 @@ impl BlockStore {
         order_vote_enabled: bool,
         is_validator: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
+        enable_randomness: bool,
     ) -> Self {
         let RootInfo(root_block, root_qc, root_ordered_cert, root_commit_cert) = root;
 
@@ -262,6 +268,7 @@ impl BlockStore {
             order_vote_enabled,
             is_validator,
             pending_blocks,
+            enable_randomness,
         };
 
         for block in blocks {
@@ -388,6 +395,7 @@ impl BlockStore {
                         proposer: p_block.block().author().map(|author| ExternalAccountAddress::new(author.into_bytes())),
                     },
                     jwks_extra_data,
+                    enable_randomness: self.enable_randomness,
                 };
                 get_block_buffer_manager()
                     .set_ordered_blocks(BlockId(*p_block.parent_id()), block)
@@ -486,6 +494,7 @@ impl BlockStore {
             self.order_vote_enabled,
             self.is_validator,
             self.pending_blocks.clone(),
+            self.enable_randomness,
         )
         .await;
 
