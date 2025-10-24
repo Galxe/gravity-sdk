@@ -84,21 +84,7 @@ impl CoreMempoolTrait for Mempool {
         sender_bucket: MempoolSenderBucket,
         start_end_pairs: HashMap<TimelineIndexIdentifier, (u64, u64)>,
     ) -> Vec<(SignedTransaction, u64)> {
-        let visited = self.txn_cache.clone();
-        let filter = Box::new(move |txn: (ExternalAccountAddress, u64, TxnHash)| {
-            !visited.lock().unwrap().is_contains(&txn.2)
-        });
-        let iter = self.pool.get_broadcast_txns(Some(filter));
-        let mut broacasted_txns = vec![];
-        let mut visited_cache = self.txn_cache.lock().unwrap();
-        for txn in iter {   
-            visited_cache.insert(TxnHash::from_bytes(txn.committed_hash().as_slice()));
-            broacasted_txns.push((
-                VerifiedTxn::from(txn).into(),
-                0,
-            ));
-        }
-        broacasted_txns
+        vec![]
     }
 
     fn timeline_range_of_message(
@@ -108,21 +94,7 @@ impl CoreMempoolTrait for Mempool {
             HashMap<TimelineIndexIdentifier, (u64, u64)>,
         >,
     ) -> Vec<(SignedTransaction, u64)> {
-        let visited = self.txn_cache.clone();
-        let filter = Box::new(move |txn: (ExternalAccountAddress, u64, TxnHash)| {
-            !visited.lock().unwrap().is_contains(&txn.2)
-        });
-        let iter = self.pool.get_broadcast_txns(Some(filter));
-        let mut broacasted_txns = vec![];
-        let mut visited_cache = self.txn_cache.lock().unwrap();
-        for txn in iter {   
-            visited_cache.insert(TxnHash::from_bytes(txn.committed_hash().as_slice()));
-            broacasted_txns.push((
-                VerifiedTxn::from(txn).into(),
-                0,
-            ));
-        }
-        broacasted_txns
+        vec![]
     }
 
     fn get_parking_lot_addresses(&self) -> Vec<(AccountAddress, u64)> {
@@ -138,10 +110,23 @@ impl CoreMempoolTrait for Mempool {
         before: Option<Instant>,
         priority_of_receiver: BroadcastPeerPriority,
     ) -> (Vec<(SignedTransaction, u64)>, MultiBucketTimelineIndexIds) {
-        let txns = self.timeline_range(sender_bucket, HashMap::new());
-        let txns_len = txns.len();
-        info!("read_timeline txns_len: {}", txns_len);
-        (txns, MultiBucketTimelineIndexIds { id_per_bucket: vec![0; txns_len] })
+        let visited = self.txn_cache.clone();
+        let filter = Box::new(move |txn: (ExternalAccountAddress, u64, TxnHash)| {
+            !visited.lock().unwrap().is_contains(&txn.2)
+        });
+        let iter = self.pool.get_broadcast_txns(Some(filter));
+        let mut broacasted_txns = vec![];
+        let mut visited_cache = self.txn_cache.lock().unwrap();
+        for txn in iter {   
+            visited_cache.insert(TxnHash::from_bytes(txn.committed_hash().as_slice()));
+            broacasted_txns.push((
+                VerifiedTxn::from(txn).into(),
+                0,
+            ));
+        }
+        let len = broacasted_txns.len();
+        
+        (broacasted_txns, MultiBucketTimelineIndexIds { id_per_bucket: vec![0; len] })
     }
 
     fn gc(&mut self) {
