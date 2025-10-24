@@ -375,7 +375,7 @@ impl BlockStore {
                 };
                 
                 let validator_txns = p_block.block().validator_txns();
-                let jwks_extra_data = crate::state_computer::process_jwk_transactions_util(
+                let jwks_extra_data = crate::state_computer::process_validator_transactions_util(
                     validator_txns.map(|v| &**v), 
                     p_block.block()
                 );

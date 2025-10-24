@@ -305,8 +305,8 @@ impl ExecutionProxy {
     }
 }
 
-/// Public utility function to process JWK transactions
-pub fn process_jwk_transactions_util(
+/// Public utility function to process validator transactions (JWK and DKG)
+pub fn process_validator_transactions_util(
     validator_txns: Option<&[ValidatorTransaction]>,
     block: &Block,
 ) -> Vec<Vec<u8>> {
@@ -315,15 +315,15 @@ pub fn process_jwk_transactions_util(
     if let Some(validator_txns) = validator_txns {
         jwks_extra_data = validator_txns
             .iter()
-            .map(|txn| process_single_jwk_transaction_util(txn, block))
+            .map(|txn| process_single_validator_transaction_util(txn, block))
             .collect();
     }
     
     jwks_extra_data
 }
 
-/// Public utility function to process a single JWK transaction
-pub fn process_single_jwk_transaction_util(
+/// Public utility function to process a single validator transaction
+pub fn process_single_validator_transaction_util(
     txn: &ValidatorTransaction,
     block: &Block,
 ) -> Vec<u8> {
@@ -401,7 +401,7 @@ impl StateComputer for ExecutionProxy {
         assert!(block.block_number().is_some());
         let txns = self.get_block_txns(block).await;
         let validator_txns = block.validator_txns();
-        let jwks_extra_data = process_jwk_transactions_util(validator_txns.map(|v| &**v), block);
+        let jwks_extra_data = process_validator_transactions_util(validator_txns.map(|v| &**v), block);
         
         let meta_data = ExternalBlockMeta {
             block_id: BlockId(*block.id()),
