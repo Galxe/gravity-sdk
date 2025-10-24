@@ -186,7 +186,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     ) -> Self {
         let is_validator = node_config.base.role.is_validator();
         let author = if is_validator {
-            node_config.validator_network.as_ref().unwrap().peer_id()
+            node_config.validator_network.as_ref().expect("validator network must be set").peer_id()
         } else {
             let mut vfn_peer_id = None;
             for network in node_config.full_node_networks.iter() {
@@ -1307,7 +1307,11 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             Arc::new(self.vtxn_pool.clone()),
             Arc::new(quorum_store_client),
         );
-        self.start_quorum_store(quorum_store_builder);
+
+        if self.is_validator {
+            self.start_quorum_store(quorum_store_builder);
+        }
+
         (
             network_sender,
             Arc::new(mixed_payload_client),
