@@ -82,7 +82,6 @@ pub struct OrderedBlocks {
     pub ordered_blocks: Vec<PipelinedBlock>,
     pub ordered_proof: LedgerInfoWithSignatures,
     pub callback: StateComputerCommitCallBackType,
-    pub recover_randomness: bool,
 }
 
 impl OrderedBlocks {
