@@ -94,6 +94,7 @@ impl MockConsensus {
             },
             txns,
             jwks_extra_data: Vec::new(), // TODO: add jwks_extra_data
+            enable_randomness: false,
         };
     }
 

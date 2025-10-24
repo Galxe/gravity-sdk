@@ -431,6 +431,7 @@ impl StateComputer for ExecutionProxy {
         APTOS_EXECUTION_TXNS.observe(real_txns.len() as f64);
         let txn_notifier = self.txn_notifier.clone();
         let block_id_hashvalue = block.id();
+        let enable_randomness = self.state.read().as_ref().unwrap().is_randomness_enabled;
         Box::pin(async move {
             let block_id = meta_data.block_id;
             let block_timestamp = meta_data.usecs;
@@ -440,6 +441,7 @@ impl StateComputer for ExecutionProxy {
                     block_meta: meta_data.clone(),
                     txns: real_txns,
                     jwks_extra_data,
+                    enable_randomness: enable_randomness,
                 })
                 .await.unwrap_or_else(|e| panic!("Failed to push ordered blocks {}", e));
             let u_ts = meta_data.usecs;
