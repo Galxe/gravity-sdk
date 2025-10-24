@@ -12,6 +12,7 @@ use gaptos::api_types::{
     u256_define::TxnHash,
     VerifiedTxn,
 };
+use greth::reth_transaction_pool::PoolTransaction;
 use greth::{
     reth_primitives::{Recovered, TransactionSigned},
     reth_transaction_pool::{
@@ -126,8 +127,13 @@ impl TxPool for Mempool {
                 let recovered = Recovered::new_unchecked(txn, signer);
                 let pool_txn = EthPooledTransaction::new(recovered, len);
                 let pool = self.pool.clone();
+                let address = pool_txn.sender();
+                let to = pool_txn.to();
                 self.runtime.spawn(async move {
-                    pool.add_external_transaction(pool_txn).await.is_ok()
+                    let res = pool.add_external_transaction(pool_txn).await;
+                    if let Err(e) = res {
+                        tracing::error!("Failed to add transaction: {:?} {:?} {:?}", address, to, e);
+                    }
                 });
                 true
             }
