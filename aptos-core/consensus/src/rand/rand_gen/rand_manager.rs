@@ -132,10 +132,7 @@ impl<S: TShare, D: TAugmentedData> RandManager<S, D> {
     fn process_incoming_blocks(&mut self, blocks: OrderedBlocks) {
         let rounds: Vec<u64> = blocks.ordered_blocks.iter().map(|b| b.round()).collect();
         info!(rounds = rounds, "Processing incoming blocks.");
-        
-        // Process randomness metadata for both normal and recover modes
-        // For recover mode, we still need to process randomness metadata
-        // because the blocks don't have randomness data and we need to regenerate it
+
         let broadcast_handles: Vec<_> = blocks
             .ordered_blocks
             .iter()
