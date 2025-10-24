@@ -188,30 +188,6 @@ pub fn register_client_and_service_with_network<
     ApplicationNetworkHandle { network_id, network_sender, network_events }
 }
 
-pub fn build_network_interfaces<T>(
-    network_builder: &mut NetworkBuilder,
-    network_id: NetworkId,
-    network_config: &NetworkConfig,
-    application_config: NetworkApplicationConfig,
-    peers_and_metadata: Arc<PeersAndMetadata>,
-) -> ApplicationNetworkInterfaces<T>
-where
-    T: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
-{
-    let consensus_network_handle = register_client_and_service_with_network(
-        network_builder,
-        network_id,
-        &network_config,
-        application_config.clone(),
-        true,
-    );
-    create_network_interfaces(
-        vec![consensus_network_handle],
-        application_config,
-        peers_and_metadata.clone(),
-    )
-}
-
 /// Creates a network runtime for the given network config
 pub fn create_network_runtime(network_config: &NetworkConfig) -> Runtime {
     let network_id = network_config.network_id;
