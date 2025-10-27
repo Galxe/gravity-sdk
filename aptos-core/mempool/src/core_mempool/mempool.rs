@@ -135,7 +135,6 @@ impl CoreMempoolTrait for Mempool {
         ready_time_at_sender: Option<u64>,
         priority: Option<BroadcastPeerPriority>,
     ) -> MempoolStatus {
-        info!("add_txn sequence_info: {}", txn.sequence_number());
         self.txn_cache.lock().unwrap().insert(TxnHash::new(*txn.committed_hash()));
         let verfited_txn = crate::core_mempool::transaction::VerifiedTxn::from(txn);
         let res = self.pool.add_external_txn(verfited_txn.into());
