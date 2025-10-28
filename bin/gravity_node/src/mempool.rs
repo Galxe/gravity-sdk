@@ -26,11 +26,12 @@ pub struct Mempool {
         DashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>,
     >,
     runtime: tokio::runtime::Runtime,
+    enable_broadcast: bool,
 }
 
 impl Mempool {
-    pub fn new(pool: RethTransactionPool) -> Self {
-        Self { pool, txn_cache: Arc::new(DashMap::new()), runtime: tokio::runtime::Runtime::new().unwrap() }
+    pub fn new(pool: RethTransactionPool, enable_broadcast: bool) -> Self {
+        Self { pool, txn_cache: Arc::new(DashMap::new()), runtime: tokio::runtime::Runtime::new().unwrap(), enable_broadcast }
     }
 
     pub fn tx_cache(
@@ -99,6 +100,9 @@ impl TxPool for Mempool {
         &self,
         filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>,
     ) -> Box<dyn Iterator<Item = VerifiedTxn>> {
+        if !self.enable_broadcast {
+            return Box::new(std::iter::empty());
+        }
         let all_txns = self.pool.all_transactions();
         let iter = all_txns
             .all()
