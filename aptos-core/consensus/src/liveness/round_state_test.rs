@@ -96,6 +96,7 @@ fn make_round_state() -> (RoundState, gaptos::aptos_channels::Receiver<Round>) {
             timeout_tx,
             delayed_qc_tx,
             QcAggregatorType::NoDelay,
+            true,
         ),
         timeout_rx,
     )

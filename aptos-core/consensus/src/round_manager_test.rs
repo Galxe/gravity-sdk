@@ -11,6 +11,7 @@ use crate::{
         proposer_election::ProposerElection,
         rotating_proposer_election::RotatingProposer,
         round_state::{ExponentialTimeInterval, RoundState},
+        unequivocal_proposer_election::UnequivocalProposerElection,
     },
     metrics_safety_rules::MetricsSafetyRules,
     network::{IncomingBlockRetrievalRequest, NetworkSender},
@@ -19,7 +20,7 @@ use crate::{
     payload_manager::DirectMempoolPayloadManager,
     persistent_liveness_storage::RecoveryData,
     pipeline::buffer_manager::OrderedBlocks,
-    round_manager::RoundManager,
+    round_manager::{RoundManager, ValidatorComponents},
     test_utils::{
         consensus_runtime, create_vec_signed_transactions,
         mock_execution_client::MockExecutionClient, timed_block_on, MockPayloadManager,
@@ -27,7 +28,7 @@ use crate::{
     },
     util::time_service::{ClockTimeService, TimeService},
 };
-use gaptos::aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
+use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
 use gaptos::aptos_config::{
     config::{ConsensusConfig, QcAggregatorType},
     network_id::{NetworkId, PeerNetworkId},
@@ -129,6 +130,7 @@ impl NodeSetup {
             round_timeout_sender,
             delayed_qc_tx,
             QcAggregatorType::NoDelay,
+            true,
         )
     }
 
@@ -293,6 +295,7 @@ impl NodeSetup {
             10,
             Arc::from(DirectMempoolPayloadManager::new()),
             false,
+            true,
             Arc::new(Mutex::new(PendingBlocks::new()))
             // None,
         ));
@@ -328,13 +331,16 @@ impl NodeSetup {
         let mut local_config = local_consensus_config.clone();
         local_config.enable_broadcast_vote(false);
 
+        let validator_components = ValidatorComponents::new(
+            Arc::new(UnequivocalProposerElection::new(proposer_election)),
+            Arc::new(proposal_generator),
+            Arc::new(Mutex::new(safety_rules)),
+        );
+
         let mut round_manager = RoundManager::new(
             epoch_state,
             Arc::clone(&block_store),
             round_state,
-            proposer_election,
-            proposal_generator,
-            Arc::new(Mutex::new(safety_rules)),
             network,
             storage.clone(),
             onchain_consensus_config.clone(),
@@ -343,6 +349,7 @@ impl NodeSetup {
             onchain_randomness_config.clone(),
             onchain_jwk_consensus_config.clone(),
             None,
+            Some(validator_components),
         );
         block_on(round_manager.init(last_vote_sent));
         Self {

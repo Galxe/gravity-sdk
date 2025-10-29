@@ -1502,12 +1502,12 @@ impl RoundManager {
     /// Inspect the current consensus state.
     #[cfg(test)]
     pub fn consensus_state(&mut self) -> ConsensusState {
-        self.safety_rules.lock().consensus_state().unwrap()
+        self.validator_components.as_ref().unwrap().safety_rules.lock().consensus_state().unwrap()
     }
 
     #[cfg(test)]
     pub fn set_safety_rules(&mut self, safety_rules: Arc<Mutex<MetricsSafetyRules>>) {
-        self.safety_rules = safety_rules
+        self.validator_components.as_mut().unwrap().safety_rules = safety_rules
     }
 
     pub fn epoch_state(&self) -> &EpochState {

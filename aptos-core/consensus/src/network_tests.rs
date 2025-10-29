@@ -836,7 +836,7 @@ mod tests {
             let response = nodes[0]
                 .request_block(
                     BlockRetrievalRequest::new(HashValue::zero(), 1),
-                    peer,
+                    PeerNetworkId::new(NetworkId::Validator, peer),
                     Duration::from_secs(5),
                 )
                 .await

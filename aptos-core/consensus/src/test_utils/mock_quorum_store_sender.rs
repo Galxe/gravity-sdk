@@ -10,6 +10,7 @@ use aptos_consensus_types::{
     common::Author,
     proof_of_store::{ProofOfStore, ProofOfStoreMsg, SignedBatchInfo, SignedBatchInfoMsg},
 };
+use gaptos::aptos_config::network_id::PeerNetworkId;
 use std::time::Duration;
 use tokio::sync::mpsc::Sender;
 
@@ -29,7 +30,7 @@ impl QuorumStoreSender for MockQuorumStoreSender {
     async fn request_batch(
         &self,
         _request: BatchRequest,
-        _recipient: Author,
+        _recipient: PeerNetworkId,
         _timeout: Duration,
     ) -> anyhow::Result<BatchResponse> {
         unimplemented!();
@@ -66,6 +67,10 @@ impl QuorumStoreSender for MockQuorumStoreSender {
     }
 
     async fn send_proof_of_store_msg_to_self(&mut self, _proof_of_stores: Vec<ProofOfStore>) {
+        unimplemented!()
+    }
+
+    fn get_available_peers(&self) -> anyhow::Result<Vec<PeerNetworkId>> {
         unimplemented!()
     }
 }
