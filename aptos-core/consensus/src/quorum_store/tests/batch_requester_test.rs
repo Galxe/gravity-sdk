@@ -12,7 +12,7 @@ use aptos_consensus_types::{
     common::Author,
     proof_of_store::{BatchId, ProofOfStore, SignedBatchInfo},
 };
-use gaptos::aptos_crypto::HashValue;
+use gaptos::{aptos_config::network_id::{NetworkId, PeerNetworkId}, aptos_crypto::HashValue};
 use gaptos::aptos_types::{
     aggregate_signature::PartialSignatures,
     block_info::BlockInfo,
@@ -40,7 +40,7 @@ impl QuorumStoreSender for MockBatchRequester {
     async fn request_batch(
         &self,
         _request: BatchRequest,
-        _recipient: Author,
+        _recipient: PeerNetworkId,
         _timeout: Duration,
     ) -> anyhow::Result<BatchResponse> {
         Ok(self.return_value.clone())
@@ -65,6 +65,10 @@ impl QuorumStoreSender for MockBatchRequester {
     async fn send_proof_of_store_msg_to_self(&mut self, _proof_of_stores: Vec<ProofOfStore>) {
         unimplemented!()
     }
+
+    fn get_available_peers(&self) -> anyhow::Result<Vec<PeerNetworkId>> {
+        unimplemented!()
+    }
 }
 
 #[tokio::test]
@@ -83,7 +87,7 @@ async fn test_batch_request_exists() {
     let (tx, mut rx) = tokio::sync::oneshot::channel();
     let batch_requester = BatchRequester::new(
         1,
-        AccountAddress::random(),
+        PeerNetworkId::new(NetworkId::Validator, AccountAddress::random()),
         1,
         2,
         1_000,
@@ -179,7 +183,7 @@ async fn test_batch_request_not_exists_not_expired() {
     let batch_response = BatchResponse::NotFound(ledger_info_with_signatures);
     let batch_requester = BatchRequester::new(
         1,
-        AccountAddress::random(),
+        PeerNetworkId::new(NetworkId::Validator, AccountAddress::random()),
         1,
         2,
         retry_interval_ms,
@@ -227,7 +231,7 @@ async fn test_batch_request_not_exists_expired() {
     let batch_response = BatchResponse::NotFound(ledger_info_with_signatures);
     let batch_requester = BatchRequester::new(
         1,
-        AccountAddress::random(),
+        PeerNetworkId::new(NetworkId::Validator, AccountAddress::random()),
         1,
         2,
         retry_interval_ms,

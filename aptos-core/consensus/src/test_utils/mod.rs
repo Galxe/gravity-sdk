@@ -96,6 +96,7 @@ pub async fn build_empty_tree() -> Arc<BlockStore> {
         10,
         Arc::from(DirectMempoolPayloadManager::new()),
         false,
+        true,
         Arc::new(Mutex::new(PendingBlocks::new())),
     ))
 }
