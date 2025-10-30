@@ -3,15 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    error::StateSyncError,
-    network::{IncomingCommitRequest, IncomingRandGenRequest},
-    payload_manager::{DirectMempoolPayloadManager, TPayloadManager},
-    pipeline::{
+    consensusdb::ConsensusDB, error::StateSyncError, network::{IncomingCommitRequest, IncomingRandGenRequest}, payload_manager::{DirectMempoolPayloadManager, TPayloadManager}, pipeline::{
         buffer_manager::OrderedBlocks, execution_client::TExecutionClient, pipeline_builder::PipelineBuilder, signing_phase::CommitSignerProvider
-    },
-    rand::rand_gen::types::RandConfig,
-    state_replication::StateComputerCommitCallBackType,
-    test_utils::mock_storage::MockStorage,
+    }, rand::rand_gen::types::RandConfig, state_replication::StateComputerCommitCallBackType, test_utils::mock_storage::MockStorage
 };
 use anyhow::{format_err, Result};
 use gaptos::aptos_channels::aptos_channel;
@@ -104,6 +98,7 @@ impl TExecutionClient for MockExecutionClient {
         _fast_rand_config: Option<RandConfig>,
         _rand_msg_rx: aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
         _highest_committed_round: Round,
+        _consensus_db: Option<Arc<ConsensusDB>>,
     ) {
     }
 

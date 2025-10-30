@@ -65,15 +65,16 @@ impl QueueItem {
 
     pub fn set_randomness(&mut self, round: Round, rand: Randomness) -> bool {
         let offset = self.offset(round);
+        self.num_undecided_blocks -= 1;
         if !self.blocks()[offset].has_randomness() {
             observe_block(
                 self.blocks()[offset].timestamp_usecs(),
                 BlockStage::RAND_ADD_DECISION,
             );
             self.blocks_mut()[offset].set_randomness(rand);
-            self.num_undecided_blocks -= 1;
             true
         } else {
+            assert_eq!(self.blocks()[offset].randomness().unwrap().randomness(), rand.randomness());
             false
         }
     }

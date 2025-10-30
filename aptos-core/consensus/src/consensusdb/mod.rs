@@ -9,8 +9,9 @@ pub mod schema;
 
 use crate::error::DbError;
 use anyhow::Result;
-use aptos_consensus_types::{block::Block, quorum_cert::QuorumCert};
+use aptos_consensus_types::{block::Block, quorum_cert::QuorumCert, pipelined_block::PipelinedBlock};
 use gaptos::aptos_crypto::HashValue;
+use gaptos::aptos_types::{randomness::Randomness, randomness::RandMetadata};
 use gaptos::aptos_logger::prelude::*;
 use gaptos::aptos_schemadb::{
     schema::{KeyCodec, Schema},
@@ -29,7 +30,7 @@ use schema::{
     block::BLOCK_NUMBER_CF_NAME,
     single_entry::{SingleEntryKey, SingleEntrySchema},
     BLOCK_CF_NAME, CERTIFIED_NODE_CF_NAME, DAG_VOTE_CF_NAME, LEDGER_INFO_CF_NAME, NODE_CF_NAME,
-    QC_CF_NAME, SINGLE_ENTRY_CF_NAME, EPOCH_BY_BLOCK_NUMBER_CF_NAME,
+    QC_CF_NAME, SINGLE_ENTRY_CF_NAME, EPOCH_BY_BLOCK_NUMBER_CF_NAME, RANDOMNESS_CF_NAME,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -98,6 +99,7 @@ impl ConsensusDB {
             LEDGER_INFO_CF_NAME,
             BLOCK_NUMBER_CF_NAME,
             EPOCH_BY_BLOCK_NUMBER_CF_NAME,
+            RANDOMNESS_CF_NAME,
             "ordered_anchor_id", // deprecated CF
         ];
 
@@ -343,6 +345,26 @@ impl ConsensusDB {
             _ => 1,
         };
         max_epoch
+    }
+
+    /// Store randomness data for blocks
+    pub fn put_randomness(&self, blocks: &Vec<(u64, Vec<u8>)>) -> Result<(), DbError> {
+        if blocks.is_empty() {
+            return Ok(());
+        }
+        
+        let mut batch = SchemaBatch::new();
+        
+        for block in blocks {
+            batch.put::<schema::randomness::RandomnessSchema>(&block.0, &block.1)?;
+        }
+        
+        self.commit(batch)
+    }
+
+    /// Get randomness data for a specific block number
+    pub fn get_randomness(&self, block_number: u64) -> Result<Option<Vec<u8>>, DbError> {
+        Ok(self.get::<schema::randomness::RandomnessSchema>(&block_number)?)
     }
 }
 
