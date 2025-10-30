@@ -17,7 +17,7 @@ use crate::{
 use anyhow::{bail, ensure, format_err, Context};
 use gaptos::{api_types::{
     account::ExternalAccountAddress, compute_res::ComputeRes, u256_define::{BlockId, Random}, ExternalBlock, ExternalBlockMeta
-}, aptos_types::{jwks, validator_txn::ValidatorTransaction}};
+}, aptos_types::{jwks, randomness::{RandMetadata, Randomness}, validator_txn::ValidatorTransaction}};
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 use block_buffer_manager::{block_buffer_manager::BlockHashRef, get_block_buffer_manager};
 use aptos_consensus_types::{
@@ -218,6 +218,39 @@ impl BlockStore {
             }
         }
         RECOVERY_GAUGE.set_with(&[], 0);
+    }
+
+    /// Returns the WrappedLedgerInfo for fast_forward_sync.
+    /// If a block with randomness is found on the path from ordered_root back to commit_root,
+    /// returns the highest_ordered_cert. Otherwise, returns the highest_commit_cert (or genesis).
+    pub fn has_randomness_on_path_from_ordered_to_commit(&self) -> Arc<WrappedLedgerInfo> {
+        let ordered_root = self.ordered_root();
+        let commit_root = self.commit_root();
+        let commit_round = commit_root.round();
+        let mut cursor = ordered_root.clone();
+        
+        loop {
+
+            if cursor.round() <= commit_round  {
+                break;
+            }
+            
+            if cursor.randomness().is_some() {
+                // Found randomness, get the quorum cert for this block
+                let qc = self.get_quorum_cert_for_block(cursor.id()).unwrap();
+                return Arc::new(qc.into_wrapped_ledger_info());
+            }
+            
+            match self.get_block(cursor.parent_id()) {
+                Some(parent) => {
+                    cursor = parent;
+                }
+                None => break,
+            }
+        }
+        
+        // No randomness found on the path, return highest_commit_cert
+        self.highest_commit_cert()
     }
 
     async fn build(
@@ -456,8 +489,8 @@ impl BlockStore {
         Ok(())
     }
 
-    pub async fn append_blocks_for_sync(&self, blocks: Vec<Block>, quorum_certs: Vec<QuorumCert>) {
-        for block in blocks {
+    pub async fn append_blocks_for_sync(&self, blocks: Vec<(Block, Option<Vec<u8>>)>, quorum_certs: Vec<QuorumCert>) {
+        for (block, _) in blocks {
             self.insert_block(block, true).await.unwrap_or_else(|e| {
                 panic!("[BlockStore] failed to insert block during append blocks for sync {:?}", e)
             });
@@ -530,6 +563,14 @@ impl BlockStore {
         }
 
         let pipelined_block = PipelinedBlock::new_ordered(block.clone());
+        // set_randomness if it is available
+        if let Some(block_number) = block.block_number() {
+            if let Ok(Some(randomness)) = self.storage.consensus_db().get_randomness(block_number) {
+                pipelined_block.set_randomness(Randomness::new(RandMetadata { epoch: block.epoch(), round: block.round() }, randomness));
+            } else {
+                warn!("No randomness found for block {}, epoch {}, round {}", block, block.epoch(), block.round());
+            }
+        }
         // ensure local time past the block time
         let block_time = Duration::from_micros(pipelined_block.timestamp_usecs());
         let current_timestamp = self.time_service.get_current_timestamp();

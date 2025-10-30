@@ -110,13 +110,13 @@ pub enum BlockRetrievalStatus {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct BlockRetrievalResponse {
     status: BlockRetrievalStatus,
-    blocks: Vec<Block>,
+    blocks: Vec<(Block, Option<Vec<u8>>)>,
     ledger_infos: Vec<LedgerInfoWithSignatures>,
     quorum_certs: Vec<QuorumCert>,
 }
 
 impl BlockRetrievalResponse {
-    pub fn new(status: BlockRetrievalStatus, blocks: Vec<Block>, quorum_certs: Vec<QuorumCert>, ledger_infos: Vec<LedgerInfoWithSignatures>) -> Self {
+    pub fn new(status: BlockRetrievalStatus, blocks: Vec<(Block, Option<Vec<u8>>)>, quorum_certs: Vec<QuorumCert>, ledger_infos: Vec<LedgerInfoWithSignatures>) -> Self {
         Self { status, blocks, quorum_certs, ledger_infos }
     }
 
@@ -124,7 +124,7 @@ impl BlockRetrievalResponse {
         self.status.clone()
     }
 
-    pub fn blocks(&self) -> &Vec<Block> {
+    pub fn blocks(&self) -> &Vec<(Block, Option<Vec<u8>>)> {
         &self.blocks
     }
 
@@ -150,7 +150,7 @@ impl BlockRetrievalResponse {
         );
         self.blocks
             .iter()
-            .try_fold(retrieval_request.block_id(), |expected_id, block| {
+            .try_fold(retrieval_request.block_id(), |expected_id, (block, _)| {
                 block.validate_signature(sig_verifier)?;
                 block.verify_well_formed()?;
                 ensure!(
@@ -177,7 +177,7 @@ impl fmt::Display for BlockRetrievalResponse {
                 )?;
 
                 f.debug_list()
-                    .entries(self.blocks.iter().map(|b| b.id().short_str()))
+                    .entries(self.blocks.iter().map(|(b, _)| b.id().short_str()))
                     .finish()?;
 
                 write!(f, "]")

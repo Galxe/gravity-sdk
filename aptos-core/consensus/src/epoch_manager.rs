@@ -857,6 +857,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 fast_rand_config.clone(),
                 rand_msg_rx,
                 recovery_data.root_block().round(),
+                Some(self.storage.consensus_db().clone()),
             )
             .await;
         let consensus_sk = consensus_key;
@@ -1434,6 +1435,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 fast_rand_config,
                 rand_msg_rx,
                 highest_committed_round,
+                Some(self.storage.consensus_db().clone()),
             )
             .await;
 

@@ -1145,6 +1145,7 @@ impl ConsensusObserver {
                 None,
                 rand_msg_rx,
                 0,
+                None,
             )
             .await;
     }

@@ -2,10 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    logging::{LogEvent, LogSchema},
-    network::{IncomingRandGenRequest, NetworkSender, TConsensusMsg},
-    pipeline::buffer_manager::{OrderedBlocks, ResetAck, ResetRequest, ResetSignal},
-    rand::rand_gen::{
+    consensusdb::ConsensusDB, logging::{LogEvent, LogSchema}, network::{IncomingRandGenRequest, NetworkSender, TConsensusMsg}, pipeline::buffer_manager::{OrderedBlocks, ResetAck, ResetRequest, ResetSignal}, rand::rand_gen::{
         aug_data_store::AugDataStore,
         block_queue::{BlockQueue, QueueItem},
         network_messages::{RandMessage, RpcRequest},
@@ -15,7 +12,7 @@ use crate::{
         },
         storage::interface::RandStorage,
         types::{FastShare, PathType, RandConfig, RequestShare, TAugmentedData, TShare},
-    },
+    }
 };
 use gaptos::aptos_bounded_executor::BoundedExecutor;
 use gaptos::aptos_channels::aptos_channel;
@@ -67,6 +64,8 @@ pub struct RandManager<S: TShare, D: TAugmentedData> {
 
     // for randomness fast path
     fast_config: Option<RandConfig>,
+
+    consensus_db: Arc<ConsensusDB>,
 }
 
 impl<S: TShare, D: TAugmentedData> RandManager<S, D> {
@@ -81,6 +80,7 @@ impl<S: TShare, D: TAugmentedData> RandManager<S, D> {
         db: Arc<dyn RandStorage<D>>,
         bounded_executor: BoundedExecutor,
         rb_config: &ReliableBroadcastConfig,
+        consensus_db: Arc<ConsensusDB>,
     ) -> Self {
         let rb_backoff_policy = ExponentialBackoff::from_millis(rb_config.backoff_policy_base_ms)
             .factor(rb_config.backoff_policy_factor)
@@ -126,6 +126,7 @@ impl<S: TShare, D: TAugmentedData> RandManager<S, D> {
             block_queue: BlockQueue::new(),
 
             fast_config,
+            consensus_db,
         }
     }
 
@@ -178,6 +179,7 @@ impl<S: TShare, D: TAugmentedData> RandManager<S, D> {
         info!(rounds = rounds, "Processing rand-ready blocks.");
 
         for blocks in ready_blocks {
+            self.consensus_db.put_randomness(&blocks.ordered_blocks.iter().map(|b| (b.block().block_number().unwrap(), b.randomness().unwrap().randomness_cloned())).collect());
             let _ = self.outgoing_blocks.unbounded_send(blocks);
         }
     }
