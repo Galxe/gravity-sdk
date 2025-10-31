@@ -6,7 +6,7 @@ use api::{
     consensus_api::{ConsensusEngine, ConsensusEngineArgs},
 };
 use consensus::mock_consensus::mock::MockConsensus;
-use gaptos::api_types::relayer::GLOBAL_RELAYER;
+use gaptos::{api_types::relayer::GLOBAL_RELAYER, aptos_config::config::RoleType};
 use gravity_storage::block_view_storage::BlockViewStorage;
 use greth::{
     gravity_storage,
@@ -216,7 +216,7 @@ fn main() {
     let (execution_args_tx, execution_args_rx) = oneshot::channel();
     let (consensus_args, latest_block_number) = run_reth(cli, execution_args_rx);
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let pool = Box::new(Mempool::new(consensus_args.pool.clone()));
+    let pool = Box::new(Mempool::new(consensus_args.pool.clone(), gcei_config.base.role == RoleType::FullNode));
     let txn_cache = pool.tx_cache();
     rt.block_on(async move {
         let client = Arc::new(RethCli::new(consensus_args, txn_cache).await);

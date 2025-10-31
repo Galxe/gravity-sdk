@@ -55,7 +55,57 @@ impl TxnCache {
     }
 
     fn is_contains(&self, txn_hash: &TxnHash) -> bool {
-        self.cache.contains(txn_hash)
+        self.cache.contains(txn_hash) || self.old_cache.contains(txn_hash)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mock_txn_hash(id: u64) -> TxnHash {
+        TxnHash::from_bytes(&[id as u8; 32])
+    }
+
+    #[test]
+    fn test_txn_cache() {
+        let cache_size = 2;
+        let mut cache = TxnCache::new(cache_size);
+
+        let h1 = mock_txn_hash(1);
+        let h2 = mock_txn_hash(2);
+        let h3 = mock_txn_hash(3);
+        let h4 = mock_txn_hash(4);
+
+        // 1. Test insertion before rotation
+        cache.insert(h1);
+        cache.insert(h2);
+
+        assert!(cache.is_contains(&h1));
+        assert!(cache.is_contains(&h2));
+        assert!(!cache.is_contains(&h3));
+        assert_eq!(cache.cache.len(), 2);
+        assert_eq!(cache.old_cache.len(), 0);
+
+        // 2. Test rotation
+        cache.insert(h3);
+
+        assert!(cache.is_contains(&h1));
+        assert!(cache.is_contains(&h2));
+        assert!(cache.is_contains(&h3));
+        assert_eq!(cache.cache.len(), 0);
+        assert_eq!(cache.old_cache.len(), 3);
+
+        // 3. Test insertion after rotation
+        cache.insert(h4);
+
+        assert!(cache.is_contains(&h1));
+        assert!(cache.is_contains(&h2));
+        assert!(cache.is_contains(&h3));
+        assert!(cache.is_contains(&h4));
+        assert_eq!(cache.cache.len(), 1);
+        assert_eq!(cache.old_cache.len(), 3);
+        assert!(cache.cache.contains(&h4));
     }
 }
 
@@ -135,7 +185,7 @@ impl CoreMempoolTrait for Mempool {
         ready_time_at_sender: Option<u64>,
         priority: Option<BroadcastPeerPriority>,
     ) -> MempoolStatus {
-        info!("add_txn sequence_info: {}", txn.sequence_number());
+        self.txn_cache.lock().unwrap().insert(TxnHash::new(*txn.committed_hash()));
         let verfited_txn = crate::core_mempool::transaction::VerifiedTxn::from(txn);
         let res = self.pool.add_external_txn(verfited_txn.into());
         if res {
