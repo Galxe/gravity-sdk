@@ -153,6 +153,7 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     // recovery_mode is set to true when the recovery manager is spawned
     recovery_mode: bool,
     is_validator: bool,
+    is_current_epoch_validator: bool,
     aptos_time_service: gaptos::aptos_time_service::TimeService,
     dag_rpc_tx: Option<aptos_channel::Sender<AccountAddress, IncomingDAGRequest>>,
     dag_shutdown_tx: Option<oneshot::Sender<oneshot::Sender<()>>>,
@@ -234,6 +235,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             bounded_executor,
             recovery_mode: false,
             is_validator,
+            is_current_epoch_validator: false,
             dag_rpc_tx: None,
             dag_shutdown_tx: None,
             aptos_time_service,
@@ -279,7 +281,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             timeout_sender,
             delayed_qc_tx,
             qc_aggregator_type,
-            self.is_validator,
+            self.is_validator && self.is_current_epoch_validator,
         )
     }
 
@@ -723,7 +725,11 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             QuorumStoreBuilder::QuorumStore(InnerBuilder::new(
                 self.epoch(),
                 PeerNetworkId::new(
-                    if self.is_validator { NetworkId::Validator } else { NetworkId::Vfn },
+                    if self.is_validator && self.is_current_epoch_validator {
+                        NetworkId::Validator
+                    } else {
+                        NetworkId::Vfn
+                    },
                     self.author,
                 ),
                 epoch_state.verifier.len() as u64,
@@ -875,7 +881,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             self.config.vote_back_pressure_limit,
             payload_manager,
             onchain_consensus_config.order_vote_enabled(),
-            self.is_validator,
+            self.is_validator && self.is_current_epoch_validator,
             self.pending_blocks.clone(),
         ).await);
 
@@ -890,7 +896,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .config
             .max_blocks_per_receiving_request(onchain_consensus_config.quorum_store_enabled());
 
-        let validator_components = if self.is_validator {
+        let validator_components = if self.is_validator && self.is_current_epoch_validator {
             info!(epoch = epoch, "Create ProposerElection");
             let proposer_election =
                 self.create_proposer_election(&epoch_state, &onchain_consensus_config);
@@ -1129,6 +1135,17 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .get()
             .expect("failed to get ValidatorSet from payload");
         info!("validator_set read from config storage is : {:?}", validator_set);
+
+        self.is_current_epoch_validator = false;
+        if self.is_validator {
+            for validator in validator_set.active_validators.iter() {
+                if validator.account_address == self.author {
+                    self.is_current_epoch_validator = true;
+                    info!("node is current epoch validator: {:?}", self.author);
+                    break;
+                }
+            }
+        }
         
         let epoch_state = Arc::new(EpochState {
             epoch: payload.epoch(),
@@ -1308,7 +1325,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             Arc::new(quorum_store_client),
         );
 
-        if self.is_validator {
+        if self.is_validator && self.is_current_epoch_validator {
             self.start_quorum_store(quorum_store_builder);
         }
 
@@ -1779,7 +1796,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
     /// Request the sync info from from other peers.
     async fn request_sync_info(&self) -> anyhow::Result<(Author, Box<SyncInfo>)> {
-        debug_assert!(!self.is_validator);
+        debug_assert!(!self.is_current_epoch_validator);
         let peers = self.network_sender.network_client.get_available_peers()?;
         let mut vfn_peers = peers
             .iter()
@@ -1808,7 +1825,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
     /// Advance the block sync progress for fullnode.
     async fn advance_block_sync(&self) {
-        if self.is_validator {
+        if self.is_validator && self.is_current_epoch_validator {
             return
         }
 
@@ -1882,15 +1899,11 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     ) {
         // initial start of the processor
         self.await_reconfig_notification().await;
-        let mut block_sync_interval = if self.is_validator {
-            // never awake
-            tokio::time::interval(Duration::from_secs(u64::MAX))
-        } else {
-            tokio::time::interval(Duration::from_millis(
-                std::env::var("GRAVITY_ADVANCE_BLOCK_SYNC_INTERVAL_MS")
-                    .map_or(1000, |s| s.parse::<u64>().unwrap()),
-            ))
-        };
+        // FIXME(nekomoto): If the node is current epoch validator, we don't need to advance the block sync.
+        let mut block_sync_interval = tokio::time::interval(Duration::from_millis(
+            std::env::var("GRAVITY_ADVANCE_BLOCK_SYNC_INTERVAL_MS")
+                .map_or(1000, |s| s.parse::<u64>().unwrap()),
+        ));
         loop {
             tokio::select! {
                 (peer, msg) = network_receivers.consensus_messages.select_next_some() => {

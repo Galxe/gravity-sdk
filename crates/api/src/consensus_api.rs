@@ -20,7 +20,10 @@ use build_info::build_information;
 use futures::channel::mpsc;
 use gaptos::{
     api_types::config_storage::{ConfigStorage, GLOBAL_CONFIG_STORAGE},
-    aptos_config::{config::NodeConfig, network_id::NetworkId},
+    aptos_config::{
+        config::{NodeConfig, RoleType},
+        network_id::NetworkId,
+    },
     aptos_event_notifications::EventNotificationSender,
     aptos_logger::{info, warn},
     aptos_network_builder::builder::NetworkBuilder,
@@ -118,17 +121,24 @@ impl ConsensusEngine {
             // Entering gives us a runtime to instantiate all the pieces of the builder
             let _enter = runtime.enter();
 
+            let network_id = network_config.network_id;
+
             // Create a new network builder
             let mut network_builder = NetworkBuilder::create(
                 chain_id,
-                node_config.base.role,
+                if network_id.is_vfn_network() {
+                    // FIXME(nekomoto): This is a temporary solution to support block sync for
+                    // validator node which is not the current epoch validator.
+                    RoleType::FullNode
+                } else {
+                    node_config.base.role
+                },
                 &network_config,
                 gaptos::aptos_time_service::TimeService::real(),
                 Some(&mut event_subscription_service),
                 peers_and_metadata.clone(),
             );
 
-            let network_id = network_config.network_id;
             if network_id.is_validator_network() {
                 if jwk_consensus_network_handle.is_some() {
                     panic!("There can be at most one validator network!");

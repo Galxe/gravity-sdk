@@ -1151,6 +1151,12 @@ impl RoundManager {
     }
 
     async fn process_order_vote_msg(&mut self, order_vote_msg: OrderVoteMsg) -> anyhow::Result<()> {
+        if !self.is_validator() {
+            return Err(anyhow::anyhow!(
+                "Not validator, skip process_order_vote_msg: {order_vote_msg}"
+            ));
+        }
+
         if self.onchain_config.order_vote_enabled() {
             fail_point!("consensus::process_order_vote_msg", |_| {
                 Err(anyhow::anyhow!("Injected error in process_order_vote_msg"))
