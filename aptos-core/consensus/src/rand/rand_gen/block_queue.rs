@@ -28,10 +28,16 @@ impl QueueItem {
             .enumerate()
             .map(|(idx, b)| (b.round(), idx))
             .collect();
+        // Count only blocks that don't have randomness yet
+        let num_undecided_blocks = ordered_blocks
+            .ordered_blocks
+            .iter()
+            .filter(|b| !b.has_randomness())
+            .count();
         Self {
             ordered_blocks,
             offsets_by_round,
-            num_undecided_blocks: len,
+            num_undecided_blocks,
             broadcast_handle,
         }
     }
@@ -65,13 +71,13 @@ impl QueueItem {
 
     pub fn set_randomness(&mut self, round: Round, rand: Randomness) -> bool {
         let offset = self.offset(round);
-        self.num_undecided_blocks -= 1;
         if !self.blocks()[offset].has_randomness() {
             observe_block(
                 self.blocks()[offset].timestamp_usecs(),
                 BlockStage::RAND_ADD_DECISION,
             );
             self.blocks_mut()[offset].set_randomness(rand);
+            self.num_undecided_blocks -= 1;
             true
         } else {
             assert_eq!(self.blocks()[offset].randomness().unwrap().randomness(), rand.randomness());
