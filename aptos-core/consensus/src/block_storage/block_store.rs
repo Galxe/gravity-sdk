@@ -429,7 +429,11 @@ impl BlockStore {
                     hash: Some(compute_res.data),
                     persist_notifier: None,
                 };
-                get_block_buffer_manager().set_commit_blocks(vec![commit_block]).await.unwrap();
+                let mut persist_notifiers =
+                    get_block_buffer_manager().set_commit_blocks(vec![commit_block]).await.unwrap();
+                for notifier in persist_notifiers.iter_mut() {
+                    let _ = notifier.recv().await;
+                }
             }
             let commit_decision = finality_proof.ledger_info().clone();
             block_tree.write().commit_callback(
