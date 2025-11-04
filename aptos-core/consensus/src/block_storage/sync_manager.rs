@@ -507,7 +507,7 @@ impl BlockStore {
         if self.commit_root().round() < ledger_info.commit_info().round()
             && self.block_exists(ledger_info.commit_info().id())
             && self.ordered_root().round() >= ledger_info.commit_info().round()
-            && self.ordered_root().randomness().is_some()
+            && (!self.enable_randomness || self.ordered_root().epoch() == 1 || self.ordered_root().randomness().is_some())
         {
             info!("sync_to_highest_commit_cert: block exists between commit root and ordered root {:?}, {:?}", self.commit_root().round(), ledger_info.commit_info().round());
             let proof = ledger_info.clone();
@@ -515,7 +515,8 @@ impl BlockStore {
             tokio::spawn(async move { network.send_commit_proof(proof).await });
             return Ok(());
         } else if self.ordered_root().round() < ledger_info.commit_info().round() 
-            && !self.block_exists(ledger_info.commit_info().id()) {
+            && !self.block_exists(ledger_info.commit_info().id())
+            || (self.enable_randomness && self.ordered_root().epoch() != 1 && self.ordered_root().randomness().is_none()) {
             
             // Get the appropriate WrappedLedgerInfo based on randomness check
             let sync_from_cert = self.has_randomness_on_path_from_ordered_to_commit();
@@ -631,6 +632,7 @@ impl BlockStore {
                     Some(block_number) => self.storage.consensus_db().get_randomness(block_number).unwrap(),
                     None => None,
                 };
+                info!("lightman1030 get1 block {:?}, randomness: {:?}", executed_block.block(), randomness);
                 blocks.push((executed_block.block().clone(), randomness));
                 id = executed_block.parent_id();
             } else if let Ok(Some(executed_block)) =

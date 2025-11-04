@@ -82,6 +82,7 @@ fuzzing = [
     "aptos-mempool/fuzzing",
 ]
 failpoints = ["fail/failpoints"]
+randomness_enabled = ["gaptos/randomness_enabled"]
 
 [package.metadata.cargo-machete]
 ignored = ["serde_bytes"]

@@ -224,6 +224,9 @@ impl BlockStore {
     /// If a block with randomness is found on the path from ordered_root back to commit_root,
     /// returns the highest_ordered_cert. Otherwise, returns the highest_commit_cert (or genesis).
     pub fn has_randomness_on_path_from_ordered_to_commit(&self) -> Arc<WrappedLedgerInfo> {
+        if !self.enable_randomness {
+            return self.highest_commit_cert();
+        }
         let ordered_root = self.ordered_root();
         let commit_root = self.commit_root();
         let commit_round = commit_root.round();
@@ -236,6 +239,7 @@ impl BlockStore {
             }
             
             if cursor.randomness().is_some() {
+                info!("lightman1030 found randomness id {:?}", cursor.id());
                 // Found randomness, get the quorum cert for this block
                 let qc = self.get_quorum_cert_for_block(cursor.id()).unwrap();
                 return Arc::new(qc.into_wrapped_ledger_info());
@@ -414,7 +418,19 @@ impl BlockStore {
                 );
 
                 // In recovery mode, use existing randomness from the block
-                let randomness = p_block.randomness().map(|r| Random::from_bytes(r.randomness()));
+                let randomness = if self.enable_randomness {
+                    match p_block.randomness() {
+                        Some(r) => Some(Random::from_bytes(r.randomness())),
+                        None => {
+                            return Err(anyhow::anyhow!(
+                                "Randomness is required but not found in block {}",
+                                p_block.block().id()
+                            ));
+                        }
+                    }
+                } else {
+                    None
+                };
 
                 let block = ExternalBlock {
                     txns: verified_txns,
@@ -546,12 +562,30 @@ impl BlockStore {
     /// Duplicate inserts will return the previously inserted block (
     /// note that it is considered a valid non-error case, for example, it can happen if a validator
     /// receives a certificate for a block that is currently being added).
+    /// Try to load and set randomness from ConsensusDB if available
+    fn try_set_randomness_from_db(&self, pipelined_block: &PipelinedBlock, block: &Block) {
+        if let Some(block_number) = block.block_number() {
+            if !pipelined_block.has_randomness() {
+                if let Ok(Some(randomness)) = self.storage.consensus_db().get_randomness(block_number) {
+                    info!("Set randomness from DB for block {}, epoch {}, round {}", block_number, block.epoch(), block.round());
+                    pipelined_block.set_randomness(Randomness::new(
+                        RandMetadata { epoch: block.epoch(), round: block.round() },
+                        randomness
+                    ));
+                } else {
+                    warn!("No randomness found for block {}, epoch {}, round {}", block, block.epoch(), block.round());
+                }
+            }
+        }
+    }
+
     pub async fn insert_block(
         &self,
         block: Block,
         rebuild: bool,
     ) -> anyhow::Result<Arc<PipelinedBlock>> {
         if let Some(existing_block) = self.get_block(block.id()) {
+            self.try_set_randomness_from_db(&existing_block, &block);
             return Ok(existing_block);
         }
         info!("insert block {}", block);
@@ -564,13 +598,7 @@ impl BlockStore {
 
         let pipelined_block = PipelinedBlock::new_ordered(block.clone());
         // set_randomness if it is available
-        if let Some(block_number) = block.block_number() {
-            if let Ok(Some(randomness)) = self.storage.consensus_db().get_randomness(block_number) {
-                pipelined_block.set_randomness(Randomness::new(RandMetadata { epoch: block.epoch(), round: block.round() }, randomness));
-            } else {
-                warn!("No randomness found for block {}, epoch {}, round {}", block, block.epoch(), block.round());
-            }
-        }
+        self.try_set_randomness_from_db(&pipelined_block, &block);
         // ensure local time past the block time
         let block_time = Duration::from_micros(pipelined_block.timestamp_usecs());
         let current_timestamp = self.time_service.get_current_timestamp();
