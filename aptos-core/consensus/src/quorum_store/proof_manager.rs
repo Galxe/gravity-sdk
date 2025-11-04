@@ -5,8 +5,7 @@ use super::batch_store::BatchStore;
 use crate::{
     monitor,
     quorum_store::{
-        batch_generator::BackPressure,
-        utils::{BatchSortKey, ProofQueue},
+        self, batch_generator::BackPressure, utils::{BatchSortKey, ProofQueue}
     },
 };
 use aptos_consensus_types::{
@@ -105,7 +104,7 @@ impl BatchQueue {
                         && num_bytes + batch.num_bytes() <= max_bytes
                     {
                         if let Ok(mut persisted_value) =
-                            self.batch_store.get_batch_from_local(batch.digest())
+                            self.batch_store.get_batch_from_local(&quorum_store::types::BatchKey::new(batch.epoch(), batch.digest().clone()))
                         {
                             if let Some(txns) = persisted_value.take_payload() {
                                 num_txns += batch.num_txns();

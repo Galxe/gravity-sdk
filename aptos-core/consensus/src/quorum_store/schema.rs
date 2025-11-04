@@ -1,7 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::quorum_store::types::PersistedValue;
+use crate::quorum_store::types::{BatchKey, PersistedValue};
 use anyhow::Result;
 use aptos_consensus_types::proof_of_store::BatchId;
 use gaptos::aptos_crypto::HashValue;
@@ -13,23 +13,31 @@ use gaptos::aptos_schemadb::{
 pub(crate) const BATCH_CF_NAME: ColumnFamilyName = "batch";
 pub(crate) const BATCH_ID_CF_NAME: ColumnFamilyName = "batch_ID";
 
+
 #[derive(Debug)]
 pub(crate) struct BatchSchema;
 
 impl Schema for BatchSchema {
-    type Key = HashValue;
+    type Key = BatchKey;
     type Value = PersistedValue;
 
     const COLUMN_FAMILY_NAME: gaptos::aptos_schemadb::ColumnFamilyName = BATCH_CF_NAME;
 }
 
-impl KeyCodec<BatchSchema> for HashValue {
+impl KeyCodec<BatchSchema> for BatchKey {
     fn encode_key(&self) -> Result<Vec<u8>> {
-        Ok(self.to_vec())
+        let mut key_bytes = Vec::with_capacity(8 + self.digest.to_vec().len());
+        key_bytes.extend_from_slice(&self.epoch.to_be_bytes());
+        key_bytes.extend_from_slice(&self.digest.to_vec());
+        Ok(key_bytes)
     }
 
     fn decode_key(data: &[u8]) -> Result<Self> {
-        Ok(HashValue::from_slice(data)?)
+        let epoch_bytes: [u8; 8] = data[0..8].try_into()?;
+        let epoch = u64::from_be_bytes(epoch_bytes);
+        let digest_data = &data[8..];
+        let digest = HashValue::from_slice(digest_data)?;
+        Ok(BatchKey { epoch, digest })
     }
 }
 

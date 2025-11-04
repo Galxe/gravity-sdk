@@ -7,7 +7,7 @@ use crate::{
     consensusdb::ConsensusDB,
     quorum_store::{
         quorum_store_db::{QuorumStoreDB, QuorumStoreStorage},
-        types::PersistedValue,
+        types::{BatchKey, PersistedValue},
     },
 };
 use anyhow::{bail, Result};
@@ -62,12 +62,13 @@ impl Command {
 }
 
 fn extract_txns_from_quorum_store(
-    digests: impl Iterator<Item = HashValue>,
-    all_batches: &HashMap<HashValue, PersistedValue>,
+    digests: impl Iterator<Item = (u64, HashValue)>,
+    all_batches: &HashMap<BatchKey, PersistedValue>,
 ) -> anyhow::Result<Vec<&SignedTransaction>> {
     let mut block_txns = Vec::new();
-    for digest in digests {
-        if let Some(batch) = all_batches.get(&digest) {
+    for (epoch, digest) in digests {
+        let key = BatchKey::new(epoch, digest);
+        if let Some(batch) = all_batches.get(&key) {
             if let Some(txns) = batch.payload() {
                 block_txns.extend(txns);
             } else {
@@ -82,7 +83,7 @@ fn extract_txns_from_quorum_store(
 
 pub fn extract_txns_from_block<'a>(
     block: &'a Block,
-    all_batches: &'a HashMap<HashValue, PersistedValue>,
+    all_batches: &'a HashMap<BatchKey, PersistedValue>,
 ) -> anyhow::Result<Vec<&'a SignedTransaction>> {
     match block.payload().as_ref() {
         Some(payload) => match payload {
@@ -90,7 +91,7 @@ pub fn extract_txns_from_block<'a>(
                 bail!("DirectMempool is not supported.");
             },
             Payload::InQuorumStore(proof_with_data) => extract_txns_from_quorum_store(
-                proof_with_data.proofs.iter().map(|proof| *proof.digest()),
+                proof_with_data.proofs.iter().map(|proof| (proof.epoch(), *proof.digest())),
                 all_batches,
             ),
             Payload::InQuorumStoreWithLimit(proof_with_data) => extract_txns_from_quorum_store(
@@ -98,12 +99,12 @@ pub fn extract_txns_from_block<'a>(
                     .proof_with_data
                     .proofs
                     .iter()
-                    .map(|proof| *proof.digest()),
+                    .map(|proof| (proof.epoch(), *proof.digest())),
                 all_batches,
             ),
             Payload::QuorumStoreInlineHybrid(inline_batches, proof_with_data, _) => {
                 let mut all_txns = extract_txns_from_quorum_store(
-                    proof_with_data.proofs.iter().map(|proof| *proof.digest()),
+                    proof_with_data.proofs.iter().map(|proof| (proof.epoch(), *proof.digest())),
                     all_batches,
                 )
                 .unwrap();
@@ -117,7 +118,7 @@ pub fn extract_txns_from_block<'a>(
                     opt_qs_payload
                         .proof_with_data()
                         .iter()
-                        .map(|proof| *proof.digest()),
+                        .map(|proof| (proof.epoch(), *proof.digest())),
                     all_batches,
                 )
                 .unwrap();
@@ -126,7 +127,7 @@ pub fn extract_txns_from_block<'a>(
                         opt_qs_payload
                             .opt_batches()
                             .iter()
-                            .map(|info| *info.digest()),
+                            .map(|info| (info.epoch(), *info.digest())),
                         all_batches,
                     )
                     .unwrap(),
