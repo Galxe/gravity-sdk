@@ -140,19 +140,19 @@ impl ConsensusDB {
             .into_iter()
             .map(|((_, block_id), block_number)| (block_number, block_id))
             .collect::<HashMap<u64, HashValue>>();
-        let (start_epoch, start_round) = if block_number_to_block_id.contains_key(&latest_block_number) {
+        let (start_epoch, start_round, start_block_id) = if block_number_to_block_id.contains_key(&latest_block_number) {
             let block = self.get::<BlockSchema>(&(epoch, block_number_to_block_id[&latest_block_number]))?
                 .unwrap();
-            (block.epoch(), block.round())
+            (block.epoch(), block.round(), block.id())
         } else {
-            (epoch, 0)
+            (epoch, 0, HashValue::zero())
         };
         let block_id_to_block_number = block_number_to_block_id
             .iter()
             .map(|(block_number, block_id)| (*block_id, *block_number))
             .collect::<HashMap<HashValue, u64>>();
         let mut consensus_blocks: Vec<_> = self
-            .get_range_with_filter::<BlockSchema, _>(&start_key, &end_key, |(_, block)| block.round() >= start_round)?
+            .get_range_with_filter::<BlockSchema, _>(&start_key, &end_key, |(_, block)| block.round() > start_round || block.id() == start_block_id)?
             .into_iter()
             .map(|(_, block)| block)
             .collect();
@@ -164,7 +164,7 @@ impl ConsensusDB {
             }
         });
         let consensus_qcs: Vec<_> = self
-            .get_range_with_filter::<QCSchema, _>(&start_key, &end_key, |(_, qc)| qc.certified_block().round() >= start_round)?
+            .get_range_with_filter::<QCSchema, _>(&start_key, &end_key, |(_, qc)| qc.certified_block().round() > start_round || qc.certified_block().id() == start_block_id)?
             .into_iter()
             .map(|(_, qc)| qc)
             .collect();

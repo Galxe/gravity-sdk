@@ -239,7 +239,6 @@ impl BlockStore {
             }
             
             if cursor.randomness().is_some() {
-                info!("lightman1030 found randomness id {:?}", cursor.id());
                 // Found randomness, get the quorum cert for this block
                 let qc = self.get_quorum_cert_for_block(cursor.id()).unwrap();
                 return Arc::new(qc.into_wrapped_ledger_info());
@@ -418,7 +417,7 @@ impl BlockStore {
                 );
 
                 // In recovery mode, use existing randomness from the block
-                let randomness = if self.enable_randomness {
+                let randomness = if self.enable_randomness && p_block.epoch() != 1 {
                     match p_block.randomness() {
                         Some(r) => Some(Random::from_bytes(r.randomness())),
                         None => {

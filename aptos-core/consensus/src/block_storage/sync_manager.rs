@@ -622,19 +622,17 @@ impl BlockStore {
                 request.req.block_id(), request.req.target_block_id().unwrap(), retrieval_epoch);
 
         while (blocks.len() as u64) < request.req.num_blocks() {
-            if request.req.match_target_id(id) {
-                status = BlockRetrievalStatus::SucceededWithTarget;
-                break;
-            }
+            let mut parent_id = HashValue::zero();
+            let mut is_last_block = false;
             if let Some(executed_block) = self.get_block(id) {
                 quorum_certs.push((*self.get_quorum_cert_for_block(id).unwrap()).clone());
                 let randomness = match executed_block.block().block_number() {
                     Some(block_number) => self.storage.consensus_db().get_randomness(block_number).unwrap(),
                     None => None,
                 };
-                info!("lightman1030 get1 block {:?}, randomness: {:?}", executed_block.block(), randomness);
+                is_last_block = executed_block.round() == 1;
                 blocks.push((executed_block.block().clone(), randomness));
-                id = executed_block.parent_id();
+                parent_id = executed_block.parent_id();
             } else if let Ok(Some(executed_block)) =
                 self.storage.consensus_db().get_block(retrieval_epoch, id)
             {
@@ -642,14 +640,19 @@ impl BlockStore {
                     self.storage.consensus_db().get_qc(retrieval_epoch, id).unwrap().unwrap(),
                 );
                 let randomness = self.storage.consensus_db().get_randomness(executed_block.block_number().unwrap()).unwrap();
-
+                is_last_block = executed_block.round() == 1;
                 blocks.push((executed_block.clone(), randomness));
-                id = executed_block.parent_id();
+                parent_id = executed_block.parent_id();
             } else {
                 info!("Cannot find the block id {}", id);
                 status = BlockRetrievalStatus::NotEnoughBlocks;
                 break;
             }
+            if request.req.match_target_id(id) || is_last_block {
+                status = BlockRetrievalStatus::SucceededWithTarget;
+                break;
+            }
+            id = parent_id;
         }
 
         let mut lower = 0;
