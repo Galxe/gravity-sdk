@@ -26,7 +26,7 @@ use gaptos::{
         config::{NodeConfig, RoleType},
         network_id::NetworkId,
     },
-    aptos_dkg_runtime::DKGMessage;
+    aptos_dkg_runtime::DKGMessage,
     aptos_event_notifications::EventNotificationSender,
     aptos_logger::{info, warn},
     aptos_network_builder::builder::NetworkBuilder,

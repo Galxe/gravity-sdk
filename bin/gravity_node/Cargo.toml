@@ -11,8 +11,8 @@ rust-version.workspace = true
 
 
 [features]
-# Forward feature to gaptos so `-p gravity_node --features randomness_enabled` works
-randomness_enabled = ["gaptos/randomness_enabled"]
+# Forward feature to gaptos so `-p gravity_node --features randomness_disabled` works
+randomness_disabled = ["gaptos/randomness_disabled"]
 default = []
 
 [dependencies]

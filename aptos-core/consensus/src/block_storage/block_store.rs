@@ -411,7 +411,7 @@ impl BlockStore {
                 };
                 
                 let validator_txns = p_block.block().validator_txns();
-                let jwks_extra_data = crate::state_computer::process_validator_transactions_util(
+                let extra_data = crate::state_computer::process_validator_transactions_util(
                     validator_txns.map(|v| &**v), 
                     p_block.block()
                 );
@@ -442,7 +442,7 @@ impl BlockStore {
                         block_hash: maybe_block_hash.clone(),
                         proposer: p_block.block().author().map(|author| ExternalAccountAddress::new(author.into_bytes())),
                     },
-                    jwks_extra_data,
+                    extra_data,
                     enable_randomness: self.enable_randomness,
                 };
                 get_block_buffer_manager()
@@ -563,10 +563,13 @@ impl BlockStore {
     /// receives a certificate for a block that is currently being added).
     /// Try to load and set randomness from ConsensusDB if available
     fn try_set_randomness_from_db(&self, pipelined_block: &PipelinedBlock, block: &Block) {
+        if !self.enable_randomness {
+            return;
+        }
         if let Some(block_number) = block.block_number() {
             if !pipelined_block.has_randomness() {
                 if let Ok(Some(randomness)) = self.storage.consensus_db().get_randomness(block_number) {
-                    info!("Set randomness from DB for block {}, epoch {}, round {}", block_number, block.epoch(), block.round());
+                    debug!("Set randomness from DB for block {}, epoch {}, round {}", block_number, block.epoch(), block.round());
                     pipelined_block.set_randomness(Randomness::new(
                         RandMetadata { epoch: block.epoch(), round: block.round() },
                         randomness

@@ -110,7 +110,7 @@ pub enum BlockRetrievalStatus {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct BlockRetrievalResponse {
     status: BlockRetrievalStatus,
-    blocks: Vec<(Block, Option<Vec<u8>>)>,
+    blocks: Vec<(Block, Option<Vec<u8>>)>, // (block, randomness)
     ledger_infos: Vec<LedgerInfoWithSignatures>,
     quorum_certs: Vec<QuorumCert>,
 }

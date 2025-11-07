@@ -183,7 +183,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                 .block_meta
                 .proposer
                 .map(|x| x.bytes().into()),
-            validator_txns_data: block.jwks_extra_data,
+            extra_data: block.extra_data,
             randomness,
             enable_randomness: block.enable_randomness,
         });
