@@ -4,10 +4,12 @@
 use build_info::build_information;
 use futures::channel::mpsc::Receiver;
 use gaptos::aptos_config::config::NodeConfig;
+use gaptos::aptos_logger::tracing_writer::TracingWriter;
 use gaptos::aptos_logger::{
     aptos_logger::FileWriter, info, telemetry_log_writer::TelemetryLog, LoggerFilterUpdater,
 };
 use futures::channel::mpsc;
+use gaptos::aptos_types::account_config::KeyRotation;
 use std::path::PathBuf;
 
 const TELEMETRY_LOG_INGEST_BUFFER_SIZE: usize = 128;
@@ -45,7 +47,8 @@ pub fn create_logger(
         logger_builder.enable_backtrace();
     }
     if let Some(log_file) = log_file {
-        logger_builder.printer(Box::new(FileWriter::new(log_file)));
+        logger_builder.printer(Box::new(TracingWriter::new(
+            log_file, node_config.logger.max_log_file_size_mbs, node_config.logger.max_log_files)));
     }
     if node_config.logger.enable_telemetry_remote_log {
         let (tx, rx) = mpsc::channel(TELEMETRY_LOG_INGEST_BUFFER_SIZE);
