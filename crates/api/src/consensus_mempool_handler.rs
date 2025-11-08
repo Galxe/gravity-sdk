@@ -6,6 +6,7 @@ use gaptos::aptos_consensus_notifications::{
     ConsensusCommitNotification, ConsensusNotification, ConsensusNotificationListener,
 };
 use gaptos::aptos_event_notifications::{EventNotificationSender, EventSubscriptionService};
+use gaptos::aptos_logger::warn;
 use gaptos::aptos_mempool_notifications::MempoolNotificationSender;
 use gaptos::aptos_types::transaction::Transaction;
 use tokio::sync::Mutex;
@@ -106,9 +107,7 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
 
         // Log any errors from notification handling
         if let Err(error) = result {
-            // warn!(LogSchema::new(LogEntry::ConsensusNotification)
-            //     .error(&error)
-            //     .message("Error encountered when handling the consensus notification!"));
+            warn!("Error encountered when handling the consensus notification! {:?}", error);
         }
     }
 

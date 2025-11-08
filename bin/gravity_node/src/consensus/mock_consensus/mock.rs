@@ -93,7 +93,8 @@ impl MockConsensus {
                 ),
             },
             txns,
-            jwks_extra_data: Vec::new(), // TODO: add jwks_extra_data
+            extra_data: Vec::new(), // TODO: add validator transaction extra_data (DKG, JWK)
+            enable_randomness: false,
         };
     }
 

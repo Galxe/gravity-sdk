@@ -28,7 +28,8 @@ impl ConfigStorage for ConfigStorageWrapper {
             OnChainConfig::Epoch
             | OnChainConfig::ValidatorSet
             | OnChainConfig::JWKConsensusConfig
-            | OnChainConfig::ObservedJWKs => {
+            | OnChainConfig::ObservedJWKs 
+            | OnChainConfig::DKGState => {
                 self.config_storage.fetch_config_bytes(config_name, block_number)
             }
             OnChainConfig::ConsensusConfig => {

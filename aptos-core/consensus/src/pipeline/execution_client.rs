@@ -3,26 +3,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    consensus_observer::publisher::ConsensusPublisher,
-    error::StateSyncError,
-    network::{IncomingCommitRequest, IncomingRandGenRequest, NetworkSender},
-    network_interface::{ConsensusMsg, ConsensusNetworkClient},
-    payload_manager::TPayloadManager,
-    pipeline::{
+    consensus_observer::publisher::ConsensusPublisher, consensusdb::ConsensusDB, error::StateSyncError, network::{IncomingCommitRequest, IncomingRandGenRequest, NetworkSender}, network_interface::{ConsensusMsg, ConsensusNetworkClient}, payload_manager::TPayloadManager, pipeline::{
         buffer_manager::{OrderedBlocks, ResetAck, ResetRequest, ResetSignal},
         decoupled_execution_utils::prepare_phases_and_buffer_manager,
         errors::Error,
         signing_phase::CommitSignerProvider,
-    },
-    rand::rand_gen::{
+    }, rand::rand_gen::{
         rand_manager::RandManager,
         storage::interface::RandStorage,
         types::{AugmentedData, RandConfig, Share},
-    },
-    state_computer::ExecutionProxy,
-    state_replication::{StateComputer, StateComputerCommitCallBackType},
-    transaction_deduper::create_transaction_deduper,
-    transaction_shuffler::create_transaction_shuffler,
+    }, state_computer::ExecutionProxy, state_replication::{StateComputer, StateComputerCommitCallBackType}, transaction_deduper::create_transaction_deduper, transaction_shuffler::create_transaction_shuffler
 };
 use anyhow::Result;
 use gaptos::aptos_bounded_executor::BoundedExecutor;
@@ -71,6 +61,7 @@ pub trait TExecutionClient: Send + Sync {
         fast_rand_config: Option<RandConfig>,
         rand_msg_rx: aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
         highest_committed_round: Round,
+        consensus_db: Option<Arc<ConsensusDB>>,
     );
 
     /// This is needed for some DAG tests. Clean this up as a TODO.
@@ -199,6 +190,7 @@ impl ExecutionProxyClient {
         highest_committed_round: Round,
         consensus_observer_config: ConsensusObserverConfig,
         consensus_publisher: Option<Arc<ConsensusPublisher>>,
+        consensus_db: Option<Arc<ConsensusDB>>,
     ) {
         let network_sender = NetworkSender::new(
             self.author,
@@ -220,7 +212,7 @@ impl ExecutionProxyClient {
             if let Some(rand_config) = rand_config {
                 let (ordered_block_tx, ordered_block_rx) = unbounded::<OrderedBlocks>();
                 let (rand_ready_block_tx, rand_ready_block_rx) = unbounded::<OrderedBlocks>();
-
+                
                 let (reset_tx_to_rand_manager, reset_rand_manager_rx) = unbounded::<ResetRequest>();
                 let signer = Arc::new(ValidatorSigner::new(self.author, consensus_sk.clone()));
 
@@ -235,6 +227,7 @@ impl ExecutionProxyClient {
                     self.rand_storage.clone(),
                     self.bounded_executor.clone(),
                     &self.consensus_config.rand_rb_config,
+                    consensus_db.unwrap(),
                 );
 
                 tokio::spawn(rand_manager.start(
@@ -309,6 +302,7 @@ impl TExecutionClient for ExecutionProxyClient {
         fast_rand_config: Option<RandConfig>,
         rand_msg_rx: aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
         highest_committed_round: Round,
+        consensus_db: Option<Arc<ConsensusDB>>,
     ) {
         let maybe_rand_msg_tx = self.spawn_decoupled_execution(
             maybe_consensus_key,
@@ -321,6 +315,7 @@ impl TExecutionClient for ExecutionProxyClient {
             highest_committed_round,
             self.consensus_observer_config,
             self.consensus_publisher.clone(),
+            consensus_db,
         );
 
         let transaction_shuffler =
@@ -487,6 +482,7 @@ impl TExecutionClient for ExecutionProxyClient {
     fn pipeline_builder(&self, signer: Arc<ValidatorSigner>) -> PipelineBuilder {
         self.execution_proxy.pipeline_builder(signer)
     }
+
 }
 
 pub struct DummyExecutionClient;
@@ -506,6 +502,7 @@ impl TExecutionClient for DummyExecutionClient {
         _fast_rand_config: Option<RandConfig>,
         _rand_msg_rx: aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
         _highest_committed_round: Round,
+        _consensus_db: Option<Arc<ConsensusDB>>,
     ) {
     }
 

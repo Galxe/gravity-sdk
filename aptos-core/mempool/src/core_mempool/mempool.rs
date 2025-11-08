@@ -155,7 +155,7 @@ impl CoreMempoolTrait for Mempool {
         let mut broacasted_txns = vec![];
         let mut visited_cache = self.txn_cache.lock().unwrap();
         for txn in iter {
-            visited_cache.insert(TxnHash::from_bytes(txn.committed_hash().as_slice()));
+        visited_cache.insert(TxnHash::from_bytes(txn.committed_hash().as_slice()));
             broacasted_txns.push((VerifiedTxn::from(txn).into(), 0));
         }
         let len = broacasted_txns.len();

@@ -849,6 +849,7 @@ impl RoundManager {
             ));
         }
 
+        
         if !self.vtxn_config.enabled()
             && matches!(
                 proposal.block_data().block_type(),

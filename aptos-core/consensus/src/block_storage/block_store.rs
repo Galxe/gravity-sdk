@@ -17,7 +17,9 @@ use crate::{
 use anyhow::{bail, ensure, format_err, Context};
 use gaptos::{api_types::{
     account::ExternalAccountAddress, compute_res::ComputeRes, u256_define::{BlockId, Random}, ExternalBlock, ExternalBlockMeta
-}, aptos_types::{jwks, validator_txn::ValidatorTransaction}};
+}, aptos_types::{jwks, randomness::{RandMetadata, Randomness}, validator_txn::ValidatorTransaction}};
+use aptos_mempool::core_mempool::transaction::VerifiedTxn;
+use block_buffer_manager::{block_buffer_manager::BlockHashRef, get_block_buffer_manager};
 use aptos_consensus_types::{
     block::Block,
     common::Round,
@@ -31,16 +33,13 @@ use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::StateComputeResult;
 use gaptos::aptos_infallible::{Mutex, RwLock};
 use gaptos::aptos_logger::prelude::*;
-use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 use gaptos::aptos_metrics_core::{register_int_gauge_vec, IntGaugeHelper, IntGaugeVec};
 use gaptos::aptos_types::{
     aggregate_signature::AggregateSignature,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
 };
-use block_buffer_manager::{block_buffer_manager::BlockHashRef, get_block_buffer_manager};
 use futures::executor::block_on;
 use once_cell::sync::Lazy;
-use sha3::digest::generic_array::typenum::Le;
 
 #[cfg(test)]
 use std::collections::VecDeque;
@@ -50,7 +49,6 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::{collections::BTreeMap, io::Read, sync::Arc, time::Duration};
 
-use super::BlockRetriever;
 use gaptos::aptos_consensus::counters as counters;
 
 #[cfg(test)]
@@ -77,6 +75,15 @@ static CUR_RECOVER_BLOCK_NUMBER_GAUGE: Lazy<IntGaugeVec> = Lazy::new(|| {
      )
      .unwrap()
  });
+
+static SET_RANDOMNESS_FROM_DB_COUNTER: Lazy<IntGaugeVec> = Lazy::new(|| {
+    register_int_gauge_vec!(
+        "aptos_set_randomness_from_db_total",
+        "Total number of times randomness was set from DB",
+        &[]
+    )
+    .unwrap()
+});
 
 fn update_counters_for_ordered_blocks(ordered_blocks: &[Arc<PipelinedBlock>]) {
     for block in ordered_blocks {
@@ -116,6 +123,7 @@ pub struct BlockStore {
     order_vote_enabled: bool,
     is_validator: bool,
     pending_blocks: Arc<Mutex<PendingBlocks>>,
+    enable_randomness: bool,
 }
 
 impl BlockStore {
@@ -130,6 +138,7 @@ impl BlockStore {
         order_vote_enabled: bool,
         is_validator: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
+        enable_randomness: bool,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -148,6 +157,7 @@ impl BlockStore {
             order_vote_enabled,
             is_validator,
             pending_blocks,
+            enable_randomness,
         ));
         block_on(block_store.recover_blocks());
         block_store
@@ -164,6 +174,7 @@ impl BlockStore {
         order_vote_enabled: bool,
         is_validator: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
+        enable_randomness: bool,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -182,6 +193,7 @@ impl BlockStore {
             order_vote_enabled,
             is_validator,
             pending_blocks,
+            enable_randomness,
         )
         .await;
         block_store.recover_blocks().await;
@@ -217,6 +229,42 @@ impl BlockStore {
         RECOVERY_GAUGE.set_with(&[], 0);
     }
 
+    /// Returns the WrappedLedgerInfo for fast_forward_sync.
+    /// If a block with randomness is found on the path from ordered_root back to commit_root,
+    /// returns the highest_ordered_cert. Otherwise, returns the highest_commit_cert (or genesis).
+    pub fn has_randomness_on_path_from_ordered_to_commit(&self) -> Arc<WrappedLedgerInfo> {
+        if !self.enable_randomness {
+            return self.highest_commit_cert();
+        }
+        let ordered_root = self.ordered_root();
+        let commit_root = self.commit_root();
+        let commit_round = commit_root.round();
+        let mut cursor = ordered_root.clone();
+        
+        loop {
+
+            if cursor.round() <= commit_round  {
+                break;
+            }
+            
+            if cursor.randomness().is_some() {
+                // Found randomness, get the quorum cert for this block
+                let qc = self.get_quorum_cert_for_block(cursor.id()).unwrap();
+                return Arc::new(qc.into_wrapped_ledger_info());
+            }
+            
+            match self.get_block(cursor.parent_id()) {
+                Some(parent) => {
+                    cursor = parent;
+                }
+                None => break,
+            }
+        }
+        
+        // No randomness found on the path, return highest_commit_cert
+        self.highest_commit_cert()
+    }
+
     async fn build(
         root: RootInfo,
         blocks: Vec<Block>,
@@ -231,6 +279,7 @@ impl BlockStore {
         order_vote_enabled: bool,
         is_validator: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
+        enable_randomness: bool,
     ) -> Self {
         let RootInfo(root_block, root_qc, root_ordered_cert, root_commit_cert) = root;
 
@@ -264,6 +313,7 @@ impl BlockStore {
             order_vote_enabled,
             is_validator,
             pending_blocks,
+            enable_randomness,
         };
 
         for block in blocks {
@@ -332,6 +382,7 @@ impl BlockStore {
         // This callback is invoked synchronously with and could be used for multiple batches of blocks.
         self.init_block_number(&blocks_to_commit);
         if recovery {
+            // Recovery mode: process blocks directly without going through execution pipeline
             for p_block in &blocks_to_commit {
                 let mut txns = vec![];
                 loop {
@@ -369,32 +420,25 @@ impl BlockStore {
                 };
                 
                 let validator_txns = p_block.block().validator_txns();
-                let mut jwks_extra_data = Vec::new();
-                if let Some(validator_txns) = validator_txns {
-                    jwks_extra_data = validator_txns.iter().map(|txn| {
-                        let jwk_txn = match txn {
-                            ValidatorTransaction::DKGResult(_) => {
-                                todo!()
-                            },
-                            ValidatorTransaction::ObservedJWKUpdate(jwks::QuorumCertifiedUpdate { update, multi_sig }) => {
-                                // TODO(Gravity): Check the signature here instread of execution layer
-                                let gaptos_provider_jwk = gaptos::api_types::on_chain_config::jwks::ProviderJWKs {
-                                    issuer: update.issuer.clone(),
-                                    version: update.version,
-                                    jwks: update.jwks.iter().map(|jwk| {
-                                        gaptos::api_types::on_chain_config::jwks::JWKStruct {
-                                            type_name: jwk.variant.type_name.clone(),
-                                            data: jwk.variant.data.clone(),
-                                        }
-                                    }).collect(),
-                                };
-                                let bcs_data = bcs::to_bytes(&gaptos_provider_jwk).unwrap();
-                                bcs_data
-                            }
-                        };
-                        jwk_txn
-                    }).collect();
-                }
+                let extra_data = crate::state_computer::process_validator_transactions_util(
+                    validator_txns.map(|v| &**v), 
+                    p_block.block()
+                );
+
+                // In recovery mode, use existing randomness from the block
+                let randomness = if self.enable_randomness && p_block.epoch() != 1 {
+                    match p_block.randomness() {
+                        Some(r) => Some(Random::from_bytes(r.randomness())),
+                        None => {
+                            return Err(anyhow::anyhow!(
+                                "Randomness is required but not found in block {}",
+                                p_block.block().id()
+                            ));
+                        }
+                    }
+                } else {
+                    None
+                };
 
                 let block = ExternalBlock {
                     txns: verified_txns,
@@ -403,13 +447,12 @@ impl BlockStore {
                         block_number,
                         usecs: p_block.block().timestamp_usecs(),
                         epoch: p_block.block().epoch(),
-                        randomness: p_block
-                            .randomness()
-                            .map(|r| Random::from_bytes(r.randomness())),
+                        randomness,
                         block_hash: maybe_block_hash.clone(),
                         proposer: p_block.block().author().map(|author| ExternalAccountAddress::new(author.into_bytes())),
                     },
-                    jwks_extra_data,
+                    extra_data,
+                    enable_randomness: self.enable_randomness,
                 };
                 get_block_buffer_manager()
                     .set_ordered_blocks(BlockId(*p_block.parent_id()), block)
@@ -470,8 +513,8 @@ impl BlockStore {
         Ok(())
     }
 
-    pub async fn append_blocks_for_sync(&self, blocks: Vec<Block>, quorum_certs: Vec<QuorumCert>) {
-        for block in blocks {
+    pub async fn append_blocks_for_sync(&self, blocks: Vec<(Block, Option<Vec<u8>>)>, quorum_certs: Vec<QuorumCert>) {
+        for (block, _) in blocks {
             self.insert_block(block, true).await.unwrap_or_else(|e| {
                 panic!("[BlockStore] failed to insert block during append blocks for sync {:?}", e)
             });
@@ -508,6 +551,7 @@ impl BlockStore {
             self.order_vote_enabled,
             self.is_validator,
             self.pending_blocks.clone(),
+            self.enable_randomness,
         )
         .await;
 
@@ -526,12 +570,34 @@ impl BlockStore {
     /// Duplicate inserts will return the previously inserted block (
     /// note that it is considered a valid non-error case, for example, it can happen if a validator
     /// receives a certificate for a block that is currently being added).
+    /// Try to load and set randomness from ConsensusDB if available
+    fn try_set_randomness_from_db(&self, pipelined_block: &PipelinedBlock, block: &Block) {
+        if !self.enable_randomness {
+            return;
+        }
+        if let Some(block_number) = block.block_number() {
+            if !pipelined_block.has_randomness() {
+                if let Ok(Some(randomness)) = self.storage.consensus_db().get_randomness(block_number) {
+                    debug!("Set randomness from DB for block {}, epoch {}, round {}", block_number, block.epoch(), block.round());
+                    SET_RANDOMNESS_FROM_DB_COUNTER.with_label_values(&[]).inc();
+                    pipelined_block.set_randomness(Randomness::new(
+                        RandMetadata { epoch: block.epoch(), round: block.round() },
+                        randomness
+                    ));
+                } else {
+                    warn!("No randomness found for block {}, epoch {}, round {}", block, block.epoch(), block.round());
+                }
+            }
+        }
+    }
+
     pub async fn insert_block(
         &self,
         block: Block,
         rebuild: bool,
     ) -> anyhow::Result<Arc<PipelinedBlock>> {
         if let Some(existing_block) = self.get_block(block.id()) {
+            self.try_set_randomness_from_db(&existing_block, &block);
             return Ok(existing_block);
         }
         info!("insert block {}", block);
@@ -543,6 +609,8 @@ impl BlockStore {
         }
 
         let pipelined_block = PipelinedBlock::new_ordered(block.clone());
+        // set_randomness if it is available
+        self.try_set_randomness_from_db(&pipelined_block, &block);
         // ensure local time past the block time
         let block_time = Duration::from_micros(pipelined_block.timestamp_usecs());
         let current_timestamp = self.time_service.get_current_timestamp();
@@ -657,6 +725,7 @@ impl BlockStore {
     pub fn check_payload(&self, proposal: &Block) -> bool {
         self.payload_manager.check_payload_availability(proposal)
     }
+
 }
 
 impl BlockReader for BlockStore {
@@ -845,6 +914,7 @@ impl BlockStore {
     pub(super) fn pruned_blocks_in_mem(&self) -> usize {
         self.inner.read().pruned_blocks_in_mem()
     }
+
 
     /// Helper function to insert the block with the qc together
     pub async fn insert_block_with_qc(&self, block: Block) -> anyhow::Result<Arc<PipelinedBlock>> {

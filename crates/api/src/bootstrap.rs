@@ -4,10 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::network::{
-    build_network_interfaces, consensus_network_configuration, extract_network_ids,
-    mempool_network_configuration,
-};
+use crate::network::extract_network_ids;
 use aptos_consensus::consensusdb::{BlockNumberSchema, BlockSchema, ConsensusDB};
 use aptos_consensus::{
     gravity_state_computer::ConsensusAdapterArgs, network_interface::ConsensusMsg,
@@ -16,11 +13,9 @@ use aptos_consensus::{
 
 use block_buffer_manager::{get_block_buffer_manager, TxPool};
 use gaptos::{
-    api_types::u256_define::BlockId,
-    aptos_event_notifications::{
+    api_types::u256_define::BlockId, aptos_dkg_runtime::DKGMessage, aptos_event_notifications::{
         DbBackedOnChainConfig, EventNotificationListener, ReconfigNotificationListener,
-    },
-    aptos_logger::info,
+    }, aptos_logger::info
 };
 use gaptos::{
     aptos_channels::{aptos_channel, message_queues::QueueStyle},
@@ -33,6 +28,7 @@ use gaptos::{
         ProtocolId,
     },
 };
+use gaptos::aptos_dkg_runtime::start_dkg_runtime;
 
 use aptos_mempool::{core_mempool::CoreMempool, shared_mempool::types::CoreMempoolTrait, MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest};
 use futures::channel::mpsc::{Receiver, Sender};
@@ -78,6 +74,22 @@ pub fn check_bootstrap_config(node_config_path: Option<PathBuf>) -> NodeConfig {
     })
 }
 
+pub fn dkg_network_configuration(node_config: &NodeConfig) -> NetworkApplicationConfig {
+    let direct_send_protocols: Vec<ProtocolId> =
+        gaptos::aptos_dkg_runtime::network_interface::DIRECT_SEND.into();
+    let rpc_protocols: Vec<ProtocolId> = gaptos::aptos_dkg_runtime::network_interface::RPC.into();
+
+    let network_client_config =
+        NetworkClientConfig::new(direct_send_protocols.clone(), rpc_protocols.clone());
+    let network_service_config = NetworkServiceConfig::new(
+        direct_send_protocols,
+        rpc_protocols,
+        aptos_channel::Config::new(node_config.dkg.max_network_channel_size)
+            .queue_style(QueueStyle::FIFO),
+    );
+    NetworkApplicationConfig::new(network_client_config, network_service_config)
+}
+
 /// Spawns a new thread for the node inspection service
 pub fn start_node_inspection_service(
     node_config: &NodeConfig,
@@ -89,6 +101,54 @@ pub fn start_node_inspection_service(
         peers_and_metadata,
     )
 }
+
+/// Creates and starts the DKG runtime (if enabled)
+pub fn create_dkg_runtime(
+    node_config: &mut NodeConfig,
+    event_subscription_service: &mut EventSubscriptionService,
+    dkg_network_interfaces: Option<ApplicationNetworkInterfaces<DKGMessage>>,
+    vtxn_pool: &VTxnPoolState,
+) -> Option<Runtime> {
+    let dkg_subscriptions = if node_config.base.role.is_validator() {
+        let reconfig_events = event_subscription_service
+            .subscribe_to_reconfigurations()
+            .expect("DKG must subscribe to reconfigurations");
+        let dkg_start_events = event_subscription_service
+            .subscribe_to_events(vec![], vec!["0x1::dkg::DKGStartEvent".to_string()])
+            .expect("Consensus must subscribe to DKG events");
+        Some((reconfig_events, dkg_start_events))
+    } else {
+        None
+    };
+    let dkg_runtime = match dkg_network_interfaces {
+        Some(interfaces) => {
+            let ApplicationNetworkInterfaces {
+                network_client,
+                network_service_events,
+            } = interfaces;
+            let (reconfig_events, dkg_start_events) = dkg_subscriptions
+                .expect("DKG needs to listen to NewEpochEvents events and DKGStartEvents");
+            let my_addr = node_config.validator_network.as_ref().unwrap().peer_id();
+            let rb_config = node_config.consensus.rand_rb_config.clone();
+            let dkg_runtime = start_dkg_runtime(
+                my_addr,
+                &node_config.consensus.safety_rules,
+                network_client,
+                network_service_events,
+                reconfig_events,
+                dkg_start_events,
+                vtxn_pool.clone(),
+                rb_config,
+                node_config.randomness_override_seq_num,
+            );
+            Some(dkg_runtime)
+        },
+        _ => None,
+    };
+
+    dkg_runtime
+}
+
 
 pub fn start_consensus(
     node_config: &NodeConfig,
@@ -127,8 +187,8 @@ pub fn start_jwk_consensus_runtime(
     jwk_consensus_network_interfaces: Option<
         ApplicationNetworkInterfaces<gaptos::aptos_jwk_consensus::types::JWKConsensusMsg>,
     >,
-) -> (Runtime, VTxnPoolState) {
-    let vtxn_pool = VTxnPoolState::default();
+    vtxn_pool: VTxnPoolState,
+) -> Runtime {
     let jwk_consensus_runtime = match jwk_consensus_network_interfaces {
         Some(interfaces) => {
             let ApplicationNetworkInterfaces { network_client, network_service_events } =
@@ -150,7 +210,7 @@ pub fn start_jwk_consensus_runtime(
         }
         _ => None,
     };
-    (jwk_consensus_runtime.expect("JWK consensus runtime must be started"), vtxn_pool)
+    jwk_consensus_runtime.expect("JWK consensus runtime must be started")
 }
 
 pub fn init_jwk_consensus(
@@ -159,7 +219,8 @@ pub fn init_jwk_consensus(
     jwk_consensus_network_interfaces: ApplicationNetworkInterfaces<
         gaptos::aptos_jwk_consensus::types::JWKConsensusMsg,
     >,
-) -> (Runtime, VTxnPoolState) {
+    vtxn_pool: &VTxnPoolState,
+) -> Runtime {
     // TODO(gravity): only valdiator should subscribe the reconf events
     let reconfig_events = event_subscription_service
         .subscribe_to_reconfigurations()
@@ -171,8 +232,10 @@ pub fn init_jwk_consensus(
         node_config,
         Some((reconfig_events, jwk_updated_events)),
         Some(jwk_consensus_network_interfaces),
+        vtxn_pool.clone(),
     )
 }
+
 
 pub fn init_mempool(
     node_config: &NodeConfig,

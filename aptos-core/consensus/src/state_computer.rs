@@ -21,7 +21,7 @@ use crate::{
 use anyhow::Result;
 use gaptos::api_types::account::{ExternalAccountAddress, ExternalChainId};
 use gaptos::api_types::u256_define::{BlockId, Random, TxnHash};
-use gaptos::api_types::{ExternalBlock, ExternalBlockMeta};
+use gaptos::api_types::{ExternalBlock, ExternalBlockMeta, ExtraDataType};
 use aptos_consensus_types::common::RejectedTransactionSummary;
 use gaptos::aptos_consensus_notifications::ConsensusNotificationSender;
 use aptos_consensus_types::{
@@ -219,39 +219,46 @@ impl ExecutionProxy {
         )
     }
 
-    /// Process JWK transactions and extract extra data for execution
-    fn process_jwk_transactions(
+    /// Process validator transactions (DKG and JWK) and extract extra data for execution
+    fn process_validator_transactions(
         &self,
         validator_txns: Option<&[ValidatorTransaction]>,
         block: &Block,
-    ) -> Vec<Vec<u8>> {
-        let mut jwks_extra_data = Vec::new();
+    ) -> Vec<ExtraDataType> {
+        let mut extra_data = Vec::new();
         
         if let Some(validator_txns) = validator_txns {
-            jwks_extra_data = validator_txns
+            extra_data = validator_txns
                 .iter()
-                .map(|txn| self.process_single_jwk_transaction(txn, block))
+                .map(|txn| self.process_single_validator_transaction(txn, block))
                 .collect();
         }
         
-        jwks_extra_data
+        extra_data
     }
 
-    /// Process a single JWK transaction and return the serialized data
-    fn process_single_jwk_transaction(
+    /// Process a single validator transaction (DKG or JWK) and return the serialized data
+    fn process_single_validator_transaction(
         &self,
         txn: &ValidatorTransaction,
         block: &Block,
-    ) -> Vec<u8> {
+    ) -> ExtraDataType {
         match txn {
-            ValidatorTransaction::DKGResult(_) => {
-                todo!()
+            ValidatorTransaction::DKGResult(transcript) => {
+                let transcript = gaptos::api_types::on_chain_config::dkg::DKGTranscript {
+                    metadata: gaptos::api_types::on_chain_config::dkg::DKGTranscriptMetadata {
+                        epoch: transcript.metadata.epoch,
+                        author: ExternalAccountAddress::new(transcript.metadata.author.into_bytes()),
+                    },
+                    transcript_bytes: transcript.transcript_bytes.clone(),
+                };
+                ExtraDataType::DKG(bcs::to_bytes(&transcript).unwrap())
             }
             ValidatorTransaction::ObservedJWKUpdate(jwks::QuorumCertifiedUpdate {
                 update,
                 multi_sig,
             }) => {
-                self.process_jwk_update(&update, block)
+                ExtraDataType::JWK(self.process_jwk_update(&update, block))
             }
         }
     }
@@ -296,7 +303,88 @@ impl ExecutionProxy {
 
         bcs::to_bytes(&gaptos_provider_jwk).unwrap()
     }
+}
 
+/// Public utility function to process validator transactions (JWK and DKG)
+pub fn process_validator_transactions_util(
+    validator_txns: Option<&[ValidatorTransaction]>,
+    block: &Block,
+) -> Vec<ExtraDataType> {
+    let mut extra_data = Vec::new();
+    
+    if let Some(validator_txns) = validator_txns {
+        extra_data = validator_txns
+            .iter()
+            .map(|txn| process_single_validator_transaction_util(txn, block))
+            .collect();
+    }
+    
+    extra_data
+}
+
+/// Public utility function to process a single validator transaction
+pub fn process_single_validator_transaction_util(
+    txn: &ValidatorTransaction,
+    block: &Block,
+) -> ExtraDataType {
+    match txn {
+        ValidatorTransaction::DKGResult(transcript) => {
+            let transcript = gaptos::api_types::on_chain_config::dkg::DKGTranscript {
+                metadata: gaptos::api_types::on_chain_config::dkg::DKGTranscriptMetadata {
+                    epoch: transcript.metadata.epoch,
+                    author: ExternalAccountAddress::new(transcript.metadata.author.into_bytes()),
+                },
+                transcript_bytes: transcript.transcript_bytes.clone(),
+            };
+            ExtraDataType::DKG(bcs::to_bytes(&transcript).unwrap())
+        }
+        ValidatorTransaction::ObservedJWKUpdate(jwks::QuorumCertifiedUpdate {
+            update,
+            multi_sig,
+        }) => {
+            ExtraDataType::JWK(process_jwk_update_util(&update, block))
+        }
+    }
+}
+
+/// Public utility function to process JWK update
+pub fn process_jwk_update_util(
+    update: &ProviderJWKs,
+    block: &Block,
+) -> Vec<u8> {
+    use gaptos::api_types::on_chain_config::jwks::{JWKStruct, ProviderJWKs};
+    // TODO(Gravity): Check the signature here instead of execution layer
+    info!(
+        "jwk txn block number {} , {:?}",
+        block.block_number().unwrap_or_else(|| panic!("No block number")),
+        update.version
+    );
+
+    let gaptos_provider_jwk = ProviderJWKs {
+        issuer: update.issuer.clone(),
+        version: update.version,
+        jwks: update
+            .jwks
+            .iter()
+            .map(|jwk| {
+                let aptos_jwk = JWK::try_from(jwk).unwrap();
+                match aptos_jwk {
+                    JWK::RSA(rsa_jwk) => JWKStruct {
+                        type_name: "0".to_string(),
+                        data: serde_json::to_vec(&rsa_jwk).unwrap(),
+                    },
+                    JWK::Unsupported(unsupported_jwk) => {
+                        JWKStruct {
+                            type_name: "1".to_string(),
+                            data: unsupported_jwk.payload,
+                        }
+                    }
+                }
+            })
+            .collect(),
+    };
+
+    bcs::to_bytes(&gaptos_provider_jwk).unwrap()
 }
 
 #[async_trait::async_trait]
@@ -313,8 +401,8 @@ impl StateComputer for ExecutionProxy {
         assert!(block.block_number().is_some());
         let txns = self.get_block_txns(block).await;
         let validator_txns = block.validator_txns();
-        let jwks_extra_data = self.process_jwk_transactions(validator_txns.map(|v| &**v), block);
-
+        let extra_data = process_validator_transactions_util(validator_txns.map(|v| &**v), block);
+        
         let meta_data = ExternalBlockMeta {
             block_id: BlockId(*block.id()),
             block_number: block.block_number().unwrap_or_else(|| panic!("No block number")),
@@ -343,6 +431,7 @@ impl StateComputer for ExecutionProxy {
         APTOS_EXECUTION_TXNS.observe(real_txns.len() as f64);
         let txn_notifier = self.txn_notifier.clone();
         let block_id_hashvalue = block.id();
+        let enable_randomness = self.state.read().as_ref().unwrap().is_randomness_enabled;
         Box::pin(async move {
             let block_id = meta_data.block_id;
             let block_timestamp = meta_data.usecs;
@@ -351,14 +440,14 @@ impl StateComputer for ExecutionProxy {
                 .set_ordered_blocks(BlockId::from_bytes(parent_block_id.as_slice()), ExternalBlock {
                     block_meta: meta_data.clone(),
                     txns: real_txns,
-                    jwks_extra_data,
+                    extra_data,
+                    enable_randomness: enable_randomness,
                 })
                 .await.unwrap_or_else(|e| panic!("Failed to push ordered blocks {}", e));
             let u_ts = meta_data.usecs;
             let compute_result = get_block_buffer_manager()
                 .get_executed_res(block_id, meta_data.block_number)
                 .await?;
-
             txn_metrics::TxnLifeTime::get_txn_life_time().record_executed(block_id_hashvalue);
             update_counters_for_compute_res(&compute_result.execution_output);
            
