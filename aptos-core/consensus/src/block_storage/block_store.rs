@@ -76,6 +76,15 @@ static CUR_RECOVER_BLOCK_NUMBER_GAUGE: Lazy<IntGaugeVec> = Lazy::new(|| {
      .unwrap()
  });
 
+static SET_RANDOMNESS_FROM_DB_COUNTER: Lazy<IntGaugeVec> = Lazy::new(|| {
+    register_int_gauge_vec!(
+        "aptos_set_randomness_from_db_total",
+        "Total number of times randomness was set from DB",
+        &[]
+    )
+    .unwrap()
+});
+
 fn update_counters_for_ordered_blocks(ordered_blocks: &[Arc<PipelinedBlock>]) {
     for block in ordered_blocks {
         observe_block(block.block().timestamp_usecs(), BlockStage::ORDERED);
@@ -570,6 +579,7 @@ impl BlockStore {
             if !pipelined_block.has_randomness() {
                 if let Ok(Some(randomness)) = self.storage.consensus_db().get_randomness(block_number) {
                     debug!("Set randomness from DB for block {}, epoch {}, round {}", block_number, block.epoch(), block.round());
+                    SET_RANDOMNESS_FROM_DB_COUNTER.with_label_values(&[]).inc();
                     pipelined_block.set_randomness(Randomness::new(
                         RandMetadata { epoch: block.epoch(), round: block.round() },
                         randomness
