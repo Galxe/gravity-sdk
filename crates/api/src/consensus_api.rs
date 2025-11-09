@@ -158,13 +158,16 @@ impl ConsensusEngine {
                 }
             }
      
-            dkg_network_handle = Some(register_client_and_service_with_network::<DKGMessage>(
-                &mut network_builder,
-                network_id,
-                &network_config,
-                dkg_network_configuration(&node_config),
-                false,
-            ));
+            // Only create DKG network interface for validator nodes
+            if network_id.is_validator_network() {
+                dkg_network_handle = Some(register_client_and_service_with_network::<DKGMessage>(
+                    &mut network_builder,
+                    network_id,
+                    &network_config,
+                    dkg_network_configuration(&node_config),
+                    false,
+                ));
+            }
 
             // Register consensus (both client and server) with the network
             let network_handle = register_client_and_service_with_network(
