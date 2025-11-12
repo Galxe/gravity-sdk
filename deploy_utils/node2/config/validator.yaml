@@ -44,10 +44,16 @@ validator_network:
     type: "from_file"
     path: /tmp/node2/config/validator-identity.yaml
 
+full_node_networks:
+  - network_id:
+      private: "vfn"
+    listen_address: "/ip4/127.0.0.1/tcp/2035"
+    identity:
+      type: "from_file"
+      path: /tmp/node2/config/validator-identity.yaml
+
 storage:
   dir: "/tmp/node2/data"
-
-node_config_path: "/tmp/node2/config/nodes_config.json"
 
 log_file_path: "/tmp/node2/consensus_log"
 

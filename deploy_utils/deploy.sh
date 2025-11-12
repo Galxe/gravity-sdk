@@ -204,12 +204,8 @@ main() {
 
         if [[ "$mode" == "cluster" ]]; then
             log_info "Setting up cluster mode"
-            cp -r "$SCRIPT_DIR/four_nodes_config.json" "$install_dir/$node_arg/config/nodes_config.json"
-            cp -r "$SCRIPT_DIR/four_nodes_discovery" "$install_dir/$node_arg/discovery"
         else
             log_info "Setting up single node mode"
-            cp -r "$SCRIPT_DIR/single_node_config.json" "$install_dir/$node_arg/config/nodes_config.json"
-            cp -r "$SCRIPT_DIR/single_node_discovery" "$install_dir/$node_arg/discovery"
             cp "$SCRIPT_DIR/waypoint_single.txt" "$install_dir/$node_arg/config/waypoint.txt"
         fi
 

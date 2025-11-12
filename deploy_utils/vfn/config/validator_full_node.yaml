@@ -38,16 +38,17 @@ full_node_networks:
   - network_id:
       private: "vfn"
     listen_address: "/ip4/127.0.0.1/tcp/2044"
+    identity:
+      type: "from_file"
+      path: /tmp/vfn/config/vfn-identity.yaml
     seeds:
-      4992d8fa579c7b7fa5de5b254ca160be28aa6f7aa72fb4a2b243e1d2f7d5a829:
+      2d86b40a1d692c0749a0a0426e2021ee24e2430da0f5bb9c2ae6c586bf3e0a0f:
         addresses:
-        - "/ip4/127.0.0.1/tcp/2034/noise-ik/4992d8fa579c7b7fa5de5b254ca160be28aa6f7aa72fb4a2b243e1d2f7d5a829/handshake/0"
+        - "/ip4/127.0.0.1/tcp/2034/noise-ik/2d86b40a1d692c0749a0a0426e2021ee24e2430da0f5bb9c2ae6c586bf3e0a0f/handshake/0"
         role: "Validator"
 
 storage:
   dir: "/tmp/vfn/data"
-
-node_config_path: "/tmp/vfn/config/nodes_config.json"
 
 log_file_path: "/tmp/vfn/consensus_log"
 
@@ -59,4 +60,4 @@ mempool:
   capacity_per_user: 20000
 
 logger:
-  level: DEBUG
+  level: INFO

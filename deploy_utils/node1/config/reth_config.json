@@ -1,6 +1,6 @@
 {
     "reth_args": {
-        "chain": "/home/neko/gravity-sdk/single_genesis.json",
+        "chain": "dev",
         "http": "",
         "http.port": 8545,
         "http.corsdomain": "*",
