@@ -1,0 +1,34 @@
+{
+  "network": {
+    "name": "gravity-local",
+    "chain_id": 1337,
+    "default_timeout": 30,
+    "default_gas_price": "1000000000",
+    "description": "Local Gravity Node test network"
+  },
+  "clusters": {
+    "single": {
+      "description": "Single node for quick testing",
+      "nodes": ["local_node"],
+      "test_suites": ["basic", "contract"]
+    },
+    "dev": {
+      "description": "Development cluster",
+      "nodes": ["local_node"],
+      "test_suites": ["all"]
+    }
+  },
+  "nodes": {
+    "local_node": {
+      "type": "validator",
+      "role": "primary",
+      "host": "127.0.0.1",
+      "rpc_port": 8545,
+      "metrics_port": 9001,
+      "ws_port": 8546,
+      "p2p_port": 30303,
+      "description": "Local development node",
+      "capabilities": ["full", "mining", "admin", "debug"]
+    }
+  }
+}
