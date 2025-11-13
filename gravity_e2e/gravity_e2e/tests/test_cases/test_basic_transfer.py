@@ -23,8 +23,8 @@ async def test_eth_transfer(run_helper: RunHelper, test_result: TestResult):
     sender_balance_before = await run_helper.client.get_balance(sender["address"])
     receiver_balance_before = await run_helper.client.get_balance(receiver["address"])
     
-    LOG.info(f"Sender balance before: {run_helper.client.web3.from_wei(sender_balance_before, 'ether')} ETH")
-    LOG.info(f"Receiver balance before: {run_helper.client.web3.from_wei(receiver_balance_before, 'ether')} ETH")
+    LOG.info(f"Sender balance before: {sender_balance_before / 10**18:.6f} ETH")
+    LOG.info(f"Receiver balance before: {receiver_balance_before / 10**18:.6f} ETH")
     
     # 3. 执行转账
     transfer_amount = 10**17  # 0.1 ETH
@@ -50,7 +50,8 @@ async def test_eth_transfer(run_helper: RunHelper, test_result: TestResult):
     }
     
     # 签名交易
-    signed_tx = run_helper.client.web3.eth.account.sign_transaction(
+    from eth_account import Account
+    signed_tx = Account.sign_transaction(
         tx_data, 
         sender["private_key"]
     )
@@ -69,8 +70,8 @@ async def test_eth_transfer(run_helper: RunHelper, test_result: TestResult):
     sender_balance_after = await run_helper.client.get_balance(sender["address"])
     receiver_balance_after = await run_helper.client.get_balance(receiver["address"])
     
-    LOG.info(f"Sender balance after: {run_helper.client.web3.from_wei(sender_balance_after, 'ether')} ETH")
-    LOG.info(f"Receiver balance after: {run_helper.client.web3.from_wei(receiver_balance_after, 'ether')} ETH")
+    LOG.info(f"Sender balance after: {sender_balance_after / 10**18:.6f} ETH")
+    LOG.info(f"Receiver balance after: {receiver_balance_after / 10**18:.6f} ETH")
     
     # 验证余额变化
     expected_receiver_balance = receiver_balance_before + transfer_amount

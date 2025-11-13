@@ -128,7 +128,7 @@ class RunHelper:
                 while int(await self.client.get_block_number()) < target_block:
                     await asyncio.sleep(0.5)
             
-            LOG.info(f"Funded account '{account['name']}' with {Web3.from_wei(amount_wei, 'ether')} ETH")
+            LOG.info(f"Funded account '{account['name']}' with {amount_wei / 10**18:.6f} ETH")
             return receipt
             
         except Exception as e:

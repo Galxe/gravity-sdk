@@ -12,7 +12,8 @@ from .helpers.account_manager import TestAccountManager
 from .helpers.test_helpers import RunHelper
 from .utils.logging import setup_logging
 from .tests.test_cases.test_basic_transfer import test_eth_transfer
-from .tests.test_cases.test_contract_deploy import test_contract_deploy_and_interact
+from .tests.test_cases.test_contract_deploy import test_simple_storage_deploy
+from .tests.test_cases.test_erc20 import test_erc20_deploy_and_transfer
 
 LOG = logging.getLogger(__name__)
 
@@ -24,7 +25,10 @@ async def run_test_module(module_name: str, test_helper: RunHelper, test_results
             result = await test_eth_transfer(run_helper=test_helper)
             test_results.append(result)
         elif module_name == "cases.contract":
-            result = await test_contract_deploy_and_interact(run_helper=test_helper)
+            result = await test_simple_storage_deploy(run_helper=test_helper)
+            test_results.append(result)
+        elif module_name == "cases.erc20":
+            result = await test_erc20_deploy_and_transfer(run_helper=test_helper)
             test_results.append(result)
         else:
             LOG.warning(f"Unknown test module: {module_name}")
@@ -45,7 +49,7 @@ async def main():
     parser.add_argument("--accounts-config", default="configs/test_accounts.json",
                        help="Path to accounts configuration file")
     parser.add_argument("--test-suite", default="all",
-                       choices=["all", "basic", "contract", "block", "network"],
+                       choices=["all", "basic", "contract", "erc20", "block", "network"],
                        help="Test suite to run")
     parser.add_argument("--cluster", default=None,
                        help="Cluster name to test (defined in nodes.json)")
@@ -144,12 +148,15 @@ async def main():
                 if args.test_suite == "all":
                     test_modules = [
                         "cases.basic_transfer",
-                        "cases.contract"
+                        "cases.contract",
+                        "cases.erc20"
                     ]
                 elif args.test_suite == "basic":
                     test_modules = ["cases.basic_transfer"]
                 elif args.test_suite == "contract":
                     test_modules = ["cases.contract"]
+                elif args.test_suite == "erc20":
+                    test_modules = ["cases.erc20"]
                 else:
                     test_modules = [f"cases.{args.test_suite}"]
                 
