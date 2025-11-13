@@ -5,7 +5,7 @@ use crate::{
     network::QuorumStoreSender,
     quorum_store::{
         batch_requester::BatchRequester,
-        types::{Batch, BatchRequest, BatchResponse},
+        types::{Batch, BatchKey, BatchRequest, BatchResponse},
     },
 };
 use aptos_consensus_types::{
@@ -99,7 +99,7 @@ async fn test_batch_request_exists() {
     let (_, subscriber_rx) = oneshot::channel();
     let result = batch_requester
         .request_batch(
-            (1, *batch.digest()),
+            BatchKey::new(1, *batch.digest()),
             batch.expiration(),
             vec![AccountAddress::random()],
             tx,
@@ -196,7 +196,7 @@ async fn test_batch_request_not_exists_not_expired() {
     let (_, subscriber_rx) = oneshot::channel();
     let result = batch_requester
         .request_batch(
-            (1, *batch.digest()),
+            BatchKey::new(1, *batch.digest()),
             batch.expiration(),
             vec![AccountAddress::random()],
             tx,
@@ -244,7 +244,7 @@ async fn test_batch_request_not_exists_expired() {
     let (_, subscriber_rx) = oneshot::channel();
     let result = batch_requester
         .request_batch(
-            (1, *batch.digest()),
+            BatchKey::new(1, *batch.digest()),
             batch.expiration(),
             vec![AccountAddress::random()],
             tx,

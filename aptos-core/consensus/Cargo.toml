@@ -46,6 +46,10 @@ num-traits = { workspace = true }
 once_cell = { workspace = true }
 ordered-float = { workspace = true }
 rand = { workspace = true }
+rand_core = { workspace = true }
+blstrs = { version = "0.7.1", features = ["serde", "__private_bench"] }
+ff = "0.13"
+group = "0.13"
 rayon = { workspace = true }
 scopeguard = { workspace = true }
 serde = { workspace = true }

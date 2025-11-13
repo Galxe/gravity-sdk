@@ -4,7 +4,7 @@
 use crate::quorum_store::{
     batch_store::{BatchStore, BatchWriter, QuotaManager},
     quorum_store_db::QuorumStoreDB,
-    types::{PersistedValue, StorageMode},
+    types::{BatchKey, PersistedValue, StorageMode},
 };
 use aptos_consensus_types::proof_of_store::{BatchId, BatchInfo};
 use gaptos::aptos_crypto::HashValue;
@@ -82,7 +82,7 @@ fn test_insert_expire() {
     assert!(expired.is_empty());
     let expired = batch_store.clear_expired_payload(29);
     assert!(expired.is_empty());
-    assert_eq!(batch_store.clear_expired_payload(30), vec![(10, digest)]);
+    assert_eq!(batch_store.clear_expired_payload(30), vec![BatchKey::new(10, digest)]);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -253,31 +253,31 @@ fn test_get_local_batch() {
     // Out of quota - should not be stored
     assert!(store.persist(vec![request_3.clone()]).is_empty());
 
-    assert_ok!(store.get_batch_from_local(&(10, digest_1)));
-    assert_ok!(store.get_batch_from_local(&(10, digest_2)));
+    assert_ok!(store.get_batch_from_local(&BatchKey::new(10, digest_1)));
+    assert_ok!(store.get_batch_from_local(&BatchKey::new(10, digest_2)));
     store.update_certified_timestamp(51);
     // Expired value w. digest_1.
-    assert_err!(store.get_batch_from_local(&(10, digest_1)));
-    assert_ok!(store.get_batch_from_local(&(10, digest_2)));
+    assert_err!(store.get_batch_from_local(&BatchKey::new(10, digest_1)));
+    assert_ok!(store.get_batch_from_local(&BatchKey::new(10, digest_2)));
 
     // Value w. digest_3 was never persisted
-    assert_err!(store.get_batch_from_local(&(10, digest_3)));
+    assert_err!(store.get_batch_from_local(&BatchKey::new(10, digest_3)));
     // Since payload is cleared, we can now persist value w. digest_3
     assert!(!store.persist(vec![request_3]).is_empty());
-    assert_ok!(store.get_batch_from_local(&(10, digest_3)));
+    assert_ok!(store.get_batch_from_local(&BatchKey::new(10, digest_3)));
 
     store.update_certified_timestamp(52);
-    assert_ok!(store.get_batch_from_local(&(10, digest_2)));
-    assert_ok!(store.get_batch_from_local(&(10, digest_3)));
+    assert_ok!(store.get_batch_from_local(&BatchKey::new(10, digest_2)));
+    assert_ok!(store.get_batch_from_local(&BatchKey::new(10, digest_3)));
 
     store.update_certified_timestamp(55);
     // Expired value w. digest_2
-    assert_err!(store.get_batch_from_local(&(10, digest_2)));
-    assert_ok!(store.get_batch_from_local(&(10, digest_3)));
+    assert_err!(store.get_batch_from_local(&BatchKey::new(10, digest_2)));
+    assert_ok!(store.get_batch_from_local(&BatchKey::new(10, digest_3)));
 
     store.update_certified_timestamp(56);
     // Expired value w. digest_3
-    assert_err!(store.get_batch_from_local(&(10, digest_1)));
-    assert_err!(store.get_batch_from_local(&(10, digest_2)));
-    assert_err!(store.get_batch_from_local(&(10, digest_3)));
+    assert_err!(store.get_batch_from_local(&BatchKey::new(10, digest_1)));
+    assert_err!(store.get_batch_from_local(&BatchKey::new(10, digest_2)));
+    assert_err!(store.get_batch_from_local(&BatchKey::new(10, digest_3)));
 }
