@@ -49,14 +49,11 @@ full_node_networks:
       private: "vfn"
     listen_address: "/ip4/127.0.0.1/tcp/2034"
     identity:
-      type: "from_config"
-      key: "1044c74ecb64b4103536c6858646c95329666203a7946f3fb7e9d6c1394abb7e"
-      peer_id: "4992d8fa579c7b7fa5de5b254ca160be28aa6f7aa72fb4a2b243e1d2f7d5a829"
+      type: "from_file"
+      path: /tmp/node1/config/validator-identity.yaml
 
 storage:
   dir: "/tmp/node1/data"
-
-node_config_path: "/tmp/node1/config/nodes_config.json"
 
 log_file_path: "/tmp/node1/consensus_log"
 

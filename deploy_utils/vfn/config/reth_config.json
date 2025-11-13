@@ -1,6 +1,6 @@
 {
     "reth_args": {
-        "chain": "/home/neko/gravity-sdk/single_genesis.json",
+        "chain": "dev",
         "http": "",
         "http.port": 8565,
         "http.corsdomain": "*",
@@ -25,7 +25,8 @@
         "txpool.basefee-max-count": 17592186044415,
         "txpool.basefee-max-size": 17592186044415,
         "txpool.queued-max-count": 17592186044415,
-        "txpool.queued-max-size": 17592186044415
+        "txpool.queued-max-size": 17592186044415,
+        "ipcdisable": ""
     },
     "env_vars": {
         "BATCH_INSERT_TIME": 20

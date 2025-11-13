@@ -1,7 +1,0 @@
----
-caafc5b658f0590d7e31de91edde7f05ae91961d0804ec634d7535969b7d171f:
-  addresses:
-    - /ip4/127.0.0.1/tcp/2025/noise-ik/caafc5b658f0590d7e31de91edde7f05ae91961d0804ec634d7535969b7d171f/handshake/0
-  keys:
-    - "caafc5b658f0590d7e31de91edde7f05ae91961d0804ec634d7535969b7d171f"
-  role: Validator
