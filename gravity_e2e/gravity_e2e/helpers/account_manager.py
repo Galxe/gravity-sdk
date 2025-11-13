@@ -12,7 +12,7 @@ LOG = logging.getLogger(__name__)
 
 
 class TestAccountManager:
-    """测试账户管理器"""
+    """Test account manager"""
     
     def __init__(self, accounts_config_path: str = "configs/test_accounts.json"):
         self.accounts_config_path = accounts_config_path
@@ -22,12 +22,12 @@ class TestAccountManager:
         self.load_accounts()
         
     def load_accounts(self):
-        """加载测试账户配置"""
+        """Load test account configuration"""
         try:
             with open(self.accounts_config_path, 'r') as f:
                 config = json.load(f)
                 
-            # 只加载水龙头账户（预设的有余额账户）
+            # Load faucet account only
             if "faucet" in config:
                 self.faucet = config["faucet"]
                 LOG.info(f"Loaded faucet account: {self.faucet['address']}")
@@ -40,22 +40,22 @@ class TestAccountManager:
             LOG.error(f"Invalid JSON in accounts config: {e}")
             
     def get_account(self, name: str) -> Optional[Dict]:
-        """获取测试账户"""
+        """Get test account"""
         return self.accounts.get(name)
         
     def get_faucet(self) -> Optional[Dict]:
-        """获取水龙头账户"""
+        """Get faucet account"""
         return self.faucet
         
     async def create_test_account(self, name: str, save_immediately: bool = False) -> Dict:
-        """创建新的测试账户（运行时）
+        """Create new test account at runtime
         
         Args:
-            name: 账户名称
-            save_immediately: 是否立即保存到文件
+            name: Account name
+            save_immediately: Whether to save to file immediately
             
         Returns:
-            账户信息字典
+            Account information dictionary
         """
         async with self._lock:
             if name in self.accounts:
@@ -73,7 +73,7 @@ class TestAccountManager:
             
             self.accounts[name] = account_info
             
-            # 打印账户信息到日志
+            # Log account information
             LOG.info(f"Created test account '{name}':")
             LOG.info(f"  Address: {account.address}")
             LOG.info(f"  Private Key: {account.key.hex()}")
@@ -84,7 +84,7 @@ class TestAccountManager:
             return account_info
             
     def save_test_accounts(self, file_path: str = None):
-        """保存所有生成的测试账户到文件（同步版本）"""
+        """Save all generated test accounts to file (synchronous version)"""
         if file_path is None:
             file_path = self.accounts_config_path.replace('.json', '_generated.json')
             
@@ -103,7 +103,7 @@ class TestAccountManager:
         }
         
         try:
-            # 创建目录（如果不存在）
+            # Create directory if it doesn't exist
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             
             with open(file_path, 'w') as f:
@@ -113,12 +113,12 @@ class TestAccountManager:
             LOG.error(f"Failed to save test accounts: {e}")
             
     async def _save_accounts_async(self, file_path: str = None):
-        """异步保存账户"""
+        """Asynchronously save accounts"""
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, self.save_test_accounts, file_path)
         
     def get_or_create_account(self, name: str) -> Dict:
-        """获取已存在账户或创建新账户"""
+        """Get existing account or create new one"""
         if name in self.accounts:
             return self.accounts[name]
         return asyncio.create_task(self.create_test_account(name))

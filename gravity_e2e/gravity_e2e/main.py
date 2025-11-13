@@ -19,7 +19,7 @@ LOG = logging.getLogger(__name__)
 
 
 async def run_test_module(module_name: str, test_helper: RunHelper, test_results: list):
-    """运行测试模块"""
+    """Run test module"""
     try:
         if module_name == "cases.basic_transfer":
             result = await test_eth_transfer(run_helper=test_helper)
@@ -42,7 +42,7 @@ async def run_test_module(module_name: str, test_helper: RunHelper, test_results
 
 
 async def main():
-    """主执行流程"""
+    """Main execution flow"""
     parser = argparse.ArgumentParser(description="Gravity Node E2E Test Framework")
     parser.add_argument("--nodes-config", default="configs/nodes.json",
                        help="Path to nodes configuration file")
@@ -68,21 +68,21 @@ async def main():
     
     args = parser.parse_args()
     
-    # 设置日志
+    # Setup logging
     setup_logging(args.log_level, args.log_file)
     
-    # 创建输出目录
+    # Create output directory
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # 1. 初始化节点连接器
+    # 1. Initialize node connector
     try:
         async with NodeConnector(args.nodes_config) as node_connector:
-            # 2. 确定要测试的节点
+            # 2. Determine nodes to test
             test_nodes = []
             
             if args.cluster:
-                # 使用预定义的集群
+                # Use predefined cluster
                 try:
                     test_nodes = node_connector.get_cluster_nodes(args.cluster)
                     LOG.info(f"Testing cluster '{args.cluster}' with nodes: {test_nodes}")
@@ -90,35 +90,35 @@ async def main():
                     LOG.error(f"Failed to load cluster '{args.cluster}': {e}")
                     sys.exit(1)
             elif args.node_id:
-                # 使用指定的节点ID
+                # Use specified node IDs
                 test_nodes = [n.strip() for n in args.node_id.split(",")]
                 LOG.info(f"Testing specified nodes: {test_nodes}")
             elif args.node_type:
-                # 使用指定类型的所有节点
+                # Use all nodes of specified type
                 test_nodes = node_connector.get_nodes_by_type(args.node_type)
                 LOG.info(f"Testing all {args.node_type} nodes: {test_nodes}")
             else:
-                # 默认测试所有节点
+                # Default: test all nodes
                 test_nodes = node_connector.list_nodes()
                 LOG.info(f"Testing all nodes: {test_nodes}")
             
-            # 3. 连接到指定节点
+            # 3. Connect to specified nodes
             LOG.info("Connecting to nodes...")
             connection_results = await node_connector.connect_all(target_nodes=test_nodes)
             
             failed_connections = [node_id for node_id, success in connection_results.items() if not success]
             if failed_connections:
                 LOG.error(f"Failed to connect to nodes: {failed_connections}")
-                # 继续执行，只测试成功连接的节点
+                # Continue with successfully connected nodes
                 
-            # 4. 初始化账户管理器
+            # 4. Initialize account manager
             try:
                 account_manager = TestAccountManager(args.accounts_config)
             except Exception as e:
                 LOG.error(f"Failed to load account configuration: {e}")
                 sys.exit(1)
             
-            # 5. 执行健康检查
+            # 5. Perform health check
             LOG.info("Performing health check...")
             health_status = await node_connector.health_check()
             LOG.info("Node health status:")
@@ -128,23 +128,23 @@ async def main():
                 else:
                     LOG.error(f"  {node_id}: {status['status']} - {status.get('error', 'Unknown error')}")
             
-            # 6. 执行测试用例
+            # 6. Execute test cases
             test_results = []
             
-            # 使用已成功连接的节点
+            # Use successfully connected nodes
             connected_nodes = list(node_connector.clients.keys())
             
             for node_id in connected_nodes:
                 client = node_connector.get_client(node_id)
                 
-                # 初始化测试辅助器
+                # Initialize test helper
                 test_helper = RunHelper(
                     client=client,
                     working_dir=str(output_dir),
                     faucet_account=account_manager.get_faucet()
                 )
                 
-                # 确定要运行的测试模块
+                # Determine test modules to run
                 if args.test_suite == "all":
                     test_modules = [
                         "cases.basic_transfer",
@@ -162,11 +162,11 @@ async def main():
                 
                 LOG.info(f"Running tests on node {node_id}: {test_modules}")
                 
-                # 执行测试
+                # Execute tests
                 for module in test_modules:
                     await run_test_module(module, test_helper, test_results)
                     
-            # 7. 生成测试报告
+            # 7. Generate test report
             total_tests = len(test_results)
             passed_tests = sum(1 for r in test_results if (getattr(r, 'success', False) if isinstance(r, dict) else r.success))
             failed_tests = total_tests - passed_tests
@@ -190,7 +190,7 @@ async def main():
                         if not result.success:
                             LOG.error(f"  {result.test_name}: {result.error}")
             
-            # 8. 保存测试结果
+            # 8. Save test results
             results_file = output_dir / "test_results.json"
             try:
                 with open(results_file, 'w') as f:
@@ -205,10 +205,10 @@ async def main():
             except Exception as e:
                 LOG.error(f"Failed to save test results: {e}")
             
-            # 9. 保存生成的测试账户
+            # 9. Save generated test accounts
             await account_manager._save_accounts_async()
             
-            # 10. 返回退出码
+            # 10. Return exit code
             return 1 if failed_tests > 0 else 0
     
     except Exception as e:

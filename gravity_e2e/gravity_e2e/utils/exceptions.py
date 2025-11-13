@@ -1,10 +1,10 @@
 class GravityError(Exception):
-    """基础异常类"""
+    """Base exception class for Gravity E2E framework"""
     pass
 
 
 class APIError(GravityError):
-    """API 调用错误"""
+    """API call error"""
     def __init__(self, message: str, code: int = None):
         self.message = message
         self.code = code
@@ -12,10 +12,10 @@ class APIError(GravityError):
 
 
 class ConnectionError(GravityError):
-    """连接错误"""
+    """Connection error"""
     pass
 
 
 class NodeError(GravityError):
-    """节点错误"""
+    """Node-related error"""
     pass

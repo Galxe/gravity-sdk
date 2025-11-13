@@ -11,7 +11,7 @@ from ...utils.common import hex_to_int
 
 
 def to_checksum_address(address: str) -> str:
-    """将地址转换为校验和格式"""
+    """Convert address to checksum format"""
     if not address.startswith("0x"):
         address = "0x" + address
     return address.lower()
@@ -117,13 +117,13 @@ class GravityClient:
         return hex_to_int(balance)
     
     async def get_transaction_count(self, address: str, block: str = "latest") -> int:
-        """获取账户交易数（nonce）"""
+        """Get account transaction count (nonce)"""
         address = to_checksum_address(address)
         count = await self.send_request("eth_getTransactionCount", [address, block])
         return hex_to_int(count)
     
     async def send_raw_transaction(self, raw_tx) -> str:
-        """发送原始交易"""
+        """Send raw transaction"""
         # Convert HexBytes to hex string if needed
         if hasattr(raw_tx, 'hex'):
             raw_tx = raw_tx.hex()
@@ -132,7 +132,7 @@ class GravityClient:
         return await self.send_request("eth_sendRawTransaction", [raw_tx])
     
     async def get_transaction_receipt(self, tx_hash: str) -> Optional[Dict]:
-        """获取交易收据"""
+        """Get transaction receipt"""
         receipt = await self.send_request("eth_getTransactionReceipt", [tx_hash])
         return receipt if receipt else None
     
@@ -140,7 +140,7 @@ class GravityClient:
                                           tx_hash: str, 
                                           timeout: int = 120,
                                           poll_interval: float = 1.0) -> Dict:
-        """等待交易确认"""
+        """Wait for transaction confirmation"""
         start_time = time.time()
         
         while time.time() - start_time < timeout:
@@ -152,7 +152,7 @@ class GravityClient:
         raise APIError(f"Transaction {tx_hash} not confirmed within {timeout}s")
     
     async def get_block(self, block_number: Union[int, str], full_transactions: bool = True) -> Dict:
-        """获取区块信息"""
+        """Get block information"""
         if isinstance(block_number, int):
             block_identifier = hex(block_number)
         elif block_number in ("latest", "pending", "earliest"):
@@ -166,7 +166,7 @@ class GravityClient:
         )
     
     async def get_code(self, address: str, block: str = "latest") -> str:
-        """获取合约代码"""
+        """Get contract code"""
         address = to_checksum_address(address)
         code = await self.send_request("eth_getCode", [address, block])
         return code

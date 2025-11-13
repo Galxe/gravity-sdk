@@ -12,18 +12,18 @@ LOG = logging.getLogger(__name__)
 CONTRACTS_DIR = Path(__file__).parent.parent.parent.parent / "contracts_data"
 SIMPLE_TOKEN_PATH = CONTRACTS_DIR / "SimpleToken.json"
 
-# 加载合约数据
+# Load contract data
 if SIMPLE_TOKEN_PATH.exists():
     with open(SIMPLE_TOKEN_PATH, 'r') as f:
         contract_data = json.load(f)
         SIMPLE_TOKEN_BYTECODE = contract_data["bytecode"]
         SIMPLE_TOKEN_ABI = contract_data["abi"]
 else:
-    # 如果文件不存在，使用默认值
+    # If file doesn't exist, use default values
     SIMPLE_TOKEN_BYTECODE = ""
     SIMPLE_TOKEN_ABI = []
 
-# 加载构造函数编码数据
+# Load constructor encoding data
 DEPLOYMENT_DATA_PATH = CONTRACTS_DIR / "deployment_data.json"
 CONSTRUCTOR_DATA = ""
 if DEPLOYMENT_DATA_PATH.exists():
@@ -45,35 +45,35 @@ def encode_uint256(value: int) -> str:
 
 @test_case
 async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: TestResult):
-    """测试 ERC20 代币部署和转账"""
+    """Test ERC20 token deployment and transfer"""
     LOG.info("Starting ERC20 token deployment and transfer test")
     
     if not SIMPLE_TOKEN_BYTECODE:
         raise RuntimeError("SimpleToken contract not compiled. Please run forge build first.")
     
-    # 1. 创建测试账户
+    # 1. Create test accounts
     deployer = await run_helper.create_test_account("deployer", fund_wei=10 * 10**18)  # 10 ETH
     recipient = await run_helper.create_test_account("recipient")
     
     LOG.info(f"Deployer: {deployer['address']}")
     LOG.info(f"Recipient: {recipient['address']}")
     
-    # 2. 部署 SimpleToken 合约
-    # 使用预生成的构造函数数据
+    # 2. Deploy SimpleToken contract
+    # Use pre-generated constructor data
     if not CONSTRUCTOR_DATA:
         raise RuntimeError("Constructor data not found. Please run encode_deploy.py first.")
     
-    # 完整的部署字节码
+    # Complete deployment bytecode
     full_bytecode = SIMPLE_TOKEN_BYTECODE + CONSTRUCTOR_DATA
     
-    # 获取部署者 nonce
+    # Get deployer nonce
     nonce = await run_helper.client.get_transaction_count(deployer["address"])
     
-    # 获取 gas 价格
+    # Get gas price
     gas_price = await run_helper.client.get_gas_price()
-    gas_limit = 3000000  # ERC20 合约需要更多 gas
+    gas_limit = 3000000  # ERC20 contracts need more gas
     
-    # 构建部署交易
+    # Build deployment transaction
     deploy_tx_data = {
         "data": full_bytecode if not full_bytecode.startswith("0x") else full_bytecode[2:],
         "gas": hex(gas_limit),

@@ -9,37 +9,37 @@ LOG = logging.getLogger(__name__)
 
 @test_case
 async def test_eth_transfer(run_helper: RunHelper, test_result: TestResult):
-    """测试基础 ETH 转账功能"""
+    """Test basic ETH transfer functionality"""
     LOG.info("Starting ETH transfer test")
     
-    # 1. 创建测试账户
+    # 1. Create test accounts
     sender = await run_helper.create_test_account("sender", fund_wei=10**18)  # 1 ETH
     receiver = await run_helper.create_test_account("receiver")
     
     LOG.info(f"Sender: {sender['address']}")
     LOG.info(f"Receiver: {receiver['address']}")
     
-    # 2. 获取转账前余额
+    # 2. Get pre-transfer balances
     sender_balance_before = await run_helper.client.get_balance(sender["address"])
     receiver_balance_before = await run_helper.client.get_balance(receiver["address"])
     
     LOG.info(f"Sender balance before: {sender_balance_before / 10**18:.6f} ETH")
     LOG.info(f"Receiver balance before: {receiver_balance_before / 10**18:.6f} ETH")
     
-    # 3. 执行转账
+    # 3. Execute transfer
     transfer_amount = 10**17  # 0.1 ETH
     
-    # 获取当前 gas 价格
+    # Get current gas price
     gas_price = await run_helper.client.get_gas_price()
     gas_limit = 21000
     
-    # 计算总费用
+    # Calculate total cost
     total_cost = transfer_amount + (gas_price * gas_limit)
     
-    # 获取 sender nonce
+    # Get sender nonce
     nonce = await run_helper.client.get_transaction_count(sender["address"])
     
-    # 构建交易
+    # Build transaction
     tx_data = {
         "to": receiver["address"],
         "value": hex(transfer_amount),
@@ -49,35 +49,35 @@ async def test_eth_transfer(run_helper: RunHelper, test_result: TestResult):
         "chainId": hex(await run_helper.client.get_chain_id())
     }
     
-    # 签名交易
+    # Sign transaction
     from eth_account import Account
     signed_tx = Account.sign_transaction(
         tx_data, 
         sender["private_key"]
     )
     
-    # 发送交易
+    # Send transaction
     tx_hash = await run_helper.client.send_raw_transaction(signed_tx.raw_transaction)
     LOG.info(f"Transfer transaction sent: {tx_hash}")
     
-    # 等待交易确认
+    # Wait for transaction confirmation
     receipt = await run_helper.client.wait_for_transaction_receipt(tx_hash, timeout=60)
     
     if receipt["status"] != "0x1":
         raise RuntimeError(f"Transfer transaction failed: {receipt}")
     
-    # 4. 验证转账后余额
+    # 4. Verify post-transfer balances
     sender_balance_after = await run_helper.client.get_balance(sender["address"])
     receiver_balance_after = await run_helper.client.get_balance(receiver["address"])
     
     LOG.info(f"Sender balance after: {sender_balance_after / 10**18:.6f} ETH")
     LOG.info(f"Receiver balance after: {receiver_balance_after / 10**18:.6f} ETH")
     
-    # 验证余额变化
+    # Verify balance changes
     expected_receiver_balance = receiver_balance_before + transfer_amount
     expected_sender_balance = sender_balance_before - total_cost
     
-    # 允许一定的误差（由于可能的手续费变化）
+    # Allow some tolerance (due to possible fee variations)
     balance_tolerance = 10**15  # 0.001 ETH
     
     if abs(receiver_balance_after - expected_receiver_balance) > balance_tolerance:
@@ -92,7 +92,7 @@ async def test_eth_transfer(run_helper: RunHelper, test_result: TestResult):
             f"got {sender_balance_after}"
         )
     
-    # 记录测试结果
+    # Record test results
     test_result.mark_success(
         tx_hash=tx_hash,
         transfer_amount=transfer_amount,

@@ -10,7 +10,7 @@ from eth_utils import to_checksum_address
 
 LOG = logging.getLogger(__name__)
 
-# 加载 SimpleStorage 合约数据
+# Load SimpleStorage contract data
 CONTRACTS_DIR = Path(__file__).parent.parent.parent.parent / "contracts_data"
 SIMPLE_STORAGE_PATH = CONTRACTS_DIR / "SimpleStorage.json"
 
@@ -24,40 +24,40 @@ else:
 
 
 def encode_function_call(func_name: str, args: list = None) -> str:
-    """编码函数调用"""
+    """Encode function call"""
     import hashlib
     
-    # 从 ABI 获取函数选择器
+    # Get function selector from ABI
     func_selector = None
     for item in SIMPLE_STORAGE_ABI:
         if item['type'] == 'function' and item['name'] == func_name:
-            # 计算函数签名
+            # Calculate function signature
             signature = f"{func_name}({','.join([arg['type'] for arg in item.get('inputs', [])])})"
-            # 使用 keccak256 哈希的前 4 字节（但由于没有 eth_hashlib，使用 sha256 作为近似）
-            # 注意：这不是标准的做法，应该使用 keccak256
+            # Use first 4 bytes of keccak256 hash (but using sha256 as approximation since eth_hashlib not available)
+            # Note: This is not standard practice, should use keccak256
             if func_name == "getValue":
-                # getValue() 的标准函数选择器是 0x20965255
+                # Standard function selector for getValue() is 0x20965255
                 func_selector = "0x20965255"
             elif func_name == "setValue":
-                # setValue(uint256) 的标准函数选择器是 0x55241077  
+                # Standard function selector for setValue(uint256) is 0x55241077  
                 func_selector = "0x55241077"
             else:
-                # 使用哈希计算作为后备
+                # Use hash calculation as fallback
                 func_selector = "0x" + hashlib.sha256(signature.encode()).hexdigest()[:8]
             break
     
     if not func_selector:
         raise ValueError(f"Function {func_name} not found in ABI")
     
-    # 编码参数
+    # Encode parameters
     data = func_selector[2:] if func_selector.startswith("0x") else func_selector
     if args:
         for arg in args:
             if isinstance(arg, int):
-                # 编码 uint256 为 32 字节
+                # Encode uint256 to 32 bytes
                 data += format(arg, '064x')
             elif isinstance(arg, str) and arg.startswith('0x'):
-                # 编码 address 为 32 字节
+                # Encode address to 32 bytes
                 data += arg[2:].rjust(64, '0')
     
     return "0x" + data
@@ -65,20 +65,20 @@ def encode_function_call(func_name: str, args: list = None) -> str:
 
 @test_case
 async def test_simple_storage_deploy(run_helper: RunHelper, test_result: TestResult):
-    """测试 SimpleStorage 合约部署和交互"""
+    """Test SimpleStorage contract deployment and interaction"""
     LOG.info("Starting SimpleStorage contract deployment test")
     
-    # 1. 创建测试账户
+    # 1. Create test account
     deployer = await run_helper.create_test_account("deployer", fund_wei=5 * 10**18)  # 5 ETH
     
     LOG.info(f"Deployer: {deployer['address']}")
     
-    # 2. 检查是否已经有合约部署
-    # 从测试结果或配置中读取已部署的合约地址（如果有的话）
+    # 2. Check if contract is already deployed
+    # Read deployed contract address from test results or config (if available)
     contract_address = None
     test_results_path = Path(run_helper.working_dir) / "test_results.json"
     
-    # 尝试从之前的测试结果中获取合约地址
+    # Try to get contract address from previous test results
     if test_results_path.exists():
         try:
             with open(test_results_path, 'r') as f:
@@ -92,15 +92,15 @@ async def test_simple_storage_deploy(run_helper: RunHelper, test_result: TestRes
         except Exception as e:
             LOG.warning(f"Failed to read previous test results: {e}")
     
-    # 如果没有找到已部署的合约，则部署新合约
+    # If no deployed contract found, deploy new one
     if not contract_address:
         LOG.info("No existing contract found, deploying new one...")
         
         nonce = await run_helper.client.get_transaction_count(deployer["address"])
         gas_price = await run_helper.client.get_gas_price()
-        gas_limit = 200000  # SimpleStorage 部署需要的 gas
+        gas_limit = 200000  # Gas needed for SimpleStorage deployment
         
-        # 构建部署交易
+        # Build deployment transaction
         deploy_tx_data = {
             "data": SIMPLE_STORAGE_BYTECODE,
             "gas": hex(gas_limit),
@@ -109,7 +109,7 @@ async def test_simple_storage_deploy(run_helper: RunHelper, test_result: TestRes
             "chainId": hex(await run_helper.client.get_chain_id())
         }
         
-        # 签名并发送部署交易
+        # Sign and send deployment transaction
         private_key = deployer["private_key"]
         if private_key.startswith("0x"):
             private_key = private_key[2:]
@@ -119,13 +119,13 @@ async def test_simple_storage_deploy(run_helper: RunHelper, test_result: TestRes
         
         LOG.info(f"Contract deployment transaction sent: {deploy_tx_hash}")
         
-        # 等待部署确认
+        # Wait for deployment confirmation
         deploy_receipt = await run_helper.client.wait_for_transaction_receipt(deploy_tx_hash, timeout=60)
         
         if deploy_receipt["status"] != "0x1":
             raise RuntimeError(f"Contract deployment failed: {deploy_receipt}")
         
-        # 获取合约地址
+        # Get contract address
         contract_address = deploy_receipt.get("contractAddress")
         if not contract_address:
             raise RuntimeError("No contract address in deployment receipt")
@@ -133,7 +133,7 @@ async def test_simple_storage_deploy(run_helper: RunHelper, test_result: TestRes
         LOG.info(f"Contract deployed at: {contract_address}")
         LOG.info(f"Deployment gas used: {int(deploy_receipt.get('gasUsed', '0x0'), 16)}")
         
-        # 保存部署交易哈希
+        # Save deployment transaction hash
         deployment_tx_hash = deploy_tx_hash
         deployment_gas_used = int(deploy_receipt.get("gasUsed", "0x0"), 16)
     else:
@@ -141,16 +141,16 @@ async def test_simple_storage_deploy(run_helper: RunHelper, test_result: TestRes
         deployment_tx_hash = "existing_contract"
         deployment_gas_used = 0
     
-    # 3. 验证合约代码
+    # 3. Verify contract code
     contract_code = await run_helper.client.get_code(contract_address)
     if contract_code == "0x" or len(contract_code) <= 2:
         raise RuntimeError(f"No contract code found at address {contract_address}")
     
     LOG.info(f"Contract code length: {len(contract_code)} characters")
     
-    # 4. 测试合约功能
+    # 4. Test contract functionality
     
-    # 4.1 调用 getValue() - 应该返回初始值 42
+    # 4.1 Call getValue() - should return initial value 42
     get_value_data = encode_function_call("getValue")
     value_result = await run_helper.client.call(to=contract_address, data=get_value_data)
     
@@ -160,11 +160,11 @@ async def test_simple_storage_deploy(run_helper: RunHelper, test_result: TestRes
         if value != 42:
             LOG.warning(f"Expected initial value 42, got {value}")
     
-    # 4.2 调用 setValue() 设置新值
+    # 4.2 Call setValue() to set new value
     new_value = 12345
     set_value_data = encode_function_call("setValue", [new_value])
     
-    # 构建设置交易
+    # Build set transaction
     set_tx_data = {
         "to": to_checksum_address(contract_address),
         "data": set_value_data,
@@ -180,7 +180,7 @@ async def test_simple_storage_deploy(run_helper: RunHelper, test_result: TestRes
     
     LOG.info(f"Set value transaction sent: {set_tx_hash}")
     
-    # 等待交易确认
+    # Wait for transaction confirmation
     set_receipt = await run_helper.client.wait_for_transaction_receipt(set_tx_hash, timeout=60)
     
     if set_receipt["status"] != "0x1":
@@ -188,7 +188,7 @@ async def test_simple_storage_deploy(run_helper: RunHelper, test_result: TestRes
     
     LOG.info(f"Set value gas used: {int(set_receipt.get('gasUsed', '0x0'), 16)}")
     
-    # 4.3 再次调用 getValue() 验证值已更新
+    # 4.3 Call getValue() again to verify value updated
     value_result2 = await run_helper.client.call(to=contract_address, data=get_value_data)
     
     if value_result2:
@@ -199,7 +199,7 @@ async def test_simple_storage_deploy(run_helper: RunHelper, test_result: TestRes
         else:
             LOG.error(f"❌ Value update failed: expected {new_value}, got {value2}")
     
-    # 记录测试结果
+    # Record test results
     test_result.mark_success(
         contract_address=contract_address,
         deployment_tx_hash=deployment_tx_hash,

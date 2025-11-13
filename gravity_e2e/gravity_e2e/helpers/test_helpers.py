@@ -11,7 +11,7 @@ LOG = logging.getLogger(__name__)
 
 
 class TestResult:
-    """测试结果"""
+    """Test results"""
     def __init__(self, test_name: str):
         self.test_name = test_name
         self.success = False
@@ -21,25 +21,25 @@ class TestResult:
         self.details = {}
         
     def mark_success(self, **details):
-        """标记测试成功"""
+        """Mark test as successful"""
         self.success = True
         if details:
             self.details.update(details)
             
     def mark_failure(self, error: str, **details):
-        """标记测试失败"""
+        """Mark test as failed"""
         self.success = False
         self.error = error
         if details:
             self.details.update(details)
             
     def set_duration(self, duration: float):
-        """设置测试耗时"""
+        """Set test duration"""
         self.details["duration"] = duration
 
 
 class RunHelper:
-    """测试执行辅助器"""
+    """Test execution helper"""
     
     def __init__(self, client: GravityClient, working_dir: str, faucet_account: Optional[Dict] = None):
         self.client = client
@@ -47,14 +47,14 @@ class RunHelper:
         self.faucet_account = faucet_account
         
     async def create_test_account(self, name: str, fund_wei: Optional[int] = None) -> Dict:
-        """创建并可选地充值测试账户
+        """Create and optionally fund test account
         
         Args:
-            name: 账户名称
-            fund_wei: 充值金额（wei），None 表示不充值
+            name: Account name
+            fund_wei: Funding amount in wei, None means no funding
             
         Returns:
-            账户信息字典
+            Account information dictionary
         """
         from eth_account import Account
         
@@ -66,36 +66,36 @@ class RunHelper:
             "account": account
         }
         
-        # 打印账户信息到日志
+        # Log account information
         LOG.info(f"Created test account '{name}':")
         LOG.info(f"  Address: {account.address}")
         LOG.info(f"  Private Key: {account.key.hex()}")
         
-        # 如果需要充值且配置了水龙头
+        # Fund account if needed and faucet is configured
         if fund_wei and fund_wei > 0 and self.faucet_account:
             await self._fund_account(account_info, fund_wei)
             
         return account_info
         
     async def _fund_account(self, account: Dict, amount_wei: int, confirmations: int = 1):
-        """使用水龙头账户给测试账户转账
+        """Fund test account using faucet account
         
         Args:
-            account: 账户信息
-            amount_wei: 充值金额
-            confirmations: 等待确认数
+            account: Account information
+            amount_wei: Funding amount in wei
+            confirmations: Number of confirmations to wait
             
         Returns:
-            交易收据
+            Transaction receipt
         """
         try:
-            # 获取水龙头账户 nonce
+            # Get faucet account nonce
             nonce = await self.client.get_transaction_count(self.faucet_account["address"])
             
-            # 获取当前 gas 价格
+            # Get current gas price
             gas_price = await self.client.get_gas_price()
             
-            # 构建转账交易
+            # Build transfer transaction
             tx_data = {
                 "to": account["address"],
                 "value": hex(amount_wei),
@@ -105,7 +105,7 @@ class RunHelper:
                 "chainId": hex(await self.client.get_chain_id())
             }
             
-            # 签名并发送
+            # Sign and send
             signed_tx = Account.sign_transaction(
                 tx_data, 
                 self.faucet_account["private_key"]
@@ -114,13 +114,13 @@ class RunHelper:
             tx_hash = await self.client.send_raw_transaction(signed_tx.raw_transaction)
             LOG.info(f"Funding transaction sent: {tx_hash}")
             
-            # 等待确认
+            # Wait for confirmation
             receipt = await self.client.wait_for_transaction_receipt(tx_hash)
             
             if receipt["status"] != "0x1":
                 raise RuntimeError(f"Funding transaction failed for account '{account['name']}'")
             
-            # 等待额外的确认
+            # Wait for additional confirmations
             if confirmations > 1:
                 current_block = int(receipt["blockNumber"], 16)
                 target_block = current_block + confirmations
@@ -137,7 +137,7 @@ class RunHelper:
 
 
 def test_case(func):
-    """测试用例装饰器"""
+    """Test case decorator"""
     async def wrapper(*args, **kwargs):
         test_name = kwargs.get('test_name') or func.__name__
         result = TestResult(test_name)
