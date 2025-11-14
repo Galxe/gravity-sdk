@@ -24,4 +24,14 @@ bcs.workspace = true
 sha3.workspace = true
 rand_core = { version = "0.6", features = ["std"] }
 k256 = { version = "0.13.0", features = ["ecdsa"] }
-
+tokio = { version = "1.35", features = ["full"] }
+alloy-primitives = { version = "1.3.1", default-features = false, features = ["map-foldhash"] }
+alloy-provider = { version = "1.0.37", features = ["reqwest"], default-features = false }
+alloy-signer = { version = "1.0.37", default-features = false }
+alloy-signer-local = { version = "1.0.37", default-features = false }
+alloy-contract = { version = "1.0.37", default-features = false }
+alloy-sol-types = { version = "1.3.1", default-features = false }
+alloy-sol-macro = "1.3.1"
+alloy-transport-http = { version = "1.0.37", features = ["reqwest-rustls-tls"], default-features = false }
+alloy-rpc-types = { version = "1.0.37", features = ["eth"], default-features = false }
+reqwest = { version = "0.12", features = ["json"] }

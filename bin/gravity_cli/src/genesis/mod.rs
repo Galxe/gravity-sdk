@@ -1,15 +1,19 @@
+mod account;
 mod key;
 mod waypoint;
-mod account;
 
-use clap::Subcommand;
+use clap::{Parser, Subcommand};
 
-use crate::genesis::key::GenerateKey;
-use crate::genesis::waypoint::GenerateWaypoint;
-use crate::genesis::account::GenerateAccount;
+use crate::genesis::{account::GenerateAccount, key::GenerateKey, waypoint::GenerateWaypoint};
+
+#[derive(Debug, Parser)]
+pub struct GenesisCommand {
+    #[command(subcommand)]
+    pub command: SubCommands,
+}
 
 #[derive(Subcommand, Debug)]
-pub enum GenesisCommand {
+pub enum SubCommands {
     GenerateKey(GenerateKey),
     GenerateWaypoint(GenerateWaypoint),
     GenerateAccount(GenerateAccount),
