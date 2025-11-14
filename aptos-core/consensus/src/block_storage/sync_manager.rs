@@ -631,6 +631,7 @@ impl BlockStore {
                     None => None,
                 };
                 is_last_block = executed_block.round() == 1;
+                info!("Found the block id {}, {}, {}", id, is_last_block, executed_block.round());
                 blocks.push((executed_block.block().clone(), randomness));
                 parent_id = executed_block.parent_id();
             } else if let Ok(Some(executed_block)) =
@@ -641,6 +642,7 @@ impl BlockStore {
                 );
                 let randomness = self.storage.consensus_db().get_randomness(executed_block.block_number().unwrap()).unwrap();
                 is_last_block = executed_block.round() == 1;
+                info!("Found the block id {}, {}, {}", id, is_last_block, executed_block.round());
                 blocks.push((executed_block.clone(), randomness));
                 parent_id = executed_block.parent_id();
             } else {
