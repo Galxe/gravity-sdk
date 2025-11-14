@@ -625,23 +625,23 @@ impl BlockStore {
             let mut parent_id = HashValue::zero();
             let mut is_last_block = false;
             if let Some(executed_block) = self.get_block(id) {
-                quorum_certs.push((*self.get_quorum_cert_for_block(id).unwrap()).clone());
+                let qc = self.get_quorum_cert_for_block(id).unwrap();
+                is_last_block = qc.commit_info().round() == 0;
+                quorum_certs.push((*qc).clone());  
                 let randomness = match executed_block.block().block_number() {
                     Some(block_number) => self.storage.consensus_db().get_randomness(block_number).unwrap(),
                     None => None,
                 };
-                is_last_block = executed_block.round() == 1;
                 info!("Found the block id {}, {}, {}", id, is_last_block, executed_block.round());
                 blocks.push((executed_block.block().clone(), randomness));
                 parent_id = executed_block.parent_id();
             } else if let Ok(Some(executed_block)) =
                 self.storage.consensus_db().get_block(retrieval_epoch, id)
             {
-                quorum_certs.push(
-                    self.storage.consensus_db().get_qc(retrieval_epoch, id).unwrap().unwrap(),
-                );
+                let qc = self.storage.consensus_db().get_qc(retrieval_epoch, id).unwrap().unwrap();
+                is_last_block = qc.commit_info().round() == 0;
+                quorum_certs.push(qc);
                 let randomness = self.storage.consensus_db().get_randomness(executed_block.block_number().unwrap()).unwrap();
-                is_last_block = executed_block.round() == 1;
                 info!("Found the block id {}, {}, {}", id, is_last_block, executed_block.round());
                 blocks.push((executed_block.clone(), randomness));
                 parent_id = executed_block.parent_id();
