@@ -1,19 +1,19 @@
 base:
   role: "full_node"
-  data_dir: "/tmp/vfn/data"
+  data_dir: "/tmp/vfn2/data"
   waypoint:
-    from_file: "/tmp/vfn/config/waypoint.txt"
+    from_file: "/tmp/vfn2/config/waypoint.txt"
 
 consensus:
   safety_rules:
     backend:
       type: "on_disk_storage"
-      path: /tmp/vfn/data/secure_storage.json
+      path: /tmp/vfn2/data/secure_storage.json
     initial_safety_rules_config:
       from_file:
         waypoint:
-          from_file: /tmp/vfn/config/waypoint.txt
-        identity_blob_path: /tmp/vfn/config/vfn-identity.yaml
+          from_file: /tmp/vfn2/config/waypoint.txt
+        identity_blob_path: /tmp/vfn2/config/vfn-identity.yaml
   enable_pipeline: true
   max_sending_block_txns_after_filtering: 5000
   max_sending_block_txns: 5000
@@ -37,10 +37,10 @@ consensus:
 full_node_networks:
   - network_id:
       private: "vfn"
-    listen_address: "/ip4/127.0.0.1/tcp/2044"
+    listen_address: "/ip4/127.0.0.1/tcp/2045"
     identity:
       type: "from_file"
-      path: /tmp/vfn/config/vfn-identity.yaml
+      path: /tmp/vfn2/config/vfn-identity.yaml
     seeds:
       2d86b40a1d692c0749a0a0426e2021ee24e2430da0f5bb9c2ae6c586bf3e0a0f:
         addresses:
@@ -48,12 +48,12 @@ full_node_networks:
         role: "Validator"
 
 storage:
-  dir: "/tmp/vfn/data"
+  dir: "/tmp/vfn2/data"
 
-log_file_path: "/tmp/vfn/consensus_log"
+log_file_path: "/tmp/vfn2/consensus_log"
 
 inspection_service:
-  port: 10011
+  port: 10012
   address: 0.0.0.0
 
 mempool:

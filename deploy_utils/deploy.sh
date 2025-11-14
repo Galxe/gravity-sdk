@@ -22,7 +22,7 @@ declare -A VALID_MODES=(
 # Default settings
 bin_name="gravity_node"
 node_arg=""
-bin_version="debug"
+bin_version="quick-release"
 mode="cluster"
 recover="false"
 install_dir="/tmp"
@@ -126,8 +126,8 @@ validate_params() {
         exit 1
     fi
 
-    if [[ "$mode" == "single" && "$node_arg" != "node1" && "$node_arg" != "node2" && "$node_arg" != "pfn" && "$node_arg" != "vfn" ]]; then
-        log_error "Single mode only supports 'node1' or 'node2' or 'pfn' or 'vfn'"
+    if [[ "$mode" == "single" && "$node_arg" != "node1" && "$node_arg" != "node2" && "$node_arg" != "pfn" && "$node_arg" != "vfn" && "$node_arg" != "vfn1" && "$node_arg" != "vfn2" ]]; then
+        log_error "Single mode only supports 'node1' or 'node2' or 'pfn' or 'vfn' or 'vfn1' or 'vfn2'"
         exit 1
     fi
 }
