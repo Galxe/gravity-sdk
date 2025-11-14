@@ -644,7 +644,7 @@ impl BlockStore {
                 blocks.push((executed_block.clone(), randomness));
                 parent_id = executed_block.parent_id();
             } else {
-                info!("Cannot find the block id {}", id);
+                info!("Cannot find the block id {}, {}", id, is_last_block);
                 status = BlockRetrievalStatus::NotEnoughBlocks;
                 break;
             }
