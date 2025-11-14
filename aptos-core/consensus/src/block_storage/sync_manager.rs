@@ -619,7 +619,7 @@ impl BlockStore {
             (self.ordered_root().epoch(), request.req.block_id())
         };
         info!("process_block_retrieval origin_block_id {}, target_block_id {}, retrieval_epoch {}",
-                request.req.block_id(), request.req.target_block_id().unwrap(), retrieval_epoch);
+                id, request.req.target_block_id().unwrap(), retrieval_epoch);
 
         while (blocks.len() as u64) < request.req.num_blocks() {
             let mut parent_id = HashValue::zero();
