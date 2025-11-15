@@ -1,0 +1,7 @@
+{
+  "faucet": {
+    "address": "0x973b046272e662c2b2b6f522d5b803f59964a4c1",
+    "private_key": "0x0000000000000000000000000000000000000000000000000000000000000001",
+    "description": "Faucet account with pre-funded balance for testing"
+  }
+}

@@ -94,3 +94,74 @@ start.sh
 *.pb
 *.svg
 /profile/*
+
+# Forge / Solidity ignores
+# Foundry Forge
+forge-output/
+out/
+cache/
+lib/
+
+# Solidity compilation artifacts
+*.sol.json
+*.abi
+*.bin
+*.bin-runtime
+
+# Hardhat (if ever used)
+artifacts/
+cache/
+typechain-types/
+
+# Python specific
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.env/
+.envrc
+
+# Test outputs
+test-results/
+test-reports/
+coverage/
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+
+# Gravity E2E specific
+gravity_e2e/output/
+gravity_e2e/test_accounts_generated.json
+gravity_e2e/contracts_data/
+# Forge build outputs (but keep lib dependencies)
+gravity_e2e/tests/contracts/**/out/
+gravity_e2e/tests/contracts/**/cache/
+gravity_e2e/tests/contracts/**/lib/.forge-snapshot
+gravity_e2e/tests/contracts/**/broadcast/
+gravity_e2e/tests/contracts/**/output/
+gravity_e2e/logs/
