@@ -296,8 +296,8 @@ impl NodeSetup {
             Arc::from(DirectMempoolPayloadManager::new()),
             false,
             true,
-            Arc::new(Mutex::new(PendingBlocks::new()))
-            // None,
+            Arc::new(Mutex::new(PendingBlocks::new())),
+            false,
         ));
 
         let proposer_election = Self::create_proposer_election(proposers.clone());
@@ -1324,7 +1324,7 @@ async fn response_on_block_retrieval() {
                     _ => panic!("block retrieval failure"),
                 };
                 assert_eq!(response.status(), BlockRetrievalStatus::Succeeded);
-                assert_eq!(response.blocks().first().unwrap().id(), block_id);
+                assert_eq!(response.blocks().first().unwrap().0.id(), block_id);
             },
             _ => panic!("block retrieval failure"),
         }
@@ -1371,10 +1371,10 @@ async fn response_on_block_retrieval() {
                     _ => panic!("block retrieval failure"),
                 };
                 assert_eq!(response.status(), BlockRetrievalStatus::NotEnoughBlocks);
-                assert_eq!(block_id, response.blocks().first().unwrap().id());
+                assert_eq!(block_id, response.blocks().first().unwrap().0.id());
                 assert_eq!(
                     node.block_store.ordered_root().id(),
-                    response.blocks().get(1).unwrap().id()
+                    response.blocks().get(1).unwrap().0.id()
                 );
             },
             _ => panic!("block retrieval failure"),
