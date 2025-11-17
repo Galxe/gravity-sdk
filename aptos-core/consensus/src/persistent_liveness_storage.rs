@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{consensusdb::ConsensusDB, epoch_manager::LivenessStorageData, error::DbError};
+use crate::consensusdb::schema::epoch_by_block_number::EpochByBlockNumberSchema;
+use crate::consensusdb::schema::ledger_info::LedgerInfoSchema;
 use anyhow::{format_err, Result};
 use aptos_consensus_types::{
     block::Block, quorum_cert::QuorumCert, timeout_2chain::TwoChainTimeoutCertificate, vote::Vote,
@@ -277,6 +279,7 @@ impl RecoveryData {
     ) -> Result<Self> {
         info!("blocks in db: {:?}", blocks.len());
         info!("quorum certs in db: {:?}", quorum_certs.len());
+        
         let root;
         if !blocks.is_empty() && execution_latest_block_num != ledger_recovery_data.storage_ledger.ledger_info().block_number() {
             root = Self::find_root_by_block_number(
@@ -424,7 +427,43 @@ impl PersistentLivenessStorage for StorageWriteProxy {
         info!("The following blocks were restored from ConsensusDB : {}", blocks_repr.concat());
         let qc_repr: Vec<String> = quorum_certs.iter().map(|qc| format!("\n\t{}", qc)).collect();
         info!("The following quorum certs were restored from ConsensusDB: {}", qc_repr.concat());
-        let latest_ledger_info = self.aptos_db.get_latest_ledger_info().unwrap();
+        
+        // Check if latest_block_number is the last block number of the previous epoch
+        let ledger_db_arc = self.db.ledger_db.metadata_db_arc();
+        let is_last_block_of_prev_epoch = match (&*ledger_db_arc).iter::<EpochByBlockNumberSchema>() {
+            Ok(mut iter) => {
+                iter.seek_to_last();
+                if let Some(Ok((last_block_num, _))) = iter.next() {
+                    latest_block_number == last_block_num
+                } else {
+                    false
+                }
+            }
+            Err(_) => {
+                // Table might not exist yet
+                false
+            }
+        };
+        
+        // Get ledger_info based on the check result
+        let latest_ledger_info = if is_last_block_of_prev_epoch {
+            // If it's the last block of previous epoch, get ledger_info from LedgerInfoSchema
+            match (&*ledger_db_arc).get::<LedgerInfoSchema>(&latest_block_number) {
+                Ok(Some(ledger_info)) => {
+                    debug!("Using ledger_info from LedgerInfoSchema for block {}", latest_block_number);
+                    ledger_info
+                }
+                Ok(None) | Err(_) => {
+                    // Fallback to original method if not found in schema
+                    warn!("LedgerInfo not found in LedgerInfoSchema for block {}, falling back to aptos_db", latest_block_number);
+                    self.aptos_db.get_latest_ledger_info().unwrap()
+                }
+            }
+        } else {
+            // Use original method
+            self.aptos_db.get_latest_ledger_info().unwrap()
+        };
+        
         let ledger_recovery_data = LedgerRecoveryData::new(latest_ledger_info);
         match RecoveryData::new(
             last_vote,
