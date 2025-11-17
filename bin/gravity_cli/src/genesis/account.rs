@@ -1,15 +1,11 @@
 use clap::Parser;
 
-use k256::{
-    ecdsa::{SigningKey, VerifyingKey},
-};
+use k256::ecdsa::SigningKey;
+use rand_core::{OsRng, RngCore};
 use sha3::{Digest, Keccak256};
-use rand_core::{RngCore, OsRng};
 
-
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 use tracing::info;
-use std::fs;
 
 use crate::{command::Executable, genesis::account};
 
@@ -54,7 +50,8 @@ fn generate_eth_account() -> Result<(String, String, String), anyhow::Error> {
     let public_key_hash = hasher.finalize();
 
     // Take the last 20 bytes of the hash as the address
-    // The address is usually the last 20 bytes (least significant bytes) of the hash, prefixed with 0x
+    // The address is usually the last 20 bytes (least significant bytes) of the hash, prefixed with
+    // 0x
     let address_bytes = &public_key_hash[12..]; // Take 20 bytes from the 12th byte
     let account_address = format!("0x{}", hex::encode(address_bytes));
 
@@ -64,11 +61,7 @@ fn generate_eth_account() -> Result<(String, String, String), anyhow::Error> {
 impl Executable for GenerateAccount {
     fn execute(self) -> Result<(), anyhow::Error> {
         let (private_key, public_key, address) = generate_eth_account()?;
-        let account = Account {
-            private_key,
-            public_key,
-            address,
-        };
+        let account = Account { private_key, public_key, address };
         let yaml_string = serde_yaml::to_string(&account)?;
         fs::write(self.output_file, yaml_string)?;
         Ok(())

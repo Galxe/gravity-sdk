@@ -1,11 +1,17 @@
-use clap::Parser;
-use crate::genesis::GenesisCommand;
+use crate::{genesis::GenesisCommand, validator::ValidatorCommand};
+use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
 #[command(name = "gravity-cli")]
 pub struct Command {
     #[command(subcommand)]
-    pub genesis: GenesisCommand,
+    pub command: SubCommands,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SubCommands {
+    Genesis(GenesisCommand),
+    Validator(ValidatorCommand),
 }
 
 pub trait Executable {
