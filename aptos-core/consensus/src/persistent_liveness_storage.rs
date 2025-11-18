@@ -463,6 +463,7 @@ impl PersistentLivenessStorage for StorageWriteProxy {
             // Use original method
             self.aptos_db.get_latest_ledger_info().unwrap()
         };
+        info!("is_last_block_of_prev_epoch: {}, latest_ledger_info: {:?}", is_last_block_of_prev_epoch, latest_ledger_info);
         
         let ledger_recovery_data = LedgerRecoveryData::new(latest_ledger_info);
         match RecoveryData::new(
