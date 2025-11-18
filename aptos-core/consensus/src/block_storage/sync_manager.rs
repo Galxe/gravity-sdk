@@ -397,7 +397,7 @@ impl BlockStore {
         self.rebuild(root, blocks, quorum_certs).await;
         storage.consensus_db().ledger_db.metadata_db().set_latest_ledger_info(ledger_infos.last().unwrap().clone());
 
-        if ledger_infos.last().unwrap().ledger_info().ends_epoch() {
+        if !ledger_infos.is_empty() && ledger_infos.last().unwrap().ledger_info().ends_epoch() {
             retriever
                 .network
                 .send_epoch_change(EpochChangeProof::new(
@@ -625,7 +625,14 @@ impl BlockStore {
             let mut parent_id = HashValue::zero();
             let mut is_last_block = false;
             if let Some(executed_block) = self.get_block(id) {
-                let qc = self.get_quorum_cert_for_block(id).unwrap();
+                let qc = match self.get_quorum_cert_for_block(id) {
+                    Some(qc) => qc,
+                    None => {
+                        info!("Cannot find quorum cert for block id {}", id);
+                        status = BlockRetrievalStatus::QuorumCertNotFound;
+                        break;
+                    }
+                };
                 is_last_block = qc.commit_info().round() == 0;
                 quorum_certs.push((*qc).clone());  
                 let randomness = match executed_block.block().block_number() {
@@ -637,7 +644,19 @@ impl BlockStore {
             } else if let Ok(Some(executed_block)) =
                 self.storage.consensus_db().get_block(retrieval_epoch, id)
             {
-                let qc = self.storage.consensus_db().get_qc(retrieval_epoch, id).unwrap().unwrap();
+                let qc = match self.storage.consensus_db().get_qc(retrieval_epoch, id) {
+                    Ok(Some(qc)) => qc,
+                    Ok(None) => {
+                        info!("Cannot find quorum cert for block id {} in epoch {}", id, retrieval_epoch);
+                        status = BlockRetrievalStatus::QuorumCertNotFound;
+                        break;
+                    }
+                    Err(e) => {
+                        error!("Error retrieving quorum cert for block id {} in epoch {}: {:?}", id, retrieval_epoch, e);
+                        status = BlockRetrievalStatus::QuorumCertNotFound;
+                        break;
+                    }
+                };
                 is_last_block = qc.commit_info().round() == 0;
                 quorum_certs.push(qc);
                 let randomness = self.storage.consensus_db().get_randomness(executed_block.block_number().unwrap()).unwrap();
