@@ -156,13 +156,13 @@ pub struct JoinCommand {
     #[clap(long)]
     pub consensus_public_key: String,
 
-    /// Validator network addresses (/ip4/{host}/tcp/{port}/noise-ik/{public-key}/handshake/0)
+    /// Validator network address (/ip4/{host}/tcp/{port}/noise-ik/{public-key}/handshake/0)
     #[clap(long)]
-    pub validator_network_addresses: Vec<String>,
+    pub validator_network_address: String,
 
-    /// Fullnode network addresses (/ip4/{host}/tcp/{port}/noise-ik/{public-key}/handshake/0)
+    /// Fullnode network address (/ip4/{host}/tcp/{port}/noise-ik/{public-key}/handshake/0)
     #[clap(long)]
-    pub fullnode_network_addresses: Vec<String>,
+    pub fullnode_network_address: String,
 
     /// Aptos validator identity address (64 characters hex string)
     #[clap(long)]
@@ -205,14 +205,14 @@ impl JoinCommand {
         println!("2. Preparing registration parameters...");
         let validator_address = Address::from_str(&self.validator_address)?;
         let validator_params = ValidatorRegistrationParams {
-            consensusPublicKey: hex::decode(&self.consensus_public_key)?.into(),
+            consensusPublicKey: self.consensus_public_key.clone().into_bytes().into(),
             blsProof: Bytes::new(),
             commission: Commission { rate: 0, maxRate: 5000, maxChangeRate: 500 },
             moniker: self.moniker,
             initialOperator: wallet_address,
             initialBeneficiary: wallet_address,
-            validatorNetworkAddresses: bcs::to_bytes(&self.validator_network_addresses)?.into(),
-            fullnodeNetworkAddresses: bcs::to_bytes(&self.fullnode_network_addresses)?.into(),
+            validatorNetworkAddresses: bcs::to_bytes(&self.validator_network_address)?.into(),
+            fullnodeNetworkAddresses: bcs::to_bytes(&self.fullnode_network_address)?.into(),
             aptosAddress: hex::decode(&self.aptos_address)?.into(),
         };
         println!("   Registration parameters:");
@@ -375,18 +375,15 @@ impl JoinCommand {
         println!("   - Consensus public key: {}", validator_info.consensusPublicKey);
         println!(
             "   - Validator network addresses: {}",
-            bcs::from_bytes::<Vec<String>>(&validator_info.validatorNetworkAddresses)
-                .map_err(|e| anyhow::anyhow!(
-                    "Failed to decode validator network addresses: {}",
-                    e
-                ))?
-                .join(", ")
+            bcs::from_bytes::<String>(&validator_info.validatorNetworkAddresses).map_err(
+                |e| anyhow::anyhow!("Failed to decode validator network addresses: {}", e)
+            )?
         );
         println!(
             "   - Fullnode network addresses: {}",
-            bcs::from_bytes::<Vec<String>>(&validator_info.fullnodeNetworkAddresses)
-                .map_err(|e| anyhow::anyhow!("Failed to decode fullnode network addresses: {}", e))?
-                .join(", ")
+            bcs::from_bytes::<String>(&validator_info.fullnodeNetworkAddresses).map_err(
+                |e| anyhow::anyhow!("Failed to decode fullnode network addresses: {}", e)
+            )?
         );
         println!("   - Aptos address: {}", validator_info.aptosAddress);
         if !matches!(validator_info.status, ValidatorStatus::INACTIVE) {
