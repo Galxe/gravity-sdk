@@ -397,7 +397,7 @@ impl BlockStore {
         self.rebuild(root, blocks, quorum_certs).await;
         storage.consensus_db().ledger_db.metadata_db().set_latest_ledger_info(ledger_infos.last().unwrap().clone());
 
-        if ledger_infos.last().unwrap().ledger_info().ends_epoch() {
+        if !ledger_infos.is_empty() && ledger_infos.last().unwrap().ledger_info().ends_epoch() {
             retriever
                 .network
                 .send_epoch_change(EpochChangeProof::new(

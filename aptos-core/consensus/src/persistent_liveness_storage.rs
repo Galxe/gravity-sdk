@@ -276,12 +276,13 @@ impl RecoveryData {
         mut quorum_certs: Vec<QuorumCert>,
         highest_2chain_timeout_cert: Option<TwoChainTimeoutCertificate>,
         order_vote_enabled: bool,
+        has_root: bool,
     ) -> Result<Self> {
         info!("blocks in db: {:?}", blocks.len());
         info!("quorum certs in db: {:?}", quorum_certs.len());
         
         let root;
-        if !blocks.is_empty() && execution_latest_block_num != ledger_recovery_data.storage_ledger.ledger_info().block_number() {
+        if has_root {
             root = Self::find_root_by_block_number(
                 execution_latest_block_num,
                 &mut blocks,
@@ -474,6 +475,7 @@ impl PersistentLivenessStorage for StorageWriteProxy {
             quorum_certs,
             highest_2chain_timeout_cert,
             order_vote_enabled,
+            raw_data.4,
         ) {
             Ok(initial_data) => {
                 // TODO(gravity_lightman)
