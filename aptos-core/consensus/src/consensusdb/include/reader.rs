@@ -109,6 +109,7 @@ impl DbReader for ConsensusDB {
                             OnChainConsensusConfig::V1(_) => {}
                             OnChainConsensusConfig::V2(_) => {}
                             OnChainConsensusConfig::V3 { alg, vtxn } => {}
+                            OnChainConsensusConfig::V5 { alg, vtxn, window_size, rand_check_enabled } => {}
                             OnChainConsensusConfig::V4 { alg, vtxn, window_size } => match alg {
                                 ConsensusAlgorithmConfig::Jolteon {
                                     main,
@@ -145,6 +146,7 @@ impl DbReader for ConsensusDB {
                                     *quorum_store_enabled = enable_quorum_store();
                                     *order_vote_enabled = false;
                                 }
+                                ConsensusAlgorithmConfig::DAG(_) => {}
                             },
                         }
                         bcs::to_bytes(&bcs::to_bytes(&consensus_conf)?)?

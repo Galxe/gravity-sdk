@@ -6,7 +6,7 @@ use aptos_consensus_types::{
     common::{TransactionInProgress, TransactionSummary, TxnSummaryWithExpiration},
     proof_of_store::{BatchId, BatchInfo, ProofOfStore},
 };
-use gaptos::aptos_logger::prelude::*;
+use gaptos::{aptos_logger::prelude::*, aptos_types::transaction::ReplayProtector};
 use aptos_mempool::{QuorumStoreRequest, QuorumStoreResponse};
 use gaptos::aptos_types::{transaction::SignedTransaction, PeerId};
 use chrono::Utc;
@@ -115,7 +115,7 @@ impl MempoolProxy {
         let exclude_transactions: BTreeMap<_, _> = exclude_transactions
             .into_iter()
             .map(|(txn, txn_in_progress)| (
-                gaptos::aptos_consensus_types::common::TransactionSummary::new(txn.sender, txn.sequence_number, txn.hash), 
+                gaptos::aptos_consensus_types::common::TransactionSummary::new(txn.sender, ReplayProtector::SequenceNumber(txn.sequence_number), txn.hash), 
                 gaptos::aptos_consensus_types::common::TransactionInProgress::new(txn_in_progress.gas_unit_price)))
             .collect();
         let msg = QuorumStoreRequest::GetBatchRequest(

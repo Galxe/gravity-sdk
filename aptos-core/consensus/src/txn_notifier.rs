@@ -5,7 +5,7 @@ use crate::{error::MempoolError, monitor};
 use anyhow::{format_err, Result};
 use aptos_consensus_types::common::RejectedTransactionSummary;
 use aptos_mempool::QuorumStoreRequest;
-use gaptos::aptos_types::transaction::{SignedTransaction, TransactionStatus};
+use gaptos::aptos_types::transaction::{ReplayProtector, SignedTransaction, TransactionStatus};
 use futures::channel::{mpsc, oneshot};
 use itertools::Itertools;
 use std::time::Duration;
@@ -68,7 +68,7 @@ impl TxnNotifier for MempoolNotifier {
         let rejected_txns = rejected_txns.iter().map(|txn| {
             gaptos::aptos_consensus_types::common::RejectedTransactionSummary {
                 sender: txn.sender,
-                sequence_number: txn.sequence_number,
+                replay_protector: ReplayProtector::SequenceNumber(txn.sequence_number),
                 hash: txn.hash,
                 reason: txn.reason,
             }

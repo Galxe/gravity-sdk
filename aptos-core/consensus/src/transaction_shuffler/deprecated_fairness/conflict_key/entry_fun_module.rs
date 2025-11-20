@@ -27,7 +27,8 @@ impl ConflictKey<SignedTransaction> for EntryFunModuleKey {
             TransactionPayload::Multisig(..)
             | TransactionPayload::Script(_)
             | TransactionPayload::ModuleBundle(_)
-            | TransactionPayload::GTxnBytes(_) => Self::AnyScriptOrMultiSig,
+            | TransactionPayload::GTxnBytes(_) 
+            | TransactionPayload::Payload(_) => Self::AnyScriptOrMultiSig,
         }
     }
 

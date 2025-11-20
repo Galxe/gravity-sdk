@@ -7,7 +7,7 @@ use aptos_consensus_types::{
     common::{Payload, PayloadFilter, TransactionInProgress, TransactionSummary},
     request_response::{GetPayloadCommand, GetPayloadResponse},
 };
-use gaptos::aptos_logger::prelude::*;
+use gaptos::{aptos_logger::prelude::*, aptos_types::transaction::ReplayProtector};
 use aptos_mempool::{QuorumStoreRequest, QuorumStoreResponse};
 use gaptos::aptos_types::transaction::SignedTransaction;
 use futures::{
@@ -54,7 +54,7 @@ impl DirectMempoolQuorumStore {
         let exclude_txns: BTreeMap<_, _> = exclude_txns
             .into_iter()
             .map(|txn| (
-                gaptos::aptos_consensus_types::common::TransactionSummary::new(txn.sender, txn.sequence_number, txn.hash), 
+                gaptos::aptos_consensus_types::common::TransactionSummary::new(txn.sender, ReplayProtector::SequenceNumber(txn.sequence_number), txn.hash), 
                 gaptos::aptos_consensus_types::common::TransactionInProgress::new(0)))
             .collect();
         let msg = QuorumStoreRequest::GetBatchRequest(

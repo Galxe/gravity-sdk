@@ -17,7 +17,7 @@ use gaptos::aptos_logger::prelude::*;
 use gaptos::aptos_types::{
     account_address::AccountAddress,
     mempool_status::{MempoolStatus, MempoolStatusCode},
-    transaction::{use_case::UseCaseKey, SignedTransaction},
+    transaction::{use_case::UseCaseKey, SignedTransaction, ReplayProtector},
     vm_status::DiscardedVMStatus,
 };
 use gaptos::{
@@ -179,7 +179,7 @@ impl CoreMempoolTrait for Mempool {
         &mut self,
         txn: SignedTransaction,
         ranking_score: u64,
-        sequence_info: u64,
+        account_sequence_number: Option<u64>,
         timeline_state: gaptos::aptos_mempool::core_mempool::TimelineState,
         client_submitted: bool,
         ready_time_at_sender: Option<u64>,
@@ -215,21 +215,21 @@ impl CoreMempoolTrait for Mempool {
     fn reject_transaction(
         &mut self,
         sender: &AccountAddress,
-        sequence_number: u64,
+        replay_protector: ReplayProtector,
         hash: &HashValue,
         reason: &DiscardedVMStatus,
     ) {
         // don't need to implement
     }
 
-    fn commit_transaction(&mut self, sender: &AccountAddress, sequence_number: u64) {
+    fn commit_transaction(&mut self, sender: &AccountAddress, replay_protector: ReplayProtector) {
         // don't need to implement
     }
 
     fn log_commit_transaction(
         &self,
         sender: &AccountAddress,
-        sequence_number: u64,
+        replay_protector: ReplayProtector,
         tracked_use_case: Option<(UseCaseKey, &String)>,
         block_timestamp: Duration,
     ) {
@@ -291,7 +291,7 @@ impl Mempool {
         let filter = Box::new(move |txn: (ExternalAccountAddress, u64, TxnHash)| {
             let summary = gaptos::aptos_consensus_types::common::TransactionSummary {
                 sender: AccountAddress::new(txn.0.bytes()),
-                sequence_number: txn.1,
+                replay_protector: ReplayProtector::SequenceNumber(txn.1),
                 hash: HashValue::new(txn.2 .0),
             };
             !exclude_transactions.contains_key(&summary)

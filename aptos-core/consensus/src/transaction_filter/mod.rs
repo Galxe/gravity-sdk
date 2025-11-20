@@ -1,7 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use gaptos::aptos_config::config::transaction_filter_type::Filter;
+use gaptos::aptos_transaction_filters::transaction_filter::TransactionFilter as Filter;
 use gaptos::aptos_crypto::HashValue;
 use gaptos::aptos_types::transaction::SignedTransaction;
 
@@ -25,7 +25,7 @@ impl TransactionFilter {
             return txns;
         }
         txns.into_iter()
-            .filter(|txn| self.filter.allows(block_id, timestamp, txn))
+            .filter(|txn| self.filter.allows_transaction(txn))
             .collect()
     }
 }
@@ -33,7 +33,7 @@ impl TransactionFilter {
 #[cfg(test)]
 mod test {
     use crate::transaction_filter::TransactionFilter;
-    use gaptos::aptos_config::config::transaction_filter_type::Filter;
+    use gaptos::aptos_transaction_filters::transaction_filter::TransactionFilter as Filter;
     use gaptos::aptos_crypto::{ed25519::Ed25519PrivateKey, HashValue, PrivateKey, SigningKey, Uniform};
     use gaptos::aptos_types::{
         chain_id::ChainId,

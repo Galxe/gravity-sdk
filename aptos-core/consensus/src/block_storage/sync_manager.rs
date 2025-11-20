@@ -31,7 +31,7 @@ use aptos_consensus_types::{
     sync_info::SyncInfo,
     wrapped_ledger_info::WrappedLedgerInfo,
 };
-use gaptos::{aptos_metrics_core::{register_int_gauge_vec, IntGaugeHelper, IntGaugeVec}, aptos_types::randomness::{RandMetadata, Randomness}};
+use gaptos::{aptos_metrics_core::{register_int_gauge_vec, IntGaugeVec}, aptos_types::randomness::{RandMetadata, Randomness}};
 use gaptos::aptos_config::network_id::{NetworkId, PeerNetworkId};
 use gaptos::aptos_crypto::HashValue;
 use gaptos::aptos_infallible::Mutex;
@@ -124,7 +124,7 @@ impl BlockStore {
         sync_info: &SyncInfo,
         mut retriever: BlockRetriever,
     ) -> anyhow::Result<()> {
-        BLOCK_SYNC_GAUGE.set_with(&[], 1);
+        BLOCK_SYNC_GAUGE.with_label_values(&[]).set(1);
         self.sync_to_highest_commit_cert(
             sync_info.highest_commit_cert().clone(),
             &mut retriever,
@@ -176,7 +176,7 @@ impl BlockStore {
         if let Some(tc) = sync_info.highest_2chain_timeout_cert() {
             self.insert_2chain_timeout_certificate(Arc::new(tc.clone()))?;
         }
-        BLOCK_SYNC_GAUGE.set_with(&[], 0);
+        BLOCK_SYNC_GAUGE.with_label_values(&[]).set(0);
         Ok(())
     }
 

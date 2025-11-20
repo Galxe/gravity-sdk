@@ -33,7 +33,8 @@ use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::StateComputeResult;
 use gaptos::aptos_infallible::{Mutex, RwLock};
 use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_metrics_core::{register_int_gauge_vec, IntGaugeHelper, IntGaugeVec};
+use gaptos::aptos_metrics_core::{register_int_gauge_vec, IntGaugeVec};
+use gaptos::aptos_metrics_core::{register_int_gauge_vecgit add , IntGaugeVec};
 use gaptos::aptos_types::{
     aggregate_signature::AggregateSignature,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
@@ -214,7 +215,7 @@ impl BlockStore {
     }
 
     async fn recover_blocks(&self) {
-        RECOVERY_GAUGE.set_with(&[], 1);
+        RECOVERY_GAUGE.with_label_values(&[]).set(1);
         // reproduce the same batches (important for the commit phase)
         let mut certs = self.inner.read().get_all_quorum_certs_with_commit_info();
         certs.sort_unstable_by_key(|qc| qc.commit_info().round());
@@ -226,7 +227,7 @@ impl BlockStore {
                 }
             }
         }
-        RECOVERY_GAUGE.set_with(&[], 0);
+        RECOVERY_GAUGE.with_label_values(&[]).set(0);
     }
 
     /// Returns the WrappedLedgerInfo for fast_forward_sync.

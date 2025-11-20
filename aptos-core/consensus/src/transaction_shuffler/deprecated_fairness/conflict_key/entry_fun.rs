@@ -33,7 +33,8 @@ impl ConflictKey<SignedTransaction> for EntryFunKey {
             TransactionPayload::Multisig(_)
             | TransactionPayload::Script(_)
             | TransactionPayload::ModuleBundle(_)
-            | TransactionPayload::GTxnBytes(_) => Self::Exempt,
+            | TransactionPayload::GTxnBytes(_) 
+            | TransactionPayload::Payload(_) => Self::Exempt,
         }
     }
 

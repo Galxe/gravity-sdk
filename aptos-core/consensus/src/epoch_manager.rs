@@ -402,7 +402,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     .expect("INVARIANT VIOLATION: proposers is empty");
                 // TODO(gravity_alex): optimize this
                 let proposers = round_proposers.iter()
-                    .map(|(round, author)| (*round, AccountAddress::from_bytes(author.bytes()).unwrap()))
+                    .map(|(round, author)| (*round, AccountAddress::from_bytes(author.to_vec()).unwrap()))
                     .collect();
                 Arc::new(RoundProposer::new(
                     proposers,

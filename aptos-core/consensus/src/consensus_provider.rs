@@ -41,6 +41,7 @@ use gaptos::{
 };
 use std::{collections::HashMap, sync::Arc};
 use tokio::runtime::Runtime;
+use gaptos::aptos_transaction_filters::transaction_filter::TransactionFilter as Filter;
 
 /// Helper function to start consensus based on configuration and return the runtime
 #[allow(clippy::unwrap_used)]
@@ -75,7 +76,7 @@ pub fn start_consensus(
         txn_notifier,
         state_sync_notifier,
         runtime.handle(),
-        TransactionFilter::new(node_config.execution.transaction_filter.clone()),
+        TransactionFilter::new(Filter::new(vec![])),
         node_config.consensus.enable_pre_commit,
     );
 
@@ -186,7 +187,7 @@ pub fn start_consensus_observer(
             txn_notifier,
             state_sync_notifier,
             runtime.handle(),
-            TransactionFilter::new(node_config.execution.transaction_filter.clone()),
+            TransactionFilter::new(Filter::new(vec![])),
             node_config.consensus.enable_pre_commit,
         );
 
