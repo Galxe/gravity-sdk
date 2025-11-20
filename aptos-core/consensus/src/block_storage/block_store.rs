@@ -34,7 +34,6 @@ use aptos_executor_types::StateComputeResult;
 use gaptos::aptos_infallible::{Mutex, RwLock};
 use gaptos::aptos_logger::prelude::*;
 use gaptos::aptos_metrics_core::{register_int_gauge_vec, IntGaugeVec};
-use gaptos::aptos_metrics_core::{register_int_gauge_vecgit add , IntGaugeVec};
 use gaptos::aptos_types::{
     aggregate_signature::AggregateSignature,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
