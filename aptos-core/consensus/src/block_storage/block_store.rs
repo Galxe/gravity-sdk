@@ -43,7 +43,9 @@ use once_cell::sync::Lazy;
 
 #[cfg(test)]
 use std::collections::VecDeque;
+#[cfg(any(test, feature = "fuzzing"))]
 use std::sync::atomic::AtomicBool;
+#[cfg(any(test, feature = "fuzzing"))]
 use std::sync::atomic::Ordering;
 use std::{collections::BTreeMap, io::Read, sync::Arc, time::Duration};
 
