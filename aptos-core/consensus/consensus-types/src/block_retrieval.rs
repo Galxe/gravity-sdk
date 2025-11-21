@@ -104,6 +104,8 @@ pub enum BlockRetrievalStatus {
     NotEnoughBlocks,
     // Successfully found the target,
     SucceededWithTarget,
+    // Can not find the quorum certificate for the block.
+    QuorumCertNotFound,
 }
 
 /// Carries the returned blocks and the retrieval status.

@@ -223,6 +223,7 @@ impl BlockStore {
                 info!("sending qc {} to execution, current commit round {}", qc.commit_info().round(), self.commit_root().round());
                 if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info(), true).await {
                     error!("Error in try-committing blocks. {}", e.to_string());
+                    break;
                 }
             }
         }

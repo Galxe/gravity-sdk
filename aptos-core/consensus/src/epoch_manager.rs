@@ -1597,7 +1597,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             | ConsensusMsg::SignedBatchInfo(_)
             | ConsensusMsg::ProofOfStoreMsg(_) => {
                 let event: UnverifiedEvent = msg.into();
-                info!("event epoch: {:?} and self epoch {:?}", event.epoch(), self.epoch());
+                debug!("event epoch: {:?} and self epoch {:?}", event.epoch(), self.epoch());
                 if event.epoch()? == self.epoch() {
                     return Ok(Some(event));
                 } else {

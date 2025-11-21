@@ -129,7 +129,8 @@ impl ConsensusDB {
         &self,
         latest_block_number: u64,
         epoch: u64,
-    ) -> Result<(Option<Vec<u8>>, Option<Vec<u8>>, Vec<Block>, Vec<QuorumCert>)> {
+    ) -> Result<(Option<Vec<u8>>, Option<Vec<u8>>, Vec<Block>, Vec<QuorumCert>, bool)> {
+        let mut has_root = false;
         let last_vote = self.get_last_vote()?;
         let highest_2chain_timeout_certificate = self.get_highest_2chain_timeout_certificate()?;
         let start_key = (epoch, HashValue::zero());
@@ -143,6 +144,7 @@ impl ConsensusDB {
         let (start_epoch, start_round, start_block_id) = if block_number_to_block_id.contains_key(&latest_block_number) {
             let block = self.get::<BlockSchema>(&(epoch, block_number_to_block_id[&latest_block_number]))?
                 .unwrap();
+            has_root = true;
             (block.epoch(), block.round(), block.id())
         } else {
             (epoch, 0, HashValue::zero())
@@ -170,7 +172,7 @@ impl ConsensusDB {
             .collect();
         info!("consensus_blocks size : {}, consensus_qcs size : {}, block_number_to_block_id size : {}, start_round : {}",
                  consensus_blocks.len(), consensus_qcs.len(), block_number_to_block_id.len(), start_round);
-        Ok((last_vote, highest_2chain_timeout_certificate, consensus_blocks, consensus_qcs))
+        Ok((last_vote, highest_2chain_timeout_certificate, consensus_blocks, consensus_qcs, has_root))
     }
 
     pub fn save_highest_2chain_timeout_certificate(&self, tc: Vec<u8>) -> Result<(), DbError> {
