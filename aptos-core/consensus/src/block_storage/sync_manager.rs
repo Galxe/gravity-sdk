@@ -507,7 +507,7 @@ impl BlockStore {
         if self.commit_root().round() < ledger_info.commit_info().round()
             && self.block_exists(ledger_info.commit_info().id())
             && self.ordered_root().round() >= ledger_info.commit_info().round()
-            && (!self.enable_randomness || self.ordered_root().epoch() == 1 || self.ordered_root().randomness().is_some())
+            && (!self.enable_randomness || self.ordered_root().epoch() == 1 || ledger_info.commit_info().round() == 0 || self.ordered_root().randomness().is_some())
         {
             info!("sync_to_highest_commit_cert: block exists between commit root and ordered root {:?}, {:?}", self.commit_root().round(), ledger_info.commit_info().round());
             let proof = ledger_info.clone();
@@ -516,8 +516,7 @@ impl BlockStore {
             return Ok(());
         } else if self.ordered_root().round() < ledger_info.commit_info().round() 
             && !self.block_exists(ledger_info.commit_info().id())
-            || (self.enable_randomness && self.ordered_root().epoch() != 1 && self.ordered_root().randomness().is_none()) {
-            
+            || (self.enable_randomness && self.ordered_root().epoch() != 1 && ledger_info.commit_info().round() != 0 && self.ordered_root().randomness().is_none()) {
             // Get the appropriate WrappedLedgerInfo based on randomness check
             let sync_from_cert = self.has_randomness_on_path_from_ordered_to_commit();
             
