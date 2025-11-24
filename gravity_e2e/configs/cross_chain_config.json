@@ -19,7 +19,7 @@
             }
         },
         "test_account": {
-            "private_key": "0xf1e579ef20d8131c9735afc1f32af9fb7d03c921f260b9b10c0cedf7ba574576"
+            "private_key": ""
         },
         "deposit_params": {
             "amount": "100000000000000000000",
