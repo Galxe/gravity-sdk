@@ -5,92 +5,13 @@ use alloy_signer::k256::ecdsa::SigningKey;
 use alloy_signer_local::PrivateKeySigner;
 use alloy_sol_types::{SolCall, SolEvent, SolType};
 use clap::Parser;
-use std::{
-    fmt::{Debug, Formatter},
-    str::FromStr,
-};
+use std::str::FromStr;
 
 use crate::command::Executable;
-
-// Define contract interface using alloy_sol_macro
-alloy_sol_macro::sol! {
-    enum ValidatorStatus {
-        PENDING_ACTIVE, // 0
-        ACTIVE, // 1
-        PENDING_INACTIVE, // 2
-        INACTIVE // 3
-    }
-
-    struct ValidatorInfo {
-        // Basic information (from ValidatorManager)
-        bytes consensusPublicKey;
-        Commission commission;
-        string moniker;
-        bool registered;
-        address stakeCreditAddress;
-        ValidatorStatus status;
-        uint256 votingPower; // Changed from uint64 to uint256 to prevent overflow
-        uint256 validatorIndex;
-        uint256 updateTime;
-        address operator;
-        bytes validatorNetworkAddresses; // BCS serialized Vec<NetworkAddress>
-        bytes fullnodeNetworkAddresses; // BCS serialized Vec<NetworkAddress>
-        bytes aptosAddress; // Aptos validator address
-    }
-
-    struct Commission {
-        uint64 rate; // the commission rate charged to delegators(10000 is 100%)
-        uint64 maxRate; // maximum commission rate which validator can ever charge
-        uint64 maxChangeRate; // maximum daily increase of the validator commission
-    }
-
-    struct ValidatorSetData {
-        uint256 totalVotingPower; // Total voting power - Changed from uint128 to uint256
-        uint256 totalJoiningPower; // Total pending voting power - Changed from uint128 to uint256
-    }
-
-    struct ValidatorSet {
-        ValidatorInfo[] activeValidators; // Active validators for the current epoch
-        ValidatorInfo[] pendingInactive; // Pending validators to leave in next epoch (still active)
-        ValidatorInfo[] pendingActive; // Pending validators to join in next epoch
-        uint256 totalVotingPower; // Current total voting power
-        uint256 totalJoiningPower; // Total voting power waiting to join in the next epoch
-    }
-
-    contract ValidatorManager {
-        function leaveValidatorSet(address validator) external;
-
-        function getValidatorInfo(
-            address validator
-        ) external view returns (ValidatorInfo memory);
-
-        function getValidatorStatus(address validator) external view returns (uint8);
-
-        event ValidatorLeaveRequested(
-            address indexed validator,
-            uint64 epoch
-        );
-
-        event ValidatorStatusChanged(
-            address indexed validator,
-            uint8 oldStatus,
-            uint8 newStatus,
-            uint64 epoch
-        );
-    }
-}
-
-impl Debug for ValidatorStatus {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ValidatorStatus::PENDING_ACTIVE => write!(f, "PENDING_ACTIVE"),
-            ValidatorStatus::ACTIVE => write!(f, "ACTIVE"),
-            ValidatorStatus::PENDING_INACTIVE => write!(f, "PENDING_INACTIVE"),
-            ValidatorStatus::INACTIVE => write!(f, "INACTIVE"),
-            _ => write!(f, "UNKNOWN"),
-        }
-    }
-}
+use crate::validator::contract::{
+    ValidatorInfo, ValidatorManager, ValidatorStatus,
+};
+use crate::validator::util::format_ether;
 
 #[derive(Debug, Parser)]
 pub struct LeaveCommand {
@@ -304,17 +225,5 @@ impl LeaveCommand {
             }
         }
         Ok(())
-    }
-}
-
-// Helper function: format ether amount
-fn format_ether(wei: U256) -> String {
-    let wei_str = wei.to_string();
-    let len = wei_str.len();
-    if len <= 18 {
-        format!("0.{}", "0".repeat(18 - len) + &wei_str)
-    } else {
-        let (integer, decimal) = wei_str.split_at(len - 18);
-        format!("{}.{}", integer, decimal.trim_end_matches('0').trim_end_matches('.'))
     }
 }

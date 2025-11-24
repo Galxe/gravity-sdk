@@ -1,5 +1,7 @@
+mod contract;
 mod join;
 mod leave;
+mod util;
 
 use clap::{Parser, Subcommand};
 
