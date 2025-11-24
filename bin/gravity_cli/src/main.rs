@@ -31,6 +31,11 @@ fn main() {
                     eprintln!("Error: {:?}", e);
                 }
             }
+            validator::SubCommands::Leave(leave_cmd) => {
+                if let Err(e) = leave_cmd.execute() {
+                    eprintln!("Error: {:?}", e);
+                }
+            }
         },
     }
 }
