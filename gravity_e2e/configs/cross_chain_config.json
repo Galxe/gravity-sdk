@@ -1,0 +1,57 @@
+{
+    "sepolia": {
+        "rpc_url": "https://sepolia.drpc.org",
+        "contracts": {
+            "gravity_bridge": {
+                "address": "0x283fC6799867BF96bF862a05BDade3EE89132027",
+                "abi": [
+                    "function depositGravity(address targetAddress, uint256 amount) external",
+                    "event DepositGravityEvent(address user, uint256 amount, address targetAddress, uint256 blockNumber)"
+                ]
+            },
+            "g_token": {
+                "address": "0xE9acf77df3fB1C888000162BCA8b6A1595d92A97",
+                "abi": [
+                    "function approve(address spender, uint256 amount) external returns (bool)",
+                    "function balanceOf(address account) external view returns (uint256)",
+                    "function decimals() external view returns (uint8)"
+                ]
+            }
+        },
+        "test_account": {
+            "private_key": "0xf1e579ef20d8131c9735afc1f32af9fb7d03c921f260b9b10c0cedf7ba574576"
+        },
+        "deposit_params": {
+            "amount": "100000000000000000000",
+            "target_address": null
+        }
+    },
+    "gravity": {
+        "monitor_contract": {
+            "address": "0000000000000000000000000000000000002018",
+            "event_name": "CrossChainDepositProcessed",
+            "abi": [
+                {
+                    "anonymous": false,
+                    "inputs": [
+                        {"indexed": true, "name": "sender", "type": "address"},
+                        {"indexed": true, "name": "targetAddress", "type": "address"},
+                        {"indexed": false, "name": "amount", "type": "uint256"},
+                        {"indexed": false, "name": "blockNumber", "type": "uint256"},
+                        {"indexed": false, "name": "success", "type": "bool"},
+                        {"indexed": false, "name": "errorMessage", "type": "string"},
+                        {"indexed": false, "name": "issuer", "type": "string"},
+                        {"indexed": false, "name": "onchainBlockNumber", "type": "uint256"}
+                    ],
+                    "name": "CrossChainDepositProcessed",
+                    "type": "event"
+                }
+            ]
+        },
+        "sync_settings": {
+            "timeout_seconds": 600,
+            "poll_interval_seconds": 10,
+            "max_blocks_per_query": 100
+        }
+    }
+}

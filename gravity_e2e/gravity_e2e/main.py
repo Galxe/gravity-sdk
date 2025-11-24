@@ -14,6 +14,7 @@ from .utils.logging import setup_logging
 from .tests.test_cases.test_basic_transfer import test_eth_transfer
 from .tests.test_cases.test_contract_deploy import test_simple_storage_deploy
 from .tests.test_cases.test_erc20 import test_erc20_deploy_and_transfer
+from .tests.test_cases.test_cross_chain_deposit import test_cross_chain_gravity_deposit
 
 LOG = logging.getLogger(__name__)
 
@@ -29,6 +30,9 @@ async def run_test_module(module_name: str, test_helper: RunHelper, test_results
             test_results.append(result)
         elif module_name == "cases.erc20":
             result = await test_erc20_deploy_and_transfer(run_helper=test_helper)
+            test_results.append(result)
+        elif module_name == "cases.cross_chain_deposit":
+            result = await test_cross_chain_gravity_deposit(run_helper=test_helper)
             test_results.append(result)
         else:
             LOG.warning(f"Unknown test module: {module_name}")
@@ -49,7 +53,7 @@ async def main():
     parser.add_argument("--accounts-config", default="configs/test_accounts.json",
                        help="Path to accounts configuration file")
     parser.add_argument("--test-suite", default="all",
-                       choices=["all", "basic", "contract", "erc20", "block", "network"],
+                       choices=["all", "basic", "contract", "erc20", "cross_chain_deposit", "block", "network"],
                        help="Test suite to run")
     parser.add_argument("--cluster", default=None,
                        help="Cluster name to test (defined in nodes.json)")
@@ -149,7 +153,8 @@ async def main():
                     test_modules = [
                         "cases.basic_transfer",
                         "cases.contract",
-                        "cases.erc20"
+                        "cases.erc20",
+                        "cases.cross_chain_deposit"
                     ]
                 elif args.test_suite == "basic":
                     test_modules = ["cases.basic_transfer"]
@@ -157,6 +162,8 @@ async def main():
                     test_modules = ["cases.contract"]
                 elif args.test_suite == "erc20":
                     test_modules = ["cases.erc20"]
+                elif args.test_suite == "cross_chain_deposit":
+                    test_modules = ["cases.cross_chain_deposit"]
                 else:
                     test_modules = [f"cases.{args.test_suite}"]
                 
