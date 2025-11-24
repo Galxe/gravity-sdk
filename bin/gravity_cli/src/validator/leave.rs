@@ -7,11 +7,13 @@ use alloy_sol_types::{SolCall, SolEvent, SolType};
 use clap::Parser;
 use std::str::FromStr;
 
-use crate::command::Executable;
-use crate::validator::contract::{
-    ValidatorInfo, ValidatorManager, ValidatorStatus,
+use crate::{
+    command::Executable,
+    validator::{
+        contract::{ValidatorInfo, ValidatorManager, ValidatorStatus},
+        util::format_ether,
+    },
 };
-use crate::validator::util::format_ether;
 
 #[derive(Debug, Parser)]
 pub struct LeaveCommand {
@@ -175,8 +177,16 @@ impl LeaveCommand {
                     if event.validator == validator_address {
                         println!("   Status changed! Event details:");
                         println!("   - Validator address: {}", event.validator);
-                        println!("   - Old status: {}", event.oldStatus);
-                        println!("   - New status: {}", event.newStatus);
+                        println!(
+                            "   - Old status: {:?}",
+                            ValidatorStatus::try_from(event.oldStatus)
+                                .unwrap_or(ValidatorStatus::__Invalid)
+                        );
+                        println!(
+                            "   - New status: {:?}",
+                            ValidatorStatus::try_from(event.newStatus)
+                                .unwrap_or(ValidatorStatus::__Invalid)
+                        );
                         println!("   - Epoch: {}", event.epoch);
                         found_status_change_event = true;
                         continue;

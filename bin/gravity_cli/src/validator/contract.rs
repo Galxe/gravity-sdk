@@ -119,4 +119,3 @@ impl Debug for ValidatorStatus {
         }
     }
 }
-
