@@ -27,7 +27,7 @@ members = [
 aptos-consensus = { path = "./aptos-core/consensus" }
 
 #  from aptos =======================
-gaptos = { git = "https://github.com/Galxe/gravity-aptos.git", rev = "56f263fd35defbd3cea335098dbd57297aeac607" }
+gaptos = { git = "https://github.com/Galxe/gravity-aptos.git", tag = "gravity-v1.1.0" }
 aptos-executor-types = { path = "dependencies/aptos-executor-types" }
 aptos-executor = { path = "dependencies/aptos-executor" }
 api = { path = "./crates/api" }
