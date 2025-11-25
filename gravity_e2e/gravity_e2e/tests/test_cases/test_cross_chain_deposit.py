@@ -115,7 +115,7 @@ class SepoliaClient:
             
             # Sign and send transaction
             signed_tx = self.w3.eth.account.sign_transaction(tx, self.account.key)
-            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
             
             LOG.info(f"Approval transaction sent: {tx_hash.hex()}")
             
@@ -154,7 +154,7 @@ class SepoliaClient:
             
             # Sign and send transaction
             signed_tx = self.w3.eth.account.sign_transaction(tx, self.account.key)
-            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
             
             LOG.info(f"Deposit transaction sent: {tx_hash.hex()}")
             
@@ -166,22 +166,50 @@ class SepoliaClient:
             
             # Parse DepositGravityEvent
             deposit_event = None
-            for log in receipt.logs:
+            LOG.info(f"Transaction receipt has {len(receipt.logs)} logs")
+            
+            for i, log in enumerate(receipt.logs):
+                LOG.info(f"Processing log {i+1}: address={log.address}")
                 try:
-                    parsed = self.gravity_bridge.events.DepositGravityEvent().process_log(log)
+                    # Check if this log is from our contract
+                    if log.address.lower() != self.config["contracts"]["gravity_bridge"]["address"].lower():
+                        LOG.debug(f"Log from different contract: {log.address}")
+                        continue
+                    
+                    LOG.info(f"Found log from gravity bridge contract!")
+                    LOG.info(f"Data length: {len(log.data)} bytes")
+                    
+                    # Parse the event from our contract
+                    # Based on the log data structure from the logs:
+                    # user(32 bytes) + amount(32 bytes) + targetAddress(32 bytes) + blockNumber(32 bytes)
+                    data_hex = log.data.hex()
+                    LOG.info(f"Raw data: {data_hex}")
+                    
+                    # Extract values from 128 bytes (256 hex chars)
+                    # Structure: user(32) + amount(32) + targetAddress(32) + blockNumber(32)
                     deposit_event = {
-                        "user": parsed.args.user,
-                        "amount": parsed.args.amount,
-                        "targetAddress": parsed.args.targetAddress,
-                        "blockNumber": parsed.args.blockNumber
+                        "user": "0x" + data_hex[24:64],  # User address (32 bytes, last 20 bytes are the address)
+                        "amount": int(data_hex[64:128], 16),  # Amount (32 bytes)
+                        "targetAddress": "0x" + data_hex[152:192],  # Target address (last 20 bytes of 32 bytes)
+                        "blockNumber": int(data_hex[192:256], 16)  # Block number (32 bytes)
                     }
-                    LOG.info(f"DepositGravityEvent detected: user={deposit_event['user']}, "
-                            f"amount={deposit_event['amount']}, target={deposit_event['targetAddress']}")
+                    
+                    LOG.info(f"✅ DepositGravityEvent detected:")
+                    LOG.info(f"   User: {deposit_event['user']}")
+                    LOG.info(f"   Amount: {deposit_event['amount']}")
+                    LOG.info(f"   Target: {deposit_event['targetAddress']}")
+                    LOG.info(f"   Block: {deposit_event['blockNumber']}")
                     break
-                except:
+                except Exception as e:
+                    LOG.error(f"Error parsing log {i+1}: {e}")
+                    import traceback
+                    traceback.print_exc()
                     continue
             
             if not deposit_event:
+                LOG.error(f"No DepositGravityEvent found in receipt. Logs:")
+                for i, log in enumerate(receipt.logs):
+                    LOG.error(f"  Log {i+1}: address={log.address}, topics={log.topics}, data={log.data}")
                 raise RuntimeError("DepositGravityEvent not found in transaction receipt")
             
             LOG.info(f"Deposit confirmed in block: {receipt.blockNumber}")
@@ -230,10 +258,10 @@ async def poll_gravity_for_event(run_helper: RunHelper, expected_sender: str,
                 
                 # Query for events
                 logs = await run_helper.client.get_logs(
+                    from_block=from_block,
+                    to_block=to_block,
                     address=gravity_config["monitor_contract"]["address"],
-                    topics=[event_topic],
-                    fromBlock=hex(from_block),
-                    toBlock=hex(to_block)
+                    topics=[[event_topic]]
                 )
                 
                 # Parse and match events
@@ -368,7 +396,10 @@ async def test_cross_chain_gravity_deposit(run_helper: RunHelper, test_result: T
         LOG.info(f"  Block: {sepolia_event['blockNumber']}")
         
         # Wait for cross-chain sync
+        # NOTE: This may take up to 12+ minutes as we wait for Sepolia block finalization
+        # (2 epochs * 6.4 minutes per epoch on Sepolia)
         LOG.info("\nWaiting for cross-chain synchronization...")
+        LOG.info("⚠️  This may take 12+ minutes for Sepolia block finalization")
         sync_start_time = time.time()
         
         gravity_event = await poll_gravity_for_event(
