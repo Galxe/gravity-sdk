@@ -41,11 +41,8 @@ full_node_networks:
     identity:
       type: "from_file"
       path: /tmp/vfn/config/vfn-identity.yaml
-    seeds:
-      2d86b40a1d692c0749a0a0426e2021ee24e2430da0f5bb9c2ae6c586bf3e0a0f:
-        addresses:
-        - "/ip4/127.0.0.1/tcp/2034/noise-ik/2d86b40a1d692c0749a0a0426e2021ee24e2430da0f5bb9c2ae6c586bf3e0a0f/handshake/0"
-        role: "Validator"
+    discovery_method:
+      onchain
 
 storage:
   dir: "/tmp/vfn/data"

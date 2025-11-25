@@ -125,11 +125,6 @@ validate_params() {
         done
         exit 1
     fi
-
-    if [[ "$mode" == "single" && "$node_arg" != "node1" && "$node_arg" != "node2" && "$node_arg" != "pfn" && "$node_arg" != "vfn" ]]; then
-        log_error "Single mode only supports 'node1' or 'node2' or 'pfn' or 'vfn'"
-        exit 1
-    fi
 }
 
 # Parse arguments
