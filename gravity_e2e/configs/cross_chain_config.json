@@ -5,16 +5,55 @@
             "gravity_bridge": {
                 "address": "0x283fC6799867BF96bF862a05BDade3EE89132027",
                 "abi": [
-                    "function depositGravity(address targetAddress, uint256 amount) external",
-                    "event DepositGravityEvent(address user, uint256 amount, address targetAddress, uint256 blockNumber)"
+                    {
+                        "type": "function",
+                        "name": "depositGravity",
+                        "inputs": [
+                            {"name": "targetAddress", "type": "address"},
+                            {"name": "amount", "type": "uint256"}
+                        ],
+                        "outputs": [],
+                        "stateMutability": "external"
+                    },
+                    {
+                        "type": "event",
+                        "name": "DepositGravityEvent",
+                        "inputs": [
+                            {"name": "user", "type": "address", "indexed": false},
+                            {"name": "amount", "type": "uint256", "indexed": false},
+                            {"name": "targetAddress", "type": "address", "indexed": false},
+                            {"name": "blockNumber", "type": "uint256", "indexed": false}
+                        ]
+                    }
                 ]
             },
             "g_token": {
                 "address": "0xE9acf77df3fB1C888000162BCA8b6A1595d92A97",
                 "abi": [
-                    "function approve(address spender, uint256 amount) external returns (bool)",
-                    "function balanceOf(address account) external view returns (uint256)",
-                    "function decimals() external view returns (uint8)"
+                    {
+                        "type": "function",
+                        "name": "approve",
+                        "inputs": [
+                            {"name": "spender", "type": "address"},
+                            {"name": "amount", "type": "uint256"}
+                        ],
+                        "outputs": [{"name": "", "type": "bool"}],
+                        "stateMutability": "external"
+                    },
+                    {
+                        "type": "function",
+                        "name": "balanceOf",
+                        "inputs": [{"name": "account", "type": "address"}],
+                        "outputs": [{"name": "", "type": "uint256"}],
+                        "stateMutability": "view"
+                    },
+                    {
+                        "type": "function",
+                        "name": "decimals",
+                        "inputs": [],
+                        "outputs": [{"name": "", "type": "uint8"}],
+                        "stateMutability": "view"
+                    }
                 ]
             }
         },
@@ -49,8 +88,8 @@
             ]
         },
         "sync_settings": {
-            "timeout_seconds": 600,
-            "poll_interval_seconds": 10,
+            "timeout_seconds": 900,
+            "poll_interval_seconds": 30,
             "max_blocks_per_query": 100
         }
     }
