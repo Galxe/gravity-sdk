@@ -556,74 +556,108 @@ impl BlockStore {
         let mut blocks = vec![];
         let mut quorum_certs = vec![];
         let mut status = BlockRetrievalStatus::Succeeded;
+        
+        // Step 1: Determine the retrieval epoch and starting block ID
+        // If epoch is specified in the request:
+        //   - If block_id is not zero, use the specified epoch and block_id
+        //   - If block_id is zero, find the last block of that epoch as the starting point
+        // If epoch is not specified, use the current ordered root's epoch
         let (retrieval_epoch, mut id) = if let Some(epoch) = request.req.epoch() {
             if request.req.block_id() != HashValue::zero() {
+                // Use the epoch and block_id specified in the request
                 (epoch, request.req.block_id())
             } else {
-                let target_block_number = self
+                // block_id is zero, need to find the last block of this epoch
+                // Find the block number corresponding to this epoch
+                let all_epoch_blocks = self
                     .storage
                     .consensus_db()
                     .get_all::<EpochByBlockNumberSchema>()
-                    .unwrap()
+                    .map_err(|e| anyhow::anyhow!("Failed to get epoch by block number: {:?}", e))?;
+                let target_block_number = all_epoch_blocks
                     .into_iter()
                     .find(|(_, eppch_)| *eppch_ == epoch)
                     .map(|(block_number, _)| block_number)
-                    .unwrap();
-                let end_block_id = self
+                    .ok_or_else(|| anyhow::anyhow!("Cannot find block number for epoch {}", epoch))?;
+                
+                // Get the ledger info to find the end block ID
+                let wrapped_ledger_info = self
                     .storage
                     .consensus_db()
                     .get::<LedgerInfoSchema>(&target_block_number)
-                    .unwrap()
-                    .unwrap()
-                    .ledger_info()
-                    .consensus_block_id();
+                    .map_err(|e| anyhow::anyhow!("Failed to get ledger info for block number {}: {:?}", target_block_number, e))?
+                    .ok_or_else(|| anyhow::anyhow!("Ledger info not found for block number {}", target_block_number))?;
+                let end_block_id = wrapped_ledger_info.ledger_info().consensus_block_id();
 
+                // Find the quorum cert for the end block in this epoch
                 let start_key = (epoch, HashValue::zero());
                 let end_key = (epoch, HashValue::new([u8::MAX; HashValue::LENGTH]));
-                let qc = self
+                let qc_range = self
                     .storage
                     .consensus_db()
                     .get_qc_range(&start_key, &end_key)
-                    .unwrap()
+                    .map_err(|e| anyhow::anyhow!("Failed to get QC range for epoch {}: {:?}", epoch, e))?;
+                let qc = qc_range
                     .into_iter()
                     .find(|qc| qc.commit_info().id() == end_block_id)
-                    .unwrap()
+                    .ok_or_else(|| anyhow::anyhow!("Cannot find QC for end block id {} in epoch {}", end_block_id, epoch))?
                     .clone();
+                
+                // Get the block corresponding to the QC
                 let block = self
                     .storage
                     .consensus_db()
                     .get_block(epoch, qc.certified_block().id())
-                    .unwrap()
-                    .unwrap();
+                    .map_err(|e| anyhow::anyhow!("Failed to get block for QC certified block {}: {:?}", qc.certified_block().id(), e))?
+                    .ok_or_else(|| anyhow::anyhow!("Block not found for QC certified block {}", qc.certified_block().id()))?;
 
+                // Get randomness if it exists for this block
                 let randomness = match block.block_number() {
-                    Some(block_number) => self.storage.consensus_db().get_randomness(block_number).unwrap(),
+                    Some(block_number) => {
+                        self.storage
+                            .consensus_db()
+                            .get_randomness(block_number)
+                            .map_err(|e| anyhow::anyhow!("Failed to get randomness for block number {}: {:?}", block_number, e))?
+                    }
                     None => None,
                 };
+                
+                // Add the initial block and QC to the result
                 quorum_certs.push(qc);
                 blocks.push((block, randomness));
 
+                // Get the start block_id (consensus_block_id of the last block in this epoch)
+                let start_wrapped_ledger_info = self
+                    .storage
+                    .consensus_db()
+                    .get::<LedgerInfoSchema>(&target_block_number)
+                    .map_err(|e| anyhow::anyhow!("Failed to get ledger info for start block: {:?}", e))?
+                    .ok_or_else(|| anyhow::anyhow!("Ledger info not found for start block"))?;
                 (
                     epoch,
-                    self.storage
-                        .consensus_db()
-                        .get::<LedgerInfoSchema>(&target_block_number)
-                        .unwrap()
-                        .unwrap()
-                        .ledger_info()
-                        .consensus_block_id(),
+                    start_wrapped_ledger_info.ledger_info().consensus_block_id(),
                 )
             }
         } else {
+            // No epoch specified, use the current ordered root's epoch
             (self.ordered_root().epoch(), request.req.block_id())
         };
+        // Log the retrieval parameters
+        let target_block_id_str = request.req.target_block_id()
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| "None".to_string());
         info!("process_block_retrieval origin_block_id {}, target_block_id {}, retrieval_epoch {}",
-                request.req.block_id(), request.req.target_block_id().unwrap(), retrieval_epoch);
+                request.req.block_id(), target_block_id_str, retrieval_epoch);
 
+        // Step 2: Retrieve blocks along the parent chain
+        // Continue retrieving blocks until we reach the requested number or encounter a termination condition
         while (blocks.len() as u64) < request.req.num_blocks() {
             let mut parent_id = HashValue::zero();
             let mut is_last_block = false;
+            
+            // Try to get the block from memory first (faster)
             if let Some(executed_block) = self.get_block(id) {
+                // Get the quorum cert for this block
                 let qc = match self.get_quorum_cert_for_block(id) {
                     Some(qc) => qc,
                     None => {
@@ -632,17 +666,30 @@ impl BlockStore {
                         break;
                     }
                 };
+                // Check if this is the last block (round == 0 indicates genesis or epoch boundary)
                 is_last_block = qc.commit_info().round() == 0;
-                quorum_certs.push((*qc).clone());  
+                quorum_certs.push((*qc).clone());
+                
+                // Get randomness if available (for randomness-enabled blocks)
                 let randomness = match executed_block.block().block_number() {
-                    Some(block_number) => self.storage.consensus_db().get_randomness(block_number).unwrap(),
+                    Some(block_number) => {
+                        self.storage
+                            .consensus_db()
+                            .get_randomness(block_number)
+                            .unwrap_or_else(|e| {
+                                warn!("Failed to get randomness for block number {}: {:?}", block_number, e);
+                                None
+                            })
+                    }
                     None => None,
                 };
                 blocks.push((executed_block.block().clone(), randomness));
                 parent_id = executed_block.parent_id();
             } else if let Ok(Some(executed_block)) =
+                // Block not in memory, try to get from database
                 self.storage.consensus_db().get_block(retrieval_epoch, id)
             {
+                // Get the quorum cert from database
                 let qc = match self.storage.consensus_db().get_qc(retrieval_epoch, id) {
                     Ok(Some(qc)) => qc,
                     Ok(None) => {
@@ -658,37 +705,68 @@ impl BlockStore {
                 };
                 is_last_block = qc.commit_info().round() == 0;
                 quorum_certs.push(qc);
-                let randomness = self.storage.consensus_db().get_randomness(executed_block.block_number().unwrap()).unwrap();
+                
+                // Get randomness if available
+                let randomness = match executed_block.block_number() {
+                    Some(block_number) => {
+                        self.storage
+                            .consensus_db()
+                            .get_randomness(block_number)
+                            .unwrap_or_else(|e| {
+                                warn!("Failed to get randomness for block number {}: {:?}", block_number, e);
+                                None
+                            })
+                    }
+                    None => {
+                        warn!("Block {} has no block number", id);
+                        None
+                    }
+                };
                 blocks.push((executed_block.clone(), randomness));
                 parent_id = executed_block.parent_id();
             } else {
+                // Block not found in either memory or database
                 info!("Cannot find the block id {}", id);
                 status = BlockRetrievalStatus::NotEnoughBlocks;
                 break;
             }
+            
+            // Check termination conditions:
+            // 1. We've reached the target block ID (if specified)
+            // 2. We've reached the last block (round == 0)
             if request.req.match_target_id(id) || is_last_block {
                 status = BlockRetrievalStatus::SucceededWithTarget;
                 break;
             }
+            
+            // Move to the parent block for the next iteration
             id = parent_id;
         }
 
+        // Step 3: Collect ledger infos for the retrieved blocks
+        // Calculate the block number range to fetch ledger infos
         let mut lower = 0;
         let mut upper = 0;
         for (block, _) in &blocks {
-            if block.block_number().is_none() {
-                continue;
+            if let Some(block_number) = block.block_number() {
+                // Set upper to the first block number + 1 (exclusive range)
+                if upper == 0 {
+                    upper = block_number + 1;
+                }
+                // Update lower to the smallest block number
+                lower = block_number;
             }
-            if upper == 0 {
-                upper = block.block_number().unwrap() + 1;
-            }
-            lower = block.block_number().unwrap();
         }
+        
+        // Fetch ledger infos for the block number range
         let mut ledger_infos = vec![];
         if upper != 0 {
             ledger_infos = self.storage.consensus_db().ledger_db.metadata_db().get_ledger_infos_by_range((lower, upper));
+            // Reverse to get them in ascending order
             ledger_infos.reverse();
         }
+        
+        // Step 4: Build and send the response
         info!("process block retrieval done. status={:?}, block size={}", status, blocks.len());
         let response = Box::new(BlockRetrievalResponse::new(status, blocks, quorum_certs, ledger_infos));
         let response_bytes = request
