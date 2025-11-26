@@ -248,10 +248,17 @@ async def poll_gravity_for_event(run_helper: RunHelper, expected_sender: str,
             # Get current block number
             current_block = await run_helper.client.get_block_number()
             
-            # Only query new blocks
+            # Query for events
             if current_block > last_checked_block:
-                # Calculate query range
-                from_block = max(last_checked_block + 1, current_block - max_blocks_per_query)
+                # For the first query, start from a reasonable block number
+                # to ensure we catch the event
+                if last_checked_block == 0:
+                    # Start from an earlier block to ensure we don't miss anything
+                    from_block = 0  # Start from genesis
+                else:
+                    # For subsequent queries, only check new blocks
+                    from_block = max(last_checked_block + 1, current_block - max_blocks_per_query)
+                
                 to_block = current_block
                 
                 LOG.debug(f"Querying blocks {from_block} to {to_block}")
@@ -295,32 +302,44 @@ def parse_and_match_event(log: Dict, expected_sender: str, expected_amount: int,
         if len(topics) < 3:
             return False
         
-        # Extract indexed parameters (sender and targetAddress)
-        sender = "0x" + topics[1][-40:]  # Last 20 bytes
-        target_address = "0x" + topics[2][-40:]  # Last 20 bytes
+        # Extract indexed parameters (sender and targetAddress) from topics
+        # Topics are already 32 bytes, last 20 bytes are the address
+        sender = "0x" + topics[1][-40:].hex() if isinstance(topics[1], bytes) else "0x" + topics[1][-40:]
+        target_address = "0x" + topics[2][-40:].hex() if isinstance(topics[2], bytes) else "0x" + topics[2][-40:]
         
-        # Remove "0x" prefix and convert to lowercase for comparison
+        # Convert to checksum addresses for comparison
         sender = to_checksum_address(sender).lower()
         target_address = to_checksum_address(target_address).lower()
         expected_sender = expected_sender.lower()
         expected_target = expected_target.lower()
         
         # Extract non-indexed parameters from data
-        # Data layout: amount(32) + blockNumber(32) + success(32) + errorMessageOffset(32) + errorMessageLength(32) + issuerOffset(32) + onchainBlockNumber(32)
-        amount_hex = data[2:66]  # First 32 bytes
+        data_hex = data[2:] if data.startswith("0x") else data.hex() if isinstance(data, bytes) else data
+        
+        # Data layout from the actual log: amount(32) + blockNumber(32) + success(32) + ... + onchainBlockNumber(32)
+        amount_hex = data_hex[0:64]  # First 32 bytes
         amount = int(amount_hex, 16)
         
-        block_number_hex = data[66:130]  # Second 32 bytes
+        block_number_hex = data_hex[64:128]  # Second 32 bytes
         block_number = int(block_number_hex, 16)
         
-        success_hex = data[130:194]  # Third 32 bytes
+        success_hex = data_hex[128:192]  # Third 32 bytes
         success = int(success_hex, 16) > 0
         
-        onchain_block_hex = data[258:322]  # Last 32 bytes
+        # Skip to onchainBlockNumber (last 32 bytes)
+        onchain_block_hex = data_hex[-64:]  # Last 32 bytes
         onchain_block_number = int(onchain_block_hex, 16)
         
-        LOG.debug(f"Event parsed: sender={sender}, target={target_address}, amount={amount}, "
-                 f"success={success}, block={block_number}, onchain={onchain_block_number}")
+        LOG.info(f"Event parsed:")
+        LOG.info(f"   Sender: {sender}")
+        LOG.info(f"   Target: {target_address}")
+        LOG.info(f"   Amount: {amount}")
+        LOG.info(f"   Success: {success}")
+        LOG.info(f"   Block: {block_number}")
+        LOG.info(f"   Onchain Block: {onchain_block_number}")
+        LOG.info(f"   Expected Sender: {expected_sender}")
+        LOG.info(f"   Expected Amount: {expected_amount}")
+        LOG.info(f"   Expected Target: {expected_target}")
         
         # Match conditions
         if (sender == expected_sender and 
@@ -329,17 +348,19 @@ def parse_and_match_event(log: Dict, expected_sender: str, expected_amount: int,
             success):
             
             LOG.info(f"✅ Event matched successfully!")
-            LOG.info(f"   Sender: {sender}")
-            LOG.info(f"   Target: {target_address}")
-            LOG.info(f"   Amount: {amount}")
-            LOG.info(f"   Success: {success}")
-            LOG.info(f"   Block: {block_number}")
-            LOG.info(f"   Onchain Block: {onchain_block_number}")
             
             return True
+        else:
+            LOG.info(f"❌ Event did not match")
+            LOG.info(f"   Sender match: {sender == expected_sender}")
+            LOG.info(f"   Target match: {target_address == expected_target}")
+            LOG.info(f"   Amount match: {amount == expected_amount}")
+            LOG.info(f"   Success: {success}")
         
     except Exception as e:
-        LOG.debug(f"Failed to parse event: {e}")
+        LOG.error(f"Failed to parse event: {e}")
+        import traceback
+        traceback.print_exc()
     
     return False
 
