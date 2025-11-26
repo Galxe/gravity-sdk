@@ -1,8 +1,6 @@
 {
   "uri_mappings": {
-    "https://accounts.google.com": "https://eth-mainnet.g.alchemy.com/v2/your-api-key",
-    "https://example-provider.com": "https://eth-sepolia.g.alchemy.com/v2/your-api-key",
-    "gravity://custom-provider": "http://localhost:8545"
+    "gravity://11155111/event?address=0x283fC6799867BF96bF862a05BDade3EE89132027&topic0=0xd53bfb630c04654c6d1da5020f14674f190f92c257c92d9b15d8ecb405057c14&fromBlock=9707940": "https://sepolia.drpc.org"
   }
 }
 
