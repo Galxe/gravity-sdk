@@ -36,6 +36,17 @@ class TestResult:
     def set_duration(self, duration: float):
         """Set test duration"""
         self.details["duration"] = duration
+    
+    def to_dict(self):
+        """Convert to dictionary for JSON serialization"""
+        return {
+            "test_name": self.test_name,
+            "success": self.success,
+            "error": self.error,
+            "start_time": self.start_time,
+            "end_time": self.end_time,
+            "details": self.details
+        }
 
 
 class RunHelper:
