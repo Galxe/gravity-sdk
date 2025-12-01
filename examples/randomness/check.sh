@@ -7,11 +7,11 @@ set -o pipefail
 export RETH_RPC_URL="http://127.0.0.1:8545"
 
 # Set private key for transaction signing
-export PRIVATE_KEY="0x047a5466f6f9e08c8bcc56213d6530d517c1ef126eefbbdf85ffe8d893ed0e9f"
+export PRIVATE_KEY="0x...PASTE_YOUR_PRIVATE_KEY..."
 
 # Set deployed contract address
 # Replace with your actual contract address after deployment
-export CONTRACT_ADDRESS="0x2BB0961D1b7f928FB3dF4d90A1A825d55e2F4e1A"
+export CONTRACT_ADDRESS="0x...PASTE_YOUR_ADDRESS_HERE..."
 # --- End Configuration 
 
 # --- 2. Environment Check
