@@ -7,7 +7,7 @@ use crate::{
         create_dkg_runtime, init_jwk_consensus
     },
     consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler},
-    https::{https_server, HttpsServerArgs},
+    https::https_server,
     logger,
     network::{
         consensus_network_configuration, create_network_interfaces, create_network_runtime,
@@ -277,7 +277,7 @@ impl ConsensusEngine {
             runtimes.push(jwk_consensus_runtime);
         }
         init_block_buffer_manager(&consensus_db, latest_block_number).await;
-        let mut args = ConsensusAdapterArgs::new(consensus_db);
+        let mut args = ConsensusAdapterArgs::new(consensus_db.clone());
         let (consensus_runtime, _, _) = start_consensus(
             &node_config,
             &mut event_subscription_service,
@@ -306,23 +306,33 @@ impl ConsensusEngine {
         });
         runtimes.push(runtime);
         // trigger this to make epoch manager invoke new epoch
-        let args = HttpsServerArgs {
-            address: node_config.https_server_address,
-            cert_pem: node_config
-                .https_cert_pem_path
-                .clone()
-                .to_str()
-                .filter(|s| !s.is_empty())
-                .map(|_| node_config.https_cert_pem_path),
-            key_pem: node_config
-                .https_key_pem_path
-                .clone()
-                .to_str()
-                .filter(|s| !s.is_empty())
-                .map(|_| node_config.https_key_pem_path),
+        // https_server_address should be a port number, default to 1998 if empty
+        let port = if node_config.https_server_address.is_empty() {
+            1998u16
+        } else {
+            node_config.https_server_address.parse::<u16>().unwrap_or_else(|_| {
+                warn!("Failed to parse https_server_address as port, using default 1998");
+                1998u16
+            })
         };
+        let address = format!("0.0.0.0:{}", port);
+        let consensus_db_clone = Some(consensus_db.clone());
+        let cert_pem = node_config
+            .https_cert_pem_path
+            .clone()
+            .to_str()
+            .filter(|s| !s.is_empty())
+            .map(|_| node_config.https_cert_pem_path);
+        let key_pem = node_config
+            .https_key_pem_path
+            .clone()
+            .to_str()
+            .filter(|s| !s.is_empty())
+            .map(|_| node_config.https_key_pem_path);
         let runtime = gaptos::aptos_runtimes::spawn_named_runtime("Http".into(), None);
-        runtime.spawn(async move { https_server(args) });
+        runtime.spawn(async move {
+            https_server(address, cert_pem, key_pem, consensus_db_clone).await
+        });
         runtimes.push(runtime);
         let arc_consensus_engine = Arc::new(Self { runtimes });
         // process new round should be after init retƒh hash
