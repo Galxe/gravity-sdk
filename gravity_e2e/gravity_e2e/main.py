@@ -15,6 +15,17 @@ from .tests.test_cases.test_basic_transfer import test_eth_transfer
 from .tests.test_cases.test_contract_deploy import test_simple_storage_deploy
 from .tests.test_cases.test_erc20 import test_erc20_deploy_and_transfer
 from .tests.test_cases.test_cross_chain_deposit import test_cross_chain_gravity_deposit
+from .tests.test_cases.test_randomness_basic import (
+    test_randomness_basic_consumption,
+    test_randomness_correctness
+)
+from .tests.test_cases.test_randomness_advanced import (
+    test_randomness_smoke,
+    test_randomness_reconfiguration,
+    test_randomness_multi_contract,
+    test_randomness_api_completeness,
+    test_randomness_stress
+)
 
 LOG = logging.getLogger(__name__)
 
@@ -33,6 +44,26 @@ async def run_test_module(module_name: str, test_helper: RunHelper, test_results
             test_results.append(result)
         elif module_name == "cases.cross_chain_deposit":
             result = await test_cross_chain_gravity_deposit(run_helper=test_helper)
+        elif module_name == "cases.randomness_basic":
+            result = await test_randomness_basic_consumption(run_helper=test_helper)
+            test_results.append(result)
+        elif module_name == "cases.randomness_correctness":
+            result = await test_randomness_correctness(run_helper=test_helper)
+            test_results.append(result)
+        elif module_name == "cases.randomness_smoke":
+            result = await test_randomness_smoke(run_helper=test_helper)
+            test_results.append(result)
+        elif module_name == "cases.randomness_reconfiguration":
+            result = await test_randomness_reconfiguration(run_helper=test_helper)
+            test_results.append(result)
+        elif module_name == "cases.randomness_multi_contract":
+            result = await test_randomness_multi_contract(run_helper=test_helper)
+            test_results.append(result)
+        elif module_name == "cases.randomness_api_completeness":
+            result = await test_randomness_api_completeness(run_helper=test_helper)
+            test_results.append(result)
+        elif module_name == "cases.randomness_stress":
+            result = await test_randomness_stress(run_helper=test_helper)
             test_results.append(result)
         else:
             LOG.warning(f"Unknown test module: {module_name}")
@@ -53,7 +84,11 @@ async def main():
     parser.add_argument("--accounts-config", default="configs/test_accounts.json",
                        help="Path to accounts configuration file")
     parser.add_argument("--test-suite", default="all",
-                       choices=["all", "basic", "contract", "erc20", "cross_chain_deposit", "block", "network"],
+                       choices=["all", "basic", "contract", "erc20", "cross_chain_deposit", "block", "network"
+                               "randomness", "randomness_basic", "randomness_correctness",
+                               "randomness_smoke", "randomness_reconfiguration",
+                               "randomness_multi_contract", "randomness_api_completeness",
+                               "randomness_stress"],
                        help="Test suite to run")
     parser.add_argument("--cluster", default=None,
                        help="Cluster name to test (defined in nodes.json)")
@@ -164,6 +199,29 @@ async def main():
                     test_modules = ["cases.erc20"]
                 elif args.test_suite == "cross_chain_deposit":
                     test_modules = ["cases.cross_chain_deposit"]
+                elif args.test_suite == "randomness":
+                    test_modules = [
+                        "cases.randomness_smoke",
+                        "cases.randomness_basic",
+                        "cases.randomness_correctness",
+                        "cases.randomness_reconfiguration",
+                        "cases.randomness_multi_contract",
+                        "cases.randomness_api_completeness"
+                    ]
+                elif args.test_suite == "randomness_basic":
+                    test_modules = ["cases.randomness_basic"]
+                elif args.test_suite == "randomness_correctness":
+                    test_modules = ["cases.randomness_correctness"]
+                elif args.test_suite == "randomness_smoke":
+                    test_modules = ["cases.randomness_smoke"]
+                elif args.test_suite == "randomness_reconfiguration":
+                    test_modules = ["cases.randomness_reconfiguration"]
+                elif args.test_suite == "randomness_multi_contract":
+                    test_modules = ["cases.randomness_multi_contract"]
+                elif args.test_suite == "randomness_api_completeness":
+                    test_modules = ["cases.randomness_api_completeness"]
+                elif args.test_suite == "randomness_stress":
+                    test_modules = ["cases.randomness_stress"]
                 else:
                     test_modules = [f"cases.{args.test_suite}"]
                 
@@ -200,13 +258,28 @@ async def main():
             # 8. Save test results
             results_file = output_dir / "test_results.json"
             try:
+                # Convert TestResult objects to dictionaries
+                serializable_results = []
+                for result in test_results:
+                    if hasattr(result, 'to_dict'):
+                        serializable_results.append(result.to_dict())
+                    elif isinstance(result, dict):
+                        serializable_results.append(result)
+                    else:
+                        # Fallback: try to extract basic info
+                        serializable_results.append({
+                            "test_name": getattr(result, 'test_name', 'unknown'),
+                            "success": getattr(result, 'success', False),
+                            "error": getattr(result, 'error', None)
+                        })
+                
                 with open(results_file, 'w') as f:
                     json.dump({
                         "timestamp": asyncio.get_event_loop().time(),
                         "total_tests": total_tests,
                         "passed": passed_tests,
                         "failed": failed_tests,
-                        "results": test_results
+                        "results": serializable_results
                     }, f, indent=2)
                 LOG.info(f"Test results saved to: {results_file}")
             except Exception as e:
