@@ -391,11 +391,6 @@ impl BufferManager {
                 // As all the validators broadcast commit votes directly to all other validators,
                 // the proposer do not have to broadcast commit decision again.
                 let commit_proof = aggregated_item.commit_proof.clone();
-                if commit_proof.ledger_info().ends_epoch() {
-                    // the epoch ends, reset to avoid executing more blocks, execute after
-                    // this persisting request will result in BlockNotFound
-                    self.reset().await;
-                }
                 if let Some(consensus_publisher) = &self.consensus_publisher {
                     let message =
                         ConsensusObserverMessage::new_commit_decision_message(commit_proof.clone());
@@ -416,12 +411,10 @@ impl BufferManager {
                     }))
                     .await
                     .expect("Failed to send persist request");
-                // this needs to be done after creating the persisting request to avoid it being lost
-                // TODO(gravity_alex): Move into persisting phase like aptos
                 if commit_proof.ledger_info().ends_epoch() {
-                    self.commit_msg_tx
-                        .send_epoch_change(EpochChangeProof::new(vec![commit_proof], false))
-                        .await;
+                    // the epoch ends, reset to avoid executing more blocks, execute after
+                    // this persisting request will result in BlockNotFound
+                    self.reset().await;
                 }
                 info!("Advance head to {:?}", self.buffer.head_cursor());
                 self.previous_commit_time = Instant::now();
