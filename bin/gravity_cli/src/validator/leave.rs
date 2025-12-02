@@ -10,7 +10,7 @@ use std::str::FromStr;
 use crate::{
     command::Executable,
     validator::{
-        contract::{ValidatorInfo, ValidatorManager, ValidatorStatus},
+        contract::{ValidatorInfo, ValidatorManager, ValidatorStatus, VALIDATOR_MANAGER_ADDRESS},
         util::format_ether,
     },
 };
@@ -20,10 +20,6 @@ pub struct LeaveCommand {
     /// RPC URL for gravity node
     #[clap(long)]
     pub rpc_url: String,
-
-    /// ValidatorManager contract address (40 bytes hex string with 0x prefix)
-    #[clap(long)]
-    pub contract_address: String,
 
     /// Private key for signing transactions (hex string with or without 0x prefix)
     #[clap(long)]
@@ -64,8 +60,7 @@ impl LeaveCommand {
         let wallet_address = signer.address();
         println!("   Wallet address: {:?}", wallet_address);
 
-        let contract_address = Address::from_str(&self.contract_address)?;
-        println!("   Contract address: {:?}", contract_address);
+        println!("   Contract address: {:?}", VALIDATOR_MANAGER_ADDRESS);
 
         // Create provider
         let provider = ProviderBuilder::new().wallet(signer).connect_http(self.rpc_url.parse()?);
@@ -81,7 +76,7 @@ impl LeaveCommand {
         let result = provider
             .call(TransactionRequest {
                 from: Some(wallet_address),
-                to: Some(TxKind::Call(contract_address)),
+                to: Some(TxKind::Call(VALIDATOR_MANAGER_ADDRESS)),
                 input: TransactionInput::new(input),
                 ..Default::default()
             })
@@ -129,7 +124,7 @@ impl LeaveCommand {
         let tx_hash = provider
             .send_transaction(TransactionRequest {
                 from: Some(wallet_address),
-                to: Some(TxKind::Call(contract_address)),
+                to: Some(TxKind::Call(VALIDATOR_MANAGER_ADDRESS)),
                 input: TransactionInput::new(input),
                 gas: Some(self.gas_limit),
                 gas_price: Some(self.gas_price),
@@ -213,7 +208,7 @@ impl LeaveCommand {
         let result = provider
             .call(TransactionRequest {
                 from: Some(wallet_address),
-                to: Some(TxKind::Call(contract_address)),
+                to: Some(TxKind::Call(VALIDATOR_MANAGER_ADDRESS)),
                 input: TransactionInput::new(input),
                 ..Default::default()
             })
