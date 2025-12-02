@@ -1,6 +1,6 @@
 """
-Gravity节点HTTP API客户端
-用于访问DKG状态和随机数数据
+Gravity Node HTTP API Client
+For accessing DKG status and randomness data
 """
 import aiohttp
 import asyncio
@@ -12,40 +12,40 @@ LOG = logging.getLogger(__name__)
 
 
 class GravityHttpClient:
-    """Gravity节点HTTP API客户端"""
+    """Gravity Node HTTP API Client"""
     
     def __init__(self, base_url: str = "http://127.0.0.1:1998", timeout: float = 30.0):
         """
-        初始化HTTP客户端
+        Initialize HTTP client
         
         Args:
-            base_url: Gravity节点HTTP API地址
-            timeout: 请求超时时间（秒）
+            base_url: Gravity Node HTTP API address
+            timeout: Request timeout (seconds)
         """
         self.base_url = base_url.rstrip('/')
         self.timeout = timeout
         self.session: Optional[aiohttp.ClientSession] = None
     
     async def __aenter__(self):
-        """异步上下文管理器入口"""
+        """Async context manager entry"""
         self.session = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=self.timeout),
-            connector=aiohttp.TCPConnector(ssl=False)  # 禁用SSL验证（本地测试）
+            connector=aiohttp.TCPConnector(ssl=False)  # Disable SSL verification (local testing)
         )
         return self
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """异步上下文管理器退出"""
+        """Async context manager exit"""
         if self.session:
             await self.session.close()
             self.session = None
     
     async def get_dkg_status(self) -> Dict:
         """
-        获取DKG状态
+        Get DKG status
         
         Returns:
-            DKG状态字典:
+            DKG status dictionary:
             {
                 "epoch": int,
                 "round": int,
@@ -54,7 +54,7 @@ class GravityHttpClient:
             }
         
         Raises:
-            RuntimeError: 请求失败
+            RuntimeError: Request failed
         """
         url = f"{self.base_url}/dkg/status"
         LOG.debug(f"Getting DKG status from {url}")
@@ -79,13 +79,13 @@ class GravityHttpClient:
     
     async def get_randomness(self, block_number: int) -> Optional[str]:
         """
-        获取指定块的随机数
+        Get randomness for a specified block
         
         Args:
-            block_number: 块号
+            block_number: Block number
         
         Returns:
-            十六进制随机数字符串（带0x前缀），如果不存在则返回None
+            Hex randomness string (with 0x prefix), or None if doesn't exist
         """
         url = f"{self.base_url}/dkg/randomness/{block_number}"
         LOG.debug(f"Getting randomness for block {block_number} from {url}")
@@ -101,7 +101,7 @@ class GravityHttpClient:
                     
                     if randomness:
                         LOG.info(f"Block {block_number} randomness: {randomness[:16]}...")
-                        # 确保有0x前缀
+                        # Ensure 0x prefix
                         if not randomness.startswith("0x"):
                             randomness = "0x" + randomness
                         return randomness
@@ -118,17 +118,17 @@ class GravityHttpClient:
     
     async def wait_for_epoch(self, target_epoch: int, timeout: int = 120) -> int:
         """
-        等待指定epoch
+        Wait for a specified epoch
         
         Args:
-            target_epoch: 目标epoch
-            timeout: 超时时间（秒）
+            target_epoch: Target epoch
+            timeout: Timeout (seconds)
         
         Returns:
-            当前epoch号
+            Current epoch number
         
         Raises:
-            TimeoutError: 超时
+            TimeoutError: Timeout
         """
         start = time.time()
         LOG.info(f"Waiting for epoch {target_epoch}...")
@@ -159,20 +159,20 @@ class GravityHttpClient:
     
     async def get_current_epoch(self) -> int:
         """
-        获取当前epoch
+        Get current epoch
         
         Returns:
-            当前epoch号
+            Current epoch number
         """
         status = await self.get_dkg_status()
         return status["epoch"]
     
     async def get_current_block(self) -> int:
         """
-        获取当前块号
+        Get current block number
         
         Returns:
-            当前块号
+            Current block number
         """
         status = await self.get_dkg_status()
         return status["block_number"]
