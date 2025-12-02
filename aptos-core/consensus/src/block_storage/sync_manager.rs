@@ -11,13 +11,12 @@ use crate::{
     consensusdb::schema::{
         epoch_by_block_number::EpochByBlockNumberSchema, ledger_info::LedgerInfoSchema,
     },
-    epoch_manager::LivenessStorageData,
     logging::{LogEvent, LogSchema},
     monitor,
     network::{IncomingBlockRetrievalRequest, NetworkSender},
     network_interface::ConsensusMsg,
     payload_manager::TPayloadManager,
-    persistent_liveness_storage::{PersistentLivenessStorage, RecoveryData},
+    persistent_liveness_storage::PersistentLivenessStorage,
 };
 use anyhow::{anyhow, bail};
 use aptos_consensus_types::{
@@ -351,7 +350,7 @@ impl BlockStore {
         let highest_commit_cert = self.highest_commit_cert();
         let payload_manager = self.payload_manager.clone();
         let storage = self.storage.clone();
-        let (blocks, mut quorum_certs, mut ledger_infos) = retriever
+        let (mut blocks, mut quorum_certs, mut ledger_infos) = retriever
             .retrieve_block_by_epoch(
                 epoch,
                 highest_commit_cert.commit_info().id(),
@@ -371,7 +370,7 @@ impl BlockStore {
             .filter(|(block, _)| block.block_number().is_some())
             .map(|(block, _)| (block.epoch(), block.block_number().unwrap(), block.id()))
             .collect::<Vec<(u64, u64, HashValue)>>();
-        storage.save_tree(blocks.iter().map(|(block, _)| block.clone()).collect(), quorum_certs, block_numbers)?;
+        storage.save_tree(blocks.iter().map(|(block, _)| block.clone()).collect(), quorum_certs.clone(), block_numbers)?;
         if !ledger_infos.is_empty() {
             ledger_infos.reverse();
             let mut ledger_info_batch = SchemaBatch::new();
@@ -388,13 +387,14 @@ impl BlockStore {
                     .iter()
                     .filter(|(_, randomness)| randomness.is_some())
                     .map(|(block, randomness)| (block.block_number().unwrap(), randomness.as_ref().unwrap().clone())).collect())?;
-        let (root, blocks, quorum_certs) =
-            match storage.start(false, ledger_infos.last().unwrap().ledger_info().epoch()).await {
-                LivenessStorageData::FullRecoveryData(recovery_data) => recovery_data,
-                _ => panic!("Failed to construct recovery data after fast forward sync"),
-            }
-            .take();
-        self.rebuild(root, blocks, quorum_certs).await;
+        
+        // Reverse blocks and quorum_certs to get them in oldest-first order for insertion
+        blocks.reverse();
+        quorum_certs.reverse();
+        
+        // Use append_blocks_for_sync instead of rebuild
+        self.append_blocks_for_sync(blocks, quorum_certs).await;
+        
         storage.consensus_db().ledger_db.metadata_db().set_latest_ledger_info(ledger_infos.last().unwrap().clone());
 
         if !ledger_infos.is_empty() && ledger_infos.last().unwrap().ledger_info().ends_epoch() {
