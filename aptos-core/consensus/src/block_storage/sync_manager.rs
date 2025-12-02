@@ -503,11 +503,16 @@ impl BlockStore {
         retriever: &mut BlockRetriever,
     ) -> anyhow::Result<()> {
         let ledger_info = highest_commit_cert.ledger_info();
+        
+        // Check if there are blocks missing randomness on the path
+        let (has_missing_randomness, sync_from_cert_opt) = 
+            self.find_missing_randomness_block_on_path(ledger_info);
+        
         // if the block exists between commit root and ordered root
         if self.commit_root().round() < ledger_info.commit_info().round()
             && self.block_exists(ledger_info.commit_info().id())
             && self.ordered_root().round() >= ledger_info.commit_info().round()
-            && (!self.enable_randomness || self.ordered_root().epoch() == 1 || ledger_info.commit_info().round() == 0 || self.ordered_root().randomness().is_some())
+            && !has_missing_randomness
         {
             info!("sync_to_highest_commit_cert: block exists between commit root and ordered root {:?}, {:?}", self.commit_root().round(), ledger_info.commit_info().round());
             let proof = ledger_info.clone();
@@ -516,9 +521,12 @@ impl BlockStore {
             return Ok(());
         } else if self.ordered_root().round() < ledger_info.commit_info().round() 
             && !self.block_exists(ledger_info.commit_info().id())
-            || (self.enable_randomness && self.ordered_root().epoch() != 1 && ledger_info.commit_info().round() != 0 && self.ordered_root().randomness().is_none()) {
-            // Get the appropriate WrappedLedgerInfo based on randomness check
-            let sync_from_cert = self.has_randomness_on_path_from_ordered_to_commit();
+            || has_missing_randomness 
+        {
+            // Determine sync start point: use the check result if available, otherwise use highest_commit_cert
+            let sync_from_cert = sync_from_cert_opt.unwrap_or_else(|| {
+                self.highest_commit_cert()
+            });
             
             // if the block doesnt exist after ordered root
             let highest_commit_cert = highest_commit_cert.into_quorum_cert(self.order_vote_enabled).unwrap();
