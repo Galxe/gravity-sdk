@@ -508,6 +508,15 @@ impl BlockStore {
         let (has_missing_randomness, sync_from_cert_opt) = 
             self.find_missing_randomness_block_on_path(ledger_info);
         
+        info!(
+            "find_missing_randomness_block_on_path result: has_missing_randomness={}, sync_from_cert_round={:?}, ordered_root_round={}, commit_root_round={}, ledger_info_round={}",
+            has_missing_randomness,
+            sync_from_cert_opt.as_ref().map(|cert| cert.ledger_info().commit_info().round()),
+            self.ordered_root().round(),
+            self.commit_root().round(),
+            ledger_info.commit_info().round()
+        );
+        
         // if the block exists between commit root and ordered root
         if self.commit_root().round() < ledger_info.commit_info().round()
             && self.block_exists(ledger_info.commit_info().id())
