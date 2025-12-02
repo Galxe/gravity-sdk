@@ -1,4 +1,8 @@
+use alloy_primitives::{address, Address};
 use std::fmt::{Debug, Formatter};
+
+pub const VALIDATOR_MANAGER_ADDRESS: Address =
+    address!("0x0000000000000000000000000000000000002013");
 
 // Define contract interface using alloy_sol_macro
 alloy_sol_macro::sol! {

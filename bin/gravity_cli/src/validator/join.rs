@@ -7,22 +7,22 @@ use alloy_sol_types::{SolCall, SolEvent, SolType, SolValue};
 use clap::Parser;
 use std::str::FromStr;
 
-use crate::command::Executable;
-use crate::validator::contract::{
-    Commission, ValidatorInfo, ValidatorManager, ValidatorRegistrationParams, ValidatorSet,
-    ValidatorSetData, ValidatorStatus,
+use crate::{
+    command::Executable,
+    validator::{
+        contract::{
+            Commission, ValidatorInfo, ValidatorManager, ValidatorRegistrationParams, ValidatorSet,
+            ValidatorSetData, ValidatorStatus, VALIDATOR_MANAGER_ADDRESS,
+        },
+        util::{format_ether, parse_ether},
+    },
 };
-use crate::validator::util::{format_ether, parse_ether};
 
 #[derive(Debug, Parser)]
 pub struct JoinCommand {
     /// RPC URL for gravity node
     #[clap(long)]
     pub rpc_url: String,
-
-    /// ValidatorManager contract address (40 bytes hex string with 0x prefix)
-    #[clap(long)]
-    pub contract_address: String,
 
     /// Private key for signing transactions (hex string with or without 0x prefix)
     #[clap(long)]
@@ -87,8 +87,7 @@ impl JoinCommand {
         let wallet_address = signer.address();
         println!("   Wallet address: {:?}", wallet_address);
 
-        let contract_address = Address::from_str(&self.contract_address)?;
-        println!("   Contract address: {:?}", contract_address);
+        println!("   Contract address: {:?}", VALIDATOR_MANAGER_ADDRESS);
 
         // Create provider
         let provider = ProviderBuilder::new().wallet(signer).connect_http(self.rpc_url.parse()?);
@@ -145,7 +144,7 @@ impl JoinCommand {
         let result = provider
             .call(TransactionRequest {
                 from: Some(wallet_address),
-                to: Some(TxKind::Call(contract_address)),
+                to: Some(TxKind::Call(VALIDATOR_MANAGER_ADDRESS)),
                 input: TransactionInput::new(input),
                 ..Default::default()
             })
@@ -165,7 +164,7 @@ impl JoinCommand {
         let result = provider
             .call(TransactionRequest {
                 from: Some(wallet_address),
-                to: Some(TxKind::Call(contract_address)),
+                to: Some(TxKind::Call(VALIDATOR_MANAGER_ADDRESS)),
                 input: TransactionInput::new(input),
                 ..Default::default()
             })
@@ -182,7 +181,7 @@ impl JoinCommand {
         let result = provider
             .call(TransactionRequest {
                 from: Some(wallet_address),
-                to: Some(TxKind::Call(contract_address)),
+                to: Some(TxKind::Call(VALIDATOR_MANAGER_ADDRESS)),
                 input: TransactionInput::new(input),
                 ..Default::default()
             })
@@ -199,7 +198,7 @@ impl JoinCommand {
             let tx_hash = provider
                 .send_transaction(TransactionRequest {
                     from: Some(wallet_address),
-                    to: Some(TxKind::Call(contract_address)),
+                    to: Some(TxKind::Call(VALIDATOR_MANAGER_ADDRESS)),
                     input: TransactionInput::new(input),
                     value: Some(stake_wei),
                     gas: Some(self.gas_limit),
@@ -254,7 +253,7 @@ impl JoinCommand {
         let result = provider
             .call(TransactionRequest {
                 from: Some(wallet_address),
-                to: Some(TxKind::Call(contract_address)),
+                to: Some(TxKind::Call(VALIDATOR_MANAGER_ADDRESS)),
                 input: TransactionInput::new(input),
                 ..Default::default()
             })
@@ -293,7 +292,7 @@ impl JoinCommand {
         let tx_hash = provider
             .send_transaction(TransactionRequest {
                 from: Some(wallet_address),
-                to: Some(TxKind::Call(contract_address)),
+                to: Some(TxKind::Call(VALIDATOR_MANAGER_ADDRESS)),
                 input: TransactionInput::new(input),
                 ..Default::default()
             })
@@ -342,7 +341,7 @@ impl JoinCommand {
         let result = provider
             .call(TransactionRequest {
                 from: Some(wallet_address),
-                to: Some(TxKind::Call(contract_address)),
+                to: Some(TxKind::Call(VALIDATOR_MANAGER_ADDRESS)),
                 input: TransactionInput::new(input),
                 ..Default::default()
             })
