@@ -509,11 +509,11 @@ impl BlockStore {
             self.find_missing_randomness_block_on_path(ledger_info);
         
         info!(
-            "find_missing_randomness_block_on_path result: has_missing_randomness={}, sync_from_cert_round={:?}, ordered_root_round={}, commit_root_round={}, ledger_info_round={}",
+            "find_missing_randomness_block_on_path result: has_missing_randomness={}, sync_from_cert_round={:?}, highest_ordered_round={}, highest_commit_round={}, ledger_info_round={}",
             has_missing_randomness,
             sync_from_cert_opt.as_ref().map(|cert| cert.ledger_info().commit_info().round()),
-            self.ordered_root().round(),
-            self.commit_root().round(),
+            self.highest_ordered_cert().commit_info().round(),
+            self.highest_commit_cert().commit_info().round(),
             ledger_info.commit_info().round()
         );
         
