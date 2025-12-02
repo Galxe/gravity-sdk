@@ -1906,7 +1906,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         // FIXME(nekomoto): If the node is current epoch validator, we don't need to advance the block sync.
         let mut block_sync_interval = tokio::time::interval(Duration::from_millis(
             std::env::var("GRAVITY_ADVANCE_BLOCK_SYNC_INTERVAL_MS")
-                .map_or(1000, |s| s.parse::<u64>().unwrap()),
+                .map_or(200, |s| s.parse::<u64>().unwrap()),
         ));
         loop {
             tokio::select! {
