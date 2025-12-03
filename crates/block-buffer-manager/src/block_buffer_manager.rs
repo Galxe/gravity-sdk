@@ -109,6 +109,58 @@ impl BlockState {
             BlockState::Committed { id, .. } => *id,
         }
     }
+
+    /// Returns epoch only for Ordered state.
+    /// Computed and Committed states have already been processed and should not be replaced.
+    pub fn get_epoch(&self) -> Option<u64> {
+        match self {
+            BlockState::Ordered { block, .. } => Some(block.block_meta.epoch),
+            BlockState::Computed { .. } | BlockState::Committed { .. } => None,
+        }
+    }
+
+    /// Check if this block should be replaced by a new block with given epoch and block_id.
+    /// Returns true if should replace, false if should skip the new block.
+    pub fn should_replace_with(&self, new_epoch: u64, new_block_id: BlockId, block_num: u64) -> bool {
+        let existing_block_id = self.get_block_id();
+
+        match self.get_epoch() {
+            Some(existing_epoch) => {
+                if new_epoch > existing_epoch {
+                    info!(
+                        "block num {} replacing existing block with older epoch {} -> {}",
+                        block_num, existing_epoch, new_epoch
+                    );
+                    true
+                } else if new_epoch == existing_epoch {
+                    assert_eq!(
+                        new_block_id, existing_block_id,
+                        "block num {} already exists with same epoch {} but different block_id: new {:?} vs existing {:?}",
+                        block_num, new_epoch, new_block_id, existing_block_id
+                    );
+                    warn!(
+                        "block {:?} num {} already exists with same epoch {} and block_id",
+                        new_block_id, block_num, new_epoch
+                    );
+                    false
+                } else {
+                    warn!(
+                        "block {:?} num {} ignored: new epoch {} < existing epoch {}",
+                        new_block_id, block_num, new_epoch, existing_epoch
+                    );
+                    false
+                }
+            }
+            None => {
+                // Existing block is in Computed or Committed state, should not be replaced
+                warn!(
+                    "block {:?} num {} already exists in non-Ordered state, cannot replace",
+                    new_block_id, block_num
+                );
+                false
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -331,24 +383,20 @@ impl BlockBufferManager {
             panic!("Buffer is not ready");
         }
         info!(
-            "set_ordered_blocks {:?} num {:?}",
-            block.block_meta.block_id, block.block_meta.block_number
+            "set_ordered_blocks {:?} num {:?} parent_id {:?}",
+            block.block_meta.block_id, block.block_meta.block_number, parent_id
         );
         let mut block_state_machine = self.block_state_machine.lock().await;
-        // TODO(gravity_alex):if it's new epoch, the new epoch is larger, it should also be able to set
-        if block_state_machine.blocks.contains_key(&block.block_meta.block_number) {
-            // if block.block_meta.epoch > block_state_machine.blocks.get(&block.block_meta.block_number).unwrap().get_block_id().epoch {
-            //     warn!(
-            //         "set_ordered_blocks block {:?} block num {} already exists",
-            //         block.block_meta.block_id, block.block_meta.block_number
-            //     );
-            //     return Ok(());
-            // }
-            warn!(
-                "set_ordered_blocks block {:?} block num {} already exists",
-                block.block_meta.block_id, block.block_meta.block_number
-            );
-            return Ok(());
+        
+        // Handle same block number with different epoch
+        if let Some(existing_state) = block_state_machine.blocks.get(&block.block_meta.block_number) {
+            if !existing_state.should_replace_with(
+                block.block_meta.epoch,
+                block.block_meta.block_id,
+                block.block_meta.block_number,
+            ) {
+                return Ok(());
+            }
         }
         let block_num = block.block_meta.block_number;
         let actual_parent = block_state_machine.blocks.get(&(block.block_meta.block_number - 1));
