@@ -11,13 +11,12 @@ use crate::{
     consensusdb::schema::{
         epoch_by_block_number::EpochByBlockNumberSchema, ledger_info::LedgerInfoSchema,
     },
-    epoch_manager::LivenessStorageData,
     logging::{LogEvent, LogSchema},
     monitor,
     network::{IncomingBlockRetrievalRequest, NetworkSender},
     network_interface::ConsensusMsg,
     payload_manager::TPayloadManager,
-    persistent_liveness_storage::{PersistentLivenessStorage, RecoveryData},
+    persistent_liveness_storage::PersistentLivenessStorage,
 };
 use anyhow::{anyhow, bail};
 use aptos_consensus_types::{
@@ -351,7 +350,7 @@ impl BlockStore {
         let highest_commit_cert = self.highest_commit_cert();
         let payload_manager = self.payload_manager.clone();
         let storage = self.storage.clone();
-        let (blocks, mut quorum_certs, mut ledger_infos) = retriever
+        let (mut blocks, mut quorum_certs, mut ledger_infos) = retriever
             .retrieve_block_by_epoch(
                 epoch,
                 highest_commit_cert.commit_info().id(),
@@ -371,7 +370,7 @@ impl BlockStore {
             .filter(|(block, _)| block.block_number().is_some())
             .map(|(block, _)| (block.epoch(), block.block_number().unwrap(), block.id()))
             .collect::<Vec<(u64, u64, HashValue)>>();
-        storage.save_tree(blocks.iter().map(|(block, _)| block.clone()).collect(), quorum_certs, block_numbers)?;
+        storage.save_tree(blocks.iter().map(|(block, _)| block.clone()).collect(), quorum_certs.clone(), block_numbers)?;
         if !ledger_infos.is_empty() {
             ledger_infos.reverse();
             let mut ledger_info_batch = SchemaBatch::new();
@@ -388,13 +387,14 @@ impl BlockStore {
                     .iter()
                     .filter(|(_, randomness)| randomness.is_some())
                     .map(|(block, randomness)| (block.block_number().unwrap(), randomness.as_ref().unwrap().clone())).collect())?;
-        let (root, blocks, quorum_certs) =
-            match storage.start(false, ledger_infos.last().unwrap().ledger_info().epoch()).await {
-                LivenessStorageData::FullRecoveryData(recovery_data) => recovery_data,
-                _ => panic!("Failed to construct recovery data after fast forward sync"),
-            }
-            .take();
-        self.rebuild(root, blocks, quorum_certs).await;
+        
+        // Reverse blocks and quorum_certs to get them in oldest-first order for insertion
+        blocks.reverse();
+        quorum_certs.reverse();
+        
+        // Use append_blocks_for_sync instead of rebuild
+        self.append_blocks_for_sync(blocks, quorum_certs).await;
+        
         storage.consensus_db().ledger_db.metadata_db().set_latest_ledger_info(ledger_infos.last().unwrap().clone());
 
         if !ledger_infos.is_empty() && ledger_infos.last().unwrap().ledger_info().ends_epoch() {
@@ -503,11 +503,25 @@ impl BlockStore {
         retriever: &mut BlockRetriever,
     ) -> anyhow::Result<()> {
         let ledger_info = highest_commit_cert.ledger_info();
+        
+        // Check if there are blocks missing randomness on the path
+        let (has_missing_randomness, sync_from_cert_opt) = 
+            self.find_missing_randomness_block_on_path(ledger_info);
+        
+        info!(
+            "find_missing_randomness_block_on_path result: has_missing_randomness={}, sync_from_cert_round={:?}, highest_ordered_round={}, highest_commit_round={}, ledger_info_round={}",
+            has_missing_randomness,
+            sync_from_cert_opt.as_ref().map(|cert| cert.ledger_info().commit_info().round()),
+            self.highest_ordered_cert().commit_info().round(),
+            self.highest_commit_cert().commit_info().round(),
+            ledger_info.commit_info().round()
+        );
+        
         // if the block exists between commit root and ordered root
         if self.commit_root().round() < ledger_info.commit_info().round()
             && self.block_exists(ledger_info.commit_info().id())
             && self.ordered_root().round() >= ledger_info.commit_info().round()
-            && (!self.enable_randomness || self.ordered_root().epoch() == 1 || ledger_info.commit_info().round() == 0 || self.ordered_root().randomness().is_some())
+            && !has_missing_randomness
         {
             info!("sync_to_highest_commit_cert: block exists between commit root and ordered root {:?}, {:?}", self.commit_root().round(), ledger_info.commit_info().round());
             let proof = ledger_info.clone();
@@ -516,9 +530,12 @@ impl BlockStore {
             return Ok(());
         } else if self.ordered_root().round() < ledger_info.commit_info().round() 
             && !self.block_exists(ledger_info.commit_info().id())
-            || (self.enable_randomness && self.ordered_root().epoch() != 1 && ledger_info.commit_info().round() != 0 && self.ordered_root().randomness().is_none()) {
-            // Get the appropriate WrappedLedgerInfo based on randomness check
-            let sync_from_cert = self.has_randomness_on_path_from_ordered_to_commit();
+            || has_missing_randomness 
+        {
+            // Determine sync start point: use the check result if available, otherwise use highest_commit_cert
+            let sync_from_cert = sync_from_cert_opt.unwrap_or_else(|| {
+                self.highest_commit_cert()
+            });
             
             // if the block doesnt exist after ordered root
             let highest_commit_cert = highest_commit_cert.into_quorum_cert(self.order_vote_enabled).unwrap();

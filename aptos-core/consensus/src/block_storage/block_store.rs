@@ -266,6 +266,79 @@ impl BlockStore {
         self.highest_commit_cert()
     }
 
+    /// Check if there are blocks without randomness on the path from highest_ordered_cert to highest_commit_cert
+    /// 
+    /// Returns:
+    /// - (false, None): Fast return conditions are met, no sync needed
+    /// - (true, Some(cert)): Found the closest block to highest_commit_cert without randomness
+    /// - (false, Some(cert)): All blocks on path have randomness, use highest_commit_cert
+    /// 
+    /// Fast return conditions:
+    /// - randomness is not enabled
+    /// - in epoch 1
+    /// - ledger_info round is 0
+    pub fn find_missing_randomness_block_on_path(
+        &self, 
+        ledger_info: &LedgerInfoWithSignatures
+    ) -> (bool, Option<Arc<WrappedLedgerInfo>>) {
+        // Fast return: these conditions mean no special handling is needed
+        if !self.enable_randomness 
+            || self.ordered_root().epoch() == 1 
+            || ledger_info.commit_info().round() == 0 {
+            return (false, None);
+        }
+        
+        // Start from highest_ordered_cert
+        let highest_ordered_cert = self.highest_ordered_cert();
+        let highest_ordered_block_id = highest_ordered_cert.commit_info().id();
+        
+        // Get the starting block
+        let Some(mut cursor) = self.get_block(highest_ordered_block_id) else {
+            // If we can't find the highest ordered block, return highest_commit_cert
+            warn!(
+                "Cannot find highest ordered block {} (round {}), returning highest_commit_cert",
+                highest_ordered_block_id,
+                highest_ordered_cert.commit_info().round()
+            );
+            return (false, Some(self.highest_commit_cert()));
+        };
+        
+        // Use highest_commit_cert instead of commit_root as the traversal endpoint
+        let highest_commit_cert = self.highest_commit_cert();
+        let commit_round = highest_commit_cert.commit_info().round();
+        let mut closest_block_without_randomness: Option<Arc<PipelinedBlock>> = None;
+        
+        // Traverse the path from highest_ordered_cert to highest_commit_cert
+        loop {
+            if cursor.round() <= commit_round {
+                break;
+            }
+            
+            // Record blocks without randomness (keep the one closest to highest_commit_cert)
+            if cursor.randomness().is_none() {
+                closest_block_without_randomness = Some(cursor.clone());
+            }
+            
+            match self.get_block(cursor.parent_id()) {
+                Some(parent) => {
+                    cursor = parent;
+                }
+                None => break,
+            }
+        }
+        
+        // If found a block without randomness
+        if let Some(block) = closest_block_without_randomness {
+            let cert = self.get_quorum_cert_for_block(block.id())
+                .map(|qc| Arc::new(qc.into_wrapped_ledger_info()))
+                .unwrap_or_else(|| self.highest_commit_cert());
+            return (true, Some(cert));
+        }
+        
+        // No block without randomness found, return highest_commit_cert
+        (false, Some(self.highest_commit_cert()))
+    }
+
     async fn build(
         root: RootInfo,
         blocks: Vec<Block>,
