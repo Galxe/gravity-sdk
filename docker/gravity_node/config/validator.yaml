@@ -13,11 +13,11 @@ consensus:
       from_file:
         waypoint:
           from_file: /gravity_node/config/waypoint.txt
-        identity_blob_path: /gravity_node/config/identity.yaml
+        identity_blob_path: /gravity_node/config/validator-identity.yaml
   enable_pipeline: true
-  max_sending_block_txns_after_filtering: 15000
-  max_sending_block_txns: 15000
-  max_receiving_block_txns: 15000
+  max_sending_block_txns_after_filtering: 5000
+  max_sending_block_txns: 5000
+  max_receiving_block_txns: 5000
   max_sending_block_bytes: 31457280 
   max_receiving_block_bytes: 31457280 
   quorum_store:
@@ -36,20 +36,24 @@ consensus:
 
 validator_network:
   network_id: validator
-  listen_address: "/ip4/127.0.0.1/tcp/2024"
+  listen_address: "/ip4/0.0.0.0/tcp/2024"
   discovery_method: 
-    file:
-      path: "/gravity_node/discovery"
-      interval_secs: 3600
+    onchain
   mutual_authentication: true
   identity:
     type: "from_file"
-    path: /gravity_node/config/identity.yaml
+    path: /gravity_node/config/validator-identity.yaml
+
+full_node_networks:
+  - network_id:
+      private: "vfn"
+    listen_address: "/ip4/0.0.0.0/tcp/2034"
+    identity:
+      type: "from_file"
+      path: /gravity_node/config/validator-identity.yaml
 
 storage:
   dir: "/gravity_node/data"
-
-node_config_path: "/gravity_node/config/nodes_config.json"
 
 log_file_path: "/gravity_node/consensus_log"
 
