@@ -1,3 +1,4 @@
+pub mod dkg;
 pub mod heap_profiler;
 mod set_failpoints;
 mod tx;
@@ -7,7 +8,7 @@ use gaptos::aptos_crypto::HashValue;
 use gaptos::aptos_logger::info;
 use axum::{
     body::Body,
-    extract::Path,
+    extract::{Path, State},
     http::Request,
     middleware::{self, Next},
     response::Response,
@@ -15,14 +16,17 @@ use axum::{
     Json, Router,
 };
 use axum_server::tls_rustls::RustlsConfig;
+use dkg::DkgState;
 use heap_profiler::control_profiler;
 use set_failpoints::{set_failpoint, FailpointConf};
 use tx::{get_tx_by_hash, submit_tx, TxRequest};
+use aptos_consensus::consensusdb::ConsensusDB;
 
-pub struct HttpsServerArgs {
+pub struct HttpsServer {
     pub address: String,
     pub cert_pem: Option<PathBuf>,
     pub key_pem: Option<PathBuf>,
+    pub consensus_db: Option<Arc<ConsensusDB>>,
 }
 
 async fn ensure_https(req: Request<Body>, next: Next) -> Response {
@@ -32,57 +36,100 @@ async fn ensure_https(req: Request<Body>, next: Next) -> Response {
     next.run(req).await
 }
 
-pub async fn https_server(args: HttpsServerArgs) {
-    rustls::crypto::ring::default_provider().install_default().unwrap();
-    let submit_tx_lambda = |Json(request): Json<TxRequest>| async move {
-        submit_tx(request).await
-    };
-
-    let get_tx_by_hash_lambda = |Path(request): Path<HashValue>| async move {
-        get_tx_by_hash(request).await
-    };
-
-    let set_fail_point_lambda =
-        |Json(request): Json<FailpointConf>| async move { set_failpoint(request).await };
-
-    let control_profiler_lambda = |Json(request): Json<heap_profiler::ControlProfileRequest>| async move {
-        control_profiler(request).await
-    };
-
-    let https_app = Router::new()
-        .route("/tx/submit_tx", post(submit_tx_lambda))
-        .route("/tx/get_tx_by_hash/:hash_value", get(get_tx_by_hash_lambda))
-        .layer(middleware::from_fn(ensure_https));
-    let http_app = Router::new()
-        .route("/set_failpoint", post(set_fail_point_lambda))
-        .route("/mem_prof", post(control_profiler_lambda));
-    let app = Router::new().merge(https_app).merge(http_app);
-    let addr: SocketAddr = args.address.parse().unwrap();
-    match (args.cert_pem.clone(), args.key_pem.clone()) {
-        (Some(cert_path), Some(key_path)) => {
-            // configure certificate and private key used by https
-            let config =
-                RustlsConfig::from_pem_file(cert_path, key_path).await.unwrap_or_else(|e| {
-                    panic!(
-                        "error {:?}, cert {:?}, key {:?} doesn't work",
-                        e, args.cert_pem, args.key_pem
-                    )
-                });
-            info!("https server listen address {}", addr);
-            axum_server::bind_rustls(addr, config)
-                .serve(app.into_make_service())
-                .await
-                .unwrap_or_else(|e| {
-                    panic!("failed to bind rustls due to {:?}", e);
-                });
-        }
-        _ => {
-            info!("http server listen address {}", addr);
-            axum_server::bind(addr).serve(app.into_make_service()).await.unwrap_or_else(|e| {
-                panic!("failed to bind http due to {:?}", e);
-            });
+impl HttpsServer {
+    pub fn new(
+        address: String,
+        cert_pem: Option<PathBuf>,
+        key_pem: Option<PathBuf>,
+        consensus_db: Option<Arc<ConsensusDB>>,
+    ) -> Self {
+        Self {
+            address,
+            cert_pem,
+            key_pem,
+            consensus_db,
         }
     }
+
+    pub async fn serve(self) {
+        rustls::crypto::ring::default_provider().install_default().unwrap();
+        
+        let consensus_db = self.consensus_db.clone();
+        let dkg_state = DkgState::new(consensus_db);
+
+        let submit_tx_lambda = |Json(request): Json<TxRequest>| async move {
+            submit_tx(request).await
+        };
+
+        let get_tx_by_hash_lambda = |Path(request): Path<HashValue>| async move {
+            get_tx_by_hash(request).await
+        };
+
+        let set_fail_point_lambda =
+            |Json(request): Json<FailpointConf>| async move { set_failpoint(request).await };
+
+        let control_profiler_lambda = |Json(request): Json<heap_profiler::ControlProfileRequest>| async move {
+            control_profiler(request).await
+        };
+
+        let get_dkg_status_lambda = |State(state): State<Arc<DkgState>>| async move {
+            state.get_dkg_status().await
+        };
+        let get_randomness_lambda = |State(state): State<Arc<DkgState>>, Path(block_number): Path<u64>| async move {
+            state.get_randomness(block_number).await
+        };
+
+        let dkg_state_arc = Arc::new(dkg_state);
+        let https_routes = Router::new()
+            .route("/tx/submit_tx", post(submit_tx_lambda))
+            .route("/tx/get_tx_by_hash/:hash_value", get(get_tx_by_hash_lambda))
+            .layer(middleware::from_fn(ensure_https));
+        let http_routes = Router::new()
+            .route("/dkg/status", get(get_dkg_status_lambda))
+            .route("/dkg/randomness/:block_number", get(get_randomness_lambda))
+            .route("/set_failpoint", post(set_fail_point_lambda))
+            .route("/mem_prof", post(control_profiler_lambda));
+        let app = Router::new()
+            .merge(https_routes)
+            .merge(http_routes)
+            .with_state(dkg_state_arc);
+        let addr: SocketAddr = self.address.parse().unwrap();
+        match (self.cert_pem.clone(), self.key_pem.clone()) {
+            (Some(cert_path), Some(key_path)) => {
+                // configure certificate and private key used by https
+                let config =
+                    RustlsConfig::from_pem_file(cert_path, key_path).await.unwrap_or_else(|e| {
+                        panic!(
+                            "error {:?}, cert {:?}, key {:?} doesn't work",
+                            e, self.cert_pem, self.key_pem
+                        )
+                    });
+                info!("https server listen address {}", addr);
+                axum_server::bind_rustls(addr, config)
+                    .serve(app.into_make_service())
+                    .await
+                    .unwrap_or_else(|e| {
+                        panic!("failed to bind rustls due to {:?}", e);
+                    });
+            }
+            _ => {
+                info!("http server listen address {}", addr);
+                axum_server::bind(addr).serve(app.into_make_service()).await.unwrap_or_else(|e| {
+                    panic!("failed to bind http due to {:?}", e);
+                });
+            }
+        }
+    }
+}
+
+pub async fn https_server(
+    address: String,
+    cert_pem: Option<PathBuf>,
+    key_pem: Option<PathBuf>,
+    consensus_db: Option<Arc<ConsensusDB>>,
+) {
+    let server = HttpsServer::new(address, cert_pem, key_pem, consensus_db);
+    server.serve().await;
 }
 
 #[cfg(test)]
@@ -90,11 +137,11 @@ mod test {
     use fail::fail_point;
     use rcgen::generate_simple_self_signed;
     use reqwest::ClientBuilder;
-    use std::{collections::HashMap, fs, path::PathBuf, sync::Arc};
+    use std::{collections::HashMap, fs, path::PathBuf};
 
     use crate::https::tx::TxResponse;
 
-    use super::{https_server, HttpsServerArgs};
+    use super::https_server;
 
     fn test_fail_point() -> Option<()> {
         fail_point!("unit_test_fail_point", |_| {
@@ -116,12 +163,10 @@ mod test {
         fs::write(dir.clone() + "/src/https/test/cert.pem", cert_pem).unwrap();
         fs::write(dir.clone() + "/src/https/test/key.pem", key_pem).unwrap();
 
-        let args = HttpsServerArgs {
-            address: "127.0.0.1:5425".to_owned(),
-            cert_pem: Some(PathBuf::from(dir.clone() + "/src/https/test/cert.pem")),
-            key_pem: Some(PathBuf::from(dir.clone() + "/src/https/test/key.pem")),
-        };
-        let _handler = tokio::spawn(https_server(args));
+        let address = "127.0.0.1:5425".to_owned();
+        let cert_pem = Some(PathBuf::from(dir.clone() + "/src/https/test/cert.pem"));
+        let key_pem = Some(PathBuf::from(dir.clone() + "/src/https/test/key.pem"));
+        let _handler = tokio::spawn(https_server(address, cert_pem, key_pem, None));
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         // read a local binary pem encoded certificate
         let pem = std::fs::read(dir.clone() + "/src/https/test/cert.pem").unwrap();

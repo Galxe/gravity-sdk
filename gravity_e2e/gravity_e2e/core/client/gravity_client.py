@@ -20,7 +20,7 @@ LOG = logging.getLogger(__name__)
 
 
 class GravityClient:
-    """Gravity Node EVM API 客户端"""
+    """Gravity Node EVM API Client"""
     
     def __init__(self, rpc_url: str, node_id: str, timeout: float = 30.0):
         self.rpc_url = rpc_url
@@ -45,18 +45,18 @@ class GravityClient:
                           method: str, 
                           params: List[Any] = None,
                           timeout: Optional[float] = None) -> Any:
-        """发送 JSON-RPC 请求
+        """Send JSON-RPC request
         
         Args:
-            method: RPC 方法名
-            params: 参数列表
-            timeout: 超时时间（覆盖默认值）
+            method: RPC method name
+            params: Parameter list
+            timeout: Timeout (overrides default)
             
         Returns:
-            RPC 响应结果
+            RPC response result
             
         Raises:
-            APIError: 请求失败或返回错误
+            APIError: Request failed or returned error
         """
         if not self.session:
             raise RuntimeError("Client not initialized. Use async with statement.")
@@ -101,17 +101,17 @@ class GravityClient:
             raise APIError(f"Invalid JSON response: {e}")
     
     async def get_chain_id(self) -> int:
-        """获取链 ID"""
+        """Get chain ID"""
         chain_id = await self.send_request("eth_chainId")
         return hex_to_int(chain_id)
     
     async def get_block_number(self) -> int:
-        """获取最新区块号"""
+        """Get latest block number"""
         block = await self.send_request("eth_blockNumber")
         return hex_to_int(block)
     
     async def get_balance(self, address: str, block: str = "latest") -> int:
-        """获取账户余额（wei）"""
+        """Get account balance (wei)"""
         address = to_checksum_address(address)
         balance = await self.send_request("eth_getBalance", [address, block])
         return hex_to_int(balance)
@@ -176,7 +176,7 @@ class GravityClient:
                    data: str = "0x", 
                    from_: str = None,
                    block: str = "latest") -> str:
-        """执行合约调用（只读）"""
+        """Execute contract call (read-only)"""
         to = to_checksum_address(to)
         params = {
             "to": to,
@@ -193,7 +193,7 @@ class GravityClient:
     async def estimate_gas(self, 
                           tx: Dict,
                           block: str = "latest") -> int:
-        """估算交易 Gas"""
+        """Estimate transaction gas"""
         gas = await self.send_request("eth_estimateGas", [tx, block])
         return hex_to_int(gas)
     
@@ -202,7 +202,7 @@ class GravityClient:
                       to_block: Union[int, str] = "latest",
                       address: Union[str, List[str]] = None,
                       topics: List[List[str]] = None) -> List[Dict]:
-        """获取日志"""
+        """Get logs"""
         params = {
             "fromBlock": hex(from_block) if isinstance(from_block, int) else from_block,
             "toBlock": hex(to_block) if isinstance(to_block, int) else to_block,
@@ -218,6 +218,6 @@ class GravityClient:
         return await self.send_request("eth_getLogs", [params])
     
     async def get_gas_price(self) -> int:
-        """获取当前 gas 价格"""
+        """Get current gas price"""
         gas_price = await self.send_request("eth_gasPrice")
         return hex_to_int(gas_price)

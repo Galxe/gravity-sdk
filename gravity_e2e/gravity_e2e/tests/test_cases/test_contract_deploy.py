@@ -10,17 +10,24 @@ from eth_utils import to_checksum_address
 
 LOG = logging.getLogger(__name__)
 
-# Load SimpleStorage contract data
+# Load SimpleStorage contract data (lazy load to avoid import-time errors)
 CONTRACTS_DIR = Path(__file__).parent.parent.parent.parent / "contracts_data"
 SIMPLE_STORAGE_PATH = CONTRACTS_DIR / "SimpleStorage.json"
+SIMPLE_STORAGE_BYTECODE = None
+SIMPLE_STORAGE_ABI = None
 
-if SIMPLE_STORAGE_PATH.exists():
-    with open(SIMPLE_STORAGE_PATH, 'r') as f:
-        contract_data = json.load(f)
-        SIMPLE_STORAGE_BYTECODE = contract_data["bytecode"]
-        SIMPLE_STORAGE_ABI = contract_data["abi"]
-else:
-    raise RuntimeError(f"SimpleStorage contract not compiled. Please run forge build first.")
+def load_simple_storage_contract():
+    """Load SimpleStorage contract data"""
+    global SIMPLE_STORAGE_BYTECODE, SIMPLE_STORAGE_ABI
+    if SIMPLE_STORAGE_BYTECODE is None:
+        if SIMPLE_STORAGE_PATH.exists():
+            with open(SIMPLE_STORAGE_PATH, 'r') as f:
+                contract_data = json.load(f)
+                SIMPLE_STORAGE_BYTECODE = contract_data["bytecode"]
+                SIMPLE_STORAGE_ABI = contract_data["abi"]
+        else:
+            raise RuntimeError(f"SimpleStorage contract not compiled. Please run forge build first.")
+    return SIMPLE_STORAGE_BYTECODE, SIMPLE_STORAGE_ABI
 
 
 def encode_function_call(func_name: str, args: list = None) -> str:
@@ -67,6 +74,9 @@ def encode_function_call(func_name: str, args: list = None) -> str:
 async def test_simple_storage_deploy(run_helper: RunHelper, test_result: TestResult):
     """Test SimpleStorage contract deployment and interaction"""
     LOG.info("Starting SimpleStorage contract deployment test")
+    
+    # Load contract data
+    load_simple_storage_contract()
     
     # 1. Create test account
     deployer = await run_helper.create_test_account("deployer", fund_wei=5 * 10**18)  # 5 ETH

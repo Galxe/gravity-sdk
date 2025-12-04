@@ -82,9 +82,9 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
         "chainId": hex(await run_helper.client.get_chain_id())
     }
     
-    # 签名部署交易
+    # Sign deployment transaction
     from eth_account import Account
-    # 确保私钥格式正确（不带 0x 前缀）
+    # Ensure private key format is correct (without 0x prefix)
     private_key = deployer["private_key"]
     if private_key.startswith("0x"):
         private_key = private_key[2:]
@@ -94,17 +94,17 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
         private_key
     )
     
-    # 发送部署交易
+    # Send deployment transaction
     deploy_tx_hash = await run_helper.client.send_raw_transaction(signed_deploy_tx.raw_transaction)
     LOG.info(f"ERC20 deployment transaction sent: {deploy_tx_hash}")
     
-    # 等待部署确认
+    # Wait for deployment confirmation
     deploy_receipt = await run_helper.client.wait_for_transaction_receipt(deploy_tx_hash, timeout=120)
     
     if deploy_receipt["status"] != "0x1":
         raise RuntimeError(f"ERC20 deployment failed: {deploy_receipt}")
     
-    # 获取合约地址
+    # Get contract address
     contract_address = deploy_receipt.get("contractAddress")
     if not contract_address:
         raise RuntimeError("No contract address in deployment receipt")
@@ -112,9 +112,9 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
     LOG.info(f"ERC20 contract deployed at: {contract_address}")
     LOG.info(f"Deployment gas used: {int(deploy_receipt.get('gasUsed', '0x0'), 16)}")
     
-    # 3. 测试 ERC20 功能
+    # 3. Test ERC20 functionality
     
-    # 获取函数选择器
+    # Get function selectors
     # name() -> 0x06fdde03
     # symbol() -> 0x95d89b41  
     # decimals() -> 0x313ce567
@@ -122,21 +122,21 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
     # balanceOf(address) -> 0x70a08231
     # transfer(address,uint256) -> 0xa9059cbb
     
-    # 测试 name()
+    # Test name()
     name_result = await run_helper.client.call(
         to=contract_address,
         data="0x06fdde03"
     )
     LOG.info(f"Token name result: {name_result}")
     
-    # 测试 symbol()
+    # Test symbol()
     symbol_result = await run_helper.client.call(
         to=contract_address,
         data="0x95d89b41"
     )
     LOG.info(f"Token symbol result: {symbol_result}")
     
-    # 测试 decimals()
+    # Test decimals()
     decimals_result = await run_helper.client.call(
         to=contract_address,
         data="0x313ce567"
@@ -144,7 +144,7 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
     decimals_int = int(decimals_result, 16)
     LOG.info(f"Token decimals: {decimals_int}")
     
-    # 测试 totalSupply()
+    # Test totalSupply()
     total_supply_result = await run_helper.client.call(
         to=contract_address,
         data="0x18160ddd"
@@ -153,7 +153,7 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
     total_supply_tokens = total_supply_int / 10**18
     LOG.info(f"Total supply: {total_supply_tokens:.2f} tokens")
     
-    # 测试 balanceOf(deployer)
+    # Test balanceOf(deployer)
     balance_of_deployer_data = "0x70a08231" + deployer["address"][2:].rjust(64, '0')
     deployer_balance_result = await run_helper.client.call(
         to=contract_address,
@@ -163,25 +163,25 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
     deployer_balance_tokens = deployer_balance_int / 10**18
     LOG.info(f"Deployer balance: {deployer_balance_tokens:.2f} tokens")
     
-    # 验证初始余额等于总供应量
+    # Verify initial balance equals total supply
     if deployer_balance_int != total_supply_int:
         raise RuntimeError(
             f"Initial balance mismatch: expected {total_supply_int}, got {deployer_balance_int}"
         )
     
-    # 4. 测试转账功能
+    # 4. Test transfer functionality
     transfer_amount = 100 * 10**18  # 100 tokens
     
-    # 构建 transfer 调用数据
+    # Build transfer call data
     # transfer(address to, uint256 amount)
     recipient_address_padded = recipient["address"][2:].rjust(64, '0')
     amount_padded = encode_uint256(transfer_amount)
     transfer_data = "0xa9059cbb" + recipient_address_padded + amount_padded
     
-    # 获取新的 nonce
+    # Get new nonce
     nonce = await run_helper.client.get_transaction_count(deployer["address"])
     
-    # 构建转账交易
+    # Build transfer transaction
     transfer_tx_data = {
         "to": contract_address,
         "data": transfer_data,
@@ -191,8 +191,8 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
         "chainId": hex(await run_helper.client.get_chain_id())
     }
     
-    # 签名转账交易
-    # 确保私钥格式正确（不带 0x 前缀）
+    # Sign transfer transaction
+    # Ensure private key format is correct (without 0x prefix)
     private_key = deployer["private_key"]
     if private_key.startswith("0x"):
         private_key = private_key[2:]
@@ -202,11 +202,11 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
         private_key
     )
     
-    # 发送转账交易
+    # Send transfer transaction
     transfer_tx_hash = await run_helper.client.send_raw_transaction(signed_transfer_tx.raw_transaction)
     LOG.info(f"Transfer transaction sent: {transfer_tx_hash}")
     
-    # 等待转账确认
+    # Wait for transfer confirmation
     transfer_receipt = await run_helper.client.wait_for_transaction_receipt(transfer_tx_hash, timeout=60)
     
     if transfer_receipt["status"] != "0x1":
@@ -214,7 +214,7 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
     
     LOG.info("Transfer successful!")
     
-    # 5. 验证转账后的余额
+    # 5. Verify balances after transfer
     recipient_balance_of_data = "0x70a08231" + recipient["address"][2:].rjust(64, '0')
     recipient_balance_result = await run_helper.client.call(
         to=contract_address,
@@ -224,13 +224,13 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
     recipient_balance_tokens = recipient_balance_int / 10**18
     LOG.info(f"Recipient balance after transfer: {recipient_balance_tokens:.2f} tokens")
     
-    # 检查收款人余额
+    # Check recipient balance
     if recipient_balance_int != transfer_amount:
         raise RuntimeError(
             f"Recipient balance mismatch: expected {transfer_amount}, got {recipient_balance_int}"
         )
     
-    # 检查部署者余额
+    # Check deployer balance
     deployer_balance_result = await run_helper.client.call(
         to=contract_address,
         data=balance_of_deployer_data
@@ -245,10 +245,10 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
             f"Deployer balance mismatch: expected {expected_deployer_balance}, got {new_deployer_balance_int}"
         )
     
-    # 4. 测试转账功能（暂时跳过，只验证部署成功）
+    # 4. Test transfer functionality (temporarily skipped, only verify deployment success)
     transfer_amount = 100 * 10**18  # 100 tokens
     
-    # 记录测试结果
+    # Record test results
     test_result.mark_success(
         contract_address=contract_address,
         deployment_tx_hash=deploy_tx_hash,

@@ -6,7 +6,7 @@ set -e # Exit on error
 export RETH_RPC_URL="http://127.0.0.1:8545"
 
 # Set deployer private key
-export PRIVATE_KEY="0x047a5466f6f9e08c8bcc56213d6530d517c1ef126eefbbdf85ffe8d893ed0e9f"
+export PRIVATE_KEY="0x...PASTE_YOUR_PRIVATE_KEY..."
 # --- End Configuration
 
 echo "--- Deploying Contract to Reth Node ---"
