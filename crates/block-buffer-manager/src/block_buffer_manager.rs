@@ -573,6 +573,7 @@ impl BlockBufferManager {
         &self,
         events: &Vec<GravityEvent>,
         block_num: u64,
+        block_state_machine: &mut BlockStateMachine,
     ) -> Result<Option<EpochState>, anyhow::Error> {
         if events.is_empty() {
             return Ok(None);
@@ -605,17 +606,15 @@ impl BlockBufferManager {
         );
         *self.latest_epoch_change_block_number.lock().await = block_num;
 
-        {
-            // Update current_epoch to the new epoch (from NewEpoch event)
-            // This ensures idempotency - even if called multiple times, epoch is correct
-            let mut block_state_machine = self.block_state_machine.lock().await;
-            let old_epoch = block_state_machine.current_epoch;
-            block_state_machine.current_epoch = *new_epoch;
-            info!(
-                "calculate_new_epoch_state: updating current_epoch from {} to {} at block {}",
-                old_epoch, new_epoch, block_num
-            );
-        }
+        // Update current_epoch to the new epoch (from NewEpoch event)
+        // This ensures idempotency - even if called multiple times, epoch is correct
+        let old_epoch = block_state_machine.current_epoch;
+        block_state_machine.current_epoch = *new_epoch;
+        info!(
+            "calculate_new_epoch_state: updating current_epoch from {} to {} at block {}",
+            old_epoch, new_epoch, block_num
+        );
+        
         Ok(Some(EpochState::new(*new_epoch, (&validator_set).into())))
     }
 
@@ -638,7 +637,7 @@ impl BlockBufferManager {
             assert_eq!(block.block_meta.block_id, block_id);
             let txn_len = block.txns.len();
             let events_len = events.len();
-            let new_epoch_state = self.calculate_new_epoch_state(&events, block_num).await?;
+            let new_epoch_state = self.calculate_new_epoch_state(&events, block_num, &mut block_state_machine).await?;
             let compute_result = StateComputeResult::new(
                 ComputeRes { data: block_hash, txn_num: txn_len as u64, txn_status, events },
                 new_epoch_state,
