@@ -473,15 +473,6 @@ impl BlockBufferManager {
 
             // If no blocks available or epoch mismatched, wait and retry
             if result.is_empty() || epoch_mismatch {
-                let reason = if epoch_mismatch {
-                    "epoch mismatch"
-                } else {
-                    "no blocks available"
-                };
-                info!(
-                    "get_ordered_blocks waiting for blocks: reason={}, start_num={}, expected_epoch={}",
-                    reason, start_num, expected_epoch
-                );
                 // Release lock before waiting
                 drop(block_state_machine);
                 // Wait for changes and try again
