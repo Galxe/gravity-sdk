@@ -604,6 +604,18 @@ impl BlockBufferManager {
             block_num, new_epoch, validator_set
         );
         *self.latest_epoch_change_block_number.lock().await = block_num;
+
+        {
+            // Update current_epoch to the new epoch (from NewEpoch event)
+            // This ensures idempotency - even if called multiple times, epoch is correct
+            let mut block_state_machine = self.block_state_machine.lock().await;
+            let old_epoch = block_state_machine.current_epoch;
+            block_state_machine.current_epoch = *new_epoch;
+            info!(
+                "calculate_new_epoch_state: updating current_epoch from {} to {} at block {}",
+                old_epoch, new_epoch, block_num
+            );
+        }
         Ok(Some(EpochState::new(*new_epoch, (&validator_set).into())))
     }
 
@@ -838,11 +850,13 @@ impl BlockBufferManager {
     pub async fn release_inflight_blocks(&self) {
         let mut block_state_machine = self.block_state_machine.lock().await;
         let latest_epoch_change_block_number = *self.latest_epoch_change_block_number.lock().await;
-        let old_epoch = block_state_machine.current_epoch;
-        block_state_machine.current_epoch += 1;
+        let current_epoch = block_state_machine.current_epoch;
+        
+        // Note: current_epoch has already been updated in calculate_new_epoch_state()
+        // when the NewEpoch event was processed, so we don't need to update it here.
         info!(
-            "release_inflight_blocks latest_epoch_change_block_number: {:?}, epoch: {} -> {}",
-            latest_epoch_change_block_number, old_epoch, block_state_machine.current_epoch
+            "release_inflight_blocks latest_epoch_change_block_number: {:?}, current_epoch: {}",
+            latest_epoch_change_block_number, current_epoch
         );
         block_state_machine
             .blocks
