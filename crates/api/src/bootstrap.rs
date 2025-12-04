@@ -321,5 +321,5 @@ pub async fn init_block_buffer_manager(consensus_db: &Arc<ConsensusDB>, latest_b
     if start_block_number == 0 {
         block_number_to_block_id.insert(0u64, BlockId::from_bytes(GENESIS_BLOCK_ID.as_slice()));
     }
-    get_block_buffer_manager().init(latest_block_number, block_number_to_block_id).await;
+    get_block_buffer_manager().init(latest_block_number, block_number_to_block_id, max_epoch).await;
 }

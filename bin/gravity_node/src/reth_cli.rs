@@ -31,7 +31,7 @@ use greth::{
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use std::{
     collections::{HashMap, VecDeque},
-    sync::Arc,
+    sync::{Arc, atomic::{AtomicU64, Ordering}},
     time::{Instant, SystemTime},
 };
 
@@ -78,6 +78,7 @@ pub struct RethCli<EthApi: RethEthCall> {
         DashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>,
     >,
     txn_batch_size: usize,
+    current_epoch: AtomicU64,
 }
 
 pub fn convert_account(acc: Address) -> ExternalAccountAddress {
@@ -107,6 +108,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             pool: args.pool,
             txn_cache,
             txn_batch_size: 2000,
+            current_epoch: AtomicU64::new(0),
         }
     }
 
@@ -223,16 +225,25 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
 
     pub async fn start_execution(&self) -> Result<(), String> {
         let mut start_ordered_block = self.provider.last_block_number().unwrap() + 1;
+        // Initialize current_epoch from block buffer manager
+        let buffer_epoch = get_block_buffer_manager().get_current_epoch().await;
+        self.current_epoch.store(buffer_epoch, Ordering::SeqCst);
+        info!("start_execution initialized with epoch {}", buffer_epoch);
+        
         loop {
+            let current_epoch = self.current_epoch.load(Ordering::SeqCst);
             // max executing block number
             let exec_blocks =
-                get_block_buffer_manager().get_ordered_blocks(start_ordered_block, None).await;
+                get_block_buffer_manager().get_ordered_blocks(start_ordered_block, None, current_epoch).await;
             if let Err(e) = exec_blocks {
                 let from = start_ordered_block;
                 if e.to_string().contains("Buffer is in epoch change") {
-                    get_block_buffer_manager().consume_epoch_change();
+                    // consume_epoch_change returns the new epoch
+                    let new_epoch = get_block_buffer_manager().consume_epoch_change().await;
                     start_ordered_block = self.provider.last_block_number().unwrap() + 1;
-                    warn!("Buffer is in epoch change, reset start_ordered_block from {} to {}", from, start_ordered_block);
+                    let old_epoch = self.current_epoch.swap(new_epoch, Ordering::SeqCst);
+                    warn!("Buffer is in epoch change, reset start_ordered_block from {} to {}, epoch from {} to {}", 
+                        from, start_ordered_block, old_epoch, new_epoch);
                 } else {
                     warn!("failed to get ordered blocks: {}", e);
                 }
@@ -243,11 +254,12 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                 info!("no ordered blocks");
                 continue;
             }
+            
             start_ordered_block = exec_blocks.last().unwrap().0.block_meta.block_number + 1;
             for (block, parent_id) in exec_blocks {
                 info!(
-                    "send reth ordered block num {:?} id {:?} with parent id {}",
-                    block.block_meta.block_number, block.block_meta.block_id, parent_id
+                    "send reth ordered block num {:?} id {:?} epoch {:?} with parent id {}",
+                    block.block_meta.block_number, block.block_meta.block_id, block.block_meta.epoch, parent_id
                 );
                 let parent_id = B256::from_slice(parent_id.as_bytes());
                 self.push_ordered_block(block, parent_id).await?;

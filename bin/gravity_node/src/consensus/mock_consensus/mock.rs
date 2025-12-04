@@ -54,7 +54,8 @@ impl MockConsensus {
         ]);
         let mut block_number_to_block_id = HashMap::new();
         block_number_to_block_id.insert(0u64, genesis_block_id.clone());
-        get_block_buffer_manager().init(0, block_number_to_block_id).await;
+        // Initialize with epoch 1 to match the mock consensus epoch
+        get_block_buffer_manager().init(0, block_number_to_block_id, 1).await;
 
         Self {
             pool: Arc::new(tokio::sync::Mutex::new(Mempool::new(pool))),
