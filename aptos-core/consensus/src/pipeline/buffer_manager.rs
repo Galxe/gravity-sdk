@@ -411,11 +411,6 @@ impl BufferManager {
                     }))
                     .await
                     .expect("Failed to send persist request");
-                if commit_proof.ledger_info().ends_epoch() {
-                    // the epoch ends, reset to avoid executing more blocks, execute after
-                    // this persisting request will result in BlockNotFound
-                    self.reset().await;
-                }
                 info!("Advance head to {:?}", self.buffer.head_cursor());
                 self.previous_commit_time = Instant::now();
                 return;
