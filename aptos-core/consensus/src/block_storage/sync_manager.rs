@@ -476,6 +476,7 @@ impl BlockStore {
         info!("[FastForwardSync] Fetched {} blocks. Requested num_blocks {}. Initial block hash {:?}, target block hash {:?}",
             blocks.len(), num_blocks, highest_quorum_cert.certified_block().id(), highest_commit_cert.commit_info().id()
         );
+        info!("lightman1205 blocks: {:?}", blocks);
         for (i, (block, _)) in blocks.iter().enumerate() {
             assert_eq!(block.id(), quorum_certs[i].certified_block().id());
         }
