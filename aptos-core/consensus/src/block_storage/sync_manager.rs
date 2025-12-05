@@ -760,6 +760,7 @@ impl BlockStore {
             // 1. We've reached the target block ID (if specified)
             // 2. We've reached the last block (round == 0)
             if request.req.match_target_id(id) || is_last_block {
+                info!("lightman1205 blocks: {:?}", blocks);
                 status = BlockRetrievalStatus::SucceededWithTarget;
                 break;
             }
