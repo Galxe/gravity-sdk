@@ -400,10 +400,10 @@ impl BlockStore {
         // If the block_id of highest_commit_cert is not equal to the block_id of ledger_info,
         // it indicates that the block has not been recovered and is being executed in buffer manager. 
         // The epoch change msg is sent in the buffer manager
-        if self.highest_commit_cert().ledger_info().commit_info().id()
-            == ledger_infos.last().unwrap().ledger_info().commit_info().id()
-            && !ledger_infos.is_empty()
+        if !ledger_infos.is_empty()
             && ledger_infos.last().unwrap().ledger_info().ends_epoch()
+            && self.highest_commit_cert().ledger_info().commit_info().id()
+                == ledger_infos.last().unwrap().ledger_info().commit_info().id()
         {
             retriever
                 .network
