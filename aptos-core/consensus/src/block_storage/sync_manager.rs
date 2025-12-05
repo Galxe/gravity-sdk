@@ -691,6 +691,7 @@ impl BlockStore {
                         break;
                     }
                 };
+                info!("lightman1205 qc: {:?}", qc);
                 // Check if parent is the genesis block (round == 0 indicates genesis or epoch boundary)
                 parent_is_genesis_block = qc.commit_info().id() != HashValue::zero() && qc.commit_info().round() == 0;
                 quorum_certs.push((*qc).clone());
@@ -728,6 +729,7 @@ impl BlockStore {
                         break;
                     }
                 };
+                info!("lightman1205 qc: {:?}", qc);
                 parent_is_genesis_block = qc.commit_info().id() != HashValue::zero() && qc.commit_info().round() == 0;
                 quorum_certs.push(qc);
                 
@@ -760,7 +762,6 @@ impl BlockStore {
             // 1. We've reached the target block ID (if specified)
             // 2. We've reached the last block (round == 0)
             if request.req.match_target_id(id) || parent_is_genesis_block {
-                info!("lightman1205 blocks: {:?}", blocks);
                 status = BlockRetrievalStatus::SucceededWithTarget;
                 break;
             }
