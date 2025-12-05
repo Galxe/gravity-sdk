@@ -296,10 +296,12 @@ impl BlockBufferManager {
         self.buffer_state.load(Ordering::SeqCst) == BufferState::EpochChange as u8
     }
 
-    pub async fn consume_epoch_change(&self) -> u64 {
+    pub async fn consume_epoch_change(&self) -> (u64, u64) {
         self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
         let block_state_machine = self.block_state_machine.lock().await;
-        block_state_machine.current_epoch
+        let current_epoch = block_state_machine.current_epoch;
+        let latest_epoch_change_block_number = *self.latest_epoch_change_block_number.lock().await;
+        (current_epoch, latest_epoch_change_block_number)
     }
 
     pub async fn pop_txns(
