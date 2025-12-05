@@ -396,8 +396,15 @@ impl BlockStore {
         self.append_blocks_for_sync(blocks, quorum_certs).await;
         
         storage.consensus_db().ledger_db.metadata_db().set_latest_ledger_info(ledger_infos.last().unwrap().clone());
-
-        if !ledger_infos.is_empty() && ledger_infos.last().unwrap().ledger_info().ends_epoch() {
+        
+        // If the block_id of highest_commit_cert is not equal to the block_id of ledger_info,
+        // it indicates that the block has not been recovered and is being executed in buffer manager. 
+        // The epoch change msg is sent in the buffer manager
+        if !ledger_infos.is_empty()
+            && ledger_infos.last().unwrap().ledger_info().ends_epoch()
+            && self.highest_commit_cert().ledger_info().commit_info().id()
+                == ledger_infos.last().unwrap().ledger_info().commit_info().id()
+        {
             retriever
                 .network
                 .send_epoch_change(EpochChangeProof::new(
@@ -670,7 +677,7 @@ impl BlockStore {
         // Continue retrieving blocks until we reach the requested number or encounter a termination condition
         while (blocks.len() as u64) < request.req.num_blocks() {
             let mut parent_id = HashValue::zero();
-            let mut is_last_block = false;
+            let mut parent_is_genesis_block = false;
             
             // Try to get the block from memory first (faster)
             if let Some(executed_block) = self.get_block(id) {
@@ -683,8 +690,8 @@ impl BlockStore {
                         break;
                     }
                 };
-                // Check if this is the last block (round == 0 indicates genesis or epoch boundary)
-                is_last_block = qc.commit_info().round() == 0;
+                // Check if parent is the genesis block (round == 0 indicates genesis or epoch boundary)
+                parent_is_genesis_block = qc.vote_data().parent().id() != HashValue::zero() && qc.vote_data().parent().round() == 0;
                 quorum_certs.push((*qc).clone());
                 
                 // Get randomness if available (for randomness-enabled blocks)
@@ -720,7 +727,7 @@ impl BlockStore {
                         break;
                     }
                 };
-                is_last_block = qc.commit_info().round() == 0;
+                parent_is_genesis_block = qc.vote_data().parent().id() != HashValue::zero() && qc.vote_data().parent().round() == 0;
                 quorum_certs.push(qc);
                 
                 // Get randomness if available
@@ -751,7 +758,7 @@ impl BlockStore {
             // Check termination conditions:
             // 1. We've reached the target block ID (if specified)
             // 2. We've reached the last block (round == 0)
-            if request.req.match_target_id(id) || is_last_block {
+            if request.req.match_target_id(id) || parent_is_genesis_block {
                 status = BlockRetrievalStatus::SucceededWithTarget;
                 break;
             }

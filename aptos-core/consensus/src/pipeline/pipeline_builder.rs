@@ -484,8 +484,9 @@ impl PipelineBuilder {
         let block_id = block.id();
         let block_number = block.block_number();
         let timestamp = block.timestamp_usecs();
+        let epoch = block.epoch();
         let hash = get_block_buffer_manager()
-            .get_executed_res(BlockId::from_bytes(block_id.as_slice()), block_number.unwrap())
+            .get_executed_res(BlockId::from_bytes(block_id.as_slice()), block_number.unwrap(), epoch)
             .await
             .unwrap_or_else(|e| panic!("Failed to get executed result {}", e));
         let hash = hash.execution_output;

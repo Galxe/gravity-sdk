@@ -314,12 +314,9 @@ pub async fn init_block_buffer_manager(consensus_db: &Arc<ConsensusDB>, latest_b
     }
     info!("init_block_buffer_manager get_max_epoch {}", max_epoch);
 
-    let mut block_number_to_block_id: HashMap<_, _> = block_number_to_block_id
-        .into_iter()
-        .map(|(block_number, (_, block_id))| (block_number, block_id))
-        .collect();
+    // Keep epoch information in block_number_to_block_id
     if start_block_number == 0 {
-        block_number_to_block_id.insert(0u64, BlockId::from_bytes(GENESIS_BLOCK_ID.as_slice()));
+        block_number_to_block_id.insert(0u64, (0, BlockId::from_bytes(GENESIS_BLOCK_ID.as_slice())));
     }
-    get_block_buffer_manager().init(latest_block_number, block_number_to_block_id).await;
+    get_block_buffer_manager().init(latest_block_number, block_number_to_block_id, max_epoch).await;
 }

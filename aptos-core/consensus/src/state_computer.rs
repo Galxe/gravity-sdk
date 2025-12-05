@@ -446,7 +446,7 @@ impl StateComputer for ExecutionProxy {
                 .await.unwrap_or_else(|e| panic!("Failed to push ordered blocks {}", e));
             let u_ts = meta_data.usecs;
             let compute_result = get_block_buffer_manager()
-                .get_executed_res(block_id, meta_data.block_number)
+                .get_executed_res(block_id, meta_data.block_number, meta_data.epoch)
                 .await?;
             txn_metrics::TxnLifeTime::get_txn_life_time().record_executed(block_id_hashvalue);
             update_counters_for_compute_res(&compute_result.execution_output);
