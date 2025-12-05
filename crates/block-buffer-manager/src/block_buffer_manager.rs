@@ -83,6 +83,18 @@ pub struct BlockHashRef {
     pub persist_notifier: Option<Sender<()>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct BlockKey {
+    pub epoch: u64,
+    pub block_number: u64,
+}
+
+impl BlockKey {
+    pub fn new(epoch: u64, block_number: u64) -> Self {
+        Self { epoch, block_number }
+    }
+}
+
 #[derive(Debug)]
 pub enum BlockState {
     Ordered {
@@ -131,8 +143,8 @@ pub struct BlockProfile {
 
 pub struct BlockStateMachine {
     sender: tokio::sync::broadcast::Sender<()>,
-    blocks: HashMap<(u64, u64), BlockState>, // key: (epoch, block_number)
-    profile: HashMap<(u64, u64), BlockProfile>, // key: (epoch, block_number)
+    blocks: HashMap<BlockKey, BlockState>,
+    profile: HashMap<BlockKey, BlockProfile>,
     latest_commit_block_number: u64,
     latest_finalized_block_number: u64,
     block_number_to_block_id: HashMap<u64, BlockId>,
@@ -206,8 +218,8 @@ impl BlockBufferManager {
             block_state_machine.latest_finalized_block_number,
             latest_persist_block_num,
         );
-        block_state_machine.blocks.retain(|(_epoch, block_num), _| *block_num >= latest_persist_block_num);
-        block_state_machine.profile.retain(|(_epoch, block_num), _| *block_num >= latest_persist_block_num);
+        block_state_machine.blocks.retain(|key, _| key.block_number >= latest_persist_block_num);
+        block_state_machine.profile.retain(|key, _| key.block_number >= latest_persist_block_num);
         let _ = block_state_machine.sender.send(());
         Ok(())
     }
@@ -239,7 +251,7 @@ impl BlockBufferManager {
                 .unwrap()
                 .clone();
             block_state_machine.blocks.insert(
-                (commit_block_epoch, latest_commit_block_number),
+                BlockKey::new(commit_block_epoch, latest_commit_block_number),
                 BlockState::Committed {
                     hash: None,
                     compute_result: StateComputeResult::new(
@@ -371,7 +383,7 @@ impl BlockBufferManager {
         
         // At this point: block.block_meta.epoch == current_epoch
         // Check if block (epoch, number) already exists
-        let block_key = (block.block_meta.epoch, block.block_meta.block_number);
+        let block_key = BlockKey::new(block.block_meta.epoch, block.block_meta.block_number);
         if let Some(existing_state) = block_state_machine.blocks.get(&block_key) {
             let existing_block_id = existing_state.get_block_id();
             if existing_block_id == block.block_meta.block_id {
@@ -389,9 +401,9 @@ impl BlockBufferManager {
         }
         let block_num = block.block_meta.block_number;
         // Try to find parent in current epoch first, then try previous epoch
-        let parent_key_current = (block.block_meta.epoch, block.block_meta.block_number - 1);
+        let parent_key_current = BlockKey::new(block.block_meta.epoch, block.block_meta.block_number - 1);
         let parent_key_prev_epoch = if block.block_meta.epoch > 0 {
-            Some((block.block_meta.epoch - 1, block.block_meta.block_number - 1))
+            Some(BlockKey::new(block.block_meta.epoch - 1, block.block_meta.block_number - 1))
         } else {
             None
         };
@@ -471,7 +483,7 @@ impl BlockBufferManager {
             let mut result = Vec::new();
             let mut current_num = start_num;
             loop {
-                let block_key = (expected_epoch, current_num);
+                let block_key = BlockKey::new(expected_epoch, current_num);
                 match block_state_machine.blocks.get(&block_key) {
                     Some(BlockState::Ordered { block, parent_id }) => {
                         result.push((block.clone(), *parent_id));
@@ -536,7 +548,7 @@ impl BlockBufferManager {
             }
 
             let mut block_state_machine = self.block_state_machine.lock().await;
-            let block_key = (epoch, block_num);
+            let block_key = BlockKey::new(epoch, block_num);
             if let Some(block) = block_state_machine.blocks.get(&block_key) {
                 match block {
                     BlockState::Computed { id, compute_result } => {
@@ -653,7 +665,7 @@ impl BlockBufferManager {
         }
 
         let mut block_state_machine = self.block_state_machine.lock().await;
-        let block_key = (epoch, block_num);
+        let block_key = BlockKey::new(epoch, block_num);
         if let Some(BlockState::Ordered { block, parent_id: _ }) =
             block_state_machine.blocks.get(&block_key)
         {
@@ -707,7 +719,7 @@ impl BlockBufferManager {
                 "push_commit_blocks id {:?} num {:?}",
                 block_id_num_hash.block_id, block_id_num_hash.num
             );
-            let block_key = (epoch, block_id_num_hash.num);
+            let block_key = BlockKey::new(epoch, block_id_num_hash.num);
             if let Some(state) = block_state_machine.blocks.get_mut(&block_key) {
                 match state {
                     BlockState::Computed { id, compute_result } => {
@@ -791,7 +803,7 @@ impl BlockBufferManager {
             let mut result = Vec::new();
             let mut current_num = start_num;
             loop {
-                let block_key = (epoch, current_num);
+                let block_key = BlockKey::new(epoch, current_num);
                 match block_state_machine.blocks.get_mut(&block_key) {
                     Some(BlockState::Committed { hash, compute_result: _, id, persist_notifier }) => {
                         result.push(BlockHashRef {
@@ -886,11 +898,11 @@ impl BlockBufferManager {
         );
         block_state_machine
             .blocks
-            .retain(|(_epoch, block_num), _| *block_num <= latest_epoch_change_block_number);
+            .retain(|key, _| key.block_number <= latest_epoch_change_block_number);
         self.buffer_state.store(BufferState::EpochChange as u8, Ordering::SeqCst);
         block_state_machine
             .profile
-            .retain(|(_epoch, block_num), _| *block_num <= latest_epoch_change_block_number);
+            .retain(|key, _| key.block_number <= latest_epoch_change_block_number);
         let _ = block_state_machine.sender.send(());
     }
 }
