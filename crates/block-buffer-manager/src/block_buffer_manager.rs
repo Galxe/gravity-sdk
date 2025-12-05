@@ -15,7 +15,7 @@ use std::{
 use tokio::{
     sync::{
         mpsc::{self, Receiver, Sender},
-        Mutex,
+        Mutex, Notify,
     },
     time::Instant,
 };
@@ -175,6 +175,7 @@ pub struct BlockBufferManager {
     buffer_state: AtomicU8,
     config: BlockBufferManagerConfig,
     latest_epoch_change_block_number: Mutex<u64>,
+    ready_notifier: Arc<Notify>,
 }
 
 impl BlockBufferManager {
@@ -194,6 +195,7 @@ impl BlockBufferManager {
             buffer_state: AtomicU8::new(BufferState::Uninitialized as u8),
             config,
             latest_epoch_change_block_number: Mutex::new(0),
+            ready_notifier: Arc::new(Notify::new()),
         };
         let block_buffer_manager = Arc::new(block_buffer_manager);
         let clone = block_buffer_manager.clone();
@@ -271,6 +273,8 @@ impl BlockBufferManager {
             *self.latest_epoch_change_block_number.lock().await = latest_commit_block_number;
         }
         self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
+        // Notify all waiters that buffer is ready
+        self.ready_notifier.notify_waiters();
     }
 
     // Helper method to wait for changes
@@ -308,12 +312,14 @@ impl BlockBufferManager {
         self.buffer_state.load(Ordering::SeqCst) == BufferState::EpochChange as u8
     }
 
-    pub async fn consume_epoch_change(&self) -> (u64, u64) {
+    pub async fn consume_epoch_change(&self) -> u64 {
         self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
         let block_state_machine = self.block_state_machine.lock().await;
-        let current_epoch = block_state_machine.current_epoch;
-        let latest_epoch_change_block_number = *self.latest_epoch_change_block_number.lock().await;
-        (current_epoch, latest_epoch_change_block_number)
+        block_state_machine.current_epoch
+    }
+
+    pub async fn latest_epoch_change_block_number(&self) -> u64 {
+        *self.latest_epoch_change_block_number.lock().await
     }
 
     pub async fn pop_txns(
@@ -877,9 +883,9 @@ impl BlockBufferManager {
     }
 
     pub async fn get_current_epoch(&self) -> u64 {
-        // Wait for buffer to be ready
-        while !self.is_ready() {
-            tokio::time::sleep(Duration::from_millis(1)).await;
+        // Wait for buffer to be ready using Notify
+        if !self.is_ready() {
+            self.ready_notifier.notified().await;
         }
         let block_state_machine = self.block_state_machine.lock().await;
         block_state_machine.current_epoch

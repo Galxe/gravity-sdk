@@ -239,7 +239,8 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                 let from = start_ordered_block;
                 if e.to_string().contains("Buffer is in epoch change") {
                     // consume_epoch_change returns the new epoch
-                    let (new_epoch, latest_epoch_change_block_number) = get_block_buffer_manager().consume_epoch_change().await;
+                    let new_epoch = get_block_buffer_manager().consume_epoch_change().await;
+                    let latest_epoch_change_block_number = get_block_buffer_manager().latest_epoch_change_block_number().await;
                     start_ordered_block = latest_epoch_change_block_number + 1;
                     let old_epoch = self.current_epoch.swap(new_epoch, Ordering::SeqCst);
                     warn!("Buffer is in epoch change, reset start_ordered_block from {} to {}, epoch from {} to {}", 
