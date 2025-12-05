@@ -693,7 +693,7 @@ impl BlockStore {
                 };
                 info!("lightman1205 qc: {:?}", qc);
                 // Check if parent is the genesis block (round == 0 indicates genesis or epoch boundary)
-                parent_is_genesis_block = qc.commit_info().id() != HashValue::zero() && qc.commit_info().round() == 0;
+                parent_is_genesis_block = qc.vote_data().parent().id() != HashValue::zero() && qc.vote_data().parent().round() == 0;
                 quorum_certs.push((*qc).clone());
                 
                 // Get randomness if available (for randomness-enabled blocks)
@@ -730,7 +730,7 @@ impl BlockStore {
                     }
                 };
                 info!("lightman1205 qc: {:?}", qc);
-                parent_is_genesis_block = qc.commit_info().id() != HashValue::zero() && qc.commit_info().round() == 0;
+                parent_is_genesis_block = qc.vote_data().parent().id() != HashValue::zero() && qc.vote_data().parent().round() == 0;
                 quorum_certs.push(qc);
                 
                 // Get randomness if available
