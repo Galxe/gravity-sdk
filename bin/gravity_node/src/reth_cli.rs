@@ -288,8 +288,9 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                     .collect(),
             ));
             let events = execution_result.gravity_events;
+            let epoch = self.current_epoch.load(Ordering::SeqCst);
             get_block_buffer_manager()
-                .set_compute_res(block_id, block_hash_data, block_number, txn_status, events)
+                .set_compute_res(block_id, block_hash_data, block_number, epoch, txn_status, events)
                 .await
                 .expect("failed to pop ordered block ids");
         }
@@ -298,8 +299,9 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
     pub async fn start_commit(&self) -> Result<(), String> {
         let mut start_commit_num = self.provider.last_block_number().unwrap() + 1;
         loop {
+            let epoch = self.current_epoch.load(Ordering::SeqCst);
             let block_ids =
-                get_block_buffer_manager().get_committed_blocks(start_commit_num, None).await;
+                get_block_buffer_manager().get_committed_blocks(start_commit_num, None, epoch).await;
             if let Err(e) = block_ids {
                 warn!("failed to get committed blocks: {}", e);
                 continue;

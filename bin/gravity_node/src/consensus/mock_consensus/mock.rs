@@ -53,7 +53,8 @@ impl MockConsensus {
             135, 49, 116, 247, 25, 67, 147, 163, 137, 28, 58, 62, 73,
         ]);
         let mut block_number_to_block_id = HashMap::new();
-        block_number_to_block_id.insert(0u64, genesis_block_id.clone());
+        // Genesis block is at epoch 0
+        block_number_to_block_id.insert(0u64, (0, genesis_block_id.clone()));
         // Initialize with epoch 1 to match the mock consensus epoch
         get_block_buffer_manager().init(0, block_number_to_block_id, 1).await;
 
@@ -199,9 +200,10 @@ impl MockConsensus {
         while let Some(block_meta) = block_meta_rx.recv().await {
             let block_id = block_meta.block_id;
             let block_number = block_meta.block_number;
+            let epoch = block_meta.epoch;
 
             let res = loop {
-                match get_block_buffer_manager().get_executed_res(block_id, block_number).await {
+                match get_block_buffer_manager().get_executed_res(block_id, block_number, epoch).await {
                     Ok(r) => {
                         break r;
                     },
@@ -228,7 +230,7 @@ impl MockConsensus {
                     num: block_number,
                     hash: Some(res.execution_output.data),
                     persist_notifier: None,
-                }])
+                }], epoch)
                 .await
                 .unwrap();
             self.process_epoch_change(&res.execution_output.events, block_number);

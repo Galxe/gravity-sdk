@@ -91,6 +91,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             assert!(block_ids.last().unwrap().as_slice() == block_id.as_slice());
             let len = block_ids.len();
             let _ = self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
+            let epoch = ledger_info_with_sigs.ledger_info().epoch();
             self.runtime.block_on(async move {
                 let mut persist_notifiers = get_block_buffer_manager()
                     .set_commit_blocks(
@@ -108,6 +109,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                                 }
                             })
                             .collect(),
+                        epoch,
                     )
                     .await
                     .unwrap_or_else(|e| panic!("Failed to push commit blocks {}", e));
@@ -141,6 +143,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         let len = block_ids.len();
         assert!(!block_ids.is_empty(), "commit_ledger block_ids is empty");
         let _ = self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
+        let epoch = ledger_info_with_sigs.ledger_info().epoch();
         self.runtime.block_on(async move {
             let mut persist_notifiers = get_block_buffer_manager()
                 .set_commit_blocks(
@@ -158,6 +161,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                             }
                         })
                         .collect(),
+                    epoch,
                 )
                 .await
                 .unwrap();

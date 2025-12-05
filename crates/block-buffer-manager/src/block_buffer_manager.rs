@@ -131,8 +131,8 @@ pub struct BlockProfile {
 
 pub struct BlockStateMachine {
     sender: tokio::sync::broadcast::Sender<()>,
-    blocks: HashMap<u64, BlockState>,
-    profile: HashMap<u64, BlockProfile>,
+    blocks: HashMap<(u64, u64), BlockState>, // key: (epoch, block_number)
+    profile: HashMap<(u64, u64), BlockProfile>, // key: (epoch, block_number)
     latest_commit_block_number: u64,
     latest_finalized_block_number: u64,
     block_number_to_block_id: HashMap<u64, BlockId>,
@@ -206,8 +206,8 @@ impl BlockBufferManager {
             block_state_machine.latest_finalized_block_number,
             latest_persist_block_num,
         );
-        block_state_machine.blocks.retain(|num, _| *num >= latest_persist_block_num);
-        block_state_machine.profile.retain(|num, _| *num >= latest_persist_block_num);
+        block_state_machine.blocks.retain(|(_epoch, block_num), _| *block_num >= latest_persist_block_num);
+        block_state_machine.profile.retain(|(_epoch, block_num), _| *block_num >= latest_persist_block_num);
         let _ = block_state_machine.sender.send(());
         Ok(())
     }
@@ -215,28 +215,31 @@ impl BlockBufferManager {
     pub async fn init(
         &self,
         latest_commit_block_number: u64,
-        block_number_to_block_id: HashMap<u64, BlockId>,
+        block_number_to_block_id_with_epoch: HashMap<u64, (u64, BlockId)>,
         initial_epoch: u64,
     ) {
         info!(
-            "init block_buffer_manager with latest_commit_block_number: {:?} block_number_to_block_id: {:?} initial_epoch: {}",
-            latest_commit_block_number, block_number_to_block_id, initial_epoch
+            "init block_buffer_manager with latest_commit_block_number: {:?} block_number_to_block_id count: {} initial_epoch: {}",
+            latest_commit_block_number, block_number_to_block_id_with_epoch.len(), initial_epoch
         );
         let mut block_state_machine = self.block_state_machine.lock().await;
         // When init, the latest_finalized_block_number is the same as latest_commit_block_number
         block_state_machine.latest_commit_block_number = latest_commit_block_number;
         block_state_machine.latest_finalized_block_number = latest_commit_block_number;
-        block_state_machine.block_number_to_block_id = block_number_to_block_id;
+        // Extract block_id only for block_number_to_block_id mapping
+        block_state_machine.block_number_to_block_id = block_number_to_block_id_with_epoch
+            .iter()
+            .map(|(block_num, (_epoch, block_id))| (*block_num, *block_id))
+            .collect();
         // Initialize current_epoch from the parameter
         block_state_machine.current_epoch = initial_epoch;
-        if !block_state_machine.block_number_to_block_id.is_empty() {
-            let id = block_state_machine
-                .block_number_to_block_id
+        if !block_number_to_block_id_with_epoch.is_empty() {
+            let (commit_block_epoch, commit_block_id) = block_number_to_block_id_with_epoch
                 .get(&latest_commit_block_number)
                 .unwrap()
                 .clone();
             block_state_machine.blocks.insert(
-                latest_commit_block_number,
+                (commit_block_epoch, latest_commit_block_number),
                 BlockState::Committed {
                     hash: None,
                     compute_result: StateComputeResult::new(
@@ -249,7 +252,7 @@ impl BlockBufferManager {
                         None,
                         None,
                     ),
-                    id,
+                    id: commit_block_id,
                     persist_notifier: None,
                 },
             );
@@ -365,8 +368,9 @@ impl BlockBufferManager {
         }
         
         // At this point: block.block_meta.epoch == current_epoch
-        // Check if block number already exists
-        if let Some(existing_state) = block_state_machine.blocks.get(&block.block_meta.block_number) {
+        // Check if block (epoch, number) already exists
+        let block_key = (block.block_meta.epoch, block.block_meta.block_number);
+        if let Some(existing_state) = block_state_machine.blocks.get(&block_key) {
             let existing_block_id = existing_state.get_block_id();
             if existing_block_id == block.block_meta.block_id {
                 warn!(
@@ -382,7 +386,15 @@ impl BlockBufferManager {
             return Ok(());
         }
         let block_num = block.block_meta.block_number;
-        let actual_parent = block_state_machine.blocks.get(&(block.block_meta.block_number - 1));
+        // Try to find parent in current epoch first, then try previous epoch
+        let parent_key_current = (block.block_meta.epoch, block.block_meta.block_number - 1);
+        let parent_key_prev_epoch = if block.block_meta.epoch > 0 {
+            Some((block.block_meta.epoch - 1, block.block_meta.block_number - 1))
+        } else {
+            None
+        };
+        let actual_parent = block_state_machine.blocks.get(&parent_key_current)
+            .or_else(|| parent_key_prev_epoch.and_then(|key| block_state_machine.blocks.get(&key)));
         let actual_parent_id = match (block_num, actual_parent) {
             (_, Some(state)) => state.get_block_id(),
             (block_number, None) => {
@@ -400,11 +412,11 @@ impl BlockBufferManager {
 
         block_state_machine
             .blocks
-            .insert(block_num, BlockState::Ordered { block: block.clone(), parent_id });
+            .insert(block_key, BlockState::Ordered { block: block.clone(), parent_id });
 
         // Record time for set_ordered_blocks
         let profile =
-            block_state_machine.profile.entry(block_num).or_insert_with(BlockProfile::default);
+            block_state_machine.profile.entry(block_key).or_insert_with(BlockProfile::default);
         profile.set_ordered_block_time = Some(SystemTime::now());
 
         let _ = block_state_machine.sender.send(());
@@ -425,6 +437,22 @@ impl BlockBufferManager {
             return Err(anyhow::anyhow!("Buffer is in epoch change"));
         }
 
+        // Check if expected_epoch matches current_epoch early
+        {
+            let block_state_machine = self.block_state_machine.lock().await;
+            let current_epoch = block_state_machine.current_epoch;
+            if expected_epoch != current_epoch {
+                warn!(
+                    "get_ordered_blocks: expected_epoch {} does not match current_epoch {}",
+                    expected_epoch, current_epoch
+                );
+                return Err(anyhow::anyhow!(
+                    "Epoch mismatch: expected {} but current is {}",
+                    expected_epoch, current_epoch
+                ));
+            }
+        }
+
         let start = Instant::now();
         info!("call get_ordered_blocks start_num: {:?} max_size: {:?} expected_epoch: {:?}", start_num, max_size, expected_epoch);
         loop {
@@ -440,29 +468,27 @@ impl BlockBufferManager {
             // get block num, block num + 1
             let mut result = Vec::new();
             let mut current_num = start_num;
-            let mut epoch_mismatch = false;
-            while let Some(block) = block_state_machine.blocks.get(&current_num) {
-                match block {
-                    BlockState::Ordered { block, parent_id } => {
-                        // Check epoch for the first block
-                        if result.is_empty() && block.block_meta.epoch != expected_epoch {
-                            warn!(
-                                "get_ordered_blocks: first block {} has epoch {} but expected epoch {}, will retry",
-                                block.block_meta.block_number, block.block_meta.epoch, expected_epoch
-                            );
-                            epoch_mismatch = true;
-                            break;
-                        }
+            loop {
+                let block_key = (expected_epoch, current_num);
+                match block_state_machine.blocks.get(&block_key) {
+                    Some(BlockState::Ordered { block, parent_id }) => {
                         result.push((block.clone(), *parent_id));
                         // Record time for get_ordered_blocks
                         let profile = block_state_machine
                             .profile
-                            .entry(current_num)
+                            .entry(block_key)
                             .or_insert_with(BlockProfile::default);
                         profile.get_ordered_blocks_time = Some(SystemTime::now());
                     }
-                    _ => {
-                        panic!("There is no Ordered Block but try to get ordered blocks for block {:?}", current_num);
+                    Some(state) => {
+                        panic!(
+                            "get_ordered_blocks: found block (epoch: {}, num: {}) in non-Ordered state: {:?}",
+                            expected_epoch, current_num, state
+                        );
+                    }
+                    None => {
+                        // No more blocks available
+                        break;
                     }
                 }
                 if result.len() >= max_size.unwrap_or(usize::MAX) {
@@ -471,8 +497,8 @@ impl BlockBufferManager {
                 current_num += 1;
             }
 
-            // If no blocks available or epoch mismatched, wait and retry
-            if result.is_empty() || epoch_mismatch {
+            // If no blocks available, wait and retry
+            if result.is_empty() {
                 // Release lock before waiting
                 drop(block_state_machine);
                 // Wait for changes and try again
@@ -490,6 +516,7 @@ impl BlockBufferManager {
         &self,
         block_id: BlockId,
         block_num: u64,
+        epoch: u64,
     ) -> Result<StateComputeResult, anyhow::Error> {
         if !self.is_ready() {
             panic!("Buffer is not ready");
@@ -507,7 +534,8 @@ impl BlockBufferManager {
             }
 
             let mut block_state_machine = self.block_state_machine.lock().await;
-            if let Some(block) = block_state_machine.blocks.get(&block_num) {
+            let block_key = (epoch, block_num);
+            if let Some(block) = block_state_machine.blocks.get(&block_key) {
                 match block {
                     BlockState::Computed { id, compute_result } => {
                         assert_eq!(id, &block_id);
@@ -516,7 +544,7 @@ impl BlockBufferManager {
                         let compute_res_clone = compute_result.clone();
                         let profile = block_state_machine
                             .profile
-                            .entry(block_num)
+                            .entry(block_key)
                             .or_insert_with(BlockProfile::default);
                         profile.get_executed_res_time = Some(SystemTime::now());
                         info!(
@@ -614,6 +642,7 @@ impl BlockBufferManager {
         block_id: BlockId,
         block_hash: [u8; 32],
         block_num: u64,
+        epoch: u64,
         txn_status: Arc<Option<Vec<TxnStatus>>>,
         events: Vec<GravityEvent>,
     ) -> Result<(), anyhow::Error> {
@@ -622,8 +651,9 @@ impl BlockBufferManager {
         }
 
         let mut block_state_machine = self.block_state_machine.lock().await;
+        let block_key = (epoch, block_num);
         if let Some(BlockState::Ordered { block, parent_id: _ }) =
-            block_state_machine.blocks.get(&block_num)
+            block_state_machine.blocks.get(&block_key)
         {
             assert_eq!(block.block_meta.block_id, block_id);
             let txn_len = block.txns.len();
@@ -636,11 +666,11 @@ impl BlockBufferManager {
             );
             block_state_machine
                 .blocks
-                .insert(block_num, BlockState::Computed { id: block_id, compute_result });
+                .insert(block_key, BlockState::Computed { id: block_id, compute_result });
 
             // Record time for set_compute_res
             let profile =
-                block_state_machine.profile.entry(block_num).or_insert_with(BlockProfile::default);
+                block_state_machine.profile.entry(block_key).or_insert_with(BlockProfile::default);
             profile.set_compute_res_time = Some(SystemTime::now());
             info!(
                 "set_compute_res id {:?} num {:?} hash {:?} and exec time {:?}ms for {:?} txns and {:?} events",
@@ -663,6 +693,7 @@ impl BlockBufferManager {
     pub async fn set_commit_blocks(
         &self,
         block_ids: Vec<BlockHashRef>,
+        epoch: u64,
     ) -> Result<Vec<Receiver<()>>, anyhow::Error> {
         if !self.is_ready() {
             panic!("Buffer is not ready");
@@ -674,7 +705,8 @@ impl BlockBufferManager {
                 "push_commit_blocks id {:?} num {:?}",
                 block_id_num_hash.block_id, block_id_num_hash.num
             );
-            if let Some(state) = block_state_machine.blocks.get_mut(&block_id_num_hash.num) {
+            let block_key = (epoch, block_id_num_hash.num);
+            if let Some(state) = block_state_machine.blocks.get_mut(&block_key) {
                 match state {
                     BlockState::Computed { id, compute_result } => {
                         if *id == block_id_num_hash.block_id {
@@ -698,7 +730,7 @@ impl BlockBufferManager {
                             // Record time for set_commit_blocks
                             let profile = block_state_machine
                                 .profile
-                                .entry(block_id_num_hash.num)
+                                .entry(block_key)
                                 .or_insert_with(BlockProfile::default);
                             profile.set_commit_blocks_time = Some(SystemTime::now());
                         } else {
@@ -735,6 +767,7 @@ impl BlockBufferManager {
         &self,
         start_num: u64,
         max_size: Option<usize>,
+        epoch: u64,
     ) -> Result<Vec<BlockHashRef>, anyhow::Error> {
         if !self.is_ready() {
             panic!("Buffer is not ready");
@@ -755,9 +788,10 @@ impl BlockBufferManager {
             let block_state_machine = &mut *block_state_machine_guard;
             let mut result = Vec::new();
             let mut current_num = start_num;
-            while let Some(block) = block_state_machine.blocks.get_mut(&current_num) {
-                match block {
-                    BlockState::Committed { hash, compute_result: _, id, persist_notifier } => {
+            loop {
+                let block_key = (epoch, current_num);
+                match block_state_machine.blocks.get_mut(&block_key) {
+                    Some(BlockState::Committed { hash, compute_result: _, id, persist_notifier }) => {
                         result.push(BlockHashRef {
                             block_id: *id,
                             num: current_num,
@@ -768,7 +802,7 @@ impl BlockBufferManager {
                         // Record time for get_committed_blocks
                         let profile = block_state_machine
                             .profile
-                            .entry(current_num)
+                            .entry(block_key)
                             .or_insert_with(BlockProfile::default);
                         profile.get_committed_blocks_time = Some(SystemTime::now());
                     }
@@ -850,11 +884,11 @@ impl BlockBufferManager {
         );
         block_state_machine
             .blocks
-            .retain(|block_num, _| *block_num <= latest_epoch_change_block_number);
+            .retain(|(_epoch, block_num), _| *block_num <= latest_epoch_change_block_number);
         self.buffer_state.store(BufferState::EpochChange as u8, Ordering::SeqCst);
         block_state_machine
             .profile
-            .retain(|block_num, _| *block_num <= latest_epoch_change_block_number);
+            .retain(|(_epoch, block_num), _| *block_num <= latest_epoch_change_block_number);
         let _ = block_state_machine.sender.send(());
     }
 }

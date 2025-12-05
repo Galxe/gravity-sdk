@@ -535,6 +535,7 @@ impl BlockStore {
                 let compute_res = get_block_buffer_manager().get_executed_res(
                     BlockId(*p_block.id()),
                     p_block.block().block_number().unwrap(),
+                    p_block.block().epoch(),
                 ).await.unwrap();
                 let compute_res = compute_res.execution_output;
                 if let Some(block_hash) = maybe_block_hash {
@@ -547,7 +548,7 @@ impl BlockStore {
                     persist_notifier: None,
                 };
                 let mut persist_notifiers =
-                    get_block_buffer_manager().set_commit_blocks(vec![commit_block]).await.unwrap();
+                    get_block_buffer_manager().set_commit_blocks(vec![commit_block], p_block.block().epoch()).await.unwrap();
                 for notifier in persist_notifiers.iter_mut() {
                     let _ = notifier.recv().await;
                 }
