@@ -476,7 +476,6 @@ impl BlockStore {
         info!("[FastForwardSync] Fetched {} blocks. Requested num_blocks {}. Initial block hash {:?}, target block hash {:?}",
             blocks.len(), num_blocks, highest_quorum_cert.certified_block().id(), highest_commit_cert.commit_info().id()
         );
-        info!("lightman1205 blocks: {:?}", blocks);
         for (i, (block, _)) in blocks.iter().enumerate() {
             assert_eq!(block.id(), quorum_certs[i].certified_block().id());
         }
@@ -691,7 +690,6 @@ impl BlockStore {
                         break;
                     }
                 };
-                info!("lightman1205 qc: {:?}", qc);
                 // Check if parent is the genesis block (round == 0 indicates genesis or epoch boundary)
                 parent_is_genesis_block = qc.vote_data().parent().id() != HashValue::zero() && qc.vote_data().parent().round() == 0;
                 quorum_certs.push((*qc).clone());
@@ -729,7 +727,6 @@ impl BlockStore {
                         break;
                     }
                 };
-                info!("lightman1205 qc: {:?}", qc);
                 parent_is_genesis_block = qc.vote_data().parent().id() != HashValue::zero() && qc.vote_data().parent().round() == 0;
                 quorum_certs.push(qc);
                 

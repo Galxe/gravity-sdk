@@ -358,7 +358,6 @@ impl ConsensusDB {
         let mut batch = SchemaBatch::new();
         
         for block in blocks {
-            info!("lightman1205 put_randomness blocknumber: {:?}, randomness: {:?}", block.0, block.1);
             batch.put::<schema::randomness::RandomnessSchema>(&block.0, &block.1)?;
         }
         

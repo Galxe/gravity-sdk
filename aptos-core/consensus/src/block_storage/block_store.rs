@@ -653,7 +653,7 @@ impl BlockStore {
         if let Some(block_number) = block.block_number() {
             if !pipelined_block.has_randomness() {
                 if let Ok(Some(randomness)) = self.storage.consensus_db().get_randomness(block_number) {
-                    info!("Set randomness from DB for block {}, epoch {}, round {}", block_number, block.epoch(), block.round());
+                    debug!("Set randomness from DB for block {}, epoch {}, round {}", block_number, block.epoch(), block.round());
                     SET_RANDOMNESS_FROM_DB_COUNTER.with_label_values(&[]).inc();
                     pipelined_block.set_randomness(Randomness::new(
                         RandMetadata { epoch: block.epoch(), round: block.round() },
