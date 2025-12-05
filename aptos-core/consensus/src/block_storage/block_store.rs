@@ -329,7 +329,7 @@ impl BlockStore {
         
         // If found a block without randomness
         if let Some(block) = closest_block_without_randomness {
-            let cert = self.get_quorum_cert_for_block(block.parent_id())
+            let cert = self.get_quorum_cert_for_block(block.id())
                 .map(|qc| Arc::new(qc.into_wrapped_ledger_info()))
                 .unwrap_or_else(|| self.highest_commit_cert());
             return (true, Some(cert));
