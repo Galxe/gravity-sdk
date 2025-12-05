@@ -396,8 +396,15 @@ impl BlockStore {
         self.append_blocks_for_sync(blocks, quorum_certs).await;
         
         storage.consensus_db().ledger_db.metadata_db().set_latest_ledger_info(ledger_infos.last().unwrap().clone());
-
-        if !ledger_infos.is_empty() && ledger_infos.last().unwrap().ledger_info().ends_epoch() {
+        
+        // If the block_id of highest_commit_cert is not equal to the block_id of ledger_info,
+        // it indicates that the block has not been recovered and is being executed in buffer manager. 
+        // The epoch change msg is sent in the buffer manager
+        if self.highest_commit_cert().ledger_info().commit_info().id()
+            == ledger_infos.last().unwrap().ledger_info().commit_info().id()
+            && !ledger_infos.is_empty()
+            && ledger_infos.last().unwrap().ledger_info().ends_epoch()
+        {
             retriever
                 .network
                 .send_epoch_change(EpochChangeProof::new(
