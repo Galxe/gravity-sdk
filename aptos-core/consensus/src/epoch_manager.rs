@@ -884,7 +884,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             onchain_consensus_config.order_vote_enabled(),
             self.is_validator && self.is_current_epoch_validator,
             self.pending_blocks.clone(),
-             self.is_validator && onchain_randomness_config.randomness_enabled(),
+             onchain_randomness_config.randomness_enabled(),
         ).await);
 
         let (round_manager_tx, round_manager_rx) = aptos_channel::new(
