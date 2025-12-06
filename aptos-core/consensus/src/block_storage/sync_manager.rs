@@ -543,6 +543,10 @@ impl BlockStore {
             let sync_from_cert = sync_from_cert_opt.unwrap_or_else(|| {
                 self.highest_commit_cert()
             });
+
+            if sync_from_cert.commit_info().round() >= ledger_info.commit_info().round()  {
+                return Ok(());
+            }
             
             // if the block doesnt exist after ordered root
             let highest_commit_cert = highest_commit_cert.into_quorum_cert(self.order_vote_enabled).unwrap();
@@ -559,7 +563,6 @@ impl BlockStore {
 
             self.append_blocks_for_sync(blocks, quorum_certs)
                 .await;
-            return Ok(());
         }
         Ok(())
     }
