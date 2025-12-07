@@ -480,8 +480,11 @@ impl BlockStore {
                 let verified_txns: Vec<VerifiedTxn> = txns.iter().map(|txn| txn.into()).collect();
                 let txn_num = verified_txns.len() as u64;
                 let verified_txns = verified_txns.into_iter().map(|txn| txn.into()).collect();
-                let block_number = p_block.block().block_number().unwrap();
-                CUR_RECOVER_BLOCK_NUMBER_GAUGE.with_label_values(&[]).set(block_number.try_into().unwrap());
+                let block_number = p_block.block().block_number()
+                    .ok_or_else(|| format_err!("Block number not found for block {}", p_block.block().id()))?;
+                let block_number_i64: i64 = block_number.try_into()
+                    .map_err(|_| format_err!("Block number {} is too large to convert to i64", block_number))?;
+                CUR_RECOVER_BLOCK_NUMBER_GAUGE.with_label_values(&[]).set(block_number_i64);
                 let maybe_block_hash = match self
                     .storage
                     .consensus_db()
@@ -531,24 +534,27 @@ impl BlockStore {
                 get_block_buffer_manager()
                     .set_ordered_blocks(BlockId(*p_block.parent_id()), block)
                     .await
-                    .unwrap();
+                    .context("Failed to set ordered blocks during recovery")?;
                 let compute_res = get_block_buffer_manager().get_executed_res(
                     BlockId(*p_block.id()),
-                    p_block.block().block_number().unwrap(),
+                    block_number,
                     p_block.block().epoch(),
-                ).await.unwrap();
+                ).await
+                .context(format!("Failed to get executed result for block {} during recovery", p_block.block().id()))?;
                 let compute_res = compute_res.execution_output;
                 if let Some(block_hash) = maybe_block_hash {
                     assert_eq!(block_hash.data, compute_res.data);
                 }
                 let commit_block = BlockHashRef {
                     block_id: BlockId(*p_block.id()),
-                    num: p_block.block().block_number().unwrap(),
+                    num: block_number,
                     hash: Some(compute_res.data),
                     persist_notifier: None,
                 };
                 let mut persist_notifiers =
-                    get_block_buffer_manager().set_commit_blocks(vec![commit_block], p_block.block().epoch()).await.unwrap();
+                    get_block_buffer_manager().set_commit_blocks(vec![commit_block], p_block.block().epoch())
+                    .await
+                    .context("Failed to set commit blocks during recovery")?;
                 for notifier in persist_notifiers.iter_mut() {
                     let _ = notifier.recv().await;
                 }
