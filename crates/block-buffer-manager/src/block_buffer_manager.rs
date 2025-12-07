@@ -149,6 +149,7 @@ pub struct BlockStateMachine {
     latest_finalized_block_number: u64,
     block_number_to_block_id: HashMap<u64, BlockId>,
     current_epoch: u64,
+    next_epoch: Option<u64>,
 }
 
 pub struct BlockBufferManagerConfig {
@@ -191,6 +192,7 @@ impl BlockBufferManager {
                 block_number_to_block_id: HashMap::new(),
                 profile: HashMap::new(),
                 current_epoch: 0,
+                next_epoch: None,
             }),
             buffer_state: AtomicU8::new(BufferState::Uninitialized as u8),
             config,
@@ -645,13 +647,13 @@ impl BlockBufferManager {
         );
         *self.latest_epoch_change_block_number.lock().await = block_num;
 
-        // Update current_epoch to the new epoch (from NewEpoch event)
-        // This ensures idempotency - even if called multiple times, epoch is correct
+        // Store the new epoch in next_epoch instead of updating current_epoch immediately
+        // The current_epoch will be updated in release_inflight_blocks when the epoch change is finalized
         let old_epoch = block_state_machine.current_epoch;
-        block_state_machine.current_epoch = *new_epoch;
+        block_state_machine.next_epoch = Some(*new_epoch);
         info!(
-            "calculate_new_epoch_state: updating current_epoch from {} to {} at block {}",
-            old_epoch, new_epoch, block_num
+            "calculate_new_epoch_state: setting next_epoch to {} (current_epoch: {}) at block {}",
+            new_epoch, old_epoch, block_num
         );
         
         Ok(Some(EpochState::new(*new_epoch, (&validator_set).into())))
@@ -894,13 +896,20 @@ impl BlockBufferManager {
     pub async fn release_inflight_blocks(&self) {
         let mut block_state_machine = self.block_state_machine.lock().await;
         let latest_epoch_change_block_number = *self.latest_epoch_change_block_number.lock().await;
-        let current_epoch = block_state_machine.current_epoch;
+        let old_epoch = block_state_machine.current_epoch;
         
-        // Note: current_epoch has already been updated in calculate_new_epoch_state()
-        // when the NewEpoch event was processed, so we don't need to update it here.
+        // Update current_epoch from next_epoch if it exists
+        if let Some(next_epoch) = block_state_machine.next_epoch.take() {
+            block_state_machine.current_epoch = next_epoch;
+            info!(
+                "release_inflight_blocks: updating current_epoch from {} to {} at block {}",
+                old_epoch, next_epoch, latest_epoch_change_block_number
+            );
+        }
+        
         info!(
             "release_inflight_blocks latest_epoch_change_block_number: {:?}, current_epoch: {}",
-            latest_epoch_change_block_number, current_epoch
+            latest_epoch_change_block_number, block_state_machine.current_epoch
         );
         block_state_machine
             .blocks
