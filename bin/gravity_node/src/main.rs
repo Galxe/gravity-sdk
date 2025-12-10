@@ -102,12 +102,12 @@ fn run_reth(
                         handle.node.pool.pending_transactions_listener();
                     let engine_cli = handle.node.auth_server_handle().clone();
                     let provider = handle.node.provider;
-                    let latest_block_number = provider.last_block_number().unwrap();
-                    info!("The latest_block_number is {}", latest_block_number);
+                    let recover_block_number = provider.recover_block_number().unwrap();
+                    info!("The latest_block_number is {}", recover_block_number);
                     let latest_block_hash =
-                        provider.block_hash(latest_block_number).unwrap().unwrap();
+                        provider.block_hash(recover_block_number).unwrap().unwrap();
                     let latest_block = provider
-                        .block(BlockHashOrNumber::Number(latest_block_number))
+                        .block(BlockHashOrNumber::Number(recover_block_number))
                         .unwrap()
                         .unwrap();
                     let pool = handle.node.pool;
@@ -130,7 +130,7 @@ fn run_reth(
                         tx_listener: pending_listener,
                         pool,
                     };
-                    let _ = tx.send((args, latest_block_number));
+                    let _ = tx.send((args, recover_block_number));
                     handle.node_exit_future.await
                 }
             },
