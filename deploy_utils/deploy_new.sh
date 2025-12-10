@@ -82,19 +82,6 @@ validate_config_dir() {
         exit 1
     fi
 
-    # Check required config files
-    local missing_files=()
-    for file in "identity.yaml" "validator.yaml" "reth_config.json"; do
-        if [[ ! -f "$config_dir/$file" ]]; then
-            missing_files+=($file)
-        fi
-    done
-
-    if [ ${#missing_files[@]} -ne 0 ]; then
-        log_error "Missing required config files in $config_dir: ${missing_files[*]}"
-        exit 1
-    fi
-
     log_info "Config directory validation passed: $config_dir"
 }
 
@@ -194,16 +181,11 @@ main() {
     
     # Prepare directories
     log_info "Creating required directories"
-    mkdir -p "$deploy_dir"/{config,bin,data,logs,script}
+    mkdir -p "$deploy_dir"/{bin,data,logs,script}
 
     # Copy configuration files
     log_info "Copying configuration files from $config_dir"
-    cp "$config_dir/identity.yaml" "$deploy_dir/config/"
-    cp "$config_dir/validator.yaml" "$deploy_dir/config/"
-    cp "$config_dir/reth_config.json" "$deploy_dir/config/"
-    cp "$config_dir/waypoint.txt" "$deploy_dir/config/"
-    cp "$config_dir/network_config.json" "$deploy_dir/config/config.json"
-    cp "$config_dir/discovery" "$deploy_dir/"
+    cp -r "$config_dir" "$deploy_dir/"
 
     # Copy program files
     log_info "Copying program files"
