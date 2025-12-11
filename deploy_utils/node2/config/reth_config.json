@@ -12,6 +12,7 @@
         "authrpc.addr": "0.0.0.0",
         "metrics": "0.0.0.0:9002",
         "log.file.filter": "info",
+        "log.stdout.filter": "error",
         "datadir": "/tmp/node2/data/reth",
         "datadir.static-files": "/tmp/node2/data/reth",
         "gravity_node_config": "/tmp/node2/config/validator.yaml",
