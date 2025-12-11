@@ -1,4 +1,4 @@
-use crate::{genesis::GenesisCommand, validator::ValidatorCommand};
+use crate::{dkg::DKGCommand, genesis::GenesisCommand, node::NodeCommand, validator::ValidatorCommand};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
@@ -12,6 +12,8 @@ pub struct Command {
 pub enum SubCommands {
     Genesis(GenesisCommand),
     Validator(ValidatorCommand),
+    Node(NodeCommand),
+    Dkg(DKGCommand),
 }
 
 pub trait Executable {
