@@ -21,6 +21,10 @@ impl DkgState {
     pub fn new(consensus_db: Option<Arc<ConsensusDB>>) -> Self {
         Self { consensus_db }
     }
+
+    pub fn consensus_db(&self) -> Option<&Arc<ConsensusDB>> {
+        self.consensus_db.as_ref()
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]

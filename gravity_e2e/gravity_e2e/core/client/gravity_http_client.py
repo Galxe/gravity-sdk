@@ -176,4 +176,143 @@ class GravityHttpClient:
         """
         status = await self.get_dkg_status()
         return status["block_number"]
+    
+    async def get_ledger_info_by_epoch(self, epoch: int) -> Dict:
+        """
+        Get ledger info by epoch
+        
+        Args:
+            epoch: Epoch number
+            
+        Returns:
+            Ledger info dictionary:
+            {
+                "epoch": int,
+                "round": int,
+                "block_number": int,
+                "block_hash": str
+            }
+        """
+        url = f"{self.base_url}/consensus/ledger_info/{epoch}"
+        LOG.debug(f"Getting ledger info for epoch {epoch} from {url}")
+        
+        if not self.session:
+            raise RuntimeError("Client not initialized. Use 'async with' statement.")
+        
+        try:
+            async with self.session.get(url) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    raise RuntimeError(f"Failed to get ledger info for epoch {epoch}: {resp.status} - {text}")
+                
+                data = await resp.json()
+                LOG.info(f"Ledger info for epoch {epoch}: block_number={data['block_number']}, round={data['round']}")
+                return data
+        except aiohttp.ClientError as e:
+            raise RuntimeError(f"HTTP request failed: {e}")
+    
+    async def get_block_by_epoch_round(self, epoch: int, round: int) -> Dict:
+        """
+        Get block by epoch and round
+        
+        Args:
+            epoch: Epoch number
+            round: Round number
+            
+        Returns:
+            Block info dictionary:
+            {
+                "epoch": int,
+                "round": int,
+                "block_number": Optional[int],
+                "block_id": str,
+                "parent_id": str
+            }
+        """
+        url = f"{self.base_url}/consensus/block/{epoch}/{round}"
+        LOG.debug(f"Getting block for epoch {epoch}, round {round} from {url}")
+        
+        if not self.session:
+            raise RuntimeError("Client not initialized. Use 'async with' statement.")
+        
+        try:
+            async with self.session.get(url) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    raise RuntimeError(f"Failed to get block for epoch {epoch}, round {round}: {resp.status} - {text}")
+                
+                data = await resp.json()
+                LOG.info(f"Block for epoch {epoch}, round {round}: block_id={data['block_id'][:16]}...")
+                return data
+        except aiohttp.ClientError as e:
+            raise RuntimeError(f"HTTP request failed: {e}")
+    
+    async def get_qc_by_epoch_round(self, epoch: int, round: int) -> Dict:
+        """
+        Get QC by epoch and round
+        
+        Args:
+            epoch: Epoch number
+            round: Round number
+            
+        Returns:
+            QC info dictionary:
+            {
+                "epoch": int,
+                "round": int,
+                "block_number": Optional[int],
+                "certified_block_id": str,
+                "commit_info_block_id": str
+            }
+        """
+        url = f"{self.base_url}/consensus/qc/{epoch}/{round}"
+        LOG.debug(f"Getting QC for epoch {epoch}, round {round} from {url}")
+        
+        if not self.session:
+            raise RuntimeError("Client not initialized. Use 'async with' statement.")
+        
+        try:
+            async with self.session.get(url) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    raise RuntimeError(f"Failed to get QC for epoch {epoch}, round {round}: {resp.status} - {text}")
+                
+                data = await resp.json()
+                LOG.info(f"QC for epoch {epoch}, round {round}: certified_block_id={data['certified_block_id'][:16]}...")
+                return data
+        except aiohttp.ClientError as e:
+            raise RuntimeError(f"HTTP request failed: {e}")
+    
+    async def get_validator_count_by_epoch(self, epoch: int) -> Dict:
+        """
+        Get validator count by epoch
+        
+        Args:
+            epoch: Epoch number
+            
+        Returns:
+            Validator count dictionary:
+            {
+                "epoch": int,
+                "block_number": int,
+                "validator_count": int
+            }
+        """
+        url = f"{self.base_url}/consensus/validator_count/{epoch}"
+        LOG.debug(f"Getting validator count for epoch {epoch} from {url}")
+        
+        if not self.session:
+            raise RuntimeError("Client not initialized. Use 'async with' statement.")
+        
+        try:
+            async with self.session.get(url) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    raise RuntimeError(f"Failed to get validator count for epoch {epoch}: {resp.status} - {text}")
+                
+                data = await resp.json()
+                LOG.info(f"Validator count for epoch {epoch}: {data['validator_count']}")
+                return data
+        except aiohttp.ClientError as e:
+            raise RuntimeError(f"HTTP request failed: {e}")
 
