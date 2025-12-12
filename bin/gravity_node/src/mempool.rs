@@ -15,9 +15,7 @@ use gaptos::api_types::{
 use greth::reth_transaction_pool::PoolTransaction;
 use greth::{
     reth_primitives::{Recovered, TransactionSigned},
-    reth_transaction_pool::{
-        EthPooledTransaction, TransactionPool, ValidPoolTransaction,
-    },
+    reth_transaction_pool::{EthPooledTransaction, TransactionPool, ValidPoolTransaction},
 };
 
 pub struct Mempool {
@@ -31,7 +29,12 @@ pub struct Mempool {
 
 impl Mempool {
     pub fn new(pool: RethTransactionPool, enable_broadcast: bool) -> Self {
-        Self { pool, txn_cache: Arc::new(DashMap::new()), runtime: tokio::runtime::Runtime::new().unwrap(), enable_broadcast }
+        Self {
+            pool,
+            txn_cache: Arc::new(DashMap::new()),
+            runtime: tokio::runtime::Runtime::new().unwrap(),
+            enable_broadcast,
+        }
     }
 
     pub fn tx_cache(
@@ -136,7 +139,12 @@ impl TxPool for Mempool {
                 self.runtime.spawn(async move {
                     let res = pool.add_external_transaction(pool_txn).await;
                     if let Err(e) = res {
-                        tracing::error!("Failed to add transaction: {:?} {:?} {:?}", address, to, e);
+                        tracing::error!(
+                            "Failed to add transaction: {:?} {:?} {:?}",
+                            address,
+                            to,
+                            e
+                        );
                     }
                 });
                 true

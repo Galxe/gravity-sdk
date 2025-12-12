@@ -21,9 +21,7 @@ use gaptos::aptos_types::{
     vm_status::DiscardedVMStatus,
 };
 use gaptos::{
-    api_types::{
-        account::ExternalAccountAddress, u256_define::TxnHash,
-    },
+    api_types::{account::ExternalAccountAddress, u256_define::TxnHash},
     aptos_mempool::shared_mempool::types::CoreMempoolTrait,
 };
 use std::{
@@ -155,7 +153,7 @@ impl CoreMempoolTrait for Mempool {
         let mut broacasted_txns = vec![];
         let mut visited_cache = self.txn_cache.lock().unwrap();
         for txn in iter {
-        visited_cache.insert(TxnHash::from_bytes(txn.committed_hash().as_slice()));
+            visited_cache.insert(TxnHash::from_bytes(txn.committed_hash().as_slice()));
             broacasted_txns.push((VerifiedTxn::from(txn).into(), 0));
         }
         let len = broacasted_txns.len();
@@ -223,7 +221,7 @@ impl CoreMempoolTrait for Mempool {
     }
 
     fn commit_transaction(&mut self, sender: &AccountAddress, sequence_number: u64) {
-        // don't need to implement
+        txn_metrics::TxnLifeTime::get_txn_life_time().record_committed(sender, sequence_number);
     }
 
     fn log_commit_transaction(
