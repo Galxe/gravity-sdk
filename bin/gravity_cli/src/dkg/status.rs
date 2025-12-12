@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 #[derive(Debug, Parser)]
 pub struct StatusCommand {
-    /// Server address and port (e.g., 127.0.0.1:1998)
+    /// Server address and port (e.g., 127.0.0.1:1024)
     #[clap(long)]
     pub server_url: String,
 }

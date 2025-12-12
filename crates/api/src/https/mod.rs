@@ -1,3 +1,4 @@
+pub mod consensus;
 pub mod dkg;
 pub mod heap_profiler;
 mod set_failpoints;
@@ -79,6 +80,22 @@ impl HttpsServer {
             state.get_randomness(block_number).await
         };
 
+        let get_ledger_info_by_epoch_lambda = |State(state): State<Arc<DkgState>>, Path(epoch): Path<u64>| async move {
+            consensus::get_ledger_info_by_epoch(State(state), Path(epoch)).await
+        };
+
+        let get_block_lambda = |State(state): State<Arc<DkgState>>, Path((epoch, round)): Path<(u64, u64)>| async move {
+            consensus::get_block(State(state), Path((epoch, round))).await
+        };
+
+        let get_qc_lambda = |State(state): State<Arc<DkgState>>, Path((epoch, round)): Path<(u64, u64)>| async move {
+            consensus::get_qc(State(state), Path((epoch, round))).await
+        };
+
+        let get_validator_count_lambda = |State(state): State<Arc<DkgState>>, Path(epoch): Path<u64>| async move {
+            consensus::get_validator_count_by_epoch(State(state), Path(epoch)).await
+        };
+
         let dkg_state_arc = Arc::new(dkg_state);
         let https_routes = Router::new()
             .route("/tx/submit_tx", post(submit_tx_lambda))
@@ -87,6 +104,10 @@ impl HttpsServer {
         let http_routes = Router::new()
             .route("/dkg/status", get(get_dkg_status_lambda))
             .route("/dkg/randomness/:block_number", get(get_randomness_lambda))
+            .route("/consensus/ledger_info/:epoch", get(get_ledger_info_by_epoch_lambda))
+            .route("/consensus/block/:epoch/:round", get(get_block_lambda))
+            .route("/consensus/qc/:epoch/:round", get(get_qc_lambda))
+            .route("/consensus/validator_count/:epoch", get(get_validator_count_lambda))
             .route("/set_failpoint", post(set_fail_point_lambda))
             .route("/mem_prof", post(control_profiler_lambda));
         let app = Router::new()

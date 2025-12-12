@@ -24,6 +24,8 @@ pub use schema::{
     block::BlockNumberSchema,
     block::BlockSchema,
     dag::{CertifiedNodeSchema, DagVoteSchema, NodeSchema},
+    ledger_info::LedgerInfoSchema,
+    epoch_by_block_number::EpochByBlockNumberSchema,
     quorum_certificate::QCSchema,
 };
 use schema::{

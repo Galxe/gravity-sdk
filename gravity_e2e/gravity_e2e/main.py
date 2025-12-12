@@ -26,6 +26,10 @@ from .tests.test_cases.test_randomness_advanced import (
     test_randomness_api_completeness,
     test_randomness_stress
 )
+from .tests.test_cases.test_epoch_consistency import test_epoch_consistency
+from .tests.test_cases.test_epoch_consistency_extended import test_epoch_consistency_extended
+from .tests.test_cases.test_validator_add_remove import test_validator_add_remove
+from .tests.test_cases.test_validator_add_remove_delayed import test_validator_add_remove_delayed
 
 LOG = logging.getLogger(__name__)
 
@@ -65,6 +69,18 @@ async def run_test_module(module_name: str, test_helper: RunHelper, test_results
         elif module_name == "cases.randomness_stress":
             result = await test_randomness_stress(run_helper=test_helper)
             test_results.append(result)
+        elif module_name == "cases.epoch_consistency":
+            result = await test_epoch_consistency(run_helper=test_helper)
+            test_results.append(result)
+        elif module_name == "cases.epoch_consistency_extended":
+            result = await test_epoch_consistency_extended(run_helper=test_helper)
+            test_results.append(result)
+        elif module_name == "cases.validator_add_remove":
+            result = await test_validator_add_remove(run_helper=test_helper)
+            test_results.append(result)
+        elif module_name == "cases.validator_add_remove_delayed":
+            result = await test_validator_add_remove_delayed(run_helper=test_helper)
+            test_results.append(result)
         else:
             LOG.warning(f"Unknown test module: {module_name}")
     except Exception as e:
@@ -84,11 +100,12 @@ async def main():
     parser.add_argument("--accounts-config", default="configs/test_accounts.json",
                        help="Path to accounts configuration file")
     parser.add_argument("--test-suite", default="all",
-                       choices=["all", "basic", "contract", "erc20", "cross_chain_deposit", "block", "network"
+                       choices=["all", "basic", "contract", "erc20", "cross_chain_deposit", "block", "network",
                                "randomness", "randomness_basic", "randomness_correctness",
                                "randomness_smoke", "randomness_reconfiguration",
                                "randomness_multi_contract", "randomness_api_completeness",
-                               "randomness_stress"],
+                               "randomness_stress", "epoch_consistency", "epoch_consistency_extended",
+                               "validator_add_remove", "validator_add_remove_delayed"],
                        help="Test suite to run")
     parser.add_argument("--cluster", default=None,
                        help="Cluster name to test (defined in nodes.json)")
@@ -170,66 +187,113 @@ async def main():
             # 6. Execute test cases
             test_results = []
             
-            # Use successfully connected nodes
-            connected_nodes = list(node_connector.clients.keys())
+            # Check if test suite manages its own nodes (doesn't need pre-existing connections)
+            self_managed_tests = ["epoch_consistency", "epoch_consistency_extended", "validator_add_remove", "validator_add_remove_delayed"]
+            is_self_managed = args.test_suite in self_managed_tests
             
-            for node_id in connected_nodes:
-                client = node_connector.get_client(node_id)
+            if is_self_managed:
+                # For self-managed tests, create a dummy client and run test once
+                LOG.info(f"Test suite '{args.test_suite}' manages its own nodes, skipping node connection requirement")
+                dummy_client = node_connector.get_client(list(node_connector.clients.keys())[0]) if node_connector.clients else None
+                if not dummy_client:
+                    # Create a dummy client if no nodes are connected
+                    from .core.client.gravity_client import GravityClient
+                    dummy_client = GravityClient("http://127.0.0.1:8545", "dummy")
                 
-                # Initialize test helper
                 test_helper = RunHelper(
-                    client=client,
+                    client=dummy_client,
                     working_dir=str(output_dir),
-                    faucet_account=account_manager.get_faucet()
+                    faucet_account=account_manager.get_faucet() if account_manager else None
                 )
                 
                 # Determine test modules to run
-                if args.test_suite == "all":
-                    test_modules = [
-                        "cases.basic_transfer",
-                        "cases.contract",
-                        "cases.erc20",
-                        "cases.cross_chain_deposit"
-                    ]
-                elif args.test_suite == "basic":
-                    test_modules = ["cases.basic_transfer"]
-                elif args.test_suite == "contract":
-                    test_modules = ["cases.contract"]
-                elif args.test_suite == "erc20":
-                    test_modules = ["cases.erc20"]
-                elif args.test_suite == "cross_chain_deposit":
-                    test_modules = ["cases.cross_chain_deposit"]
-                elif args.test_suite == "randomness":
-                    test_modules = [
-                        "cases.randomness_smoke",
-                        "cases.randomness_basic",
-                        "cases.randomness_correctness",
-                        "cases.randomness_reconfiguration",
-                        "cases.randomness_multi_contract",
-                        "cases.randomness_api_completeness"
-                    ]
-                elif args.test_suite == "randomness_basic":
-                    test_modules = ["cases.randomness_basic"]
-                elif args.test_suite == "randomness_correctness":
-                    test_modules = ["cases.randomness_correctness"]
-                elif args.test_suite == "randomness_smoke":
-                    test_modules = ["cases.randomness_smoke"]
-                elif args.test_suite == "randomness_reconfiguration":
-                    test_modules = ["cases.randomness_reconfiguration"]
-                elif args.test_suite == "randomness_multi_contract":
-                    test_modules = ["cases.randomness_multi_contract"]
-                elif args.test_suite == "randomness_api_completeness":
-                    test_modules = ["cases.randomness_api_completeness"]
-                elif args.test_suite == "randomness_stress":
-                    test_modules = ["cases.randomness_stress"]
+                if args.test_suite == "epoch_consistency":
+                    test_modules = ["cases.epoch_consistency"]
+                elif args.test_suite == "epoch_consistency_extended":
+                    test_modules = ["cases.epoch_consistency_extended"]
+                elif args.test_suite == "validator_add_remove":
+                    test_modules = ["cases.validator_add_remove"]
+                elif args.test_suite == "validator_add_remove_delayed":
+                    test_modules = ["cases.validator_add_remove_delayed"]
                 else:
-                    test_modules = [f"cases.{args.test_suite}"]
-                
-                LOG.info(f"Running tests on node {node_id}: {test_modules}")
+                    test_modules = []
                 
                 # Execute tests
                 for module in test_modules:
                     await run_test_module(module, test_helper, test_results)
+            else:
+                # Use successfully connected nodes
+                connected_nodes = list(node_connector.clients.keys())
+                
+                if not connected_nodes:
+                    LOG.error("No nodes connected. Please ensure nodes are running and accessible.")
+                    sys.exit(1)
+                
+                for node_id in connected_nodes:
+                    client = node_connector.get_client(node_id)
+                    
+                    # Initialize test helper
+                    test_helper = RunHelper(
+                        client=client,
+                        working_dir=str(output_dir),
+                        faucet_account=account_manager.get_faucet()
+                    )
+                    
+                    # Determine test modules to run
+                    if args.test_suite == "all":
+                        test_modules = [
+                            "cases.basic_transfer",
+                            "cases.contract",
+                            "cases.erc20",
+                            "cases.cross_chain_deposit"
+                        ]
+                    elif args.test_suite == "basic":
+                        test_modules = ["cases.basic_transfer"]
+                    elif args.test_suite == "contract":
+                        test_modules = ["cases.contract"]
+                    elif args.test_suite == "erc20":
+                        test_modules = ["cases.erc20"]
+                    elif args.test_suite == "cross_chain_deposit":
+                        test_modules = ["cases.cross_chain_deposit"]
+                    elif args.test_suite == "randomness":
+                        test_modules = [
+                            "cases.randomness_smoke",
+                            "cases.randomness_basic",
+                            "cases.randomness_correctness",
+                            "cases.randomness_reconfiguration",
+                            "cases.randomness_multi_contract",
+                            "cases.randomness_api_completeness"
+                        ]
+                    elif args.test_suite == "randomness_basic":
+                        test_modules = ["cases.randomness_basic"]
+                    elif args.test_suite == "randomness_correctness":
+                        test_modules = ["cases.randomness_correctness"]
+                    elif args.test_suite == "randomness_smoke":
+                        test_modules = ["cases.randomness_smoke"]
+                    elif args.test_suite == "randomness_reconfiguration":
+                        test_modules = ["cases.randomness_reconfiguration"]
+                    elif args.test_suite == "randomness_multi_contract":
+                        test_modules = ["cases.randomness_multi_contract"]
+                    elif args.test_suite == "randomness_api_completeness":
+                        test_modules = ["cases.randomness_api_completeness"]
+                    elif args.test_suite == "randomness_stress":
+                        test_modules = ["cases.randomness_stress"]
+                    elif args.test_suite == "epoch_consistency":
+                        test_modules = ["cases.epoch_consistency"]
+                    elif args.test_suite == "epoch_consistency_extended":
+                        test_modules = ["cases.epoch_consistency_extended"]
+                    elif args.test_suite == "validator_add_remove":
+                        test_modules = ["cases.validator_add_remove"]
+                    elif args.test_suite == "validator_add_remove_delayed":
+                        test_modules = ["cases.validator_add_remove_delayed"]
+                    else:
+                        test_modules = [f"cases.{args.test_suite}"]
+                    
+                    LOG.info(f"Running tests on node {node_id}: {test_modules}")
+                    
+                    # Execute tests
+                    for module in test_modules:
+                        await run_test_module(module, test_helper, test_results)
                     
             # 7. Generate test report
             total_tests = len(test_results)

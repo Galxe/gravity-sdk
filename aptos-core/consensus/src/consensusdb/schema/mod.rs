@@ -6,8 +6,8 @@ pub(crate) mod block;
 pub(crate) mod dag;
 pub(crate) mod quorum_certificate;
 pub(crate) mod single_entry;
-pub(crate) mod ledger_info;
-pub(crate) mod epoch_by_block_number;
+pub mod ledger_info;
+pub mod epoch_by_block_number;
 pub(crate) mod randomness;
 
 

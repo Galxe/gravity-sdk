@@ -1,13 +1,13 @@
 use super::{ensure_slice_len_eq, EPOCH_BY_BLOCK_NUMBER_CF_NAME};
 use anyhow::Result;
 use gaptos::aptos_schemadb::{
-    define_schema,
+    define_pub_schema,
     schema::{KeyCodec, ValueCodec},
 };
 use byteorder::{BigEndian, ReadBytesExt};
 use std::mem::size_of;
 
-define_schema!(
+define_pub_schema!(
     EpochByBlockNumberSchema,
     u64, // block num
     u64, // epoch num

@@ -59,13 +59,13 @@ fn main() {
             }
         },
         command::SubCommands::Dkg(dkg_cmd) => match dkg_cmd.command {
-            // Example: gravity-cli dkg status --server-url="127.0.0.1:1998"
+            // Example: gravity-cli dkg status --server-url="127.0.0.1:1024"
             dkg::SubCommands::Status(status_cmd) => {
                 if let Err(e) = status_cmd.execute() {
                     eprintln!("Error: {:?}", e);
                 }
             }
-            // Example: gravity-cli dkg randomness --server-url="127.0.0.1:1998" --block-number=100
+            // Example: gravity-cli dkg randomness --server-url="127.0.0.1:1024" --block-number=100
             dkg::SubCommands::Randomness(randomness_cmd) => {
                 if let Err(e) = randomness_cmd.execute() {
                     eprintln!("Error: {:?}", e);

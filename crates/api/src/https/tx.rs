@@ -26,7 +26,7 @@ pub struct TxResponse {
 }
 
 // example:
-// curl -X POST -H "Content-Type:application/json" -d '{"tx": [1, 2, 3, 4]}' https://127.0.0.1:1998/tx/submit_tx
+// curl -X POST -H "Content-Type:application/json" -d '{"tx": [1, 2, 3, 4]}' https://127.0.0.1:1024/tx/submit_tx
 pub async fn submit_tx(
     request: TxRequest,
 ) -> Result<JsonResponse<SubmitResponse>, StatusCode> {
@@ -34,7 +34,7 @@ pub async fn submit_tx(
 }
 
 // example:
-// curl https://127.0.0.1:1998/tx/get_tx_by_hash/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+// curl https://127.0.0.1:1024/tx/get_tx_by_hash/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 pub async fn get_tx_by_hash(
     request: HashValue,
 ) -> Result<JsonResponse<TxResponse>, StatusCode> {

@@ -17,9 +17,6 @@ use gaptos::aptos_types::{
 };
 use once_cell::sync::OnceCell;
 
-use crate::consensusdb::schema::epoch_by_block_number::EpochByBlockNumberSchema;
-use crate::consensusdb::schema::ledger_info::LedgerInfoSchema;
-
 static VALIDATOR_SET: OnceCell<ValidatorSet> = OnceCell::new();
 
 impl ConsensusDB {

@@ -142,7 +142,6 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         let block_num = ledger_info_with_sigs.ledger_info().block_number();
         let len = block_ids.len();
         assert!(!block_ids.is_empty(), "commit_ledger block_ids is empty");
-        let _ = self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
         let epoch = ledger_info_with_sigs.ledger_info().epoch();
         self.runtime.block_on(async move {
             let mut persist_notifiers = get_block_buffer_manager()
@@ -168,6 +167,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             for notifier in persist_notifiers.iter_mut() {
                 let _ = notifier.recv().await;
             }
+            let _ = self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
         });
         Ok(())
     }
