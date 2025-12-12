@@ -70,7 +70,7 @@ pub struct ErrorResponse {
 
 impl DkgState {
     /// Get DKG status (epoch, round, block, participating nodes)
-    /// Example: curl https://127.0.0.1:1998/dkg/status
+    /// Example: curl https://127.0.0.1:1024/dkg/status
     pub async fn get_dkg_status(&self) -> impl IntoResponse {
         info!("Getting DKG status");
 
@@ -181,7 +181,7 @@ impl DkgState {
     }
 
     /// Get randomness for a specific block number
-    /// Example: curl "https://127.0.0.1:1998/dkg/randomness/100"
+    /// Example: curl "https://127.0.0.1:1024/dkg/randomness/100"
     pub async fn get_randomness(
         &self,
         block_number: u64,

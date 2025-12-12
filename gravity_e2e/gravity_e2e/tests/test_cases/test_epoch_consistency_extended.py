@@ -1,6 +1,6 @@
 """
-Epoch consistency test
-Tests data consistency after epoch switching
+Epoch consistency extended test
+Tests data consistency after epoch switching for 10 epochs
 """
 import asyncio
 import logging
@@ -15,24 +15,24 @@ LOG = logging.getLogger(__name__)
 
 
 @test_case
-async def test_epoch_consistency(
+async def test_epoch_consistency_extended(
     run_helper: RunHelper,
     test_result: TestResult
 ):
     """
-    Test epoch switching data consistency
+    Test epoch switching data consistency for 10 epochs
     
     Test steps:
     1. Deploy node1
     2. Start node1
-    3. Wait for 3 epochs (epoch 1, 2, 3), checking every 2 minutes
+    3. Wait for 10 epochs (epoch 1-10), checking every 10 seconds
     4. Record data for each epoch
-    5. Validate for N = [1, 2]:
+    5. Validate for N = [1, 2, ..., 9]:
        - Epoch N ledger_info.block_number == Epoch N+1 round 1 block.block_number - 1
        - Epoch N+1 round 1 QC commit_info_block_id != Epoch N ledger_info.block_hash
     """
     LOG.info("=" * 70)
-    LOG.info("Test: Epoch Consistency Test")
+    LOG.info("Test: Epoch Consistency Extended Test (10 epochs)")
     LOG.info("=" * 70)
     
     node_manager = NodeManager()
@@ -71,13 +71,13 @@ async def test_epoch_consistency(
         await asyncio.sleep(10)
         
         # Step 3: Monitor epochs and collect data
-        LOG.info("\n[Step 3] Monitoring epochs (checking every 2 minutes)...")
+        LOG.info("\n[Step 3] Monitoring epochs (checking every 10 seconds)...")
         
         async with GravityHttpClient(base_url=http_url) as http_client:
             epoch_data: Dict[int, Dict] = {}
-            # 检查 N = [1, 2]，即检查 epoch 1->2 和 epoch 2->3 的连续性
-            target_epochs = [1, 2, 3]
-            check_interval = 120  # 2 minutes
+            # 检查 N = [1, 2, ..., 9]，即检查 epoch 1->2, 2->3, ..., 9->10 的连续性
+            target_epochs = list(range(1, 11))  # [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+            check_interval = 10  # 10 seconds
             
             for target_epoch in target_epochs:
                 LOG.info(f"\n[Epoch {target_epoch}] Waiting for epoch {target_epoch}...")
@@ -111,8 +111,8 @@ async def test_epoch_consistency(
                 LOG.info(f"    round: {ledger_info['round']}")
                 LOG.info(f"    block_hash: {ledger_info['block_hash']}")
                 
-                # 对于 epoch 2 和 3，获取 round 1 的 block 和 QC
-                if target_epoch in [2, 3]:
+                # 对于 epoch 2-10，获取 round 1 的 block 和 QC
+                if target_epoch >= 2:
                     LOG.info(f"[Epoch {target_epoch}] Getting round 1 block and QC...")
                     
                     # Get block for epoch N+1, round 1
@@ -131,7 +131,7 @@ async def test_epoch_consistency(
                     LOG.info(f"    certified_block_id: {qc_info['certified_block_id']}")
                     LOG.info(f"    commit_info_block_id: {qc_info['commit_info_block_id']}")
                 
-                # Wait 2 minutes before checking next epoch (except for the last epoch)
+                # Wait 10 seconds before checking next epoch (except for the last epoch)
                 if target_epoch < target_epochs[-1]:
                     LOG.info(f"Waiting {check_interval} seconds before checking next epoch...")
                     await asyncio.sleep(check_interval)
@@ -139,8 +139,9 @@ async def test_epoch_consistency(
         # Step 4: Validate consistency
         LOG.info("\n[Step 4] Validating data consistency...")
         
-        # 检查 N = [1, 2] 两轮
-        for n in [1, 2]:
+        # 检查 N = [1, 2, ..., 9] 九轮
+        validation_n_values = list(range(1, 10))  # [1, 2, 3, 4, 5, 6, 7, 8, 9]
+        for n in validation_n_values:
             LOG.info(f"\n[Validation for N={n}]")
             
             # 获取 Epoch N 的 ledger_info
@@ -191,15 +192,17 @@ async def test_epoch_consistency(
                     f"Epoch {epoch_n_plus_1} round 1 QC commit_info_block_id "
                     f"({epoch_n_plus_1_commit_info_block_id})")
         
-        LOG.info("\n✅ All validations passed for N=[1, 2]!")
+        LOG.info("\n✅ All validations passed for N=[1, 2, ..., 9]!")
         LOG.info("=" * 70)
         
-        test_result.mark_success(
-            epoch1_block_number=epoch_data[1]["ledger_info"]["block_number"],
-            epoch2_block_number=epoch_data[2]["ledger_info"]["block_number"],
-            epoch3_block_number=epoch_data[3]["ledger_info"]["block_number"],
-            validation_rounds="N=[1,2]"
-        )
+        # Prepare success data with all epoch block numbers
+        success_data = {
+            "validation_rounds": "N=[1,2,3,4,5,6,7,8,9]"
+        }
+        for epoch_num in range(1, 11):
+            success_data[f"epoch{epoch_num}_block_number"] = epoch_data[epoch_num]["ledger_info"]["block_number"]
+        
+        test_result.mark_success(**success_data)
         
     except Exception as e:
         LOG.error(f"❌ Test failed: {e}")
@@ -217,3 +220,35 @@ async def test_epoch_consistency(
                 LOG.warning(f"⚠️  Failed to stop {node_name}")
         except Exception as e:
             LOG.warning(f"⚠️  Error stopping node: {e}")
+
+
+# 允许直接运行此测试文件
+if __name__ == "__main__":
+    import sys
+    from pathlib import Path
+    
+    # 添加项目路径
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+    
+    from gravity_e2e.helpers.test_helpers import RunHelper
+    from gravity_e2e.core.client.gravity_client import GravityClient
+    
+    # 设置日志
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    async def run_direct():
+        """直接运行测试"""
+        dummy_client = GravityClient("http://127.0.0.1:8545", "dummy_node")
+        run_helper = RunHelper(
+            client=dummy_client,
+            working_dir=str(Path(__file__).parent.parent.parent.parent),
+            faucet_account=None
+        )
+        result = await test_epoch_consistency_extended(run_helper=run_helper)
+        sys.exit(0 if result.success else 1)
+    
+    asyncio.run(run_direct())
+

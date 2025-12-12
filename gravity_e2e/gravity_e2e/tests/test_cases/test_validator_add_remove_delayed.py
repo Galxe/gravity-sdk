@@ -1,6 +1,6 @@
 """
-Validator add and remove test
-Tests adding and removing validators from the validator set
+Validator add and remove test (delayed node3 start)
+Tests adding and removing validators from the validator set with delayed node3 startup
 """
 import asyncio
 import logging
@@ -16,26 +16,28 @@ LOG = logging.getLogger(__name__)
 
 
 @test_case
-async def test_validator_add_remove(
+async def test_validator_add_remove_delayed(
     run_helper: RunHelper,
     test_result: TestResult
 ):
     """
-    Test adding and removing validators
+    Test adding and removing validators with delayed node3 startup
     
     Test steps:
     1. Deploy node1 and node3
     2. Start node1
     3. Wait 1 minute and verify validator count == 1
     4. Add validator (node3) using gravity_cli
-    5. Start node3
-    6. Wait 2 minutes and verify validator count == 2
-    7. Remove validator (node3) using gravity_cli
-    8. Wait 2 minutes and verify validator count == 1
-    9. Stop nodes
+    5. Wait 2 minutes before starting node3
+    6. Start node3
+    7. Wait 30 seconds after starting node3
+    8. Verify validator count == 2 (using node3's HTTP endpoint)
+    9. Remove validator (node3) using gravity_cli
+    10. Wait 2 minutes and verify validator count == 1
+    11. Stop nodes
     """
     LOG.info("=" * 70)
-    LOG.info("Test: Validator Add and Remove Test")
+    LOG.info("Test: Validator Add and Remove Test (Delayed Node3 Start)")
     LOG.info("=" * 70)
     
     node_manager = NodeManager()
@@ -43,6 +45,7 @@ async def test_validator_add_remove(
     node3_name = "node3"
     install_dir = "/tmp"
     http_url = "http://127.0.0.1:1024"
+    http_url_node3 = "http://127.0.0.1:1026"  # node3's HTTP endpoint
     rpc_url = "http://127.0.0.1:8545"
     
     # Validator join parameters
@@ -148,8 +151,12 @@ async def test_validator_add_remove(
         if result.stdout:
             LOG.info(f"Command output: {result.stdout}")
         
-        # Step 5: Start node3
-        LOG.info("\n[Step 5] Starting node3...")
+        # Step 5: Wait 2 minutes before starting node3
+        LOG.info("\n[Step 5] Waiting 2 minutes before starting node3...")
+        await asyncio.sleep(120)  # Wait 2 minutes
+        
+        # Step 6: Start node3
+        LOG.info("\n[Step 6] Starting node3...")
         node3_path = node_manager.get_node_deploy_path(node3_name, install_dir)
         start_success = node_manager.start_node(node3_path)
         
@@ -158,12 +165,15 @@ async def test_validator_add_remove(
         
         LOG.info(f"✅ Node {node3_name} started")
         
-        # Step 6: Wait 2 minutes and verify validator count == 2
-        LOG.info("\n[Step 6] Waiting 2 minutes and verifying validator count == 2...")
+        # Step 7: Wait 2 minutes after starting node3
+        LOG.info("\n[Step 7] Waiting 2 minutes after starting node3...")
         await asyncio.sleep(120)  # Wait 2 minutes
         
-        # Wait for epoch to potentially change
-        http_client = GravityHttpClient(base_url=http_url)
+        # Step 8: Verify validator count == 2 (using node3's HTTP endpoint)
+        LOG.info("\n[Step 8] Verifying validator count == 2 (using node3's HTTP endpoint)...")
+        
+        # Use node3's HTTP endpoint
+        http_client = GravityHttpClient(base_url=http_url_node3)
         async with http_client:
             # Get current epoch (may have changed)
             current_epoch = await http_client.get_current_epoch()
@@ -186,8 +196,8 @@ async def test_validator_add_remove(
             
             LOG.info(f"✅ Validation passed: validator count == 2")
         
-        # Step 7: Remove validator (node3) using gravity_cli
-        LOG.info("\n[Step 7] Removing validator (node3) using gravity_cli...")
+        # Step 9: Remove validator (node3) using gravity_cli
+        LOG.info("\n[Step 9] Removing validator (node3) using gravity_cli...")
         
         leave_cmd = [
             str(gravity_cli_path),
@@ -213,8 +223,8 @@ async def test_validator_add_remove(
         if result.stdout:
             LOG.info(f"Command output: {result.stdout}")
         
-        # Step 8: Wait 2 minutes and verify validator count == 1
-        LOG.info("\n[Step 8] Waiting 2 minutes and verifying validator count == 1...")
+        # Step 10: Wait 2 minutes and verify validator count == 1
+        LOG.info("\n[Step 10] Waiting 2 minutes and verifying validator count == 1...")
         await asyncio.sleep(120)  # Wait 2 minutes
         
         # Wait for epoch to potentially change
@@ -247,7 +257,8 @@ async def test_validator_add_remove(
         test_result.mark_success(
             initial_validator_count=1,
             after_add_validator_count=2,
-            after_remove_validator_count=1
+            after_remove_validator_count=1,
+            delayed_startup=True
         )
         
     except Exception as e:

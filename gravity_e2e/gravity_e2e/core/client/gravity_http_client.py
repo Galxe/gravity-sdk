@@ -14,7 +14,7 @@ LOG = logging.getLogger(__name__)
 class GravityHttpClient:
     """Gravity Node HTTP API Client"""
     
-    def __init__(self, base_url: str = "http://127.0.0.1:1998", timeout: float = 30.0):
+    def __init__(self, base_url: str = "http://127.0.0.1:1024", timeout: float = 30.0):
         """
         Initialize HTTP client
         
@@ -133,20 +133,19 @@ class GravityHttpClient:
         start = time.time()
         LOG.info(f"Waiting for epoch {target_epoch}...")
         
-        last_epoch = None
         while time.time() - start < timeout:
             try:
-                status = await self.get_dkg_status()
-                current_epoch = status["epoch"]
-                
-                if current_epoch != last_epoch:
-                    LOG.debug(f"Current epoch: {current_epoch}, target: {target_epoch}")
-                    last_epoch = current_epoch
+                # 尝试获取目标 epoch 的 round 1 block 来判断 epoch 是否存在
+                block = await self.get_block_by_epoch_round(target_epoch, 1)
+                current_epoch = block.get("epoch", target_epoch)
                 
                 if current_epoch >= target_epoch:
                     LOG.info(f"Reached epoch {current_epoch}")
                     return current_epoch
                 
+            except RuntimeError as e:
+                # Block 不存在，epoch 还未到达，继续等待
+                LOG.debug(f"Epoch {target_epoch} not yet available, waiting...")
             except Exception as e:
                 LOG.warning(f"Error checking epoch: {e}")
             
@@ -154,7 +153,7 @@ class GravityHttpClient:
         
         raise TimeoutError(
             f"Timeout waiting for epoch {target_epoch} "
-            f"(current: {last_epoch}, timeout: {timeout}s)"
+            f"(timeout: {timeout}s)"
         )
     
     async def get_current_epoch(self) -> int:

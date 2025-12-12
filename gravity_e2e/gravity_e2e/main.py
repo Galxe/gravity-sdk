@@ -27,7 +27,9 @@ from .tests.test_cases.test_randomness_advanced import (
     test_randomness_stress
 )
 from .tests.test_cases.test_epoch_consistency import test_epoch_consistency
+from .tests.test_cases.test_epoch_consistency_extended import test_epoch_consistency_extended
 from .tests.test_cases.test_validator_add_remove import test_validator_add_remove
+from .tests.test_cases.test_validator_add_remove_delayed import test_validator_add_remove_delayed
 
 LOG = logging.getLogger(__name__)
 
@@ -70,8 +72,14 @@ async def run_test_module(module_name: str, test_helper: RunHelper, test_results
         elif module_name == "cases.epoch_consistency":
             result = await test_epoch_consistency(run_helper=test_helper)
             test_results.append(result)
+        elif module_name == "cases.epoch_consistency_extended":
+            result = await test_epoch_consistency_extended(run_helper=test_helper)
+            test_results.append(result)
         elif module_name == "cases.validator_add_remove":
             result = await test_validator_add_remove(run_helper=test_helper)
+            test_results.append(result)
+        elif module_name == "cases.validator_add_remove_delayed":
+            result = await test_validator_add_remove_delayed(run_helper=test_helper)
             test_results.append(result)
         else:
             LOG.warning(f"Unknown test module: {module_name}")
@@ -96,7 +104,8 @@ async def main():
                                "randomness", "randomness_basic", "randomness_correctness",
                                "randomness_smoke", "randomness_reconfiguration",
                                "randomness_multi_contract", "randomness_api_completeness",
-                               "randomness_stress", "epoch_consistency", "validator_add_remove"],
+                               "randomness_stress", "epoch_consistency", "epoch_consistency_extended",
+                               "validator_add_remove", "validator_add_remove_delayed"],
                        help="Test suite to run")
     parser.add_argument("--cluster", default=None,
                        help="Cluster name to test (defined in nodes.json)")
@@ -179,7 +188,7 @@ async def main():
             test_results = []
             
             # Check if test suite manages its own nodes (doesn't need pre-existing connections)
-            self_managed_tests = ["epoch_consistency", "validator_add_remove"]
+            self_managed_tests = ["epoch_consistency", "epoch_consistency_extended", "validator_add_remove", "validator_add_remove_delayed"]
             is_self_managed = args.test_suite in self_managed_tests
             
             if is_self_managed:
@@ -200,8 +209,12 @@ async def main():
                 # Determine test modules to run
                 if args.test_suite == "epoch_consistency":
                     test_modules = ["cases.epoch_consistency"]
+                elif args.test_suite == "epoch_consistency_extended":
+                    test_modules = ["cases.epoch_consistency_extended"]
                 elif args.test_suite == "validator_add_remove":
                     test_modules = ["cases.validator_add_remove"]
+                elif args.test_suite == "validator_add_remove_delayed":
+                    test_modules = ["cases.validator_add_remove_delayed"]
                 else:
                     test_modules = []
                 
@@ -267,8 +280,12 @@ async def main():
                         test_modules = ["cases.randomness_stress"]
                     elif args.test_suite == "epoch_consistency":
                         test_modules = ["cases.epoch_consistency"]
+                    elif args.test_suite == "epoch_consistency_extended":
+                        test_modules = ["cases.epoch_consistency_extended"]
                     elif args.test_suite == "validator_add_remove":
                         test_modules = ["cases.validator_add_remove"]
+                    elif args.test_suite == "validator_add_remove_delayed":
+                        test_modules = ["cases.validator_add_remove_delayed"]
                     else:
                         test_modules = [f"cases.{args.test_suite}"]
                     
