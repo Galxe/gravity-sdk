@@ -178,6 +178,18 @@ pub struct TxnLifeTime {
 
 static INSTANCE: OnceLock<TxnLifeTime> = OnceLock::new();
 
+/// Check if TxnLife feature is enabled via environment variable.
+/// Reads `TXN_LIFE_ENABLED` env var. Defaults to false (disabled).
+static TXN_LIFE_ENABLED: OnceLock<bool> = OnceLock::new();
+
+fn is_txn_life_enabled() -> bool {
+    *TXN_LIFE_ENABLED.get_or_init(|| {
+        std::env::var("TXN_LIFE_ENABLED")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+    })
+}
+
 impl TxnLifeTime {
     pub fn get_txn_life_time() -> &'static TxnLifeTime {
         INSTANCE.get_or_init(|| TxnLifeTime {
@@ -189,6 +201,9 @@ impl TxnLifeTime {
     }
 
     pub fn record_added(&self, txn: &SignedTransaction) {
+        if !is_txn_life_enabled() {
+            return;
+        }
         let now = SystemTime::now();
         let txn_key = (txn.sender(), txn.sequence_number());
         let txn_hash = txn.committed_hash();
@@ -207,6 +222,9 @@ impl TxnLifeTime {
     }
 
     pub fn record_batch(&self, batch_id: BatchId, batch: &Vec<SignedTransaction>) {
+        if !is_txn_life_enabled() {
+            return;
+        }
         let now = SystemTime::now();
         let mut current_batch_txn_keys = HashSet::with_capacity(batch.len());
         for txn in batch.iter() {
@@ -233,6 +251,9 @@ impl TxnLifeTime {
     }
 
     pub fn record_broadcast_batch(&self, batch_id: BatchId) {
+        if !is_txn_life_enabled() {
+            return;
+        }
         let now = SystemTime::now();
         if let Some(txn_keys_entry) = self.txn_batch_id.get(&batch_id) {
             for &txn_key in txn_keys_entry.value().iter() {
@@ -248,6 +269,9 @@ impl TxnLifeTime {
     }
 
     pub fn record_before_persist(&self, batch_id: BatchId) {
+        if !is_txn_life_enabled() {
+            return;
+        }
         let now = SystemTime::now();
         if let Some(txn_keys_entry) = self.txn_batch_id.get(&batch_id) {
             for &txn_key in txn_keys_entry.value().iter() {
@@ -263,6 +287,9 @@ impl TxnLifeTime {
     }
 
     pub fn record_after_persist(&self, batch_id: BatchId) {
+        if !is_txn_life_enabled() {
+            return;
+        }
         let now = SystemTime::now();
         if let Some(txn_keys_entry) = self.txn_batch_id.get(&batch_id) {
             for &txn_key in txn_keys_entry.value().iter() {
@@ -277,6 +304,9 @@ impl TxnLifeTime {
     }
 
     pub fn record_proof(&self, batch_id: BatchId) {
+        if !is_txn_life_enabled() {
+            return;
+        }
         let now = SystemTime::now();
         if let Some(txn_keys_entry) = self.txn_batch_id.get(&batch_id) {
             for &txn_key in txn_keys_entry.value().iter() {
@@ -322,6 +352,9 @@ impl TxnLifeTime {
     }
 
     pub fn record_block(&self, payload: Option<&Payload>, block_id: HashValue) {
+        if !is_txn_life_enabled() {
+            return;
+        }
         let now = SystemTime::now(); // Time this block is being processed/recorded
         if let Some(payload) = payload {
             match payload {
@@ -373,6 +406,9 @@ impl TxnLifeTime {
     }
 
     pub fn record_executing(&self, block_id: HashValue) {
+        if !is_txn_life_enabled() {
+            return;
+        }
         let now = SystemTime::now();
         if let Some(txn_keys_entry) = self.txn_block_id.get(&block_id) {
             for &txn_key in txn_keys_entry.value().iter() {
@@ -386,6 +422,9 @@ impl TxnLifeTime {
     }
 
     pub fn record_executed(&self, block_id: HashValue) {
+        if !is_txn_life_enabled() {
+            return;
+        }
         let now = SystemTime::now();
         if let Some(txn_keys_entry) = self.txn_block_id.get(&block_id) {
             for &txn_key in txn_keys_entry.value().iter() {
@@ -399,6 +438,9 @@ impl TxnLifeTime {
     }
 
     pub fn record_block_committed(&self, block_id: HashValue) {
+        if !is_txn_life_enabled() {
+            return;
+        }
         let now = SystemTime::now();
         if let Some(txn_keys_entry) = self.txn_block_id.get(&block_id) {
             for &txn_key in txn_keys_entry.value().iter() {
@@ -413,6 +455,9 @@ impl TxnLifeTime {
     }
 
     pub fn record_committed(&self, sender: &AccountAddress, sequence_number: u64) {
+        if !is_txn_life_enabled() {
+            return;
+        }
         let now = SystemTime::now();
         let txn_key = (*sender, sequence_number);
 
