@@ -1499,11 +1499,31 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         // onchain_config.quorum_store_enabled()
     }
 
+    /// Filter out consensus messages that are not relevant to the current epoch role.
+    /// Return false if the message is filtered out, true otherwise.
+    fn consensus_msg_filter(
+        &self,
+        peer_id: &AccountAddress,
+        consensus_msg: &ConsensusMsg,
+    ) -> bool {
+        match consensus_msg {
+            ConsensusMsg::EpochChangeProof(_) => {
+                peer_id == &self.author
+            }
+            _ => self.is_validator && self.is_current_epoch_validator
+        }
+    }
+
     async fn process_message(
         &mut self,
         peer_id: AccountAddress,
         consensus_msg: ConsensusMsg,
     ) -> anyhow::Result<()> {
+        if !self.consensus_msg_filter(&peer_id, &consensus_msg) {
+            info!("consensus msg from {peer_id} is filtered out: {consensus_msg:?}");
+            return Ok(());
+        }
+
         fail_point!("consensus::process::any", |_| {
             Err(anyhow::anyhow!("Injected error in process_message"))
         });
@@ -1729,11 +1749,26 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         }
     }
 
+    /// Filter out rpc requests that are not relevant to the current epoch role.
+    /// Return false if the request is filtered out, true otherwise.
+    fn rpc_request_filter(
+        &self,
+        peer_id: &Author,
+        request: &IncomingRpcRequest,
+    ) -> bool {
+        self.is_validator && self.is_current_epoch_validator
+    }
+
     fn process_rpc_request(
         &mut self,
         peer_id: Author,
         request: IncomingRpcRequest,
     ) -> anyhow::Result<()> {
+        if !self.rpc_request_filter(&peer_id, &request) {
+            info!("rpc request from {peer_id} is filtered out: {request:?}");
+            return Ok(());
+        }
+
         fail_point!("consensus::process::any", |_| {
             Err(anyhow::anyhow!("Injected error in process_rpc_request"))
         });
