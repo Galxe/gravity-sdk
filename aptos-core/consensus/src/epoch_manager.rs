@@ -1906,6 +1906,11 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     }
 
     fn process_local_timeout(&mut self, round: u64) {
+        // FIXME(nekomoto): This is a temporary fix to skip unexpected local timeout from non-validator.
+        if !self.is_validator || !self.is_current_epoch_validator {
+            error!("Not validator or current epoch validator, skipping local timeout for round {round}");
+            return;
+        }
         let Some(sender) = self.round_manager_tx.as_ref() else {
             warn!(
                 "Received local timeout for round {} without Round Manager",
