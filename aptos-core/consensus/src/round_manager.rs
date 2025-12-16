@@ -376,9 +376,10 @@ impl RoundManager {
         &mut self,
         new_round_event: NewRoundEvent,
     ) -> anyhow::Result<()> {
-        if !self.is_validator() {
-            return Err(anyhow::anyhow!("Not validator, skip process_new_round_event: {new_round_event}"));
-        }
+        debug_assert!(
+            self.is_validator(),
+            "Not validator, cannot process new round event: {new_round_event}"
+        );
 
         tokio::time::sleep(Duration::from_millis(
             // try get env
@@ -758,9 +759,7 @@ impl RoundManager {
     /// Note this function returns Err even if messages are broadcasted successfully because timeout
     /// is considered as error. It only returns Ok(()) when the timeout is stale.
     pub async fn process_local_timeout(&mut self, round: Round) -> anyhow::Result<()> {
-        if !self.is_validator() {
-            return Err(anyhow::anyhow!("Not validator, skip process_local_timeout: {round}"));
-        }
+        debug_assert!(self.is_validator(), "Not validator, cannot process local timeout: {round}");
 
         if !self.round_state.process_local_timeout(round) {
             return Ok(());
@@ -838,17 +837,11 @@ impl RoundManager {
     /// 4. In case a validator chooses to vote, send the vote to the representatives at the next
     /// round.
     async fn process_proposal(&mut self, proposal: Block) -> anyhow::Result<()> {
+        debug_assert!(self.is_validator(), "Not validator, cannot process proposal: {}", proposal.id());
+
         let author = proposal
             .author()
             .expect("Proposal should be verified having an author");
-
-        if !self.is_validator() {
-            return Err(anyhow::anyhow!(
-                "not validator, skip process_proposal: {}",
-                proposal.id()
-            ));
-        }
-
         
         if !self.vtxn_config.enabled()
             && matches!(
@@ -985,13 +978,15 @@ impl RoundManager {
         &mut self,
         proposal: Block,
     ) -> anyhow::Result<()> {
+        debug_assert!(
+            self.is_validator(),
+            "Not validator, cannot check backpressure and process proposal: {}",
+            proposal.id()
+        );
+
         let author = proposal
             .author()
             .expect("Proposal should be verified having an author");
-
-        if !self.is_validator() {
-            return Err(anyhow::anyhow!("not validator, skip check_backpressure_and_process_proposal: {}", proposal.id()));
-        }
 
         if self.block_store.vote_back_pressure() {
             counters::CONSENSUS_WITHOLD_VOTE_BACKPRESSURE_TRIGGERED.observe(1.0);
@@ -1072,9 +1067,11 @@ impl RoundManager {
     }
 
     pub async fn process_verified_proposal(&mut self, proposal: Block) -> anyhow::Result<()> {
-        if !self.is_validator() {
-            return Err(anyhow::anyhow!("Not validator, skip process_verified_proposal: {proposal}"));
-        }
+        debug_assert!(
+            self.is_validator(),
+            "Not validator, cannot process verified proposal: {:?}",
+            proposal.id()
+        );
 
         let proposal_round = proposal.round();
         let vote = self
@@ -1110,7 +1107,11 @@ impl RoundManager {
     /// * save the updated state to consensus DB
     /// * return a VoteMsg with the LedgerInfo to be committed in case the vote gathers QC.
     async fn vote_block(&mut self, proposed_block: Block) -> anyhow::Result<Vote> {
-        debug_assert!(self.is_validator(), "{}", proposed_block.id());
+        debug_assert!(
+            self.is_validator(),
+            "Not validator, cannot vote block: {}",
+            proposed_block.id()
+        );
 
         let block_arc = self
             .block_store
@@ -1152,11 +1153,10 @@ impl RoundManager {
     }
 
     async fn process_order_vote_msg(&mut self, order_vote_msg: OrderVoteMsg) -> anyhow::Result<()> {
-        if !self.is_validator() {
-            return Err(anyhow::anyhow!(
-                "Not validator, skip process_order_vote_msg: {order_vote_msg}"
-            ));
-        }
+        debug_assert!(
+            self.is_validator(),
+            "Not validator, cannot process order vote: {order_vote_msg}"
+        );
 
         if self.onchain_config.order_vote_enabled() {
             fail_point!("consensus::process_order_vote_msg", |_| {
@@ -1205,7 +1205,11 @@ impl RoundManager {
         vote: &Vote,
         qc: Arc<QuorumCert>,
     ) -> anyhow::Result<()> {
-        debug_assert!(self.is_validator(), "{}", vote.vote_data().proposed().id());
+        debug_assert!(
+            self.is_validator(),
+            "Not validator, cannot broadcast order vote: {:?}",
+            vote.vote_data()
+        );
         if let Some(proposed_block) = self.block_store.get_block(vote.vote_data().proposed().id()) {
             // Generate an order vote with ledger_info = proposed_block
             let order_vote_proposal = proposed_block.order_vote_proposal(qc.clone());
@@ -1242,13 +1246,11 @@ impl RoundManager {
     /// 2. Add the vote to the pending votes and check whether it finishes a QC.
     /// 3. Once the QC/TC successfully formed, notify the RoundState.
     pub async fn process_vote_msg(&mut self, vote_msg: VoteMsg) -> anyhow::Result<()> {
+        debug_assert!(self.is_validator(), "Not validator, cannot process vote: {vote_msg:?}");
+
         fail_point!("consensus::process_vote_msg", |_| {
             Err(anyhow::anyhow!("Injected error in process_vote_msg"))
         });
-
-        if !self.is_validator() {
-            return Err(anyhow::anyhow!("Not validator, skip process_vote_msg"))
-        }
 
         // Check whether this validator is a valid recipient of the vote.
         if self
@@ -1272,7 +1274,11 @@ impl RoundManager {
     /// 1) fetch missing dependencies if required, and then
     /// 2) call process_certificates(), which will start a new round in return.
     async fn process_vote(&mut self, vote: &Vote) -> anyhow::Result<()> {
-        debug_assert!(self.is_validator(), "{}", vote.vote_data().proposed().id());
+        debug_assert!(
+            self.is_validator(),
+            "Not validator, cannot process vote: {:?}",
+            vote.vote_data()
+        );
         let round = vote.vote_data().proposed().round();
 
         if vote.is_timeout() {
@@ -1330,7 +1336,11 @@ impl RoundManager {
         vote: &Vote,
         result: VoteReceptionResult,
     ) -> anyhow::Result<()> {
-        debug_assert!(self.is_validator(), "{}", vote.vote_data().proposed().id());
+        debug_assert!(
+            self.is_validator(),
+            "Not validator, cannot process vote: {:?}",
+            vote.vote_data()
+        );
         let round = vote.vote_data().proposed().round();
         match result {
             VoteReceptionResult::NewQuorumCertificate(qc) => {
