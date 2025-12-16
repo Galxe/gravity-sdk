@@ -777,6 +777,8 @@ impl BlockStore {
         let mut ledger_infos = vec![];
         if upper != 0 {
             ledger_infos = self.storage.consensus_db().ledger_db.metadata_db().get_ledger_infos_by_range((lower, upper));
+            // Filter ledger infos by retrieval_epoch
+            ledger_infos.retain(|ledger_info| ledger_info.ledger_info().epoch() == retrieval_epoch);
             // Reverse to get them in ascending order
             ledger_infos.reverse();
         }
