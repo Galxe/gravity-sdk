@@ -49,7 +49,7 @@ async def test_validator_add_remove_delayed(
     rpc_url = "http://127.0.0.1:8545"
     
     # Validator join parameters
-    private_key = "0x5c173b12be434289682782ac6f7e7bf73a6fa5a20d507e318a4bdb039b1a5f6e"
+    private_key = "0x...."
     stake_amount = "10001.0"
     validator_address = "0x9B2C25E77a97d3e84DC0Cb7F83fb676ddC4F24b9"
     consensus_public_key = "b7a931fa544c2d1d54dee27619edfb70cc801bc599dd7a3f56f641a588cee4600b63e35d0d35fe69f2e454462b0ce9b2"
