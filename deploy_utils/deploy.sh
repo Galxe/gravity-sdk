@@ -26,6 +26,7 @@ bin_version="debug"
 mode="cluster"
 recover="false"
 install_dir="/tmp"
+node_config_dir=""
 
 # Logging functions
 log_info() {
@@ -57,6 +58,7 @@ show_help() {
     done
     echo "  -r, --recover          Preserve existing data (default: false)"
     echo "  -i, --install_dir DIR   Specify installation directory (required)"
+    echo "  -c, --node-config-dir DIR  Specify node config directory (optional, default: \$SCRIPT_DIR/\$node/config)"
     echo "  -h, --help             Show this help message"
     echo
     echo "Examples:"
@@ -153,6 +155,10 @@ while [[ "$#" -gt 0 ]]; do
         install_dir="$2"
         shift
         ;;
+    -c|--node-config-dir)
+        node_config_dir="$2"
+        shift
+        ;;
     -h|--help)
         show_help
         exit 0
@@ -177,6 +183,17 @@ main() {
     SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
     TARGET_DIR="$SCRIPT_DIR/../target"
 
+    # Set node_config_dir if not provided
+    if [[ -z "$node_config_dir" ]]; then
+        node_config_dir="$SCRIPT_DIR/$node_arg/config"
+    fi
+
+    # Check if node_config_dir exists
+    if [[ ! -d "$node_config_dir" ]]; then
+        log_error "Node config directory does not exist: $node_config_dir"
+        exit 1
+    fi
+
     # Check binary file
     if [[ ! -f "$TARGET_DIR/$bin_version/$bin_name" ]]; then
         log_error "Binary not found: $TARGET_DIR/$bin_version/$bin_name"
@@ -195,7 +212,7 @@ main() {
 
         # Copy files
         log_info "Copying configuration files"
-        cp -r "$SCRIPT_DIR/$node_arg/config" "$install_dir/$node_arg"
+        cp -r "$node_config_dir" "$install_dir/$node_arg"
 
         if [[ "$mode" == "cluster" ]]; then
             log_info "Setting up cluster mode"
