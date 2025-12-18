@@ -114,7 +114,8 @@ class NodeManager:
         mode: str = "cluster",
         install_dir: str = "/tmp",
         bin_version: str = "debug",
-        recover: bool = False
+        recover: bool = False,
+        node_config_dir: str = "",
     ) -> bool:
         """部署单个节点
         
@@ -151,7 +152,8 @@ class NodeManager:
             "-n", node_name,
             "-m", mode,
             "-i", install_dir,
-            "-v", bin_version
+            "-v", bin_version,
+            "-c", node_config_dir,
         ]
         
         if recover:
