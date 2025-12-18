@@ -205,6 +205,10 @@ main() {
     else
         log_info "Cleaning directory $install_dir/$node_arg"
         rm -rf "$install_dir/$node_arg"
+        if [[ $? -ne 0 ]]; then
+            log_error "Failed to clean directory: $install_dir/$node_arg"
+            exit 1
+        fi
         
         # Prepare directories
         log_info "Creating required directories"
