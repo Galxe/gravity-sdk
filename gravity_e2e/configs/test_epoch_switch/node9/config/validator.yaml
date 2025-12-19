@@ -51,6 +51,8 @@ full_node_networks:
     identity:
       type: "from_file"
       path: /tmp/node9/config/validator-identity.yaml
+    discovery_method: 
+      onchain
 
 storage:
   dir: "/tmp/node9/data"
