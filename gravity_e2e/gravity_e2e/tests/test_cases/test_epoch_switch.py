@@ -6,12 +6,14 @@ Tests epoch switching with multiple nodes (node1-node10)
 import asyncio
 from dataclasses import dataclass
 import logging
+import random
 import subprocess
-from typing import Dict
+from typing import Dict, Set
 
 from ...utils.aptos_identity import AptosIdentity, parse_identity_from_yaml
 from ...helpers.test_helpers import RunHelper, TestResult, test_case
 from ...core.node_manager import NodeManager
+from ...core.client.gravity_http_client import GravityHttpClient
 
 LOG = logging.getLogger(__name__)
 
@@ -221,6 +223,108 @@ class TestContext:
             LOG.info(f"Initialized validator join args for {node_name}: {args}")
             self.node_to_validator_join_args[node_name] = args
 
+    async def fuzzy_validator_join_and_leave(self):
+        """
+        模糊测试：持续随机地让节点加入和离开 validator set
+        函数永不退出，持续运行
+        """
+        # validator set not include genesis validators
+        validator_set: Set[str] = set()
+        pending_joins: Set[str] = set()
+        pending_leaves: Set[str] = set()
+
+        # FIXME: hardcoded port
+        http_url = "http://127.0.0.1:1031"
+
+        # 初始化 HTTP 客户端
+        http_client = GravityHttpClient(base_url=http_url)
+        async with http_client:
+            # 获取初始 epoch
+            try:
+                current_epoch = await http_client.get_current_epoch()
+                LOG.info(f"初始 epoch: {current_epoch}")
+            except Exception as e:
+                LOG.error(f"❌ 无法获取初始 epoch: {e}")
+                # 如果无法获取初始 epoch，设置为 0 并继续
+                raise RuntimeError(f"Failed to get epoch: {e}")
+
+            # 主循环：永不退出
+            while True:
+                try:
+                    # 每隔 10 秒检查 epoch 是否切换
+                    await asyncio.sleep(10)
+
+                    # 检查 epoch 是否切换
+                    try:
+                        new_epoch = await http_client.get_current_epoch()
+                    except Exception as e:
+                        LOG.warning(f"⚠️ 无法获取当前 epoch: {e}，跳过本次检查")
+                        raise RuntimeError(f"Failed to get epoch: {e}")
+
+                    if new_epoch == current_epoch:
+                        continue
+
+                    if new_epoch < current_epoch:
+                        raise RuntimeError(
+                            f"Epoch decreased from {current_epoch} to {new_epoch}"
+                        )
+                    # Epoch 切换了，更新 validator_set
+                    LOG.info(f"Epoch 从 {current_epoch} 切换到 {new_epoch}")
+
+                    # 将成功 join 的节点加入 validator_set
+                    validator_set.update(pending_joins)
+                    if pending_joins:
+                        LOG.info(f"节点 {pending_joins} 进入 validator_set")
+
+                    # 将成功 leave 的节点从 validator_set 移除
+                    validator_set.difference_update(pending_leaves)
+                    if pending_leaves:
+                        LOG.info(f"节点 {pending_leaves} 退出 validator_set")
+
+                    # 重置待处理的 join 和 leave
+                    pending_joins.clear()
+                    pending_leaves.clear()
+
+                    # 更新当前 epoch
+                    current_epoch = new_epoch
+                    LOG.info(f"当前 validator_set: {validator_set}")
+
+                    # 在每个 epoch 期间执行随机 join 和 leave
+                    # 从不在 validator_set 的节点中随机选择 1-3 个节点调用 validator join
+                    nodes_not_in_validator = [
+                        node for node in self.node_names if node not in validator_set
+                    ]
+
+                    if nodes_not_in_validator:
+                        # 随机选择 1-3 个节点
+                        num_joins = random.randint(
+                            1, min(3, len(nodes_not_in_validator))
+                        )
+                        nodes_to_join = random.sample(nodes_not_in_validator, num_joins)
+
+                        for node_name in nodes_to_join:
+                            LOG.info(f"尝试让节点 {node_name} join validator set...")
+                            self.validator_join(node_name)
+                            pending_joins.add(node_name)
+                            LOG.info(
+                                f"✅ 节点 {node_name} join 成功，将在下一个 epoch 进入 validator_set"
+                            )
+                    # 从在 validator_set 的节点中随机选择 1-3 个节点调用 validator leave
+                    if validator_set:
+                        # 随机选择 1-3 个节点
+                        num_leaves = random.randint(1, min(3, len(validator_set)))
+                        nodes_to_leave = random.sample(validator_set, num_leaves)
+
+                        for node_name in nodes_to_leave:
+                            LOG.info(f"尝试让节点 {node_name} leave validator set...")
+                            self.validator_leave(node_name)
+                            pending_leaves.add(node_name)
+                            LOG.info(
+                                f"✅ 节点 {node_name} leave 成功，将在下一个 epoch 退出 validator_set"
+                            )
+                except Exception as e:
+                    raise RuntimeError(f"Failed to fuzzy validator join and leave: {e}")
+
 
 @test_case
 async def test_epoch_switch(run_helper: RunHelper, test_result: TestResult):
@@ -268,6 +372,11 @@ async def test_epoch_switch(run_helper: RunHelper, test_result: TestResult):
         LOG.info(
             f"✅ Node to identity and validator join args initialized successfully"
         )
+
+        # Step 6: Fuzzy validator join and leave
+        LOG.info("\n[Step 6] Fuzzy validator join and leave...")
+        await test_context.fuzzy_validator_join_and_leave()
+        LOG.info(f"✅ Fuzzy validator join and leave completed successfully")
 
         test_result.mark_success()
 
