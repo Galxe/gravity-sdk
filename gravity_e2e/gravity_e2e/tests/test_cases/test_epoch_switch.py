@@ -7,8 +7,11 @@ import asyncio
 from dataclasses import dataclass
 import logging
 import random
+import signal
 import subprocess
 from typing import Dict, Set
+
+from gravity_e2e.gravity_e2e.core.client.gravity_client import GravityClient
 
 from ...utils.aptos_identity import AptosIdentity, parse_identity_from_yaml
 from ...helpers.test_helpers import RunHelper, TestResult, test_case
@@ -43,6 +46,13 @@ class TestContext:
         self.node_to_identity: Dict[str, AptosIdentity] = dict()
         self.node_to_account: Dict[str, Dict] = dict()
         self.node_to_validator_join_args: Dict[str, ValidatorJoinArgs] = dict()
+        self.should_stop = False
+        signal.signal(signal.SIGTERM, self.signal_handler)
+        signal.signal(signal.SIGINT, self.signal_handler)
+
+    def signal_handler(self, signum, frame):
+        self.should_stop = True
+        LOG.info(f"收到信号 {signal.Signals(signum).name}，准备停止...")
 
     def deploy_nodes(self):
         deploy_results = {}
@@ -226,7 +236,6 @@ class TestContext:
     async def fuzzy_validator_join_and_leave(self):
         """
         模糊测试：持续随机地让节点加入和离开 validator set
-        函数永不退出，持续运行
         """
         # validator set not include genesis validators
         validator_set: Set[str] = set()
@@ -248,8 +257,8 @@ class TestContext:
                 # 如果无法获取初始 epoch，设置为 0 并继续
                 raise RuntimeError(f"Failed to get epoch: {e}")
 
-            # 主循环：永不退出
-            while True:
+            # 主循环：检查停止标志
+            while not self.should_stop:
                 try:
                     # 每隔 10 秒检查 epoch 是否切换
                     await asyncio.sleep(10)
@@ -325,6 +334,28 @@ class TestContext:
                 except Exception as e:
                     raise RuntimeError(f"Failed to fuzzy validator join and leave: {e}")
 
+    async def check_node_block_height(self):
+        clients = [self.run_helper.client]
+        for i in range(2, 11):
+            node_name = f"node{i}"
+            # FIXME: hardcoded port
+            http_url = f"http://127.0.0.1:{8540 + i}"
+            client = GravityClient(rpc_url=http_url, node_id=node_name)
+            clients.append(client)
+        block_heights = await asyncio.gather(
+            *[client.get_block_number() for client in clients]
+        )
+        max_block_height = max(block_heights)
+        LOG.info(f"Max block height: {max_block_height}")
+        is_gap_too_large = False
+        for i, block_height in enumerate(block_heights):
+            LOG.info(f"node{i} block height: {block_height}")
+            if block_height + 100 < max_block_height:
+                LOG.warning(f"node{i} block height is too low: {block_height}")
+                is_gap_too_large = True
+        if is_gap_too_large:
+            raise RuntimeError(f"Gap between node block heights is too large")
+
 
 @test_case
 async def test_epoch_switch(run_helper: RunHelper, test_result: TestResult):
@@ -377,6 +408,11 @@ async def test_epoch_switch(run_helper: RunHelper, test_result: TestResult):
         LOG.info("\n[Step 6] Fuzzy validator join and leave...")
         await test_context.fuzzy_validator_join_and_leave()
         LOG.info(f"✅ Fuzzy validator join and leave completed successfully")
+
+        # Step 7: Check node block height
+        LOG.info("\n[Step 7] Checking node block height...")
+        await test_context.check_node_block_height()
+        LOG.info(f"✅ Node block height checked successfully")
 
         test_result.mark_success()
 
