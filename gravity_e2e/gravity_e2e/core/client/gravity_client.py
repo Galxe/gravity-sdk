@@ -8,13 +8,14 @@ from web3 import Web3
 
 from ...utils.exceptions import APIError
 from ...utils.common import hex_to_int
+from web3 import Web3
 
 
 def to_checksum_address(address: str) -> str:
-    """Convert address to checksum format"""
+    """Convert address to EIP-55 checksum format"""
     if not address.startswith("0x"):
         address = "0x" + address
-    return address.lower()
+    return Web3.to_checksum_address(address)
 
 LOG = logging.getLogger(__name__)
 
@@ -26,9 +27,19 @@ class GravityClient:
         self.rpc_url = rpc_url
         self.node_id = node_id
         self.timeout = timeout
-        self.w3 = Web3(Web3.HTTPProvider(rpc_url))
+        self._web3 = Web3(Web3.HTTPProvider(rpc_url))
         self.session: Optional[aiohttp.ClientSession] = None
         self._request_id = 0
+    
+    @property
+    def web3(self) -> Web3:
+        """Get Web3 instance for synchronous operations (use with caution in async context)"""
+        return self._web3
+    
+    @property
+    def w3(self) -> Web3:
+        """Alias for web3 property (deprecated, use web3 instead)"""
+        return self._web3
         
     async def __aenter__(self):
         self.session = aiohttp.ClientSession(

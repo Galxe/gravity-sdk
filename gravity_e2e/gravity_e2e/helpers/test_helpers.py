@@ -1,44 +1,223 @@
+"""
+Gravity E2E Test Framework Helpers
+
+This module provides core helper classes for test execution, including test
+result tracking and account management utilities.
+
+Design Notes:
+- TestResult class for standardized test outcome reporting
+- RunHelper class for common test operations
+- Automatic account creation and funding
+- Integration with faucet for test ETH distribution
+- Type-safe account information handling
+- Unified exception handling patterns
+
+Usage:
+    # Create test helper
+    helper = RunHelper(client, "/tmp/test_output", faucet_account)
+
+    # Create and fund test account
+    account = await helper.create_test_account("test_user", fund_wei=10**18)
+
+    # Initialize test result
+    result = TestResult("my_test")
+
+    # Mark test success with details
+    result.mark_success(tx_hash="0x123...", gas_used=21000)
+    
+    # Use unified exception handling
+    with handle_test_exception(test_result):
+        # test code here
+        pass
+"""
+
 import asyncio
 import logging
-from typing import Dict, Optional
+from contextlib import contextmanager
+from typing import Dict, Optional, Type, Tuple
 from eth_account import Account
 from web3 import Web3
 
 from .account_manager import TestAccountManager
 from ..core.client.gravity_client import GravityClient
+from ..utils.exceptions import (
+    GravityE2EError,
+    TransactionError,
+    ContractError,
+    EventError,
+)
 
 LOG = logging.getLogger(__name__)
 
 
+@contextmanager
+def handle_test_exception(test_result: 'TestResult', reraise: bool = True):
+    """
+    Context manager for unified exception handling in tests.
+    
+    This ensures consistent error handling and result marking across all tests.
+    
+    Args:
+        test_result: TestResult instance to mark on failure
+        reraise: Whether to re-raise the exception after handling
+    
+    Usage:
+        with handle_test_exception(test_result):
+            # your test code
+            await do_something()
+    """
+    try:
+        yield
+    except (TransactionError, ContractError, EventError) as e:
+        # Framework-specific exceptions with details
+        test_result.mark_failure(
+            error=f"{e.__class__.__name__}: {e}",
+            details=e.details if hasattr(e, 'details') else {}
+        )
+        if reraise:
+            raise
+    except GravityE2EError as e:
+        # Base framework exception
+        test_result.mark_failure(
+            error=f"{e.__class__.__name__}: {e}",
+            details=e.details if hasattr(e, 'details') else {}
+        )
+        if reraise:
+            raise
+    except Exception as e:
+        # Generic exception
+        test_result.mark_failure(
+            error=f"Test failed: {e}",
+            details={"type": type(e).__name__}
+        )
+        if reraise:
+            raise
+
+
+async def handle_test_exception_async(
+    test_result: 'TestResult',
+    coro,
+    reraise: bool = True
+):
+    """
+    Async version of exception handling for tests.
+    
+    Args:
+        test_result: TestResult instance to mark on failure
+        coro: Coroutine to execute
+        reraise: Whether to re-raise the exception after handling
+    
+    Returns:
+        Result of the coroutine if successful
+    
+    Usage:
+        result = await handle_test_exception_async(test_result, do_something())
+    """
+    try:
+        return await coro
+    except (TransactionError, ContractError, EventError) as e:
+        test_result.mark_failure(
+            error=f"{e.__class__.__name__}: {e}",
+            details=e.details if hasattr(e, 'details') else {}
+        )
+        if reraise:
+            raise
+    except GravityE2EError as e:
+        test_result.mark_failure(
+            error=f"{e.__class__.__name__}: {e}",
+            details=e.details if hasattr(e, 'details') else {}
+        )
+        if reraise:
+            raise
+    except Exception as e:
+        test_result.mark_failure(
+            error=f"Test failed: {e}",
+            details={"type": type(e).__name__}
+        )
+        if reraise:
+            raise
+
+
 class TestResult:
-    """Test results"""
+    """
+    Standardized test result tracking and reporting.
+
+    This class provides a consistent way to track test execution results,
+    including success/failure status, error messages, timing, and custom
+    test-specific details.
+
+    Attributes:
+        test_name: Name/identifier of the test
+        success: Whether the test passed (True) or failed (False)
+        error: Error message if test failed
+        start_time: Test start timestamp
+        end_time: Test end timestamp
+        details: Dictionary of test-specific metrics and data
+
+    Example:
+        result = TestResult("token_transfer")
+        result.mark_success(
+            tx_hash="0xabc123",
+            gas_used=50000,
+            amount=1000
+        )
+        print(result.to_dict())
+    """
+
     def __init__(self, test_name: str):
+        """
+        Initialize test result.
+
+        Args:
+            test_name: Unique identifier for the test
+        """
         self.test_name = test_name
         self.success = False
         self.error = None
         self.start_time = None
         self.end_time = None
         self.details = {}
-        
+
     def mark_success(self, **details):
-        """Mark test as successful"""
+        """
+        Mark the test as successful with optional details.
+
+        Args:
+            **details: Test-specific metrics and data (e.g., tx_hash, gas_used)
+        """
         self.success = True
         if details:
             self.details.update(details)
-            
+
     def mark_failure(self, error: str, **details):
-        """Mark test as failed"""
+        """
+        Mark the test as failed with error message and optional details.
+
+        Args:
+            error: Description of what went wrong
+            **details: Additional context (e.g., failed_operation, expected_vs_actual)
+        """
         self.success = False
         self.error = error
         if details:
             self.details.update(details)
-            
+
     def set_duration(self, duration: float):
-        """Set test duration"""
+        """
+        Set the test execution duration.
+
+        Args:
+            duration: Test duration in seconds
+        """
         self.details["duration"] = duration
-    
+
     def to_dict(self):
-        """Convert to dictionary for JSON serialization"""
+        """
+        Convert test result to dictionary for JSON serialization.
+
+        Returns:
+            Dictionary representation suitable for saving to file
+        """
         return {
             "test_name": self.test_name,
             "success": self.success,
@@ -50,9 +229,40 @@ class TestResult:
 
 
 class RunHelper:
-    """Test execution helper"""
-    
+    """
+    Helper class for test execution operations.
+
+    Provides common functionality needed during test execution, including
+    account creation, funding, and interaction with the blockchain client.
+
+    Attributes:
+        client: GravityClient instance for blockchain interactions
+        working_dir: Directory for test outputs and temporary files
+        faucet_account: Account used for funding test accounts
+
+    Example:
+        # Initialize helper
+        helper = RunHelper(client, "/tmp/tests", faucet_account)
+
+        # Create funded test account
+        account = await helper.create_test_account(
+            name="alice",
+            fund_wei=10**18  # 1 ETH
+        )
+
+        # Use account address for transactions
+        print(f"Created account: {account['address']}")
+    """
+
     def __init__(self, client: GravityClient, working_dir: str, faucet_account: Optional[Dict] = None):
+        """
+        Initialize run helper.
+
+        Args:
+            client: GravityClient for blockchain communication
+            working_dir: Directory path for test outputs
+            faucet_account: Optional faucet account with ETH for funding tests
+        """
         self.client = client
         self.working_dir = working_dir
         self.faucet_account = faucet_account
@@ -90,80 +300,100 @@ class RunHelper:
         
     async def _fund_account(self, account: Dict, amount_wei: int, confirmations: int = 1):
         """Fund test account using faucet account
-        
+
         Args:
             account: Account information
             amount_wei: Funding amount in wei
             confirmations: Number of confirmations to wait
-            
+
         Returns:
             Transaction receipt
         """
         try:
-            # Get faucet account nonce
-            nonce = await self.client.get_transaction_count(self.faucet_account["address"])
-            
-            # Get current gas price
-            gas_price = await self.client.get_gas_price()
-            
-            # Build transfer transaction
-            tx_data = {
-                "to": account["address"],
-                "value": hex(amount_wei),
-                "gas": hex(21000),
-                "gasPrice": hex(gas_price),
-                "nonce": hex(nonce),
-                "chainId": hex(await self.client.get_chain_id())
-            }
-            
-            # Sign and send
-            signed_tx = Account.sign_transaction(
-                tx_data, 
-                self.faucet_account["private_key"]
+            # Import here to avoid circular dependency
+            from ..utils.transaction_builder import TransactionBuilder, TransactionOptions
+            from eth_account import Account
+
+            # Create transaction builder with faucet account
+            faucet_account_obj = Account.from_key(self.faucet_account["private_key"])
+            tx_builder = TransactionBuilder(
+                web3=self.client.web3,
+                account=faucet_account_obj
             )
-            
-            tx_hash = await self.client.send_raw_transaction(signed_tx.raw_transaction)
-            LOG.info(f"Funding transaction sent: {tx_hash}")
-            
-            # Wait for confirmation
-            receipt = await self.client.wait_for_transaction_receipt(tx_hash)
-            
-            if receipt["status"] != "0x1":
-                raise RuntimeError(f"Funding transaction failed for account '{account['name']}'")
-            
-            # Wait for additional confirmations
-            if confirmations > 1:
-                current_block = int(receipt["blockNumber"], 16)
-                target_block = current_block + confirmations
-                
-                while int(await self.client.get_block_number()) < target_block:
-                    await asyncio.sleep(0.5)
-            
+
+            # Send ETH transfer
+            result = await tx_builder.send_ether(
+                to=account["address"],
+                amount_wei=amount_wei
+            )
+
+            # Wait for additional confirmations if needed
+            if confirmations > 1 and result.success:
+                await self._wait_for_confirmations(
+                    result.tx_hash,
+                    confirmations - 1,
+                    result.block_number
+                )
+
             LOG.info(f"Funded account '{account['name']}' with {amount_wei / 10**18:.6f} ETH")
-            return receipt
-            
+            return result.tx_receipt
+
         except Exception as e:
             LOG.error(f"Failed to fund account: {e}")
             raise
 
+    async def _wait_for_confirmations(self, tx_hash: str, additional_confirmations: int, current_block: int):
+        """Wait for additional block confirmations"""
+        target_block = current_block + additional_confirmations
+
+        while int(await self.client.get_block_number()) < target_block:
+            await asyncio.sleep(0.5)
+
 
 def test_case(func):
-    """Test case decorator"""
+    """
+    Test case decorator.
+    
+    This decorator:
+    - Creates a TestResult object and passes it to the test function
+    - Measures execution time
+    - Handles exceptions and marks test as failed
+    - Preserves test result details set by the test function
+    
+    Note: The test function should call test_result.mark_success() or
+    test_result.mark_failure() to set the result. The decorator will NOT
+    override results set by the test function.
+    """
+    import functools
+    import time
+    
+    @functools.wraps(func)
     async def wrapper(*args, **kwargs):
         test_name = kwargs.get('test_name') or func.__name__
         result = TestResult(test_name)
-        result.start_time = asyncio.get_event_loop().time()
+        result.start_time = time.time()
         result.end_time = result.start_time  # Initialize end_time
         
         try:
             await func(*args, **kwargs, test_result=result)
-            result.end_time = asyncio.get_event_loop().time()
+            result.end_time = time.time()
             result.set_duration(result.end_time - result.start_time)
-            result.mark_success()
+            
+            # Only mark success if the test didn't explicitly set a result
+            # This preserves any mark_success() or mark_failure() calls made by the test
+            # Note: If test called mark_success(), success is already True
+            # If test called mark_failure(), success is False and we shouldn't override
+            # We can detect this by checking if error is set (mark_failure sets error)
+            if not result.success and result.error is None:
+                # Test didn't call mark_success() or mark_failure(), mark as success
+                result.mark_success()
+                
         except Exception as e:
-            result.end_time = asyncio.get_event_loop().time()
+            result.end_time = time.time()
             result.set_duration(result.end_time - result.start_time)
-            result.mark_failure(str(e))
+            # Only mark failure if not already marked
+            if result.error is None:
+                result.mark_failure(str(e))
             raise
             
         return result

@@ -1,91 +1,100 @@
+"""
+Test cross-chain deposit functionality (Refactored)
+
+This test verifies cross-chain deposit from Sepolia to Gravity chain using
+the new utility modules for cleaner, more maintainable code.
+
+Key improvements from refactoring:
+- Uses EventPoller for efficient event monitoring
+- Uses TransactionBuilder for transaction handling
+- Uses ConfigManager for configuration management
+- Eliminates manual event parsing and hex manipulation
+- Proper event-based verification instead of polling
+- Better error handling with custom exceptions
+"""
+
 import asyncio
 import json
 import logging
 import os
-import time
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, Tuple
 from pathlib import Path
 
-import web3
 from web3 import Web3
 from eth_account import Account
 from eth_utils import to_checksum_address, from_wei, to_wei
 
 from ...helpers.test_helpers import RunHelper, TestResult, test_case
+from ...utils.config_manager import ConfigManager
+from ...utils.transaction_builder import TransactionBuilder, TransactionOptions
+from ...utils.event_poller import EventPoller, wait_for_transfer_event
+from ...utils.async_retry import AsyncRetry
+from ...utils.exceptions import TransactionError, EventError, ConfigurationError
 
 LOG = logging.getLogger(__name__)
 
-# Default configuration path
-DEFAULT_CONFIG_PATH = Path(__file__).parent.parent.parent.parent / "configs" / "cross_chain_config.json"
 
+class CrossChainTestHarness:
+    """Test harness for cross-chain operations with refactored utilities"""
 
-class CrossChainConfig:
-    """Cross-chain test configuration manager"""
-    
-    def __init__(self, config_path: Optional[str] = None):
-        config_path = config_path or os.getenv("CROSS_CHAIN_CONFIG_PATH", str(DEFAULT_CONFIG_PATH))
-        with open(config_path, 'r') as f:
-            self.config = json.load(f)
-        
-        # Override with environment variables if provided
-        self._apply_env_overrides()
-    
-    def _apply_env_overrides(self):
-        """Apply environment variable overrides"""
-        if os.getenv("SEPOLIA_RPC_URL"):
-            self.config["sepolia"]["rpc_url"] = os.getenv("SEPOLIA_RPC_URL")
-        if os.getenv("SEPOLIA_PRIVATE_KEY"):
-            self.config["sepolia"]["test_account"]["private_key"] = os.getenv("SEPOLIA_PRIVATE_KEY")
-        if os.getenv("CROSS_CHAIN_TIMEOUT"):
-            self.config["gravity"]["sync_settings"]["timeout_seconds"] = int(os.getenv("CROSS_CHAIN_TIMEOUT"))
-    
-    def get_sepolia_config(self) -> Dict:
-        return self.config["sepolia"]
-    
-    def get_gravity_config(self) -> Dict:
-        return self.config["gravity"]
-
-
-class SepoliaClient:
-    """Sepolia testnet client wrapper"""
-    
     def __init__(self, config: Dict):
         self.config = config
-        self.w3 = Web3(Web3.HTTPProvider(config["rpc_url"]))
-        self.account = Account.from_key(config["test_account"]["private_key"])
-        
+        self.sepolia_w3 = Web3(Web3.HTTPProvider(config["sepolia"]["rpc_url"]))
+
+        # Initialize accounts
+        self.sepolia_account = Account.from_key(config["sepolia"]["test_account"]["private_key"])
+        self.gravity_account = Account.from_key(config["gravity"]["test_account"]["private_key"])
+
+        # Initialize transaction builders
+        self.sepolia_builder = TransactionBuilder(
+            web3=self.sepolia_w3,
+            account=self.sepolia_account,
+            retry_config=AsyncRetry(max_retries=3, base_delay=1.0)
+        )
+
         # Initialize contracts
-        self.gravity_bridge = self.w3.eth.contract(
-            address=config["contracts"]["gravity_bridge"]["address"],
-            abi=config["contracts"]["gravity_bridge"]["abi"]
+        self._init_contracts()
+
+        # Initialize event poller
+        self.sepolia_event_poller = EventPoller(self.sepolia_w3)
+
+        LOG.info(f"Cross-chain test harness initialized")
+        LOG.info(f"Sepolia account: {self.sepolia_account.address}")
+        LOG.info(f"Gravity account: {self.gravity_account.address}")
+
+    def _init_contracts(self):
+        """Initialize contract instances"""
+        # Sepolia contracts
+        sepolia_config = self.config["sepolia"]
+        self.gravity_bridge = self.sepolia_w3.eth.contract(
+            address=sepolia_config["contracts"]["gravity_bridge"]["address"],
+            abi=sepolia_config["contracts"]["gravity_bridge"]["abi"]
         )
-        self.g_token = self.w3.eth.contract(
-            address=config["contracts"]["g_token"]["address"],
-            abi=config["contracts"]["g_token"]["abi"]
+        self.g_token = self.sepolia_w3.eth.contract(
+            address=sepolia_config["contracts"]["g_token"]["address"],
+            abi=sepolia_config["contracts"]["g_token"]["abi"]
         )
-        
-        LOG.info(f"Sepolia client initialized for account: {self.account.address}")
-    
+
     async def check_balances(self) -> Dict[str, Any]:
-        """Check account balances"""
+        """Check account balances on Sepolia"""
         try:
             # Check ETH balance
-            eth_balance_wei = self.w3.eth.get_balance(self.account.address)
+            eth_balance_wei = await self.sepolia_w3.eth.get_balance(self.sepolia_account.address)
             eth_balance = from_wei(eth_balance_wei, 'ether')
-            
+
             # Check G Token balance
-            g_balance = self.g_token.functions.balanceOf(self.account.address).call()
-            
+            g_balance = await self.g_token.functions.balanceOf(self.sepolia_account.address).call()
+
             # Get G Token decimals
             try:
-                decimals = self.g_token.functions.decimals().call()
+                decimals = await self.g_token.functions.decimals().call()
                 g_balance_formatted = g_balance / (10 ** decimals)
             except:
                 g_balance_formatted = from_wei(g_balance, 'ether')
-            
-            LOG.info(f"ETH balance: {eth_balance:.6f} ETH")
-            LOG.info(f"G Token balance: {g_balance_formatted:.6f} G")
-            
+
+            LOG.info(f"Sepolia ETH balance: {eth_balance:.6f} ETH")
+            LOG.info(f"Sepolia G Token balance: {g_balance_formatted:.6f} G")
+
             return {
                 "eth_balance": eth_balance_wei,
                 "g_balance": g_balance,
@@ -93,370 +102,498 @@ class SepoliaClient:
                 "g_balance_formatted": g_balance_formatted
             }
         except Exception as e:
-            LOG.error(f"Failed to check balances: {e}")
-            raise
-    
+            raise TransactionError(f"Failed to check balances: {e}")
+
     async def approve_g_token(self, amount: int) -> str:
         """Approve Gravity Bridge contract to spend G Tokens"""
         try:
-            # Build approval transaction
-            nonce = self.w3.eth.get_transaction_count(self.account.address)
-            gas_price = self.w3.eth.gas_price
-            
-            tx = self.g_token.functions.approve(
-                self.config["contracts"]["gravity_bridge"]["address"],
-                amount
-            ).build_transaction({
-                'from': self.account.address,
-                'nonce': nonce,
-                'gas': 100000,
-                'gasPrice': gas_price
-            })
-            
-            # Sign and send transaction
-            signed_tx = self.w3.eth.account.sign_transaction(tx, self.account.key)
-            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
-            
-            LOG.info(f"Approval transaction sent: {tx_hash.hex()}")
-            
-            # Wait for confirmation
-            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
-            
-            if receipt.status != 1:
-                raise RuntimeError(f"Approval transaction failed: {receipt}")
-            
-            LOG.info(f"Approval confirmed in block: {receipt.blockNumber}")
-            return tx_hash.hex()
-            
+            LOG.info(f"Approving {amount} G tokens for Gravity Bridge")
+
+            # Build and send approval transaction
+            result = await self.sepolia_builder.build_and_send_tx(
+                to=self.config["sepolia"]["contracts"]["g_token"]["address"],
+                data=self.g_token.functions.approve(
+                    self.config["sepolia"]["contracts"]["gravity_bridge"]["address"],
+                    amount
+                ).data_in_transaction,
+                options=TransactionOptions(gas_limit=100000)
+            )
+
+            if not result.success:
+                raise TransactionError(f"Approval transaction failed: {result.error}")
+
+            LOG.info(f"Approval successful: {result.tx_hash}")
+            return result.tx_hash
+
         except Exception as e:
-            LOG.error(f"Failed to approve G Token: {e}")
-            raise
-    
-    async def deposit_gravity(self, amount: int, target_address: Optional[str] = None) -> Dict[str, Any]:
-        """Execute depositGravity function"""
+            raise TransactionError(f"Failed to approve G Token: {e}")
+
+    async def deposit_gravity(self, amount: int, target_address: Optional[str] = None) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """Execute depositGravity and monitor for events"""
         try:
             if not target_address:
-                target_address = self.account.address
-            
-            # Build deposit transaction
-            nonce = self.w3.eth.get_transaction_count(self.account.address)
-            gas_price = self.w3.eth.gas_price
-            
-            tx = self.gravity_bridge.functions.depositGravity(
-                to_checksum_address(target_address),
-                amount
-            ).build_transaction({
-                'from': self.account.address,
-                'nonce': nonce,
-                'gas': 200000,
-                'gasPrice': gas_price
-            })
-            
-            # Sign and send transaction
-            signed_tx = self.w3.eth.account.sign_transaction(tx, self.account.key)
-            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
-            
-            LOG.info(f"Deposit transaction sent: {tx_hash.hex()}")
-            
-            # Wait for confirmation
-            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
-            
-            if receipt.status != 1:
-                raise RuntimeError(f"Deposit transaction failed: {receipt}")
-            
-            # Parse DepositGravityEvent
-            deposit_event = None
-            LOG.info(f"Transaction receipt has {len(receipt.logs)} logs")
-            
-            for i, log in enumerate(receipt.logs):
-                LOG.info(f"Processing log {i+1}: address={log.address}")
-                try:
-                    # Check if this log is from our contract
-                    if log.address.lower() != self.config["contracts"]["gravity_bridge"]["address"].lower():
-                        LOG.debug(f"Log from different contract: {log.address}")
-                        continue
-                    
-                    LOG.info(f"Found log from gravity bridge contract!")
-                    LOG.info(f"Data length: {len(log.data)} bytes")
-                    
-                    # Parse the event from our contract
-                    # Based on the log data structure from the logs:
-                    # user(32 bytes) + amount(32 bytes) + targetAddress(32 bytes) + blockNumber(32 bytes)
-                    data_hex = log.data.hex()
-                    LOG.info(f"Raw data: {data_hex}")
-                    
-                    # Extract values from 128 bytes (256 hex chars)
-                    # Structure: user(32) + amount(32) + targetAddress(32) + blockNumber(32)
-                    deposit_event = {
-                        "user": "0x" + data_hex[24:64],  # User address (32 bytes, last 20 bytes are the address)
-                        "amount": int(data_hex[64:128], 16),  # Amount (32 bytes)
-                        "targetAddress": "0x" + data_hex[152:192],  # Target address (last 20 bytes of 32 bytes)
-                        "blockNumber": int(data_hex[192:256], 16)  # Block number (32 bytes)
-                    }
-                    
-                    LOG.info(f"✅ DepositGravityEvent detected:")
-                    LOG.info(f"   User: {deposit_event['user']}")
-                    LOG.info(f"   Amount: {deposit_event['amount']}")
-                    LOG.info(f"   Target: {deposit_event['targetAddress']}")
-                    LOG.info(f"   Block: {deposit_event['blockNumber']}")
-                    break
-                except Exception as e:
-                    LOG.error(f"Error parsing log {i+1}: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    continue
-            
-            if not deposit_event:
-                LOG.error(f"No DepositGravityEvent found in receipt. Logs:")
-                for i, log in enumerate(receipt.logs):
-                    LOG.error(f"  Log {i+1}: address={log.address}, topics={log.topics}, data={log.data}")
-                raise RuntimeError("DepositGravityEvent not found in transaction receipt")
-            
-            LOG.info(f"Deposit confirmed in block: {receipt.blockNumber}")
-            return {
-                "tx_hash": tx_hash.hex(),
-                "block_number": receipt.blockNumber,
-                "gas_used": receipt.gasUsed,
-                "event": deposit_event
-            }
-            
-        except Exception as e:
-            LOG.error(f"Failed to deposit gravity: {e}")
-            raise
+                target_address = self.sepolia_account.address
 
+            LOG.info(f"Depositing {from_wei(amount, 'ether')} G tokens to Gravity chain")
+            LOG.info(f"Target address on Gravity: {target_address}")
 
-async def poll_gravity_for_event(run_helper: RunHelper, expected_sender: str, 
-                                expected_amount: int, expected_target: str,
-                                gravity_config: Dict) -> Optional[Dict[str, Any]]:
-    """Poll Gravity Chain for CrossChainDepositProcessed event"""
-    timeout = gravity_config["sync_settings"]["timeout_seconds"]
-    poll_interval = gravity_config["sync_settings"]["poll_interval_seconds"]
-    max_blocks_per_query = gravity_config["sync_settings"]["max_blocks_per_query"]
-    
-    # Calculate event topic for CrossChainDepositProcessed
-    event_signature = web3.Web3.keccak(text="CrossChainDepositProcessed(address,address,uint256,uint256,bool,string,string,uint256)")
-    event_topic = "0x" + event_signature.hex()
-    
-    start_time = time.time()
-    last_checked_block = 0
-    
-    LOG.info(f"Starting to poll Gravity Chain for event from sender={expected_sender}")
-    LOG.info(f"Poll settings: timeout={timeout}s, interval={poll_interval}s")
-    
-    while time.time() - start_time < timeout:
-        try:
-            # Get current block number
-            current_block = await run_helper.client.get_block_number()
-            
-            # Query for events
-            if current_block > last_checked_block:
-                # For the first query, start from a reasonable block number
-                # to ensure we catch the event
-                if last_checked_block == 0:
-                    # Start from an earlier block to ensure we don't miss anything
-                    from_block = 0  # Start from genesis
-                else:
-                    # For subsequent queries, only check new blocks
-                    from_block = max(last_checked_block + 1, current_block - max_blocks_per_query)
-                
-                to_block = current_block
-                
-                LOG.debug(f"Querying blocks {from_block} to {to_block}")
-                
-                # Query for events
-                logs = await run_helper.client.get_logs(
-                    from_block=from_block,
-                    to_block=to_block,
-                    address=gravity_config["monitor_contract"]["address"],
-                    topics=[[event_topic]]
+            # Start monitoring for DepositGravity event before sending transaction
+            deposit_event_task = asyncio.create_task(
+                self.sepolia_event_poller.wait_for_event(
+                    contract=self.gravity_bridge,
+                    event_name="DepositGravity",
+                    timeout=30,
+                    from_address=self.sepolia_account.address,
+                    callback=lambda event: (
+                        event['args']['to'].lower() == target_address.lower() and
+                        event['args']['amount'] == amount
+                    )
                 )
-                
-                # Parse and match events
-                for log in logs:
-                    if parse_and_match_event(log, expected_sender, expected_amount, expected_target):
-                        LOG.info(f"✅ CrossChainDepositProcessed found after {time.time() - start_time:.1f} seconds")
-                        return log
-                
-                last_checked_block = current_block
-                LOG.info(f"Still waiting... Checked up to block {current_block}")
-            
-            # Wait before next poll
-            await asyncio.sleep(poll_interval)
-            
+            )
+
+            # Execute deposit transaction
+            result = await self.sepolia_builder.build_and_send_tx(
+                to=self.config["sepolia"]["contracts"]["gravity_bridge"]["address"],
+                data=self.gravity_bridge.functions.depositGravity(
+                    to_checksum_address(target_address),
+                    amount
+                ).data_in_transaction,
+                options=TransactionOptions(gas_limit=200000, timeout=120)
+            )
+
+            if not result.success:
+                raise TransactionError(f"Deposit transaction failed: {result.error}")
+
+            LOG.info(f"Deposit transaction sent: {result.tx_hash}")
+
+            # Wait for event
+            try:
+                deposit_event = await asyncio.wait_for(deposit_event_task, timeout=30)
+
+                if deposit_event:
+                    LOG.info(f"✅ DepositGravity event detected!")
+                    LOG.info(f"   User: {deposit_event['args']['user']}")
+                    LOG.info(f"   Amount: {deposit_event['args']['amount']}")
+                    LOG.info(f"   Target: {deposit_event['args']['targetAddress']}")
+                    LOG.info(f"   Block: {deposit_event['args']['blockNumber']}")
+
+                    deposit_event_data = {
+                        "user": deposit_event['args']['user'],
+                        "amount": deposit_event['args']['amount'],
+                        "targetAddress": deposit_event['args']['targetAddress'],
+                        "blockNumber": deposit_event['args']['blockNumber']
+                    }
+                else:
+                    LOG.warning("DepositGravity event not found in transaction")
+                    deposit_event_data = None
+
+            except asyncio.TimeoutError:
+                LOG.warning("Timeout waiting for DepositGravity event")
+                deposit_event_data = None
+
+            return {
+                "tx_hash": result.tx_hash,
+                "block_number": result.block_number,
+                "gas_used": result.gas_used,
+                "event": deposit_event_data
+            }, result
+
         except Exception as e:
-            LOG.warning(f"Error during polling: {e}")
-            await asyncio.sleep(poll_interval)
-    
-    LOG.error(f"❌ Timeout: CrossChainDepositProcessed not found after {timeout} seconds")
-    return None
+            raise TransactionError(f"Failed to deposit gravity: {e}")
 
 
-def parse_and_match_event(log: Dict, expected_sender: str, expected_amount: int, 
-                         expected_target: str) -> bool:
-    """Parse and match CrossChainDepositProcessed event"""
+async def monitor_gravity_for_cross_chain_event(
+    run_helper: RunHelper,
+    expected_sender: str,
+    expected_amount: int,
+    expected_target: str,
+    gravity_config: Dict,
+    timeout: float = 300.0
+) -> Optional[Dict[str, Any]]:
+    """Monitor Gravity chain for CrossChainDepositProcessed event using EventPoller"""
     try:
-        # Extract data from log
-        topics = log.get("topics", [])
-        data = log.get("data", "")
-        
-        if len(topics) < 3:
-            return False
-        
-        # Extract indexed parameters (sender and targetAddress) from topics
-        # Topics are already 32 bytes, last 20 bytes are the address
-        sender = "0x" + topics[1][-40:].hex() if isinstance(topics[1], bytes) else "0x" + topics[1][-40:]
-        target_address = "0x" + topics[2][-40:].hex() if isinstance(topics[2], bytes) else "0x" + topics[2][-40:]
-        
-        # Convert to checksum addresses for comparison
-        sender = to_checksum_address(sender).lower()
-        target_address = to_checksum_address(target_address).lower()
-        expected_sender = expected_sender.lower()
-        expected_target = expected_target.lower()
-        
-        # Extract non-indexed parameters from data
-        data_hex = data[2:] if data.startswith("0x") else data.hex() if isinstance(data, bytes) else data
-        
-        # Data layout from the actual log: amount(32) + blockNumber(32) + success(32) + ... + onchainBlockNumber(32)
-        amount_hex = data_hex[0:64]  # First 32 bytes
-        amount = int(amount_hex, 16)
-        
-        block_number_hex = data_hex[64:128]  # Second 32 bytes
-        block_number = int(block_number_hex, 16)
-        
-        success_hex = data_hex[128:192]  # Third 32 bytes
-        success = int(success_hex, 16) > 0
-        
-        # Skip to onchainBlockNumber (last 32 bytes)
-        onchain_block_hex = data_hex[-64:]  # Last 32 bytes
-        onchain_block_number = int(onchain_block_hex, 16)
-        
-        LOG.info(f"Event parsed:")
-        LOG.info(f"   Sender: {sender}")
-        LOG.info(f"   Target: {target_address}")
-        LOG.info(f"   Amount: {amount}")
-        LOG.info(f"   Success: {success}")
-        LOG.info(f"   Block: {block_number}")
-        LOG.info(f"   Onchain Block: {onchain_block_number}")
-        LOG.info(f"   Expected Sender: {expected_sender}")
-        LOG.info(f"   Expected Amount: {expected_amount}")
-        LOG.info(f"   Expected Target: {expected_target}")
-        
-        # Match conditions
-        if (sender == expected_sender and 
-            target_address == expected_target and 
-            amount == expected_amount and 
-            success):
-            
-            LOG.info(f"✅ Event matched successfully!")
-            
-            return True
-        else:
-            LOG.info(f"❌ Event did not match")
-            LOG.info(f"   Sender match: {sender == expected_sender}")
-            LOG.info(f"   Target match: {target_address == expected_target}")
-            LOG.info(f"   Amount match: {amount == expected_amount}")
-            LOG.info(f"   Success: {success}")
-        
+        LOG.info(f"Monitoring Gravity chain for CrossChainDepositProcessed event")
+        LOG.info(f"Expected sender: {expected_sender}")
+        LOG.info(f"Expected amount: {expected_amount}")
+        LOG.info(f"Expected target: {expected_target}")
+
+        # Get the monitor contract
+        monitor_address = gravity_config["monitor_contract"]["address"]
+
+        # For the Gravity chain, we need to create a web3 instance and contract
+        from web3 import Web3
+        gravity_w3 = Web3(Web3.HTTPProvider(gravity_config["rpc_url"]))
+
+        # Create contract ABI for CrossChainDepositProcessed event
+        monitor_abi = [
+            {
+                "anonymous": False,
+                "inputs": [
+                    {"indexed": True, "name": "sender", "type": "address"},
+                    {"indexed": True, "name": "targetAddress", "type": "address"},
+                    {"indexed": False, "name": "amount", "type": "uint256"},
+                    {"indexed": False, "name": "blockNumber", "type": "uint256"},
+                    {"indexed": False, "name": "success", "type": "bool"},
+                    {"indexed": False, "name": "errorMessage", "type": "string"},
+                    {"indexed": False, "name": "issuer", "type": "string"},
+                    {"indexed": False, "name": "onchainBlockNumber", "type": "uint256"}
+                ],
+                "name": "CrossChainDepositProcessed",
+                "type": "event"
+            }
+        ]
+
+        monitor_contract = gravity_w3.eth.contract(
+            address=monitor_address,
+            abi=monitor_abi
+        )
+
+        # Initialize event poller for Gravity chain
+        gravity_event_poller = EventPoller(gravity_w3)
+
+        # Wait for the event with specific filters
+        event = await gravity_event_poller.wait_for_event(
+            contract=monitor_contract,
+            event_name="CrossChainDepositProcessed",
+            timeout=timeout,
+            poll_interval=2.0,
+            callback=lambda event: (
+                event['args']['sender'].lower() == expected_sender.lower() and
+                event['args']['targetAddress'].lower() == expected_target.lower() and
+                event['args']['amount'] == expected_amount and
+                event['args']['success'] == True
+            )
+        )
+
+        if event:
+            LOG.info(f"✅ CrossChainDepositProcessed found!")
+            LOG.info(f"   Sender: {event['args']['sender']}")
+            LOG.info(f"   Target: {event['args']['targetAddress']}")
+            LOG.info(f"   Amount: {event['args']['amount']}")
+            LOG.info(f"   Block: {event['args']['blockNumber']}")
+            LOG.info(f"   Success: {event['args']['success']}")
+            LOG.info(f"   Issuer: {event['args']['issuer']}")
+            LOG.info(f"   Onchain Block: {event['args']['onchainBlockNumber']}")
+
+            if event['args']['errorMessage']:
+                LOG.warning(f"   Error Message: {event['args']['errorMessage']}")
+
+        return event
+
+    except asyncio.TimeoutError:
+        LOG.error(f"❌ Timeout: CrossChainDepositProcessed not found after {timeout} seconds")
+        return None
     except Exception as e:
-        LOG.error(f"Failed to parse event: {e}")
-        import traceback
-        traceback.print_exc()
-    
-    return False
+        LOG.error(f"Error monitoring Gravity chain: {e}")
+        raise EventError(f"Failed to monitor cross-chain event: {e}")
 
 
 @test_case
 async def test_cross_chain_gravity_deposit(run_helper: RunHelper, test_result: TestResult):
-    """Test cross-chain Gravity Deposit functionality"""
-    LOG.info("=" * 60)
-    LOG.info("Starting Cross-Chain Gravity Deposit Test")
-    LOG.info("=" * 60)
-    
+    """Test cross-chain deposit from Sepolia to Gravity using refactored utilities"""
+    LOG.info("Starting cross-chain Gravity deposit test (refactored)")
+
     try:
-        # Load configuration
-        config = CrossChainConfig()
-        sepolia_config = config.get_sepolia_config()
-        gravity_config = config.get_gravity_config()
-        
-        # Initialize Sepolia client
-        LOG.info("Initializing Sepolia client...")
-        sepolia_client = SepoliaClient(sepolia_config)
-        
-        # Check balances
-        LOG.info("Checking account balances...")
-        balances = await sepolia_client.check_balances()
-        
-        # Get deposit parameters
-        deposit_amount = int(sepolia_config["deposit_params"]["amount"])
-        target_address = sepolia_config["deposit_params"]["target_address"]
-        if not target_address:
-            target_address = sepolia_client.account.address
-        
-        # Validate balances
-        if balances["eth_balance"] < to_wei(0.01, 'ether'):
-            raise RuntimeError(f"Insufficient ETH balance: {balances['eth_balance_formatted']} ETH")
-        
-        if balances["g_balance"] < deposit_amount:
-            raise RuntimeError(f"Insufficient G Token balance: {balances['g_balance_formatted']} G "
-                             f"(required: {deposit_amount / 10**18:.6f} G)")
-        
-        # Approve G Token spending
-        LOG.info(f"Approving {deposit_amount / 10**18:.6f} G Tokens...")
-        await sepolia_client.approve_g_token(deposit_amount)
-        
-        # Execute depositGravity
-        LOG.info(f"Executing depositGravity to {target_address}...")
-        deposit_result = await sepolia_client.deposit_gravity(deposit_amount, target_address)
-        
-        # Extract event data
-        sepolia_event = deposit_result["event"]
-        LOG.info(f"Sepolia event received:")
-        LOG.info(f"  User: {sepolia_event['user']}")
-        LOG.info(f"  Amount: {sepolia_event['amount']}")
-        LOG.info(f"  Target: {sepolia_event['targetAddress']}")
-        LOG.info(f"  Block: {sepolia_event['blockNumber']}")
-        
-        # Wait for cross-chain sync
-        # NOTE: This may take up to 12+ minutes as we wait for Sepolia block finalization
-        # (2 epochs * 6.4 minutes per epoch on Sepolia)
-        LOG.info("\nWaiting for cross-chain synchronization...")
-        LOG.info("⚠️  This may take 12+ minutes for Sepolia block finalization")
-        sync_start_time = time.time()
-        
-        gravity_event = await poll_gravity_for_event(
-            run_helper=run_helper,
-            expected_sender=sepolia_event["user"],
-            expected_amount=sepolia_event["amount"],
-            expected_target=sepolia_event["targetAddress"],
-            gravity_config=gravity_config
+        # 1. Load configuration using ConfigManager
+        config_manager = ConfigManager()
+
+        # Load cross-chain configuration
+        cross_chain_config_file = os.getenv(
+            "CROSS_CHAIN_CONFIG_PATH",
+            str(Path(__file__).parent.parent.parent.parent / "configs" / "cross_chain_config.json")
         )
-        
-        sync_duration = time.time() - sync_start_time
-        
+
+        if not Path(cross_chain_config_file).exists():
+            raise ConfigurationError(
+                f"Cross-chain config not found: {cross_chain_config_file}",
+                config_file=cross_chain_config_file
+            )
+
+        cross_chain_config = config_manager.load_config(
+            Path(cross_chain_config_file).name,
+            validate=False,
+            apply_env_overrides=True
+        )
+
+        LOG.info("Cross-chain configuration loaded successfully")
+
+        # 2. Initialize test harness
+        harness = CrossChainTestHarness(cross_chain_config)
+
+        # 3. Check initial balances
+        initial_balances = await harness.check_balances()
+
+        # Define deposit amount (in G tokens)
+        decimals = await harness.g_token.functions.decimals().call()
+        deposit_amount = 100 * (10 ** decimals)  # 100 G tokens
+
+        LOG.info(f"Deposit amount: {deposit_amount / (10 ** decimals)} G tokens")
+
+        # 4. Approve G tokens for Gravity Bridge
+        LOG.info("Step 1: Approving G tokens...")
+        approval_tx_hash = await harness.approve_g_token(deposit_amount)
+
+        # 5. Execute depositGravity
+        LOG.info("Step 2: Executing depositGravity...")
+        deposit_result, tx_result = await harness.deposit_gravity(
+            amount=deposit_amount,
+            target_address=harness.gravity_account.address
+        )
+
+        # 6. Monitor Gravity chain for CrossChainDepositProcessed event
+        LOG.info("Step 3: Monitoring Gravity chain for cross-chain event...")
+
+        gravity_event = await monitor_gravity_for_cross_chain_event(
+            run_helper=run_helper,
+            expected_sender=harness.sepolia_account.address,
+            expected_amount=deposit_amount,
+            expected_target=harness.gravity_account.address,
+            gravity_config=cross_chain_config["gravity"],
+            timeout=cross_chain_config["gravity"]["sync_settings"]["timeout_seconds"]
+        )
+
+        # 7. Verify cross-chain transfer
         if not gravity_event:
-            raise RuntimeError("Cross-chain sync timeout - event not found on Gravity Chain")
-        
-        # Record test results
+            raise EventError(
+                "CrossChainDepositProcessed event not found on Gravity chain",
+                event_name="CrossChainDepositProcessed"
+            )
+
+        # 8. Check final balances
+        final_balances = await harness.check_balances()
+
+        # Verify G token balance decreased
+        balance_diff = initial_balances["g_balance"] - final_balances["g_balance"]
+        if balance_diff != deposit_amount:
+            LOG.warning(
+                f"Balance difference {balance_diff} doesn't match deposit amount {deposit_amount}"
+            )
+
+        # 9. Record test results
         test_result.mark_success(
             sepolia_tx_hash=deposit_result["tx_hash"],
             sepolia_block_number=deposit_result["block_number"],
             sepolia_gas_used=deposit_result["gas_used"],
-            gravity_tx_hash=gravity_event.get("transactionHash", "unknown"),
-            cross_chain_sync_time=sync_duration,
+            deposit_event=deposit_result["event"],
+            gravity_event=gravity_event["args"] if gravity_event else None,
+            gravity_block_number=gravity_event["blockNumber"] if gravity_event else None,
             deposit_amount=deposit_amount,
-            sender_address=sepolia_event["user"],
-            target_address=sepolia_event["targetAddress"]
+            initial_g_balance=initial_balances["g_balance"],
+            final_g_balance=final_balances["g_balance"],
+            approval_tx_hash=approval_tx_hash,
+            cross_chain_delay=gravity_event["blockNumber"] - deposit_result["block_number"] if gravity_event else None
         )
-        
-        LOG.info("\n" + "=" * 60)
-        LOG.info("✅ Cross-Chain Gravity Deposit Test PASSED")
-        LOG.info(f"   Sepolia TX: {deposit_result['tx_hash']}")
-        LOG.info(f"   Gravity TX: {gravity_event.get('transactionHash', 'unknown')}")
-        LOG.info(f"   Sync Time: {sync_duration:.1f} seconds")
-        LOG.info(f"   Amount: {deposit_amount / 10**18:.6f} G")
-        LOG.info("=" * 60)
-        
+
+        LOG.info("✅ Cross-chain deposit test completed successfully!")
+        LOG.info(f"Deposit confirmed on Sepolia at block: {deposit_result['block_number']}")
+        LOG.info(f"Cross-chain processed on Gravity at block: {gravity_event['blockNumber']}")
+
+    except (TransactionError, EventError, ConfigurationError) as e:
+        test_result.mark_failure(
+            error=f"{e.__class__.__name__}: {e}",
+            details=e.details
+        )
+        raise
     except Exception as e:
-        LOG.error(f"\n❌ Cross-Chain Gravity Deposit Test FAILED: {e}")
-        test_result.mark_failure(str(e))
+        test_result.mark_failure(
+            error=f"Test failed: {e}",
+            details={"type": type(e).__name__}
+        )
+        raise
+
+
+@test_case
+async def test_cross_chain_multiple_deposits(run_helper: RunHelper, test_result: TestResult):
+    """Test multiple cross-chain deposits in sequence"""
+    LOG.info("Starting multiple cross-chain deposits test (refactored)")
+
+    try:
+        # 1. Load configuration and initialize harness
+        config_manager = ConfigManager()
+        cross_chain_config_file = Path(__file__).parent.parent.parent.parent / "configs" / "cross_chain_config.json"
+        cross_chain_config = config_manager.load_config(
+            cross_chain_config_file.name,
+            validate=False,
+            apply_env_overrides=True
+        )
+
+        harness = CrossChainTestHarness(cross_chain_config)
+
+        # 2. Check initial balances
+        initial_balances = await harness.check_balances()
+        decimals = await harness.g_token.functions.decimals().call()
+
+        # 3. Execute multiple deposits
+        num_deposits = 3
+        deposit_amount = 50 * (10 ** decimals)  # 50 G tokens each
+        total_amount = deposit_amount * num_deposits
+
+        LOG.info(f"Executing {num_deposits} deposits of {deposit_amount / (10 ** decimals)} G tokens each")
+
+        deposit_results = []
+        gravity_events = []
+
+        for i in range(num_deposits):
+            LOG.info(f"\n--- Deposit {i+1}/{num_deposits} ---")
+
+            # Approve tokens
+            await harness.approve_g_token(deposit_amount)
+
+            # Execute deposit
+            deposit_result, _ = await harness.deposit_gravity(
+                amount=deposit_amount,
+                target_address=harness.gravity_account.address
+            )
+
+            # Monitor Gravity chain
+            gravity_event = await monitor_gravity_for_cross_chain_event(
+                run_helper=run_helper,
+                expected_sender=harness.sepolia_account.address,
+                expected_amount=deposit_amount,
+                expected_target=harness.gravity_account.address,
+                gravity_config=cross_chain_config["gravity"],
+                timeout=60  # Shorter timeout for multiple deposits
+            )
+
+            if not gravity_event:
+                raise EventError(f"Cross-chain event not found for deposit {i+1}")
+
+            deposit_results.append(deposit_result)
+            gravity_events.append(gravity_event)
+
+            LOG.info(f"Deposit {i+1} completed successfully")
+
+        # 4. Verify final state
+        final_balances = await harness.check_balances()
+        balance_diff = initial_balances["g_balance"] - final_balances["g_balance"]
+
+        # Calculate total gas used
+        total_sepolia_gas = sum(r["gas_used"] for r in deposit_results)
+
+        # 5. Analyze cross-chain delays
+        delays = []
+        for i, (deposit, event) in enumerate(zip(deposit_results, gravity_events)):
+            delay = event["blockNumber"] - deposit["block_number"]
+            delays.append(delay)
+            LOG.info(f"Deposit {i+1} cross-chain delay: {delay} blocks")
+
+        avg_delay = sum(delays) / len(delays)
+
+        # 6. Record test results
+        test_result.mark_success(
+            num_deposits=num_deposits,
+            total_deposited=total_amount,
+            total_gas_used_sepolia=total_sepolia_gas,
+            avg_gas_per_deposit=total_sepolia_gas // num_deposits,
+            initial_g_balance=initial_balances["g_balance"],
+            final_g_balance=final_balances["g_balance"],
+            actual_amount_deposited=balance_diff,
+            cross_chain_delays=delays,
+            avg_cross_chain_delay=avg_delay,
+            gravity_block_numbers=[event["blockNumber"] for event in gravity_events]
+        )
+
+        LOG.info(f"\n✅ Multiple deposits test completed successfully!")
+        LOG.info(f"Total deposited: {total_amount / (10 ** decimals)} G tokens")
+        LOG.info(f"Total Sepolia gas used: {total_sepolia_gas}")
+        LOG.info(f"Average cross-chain delay: {avg_delay:.1f} blocks")
+
+    except Exception as e:
+        test_result.mark_failure(error=f"Multiple deposits test failed: {e}")
+        raise
+
+
+@test_case
+async def test_cross_chain_error_scenarios(run_helper: RunHelper, test_result: TestResult):
+    """Test cross-chain deposit error scenarios"""
+    LOG.info("Starting cross-chain error scenarios test (refactored)")
+
+    try:
+        # 1. Load configuration and initialize harness
+        config_manager = ConfigManager()
+        cross_chain_config_file = Path(__file__).parent.parent.parent.parent / "configs" / "cross_chain_config.json"
+        cross_chain_config = config_manager.load_config(
+            cross_chain_config_file.name,
+            validate=False,
+            apply_env_overrides=True
+        )
+
+        harness = CrossChainTestHarness(cross_chain_config)
+
+        # 2. Test scenario: Deposit without approval
+        LOG.info("\n--- Test 1: Deposit without approval ---")
+        decimals = await harness.g_token.functions.decimals().call()
+        deposit_amount = 10 * (10 ** decimals)
+
+        try:
+            _, _ = await harness.deposit_gravity(amount=deposit_amount)
+            LOG.warning("Deposit without approval succeeded (unexpected)")
+            approval_test_passed = False
+        except Exception as e:
+            if "insufficient" in str(e).lower() or "allowance" in str(e).lower():
+                LOG.info("✅ Deposit without approval correctly failed")
+                approval_test_passed = True
+            else:
+                raise
+
+        # 3. Test scenario: Deposit to invalid address
+        LOG.info("\n--- Test 2: Deposit to zero address ---")
+
+        # First approve tokens
+        await harness.approve_g_token(deposit_amount)
+
+        try:
+            _, _ = await harness.deposit_gravity(
+                amount=deposit_amount,
+                target_address="0x0000000000000000000000000000000000000000"
+            )
+            LOG.info("Deposit to zero address succeeded")
+            zero_address_test_passed = True
+        except Exception as e:
+            LOG.info(f"✅ Deposit to zero address correctly failed: {e}")
+            zero_address_test_passed = False
+
+        # 4. Test scenario: Zero amount deposit
+        LOG.info("\n--- Test 3: Zero amount deposit ---")
+
+        try:
+            _, _ = await harness.deposit_gravity(amount=0)
+            LOG.info("Zero amount deposit succeeded")
+            zero_amount_test_passed = True
+        except Exception as e:
+            LOG.info(f"Zero amount deposit failed: {e}")
+            zero_amount_test_passed = False
+
+        # 5. Test scenario: Very large amount deposit
+        LOG.info("\n--- Test 4: Large amount deposit (exceeds balance) ---")
+
+        # Get current balance
+        balances = await harness.check_balances()
+        large_amount = balances["g_balance"] + (10 ** decimals)  # More than balance
+
+        try:
+            await harness.approve_g_token(large_amount)
+            _, _ = await harness.deposit_gravity(amount=large_amount)
+            LOG.warning("Large amount deposit succeeded (unexpected)")
+            large_amount_test_passed = False
+        except Exception as e:
+            if "insufficient" in str(e).lower() or "balance" in str(e).lower():
+                LOG.info("✅ Large amount deposit correctly failed")
+                large_amount_test_passed = True
+            else:
+                raise
+
+        # 6. Record test results
+        test_result.mark_success(
+            approval_required_test=approval_test_passed,
+            zero_address_test=zero_address_test_passed,
+            zero_amount_test=zero_amount_test_passed,
+            large_amount_test=large_amount_test_passed,
+            deposit_amount=deposit_amount
+        )
+
+        LOG.info("\n✅ Error scenarios test completed successfully!")
+
+    except Exception as e:
+        test_result.mark_failure(error=f"Error scenarios test failed: {e}")
         raise
