@@ -124,6 +124,8 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use gaptos::aptos_consensus::counters as counters;
+use proposer_reth_map;
 
 /// Range of rounds (window) that we might be calling proposer election
 /// functions with at any given time, in addition to the proposer history length.
@@ -1121,6 +1123,13 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         let validator_set: ValidatorSet =
             payload.get().expect("failed to get ValidatorSet from payload");
         info!("validator_set read from config storage is : {:?}", validator_set);
+
+        // Update global proposer reth address map for current epoch
+        proposer_reth_map::update_proposer_reth_address_map(&validator_set);
+        info!(
+            "Updated proposer reth address map for epoch {}",
+            payload.epoch()
+        );
 
         self.is_current_epoch_validator = false;
         if self.is_validator {

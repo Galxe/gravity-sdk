@@ -13,6 +13,8 @@ use gaptos::api_types::{
     ExternalBlock, GLOBAL_CRYPTO_TXN_HASHER,
 };
 use greth::reth_transaction_pool::{EthPooledTransaction, ValidPoolTransaction};
+use gaptos::aptos_types::account_address::AccountAddress;
+use proposer_reth_map::get_proposer_reth_address;
 
 use alloy_rpc_types_eth::TransactionRequest;
 use greth::{
@@ -130,6 +132,50 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         (txn.recover_signer().unwrap(), txn)
     }
 
+    /// Get reth coinbase address from proposer's validator info
+    /// Returns the reth account address of the proposer if found, otherwise returns Address::ZERO
+    fn get_coinbase_from_proposer(
+        proposer: Option<&ExternalAccountAddress>,
+        _block_number: u64,
+    ) -> Address {
+        let proposer_addr = match proposer {
+            Some(addr) => addr,
+            None => return Address::ZERO,
+        };
+
+        // Convert ExternalAccountAddress to AccountAddress
+        let proposer_account_addr = match AccountAddress::from_bytes(proposer_addr.bytes()) {
+            Ok(addr) => addr,
+            Err(e) => {
+                warn!("Failed to convert proposer address: {}, using ZERO", e);
+                return Address::ZERO;
+            }
+        };
+
+        // Get reth address from global map (built in epoch_manager when epoch starts)
+        match get_proposer_reth_address(&proposer_account_addr) {
+            Some(reth_addr_bytes) => {
+                if reth_addr_bytes.len() == 20 {
+                    Address::from_slice(&reth_addr_bytes)
+                } else {
+                    warn!(
+                        "Reth address length {} is not 20 bytes for proposer {:?}, using ZERO",
+                        reth_addr_bytes.len(),
+                        proposer_account_addr
+                    );
+                    Address::ZERO
+                }
+            }
+            None => {
+                warn!(
+                    "Failed to get reth coinbase for proposer {:?}, using ZERO",
+                    proposer_account_addr
+                );
+                Address::ZERO
+            }
+        }
+    }
+
     pub async fn push_ordered_block(
         &self,
         mut block: ExternalBlock,
@@ -179,14 +225,20 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         };
 
         info!("push ordered block time deserialize {:?}ms", system_time.elapsed().as_millis());
-        // TODO: make zero make sense
+        
+        // Get reth coinbase from proposer's validator info
+        let coinbase = Self::get_coinbase_from_proposer(
+            block.block_meta.proposer.as_ref(),
+            block.block_meta.block_number,
+        );
+        info!("block_number: {:?} block.block_meta.proposer: {:?} coinbase: {:?}", block.block_meta.block_number, block.block_meta.proposer, coinbase);
+        
         pipe_api.push_ordered_block(OrderedBlock {
             parent_id,
             id: B256::from_slice(block.block_meta.block_id.as_bytes()),
             number: block.block_meta.block_number,
             timestamp_us: block.block_meta.usecs,
-            // TODO(gravity_jan): add reth coinbase
-            coinbase: Address::ZERO,
+            coinbase,
             prev_randao: randao,
             withdrawals: Withdrawals::new(Vec::new()),
             transactions,

@@ -21,11 +21,16 @@ members = [
     "crates/block-buffer-manager",
     "crates/txn_metrics",
     "crates/build-info",
+<<<<<<< HEAD
     "crates/gravity-sdk"
 ]
 exclude = [
     "external"
 ]
+=======
+    "crates/gravity-sdk",
+    "crates/proposer-reth-map"]
+>>>>>>> 26b8f4c2 (feat: Add true coinbase addr)
 
 # Workspace-level lint configuration - applies to all members
 [workspace.lints.clippy]
@@ -86,6 +91,7 @@ aptos-mempool = { path = "./aptos-core/mempool", features = ["fuzzing"] }
 aptos-safety-rules = { path = "./aptos-core/consensus/safety-rules" }
 block-buffer-manager = { path = "./crates/block-buffer-manager" }
 build-info = { path = "./crates/build-info" }
+proposer-reth-map = { path = "./crates/proposer-reth-map" }
 
 # from aptos =======================
 
