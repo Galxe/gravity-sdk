@@ -48,8 +48,8 @@ class RandomDiceHelper:
         """
         # Search for compiled output
         possible_paths = [
+            Path(__file__).parent.parent.parent / "contracts_data/RandomDice.json",
             Path(__file__).parent.parent.parent.parent / "out/RandomDice.sol/RandomDice.json",
-            Path(__file__).parent.parent.parent.parent / "examples/randomness/out/RandomDice.sol/RandomDice.json",
         ]
         
         contract_path = None
