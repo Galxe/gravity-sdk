@@ -30,6 +30,7 @@ from .tests.test_cases.test_epoch_consistency import test_epoch_consistency
 from .tests.test_cases.test_epoch_consistency_extended import test_epoch_consistency_extended
 from .tests.test_cases.test_validator_add_remove import test_validator_add_remove
 from .tests.test_cases.test_validator_add_remove_delayed import test_validator_add_remove_delayed
+from .tests.test_cases.test_balance_wait import test_wait_balance_100
 
 LOG = logging.getLogger(__name__)
 
@@ -81,6 +82,9 @@ async def run_test_module(module_name: str, test_helper: RunHelper, test_results
         elif module_name == "cases.validator_add_remove_delayed":
             result = await test_validator_add_remove_delayed(run_helper=test_helper)
             test_results.append(result)
+        elif module_name == "cases.balance_wait":
+            result = await test_wait_balance_100(run_helper=test_helper)
+            test_results.append(result)
         else:
             LOG.warning(f"Unknown test module: {module_name}")
     except Exception as e:
@@ -105,7 +109,7 @@ async def main():
                                "randomness_smoke", "randomness_reconfiguration",
                                "randomness_multi_contract", "randomness_api_completeness",
                                "randomness_stress", "epoch_consistency", "epoch_consistency_extended",
-                               "validator_add_remove", "validator_add_remove_delayed"],
+                               "validator_add_remove", "validator_add_remove_delayed", "balance_wait"],
                        help="Test suite to run")
     parser.add_argument("--cluster", default=None,
                        help="Cluster name to test (defined in nodes.json)")
