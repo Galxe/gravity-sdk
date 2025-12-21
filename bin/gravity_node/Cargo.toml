@@ -45,6 +45,7 @@ api.workspace = true
 gaptos.workspace = true
 # api-types.workspace = true
 block-buffer-manager.workspace = true
+proposer-reth-map.workspace = true
 build-info.workspace = true
 rayon = "1.7.0"
 tracing-flame = "0.2"
