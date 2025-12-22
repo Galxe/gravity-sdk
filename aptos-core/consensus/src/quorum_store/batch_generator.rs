@@ -411,7 +411,79 @@ impl BatchGenerator {
             let _timer = counters::BATCH_GENERATOR_MAIN_LOOP.start_timer();
             counters::PROCESS_TXN_IN_BATCH_GENERATOR.reset();
             counters::PROCESS_TXN_IN_BATCH_GENERATOR.inc_by(self.txns_in_progress_sorted.len() as u64);
-            tokio::select! {
+        tokio::select! {
+                biased;
+                Some(cmd) = cmd_rx.recv() => monitor!("batch_generator_handle_command", {
+                    match cmd {
+                        BatchGeneratorCommand::CommitNotification(block_timestamp, batches) => {
+                            trace!(
+                                "QS: got clean request from execution, block timestamp {}",
+                                block_timestamp
+                            );
+                            assert!(
+                                self.latest_block_timestamp <= block_timestamp,
+                                "Decreasing block timestamp"
+                            );
+                            self.latest_block_timestamp = block_timestamp;
+                            
+                            // keep the last commited txn for each sender to avoid duplicate txn
+                            self.commited_txns_buffer.clear();
+                            for (author, batch_id) in batches.iter().map(|b| (b.author(), b.batch_id())) {
+                                if let Some(batch_in_progress) = self.batches_in_progress.get(&(author, batch_id)) {
+                                    for txn_summary in &batch_in_progress.txns {
+                                        if let Some(txn_in_progress) = self.txns_in_progress_sorted.get(txn_summary) {
+                                            self.commited_txns_buffer.push((txn_summary.clone(), txn_in_progress.clone()));
+                                        }
+                                    }
+                                }
+                                
+                                if self.remove_batch_in_progress(author, batch_id) {
+                                    counters::BATCH_IN_PROGRESS_COMMITTED.inc();
+                                }
+                            }
+
+                            // Cleans up all batches that expire in timestamp <= block_timestamp. This is
+                            // safe since clean request must occur only after execution result is certified.
+                            for (author, batch_id) in self.batch_expirations.expire(block_timestamp) {
+                                if let Some(batch_in_progress) = self.batches_in_progress.get(&(author, batch_id)) {
+                                    // If there is an identical batch with higher expiry time, re-insert it.
+                                    if batch_in_progress.expiry_time_usecs > block_timestamp {
+                                        self.batch_expirations.add_item((author, batch_id), batch_in_progress.expiry_time_usecs);
+                                        continue;
+                                    }
+                                }
+                                if self.remove_batch_in_progress(author, batch_id) {
+                                    counters::BATCH_IN_PROGRESS_EXPIRED.inc();
+                                    debug!(
+                                        "QS: logical time based expiration batch w. id {} from batches_in_progress, new size {}",
+                                        batch_id,
+                                        self.batches_in_progress.len(),
+                                    );
+                                }
+                            }
+                        },
+                        BatchGeneratorCommand::ProofExpiration(batch_ids) => {
+                            for batch_id in batch_ids {
+                                counters::BATCH_IN_PROGRESS_TIMEOUT.inc();
+                                debug!(
+                                    "QS: received timeout for proof of store, batch id = {}",
+                                    batch_id
+                                );
+                                // Not able to gather the proof, allow transactions to be polled again.
+                                self.remove_batch_in_progress(self.my_peer_id, batch_id);
+                            }
+                        },
+                        BatchGeneratorCommand::RemoteBatch(batch) => {
+                            self.handle_remote_batch(batch.author(), batch.batch_id(), batch.into_transactions());
+                        },
+                        BatchGeneratorCommand::Shutdown(ack_tx) => {
+                            ack_tx
+                                .send(())
+                                .expect("Failed to send shutdown ack");
+                            break;
+                        },
+                    }
+                }),
                 Some(updated_back_pressure) = back_pressure_rx.recv() => {
                     self.back_pressure = updated_back_pressure;
                 },
@@ -505,77 +577,6 @@ impl BatchGenerator {
                         }
                     }
                 }),
-                Some(cmd) = cmd_rx.recv() => monitor!("batch_generator_handle_command", {
-                    match cmd {
-                        BatchGeneratorCommand::CommitNotification(block_timestamp, batches) => {
-                            trace!(
-                                "QS: got clean request from execution, block timestamp {}",
-                                block_timestamp
-                            );
-                            assert!(
-                                self.latest_block_timestamp <= block_timestamp,
-                                "Decreasing block timestamp"
-                            );
-                            self.latest_block_timestamp = block_timestamp;
-                            
-                            // keep the last commited txn for each sender to avoid duplicate txn
-                            self.commited_txns_buffer.clear();
-                            for (author, batch_id) in batches.iter().map(|b| (b.author(), b.batch_id())) {
-                                if let Some(batch_in_progress) = self.batches_in_progress.get(&(author, batch_id)) {
-                                    for txn_summary in &batch_in_progress.txns {
-                                        if let Some(txn_in_progress) = self.txns_in_progress_sorted.get(txn_summary) {
-                                            self.commited_txns_buffer.push((txn_summary.clone(), txn_in_progress.clone()));
-                                        }
-                                    }
-                                }
-                                
-                                if self.remove_batch_in_progress(author, batch_id) {
-                                    counters::BATCH_IN_PROGRESS_COMMITTED.inc();
-                                }
-                            }
-
-                            // Cleans up all batches that expire in timestamp <= block_timestamp. This is
-                            // safe since clean request must occur only after execution result is certified.
-                            for (author, batch_id) in self.batch_expirations.expire(block_timestamp) {
-                                if let Some(batch_in_progress) = self.batches_in_progress.get(&(author, batch_id)) {
-                                    // If there is an identical batch with higher expiry time, re-insert it.
-                                    if batch_in_progress.expiry_time_usecs > block_timestamp {
-                                        self.batch_expirations.add_item((author, batch_id), batch_in_progress.expiry_time_usecs);
-                                        continue;
-                                    }
-                                }
-                                if self.remove_batch_in_progress(author, batch_id) {
-                                    counters::BATCH_IN_PROGRESS_EXPIRED.inc();
-                                    debug!(
-                                        "QS: logical time based expiration batch w. id {} from batches_in_progress, new size {}",
-                                        batch_id,
-                                        self.batches_in_progress.len(),
-                                    );
-                                }
-                            }
-                        },
-                        BatchGeneratorCommand::ProofExpiration(batch_ids) => {
-                            for batch_id in batch_ids {
-                                counters::BATCH_IN_PROGRESS_TIMEOUT.inc();
-                                debug!(
-                                    "QS: received timeout for proof of store, batch id = {}",
-                                    batch_id
-                                );
-                                // Not able to gather the proof, allow transactions to be polled again.
-                                self.remove_batch_in_progress(self.my_peer_id, batch_id);
-                            }
-                        },
-                        BatchGeneratorCommand::RemoteBatch(batch) => {
-                            self.handle_remote_batch(batch.author(), batch.batch_id(), batch.into_transactions());
-                        },
-                        BatchGeneratorCommand::Shutdown(ack_tx) => {
-                            ack_tx
-                                .send(())
-                                .expect("Failed to send shutdown ack");
-                            break;
-                        },
-                    }
-                })
             }
         }
     }
