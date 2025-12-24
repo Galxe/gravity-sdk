@@ -11,11 +11,10 @@ import signal
 import subprocess
 from typing import Dict, Set
 
-from gravity_e2e.gravity_e2e.core.client.gravity_client import GravityClient
-
 from ...utils.aptos_identity import AptosIdentity, parse_identity_from_yaml
 from ...helpers.test_helpers import RunHelper, TestResult, test_case
 from ...core.node_manager import NodeManager
+from ...core.client.gravity_client import GravityClient
 from ...core.client.gravity_http_client import GravityHttpClient
 
 LOG = logging.getLogger(__name__)
@@ -258,6 +257,7 @@ class TestContext:
                 raise RuntimeError(f"Failed to get epoch: {e}")
 
             # 主循环：检查停止标志
+            first_epoch = True
             while not self.should_stop:
                 try:
                     # 每隔 10 秒检查 epoch 是否切换
@@ -270,7 +270,7 @@ class TestContext:
                         LOG.warning(f"⚠️ 无法获取当前 epoch: {e}，跳过本次检查")
                         raise RuntimeError(f"Failed to get epoch: {e}")
 
-                    if new_epoch == current_epoch:
+                    if new_epoch == current_epoch and not first_epoch:
                         continue
 
                     if new_epoch < current_epoch:
@@ -322,7 +322,7 @@ class TestContext:
                     if validator_set:
                         # 随机选择 1-3 个节点
                         num_leaves = random.randint(1, min(3, len(validator_set)))
-                        nodes_to_leave = random.sample(validator_set, num_leaves)
+                        nodes_to_leave = random.sample(sorted(validator_set), num_leaves)
 
                         for node_name in nodes_to_leave:
                             LOG.info(f"尝试让节点 {node_name} leave validator set...")
@@ -331,6 +331,8 @@ class TestContext:
                             LOG.info(
                                 f"✅ 节点 {node_name} leave 成功，将在下一个 epoch 退出 validator_set"
                             )
+                    
+                    first_epoch = False
                 except Exception as e:
                     raise RuntimeError(f"Failed to fuzzy validator join and leave: {e}")
 
