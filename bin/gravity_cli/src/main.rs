@@ -43,6 +43,12 @@ fn main() {
                     eprintln!("Error: {:?}", e);
                 }
             }
+            // Example: gravity-cli validator list --rpc-url="http://127.0.0.1:8545"
+            validator::SubCommands::List(list_cmd) => {
+                if let Err(e) = list_cmd.execute() {
+                    eprintln!("Error: {:?}", e);
+                }
+            }
         },
         command::SubCommands::Node(node_cmd) => match node_cmd.command {
             // Example: gravity-cli node start --deploy-path="./deploy_utils/node1"
