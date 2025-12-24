@@ -35,28 +35,9 @@ pub type Round = u64;
 /// Author refers to the author's account address
 pub type Author = AccountAddress;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize, Hash, Ord, PartialOrd)]
-pub struct TransactionSummary {
-    pub sender: AccountAddress,
-    pub sequence_number: u64,
-    pub hash: HashValue,
-}
-
-impl TransactionSummary {
-    pub fn new(sender: AccountAddress, sequence_number: u64, hash: HashValue) -> Self {
-        Self {
-            sender,
-            sequence_number,
-            hash,
-        }
-    }
-}
-
-impl fmt::Display for TransactionSummary {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}", self.sender, self.sequence_number,)
-    }
-}
+// Re-export from gaptos to unify types and avoid O(N) conversion in pull_internal
+pub use gaptos::aptos_consensus_types::common::TransactionSummary;
+pub use gaptos::aptos_consensus_types::common::TransactionInProgress;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize, Hash, Ord, PartialOrd)]
 pub struct TxnSummaryWithExpiration {
@@ -85,35 +66,6 @@ impl TxnSummaryWithExpiration {
 impl fmt::Display for TxnSummaryWithExpiration {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.sender, self.sequence_number,)
-    }
-}
-
-#[derive(Clone)]
-pub struct TransactionInProgress {
-    pub gas_unit_price: u64,
-    pub count: u64,
-}
-
-impl TransactionInProgress {
-    pub fn new(gas_unit_price: u64) -> Self {
-        Self {
-            gas_unit_price,
-            count: 0,
-        }
-    }
-
-    pub fn gas_unit_price(&self) -> u64 {
-        self.gas_unit_price
-    }
-
-    pub fn decrement(&mut self) -> u64 {
-        self.count -= 1;
-        self.count
-    }
-
-    pub fn increment(&mut self) -> u64 {
-        self.count += 1;
-        self.count
     }
 }
 

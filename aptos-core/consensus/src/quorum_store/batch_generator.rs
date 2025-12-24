@@ -342,7 +342,7 @@ impl BatchGenerator {
             .pull_internal(
                 max_count,
                 self.config.sender_max_total_bytes as u64,
-                exclude_transactions,
+                &exclude_transactions,
             )
             .await
             .unwrap_or_default();

@@ -109,20 +109,15 @@ impl MempoolProxy {
         &self,
         max_items: u64,
         max_bytes: u64,
-        exclude_transactions: BTreeMap<TransactionSummary, TransactionInProgress>,
+        exclude_transactions: &BTreeMap<TransactionSummary, TransactionInProgress>,
     ) -> Result<Vec<SignedTransaction>, anyhow::Error> {
         let (callback, callback_rcv) = oneshot::channel();
-        let exclude_transactions: BTreeMap<_, _> = exclude_transactions
-            .into_iter()
-            .map(|(txn, txn_in_progress)| (
-                gaptos::aptos_consensus_types::common::TransactionSummary::new(txn.sender, txn.sequence_number, txn.hash), 
-                gaptos::aptos_consensus_types::common::TransactionInProgress::new(txn_in_progress.gas_unit_price)))
-            .collect();
+        // Types are now unified (re-exported from gaptos), no conversion needed
         let msg = QuorumStoreRequest::GetBatchRequest(
             max_items,
             max_bytes,
             true,
-            exclude_transactions,
+            exclude_transactions.clone(),
             callback,
         );
         self.mempool_tx
