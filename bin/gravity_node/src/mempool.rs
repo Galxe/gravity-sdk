@@ -1,4 +1,8 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
 use crate::RethTransactionPool;
 use alloy_consensus::{transaction::SignerRecoverable, Transaction};
@@ -18,11 +22,38 @@ use greth::{
     reth_transaction_pool::{EthPooledTransaction, TransactionPool, ValidPoolTransaction},
 };
 
+/// Cache TTL for best transactions
+const CACHE_TTL_SECS: u64 = 30;
+
+/// Cached best transactions with TTL
+struct CachedBest {
+    txns: VecDeque<(Arc<ValidPoolTransaction<EthPooledTransaction>>, VerifiedTxn)>,
+    created_at: Instant,
+}
+
+impl CachedBest {
+    fn new() -> Self {
+        Self {
+            txns: VecDeque::new(),
+            created_at: Instant::now() - Duration::from_secs(CACHE_TTL_SECS + 1), // Start expired
+        }
+    }
+
+    fn is_expired(&self) -> bool {
+        self.created_at.elapsed() > Duration::from_secs(CACHE_TTL_SECS)
+    }
+
+    fn is_empty(&self) -> bool {
+        self.txns.is_empty()
+    }
+}
+
 pub struct Mempool {
     pool: RethTransactionPool,
     txn_cache: Arc<
         DashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>,
     >,
+    cached_best: Mutex<CachedBest>,
     runtime: tokio::runtime::Runtime,
     enable_broadcast: bool,
 }
@@ -32,6 +63,7 @@ impl Mempool {
         Self {
             pool,
             txn_cache: Arc::new(DashMap::new()),
+            cached_best: Mutex::new(CachedBest::new()),
             runtime: tokio::runtime::Runtime::new().unwrap(),
             enable_broadcast,
         }
@@ -82,21 +114,49 @@ impl TxPool for Mempool {
         &self,
         filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>,
     ) -> Box<dyn Iterator<Item = VerifiedTxn>> {
+        let mut cached = self.cached_best.lock().unwrap();
+        
+        // Check if cache needs refresh
+        let should_refresh = cached.is_empty() || cached.is_expired();
+        
+        if should_refresh {
+            // Refresh cache from pool
+            let fresh_txns: VecDeque<_> = self.pool.best_transactions()
+                .map(|pool_txn| {
+                    let verified = to_verified_txn(pool_txn.clone());
+                    (pool_txn, verified)
+                })
+                .collect();
+            
+            cached.txns = fresh_txns;
+            cached.created_at = Instant::now();
+            tracing::debug!("Refreshed best_txns cache with {} transactions", cached.txns.len());
+        }
+        
+        // Filter and collect from cache
         let txn_cache = self.txn_cache.clone();
-        let iter = self.pool.best_transactions().filter_map(move |pool_txn| {
-            let sender = convert_account(pool_txn.sender());
-            let nonce = pool_txn.nonce();
-            let hash = TxnHash::from_bytes(pool_txn.hash().as_slice());
-            if let Some(filter) = &filter {
-                if !filter((sender, nonce, hash)) {
-                    return None;
+        let result: Vec<_> = cached.txns.iter()
+            .filter_map(|(pool_txn, verified)| {
+                let sender = verified.sender.clone();
+                let nonce = verified.sequence_number;
+                let hash = TxnHash::from_bytes(pool_txn.hash().as_slice());
+                
+                if let Some(ref f) = filter {
+                    if !f((sender.clone(), nonce, hash)) {
+                        return None;
+                    }
                 }
-            }
-            let verified_txn = to_verified_txn(pool_txn.clone());
-            txn_cache.insert((verified_txn.sender.clone(), verified_txn.sequence_number), pool_txn);
-            Some(verified_txn)
-        });
-        Box::new(iter)
+                
+                // Update txn_cache for later commit lookup
+                txn_cache.insert((sender, nonce), pool_txn.clone());
+                Some(verified.clone())
+            })
+            .collect();
+        
+        // Clear cache (mark as consumed)
+        cached.txns.clear();
+        
+        Box::new(result.into_iter())
     }
 
     fn get_broadcast_txns(
