@@ -34,7 +34,10 @@ class TestContext:
     def __init__(self, run_helper: RunHelper):
         self.run_helper = run_helper
         self.node_manager = NodeManager()
-        self.node_names = [f"node{i}" for i in range(5, 11)]  # node5 to node10
+        # node1-4 are genesis validators
+        self.genesis_node_names = [f"node{i}" for i in range(1, 5)]
+        # node5-10 are validator candidate nodes
+        self.candidate_node_names = [f"node{i}" for i in range(5, 11)]
         self.install_dir = "/tmp"
         self.config_base_dir = (
             self.node_manager.workspace_root
@@ -56,14 +59,8 @@ class TestContext:
     def deploy_nodes(self):
         deploy_results = {}
 
-        for node_name in self.node_names:
-            identity_path = (
-                self.config_base_dir / node_name / "config" / "validator-identity.yaml"
-            )
-            identity = parse_identity_from_yaml(identity_path)
-        LOG.info(f"Loaded identity map: {self.node_to_identity}")
-
-        for node_name in self.node_names:
+        all_node_names = self.genesis_node_names + self.candidate_node_names
+        for node_name in all_node_names:
             LOG.info(f"Deploying {node_name}...")
             # 获取该节点的配置目录路径
             node_config_dir = str(self.config_base_dir / node_name / "config")
@@ -93,7 +90,8 @@ class TestContext:
     def start_nodes(self):
         start_results = {}
 
-        for node_name in self.node_names:
+        all_node_names = self.genesis_node_names + self.candidate_node_names
+        for node_name in all_node_names:
             LOG.info(f"Starting {node_name}...")
             node_path = self.node_manager.get_node_deploy_path(
                 node_name, self.install_dir
@@ -117,7 +115,8 @@ class TestContext:
             )
 
     def stop_nodes(self):
-        for node_name in self.node_names:
+        all_node_names = self.genesis_node_names + self.candidate_node_names
+        for node_name in all_node_names:
             try:
                 node_path = self.node_manager.get_node_deploy_path(
                     node_name, self.install_dir
@@ -131,8 +130,8 @@ class TestContext:
             except Exception as e:
                 LOG.warning(f"⚠️  Error stopping node {node_name}: {e}")
 
-    async def faucet_nodes(self):
-        for node_name in self.node_names:
+    async def fund_nodes(self):
+        for node_name in self.candidate_node_names:
             LOG.info(f"Creating EVM account for {node_name}...")
             account = await self.run_helper.create_test_account(
                 node_name, fund_wei=10**24
@@ -203,7 +202,8 @@ class TestContext:
             LOG.info(f"Command output: {result.stdout}")
 
     def init_node_to_identity(self):
-        for node_name in self.node_names:
+        validator_node_names = self.genesis_node_names + self.candidate_node_names
+        for node_name in validator_node_names:
             identity_path = (
                 self.config_base_dir / node_name / "config" / "validator-identity.yaml"
             )
@@ -215,7 +215,8 @@ class TestContext:
         # FIXME: hardcoded port offsets
         validator_network_address_port_offset = 2025
         fullnode_network_address_port_offset = 2125
-        for i, node_name in enumerate(self.node_names):
+        validator_node_names = self.genesis_node_names + self.candidate_node_names
+        for i, node_name in enumerate(validator_node_names):
             validator_network_address_port = validator_network_address_port_offset + i
             fullnode_network_address_port = fullnode_network_address_port_offset + i
             consensus_public_key = self.load_consensus_public_key(node_name)
@@ -301,7 +302,9 @@ class TestContext:
                     # 在每个 epoch 期间执行随机 join 和 leave
                     # 从不在 validator_set 的节点中随机选择 1-3 个节点调用 validator join
                     nodes_not_in_validator = [
-                        node for node in self.node_names if node not in validator_set
+                        node
+                        for node in self.candidate_node_names
+                        if node not in validator_set
                     ]
 
                     if nodes_not_in_validator:
@@ -322,7 +325,9 @@ class TestContext:
                     if validator_set:
                         # 随机选择 1-3 个节点
                         num_leaves = random.randint(1, min(3, len(validator_set)))
-                        nodes_to_leave = random.sample(sorted(validator_set), num_leaves)
+                        nodes_to_leave = random.sample(
+                            sorted(validator_set), num_leaves
+                        )
 
                         for node_name in nodes_to_leave:
                             LOG.info(f"尝试让节点 {node_name} leave validator set...")
@@ -331,15 +336,16 @@ class TestContext:
                             LOG.info(
                                 f"✅ 节点 {node_name} leave 成功，将在下一个 epoch 退出 validator_set"
                             )
-                    
+
                     first_epoch = False
                 except Exception as e:
                     raise RuntimeError(f"Failed to fuzzy validator join and leave: {e}")
 
     async def check_node_block_height(self):
         clients = [self.run_helper.client]
-        for i in range(2, 11):
-            node_name = f"node{i}"
+        for i, node_name in enumerate(
+            self.genesis_node_names + self.candidate_node_names
+        )[1:]:
             # FIXME: hardcoded port
             http_url = f"http://127.0.0.1:{8540 + i}"
             client = GravityClient(rpc_url=http_url, node_id=node_name)
@@ -365,10 +371,13 @@ async def test_epoch_switch(run_helper: RunHelper, test_result: TestResult):
     Test epoch switching with multiple nodes
 
     Test steps:
-    1. Deploy node5-node10
-    2. Start node5-node10
-    3. Wait for nodes to be ready
-    4. Create EVM accounts for node5-10
+    1. Initialize node to identity for all validator nodes(genesis and candidate), initialize validator join args for all candidate nodes
+    2. Deploy all nodes
+    3. Start all nodes
+    4. Wait for nodes to be ready
+    5. Create EVM accounts for candidate nodes
+    6. Fuzzy validator candidate nodes join and leave
+    7. Check node block height gap between all nodes
     """
     LOG.info("=" * 70)
     LOG.info("Test: Epoch Switch Test")
@@ -376,45 +385,44 @@ async def test_epoch_switch(run_helper: RunHelper, test_result: TestResult):
 
     test_context = TestContext(run_helper)
     try:
-        # Step 1: Deploy node1-node10
-        LOG.info("\n[Step 1] Deploying node5-node10...")
-        test_context.deploy_nodes()
-        LOG.info(f"✅ All nodes (node5-node10) deployed successfully")
-
-        # Step 2: Start node1-node10
-        LOG.info("\n[Step 2] Starting node5-node10...")
-        test_context.start_nodes()
-        LOG.info(f"✅ All nodes (node1-node10) started successfully")
-
-        # Step 3: Wait for nodes to be ready
-        LOG.info("\n[Step 3] Waiting 10 seconds for nodes to be ready...")
-        await asyncio.sleep(10)
-
-        LOG.info("\n✅ All nodes deployed and started successfully!")
-        LOG.info("=" * 70)
-
-        # node1-4 are genesis validators, create evm accounts for node5-10
-        LOG.info("\n[Step 4] Creating EVM accounts for node5-10...")
-        await test_context.faucet_nodes()
-        LOG.info(f"✅ All nodes (node5-10) EVM accounts created successfully")
-
-        # Step 5: Initialize node to identity and validator join args
-        LOG.info("\n[Step 5] Initializing node to identity and validator join args...")
+        # Step 1: Initialize node to identity and validator join args
+        LOG.info("\n[Step 1] Initializing node to identity and validator join args...")
         test_context.init_node_to_identity()
         test_context.init_validator_join_args()
         LOG.info(
             f"✅ Node to identity and validator join args initialized successfully"
         )
+        # Step 2: Deploy all nodes
+        LOG.info("\n[Step 2] Deploying all nodes...")
+        test_context.deploy_nodes()
+        LOG.info(f"✅ All nodes deployed successfully")
 
-        # Step 6: Fuzzy validator join and leave
-        LOG.info("\n[Step 6] Fuzzy validator join and leave...")
+        # Step 3: Start all nodes
+        LOG.info("\n[Step 3] Starting all nodes...")
+        test_context.start_nodes()
+        LOG.info(f"✅ All nodes started successfully")
+
+        # Step 4: Wait for nodes to be ready
+        LOG.info("\n[Step 4] Waiting 10 seconds for nodes to be ready...")
+        await asyncio.sleep(10)
+
+        LOG.info("\n✅ All nodes deployed and started successfully!")
+        LOG.info("=" * 70)
+
+        # Step 5: Create EVM accounts for candidate nodes
+        LOG.info("\n[Step 5] Funding EVM accounts for candidate nodes...")
+        await test_context.fund_nodes()
+        LOG.info(f"✅ All candidate nodes EVM accounts created successfully")
+
+        # Step 6: Fuzzy validator candidate nodes join and leave
+        LOG.info("\n[Step 6] Fuzzy validator candidate nodes join and leave...")
         await test_context.fuzzy_validator_join_and_leave()
-        LOG.info(f"✅ Fuzzy validator join and leave completed successfully")
+        LOG.info(f"✅ Fuzzy validator candidate nodes join and leave completed successfully")
 
-        # Step 7: Check node block height
-        LOG.info("\n[Step 7] Checking node block height...")
+        # Step 7: Check node block height gap between all nodes
+        LOG.info("\n[Step 7] Checking node block height gap between all nodes...")
         await test_context.check_node_block_height()
-        LOG.info(f"✅ Node block height checked successfully")
+        LOG.info(f"✅ Node block height gap between all nodes checked successfully")
 
         test_result.mark_success()
 
