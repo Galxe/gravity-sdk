@@ -246,6 +246,7 @@ class NodeManager:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                start_new_session=True, # 新开一个会话，避免被父进程杀死
                 bufsize=1  # 行缓冲
             )
             # 不等待进程结束，立即返回
