@@ -221,8 +221,7 @@ async def main():
                 elif args.test_suite == "validator_add_remove_delayed":
                     test_modules = ["cases.validator_add_remove_delayed"]
                 else:
-                    test_modules = []
-                
+                    test_modules = [f"cases.{args.test_suite}"]
                 # Execute tests
                 for module in test_modules:
                     await run_test_module(module, test_helper, test_results)

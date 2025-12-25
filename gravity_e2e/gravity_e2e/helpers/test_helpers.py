@@ -57,13 +57,13 @@ class RunHelper:
         self.working_dir = working_dir
         self.faucet_account = faucet_account
         
-    async def create_test_account(self, name: str, fund_wei: Optional[int] = None) -> Dict:
+    async def create_test_account(self, name: str, fund_wei: Optional[int] = None, nonce: Optional[int] = None) -> Dict:
         """Create and optionally fund test account
         
         Args:
             name: Account name
             fund_wei: Funding amount in wei, None means no funding
-            
+            nonce: Transaction count for the faucet account
         Returns:
             Account information dictionary
         """
@@ -84,25 +84,30 @@ class RunHelper:
         
         # Fund account if needed and faucet is configured
         if fund_wei and fund_wei > 0 and self.faucet_account:
-            await self._fund_account(account_info, fund_wei)
+            await self._fund_account(account_info, fund_wei, nonce=nonce)
             
         return account_info
+    
+    def faucet_address(self) -> str:
+        return self.faucet_account["address"]
         
-    async def _fund_account(self, account: Dict, amount_wei: int, confirmations: int = 1):
+    async def _fund_account(self, account: Dict, amount_wei: int, confirmations: int = 1, nonce: Optional[int] = None):
         """Fund test account using faucet account
         
         Args:
             account: Account information
             amount_wei: Funding amount in wei
             confirmations: Number of confirmations to wait
-            
+            nonce: Transaction count for the faucet account
         Returns:
             Transaction receipt
         """
         try:
             # Get faucet account nonce
-            nonce = await self.client.get_transaction_count(self.faucet_account["address"])
+            if nonce is None:
+                nonce = await self.client.get_transaction_count(self.faucet_account["address"])
             
+            LOG.info(f"Funding account '{account['name']}' with {amount_wei / 10**18:.6f} ETH using nonce {nonce}")
             # Get current gas price
             gas_price = await self.client.get_gas_price()
             
@@ -143,7 +148,7 @@ class RunHelper:
             return receipt
             
         except Exception as e:
-            LOG.error(f"Failed to fund account: {e}")
+            LOG.error(f"Failed to fund account for {account['name']}: {e}")
             raise
 
 
