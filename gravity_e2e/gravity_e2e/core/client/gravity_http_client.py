@@ -156,25 +156,48 @@ class GravityHttpClient:
             f"(timeout: {timeout}s)"
         )
     
+    async def get_latest_ledger_info(self) -> Dict:
+        """
+        Get latest ledger info
+        
+        Returns:
+            Latest ledger info dictionary:
+            {
+                "epoch": int,
+                "round": int,
+                "block_number": int,
+                "block_hash": str
+            }
+            
+        Raises:
+            RuntimeError: Request failed
+        """
+        url = f"{self.base_url}/consensus/latest_ledger_info"
+        LOG.debug(f"Getting latest ledger info from {url}")
+        
+        if not self.session:
+            raise RuntimeError("Client not initialized. Use 'async with' statement.")
+        
+        try:
+            async with self.session.get(url) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    raise RuntimeError(f"Failed to get latest ledger info: {resp.status} - {text}")
+                
+                data = await resp.json()
+                return data
+        except aiohttp.ClientError as e:
+            raise RuntimeError(f"HTTP request failed: {e}")
+
     async def get_current_epoch(self) -> int:
         """
-        Get current epoch
+        Get current epoch from latest ledger info
         
         Returns:
             Current epoch number
         """
-        status = await self.get_dkg_status()
-        return status["epoch"]
-    
-    async def get_current_block(self) -> int:
-        """
-        Get current block number
-        
-        Returns:
-            Current block number
-        """
-        status = await self.get_dkg_status()
-        return status["block_number"]
+        latest_ledger_info = await self.get_latest_ledger_info()
+        return latest_ledger_info["epoch"]
     
     async def get_ledger_info_by_epoch(self, epoch: int) -> Dict:
         """
