@@ -193,7 +193,7 @@ async def main():
             test_results = []
             
             # Check if test suite manages its own nodes (doesn't need pre-existing connections)
-            self_managed_tests = ["epoch_consistency", "epoch_consistency_extended", "validator_add_remove", "validator_add_remove_delayed"]
+            self_managed_tests = ["epoch_consistency", "epoch_consistency_extended", "validator_add_remove", "validator_add_remove_delayed", "epoch_switch"]
             is_self_managed = args.test_suite in self_managed_tests
             
             if is_self_managed:
