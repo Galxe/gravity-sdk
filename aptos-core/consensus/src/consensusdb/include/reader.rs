@@ -26,7 +26,7 @@ impl ConsensusDB {
                 let validator_set_config = GLOBAL_CONFIG_STORAGE
                     .get()
                     .unwrap()
-                    .fetch_config_bytes(GravityOnChainConfig::ValidatorSet, 0);
+                    .fetch_config_bytes(GravityOnChainConfig::ValidatorSet, 0.into());
                 let validator_bytes =
                     TryInto::<Bytes>::try_into(validator_set_config.unwrap()).unwrap();
                 let validator_set =

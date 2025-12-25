@@ -109,7 +109,7 @@ impl DkgState {
 
         // Get participating nodes count from DKGState last_completed session
         let participating_nodes = if let Some(config_storage) = GLOBAL_CONFIG_STORAGE.get() {
-            if let Some(config_bytes) = config_storage.fetch_config_bytes(OnChainConfig::DKGState, block) {
+            if let Some(config_bytes) = config_storage.fetch_config_bytes(OnChainConfig::DKGState, block.into()) {
                 match config_bytes.try_into() {
                     Ok(bytes) => {
                         let bytes: Bytes = bytes;
