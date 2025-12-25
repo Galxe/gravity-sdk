@@ -3,12 +3,14 @@ Epoch switch test
 Tests epoch switching with multiple nodes (node1-node10)
 """
 
+from ast import Tuple
 import asyncio
 from dataclasses import dataclass
+import json
 import logging
 import random
 import signal
-import subprocess
+from contextlib import AsyncExitStack
 from typing import Dict, Set
 
 from ...utils.aptos_identity import AptosIdentity, parse_identity_from_yaml
@@ -33,6 +35,10 @@ class ValidatorJoinArgs:
 class TestContext:
     def __init__(self, run_helper: RunHelper):
         self.run_helper = run_helper
+        # FIXME: hardcoded port
+        self.run_helper.client = GravityClient(
+            rpc_url="http://127.0.0.1:8541", node_id="node1"
+        )
         self.node_manager = NodeManager()
         # node1-4 are genesis validators
         self.genesis_node_names = [f"node{i}" for i in range(1, 5)]
@@ -46,11 +52,19 @@ class TestContext:
             / "test_epoch_switch"
         )
         self.node_to_identity: Dict[str, AptosIdentity] = dict()
+        self.aptos_address_to_node_name: Dict[str, str] = dict()
         self.node_to_account: Dict[str, Dict] = dict()
         self.node_to_validator_join_args: Dict[str, ValidatorJoinArgs] = dict()
         self.should_stop = False
         signal.signal(signal.SIGTERM, self.signal_handler)
         signal.signal(signal.SIGINT, self.signal_handler)
+
+    async def __aenter__(self):
+        await self.run_helper.client.__aenter__()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.run_helper.client.__aexit__(exc_type, exc_val, exc_tb)
 
     def signal_handler(self, signum, frame):
         self.should_stop = True
@@ -131,12 +145,19 @@ class TestContext:
                 LOG.warning(f"⚠️  Error stopping node {node_name}: {e}")
 
     async def fund_nodes(self):
-        for node_name in self.candidate_node_names:
-            LOG.info(f"Creating EVM account for {node_name}...")
-            account = await self.run_helper.create_test_account(
-                node_name, fund_wei=10**24
-            )
-            LOG.info(f"✅ Created EVM account for {node_name}: {account}")
+        faucet_address = self.run_helper.faucet_address()
+        faucet_nonce = await self.run_helper.client.get_transaction_count(
+            faucet_address
+        )
+        accounts = await asyncio.gather(
+            *[
+                self.run_helper.create_test_account(
+                    node_name, fund_wei=10**24, nonce=faucet_nonce + i
+                )
+                for i, node_name in enumerate(self.candidate_node_names)
+            ]
+        )
+        for node_name, account in zip(self.candidate_node_names, accounts):
             self.node_to_account[node_name] = account
 
     def load_consensus_public_key(self, node_name: str):
@@ -147,10 +168,9 @@ class TestContext:
             consensus_public_key = f.read().strip()
         return consensus_public_key
 
-    def validator_join(self, node_name: str):
+    async def validator_join(self, node_name: str):
         validator_join_args = self.node_to_validator_join_args[node_name]
-        join_cmd = [
-            str(self.node_manager.gravity_cli_path),
+        join_args = [
             "validator",
             "join",
             "--rpc-url",
@@ -169,20 +189,29 @@ class TestContext:
             validator_join_args.fullnode_network_address,
             "--aptos-address",
             validator_join_args.aptos_address,
+            "--moniker",
+            node_name.upper(),
         ]
-        LOG.info(f"Running command: {' '.join(join_cmd)}")
-        result = subprocess.run(join_cmd, capture_output=True, text=True, timeout=60)
-        if result.returncode != 0:
-            LOG.error(f"Failed to join validator: {result.stderr}")
-            raise RuntimeError(f"Failed to join validator: {result.stderr}")
-        LOG.info(f"✅ Validator join command executed successfully")
-        if result.stdout:
-            LOG.info(f"Command output: {result.stdout}")
-
-    def validator_leave(self, node_name: str):
-        args = self.node_to_validator_join_args[node_name]
-        leave_cmd = [
+        LOG.info(
+            f"Running command: {str(self.node_manager.gravity_cli_path)} {' '.join(join_args)}"
+        )
+        process = await asyncio.create_subprocess_exec(
             str(self.node_manager.gravity_cli_path),
+            *join_args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,  # 新开一个会话，避免被父进程杀死
+        )
+        stdout, stderr = await process.communicate()
+        LOG.info(f"Validator join command output: {stdout}")
+        if process.returncode != 0:
+            LOG.error(f"Failed to join validator: {stderr}")
+            raise RuntimeError(f"Failed to join validator: {stderr}")
+        LOG.info(f"✅ Validator join command executed successfully")
+
+    async def validator_leave(self, node_name: str):
+        args = self.node_to_validator_join_args[node_name]
+        leave_args = [
             "validator",
             "leave",
             "--rpc-url",
@@ -192,14 +221,73 @@ class TestContext:
             "--validator-address",
             args.validator_address,
         ]
-        LOG.info(f"Running command: {' '.join(leave_cmd)}")
-        result = subprocess.run(leave_cmd, capture_output=True, text=True, timeout=60)
-        if result.returncode != 0:
-            LOG.error(f"Failed to leave validator: {result.stderr}")
-            raise RuntimeError(f"Failed to leave validator: {result.stderr}")
+        LOG.info(
+            f"Running command: {str(self.node_manager.gravity_cli_path)} {' '.join(leave_args)}"
+        )
+        process = await asyncio.create_subprocess_exec(
+            str(self.node_manager.gravity_cli_path),
+            *leave_args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,  # 新开一个会话，避免被父进程杀死
+        )
+        stdout, stderr = await process.communicate()
+        LOG.info(f"Validator leave command output: {stdout}")
+        if process.returncode != 0:
+            LOG.error(f"Failed to leave validator: {stderr}")
+            raise RuntimeError(f"Failed to leave validator: {stderr}")
         LOG.info(f"✅ Validator leave command executed successfully")
-        if result.stdout:
-            LOG.info(f"Command output: {result.stdout}")
+
+    async def validator_list(self):
+        """
+        Get validator list from gravity node
+        Returns:
+            active_node_names: set of node names in active validator set
+            pending_inactive_node_names: set of node names in pending inactive validator set
+            pending_active_node_names: set of node names in pending active validator set
+        """
+        args = [
+            "validator",
+            "list",
+            "--rpc-url",
+            self.run_helper.client.rpc_url,
+        ]
+        process = await asyncio.create_subprocess_exec(
+            str(self.node_manager.gravity_cli_path),
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,  # 新开一个会话，避免被父进程杀死
+        )
+        stdout, stderr = await process.communicate()
+        LOG.info(f"Validator list command output: {stdout}")
+        if process.returncode != 0:
+            LOG.error(f"Failed to list validator: {stderr}")
+            raise RuntimeError(f"Failed to list validator: {stderr}")
+        LOG.info(f"✅ Validator list command executed successfully")
+
+        # 解析 JSON 输出
+        stdout_str = stdout.decode("utf-8") if isinstance(stdout, bytes) else stdout
+        validator_data = json.loads(stdout_str)
+
+        # 收集所有 validator 的 aptos_address（从 active_validators, pending_inactive, pending_active）
+        active_node_names = set()
+        pending_inactive_node_names = set()
+        pending_active_node_names = set()
+        for validator in validator_data["active_validators"]:
+            active_node_names.add(
+                self.aptos_address_to_node_name[validator["aptos_address"]]
+            )
+        for validator in validator_data["pending_inactive"]:
+            pending_inactive_node_names.add(
+                self.aptos_address_to_node_name[validator["aptos_address"]]
+            )
+        for validator in validator_data["pending_active"]:
+            pending_active_node_names.add(
+                self.aptos_address_to_node_name[validator["aptos_address"]]
+            )
+
+        return active_node_names, pending_inactive_node_names, pending_active_node_names
 
     def init_node_to_identity(self):
         validator_node_names = self.genesis_node_names + self.candidate_node_names
@@ -209,14 +297,14 @@ class TestContext:
             )
             identity = parse_identity_from_yaml(identity_path)
             self.node_to_identity[node_name] = identity
+            self.aptos_address_to_node_name[identity.account_address] = node_name
             LOG.info(f"Loaded identity for {node_name}: {identity}")
 
     def init_validator_join_args(self):
         # FIXME: hardcoded port offsets
         validator_network_address_port_offset = 2025
         fullnode_network_address_port_offset = 2125
-        validator_node_names = self.genesis_node_names + self.candidate_node_names
-        for i, node_name in enumerate(validator_node_names):
+        for i, node_name in enumerate(self.candidate_node_names):
             validator_network_address_port = validator_network_address_port_offset + i
             fullnode_network_address_port = fullnode_network_address_port_offset + i
             consensus_public_key = self.load_consensus_public_key(node_name)
@@ -238,7 +326,7 @@ class TestContext:
         模糊测试：持续随机地让节点加入和离开 validator set
         """
         # validator set not include genesis validators
-        validator_set: Set[str] = set()
+        validator_set: Set[str] = set(self.genesis_node_names)
         pending_joins: Set[str] = set()
         pending_leaves: Set[str] = set()
 
@@ -259,8 +347,8 @@ class TestContext:
 
             # 主循环：检查停止标志
             first_epoch = True
-            while not self.should_stop:
-                try:
+            try:
+                while not self.should_stop:
                     # 每隔 10 秒检查 epoch 是否切换
                     await asyncio.sleep(10)
 
@@ -278,8 +366,9 @@ class TestContext:
                         raise RuntimeError(
                             f"Epoch decreased from {current_epoch} to {new_epoch}"
                         )
-                    # Epoch 切换了，更新 validator_set
-                    LOG.info(f"Epoch 从 {current_epoch} 切换到 {new_epoch}")
+                    elif new_epoch > current_epoch:
+                        current_epoch = new_epoch
+                        LOG.info(f"Epoch 从 {current_epoch} 切换到 {new_epoch}")
 
                     # 将成功 join 的节点加入 validator_set
                     validator_set.update(pending_joins)
@@ -291,16 +380,21 @@ class TestContext:
                     if pending_leaves:
                         LOG.info(f"节点 {pending_leaves} 退出 validator_set")
 
+                    actual_active_nodes, _, _ = await self.validator_list()
+                    if actual_active_nodes != validator_set:
+                        raise RuntimeError(
+                            f"Actual active nodes: {actual_active_nodes} != expected active nodes: {validator_set}"
+                        )
+
                     # 重置待处理的 join 和 leave
                     pending_joins.clear()
                     pending_leaves.clear()
 
                     # 更新当前 epoch
-                    current_epoch = new_epoch
                     LOG.info(f"当前 validator_set: {validator_set}")
 
                     # 在每个 epoch 期间执行随机 join 和 leave
-                    # 从不在 validator_set 的节点中随机选择 1-3 个节点调用 validator join
+                    # 随机选择 1-3 个候选节点调用 validator join
                     nodes_not_in_validator = [
                         node
                         for node in self.candidate_node_names
@@ -309,50 +403,79 @@ class TestContext:
 
                     if nodes_not_in_validator:
                         # 随机选择 1-3 个节点
-                        num_joins = random.randint(
-                            1, min(3, len(nodes_not_in_validator))
-                        )
-                        nodes_to_join = random.sample(nodes_not_in_validator, num_joins)
+                        if len(nodes_not_in_validator) > 1:
+                            num_joins = random.randint(
+                                1, min(3, len(nodes_not_in_validator))
+                            )
+                            nodes_to_join = random.sample(
+                                nodes_not_in_validator, num_joins
+                            )
+                        else:
+                            nodes_to_join = nodes_not_in_validator
 
                         for node_name in nodes_to_join:
                             LOG.info(f"尝试让节点 {node_name} join validator set...")
-                            self.validator_join(node_name)
+                            await self.validator_join(node_name)
                             pending_joins.add(node_name)
                             LOG.info(
                                 f"✅ 节点 {node_name} join 成功，将在下一个 epoch 进入 validator_set"
                             )
-                    # 从在 validator_set 的节点中随机选择 1-3 个节点调用 validator leave
-                    if validator_set:
+                    # 随机选择 1-3 个候选节点调用 validator leave
+                    candidate_nodes_in_validator_set = [
+                        node
+                        for node in validator_set
+                        if node not in self.genesis_node_names
+                    ]
+                    if candidate_nodes_in_validator_set:
                         # 随机选择 1-3 个节点
-                        num_leaves = random.randint(1, min(3, len(validator_set)))
-                        nodes_to_leave = random.sample(
-                            sorted(validator_set), num_leaves
-                        )
+                        if len(candidate_nodes_in_validator_set) > 1:
+                            num_leaves = random.randint(
+                                1, min(3, len(candidate_nodes_in_validator_set))
+                            )
+                            nodes_to_leave = random.sample(
+                                candidate_nodes_in_validator_set, num_leaves
+                            )
+                        else:
+                            nodes_to_leave = candidate_nodes_in_validator_set
 
                         for node_name in nodes_to_leave:
                             LOG.info(f"尝试让节点 {node_name} leave validator set...")
-                            self.validator_leave(node_name)
+                            await self.validator_leave(node_name)
                             pending_leaves.add(node_name)
                             LOG.info(
                                 f"✅ 节点 {node_name} leave 成功，将在下一个 epoch 退出 validator_set"
                             )
 
+                    _, pending_inactive_nodes, pending_active_nodes = (
+                        await self.validator_list()
+                    )
+                    if pending_inactive_nodes != pending_leaves:
+                        raise RuntimeError(
+                            f"Actual pending inactive nodes: {pending_inactive_nodes} != expected pending inactive nodes: {pending_leaves}"
+                        )
+                    if pending_active_nodes != pending_joins:
+                        raise RuntimeError(
+                            f"Actual pending active nodes: {pending_active_nodes} != expected pending active nodes: {pending_joins}"
+                        )
+
                     first_epoch = False
-                except Exception as e:
-                    raise RuntimeError(f"Failed to fuzzy validator join and leave: {e}")
+            except Exception as e:
+                raise RuntimeError(f"Failed to fuzzy validator join and leave: {e}")
 
     async def check_node_block_height(self):
         clients = [self.run_helper.client]
         for i, node_name in enumerate(
-            self.genesis_node_names + self.candidate_node_names
-        )[1:]:
+            self.genesis_node_names[1:] + self.candidate_node_names
+        ):
             # FIXME: hardcoded port
-            http_url = f"http://127.0.0.1:{8540 + i}"
+            http_url = f"http://127.0.0.1:{8541 + i}"
             client = GravityClient(rpc_url=http_url, node_id=node_name)
             clients.append(client)
-        block_heights = await asyncio.gather(
-            *[client.get_block_number() for client in clients]
-        )
+        async with AsyncExitStack() as stack:
+            await asyncio.gather(*[stack.enter_async_context(c) for c in clients[1:]])
+            block_heights = await asyncio.gather(
+                *[client.get_block_number() for client in clients]
+            )
         max_block_height = max(block_heights)
         LOG.info(f"Max block height: {max_block_height}")
         is_gap_too_large = False
@@ -371,29 +494,30 @@ async def test_epoch_switch(run_helper: RunHelper, test_result: TestResult):
     Test epoch switching with multiple nodes
 
     Test steps:
-    1. Initialize node to identity for all validator nodes(genesis and candidate), initialize validator join args for all candidate nodes
+    1. Initialize node to identity for all validator nodes(genesis and candidate)
     2. Deploy all nodes
     3. Start all nodes
     4. Wait for nodes to be ready
     5. Create EVM accounts for candidate nodes
-    6. Fuzzy validator candidate nodes join and leave
-    7. Check node block height gap between all nodes
+    6. Initialize validator join args for all candidate nodes
+    7. Fuzzy validator candidate nodes join and leave
+    8. Check node block height gap between all nodes
     """
     LOG.info("=" * 70)
     LOG.info("Test: Epoch Switch Test")
     LOG.info("=" * 70)
 
     test_context = TestContext(run_helper)
+    await test_context.__aenter__()
     try:
         # Step 1: Initialize node to identity and validator join args
-        LOG.info("\n[Step 1] Initializing node to identity and validator join args...")
+        LOG.info("\n[Step 1] Initializing node to identity")
         test_context.init_node_to_identity()
-        test_context.init_validator_join_args()
-        LOG.info(
-            f"✅ Node to identity and validator join args initialized successfully"
-        )
+        LOG.info(f"✅ Node to identity initialized successfully")
+
         # Step 2: Deploy all nodes
         LOG.info("\n[Step 2] Deploying all nodes...")
+        test_context.stop_nodes()
         test_context.deploy_nodes()
         LOG.info(f"✅ All nodes deployed successfully")
 
@@ -414,13 +538,22 @@ async def test_epoch_switch(run_helper: RunHelper, test_result: TestResult):
         await test_context.fund_nodes()
         LOG.info(f"✅ All candidate nodes EVM accounts created successfully")
 
-        # Step 6: Fuzzy validator candidate nodes join and leave
-        LOG.info("\n[Step 6] Fuzzy validator candidate nodes join and leave...")
-        await test_context.fuzzy_validator_join_and_leave()
-        LOG.info(f"✅ Fuzzy validator candidate nodes join and leave completed successfully")
+        # Step 6: Initialize validator join args for all candidate nodes
+        LOG.info(
+            "\n[Step 6] Initializing validator join args for all candidate nodes..."
+        )
+        test_context.init_validator_join_args()
+        LOG.info(f"✅ Validator join args initialized successfully")
 
-        # Step 7: Check node block height gap between all nodes
-        LOG.info("\n[Step 7] Checking node block height gap between all nodes...")
+        # Step 7: Fuzzy validator candidate nodes join and leave
+        LOG.info("\n[Step 7] Fuzzy validator candidate nodes join and leave...")
+        await test_context.fuzzy_validator_join_and_leave()
+        LOG.info(
+            f"✅ Fuzzy validator candidate nodes join and leave completed successfully"
+        )
+
+        # Step 8: Check node block height gap between all nodes
+        LOG.info("\n[Step 8] Checking node block height gap between all nodes...")
         await test_context.check_node_block_height()
         LOG.info(f"✅ Node block height gap between all nodes checked successfully")
 
@@ -434,3 +567,4 @@ async def test_epoch_switch(run_helper: RunHelper, test_result: TestResult):
         # Cleanup: Stop nodes
         LOG.info("\n[Cleanup] Stopping nodes...")
         test_context.stop_nodes()
+        await test_context.__aexit__(None, None, None)
