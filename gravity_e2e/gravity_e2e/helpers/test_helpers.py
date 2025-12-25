@@ -257,13 +257,13 @@ class RunHelper:
         self.working_dir = working_dir
         self.faucet_account = faucet_account
         
-    async def create_test_account(self, name: str, fund_wei: Optional[int] = None) -> Dict:
+    async def create_test_account(self, name: str, fund_wei: Optional[int] = None, nonce: Optional[int] = None) -> Dict:
         """Create and optionally fund test account
         
         Args:
             name: Account name
             fund_wei: Funding amount in wei, None means no funding
-            
+            nonce: Transaction count for the faucet account
         Returns:
             Account information dictionary
         """
@@ -284,22 +284,30 @@ class RunHelper:
         
         # Fund account if needed and faucet is configured
         if fund_wei and fund_wei > 0 and self.faucet_account:
-            await self._fund_account(account_info, fund_wei)
+            await self._fund_account(account_info, fund_wei, nonce=nonce)
             
         return account_info
+    
+    def faucet_address(self) -> str:
+        return self.faucet_account["address"]
         
-    async def _fund_account(self, account: Dict, amount_wei: int, confirmations: int = 1):
+    async def _fund_account(self, account: Dict, amount_wei: int, confirmations: int = 1, nonce: Optional[int] = None):
         """Fund test account using faucet account
 
         Args:
             account: Account information
             amount_wei: Funding amount in wei
             confirmations: Number of confirmations to wait
+<<<<<<< HEAD
 
+=======
+            nonce: Transaction count for the faucet account
+>>>>>>> 70fc0ad (fix test_epoch_switch)
         Returns:
             Transaction receipt
         """
         try:
+<<<<<<< HEAD
             # Import here to avoid circular dependency
             from ..utils.transaction_builder import TransactionBuilder, TransactionOptions
             from eth_account import Account
@@ -309,6 +317,30 @@ class RunHelper:
             tx_builder = TransactionBuilder(
                 web3=self.client.web3,
                 account=faucet_account_obj
+=======
+            # Get faucet account nonce
+            if nonce is None:
+                nonce = await self.client.get_transaction_count(self.faucet_account["address"])
+            
+            LOG.info(f"Funding account '{account['name']}' with {amount_wei / 10**18:.6f} ETH using nonce {nonce}")
+            # Get current gas price
+            gas_price = await self.client.get_gas_price()
+            
+            # Build transfer transaction
+            tx_data = {
+                "to": account["address"],
+                "value": hex(amount_wei),
+                "gas": hex(21000),
+                "gasPrice": hex(gas_price),
+                "nonce": hex(nonce),
+                "chainId": hex(await self.client.get_chain_id())
+            }
+            
+            # Sign and send
+            signed_tx = Account.sign_transaction(
+                tx_data, 
+                self.faucet_account["private_key"]
+>>>>>>> 70fc0ad (fix test_epoch_switch)
             )
 
             # Send ETH transfer
@@ -329,7 +361,7 @@ class RunHelper:
             return result.tx_receipt
 
         except Exception as e:
-            LOG.error(f"Failed to fund account: {e}")
+            LOG.error(f"Failed to fund account for {account['name']}: {e}")
             raise
 
     async def _wait_for_confirmations(self, tx_hash: str, additional_confirmations: int, current_block: int):
