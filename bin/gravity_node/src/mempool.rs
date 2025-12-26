@@ -23,7 +23,7 @@ use greth::{
 };
 
 /// Cache TTL for best transactions
-const CACHE_TTL_SECS: u64 = 30;
+const CACHE_TTL_SECS: u64 = 5;
 
 /// Cached best transactions with TTL
 struct CachedBest {
@@ -113,6 +113,7 @@ impl TxPool for Mempool {
     fn best_txns(
         &self,
         filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>,
+        limit: usize,
     ) -> Box<dyn Iterator<Item = VerifiedTxn>> {
         let mut cached = self.cached_best.lock().unwrap();
         
@@ -128,33 +129,41 @@ impl TxPool for Mempool {
                 })
                 .collect();
             
+            // Update txn_cache for later commit lookup
+            // Do this in batch during refresh instead of per-call
+            let txn_cache = self.txn_cache.clone();
+            for (pool_txn, verified) in &fresh_txns {
+                let sender = verified.sender.clone();
+                let nonce = verified.sequence_number;
+                txn_cache.insert((sender, nonce), pool_txn.clone());
+            }
+
             cached.txns = fresh_txns;
             cached.created_at = Instant::now();
             tracing::debug!("Refreshed best_txns cache with {} transactions", cached.txns.len());
         }
         
         // Filter and collect from cache
-        let txn_cache = self.txn_cache.clone();
         let result: Vec<_> = cached.txns.iter()
             .filter_map(|(pool_txn, verified)| {
                 let sender = verified.sender.clone();
                 let nonce = verified.sequence_number;
-                let hash = TxnHash::from_bytes(pool_txn.hash().as_slice());
+                
+                // We've already populated txn_cache during refresh, so just filter here
                 
                 if let Some(ref f) = filter {
-                    if !f((sender.clone(), nonce, hash)) {
+                     let hash = TxnHash::from_bytes(pool_txn.hash().as_slice());
+                     if !f((sender.clone(), nonce, hash)) {
                         return None;
                     }
                 }
                 
-                // Update txn_cache for later commit lookup
-                txn_cache.insert((sender, nonce), pool_txn.clone());
                 Some(verified.clone())
             })
+            .take(limit) // Use the limit parameter
             .collect();
         
-        // Clear cache (mark as consumed)
-        cached.txns.clear();
+        // Removed cached.txns.clear() to actually enable caching with TTL
         
         Box::new(result.into_iter())
     }
@@ -217,6 +226,24 @@ impl TxPool for Mempool {
     }
 
     fn remove_txns(&self, txns: Vec<VerifiedTxn>) {
+        if txns.is_empty() {
+             return;
+        }
+
+        // Also remove from cache
+        let mut cached = self.cached_best.lock().unwrap();
+        if !cached.txns.is_empty() {
+             let to_remove: std::collections::HashSet<_> = txns.iter().filter_map(|t| t.committed_hash.get()).collect();
+             cached.txns.retain(|(_, v)| {
+                if let Some(v) = v.committed_hash.get(){
+                    !to_remove.contains(&v)
+                } else {
+                    false
+                }
+             });
+        }
+        drop(cached);
+
         let mut eth_txn_hashes = Vec::with_capacity(txns.len());
         for txn in txns {
             let txn = TransactionSigned::decode_2718(&mut txn.bytes.as_ref());
