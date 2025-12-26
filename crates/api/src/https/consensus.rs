@@ -198,7 +198,7 @@ pub async fn get_validator_count_by_epoch(
     // Get validator set from config storage using block_number
     let validator_count = match GLOBAL_CONFIG_STORAGE.get() {
         Some(config_storage) => {
-            match config_storage.fetch_config_bytes(OnChainConfig::ValidatorSet, target_block_number) {
+            match config_storage.fetch_config_bytes(OnChainConfig::ValidatorSet, target_block_number.into()) {
                 Some(config_bytes) => {
                     match config_bytes.try_into() {
                         Ok(bytes) => {

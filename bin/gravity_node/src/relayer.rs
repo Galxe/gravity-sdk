@@ -108,7 +108,7 @@ impl RelayerWrapper {
         let config_bytes = GLOBAL_CONFIG_STORAGE
             .get()
             .unwrap()
-            .fetch_config_bytes(OnChainConfig::JWKConsensusConfig, block_number)
+            .fetch_config_bytes(OnChainConfig::JWKConsensusConfig, block_number.into())
             .unwrap();
 
         let bytes: Bytes = config_bytes.try_into().unwrap();

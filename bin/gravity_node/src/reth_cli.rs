@@ -8,7 +8,7 @@ use core::panic;
 use gaptos::api_types::{
     account::{ExternalAccountAddress, ExternalChainId},
     compute_res::TxnStatus,
-    config_storage::{ConfigStorage, OnChainConfig, OnChainConfigResType},
+    config_storage::{BlockNumber, ConfigStorage, OnChainConfig, OnChainConfigResType},
     u256_define::{BlockId as ExternalBlockId, TxnHash},
     ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum, GLOBAL_CRYPTO_TXN_HASHER,
 };
@@ -360,8 +360,8 @@ impl<EthApi: RethEthCall> ConfigStorage for RethCliConfigStorage<EthApi> {
     fn fetch_config_bytes(
         &self,
         config_name: OnChainConfig,
-        block_number: u64,
+        block_number: BlockNumber,
     ) -> Option<OnChainConfigResType> {
-        self.reth_cli.pipe_api.fetch_config_bytes(config_name, block_number)
+        self.reth_cli.pipe_api.fetch_config_bytes(config_name, block_number.into())
     }
 }

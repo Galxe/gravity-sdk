@@ -1,6 +1,6 @@
 use bytes::Bytes;
 use gaptos::{
-    api_types::config_storage::{ConfigStorage, OnChainConfig, OnChainConfigResType},
+    api_types::config_storage::{BlockNumber, ConfigStorage, OnChainConfig, OnChainConfigResType},
     aptos_logger::info,
 };
 use std::sync::Arc;
@@ -19,7 +19,7 @@ impl ConfigStorage for ConfigStorageWrapper {
     fn fetch_config_bytes(
         &self,
         config_name: OnChainConfig,
-        block_number: u64,
+        block_number: BlockNumber,
     ) -> Option<OnChainConfigResType> {
         println!("fetch_config_bytes: {:?}, block_number: {:?}", config_name, block_number);
 
@@ -30,7 +30,7 @@ impl ConfigStorage for ConfigStorageWrapper {
             | OnChainConfig::JWKConsensusConfig
             | OnChainConfig::ObservedJWKs 
             | OnChainConfig::DKGState => {
-                self.config_storage.fetch_config_bytes(config_name, block_number)
+                self.config_storage.fetch_config_bytes(config_name, block_number.into())
             }
             OnChainConfig::ConsensusConfig => {
                 // let bytes = vec![
