@@ -1,10 +1,21 @@
 # Gravity E2E Test Framework
 
-A comprehensive end-to-end testing framework for Gravity Node, designed to validate blockchain functionality through automated tests.
+A comprehensive end-to-end testing framework for the Gravity blockchain network, designed to validate cross-chain functionality, smart contract deployments, and network operations.
 
 ## Overview
 
-The Gravity E2E Test Framework connects to deployed Gravity nodes via JSON-RPC API and performs various tests including basic transactions, smart contract deployment, and token operations. The framework is built with Python using async architecture for efficient concurrent testing.
+The Gravity E2E Test Framework provides a robust, async-first testing infrastructure for validating blockchain operations across different scenarios. It supports multi-node deployments, cross-chain transactions, and comprehensive test reporting with modular, reusable utilities.
+
+### Key Features
+
+- **Async-First Architecture**: Built on Python's async/await for non-blocking operations
+- **Modular Design**: Reusable utilities that eliminate code duplication
+- **Multi-Chain Support**: Test cross-chain deposits and operations (Sepolia ↔ Gravity)
+- **Contract Testing**: Comprehensive smart contract deployment and interaction
+- **Node Management**: Automated node deployment, startup, and health monitoring
+- **Event Monitoring**: Real-time event polling and verification
+- **Retry Mechanisms**: Configurable retry strategies for network operations
+- **Code Quality**: Refactored with clean, maintainable code patterns
 
 ## Features
 
@@ -318,16 +329,129 @@ gravity_e2e/
 ├── gravity_e2e/          # Main package
 │   ├── core/            # Core components
 │   │   ├── client/      # Gravity RPC client
-│   │   └── node_connector.py  # Node connection manager
+│   │   ├── node_connector.py  # Multi-node connection manager
+│   │   └── node_manager.py    # Node deployment and lifecycle
 │   ├── helpers/         # Test utilities
 │   │   ├── test_helpers.py    # Test execution framework
 │   │   └── account_manager.py # Account management
+│   ├── utils/           # Shared utility modules (NEW)
+│   │   ├── async_retry.py     # Configurable async retry mechanism
+│   │   ├── config_manager.py  # Configuration loading with validation
+│   │   ├── transaction_builder.py # Transaction building and signing
+│   │   ├── event_poller.py    # Event monitoring and polling
+│   │   ├── contract_deployer.py # Contract deployment utilities
+│   │   └── exceptions.py      # Centralized exception definitions
 │   ├── tests/           # Test cases
-│   │   └── test_cases/
-│   └── utils/           # Common utilities
+│   │   ├── test_cases/   # Individual test scenarios
+│   │   └── unit/         # Unit tests for utilities
+│   └── scripts/         # Helper scripts
 ├── configs/             # Configuration files
+│   └── schemas/         # JSON schemas for validation
 ├── contracts_data/      # Compiled contract data
+├── docs/                # Documentation
 └── output/             # Test results
+```
+
+## New Utility Modules
+
+The framework now provides comprehensive utility modules that eliminate code duplication:
+
+### 1. Transaction Builder (`utils/transaction_builder.py`)
+Build, sign, and send blockchain transactions with automatic gas estimation and nonce management.
+
+```python
+from gravity_e2e.utils.transaction_builder import TransactionBuilder, TransactionOptions
+
+builder = TransactionBuilder(web3, account)
+result = await builder.build_and_send_tx(
+    to="0x742d35Cc6634C0532925a3b8D4C9db96C4b4Db45",
+    options=TransactionOptions(value=Web3.to_wei(1, 'ether')),
+    simulate=True  # Simulate before sending
+)
+```
+
+### 2. Event Poller (`utils/event_poller.py`)
+Monitor blockchain events efficiently with configurable filtering.
+
+```python
+from gravity_e2e.utils.event_poller import EventPoller
+
+poller = EventPoller(web3)
+
+# Wait for specific event
+event = await poller.wait_for_event(
+    contract=token_contract,
+    event_name="Transfer",
+    timeout=60,
+    from_address=sender_address
+)
+
+# Get all events in range
+events = await poller.get_events(
+    contract=token_contract,
+    event_name="Transfer",
+    from_block=1000,
+    to_block=2000
+)
+```
+
+### 3. Contract Deployer (`utils/contract_deployer.py`)
+Deploy smart contracts with automatic verification and caching.
+
+```python
+from gravity_e2e.utils.contract_deployer import ContractDeployer
+
+deployer = ContractDeployer(web3, account)
+result = await deployer.deploy(
+    contract_name="SimpleToken",
+    constructor_args=["Test Token", "TEST", 1000000],
+    options=DeploymentOptions(verify=True)
+)
+
+contract = await deployer.get_deployment("SimpleToken", result.contract_address)
+```
+
+### 4. Async Retry (`utils/async_retry.py`)
+Add resilient retry logic with exponential backoff and jitter.
+
+```python
+from gravity_e2e.utils.async_retry import AsyncRetry
+
+retry = AsyncRetry(max_retries=3, base_delay=1.0, jitter=True)
+result = await retry.execute(unstable_function)
+
+# Or use as decorator
+@retry
+async def my_function():
+    return await some_operation()
+```
+
+### 5. Configuration Manager (`utils/config_manager.py`)
+Load and validate configurations with JSON schema support and environment overrides.
+
+```python
+from gravity_e2e.utils.config_manager import ConfigManager
+
+config = ConfigManager()
+nodes = config.load_nodes_config()  # Automatically validates with schema
+
+# Environment overrides supported
+# GRAVITY_E2E_NODE1_HOST=custom-host
+# GRAVITY_E2E_CHAIN_ID=12345
+```
+
+### 6. Centralized Exceptions (`utils/exceptions.py`)
+Consistent error handling with categorized exceptions and error codes.
+
+```python
+from gravity_e2e.utils.exceptions import TransactionError, ContractError
+
+try:
+    result = await some_operation()
+except TransactionError as e:
+    # Rich error context available
+    print(f"Tx failed: {e}")
+    print(f"Tx hash: {e.details.get('tx_hash')}")
 ```
 
 ## Best Practices

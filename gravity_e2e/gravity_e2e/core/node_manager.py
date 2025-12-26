@@ -1,6 +1,32 @@
 """
-Node Manager - 管理节点的部署、启动和停止
-支持通过 deploy_utils 脚本部署节点，通过 gravity_cli 启停节点
+Gravity Node Manager - Node deployment, startup, and management
+
+This module provides comprehensive node management capabilities for the Gravity
+blockchain network, including deployment, startup, shutdown, and monitoring
+operations.
+
+Design Notes:
+- Manages node lifecycle from deployment to shutdown
+- Supports both single-node and multi-node deployments
+- Provides health checking and status monitoring
+- Integrates with deploy_utils scripts and gravity_cli
+- Async/await support for non-blocking operations
+- Type hints for better IDE support
+
+Usage:
+    manager = NodeManager(workspace_root=Path("/path/to/gravity-sdk"))
+
+    # Deploy a node
+    success = await manager.deploy_node(
+        node_id="validator1",
+        config_template="validator.toml"
+    )
+
+    # Start the node
+    await manager.start_node("validator1")
+
+    # Check node status
+    status = await manager.check_node_health("validator1")
 """
 import asyncio
 import logging
