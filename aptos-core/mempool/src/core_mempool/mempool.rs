@@ -294,15 +294,11 @@ impl Mempool {
             };
             !exclude_transactions.contains_key(&summary)
         });
-        let mut transactions = vec![];
-        let best_txns = self.pool.best_txns(Some(filter));
-        for txn in best_txns {
-            let signed_txn = VerifiedTxn::from(txn).into();
-            transactions.push(signed_txn);
-            if transactions.len() >= max_txns as usize || transactions.len() >= max_bytes as usize {
-                break;
-            }
-        }
+        // Pass max_txns as limit to best_txns so the limit is enforced at source
+        let best_txns = self.pool.best_txns(Some(filter), max_txns as usize);
+        let transactions: Vec<SignedTransaction> = best_txns
+            .map(|txn| VerifiedTxn::from(txn).into())
+            .collect();
         transactions
     }
 

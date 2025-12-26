@@ -1,4 +1,8 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
 use crate::RethTransactionPool;
 use alloy_consensus::{transaction::SignerRecoverable, Transaction};
@@ -12,17 +16,40 @@ use gaptos::api_types::{
     u256_define::TxnHash,
     VerifiedTxn,
 };
-use greth::reth_transaction_pool::PoolTransaction;
+use greth::reth_transaction_pool::{BestTransactions, PoolTransaction};
 use greth::{
     reth_primitives::{Recovered, TransactionSigned},
     reth_transaction_pool::{EthPooledTransaction, TransactionPool, ValidPoolTransaction},
 };
+
+/// Cache TTL for best transactions
+const CACHE_TTL_SECS: u64 = 1;
+
+/// Cached best transactions with TTL
+struct CachedBest {
+    best_txns: Option<Box<dyn BestTransactions<Item = Arc<ValidPoolTransaction<EthPooledTransaction>>> + 'static>>,
+    created_at: Instant,
+}
+
+impl CachedBest {
+    fn new() -> Self {
+        Self {
+            best_txns:None,
+            created_at: Instant::now() - Duration::from_secs(CACHE_TTL_SECS + 1), // Start expired
+        }
+    }
+
+    fn is_expired(&self) -> bool {
+        self.created_at.elapsed() > Duration::from_secs(CACHE_TTL_SECS)
+    }
+}
 
 pub struct Mempool {
     pool: RethTransactionPool,
     txn_cache: Arc<
         DashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>,
     >,
+    cached_best: Arc<std::sync::Mutex<CachedBest>>,
     runtime: tokio::runtime::Runtime,
     enable_broadcast: bool,
 }
@@ -32,6 +59,7 @@ impl Mempool {
         Self {
             pool,
             txn_cache: Arc::new(DashMap::new()),
+            cached_best: Arc::new(std::sync::Mutex::new(CachedBest::new())),
             runtime: tokio::runtime::Runtime::new().unwrap(),
             enable_broadcast,
         }
@@ -81,22 +109,41 @@ impl TxPool for Mempool {
     fn best_txns(
         &self,
         filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>,
+        limit: usize,
     ) -> Box<dyn Iterator<Item = VerifiedTxn>> {
+        let mut best_txns = self.cached_best.lock().unwrap();
+        if best_txns.is_expired() {
+            *best_txns = CachedBest {
+                best_txns: Some(self.pool.best_transactions()),
+                created_at: Instant::now(),
+            };
+        } else if let None = best_txns.best_txns.as_ref() {
+            *best_txns = CachedBest {
+                best_txns: Some(self.pool.best_transactions()),
+                created_at: Instant::now(),
+            };
+        }
         let txn_cache = self.txn_cache.clone();
-        let iter = self.pool.best_transactions().filter_map(move |pool_txn| {
-            let sender = convert_account(pool_txn.sender());
-            let nonce = pool_txn.nonce();
-            let hash = TxnHash::from_bytes(pool_txn.hash().as_slice());
-            if let Some(filter) = &filter {
-                if !filter((sender, nonce, hash)) {
-                    return None;
+        let result: Vec<_> = best_txns.best_txns.as_mut().unwrap()
+            .filter_map(|(pool_txn)| {
+                let sender = convert_account(pool_txn.sender());
+                let nonce = pool_txn.nonce();
+
+                // We've already populated txn_cache during refresh, so just filter here
+
+                if let Some(ref f) = filter {
+                     let hash = TxnHash::from_bytes(pool_txn.hash().as_slice());
+                     if !f((sender.clone(), nonce, hash)) {
+                        return None;
+                    }
                 }
-            }
-            let verified_txn = to_verified_txn(pool_txn.clone());
-            txn_cache.insert((verified_txn.sender.clone(), verified_txn.sequence_number), pool_txn);
-            Some(verified_txn)
-        });
-        Box::new(iter)
+                let verified_txn = to_verified_txn(pool_txn.clone());
+                txn_cache.insert((verified_txn.sender.clone(), verified_txn.sequence_number), pool_txn);
+                Some(verified_txn)
+            })
+            .take(limit) // Use the limit parameter
+            .collect();
+        Box::new(result.into_iter())
     }
 
     fn get_broadcast_txns(
@@ -157,6 +204,10 @@ impl TxPool for Mempool {
     }
 
     fn remove_txns(&self, txns: Vec<VerifiedTxn>) {
+        if txns.is_empty() {
+             return;
+        }
+
         let mut eth_txn_hashes = Vec::with_capacity(txns.len());
         for txn in txns {
             let txn = TransactionSigned::decode_2718(&mut txn.bytes.as_ref());

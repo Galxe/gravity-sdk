@@ -35,7 +35,7 @@ pub struct TxnItem {
 }
 
 pub trait TxPool: Send + Sync + 'static {
-    fn best_txns(&self, filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>) -> Box<dyn Iterator<Item = VerifiedTxn>>;
+    fn best_txns(&self, filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>, limit: usize) -> Box<dyn Iterator<Item = VerifiedTxn>>;
 
     fn get_broadcast_txns(&self, filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>) -> Box<dyn Iterator<Item = VerifiedTxn>>;
 
@@ -55,7 +55,7 @@ impl EmptyTxPool {
 
 
 impl TxPool for EmptyTxPool {
-    fn best_txns(&self, _filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>) -> Box<dyn Iterator<Item = VerifiedTxn>> {
+    fn best_txns(&self, _filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>, _limit: usize) -> Box<dyn Iterator<Item = VerifiedTxn>> {
         Box::new(vec![].into_iter())
     }
 
