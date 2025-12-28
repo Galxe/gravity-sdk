@@ -153,6 +153,12 @@ impl TxPool for Mempool {
             })
             .take(limit) // Use the limit parameter
             .collect();
+        if result.is_empty() {
+            *best_txns = CachedBest {
+                best_txns: None,
+                created_at: Instant::now(),
+            };
+        }
         Box::new(result.into_iter())
     }
 
