@@ -22,8 +22,18 @@ use greth::{
     reth_transaction_pool::{EthPooledTransaction, TransactionPool, ValidPoolTransaction},
 };
 
-/// Cache TTL for best transactions
-const CACHE_TTL_SECS: u64 = 1;
+/// Cache TTL for best transactions (in milliseconds)
+/// Can be configured via MEMPOOL_CACHE_TTL_MS environment variable
+fn cache_ttl() -> Duration {
+    static CACHE_TTL: std::sync::OnceLock<Duration> = std::sync::OnceLock::new();
+    *CACHE_TTL.get_or_init(|| {
+        let ms = std::env::var("MEMPOOL_CACHE_TTL_MS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(1000); // Default 1000ms (1 second)
+        Duration::from_millis(ms)
+    })
+}
 
 /// Cached best transactions with TTL
 struct CachedBest {
@@ -35,12 +45,12 @@ impl CachedBest {
     fn new() -> Self {
         Self {
             best_txns:None,
-            created_at: Instant::now() - Duration::from_secs(CACHE_TTL_SECS + 1), // Start expired
+            created_at: Instant::now() - cache_ttl() - Duration::from_millis(1), // Start expired
         }
     }
 
     fn is_expired(&self) -> bool {
-        self.created_at.elapsed() > Duration::from_secs(CACHE_TTL_SECS)
+        self.created_at.elapsed() > cache_ttl()
     }
 }
 
@@ -125,7 +135,7 @@ impl TxPool for Mempool {
         }
         let txn_cache = self.txn_cache.clone();
         let result: Vec<_> = best_txns.best_txns.as_mut().unwrap()
-            .filter_map(|(pool_txn)| {
+            .filter_map(|pool_txn| {
                 let sender = convert_account(pool_txn.sender());
                 let nonce = pool_txn.nonce();
 
