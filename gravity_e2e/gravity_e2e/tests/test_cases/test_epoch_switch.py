@@ -263,11 +263,11 @@ class TestContext:
         if process.returncode != 0:
             LOG.error(f"Failed to list validator: {stderr}")
             raise RuntimeError(f"Failed to list validator: {stderr}")
-        
+
         # 解析 JSON 输出
         stdout_str = stdout.decode("utf-8") if isinstance(stdout, bytes) else stdout
         validator_data = json.loads(stdout_str)
-        
+
         # 输出格式化的 JSON 以便于阅读
         formatted_json = json.dumps(validator_data, indent=2, ensure_ascii=False)
         LOG.info(f"Validator list command output:\n{formatted_json}")
@@ -349,7 +349,6 @@ class TestContext:
                 raise RuntimeError(f"Failed to get epoch: {e}")
 
             # 主循环：检查停止标志
-            first_epoch = True
             try:
                 while not self.should_stop:
                     # 每隔 10 秒检查 epoch 是否切换
@@ -362,7 +361,7 @@ class TestContext:
                         LOG.warning(f"⚠️ 无法获取当前 epoch: {e}，跳过本次检查")
                         raise RuntimeError(f"Failed to get epoch: {e}")
 
-                    if new_epoch == current_epoch and not first_epoch:
+                    if new_epoch == current_epoch:
                         continue
 
                     if new_epoch < current_epoch:
@@ -460,8 +459,6 @@ class TestContext:
                         raise RuntimeError(
                             f"Actual pending active nodes: {pending_active_nodes} != expected pending active nodes: {pending_joins}"
                         )
-
-                    first_epoch = False
             except Exception as e:
                 raise RuntimeError(f"Failed to fuzzy validator join and leave: {e}")
 
@@ -476,21 +473,31 @@ class TestContext:
             clients.append(client)
         async with AsyncExitStack() as stack:
             await asyncio.gather(*[stack.enter_async_context(c) for c in clients[1:]])
-            block_heights = await asyncio.gather(
-                *[client.get_block_number() for client in clients]
-            )
-        max_block_height = max(block_heights)
-        LOG.info(f"Max block height: {max_block_height}")
-        is_gap_too_large = False
-        for node_name, block_height in zip(
-            self.genesis_node_names + self.candidate_node_names, block_heights
-        ):
-            LOG.info(f"{node_name} block height: {block_height}")
-            if block_height + 100 < max_block_height:
-                LOG.warning(f"{node_name} block height is too low: {block_height}")
-                is_gap_too_large = True
-        if is_gap_too_large:
-            raise RuntimeError(f"Gap between node block heights is too large")
+            try:
+                while not self.should_stop:
+                    await asyncio.sleep(10)
+                    block_heights = await asyncio.gather(
+                        *[client.get_block_number() for client in clients]
+                    )
+                    max_block_height = max(block_heights)
+                    LOG.info(f"Max block height: {max_block_height}")
+                    is_gap_too_large = False
+                    for node_name, block_height in zip(
+                        self.genesis_node_names + self.candidate_node_names,
+                        block_heights,
+                    ):
+                        LOG.info(f"{node_name} block height: {block_height}")
+                        if block_height + 100 < max_block_height:
+                            LOG.warning(
+                                f"{node_name} block height is too low: {block_height}"
+                            )
+                            is_gap_too_large = True
+                    if is_gap_too_large:
+                        raise RuntimeError(
+                            f"Gap between node block heights is too large"
+                        )
+            except Exception as e:
+                raise RuntimeError(f"Failed to check node block height: {e}")
 
 
 @test_case
@@ -550,17 +557,14 @@ async def test_epoch_switch(run_helper: RunHelper, test_result: TestResult):
         test_context.init_validator_join_args()
         LOG.info(f"✅ Validator join args initialized successfully")
 
+        tasks = []
         # Step 7: Fuzzy validator candidate nodes join and leave
         LOG.info("\n[Step 7] Fuzzy validator candidate nodes join and leave...")
-        await test_context.fuzzy_validator_join_and_leave()
-        LOG.info(
-            f"✅ Fuzzy validator candidate nodes join and leave completed successfully"
-        )
-
+        tasks.append(asyncio.create_task(test_context.fuzzy_validator_join_and_leave()))
         # Step 8: Check node block height gap between all nodes
         LOG.info("\n[Step 8] Checking node block height gap between all nodes...")
-        await test_context.check_node_block_height()
-        LOG.info(f"✅ Node block height gap between all nodes checked successfully")
+        tasks.append(asyncio.create_task(test_context.check_node_block_height()))
+        await asyncio.gather(*tasks)
 
         test_result.mark_success()
 
