@@ -260,15 +260,18 @@ class TestContext:
             start_new_session=True,  # 新开一个会话，避免被父进程杀死
         )
         stdout, stderr = await process.communicate()
-        LOG.info(f"Validator list command output: {stdout}")
         if process.returncode != 0:
             LOG.error(f"Failed to list validator: {stderr}")
             raise RuntimeError(f"Failed to list validator: {stderr}")
-        LOG.info(f"✅ Validator list command executed successfully")
-
+        
         # 解析 JSON 输出
         stdout_str = stdout.decode("utf-8") if isinstance(stdout, bytes) else stdout
         validator_data = json.loads(stdout_str)
+        
+        # 输出格式化的 JSON 以便于阅读
+        formatted_json = json.dumps(validator_data, indent=2, ensure_ascii=False)
+        LOG.info(f"Validator list command output:\n{formatted_json}")
+        LOG.info(f"✅ Validator list command executed successfully")
 
         # 收集所有 validator 的 aptos_address（从 active_validators, pending_inactive, pending_active）
         active_node_names = set()
@@ -367,8 +370,8 @@ class TestContext:
                             f"Epoch decreased from {current_epoch} to {new_epoch}"
                         )
                     elif new_epoch > current_epoch:
-                        current_epoch = new_epoch
                         LOG.info(f"Epoch 从 {current_epoch} 切换到 {new_epoch}")
+                        current_epoch = new_epoch
 
                     # 将成功 join 的节点加入 validator_set
                     validator_set.update(pending_joins)
@@ -479,10 +482,12 @@ class TestContext:
         max_block_height = max(block_heights)
         LOG.info(f"Max block height: {max_block_height}")
         is_gap_too_large = False
-        for i, block_height in enumerate(block_heights):
-            LOG.info(f"node{i} block height: {block_height}")
+        for node_name, block_height in zip(
+            self.genesis_node_names + self.candidate_node_names, block_heights
+        ):
+            LOG.info(f"{node_name} block height: {block_height}")
             if block_height + 100 < max_block_height:
-                LOG.warning(f"node{i} block height is too low: {block_height}")
+                LOG.warning(f"{node_name} block height is too low: {block_height}")
                 is_gap_too_large = True
         if is_gap_too_large:
             raise RuntimeError(f"Gap between node block heights is too large")
