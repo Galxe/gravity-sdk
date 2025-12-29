@@ -1501,16 +1501,11 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
     /// Filter out consensus messages that are not relevant to the current epoch role.
     /// Return false if the message is filtered out, true otherwise.
-    fn consensus_msg_filter(
-        &self,
-        peer_id: &AccountAddress,
-        consensus_msg: &ConsensusMsg,
-    ) -> bool {
+    fn consensus_msg_filter(&self, peer_id: &AccountAddress, consensus_msg: &ConsensusMsg) -> bool {
         match consensus_msg {
-            ConsensusMsg::EpochChangeProof(_) => {
-                peer_id == &self.author
-            }
-            _ => self.is_validator && self.is_current_epoch_validator
+            ConsensusMsg::EpochChangeProof(_) => peer_id == &self.author,
+            ConsensusMsg::SyncInfoRequest => true,
+            _ => self.is_validator && self.is_current_epoch_validator,
         }
     }
 
@@ -1845,8 +1840,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         if vfn_peers.is_empty() {
             return Err(anyhow::anyhow!("No vfn peers available"));
         }
-        self.network_sender.network_client.sort_peers_by_latency(NetworkId::Vfn, &mut vfn_peers);
-        let peer = vfn_peers[0];
+        let peer = vfn_peers[thread_rng().gen_range(0, vfn_peers.len())];
         let sync_info = self
             .network_sender
             .network_client
@@ -1874,7 +1868,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 (peer_id, sync_info)
             }
             Err(e) => {
-                error!("Failed to request sync info: {e}");
+                error!("Failed to request sync info from {peer_id}: {e}");
                 return;
             }
         };
