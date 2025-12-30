@@ -80,6 +80,9 @@ impl QuorumStoreStorage for QuorumStoreDB {
     }
 
     fn save_batch(&self, batch: PersistedValue) -> Result<(), DbError> {
+        if std::env::var("APTOS_QS_DISABLE_SAVE").is_ok() {
+            return Ok(());
+        }
         trace!(
             "QS: db persists epoch {} digest {} expiration {:?}",
             batch.epoch(),
@@ -125,6 +128,9 @@ impl QuorumStoreStorage for QuorumStoreDB {
     }
 
     fn save_batch_id(&self, epoch: u64, batch_id: BatchId) -> Result<(), DbError> {
+        if std::env::var("APTOS_QS_DISABLE_SAVE").is_ok() {
+            return Ok(());
+        }
         Ok(self.db.put::<BatchIdSchema>(&epoch, &batch_id)?)
     }
 }
