@@ -698,10 +698,11 @@ impl BlockStore {
                     self.storage.consensus_db().get_randomness(block_number)
                 {
                     debug!(
-                        "Set randomness from DB for block {}, epoch {}, round {}",
+                        "Set randomness from DB for block {}, epoch {}, round {}: {:?}",
                         block_number,
                         block.epoch(),
-                        block.round()
+                        block.round(),
+                        randomness
                     );
                     SET_RANDOMNESS_FROM_DB_COUNTER.with_label_values(&[]).inc();
                     pipelined_block.set_randomness(Randomness::new(
