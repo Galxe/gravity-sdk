@@ -164,6 +164,10 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     consensus_publisher: Option<Arc<ConsensusPublisher>>,
     pending_blocks: Arc<Mutex<PendingBlocks>>,
     key_storage: PersistentSafetyStorage,
+    // For fast block sync from VFN
+    sync_info_tx: mpsc::Sender<Option<(Author, Box<SyncInfo>)>>,
+    sync_info_rx: mpsc::Receiver<Option<(Author, Box<SyncInfo>)>>,
+    inflight_request_sync_info: bool,
 }
 
 impl<P: OnChainConfigProvider> EpochManager<P> {
@@ -204,6 +208,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         let sr_config = &node_config.consensus.safety_rules;
         let safety_rules_manager = SafetyRulesManager::new(sr_config);
         let key_storage = safety_rules_manager::storage(sr_config);
+        let (sync_info_tx, sync_info_rx) = mpsc::channel(1);
         Self {
             author,
             config,
@@ -250,6 +255,9 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             consensus_publisher,
             pending_blocks: Arc::new(Mutex::new(PendingBlocks::new())),
             key_storage,
+            sync_info_tx,
+            sync_info_rx,
+            inflight_request_sync_info: false,
         }
     }
 
@@ -281,7 +289,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             timeout_sender,
             delayed_qc_tx,
             qc_aggregator_type,
-            self.is_validator && self.is_current_epoch_validator,
+            self.is_current_epoch_validator,
         )
     }
 
@@ -725,7 +733,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             QuorumStoreBuilder::QuorumStore(InnerBuilder::new(
                 self.epoch(),
                 PeerNetworkId::new(
-                    if self.is_validator && self.is_current_epoch_validator {
+                    if self.is_current_epoch_validator {
                         NetworkId::Validator
                     } else {
                         NetworkId::Vfn
@@ -882,7 +890,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             self.config.vote_back_pressure_limit,
             payload_manager,
             onchain_consensus_config.order_vote_enabled(),
-            self.is_validator && self.is_current_epoch_validator,
+            self.is_current_epoch_validator,
             self.pending_blocks.clone(),
             onchain_randomness_config.randomness_enabled(),
         ).await);
@@ -898,7 +906,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .config
             .max_blocks_per_receiving_request(onchain_consensus_config.quorum_store_enabled());
 
-        let validator_components = if self.is_validator && self.is_current_epoch_validator {
+        let validator_components = if self.is_current_epoch_validator {
             info!(epoch = epoch, "Create ProposerElection");
             let proposer_election =
                 self.create_proposer_election(&epoch_state, &onchain_consensus_config);
@@ -1328,7 +1336,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             Arc::new(quorum_store_client),
         );
 
-        if self.is_validator && self.is_current_epoch_validator {
+        if self.is_current_epoch_validator {
             self.start_quorum_store(quorum_store_builder);
         }
 
@@ -1501,16 +1509,11 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
     /// Filter out consensus messages that are not relevant to the current epoch role.
     /// Return false if the message is filtered out, true otherwise.
-    fn consensus_msg_filter(
-        &self,
-        peer_id: &AccountAddress,
-        consensus_msg: &ConsensusMsg,
-    ) -> bool {
+    fn consensus_msg_filter(&self, peer_id: &AccountAddress, consensus_msg: &ConsensusMsg) -> bool {
         match consensus_msg {
-            ConsensusMsg::EpochChangeProof(_) => {
-                peer_id == &self.author
-            }
-            _ => self.is_validator && self.is_current_epoch_validator
+            ConsensusMsg::EpochChangeProof(_) => peer_id == &self.author,
+            ConsensusMsg::SyncInfoRequest => true,
+            _ => self.is_current_epoch_validator,
         }
     }
 
@@ -1756,7 +1759,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         peer_id: &Author,
         request: &IncomingRpcRequest,
     ) -> bool {
-        self.is_validator && self.is_current_epoch_validator
+        self.is_current_epoch_validator
     }
 
     fn process_rpc_request(
@@ -1834,51 +1837,68 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     }
 
     /// Request the sync info from from other peers.
-    async fn request_sync_info(&self) -> anyhow::Result<(Author, Box<SyncInfo>)> {
+    fn request_sync_info(&mut self) {
         debug_assert!(!self.is_current_epoch_validator);
-        let peers = self.network_sender.network_client.get_available_peers()?;
-        let mut vfn_peers = peers
+        if self.inflight_request_sync_info {
+            info!("Already inflight request sync info");
+            return
+        }
+
+        let peers = self
+            .network_sender
+            .network_client
+            .get_available_peers()
+            .expect("failed to get available peers");
+        let vfn_peers = peers
             .iter()
             .filter(|peer| peer.network_id() == NetworkId::Vfn)
             .map(|peer| peer.peer_id())
             .collect::<Vec<_>>();
         if vfn_peers.is_empty() {
-            return Err(anyhow::anyhow!("No vfn peers available"));
+            warn!("No vfn peers available");
+            return;
         }
-        self.network_sender.network_client.sort_peers_by_latency(NetworkId::Vfn, &mut vfn_peers);
-        let peer = vfn_peers[0];
-        let sync_info = self
-            .network_sender
-            .network_client
-            .send_to_peer_rpc(
-                ConsensusMsg::SyncInfoRequest,
-                Duration::from_secs(5),
-                PeerNetworkId::new(NetworkId::Vfn, peer),
-            )
-            .await?;
-        match sync_info {
-            ConsensusMsg::SyncInfo(sync_info) => Ok((peer, sync_info)),
-            _ => Err(anyhow::anyhow!("Invalid response to request")),
-        }
+        let peer = vfn_peers[thread_rng().gen_range(0, vfn_peers.len())];
+        
+        let mut sync_info_tx = self.sync_info_tx.clone();
+        let client = self.network_sender.network_client.clone();
+        tokio::spawn(async move {
+            debug!("Requesting sync info from peer {peer}");
+            let result = client
+                .send_to_peer_rpc(
+                    ConsensusMsg::SyncInfoRequest,
+                    Duration::from_secs(5),
+                    PeerNetworkId::new(NetworkId::Vfn, peer),
+                )
+                .await;
+            match result {
+                Ok(msg) => {
+                    match msg {
+                        ConsensusMsg::SyncInfo(sync_info) => {
+                            let _ = sync_info_tx.send(Some((peer, sync_info))).await;
+                        }
+                        _ => {
+                            warn!("Invalid response to sync info request from peer {peer}");
+                            let _ = sync_info_tx.send(None).await;
+                        }
+                    };
+                }
+                Err(e) => {
+                    error!("Failed to request sync info from peer {peer}: {e}");
+                    let _ = sync_info_tx.send(None).await;
+                }
+            }
+        });
+        self.inflight_request_sync_info = true;
     }
 
     /// Advance the block sync progress for fullnode.
-    async fn advance_block_sync(&self) {
-        if self.is_validator && self.is_current_epoch_validator {
+    fn advance_block_sync(&self, peer_id: Author, sync_info: Box<SyncInfo>) {
+        if self.is_current_epoch_validator {
             return
         }
 
-        let (peer_id, sync_info) = match self.request_sync_info().await {
-            Ok((peer_id, sync_info)) => {
-                debug!("Requested sync info from {peer_id}, response: {sync_info}");
-                (peer_id, sync_info)
-            }
-            Err(e) => {
-                error!("Failed to request sync info: {e}");
-                return;
-            }
-        };
-
+        info!("advancing block sync from peer {peer_id}. epoch: {}, highest_ordered_round: {}, highest_commit_round: {}", sync_info.epoch(), sync_info.highest_ordered_round(), sync_info.highest_commit_round());
         let self_epoch = self.epoch();
         match sync_info.epoch().cmp(&self_epoch) {
             Ordering::Greater => {
@@ -1907,8 +1927,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
     fn process_local_timeout(&mut self, round: u64) {
         // FIXME(nekomoto): This is a temporary fix to skip unexpected local timeout from non-validator.
-        if !self.is_validator || !self.is_current_epoch_validator {
-            error!("Not validator or current epoch validator, skipping local timeout for round {round}");
+        if !self.is_current_epoch_validator {
+            error!("Not current epoch validator, skipping local timeout for round {round}");
             return;
         }
         let Some(sender) = self.round_manager_tx.as_ref() else {
@@ -1943,11 +1963,14 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     ) {
         // initial start of the processor
         self.await_reconfig_notification().await;
-        // FIXME(nekomoto): If the node is current epoch validator, we don't need to advance the block sync.
-        let mut block_sync_interval = tokio::time::interval(Duration::from_millis(
-            std::env::var("GRAVITY_ADVANCE_BLOCK_SYNC_INTERVAL_MS")
-                .map_or(200, |s| s.parse::<u64>().unwrap()),
+
+        let mut request_sync_info_interval = tokio::time::interval(Duration::from_millis(
+            std::env::var("GRAVITY_REQUEST_SYNC_INFO_INTERVAL_MS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(200),
         ));
+
         loop {
             tokio::select! {
                 (peer, msg) = network_receivers.consensus_messages.select_next_some() => {
@@ -1973,8 +1996,21 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     monitor!("epoch_manager_process_round_timeout",
                     self.process_local_timeout(round));
                 },
-                _ = block_sync_interval.tick() => {
-                    self.advance_block_sync().await;
+                // Consume sync info from request sync info task
+                result = self.sync_info_rx.next() => {
+                    if let Some(result) = result {
+                        self.inflight_request_sync_info = false;
+                        if let Some((peer, sync_info)) = result {
+                            self.advance_block_sync(peer, sync_info);
+                        }
+                    } else {
+                        info!("sync info receiver dropped, stopping epoch manager");
+                        break;
+                    }
+                },
+                // Request sync info from a random peer every interval
+                _ = request_sync_info_interval.tick(), if !self.is_current_epoch_validator => {
+                    self.request_sync_info();
                 }
             }
             // Continually capture the time of consensus process to ensure that clock skew between
