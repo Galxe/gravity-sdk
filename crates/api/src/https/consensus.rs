@@ -1,12 +1,21 @@
-use axum::{extract::{Path, State}, http::StatusCode, response::Json as JsonResponse};
-use serde::{Deserialize, Serialize};
-use aptos_consensus::consensusdb::{ConsensusDB, BlockSchema, BlockNumberSchema, EpochByBlockNumberSchema, LedgerInfoSchema};
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_logger::{error, info};
-use gaptos::api_types::config_storage::{OnChainConfig, GLOBAL_CONFIG_STORAGE};
-use gaptos::aptos_types::on_chain_config::{OnChainConfig as OnChainConfigTrait, ValidatorSet};
-use bytes::Bytes;
 use crate::https::dkg::DkgState;
+use aptos_consensus::consensusdb::{
+    BlockNumberSchema, BlockSchema, ConsensusDB, EpochByBlockNumberSchema, LedgerInfoSchema,
+};
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    response::{IntoResponse, Json as JsonResponse},
+};
+use bytes::Bytes;
+use gaptos::{
+    api_types::config_storage::{OnChainConfig, GLOBAL_CONFIG_STORAGE},
+    aptos_crypto::HashValue,
+    aptos_logger::{error, info},
+    aptos_storage_interface::DbReader,
+    aptos_types::on_chain_config::{OnChainConfig as OnChainConfigTrait, ValidatorSet},
+};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -22,7 +31,7 @@ pub struct BlockInfo {
     pub epoch: u64,
     pub round: u64,
     pub block_number: Option<u64>,
-    pub block_id: String, // hex encoded
+    pub block_id: String,  // hex encoded
     pub parent_id: String, // hex encoded
 }
 
@@ -31,7 +40,7 @@ pub struct QCInfo {
     pub epoch: u64,
     pub round: u64,
     pub block_number: Option<u64>,
-    pub certified_block_id: String, // hex encoded
+    pub certified_block_id: String,   // hex encoded
     pub commit_info_block_id: String, // hex encoded - commit_info().id()
 }
 
@@ -47,18 +56,62 @@ pub struct ValidatorCountResponse {
     pub validator_count: usize,
 }
 
+/// Get latest ledger info
+/// Example: GET /consensus/latest_ledger_info
+pub fn get_latest_ledger_info(dkg_state: Arc<DkgState>) -> impl IntoResponse {
+    info!("Getting latest ledger info");
+
+    // Get ConsensusDB
+    let consensus_db = match dkg_state.consensus_db() {
+        Some(db) => db,
+        None => {
+            error!("ConsensusDB is not initialized");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(ErrorResponse { error: "ConsensusDB is not initialized".to_string() }),
+            )
+                .into_response();
+        }
+    };
+
+    // Get latest ledger info using DbReader trait
+    match DbReader::get_latest_ledger_info(consensus_db.as_ref()) {
+        Ok(info) => {
+            let ledger_info = info.ledger_info();
+            let response = LedgerInfoResponse {
+                epoch: ledger_info.epoch(),
+                round: ledger_info.round(),
+                block_number: ledger_info.block_number(),
+                block_hash: hex::encode(ledger_info.block_hash().as_ref()),
+            };
+            JsonResponse(response).into_response()
+        }
+        Err(e) => {
+            error!("Failed to get latest ledger info: {:?}", e);
+            JsonResponse(ErrorResponse {
+                error: format!("Failed to get latest ledger info: {:?}", e),
+            })
+            .into_response()
+        }
+    }
+}
+
 /// Get ledger info by epoch
 /// Example: GET /consensus/ledger_info/:epoch
-pub async fn get_ledger_info_by_epoch(
+pub fn get_ledger_info_by_epoch(
     State(dkg_state): State<Arc<DkgState>>,
     Path(epoch): Path<u64>,
-) -> Result<(StatusCode, JsonResponse<LedgerInfoResponse>), (StatusCode, JsonResponse<ErrorResponse>)> {
+) -> Result<(StatusCode, JsonResponse<LedgerInfoResponse>), (StatusCode, JsonResponse<ErrorResponse>)>
+{
     info!("Getting ledger info for epoch={}", epoch);
 
     let consensus_db = match dkg_state.consensus_db() {
         Some(db) => db,
         None => {
-            return Err(error_response(StatusCode::INTERNAL_SERVER_ERROR, "ConsensusDB is not initialized"));
+            return Err(error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "ConsensusDB is not initialized",
+            ));
         }
     };
 
@@ -67,7 +120,10 @@ pub async fn get_ledger_info_by_epoch(
         Ok(blocks) => blocks,
         Err(e) => {
             error!("Failed to get epoch by block number: {:?}", e);
-            return Err(error_response(StatusCode::INTERNAL_SERVER_ERROR, &format!("Failed to get epoch by block number: {:?}", e)));
+            return Err(error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                &format!("Failed to get epoch by block number: {:?}", e),
+            ));
         }
     };
 
@@ -78,7 +134,10 @@ pub async fn get_ledger_info_by_epoch(
         .map(|(block_number, _)| block_number)
         .ok_or_else(|| {
             error!("Cannot find block number for epoch {}", epoch);
-            error_response(StatusCode::NOT_FOUND, &format!("Cannot find block number for epoch {}", epoch))
+            error_response(
+                StatusCode::NOT_FOUND,
+                &format!("Cannot find block number for epoch {}", epoch),
+            )
         })?;
 
     // Get the ledger info for the target block number
@@ -91,23 +150,38 @@ pub async fn get_ledger_info_by_epoch(
                 block_number: ledger_info_inner.block_number(),
                 block_hash: hex::encode(ledger_info_inner.block_hash().as_ref()),
             };
-            info!("Successfully retrieved ledger info for epoch={}, block_number={}", epoch, target_block_number);
+            info!(
+                "Successfully retrieved ledger info for epoch={}, block_number={}",
+                epoch, target_block_number
+            );
             Ok((StatusCode::OK, JsonResponse(response)))
         }
         Ok(None) => {
-            error!("Ledger info not found for block_number={} (epoch={})", target_block_number, epoch);
-            Err(error_response(StatusCode::NOT_FOUND, &format!("Ledger info not found for block_number={} (epoch={})", target_block_number, epoch)))
+            error!(
+                "Ledger info not found for block_number={} (epoch={})",
+                target_block_number, epoch
+            );
+            Err(error_response(
+                StatusCode::NOT_FOUND,
+                &format!(
+                    "Ledger info not found for block_number={} (epoch={})",
+                    target_block_number, epoch
+                ),
+            ))
         }
         Err(e) => {
             error!("Failed to get ledger info for block_number={}: {:?}", target_block_number, e);
-            Err(error_response(StatusCode::INTERNAL_SERVER_ERROR, &format!("Failed to get ledger info: {:?}", e)))
+            Err(error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                &format!("Failed to get ledger info: {:?}", e),
+            ))
         }
     }
 }
 
 /// Get block by epoch and round
 /// Example: GET /consensus/block/:epoch/:round
-pub async fn get_block(
+pub fn get_block(
     State(dkg_state): State<Arc<DkgState>>,
     Path((epoch, round)): Path<(u64, u64)>,
 ) -> Result<(StatusCode, JsonResponse<BlockInfo>), (StatusCode, JsonResponse<ErrorResponse>)> {
@@ -116,7 +190,10 @@ pub async fn get_block(
     let consensus_db = match dkg_state.consensus_db() {
         Some(db) => db,
         None => {
-            return Err(error_response(StatusCode::INTERNAL_SERVER_ERROR, "ConsensusDB is not initialized"));
+            return Err(error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "ConsensusDB is not initialized",
+            ));
         }
     };
 
@@ -128,14 +205,17 @@ pub async fn get_block(
         }
         None => {
             error!("Block not found for epoch={}, round={}", epoch, round);
-            Err(error_response(StatusCode::NOT_FOUND, &format!("Block not found for epoch={}, round={}", epoch, round)))
+            Err(error_response(
+                StatusCode::NOT_FOUND,
+                &format!("Block not found for epoch={}, round={}", epoch, round),
+            ))
         }
     }
 }
 
 /// Get QC by epoch and round
 /// Example: GET /consensus/qc/:epoch/:round
-pub async fn get_qc(
+pub fn get_qc(
     State(dkg_state): State<Arc<DkgState>>,
     Path((epoch, round)): Path<(u64, u64)>,
 ) -> Result<(StatusCode, JsonResponse<QCInfo>), (StatusCode, JsonResponse<ErrorResponse>)> {
@@ -144,7 +224,10 @@ pub async fn get_qc(
     let consensus_db = match dkg_state.consensus_db() {
         Some(db) => db,
         None => {
-            return Err(error_response(StatusCode::INTERNAL_SERVER_ERROR, "ConsensusDB is not initialized"));
+            return Err(error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "ConsensusDB is not initialized",
+            ));
         }
     };
 
@@ -156,23 +239,32 @@ pub async fn get_qc(
         }
         None => {
             error!("QC not found for epoch={}, round={}", epoch, round);
-            Err(error_response(StatusCode::NOT_FOUND, &format!("QC not found for epoch={}, round={}", epoch, round)))
+            Err(error_response(
+                StatusCode::NOT_FOUND,
+                &format!("QC not found for epoch={}, round={}", epoch, round),
+            ))
         }
     }
 }
 
 /// Get validator count by epoch
 /// Example: GET /consensus/validator_count/:epoch
-pub async fn get_validator_count_by_epoch(
+pub fn get_validator_count_by_epoch(
     State(dkg_state): State<Arc<DkgState>>,
     Path(epoch): Path<u64>,
-) -> Result<(StatusCode, JsonResponse<ValidatorCountResponse>), (StatusCode, JsonResponse<ErrorResponse>)> {
+) -> Result<
+    (StatusCode, JsonResponse<ValidatorCountResponse>),
+    (StatusCode, JsonResponse<ErrorResponse>),
+> {
     info!("Getting validator count for epoch={}", epoch);
 
     let consensus_db = match dkg_state.consensus_db() {
         Some(db) => db,
         None => {
-            return Err(error_response(StatusCode::INTERNAL_SERVER_ERROR, "ConsensusDB is not initialized"));
+            return Err(error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "ConsensusDB is not initialized",
+            ));
         }
     };
 
@@ -181,7 +273,10 @@ pub async fn get_validator_count_by_epoch(
         Ok(blocks) => blocks,
         Err(e) => {
             error!("Failed to get epoch by block number: {:?}", e);
-            return Err(error_response(StatusCode::INTERNAL_SERVER_ERROR, &format!("Failed to get epoch by block number: {:?}", e)));
+            return Err(error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                &format!("Failed to get epoch by block number: {:?}", e),
+            ));
         }
     };
 
@@ -192,52 +287,64 @@ pub async fn get_validator_count_by_epoch(
         .map(|(block_number, _)| block_number)
         .ok_or_else(|| {
             error!("Cannot find block number for epoch {}", epoch);
-            error_response(StatusCode::NOT_FOUND, &format!("Cannot find block number for epoch {}", epoch))
+            error_response(
+                StatusCode::NOT_FOUND,
+                &format!("Cannot find block number for epoch {}", epoch),
+            )
         })?;
 
     // Get validator set from config storage using block_number
     let validator_count = match GLOBAL_CONFIG_STORAGE.get() {
         Some(config_storage) => {
-            match config_storage.fetch_config_bytes(OnChainConfig::ValidatorSet, target_block_number.into()) {
-                Some(config_bytes) => {
-                    match config_bytes.try_into() {
-                        Ok(bytes) => {
-                            let bytes: Bytes = bytes;
-                            match ValidatorSet::deserialize_into_config(bytes.as_ref()) {
-                                Ok(validator_set) => {
-                                    let count = validator_set.active_validators.len();
-                                    info!("Epoch {} validator count: {}", epoch, count);
-                                    count
-                                }
-                                Err(e) => {
-                                    error!("Failed to deserialize ValidatorSet: {:?}", e);
-                                    return Err(error_response(StatusCode::INTERNAL_SERVER_ERROR, &format!("Failed to deserialize ValidatorSet: {:?}", e)));
-                                }
+            match config_storage
+                .fetch_config_bytes(OnChainConfig::ValidatorSet, target_block_number.into())
+            {
+                Some(config_bytes) => match config_bytes.try_into() {
+                    Ok(bytes) => {
+                        let bytes: Bytes = bytes;
+                        match ValidatorSet::deserialize_into_config(bytes.as_ref()) {
+                            Ok(validator_set) => {
+                                let count = validator_set.active_validators.len();
+                                info!("Epoch {} validator count: {}", epoch, count);
+                                count
+                            }
+                            Err(e) => {
+                                error!("Failed to deserialize ValidatorSet: {:?}", e);
+                                return Err(error_response(
+                                    StatusCode::INTERNAL_SERVER_ERROR,
+                                    &format!("Failed to deserialize ValidatorSet: {:?}", e),
+                                ));
                             }
                         }
-                        Err(e) => {
-                            error!("Failed to convert config bytes: {:?}", e);
-                            return Err(error_response(StatusCode::INTERNAL_SERVER_ERROR, &format!("Failed to convert config bytes: {:?}", e)));
-                        }
                     }
-                }
+                    Err(e) => {
+                        error!("Failed to convert config bytes: {:?}", e);
+                        return Err(error_response(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            &format!("Failed to convert config bytes: {:?}", e),
+                        ));
+                    }
+                },
                 None => {
                     error!("ValidatorSet not found for block_number {}", target_block_number);
-                    return Err(error_response(StatusCode::NOT_FOUND, &format!("ValidatorSet not found for block_number {}", target_block_number)));
+                    return Err(error_response(
+                        StatusCode::NOT_FOUND,
+                        &format!("ValidatorSet not found for block_number {}", target_block_number),
+                    ));
                 }
             }
         }
         None => {
             error!("GLOBAL_CONFIG_STORAGE is not initialized");
-            return Err(error_response(StatusCode::INTERNAL_SERVER_ERROR, "GLOBAL_CONFIG_STORAGE is not initialized"));
+            return Err(error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "GLOBAL_CONFIG_STORAGE is not initialized",
+            ));
         }
     };
 
-    let response = ValidatorCountResponse {
-        epoch,
-        block_number: target_block_number,
-        validator_count,
-    };
+    let response =
+        ValidatorCountResponse { epoch, block_number: target_block_number, validator_count };
 
     Ok((StatusCode::OK, JsonResponse(response)))
 }
@@ -255,10 +362,7 @@ fn get_block_by_round(consensus_db: &ConsensusDB, epoch: u64, round: u64) -> Opt
                 if block.round() == round {
                     // Try to get block number if not set
                     let block_number = if block.block_number().is_none() {
-                        consensus_db
-                            .get::<BlockNumberSchema>(&(epoch, block.id()))
-                            .ok()
-                            .flatten()
+                        consensus_db.get::<BlockNumberSchema>(&(epoch, block.id())).ok().flatten()
                     } else {
                         block.block_number()
                     };
@@ -318,10 +422,5 @@ fn get_qc_by_round(consensus_db: &ConsensusDB, epoch: u64, round: u64) -> Option
 
 /// Helper function to create error response
 fn error_response(status: StatusCode, message: &str) -> (StatusCode, JsonResponse<ErrorResponse>) {
-    (
-        status,
-        JsonResponse(ErrorResponse {
-            error: message.to_string(),
-        }),
-    )
+    (status, JsonResponse(ErrorResponse { error: message.to_string() }))
 }

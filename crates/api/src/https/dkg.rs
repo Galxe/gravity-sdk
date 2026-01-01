@@ -1,16 +1,16 @@
+use aptos_consensus::consensusdb::ConsensusDB;
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Json as JsonResponse},
+};
 use bytes::Bytes;
 use gaptos::{
     api_types::config_storage::{OnChainConfig, GLOBAL_CONFIG_STORAGE},
     aptos_logger::{error, info},
     aptos_storage_interface::DbReader,
-    aptos_types::{
-        dkg::DKGState,
-        on_chain_config::OnChainConfig as OnChainConfigTrait,
-    },
+    aptos_types::{dkg::DKGState, on_chain_config::OnChainConfig as OnChainConfigTrait},
 };
-use axum::{http::StatusCode, response::{Json as JsonResponse, IntoResponse}};
 use serde::{Deserialize, Serialize};
-use aptos_consensus::consensusdb::ConsensusDB;
 use std::sync::Arc;
 
 pub struct DkgState {
@@ -71,7 +71,7 @@ pub struct ErrorResponse {
 impl DkgState {
     /// Get DKG status (epoch, round, block, participating nodes)
     /// Example: curl https://127.0.0.1:1024/dkg/status
-    pub async fn get_dkg_status(&self) -> impl IntoResponse {
+    pub fn get_dkg_status(&self) -> impl IntoResponse {
         info!("Getting DKG status");
 
         // Get ConsensusDB
@@ -84,7 +84,8 @@ impl DkgState {
                     JsonResponse(ErrorResponse {
                         error: "ConsensusDB is not initialized".to_string(),
                     }),
-                ).into_response();
+                )
+                    .into_response();
             }
         };
 
@@ -98,7 +99,8 @@ impl DkgState {
                     JsonResponse(ErrorResponse {
                         error: format!("Failed to get latest ledger info: {:?}", e),
                     }),
-                ).into_response();
+                )
+                    .into_response();
             }
         };
 
@@ -113,19 +115,29 @@ impl DkgState {
                 match config_bytes.try_into() {
                     Ok(bytes) => {
                         let bytes: Bytes = bytes;
-                        match <DKGState as OnChainConfigTrait>::deserialize_into_config(bytes.as_ref()) {
+                        match <DKGState as OnChainConfigTrait>::deserialize_into_config(
+                            bytes.as_ref(),
+                        ) {
                             Ok(dkg_state) => {
-                                // participating_nodes is the count of target_validator_set from last_completed session
+                                // participating_nodes is the count of target_validator_set from
+                                // last_completed session
                                 if let Some(session) = &dkg_state.last_completed {
                                     session.metadata.target_validator_set.len()
                                 } else {
-                                    error!("No last_completed DKG session found at block {}", block);
+                                    error!(
+                                        "No last_completed DKG session found at block {}",
+                                        block
+                                    );
                                     return (
                                         StatusCode::NOT_FOUND,
                                         JsonResponse(ErrorResponse {
-                                            error: format!("No last_completed DKG session found at block {}", block),
+                                            error: format!(
+                                                "No last_completed DKG session found at block {}",
+                                                block
+                                            ),
                                         }),
-                                    ).into_response();
+                                    )
+                                        .into_response();
                                 }
                             }
                             Err(e) => {
@@ -135,7 +147,8 @@ impl DkgState {
                                     JsonResponse(ErrorResponse {
                                         error: format!("Failed to deserialize DKG state: {:?}", e),
                                     }),
-                                ).into_response();
+                                )
+                                    .into_response();
                             }
                         }
                     }
@@ -146,7 +159,8 @@ impl DkgState {
                             JsonResponse(ErrorResponse {
                                 error: format!("Failed to convert config bytes: {:?}", e),
                             }),
-                        ).into_response();
+                        )
+                            .into_response();
                     }
                 }
             } else {
@@ -154,9 +168,13 @@ impl DkgState {
                 return (
                     StatusCode::NOT_FOUND,
                     JsonResponse(ErrorResponse {
-                        error: format!("Failed to fetch DKG state from config storage at block {}", block),
+                        error: format!(
+                            "Failed to fetch DKG state from config storage at block {}",
+                            block
+                        ),
                     }),
-                ).into_response();
+                )
+                    .into_response();
             }
         } else {
             error!("GLOBAL_CONFIG_STORAGE is not initialized");
@@ -165,27 +183,22 @@ impl DkgState {
                 JsonResponse(ErrorResponse {
                     error: "GLOBAL_CONFIG_STORAGE is not initialized".to_string(),
                 }),
-            ).into_response();
+            )
+                .into_response();
         };
 
-        let response = DKGStatusResponse {
-            epoch,
-            round,
-            block_number: block,
-            participating_nodes,
-        };
+        let response = DKGStatusResponse { epoch, round, block_number: block, participating_nodes };
 
-        info!("Successfully retrieved DKG status: epoch={}, round={}, block={}, nodes={}", 
-              epoch, round, block, participating_nodes);
+        info!(
+            "Successfully retrieved DKG status: epoch={}, round={}, block={}, nodes={}",
+            epoch, round, block, participating_nodes
+        );
         JsonResponse(response).into_response()
     }
 
     /// Get randomness for a specific block number
     /// Example: curl "https://127.0.0.1:1024/dkg/randomness/100"
-    pub async fn get_randomness(
-        &self,
-        block_number: u64,
-    ) -> impl IntoResponse {
+    pub fn get_randomness(&self, block_number: u64) -> impl IntoResponse {
         info!("Getting randomness for block {}", block_number);
 
         // Get ConsensusDB
@@ -198,26 +211,22 @@ impl DkgState {
                     JsonResponse(ErrorResponse {
                         error: "ConsensusDB is not initialized".to_string(),
                     }),
-                ).into_response();
+                )
+                    .into_response();
             }
         };
 
         match consensus_db.get_randomness(block_number) {
             Ok(Some(randomness)) => {
-                let response = RandomnessResponse {
-                    block_number,
-                    randomness: Some(hex::encode(&randomness)),
-                };
+                let response =
+                    RandomnessResponse { block_number, randomness: Some(hex::encode(&randomness)) };
                 info!("Successfully retrieved randomness for block {}", block_number);
                 JsonResponse(response).into_response()
             }
             Ok(None) => {
                 // Return 200 with None randomness instead of 404
                 // This is more RESTful: the resource exists, but has no randomness data
-                let response = RandomnessResponse {
-                    block_number,
-                    randomness: None,
-                };
+                let response = RandomnessResponse { block_number, randomness: None };
                 info!("No randomness found for block {}", block_number);
                 JsonResponse(response).into_response()
             }
@@ -226,9 +235,13 @@ impl DkgState {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     JsonResponse(ErrorResponse {
-                        error: format!("Failed to get randomness for block {}: {:?}", block_number, e),
+                        error: format!(
+                            "Failed to get randomness for block {}: {:?}",
+                            block_number, e
+                        ),
                     }),
-                ).into_response()
+                )
+                    .into_response()
             }
         }
     }
