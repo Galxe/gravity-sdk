@@ -241,3 +241,14 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "validator: mark test as validator management test"
     )
+
+
+def pytest_collection_modifyitems(session, config, items):
+    """
+    Filter out test_case decorator from being collected as a test.
+
+    The test_case decorator is used to wrap test functions but should not
+    be collected as a test itself.
+    """
+    # Filter out any item named 'test_case' (the decorator)
+    items[:] = [item for item in items if item.name != 'test_case']

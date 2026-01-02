@@ -340,7 +340,7 @@ class RunHelper:
             await asyncio.sleep(0.5)
 
 
-def test_case(func):
+def mark_as_testcase(func):
     """
     Test case decorator for marking test functions.
 
@@ -349,7 +349,7 @@ def test_case(func):
     When running standalone, the function can be called with explicit parameters.
 
     Usage:
-        @test_case
+        @mark_as_testcase
         async def test_something(run_helper: RunHelper, test_result: TestResult):
             # test code
             pass
@@ -386,3 +386,8 @@ def test_case(func):
             return await func(*args, **kwargs)
 
     return wrapper
+
+
+# Alias for backward compatibility
+test_case = mark_as_testcase
+testcase = mark_as_testcase

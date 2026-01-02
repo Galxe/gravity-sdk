@@ -15,6 +15,7 @@ Design Notes:
 import asyncio
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 from dataclasses import dataclass, field
@@ -24,7 +25,7 @@ from web3.contract import Contract
 from web3.types import TxReceipt, Address
 from eth_account.signers.local import LocalAccount
 from .exceptions import ContractError, TransactionError
-from .transaction_builder import TransactionBuilder, TransactionOptions
+from .transaction_builder import TransactionBuilder, TransactionOptions, run_sync
 from .async_retry import AsyncRetry
 
 LOG = logging.getLogger(__name__)
@@ -414,13 +415,10 @@ class ContractDeployer:
                 abi=contract_data.abi
             )
 
-            # Verify contract exists
-            code = await self.retry.execute(
-                self.web3.eth.get_code,
-                address
-            )
+            # Verify contract exists (use run_sync for synchronous web3 call)
+            code = await run_sync(self.web3.eth.get_code, address)
 
-            if code == '0x':
+            if code == b'' or code == '0x':
                 LOG.warning(f"No contract code at address {address}")
                 return None
 
@@ -459,25 +457,22 @@ class ContractDeployer:
         timeout: float
     ) -> None:
         """Wait for block confirmations"""
-        # Get receipt to know which block
-        receipt = await self.retry.execute(
-            self.web3.eth.get_transaction_receipt,
-            tx_hash
-        )
+        # Get receipt to know which block (use run_sync for synchronous web3 call)
+        receipt = await run_sync(self.web3.eth.get_transaction_receipt, tx_hash)
 
         target_block = receipt.blockNumber + confirmations
-        current_block = await self.retry.execute(self.web3.eth.block_number)
+        current_block = await run_sync(self.web3.eth.get_block_number)
 
-        start_time = asyncio.get_event_loop().time()
+        start_time = time.time()
 
         while current_block < target_block:
-            if asyncio.get_event_loop().time() - start_time > timeout:
+            if time.time() - start_time > timeout:
                 raise ContractError(
                     f"Confirmation timeout: waited {timeout}s for {confirmations} confirmations"
                 )
 
             await asyncio.sleep(1.0)
-            current_block = await self.retry.execute(self.web3.eth.block_number)
+            current_block = await run_sync(self.web3.eth.get_block_number)
 
     async def _verify_deployment(
         self,
@@ -486,11 +481,8 @@ class ContractDeployer:
     ) -> bool:
         """Verify that deployed contract matches expected bytecode"""
         try:
-            # Get deployed bytecode
-            deployed_code = await self.retry.execute(
-                self.web3.eth.get_code,
-                contract.address
-            )
+            # Get deployed bytecode (use run_sync for synchronous web3 call)
+            deployed_code = await run_sync(self.web3.eth.get_code, contract.address)
 
             # Compare with expected deployed bytecode
             if contract_data.deployed_bytecode:
@@ -501,10 +493,10 @@ class ContractDeployer:
 
                 # Basic verification that code exists at the address
                 # Full bytecode comparison would require handling library linking
-                return deployed_code != '0x'
+                return deployed_code != b'' and deployed_code != '0x'
 
             # If no deployed bytecode, just check that code exists
-            return deployed_code != '0x'
+            return deployed_code != b'' and deployed_code != '0x'
 
         except Exception as e:
             LOG.warning(f"Contract verification failed: {e}")

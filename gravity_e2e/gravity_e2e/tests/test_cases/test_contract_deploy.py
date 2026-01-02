@@ -123,9 +123,10 @@ async def test_simple_storage_deploy(run_helper: RunHelper, test_result: TestRes
         LOG.info(f"Setting value to {test_value}")
 
         # Build setValue transaction
+        set_value_data = contract.encode_abi('setValue', [test_value])
         set_value_result = await tx_builder.build_and_send_tx(
             to=contract_address,
-            data=contract.functions.setValue(test_value).data_in_transaction,
+            data=set_value_data,
             options=TransactionOptions(gas_limit=50000)
         )
 
@@ -140,8 +141,9 @@ async def test_simple_storage_deploy(run_helper: RunHelper, test_result: TestRes
         # 8. Test contract interaction - getValue
         LOG.info("Reading value from contract")
 
-        # Call view function
-        stored_value = await contract.functions.getValue().call()
+        # Call view function (synchronous call, use run_sync)
+        from gravity_e2e.utils.transaction_builder import run_sync
+        stored_value = await run_sync(contract.functions.getValue().call)
         LOG.info(f"Retrieved value: {stored_value}")
 
         if stored_value != test_value:
@@ -243,10 +245,11 @@ async def test_contract_with_constructor(run_helper: RunHelper, test_result: Tes
         if not contract:
             raise ContractError("Failed to get deployed token contract")
 
-        # Check token metadata
-        name = await contract.functions.name().call()
-        symbol = await contract.functions.symbol().call()
-        total_supply = await contract.functions.totalSupply().call()
+        # Check token metadata (use run_sync for synchronous web3 calls)
+        from gravity_e2e.utils.transaction_builder import run_sync
+        name = await run_sync(contract.functions.name().call)
+        symbol = await run_sync(contract.functions.symbol().call)
+        total_supply = await run_sync(contract.functions.totalSupply().call)
 
         if name != token_name or symbol != token_symbol or total_supply != initial_supply:
             raise ContractError(
@@ -264,9 +267,11 @@ async def test_contract_with_constructor(run_helper: RunHelper, test_result: Tes
             account=deployer['account']
         )
 
+        # Build transfer transaction
+        transfer_data = contract.encode_abi('transfer', [recipient['address'], transfer_amount])
         transfer_result = await tx_builder.build_and_send_tx(
             to=result.contract_address,
-            data=contract.functions.transfer(recipient['address'], transfer_amount).data_in_transaction,
+            data=transfer_data,
             options=TransactionOptions(gas_limit=100000)
         )
 
@@ -276,8 +281,8 @@ async def test_contract_with_constructor(run_helper: RunHelper, test_result: Tes
                 tx_hash=transfer_result.tx_hash
             )
 
-        # Verify recipient balance
-        recipient_balance = await contract.functions.balanceOf(recipient['address']).call()
+        # Verify recipient balance (use run_sync for synchronous web3 call)
+        recipient_balance = await run_sync(contract.functions.balanceOf(recipient['address']).call)
         if recipient_balance != transfer_amount:
             raise TransactionError(
                 f"Recipient balance mismatch: expected {transfer_amount}, got {recipient_balance}"
@@ -367,9 +372,11 @@ async def test_contract_deployment_with_retry(run_helper: RunHelper, test_result
                 result.contract_address
             )
 
+            # Build setValue transaction
+            set_value_data = contract.encode_abi('setValue', [value])
             set_result = await tx_builder.build_and_send_tx(
                 to=result.contract_address,
-                data=contract.functions.setValue(value).data_in_transaction,
+                data=set_value_data,
                 options=TransactionOptions(gas_limit=50000)
             )
 
@@ -380,8 +387,9 @@ async def test_contract_deployment_with_retry(run_helper: RunHelper, test_result
 
             tx_hashes.append(set_result.tx_hash)
 
-        # 5. Verify final value
-        final_value = await contract.functions.getValue().call()
+        # 5. Verify final value (use run_sync for synchronous web3 call)
+        from gravity_e2e.utils.transaction_builder import run_sync
+        final_value = await run_sync(contract.functions.getValue().call)
         if final_value != test_values[-1]:
             raise TransactionError(
                 f"Final value mismatch: expected {test_values[-1]}, got {final_value}"
