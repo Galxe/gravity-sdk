@@ -160,7 +160,7 @@ Tests Solidity smart contract deployment and interaction:
 
 ### ERC20 Token Tests (`erc20` suite)
 
-**Test Files**: `test_erc20.py`, `test_erc20_enhanced.py`
+**Test Files**: `test_erc20.py`
 
 Comprehensive ERC20 token functionality testing:
 - **erc20**: Basic ERC20 deployment, metadata verification, and transfers
@@ -195,7 +195,7 @@ Validates on-chain randomness generation and consumption:
 
 ### Epoch Consistency Tests (`epoch` suite) - Self-Managed
 
-**Test Files**: `test_epoch_consistency.py`, `test_epoch_consistency_extended.py`
+**Test Files**: `test_epoch_consistency.py`
 
 Tests consensus epoch progression and consistency:
 - **epoch_consistency**: Basic epoch consistency validation
@@ -205,11 +205,11 @@ Tests consensus epoch progression and consistency:
 
 ### Validator Management Tests (`validator` suite) - Self-Managed
 
-**Test Files**: `test_validator_add_remove.py`, `test_validator_add_remove_delayed.py`
+**Test Files**: `test_validator_add_remove.py`
 
 Tests dynamic validator set changes:
-- **validator_add_remove**: Add and remove validators from the network
-- **validator_add_remove_delayed**: Test with delayed reconfiguration
+- **validator_add_remove**: Add and remove validators from the network (immediate startup)
+- **validator_add_remove_delayed**: Test with delayed node startup after validator join
 - Validate consensus after validator changes
 - These tests manage their own cluster setup
 
@@ -368,25 +368,6 @@ result = await deployer.deploy(
 )
 ```
 
-##### Contract Caller
-```python
-from gravity_e2e.utils.contract_caller import ContractCaller
-
-caller = ContractCaller(run_helper.client, contract_address, contract_abi)
-
-# Read-only call
-balance = await caller.call("balanceOf", account_address)
-name = await caller.call("name")
-
-# Send transaction
-tx_receipt = await caller.send_and_wait(
-    "transfer",
-    recipient_address,
-    amount,
-    from_account=sender_account
-)
-```
-
 ##### Event Poller
 ```python
 from gravity_e2e.utils.event_poller import EventPoller
@@ -535,15 +516,15 @@ gravity_e2e/
 │   │
 │   ├── utils/                     # Shared utility modules
 │   │   ├── async_retry.py         # Configurable async retry with exponential backoff
-│   │   ├── config_manager.py      # Configuration loading with JSON schema validation
+│   │   ├── config_manager.py      # Configuration loading
 │   │   ├── transaction_builder.py # Transaction building, signing, and sending
 │   │   ├── contract_deployer.py   # Contract deployment with verification
-│   │   ├── contract_caller.py     # Unified contract interaction interface
 │   │   ├── contract_utils.py      # Contract encoding/decoding utilities
 │   │   ├── event_poller.py        # Event monitoring and polling
 │   │   ├── event_parser.py        # Event parsing and filtering
-│   │   ├── shared_contracts.py    # Contract deployment and caching
 │   │   ├── randomness_utils.py    # Randomness testing utilities
+│   │   ├── epoch_utils.py         # Epoch testing utilities
+│   │   ├── validator_utils.py     # Validator testing utilities
 │   │   ├── logging.py             # Logging configuration
 │   │   ├── common.py              # Common utility functions
 │   │   └── exceptions.py          # Centralized exception definitions
@@ -556,14 +537,11 @@ gravity_e2e/
 │   │   │   ├── test_basic_transfer.py
 │   │   │   ├── test_contract_deploy.py
 │   │   │   ├── test_erc20.py
-│   │   │   ├── test_erc20_enhanced.py
 │   │   │   ├── test_cross_chain_deposit.py
 │   │   │   ├── test_randomness_basic.py
 │   │   │   ├── test_randomness_advanced.py
 │   │   │   ├── test_epoch_consistency.py
-│   │   │   ├── test_epoch_consistency_extended.py
-│   │   │   ├── test_validator_add_remove.py
-│   │   │   └── test_validator_add_remove_delayed.py
+│   │   │   └── test_validator_add_remove.py
 │   │   └── unit/                  # Unit tests for utilities
 │   │       └── test_utilities.py
 │   │
@@ -573,8 +551,7 @@ gravity_e2e/
 ├── configs/                       # Configuration files
 │   ├── nodes.json                 # Node connection configurations
 │   ├── test_accounts.json         # Test account credentials
-│   ├── cross_chain_config.json    # Cross-chain test configuration
-│   └── schemas/                   # JSON schemas for validation
+│   └── cross_chain_config.json    # Cross-chain test configuration
 │
 ├── contracts_data/                # Compiled contract data (bytecode + ABI)
 │   ├── SimpleStorage.json
@@ -615,10 +592,11 @@ gravity_e2e/
 #### 3. Utility Modules (`utils/`)
 - **Transaction Builder**: Simplified transaction creation with automatic gas estimation
 - **Contract Deployer**: Deploy contracts with verification and caching
-- **Contract Caller**: High-level contract interaction interface
 - **Event Poller**: Efficient event monitoring with filtering
 - **Async Retry**: Resilient retry mechanism with exponential backoff
-- **Config Manager**: Configuration loading with schema validation
+- **Config Manager**: Simple configuration loading from JSON files
+- **Validator Utils**: Shared utilities for validator add/remove tests
+- **Epoch Utils**: Shared utilities for epoch consistency tests
 
 #### 4. Test Helpers (`helpers/`)
 - **RunHelper**: Provides test utilities (account creation, client access)
@@ -629,7 +607,7 @@ gravity_e2e/
 
 1. **Use the Test Registry**: Register all tests with `@register_test` decorator for automatic discovery
 2. **Use the `@test_case` decorator**: Provides automatic timing, error handling, and logging
-3. **Leverage utility modules**: Use TransactionBuilder, ContractDeployer, and ContractCaller instead of manual RPC calls
+3. **Leverage utility modules**: Use TransactionBuilder and ContractDeployer instead of manual RPC calls
 4. **Create descriptive test names**: Test names should clearly indicate what is being tested
 5. **Include meaningful metrics**: Add relevant data to `test_result.mark_success()` for better reporting
 6. **Handle async operations properly**: Always use `await` for async operations

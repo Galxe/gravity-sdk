@@ -15,18 +15,16 @@ Design Notes:
 
 import asyncio
 import functools
-import json
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from web3 import Web3
 from web3.types import TxParams, TxReceipt, Wei
-from eth_account import Account
 from eth_account.signers.local import LocalAccount
-from .exceptions import TransactionError, NodeConnectionError
+from .exceptions import TransactionError
 from .async_retry import AsyncRetry
 
 LOG = logging.getLogger(__name__)
@@ -609,79 +607,3 @@ class TransactionBuilder:
             options=options,
             **kwargs
         )
-
-
-# Convenience functions for common transaction patterns
-async def send_simple_transfer(
-    web3: Web3,
-    account: LocalAccount,
-    to: str,
-    amount_wei: int,
-    gas_price: Optional[int] = None
-) -> str:
-    """
-    Send a simple ether transfer.
-
-    Args:
-        web3: Web3 instance
-        account: Account to send from
-        to: Recipient address
-        amount_wei: Amount to send
-        gas_price: Optional gas price
-
-    Returns:
-        Transaction hash
-    """
-    builder = TransactionBuilder(web3, account)
-
-    options = TransactionOptions(
-        value=amount_wei,
-        gas_price=gas_price
-    )
-
-    result = await builder.build_and_send_tx(
-        to=to,
-        options=options
-    )
-
-    if not result.success:
-        raise TransactionError(f"Transfer failed: {result.error}")
-
-    return result.tx_hash
-
-
-async def deploy_simple_contract(
-    web3: Web3,
-    account: LocalAccount,
-    bytecode: str,
-    abi: List[Dict],
-    gas_limit: Optional[int] = None
-) -> Tuple[str, str]:
-    """
-    Deploy a contract with no constructor arguments.
-
-    Args:
-        web3: Web3 instance
-        account: Account to deploy with
-        bytecode: Contract bytecode
-        abi: Contract ABI
-        gas_limit: Optional gas limit
-
-    Returns:
-        Tuple of (transaction hash, contract address)
-    """
-    builder = TransactionBuilder(web3, account)
-
-    options = TransactionOptions(gas_limit=gas_limit)
-
-    result = await builder.deploy_contract(
-        bytecode=bytecode,
-        abi=abi,
-        options=options
-    )
-
-    if not result.success:
-        raise TransactionError(f"Contract deployment failed: {result.error}")
-
-    contract_address = result.tx_receipt.contractAddress
-    return result.tx_hash, contract_address
