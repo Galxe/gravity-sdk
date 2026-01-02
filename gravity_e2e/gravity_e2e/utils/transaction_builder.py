@@ -17,6 +17,7 @@ import asyncio
 import functools
 import json
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
 from dataclasses import dataclass, field
@@ -39,16 +40,16 @@ _web3_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="web3_sync
 async def run_sync(func: Callable[..., T], *args, **kwargs) -> T:
     """
     Run a synchronous function in a thread pool to avoid blocking the event loop.
-    
+
     Args:
         func: Synchronous function to run
         *args: Positional arguments for func
         **kwargs: Keyword arguments for func
-    
+
     Returns:
         Result of func
     """
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     partial_func = functools.partial(func, *args, **kwargs)
     return await loop.run_in_executor(_web3_executor, partial_func)
 
@@ -461,8 +462,8 @@ class TransactionBuilder:
             Transaction receipt
         """
         from web3.exceptions import TransactionNotFound
-        
-        start_time = asyncio.get_event_loop().time()
+
+        start_time = time.time()
         tx_hash_hex = tx_hash.hex() if hasattr(tx_hash, 'hex') else str(tx_hash)
 
         while True:
@@ -484,7 +485,7 @@ class TransactionBuilder:
                     raise
 
             # Check timeout
-            if asyncio.get_event_loop().time() - start_time > timeout:
+            if time.time() - start_time > timeout:
                 raise TransactionError(
                     f"Transaction receipt timeout after {timeout}s",
                     tx_hash=tx_hash_hex

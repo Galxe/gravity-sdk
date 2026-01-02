@@ -24,7 +24,7 @@ Usage:
 
     # Mark test success with details
     result.mark_success(tx_hash="0x123...", gas_used=21000)
-    
+
     # Use unified exception handling
     with handle_test_exception(test_result):
         # test code here
@@ -34,11 +34,9 @@ Usage:
 import asyncio
 import logging
 from contextlib import contextmanager
-from typing import Dict, Optional, Type, Tuple
+from typing import Any, Coroutine, Dict, Optional, TypeVar
 from eth_account import Account
-from web3 import Web3
 
-from .account_manager import TestAccountManager
 from ..core.client.gravity_client import GravityClient
 from ..utils.exceptions import (
     GravityE2EError,
@@ -49,18 +47,42 @@ from ..utils.exceptions import (
 
 LOG = logging.getLogger(__name__)
 
+T = TypeVar('T')
+
+
+def _handle_exception(test_result: 'TestResult', e: Exception) -> None:
+    """Internal helper to handle exceptions and mark test result."""
+    if isinstance(e, (TransactionError, ContractError, EventError)):
+        # Framework-specific exceptions with details
+        test_result.mark_failure(
+            error=f"{e.__class__.__name__}: {e}",
+            details=e.details if hasattr(e, 'details') else {}
+        )
+    elif isinstance(e, GravityE2EError):
+        # Base framework exception
+        test_result.mark_failure(
+            error=f"{e.__class__.__name__}: {e}",
+            details=e.details if hasattr(e, 'details') else {}
+        )
+    else:
+        # Generic exception
+        test_result.mark_failure(
+            error=f"Test failed: {e}",
+            details={"type": type(e).__name__}
+        )
+
 
 @contextmanager
 def handle_test_exception(test_result: 'TestResult', reraise: bool = True):
     """
     Context manager for unified exception handling in tests.
-    
+
     This ensures consistent error handling and result marking across all tests.
-    
+
     Args:
         test_result: TestResult instance to mark on failure
         reraise: Whether to re-raise the exception after handling
-    
+
     Usage:
         with handle_test_exception(test_result):
             # your test code
@@ -68,74 +90,38 @@ def handle_test_exception(test_result: 'TestResult', reraise: bool = True):
     """
     try:
         yield
-    except (TransactionError, ContractError, EventError) as e:
-        # Framework-specific exceptions with details
-        test_result.mark_failure(
-            error=f"{e.__class__.__name__}: {e}",
-            details=e.details if hasattr(e, 'details') else {}
-        )
-        if reraise:
-            raise
-    except GravityE2EError as e:
-        # Base framework exception
-        test_result.mark_failure(
-            error=f"{e.__class__.__name__}: {e}",
-            details=e.details if hasattr(e, 'details') else {}
-        )
-        if reraise:
-            raise
     except Exception as e:
-        # Generic exception
-        test_result.mark_failure(
-            error=f"Test failed: {e}",
-            details={"type": type(e).__name__}
-        )
+        _handle_exception(test_result, e)
         if reraise:
             raise
 
 
 async def handle_test_exception_async(
     test_result: 'TestResult',
-    coro,
+    coro: Coroutine[Any, Any, T],
     reraise: bool = True
-):
+) -> Optional[T]:
     """
     Async version of exception handling for tests.
-    
+
     Args:
         test_result: TestResult instance to mark on failure
         coro: Coroutine to execute
         reraise: Whether to re-raise the exception after handling
-    
+
     Returns:
         Result of the coroutine if successful
-    
+
     Usage:
         result = await handle_test_exception_async(test_result, do_something())
     """
     try:
         return await coro
-    except (TransactionError, ContractError, EventError) as e:
-        test_result.mark_failure(
-            error=f"{e.__class__.__name__}: {e}",
-            details=e.details if hasattr(e, 'details') else {}
-        )
-        if reraise:
-            raise
-    except GravityE2EError as e:
-        test_result.mark_failure(
-            error=f"{e.__class__.__name__}: {e}",
-            details=e.details if hasattr(e, 'details') else {}
-        )
-        if reraise:
-            raise
     except Exception as e:
-        test_result.mark_failure(
-            error=f"Test failed: {e}",
-            details={"type": type(e).__name__}
-        )
+        _handle_exception(test_result, e)
         if reraise:
             raise
+    return None
 
 
 class TestResult:  # noqa: N801
@@ -356,50 +342,47 @@ class RunHelper:
 
 def test_case(func):
     """
-    Test case decorator.
-    
-    This decorator:
-    - Creates a TestResult object and passes it to the test function
-    - Measures execution time
-    - Handles exceptions and marks test as failed
-    - Preserves test result details set by the test function
-    
-    Note: The test function should call test_result.mark_success() or
-    test_result.mark_failure() to set the result. The decorator will NOT
-    override results set by the test function.
+    Test case decorator for marking test functions.
+
+    This decorator is compatible with pytest - it simply returns the function unchanged.
+    When running with pytest, the function receives test_result from the fixture.
+    When running standalone, the function can be called with explicit parameters.
+
+    Usage:
+        @test_case
+        async def test_something(run_helper: RunHelper, test_result: TestResult):
+            # test code
+            pass
     """
     import functools
-    import time
-    
+
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
-        test_name = kwargs.get('test_name') or func.__name__
-        result = TestResult(test_name)
-        result.start_time = time.time()
-        result.end_time = result.start_time  # Initialize end_time
-        
-        try:
-            await func(*args, **kwargs, test_result=result)
-            result.end_time = time.time()
-            result.set_duration(result.end_time - result.start_time)
-            
-            # Only mark success if the test didn't explicitly set a result
-            # This preserves any mark_success() or mark_failure() calls made by the test
-            # Note: If test called mark_success(), success is already True
-            # If test called mark_failure(), success is False and we shouldn't override
-            # We can detect this by checking if error is set (mark_failure sets error)
-            if not result.success and result.error is None:
-                # Test didn't call mark_success() or mark_failure(), mark as success
-                result.mark_success()
-                
-        except Exception as e:
-            result.end_time = time.time()
-            result.set_duration(result.end_time - result.start_time)
-            # Only mark failure if not already marked
-            if result.error is None:
-                result.mark_failure(str(e))
-            raise
-            
-        return result
-    
+        # If test_result is not provided, create one
+        if 'test_result' not in kwargs:
+            import time
+            test_name = kwargs.get('test_name') or func.__name__
+            result = TestResult(test_name)
+            result.start_time = time.time()
+
+            try:
+                await func(*args, test_result=result, **kwargs)
+                result.end_time = time.time()
+                result.set_duration(result.end_time - result.start_time)
+
+                if not result.success and result.error is None:
+                    result.mark_success()
+
+            except Exception as e:
+                result.end_time = time.time()
+                result.set_duration(result.end_time - result.start_time)
+                if result.error is None:
+                    result.mark_failure(str(e))
+                raise
+
+            return result
+        else:
+            # test_result is provided (e.g., by pytest fixture)
+            return await func(*args, **kwargs)
+
     return wrapper

@@ -125,10 +125,14 @@ class APIError(GravityE2EError):
         self.code = code
 
 
-class ConnectionError(GravityE2EError):
-    """Connection error (legacy)"""
+class GravityConnectionError(GravityE2EError):
+    """Connection error"""
     def __init__(self, message: str):
         super().__init__(message, ErrorCodes.NODE_CONNECTION_FAILED)
+
+
+# Alias for backward compatibility
+ConnectionError = GravityConnectionError
 
 
 class NodeError(GravityE2EError):

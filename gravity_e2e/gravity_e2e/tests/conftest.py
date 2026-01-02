@@ -15,12 +15,10 @@ Usage:
 """
 
 import asyncio
-import json
 import logging
-import os
 import sys
 from pathlib import Path
-from typing import AsyncGenerator, Dict, Optional
+from typing import AsyncGenerator, Optional
 
 # Add the parent package to path for imports
 # This allows pytest to find the gravity_e2e package
@@ -79,18 +77,6 @@ def pytest_addoption(parser):
         default=None,
         help="Cluster name to test"
     )
-
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create event loop for the test session."""
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    yield loop
-    loop.close()
 
 
 @pytest.fixture(scope="session")
@@ -255,12 +241,3 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "validator: mark test as validator management test"
     )
-
-
-# Skip self-managed tests if run through pytest normally
-def pytest_collection_modifyitems(config, items):
-    """Modify test collection to handle special test types."""
-    for item in items:
-        # Add asyncio marker to all async tests
-        if asyncio.iscoroutinefunction(item.obj):
-            item.add_marker(pytest.mark.asyncio)

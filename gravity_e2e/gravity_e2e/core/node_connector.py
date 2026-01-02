@@ -33,7 +33,7 @@ from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 
 from .client.gravity_client import GravityClient
-from ..utils.exceptions import ConnectionError, NodeError
+from ..utils.exceptions import GravityConnectionError, NodeError
 from ..utils.common import format_timestamp
 
 LOG = logging.getLogger(__name__)
@@ -303,24 +303,25 @@ class NodeConnector:
         
     async def wait_for_ready(self, node_id: str, timeout: int = 60, check_interval: float = 2.0):
         """Wait for specific node to be ready
-        
+
         Args:
             node_id: Node ID
             timeout: Timeout in seconds
             check_interval: Check interval in seconds
-            
+
         Returns:
             bool: Whether node is ready
-            
+
         Raises:
             NodeError: Node not found
-            ConnectionError: Wait timeout
+            GravityConnectionError: Wait timeout
         """
         if node_id not in self.nodes:
             raise NodeError(f"Node {node_id} not found in config")
-            
+
         start_time = time.time()
-        
+        last_error = None
+
         while time.time() - start_time < timeout:
             try:
                 async with GravityClient(self.nodes[node_id].rpc_url, node_id) as client:
@@ -332,12 +333,13 @@ class NodeConnector:
                     LOG.info(f"Node {node_id} is ready at block {block_number}")
                     return True
             except Exception as e:
+                last_error = e
                 LOG.debug(f"Node {node_id} not ready yet: {e}")
                 await asyncio.sleep(check_interval)
-                
-        raise ConnectionError(
+
+        raise GravityConnectionError(
             f"Node {node_id} not ready within {timeout}s. "
-            f"Last error: {str(e)}"
+            f"Last error: {str(last_error) if last_error else 'Unknown'}"
         )
         
     async def close_all(self):

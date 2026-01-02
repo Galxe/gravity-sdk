@@ -8,7 +8,6 @@ from web3 import Web3
 
 from ...utils.exceptions import APIError
 from ...utils.common import hex_to_int
-from web3 import Web3
 
 
 def to_checksum_address(address: str) -> str:

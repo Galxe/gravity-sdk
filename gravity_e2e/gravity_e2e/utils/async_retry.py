@@ -73,6 +73,7 @@ class RetryState:
         # Cap at max_delay
         delay = min(delay, self.max_delay)
 
+        # Accumulate total delay
         self.total_delay += delay
         return delay
 
@@ -80,7 +81,7 @@ class RetryState:
         """Record a retry attempt"""
         self.attempt += 1
         self.last_exception = exception
-        self.total_delay = 0.0  # Reset for next calculation
+        # Note: Don't reset total_delay here - it accumulates across all retries
 
     def get_summary(self) -> Dict[str, Any]:
         """Get retry summary statistics"""
