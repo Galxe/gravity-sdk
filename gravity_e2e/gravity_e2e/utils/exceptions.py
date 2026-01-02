@@ -166,9 +166,10 @@ class TransactionError(GravityE2EError):
         from_address: Optional[str] = None,
         to_address: Optional[str] = None,
         value: Optional[int] = None,
-        gas_limit: Optional[int] = None
+        gas_limit: Optional[int] = None,
+        cause: Optional[Exception] = None
     ):
-        super().__init__(message, code)
+        super().__init__(message, code, cause=cause)
         if tx_hash:
             self.details["tx_hash"] = tx_hash
         if from_address:

@@ -363,7 +363,9 @@ class TransactionBuilder:
             # Sign transaction
             signed_tx = self.account.sign_transaction(transaction)
 
-            return signed_tx.rawTransaction.hex(), signed_tx.rawTransaction
+            # Support both old and new web3.py API
+            raw_tx = getattr(signed_tx, 'raw_transaction', None) or getattr(signed_tx, 'rawTransaction', None)
+            return raw_tx.hex(), raw_tx
 
         except Exception as e:
             raise TransactionError(
@@ -458,7 +460,10 @@ class TransactionBuilder:
         Returns:
             Transaction receipt
         """
+        from web3.exceptions import TransactionNotFound
+        
         start_time = asyncio.get_event_loop().time()
+        tx_hash_hex = tx_hash.hex() if hasattr(tx_hash, 'hex') else str(tx_hash)
 
         while True:
             try:
@@ -467,18 +472,22 @@ class TransactionBuilder:
                     self.web3.eth.get_transaction_receipt,
                     tx_hash
                 )
-                return receipt
+                if receipt is not None:
+                    return receipt
 
+            except TransactionNotFound:
+                # Transaction not yet mined, continue polling
+                pass
             except Exception as e:
-                # Check if transaction is pending
-                if "transaction not found" not in str(e).lower():
+                # Check if transaction is pending (legacy error message check)
+                if "transaction not found" not in str(e).lower() and "not found" not in str(e).lower():
                     raise
 
             # Check timeout
             if asyncio.get_event_loop().time() - start_time > timeout:
                 raise TransactionError(
                     f"Transaction receipt timeout after {timeout}s",
-                    tx_hash=tx_hash.hex()
+                    tx_hash=tx_hash_hex
                 )
 
             # Wait before polling again

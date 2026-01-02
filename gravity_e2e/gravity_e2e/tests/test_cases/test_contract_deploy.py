@@ -12,17 +12,25 @@ Key improvements from refactoring:
 - More readable and maintainable
 """
 
+import sys
+from pathlib import Path
+
+# Add package to path for absolute imports
+_current_dir = Path(__file__).resolve().parent
+_package_root = _current_dir.parent.parent.parent
+if str(_package_root) not in sys.path:
+    sys.path.insert(0, str(_package_root))
+
 import asyncio
 import json
 import logging
-from pathlib import Path
 from typing import Dict, Optional
 
-from ...helpers.test_helpers import RunHelper, TestResult, test_case
-from ...utils.contract_deployer import ContractDeployer, DeploymentOptions
-from ...utils.transaction_builder import TransactionBuilder, TransactionOptions
-from ...utils.event_poller import EventPoller
-from ...utils.exceptions import ContractError, TransactionError
+from gravity_e2e.helpers.test_helpers import RunHelper, TestResult, test_case
+from gravity_e2e.utils.contract_deployer import ContractDeployer, DeploymentOptions
+from gravity_e2e.utils.transaction_builder import TransactionBuilder, TransactionOptions
+from gravity_e2e.utils.event_poller import EventPoller
+from gravity_e2e.utils.exceptions import ContractError, TransactionError
 from eth_account import Account
 
 LOG = logging.getLogger(__name__)
@@ -304,7 +312,7 @@ async def test_contract_deployment_with_retry(run_helper: RunHelper, test_result
         deployer = await run_helper.create_test_account("deployer", fund_wei=5 * 10**18)
 
         # 2. Initialize contract deployer with custom retry config
-        from ...utils.async_retry import AsyncRetry
+        from gravity_e2e.utils.async_retry import AsyncRetry
 
         retry_config = AsyncRetry(
             max_retries=3,

@@ -2,14 +2,22 @@
 Epoch consistency test
 Tests data consistency after epoch switching
 """
+import sys
+from pathlib import Path
+
+# Add package to path for absolute imports
+_current_dir = Path(__file__).resolve().parent
+_package_root = _current_dir.parent.parent.parent
+if str(_package_root) not in sys.path:
+    sys.path.insert(0, str(_package_root))
+
 import asyncio
 import logging
 from typing import Dict, Optional
-from pathlib import Path
 
-from ...helpers.test_helpers import RunHelper, TestResult, test_case
-from ...core.client.gravity_http_client import GravityHttpClient
-from ...core.node_manager import NodeManager
+from gravity_e2e.helpers.test_helpers import RunHelper, TestResult, test_case
+from gravity_e2e.core.client.gravity_http_client import GravityHttpClient
+from gravity_e2e.core.node_manager import NodeManager
 
 LOG = logging.getLogger(__name__)
 

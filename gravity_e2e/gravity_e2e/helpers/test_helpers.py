@@ -138,13 +138,15 @@ async def handle_test_exception_async(
             raise
 
 
-class TestResult:
+class TestResult:  # noqa: N801
     """
     Standardized test result tracking and reporting.
 
     This class provides a consistent way to track test execution results,
     including success/failure status, error messages, timing, and custom
     test-specific details.
+
+    Note: __test__ = False tells pytest not to collect this class as a test.
 
     Attributes:
         test_name: Name/identifier of the test
@@ -163,6 +165,8 @@ class TestResult:
         )
         print(result.to_dict())
     """
+
+    __test__ = False  # Tell pytest not to collect this class as a test
 
     def __init__(self, test_name: str):
         """

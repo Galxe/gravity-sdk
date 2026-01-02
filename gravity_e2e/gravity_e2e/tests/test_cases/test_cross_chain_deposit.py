@@ -13,23 +13,31 @@ Key improvements from refactoring:
 - Better error handling with custom exceptions
 """
 
+import sys
+from pathlib import Path
+
+# Add package to path for absolute imports
+_current_dir = Path(__file__).resolve().parent
+_package_root = _current_dir.parent.parent.parent
+if str(_package_root) not in sys.path:
+    sys.path.insert(0, str(_package_root))
+
 import asyncio
 import json
 import logging
 import os
 from typing import Dict, Optional, Any, Tuple
-from pathlib import Path
 
 from web3 import Web3
 from eth_account import Account
 from eth_utils import to_checksum_address, from_wei, to_wei
 
-from ...helpers.test_helpers import RunHelper, TestResult, test_case
-from ...utils.config_manager import ConfigManager
-from ...utils.transaction_builder import TransactionBuilder, TransactionOptions
-from ...utils.event_poller import EventPoller, wait_for_transfer_event
-from ...utils.async_retry import AsyncRetry
-from ...utils.exceptions import TransactionError, EventError, ConfigurationError
+from gravity_e2e.helpers.test_helpers import RunHelper, TestResult, test_case
+from gravity_e2e.utils.config_manager import ConfigManager
+from gravity_e2e.utils.transaction_builder import TransactionBuilder, TransactionOptions
+from gravity_e2e.utils.event_poller import EventPoller, wait_for_transfer_event
+from gravity_e2e.utils.async_retry import AsyncRetry
+from gravity_e2e.utils.exceptions import TransactionError, EventError, ConfigurationError
 
 LOG = logging.getLogger(__name__)
 

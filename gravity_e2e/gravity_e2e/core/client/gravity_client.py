@@ -81,11 +81,11 @@ class GravityClient:
         }
         
         try:
-            timeout = timeout or self.timeout
+            # Note: Don't create new ClientTimeout for each request as it can cause
+            # issues with pytest-asyncio. Use session's default timeout instead.
             async with self.session.post(
                 self.rpc_url,
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=timeout)
+                json=payload
             ) as response:
                 if response.status != 200:
                     text = await response.text()

@@ -13,17 +13,25 @@ Key improvements from refactoring:
 - Comprehensive event testing
 """
 
+import sys
+from pathlib import Path
+
+# Add package to path for absolute imports
+_current_dir = Path(__file__).resolve().parent
+_package_root = _current_dir.parent.parent.parent
+if str(_package_root) not in sys.path:
+    sys.path.insert(0, str(_package_root))
+
 import asyncio
 import json
 import logging
-from pathlib import Path
 from typing import Dict, List, Optional
 
-from ...helpers.test_helpers import RunHelper, TestResult, test_case
-from ...utils.contract_deployer import ContractDeployer, DeploymentOptions
-from ...utils.transaction_builder import TransactionBuilder, TransactionOptions
-from ...utils.event_poller import EventPoller, wait_for_transfer_event
-from ...utils.exceptions import ContractError, TransactionError, EventError
+from gravity_e2e.helpers.test_helpers import RunHelper, TestResult, test_case
+from gravity_e2e.utils.contract_deployer import ContractDeployer, DeploymentOptions
+from gravity_e2e.utils.transaction_builder import TransactionBuilder, TransactionOptions
+from gravity_e2e.utils.event_poller import EventPoller, wait_for_transfer_event
+from gravity_e2e.utils.exceptions import ContractError, TransactionError, EventError
 from eth_account import Account
 
 LOG = logging.getLogger(__name__)

@@ -7,6 +7,14 @@ This module implements more advanced randomness tests:
 - multi_contract: Multiple contracts using randomness simultaneously
 - stress_test: High-frequency randomness consumption
 """
+import sys
+from pathlib import Path
+
+# Add package to path for absolute imports
+_current_dir = Path(__file__).resolve().parent
+_package_root = _current_dir.parent.parent.parent
+if str(_package_root) not in sys.path:
+    sys.path.insert(0, str(_package_root))
 
 import asyncio
 import logging
@@ -14,9 +22,9 @@ from typing import Dict, List, Set
 from collections import Counter
 from eth_account import Account
 
-from ...helpers.test_helpers import RunHelper, TestResult, test_case
-from ...utils.randomness_utils import RandomDiceHelper
-from ...core.client.gravity_http_client import GravityHttpClient
+from gravity_e2e.helpers.test_helpers import RunHelper, TestResult, test_case
+from gravity_e2e.utils.randomness_utils import RandomDiceHelper
+from gravity_e2e.core.client.gravity_http_client import GravityHttpClient
 
 LOG = logging.getLogger(__name__)
 

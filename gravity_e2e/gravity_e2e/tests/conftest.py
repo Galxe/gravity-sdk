@@ -18,16 +18,25 @@ import asyncio
 import json
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import AsyncGenerator, Dict, Optional
+
+# Add the parent package to path for imports
+# This allows pytest to find the gravity_e2e package
+_current_dir = Path(__file__).resolve().parent
+_package_root = _current_dir.parent.parent  # gravity_e2e/gravity_e2e -> gravity_e2e
+if str(_package_root) not in sys.path:
+    sys.path.insert(0, str(_package_root))
 
 import pytest
 import pytest_asyncio
 
-from ..core.node_connector import NodeConnector
-from ..core.client.gravity_client import GravityClient
-from ..helpers.account_manager import TestAccountManager
-from ..helpers.test_helpers import RunHelper, TestResult
+# Use absolute imports now that path is set
+from gravity_e2e.core.node_connector import NodeConnector
+from gravity_e2e.core.client.gravity_client import GravityClient
+from gravity_e2e.helpers.account_manager import TestAccountManager
+from gravity_e2e.helpers.test_helpers import RunHelper, TestResult
 
 LOG = logging.getLogger(__name__)
 
@@ -75,7 +84,11 @@ def pytest_addoption(parser):
 @pytest.fixture(scope="session")
 def event_loop():
     """Create event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     yield loop
     loop.close()
 
@@ -120,6 +133,7 @@ async def node_connector(nodes_config_path: str) -> AsyncGenerator[NodeConnector
     Yields:
         Connected NodeConnector instance
     """
+    connector = None
     try:
         connector = NodeConnector(nodes_config_path)
         
@@ -142,7 +156,8 @@ async def node_connector(nodes_config_path: str) -> AsyncGenerator[NodeConnector
         
     finally:
         # Cleanup
-        await connector.close_all()
+        if connector:
+            await connector.close_all()
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -164,20 +179,29 @@ async def gravity_client(
     """
     Get a Gravity client for tests.
     
-    Returns the client for the specified node, or the first connected node.
+    Creates a new client for each test function to avoid aiohttp session
+    sharing issues across different async tasks.
     """
+    # Get node info
     if target_node_id:
-        client = node_connector.get_client(target_node_id)
-        if not client:
-            pytest.skip(f"Node {target_node_id} not connected")
-        return client
+        node = node_connector.get_node(target_node_id)
+        if not node:
+            pytest.skip(f"Node {target_node_id} not found")
+        rpc_url = node.rpc_url
+        node_id = target_node_id
+    else:
+        # Get first connected node
+        connected_nodes = list(node_connector.clients.keys())
+        if not connected_nodes:
+            pytest.skip("No nodes connected")
+        node_id = connected_nodes[0]
+        node = node_connector.get_node(node_id)
+        rpc_url = node.rpc_url
     
-    # Get first connected client
-    connected_nodes = list(node_connector.clients.keys())
-    if not connected_nodes:
-        pytest.skip("No nodes connected")
-    
-    return node_connector.get_client(connected_nodes[0])
+    # Create a fresh client for this test function
+    client = GravityClient(rpc_url, node_id)
+    async with client:
+        yield client
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -240,4 +264,3 @@ def pytest_collection_modifyitems(config, items):
         # Add asyncio marker to all async tests
         if asyncio.iscoroutinefunction(item.obj):
             item.add_marker(pytest.mark.asyncio)
-

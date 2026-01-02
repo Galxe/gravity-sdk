@@ -11,13 +11,22 @@ Key improvements from refactoring:
 - More readable and maintainable
 """
 
+import sys
+from pathlib import Path
+
+# Add package to path for absolute imports
+_current_dir = Path(__file__).resolve().parent
+_package_root = _current_dir.parent.parent.parent
+if str(_package_root) not in sys.path:
+    sys.path.insert(0, str(_package_root))
+
 import asyncio
 import logging
 from typing import Dict
 
-from ...helpers.test_helpers import RunHelper, TestResult, test_case, handle_test_exception
-from ...utils.transaction_builder import TransactionBuilder, TransactionOptions
-from ...utils.exceptions import TransactionError
+from gravity_e2e.helpers.test_helpers import RunHelper, TestResult, test_case, handle_test_exception
+from gravity_e2e.utils.transaction_builder import TransactionBuilder, TransactionOptions
+from gravity_e2e.utils.exceptions import TransactionError
 
 LOG = logging.getLogger(__name__)
 

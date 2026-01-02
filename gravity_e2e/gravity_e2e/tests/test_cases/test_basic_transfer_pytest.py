@@ -5,15 +5,25 @@ This module provides pytest-compatible versions of the basic transfer tests,
 demonstrating how to use pytest fixtures and async test patterns.
 
 Run with:
+    cd gravity_e2e
     pytest gravity_e2e/tests/test_cases/test_basic_transfer_pytest.py -v
 """
+
+import sys
+from pathlib import Path
+
+# Add package to path for absolute imports
+_current_dir = Path(__file__).resolve().parent
+_package_root = _current_dir.parent.parent.parent
+if str(_package_root) not in sys.path:
+    sys.path.insert(0, str(_package_root))
 
 import pytest
 import logging
 
-from ...helpers.test_helpers import RunHelper, TestResult, handle_test_exception
-from ...utils.transaction_builder import TransactionBuilder, TransactionOptions
-from ...utils.exceptions import TransactionError
+from gravity_e2e.helpers.test_helpers import RunHelper, TestResult, handle_test_exception
+from gravity_e2e.utils.transaction_builder import TransactionBuilder, TransactionOptions
+from gravity_e2e.utils.exceptions import TransactionError
 
 LOG = logging.getLogger(__name__)
 

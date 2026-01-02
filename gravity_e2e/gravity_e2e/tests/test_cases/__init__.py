@@ -3,42 +3,67 @@ Test cases package initialization.
 
 This module registers all test cases with the test registry for automatic
 discovery and execution through the CLI.
+
+Note: For pytest compatibility, imports use absolute paths.
 """
 
-from ..test_registry import register_test
+import sys
+from pathlib import Path
 
-# Import and register all test cases
-from .test_basic_transfer import (
+# Add package to path for absolute imports
+_current_dir = Path(__file__).resolve().parent
+_package_root = _current_dir.parent.parent.parent
+if str(_package_root) not in sys.path:
+    sys.path.insert(0, str(_package_root))
+
+from gravity_e2e.tests.test_registry import register_test
+
+# Import test functions using absolute imports
+# Basic transfer tests
+from gravity_e2e.tests.test_cases.test_basic_transfer import (
     test_eth_transfer,
     test_multiple_transfers,
     test_transfer_with_insufficient_funds,
 )
-from .test_contract_deploy import (
+
+# Contract tests
+from gravity_e2e.tests.test_cases.test_contract_deploy import (
     test_simple_storage_deploy,
     test_contract_with_constructor,
     test_contract_deployment_with_retry,
 )
-from .test_erc20 import (
+
+# ERC20 tests
+from gravity_e2e.tests.test_cases.test_erc20 import (
     test_erc20_deploy_and_transfer,
     test_erc20_batch_transfers,
     test_erc20_edge_cases,
 )
-from .test_cross_chain_deposit import test_cross_chain_gravity_deposit
-from .test_randomness_basic import (
+
+# Cross-chain tests
+from gravity_e2e.tests.test_cases.test_cross_chain_deposit import test_cross_chain_gravity_deposit
+
+# Randomness tests
+from gravity_e2e.tests.test_cases.test_randomness_basic import (
     test_randomness_basic_consumption,
     test_randomness_correctness,
 )
-from .test_randomness_advanced import (
+
+from gravity_e2e.tests.test_cases.test_randomness_advanced import (
     test_randomness_smoke,
     test_randomness_reconfiguration,
     test_randomness_multi_contract,
     test_randomness_api_completeness,
     test_randomness_stress,
 )
-from .test_epoch_consistency import test_epoch_consistency
-from .test_epoch_consistency_extended import test_epoch_consistency_extended
-from .test_validator_add_remove import test_validator_add_remove
-from .test_validator_add_remove_delayed import test_validator_add_remove_delayed
+
+# Epoch consistency tests
+from gravity_e2e.tests.test_cases.test_epoch_consistency import test_epoch_consistency
+from gravity_e2e.tests.test_cases.test_epoch_consistency_extended import test_epoch_consistency_extended
+
+# Validator tests
+from gravity_e2e.tests.test_cases.test_validator_add_remove import test_validator_add_remove
+from gravity_e2e.tests.test_cases.test_validator_add_remove_delayed import test_validator_add_remove_delayed
 
 
 # Register all tests with the registry
