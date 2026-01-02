@@ -57,13 +57,20 @@ from gravity_e2e.tests.test_cases.test_randomness_advanced import (
     test_randomness_stress,
 )
 
-# Epoch consistency tests
-from gravity_e2e.tests.test_cases.test_epoch_consistency import test_epoch_consistency
-from gravity_e2e.tests.test_cases.test_epoch_consistency_extended import test_epoch_consistency_extended
+# Epoch consistency tests (both scenarios now in one file)
+from gravity_e2e.tests.test_cases.test_epoch_consistency import (
+    test_epoch_consistency,
+    test_epoch_consistency_extended,
+    test_epoch_consistency_slow,
+    test_epoch_consistency_fast,
+)
 
-# Validator tests
-from gravity_e2e.tests.test_cases.test_validator_add_remove import test_validator_add_remove
-from gravity_e2e.tests.test_cases.test_validator_add_remove_delayed import test_validator_add_remove_delayed
+# Validator tests (both scenarios now in one file)
+from gravity_e2e.tests.test_cases.test_validator_add_remove import (
+    test_validator_add_remove,
+    test_validator_add_remove_immediate,
+    test_validator_add_remove_delayed,
+)
 
 
 # Register all tests with the registry
@@ -133,7 +140,10 @@ __all__ = [
     'test_randomness_stress',
     'test_epoch_consistency',
     'test_epoch_consistency_extended',
+    'test_epoch_consistency_slow',
+    'test_epoch_consistency_fast',
     'test_validator_add_remove',
+    'test_validator_add_remove_immediate',
     'test_validator_add_remove_delayed',
     # Default test list
     'DEFAULT_TESTS',
