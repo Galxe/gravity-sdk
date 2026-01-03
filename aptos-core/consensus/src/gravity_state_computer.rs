@@ -12,7 +12,7 @@ use block_buffer_manager::block_buffer_manager::BlockHashRef;
 use block_buffer_manager::get_block_buffer_manager;
 use gaptos::aptos_consensus::counters::{APTOS_COMMIT_BLOCKS, APTOS_EXECUTION_TXNS};
 use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_logger::info;
+use gaptos::aptos_logger::{info, debug};
 use gaptos::aptos_types::block_executor::partitioner::ExecutableBlock;
 use gaptos::aptos_types::{
     block_executor::config::BlockExecutorConfigFromOnchain, ledger_info::LedgerInfoWithSignatures,
@@ -41,12 +41,13 @@ impl ConsensusAdapterArgs {
 
 pub struct GravityBlockExecutor {
     inner: BlockExecutor,
+    consensus_db: Arc<ConsensusDB>,
     runtime: Runtime,
 }
 
 impl GravityBlockExecutor {
-    pub(crate) fn new(inner: BlockExecutor) -> Self {
-        Self { inner, runtime: gaptos::aptos_runtimes::spawn_named_runtime("tmp".into(), None) }
+    pub(crate) fn new(inner: BlockExecutor, consensus_db: Arc<ConsensusDB>) -> Self {
+        Self { inner, consensus_db, runtime: gaptos::aptos_runtimes::spawn_named_runtime("tmp".into(), None) }
     }
 }
 
@@ -132,6 +133,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         &self,
         block_ids: Vec<HashValue>,
         ledger_info_with_sigs: LedgerInfoWithSignatures,
+        randomness_data: Vec<(u64, Vec<u8>)>,
     ) -> ExecutorResult<()> {
         APTOS_COMMIT_BLOCKS.inc_by(block_ids.len() as u64);
         info!("commit blocks: {:?}", block_ids);
@@ -143,6 +145,14 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         let len = block_ids.len();
         assert!(!block_ids.is_empty(), "commit_ledger block_ids is empty");
         let epoch = ledger_info_with_sigs.ledger_info().epoch();
+        
+        // Persist randomness data
+        if !randomness_data.is_empty() {
+            self.consensus_db.put_randomness(&randomness_data)
+                .map_err(|e| anyhow::anyhow!("Failed to persist randomness: {:?}", e))?;
+            info!("Persisted randomness data: {:?}", randomness_data);
+        }
+        
         self.runtime.block_on(async move {
             let mut persist_notifiers = get_block_buffer_manager()
                 .set_commit_blocks(

@@ -179,7 +179,7 @@ impl<S: TShare, D: TAugmentedData> RandManager<S, D> {
         info!(rounds = rounds, "Processing rand-ready blocks.");
 
         for blocks in ready_blocks {
-            self.consensus_db.put_randomness(&blocks.ordered_blocks.iter().map(|b| (b.block().block_number().unwrap(), b.randomness().unwrap().randomness_cloned())).collect());
+            // self.consensus_db.put_randomness(&blocks.ordered_blocks.iter().map(|b| (b.block().block_number().unwrap(), b.randomness().unwrap().randomness_cloned())).collect());
             let _ = self.outgoing_blocks.unbounded_send(blocks);
         }
     }

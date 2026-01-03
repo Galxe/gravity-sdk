@@ -68,7 +68,8 @@ pub fn start_consensus(
         node_config.consensus.mempool_executed_txn_timeout_ms,
     ));
 
-    let g_executor = GravityBlockExecutor::new(BlockExecutor::new(aptos_db));
+    let g_executor = GravityBlockExecutor::new(BlockExecutor::new(aptos_db),
+         gravity_args.consensus_db.as_ref().unwrap().clone());
     let executor = Arc::new(g_executor);
     let execution_proxy = ExecutionProxy::new(
         executor.clone(),

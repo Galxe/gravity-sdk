@@ -387,10 +387,10 @@ impl BlockStore {
                 _ => panic!("Failed to construct recovery data after fast forward sync"),
             }
             .take();
+        storage.consensus_db().ledger_db.metadata_db().update_latest_ledger_info();
+
         self.rebuild(root, blocks, quorum_certs).await;
         
-        storage.consensus_db().ledger_db.metadata_db().set_latest_ledger_info(ledger_infos.last().unwrap().clone());
-
         if !ledger_infos.is_empty() && ledger_infos.last().unwrap().ledger_info().ends_epoch()
         {
             retriever
@@ -484,6 +484,7 @@ impl BlockStore {
             }
             storage.consensus_db().ledger_db.metadata_db().write_schemas(ledger_info_batch);
         }
+        storage.consensus_db().ledger_db.metadata_db().update_latest_ledger_info();
             // we do not need to update block_tree.highest_commit_decision_ledger_info here
             // because the block_tree is going to rebuild itself.
         blocks.reverse();
