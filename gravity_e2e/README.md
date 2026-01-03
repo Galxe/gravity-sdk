@@ -240,6 +240,8 @@ async def test_my_feature(run_helper, test_result):
 
 ## Writing New Tests
 
+> **📖 For a comprehensive guide on adding test cases, see [Adding Test Cases Guide](docs/adding_test_cases_guide.md)**
+
 ### 1. Create Test File
 
 Create a new Python file in `gravity_e2e/tests/test_cases/`:
@@ -563,7 +565,8 @@ gravity_e2e/
 │       └── erc20-test/           # Forge project for test contracts
 │
 ├── docs/                          # Documentation
-│   └── contract_tools_guide.md   # Contract testing tools guide
+│   ├── contract_tools_guide.md   # Contract testing tools guide
+│   └── adding_test_cases_guide.md # Guide for adding new test cases
 │
 ├── scripts/                       # Helper scripts
 │   └── extract_contract.py       # Extract bytecode/ABI from Forge builds
@@ -853,6 +856,7 @@ For issues, questions, or contributions:
 
 - [Gravity SDK Architecture](../book/docs/architecture.md)
 - [Contract Testing Tools Guide](docs/contract_tools_guide.md)
+- [Adding Test Cases Guide](docs/adding_test_cases_guide.md) - Comprehensive guide for adding new test cases to the framework
 - [Node Deployment Instructions](../deploy_utils/readme.md)
 
 ---

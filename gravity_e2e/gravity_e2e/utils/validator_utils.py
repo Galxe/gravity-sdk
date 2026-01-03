@@ -6,8 +6,7 @@ reducing duplication across different test scenarios.
 """
 import asyncio
 import logging
-import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -216,7 +215,7 @@ def stop_nodes(
             LOG.warning(f"Error stopping {node_name}: {e}")
 
 
-def execute_validator_join(
+async def execute_validator_join(
     gravity_cli_path: Path,
     rpc_url: str,
     params: ValidatorJoinParams,
@@ -236,6 +235,7 @@ def execute_validator_join(
 
     Raises:
         RuntimeError: If command fails
+        asyncio.TimeoutError: If command times out
     """
     join_cmd = [
         str(gravity_cli_path),
@@ -253,25 +253,37 @@ def execute_validator_join(
     LOG.info(f"Executing validator join command...")
     LOG.debug(f"Command: {' '.join(join_cmd)}")
 
-    result = subprocess.run(
-        join_cmd,
-        capture_output=True,
-        text=True,
-        timeout=timeout
-    )
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *join_cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
 
-    if result.returncode != 0:
-        LOG.error(f"Failed to join validator: {result.stderr}")
-        raise RuntimeError(f"Failed to join validator: {result.stderr}")
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(),
+            timeout=timeout
+        )
 
-    LOG.info("Validator join command executed successfully")
-    if result.stdout:
-        LOG.debug(f"Command output: {result.stdout}")
+        stdout_str = stdout.decode() if stdout else ""
+        stderr_str = stderr.decode() if stderr else ""
 
-    return result.stdout
+        if process.returncode != 0:
+            LOG.error(f"Failed to join validator: {stderr_str}")
+            raise RuntimeError(f"Failed to join validator: {stderr_str}")
+
+        LOG.info("Validator join command executed successfully")
+        if stdout_str:
+            LOG.debug(f"Command output: {stdout_str}")
+
+        return stdout_str
+
+    except asyncio.TimeoutError:
+        LOG.error(f"Validator join command timed out after {timeout} seconds")
+        raise
 
 
-def execute_validator_leave(
+async def execute_validator_leave(
     gravity_cli_path: Path,
     rpc_url: str,
     params: ValidatorJoinParams,
@@ -291,6 +303,7 @@ def execute_validator_leave(
 
     Raises:
         RuntimeError: If command fails
+        asyncio.TimeoutError: If command times out
     """
     leave_cmd = [
         str(gravity_cli_path),
@@ -303,22 +316,34 @@ def execute_validator_leave(
     LOG.info(f"Executing validator leave command...")
     LOG.debug(f"Command: {' '.join(leave_cmd)}")
 
-    result = subprocess.run(
-        leave_cmd,
-        capture_output=True,
-        text=True,
-        timeout=timeout
-    )
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *leave_cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
 
-    if result.returncode != 0:
-        LOG.error(f"Failed to leave validator: {result.stderr}")
-        raise RuntimeError(f"Failed to leave validator: {result.stderr}")
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(),
+            timeout=timeout
+        )
 
-    LOG.info("Validator leave command executed successfully")
-    if result.stdout:
-        LOG.debug(f"Command output: {result.stdout}")
+        stdout_str = stdout.decode() if stdout else ""
+        stderr_str = stderr.decode() if stderr else ""
 
-    return result.stdout
+        if process.returncode != 0:
+            LOG.error(f"Failed to leave validator: {stderr_str}")
+            raise RuntimeError(f"Failed to leave validator: {stderr_str}")
+
+        LOG.info("Validator leave command executed successfully")
+        if stdout_str:
+            LOG.debug(f"Command output: {stdout_str}")
+
+        return stdout_str
+
+    except asyncio.TimeoutError:
+        LOG.error(f"Validator leave command timed out after {timeout} seconds")
+        raise
 
 
 @dataclass
@@ -382,7 +407,7 @@ async def run_validator_add_remove_test(
 
         # Step 4: Add validator using gravity_cli
         LOG.info("\n[Step 4] Adding validator (node3) using gravity_cli...")
-        execute_validator_join(
+        await execute_validator_join(
             node_manager.gravity_cli_path,
             config.rpc_url,
             validator_params
@@ -415,7 +440,7 @@ async def run_validator_add_remove_test(
         # Remove validator
         step_num = 9 if delayed_node3_start else 7
         LOG.info(f"\n[Step {step_num}] Removing validator (node3) using gravity_cli...")
-        execute_validator_leave(
+        await execute_validator_leave(
             node_manager.gravity_cli_path,
             config.rpc_url,
             validator_params

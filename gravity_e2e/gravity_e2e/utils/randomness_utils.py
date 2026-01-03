@@ -438,7 +438,7 @@ async def get_dkg_status_safe(http_client) -> Dict[str, Any]:
         }
 
 
-def get_http_url_from_rpc(rpc_url: str, http_port: int = 1998) -> str:
+def get_http_url_from_rpc(rpc_url: str, http_port: int = 1024) -> str:
     """
     Derive HTTP API URL from RPC URL.
 
