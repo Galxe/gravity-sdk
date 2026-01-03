@@ -1,16 +1,24 @@
 """
 Randomness testing utility tools
-Includes RandomDice contract helper class and randomness verification tools
+
+Includes:
+- RandomDiceHelper: Contract helper class for RandomDice operations
+- RandomnessVerifier: Verification tools for randomness correctness
+- deploy_random_dice: Convenience function for deploying RandomDice contracts
+- DKG status checking utilities
 """
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING
 from eth_account import Account
 from eth_utils import to_checksum_address
 
 from ..core.client.gravity_client import GravityClient
 from .contract_utils import ContractUtils
+
+if TYPE_CHECKING:
+    from ..helpers.test_helpers import RunHelper
 
 LOG = logging.getLogger(__name__)
 
@@ -322,11 +330,129 @@ class RandomnessVerifier:
         difficulty = int(difficulty_hex, 16)
         
         match = (seed == difficulty)
-        
+
         if match:
-            LOG.info(f"✅ Seed matches: contract={seed}, block={difficulty}")
+            LOG.info(f"Seed matches: contract={seed}, block={difficulty}")
         else:
-            LOG.warning(f"❌ Seed mismatch: contract={seed}, block={difficulty}")
-        
+            LOG.warning(f"Seed mismatch: contract={seed}, block={difficulty}")
+
         return match
+
+
+async def deploy_random_dice(
+    run_helper: "RunHelper",
+    deployer: Dict[str, Any],
+    gas_limit: int = 500000
+) -> RandomDiceHelper:
+    """
+    Deploy RandomDice contract and return helper instance.
+
+    This is a convenience function that handles the full deployment process:
+    1. Load contract bytecode
+    2. Build and sign deployment transaction
+    3. Wait for deployment confirmation
+    4. Return configured helper instance
+
+    Args:
+        run_helper: Test helper with client and account management
+        deployer: Deployer account dict with 'address' and 'private_key'
+        gas_limit: Gas limit for deployment transaction
+
+    Returns:
+        RandomDiceHelper instance for the deployed contract
+
+    Raises:
+        FileNotFoundError: If contract bytecode not found
+        RuntimeError: If deployment fails
+    """
+    # Load bytecode
+    bytecode = RandomDiceHelper.load_bytecode()
+
+    # Get deployment parameters
+    nonce = await run_helper.client.get_transaction_count(deployer["address"])
+    gas_price = await run_helper.client.get_gas_price()
+    chain_id = await run_helper.client.get_chain_id()
+
+    # Build deployment transaction
+    deploy_tx = {
+        "data": bytecode,
+        "gas": hex(gas_limit),
+        "gasPrice": hex(gas_price),
+        "nonce": hex(nonce),
+        "chainId": hex(chain_id),
+        "value": "0x0"
+    }
+
+    # Sign and send
+    private_key = deployer["private_key"]
+    if private_key.startswith("0x"):
+        private_key = private_key[2:]
+
+    signed_deploy = Account.sign_transaction(deploy_tx, private_key)
+    deploy_tx_hash = await run_helper.client.send_raw_transaction(signed_deploy.raw_transaction)
+
+    LOG.info(f"Deploy transaction sent: {deploy_tx_hash}")
+
+    # Wait for deployment
+    deploy_receipt = await run_helper.client.wait_for_transaction_receipt(deploy_tx_hash, timeout=60)
+
+    if deploy_receipt.get("status") != "0x1":
+        raise RuntimeError(f"Contract deployment failed: {deploy_receipt}")
+
+    contract_address = deploy_receipt.get("contractAddress")
+    if not contract_address:
+        raise RuntimeError("No contract address in deployment receipt")
+
+    LOG.info(f"Contract deployed at: {contract_address}")
+
+    return RandomDiceHelper(run_helper.client, contract_address)
+
+
+async def get_dkg_status_safe(http_client) -> Dict[str, Any]:
+    """
+    Get DKG status with error handling.
+
+    Returns default values if DKG status endpoint fails.
+
+    Args:
+        http_client: GravityHttpClient instance
+
+    Returns:
+        DKG status dict with epoch, round, block_number, participating_nodes
+    """
+    try:
+        dkg_status = await http_client.get_dkg_status()
+        LOG.info(f"DKG Status:")
+        LOG.info(f"  Epoch: {dkg_status['epoch']}")
+        LOG.info(f"  Round: {dkg_status['round']}")
+        LOG.info(f"  Block: {dkg_status['block_number']}")
+        LOG.info(f"  Nodes: {dkg_status['participating_nodes']}")
+        return dkg_status
+    except Exception as e:
+        LOG.warning(f"Failed to get DKG status: {e}")
+        return {
+            "epoch": 0,
+            "round": 0,
+            "block_number": 0,
+            "participating_nodes": 0
+        }
+
+
+def get_http_url_from_rpc(rpc_url: str, http_port: int = 1024) -> str:
+    """
+    Derive HTTP API URL from RPC URL.
+
+    Converts an RPC URL (e.g., http://127.0.0.1:8545) to an HTTP API URL
+    (e.g., http://127.0.0.1:1998).
+
+    Args:
+        rpc_url: RPC URL
+        http_port: HTTP API port (default: 1998)
+
+    Returns:
+        HTTP API URL
+    """
+    # Replace port in URL
+    import re
+    return re.sub(r':\d+$', f':{http_port}', rpc_url.rstrip('/'))
 

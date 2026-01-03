@@ -1,3 +1,29 @@
+"""
+Gravity Node Connector - Multi-node connection management
+
+This module provides connection management for multiple Gravity nodes in a test
+environment, supporting cluster configurations and health monitoring.
+
+Design Notes:
+- Manages connections to multiple nodes simultaneously
+- Supports validator and VFN (validator full node) configurations
+- Provides automatic health checking and reconnection
+- Async context manager support for resource cleanup
+- Type-safe node information with dataclasses
+- Cluster-based node organization
+
+Usage:
+    async with NodeConnector("configs/nodes.json") as connector:
+        # Connect to all nodes
+        results = await connector.connect_all()
+
+        # Get client for specific node
+        client = connector.get_client("validator1")
+
+        # Perform health check
+        status = await connector.health_check()
+"""
+
 import asyncio
 import json
 import logging
@@ -7,7 +33,7 @@ from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 
 from .client.gravity_client import GravityClient
-from ..utils.exceptions import ConnectionError, NodeError
+from ..utils.exceptions import GravityConnectionError, NodeError
 from ..utils.common import format_timestamp
 
 LOG = logging.getLogger(__name__)
@@ -15,7 +41,27 @@ LOG = logging.getLogger(__name__)
 
 @dataclass
 class NodeInfo:
-    """Node information"""
+    """
+    Complete information about a Gravity node.
+
+    This dataclass encapsulates all necessary information about a node in the
+    Gravity network, including connection details, role, and capabilities.
+
+    Attributes:
+        node_id: Unique identifier for the node
+        type: Node type - "validator" or "vfn" (validator full node)
+        role: Node role - "primary", "secondary", or "read_only"
+        host: Hostname or IP address of the node
+        rpc_port: JSON-RPC API port
+        metrics_port: Prometheus metrics port
+        ws_port: WebSocket port (optional)
+        p2p_port: P2P networking port (optional)
+        description: Human-readable description of the node
+        connected_to: For VFNs, the validator they're connected to
+        capabilities: List of supported capabilities/features
+        rpc_url: Auto-generated RPC URL (http://host:port)
+        metrics_url: Auto-generated metrics URL (http://host:port/metrics)
+    """
     node_id: str
     type: str  # validator, vfn
     role: str  # primary, secondary, read_only
@@ -29,15 +75,40 @@ class NodeInfo:
     capabilities: List[str] = field(default_factory=list)  # Node capabilities list
     rpc_url: Optional[str] = field(init=False)  # Auto calculated
     metrics_url: Optional[str] = field(init=False)  # Auto calculated
-    
+
     def __post_init__(self):
+        """Auto-generate URLs from host and port information."""
         # Auto generate RPC URL
         self.rpc_url = f"http://{self.host}:{self.rpc_port}"
         self.metrics_url = f"http://{self.host}:{self.metrics_port}/metrics"
 
 
 class NodeConnector:
-    """Node connector - connects to deployed nodes"""
+    """
+    Manages connections to multiple Gravity nodes.
+
+    This class provides a unified interface for connecting to, managing, and
+    monitoring multiple Gravity nodes in a test environment. It supports both
+    individual node operations and cluster-wide operations.
+
+    Features:
+    - Connection pooling and management
+    - Automatic health checking
+    - Cluster-based node organization
+    - Async context manager support
+    - Reconnection handling
+
+    Example:
+        # Load nodes from configuration
+        connector = NodeConnector("configs/nodes.json")
+
+        # Connect to specific nodes
+        results = await connector.connect_all(target_nodes=["validator1", "vfn1"])
+
+        # Use a specific client
+        client = connector.get_client("validator1")
+        block_number = await client.get_block_number()
+    """
     
     def __init__(self, nodes_config_path: str = "configs/nodes.json"):
         self.nodes_config_path = nodes_config_path
@@ -232,24 +303,25 @@ class NodeConnector:
         
     async def wait_for_ready(self, node_id: str, timeout: int = 60, check_interval: float = 2.0):
         """Wait for specific node to be ready
-        
+
         Args:
             node_id: Node ID
             timeout: Timeout in seconds
             check_interval: Check interval in seconds
-            
+
         Returns:
             bool: Whether node is ready
-            
+
         Raises:
             NodeError: Node not found
-            ConnectionError: Wait timeout
+            GravityConnectionError: Wait timeout
         """
         if node_id not in self.nodes:
             raise NodeError(f"Node {node_id} not found in config")
-            
+
         start_time = time.time()
-        
+        last_error = None
+
         while time.time() - start_time < timeout:
             try:
                 async with GravityClient(self.nodes[node_id].rpc_url, node_id) as client:
@@ -261,12 +333,13 @@ class NodeConnector:
                     LOG.info(f"Node {node_id} is ready at block {block_number}")
                     return True
             except Exception as e:
+                last_error = e
                 LOG.debug(f"Node {node_id} not ready yet: {e}")
                 await asyncio.sleep(check_interval)
-                
-        raise ConnectionError(
+
+        raise GravityConnectionError(
             f"Node {node_id} not ready within {timeout}s. "
-            f"Last error: {str(e)}"
+            f"Last error: {str(last_error) if last_error else 'Unknown'}"
         )
         
     async def close_all(self):
