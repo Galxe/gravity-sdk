@@ -150,7 +150,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         if !randomness_data.is_empty() {
             self.consensus_db.put_randomness(&randomness_data)
                 .map_err(|e| anyhow::anyhow!("Failed to persist randomness: {:?}", e))?;
-            info!("Persisted randomness data: {:?}", randomness_data);
+            debug!("Persisted randomness data: {:?}", randomness_data);
         }
         
         self.runtime.block_on(async move {
