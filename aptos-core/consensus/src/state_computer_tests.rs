@@ -134,7 +134,8 @@ impl BlockExecutorTrait for DummyBlockExecutor {
     
     fn commit_ledger(&self,
         block_ids: Vec<HashValue>, 
-        ledger_info_with_sigs: LedgerInfoWithSignatures) -> ExecutorResult<()> {
+        ledger_info_with_sigs: LedgerInfoWithSignatures,
+        randomness_data: Vec<(u64, Vec<u8>)>) -> ExecutorResult<()> {
         Ok(())
     }
 }

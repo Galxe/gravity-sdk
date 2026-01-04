@@ -217,13 +217,25 @@ impl BlockStore {
         RECOVERY_GAUGE.set_with(&[], 1);
         // reproduce the same batches (important for the commit phase)
         let mut certs = self.inner.read().get_all_quorum_certs_with_commit_info();
+        let last_ledger_info = self.storage.consensus_db().ledger_db.metadata_db().get_latest_ledger_info();
+        info!("recover blocks, last_ledger_info: {:?}", last_ledger_info);
         certs.sort_unstable_by_key(|qc| qc.commit_info().round());
         for qc in certs {
             if qc.commit_info().round() > self.commit_root().round() {
-                info!("sending qc {} to execution, current commit round {}", qc.commit_info().round(), self.commit_root().round());
-                if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info(), true).await {
-                    error!("Error in try-committing blocks. {}", e.to_string());
-                    break;
+                if let Some(last_ledger_info) = &last_ledger_info {
+                    if last_ledger_info.ledger_info().epoch() == qc.commit_info().epoch()
+                        && qc.commit_info().round() <= last_ledger_info.commit_info().round()
+                    {
+                        info!(
+                            "sending qc {} to execution, current commit round {}",
+                            qc.commit_info().round(),
+                            self.commit_root().round()
+                        );
+                        if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info(), true).await {
+                            error!("Error in try-committing blocks. {}", e.to_string());
+                            break;
+                        }
+                    }
                 }
             }
         }

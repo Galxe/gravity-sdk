@@ -719,9 +719,11 @@ impl PipelineBuilder {
         let mut block_ids = vec![];
         block_ids.push(block.id());
         let ledger_info_with_sigs_clone = ledger_info_with_sigs.clone();
+        // TODO: Collect randomness data from block
+        let randomness_data = vec![];
         tokio::task::spawn_blocking(move || {
             executor
-                .commit_ledger(block_ids, ledger_info_with_sigs_clone)
+                .commit_ledger(block_ids, ledger_info_with_sigs_clone, randomness_data)
                 .map_err(anyhow::Error::from)
         })
         .await
