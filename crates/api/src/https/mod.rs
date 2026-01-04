@@ -74,26 +74,31 @@ impl HttpsServer {
         };
 
         let get_dkg_status_lambda = |State(state): State<Arc<DkgState>>| async move {
-            state.get_dkg_status().await
+            state.get_dkg_status()
         };
+
+        let get_latest_ledger_info_lambda = |State(state): State<Arc<DkgState>>| async move {
+            consensus::get_latest_ledger_info(state)
+        };
+
         let get_randomness_lambda = |State(state): State<Arc<DkgState>>, Path(block_number): Path<u64>| async move {
-            state.get_randomness(block_number).await
+            state.get_randomness(block_number)
         };
 
         let get_ledger_info_by_epoch_lambda = |State(state): State<Arc<DkgState>>, Path(epoch): Path<u64>| async move {
-            consensus::get_ledger_info_by_epoch(State(state), Path(epoch)).await
+            consensus::get_ledger_info_by_epoch(State(state), Path(epoch))
         };
 
         let get_block_lambda = |State(state): State<Arc<DkgState>>, Path((epoch, round)): Path<(u64, u64)>| async move {
-            consensus::get_block(State(state), Path((epoch, round))).await
+            consensus::get_block(State(state), Path((epoch, round)))
         };
 
         let get_qc_lambda = |State(state): State<Arc<DkgState>>, Path((epoch, round)): Path<(u64, u64)>| async move {
-            consensus::get_qc(State(state), Path((epoch, round))).await
+            consensus::get_qc(State(state), Path((epoch, round)))
         };
 
         let get_validator_count_lambda = |State(state): State<Arc<DkgState>>, Path(epoch): Path<u64>| async move {
-            consensus::get_validator_count_by_epoch(State(state), Path(epoch)).await
+            consensus::get_validator_count_by_epoch(State(state), Path(epoch))
         };
 
         let dkg_state_arc = Arc::new(dkg_state);
@@ -104,6 +109,7 @@ impl HttpsServer {
         let http_routes = Router::new()
             .route("/dkg/status", get(get_dkg_status_lambda))
             .route("/dkg/randomness/:block_number", get(get_randomness_lambda))
+            .route("/consensus/latest_ledger_info", get(get_latest_ledger_info_lambda))
             .route("/consensus/ledger_info/:epoch", get(get_ledger_info_by_epoch_lambda))
             .route("/consensus/block/:epoch/:round", get(get_block_lambda))
             .route("/consensus/qc/:epoch/:round", get(get_qc_lambda))
