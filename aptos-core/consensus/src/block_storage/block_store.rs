@@ -221,14 +221,21 @@ impl BlockStore {
         info!("recover blocks, last_ledger_info: {:?}", last_ledger_info);
         certs.sort_unstable_by_key(|qc| qc.commit_info().round());
         for qc in certs {
-            if qc.commit_info().round() > self.commit_root().round() 
-                && last_ledger_info.is_some() 
-                && last_ledger_info.as_ref().unwrap().ledger_info().epoch() == qc.commit_info().epoch()
-                && qc.commit_info().round() <= last_ledger_info.as_ref().unwrap().commit_info().round() {
-                info!("sending qc {} to execution, current commit round {}", qc.commit_info().round(), self.commit_root().round());
-                if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info(), true).await {
-                    error!("Error in try-committing blocks. {}", e.to_string());
-                    break;
+            if qc.commit_info().round() > self.commit_root().round() {
+                if let Some(last_ledger_info) = &last_ledger_info {
+                    if last_ledger_info.ledger_info().epoch() == qc.commit_info().epoch()
+                        && qc.commit_info().round() <= last_ledger_info.commit_info().round()
+                    {
+                        info!(
+                            "sending qc {} to execution, current commit round {}",
+                            qc.commit_info().round(),
+                            self.commit_root().round()
+                        );
+                        if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info(), true).await {
+                            error!("Error in try-committing blocks. {}", e.to_string());
+                            break;
+                        }
+                    }
                 }
             }
         }
