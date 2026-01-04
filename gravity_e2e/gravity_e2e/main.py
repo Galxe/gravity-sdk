@@ -1,112 +1,84 @@
 #!/usr/bin/env python3
+"""
+Gravity E2E Test Framework - Main Entry Point
+
+This module provides the CLI interface for running E2E tests against
+the Gravity blockchain network.
+"""
 import argparse
 import asyncio
 import json
 import logging
 import sys
-import os
 from pathlib import Path
 
 from .core.node_connector import NodeConnector
 from .helpers.account_manager import TestAccountManager
 from .helpers.test_helpers import RunHelper
 from .utils.logging import setup_logging
-from .tests.test_cases.test_basic_transfer import test_eth_transfer
-from .tests.test_cases.test_contract_deploy import test_simple_storage_deploy
-from .tests.test_cases.test_erc20 import test_erc20_deploy_and_transfer
-from .tests.test_cases.test_cross_chain_deposit import test_cross_chain_gravity_deposit
-from .tests.test_cases.test_randomness_basic import (
-    test_randomness_basic_consumption,
-    test_randomness_correctness
+
+# Import test cases to trigger registration
+from .tests import test_cases  # noqa: F401
+from .tests.test_registry import (
+    get_test,
+    get_tests_to_run,
+    get_available_choices,
+    is_self_managed,
+    list_suites,
+    list_tests,
 )
-from .tests.test_cases.test_randomness_advanced import (
-    test_randomness_smoke,
-    test_randomness_reconfiguration,
-    test_randomness_multi_contract,
-    test_randomness_api_completeness,
-    test_randomness_stress
-)
-from .tests.test_cases.test_epoch_consistency import test_epoch_consistency
-from .tests.test_cases.test_epoch_consistency_extended import test_epoch_consistency_extended
-from .tests.test_cases.test_validator_add_remove import test_validator_add_remove
-from .tests.test_cases.test_validator_add_remove_delayed import test_validator_add_remove_delayed
+from .tests.test_cases import DEFAULT_TESTS
 
 LOG = logging.getLogger(__name__)
 
 
-async def run_test_module(module_name: str, test_helper: RunHelper, test_results: list):
-    """Run test module"""
+async def run_test(test_name: str, test_helper: RunHelper) -> dict:
+    """
+    Run a single test by name.
+    
+    Args:
+        test_name: The registered test name
+        test_helper: RunHelper instance for the test
+    
+    Returns:
+        Test result dictionary or TestResult object
+    """
+    test_func = get_test(test_name)
+    if not test_func:
+        LOG.error(f"Test '{test_name}' not found in registry")
+        return {
+            "test_name": test_name,
+            "success": False,
+            "error": f"Test '{test_name}' not found"
+        }
+    
     try:
-        if module_name == "cases.basic_transfer":
-            result = await test_eth_transfer(run_helper=test_helper)
-            test_results.append(result)
-        elif module_name == "cases.contract":
-            result = await test_simple_storage_deploy(run_helper=test_helper)
-            test_results.append(result)
-        elif module_name == "cases.erc20":
-            result = await test_erc20_deploy_and_transfer(run_helper=test_helper)
-            test_results.append(result)
-        elif module_name == "cases.cross_chain_deposit":
-            result = await test_cross_chain_gravity_deposit(run_helper=test_helper)
-        elif module_name == "cases.randomness_basic":
-            result = await test_randomness_basic_consumption(run_helper=test_helper)
-            test_results.append(result)
-        elif module_name == "cases.randomness_correctness":
-            result = await test_randomness_correctness(run_helper=test_helper)
-            test_results.append(result)
-        elif module_name == "cases.randomness_smoke":
-            result = await test_randomness_smoke(run_helper=test_helper)
-            test_results.append(result)
-        elif module_name == "cases.randomness_reconfiguration":
-            result = await test_randomness_reconfiguration(run_helper=test_helper)
-            test_results.append(result)
-        elif module_name == "cases.randomness_multi_contract":
-            result = await test_randomness_multi_contract(run_helper=test_helper)
-            test_results.append(result)
-        elif module_name == "cases.randomness_api_completeness":
-            result = await test_randomness_api_completeness(run_helper=test_helper)
-            test_results.append(result)
-        elif module_name == "cases.randomness_stress":
-            result = await test_randomness_stress(run_helper=test_helper)
-            test_results.append(result)
-        elif module_name == "cases.epoch_consistency":
-            result = await test_epoch_consistency(run_helper=test_helper)
-            test_results.append(result)
-        elif module_name == "cases.epoch_consistency_extended":
-            result = await test_epoch_consistency_extended(run_helper=test_helper)
-            test_results.append(result)
-        elif module_name == "cases.validator_add_remove":
-            result = await test_validator_add_remove(run_helper=test_helper)
-            test_results.append(result)
-        elif module_name == "cases.validator_add_remove_delayed":
-            result = await test_validator_add_remove_delayed(run_helper=test_helper)
-            test_results.append(result)
-        else:
-            LOG.warning(f"Unknown test module: {module_name}")
+        LOG.info(f"Running test: {test_name}")
+        result = await test_func(run_helper=test_helper)
+        return result
     except Exception as e:
-        LOG.error(f"Test module {module_name} failed: {e}", exc_info=True)
-        test_results.append({
-            "test_name": module_name,
+        LOG.error(f"Test {test_name} failed: {e}", exc_info=True)
+        return {
+            "test_name": test_name,
             "success": False,
             "error": str(e)
-        })
+        }
 
 
 async def main():
     """Main execution flow"""
+    # Build available choices dynamically
+    available_choices = ["all"] + list(set(list_suites() + list_tests()))
+    
     parser = argparse.ArgumentParser(description="Gravity Node E2E Test Framework")
     parser.add_argument("--nodes-config", default="configs/nodes.json",
                        help="Path to nodes configuration file")
     parser.add_argument("--accounts-config", default="configs/test_accounts.json",
                        help="Path to accounts configuration file")
     parser.add_argument("--test-suite", default="all",
-                       choices=["all", "basic", "contract", "erc20", "cross_chain_deposit", "block", "network",
-                               "randomness", "randomness_basic", "randomness_correctness",
-                               "randomness_smoke", "randomness_reconfiguration",
-                               "randomness_multi_contract", "randomness_api_completeness",
-                               "randomness_stress", "epoch_consistency", "epoch_consistency_extended",
-                               "validator_add_remove", "validator_add_remove_delayed"],
-                       help="Test suite to run")
+                       help=f"Test suite to run. Available: {', '.join(available_choices[:10])}...")
+    parser.add_argument("--list-tests", action="store_true",
+                       help="List all available tests and suites")
     parser.add_argument("--cluster", default=None,
                        help="Cluster name to test (defined in nodes.json)")
     parser.add_argument("--node-id", default=None,
@@ -127,102 +99,115 @@ async def main():
     # Setup logging
     setup_logging(args.log_level, args.log_file)
     
+    # Handle --list-tests
+    if args.list_tests:
+        print("\nAvailable Test Suites:")
+        for suite in sorted(list_suites()):
+            print(f"  - {suite}")
+        print("\nAvailable Individual Tests:")
+        for test in sorted(list_tests()):
+            managed = " (self-managed)" if is_self_managed(test) else ""
+            print(f"  - {test}{managed}")
+        return 0
+    
     # Create output directory
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # 1. Initialize node connector
+    # Get tests to run
+    tests_to_run = get_tests_to_run(args.test_suite)
+    
+    # Handle special case for "all" - use default tests
+    if args.test_suite == "all":
+        tests_to_run = DEFAULT_TESTS
+    
+    if not tests_to_run:
+        LOG.error(f"No tests found for suite '{args.test_suite}'")
+        LOG.info(f"Available suites: {list_suites()}")
+        LOG.info(f"Available tests: {list_tests()}")
+        return 1
+    
+    LOG.info(f"Tests to run: {tests_to_run}")
+    
+    # Check if any tests are self-managed
+    has_self_managed = any(is_self_managed(t) for t in tests_to_run)
+    all_self_managed = all(is_self_managed(t) for t in tests_to_run)
+    
+    test_results = []
+    
     try:
         async with NodeConnector(args.nodes_config) as node_connector:
-            # 2. Determine nodes to test
+            # Determine nodes to test
             test_nodes = []
             
-            if args.cluster:
-                # Use predefined cluster
-                try:
-                    test_nodes = node_connector.get_cluster_nodes(args.cluster)
-                    LOG.info(f"Testing cluster '{args.cluster}' with nodes: {test_nodes}")
-                except Exception as e:
-                    LOG.error(f"Failed to load cluster '{args.cluster}': {e}")
-                    sys.exit(1)
-            elif args.node_id:
-                # Use specified node IDs
-                test_nodes = [n.strip() for n in args.node_id.split(",")]
-                LOG.info(f"Testing specified nodes: {test_nodes}")
-            elif args.node_type:
-                # Use all nodes of specified type
-                test_nodes = node_connector.get_nodes_by_type(args.node_type)
-                LOG.info(f"Testing all {args.node_type} nodes: {test_nodes}")
-            else:
-                # Default: test all nodes
-                test_nodes = node_connector.list_nodes()
-                LOG.info(f"Testing all nodes: {test_nodes}")
-            
-            # 3. Connect to specified nodes
-            LOG.info("Connecting to nodes...")
-            connection_results = await node_connector.connect_all(target_nodes=test_nodes)
-            
-            failed_connections = [node_id for node_id, success in connection_results.items() if not success]
-            if failed_connections:
-                LOG.error(f"Failed to connect to nodes: {failed_connections}")
-                # Continue with successfully connected nodes
+            if not all_self_managed:
+                if args.cluster:
+                    try:
+                        test_nodes = node_connector.get_cluster_nodes(args.cluster)
+                        LOG.info(f"Testing cluster '{args.cluster}' with nodes: {test_nodes}")
+                    except Exception as e:
+                        LOG.error(f"Failed to load cluster '{args.cluster}': {e}")
+                        sys.exit(1)
+                elif args.node_id:
+                    test_nodes = [n.strip() for n in args.node_id.split(",")]
+                    LOG.info(f"Testing specified nodes: {test_nodes}")
+                elif args.node_type:
+                    test_nodes = node_connector.get_nodes_by_type(args.node_type)
+                    LOG.info(f"Testing all {args.node_type} nodes: {test_nodes}")
+                else:
+                    test_nodes = node_connector.list_nodes()
+                    LOG.info(f"Testing all nodes: {test_nodes}")
                 
-            # 4. Initialize account manager
+                # Connect to specified nodes
+                LOG.info("Connecting to nodes...")
+                connection_results = await node_connector.connect_all(target_nodes=test_nodes)
+                
+                failed_connections = [node_id for node_id, success in connection_results.items() if not success]
+                if failed_connections:
+                    LOG.error(f"Failed to connect to nodes: {failed_connections}")
+            
+            # Initialize account manager
             try:
                 account_manager = TestAccountManager(args.accounts_config)
             except Exception as e:
                 LOG.error(f"Failed to load account configuration: {e}")
                 sys.exit(1)
             
-            # 5. Perform health check
-            LOG.info("Performing health check...")
-            health_status = await node_connector.health_check()
-            LOG.info("Node health status:")
-            for node_id, status in health_status.items():
-                if status["status"] == "healthy":
-                    LOG.info(f"  {node_id}: OK (block {status['block_number']})")
-                else:
-                    LOG.error(f"  {node_id}: {status['status']} - {status.get('error', 'Unknown error')}")
+            # Perform health check if we have connected nodes
+            if not all_self_managed:
+                LOG.info("Performing health check...")
+                health_status = await node_connector.health_check()
+                LOG.info("Node health status:")
+                for node_id, status in health_status.items():
+                    if status["status"] == "healthy":
+                        LOG.info(f"  {node_id}: OK (block {status['block_number']})")
+                    else:
+                        LOG.error(f"  {node_id}: {status['status']} - {status.get('error', 'Unknown error')}")
             
-            # 6. Execute test cases
-            test_results = []
+            # Run self-managed tests first (they don't need pre-connected nodes)
+            self_managed_tests = [t for t in tests_to_run if is_self_managed(t)]
+            regular_tests = [t for t in tests_to_run if not is_self_managed(t)]
             
-            # Check if test suite manages its own nodes (doesn't need pre-existing connections)
-            self_managed_tests = ["epoch_consistency", "epoch_consistency_extended", "validator_add_remove", "validator_add_remove_delayed"]
-            is_self_managed = args.test_suite in self_managed_tests
-            
-            if is_self_managed:
-                # For self-managed tests, create a dummy client and run test once
-                LOG.info(f"Test suite '{args.test_suite}' manages its own nodes, skipping node connection requirement")
-                dummy_client = node_connector.get_client(list(node_connector.clients.keys())[0]) if node_connector.clients else None
-                if not dummy_client:
-                    # Create a dummy client if no nodes are connected
-                    from .core.client.gravity_client import GravityClient
-                    dummy_client = GravityClient("http://127.0.0.1:8545", "dummy")
+            # Run self-managed tests
+            if self_managed_tests:
+                LOG.info(f"Running {len(self_managed_tests)} self-managed tests...")
+                
+                # Create a dummy client for self-managed tests
+                from .core.client.gravity_client import GravityClient
+                dummy_client = GravityClient("http://127.0.0.1:8545", "dummy")
                 
                 test_helper = RunHelper(
                     client=dummy_client,
                     working_dir=str(output_dir),
-                    faucet_account=account_manager.get_faucet() if account_manager else None
+                    faucet_account=account_manager.get_faucet()
                 )
                 
-                # Determine test modules to run
-                if args.test_suite == "epoch_consistency":
-                    test_modules = ["cases.epoch_consistency"]
-                elif args.test_suite == "epoch_consistency_extended":
-                    test_modules = ["cases.epoch_consistency_extended"]
-                elif args.test_suite == "validator_add_remove":
-                    test_modules = ["cases.validator_add_remove"]
-                elif args.test_suite == "validator_add_remove_delayed":
-                    test_modules = ["cases.validator_add_remove_delayed"]
-                else:
-                    test_modules = []
-                
-                # Execute tests
-                for module in test_modules:
-                    await run_test_module(module, test_helper, test_results)
-            else:
-                # Use successfully connected nodes
+                for test_name in self_managed_tests:
+                    result = await run_test(test_name, test_helper)
+                    test_results.append(result)
+            
+            # Run regular tests on connected nodes
+            if regular_tests:
                 connected_nodes = list(node_connector.clients.keys())
                 
                 if not connected_nodes:
@@ -232,72 +217,21 @@ async def main():
                 for node_id in connected_nodes:
                     client = node_connector.get_client(node_id)
                     
-                    # Initialize test helper
                     test_helper = RunHelper(
                         client=client,
                         working_dir=str(output_dir),
                         faucet_account=account_manager.get_faucet()
                     )
                     
-                    # Determine test modules to run
-                    if args.test_suite == "all":
-                        test_modules = [
-                            "cases.basic_transfer",
-                            "cases.contract",
-                            "cases.erc20",
-                            "cases.cross_chain_deposit"
-                        ]
-                    elif args.test_suite == "basic":
-                        test_modules = ["cases.basic_transfer"]
-                    elif args.test_suite == "contract":
-                        test_modules = ["cases.contract"]
-                    elif args.test_suite == "erc20":
-                        test_modules = ["cases.erc20"]
-                    elif args.test_suite == "cross_chain_deposit":
-                        test_modules = ["cases.cross_chain_deposit"]
-                    elif args.test_suite == "randomness":
-                        test_modules = [
-                            "cases.randomness_smoke",
-                            "cases.randomness_basic",
-                            "cases.randomness_correctness",
-                            "cases.randomness_reconfiguration",
-                            "cases.randomness_multi_contract",
-                            "cases.randomness_api_completeness"
-                        ]
-                    elif args.test_suite == "randomness_basic":
-                        test_modules = ["cases.randomness_basic"]
-                    elif args.test_suite == "randomness_correctness":
-                        test_modules = ["cases.randomness_correctness"]
-                    elif args.test_suite == "randomness_smoke":
-                        test_modules = ["cases.randomness_smoke"]
-                    elif args.test_suite == "randomness_reconfiguration":
-                        test_modules = ["cases.randomness_reconfiguration"]
-                    elif args.test_suite == "randomness_multi_contract":
-                        test_modules = ["cases.randomness_multi_contract"]
-                    elif args.test_suite == "randomness_api_completeness":
-                        test_modules = ["cases.randomness_api_completeness"]
-                    elif args.test_suite == "randomness_stress":
-                        test_modules = ["cases.randomness_stress"]
-                    elif args.test_suite == "epoch_consistency":
-                        test_modules = ["cases.epoch_consistency"]
-                    elif args.test_suite == "epoch_consistency_extended":
-                        test_modules = ["cases.epoch_consistency_extended"]
-                    elif args.test_suite == "validator_add_remove":
-                        test_modules = ["cases.validator_add_remove"]
-                    elif args.test_suite == "validator_add_remove_delayed":
-                        test_modules = ["cases.validator_add_remove_delayed"]
-                    else:
-                        test_modules = [f"cases.{args.test_suite}"]
+                    LOG.info(f"Running {len(regular_tests)} tests on node {node_id}")
                     
-                    LOG.info(f"Running tests on node {node_id}: {test_modules}")
-                    
-                    # Execute tests
-                    for module in test_modules:
-                        await run_test_module(module, test_helper, test_results)
-                    
-            # 7. Generate test report
+                    for test_name in regular_tests:
+                        result = await run_test(test_name, test_helper)
+                        test_results.append(result)
+            
+            # Generate test report
             total_tests = len(test_results)
-            passed_tests = sum(1 for r in test_results if (getattr(r, 'success', False) if isinstance(r, dict) else r.success))
+            passed_tests = sum(1 for r in test_results if _is_success(r))
             failed_tests = total_tests - passed_tests
             
             LOG.info("=" * 60)
@@ -311,31 +245,15 @@ async def main():
             if failed_tests > 0:
                 LOG.error("Failed tests:")
                 for result in test_results:
-                    if isinstance(result, dict):
-                        if not getattr(result, 'success', False):
-                            error_msg = getattr(result, 'error', 'Unknown error')
-                            LOG.error(f"  {getattr(result, 'test_name', 'Unknown test')}: {error_msg}")
-                    else:
-                        if not result.success:
-                            LOG.error(f"  {result.test_name}: {result.error}")
+                    if not _is_success(result):
+                        name = _get_test_name(result)
+                        error = _get_error(result)
+                        LOG.error(f"  {name}: {error}")
             
-            # 8. Save test results
+            # Save test results
             results_file = output_dir / "test_results.json"
             try:
-                # Convert TestResult objects to dictionaries
-                serializable_results = []
-                for result in test_results:
-                    if hasattr(result, 'to_dict'):
-                        serializable_results.append(result.to_dict())
-                    elif isinstance(result, dict):
-                        serializable_results.append(result)
-                    else:
-                        # Fallback: try to extract basic info
-                        serializable_results.append({
-                            "test_name": getattr(result, 'test_name', 'unknown'),
-                            "success": getattr(result, 'success', False),
-                            "error": getattr(result, 'error', None)
-                        })
+                serializable_results = [_to_dict(r) for r in test_results]
                 
                 with open(results_file, 'w') as f:
                     json.dump({
@@ -349,15 +267,49 @@ async def main():
             except Exception as e:
                 LOG.error(f"Failed to save test results: {e}")
             
-            # 9. Save generated test accounts
+            # Save generated test accounts
             await account_manager._save_accounts_async()
             
-            # 10. Return exit code
             return 1 if failed_tests > 0 else 0
     
     except Exception as e:
         LOG.error(f"Failed to initialize node connector: {e}")
         sys.exit(1)
+
+
+def _is_success(result) -> bool:
+    """Check if a test result indicates success."""
+    if isinstance(result, dict):
+        return result.get('success', False)
+    return getattr(result, 'success', False)
+
+
+def _get_test_name(result) -> str:
+    """Get test name from result."""
+    if isinstance(result, dict):
+        return result.get('test_name', 'Unknown')
+    return getattr(result, 'test_name', 'Unknown')
+
+
+def _get_error(result) -> str:
+    """Get error message from result."""
+    if isinstance(result, dict):
+        return result.get('error', 'Unknown error')
+    return getattr(result, 'error', 'Unknown error')
+
+
+def _to_dict(result) -> dict:
+    """Convert result to dictionary."""
+    if hasattr(result, 'to_dict'):
+        return result.to_dict()
+    elif isinstance(result, dict):
+        return result
+    else:
+        return {
+            "test_name": getattr(result, 'test_name', 'unknown'),
+            "success": getattr(result, 'success', False),
+            "error": getattr(result, 'error', None)
+        }
 
 
 if __name__ == "__main__":

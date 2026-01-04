@@ -1,3 +1,28 @@
+"""
+Gravity Test Account Manager
+
+Manages test accounts for the Gravity E2E test framework, including loading
+pre-configured accounts, creating new test accounts, and managing persistent
+account storage.
+
+Design Notes:
+- Manages faucet account for test funding
+- Supports persistent account storage
+- Async-safe operations with locks
+- JSON-based account configuration
+- Thread-safe account creation and retrieval
+
+Usage:
+    # Initialize account manager
+    manager = TestAccountManager("configs/test_accounts.json")
+
+    # Get faucet account for funding
+    faucet = manager.get_faucet()
+
+    # Create new test account
+    account = await manager.create_test_account("test_user")
+"""
+
 import asyncio
 import json
 import logging
@@ -12,7 +37,34 @@ LOG = logging.getLogger(__name__)
 
 
 class TestAccountManager:
-    """Test account manager"""
+    """
+    Manages test accounts for Gravity E2E testing.
+
+    This class handles loading of pre-configured test accounts from JSON files,
+    creating new test accounts dynamically, and persisting account information
+    for later reuse.
+
+    Attributes:
+        accounts_config_path: Path to the accounts configuration JSON file
+        accounts: Dictionary of loaded test accounts
+        faucet: Special account used for funding other test accounts
+        _lock: Async lock for thread-safe operations
+
+    Configuration Format:
+        {
+            "faucet": {
+                "address": "0x...",
+                "private_key": "..."
+            },
+            "test_accounts": {
+                "account_name": {
+                    "address": "0x...",
+                    "private_key": "...",
+                    "description": "Optional description"
+                }
+            }
+        }
+    """
     
     def __init__(self, accounts_config_path: str = "configs/test_accounts.json"):
         self.accounts_config_path = accounts_config_path
@@ -117,8 +169,16 @@ class TestAccountManager:
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, self.save_test_accounts, file_path)
         
-    def get_or_create_account(self, name: str) -> Dict:
-        """Get existing account or create new one"""
+    async def get_or_create_account(self, name: str) -> Dict:
+        """
+        Get existing account or create new one.
+        
+        Args:
+            name: Account name
+            
+        Returns:
+            Account information dictionary
+        """
         if name in self.accounts:
             return self.accounts[name]
-        return asyncio.create_task(self.create_test_account(name))
+        return await self.create_test_account(name)
