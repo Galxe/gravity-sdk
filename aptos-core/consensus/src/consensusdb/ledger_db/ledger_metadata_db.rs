@@ -121,6 +121,11 @@ impl LedgerMetadataDb {
             .store(Arc::new(Some(ledger_info_with_sigs)));
     }
 
+    pub(crate) fn update_latest_ledger_info(&self) {
+        let latest_ledger_info = get_latest_ledger_info_in_db_impl(&self.db).expect("DB read failed.");
+        self.latest_ledger_info.store(Arc::new(latest_ledger_info));
+    }
+
     pub(crate) fn get_latest_ledger_info(&self) -> Option<LedgerInfoWithSignatures> {
         let latest_ledger_info = self.latest_ledger_info.load();
         latest_ledger_info.as_ref().clone()
@@ -135,7 +140,7 @@ impl LedgerMetadataDb {
         let ledger_info = ledger_info_with_sigs.ledger_info();
         if ledger_info.ends_epoch() {
             // This is the last version of the current epoch, update the epoch by version index.
-            batch.put::<EpochByBlockNumberSchema>(&ledger_info.block_number(),&ledger_info.epoch())?;
+            batch.put::<EpochByBlockNumberSchema>(&ledger_info.block_number(), &ledger_info.epoch())?;
         }
         batch.put::<LedgerInfoSchema>(&ledger_info.block_number(), ledger_info_with_sigs)
     }

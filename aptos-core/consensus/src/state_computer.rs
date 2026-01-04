@@ -511,6 +511,7 @@ impl StateComputer for ExecutionProxy {
         // but this asynchronous function is an empty one and can be skipped
         // let mut pre_commit_futs = Vec::with_capacity(blocks.len());
         let mut block_ids = vec![];
+        let mut randomness_data = vec![];
         for block in blocks {
             if let Some(payload) = block.block().payload() {
                 payloads.push(payload.clone());
@@ -525,6 +526,13 @@ impl StateComputer for ExecutionProxy {
             subscribable_txn_events.extend(block.subscribable_events());
             // pre_commit_futs.push(block.take_pre_commit_fut());
             block_ids.push(block.id());
+            
+            // Collect randomness data for persistence
+            if let Some(randomness) = block.randomness() {
+                if let Some(block_number) = block.block().block_number() {
+                    randomness_data.push((block_number, randomness.randomness().to_vec()));
+                }
+            }
         }
 
         // wait until all blocks are committed
@@ -538,7 +546,7 @@ impl StateComputer for ExecutionProxy {
         monitor!(
             "commit_block",
             tokio::task::spawn_blocking(move || {
-                executor.commit_ledger(block_ids, proof).expect("Failed to commit blocks");
+                executor.commit_ledger(block_ids, proof, randomness_data).expect("Failed to commit blocks");
             })
             .await
         )
@@ -706,6 +714,7 @@ async fn test_commit_sync_race() {
             &self,
             block_ids: Vec<HashValue>,
             ledger_info_with_sigs: LedgerInfoWithSignatures,
+            randomness_data: Vec<(u64, Vec<u8>)>,
         ) -> ExecutorResult<()> {
             *self.time.lock() = LogicalTime::new(
                 ledger_info_with_sigs.ledger_info().epoch(),
