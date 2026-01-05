@@ -24,6 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install rustfmt
+        run: rustup component add rustfmt
       - name: Check formatting
         run: cargo fmt --all -- --check
 
@@ -35,6 +37,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
+      - name: Install clippy
+        run: rustup component add clippy
       - name: Run cargo cache
         uses: Swatinem/rust-cache@v2
       - name: Run clippy
