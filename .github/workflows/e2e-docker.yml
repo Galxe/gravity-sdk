@@ -1,0 +1,33 @@
+name: E2E Test in Docker
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Run duration in seconds'
+        required: false
+        default: '60'
+
+jobs:
+  e2e-test:
+    name: E2E Test
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 120
+
+    steps:
+    - name: Checkout (to get scripts)
+      uses: actions/checkout@v4
+      with:
+        sparse-checkout: scripts
+
+    - name: Run E2E Test
+      env:
+        REPO: ${{ github.repository }}
+        GIT_REF: ${{ github.head_ref || github.ref_name }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        DURATION: ${{ github.event.inputs.duration || '60' }}
+      run: |
+        chmod +x scripts/e2e_test.sh
+        ./scripts/e2e_test.sh "${GIT_REF}"
