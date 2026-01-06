@@ -459,7 +459,7 @@ echo "Benchmark execution finished. Displaying latest log..."
 LATEST_LOG=$(ls -t log.*.log 2>/dev/null | head -n 1)
 if [ -n "$LATEST_LOG" ]; then
     echo "Found log: $LATEST_LOG"
-    cat "$LATEST_LOG"
+    tail "$LATEST_LOG"
     
     # Run verification script (located in /app/scripts/verify_benchmark.py)
     echo "Verifying benchmark results..."
