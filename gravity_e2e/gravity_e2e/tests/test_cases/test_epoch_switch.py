@@ -463,30 +463,36 @@ class TestContext:
                 raise RuntimeError(f"Failed to fuzzy validator join and leave: {e}")
 
     async def check_node_block_height(self):
-        clients = [self.run_helper.client]
+        clients = []
         for i, node_name in enumerate(
-            self.genesis_node_names[1:] + self.candidate_node_names
+            self.genesis_node_names + self.candidate_node_names
         ):
             # FIXME: hardcoded port
             http_url = f"http://127.0.0.1:{8541 + i}"
             client = GravityClient(rpc_url=http_url, node_id=node_name)
             clients.append(client)
         async with AsyncExitStack() as stack:
-            await asyncio.gather(*[stack.enter_async_context(c) for c in clients[1:]])
+            await asyncio.gather(*[stack.enter_async_context(c) for c in clients])
             try:
                 while not self.should_stop:
                     await asyncio.sleep(10)
+                    all_node_names = self.genesis_node_names + self.candidate_node_names
+
+                    async def get_and_log_block_number(client, node_name):
+                        block_height = await client.get_block_number()
+                        LOG.info(f"{node_name} block height: {block_height}")
+                        return block_height
+
                     block_heights = await asyncio.gather(
-                        *[client.get_block_number() for client in clients]
+                        *[
+                            get_and_log_block_number(client, node_name)
+                            for client, node_name in zip(clients, all_node_names)
+                        ]
                     )
                     max_block_height = max(block_heights)
                     LOG.info(f"Max block height: {max_block_height}")
                     is_gap_too_large = False
-                    for node_name, block_height in zip(
-                        self.genesis_node_names + self.candidate_node_names,
-                        block_heights,
-                    ):
-                        LOG.info(f"{node_name} block height: {block_height}")
+                    for node_name, block_height in zip(all_node_names, block_heights):
                         if block_height + 100 < max_block_height:
                             LOG.warning(
                                 f"{node_name} block height is too low: {block_height}"
