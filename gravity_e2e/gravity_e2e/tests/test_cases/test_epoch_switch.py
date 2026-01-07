@@ -3,10 +3,7 @@ Epoch switch test
 Tests epoch switching with multiple nodes (node1-node10)
 """
 
-from ast import Tuple
 import asyncio
-from dataclasses import dataclass
-import json
 import logging
 import random
 import signal
@@ -14,22 +11,18 @@ from contextlib import AsyncExitStack
 from typing import Dict, Set
 
 from ...utils.aptos_identity import AptosIdentity, parse_identity_from_yaml
+from ...utils.validator_utils import (
+    ValidatorJoinParams,
+    execute_validator_join,
+    execute_validator_leave,
+    execute_validator_list,
+)
 from ...helpers.test_helpers import RunHelper, TestResult, test_case
 from ...core.node_manager import NodeManager
 from ...core.client.gravity_client import GravityClient
 from ...core.client.gravity_http_client import GravityHttpClient
 
 LOG = logging.getLogger(__name__)
-
-
-@dataclass
-class ValidatorJoinArgs:
-    private_key: str
-    validator_address: str
-    consensus_public_key: str
-    validator_network_address: str
-    fullnode_network_address: str
-    aptos_address: str
 
 
 class TestContext:
@@ -54,7 +47,7 @@ class TestContext:
         self.node_to_identity: Dict[str, AptosIdentity] = dict()
         self.aptos_address_to_node_name: Dict[str, str] = dict()
         self.node_to_account: Dict[str, Dict] = dict()
-        self.node_to_validator_join_args: Dict[str, ValidatorJoinArgs] = dict()
+        self.node_to_validator_join_params: Dict[str, ValidatorJoinParams] = dict()
         self.should_stop = False
         signal.signal(signal.SIGTERM, self.signal_handler)
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -169,74 +162,24 @@ class TestContext:
         return consensus_public_key
 
     async def validator_join(self, node_name: str):
-        validator_join_args = self.node_to_validator_join_args[node_name]
-        join_args = [
-            "validator",
-            "join",
-            "--rpc-url",
-            self.run_helper.client.rpc_url,
-            "--private-key",
-            validator_join_args.private_key,
-            "--stake-amount",
-            "10001.0",
-            "--validator-address",
-            validator_join_args.validator_address,
-            "--consensus-public-key",
-            validator_join_args.consensus_public_key,
-            "--validator-network-address",
-            validator_join_args.validator_network_address,
-            "--fullnode-network-address",
-            validator_join_args.fullnode_network_address,
-            "--aptos-address",
-            validator_join_args.aptos_address,
-            "--moniker",
-            node_name.upper(),
-        ]
-        LOG.info(
-            f"Running command: {str(self.node_manager.gravity_cli_path)} {' '.join(join_args)}"
+        params = self.node_to_validator_join_params[node_name]
+        await execute_validator_join(
+            gravity_cli_path=self.node_manager.gravity_cli_path,
+            rpc_url=self.run_helper.client.rpc_url,
+            params=params,
+            start_new_session=True,
         )
-        process = await asyncio.create_subprocess_exec(
-            str(self.node_manager.gravity_cli_path),
-            *join_args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            start_new_session=True,  # 新开一个会话，避免被父进程杀死
-        )
-        stdout, stderr = await process.communicate()
-        LOG.info(f"Validator join command output: {stdout}")
-        if process.returncode != 0:
-            LOG.error(f"Failed to join validator: {stderr}")
-            raise RuntimeError(f"Failed to join validator: {stderr}")
-        LOG.info(f"✅ Validator join command executed successfully")
+        LOG.info(f"✅ Validator {node_name} join command executed successfully")
 
     async def validator_leave(self, node_name: str):
-        args = self.node_to_validator_join_args[node_name]
-        leave_args = [
-            "validator",
-            "leave",
-            "--rpc-url",
-            self.run_helper.client.rpc_url,
-            "--private-key",
-            args.private_key,
-            "--validator-address",
-            args.validator_address,
-        ]
-        LOG.info(
-            f"Running command: {str(self.node_manager.gravity_cli_path)} {' '.join(leave_args)}"
+        params = self.node_to_validator_join_params[node_name]
+        await execute_validator_leave(
+            gravity_cli_path=self.node_manager.gravity_cli_path,
+            rpc_url=self.run_helper.client.rpc_url,
+            params=params,
+            start_new_session=True,
         )
-        process = await asyncio.create_subprocess_exec(
-            str(self.node_manager.gravity_cli_path),
-            *leave_args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            start_new_session=True,  # 新开一个会话，避免被父进程杀死
-        )
-        stdout, stderr = await process.communicate()
-        LOG.info(f"Validator leave command output: {stdout}")
-        if process.returncode != 0:
-            LOG.error(f"Failed to leave validator: {stderr}")
-            raise RuntimeError(f"Failed to leave validator: {stderr}")
-        LOG.info(f"✅ Validator leave command executed successfully")
+        LOG.info(f"✅ Validator {node_name} leave command executed successfully")
 
     async def validator_list(self):
         """
@@ -246,49 +189,25 @@ class TestContext:
             pending_inactive_node_names: set of node names in pending inactive validator set
             pending_active_node_names: set of node names in pending active validator set
         """
-        args = [
-            "validator",
-            "list",
-            "--rpc-url",
-            self.run_helper.client.rpc_url,
-        ]
-        process = await asyncio.create_subprocess_exec(
-            str(self.node_manager.gravity_cli_path),
-            *args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            start_new_session=True,  # 新开一个会话，避免被父进程杀死
+        result = await execute_validator_list(
+            gravity_cli_path=self.node_manager.gravity_cli_path,
+            rpc_url=self.run_helper.client.rpc_url,
+            start_new_session=True,
         )
-        stdout, stderr = await process.communicate()
-        if process.returncode != 0:
-            LOG.error(f"Failed to list validator: {stderr}")
-            raise RuntimeError(f"Failed to list validator: {stderr}")
 
-        # 解析 JSON 输出
-        stdout_str = stdout.decode("utf-8") if isinstance(stdout, bytes) else stdout
-        validator_data = json.loads(stdout_str)
-
-        # 输出格式化的 JSON 以便于阅读
-        formatted_json = json.dumps(validator_data, indent=2, ensure_ascii=False)
-        LOG.info(f"Validator list command output:\n{formatted_json}")
-        LOG.info(f"✅ Validator list command executed successfully")
-
-        # 收集所有 validator 的 aptos_address（从 active_validators, pending_inactive, pending_active）
+        # Map aptos addresses to node names
         active_node_names = set()
         pending_inactive_node_names = set()
         pending_active_node_names = set()
-        for validator in validator_data["active_validators"]:
-            active_node_names.add(
-                self.aptos_address_to_node_name[validator["aptos_address"]]
-            )
-        for validator in validator_data["pending_inactive"]:
-            pending_inactive_node_names.add(
-                self.aptos_address_to_node_name[validator["aptos_address"]]
-            )
-        for validator in validator_data["pending_active"]:
-            pending_active_node_names.add(
-                self.aptos_address_to_node_name[validator["aptos_address"]]
-            )
+        
+        for aptos_address in result.get_active_aptos_addresses():
+            active_node_names.add(self.aptos_address_to_node_name[aptos_address])
+        
+        for aptos_address in result.get_pending_inactive_aptos_addresses():
+            pending_inactive_node_names.add(self.aptos_address_to_node_name[aptos_address])
+        
+        for aptos_address in result.get_pending_active_aptos_addresses():
+            pending_active_node_names.add(self.aptos_address_to_node_name[aptos_address])
 
         return active_node_names, pending_inactive_node_names, pending_active_node_names
 
@@ -303,7 +222,7 @@ class TestContext:
             self.aptos_address_to_node_name[identity.account_address] = node_name
             LOG.info(f"Loaded identity for {node_name}: {identity}")
 
-    def init_validator_join_args(self):
+    def init_validator_join_params(self):
         # FIXME: hardcoded port offsets
         validator_network_address_port_offset = 2025
         fullnode_network_address_port_offset = 2125
@@ -313,16 +232,17 @@ class TestContext:
             consensus_public_key = self.load_consensus_public_key(node_name)
             identity = self.node_to_identity[node_name]
             account = self.node_to_account[node_name]
-            args = ValidatorJoinArgs(
+            params = ValidatorJoinParams(
                 private_key=account["private_key"],
                 validator_address=account["address"],
                 consensus_public_key=consensus_public_key,
                 validator_network_address=f"/ip4/127.0.0.1/tcp/{validator_network_address_port}/noise-ik/{identity.account_address}/handshake/0",
                 fullnode_network_address=f"/ip4/127.0.0.1/tcp/{fullnode_network_address_port}/noise-ik/{identity.account_address}/handshake/0",
                 aptos_address=identity.account_address,
+                moniker=node_name.upper(),
             )
-            LOG.info(f"Initialized validator join args for {node_name}: {args}")
-            self.node_to_validator_join_args[node_name] = args
+            LOG.info(f"Initialized validator join params for {node_name}: {params}")
+            self.node_to_validator_join_params[node_name] = params
 
     async def fuzzy_validator_join_and_leave(self):
         """
@@ -556,12 +476,12 @@ async def test_epoch_switch(run_helper: RunHelper, test_result: TestResult):
         await test_context.fund_nodes()
         LOG.info(f"✅ All candidate nodes EVM accounts created successfully")
 
-        # Step 6: Initialize validator join args for all candidate nodes
+        # Step 6: Initialize validator join params for all candidate nodes
         LOG.info(
-            "\n[Step 6] Initializing validator join args for all candidate nodes..."
+            "\n[Step 6] Initializing validator join params for all candidate nodes..."
         )
-        test_context.init_validator_join_args()
-        LOG.info(f"✅ Validator join args initialized successfully")
+        test_context.init_validator_join_params()
+        LOG.info(f"✅ Validator join params initialized successfully")
 
         tasks = []
         # Step 7: Fuzzy validator candidate nodes join and leave

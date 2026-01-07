@@ -78,6 +78,11 @@ from gravity_e2e.tests.test_cases.test_cluster_ops import (
     test_fault_tolerance,
 )
 
+# Epoch switch tests
+from gravity_e2e.tests.test_cases.test_epoch_switch import (
+    test_epoch_switch,
+)
+
 
 # Register all tests with the registry
 # Basic transfer tests
@@ -118,6 +123,8 @@ register_test("validator_add_remove_delayed", suite="validator", self_managed=Tr
 # Cluster Ops tests (self-managed)
 register_test("cluster_lifecycle", suite="cluster_ops", self_managed=True)(test_cluster_lifecycle)
 register_test("cluster_fault_tolerance", suite="cluster_ops", self_managed=True)(test_fault_tolerance)
+# Epoch switch tests (self-managed)
+register_test("epoch_switch", suite="epoch_switch", self_managed=True)(test_epoch_switch)
 
 
 # Define default test list for "all" suite
@@ -158,6 +165,7 @@ __all__ = [
     'test_validator_add_remove_delayed',
     'test_cluster_lifecycle',
     'test_fault_tolerance',
+    'test_epoch_switch',
     # Default test list
     'DEFAULT_TESTS',
 ]
