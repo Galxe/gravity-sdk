@@ -122,8 +122,7 @@ fn vault(n: u64) {
     let signer = ValidatorSigner::from_int(0);
     let waypoint = test_utils::validator_signers_to_waypoint(&[&signer]);
 
-    let mut storage = create_vault_storage();
-    storage.reset_and_clear().unwrap();
+    let storage = create_vault_storage();
 
     let storage = PersistentSafetyStorage::initialize(
         Storage::from(storage),

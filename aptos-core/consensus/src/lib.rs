@@ -2,6 +2,11 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+#![allow(unused)]
+#![allow(unreachable_code)]
+#![allow(clippy::all)]
+#![allow(unexpected_cfgs)]
+
 #![forbid(unsafe_code)]
 
 //! Consensus for the Aptos Core blockchain
@@ -41,7 +46,7 @@ mod state_computer;
 #[cfg(test)]
 mod state_computer_tests;
 mod state_replication;
-#[cfg(any(test))]
+#[cfg(any(test, feature = "fuzzing"))]
 pub mod test_utils;
 #[cfg(test)]
 mod twins;

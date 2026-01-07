@@ -173,7 +173,7 @@ mod test {
     fn test_fail_point() -> Option<()> {
         fail_point!("unit_test_fail_point", |_| {
             println!("set test fail point");
-            Some(());
+            Some(())
         });
         None
     }

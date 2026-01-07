@@ -117,7 +117,8 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
     }
 
     fn txn_to_signed(bytes: &mut [u8], chain_id: u64) -> (Address, TransactionSigned) {
-        let txn = TransactionSigned::decode_2718(&mut bytes.as_ref()).unwrap();
+        let mut slice = &bytes[..];
+        let txn = TransactionSigned::decode_2718(&mut slice).unwrap();
         (txn.recover_signer().unwrap(), txn)
     }
 
@@ -341,7 +342,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             for (block_number, persist_notifier) in persist_notifiers {
                 info!("wait_for_block_persistence num {:?} send persist_notifier", block_number);
                 self.wait_for_block_persistence(block_number).await.unwrap();
-                let _ = persist_notifier.send(());
+                let _ = persist_notifier.send(()).await;
             }
         }
     }

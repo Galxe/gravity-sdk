@@ -30,3 +30,6 @@ rand = "0.8"
 flexi_logger = "0.23"
 log = "0.4"
 block-buffer-manager.workspace = true
+
+[lints]
+workspace = true

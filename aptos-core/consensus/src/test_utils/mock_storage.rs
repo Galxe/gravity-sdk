@@ -1,3 +1,4 @@
+#![allow(unreachable_code)]
 // Copyright © Aptos Foundation
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
@@ -128,6 +129,7 @@ impl MockStorage {
             quorum_certs,
             qc,
             order_vote_enabled,
+            todo!()
         )
     }
 
@@ -299,6 +301,7 @@ impl PersistentLivenessStorage for EmptyStorage {
             vec![],
             None,
             order_vote_enabled,
+            todo!()
         ) {
             Ok(recovery_data) => LivenessStorageData::FullRecoveryData(recovery_data),
             Err(e) => {

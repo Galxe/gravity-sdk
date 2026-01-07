@@ -117,7 +117,7 @@ impl MockConsensus {
             }
             let has_new_txn = pool.lock().await.get_txns(&mut txns, max_txn_num);
             if !has_new_txn {
-                if txns.len() > 0 {
+                if !txns.is_empty() {
                     return Self::construct_block(block_number, txns, attr, epoch);
                 } else {
                     tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;

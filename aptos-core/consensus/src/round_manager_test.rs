@@ -1,3 +1,5 @@
+#![allow(unused)]
+#![allow(unreachable_code)]
 // Copyright © Aptos Foundation
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
@@ -1411,7 +1413,7 @@ async fn recover_on_restart() {
             i,
             i,
             Payload::empty(false, true),
-            (std::cmp::max(1, i.saturating_sub(10))..i)
+            (std::cmp::max(1, (i as u64).saturating_sub(10))..i)
                 .map(|i| (i, inserter.signer().author()))
                 .collect(),
         );

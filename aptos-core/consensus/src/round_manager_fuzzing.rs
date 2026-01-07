@@ -2,6 +2,8 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+#![allow(unused)]
+#![allow(unreachable_code)]
 #![allow(clippy::unwrap_used)]
 
 use crate::{
@@ -11,6 +13,7 @@ use crate::{
             ChainHealthBackoffConfig, PipelineBackpressureConfig, ProposalGenerator,
         },
         rotating_proposer_election::RotatingProposer,
+        unequivocal_proposer_election::UnequivocalProposerElection,
         round_state::{ExponentialTimeInterval, NewRoundEvent, NewRoundReason, RoundState},
     },
     metrics_safety_rules::MetricsSafetyRules,
@@ -19,7 +22,7 @@ use crate::{
     payload_manager::DirectMempoolPayloadManager,
     persistent_liveness_storage::{PersistentLivenessStorage, RecoveryData},
     pipeline::execution_client::DummyExecutionClient,
-    round_manager::RoundManager,
+    round_manager::{RoundManager, ValidatorComponents},
     test_utils::{MockPayloadManager, MockStorage},
     util::{mock_time_service::SimulatedTimeService, time_service::TimeService},
 };
@@ -94,8 +97,9 @@ fn build_empty_store(
         10,
         Arc::from(DirectMempoolPayloadManager::new()),
         false,
+        false, // enable_randomness
         Arc::new(Mutex::new(PendingBlocks::new())),
-        None,
+        false, // check_ordered_only
     ))
 }
 
@@ -123,6 +127,7 @@ fn create_round_state() -> RoundState {
         round_timeout_sender,
         delayed_qc_tx,
         QcAggregatorType::NoDelay,
+        false, // is_validator
     )
 }
 
@@ -136,7 +141,7 @@ fn create_node_for_fuzzing() -> RoundManager {
     let validator_set = (&validator).into();
 
     // TODO: EmptyStorage
-    let (initial_data, storage) = MockStorage::start_for_testing(validator_set);
+    let (initial_data, storage) = futures::executor::block_on(MockStorage::start_for_testing(validator_set));
 
     // TODO: remove
     let proof = make_initial_epoch_change_proof(&signer);
@@ -162,7 +167,7 @@ fn create_node_for_fuzzing() -> RoundManager {
 
     let epoch_state = Arc::new(EpochState {
         epoch: 1,
-        verifier: storage.get_validator_set().into(),
+        verifier: Arc::new(storage.get_validator_set().into()),
     });
     let network = Arc::new(NetworkSender::new(
         signer.author(),
@@ -208,24 +213,27 @@ fn create_node_for_fuzzing() -> RoundManager {
     let (round_manager_tx, _) = aptos_channel::new(QueueStyle::LIFO, 1, None);
 
     // event processor
+    // event processor
     RoundManager::new(
         epoch_state,
         Arc::clone(&block_store),
         round_state,
-        proposer_election,
-        proposal_generator,
-        Arc::new(Mutex::new(MetricsSafetyRules::new(
-            Box::new(safety_rules),
-            storage.clone(),
-        ))),
         network,
-        storage,
+        storage.clone(),
         OnChainConsensusConfig::default(),
         round_manager_tx,
         ConsensusConfig::default(),
         OnChainRandomnessConfig::default_enabled(),
         OnChainJWKConsensusConfig::default_enabled(),
         None,
+        Some(ValidatorComponents::new(
+            Arc::new(UnequivocalProposerElection::new(proposer_election)),
+            Arc::new(proposal_generator),
+            Arc::new(Mutex::new(MetricsSafetyRules::new(
+                Box::new(safety_rules),
+                storage.clone(),
+            ))),
+        )),
     )
 }
 

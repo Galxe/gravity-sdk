@@ -1,6 +1,8 @@
 // Copyright (c) Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+#![allow(non_local_definitions)]
+
 use gaptos::aptos_types::transaction::use_case::{UseCaseAwareTransaction, UseCaseKey};
 use gaptos::move_core_types::account_address::AccountAddress;
 use proptest_derive::Arbitrary;

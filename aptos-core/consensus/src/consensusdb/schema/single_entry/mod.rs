@@ -2,6 +2,7 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+#![allow(non_local_definitions)]
 //! This module defines physical storage schema for any single-entry data.
 //!
 //! There will be only one row in this column family for each type of data.

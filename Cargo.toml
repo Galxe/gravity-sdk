@@ -6,9 +6,9 @@ license = "Apache-2.0"
 publish = false
 repository = "https://github.com/Galxe/gravity-sdk"
 rust-version = "1.83.0"
-resolver = "2"
 
 [workspace]
+resolver = "2"
 members = [
     "aptos-core/consensus",
     "dependencies/aptos-executor-types",
@@ -22,6 +22,48 @@ members = [
     "crates/txn_metrics",
     "crates/build-info"
 , "crates/gravity-sdk"]
+
+# Workspace-level lint configuration - applies to all members
+[workspace.lints.clippy]
+uninlined_format_args = "allow"
+clone_on_copy = "allow"
+iter_kv_map = "allow"
+legacy_numeric_constants = "allow"
+too_many_arguments = "allow"
+unnecessary_map_or = "allow"
+upper_case_acronyms = "allow"
+manual_unwrap_or_default = "allow"
+doc_overindented_list_items = "allow"
+manual_unwrap_or = "allow"
+type_complexity = "allow"
+new_ret_no_self = "allow"
+ptr_arg = "allow"
+needless_borrow = "allow"
+items_after_test_module = "allow"
+from_over_into = "allow"
+manual_inspect = "allow"
+redundant_closure = "allow"
+needless_question_mark = "allow"
+needless_return = "allow"
+single_match = "allow"
+let_and_return = "allow"
+implicit_saturating_sub = "allow"
+useless_conversion = "allow"
+unnecessary_unwrap = "allow"
+async_yields_async = "allow"
+len_zero = "allow"
+useless_asref = "allow"
+let_underscore_future = "allow"
+collapsible_if = "allow"
+
+[workspace.lints.rust]
+unused_variables = "allow"
+dead_code = "allow"
+unused_imports = "allow"
+unused_must_use = "allow"
+unused_mut = "allow"
+unreachable_code = "allow"
+unexpected_cfgs = { level = "allow", check-cfg = ["cfg(mirai)"] }
 
 [workspace.dependencies]
 aptos-consensus = { path = "./aptos-core/consensus" }

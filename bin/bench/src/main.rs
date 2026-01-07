@@ -129,7 +129,7 @@ async fn main() {
             let _ = thread::spawn(move || {
                 tokio::runtime::Runtime::new().unwrap().block_on(async move {
                     let cl = TestConsensusLayer::new(gcei_config).await;
-                    cl.run()
+                    cl.run().await
                 });
             });
 

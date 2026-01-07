@@ -62,6 +62,5 @@ bcs.workspace = true
 [build-dependencies]
 shadow-rs.workspace = true
 
-[patch.crates-io]
-darling = { git = "https://github.com/TedDriggs/darling.git", rev = "84448b8"}
-
+[lints]
+workspace = true

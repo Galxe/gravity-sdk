@@ -19,3 +19,6 @@ itertools = { workspace = true }
 
 [features]
 fuzzing = []
+
+[lints]
+workspace = true
