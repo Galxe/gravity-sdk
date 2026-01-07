@@ -298,16 +298,11 @@ class RunHelper:
             account: Account information
             amount_wei: Funding amount in wei
             confirmations: Number of confirmations to wait
-<<<<<<< HEAD
-
-=======
             nonce: Transaction count for the faucet account
->>>>>>> 70fc0ad (fix test_epoch_switch)
         Returns:
             Transaction receipt
         """
         try:
-<<<<<<< HEAD
             # Import here to avoid circular dependency
             from ..utils.transaction_builder import TransactionBuilder, TransactionOptions
             from eth_account import Account
@@ -316,31 +311,8 @@ class RunHelper:
             faucet_account_obj = Account.from_key(self.faucet_account["private_key"])
             tx_builder = TransactionBuilder(
                 web3=self.client.web3,
-                account=faucet_account_obj
-=======
-            # Get faucet account nonce
-            if nonce is None:
-                nonce = await self.client.get_transaction_count(self.faucet_account["address"])
-            
-            LOG.info(f"Funding account '{account['name']}' with {amount_wei / 10**18:.6f} ETH using nonce {nonce}")
-            # Get current gas price
-            gas_price = await self.client.get_gas_price()
-            
-            # Build transfer transaction
-            tx_data = {
-                "to": account["address"],
-                "value": hex(amount_wei),
-                "gas": hex(21000),
-                "gasPrice": hex(gas_price),
-                "nonce": hex(nonce),
-                "chainId": hex(await self.client.get_chain_id())
-            }
-            
-            # Sign and send
-            signed_tx = Account.sign_transaction(
-                tx_data, 
-                self.faucet_account["private_key"]
->>>>>>> 70fc0ad (fix test_epoch_switch)
+                account=faucet_account_obj,
+                default_options=TransactionOptions(nonce=nonce)
             )
 
             # Send ETH transfer

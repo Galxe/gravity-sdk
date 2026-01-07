@@ -5,10 +5,11 @@ This module provides common functions for validator add/remove tests,
 reducing duplication across different test scenarios.
 """
 import asyncio
+import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from ..core.client.gravity_http_client import GravityHttpClient
 from ..core.node_manager import NodeManager
@@ -20,12 +21,41 @@ LOG = logging.getLogger(__name__)
 class ValidatorJoinParams:
     """Parameters for joining a validator to the network"""
     private_key: str
-    stake_amount: str
     validator_address: str
     consensus_public_key: str
     validator_network_address: str
     fullnode_network_address: str
     aptos_address: str
+    stake_amount: str = "10001.0"
+    moniker: Optional[str] = None
+
+
+@dataclass
+class ValidatorInfo:
+    """Information about a single validator"""
+    aptos_address: str
+    voting_power: int = 0
+    moniker: str = ""
+
+
+@dataclass
+class ValidatorListResult:
+    """Result of validator list command"""
+    active_validators: List[ValidatorInfo] = field(default_factory=list)
+    pending_inactive: List[ValidatorInfo] = field(default_factory=list)
+    pending_active: List[ValidatorInfo] = field(default_factory=list)
+    
+    def get_active_aptos_addresses(self) -> Set[str]:
+        """Get set of aptos addresses of active validators"""
+        return {v.aptos_address for v in self.active_validators}
+    
+    def get_pending_inactive_aptos_addresses(self) -> Set[str]:
+        """Get set of aptos addresses of pending inactive validators"""
+        return {v.aptos_address for v in self.pending_inactive}
+    
+    def get_pending_active_aptos_addresses(self) -> Set[str]:
+        """Get set of aptos addresses of pending active validators"""
+        return {v.aptos_address for v in self.pending_active}
 
 
 @dataclass
@@ -219,7 +249,8 @@ async def execute_validator_join(
     gravity_cli_path: Path,
     rpc_url: str,
     params: ValidatorJoinParams,
-    timeout: int = 60
+    timeout: int = 60,
+    start_new_session: bool = False
 ) -> str:
     """
     Execute validator join command.
@@ -229,6 +260,7 @@ async def execute_validator_join(
         rpc_url: RPC URL
         params: Validator join parameters
         timeout: Command timeout in seconds
+        start_new_session: If True, start process in new session to avoid being killed by parent
 
     Returns:
         Command output
@@ -249,6 +281,9 @@ async def execute_validator_join(
         "--fullnode-network-address", params.fullnode_network_address,
         "--aptos-address", params.aptos_address,
     ]
+    
+    if params.moniker:
+        join_cmd.extend(["--moniker", params.moniker])
 
     LOG.info(f"Executing validator join command...")
     LOG.debug(f"Command: {' '.join(join_cmd)}")
@@ -257,7 +292,8 @@ async def execute_validator_join(
         process = await asyncio.create_subprocess_exec(
             *join_cmd,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.PIPE,
+            start_new_session=start_new_session
         )
 
         stdout, stderr = await asyncio.wait_for(
@@ -287,7 +323,8 @@ async def execute_validator_leave(
     gravity_cli_path: Path,
     rpc_url: str,
     params: ValidatorJoinParams,
-    timeout: int = 60
+    timeout: int = 60,
+    start_new_session: bool = False
 ) -> str:
     """
     Execute validator leave command.
@@ -297,6 +334,7 @@ async def execute_validator_leave(
         rpc_url: RPC URL
         params: Validator parameters (uses private_key and validator_address)
         timeout: Command timeout in seconds
+        start_new_session: If True, start process in new session to avoid being killed by parent
 
     Returns:
         Command output
@@ -320,7 +358,8 @@ async def execute_validator_leave(
         process = await asyncio.create_subprocess_exec(
             *leave_cmd,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.PIPE,
+            start_new_session=start_new_session
         )
 
         stdout, stderr = await asyncio.wait_for(
@@ -343,6 +382,96 @@ async def execute_validator_leave(
 
     except asyncio.TimeoutError:
         LOG.error(f"Validator leave command timed out after {timeout} seconds")
+        raise
+
+
+async def execute_validator_list(
+    gravity_cli_path: Path,
+    rpc_url: str,
+    timeout: int = 60,
+    start_new_session: bool = False
+) -> ValidatorListResult:
+    """
+    Execute validator list command.
+
+    Args:
+        gravity_cli_path: Path to gravity_cli binary
+        rpc_url: RPC URL
+        timeout: Command timeout in seconds
+        start_new_session: If True, start process in new session to avoid being killed by parent
+
+    Returns:
+        ValidatorListResult containing active, pending inactive, and pending active validators
+
+    Raises:
+        RuntimeError: If command fails
+        asyncio.TimeoutError: If command times out
+    """
+    list_cmd = [
+        str(gravity_cli_path),
+        "validator", "list",
+        "--rpc-url", rpc_url,
+    ]
+
+    LOG.info(f"Executing validator list command...")
+    LOG.debug(f"Command: {' '.join(list_cmd)}")
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *list_cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            start_new_session=start_new_session
+        )
+
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(),
+            timeout=timeout
+        )
+
+        stdout_str = stdout.decode() if stdout else ""
+        stderr_str = stderr.decode() if stderr else ""
+
+        if process.returncode != 0:
+            LOG.error(f"Failed to list validators: {stderr_str}")
+            raise RuntimeError(f"Failed to list validators: {stderr_str}")
+
+        # Parse JSON output
+        validator_data = json.loads(stdout_str)
+
+        # Log formatted JSON for readability
+        formatted_json = json.dumps(validator_data, indent=2, ensure_ascii=False)
+        LOG.info(f"Validator list command output:\n{formatted_json}")
+        LOG.info("Validator list command executed successfully")
+
+        # Build result
+        result = ValidatorListResult()
+        
+        for v in validator_data.get("active_validators", []):
+            result.active_validators.append(ValidatorInfo(
+                aptos_address=v.get("aptos_address", ""),
+                voting_power=v.get("voting_power", 0),
+                moniker=v.get("moniker", "")
+            ))
+        
+        for v in validator_data.get("pending_inactive", []):
+            result.pending_inactive.append(ValidatorInfo(
+                aptos_address=v.get("aptos_address", ""),
+                voting_power=v.get("voting_power", 0),
+                moniker=v.get("moniker", "")
+            ))
+        
+        for v in validator_data.get("pending_active", []):
+            result.pending_active.append(ValidatorInfo(
+                aptos_address=v.get("aptos_address", ""),
+                voting_power=v.get("voting_power", 0),
+                moniker=v.get("moniker", "")
+            ))
+
+        return result
+
+    except asyncio.TimeoutError:
+        LOG.error(f"Validator list command timed out after {timeout} seconds")
         raise
 
 
