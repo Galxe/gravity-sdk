@@ -361,6 +361,7 @@ fi
 
 
 echo "$TEST_GENESIS" | docker run --rm -i \
+    -p 9001:9001 \
     -e GIT_REF="${GIT_REF}" \
     -e CLONE_URL="${CLONE_URL}" \
     -e DURATION="${DURATION}" \
