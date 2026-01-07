@@ -37,4 +37,8 @@ required-features = ["testing"]
 
 [features]
 default = []
+testing = []
 fuzzing = ["aptos-consensus-types/fuzzing", "proptest"]
+
+[lints]
+workspace = true

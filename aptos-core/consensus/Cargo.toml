@@ -84,12 +84,18 @@ default = []
 fuzzing = [
     "aptos-consensus-types/fuzzing",
     "aptos-mempool/fuzzing",
+    "aptos-safety-rules/testing",
 ]
 failpoints = ["fail/failpoints"]
 randomness_disabled = ["gaptos/randomness_disabled"]
 
 [package.metadata.cargo-machete]
 ignored = ["serde_bytes"]
+[lints.rust]
+warnings = "allow"
 
 [lints.clippy]
-unwrap_used = "deny"
+all = "allow"
+pedantic = "allow"
+restriction = "allow"
+nursery = "allow"

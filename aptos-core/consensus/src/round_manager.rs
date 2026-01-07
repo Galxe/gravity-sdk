@@ -549,9 +549,9 @@ impl RoundManager {
             new_round_event,
             self.block_store.sync_info(),
             self.network.clone(),
-            self.proposal_generator.clone(),
-            self.safety_rules.clone(),
-            self.proposer_election.clone(),
+            self.validator_components.as_ref().unwrap().proposal_generator.clone(),
+            self.validator_components.as_ref().unwrap().safety_rules.clone(),
+            self.validator_components.as_ref().unwrap().proposer_election.clone(),
         )
         .await
     }
@@ -787,7 +787,7 @@ impl RoundManager {
                     "Planning to vote for a NIL block {}", nil_block
                 );
                 counters::VOTE_NIL_COUNT.inc();
-                drop(validator_components);
+                let _ = validator_components;
                 let nil_vote = self.vote_block(nil_block).await?;
                 (true, nil_vote)
             },

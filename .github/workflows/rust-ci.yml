@@ -42,7 +42,7 @@ jobs:
       - name: Run cargo cache
         uses: Swatinem/rust-cache@v2
       - name: Run clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: RUSTFLAGS="--cfg tokio_unstable" cargo clippy --all-targets --all-features -- -D warnings
 
   # Build gravity_node and gravity_cli
   build:

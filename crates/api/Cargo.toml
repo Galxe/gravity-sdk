@@ -53,3 +53,6 @@ bytes = { workspace = true }
 default = []
 failpoints = ["fail/failpoints", "aptos-consensus/failpoints", "aptos-mempool/failpoints"]
 jemalloc-profiling = ["tikv-jemallocator/profiling", "tikv-jemalloc-sys/profiling"]
+
+[lints]
+workspace = true

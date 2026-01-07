@@ -39,3 +39,6 @@ serde_json = { workspace = true }
 default = []
 failpoints = ["fail/failpoints"]
 fuzzing = ["proptest"]
+
+[lints]
+workspace = true

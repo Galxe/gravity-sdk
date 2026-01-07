@@ -14,3 +14,6 @@ rayon = { workspace = true }
 gaptos = { workspace = true }
 aptos-executor-types = { workspace = true }
 anyhow = { workspace = true }
+
+[lints]
+workspace = true

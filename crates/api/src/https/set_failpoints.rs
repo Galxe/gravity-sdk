@@ -6,6 +6,8 @@
 use anyhow::{format_err, Result};
 #[cfg(feature = "failpoints")]
 use gaptos::aptos_logger::prelude::*;
+#[cfg(feature = "failpoints")]
+use axum::Json;
 use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 
