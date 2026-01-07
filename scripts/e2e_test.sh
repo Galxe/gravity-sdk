@@ -375,7 +375,7 @@ echo "$TEST_GENESIS" | docker run --rm -i \
     -e GIT_REF="${GIT_REF}" \
     -e CLONE_URL="${CLONE_URL}" \
     -e DURATION="${DURATION}" \
-    -v "${BENCH_CONFIG_PATH}:/gravity_bench/bench_config.toml:ro" \
+    -v "${BENCH_CONFIG_PATH}:/bench_config.toml:ro" \
     rust:1.88.0-bookworm \
     bash -c '
 set -e
@@ -426,12 +426,13 @@ sleep 2
 echo "Check node is up..."
 curl -X POST -H "Content-Type: application/json" --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_blockNumber\",\"params\":[],\"id\":1}" http://localhost:8545
 
-echo "[6/6] Running benchmark (100 accounts, 100 TPS, 5 min)..."
+echo "[6/6] Running benchmark..."
 cd /
 git clone --depth 1 https://github.com/Galxe/gravity_bench.git /gravity_bench || true
 cd /gravity_bench
 
 echo "Using mounted benchmark config:"
+cp /bench_config.toml ./
 cat bench_config.toml
 source setup.sh
 # Run benchmark
