@@ -36,6 +36,21 @@ The script accepts the following parameters via environment variables (optional)
 | `GIT_REF` | Passed automatically from `$1`. |
 | `CLONE_URL` | The repository URL to clone inside Docker. |
 | `DURATION` | Benchmark duration in seconds (Default: 300). |
+| `BENCH_CONFIG_PATH` | Path to the benchmark configuration file (Default: `./scripts/bench_config.toml`). |
+
+### Benchmark Configuration
+
+The benchmark configuration is passed to the Docker container via file mounting. You can customize the benchmark by:
+
+1. **Using the default config**: The script uses `scripts/bench_config.toml` by default.
+2. **Specifying a custom config**: Set the `BENCH_CONFIG_PATH` environment variable.
+
+**Example with custom config:**
+```bash
+BENCH_CONFIG_PATH=/path/to/my_bench_config.toml bash scripts/e2e_test.sh main
+```
+
+**How to configure `bench_config.toml` structure:** [gravity_bench](https://github.com/galxe/gravity_bench/)
 
 ## Logs & Monitoring
 
@@ -71,7 +86,7 @@ To inspect files (like detailed debug logs) or check the node status *while the 
 3.  **View Logs**:
     Once inside:
     ```bash
-    # View Benchmark logs
+    # View Benchmark logs. The log will report the TPS of node.
     tail -f /gravity_bench/log.*.log
 
     # View Node logs/status
@@ -86,11 +101,30 @@ docker attach <container_id>
 ```
 *Note: This connects you to the main execution process. Pressing `Ctrl+C` here might terminate the test.*
 
+### Metrics Monitoring
+
+The script exposes metrics on port `9001` of the host machine (`-p 9001:9001`), allowing you to monitor Gravity node performance in real-time using a metrics system.
+
+#### Quick Check
+You can quickly verify metrics are available by running:
+```bash
+curl http://localhost:9001/metrics
+```
+
+#### Prometheus & Grafana Setup
+For detailed performance analysis, you can set up a Prometheus & Grafana monitoring stack to visualize metrics such as TPS, latency, block production rate, and more.
+
+Refer to the [Gravity Reth Monitoring Guide](https://github.com/Galxe/gravity-reth/blob/main/docs/vocs/docs/pages/run/monitoring.mdx) for instructions on:
+- Configuring Prometheus to scrape metrics from `localhost:9001`
+- Setting up Grafana dashboards for Gravity performance visualization
+- Available metrics and their meanings
+
 ## Script Logic Overview
 
 1.  **Genesis Injection**: Pipes `TEST_GENESIS` (defined in the host script) into the Docker container.
-2.  **Environment Setup**: Installs dependencies (`clang`, `llvm`, `node`, `python3`) inside Docker.
-3.  **Clone & Configure**: Clones the SDK branch, writes genesis, and updates `reth_config.json` using `jq`.
-4.  **Build & Deploy**: builds `gravity_node` and deploys it to `/tmp/node1`.
-5.  **Benchmark**: Downloads `gravity_bench`, configures it (100 TPS, 100 Accounts), and runs it.
-6.  **Verification**: Analyzes the benchmark logs using a Python script to verify success.
+2.  **Config Mounting**: Mounts the benchmark config file (`bench_config.toml`) into the container at `/gravity_bench/bench_config.toml`.
+3.  **Environment Setup**: Installs dependencies (`clang`, `llvm`, `node`, `python3`) inside Docker.
+4.  **Clone & Configure**: Clones the SDK branch, writes genesis, and updates `reth_config.json` using `jq`.
+5.  **Build & Deploy**: builds `gravity_node` and deploys it to `/tmp/node1`.
+6.  **Benchmark**: Downloads `gravity_bench` and runs the benchmark using the mounted config file.
+7.  **Verification**: Analyzes the benchmark logs using a Python script to verify success.
