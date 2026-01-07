@@ -59,7 +59,7 @@ docker run --rm -i \
     -e CLONE_URL="${CLONE_URL}" \
     -e DURATION="${DURATION}" \
     -v "${BENCH_CONFIG_PATH}:/bench_config.toml:ro" \
-    -v "${SCRIPT_DIR}/genesis.json:/app/genesis.json:ro" \
+    -v "${SCRIPT_DIR}/genesis.json:/genesis.json:ro" \
     rust:1.88.0-bookworm \
     bash -c '
 set -e
@@ -75,6 +75,7 @@ cd /app
 echo "Checked out: $(git rev-parse --short HEAD)"
 
 echo "[2.5/6] Configuring Genesis..."
+cp /genesis.json ./
 echo "Genesis file size: $(wc -c < /app/genesis.json) bytes"
 
 echo "Updating reth_config.json template..."
