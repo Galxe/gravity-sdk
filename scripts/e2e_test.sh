@@ -330,10 +330,19 @@ TEST_GENESIS='
 #   ./scripts/e2e_test.sh abc123def
 #
 # Environment Variables:
-#   REPO         - GitHub repo (default: Galxe/gravity-sdk)
-#   GITHUB_TOKEN - Token for private repo access (optional for public)
-#   DURATION     - How long to run the node (default: 60s)
+#   REPO              - GitHub repo (default: Galxe/gravity-sdk)
+#   GITHUB_TOKEN      - Token for private repo access (optional for public)
+#   DURATION          - How long to run the node (default: 60s)
+#   BENCH_CONFIG_PATH - Path to bench_config.toml (default: ./bench_config.toml in scripts dir)
 # ============================================================
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BENCH_CONFIG_PATH="${BENCH_CONFIG_PATH:-${SCRIPT_DIR}/bench_config.toml}"
+
+if [ ! -f "${BENCH_CONFIG_PATH}" ]; then
+    echo "Error: bench_config.toml not found at ${BENCH_CONFIG_PATH}"
+    exit 1
+fi
 
 GIT_REF="${1:-}"
 if [ -z "${GIT_REF}" ]; then
@@ -350,6 +359,7 @@ echo "===== Gravity E2E Test ====="
 echo "Repo: ${REPO}"
 echo "Ref: ${GIT_REF}"
 echo "Duration: ${DURATION}s"
+echo "Bench Config: ${BENCH_CONFIG_PATH}"
 echo "============================"
 
 # 构建 clone URL
@@ -365,6 +375,7 @@ echo "$TEST_GENESIS" | docker run --rm -i \
     -e GIT_REF="${GIT_REF}" \
     -e CLONE_URL="${CLONE_URL}" \
     -e DURATION="${DURATION}" \
+    -v "${BENCH_CONFIG_PATH}:/bench_config.toml:ro" \
     rust:1.88.0-bookworm \
     bash -c '
 set -e
@@ -415,42 +426,13 @@ sleep 2
 echo "Check node is up..."
 curl -X POST -H "Content-Type: application/json" --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_blockNumber\",\"params\":[],\"id\":1}" http://localhost:8545
 
-echo "[6/6] Running benchmark (100 accounts, 100 TPS, 5 min)..."
+echo "[6/6] Running benchmark..."
 cd /
 git clone --depth 1 https://github.com/Galxe/gravity_bench.git /gravity_bench || true
 cd /gravity_bench
 
-# Create benchmark config
-cat > bench_config.toml << EOF
-# Gravity Bench E2E Test Configuration
-contract_config_path = "deploy.json"
-target_tps = 100
-nodes = [
-    { rpc_url = "http://localhost:8545", chain_id = 7771625 },
-]
-num_tokens = 1
-enable_swap_token = false
-address_pool_type = "random"
-
-[faucet]
-private_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
-faucet_level = 0
-wait_duration_secs = 1
-fauce_eth_balance = "1000000000000000000000000000000000"
-
-[accounts]
-num_accounts = 100
-
-[performance]
-num_senders = 10
-max_pool_size = 1000
-duration_secs = 300
-sampling = 100
-
-log_path = ""
-EOF
-
-echo "Benchmark config created:"
+echo "Using mounted benchmark config:"
+cp /bench_config.toml ./
 cat bench_config.toml
 source setup.sh
 # Run benchmark
