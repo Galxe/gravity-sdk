@@ -25,15 +25,20 @@ fn generate_commit_ledger_info(
     commit_info: &BlockInfo,
     ordered_proof: &LedgerInfoWithSignatures,
     order_vote_enabled: bool,
+    block_hash: HashValue,
+    block_number: u64,
 ) -> LedgerInfo {
-    LedgerInfo::new(
+    let mut ledger_info = LedgerInfo::new(
         commit_info.clone(),
         if order_vote_enabled {
             HashValue::zero()
         } else {
             ordered_proof.ledger_info().consensus_data_hash()
         },
-    )
+    );
+    ledger_info.set_block_hash(block_hash);
+    ledger_info.set_block_number(block_number);
+    ledger_info
 }
 
 fn verify_signatures(
@@ -78,9 +83,13 @@ fn generate_executed_item_from_ordered(
         block.timestamp_usecs(),
         commit_info.next_epoch_state().cloned(),
     );
-    let mut commit_ledger_info = generate_commit_ledger_info(&new_commit_info, &ordered_proof, order_vote_enabled);
-    commit_ledger_info.set_block_hash(block.compute_result().root_hash());
-    commit_ledger_info.set_block_number(block.block().block_number().unwrap());
+    let commit_ledger_info = generate_commit_ledger_info(
+        &commit_info,
+        &ordered_proof,
+        order_vote_enabled,
+        block.compute_result().root_hash(),
+        block.block().block_number().unwrap(),
+    );
     let partial_commit_proof = LedgerInfoWithVerifiedSignatures::new(
         commit_ledger_info,
         verified_signatures,
@@ -221,6 +230,8 @@ impl BufferItem {
                         &commit_info,
                         &ordered_proof,
                         order_vote_enabled,
+                        block.compute_result().root_hash(),
+                        block.block().block_number().unwrap(),
                     );
                     let verified_signatures =
                         verify_signatures(unverified_signatures, validator, &commit_ledger_info);
