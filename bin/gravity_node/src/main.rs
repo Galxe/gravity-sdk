@@ -121,8 +121,6 @@ fn run_reth(
                         execution_args_rx,
                         eth_api,
                     );
-                    // wait for reth event loop to start
-                    tokio::time::sleep(Duration::from_secs(3)).await;
                     let args = ConsensusArgs {
                         engine_api: engine_cli,
                         pipeline_api: pipeline_api_v2,

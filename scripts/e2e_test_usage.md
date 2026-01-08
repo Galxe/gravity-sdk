@@ -116,7 +116,7 @@ For detailed performance analysis, you can set up a Prometheus & Grafana monitor
 
 Refer to the [Gravity Reth Monitoring Guide](https://github.com/Galxe/gravity-reth/blob/main/docs/vocs/docs/pages/run/monitoring.mdx) for instructions on:
 - Configuring Prometheus to scrape metrics from `localhost:9001`
-- Setting up Grafana dashboards for Gravity performance visualization
+- Setting up Grafana dashboards for Gravity performance visualization. Using [greth-performance.json](https://github.com/Galxe/gravity-reth/blob/main/etc/grafana/dashboards/greth-performance.json) as the dashboards json imports.
 - Available metrics and their meanings
 
 ## Script Logic Overview
