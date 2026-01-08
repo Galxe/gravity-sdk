@@ -2,9 +2,9 @@ name: Rust CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'branch-v**']
   pull_request:
-    branches: [main]
+    branches: [main, 'branch-v**']
   workflow_dispatch:
 
 env:
@@ -76,3 +76,61 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Run tests
         run: cargo test --workspace --exclude smoke-test
+
+  # Check gravity-reth dependency for branch-v* branches
+  dependency-check:
+    name: Check gravity-reth Dependency
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref_name, 'branch-v')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check gravity-reth branch dependency
+        run: |
+          set -e
+
+          # 提取版本号，例如 branch-v1.2 -> v1.2
+          VERSION=$(echo "${{ github.ref_name }}" | sed 's/^branch-//')
+          EXPECTED_BRANCH="gravity-devnet-${VERSION}"
+
+          echo "===== Dependency Check ====="
+          echo "Current branch: ${{ github.ref_name }}"
+          echo "Expected gravity-reth branch: ${EXPECTED_BRANCH}"
+          echo "============================="
+
+          CARGO_FILE="bin/gravity_node/Cargo.toml"
+
+          if [ ! -f "${CARGO_FILE}" ]; then
+            echo "ERROR: ${CARGO_FILE} not found"
+            exit 1
+          fi
+
+          # 检查 greth 依赖是否使用正确的 branch
+          if grep -q 'greth = .*branch = "' "${CARGO_FILE}"; then
+            ACTUAL_BRANCH=$(grep 'greth = ' "${CARGO_FILE}" | sed -n 's/.*branch = "\([^"]*\)".*/\1/p')
+
+            echo "Current greth dependency branch: ${ACTUAL_BRANCH}"
+
+            if [ "${ACTUAL_BRANCH}" != "${EXPECTED_BRANCH}" ]; then
+              echo ""
+              echo "ERROR: greth dependency branch mismatch!"
+              echo "  Expected: ${EXPECTED_BRANCH}"
+              echo "  Actual:   ${ACTUAL_BRANCH}"
+              echo ""
+              echo "Please update ${CARGO_FILE} to use:"
+              echo '  greth = { git = "https://github.com/Galxe/gravity-reth", branch = "'${EXPECTED_BRANCH}'" }'
+              exit 1
+            fi
+          else
+            echo "ERROR: greth dependency must use 'branch' parameter"
+            echo ""
+            echo "Current greth dependency line:"
+            grep 'greth = ' "${CARGO_FILE}"
+            echo ""
+            echo "Please update it to use branch format:"
+            echo '  greth = { git = "https://github.com/Galxe/gravity-reth", branch = "'${EXPECTED_BRANCH}'" }'
+            exit 1
+          fi
+
+          echo ""
+          echo "✓ Dependency check PASSED"
+          echo "  Using gravity-reth branch: ${EXPECTED_BRANCH}"
