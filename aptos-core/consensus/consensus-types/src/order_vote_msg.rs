@@ -16,20 +16,13 @@ pub struct OrderVoteMsg {
 
 impl Display for OrderVoteMsg {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "OrderVote: [{}], QuorumCert: [{}]",
-            self.order_vote, self.quorum_cert
-        )
+        write!(f, "OrderVote: [{}], QuorumCert: [{}]", self.order_vote, self.quorum_cert)
     }
 }
 
 impl OrderVoteMsg {
     pub fn new(order_vote: OrderVote, quorum_cert: QuorumCert) -> Self {
-        Self {
-            order_vote,
-            quorum_cert,
-        }
+        Self { order_vote, quorum_cert }
     }
 
     pub fn order_vote(&self) -> &OrderVote {

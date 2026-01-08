@@ -15,9 +15,7 @@ use crate::dag::{
     CertifiedNode,
 };
 use aptos_consensus_types::common::Round;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::debug;
-use gaptos::aptos_types::epoch_state::EpochState;
+use gaptos::{aptos_infallible::Mutex, aptos_logger::debug, aptos_types::epoch_state::EpochState};
 use std::sync::Arc;
 
 pub trait TOrderRule: Send + Sync {
@@ -52,10 +50,8 @@ impl OrderRule {
                 .all(|w| (w[0].epoch(), w[0].round()) < (w[1].epoch(), w[1].round())));
             for event in commit_events {
                 if event.epoch() == epoch_state.epoch {
-                    let maybe_anchor = dag
-                        .read()
-                        .get_node_by_round_author(event.round(), event.author())
-                        .cloned();
+                    let maybe_anchor =
+                        dag.read().get_node_by_round_author(event.round(), event.author()).cloned();
                     if let Some(anchor) = maybe_anchor {
                         dag.write()
                             .reachable_mut(&anchor, None)
@@ -92,7 +88,8 @@ impl OrderRule {
             {
                 let ordered_anchor = self.find_first_anchor_to_order(direct_anchor);
                 self.finalize_order(ordered_anchor);
-                // if there's any anchor being ordered, the loop continues to check if new anchor can be ordered as well.
+                // if there's any anchor being ordered, the loop continues to check if new anchor
+                // can be ordered as well.
                 start_round = self.lowest_unordered_anchor_round;
             } else {
                 break;
@@ -100,7 +97,8 @@ impl OrderRule {
         }
     }
 
-    /// From the start round until the target_round, try to find if there's any anchor has enough votes to trigger ordering
+    /// From the start round until the target_round, try to find if there's any anchor has enough
+    /// votes to trigger ordering
     fn find_first_anchor_with_enough_votes(
         &self,
         mut start_round: Round,
@@ -120,17 +118,15 @@ impl OrderRule {
                     return Some(anchor_node.clone());
                 }
             } else {
-                debug!(
-                    anchor = anchor_author,
-                    "Anchor not found for round {}", start_round
-                );
+                debug!(anchor = anchor_author, "Anchor not found for round {}", start_round);
             }
             start_round += 2;
         }
         None
     }
 
-    /// Follow an anchor with enough votes to find the first anchor that's recursively reachable by its suffix anchor
+    /// Follow an anchor with enough votes to find the first anchor that's recursively reachable by
+    /// its suffix anchor
     fn find_first_anchor_to_order(
         &self,
         mut current_anchor: Arc<CertifiedNode>,
@@ -138,8 +134,8 @@ impl OrderRule {
         let dag_reader = self.dag.read();
         let anchor_round = current_anchor.round();
         let is_anchor = |metadata: &NodeMetadata| -> bool {
-            Self::check_parity(metadata.round(), anchor_round)
-                && *metadata.author() == self.anchor_election.get_anchor(metadata.round())
+            Self::check_parity(metadata.round(), anchor_round) &&
+                *metadata.author() == self.anchor_election.get_anchor(metadata.round())
         };
         while let Some(prev_anchor) = dag_reader
             .reachable(
@@ -157,20 +153,18 @@ impl OrderRule {
         current_anchor
     }
 
-    /// Finalize the ordering with the given anchor node, update anchor election and construct blocks for execution.
+    /// Finalize the ordering with the given anchor node, update anchor election and construct
+    /// blocks for execution.
     fn finalize_order(&mut self, anchor: Arc<CertifiedNode>) {
         // Check we're in the expected instance
-        assert!(Self::check_parity(
-            self.lowest_unordered_anchor_round,
-            anchor.round(),
-        ));
+        assert!(Self::check_parity(self.lowest_unordered_anchor_round, anchor.round(),));
         let lowest_round_to_reach = anchor.round().saturating_sub(self.dag_window_size_config);
 
         // Ceil it to the closest unordered anchor round
         let lowest_anchor_round = std::cmp::max(
             self.lowest_unordered_anchor_round,
-            lowest_round_to_reach
-                + !Self::check_parity(lowest_round_to_reach, anchor.round()) as u64,
+            lowest_round_to_reach +
+                !Self::check_parity(lowest_round_to_reach, anchor.round()) as u64,
         );
         assert!(Self::check_parity(lowest_anchor_round, anchor.round()));
 
@@ -178,18 +172,11 @@ impl OrderRule {
             .step_by(2)
             .map(|failed_round| (failed_round, self.anchor_election.get_anchor(failed_round)))
             .collect();
-        let parents = anchor
-            .parents()
-            .iter()
-            .map(|cert| *cert.metadata().author())
-            .collect();
+        let parents = anchor.parents().iter().map(|cert| *cert.metadata().author()).collect();
         let event = CommitEvent::new(
             anchor.id(),
             parents,
-            failed_authors_and_rounds
-                .iter()
-                .map(|(_, author)| *author)
-                .collect(),
+            failed_authors_and_rounds.iter().map(|(_, author)| *author).collect(),
         );
         self.anchor_election.update_reputation(event);
 
@@ -218,8 +205,7 @@ impl OrderRule {
         );
 
         self.lowest_unordered_anchor_round = anchor.round() + 1;
-        self.notifier
-            .send_ordered_nodes(ordered_nodes, failed_authors_and_rounds);
+        self.notifier.send_ordered_nodes(ordered_nodes, failed_authors_and_rounds);
     }
 
     /// Check if this node can trigger anchors to be ordered
@@ -231,9 +217,10 @@ impl OrderRule {
             node_round = round,
             "Trigger Ordering"
         );
-        // If the node comes from the proposal round in the current instance, it can't trigger any ordering
-        if round <= self.lowest_unordered_anchor_round
-            || Self::check_parity(round, self.lowest_unordered_anchor_round)
+        // If the node comes from the proposal round in the current instance, it can't trigger any
+        // ordering
+        if round <= self.lowest_unordered_anchor_round ||
+            Self::check_parity(round, self.lowest_unordered_anchor_round)
         {
             return;
         }

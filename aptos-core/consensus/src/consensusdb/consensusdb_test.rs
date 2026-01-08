@@ -9,9 +9,10 @@ use aptos_consensus_types::{
     block::block_test_utils::certificate_for_genesis,
     common::{Author, Payload},
 };
-use gaptos::aptos_crypto::bls12381::Signature;
-use gaptos::aptos_temppath::TempPath;
-use gaptos::aptos_types::aggregate_signature::AggregateSignature;
+use gaptos::{
+    aptos_crypto::bls12381::Signature, aptos_temppath::TempPath,
+    aptos_types::aggregate_signature::AggregateSignature,
+};
 use std::{collections::HashMap, hash::Hash};
 
 #[test]
@@ -26,15 +27,13 @@ fn test_put_get() {
     assert_eq!(db.get_all::<QCSchema>().unwrap().len(), 0);
 
     let qcs = vec![certificate_for_genesis()];
-    db.save_blocks_and_quorum_certificates(blocks.clone(), qcs.clone())
-        .unwrap();
+    db.save_blocks_and_quorum_certificates(blocks.clone(), qcs.clone()).unwrap();
 
     assert_eq!(db.get_all::<BlockSchema>().unwrap().len(), 1);
     assert_eq!(db.get_all::<QCSchema>().unwrap().len(), 1);
 
     let tc = vec![0u8, 1, 2];
-    db.save_highest_2chain_timeout_certificate(tc.clone())
-        .unwrap();
+    db.save_highest_2chain_timeout_certificate(tc.clone()).unwrap();
 
     let vote = vec![2u8, 1, 0];
     db.save_vote(vote.clone()).unwrap();
@@ -74,8 +73,7 @@ fn test_delete_block_and_qc() {
     assert_eq!(db.get_all::<QCSchema>().unwrap().len(), 1);
 
     // Start to delete
-    db.delete_blocks_and_quorum_certificates(vec![(epoch, block_id), (epoch, qc_id)])
-        .unwrap();
+    db.delete_blocks_and_quorum_certificates(vec![(epoch, block_id), (epoch, qc_id)]).unwrap();
     assert_eq!(db.get_all::<BlockSchema>().unwrap().len(), 0);
     assert_eq!(db.get_all::<QCSchema>().unwrap().len(), 0);
 }

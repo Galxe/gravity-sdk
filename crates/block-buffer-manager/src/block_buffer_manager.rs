@@ -1,7 +1,11 @@
 use anyhow::{anyhow, format_err};
 use aptos_executor_types::StateComputeResult;
 use gaptos::{
-    api_types::{self, account::ExternalAccountAddress, u256_define::{HashValue, TxnHash}},
+    api_types::{
+        self,
+        account::ExternalAccountAddress,
+        u256_define::{HashValue, TxnHash},
+    },
     aptos_types::{epoch_state::EpochState, idl::convert_validator_set},
 };
 use std::{
@@ -35,9 +39,15 @@ pub struct TxnItem {
 }
 
 pub trait TxPool: Send + Sync + 'static {
-    fn best_txns(&self, filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>) -> Box<dyn Iterator<Item = VerifiedTxn>>;
+    fn best_txns(
+        &self,
+        filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>,
+    ) -> Box<dyn Iterator<Item = VerifiedTxn>>;
 
-    fn get_broadcast_txns(&self, filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>) -> Box<dyn Iterator<Item = VerifiedTxn>>;
+    fn get_broadcast_txns(
+        &self,
+        filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>,
+    ) -> Box<dyn Iterator<Item = VerifiedTxn>>;
 
     // add external txns to the tx pool
     fn add_external_txn(&self, txns: VerifiedTxn) -> bool;
@@ -53,22 +63,26 @@ impl EmptyTxPool {
     }
 }
 
-
 impl TxPool for EmptyTxPool {
-    fn best_txns(&self, _filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>) -> Box<dyn Iterator<Item = VerifiedTxn>> {
+    fn best_txns(
+        &self,
+        _filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>,
+    ) -> Box<dyn Iterator<Item = VerifiedTxn>> {
         Box::new(vec![].into_iter())
     }
 
-    fn get_broadcast_txns(&self, _filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>) -> Box<dyn Iterator<Item = VerifiedTxn>> {
+    fn get_broadcast_txns(
+        &self,
+        _filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>,
+    ) -> Box<dyn Iterator<Item = VerifiedTxn>> {
         Box::new(vec![].into_iter())
     }
 
     fn add_external_txn(&self, _txns: VerifiedTxn) -> bool {
         false
     }
-    
-    fn remove_txns(&self, _txns: Vec<VerifiedTxn>) {
-    }
+
+    fn remove_txns(&self, _txns: Vec<VerifiedTxn>) {}
 }
 
 pub struct TxnBuffer {
@@ -182,7 +196,7 @@ pub struct BlockBufferManager {
 impl BlockBufferManager {
     pub fn new(config: BlockBufferManagerConfig) -> Arc<Self> {
         let (sender, _recv) = tokio::sync::broadcast::channel(1024);
-            let block_buffer_manager = Self {
+        let block_buffer_manager = Self {
             txn_buffer: TxnBuffer { txns: Mutex::new(Vec::new()) },
             block_state_machine: Mutex::new(BlockStateMachine {
                 sender,
@@ -367,11 +381,14 @@ impl BlockBufferManager {
         }
         info!(
             "set_ordered_blocks {:?} num {:?} epoch {:?} parent_id {:?}",
-            block.block_meta.block_id, block.block_meta.block_number, block.block_meta.epoch, parent_id
+            block.block_meta.block_id,
+            block.block_meta.block_number,
+            block.block_meta.epoch,
+            parent_id
         );
         let mut block_state_machine = self.block_state_machine.lock().await;
         let current_epoch = block_state_machine.current_epoch;
-        
+
         // Check epoch validity
         if block.block_meta.epoch < current_epoch {
             warn!(
@@ -380,7 +397,7 @@ impl BlockBufferManager {
             );
             return Ok(());
         }
-        
+
         if block.block_meta.epoch > current_epoch {
             warn!(
                 "set_ordered_blocks: ignoring block {} with future epoch {} (current epoch: {})",
@@ -388,7 +405,7 @@ impl BlockBufferManager {
             );
             return Ok(());
         }
-        
+
         // At this point: block.block_meta.epoch == current_epoch
         // Check if block (epoch, number) already exists
         let block_key = BlockKey::new(block.block_meta.epoch, block.block_meta.block_number);
@@ -397,7 +414,9 @@ impl BlockBufferManager {
             if existing_block_id == block.block_meta.block_id {
                 warn!(
                     "set_ordered_blocks: block {} with epoch {} and id {:?} already exists",
-                    block.block_meta.block_number, block.block_meta.epoch, block.block_meta.block_id
+                    block.block_meta.block_number,
+                    block.block_meta.epoch,
+                    block.block_meta.block_id
                 );
             } else {
                 warn!(
@@ -409,13 +428,16 @@ impl BlockBufferManager {
         }
         let block_num = block.block_meta.block_number;
         // Try to find parent in current epoch first, then try previous epoch
-        let parent_key_current = BlockKey::new(block.block_meta.epoch, block.block_meta.block_number - 1);
+        let parent_key_current =
+            BlockKey::new(block.block_meta.epoch, block.block_meta.block_number - 1);
         let parent_key_prev_epoch = if block.block_meta.epoch > 0 {
             Some(BlockKey::new(block.block_meta.epoch - 1, block.block_meta.block_number - 1))
         } else {
             None
         };
-        let actual_parent = block_state_machine.blocks.get(&parent_key_current)
+        let actual_parent = block_state_machine
+            .blocks
+            .get(&parent_key_current)
             .or_else(|| parent_key_prev_epoch.and_then(|key| block_state_machine.blocks.get(&key)));
         let actual_parent_id = match (block_num, actual_parent) {
             (_, Some(state)) => state.get_block_id(),
@@ -470,13 +492,17 @@ impl BlockBufferManager {
                 );
                 return Err(anyhow::anyhow!(
                     "Epoch mismatch: expected {} but current is {}",
-                    expected_epoch, current_epoch
+                    expected_epoch,
+                    current_epoch
                 ));
             }
         }
 
         let start = Instant::now();
-        info!("call get_ordered_blocks start_num: {:?} max_size: {:?} expected_epoch: {:?}", start_num, max_size, expected_epoch);
+        info!(
+            "call get_ordered_blocks start_num: {:?} max_size: {:?} expected_epoch: {:?}",
+            start_num, max_size, expected_epoch
+        );
         loop {
             if start.elapsed() > self.config.max_wait_timeout {
                 return Err(anyhow::anyhow!(
@@ -529,7 +555,7 @@ impl BlockBufferManager {
                     Err(_) => continue, // Timeout on the wait, retry
                 }
             }
-            
+
             return Ok(result);
         }
     }
@@ -648,14 +674,15 @@ impl BlockBufferManager {
         *self.latest_epoch_change_block_number.lock().await = block_num;
 
         // Store the new epoch in next_epoch instead of updating current_epoch immediately
-        // The current_epoch will be updated in release_inflight_blocks when the epoch change is finalized
+        // The current_epoch will be updated in release_inflight_blocks when the epoch change is
+        // finalized
         let old_epoch = block_state_machine.current_epoch;
         block_state_machine.next_epoch = Some(*new_epoch);
         info!(
             "calculate_new_epoch_state: setting next_epoch to {} (current_epoch: {}) at block {}",
             new_epoch, old_epoch, block_num
         );
-        
+
         Ok(Some(EpochState::new(*new_epoch, (&validator_set).into())))
     }
 
@@ -680,7 +707,9 @@ impl BlockBufferManager {
             assert_eq!(block.block_meta.block_id, block_id);
             let txn_len = block.txns.len();
             let events_len = events.len();
-            let new_epoch_state = self.calculate_new_epoch_state(&events, block_num, &mut block_state_machine).await?;
+            let new_epoch_state = self
+                .calculate_new_epoch_state(&events, block_num, &mut block_state_machine)
+                .await?;
             let compute_result = StateComputeResult::new(
                 ComputeRes { data: block_hash, txn_num: txn_len as u64, txn_status, events },
                 new_epoch_state,
@@ -813,7 +842,12 @@ impl BlockBufferManager {
             loop {
                 let block_key = BlockKey::new(epoch, current_num);
                 match block_state_machine.blocks.get_mut(&block_key) {
-                    Some(BlockState::Committed { hash, compute_result: _, id, persist_notifier }) => {
+                    Some(BlockState::Committed {
+                        hash,
+                        compute_result: _,
+                        id,
+                        persist_notifier,
+                    }) => {
                         result.push(BlockHashRef {
                             block_id: *id,
                             num: current_num,
@@ -897,7 +931,7 @@ impl BlockBufferManager {
         let mut block_state_machine = self.block_state_machine.lock().await;
         let latest_epoch_change_block_number = *self.latest_epoch_change_block_number.lock().await;
         let old_epoch = block_state_machine.current_epoch;
-        
+
         // Update current_epoch from next_epoch if it exists
         if let Some(next_epoch) = block_state_machine.next_epoch.take() {
             block_state_machine.current_epoch = next_epoch;
@@ -906,7 +940,7 @@ impl BlockBufferManager {
                 old_epoch, next_epoch, latest_epoch_change_block_number
             );
         }
-        
+
         info!(
             "release_inflight_blocks latest_epoch_change_block_number: {:?}, current_epoch: {}",
             latest_epoch_change_block_number, block_state_machine.current_epoch

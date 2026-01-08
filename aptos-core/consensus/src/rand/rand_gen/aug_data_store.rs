@@ -10,8 +10,7 @@ use crate::rand::rand_gen::{
 };
 use anyhow::ensure;
 use aptos_consensus_types::common::Author;
-use gaptos::aptos_logger::error;
-use gaptos::aptos_types::validator_signer::ValidatorSigner;
+use gaptos::{aptos_logger::error, aptos_types::validator_signer::ValidatorSigner};
 use std::{collections::HashMap, sync::Arc};
 
 pub struct AugDataStore<D> {
@@ -58,16 +57,11 @@ impl<D: TAugmentedData> AugDataStore<D> {
         let (to_remove, certified_data) =
             Self::filter_by_epoch(epoch, all_certified_data.into_iter());
         if let Err(e) = db.remove_certified_aug_data(to_remove) {
-            error!(
-                "[AugDataStore] failed to remove certified aug data: {:?}",
-                e
-            );
+            error!("[AugDataStore] failed to remove certified aug data: {:?}", e);
         }
 
         for (_, certified_data) in &certified_data {
-            certified_data
-                .data()
-                .augment(&config, &fast_config, certified_data.author());
+            certified_data.data().augment(&config, &fast_config, certified_data.author());
         }
 
         Self {
@@ -75,10 +69,7 @@ impl<D: TAugmentedData> AugDataStore<D> {
             signer,
             config,
             fast_config,
-            data: aug_data
-                .into_iter()
-                .map(|(id, data)| (id.author(), data))
-                .collect(),
+            data: aug_data.into_iter().map(|(id, data)| (id.author(), data)).collect(),
             certified_data: certified_data
                 .into_iter()
                 .map(|(id, data)| (id.author(), data))
@@ -122,11 +113,8 @@ impl<D: TAugmentedData> AugDataStore<D> {
             return Ok(CertifiedAugDataAck::new(self.epoch));
         }
         self.db.save_certified_aug_data(&certified_data)?;
-        certified_data
-            .data()
-            .augment(&self.config, &self.fast_config, certified_data.author());
-        self.certified_data
-            .insert(*certified_data.author(), certified_data);
+        certified_data.data().augment(&self.config, &self.fast_config, certified_data.author());
+        self.certified_data.insert(*certified_data.author(), certified_data);
         Ok(CertifiedAugDataAck::new(self.epoch))
     }
 }

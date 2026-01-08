@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::{pipeline_health::TPipelineHealth, TChainHealth};
-use gaptos::aptos_config::config::DagPayloadConfig;
 use aptos_consensus_types::common::Round;
-use gaptos::aptos_types::epoch_state::EpochState;
+use gaptos::{aptos_config::config::DagPayloadConfig, aptos_types::epoch_state::EpochState};
 use std::{sync::Arc, time::Duration};
 
 #[derive(Clone)]
@@ -20,11 +19,7 @@ impl HealthBackoff {
         chain_health: Arc<dyn TChainHealth>,
         pipeline_health: Arc<dyn TPipelineHealth>,
     ) -> Self {
-        Self {
-            epoch_state,
-            chain_health,
-            pipeline_health,
-        }
+        Self { epoch_state, chain_health, pipeline_health }
     }
 
     pub fn calculate_payload_limits(
@@ -32,33 +27,23 @@ impl HealthBackoff {
         round: Round,
         payload_config: &DagPayloadConfig,
     ) -> (u64, u64) {
-        let chain_backoff = self
-            .chain_health
-            .get_round_payload_limits(round)
-            .unwrap_or((u64::MAX, u64::MAX));
-        let pipeline_backoff = self
-            .pipeline_health
-            .get_payload_limits()
-            .unwrap_or((u64::MAX, u64::MAX));
+        let chain_backoff =
+            self.chain_health.get_round_payload_limits(round).unwrap_or((u64::MAX, u64::MAX));
+        let pipeline_backoff =
+            self.pipeline_health.get_payload_limits().unwrap_or((u64::MAX, u64::MAX));
         let voting_power_ratio = self.chain_health.voting_power_ratio(round);
 
-        let max_txns_per_round = [
-            payload_config.max_sending_txns_per_round,
-            chain_backoff.0,
-            pipeline_backoff.0,
-        ]
-        .into_iter()
-        .min()
-        .expect("must not be empty");
+        let max_txns_per_round =
+            [payload_config.max_sending_txns_per_round, chain_backoff.0, pipeline_backoff.0]
+                .into_iter()
+                .min()
+                .expect("must not be empty");
 
-        let max_size_per_round_bytes = [
-            payload_config.max_sending_size_per_round_bytes,
-            chain_backoff.1,
-            pipeline_backoff.1,
-        ]
-        .into_iter()
-        .min()
-        .expect("must not be empty");
+        let max_size_per_round_bytes =
+            [payload_config.max_sending_size_per_round_bytes, chain_backoff.1, pipeline_backoff.1]
+                .into_iter()
+                .min()
+                .expect("must not be empty");
 
         // TODO: figure out receiver side checks
         let max_txns = max_txns_per_round.saturating_div(
@@ -75,9 +60,7 @@ impl HealthBackoff {
         let chain_backoff = self.chain_health.get_round_backoff(round);
         let pipeline_backoff = self.pipeline_health.get_backoff();
 
-        chain_backoff
-            .unwrap_or_default()
-            .max(pipeline_backoff.unwrap_or_default())
+        chain_backoff.unwrap_or_default().max(pipeline_backoff.unwrap_or_default())
     }
 
     pub fn stop_voting(&self) -> bool {

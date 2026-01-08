@@ -23,24 +23,13 @@ use crate::{
     },
     state_replication::StateComputerCommitCallBackType,
 };
-use block_buffer_manager::get_block_buffer_manager;
-use gaptos::aptos_bounded_executor::BoundedExecutor;
-use gaptos::aptos_config::config::ConsensusObserverConfig;
 use aptos_consensus_types::{
     common::{Author, Round},
     pipeline::commit_vote::CommitVote,
     pipelined_block::PipelinedBlock,
 };
-use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::ExecutorResult;
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_network::protocols::{rpc::error::RpcError, wire::handshake::v1::ProtocolId};
-use gaptos::aptos_reliable_broadcast::{DropGuard, ReliableBroadcast};
-use gaptos::aptos_time_service::TimeService;
-use gaptos::aptos_types::{
-    account_address::AccountAddress, epoch_change::EpochChangeProof, epoch_state::EpochState,
-    ledger_info::LedgerInfoWithSignatures,
-};
+use block_buffer_manager::get_block_buffer_manager;
 use bytes::Bytes;
 use futures::{
     channel::{
@@ -50,16 +39,31 @@ use futures::{
     future::{AbortHandle, Abortable},
     FutureExt, SinkExt, StreamExt,
 };
+use gaptos::{
+    aptos_bounded_executor::BoundedExecutor,
+    aptos_config::config::ConsensusObserverConfig,
+    aptos_consensus::counters,
+    aptos_crypto::HashValue,
+    aptos_logger::prelude::*,
+    aptos_network::protocols::{rpc::error::RpcError, wire::handshake::v1::ProtocolId},
+    aptos_reliable_broadcast::{DropGuard, ReliableBroadcast},
+    aptos_time_service::TimeService,
+    aptos_types::{
+        account_address::AccountAddress, epoch_change::EpochChangeProof, epoch_state::EpochState,
+        ledger_info::LedgerInfoWithSignatures,
+    },
+};
 use once_cell::sync::OnceCell;
 use std::{
-    collections::HashMap, f32::consts::E, sync::{
+    collections::HashMap,
+    f32::consts::E,
+    sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
-    }
+    },
 };
 use tokio::time::{Duration, Instant};
 use tokio_retry::strategy::ExponentialBackoff;
-use gaptos::aptos_consensus::counters as counters;
 
 pub const COMMIT_VOTE_BROADCAST_INTERVAL_MS: u64 = 1500;
 pub const COMMIT_VOTE_REBROADCAST_INTERVAL_MS: u64 = 30000;
@@ -107,7 +111,8 @@ pub struct BufferManager {
     buffer: Buffer<BufferItem>,
 
     // the roots point to the first *unprocessed* item.
-    // None means no items ready to be processed (either all processed or no item finishes previous stage)
+    // None means no items ready to be processed (either all processed or no item finishes previous
+    // stage)
     execution_root: BufferItemRootType,
     execution_schedule_phase_tx: Sender<CountedRequest<ExecutionRequest>>,
     execution_schedule_phase_rx: Receiver<ExecutionWaitRequest>,
@@ -123,8 +128,9 @@ pub struct BufferManager {
     commit_proof_rb_handle: Option<DropGuard>,
 
     // message received from the network
-    commit_msg_rx:
-        Option<gaptos::aptos_channels::aptos_channel::Receiver<AccountAddress, IncomingCommitRequest>>,
+    commit_msg_rx: Option<
+        gaptos::aptos_channels::aptos_channel::Receiver<AccountAddress, IncomingCommitRequest>,
+    >,
 
     persisting_phase_tx: Sender<CountedRequest<PersistingRequest>>,
     persisting_phase_rx: Receiver<ExecutorResult<Round>>,
@@ -396,7 +402,8 @@ impl BufferManager {
                         ConsensusObserverMessage::new_commit_decision_message(commit_proof.clone());
                     consensus_publisher.publish_message(message).await;
                 }
-                counters::SEND_TO_PERSISTING_BLOCK_COUNTER.inc_by(blocks_to_persist.len().try_into().unwrap());
+                counters::SEND_TO_PERSISTING_BLOCK_COUNTER
+                    .inc_by(blocks_to_persist.len().try_into().unwrap());
                 self.persisting_phase_tx
                     .send(self.create_new_request(PersistingRequest {
                         blocks: blocks_to_persist,
@@ -404,8 +411,9 @@ impl BufferManager {
                         // we use the last callback
                         // this is okay because the callback function (from BlockStore::commit)
                         // takes in the actual blocks and ledger info from the state computer
-                        // the encoded values are references to the block_tree, storage, and a commit root
-                        // the block_tree and storage are the same for all the callbacks in the current epoch
+                        // the encoded values are references to the block_tree, storage, and a
+                        // commit root the block_tree and storage are the
+                        // same for all the callbacks in the current epoch
                         // the commit root is used in logging only.
                         callback: aggregated_item.callback,
                     }))
@@ -419,9 +427,10 @@ impl BufferManager {
         unreachable!("Aggregated item not found in the list");
     }
 
-    /// Reset any request in buffer manager, this is important to avoid race condition with state sync.
-    /// Internal requests are managed with ongoing_tasks.
-    /// Incoming ordered blocks are pulled, it should only have existing blocks but no new blocks until reset finishes.
+    /// Reset any request in buffer manager, this is important to avoid race condition with state
+    /// sync. Internal requests are managed with ongoing_tasks.
+    /// Incoming ordered blocks are pulled, it should only have existing blocks but no new blocks
+    /// until reset finishes.
     async fn reset(&mut self) {
         self.buffer = Buffer::new();
         self.execution_root = None;
@@ -548,7 +557,8 @@ impl BufferManager {
         }
     }
 
-    /// If the signing response is successful, advance the item to Signed and broadcast commit votes.
+    /// If the signing response is successful, advance the item to Signed and broadcast commit
+    /// votes.
     async fn process_signing_response(&mut self, response: SigningResponse) {
         let SigningResponse { signature_result, commit_ledger_info } = response;
         let signature = match signature_result {
@@ -564,7 +574,8 @@ impl BufferManager {
             self.buffer.find_elem_by_key(self.signing_root, commit_ledger_info.commit_info().id());
         if current_cursor.is_some() {
             let item = self.buffer.take(&current_cursor);
-            // it is possible that we already signed this buffer item (double check after the final integration)
+            // it is possible that we already signed this buffer item (double check after the final
+            // integration)
             if item.is_executed() {
                 // we have found the buffer item
                 let mut signed_item = item.advance_to_signed(self.author, signature);
@@ -673,7 +684,9 @@ impl BufferManager {
                         return Some(target_block_id);
                     }
                 }
-                reply_nack(protocol, response_sender); // TODO: send_commit_proof() doesn't care about the response and this should be direct send not RPC
+                reply_nack(protocol, response_sender); // TODO: send_commit_proof() doesn't care
+                                                       // about the response and this should be
+                                                       // direct send not RPC
             }
             CommitMessage::Ack(_) => {
                 // It should be filtered out by verify, so we log errors here
@@ -689,8 +702,8 @@ impl BufferManager {
     /// this function retries all the items until the signing root
     /// note that there might be other signed items after the signing root
     async fn rebroadcast_commit_votes_if_needed(&mut self) {
-        if self.previous_commit_time.elapsed()
-            < Duration::from_millis(COMMIT_VOTE_BROADCAST_INTERVAL_MS)
+        if self.previous_commit_time.elapsed() <
+            Duration::from_millis(COMMIT_VOTE_BROADCAST_INTERVAL_MS)
         {
             return;
         }
@@ -706,11 +719,12 @@ impl BufferManager {
                 let signed_item = item.unwrap_signed_mut();
                 let re_broadcast = match &signed_item.rb_handle {
                     None => true,
-                    // Since we don't persist the votes, nodes that crashed would lose the votes even after send ack,
-                    // We'll try to re-initiate the broadcast after 30s.
+                    // Since we don't persist the votes, nodes that crashed would lose the votes
+                    // even after send ack, We'll try to re-initiate the
+                    // broadcast after 30s.
                     Some((start_time, _)) => {
-                        start_time.elapsed()
-                            >= Duration::from_millis(COMMIT_VOTE_REBROADCAST_INTERVAL_MS)
+                        start_time.elapsed() >=
+                            Duration::from_millis(COMMIT_VOTE_REBROADCAST_INTERVAL_MS)
                     }
                 };
                 if re_broadcast {

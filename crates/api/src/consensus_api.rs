@@ -2,9 +2,9 @@ use std::{path::PathBuf, sync::Arc};
 
 use crate::{
     bootstrap::{
-        init_block_buffer_manager, init_mempool, init_peers_and_metadata,
-        start_consensus, start_node_inspection_service, dkg_network_configuration,
-        create_dkg_runtime, init_jwk_consensus
+        create_dkg_runtime, dkg_network_configuration, init_block_buffer_manager,
+        init_jwk_consensus, init_mempool, init_peers_and_metadata, start_consensus,
+        start_node_inspection_service,
     },
     consensus_mempool_handler::{ConsensusToMempoolHandler, MempoolNotificationHandler},
     https::https_server,
@@ -90,7 +90,7 @@ fn prepare_https_server_config(
         .to_str()
         .filter(|s| !s.is_empty())
         .map(|_| node_config.https_key_pem_path.clone());
-    
+
     HttpsServerConfig {
         address: node_config.https_server_address.clone(),
         cert_pem,
@@ -190,7 +190,7 @@ impl ConsensusEngine {
                     jwk_consensus_network_handle = Some(network_handle);
                 }
             }
-     
+
             // Only create DKG network interface for validator nodes
             if network_id.is_validator_network() {
                 dkg_network_handle = Some(register_client_and_service_with_network::<DKGMessage>(
@@ -292,10 +292,10 @@ impl ConsensusEngine {
 
         // Create DKG runtime with shared VTxn pool
         let dkg_runtime = create_dkg_runtime(
-            &mut node_config.clone(), 
-            &mut event_subscription_service, 
+            &mut node_config.clone(),
+            &mut event_subscription_service,
             dkg_interfaces,
-            &vtxn_pool
+            &vtxn_pool,
         );
         if let Some(dkg_runtime) = dkg_runtime {
             runtimes.push(dkg_runtime);

@@ -4,17 +4,17 @@
 use crate::{
     monitor,
     quorum_store::{
-        batch_coordinator::BatchCoordinatorCommand,
-        proof_coordinator::ProofCoordinatorCommand, proof_manager::ProofManagerCommand,
+        batch_coordinator::BatchCoordinatorCommand, proof_coordinator::ProofCoordinatorCommand,
+        proof_manager::ProofManagerCommand,
     },
     round_manager::VerifiedEvent,
 };
-use gaptos::aptos_channels::aptos_channel;
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_types::PeerId;
 use futures::StreamExt;
+use gaptos::{
+    aptos_channels::aptos_channel, aptos_consensus::quorum_store::counters,
+    aptos_logger::prelude::*, aptos_types::PeerId,
+};
 use tokio::sync::mpsc::Sender;
-use gaptos::aptos_consensus::quorum_store::counters as counters;
 
 pub(crate) struct NetworkListener {
     network_msg_rx: aptos_channel::Receiver<PeerId, VerifiedEvent>,
@@ -30,12 +30,7 @@ impl NetworkListener {
         remote_batch_coordinator_tx: Vec<Sender<BatchCoordinatorCommand>>,
         proof_manager_tx: Sender<ProofManagerCommand>,
     ) -> Self {
-        Self {
-            network_msg_rx,
-            proof_coordinator_tx,
-            remote_batch_coordinator_tx,
-            proof_manager_tx,
-        }
+        Self { network_msg_rx, proof_coordinator_tx, remote_batch_coordinator_tx, proof_manager_tx }
     }
 
     pub async fn start(mut self) {
@@ -46,18 +41,16 @@ impl NetworkListener {
                     // TODO: does the assumption have to be that network listener is shutdown first?
                     VerifiedEvent::Shutdown(ack_tx) => {
                         info!("QS: shutdown network listener received");
-                        ack_tx
-                            .send(())
-                            .expect("Failed to send shutdown ack to QuorumStore");
+                        ack_tx.send(()).expect("Failed to send shutdown ack to QuorumStore");
                         break;
-                    },
+                    }
                     VerifiedEvent::SignedBatchInfo(signed_batch_infos) => {
                         let cmd = ProofCoordinatorCommand::AppendSignature(*signed_batch_infos);
                         self.proof_coordinator_tx
                             .send(cmd)
                             .await
                             .expect("Could not send signed_batch_info to proof_coordinator");
-                    },
+                    }
                     VerifiedEvent::BatchMsg(batch_msg) => {
                         let author = batch_msg.author();
                         let batches = batch_msg.take();
@@ -75,17 +68,17 @@ impl NetworkListener {
                             .send(BatchCoordinatorCommand::NewBatches(author, batches))
                             .await
                             .expect("Could not send remote batch");
-                    },
+                    }
                     VerifiedEvent::ProofOfStoreMsg(proofs) => {
                         let cmd = ProofManagerCommand::ReceiveProofs(*proofs);
                         self.proof_manager_tx
                             .send(cmd)
                             .await
                             .expect("could not push Proof proof_of_store");
-                    },
+                    }
                     _ => {
                         unreachable!()
-                    },
+                    }
                 };
             });
         }

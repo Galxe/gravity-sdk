@@ -9,30 +9,34 @@ pub mod schema;
 
 use crate::error::DbError;
 use anyhow::Result;
-use aptos_consensus_types::{block::Block, quorum_cert::QuorumCert, pipelined_block::PipelinedBlock};
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_types::{randomness::Randomness, randomness::RandMetadata};
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_schemadb::{
-    schema::{KeyCodec, Schema},
-    Options, batch::SchemaBatch, DB, DEFAULT_COLUMN_FAMILY_NAME,
+use aptos_consensus_types::{
+    block::Block, pipelined_block::PipelinedBlock, quorum_cert::QuorumCert,
 };
-use gaptos::aptos_storage_interface::AptosDbError;
+use gaptos::{
+    aptos_crypto::HashValue,
+    aptos_logger::prelude::*,
+    aptos_schemadb::{
+        batch::SchemaBatch,
+        schema::{KeyCodec, Schema},
+        Options, DB, DEFAULT_COLUMN_FAMILY_NAME,
+    },
+    aptos_storage_interface::AptosDbError,
+    aptos_types::randomness::{RandMetadata, Randomness},
+};
 use ledger_db::LedgerDb;
 use rocksdb::ReadOptions;
-pub use schema::{
-    block::BlockNumberSchema,
-    block::BlockSchema,
-    dag::{CertifiedNodeSchema, DagVoteSchema, NodeSchema},
-    ledger_info::LedgerInfoSchema,
-    epoch_by_block_number::EpochByBlockNumberSchema,
-    quorum_certificate::QCSchema,
-};
 use schema::{
     block::BLOCK_NUMBER_CF_NAME,
     single_entry::{SingleEntryKey, SingleEntrySchema},
-    BLOCK_CF_NAME, CERTIFIED_NODE_CF_NAME, DAG_VOTE_CF_NAME, LEDGER_INFO_CF_NAME, NODE_CF_NAME,
-    QC_CF_NAME, SINGLE_ENTRY_CF_NAME, EPOCH_BY_BLOCK_NUMBER_CF_NAME, RANDOMNESS_CF_NAME,
+    BLOCK_CF_NAME, CERTIFIED_NODE_CF_NAME, DAG_VOTE_CF_NAME, EPOCH_BY_BLOCK_NUMBER_CF_NAME,
+    LEDGER_INFO_CF_NAME, NODE_CF_NAME, QC_CF_NAME, RANDOMNESS_CF_NAME, SINGLE_ENTRY_CF_NAME,
+};
+pub use schema::{
+    block::{BlockNumberSchema, BlockSchema},
+    dag::{CertifiedNodeSchema, DagVoteSchema, NodeSchema},
+    epoch_by_block_number::EpochByBlockNumberSchema,
+    ledger_info::LedgerInfoSchema,
+    quorum_certificate::QCSchema,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -139,24 +143,32 @@ impl ConsensusDB {
         let end_key = (epoch, HashValue::new([u8::MAX; HashValue::LENGTH]));
 
         let block_number_to_block_id = self
-            .get_range_with_filter::<BlockNumberSchema, _>(&start_key, &end_key, |(_, block_number)| *block_number >= latest_block_number)?
+            .get_range_with_filter::<BlockNumberSchema, _>(
+                &start_key,
+                &end_key,
+                |(_, block_number)| *block_number >= latest_block_number,
+            )?
             .into_iter()
             .map(|((_, block_id), block_number)| (block_number, block_id))
             .collect::<HashMap<u64, HashValue>>();
-        let (start_epoch, start_round, start_block_id) = if block_number_to_block_id.contains_key(&latest_block_number) {
-            let block = self.get::<BlockSchema>(&(epoch, block_number_to_block_id[&latest_block_number]))?
-                .unwrap();
-            has_root = true;
-            (block.epoch(), block.round(), block.id())
-        } else {
-            (epoch, 0, HashValue::zero())
-        };
+        let (start_epoch, start_round, start_block_id) =
+            if block_number_to_block_id.contains_key(&latest_block_number) {
+                let block = self
+                    .get::<BlockSchema>(&(epoch, block_number_to_block_id[&latest_block_number]))?
+                    .unwrap();
+                has_root = true;
+                (block.epoch(), block.round(), block.id())
+            } else {
+                (epoch, 0, HashValue::zero())
+            };
         let block_id_to_block_number = block_number_to_block_id
             .iter()
             .map(|(block_number, block_id)| (*block_id, *block_number))
             .collect::<HashMap<HashValue, u64>>();
         let mut consensus_blocks: Vec<_> = self
-            .get_range_with_filter::<BlockSchema, _>(&start_key, &end_key, |(_, block)| block.round() > start_round || block.id() == start_block_id)?
+            .get_range_with_filter::<BlockSchema, _>(&start_key, &end_key, |(_, block)| {
+                block.round() > start_round || block.id() == start_block_id
+            })?
             .into_iter()
             .map(|(_, block)| block)
             .collect();
@@ -168,13 +180,22 @@ impl ConsensusDB {
             }
         });
         let consensus_qcs: Vec<_> = self
-            .get_range_with_filter::<QCSchema, _>(&start_key, &end_key, |(_, qc)| qc.certified_block().round() > start_round || qc.certified_block().id() == start_block_id)?
+            .get_range_with_filter::<QCSchema, _>(&start_key, &end_key, |(_, qc)| {
+                qc.certified_block().round() > start_round ||
+                    qc.certified_block().id() == start_block_id
+            })?
             .into_iter()
             .map(|(_, qc)| qc)
             .collect();
         info!("consensus_blocks size : {}, consensus_qcs size : {}, block_number_to_block_id size : {}, start_round : {}",
                  consensus_blocks.len(), consensus_qcs.len(), block_number_to_block_id.len(), start_round);
-        Ok((last_vote, highest_2chain_timeout_certificate, consensus_blocks, consensus_qcs, has_root))
+        Ok((
+            last_vote,
+            highest_2chain_timeout_certificate,
+            consensus_blocks,
+            consensus_qcs,
+            has_root,
+        ))
     }
 
     pub fn save_highest_2chain_timeout_certificate(&self, tc: Vec<u8>) -> Result<(), DbError> {
@@ -199,12 +220,19 @@ impl ConsensusDB {
             return Ok(());
         }
         let mut batch = SchemaBatch::new();
-        block_data.iter().try_for_each(|block| batch.put::<BlockSchema>(&(block.epoch(), block.id()), block))?;
-        qc_data.iter().try_for_each(|qc| batch.put::<QCSchema>(&(qc.certified_block().epoch(), qc.certified_block().id()), qc))?;
+        block_data
+            .iter()
+            .try_for_each(|block| batch.put::<BlockSchema>(&(block.epoch(), block.id()), block))?;
+        qc_data.iter().try_for_each(|qc| {
+            batch.put::<QCSchema>(&(qc.certified_block().epoch(), qc.certified_block().id()), qc)
+        })?;
         self.commit(batch)
     }
 
-    pub fn save_block_numbers(&self, block_numbers: Vec<(u64, u64, HashValue)>) -> Result<(), DbError> {
+    pub fn save_block_numbers(
+        &self,
+        block_numbers: Vec<(u64, u64, HashValue)>,
+    ) -> Result<(), DbError> {
         if block_numbers.is_empty() {
             return Ok(());
         }
@@ -283,7 +311,11 @@ impl ConsensusDB {
         Ok(self.db.get::<S>(key)?)
     }
 
-    pub fn get_range<S: Schema>(&self, start_key: &S::Key, end_key: &S::Key) -> Result<Vec<(S::Key, S::Value)>, DbError> {
+    pub fn get_range<S: Schema>(
+        &self,
+        start_key: &S::Key,
+        end_key: &S::Key,
+    ) -> Result<Vec<(S::Key, S::Value)>, DbError> {
         let mut option = ReadOptions::default();
         let lower_bound = <S::Key as KeyCodec<S>>::encode_key(start_key).unwrap();
         option.set_iterate_lower_bound(lower_bound);
@@ -294,7 +326,12 @@ impl ConsensusDB {
         Ok(iter.collect::<Result<Vec<(S::Key, S::Value)>, AptosDbError>>()?)
     }
 
-    pub fn get_range_with_filter<S: Schema, F>(&self, start_key: &S::Key, end_key: &S::Key, filter: F) -> Result<Vec<(S::Key, S::Value)>, DbError>
+    pub fn get_range_with_filter<S: Schema, F>(
+        &self,
+        start_key: &S::Key,
+        end_key: &S::Key,
+        filter: F,
+    ) -> Result<Vec<(S::Key, S::Value)>, DbError>
     where
         F: FnMut(&(S::Key, S::Value)) -> bool,
     {
@@ -337,8 +374,16 @@ impl ConsensusDB {
         self.get::<QCSchema>(&(epoch, block_id))
     }
 
-    pub fn get_qc_range(&self, start_key: &(u64, HashValue), end_key: &(u64, HashValue)) -> Result<Vec<QuorumCert>, DbError> {
-        Ok(self.get_range::<QCSchema>(start_key, end_key)?.into_iter().map(|(_, value)| value).collect())
+    pub fn get_qc_range(
+        &self,
+        start_key: &(u64, HashValue),
+        end_key: &(u64, HashValue),
+    ) -> Result<Vec<QuorumCert>, DbError> {
+        Ok(self
+            .get_range::<QCSchema>(start_key, end_key)?
+            .into_iter()
+            .map(|(_, value)| value)
+            .collect())
     }
 
     pub fn get_max_epoch(&self) -> u64 {
@@ -356,13 +401,13 @@ impl ConsensusDB {
         if blocks.is_empty() {
             return Ok(());
         }
-        
+
         let mut batch = SchemaBatch::new();
-        
+
         for block in blocks {
             batch.put::<schema::randomness::RandomnessSchema>(&block.0, &block.1)?;
         }
-        
+
         self.commit(batch)
     }
 
@@ -377,10 +422,12 @@ include!("include/writer.rs");
 
 #[cfg(test)]
 mod test {
-    use gaptos::aptos_crypto::ed25519::Ed25519PrivateKey;
-    use gaptos::aptos_crypto::ed25519::Ed25519PublicKey;
-    use gaptos::aptos_crypto::test_utils::KeyPair;
-    use gaptos::aptos_crypto::{bls12381, x25519, PrivateKey};
+    use gaptos::aptos_crypto::{
+        bls12381,
+        ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
+        test_utils::KeyPair,
+        x25519, PrivateKey,
+    };
 
     #[test]
     fn gen_account_private_key() {

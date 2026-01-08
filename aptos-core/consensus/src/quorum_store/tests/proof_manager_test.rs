@@ -9,9 +9,11 @@ use aptos_consensus_types::{
     proof_of_store::{BatchId, BatchInfo, ProofOfStore},
     request_response::{GetPayloadCommand, GetPayloadResponse},
 };
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_types::{aggregate_signature::AggregateSignature, PeerId};
 use futures::channel::oneshot;
+use gaptos::{
+    aptos_crypto::HashValue,
+    aptos_types::{aggregate_signature::AggregateSignature, PeerId},
+};
 use std::collections::HashSet;
 
 fn create_proof_manager() -> ProofManager {
@@ -32,16 +34,7 @@ fn create_proof_with_gas(
     let digest = HashValue::random();
     let batch_id = BatchId::new_for_test(batch_sequence);
     ProofOfStore::new(
-        BatchInfo::new(
-            author,
-            batch_id,
-            0,
-            expiration,
-            digest,
-            1,
-            1,
-            gas_bucket_start,
-        ),
+        BatchInfo::new(author, batch_id, 0, expiration, digest, 1, 1, gas_bucket_start),
         AggregateSignature::empty(),
     )
 }
@@ -81,21 +74,21 @@ fn assert_payload_response(
             for proof in proofs.proofs {
                 assert!(expected.contains(&proof));
             }
-        },
+        }
         Payload::InQuorumStoreWithLimit(proofs) => {
             assert_eq!(proofs.proof_with_data.proofs.len(), expected.len());
             for proof in proofs.proof_with_data.proofs {
                 assert!(expected.contains(&proof));
             }
             assert_eq!(proofs.max_txns_to_execute, max_txns_from_block_to_execute);
-        },
+        }
         Payload::QuorumStoreInlineHybrid(_inline_batches, proofs, max_txns_to_execute) => {
             assert_eq!(proofs.proofs.len(), expected.len());
             for proof in proofs.proofs {
                 assert!(expected.contains(&proof));
             }
             assert_eq!(max_txns_to_execute, max_txns_from_block_to_execute);
-        },
+        }
         // TODO: Check how to update this for Payload::QuorumStoreInlineHybrid
         _ => panic!("Unexpected variant"),
     }
@@ -107,11 +100,7 @@ async fn get_proposal_and_assert(
     filter: &[BatchInfo],
     expected: &[ProofOfStore],
 ) {
-    assert_payload_response(
-        get_proposal(proof_manager, max_txns, filter).await,
-        expected,
-        None,
-    );
+    assert_payload_response(get_proposal(proof_manager, max_txns, filter).await, expected, None);
 }
 
 #[tokio::test]
@@ -189,13 +178,7 @@ async fn test_proposal_priority() {
 
     // Batch sequence is prioritized next
     let expected = vec![peer0_proof3.clone()];
-    get_proposal_and_assert(
-        &mut proof_manager,
-        1,
-        &[peer0_proof0.info().clone()],
-        &expected,
-    )
-    .await;
+    get_proposal_and_assert(&mut proof_manager, 1, &[peer0_proof0.info().clone()], &expected).await;
 }
 
 #[tokio::test]
@@ -220,10 +203,12 @@ async fn test_proposal_fairness() {
     get_proposal_and_assert(&mut proof_manager, 100, &[], &expected).await;
 
     // The first two proofs are taken fairly from each peer
-    get_proposal_and_assert(&mut proof_manager, 2, &[], &vec![
-        peer0_proofs[0].clone(),
-        peer1_proof_0.clone(),
-    ])
+    get_proposal_and_assert(
+        &mut proof_manager,
+        2,
+        &[],
+        &vec![peer0_proofs[0].clone(), peer1_proof_0.clone()],
+    )
     .await;
 
     // The next two proofs are taken from the remaining peer

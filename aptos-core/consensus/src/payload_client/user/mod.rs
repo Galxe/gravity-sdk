@@ -3,9 +3,9 @@
 
 use crate::error::QuorumStoreError;
 use aptos_consensus_types::common::{Payload, PayloadFilter};
+use futures::future::BoxFuture;
 #[cfg(test)]
 use gaptos::aptos_types::transaction::SignedTransaction;
-use futures::future::BoxFuture;
 use std::time::Duration;
 #[cfg(test)]
 use std::time::Instant;
@@ -67,12 +67,12 @@ impl UserPayloadClient for DummyClient {
         let timer = Instant::now();
         let mut nxt_txn_idx = 0;
         let mut txns = vec![];
-        while timer.elapsed() < max_poll_time
-            && max_items >= 1
-            && max_items_after_filtering >= 1
-            && soft_max_items_after_filtering >= 1
-            && max_bytes >= 1
-            && nxt_txn_idx < self.txns.len()
+        while timer.elapsed() < max_poll_time &&
+            max_items >= 1 &&
+            max_items_after_filtering >= 1 &&
+            soft_max_items_after_filtering >= 1 &&
+            max_bytes >= 1 &&
+            nxt_txn_idx < self.txns.len()
         {
             tokio::time::sleep(Duration::from_millis(1)).await;
             let txn = self.txns[nxt_txn_idx].clone();

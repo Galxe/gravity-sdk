@@ -12,7 +12,6 @@ use crate::{
     qc_aggregator::{create_qc_aggregator, QcAggregator},
     util::time_service::TimeService,
 };
-use gaptos::aptos_config::config::QcAggregatorType;
 use aptos_consensus_types::{
     common::Author,
     delayed_qc_msg::DelayedQcMsg,
@@ -21,20 +20,23 @@ use aptos_consensus_types::{
     vote::Vote,
     vote_data::VoteData,
 };
-use gaptos::aptos_crypto::{hash::CryptoHash, HashValue};
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_types::{
-    aggregate_signature::PartialSignatures,
-    ledger_info::LedgerInfoWithVerifiedSignatures,
-    validator_verifier::{ValidatorVerifier, VerifyError},
-};
 use futures_channel::mpsc::UnboundedSender;
+use gaptos::{
+    aptos_config::config::QcAggregatorType,
+    aptos_consensus::counters,
+    aptos_crypto::{hash::CryptoHash, HashValue},
+    aptos_logger::prelude::*,
+    aptos_types::{
+        aggregate_signature::PartialSignatures,
+        ledger_info::LedgerInfoWithVerifiedSignatures,
+        validator_verifier::{ValidatorVerifier, VerifyError},
+    },
+};
 use std::{
     collections::{BTreeMap, HashMap},
     fmt,
     sync::Arc,
 };
-use gaptos::aptos_consensus::counters as counters;
 
 /// Result of the vote processing. The failure case (Verification error) is returned
 /// as the Error part of the result.
@@ -62,15 +64,17 @@ pub enum VoteReceptionResult {
     ErrorAggregatingTimeoutCertificate(VerifyError),
     /// The vote is not for the current round.
     UnexpectedRound(u64, u64),
-    /// Receive f+1 timeout to trigger a local timeout, return the amount of voting power TC currently has.
+    /// Receive f+1 timeout to trigger a local timeout, return the amount of voting power TC
+    /// currently has.
     EchoTimeout(u128),
 }
 
 /// A PendingVotes structure keep track of votes
 pub struct PendingVotes {
-    /// Maps LedgerInfo digest to associated signatures (contained in a partial LedgerInfoWithSignatures).
-    /// This might keep multiple LedgerInfos for the current round: either due to different proposals (byzantine behavior)
-    /// or due to different NIL proposals (clients can have a different view of what block to extend).
+    /// Maps LedgerInfo digest to associated signatures (contained in a partial
+    /// LedgerInfoWithSignatures). This might keep multiple LedgerInfos for the current round:
+    /// either due to different proposals (byzantine behavior) or due to different NIL
+    /// proposals (clients can have a different view of what block to extend).
     li_digest_to_votes:
         HashMap<HashValue /* LedgerInfo digest */, (usize, LedgerInfoWithVerifiedSignatures)>,
     /// Tracks all the signatures of the 2-chain timeout for the given round.
@@ -141,8 +145,7 @@ impl PendingVotes {
         // 2. Store new vote (or update, in case it's a new timeout vote)
         //
 
-        self.author_to_vote
-            .insert(vote.author(), (vote.clone(), li_digest));
+        self.author_to_vote.insert(vote.author(), (vote.clone(), li_digest));
 
         //
         // 3. Let's check if we can create a QC
@@ -162,9 +165,8 @@ impl PendingVotes {
                 )
             });
 
-        let validator_voting_power = validator_verifier
-            .get_voting_power(&vote.author())
-            .unwrap_or(0);
+        let validator_voting_power =
+            validator_verifier.get_voting_power(&vote.author()).unwrap_or(0);
         if validator_voting_power == 0 {
             warn!("Received vote with no voting power, from {}", vote.author());
         }
@@ -199,19 +201,16 @@ impl PendingVotes {
                         vote,
                         li_with_sig,
                     );
-                },
+                }
 
                 // not enough votes
                 Err(VerifyError::TooLittleVotingPower { voting_power, .. }) => voting_power,
 
                 // error
                 Err(error) => {
-                    error!(
-                        "MUST_FIX: vote received could not be added: {}, vote: {}",
-                        error, vote
-                    );
+                    error!("MUST_FIX: vote received could not be added: {}, vote: {}", error, vote);
                     return VoteReceptionResult::ErrorAddingVote(error);
-                },
+                }
             };
 
         //
@@ -242,7 +241,7 @@ impl PendingVotes {
                             ),
                             Err(e) => VoteReceptionResult::ErrorAggregatingTimeoutCertificate(e),
                         };
-                    },
+                    }
                     Err(VerifyError::TooLittleVotingPower { voting_power, .. }) => voting_power,
                     Err(error) => {
                         error!(
@@ -250,14 +249,14 @@ impl PendingVotes {
                         error, vote
                     );
                         return VoteReceptionResult::ErrorAddingVote(error);
-                    },
+                    }
                 };
 
             // Echo timeout if receive f+1 timeout message.
             if !self.echo_timeout {
-                let f_plus_one = validator_verifier.total_voting_power()
-                    - validator_verifier.quorum_voting_power()
-                    + 1;
+                let f_plus_one = validator_verifier.total_voting_power() -
+                    validator_verifier.quorum_voting_power() +
+                    1;
                 if tc_voting_power >= f_plus_one {
                     self.echo_timeout = true;
                     return VoteReceptionResult::EchoTimeout(tc_voting_power);
@@ -297,12 +296,12 @@ impl PendingVotes {
                     // a quorum of signature was reached, a new QC is formed
                     Ok(_) => {
                         Self::aggregate_qc_now(validator_verifier, li_with_sig, vote.vote_data())
-                    },
+                    }
 
                     // not enough votes
                     Err(VerifyError::TooLittleVotingPower { .. }) => {
                         panic!("Delayed QC aggregation should not be triggered if we don't have enough votes to form a QC");
-                    },
+                    }
 
                     // error
                     Err(error) => {
@@ -311,16 +310,13 @@ impl PendingVotes {
                             error, vote
                         );
                         VoteReceptionResult::ErrorAddingVote(error)
-                    },
+                    }
                 }
-            },
+            }
             None => {
-                error!(
-                    "No LedgerInfoWithSignatures found for the given digest: {}",
-                    li_digest
-                );
+                error!("No LedgerInfoWithSignatures found for the given digest: {}", li_digest);
                 VoteReceptionResult::ErrorAddingVote(VerifyError::EmptySignature)
-            },
+            }
         }
     }
 
@@ -347,10 +343,7 @@ impl PendingVotes {
         }
 
         (
-            self.li_digest_to_votes
-                .drain()
-                .map(|(key, (_, li))| (key, li))
-                .collect(),
+            self.li_digest_to_votes.drain().map(|(key, (_, li))| (key, li)).collect(),
             self.maybe_partial_2chain_tc.take(),
         )
     }
@@ -406,16 +399,18 @@ impl fmt::Display for PendingVotes {
 mod tests {
     use super::{PendingVotes, VoteReceptionResult};
     use crate::util::mock_time_service::SimulatedTimeService;
-    use gaptos::aptos_config::config::QcAggregatorType;
     use aptos_consensus_types::{
         block::block_test_utils::certificate_for_genesis, vote::Vote, vote_data::VoteData,
     };
-    use gaptos::aptos_crypto::HashValue;
-    use gaptos::aptos_types::{
-        block_info::BlockInfo, ledger_info::LedgerInfo,
-        validator_verifier::random_validator_verifier,
-    };
     use futures_channel::mpsc::unbounded;
+    use gaptos::{
+        aptos_config::config::QcAggregatorType,
+        aptos_crypto::HashValue,
+        aptos_types::{
+            block_info::BlockInfo, ledger_info::LedgerInfo,
+            validator_verifier::random_validator_verifier,
+        },
+    };
     use itertools::Itertools;
     use std::sync::Arc;
 
@@ -468,26 +463,16 @@ mod tests {
         // same author voting for a different result -> EquivocateVote
         let li2 = random_ledger_info();
         let vote_data_2 = random_vote_data();
-        let vote_data_2_author_0 = Vote::new(
-            vote_data_2.clone(),
-            signers[0].author(),
-            li2.clone(),
-            &signers[0],
-        )
-        .unwrap();
+        let vote_data_2_author_0 =
+            Vote::new(vote_data_2.clone(), signers[0].author(), li2.clone(), &signers[0]).unwrap();
         assert_eq!(
             pending_votes.insert_vote(&vote_data_2_author_0, &validator),
             VoteReceptionResult::EquivocateVote
         );
 
         // a different author voting for a different result -> VoteAdded
-        let vote_data_2_author_1 = Vote::new(
-            vote_data_2.clone(),
-            signers[1].author(),
-            li2.clone(),
-            &signers[1],
-        )
-        .unwrap();
+        let vote_data_2_author_1 =
+            Vote::new(vote_data_2.clone(), signers[1].author(), li2.clone(), &signers[1]).unwrap();
         assert_eq!(
             pending_votes.insert_vote(&vote_data_2_author_1, &validator),
             VoteReceptionResult::VoteAdded(1)
@@ -499,10 +484,10 @@ mod tests {
         match pending_votes.insert_vote(&vote_data_2_author_2, &validator) {
             VoteReceptionResult::NewQuorumCertificate(qc) => {
                 assert!(qc.ledger_info().check_voting_power(&validator).is_ok());
-            },
+            }
             _ => {
                 panic!("No QC formed.");
-            },
+            }
         };
     }
 
@@ -539,7 +524,8 @@ mod tests {
             VoteReceptionResult::VoteAdded(1)
         );
 
-        // another vote for a different block cannot form a TC if it doesn't have a timeout signature
+        // another vote for a different block cannot form a TC if it doesn't have a timeout
+        // signature
         let li1 = random_ledger_info();
         let vote1 = random_vote_data();
         let mut vote1_author_1 = Vote::new(vote1, signers[1].author(), li1, &signers[1]).unwrap();
@@ -555,10 +541,10 @@ mod tests {
         match pending_votes.insert_vote(&vote1_author_1, &validator) {
             VoteReceptionResult::EchoTimeout(voting_power) => {
                 assert_eq!(voting_power, 2);
-            },
+            }
             _ => {
                 panic!("Should echo timeout");
-            },
+            }
         };
 
         let li2 = random_ledger_info();
@@ -582,10 +568,10 @@ mod tests {
                         true
                     )
                     .is_ok());
-            },
+            }
             _ => {
                 panic!("Should form TC");
-            },
+            }
         };
     }
 }

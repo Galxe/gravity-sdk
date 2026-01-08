@@ -11,13 +11,15 @@ use aptos_consensus_types::{
     common::{Payload, PayloadFilter},
     request_response::GetPayloadCommand,
 };
-use gaptos::aptos_types::{
-    transaction::{ExecutionStatus, TransactionStatus},
-    validator_txn::ValidatorTransaction,
-    vm_status::StatusCode,
-};
-use gaptos::aptos_validator_transaction_pool as vtxn_pool;
 use futures::{channel::mpsc, future::BoxFuture};
+use gaptos::{
+    aptos_types::{
+        transaction::{ExecutionStatus, TransactionStatus},
+        validator_txn::ValidatorTransaction,
+        vm_status::StatusCode,
+    },
+    aptos_validator_transaction_pool as vtxn_pool,
+};
 use rand::Rng;
 use std::time::Duration;
 
@@ -31,9 +33,7 @@ impl MockPayloadManager {
     pub fn new(consensus_to_quorum_store_sender: Option<mpsc::Sender<GetPayloadCommand>>) -> Self {
         let quorum_store_client =
             consensus_to_quorum_store_sender.map(|s| QuorumStoreClient::new(s, 1, 1.1, 100));
-        Self {
-            _quorum_store_client: quorum_store_client,
-        }
+        Self { _quorum_store_client: quorum_store_client }
     }
 }
 
@@ -72,9 +72,6 @@ impl PayloadClient for MockPayloadManager {
         _block_timestamp: Duration,
     ) -> Result<(Vec<ValidatorTransaction>, Payload), QuorumStoreError> {
         // generate 1k txn is too slow with coverage instrumentation
-        Ok((
-            vec![ValidatorTransaction::dummy(vec![0xFF; 1])],
-            random_payload(10),
-        ))
+        Ok((vec![ValidatorTransaction::dummy(vec![0xFF; 1])], random_payload(10)))
     }
 }

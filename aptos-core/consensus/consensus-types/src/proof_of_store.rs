@@ -3,12 +3,14 @@
 
 use crate::payload::TDataInfo;
 use anyhow::{bail, ensure, Context};
-use gaptos::aptos_crypto::{bls12381, CryptoMaterialError, HashValue};
-use gaptos::aptos_crypto as aptos_crypto;
-use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
-use gaptos::aptos_types::{
-    aggregate_signature::AggregateSignature, validator_signer::ValidatorSigner,
-    validator_verifier::ValidatorVerifier, PeerId,
+use gaptos::{
+    aptos_crypto,
+    aptos_crypto::{bls12381, CryptoMaterialError, HashValue},
+    aptos_crypto_derive::{BCSCryptoHash, CryptoHasher},
+    aptos_types::{
+        aggregate_signature::AggregateSignature, validator_signer::ValidatorSigner,
+        validator_verifier::ValidatorVerifier, PeerId,
+    },
 };
 use mini_moka::sync::Cache;
 use rand::{seq::SliceRandom, thread_rng};
@@ -54,7 +56,7 @@ impl PartialOrd<Self> for BatchId {
 impl Ord for BatchId {
     fn cmp(&self, other: &Self) -> Ordering {
         match self.nonce.cmp(&other.nonce) {
-            Ordering::Equal => {},
+            Ordering::Equal => {}
             ordering => return ordering,
         }
         self.id.cmp(&other.id)
@@ -92,16 +94,7 @@ impl BatchInfo {
         num_bytes: u64,
         gas_bucket_start: u64,
     ) -> Self {
-        Self {
-            author,
-            batch_id,
-            epoch,
-            expiration,
-            digest,
-            num_txns,
-            num_bytes,
-            gas_bucket_start,
-        }
+        Self { author, batch_id, epoch, expiration, digest, num_txns, num_bytes, gas_bucket_start }
     }
 
     pub fn epoch(&self) -> u64 {
@@ -199,12 +192,7 @@ impl SignedBatchInfoMsg {
         ensure!(!self.signed_infos.is_empty(), "Empty message");
         let epoch = self.signed_infos[0].epoch();
         for info in self.signed_infos.iter() {
-            ensure!(
-                info.epoch() == epoch,
-                "Epoch mismatch: {} != {}",
-                info.epoch(),
-                epoch
-            );
+            ensure!(info.epoch() == epoch, "Epoch mismatch: {} != {}", info.epoch(), epoch);
         }
         Ok(epoch)
     }
@@ -228,11 +216,7 @@ impl SignedBatchInfo {
     ) -> Result<Self, CryptoMaterialError> {
         let signature = validator_signer.sign(&batch_info)?;
 
-        Ok(Self {
-            info: batch_info,
-            signer: validator_signer.author(),
-            signature,
-        })
+        Ok(Self { info: batch_info, signer: validator_signer.author(), signature })
     }
 
     pub fn signer(&self) -> PeerId {
@@ -249,15 +233,15 @@ impl SignedBatchInfo {
             bail!("Sender {} mismatch signer {}", sender, self.signer);
         }
 
-        if self.expiration()
-            > gaptos::aptos_infallible::duration_since_epoch().as_micros() as u64
-                + max_batch_expiry_gap_usecs
+        if self.expiration() >
+            gaptos::aptos_infallible::duration_since_epoch().as_micros() as u64 +
+                max_batch_expiry_gap_usecs
         {
             bail!(
                 "Batch expiration too far in future: {} > {}",
                 self.expiration(),
-                gaptos::aptos_infallible::duration_since_epoch().as_micros() as u64
-                    + max_batch_expiry_gap_usecs
+                gaptos::aptos_infallible::duration_since_epoch().as_micros() as u64 +
+                    max_batch_expiry_gap_usecs
             );
         }
 
@@ -325,12 +309,7 @@ impl ProofOfStoreMsg {
         ensure!(!self.proofs.is_empty(), "Empty message");
         let epoch = self.proofs[0].epoch();
         for proof in self.proofs.iter() {
-            ensure!(
-                proof.epoch() == epoch,
-                "Epoch mismatch: {} != {}",
-                proof.epoch(),
-                epoch
-            );
+            ensure!(proof.epoch() == epoch, "Epoch mismatch: {} != {}", proof.epoch(), epoch);
         }
         Ok(epoch)
     }
@@ -350,10 +329,7 @@ pub struct ProofOfStore {
 
 impl ProofOfStore {
     pub fn new(info: BatchInfo, multi_signature: AggregateSignature) -> Self {
-        Self {
-            info,
-            multi_signature,
-        }
+        Self { info, multi_signature }
     }
 
     pub fn verify(&self, validator: &ValidatorVerifier, cache: &ProofCache) -> anyhow::Result<()> {

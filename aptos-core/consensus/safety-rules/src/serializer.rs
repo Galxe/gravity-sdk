@@ -11,25 +11,24 @@ use aptos_consensus_types::{
     vote::Vote,
     vote_proposal::VoteProposal,
 };
-use gaptos::aptos_crypto::bls12381;
-use gaptos::aptos_infallible::RwLock;
-use gaptos::aptos_types::{
-    epoch_change::EpochChangeProof,
-    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+use gaptos::{
+    aptos_crypto::bls12381,
+    aptos_infallible::RwLock,
+    aptos_safety_rules::counters,
+    aptos_types::{
+        epoch_change::EpochChangeProof,
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use gaptos::aptos_safety_rules::counters as counters;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum SafetyRulesInput {
     ConsensusState,
     Initialize(Box<EpochChangeProof>),
     SignProposal(Box<BlockData>),
-    SignTimeoutWithQC(
-        Box<TwoChainTimeout>,
-        Box<Option<TwoChainTimeoutCertificate>>,
-    ),
+    SignTimeoutWithQC(Box<TwoChainTimeout>, Box<Option<TwoChainTimeoutCertificate>>),
     ConstructAndSignVoteTwoChain(Box<VoteProposal>, Box<Option<TwoChainTimeoutCertificate>>),
     ConstructAndSignOrderVote(Box<OrderVoteProposal>),
     SignCommitVote(Box<LedgerInfoWithSignatures>, Box<LedgerInfo>),
@@ -50,15 +49,13 @@ impl SerializerService {
         let output = match input {
             SafetyRulesInput::ConsensusState => {
                 serde_json::to_vec(&self.internal.consensus_state())
-            },
+            }
             SafetyRulesInput::Initialize(li) => serde_json::to_vec(&self.internal.initialize(&li)),
             SafetyRulesInput::SignProposal(block_data) => {
                 serde_json::to_vec(&self.internal.sign_proposal(&block_data))
-            },
+            }
             SafetyRulesInput::SignTimeoutWithQC(timeout, maybe_tc) => serde_json::to_vec(
-                &self
-                    .internal
-                    .sign_timeout_with_qc(&timeout, maybe_tc.as_ref().as_ref()),
+                &self.internal.sign_timeout_with_qc(&timeout, maybe_tc.as_ref().as_ref()),
             ),
             SafetyRulesInput::ConstructAndSignVoteTwoChain(vote_proposal, maybe_tc) => {
                 serde_json::to_vec(
@@ -67,17 +64,13 @@ impl SerializerService {
                         maybe_tc.as_ref().as_ref(),
                     ),
                 )
-            },
+            }
             SafetyRulesInput::ConstructAndSignOrderVote(order_vote_proposal) => serde_json::to_vec(
-                &self
-                    .internal
-                    .construct_and_sign_order_vote(&order_vote_proposal),
+                &self.internal.construct_and_sign_order_vote(&order_vote_proposal),
             ),
-            SafetyRulesInput::SignCommitVote(ledger_info, new_ledger_info) => serde_json::to_vec(
-                &self
-                    .internal
-                    .sign_commit_vote(*ledger_info, *new_ledger_info),
-            ),
+            SafetyRulesInput::SignCommitVote(ledger_info, new_ledger_info) => {
+                serde_json::to_vec(&self.internal.sign_commit_vote(*ledger_info, *new_ledger_info))
+            }
         };
 
         Ok(output?)
@@ -187,8 +180,6 @@ struct LocalService {
 impl TSerializerClient for LocalService {
     fn request(&mut self, input: SafetyRulesInput) -> Result<Vec<u8>, Error> {
         let input_message = serde_json::to_vec(&input)?;
-        self.serializer_service
-            .write()
-            .handle_message(input_message)
+        self.serializer_service.write().handle_message(input_message)
     }
 }

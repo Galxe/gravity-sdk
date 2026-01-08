@@ -3,10 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use aptos_consensus_types::common::Author;
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_logger as aptos_logger;
-use gaptos::aptos_logger::Schema;
-use gaptos::aptos_types::block_info::Round;
+use gaptos::{
+    aptos_crypto::HashValue, aptos_logger, aptos_logger::Schema, aptos_types::block_info::Round,
+};
 use serde::Serialize;
 
 #[derive(Schema)]
@@ -62,13 +61,6 @@ pub enum LogEvent {
 
 impl LogSchema {
     pub fn new(event: LogEvent) -> Self {
-        Self {
-            event,
-            author: None,
-            remote_peer: None,
-            epoch: None,
-            round: None,
-            id: None,
-        }
+        Self { event, author: None, remote_peer: None, epoch: None, round: None, id: None }
     }
 }

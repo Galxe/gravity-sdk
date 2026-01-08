@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    consensusdb::ConsensusDB, logging::{LogEvent, LogSchema}, network::{IncomingRandGenRequest, NetworkSender, TConsensusMsg}, pipeline::buffer_manager::{OrderedBlocks, ResetAck, ResetRequest, ResetSignal}, rand::rand_gen::{
+    consensusdb::ConsensusDB,
+    logging::{LogEvent, LogSchema},
+    network::{IncomingRandGenRequest, NetworkSender, TConsensusMsg},
+    pipeline::buffer_manager::{OrderedBlocks, ResetAck, ResetRequest, ResetSignal},
+    rand::rand_gen::{
         aug_data_store::AugDataStore,
         block_queue::{BlockQueue, QueueItem},
         network_messages::{RandMessage, RpcRequest},
@@ -12,22 +16,9 @@ use crate::{
         },
         storage::interface::RandStorage,
         types::{FastShare, PathType, RandConfig, RequestShare, TAugmentedData, TShare},
-    }
+    },
 };
-use gaptos::aptos_bounded_executor::BoundedExecutor;
-use gaptos::aptos_channels::aptos_channel;
-use gaptos::aptos_config::config::ReliableBroadcastConfig;
 use aptos_consensus_types::common::{Author, Round};
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::{error, info, spawn_named, trace, warn};
-use gaptos::aptos_network::{protocols::network::RpcError, ProtocolId};
-use gaptos::aptos_reliable_broadcast::{DropGuard, ReliableBroadcast};
-use gaptos::aptos_time_service::TimeService;
-use gaptos::aptos_types::{
-    epoch_state::EpochState,
-    randomness::{FullRandMetadata, RandMetadata, Randomness},
-    validator_signer::ValidatorSigner,
-};
 use bytes::Bytes;
 use fail::fail_point;
 use futures::{
@@ -38,9 +29,24 @@ use futures_channel::{
     mpsc::{unbounded, UnboundedReceiver, UnboundedSender},
     oneshot,
 };
+use gaptos::{
+    aptos_bounded_executor::BoundedExecutor,
+    aptos_channels::aptos_channel,
+    aptos_config::config::ReliableBroadcastConfig,
+    aptos_consensus::counters::RAND_QUEUE_SIZE,
+    aptos_infallible::Mutex,
+    aptos_logger::{error, info, spawn_named, trace, warn},
+    aptos_network::{protocols::network::RpcError, ProtocolId},
+    aptos_reliable_broadcast::{DropGuard, ReliableBroadcast},
+    aptos_time_service::TimeService,
+    aptos_types::{
+        epoch_state::EpochState,
+        randomness::{FullRandMetadata, RandMetadata, Randomness},
+        validator_signer::ValidatorSigner,
+    },
+};
 use std::{sync::Arc, time::Duration};
 use tokio_retry::strategy::ExponentialBackoff;
-use gaptos::aptos_consensus::counters::RAND_QUEUE_SIZE;
 
 pub type Sender<T> = UnboundedSender<T>;
 pub type Receiver<T> = UnboundedReceiver<T>;
@@ -102,13 +108,8 @@ impl<S: TShare, D: TAugmentedData> RandManager<S, D> {
             fast_config.clone(),
             decision_tx,
         )));
-        let aug_data_store = AugDataStore::new(
-            epoch_state.epoch,
-            signer,
-            config.clone(),
-            fast_config.clone(),
-            db,
-        );
+        let aug_data_store =
+            AugDataStore::new(epoch_state.epoch, signer, config.clone(), fast_config.clone(), db);
 
         Self {
             author,
@@ -190,9 +191,7 @@ impl<S: TShare, D: TAugmentedData> RandManager<S, D> {
             ResetSignal::TargetRound(round) => round,
         };
         self.block_queue = BlockQueue::new();
-        self.rand_store
-            .lock()
-            .update_highest_known_round(target_round);
+        self.rand_store.lock().update_highest_known_round(target_round);
         self.stop = matches!(signal, ResetSignal::Stop);
         let _ = tx.send(ResetAck::default());
     }
@@ -253,10 +252,10 @@ impl<S: TShare, D: TAugmentedData> RandManager<S, D> {
                                     response_sender: rand_gen_msg.response_sender,
                                 });
                             }
-                        },
+                        }
                         Err(e) => {
                             warn!("Invalid rand gen message: {}", e);
-                        },
+                        }
                     }
                 })
                 .await;
@@ -310,10 +309,9 @@ impl<S: TShare, D: TAugmentedData> RandManager<S, D> {
             .aug_data_store
             .get_my_aug_data()
             .unwrap_or_else(|| D::generate(&self.config, &self.fast_config));
-        // Add it synchronously to avoid race that it sends to others but panics before it persists locally.
-        self.aug_data_store
-            .add_aug_data(data.clone())
-            .expect("Add self aug data should succeed");
+        // Add it synchronously to avoid race that it sends to others but panics before it persists
+        // locally.
+        self.aug_data_store.add_aug_data(data.clone()).expect("Add self aug data should succeed");
         let aug_ack = AugDataCertBuilder::new(data.clone(), self.epoch_state.clone());
         let rb = self.reliable_broadcast.clone();
         let rb2 = self.reliable_broadcast.clone();
@@ -338,9 +336,7 @@ impl<S: TShare, D: TAugmentedData> RandManager<S, D> {
                 .author(*certified_data.author())
                 .epoch(certified_data.epoch()));
             info!("[RandManager] Start broadcasting certified aug data");
-            rb2.broadcast(certified_data, ack_state)
-                .await
-                .expect("Broadcast cannot fail");
+            rb2.broadcast(certified_data, ack_state).await.expect("Broadcast cannot fail");
             info!("[RandManager] Finish broadcasting certified aug data");
         });
         let (abort_handle, abort_registration) = AbortHandle::new_pair();
@@ -361,9 +357,7 @@ impl<S: TShare, D: TAugmentedData> RandManager<S, D> {
         let epoch_state = self.epoch_state.clone();
         let rand_config = self.config.clone();
         let fast_rand_config = self.fast_config.clone();
-        self.rand_store
-            .lock()
-            .update_highest_known_round(highest_known_round);
+        self.rand_store.lock().update_highest_known_round(highest_known_round);
         spawn_named!(
             "rand manager verification",
             Self::verification_task(

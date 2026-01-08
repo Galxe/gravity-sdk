@@ -1,19 +1,23 @@
-use gaptos::aptos_dkg::{
-    pvss,
-    pvss::{
-        das,
-        test_utils::{DealingArgs, NoAux, setup_dealing, reconstruct_dealt_secret_key_randomly},
-        traits::{SecretSharingConfig, Transcript},
-        Player, WeightedConfig,
-    },
-    utils::random::random_scalar,
-    weighted_vuf::{pinkas::PinkasWUF, traits::WeightedVUF},
-};
-use gaptos::aptos_runtimes::spawn_rayon_thread_pool;
-use rand::{rngs::StdRng, thread_rng};
-use rand_core::{RngCore, CryptoRng, SeedableRng};
-use sha3::{Digest, Sha3_256};
 use bcs;
+use gaptos::{
+    aptos_dkg::{
+        pvss,
+        pvss::{
+            das,
+            test_utils::{
+                reconstruct_dealt_secret_key_randomly, setup_dealing, DealingArgs, NoAux,
+            },
+            traits::{SecretSharingConfig, Transcript},
+            Player, WeightedConfig,
+        },
+        utils::random::random_scalar,
+        weighted_vuf::{pinkas::PinkasWUF, traits::WeightedVUF},
+    },
+    aptos_runtimes::spawn_rayon_thread_pool,
+};
+use rand::{rngs::StdRng, thread_rng};
+use rand_core::{CryptoRng, RngCore, SeedableRng};
+use sha3::{Digest, Sha3_256};
 
 #[test]
 fn test_wvuf_basic_viability() {
@@ -61,16 +65,7 @@ where
 
     let d = setup_dealing::<T, R>(&wc, rng);
 
-    let trx = T::deal(
-        &wc,
-        &d.pp,
-        &d.ssks[0],
-        &d.eks,
-        &d.s,
-        &NoAux,
-        &wc.get_player(0),
-        rng,
-    );
+    let trx = T::deal(&wc, &d.pp, &d.ssks[0], &d.eks, &d.s, &NoAux, &wc.get_player(0), rng);
 
     // Make sure the PVSS dealt correctly
     trx.verify(&wc, &d.pp, &vec![d.spks[0].clone()], &d.eks, &vec![NoAux])
@@ -104,7 +99,8 @@ fn wvuf_randomly_aggregate_verify_and_derive_eval<
 ) where
     WVUF::PublicParameters: for<'a> From<&'a T::PublicParameters>,
 {
-    // Note: A WVUF scheme needs to implement conversion from all PVSS's public parameters to its own.
+    // Note: A WVUF scheme needs to implement conversion from all PVSS's public parameters to its
+    // own.
     let vuf_pp = WVUF::PublicParameters::from(&pvss_pp);
 
     let msg = b"some msg";
@@ -120,7 +116,8 @@ fn wvuf_randomly_aggregate_verify_and_derive_eval<
         .into_iter()
         .unzip();
 
-    // we are going to be popping the SKs in reverse below (simplest way to move them out of the Vec)
+    // we are going to be popping the SKs in reverse below (simplest way to move them out of the
+    // Vec)
     sks.reverse();
     let augmented_key_pairs = (0..wc.get_total_num_players())
         .map(|p| {
@@ -130,10 +127,7 @@ fn wvuf_randomly_aggregate_verify_and_derive_eval<
 
             // Test that pubkey augmentation works
             let delta = WVUF::get_public_delta(&apk);
-            assert_eq!(
-                apk,
-                WVUF::augment_pubkey(&vuf_pp, pk, delta.clone()).unwrap()
-            );
+            assert_eq!(apk, WVUF::augment_pubkey(&vuf_pp, pk, delta.clone()).unwrap());
 
             (ask, apk)
         })
@@ -144,7 +138,8 @@ fn wvuf_randomly_aggregate_verify_and_derive_eval<
         .map(|(_, apk)| Some(apk.clone()))
         .collect::<Vec<Option<WVUF::AugmentedPubKeyShare>>>();
 
-    let apks_and_proofs = wc.get_random_eligible_subset_of_players(rng)
+    let apks_and_proofs = wc
+        .get_random_eligible_subset_of_players(rng)
         .into_iter()
         .map(|p| {
             let ask = &augmented_key_pairs[p.id].0;

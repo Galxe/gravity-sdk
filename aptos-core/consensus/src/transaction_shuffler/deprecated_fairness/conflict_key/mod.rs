@@ -35,10 +35,12 @@ impl ConflictKeyId {
 
 /// `ConflictKeyRegistry::build::<K: ConflictKey>()` goes through a block of transactions and
 /// extract the conflict keys from each transaction. In that process, each unique conflict key is
-/// assigned a unique `ConflictKeyId`, essentially a sequence number, and the registry remembers which
-/// key was extracted from each transaction. After that, we can query the registry to get the key
-/// represented by the id, which is 1. cheaper than calling `ConflictKey::extract_from(txn)` again;
-/// 2. enables vector based `MapByKeyId` which is cheaper than a `HashMap`; and 3. eliminates the typing
+/// assigned a unique `ConflictKeyId`, essentially a sequence number, and the registry remembers
+/// which key was extracted from each transaction. After that, we can query the registry to get the
+/// key represented by the id, which is 1. cheaper than calling `ConflictKey::extract_from(txn)`
+/// again;
+/// 2. enables vector based `MapByKeyId` which is cheaper than a `HashMap`; and 3. eliminates the
+///    typing
 /// information and easier to use in the shuffler.
 #[derive(Debug)]
 pub(crate) struct ConflictKeyRegistry {
@@ -89,10 +91,7 @@ impl ConflictKeyRegistry {
             })
             .collect();
 
-        Self {
-            id_by_txn,
-            is_exempt_by_id,
-        }
+        Self { id_by_txn, is_exempt_by_id }
     }
 
     fn num_ids(&self) -> usize {

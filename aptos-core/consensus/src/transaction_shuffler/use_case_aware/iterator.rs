@@ -51,7 +51,8 @@ where
             return Some(txn);
         }
 
-        // 2. Otherwise, seek in the input queue for something that shouldn't be delayed due to either
+        // 2. Otherwise, seek in the input queue for something that shouldn't be delayed due to
+        //    either
         // the sender or the use case.
         while let Some(txn) = self.input_queue.pop_front() {
             let input_idx = self.input_idx;

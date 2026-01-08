@@ -7,11 +7,13 @@ use crate::consensus_observer::{
     metrics,
     network_message::{BlockPayload, OrderedBlock},
 };
-use gaptos::aptos_config::config::ConsensusObserverConfig;
 use aptos_consensus_types::{common::Round, pipelined_block::PipelinedBlock};
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::{error, warn};
-use gaptos::aptos_types::epoch_state::EpochState;
+use gaptos::{
+    aptos_config::config::ConsensusObserverConfig,
+    aptos_infallible::Mutex,
+    aptos_logger::{error, warn},
+    aptos_types::epoch_state::EpochState,
+};
 use std::{
     collections::{btree_map::Entry, BTreeMap},
     sync::Arc,
@@ -35,10 +37,7 @@ pub struct BlockPayloadStore {
 
 impl BlockPayloadStore {
     pub fn new(consensus_observer_config: ConsensusObserverConfig) -> Self {
-        Self {
-            consensus_observer_config,
-            block_payloads: Arc::new(Mutex::new(BTreeMap::new())),
-        }
+        Self { consensus_observer_config, block_payloads: Arc::new(Mutex::new(BTreeMap::new())) }
     }
 
     /// Returns true iff all the payloads for the given blocks
@@ -73,12 +72,10 @@ impl BlockPayloadStore {
         // Verify that the number of payloads doesn't exceed the maximum
         let max_num_pending_blocks = self.consensus_observer_config.max_num_pending_blocks as usize;
         if self.block_payloads.lock().len() >= max_num_pending_blocks {
-            warn!(
-                LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                    "Exceeded the maximum number of payloads: {:?}. Dropping block: {:?}!",
-                    max_num_pending_blocks, block_payload.block,
-                ))
-            );
+            warn!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                "Exceeded the maximum number of payloads: {:?}. Dropping block: {:?}!",
+                max_num_pending_blocks, block_payload.block,
+            )));
             return; // Drop the block if we've exceeded the maximum
         }
 
@@ -91,9 +88,7 @@ impl BlockPayloadStore {
         };
 
         // Insert the new payload status
-        self.block_payloads
-            .lock()
-            .insert(epoch_and_round, payload_status);
+        self.block_payloads.lock().insert(epoch_and_round, payload_status);
     }
 
     /// Removes all blocks up to the specified epoch and round (inclusive)
@@ -109,9 +104,8 @@ impl BlockPayloadStore {
     /// Removes the committed blocks from the payload store
     pub fn remove_committed_blocks(&self, committed_blocks: &[Arc<PipelinedBlock>]) {
         // Get the highest epoch and round for the committed blocks
-        let (highest_epoch, highest_round) = committed_blocks
-            .last()
-            .map_or((0, 0), |block| (block.epoch(), block.round()));
+        let (highest_epoch, highest_round) =
+            committed_blocks.last().map_or((0, 0), |block| (block.epoch(), block.round()));
 
         // Remove the blocks
         self.remove_blocks_for_epoch_round(highest_epoch, highest_round);
@@ -128,12 +122,8 @@ impl BlockPayloadStore {
         );
 
         // Update the highest round for the block payloads
-        let highest_round = self
-            .block_payloads
-            .lock()
-            .last_key_value()
-            .map(|((_, round), _)| *round)
-            .unwrap_or(0);
+        let highest_round =
+            self.block_payloads.lock().last_key_value().map(|((_, round), _)| *round).unwrap_or(0);
         metrics::set_gauge_with_label(
             &metrics::OBSERVER_PROCESSED_BLOCK_ROUNDS,
             metrics::STORED_PAYLOADS_LABEL,
@@ -160,7 +150,7 @@ impl BlockPayloadStore {
                     let transaction_payload = match entry.get() {
                         BlockPayloadStatus::AvailableAndVerified(block_payload) => {
                             &block_payload.transaction_payload
-                        },
+                        }
                         BlockPayloadStatus::AvailableAndUnverified(_) => {
                             // The payload should have already been verified
                             return Err(Error::InvalidMessageError(format!(
@@ -168,7 +158,7 @@ impl BlockPayloadStore {
                                 ordered_block.epoch(),
                                 ordered_block.round()
                             )));
-                        },
+                        }
                     };
 
                     // Get the ordered block payload
@@ -180,12 +170,12 @@ impl BlockPayloadStore {
                                 ordered_block.epoch(),
                                 ordered_block.round()
                             )));
-                        },
+                        }
                     };
 
                     // Verify the transaction payload against the ordered block payload
                     transaction_payload.verify_against_ordered_payload(ordered_block_payload)?;
-                },
+                }
                 Entry::Vacant(_) => {
                     // The payload is missing (this should never happen)
                     return Err(Error::InvalidMessageError(format!(
@@ -193,7 +183,7 @@ impl BlockPayloadStore {
                         ordered_block.epoch(),
                         ordered_block.round()
                     )));
-                },
+                }
             }
         }
 
@@ -267,7 +257,6 @@ impl BlockPayloadStore {
 mod test {
     use super::*;
     use crate::consensus_observer::network_message::BlockTransactionPayload;
-    use gaptos::aptos_bitvec::BitVec;
     use aptos_consensus_types::{
         block::Block,
         block_data::{BlockData, BlockType},
@@ -275,17 +264,20 @@ mod test {
         proof_of_store::{BatchId, BatchInfo, ProofOfStore},
         quorum_cert::QuorumCert,
     };
-    use gaptos::aptos_crypto::HashValue;
-    use gaptos::aptos_types::{
-        aggregate_signature::AggregateSignature,
-        block_info::{BlockInfo, Round},
-        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
-        transaction::Version,
-        validator_signer::ValidatorSigner,
-        validator_verifier::{ValidatorConsensusInfo, ValidatorVerifier},
-        PeerId,
-    };
     use claims::assert_matches;
+    use gaptos::{
+        aptos_bitvec::BitVec,
+        aptos_crypto::HashValue,
+        aptos_types::{
+            aggregate_signature::AggregateSignature,
+            block_info::{BlockInfo, Round},
+            ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+            transaction::Version,
+            validator_signer::ValidatorSigner,
+            validator_verifier::{ValidatorConsensusInfo, ValidatorVerifier},
+            PeerId,
+        },
+    };
     use rand::{rngs::OsRng, Rng};
 
     #[test]
@@ -312,10 +304,7 @@ mod test {
         // Verify the payloads don't exist in the block payload store
         assert!(!block_payload_store.all_payloads_exist(&unverified_blocks));
         assert_eq!(get_num_verified_payloads(&block_payload_store), 0);
-        assert_eq!(
-            get_num_unverified_payloads(&block_payload_store),
-            num_blocks_in_store
-        );
+        assert_eq!(get_num_unverified_payloads(&block_payload_store), num_blocks_in_store);
 
         // Add some verified blocks to the payload store
         let num_blocks_in_store = 100;
@@ -828,16 +817,11 @@ mod test {
             get_num_verified_payloads(&block_payload_store),
             num_verified_blocks + num_unverified_blocks
         );
-        assert_eq!(
-            get_num_unverified_payloads(&block_payload_store),
-            num_future_blocks
-        );
+        assert_eq!(get_num_unverified_payloads(&block_payload_store), num_future_blocks);
 
         // Check the rounds of the newly verified payloads
-        let expected_verified_rounds = unverified_blocks
-            .iter()
-            .map(|block| block.round())
-            .collect::<Vec<_>>();
+        let expected_verified_rounds =
+            unverified_blocks.iter().map(|block| block.round()).collect::<Vec<_>>();
         assert_eq!(verified_rounds, expected_verified_rounds);
 
         // Clear the verified blocks and check the verified blocks are empty
@@ -852,17 +836,12 @@ mod test {
 
         // Verify the future unverified payloads were moved to the verified store
         assert!(block_payload_store.all_payloads_exist(&future_unverified_blocks));
-        assert_eq!(
-            get_num_verified_payloads(&block_payload_store),
-            num_future_blocks
-        );
+        assert_eq!(get_num_verified_payloads(&block_payload_store), num_future_blocks);
         assert_eq!(get_num_unverified_payloads(&block_payload_store), 0);
 
         // Check the rounds of the newly verified payloads
-        let expected_verified_rounds = future_unverified_blocks
-            .iter()
-            .map(|block| block.round())
-            .collect::<Vec<_>>();
+        let expected_verified_rounds =
+            future_unverified_blocks.iter().map(|block| block.round()).collect::<Vec<_>>();
         assert_eq!(verified_rounds, expected_verified_rounds);
     }
 
@@ -883,32 +862,26 @@ mod test {
         );
 
         // Create an ordered block using the verified blocks
-        let ordered_block = OrderedBlock::new(
-            verified_blocks.clone(),
-            create_empty_ledger_info(current_epoch),
-        );
+        let ordered_block =
+            OrderedBlock::new(verified_blocks.clone(), create_empty_ledger_info(current_epoch));
 
         // Verify the ordered block and ensure it passes
-        block_payload_store
-            .verify_payloads_against_ordered_block(&ordered_block)
-            .unwrap();
+        block_payload_store.verify_payloads_against_ordered_block(&ordered_block).unwrap();
 
         // Mark the first block payload as unverified
         mark_payload_as_unverified(block_payload_store.clone(), &verified_blocks[0]);
 
         // Verify the ordered block and ensure it fails (since the payloads are unverified)
-        let error = block_payload_store
-            .verify_payloads_against_ordered_block(&ordered_block)
-            .unwrap_err();
+        let error =
+            block_payload_store.verify_payloads_against_ordered_block(&ordered_block).unwrap_err();
         assert_matches!(error, Error::InvalidMessageError(_));
 
         // Clear the block payload store
         block_payload_store.clear_all_payloads();
 
         // Verify the ordered block and ensure it fails (since the payloads are missing)
-        let error = block_payload_store
-            .verify_payloads_against_ordered_block(&ordered_block)
-            .unwrap_err();
+        let error =
+            block_payload_store.verify_payloads_against_ordered_block(&ordered_block).unwrap_err();
         assert_matches!(error, Error::InvalidMessageError(_));
     }
 
@@ -1121,9 +1094,7 @@ mod test {
         // Get the payload entry for the given block
         let block_payloads = block_payload_store.get_block_payloads();
         let mut block_payloads = block_payloads.lock();
-        let block_payload = block_payloads
-            .get_mut(&(block.epoch(), block.round()))
-            .unwrap();
+        let block_payload = block_payloads.get_mut(&(block.epoch(), block.round())).unwrap();
 
         // Mark the block payload as unverified
         *block_payload = BlockPayloadStatus::AvailableAndUnverified(BlockPayload::new(

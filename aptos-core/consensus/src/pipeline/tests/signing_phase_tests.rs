@@ -17,23 +17,22 @@ use crate::{
     },
     test_utils::consensus_runtime,
 };
-use gaptos::aptos_crypto::HashValue;
 use aptos_safety_rules::Error;
-use gaptos::aptos_types::{
-    aggregate_signature::AggregateSignature,
-    block_info::BlockInfo,
-    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
-    validator_signer::ValidatorSigner,
+use gaptos::{
+    aptos_crypto::HashValue,
+    aptos_types::{
+        aggregate_signature::AggregateSignature,
+        block_info::BlockInfo,
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+        validator_signer::ValidatorSigner,
+    },
 };
 use std::sync::{atomic::AtomicBool, Arc};
 
 pub fn prepare_signing_pipeline(
     signing_phase: SigningPhase,
-) -> (
-    Sender<CountedRequest<SigningRequest>>,
-    Receiver<SigningResponse>,
-    PipelinePhase<SigningPhase>,
-) {
+) -> (Sender<CountedRequest<SigningRequest>>, Receiver<SigningResponse>, PipelinePhase<SigningPhase>)
+{
     // e2e tests
     let (in_channel_tx, in_channel_rx) = create_channel::<CountedRequest<SigningRequest>>();
     let (out_channel_tx, out_channel_rx) = create_channel::<SigningResponse>();
@@ -55,10 +54,8 @@ fn add_signing_phase_test_cases(
 ) {
     let (vecblocks, ordered_ledger_info) =
         prepare_executed_blocks_with_ordered_ledger_info(&signers[0]);
-    let commit_ledger_info = LedgerInfo::new(
-        vecblocks.last().unwrap().block_info(),
-        HashValue::from_u64(0xBEEF),
-    );
+    let commit_ledger_info =
+        LedgerInfo::new(vecblocks.last().unwrap().block_info(), HashValue::from_u64(0xBEEF));
 
     // happy path
     phase_tester.add_test_case(
@@ -84,10 +81,7 @@ fn add_signing_phase_test_cases(
             commit_ledger_info: inconsistent_commit_ledger_info,
         },
         Box::new(move |resp| {
-            assert!(matches!(
-                resp.signature_result,
-                Err(Error::InconsistentExecutionResult(_, _))
-            ));
+            assert!(matches!(resp.signature_result, Err(Error::InconsistentExecutionResult(_, _))));
         }),
     );
 
@@ -113,10 +107,7 @@ fn add_signing_phase_test_cases(
             commit_ledger_info: executed_ledger_info.ledger_info().clone(),
         },
         Box::new(move |resp| {
-            assert!(matches!(
-                resp.signature_result,
-                Err(Error::InvalidQuorumCertificate(_))
-            ));
+            assert!(matches!(resp.signature_result, Err(Error::InvalidQuorumCertificate(_))));
         }),
     );
 }

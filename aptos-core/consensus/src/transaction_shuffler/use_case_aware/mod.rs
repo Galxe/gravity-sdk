@@ -41,8 +41,6 @@ pub struct UseCaseAwareShuffler {
 
 impl TransactionShuffler for UseCaseAwareShuffler {
     fn shuffle(&self, txns: Vec<SignedTransaction>) -> Vec<SignedTransaction> {
-        ShuffledTransactionIterator::new(self.config.clone())
-            .extended_with(txns)
-            .collect()
+        ShuffledTransactionIterator::new(self.config.clone()).extended_with(txns).collect()
     }
 }

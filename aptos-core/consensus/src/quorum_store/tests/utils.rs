@@ -6,8 +6,10 @@ use aptos_consensus_types::{
     common::TxnSummaryWithExpiration,
     proof_of_store::{BatchId, BatchInfo, ProofOfStore},
 };
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_types::{aggregate_signature::AggregateSignature, PeerId};
+use gaptos::{
+    aptos_crypto::HashValue,
+    aptos_types::{aggregate_signature::AggregateSignature, PeerId},
+};
 use maplit::hashset;
 use std::{collections::HashSet, time::Duration};
 
@@ -159,46 +161,16 @@ fn test_proof_calculate_remaining_txns_and_proofs() {
     ];
 
     let author_0_batches = vec![
-        proof_of_store(
-            author_0,
-            BatchId::new_for_test(0),
-            100,
-            now_in_usecs + 50000,
-        ),
-        proof_of_store(
-            author_0,
-            BatchId::new_for_test(1),
-            200,
-            now_in_usecs + 70000,
-        ),
+        proof_of_store(author_0, BatchId::new_for_test(0), 100, now_in_usecs + 50000),
+        proof_of_store(author_0, BatchId::new_for_test(1), 200, now_in_usecs + 70000),
         proof_of_store(author_0, BatchId::new_for_test(2), 50, now_in_usecs + 20000),
-        proof_of_store(
-            author_0,
-            BatchId::new_for_test(3),
-            300,
-            now_in_usecs + 10000,
-        ),
+        proof_of_store(author_0, BatchId::new_for_test(3), 300, now_in_usecs + 10000),
     ];
 
     let author_1_batches = vec![
-        proof_of_store(
-            author_1,
-            BatchId::new_for_test(4),
-            500,
-            now_in_usecs + 20000,
-        ),
-        proof_of_store(
-            author_1,
-            BatchId::new_for_test(5),
-            400,
-            now_in_usecs + 30000,
-        ),
-        proof_of_store(
-            author_1,
-            BatchId::new_for_test(6),
-            600,
-            now_in_usecs + 50000,
-        ),
+        proof_of_store(author_1, BatchId::new_for_test(4), 500, now_in_usecs + 20000),
+        proof_of_store(author_1, BatchId::new_for_test(5), 400, now_in_usecs + 30000),
+        proof_of_store(author_1, BatchId::new_for_test(6), 600, now_in_usecs + 50000),
         proof_of_store(author_1, BatchId::new_for_test(7), 50, now_in_usecs + 60000),
     ];
 
@@ -419,57 +391,17 @@ fn test_proof_pull_proofs_with_duplicates() {
     let author_1 = PeerId::random();
 
     let author_0_batches = vec![
-        proof_of_store(
-            author_0,
-            BatchId::new_for_test(0),
-            100,
-            now_in_usecs + 1_100_000,
-        ),
-        proof_of_store(
-            author_0,
-            BatchId::new_for_test(1),
-            200,
-            now_in_usecs + 3_000_000,
-        ),
-        proof_of_store(
-            author_0,
-            BatchId::new_for_test(2),
-            50,
-            now_in_usecs + 5_000_000,
-        ),
-        proof_of_store(
-            author_0,
-            BatchId::new_for_test(3),
-            300,
-            now_in_usecs + 4_000_000,
-        ),
+        proof_of_store(author_0, BatchId::new_for_test(0), 100, now_in_usecs + 1_100_000),
+        proof_of_store(author_0, BatchId::new_for_test(1), 200, now_in_usecs + 3_000_000),
+        proof_of_store(author_0, BatchId::new_for_test(2), 50, now_in_usecs + 5_000_000),
+        proof_of_store(author_0, BatchId::new_for_test(3), 300, now_in_usecs + 4_000_000),
     ];
 
     let author_1_batches = vec![
-        proof_of_store(
-            author_1,
-            BatchId::new_for_test(4),
-            500,
-            now_in_usecs + 4_000_000,
-        ),
-        proof_of_store(
-            author_1,
-            BatchId::new_for_test(5),
-            400,
-            now_in_usecs + 2_500_000,
-        ),
-        proof_of_store(
-            author_1,
-            BatchId::new_for_test(6),
-            600,
-            now_in_usecs + 3_500_000,
-        ),
-        proof_of_store(
-            author_1,
-            BatchId::new_for_test(7),
-            50,
-            now_in_usecs + 4_500_000,
-        ),
+        proof_of_store(author_1, BatchId::new_for_test(4), 500, now_in_usecs + 4_000_000),
+        proof_of_store(author_1, BatchId::new_for_test(5), 400, now_in_usecs + 2_500_000),
+        proof_of_store(author_1, BatchId::new_for_test(6), 600, now_in_usecs + 3_500_000),
+        proof_of_store(author_1, BatchId::new_for_test(7), 50, now_in_usecs + 4_500_000),
     ];
 
     let info_0 = author_0_batches[0].info().clone();
@@ -612,7 +544,8 @@ fn test_proof_pull_proofs_with_duplicates() {
         true,
         Duration::from_micros(now_in_usecs + 2_500_100),
     );
-    // author_0_batches[0], author_1_batches[1] is removed. author_1_batches[2] is excluded. txn_0, txn_1 are expired.
+    // author_0_batches[0], author_1_batches[1] is removed. author_1_batches[2] is excluded. txn_0,
+    // txn_1 are expired.
     assert_eq!(result.0.len(), 5);
     assert_eq!(result.1, 1);
 
@@ -626,7 +559,8 @@ fn test_proof_pull_proofs_with_duplicates() {
         true,
         Duration::from_micros(now_in_usecs + 3_000_100),
     );
-    // author_0_batches[0], author_0_batches[1], author_1_batches[1] are removed. txn_0, txn_1, txn_2 are expired.
+    // author_0_batches[0], author_0_batches[1], author_1_batches[1] are removed. txn_0, txn_1,
+    // txn_2 are expired.
     assert_eq!(result.0.len(), 5);
     assert_eq!(result.1, 1);
 
@@ -640,7 +574,8 @@ fn test_proof_pull_proofs_with_duplicates() {
         true,
         Duration::from_micros(now_in_usecs + 3_500_100),
     );
-    // author_0_batches[0], author_0_batches[1], author_1_batches[1], author_1_batches[2] are removed. txn_0, txn_1, txn_0 are expired.
+    // author_0_batches[0], author_0_batches[1], author_1_batches[1], author_1_batches[2] are
+    // removed. txn_0, txn_1, txn_0 are expired.
     assert_eq!(result.0.len(), 4);
     assert_eq!(result.1, 0);
 
@@ -654,8 +589,8 @@ fn test_proof_pull_proofs_with_duplicates() {
         true,
         Duration::from_micros(now_in_usecs + 4_000_100),
     );
-    // author_0_batches[0], author_0_batches[1], author_0_batches[3], author_1_batches[0], author_1_batches[1], author_1_batches[2] are removed.
-    // txn_0, txn_1, txn_2 are expired.
+    // author_0_batches[0], author_0_batches[1], author_0_batches[3], author_1_batches[0],
+    // author_1_batches[1], author_1_batches[2] are removed. txn_0, txn_1, txn_2 are expired.
     assert_eq!(result.0.len(), 2);
     assert_eq!(result.1, 0);
 }

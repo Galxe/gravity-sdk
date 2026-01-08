@@ -5,7 +5,9 @@ use super::batch_store::BatchStore;
 use crate::{
     monitor,
     quorum_store::{
-        self, batch_generator::BackPressure, utils::{BatchSortKey, ProofQueue}
+        self,
+        batch_generator::BackPressure,
+        utils::{BatchSortKey, ProofQueue},
     },
 };
 use aptos_consensus_types::{
@@ -13,10 +15,13 @@ use aptos_consensus_types::{
     proof_of_store::{BatchInfo, ProofOfStore, ProofOfStoreMsg},
     request_response::{GetPayloadCommand, GetPayloadResponse},
 };
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_types::{transaction::SignedTransaction, PeerId};
 use futures::StreamExt;
 use futures_channel::mpsc::Receiver;
+use gaptos::{
+    aptos_consensus::quorum_store::counters,
+    aptos_logger::prelude::*,
+    aptos_types::{transaction::SignedTransaction, PeerId},
+};
 use rand::{seq::SliceRandom, thread_rng};
 use std::{
     cmp::min,
@@ -24,7 +29,6 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use gaptos::aptos_consensus::quorum_store::counters as counters;
 
 #[derive(Debug)]
 pub enum ProofManagerCommand {
@@ -42,10 +46,7 @@ pub struct BatchQueue {
 
 impl BatchQueue {
     pub fn new(batch_store: Arc<BatchStore>) -> Self {
-        Self {
-            batch_store,
-            author_to_batches: HashMap::new(),
-        }
+        Self { batch_store, author_to_batches: HashMap::new() }
     }
 
     pub fn add_batches(&mut self, batches: Vec<BatchInfo>) {
@@ -71,10 +72,7 @@ impl BatchQueue {
     }
 
     pub fn len(&self) -> usize {
-        self.author_to_batches
-            .values()
-            .map(|batch_tree| batch_tree.len())
-            .sum()
+        self.author_to_batches.values().map(|batch_tree| batch_tree.len()).sum()
     }
 
     pub fn pull_batches(
@@ -172,14 +170,11 @@ impl ProofManager {
         batch_summaries: Vec<(BatchInfo, Vec<TxnSummaryWithExpiration>)>,
     ) {
         if self.allow_batches_without_pos_in_proposal {
-            let batches = batch_summaries
-                .iter()
-                .map(|(batch_info, _)| batch_info.clone())
-                .collect();
+            let batches =
+                batch_summaries.iter().map(|(batch_info, _)| batch_info.clone()).collect();
             self.batch_queue.add_batches(batches);
         }
-        self.proofs_for_consensus
-            .add_batch_summaries(batch_summaries);
+        self.proofs_for_consensus.add_batch_summaries(batch_summaries);
     }
 
     pub(crate) fn handle_commit_notification(
@@ -187,21 +182,14 @@ impl ProofManager {
         block_timestamp: u64,
         batches: Vec<BatchInfo>,
     ) {
-        info!(
-            "QS: got clean request from execution at block timestamp {}",
-            block_timestamp
-        );
-        trace!(
-            "QS: got clean request from execution at block timestamp {}",
-            block_timestamp
-        );
+        info!("QS: got clean request from execution at block timestamp {}", block_timestamp);
+        trace!("QS: got clean request from execution at block timestamp {}", block_timestamp);
         self.batch_queue.remove_expired_batches();
         for batch in &batches {
             self.batch_queue.remove_batch(batch);
         }
         self.proofs_for_consensus.mark_committed(batches);
-        self.proofs_for_consensus
-            .handle_updated_block_timestamp(block_timestamp);
+        self.proofs_for_consensus.handle_updated_block_timestamp(block_timestamp);
         (self.remaining_total_txn_num, self.remaining_total_proof_num) =
             self.proofs_for_consensus.remaining_txns_and_proofs();
     }
@@ -224,7 +212,7 @@ impl ProofManager {
                     PayloadFilter::Empty => HashSet::new(),
                     PayloadFilter::DirectMempool(_) => {
                         unreachable!()
-                    },
+                    }
                     PayloadFilter::InQuorumStore(proofs) => proofs,
                 };
 
@@ -240,8 +228,11 @@ impl ProofManager {
                     );
                 counters::NUM_PROOF_OF_STORE_IN_PROPOSAL.observe(proof_block.len() as f64);
                 counters::NUM_BATCHES_WITHOUT_PROOF_OF_STORE.observe(self.batch_queue.len() as f64);
-                counters::PROOF_QUEUE_FULLY_UTILIZED
-                    .observe(if proof_queue_fully_utilized { 1.0 } else { 0.0 });
+                counters::PROOF_QUEUE_FULLY_UTILIZED.observe(if proof_queue_fully_utilized {
+                    1.0
+                } else {
+                    0.0
+                });
 
                 let mut inline_block: Vec<(BatchInfo, Vec<SignedTransaction>)> = vec![];
                 let cur_all_txns: u64 = proof_block.iter().map(|p| p.num_txns()).sum();
@@ -264,10 +255,7 @@ impl ProofManager {
                             .collect(),
                     );
                 }
-                let inline_txns = inline_block
-                    .iter()
-                    .map(|(_, txns)| txns.len())
-                    .sum::<usize>();
+                let inline_txns = inline_block.iter().map(|(_, txns)| txns.len()).sum::<usize>();
                 counters::NUM_INLINE_BATCHES.observe(inline_block.len() as f64);
                 counters::NUM_INLINE_TXNS.observe(inline_txns as f64);
 
@@ -299,14 +287,14 @@ impl ProofManager {
                     Ok(_) => (),
                     Err(err) => debug!("BlockResponse receiver not available! error {:?}", err),
                 }
-            },
+            }
         }
     }
 
     /// return true when quorum store is back pressured
     pub(crate) fn qs_back_pressure(&self) -> BackPressure {
-        if self.remaining_total_txn_num > self.back_pressure_total_txn_limit
-            || self.remaining_total_proof_num > self.back_pressure_total_proof_limit
+        if self.remaining_total_txn_num > self.back_pressure_total_txn_limit ||
+            self.remaining_total_proof_num > self.back_pressure_total_proof_limit
         {
             sample!(
                 SampleRate::Duration(Duration::from_millis(200)),
@@ -332,10 +320,7 @@ impl ProofManager {
         mut proposal_rx: Receiver<GetPayloadCommand>,
         mut proof_rx: tokio::sync::mpsc::Receiver<ProofManagerCommand>,
     ) {
-        let mut back_pressure = BackPressure {
-            txn_count: false,
-            proof_count: false,
-        };
+        let mut back_pressure = BackPressure { txn_count: false, proof_count: false };
 
         loop {
             let _timer = counters::PROOF_MANAGER_MAIN_LOOP.start_timer();

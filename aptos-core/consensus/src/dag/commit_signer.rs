@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::pipeline::signing_phase::CommitSignerProvider;
-use gaptos::aptos_crypto::bls12381;
-use gaptos::aptos_types::validator_signer::ValidatorSigner;
+use gaptos::{aptos_crypto::bls12381, aptos_types::validator_signer::ValidatorSigner};
 use std::sync::Arc;
 
 pub struct DagCommitSigner {

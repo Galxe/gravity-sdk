@@ -53,10 +53,7 @@ pub struct ProcessService {
 
 impl ProcessService {
     pub fn new(server_addr: SocketAddr, network_timeout: u64) -> Self {
-        Self {
-            server_addr,
-            network_timeout_ms: network_timeout,
-        }
+        Self { server_addr, network_timeout_ms: network_timeout }
     }
 }
 

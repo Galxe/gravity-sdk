@@ -34,11 +34,7 @@ impl ThreadService {
 
         let child = thread::spawn(move || remote_service::execute(storage, listen_addr, timeout));
 
-        Self {
-            _child: child,
-            server_addr,
-            network_timeout: timeout,
-        }
+        Self { _child: child, server_addr, network_timeout: timeout }
     }
 }
 

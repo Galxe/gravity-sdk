@@ -9,7 +9,10 @@ use gaptos::aptos_schemadb::{schema::fuzzing::assert_encode_decode, test_no_pani
 #[test]
 fn test_encode_decode() {
     let qc = certificate_for_genesis();
-    assert_encode_decode::<QCSchema>(&(qc.certified_block().epoch(), qc.certified_block().id()), &qc);
+    assert_encode_decode::<QCSchema>(
+        &(qc.certified_block().epoch(), qc.certified_block().id()),
+        &qc,
+    );
 }
 
 // test_no_panic_decoding!(QCSchema);

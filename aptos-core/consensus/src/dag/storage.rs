@@ -4,8 +4,7 @@
 use super::{types::Vote, NodeId};
 use crate::dag::{CertifiedNode, Node};
 use aptos_consensus_types::common::{Author, Round};
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_types::ledger_info::LedgerInfoWithSignatures;
+use gaptos::{aptos_crypto::HashValue, aptos_types::ledger_info::LedgerInfoWithSignatures};
 use std::collections::HashMap;
 
 #[derive(Clone)]
@@ -17,11 +16,7 @@ pub struct CommitEvent {
 
 impl CommitEvent {
     pub fn new(node_id: NodeId, parents: Vec<Author>, failed_authors: Vec<Author>) -> Self {
-        CommitEvent {
-            node_id,
-            parents,
-            failed_authors,
-        }
+        CommitEvent { node_id, parents, failed_authors }
     }
 
     pub fn epoch(&self) -> u64 {

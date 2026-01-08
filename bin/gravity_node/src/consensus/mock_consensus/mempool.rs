@@ -1,7 +1,10 @@
 use std::collections::{BTreeMap, HashMap};
 
 use block_buffer_manager::TxPool;
-use gaptos::api_types::{account::ExternalAccountAddress, u256_define::TxnHash, VerifiedTxn, VerifiedTxnWithAccountSeqNum};
+use gaptos::api_types::{
+    account::ExternalAccountAddress, u256_define::TxnHash, VerifiedTxn,
+    VerifiedTxnWithAccountSeqNum,
+};
 use tracing::*;
 
 pub struct Mempool {
@@ -53,8 +56,7 @@ impl Mempool {
         has_new_txn
     }
 
-    pub fn commit_txns(&mut self, _txns: &[TxnId]) {
-    }
+    pub fn commit_txns(&mut self, _txns: &[TxnId]) {}
 
     pub fn get_current_sequence_number(&self, account: &ExternalAccountAddress) -> u64 {
         *self.commit_sequence_numbers.get(account).unwrap_or(&0)

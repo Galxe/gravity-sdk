@@ -9,11 +9,13 @@ use crate::{
     state_replication::StateComputer,
 };
 use aptos_consensus_types::pipelined_block::PipelinedBlock;
-use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::ExecutorError;
-use gaptos::aptos_logger::{debug, info};
 use async_trait::async_trait;
 use futures::TryFutureExt;
+use gaptos::{
+    aptos_crypto::HashValue,
+    aptos_logger::{debug, info},
+};
 use std::{
     fmt::{Debug, Display, Formatter},
     sync::Arc,
@@ -25,8 +27,8 @@ use std::{
 
 pub struct ExecutionRequest {
     pub ordered_blocks: Vec<PipelinedBlock>,
-    // Pass down a CountedRequest to the ExecutionPipeline stages in order to guarantee the executor
-    // doesn't get reset with pending tasks stuck in the pipeline.
+    // Pass down a CountedRequest to the ExecutionPipeline stages in order to guarantee the
+    // executor doesn't get reset with pending tasks stuck in the pipeline.
     pub lifetime_guard: CountedRequest<()>,
 }
 
@@ -60,10 +62,7 @@ impl StatelessPipeline for ExecutionSchedulePhase {
     const NAME: &'static str = "execution_schedule";
 
     async fn process(&self, req: ExecutionRequest) -> ExecutionWaitRequest {
-        let ExecutionRequest {
-            ordered_blocks,
-            lifetime_guard,
-        } = req;
+        let ExecutionRequest { ordered_blocks, lifetime_guard } = req;
 
         let block_id = match ordered_blocks.last() {
             Some(block) => block.id(),
@@ -72,7 +71,7 @@ impl StatelessPipeline for ExecutionSchedulePhase {
                     block_id: HashValue::zero(),
                     fut: Box::pin(async { Err(aptos_executor_types::ExecutorError::EmptyBlocks) }),
                 }
-            },
+            }
         };
 
         // Call schedule_compute() for each block here (not in the fut being returned) to
@@ -102,9 +101,6 @@ impl StatelessPipeline for ExecutionSchedulePhase {
         })
         .map_err(ExecutorError::internal_err)
         .and_then(|res| async { res });
-        ExecutionWaitRequest {
-            block_id,
-            fut: Box::pin(fut),
-        }
+        ExecutionWaitRequest { block_id, fut: Box::pin(fut) }
     }
 }

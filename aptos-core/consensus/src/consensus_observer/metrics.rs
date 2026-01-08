@@ -3,10 +3,12 @@
 
 #![allow(clippy::unwrap_used)]
 
-use gaptos::aptos_config::network_id::{NetworkId, PeerNetworkId};
-use gaptos::aptos_metrics_core::{
-    register_histogram_vec, register_int_counter_vec, register_int_gauge_vec, HistogramVec,
-    IntCounterVec, IntGaugeVec,
+use gaptos::{
+    aptos_config::network_id::{NetworkId, PeerNetworkId},
+    aptos_metrics_core::{
+        register_histogram_vec, register_int_counter_vec, register_int_gauge_vec, HistogramVec,
+        IntCounterVec, IntGaugeVec,
+    },
 };
 use once_cell::sync::Lazy;
 
@@ -187,9 +189,7 @@ pub fn increment_request_counter(
     peer_network_id: &PeerNetworkId,
 ) {
     let network_id = peer_network_id.network_id();
-    counter
-        .with_label_values(&[label, network_id.as_str()])
-        .inc();
+    counter.with_label_values(&[label, network_id.as_str()]).inc();
 }
 
 /// Observes the value for the provided histogram and label
@@ -200,9 +200,7 @@ pub fn observe_value_with_label(
     value: f64,
 ) {
     let network_id = peer_network_id.network_id();
-    histogram
-        .with_label_values(&[request_label, network_id.as_str()])
-        .observe(value)
+    histogram.with_label_values(&[request_label, network_id.as_str()]).observe(value)
 }
 
 /// Sets the gauge with the specific network ID and value

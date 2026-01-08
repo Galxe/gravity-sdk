@@ -11,33 +11,35 @@ use crate::{
     pipeline::{buffer_manager::OrderedBlocks, execution_client::DummyExecutionClient},
     test_utils::{consensus_runtime, MockPayloadManager, MockStorage},
 };
-use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use gaptos::aptos_config::network_id::{NetworkId, PeerNetworkId};
 use aptos_consensus_types::common::Author;
-use gaptos::aptos_logger::debug;
-use gaptos::aptos_network::{
-    application::interface::NetworkClient,
-    peer_manager::{ConnectionRequestSender, PeerManagerRequestSender},
-    protocols::{
-        network::{self, Event, NetworkEvents, NewNetworkEvents, NewNetworkSender},
-        wire::handshake::v1::ProtocolIdSet,
-    },
-    transport::ConnectionMetadata,
-    ProtocolId,
-};
-use gaptos::aptos_time_service::TimeService;
-use gaptos::aptos_types::{
-    epoch_state::EpochState,
-    ledger_info::generate_ledger_info_with_sig,
-    validator_signer::ValidatorSigner,
-    validator_verifier::{random_validator_verifier, ValidatorVerifier},
-};
 use claims::assert_gt;
 use futures::{
     stream::{select, Select},
     StreamExt,
 };
 use futures_channel::mpsc::UnboundedReceiver;
+use gaptos::{
+    aptos_channels::{aptos_channel, message_queues::QueueStyle},
+    aptos_config::network_id::{NetworkId, PeerNetworkId},
+    aptos_logger::debug,
+    aptos_network::{
+        application::interface::NetworkClient,
+        peer_manager::{ConnectionRequestSender, PeerManagerRequestSender},
+        protocols::{
+            network::{self, Event, NetworkEvents, NewNetworkEvents, NewNetworkSender},
+            wire::handshake::v1::ProtocolIdSet,
+        },
+        transport::ConnectionMetadata,
+        ProtocolId,
+    },
+    aptos_time_service::TimeService,
+    aptos_types::{
+        epoch_state::EpochState,
+        ledger_info::generate_ledger_info_with_sig,
+        validator_signer::ValidatorSigner,
+        validator_verifier::{random_validator_verifier, ValidatorVerifier},
+    },
+};
 use maplit::hashmap;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
@@ -47,7 +49,10 @@ struct DagBootstrapUnit {
     df_task_handle: JoinHandle<()>,
     dag_rpc_tx: aptos_channel::Sender<Author, IncomingDAGRequest>,
     network_events: Box<
-        Select<NetworkEvents<ConsensusMsg>, gaptos::aptos_channels::UnboundedReceiver<Event<ConsensusMsg>>>,
+        Select<
+            NetworkEvents<ConsensusMsg>,
+            gaptos::aptos_channels::UnboundedReceiver<Event<ConsensusMsg>>,
+        >,
     >,
 }
 
@@ -69,7 +74,7 @@ impl DagBootstrapUnit {
     ) -> (Self, UnboundedReceiver<OrderedBlocks>) {
         let epoch_state = Arc::new(EpochState {
             epoch,
-            verifier: todo!() //storage.get_validator_set().into(),
+            verifier: todo!(), //storage.get_validator_set().into(),
         });
         let ledger_info = generate_ledger_info_with_sig(&all_signers, storage.get_ledger_info());
         let dag_storage =
@@ -114,15 +119,15 @@ impl DagBootstrapUnit {
                 Event::RpcRequest(sender, msg, protocol, response_sender) => match msg {
                     ConsensusMsg::DAGMessage(msg) => {
                         debug!("handling RPC...");
-                        self.dag_rpc_tx.push(sender, IncomingDAGRequest {
-                            req: msg,
+                        self.dag_rpc_tx.push(
                             sender,
-                            responder: RpcResponder {
-                                protocol,
-                                response_sender,
+                            IncomingDAGRequest {
+                                req: msg,
+                                sender,
+                                responder: RpcResponder { protocol, response_sender },
                             },
-                        })
-                    },
+                        )
+                    }
                     _ => unreachable!("expected only DAG-related messages"),
                 },
                 _ => panic!("Unexpected Network Event"),
@@ -140,7 +145,10 @@ fn create_network(
 ) -> (
     NetworkSender,
     Box<
-        Select<NetworkEvents<ConsensusMsg>, gaptos::aptos_channels::UnboundedReceiver<Event<ConsensusMsg>>>,
+        Select<
+            NetworkEvents<ConsensusMsg>,
+            gaptos::aptos_channels::UnboundedReceiver<Event<ConsensusMsg>>,
+        >,
     >,
 ) {
     let (network_reqs_tx, network_reqs_rx) = aptos_channel::new(QueueStyle::FIFO, 8, None);
@@ -191,9 +199,7 @@ async fn bootstrap_nodes(
                 ProtocolId::ConsensusRpcBcs,
             ]);
             let peer_network_id = PeerNetworkId::new(NetworkId::Validator, peer_id);
-            peers_and_metadata
-                .insert_connection_metadata(peer_network_id, conn_meta)
-                .unwrap();
+            peers_and_metadata.insert_connection_metadata(peer_network_id, conn_meta).unwrap();
 
             todo!()
             // let (network, network_events) =
@@ -221,11 +227,9 @@ async fn test_dag_e2e() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let (signers, validators) = random_validator_verifier(num_nodes, None, false);
-    let (nodes, mut ordered_node_receivers) = bootstrap_nodes(&mut playground, signers, validators).await;
-    let tasks: Vec<_> = nodes
-        .into_iter()
-        .map(|node| runtime.spawn(node.start()))
-        .collect();
+    let (nodes, mut ordered_node_receivers) =
+        bootstrap_nodes(&mut playground, signers, validators).await;
+    let tasks: Vec<_> = nodes.into_iter().map(|node| runtime.spawn(node.start())).collect();
     runtime.spawn(playground.start());
 
     for _ in 1..10 {

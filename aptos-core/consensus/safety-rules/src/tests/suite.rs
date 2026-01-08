@@ -14,16 +14,18 @@ use aptos_consensus_types::{
     timeout_2chain::{TwoChainTimeout, TwoChainTimeoutCertificate},
     vote_proposal::VoteProposal,
 };
-use gaptos::aptos_crypto::hash::{HashValue, ACCUMULATOR_PLACEHOLDER_HASH};
-use gaptos::aptos_types::{
-    aggregate_signature::AggregateSignature,
-    block_info::BlockInfo,
-    epoch_state::EpochState,
-    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
-    validator_signer::ValidatorSigner,
-    validator_verifier::ValidatorVerifier,
-};
 use claims::assert_err;
+use gaptos::{
+    aptos_crypto::hash::{HashValue, ACCUMULATOR_PLACEHOLDER_HASH},
+    aptos_types::{
+        aggregate_signature::AggregateSignature,
+        block_info::BlockInfo,
+        epoch_state::EpochState,
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+        validator_signer::ValidatorSigner,
+        validator_verifier::ValidatorVerifier,
+    },
+};
 use std::sync::Arc;
 
 type Proof = test_utils::Proof;
@@ -34,12 +36,7 @@ fn make_proposal_with_qc_and_proof(
     qc: QuorumCert,
     signer: &ValidatorSigner,
 ) -> VoteProposal {
-    test_utils::make_proposal_with_qc_and_proof(
-        Payload::empty(false, true),
-        round,
-        qc,
-        signer,
-    )
+    test_utils::make_proposal_with_qc_and_proof(Payload::empty(false, true), round, qc, signer)
 }
 
 fn make_proposal_with_parent(
@@ -174,18 +171,10 @@ fn test_order_votes_out_of_order_execution(safety_rules: &Callback) {
 
     safety_rules.construct_and_sign_order_vote(&ov2).unwrap();
 
-    safety_rules
-        .construct_and_sign_vote_two_chain(&p0, None)
-        .unwrap();
-    safety_rules
-        .construct_and_sign_vote_two_chain(&p1, None)
-        .unwrap();
-    safety_rules
-        .construct_and_sign_vote_two_chain(&p2, None)
-        .unwrap();
-    safety_rules
-        .construct_and_sign_vote_two_chain(&p3, None)
-        .unwrap();
+    safety_rules.construct_and_sign_vote_two_chain(&p0, None).unwrap();
+    safety_rules.construct_and_sign_vote_two_chain(&p1, None).unwrap();
+    safety_rules.construct_and_sign_vote_two_chain(&p2, None).unwrap();
+    safety_rules.construct_and_sign_vote_two_chain(&p3, None).unwrap();
 }
 
 fn test_order_votes_incorrect_qc(safety_rules: &Callback) {
@@ -269,17 +258,14 @@ fn test_order_votes_with_timeout(safety_rules: &Callback) {
 
     safety_rules.initialize(&proof).unwrap();
 
-    safety_rules
-        .construct_and_sign_vote_two_chain(&p0, None)
-        .unwrap();
+    safety_rules.construct_and_sign_vote_two_chain(&p0, None).unwrap();
 
-    safety_rules
-        .construct_and_sign_vote_two_chain(&p2, Some(&tc1))
-        .unwrap();
+    safety_rules.construct_and_sign_vote_two_chain(&p2, Some(&tc1)).unwrap();
 
-    // The validator hasn't signed timeout for round 2, but has received timeout certificate for round 2.
-    // The validator can still sign order vote for round 1. But all the 2f+1 validators who signed timeout certificate
-    // can't order vote for round 1. So, 2f+1 order votes can't be formed for round 1.
+    // The validator hasn't signed timeout for round 2, but has received timeout certificate for
+    // round 2. The validator can still sign order vote for round 1. But all the 2f+1 validators
+    // who signed timeout certificate can't order vote for round 1. So, 2f+1 order votes can't
+    // be formed for round 1.
     safety_rules.construct_and_sign_order_vote(&ov1).unwrap();
 
     safety_rules
@@ -295,9 +281,7 @@ fn test_order_votes_with_timeout(safety_rules: &Callback) {
     // Cannot sign vote for round 4 after signing timeout for round 4
     assert_err!(safety_rules.construct_and_sign_vote_two_chain(&p3, None));
 
-    safety_rules
-        .construct_and_sign_vote_two_chain(&p4b, Some(&tc3))
-        .unwrap();
+    safety_rules.construct_and_sign_vote_two_chain(&p4b, Some(&tc3)).unwrap();
 
     // Cannot sign order vote for round 4 after signing timeoiut for round 4
     assert_err!(safety_rules.construct_and_sign_order_vote(&ov4));
@@ -370,28 +354,14 @@ fn test_end_to_end(safety_rules: &Callback) {
     let p3 = test_utils::make_proposal_with_parent(data, round + 4, &p2, Some(&p0), &signer);
 
     let state = safety_rules.consensus_state().unwrap();
-    assert_eq!(
-        state.last_voted_round(),
-        genesis_qc.certified_block().round()
-    );
-    assert_eq!(
-        state.preferred_round(),
-        genesis_qc.certified_block().round()
-    );
+    assert_eq!(state.last_voted_round(), genesis_qc.certified_block().round());
+    assert_eq!(state.preferred_round(), genesis_qc.certified_block().round());
 
     safety_rules.initialize(&proof).unwrap();
-    safety_rules
-        .construct_and_sign_vote_two_chain(&p0, None)
-        .unwrap();
-    safety_rules
-        .construct_and_sign_vote_two_chain(&p1, None)
-        .unwrap();
-    safety_rules
-        .construct_and_sign_vote_two_chain(&p2, None)
-        .unwrap();
-    safety_rules
-        .construct_and_sign_vote_two_chain(&p3, None)
-        .unwrap();
+    safety_rules.construct_and_sign_vote_two_chain(&p0, None).unwrap();
+    safety_rules.construct_and_sign_vote_two_chain(&p1, None).unwrap();
+    safety_rules.construct_and_sign_vote_two_chain(&p2, None).unwrap();
+    safety_rules.construct_and_sign_vote_two_chain(&p3, None).unwrap();
 
     let state = safety_rules.consensus_state().unwrap();
     assert_eq!(state.last_voted_round(), round + 4);
@@ -439,9 +409,7 @@ fn test_voting_bad_epoch(safety_rules: &Callback) {
         None,
     );
     safety_rules.initialize(&proof).unwrap();
-    safety_rules
-        .construct_and_sign_vote_two_chain(&a1, None)
-        .unwrap();
+    safety_rules.construct_and_sign_vote_two_chain(&a1, None).unwrap();
 
     assert_eq!(
         safety_rules.construct_and_sign_vote_two_chain(&a2, None),
@@ -459,9 +427,7 @@ fn test_sign_old_proposal(safety_rules: &Callback) {
     safety_rules.initialize(&proof).unwrap();
 
     let a1 = test_utils::make_proposal_with_qc(round, genesis_qc, &signer);
-    let err = safety_rules
-        .sign_proposal(a1.block().block_data())
-        .unwrap_err();
+    let err = safety_rules.sign_proposal(a1.block().block_data()).unwrap_err();
     assert!(matches!(err, Error::InvalidProposal(_)));
 }
 
@@ -479,13 +445,8 @@ fn test_sign_proposal_with_bad_signer(safety_rules: &Callback) {
 
     let bad_signer = ValidatorSigner::random([0xFu8; 32]);
     let a2 = make_proposal_with_parent(round + 2, &a1, None, &bad_signer);
-    let err = safety_rules
-        .sign_proposal(a2.block().block_data())
-        .unwrap_err();
-    assert_eq!(
-        err,
-        Error::InvalidProposal("Proposal author is not validator signer!".into())
-    );
+    let err = safety_rules.sign_proposal(a2.block().block_data()).unwrap_err();
+    assert_eq!(err, Error::InvalidProposal("Proposal author is not validator signer!".into()));
 }
 
 fn test_sign_proposal_with_invalid_qc(safety_rules: &Callback) {
@@ -506,9 +467,7 @@ fn test_sign_proposal_with_invalid_qc(safety_rules: &Callback) {
     let a3 =
         test_utils::make_proposal_with_qc(round + 3, a2.block().quorum_cert().clone(), &signer);
     assert_eq!(
-        safety_rules
-            .sign_proposal(a3.block().block_data())
-            .unwrap_err(),
+        safety_rules.sign_proposal(a3.block().block_data()).unwrap_err(),
         Error::InvalidQuorumCertificate("Fail to verify QuorumCert".into())
     );
 }
@@ -527,15 +486,9 @@ fn test_sign_proposal_with_early_preferred_round(safety_rules: &Callback) {
     let a2 = make_proposal_with_parent(round + 2, &a1, None, &signer);
     let a3 = make_proposal_with_parent(round + 3, &a2, None, &signer);
     let a4 = make_proposal_with_parent(round + 4, &a3, Some(&a2), &signer);
-    safety_rules
-        .construct_and_sign_vote_two_chain(&a2, None)
-        .unwrap();
-    safety_rules
-        .construct_and_sign_vote_two_chain(&a3, None)
-        .unwrap();
-    safety_rules
-        .construct_and_sign_vote_two_chain(&a4, None)
-        .unwrap();
+    safety_rules.construct_and_sign_vote_two_chain(&a2, None).unwrap();
+    safety_rules.construct_and_sign_vote_two_chain(&a3, None).unwrap();
+    safety_rules.construct_and_sign_vote_two_chain(&a4, None).unwrap();
 
     let a5 = make_proposal_with_qc_and_proof(
         round + 5,
@@ -543,9 +496,7 @@ fn test_sign_proposal_with_early_preferred_round(safety_rules: &Callback) {
         a1.block().quorum_cert().clone(),
         &signer,
     );
-    let err = safety_rules
-        .sign_proposal(a5.block().block_data())
-        .unwrap_err();
+    let err = safety_rules.sign_proposal(a5.block().block_data()).unwrap_err();
     assert_eq!(err, Error::IncorrectPreferredRound(0, 2));
 }
 
@@ -558,19 +509,13 @@ fn test_uninitialized_signer(safety_rules: &Callback) {
     let round = genesis_qc.certified_block().round();
 
     let a1 = test_utils::make_proposal_with_qc(round + 1, genesis_qc, &signer);
-    let err = safety_rules
-        .construct_and_sign_vote_two_chain(&a1, None)
-        .unwrap_err();
+    let err = safety_rules.construct_and_sign_vote_two_chain(&a1, None).unwrap_err();
     assert_eq!(err, Error::NotInitialized("validator_signer".into()));
-    let err = safety_rules
-        .sign_proposal(a1.block().block_data())
-        .unwrap_err();
+    let err = safety_rules.sign_proposal(a1.block().block_data()).unwrap_err();
     assert_eq!(err, Error::NotInitialized("validator_signer".into()));
 
     safety_rules.initialize(&proof).unwrap();
-    safety_rules
-        .construct_and_sign_vote_two_chain(&a1, None)
-        .unwrap();
+    safety_rules.construct_and_sign_vote_two_chain(&a1, None).unwrap();
 }
 
 fn test_validator_not_in_set(safety_rules: &Callback) {
@@ -689,15 +634,11 @@ fn test_2chain_rules(constructor: &Callback) {
         let qc = p.block().quorum_cert();
         if vote {
             let vote = result.unwrap();
-            let id = if commit {
-                qc.certified_block().id()
-            } else {
-                HashValue::zero()
-            };
+            let id = if commit { qc.certified_block().id() } else { HashValue::zero() };
             assert_eq!(vote.ledger_info().consensus_block_id(), id);
             assert!(
-                safety_rules.consensus_state().unwrap().one_chain_round()
-                    >= qc.certified_block().round()
+                safety_rules.consensus_state().unwrap().one_chain_round() >=
+                    qc.certified_block().round()
             );
         } else {
             result.unwrap_err();
@@ -706,51 +647,21 @@ fn test_2chain_rules(constructor: &Callback) {
     // block == qc + 1, commit
     expect(&a1, None, true, true);
     // block != qc + 1 && block != tc + 1
-    expect(
-        &b1,
-        Some(make_timeout_cert(3, b1.block().quorum_cert(), &signer)),
-        false,
-        false,
-    );
+    expect(&b1, Some(make_timeout_cert(3, b1.block().quorum_cert(), &signer)), false, false);
     // block != qc + 1, no TC
     expect(&b2, None, false, false);
     // block = tc + 1, qc == tc.hqc
-    expect(
-        &a2,
-        Some(make_timeout_cert(3, a2.block().quorum_cert(), &signer)),
-        true,
-        false,
-    );
+    expect(&a2, Some(make_timeout_cert(3, a2.block().quorum_cert(), &signer)), true, false);
     // block = tc + 1, qc < tc.hqc
-    expect(
-        &b3,
-        Some(make_timeout_cert(4, a3.block().quorum_cert(), &signer)),
-        false,
-        false,
-    );
+    expect(&b3, Some(make_timeout_cert(4, a3.block().quorum_cert(), &signer)), false, false);
     // block != qc + 1, no TC
     expect(&a3, None, false, false);
     // block = qc + 1, with TC, commit
-    expect(
-        &a4,
-        Some(make_timeout_cert(7, a3.block().quorum_cert(), &signer)),
-        true,
-        true,
-    );
+    expect(&a4, Some(make_timeout_cert(7, a3.block().quorum_cert(), &signer)), true, true);
     // block = tc + 1, qc > tc.hqc
-    expect(
-        &a5,
-        Some(make_timeout_cert(7, b4.block().quorum_cert(), &signer)),
-        true,
-        false,
-    );
+    expect(&a5, Some(make_timeout_cert(7, b4.block().quorum_cert(), &signer)), true, false);
     // block = qc + 1, block != tc + 1 (tc is ignored)
-    expect(
-        &a6,
-        Some(make_timeout_cert(7, b4.block().quorum_cert(), &signer)),
-        true,
-        true,
-    );
+    expect(&a6, Some(make_timeout_cert(7, b4.block().quorum_cert(), &signer)), true, true);
 }
 
 fn test_2chain_timeout(constructor: &Callback) {
@@ -792,9 +703,7 @@ fn test_2chain_timeout(constructor: &Callback) {
         Error::IncorrectLastVotedRound(1, 2)
     );
     // update one-chain to 2
-    safety_rules
-        .construct_and_sign_vote_two_chain(&a3, None)
-        .unwrap();
+    safety_rules.construct_and_sign_vote_two_chain(&a3, None).unwrap();
     assert_eq!(
         safety_rules
             .sign_timeout_with_qc(
@@ -845,10 +754,7 @@ fn test_sign_commit_vote(constructor: &Callback) {
     assert!(ledger_info_with_sigs
         .ledger_info()
         .commit_info()
-        .match_ordered_only(
-            &a1.block()
-                .gen_block_info(*ACCUMULATOR_PLACEHOLDER_HASH, 0, None,)
-        ));
+        .match_ordered_only(&a1.block().gen_block_info(*ACCUMULATOR_PLACEHOLDER_HASH, 0, None,)));
 
     assert!(safety_rules
         .sign_commit_vote(
@@ -910,9 +816,7 @@ fn test_sign_commit_vote(constructor: &Callback) {
     );
 
     assert!(matches!(
-        safety_rules
-            .sign_commit_vote(ledger_info_with_sigs.clone(), bad_ledger_info,)
-            .unwrap_err(),
+        safety_rules.sign_commit_vote(ledger_info_with_sigs.clone(), bad_ledger_info,).unwrap_err(),
         Error::InconsistentExecutionResult(_, _)
     ));
 }

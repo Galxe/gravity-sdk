@@ -4,7 +4,9 @@
 
 use crate::common::Round;
 use anyhow::{ensure, Context};
-use gaptos::aptos_types::{ledger_info::LedgerInfoWithSignatures, validator_verifier::ValidatorVerifier};
+use gaptos::aptos_types::{
+    ledger_info::LedgerInfoWithSignatures, validator_verifier::ValidatorVerifier,
+};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
 
@@ -54,8 +56,6 @@ impl CommitDecision {
         );
         // We do not need to check the author because as long as the signature tree
         // is valid, the message should be valid.
-        self.ledger_info
-            .verify_signatures(validator)
-            .context("Failed to verify Commit Decision")
+        self.ledger_info.verify_signatures(validator).context("Failed to verify Commit Decision")
     }
 }

@@ -49,16 +49,12 @@ async fn test_block_request_no_txns() {
         _return_non_full,
         _exclude_txns,
         callback,
-    ) = timeout(
-        Duration::from_millis(1_000),
-        quorum_store_to_mempool_receiver.select_next_some(),
-    )
-    .await
-    .unwrap()
+    ) =
+        timeout(Duration::from_millis(1_000), quorum_store_to_mempool_receiver.select_next_some())
+            .await
+            .unwrap()
     {
-        callback
-            .send(Ok(QuorumStoreResponse::GetBatchResponse(vec![])))
-            .unwrap();
+        callback.send(Ok(QuorumStoreResponse::GetBatchResponse(vec![]))).unwrap();
     } else {
         panic!("Unexpected variant")
     }
@@ -71,12 +67,9 @@ async fn test_block_request_no_txns() {
     {
         GetPayloadResponse::GetPayloadResponse(payload) => {
             assert!(payload.is_empty());
-        },
+        }
     }
 
     std::mem::drop(consensus_to_quorum_store_sender);
-    timeout(Duration::from_millis(1_000), join_handle)
-        .await
-        .unwrap()
-        .unwrap();
+    timeout(Duration::from_millis(1_000), join_handle).await.unwrap().unwrap();
 }

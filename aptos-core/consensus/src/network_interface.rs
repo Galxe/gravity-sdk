@@ -10,7 +10,6 @@ use crate::{
     quorum_store::types::{Batch, BatchMsg, BatchRequest, BatchResponse},
     rand::rand_gen::network_messages::RandGenMessage,
 };
-use gaptos::aptos_config::network_id::{NetworkId, PeerNetworkId};
 use aptos_consensus_types::{
     block_retrieval::{BlockRetrievalRequest, BlockRetrievalResponse},
     epoch_retrieval::EpochRetrievalRequest,
@@ -21,12 +20,15 @@ use aptos_consensus_types::{
     sync_info::SyncInfo,
     vote_msg::VoteMsg,
 };
-use gaptos::aptos_network::{
-    application::{error::Error, interface::NetworkClientInterface},
-    ProtocolId,
-};
-use gaptos::aptos_types::{epoch_change::EpochChangeProof, PeerId};
 use bytes::Bytes;
+use gaptos::{
+    aptos_config::network_id::{NetworkId, PeerNetworkId},
+    aptos_network::{
+        application::{error::Error, interface::NetworkClientInterface},
+        ProtocolId,
+    },
+    aptos_types::{epoch_change::EpochChangeProof, PeerId},
+};
 pub use pipeline::commit_reliable_broadcast::CommitMessage;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::Duration};
@@ -77,8 +79,8 @@ pub enum ConsensusMsg {
     RandGenMessage(RandGenMessage),
     /// Quorum Store: Response to the batch request.
     BatchResponseV2(Box<BatchResponse>),
-    /// OrderVoteMsg is the struct that is broadcasted by a validator on receiving quorum certificate
-    /// on a block.
+    /// OrderVoteMsg is the struct that is broadcasted by a validator on receiving quorum
+    /// certificate on a block.
     OrderVoteMsg(Box<OrderVoteMsg>),
     /// Request to get the sync info from the destination peer.
     SyncInfoRequest,
@@ -87,7 +89,6 @@ pub enum ConsensusMsg {
 /// Network type for consensus
 impl ConsensusMsg {
     /// ConsensusMsg type in string
-    ///
     pub fn name(&self) -> &str {
         match self {
             ConsensusMsg::BlockRetrievalRequest(_) => "BlockRetrievalRequest",
@@ -155,10 +156,8 @@ impl<NetworkClient: NetworkClientInterface<ConsensusMsg>> ConsensusNetworkClient
 
     /// Send a single message to the destination peers
     pub fn send_to_many(&self, peers: Vec<PeerId>, message: ConsensusMsg) -> Result<(), Error> {
-        let peer_network_ids: Vec<PeerNetworkId> = peers
-            .into_iter()
-            .map(|peer| self.get_peer_network_id_for_peer(peer))
-            .collect();
+        let peer_network_ids: Vec<PeerNetworkId> =
+            peers.into_iter().map(|peer| self.get_peer_network_id_for_peer(peer)).collect();
         self.network_client.send_to_peers(message, peer_network_ids)
     }
 
@@ -170,9 +169,7 @@ impl<NetworkClient: NetworkClientInterface<ConsensusMsg>> ConsensusNetworkClient
         rpc_timeout: Duration,
     ) -> Result<ConsensusMsg, Error> {
         let peer_network_id = self.get_peer_network_id_for_peer(peer);
-        self.network_client
-            .send_to_peer_rpc(message, rpc_timeout, peer_network_id)
-            .await
+        self.network_client.send_to_peer_rpc(message, rpc_timeout, peer_network_id).await
     }
 
     pub async fn send_rpc_raw(
@@ -182,9 +179,7 @@ impl<NetworkClient: NetworkClientInterface<ConsensusMsg>> ConsensusNetworkClient
         rpc_timeout: Duration,
     ) -> Result<ConsensusMsg, Error> {
         let peer_network_id = self.get_peer_network_id_for_peer(peer);
-        self.network_client
-            .send_to_peer_rpc_raw(message, rpc_timeout, peer_network_id)
-            .await
+        self.network_client.send_to_peer_rpc_raw(message, rpc_timeout, peer_network_id).await
     }
 
     pub fn to_bytes_by_protocol(
@@ -192,10 +187,8 @@ impl<NetworkClient: NetworkClientInterface<ConsensusMsg>> ConsensusNetworkClient
         peers: Vec<PeerId>,
         message: ConsensusMsg,
     ) -> anyhow::Result<HashMap<PeerId, Bytes>> {
-        let peer_network_ids: Vec<PeerNetworkId> = peers
-            .into_iter()
-            .map(|peer| self.get_peer_network_id_for_peer(peer))
-            .collect();
+        let peer_network_ids: Vec<PeerNetworkId> =
+            peers.into_iter().map(|peer| self.get_peer_network_id_for_peer(peer)).collect();
         Ok(self
             .network_client
             .to_bytes_by_protocol(peer_network_ids, message)?
@@ -211,7 +204,6 @@ impl<NetworkClient: NetworkClientInterface<ConsensusMsg>> ConsensusNetworkClient
     }
 
     pub fn sort_peers_by_latency(&self, peers: &mut [PeerId]) {
-        self.network_client
-            .sort_peers_by_latency(NetworkId::Validator, peers);
+        self.network_client.sort_peers_by_latency(NetworkId::Validator, peers);
     }
 }

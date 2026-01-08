@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use aptos_executor_types::{ExecutorResult, StateComputeResult};
-use gaptos::aptos_types::transaction::SignedTransaction;
 use derivative::Derivative;
 use futures::future::BoxFuture;
+use gaptos::aptos_types::transaction::SignedTransaction;
 use std::time::Duration;
 
 #[derive(Derivative)]
@@ -24,11 +24,6 @@ impl PipelineExecutionResult {
         execution_time: Duration,
         pre_commit_fut: BoxFuture<'static, ExecutorResult<()>>,
     ) -> Self {
-        Self {
-            input_txns,
-            result,
-            execution_time,
-            pre_commit_fut,
-        }
+        Self { input_txns, result, execution_time, pre_commit_fut }
     }
 }

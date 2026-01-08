@@ -4,16 +4,16 @@
 use crate::{
     block_preparer::BlockPreparer,
     block_storage::tracing::{observe_block, BlockStage},
-    counters::{update_counters_for_block, update_counters_for_compute_res, update_counters_for_compute_result},
+    counters::{
+        update_counters_for_block, update_counters_for_compute_res,
+        update_counters_for_compute_result,
+    },
     execution_pipeline::SIG_VERIFY_POOL,
     monitor,
     payload_manager::TPayloadManager,
     txn_notifier::TxnNotifier,
 };
-use gaptos::aptos_consensus::counters as counters;
 use anyhow::anyhow;
-use gaptos::api_types::{account::{ExternalAccountAddress, ExternalChainId}, u256_define::{BlockId, Random, TxnHash}, ExternalBlock, ExternalBlockMeta};
-use gaptos::aptos_consensus_notifications::ConsensusNotificationSender;
 use aptos_consensus_types::{
     block::Block,
     common::{RejectedTransactionSummary, Round},
@@ -24,37 +24,56 @@ use aptos_consensus_types::{
         PostPreCommitResult, PreCommitResult, PrepareResult, TaskError, TaskFuture, TaskResult,
     },
 };
-use gaptos::aptos_crypto::HashValue;
-use aptos_executor_types::{StateComputeResult, BlockExecutorTrait};
-use gaptos::aptos_experimental_runtimes::thread_manager::optimal_min_len;
-use gaptos::aptos_logger::{error, info, warn};
+use aptos_executor_types::{BlockExecutorTrait, StateComputeResult};
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
-use gaptos::aptos_types::{
-    block_executor::config::BlockExecutorConfigFromOnchain,
-    block_metadata_ext::BlockMetadataExt,
-    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
-    randomness::Randomness,
-    transaction::{
-        signature_verified_transaction::SignatureVerifiedTransaction, SignedTransaction, Transaction
-    },
-    validator_signer::ValidatorSigner, vm_status::{DiscardedVMStatus, StatusCode},
-};
 use block_buffer_manager::get_block_buffer_manager;
 use futures::FutureExt;
+use gaptos::{
+    api_types::{
+        account::{ExternalAccountAddress, ExternalChainId},
+        u256_define::{BlockId, Random, TxnHash},
+        ExternalBlock, ExternalBlockMeta,
+    },
+    aptos_consensus::counters,
+    aptos_consensus_notifications::ConsensusNotificationSender,
+    aptos_crypto::HashValue,
+    aptos_experimental_runtimes::thread_manager::optimal_min_len,
+    aptos_logger::{error, info, warn},
+    aptos_types::{
+        block_executor::config::BlockExecutorConfigFromOnchain,
+        block_metadata_ext::BlockMetadataExt,
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+        randomness::Randomness,
+        transaction::{
+            signature_verified_transaction::SignatureVerifiedTransaction, SignedTransaction,
+            Transaction,
+        },
+        validator_signer::ValidatorSigner,
+        vm_status::{DiscardedVMStatus, StatusCode},
+    },
+    move_core_types::account_address::AccountAddress,
+};
 use itertools::Itertools;
-use gaptos::move_core_types::account_address::AccountAddress;
 use rayon::prelude::*;
 use std::{
-    collections::HashMap, future::Future, sync::Arc, time::{Duration, Instant}
+    collections::HashMap,
+    future::Future,
+    sync::Arc,
+    time::{Duration, Instant},
 };
-use tokio::{select, sync::{oneshot, Mutex}, task::AbortHandle};
+use tokio::{
+    select,
+    sync::{oneshot, Mutex},
+    task::AbortHandle,
+};
 
 /// The pipeline builder is responsible for constructing the pipeline structure for a block.
 /// Each phase is represented as a shared future, takes in other futures as pre-condition.
-/// Future returns a TaskResult<T>, which error can be either a user error or task error (e.g. cancellation).
+/// Future returns a TaskResult<T>, which error can be either a user error or task error (e.g.
+/// cancellation).
 ///
-/// Currently, the critical path is the following, more details can be found in the comments of each phase.
-/// prepare -> execute -> ledger update -> pre-commit -> commit ledger
+/// Currently, the critical path is the following, more details can be found in the comments of each
+/// phase. prepare -> execute -> ledger update -> pre-commit -> commit ledger
 ///    rand ->
 ///                         order proof ->
 ///                                      commit proof ->
@@ -111,12 +130,7 @@ struct Tracker {
 
 impl Tracker {
     pub fn new(name: &'static str, block: &Block) -> Self {
-        let ret = Self {
-            name,
-            block_id: block.id(),
-            epoch: block.epoch(),
-            round: block.round(),
-        };
+        let ret = Self { name, block_id: block.id(), epoch: block.epoch(), round: block.round() };
         ret.log_start();
         ret
     }
@@ -181,12 +195,7 @@ impl PipelineBuilder {
                 order_proof_tx,
                 commit_proof_tx,
             },
-            PipelineInputRx {
-                rand_rx,
-                order_vote_rx,
-                order_proof_rx,
-                commit_proof_rx,
-            },
+            PipelineInputRx { rand_rx, order_vote_rx, order_proof_rx, commit_proof_rx },
         )
     }
 
@@ -201,9 +210,7 @@ impl PipelineBuilder {
         let commit_vote_fut = spawn_ready_fut(CommitVote::new_with_signature(
             self.signer.author(),
             commit_proof.ledger_info().clone(),
-            self.signer
-                .sign(commit_proof.ledger_info())
-                .expect("Signing should succeed"),
+            self.signer.sign(commit_proof.ledger_info()).expect("Signing should succeed"),
         ));
         let pre_commit_fut = spawn_ready_fut(compute_result);
         let commit_ledger_fut = spawn_ready_fut(Some(commit_proof));
@@ -230,12 +237,7 @@ impl PipelineBuilder {
         block_store_callback: Box<dyn FnOnce(LedgerInfoWithSignatures) + Send + Sync>,
     ) -> (PipelineFutures, PipelineInputTx, Vec<AbortHandle>) {
         let (tx, rx) = Self::channel();
-        let PipelineInputRx {
-            rand_rx,
-            order_vote_rx,
-            order_proof_rx,
-            commit_proof_rx,
-        } = rx;
+        let PipelineInputRx { rand_rx, order_vote_rx, order_proof_rx, commit_proof_rx } = rx;
 
         let mut abort_handles = vec![];
 
@@ -338,12 +340,7 @@ impl PipelineBuilder {
             commit_ledger_fut,
             post_commit_fut,
         };
-        tokio::spawn(Self::monitor(
-            block.epoch(),
-            block.round(),
-            block.id(),
-            all_fut.clone(),
-        ));
+        tokio::spawn(Self::monitor(block.epoch(), block.round(), block.id(), all_fut.clone()));
         (all_fut, tx, abort_handles)
     }
 
@@ -362,7 +359,7 @@ impl PipelineBuilder {
                         e
                     );
                     tokio::time::sleep(Duration::from_millis(100)).await;
-                },
+                }
             }
         };
         let sig_verification_start = Instant::now();
@@ -379,8 +376,8 @@ impl PipelineBuilder {
         Ok(Arc::new(sig_verified_txns))
     }
 
-    /// Precondition: 1. prepare finishes, 2. parent block's phase finishes 3. randomness is available
-    /// What it does: Execute all transactions in block executor
+    /// Precondition: 1. prepare finishes, 2. parent block's phase finishes 3. randomness is
+    /// available What it does: Execute all transactions in block executor
     async fn execute(
         prepare_phase: TaskFuture<PrepareResult>,
         parent_block_execute_phase: TaskFuture<ExecuteResult>,
@@ -393,9 +390,7 @@ impl PipelineBuilder {
     ) -> TaskResult<ExecuteResult> {
         parent_block_execute_phase.await?;
         let user_txns = prepare_phase.await?;
-        let maybe_rand = randomness_rx
-            .await
-            .map_err(|_| anyhow!("randomness tx cancelled"))?;
+        let maybe_rand = randomness_rx.await.map_err(|_| anyhow!("randomness tx cancelled"))?;
 
         let _tracker = Tracker::new("execute", &block);
         // TODO(gravity_lightman_dkg)
@@ -404,11 +399,9 @@ impl PipelineBuilder {
         // } else {
         //     block.new_block_metadata(&validator).into()
         // };
-        let metadata_txn : BlockMetadataExt = block.new_block_metadata(&validator).into();
+        let metadata_txn: BlockMetadataExt = block.new_block_metadata(&validator).into();
         let txns = [
-            vec![SignatureVerifiedTransaction::from(Transaction::from(
-                metadata_txn,
-            ))],
+            vec![SignatureVerifiedTransaction::from(Transaction::from(metadata_txn))],
             block
                 .validator_txns()
                 .cloned()
@@ -431,13 +424,13 @@ impl PipelineBuilder {
         // })
         // .await
         // .expect("spawn blocking failed")?;
-        let stxns =
-            txns.into_iter().map(|txn| {
-                match txn.into_inner() {
-                    Transaction::UserTransaction(sign_txn) => sign_txn,
-                    _ => panic!("Shouldn't be other txn"),
-                }
-            }).collect::<Vec<_>>();
+        let stxns = txns
+            .into_iter()
+            .map(|txn| match txn.into_inner() {
+                Transaction::UserTransaction(sign_txn) => sign_txn,
+                _ => panic!("Shouldn't be other txn"),
+            })
+            .collect::<Vec<_>>();
         let vtxns =
             stxns.iter().map(|txn| Into::<VerifiedTxn>::into(&txn.clone())).collect::<Vec<_>>();
         let real_txns = vtxns
@@ -463,15 +456,24 @@ impl PipelineBuilder {
         };
         // TODO: add extra_data (validator transactions)
         get_block_buffer_manager()
-            .set_ordered_blocks(BlockId::from_bytes(block.parent_id().as_slice()), ExternalBlock { block_meta: meta_data, txns: real_txns, extra_data: vec![], enable_randomness: is_randomness_enabled })
+            .set_ordered_blocks(
+                BlockId::from_bytes(block.parent_id().as_slice()),
+                ExternalBlock {
+                    block_meta: meta_data,
+                    txns: real_txns,
+                    extra_data: vec![],
+                    enable_randomness: is_randomness_enabled,
+                },
+            )
             .await
             .unwrap_or_else(|e| panic!("Failed to push ordered blocks {}", e));
         Ok(())
     }
 
     /// Precondition: 1. execute finishes, 2. parent block's phase finishes
-    /// What it does: Generate state compute result from the execution, it's split from execution for more parallelism
-    /// It carries block timestamp from epoch-ending block to all suffix block
+    /// What it does: Generate state compute result from the execution, it's split from execution
+    /// for more parallelism It carries block timestamp from epoch-ending block to all suffix
+    /// block
     async fn ledger_update(
         execute_phase: TaskFuture<ExecuteResult>,
         parent_block_ledger_update_phase: TaskFuture<LedgerUpdateResult>,
@@ -486,7 +488,11 @@ impl PipelineBuilder {
         let timestamp = block.timestamp_usecs();
         let epoch = block.epoch();
         let hash = get_block_buffer_manager()
-            .get_executed_res(BlockId::from_bytes(block_id.as_slice()), block_number.unwrap(), epoch)
+            .get_executed_res(
+                BlockId::from_bytes(block_id.as_slice()),
+                block_number.unwrap(),
+                epoch,
+            )
             .await
             .unwrap_or_else(|e| panic!("Failed to get executed result {}", e));
         let hash = hash.execution_output;
@@ -495,8 +501,8 @@ impl PipelineBuilder {
         observe_block(timestamp, BlockStage::EXECUTED);
         // FIXME(gravity_byteyue): fixme
         // let epoch_end_timestamp =
-        //     if result.has_reconfiguration() && !result.compute_status_for_input_txns().is_empty() {
-        //         Some(timestamp)
+        //     if result.has_reconfiguration() && !result.compute_status_for_input_txns().is_empty()
+        // {         Some(timestamp)
         //     } else {
         //         prev_epoch_end_timestamp
         //     };
@@ -520,14 +526,16 @@ impl PipelineBuilder {
         let txn_status = compute_result.txn_status();
         match (*txn_status).as_ref() {
             Some(txn_status) => {
-                let rejected_txns = txn_status.iter().filter(|txn| txn.is_discarded).map(|discard_txn_info| {
-                    RejectedTransactionSummary {
+                let rejected_txns = txn_status
+                    .iter()
+                    .filter(|txn| txn.is_discarded)
+                    .map(|discard_txn_info| RejectedTransactionSummary {
                         sender: discard_txn_info.sender.into(),
                         sequence_number: discard_txn_info.nonce,
                         hash: HashValue::new(discard_txn_info.txn_hash),
                         reason: DiscardedVMStatus::from(StatusCode::SEQUENCE_NONCE_INVALID),
-                    }
-                }).collect::<Vec<_>>();
+                    })
+                    .collect::<Vec<_>>();
                 if let Err(e) = mempool_notifier.notify_failed_txn(rejected_txns).await {
                     error!(error = ?e, "Failed to notify mempool of rejected txns");
                 }
@@ -535,13 +543,14 @@ impl PipelineBuilder {
             None => {}
         }
         // let compute_status = compute_result.compute_status_for_input_txns();
-        // // the length of compute_status is user_txns.len() + num_vtxns + 1 due to having blockmetadata
-        // if user_txns.len() >= compute_status.len() {
+        // // the length of compute_status is user_txns.len() + num_vtxns + 1 due to having
+        // blockmetadata if user_txns.len() >= compute_status.len() {
         //     // reconfiguration suffix blocks don't have any transactions
         //     // otherwise, this is an error
         //     if !compute_status.is_empty() {
         //         error!(
-        //                 "Expected compute_status length and actual compute_status length mismatch! user_txns len: {}, compute_status len: {}, has_reconfiguration: {}",
+        //                 "Expected compute_status length and actual compute_status length
+        // mismatch! user_txns len: {}, compute_status len: {}, has_reconfiguration: {}",
         //                 user_txns.len(),
         //                 compute_status.len(),
         //                 compute_result.has_reconfiguration(),
@@ -570,8 +579,9 @@ impl PipelineBuilder {
         Ok(())
     }
 
-    /// Precondition: 1. ledger update finishes, 2. order vote or order proof or commit proof is received
-    /// What it does: Sign the commit vote with execution result, it needs to update the timestamp for reconfig suffix blocks
+    /// Precondition: 1. ledger update finishes, 2. order vote or order proof or commit proof is
+    /// received What it does: Sign the commit vote with execution result, it needs to update
+    /// the timestamp for reconfig suffix blocks
     async fn sign_commit_vote(
         ledger_update_phase: TaskFuture<LedgerUpdateResult>,
         order_vote_rx: oneshot::Receiver<()>,
@@ -611,16 +621,12 @@ impl PipelineBuilder {
         let ledger_info = LedgerInfo::new(block_info, HashValue::zero());
         info!("[Pipeline] Signed ledger info {ledger_info}");
         let signature = signer.sign(&ledger_info).expect("Signing should succeed");
-        Ok(CommitVote::new_with_signature(
-            signer.author(),
-            ledger_info,
-            signature,
-        ))
+        Ok(CommitVote::new_with_signature(signer.author(), ledger_info, signature))
     }
 
-    /// Precondition: 1. ledger update finishes, 2. parent block's phase finishes 2. order proof is received
-    /// What it does: pre-write result to storage even commit proof is not yet available
-    /// For epoch ending block, wait until commit proof is available
+    /// Precondition: 1. ledger update finishes, 2. parent block's phase finishes 2. order proof is
+    /// received What it does: pre-write result to storage even commit proof is not yet
+    /// available For epoch ending block, wait until commit proof is available
     async fn pre_commit(
         ledger_update_phase: TaskFuture<LedgerUpdateResult>,
         // TODO bound parent_commit_ledger too
@@ -633,23 +639,15 @@ impl PipelineBuilder {
         let (compute_result, _) = ledger_update_phase.await?;
         parent_block_pre_commit_phase.await?;
 
-        order_proof_rx
-            .recv()
-            .await
-            .map_err(|_| anyhow!("order proof tx cancelled"))?;
+        order_proof_rx.recv().await.map_err(|_| anyhow!("order proof tx cancelled"))?;
 
         if compute_result.has_reconfiguration() {
-            commit_proof_rx
-                .recv()
-                .await
-                .map_err(|_| anyhow!("commit proof tx cancelled"))?;
+            commit_proof_rx.recv().await.map_err(|_| anyhow!("commit proof tx cancelled"))?;
         }
 
         let _tracker = Tracker::new("pre_commit", &block);
         tokio::task::spawn_blocking(move || {
-            executor
-                .pre_commit_block(block.id())
-                .map_err(anyhow::Error::from)
+            executor.pre_commit_block(block.id()).map_err(anyhow::Error::from)
         })
         .await
         .expect("spawn blocking failed")?;
@@ -676,14 +674,18 @@ impl PipelineBuilder {
 
         // let txns = compute_result.transactions_to_commit().to_vec();
         let (txns, _) = payload_manager.get_transactions(&block).await.unwrap_or_default();
-        let txns = txns.into_iter().map(|t| { Transaction::UserTransaction(t) }).collect_vec();
+        let txns = txns.into_iter().map(|t| Transaction::UserTransaction(t)).collect_vec();
         let commit_txns = compute_result.transactions_to_commit(txns);
         // let subscribable_events = compute_result.subscribable_events().to_vec();
         let subscribable_events = vec![];
         if let Err(e) = monitor!(
             "notify_state_sync",
             state_sync_notifier
-                .notify_new_commit(commit_txns, subscribable_events, block.block_number().unwrap_or_else(|| panic!("No block number")))
+                .notify_new_commit(
+                    commit_txns,
+                    subscribable_events,
+                    block.block_number().unwrap_or_else(|| panic!("No block number"))
+                )
                 .await
         ) {
             error!(error = ?e, "Failed to notify state synchronizer");
@@ -694,8 +696,9 @@ impl PipelineBuilder {
         Ok(())
     }
 
-    /// Precondition: 1. pre-commit finishes, 2. parent block's phase finishes 3. commit proof is available
-    /// What it does: Commit the ledger info to storage, this makes the data visible for clients
+    /// Precondition: 1. pre-commit finishes, 2. parent block's phase finishes 3. commit proof is
+    /// available What it does: Commit the ledger info to storage, this makes the data visible
+    /// for clients
     async fn commit_ledger(
         pre_commit_fut: TaskFuture<PreCommitResult>,
         mut commit_proof_rx: tokio::sync::broadcast::Receiver<LedgerInfoWithSignatures>,
@@ -705,10 +708,8 @@ impl PipelineBuilder {
     ) -> TaskResult<CommitLedgerResult> {
         parent_block_commit_phase.await?;
         pre_commit_fut.await?;
-        let ledger_info_with_sigs = commit_proof_rx
-            .recv()
-            .await
-            .map_err(|_| anyhow!("commit rx cancelled"))?;
+        let ledger_info_with_sigs =
+            commit_proof_rx.recv().await.map_err(|_| anyhow!("commit rx cancelled"))?;
 
         // it's committed as prefix
         if ledger_info_with_sigs.commit_info().id() != block.id() {
@@ -768,20 +769,10 @@ impl PipelineBuilder {
         } = all_futs;
         wait_and_log_error(prepare_fut, format!("{epoch} {round} {block_id} prepare")).await;
         wait_and_log_error(execute_fut, format!("{epoch} {round} {block_id} execute")).await;
-        wait_and_log_error(
-            ledger_update_fut,
-            format!("{epoch} {round} {block_id} ledger update"),
-        )
-        .await;
-        wait_and_log_error(
-            pre_commit_fut,
-            format!("{epoch} {round} {block_id} pre commit"),
-        )
-        .await;
-        wait_and_log_error(
-            commit_ledger_fut,
-            format!("{epoch} {round} {block_id} commit ledger"),
-        )
-        .await;
+        wait_and_log_error(ledger_update_fut, format!("{epoch} {round} {block_id} ledger update"))
+            .await;
+        wait_and_log_error(pre_commit_fut, format!("{epoch} {round} {block_id} pre commit")).await;
+        wait_and_log_error(commit_ledger_fut, format!("{epoch} {round} {block_id} commit ledger"))
+            .await;
     }
 }

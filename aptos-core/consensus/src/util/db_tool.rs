@@ -12,9 +12,11 @@ use crate::{
 };
 use anyhow::{bail, Result};
 use aptos_consensus_types::{block::Block, common::Payload};
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_types::transaction::{SignedTransaction, Transaction};
 use clap::Parser;
+use gaptos::{
+    aptos_crypto::HashValue,
+    aptos_types::transaction::{SignedTransaction, Transaction},
+};
 use std::{collections::HashMap, path::PathBuf};
 
 #[derive(Parser)]
@@ -89,7 +91,7 @@ pub fn extract_txns_from_block<'a>(
         Some(payload) => match payload {
             Payload::DirectMempool(_) => {
                 bail!("DirectMempool is not supported.");
-            },
+            }
             Payload::InQuorumStore(proof_with_data) => extract_txns_from_quorum_store(
                 proof_with_data.proofs.iter().map(|proof| (proof.epoch(), *proof.digest())),
                 all_batches,
@@ -112,7 +114,7 @@ pub fn extract_txns_from_block<'a>(
                     all_txns.extend(txns);
                 }
                 Ok(all_txns)
-            },
+            }
             Payload::OptQuorumStore(opt_qs_payload) => {
                 let mut all_txns = extract_txns_from_quorum_store(
                     opt_qs_payload
@@ -133,7 +135,7 @@ pub fn extract_txns_from_block<'a>(
                     .unwrap(),
                 );
                 Ok(all_txns)
-            },
+            }
         },
         None => Ok(vec![]),
     }

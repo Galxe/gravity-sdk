@@ -12,8 +12,10 @@ use aptos_consensus_types::{
     vote::Vote,
     vote_proposal::VoteProposal,
 };
-use gaptos::aptos_crypto::{bls12381, hash::CryptoHash, HashValue};
-use gaptos::aptos_types::{block_info::BlockInfo, ledger_info::LedgerInfo};
+use gaptos::{
+    aptos_crypto::{bls12381, hash::CryptoHash, HashValue},
+    aptos_types::{block_info::BlockInfo, ledger_info::LedgerInfo},
+};
 
 /// 2-chain safety rules implementation
 impl SafetyRules {
@@ -129,17 +131,12 @@ impl SafetyRules {
         let round = timeout.round();
         let qc_round = timeout.hqc_round();
         let tc_round = maybe_tc.map_or(0, |tc| tc.round());
-        if (round == next_round(qc_round)? || round == next_round(tc_round)?)
-            && qc_round >= safety_data.one_chain_round
+        if (round == next_round(qc_round)? || round == next_round(tc_round)?) &&
+            qc_round >= safety_data.one_chain_round
         {
             Ok(())
         } else {
-            Err(Error::NotSafeToTimeout(
-                round,
-                qc_round,
-                tc_round,
-                safety_data.one_chain_round,
-            ))
+            Err(Error::NotSafeToTimeout(round, qc_round, tc_round, safety_data.one_chain_round))
         }
     }
 
@@ -155,8 +152,8 @@ impl SafetyRules {
         let qc_round = block.quorum_cert().certified_block().round();
         let tc_round = maybe_tc.map_or(0, |tc| tc.round());
         let hqc_round = maybe_tc.map_or(0, |tc| tc.highest_hqc_round());
-        if round == next_round(qc_round)?
-            || (round == next_round(tc_round)? && qc_round >= hqc_round)
+        if round == next_round(qc_round)? ||
+            (round == next_round(tc_round)? && qc_round >= hqc_round)
         {
             Ok(())
         } else {
@@ -169,10 +166,7 @@ impl SafetyRules {
         if round > safety_data.highest_timeout_round {
             Ok(())
         } else {
-            Err(Error::NotSafeForOrderVote(
-                round,
-                safety_data.highest_timeout_round,
-            ))
+            Err(Error::NotSafeForOrderVote(round, safety_data.highest_timeout_round))
         }
     }
 

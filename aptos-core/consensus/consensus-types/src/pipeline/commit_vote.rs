@@ -4,11 +4,13 @@
 
 use crate::common::{Author, Round};
 use anyhow::Context;
-use gaptos::aptos_crypto::{bls12381, CryptoMaterialError};
-use gaptos::aptos_short_hex_str::AsShortHexStr;
-use gaptos::aptos_types::{
-    block_info::BlockInfo, ledger_info::LedgerInfo, validator_signer::ValidatorSigner,
-    validator_verifier::ValidatorVerifier,
+use gaptos::{
+    aptos_crypto::{bls12381, CryptoMaterialError},
+    aptos_short_hex_str::AsShortHexStr,
+    aptos_types::{
+        block_info::BlockInfo, ledger_info::LedgerInfo, validator_signer::ValidatorSigner,
+        validator_verifier::ValidatorVerifier,
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
@@ -29,12 +31,7 @@ impl Debug for CommitVote {
 
 impl Display for CommitVote {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "CommitProposal: [author: {}, {}]",
-            self.author.short_str(),
-            self.ledger_info
-        )
+        write!(f, "CommitProposal: [author: {}, {}]", self.author.short_str(), self.ledger_info)
     }
 }
 
@@ -46,11 +43,7 @@ impl CommitVote {
         validator_signer: &ValidatorSigner,
     ) -> Result<Self, CryptoMaterialError> {
         let signature = validator_signer.sign(&ledger_info_placeholder)?;
-        Ok(Self::new_with_signature(
-            author,
-            ledger_info_placeholder,
-            signature,
-        ))
+        Ok(Self::new_with_signature(author, ledger_info_placeholder, signature))
     }
 
     /// Generates a new CommitProposal using a signature over the specified ledger_info
@@ -59,11 +52,7 @@ impl CommitVote {
         ledger_info: LedgerInfo,
         signature: bls12381::Signature,
     ) -> Self {
-        Self {
-            author,
-            ledger_info,
-            signature,
-        }
+        Self { author, ledger_info, signature }
     }
 
     /// Return the author of the commit proposal

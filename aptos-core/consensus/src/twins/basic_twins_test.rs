@@ -9,10 +9,10 @@ use crate::{
     twins::twins_node::SMRNode,
 };
 use aptos_consensus_types::{block::Block, common::Round};
+use futures::StreamExt;
 use gaptos::aptos_types::on_chain_config::ProposerElectionType::{
     FixedProposer, RotatingProposer, RoundProposer,
 };
-use futures::StreamExt;
 use std::collections::HashMap;
 
 #[tokio::test]
@@ -36,25 +36,17 @@ async fn basic_start_test() {
         &mut playground,
         RotatingProposer(2),
         None,
-    ).await;
+    )
+    .await;
     let genesis = Block::make_genesis_block_from_ledger_info(&nodes[0].storage.get_ledger_info());
     timed_block_on(&runtime, async {
-        let msg = playground
-            .wait_for_messages(1, NetworkPlayground::proposals_only)
-            .await;
+        let msg = playground.wait_for_messages(1, NetworkPlayground::proposals_only).await;
         let first_proposal = match &msg[0].1 {
             ConsensusMsg::ProposalMsg(proposal) => proposal,
             _ => panic!("Unexpected message found"),
         };
         assert_eq!(first_proposal.proposal().parent_id(), genesis.id());
-        assert_eq!(
-            first_proposal
-                .proposal()
-                .quorum_cert()
-                .certified_block()
-                .id(),
-            genesis.id()
-        );
+        assert_eq!(first_proposal.proposal().quorum_cert().certified_block().id(), genesis.id());
     });
 }
 
@@ -88,7 +80,8 @@ async fn drop_config_test() {
         &mut playground,
         FixedProposer(2),
         None,
-    ).await;
+    )
+    .await;
 
     // 4 honest nodes
     let n0_twin_id = nodes[0].id;
@@ -144,7 +137,8 @@ async fn twins_vote_dedup_test() {
         &mut playground,
         RotatingProposer(2),
         None,
-    ).await;
+    )
+    .await;
 
     // 4 honest nodes
     let n0_twin_id = nodes[0].id;
@@ -155,11 +149,8 @@ async fn twins_vote_dedup_test() {
     let n2_twin_id = nodes[2].id;
     let n3_twin_id = nodes[3].id;
 
-    assert!(playground.split_network(vec![n1_twin_id, n3_twin_id], vec![
-        twin0_twin_id,
-        n0_twin_id,
-        n2_twin_id
-    ],));
+    assert!(playground
+        .split_network(vec![n1_twin_id, n3_twin_id], vec![twin0_twin_id, n0_twin_id, n2_twin_id],));
     runtime.spawn(playground.start());
 
     timed_block_on(&runtime, async {
@@ -213,7 +204,8 @@ async fn twins_proposer_test() {
         &mut playground,
         RoundProposer(HashMap::new()),
         Some(round_proposers),
-    ).await;
+    )
+    .await;
 
     // 4 honest nodes
     let n0_twin_id = nodes[0].id;
@@ -231,11 +223,13 @@ async fn twins_proposer_test() {
     let mut round_partitions: HashMap<u64, Vec<Vec<TwinId>>> = HashMap::new();
     // Round 1 to 10 partitions: [node0, node1, node2], [node3, twin0, twin1]
     for i in 1..10 {
-        round_partitions.insert(i, vec![vec![n0_twin_id, n1_twin_id, n2_twin_id], vec![
-            n3_twin_id,
-            twin0_twin_id,
-            twin1_twin_id,
-        ]]);
+        round_partitions.insert(
+            i,
+            vec![
+                vec![n0_twin_id, n1_twin_id, n2_twin_id],
+                vec![n3_twin_id, twin0_twin_id, twin1_twin_id],
+            ],
+        );
     }
     assert!(playground.split_network_round(&round_partitions));
     runtime.spawn(playground.start());
@@ -251,7 +245,7 @@ async fn twins_proposer_test() {
                 // Proposal from both node0 and twin_node0 are going to
                 // get committed in their respective partitions
                 assert_ne!(node0_commit_id, twin0_commit_id);
-            },
+            }
             _ => panic!("[TwinsTest] Test failed due to no commit(s)"),
         }
     });
@@ -294,7 +288,8 @@ async fn twins_commit_test() {
         &mut playground,
         RoundProposer(HashMap::new()),
         Some(round_proposers),
-    ).await;
+    )
+    .await;
     runtime.spawn(playground.start());
 
     timed_block_on(&runtime, async {
@@ -308,7 +303,7 @@ async fn twins_commit_test() {
                 // Proposals from both node0 and twin_node0 are going to race,
                 // but only one of them will form a commit
                 assert_eq!(node0_commit_id, twin0_commit_id);
-            },
+            }
             _ => panic!("[TwinsTest] Test failed due to no commit(s)"),
         }
     });

@@ -9,11 +9,11 @@ use aptos_consensus_types::{
     timeout_2chain::TwoChainTimeoutCertificate,
     wrapped_ledger_info::WrappedLedgerInfo,
 };
-use gaptos::aptos_crypto::HashValue;
 pub use block_store::{
     sync_manager::{BlockRetriever, NeedFetchResult},
     BlockStore,
 };
+use gaptos::aptos_crypto::HashValue;
 use std::{sync::Arc, time::Duration};
 
 mod block_store;
@@ -36,8 +36,8 @@ pub trait BlockReader: Send + Sync {
 
     fn get_quorum_cert_for_block(&self, block_id: HashValue) -> Option<Arc<QuorumCert>>;
 
-    /// Returns all the blocks between the ordered/commit root and the given block, including the given block
-    /// but excluding the root.
+    /// Returns all the blocks between the ordered/commit root and the given block, including the
+    /// given block but excluding the root.
     /// In case a given block is not the successor of the root, return None.
     /// For example if a tree is b0 <- b1 <- b2 <- b3, then
     /// path_from_root(b2) -> Some([b2, b1])

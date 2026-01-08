@@ -17,10 +17,7 @@ pub struct RoundProposer {
 
 impl RoundProposer {
     pub fn new(proposers: HashMap<Round, Author>, default_proposer: Author) -> Self {
-        Self {
-            proposers,
-            default_proposer,
-        }
+        Self { proposers, default_proposer }
     }
 }
 

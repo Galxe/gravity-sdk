@@ -1,7 +1,5 @@
 use clap::Parser;
-use std::fs;
-use std::path::PathBuf;
-use std::process::Command;
+use std::{fs, path::PathBuf, process::Command};
 
 use crate::command::Executable;
 
@@ -22,16 +20,12 @@ impl StartCommand {
         // Read PID from file
         let pid_str = fs::read_to_string(pid_path)?;
         let pid_str = pid_str.trim();
-        let pid: i32 = pid_str
-            .parse()
-            .map_err(|e| anyhow::anyhow!("Invalid PID in file: {}", e))?;
+        let pid: i32 =
+            pid_str.parse().map_err(|e| anyhow::anyhow!("Invalid PID in file: {}", e))?;
 
         // Check if process is still running using ps command
         // This works on Unix-like systems (Linux, macOS, etc.)
-        let output = Command::new("ps")
-            .arg("-p")
-            .arg(pid_str)
-            .output()?;
+        let output = Command::new("ps").arg("-p").arg(pid_str).output()?;
 
         if output.status.success() {
             // Process is still running
@@ -58,10 +52,7 @@ impl Executable for StartCommand {
         let pid_path = deploy_path.join("script").join("node.pid");
 
         if !script_path.exists() {
-            return Err(anyhow::anyhow!(
-                "Start script not found: {}",
-                script_path.display()
-            ));
+            return Err(anyhow::anyhow!("Start script not found: {}", script_path.display()));
         }
 
         // Check PID file before starting
@@ -71,10 +62,8 @@ impl Executable for StartCommand {
 
         // Use status() instead of output() to avoid waiting for output
         // The start.sh script starts the node in background and returns immediately
-        let status = Command::new("bash")
-            .arg(script_path.as_os_str())
-            .current_dir(&deploy_path)
-            .status()?;
+        let status =
+            Command::new("bash").arg(script_path.as_os_str()).current_dir(&deploy_path).status()?;
 
         if !status.success() {
             return Err(anyhow::anyhow!(
@@ -102,4 +91,3 @@ impl Executable for StartCommand {
         Ok(())
     }
 }
-

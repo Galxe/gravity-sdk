@@ -5,8 +5,8 @@ use crate::{error::MempoolError, monitor};
 use anyhow::{format_err, Result};
 use aptos_consensus_types::common::RejectedTransactionSummary;
 use aptos_mempool::QuorumStoreRequest;
-use gaptos::aptos_types::transaction::{SignedTransaction, TransactionStatus};
 use futures::channel::{mpsc, oneshot};
+use gaptos::aptos_types::transaction::{SignedTransaction, TransactionStatus};
 use itertools::Itertools;
 use std::time::Duration;
 use tokio::time::timeout;
@@ -25,7 +25,8 @@ pub trait TxnNotifier: Send + Sync {
 /// Execution -> Mempool notification of failed transactions.
 pub struct MempoolNotifier {
     consensus_to_mempool_sender: mpsc::Sender<QuorumStoreRequest>,
-    /// Timeout for consensus to get an ack from mempool for executed transactions (in milliseconds)
+    /// Timeout for consensus to get an ack from mempool for executed transactions (in
+    /// milliseconds)
     mempool_executed_txn_timeout_ms: u64,
 }
 
@@ -35,10 +36,7 @@ impl MempoolNotifier {
         consensus_to_mempool_sender: mpsc::Sender<QuorumStoreRequest>,
         mempool_executed_txn_timeout_ms: u64,
     ) -> Self {
-        Self {
-            consensus_to_mempool_sender,
-            mempool_executed_txn_timeout_ms,
-        }
+        Self { consensus_to_mempool_sender, mempool_executed_txn_timeout_ms }
     }
 }
 
@@ -65,31 +63,26 @@ impl TxnNotifier for MempoolNotifier {
             return Ok(());
         }
 
-        let rejected_txns = rejected_txns.iter().map(|txn| {
-            gaptos::aptos_consensus_types::common::RejectedTransactionSummary {
+        let rejected_txns = rejected_txns
+            .iter()
+            .map(|txn| gaptos::aptos_consensus_types::common::RejectedTransactionSummary {
                 sender: txn.sender,
                 sequence_number: txn.sequence_number,
                 hash: txn.hash,
                 reason: txn.reason,
-            }
-        }).collect::<Vec<_>>();
+            })
+            .collect::<Vec<_>>();
 
         let (callback, callback_rcv) = oneshot::channel();
         let req = QuorumStoreRequest::RejectNotification(rejected_txns, callback);
 
         // send to shared mempool
-        self.consensus_to_mempool_sender
-            .clone()
-            .try_send(req)
-            .map_err(anyhow::Error::from)?;
+        self.consensus_to_mempool_sender.clone().try_send(req).map_err(anyhow::Error::from)?;
 
         if let Err(e) = monitor!(
             "notify_mempool",
-            timeout(
-                Duration::from_millis(self.mempool_executed_txn_timeout_ms),
-                callback_rcv
-            )
-            .await
+            timeout(Duration::from_millis(self.mempool_executed_txn_timeout_ms), callback_rcv)
+                .await
         ) {
             Err(format_err!("[consensus] txn notifier did not receive ACK for commit notification sent to mempool on time: {:?}", e).into())
         } else {

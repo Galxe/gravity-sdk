@@ -1,9 +1,10 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use gaptos::aptos_types::validator_txn::ValidatorTransaction;
-use gaptos::aptos_validator_transaction_pool as vtxn_pool;
-use gaptos::aptos_validator_transaction_pool::VTxnPoolState;
+use gaptos::{
+    aptos_types::validator_txn::ValidatorTransaction,
+    aptos_validator_transaction_pool as vtxn_pool, aptos_validator_transaction_pool::VTxnPoolState,
+};
 use std::{
     ops::Add,
     time::{Duration, Instant},
@@ -45,10 +46,10 @@ impl ValidatorTxnPayloadClient for DummyValidatorTxnClient {
         let timer = Instant::now();
         let mut nxt_txn_idx = 0;
         let mut ret = vec![];
-        while timer.elapsed() < max_time
-            && max_items > 0
-            && max_bytes > 0
-            && nxt_txn_idx < self.txns.len()
+        while timer.elapsed() < max_time &&
+            max_items > 0 &&
+            max_bytes > 0 &&
+            nxt_txn_idx < self.txns.len()
         {
             tokio::time::sleep(Duration::from_millis(1)).await;
             let txn = self.txns[nxt_txn_idx].clone();

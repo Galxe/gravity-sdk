@@ -5,13 +5,16 @@ mod txn;
 
 use std::{sync::Arc, thread};
 
-use api::{check_bootstrap_config, consensus_api::{ConsensusEngine, ConsensusEngineArgs}, NodeConfig};
-use gaptos::api_types::{
-    account::ExternalAccountAddress, ExecTxn
+use api::{
+    check_bootstrap_config,
+    consensus_api::{ConsensusEngine, ConsensusEngineArgs},
+    NodeConfig,
 };
+use block_buffer_manager::block_buffer_manager::EmptyTxPool;
 use clap::Parser;
 use cli::Cli;
 use flexi_logger::{FileSpec, Logger, WriteMode};
+use gaptos::api_types::{account::ExternalAccountAddress, ExecTxn};
 use kv::KvStore;
 use log::info;
 use once_cell::sync::OnceCell;
@@ -19,7 +22,6 @@ use rand::Rng;
 use tokio::sync::RwLock;
 use txn::RawTxn;
 use warp::Filter;
-use block_buffer_manager::block_buffer_manager::EmptyTxPool;
 
 struct TestConsensusLayer {
     consensus_engine: Arc<ConsensusEngine>,
@@ -28,14 +30,16 @@ struct TestConsensusLayer {
 impl TestConsensusLayer {
     async fn new(node_config: NodeConfig) -> Self {
         Self {
-            consensus_engine: ConsensusEngine::init(ConsensusEngineArgs {
-                node_config,
-                chain_id: 1337,
-                latest_block_number: 0,
-                config_storage: None,
-            },
-            EmptyTxPool::new(),
-        ).await,
+            consensus_engine: ConsensusEngine::init(
+                ConsensusEngineArgs {
+                    node_config,
+                    chain_id: 1337,
+                    latest_block_number: 0,
+                    config_storage: None,
+                },
+                EmptyTxPool::new(),
+            )
+            .await,
         }
     }
 
@@ -60,9 +64,7 @@ impl TestConsensusLayer {
                     std::env::var("BLOCK_TXN_NUMS").map(|s| s.parse().unwrap()).unwrap_or(1000);
                 TestConsensusLayer::random_txns(txn_num_in_block).await.into_iter().for_each(
                     |txn| {
-                        tokio::spawn(async move {
-                            todo!()
-                        });
+                        tokio::spawn(async move { todo!() });
                     },
                 );
             }

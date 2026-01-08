@@ -1,12 +1,13 @@
+use super::{ensure_slice_len_eq, LEDGER_INFO_CF_NAME};
 use anyhow::Result;
-use gaptos::aptos_schemadb::{
-    define_pub_schema,
-    schema::{KeyCodec, ValueCodec},
-};
-use gaptos::aptos_types::ledger_info::LedgerInfoWithSignatures;
-use super::ensure_slice_len_eq;
-use super::LEDGER_INFO_CF_NAME;
 use byteorder::{BigEndian, ReadBytesExt};
+use gaptos::{
+    aptos_schemadb::{
+        define_pub_schema,
+        schema::{KeyCodec, ValueCodec},
+    },
+    aptos_types::ledger_info::LedgerInfoWithSignatures,
+};
 define_pub_schema!(
     LedgerInfoSchema,
     u64, /* block num */

@@ -17,20 +17,25 @@ use aptos_consensus_types::{
     vote_data::VoteData,
     vote_proposal::VoteProposal,
 };
-use gaptos::aptos_crypto::{hash::{CryptoHash, TransactionAccumulatorHasher}, HashValue};
-use gaptos::aptos_secure_storage::{InMemoryStorage, Storage};
-use gaptos::aptos_types::{
-    aggregate_signature::{AggregateSignature, PartialSignatures},
-    block_info::BlockInfo,
-    epoch_change::EpochChangeProof,
-    epoch_state::EpochState,
-    ledger_info::{LedgerInfo, LedgerInfoWithVerifiedSignatures, LedgerInfoWithSignatures},
-    on_chain_config::ValidatorSet,
-    proof::AccumulatorExtensionProof,
-    validator_info::ValidatorInfo,
-    validator_signer::ValidatorSigner,
-    validator_verifier::generate_validator_verifier,
-    waypoint::Waypoint,
+use gaptos::{
+    aptos_crypto::{
+        hash::{CryptoHash, TransactionAccumulatorHasher},
+        HashValue,
+    },
+    aptos_secure_storage::{InMemoryStorage, Storage},
+    aptos_types::{
+        aggregate_signature::{AggregateSignature, PartialSignatures},
+        block_info::BlockInfo,
+        epoch_change::EpochChangeProof,
+        epoch_state::EpochState,
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures, LedgerInfoWithVerifiedSignatures},
+        on_chain_config::ValidatorSet,
+        proof::AccumulatorExtensionProof,
+        validator_info::ValidatorInfo,
+        validator_signer::ValidatorSigner,
+        validator_verifier::generate_validator_verifier,
+        waypoint::Waypoint,
+    },
 };
 
 pub type Proof = AccumulatorExtensionProof<TransactionAccumulatorHasher>;
@@ -77,12 +82,7 @@ pub fn make_proposal_with_qc(
     qc: QuorumCert,
     validator_signer: &ValidatorSigner,
 ) -> VoteProposal {
-    make_proposal_with_qc_and_proof(
-        Payload::empty(false, true),
-        round,
-        qc,
-        validator_signer,
-    )
+    make_proposal_with_qc_and_proof(Payload::empty(false, true), round, qc, validator_signer)
 }
 
 pub fn make_proposal_with_parent_and_overrides(
@@ -109,12 +109,10 @@ pub fn make_proposal_with_parent_and_overrides(
         parent.block().timestamp_usecs() + 1,
         None,
     );
-    
-    let vote_data = VoteData::new(
-        proposed_block,
-        parent.block().quorum_cert().certified_block().clone(),
-    );
-    
+
+    let vote_data =
+        VoteData::new(proposed_block, parent.block().quorum_cert().certified_block().clone());
+
     let ledger_info = match committed {
         Some(committed) => {
             let commit_block_info = BlockInfo::new(
@@ -127,32 +125,28 @@ pub fn make_proposal_with_parent_and_overrides(
                 next_epoch_state,
             );
             LedgerInfo::new(commit_block_info, vote_data.hash())
-        },
+        }
         None => LedgerInfo::new(BlockInfo::empty(), vote_data.hash()),
     };
-    
-    let vote = Vote::new(
-        vote_data.clone(),
-        validator_signer.author(),
-        ledger_info,
-        validator_signer,
-    )
-    .unwrap();
-    
+
+    let vote =
+        Vote::new(vote_data.clone(), validator_signer.author(), ledger_info, validator_signer)
+            .unwrap();
+
     let mut ledger_info_with_signatures = LedgerInfoWithVerifiedSignatures::new(
         vote.ledger_info().clone(),
         PartialSignatures::empty(),
     );
-    
+
     ledger_info_with_signatures.add_signature(vote.author(), vote.signature().clone());
-    
+
     let qc = QuorumCert::new(
         vote_data,
         ledger_info_with_signatures
             .aggregate_signatures(&generate_validator_verifier(&[validator_signer.clone()]))
             .unwrap(),
     );
-    
+
     make_proposal_with_qc_and_proof(payload, round, qc, validator_signer)
 }
 
@@ -183,9 +177,7 @@ pub fn make_timeout_cert(
     let mut tc_partial = TwoChainTimeoutWithPartialSignatures::new(timeout.clone());
     let signature = timeout.sign(signer).unwrap();
     tc_partial.add(signer.author(), timeout, signature);
-    tc_partial
-        .aggregate_signatures(&generate_validator_verifier(&[signer.clone()]))
-        .unwrap()
+    tc_partial.aggregate_signatures(&generate_validator_verifier(&[signer.clone()])).unwrap()
 }
 
 pub fn validator_signers_to_ledger_info(signers: &[&ValidatorSigner]) -> LedgerInfo {

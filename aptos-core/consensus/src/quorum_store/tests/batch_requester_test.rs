@@ -12,15 +12,18 @@ use aptos_consensus_types::{
     common::Author,
     proof_of_store::{BatchId, ProofOfStore, SignedBatchInfo},
 };
-use gaptos::{aptos_config::network_id::{NetworkId, PeerNetworkId}, aptos_crypto::HashValue};
-use gaptos::aptos_types::{
-    aggregate_signature::PartialSignatures,
-    block_info::BlockInfo,
-    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
-    validator_signer::ValidatorSigner,
-    validator_verifier::{ValidatorConsensusInfo, ValidatorVerifier},
+use gaptos::{
+    aptos_config::network_id::{NetworkId, PeerNetworkId},
+    aptos_crypto::HashValue,
+    aptos_types::{
+        aggregate_signature::PartialSignatures,
+        block_info::BlockInfo,
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+        validator_signer::ValidatorSigner,
+        validator_verifier::{ValidatorConsensusInfo, ValidatorVerifier},
+    },
+    move_core_types::account_address::AccountAddress,
 };
-use gaptos::move_core_types::account_address::AccountAddress;
 use std::time::{Duration, Instant};
 use tokio::sync::oneshot;
 
@@ -73,14 +76,7 @@ impl QuorumStoreSender for MockBatchRequester {
 
 #[tokio::test]
 async fn test_batch_request_exists() {
-    let batch = Batch::new(
-        BatchId::new_for_test(1),
-        vec![],
-        1,
-        1,
-        AccountAddress::random(),
-        0,
-    );
+    let batch = Batch::new(BatchId::new_for_test(1), vec![], 1, 1, AccountAddress::random(), 0);
     let batch_response = BatchResponse::Batch(batch.clone());
 
     let validator_signer = ValidatorSigner::random(None);
@@ -93,7 +89,8 @@ async fn test_batch_request_exists() {
         1_000,
         1_000,
         MockBatchRequester::new(batch_response),
-        todo!() // ValidatorVerifier::new_single(validator_signer.author(), validator_signer.public_key()),
+        todo!(), /* ValidatorVerifier::new_single(validator_signer.author(),
+                  * validator_signer.public_key()), */
     );
 
     let (_, subscriber_rx) = oneshot::channel();
@@ -146,8 +143,8 @@ fn create_ledger_info_with_timestamp(
     // // Create a map from author to signatures.
     // let mut partial_signature = PartialSignatures::empty();
     // for validator in validator_signers.iter() {
-    //     partial_signature.add_signature(validator.author(), validator.sign(&ledger_info).unwrap());
-    // }
+    //     partial_signature.add_signature(validator.author(),
+    // validator.sign(&ledger_info).unwrap()); }
 
     // // Let's assume our verifier needs to satisfy all NUM_SIGNERS
     // let validator_verifier =
@@ -171,14 +168,8 @@ async fn test_batch_request_not_exists_not_expired() {
     let (ledger_info_with_signatures, validator_verifier) =
         create_ledger_info_with_timestamp(expiration - 1);
 
-    let batch = Batch::new(
-        BatchId::new_for_test(1),
-        vec![],
-        1,
-        expiration,
-        AccountAddress::random(),
-        0,
-    );
+    let batch =
+        Batch::new(BatchId::new_for_test(1), vec![], 1, expiration, AccountAddress::random(), 0);
     let (tx, mut rx) = tokio::sync::oneshot::channel();
     let batch_response = BatchResponse::NotFound(ledger_info_with_signatures);
     let batch_requester = BatchRequester::new(
@@ -189,7 +180,7 @@ async fn test_batch_request_not_exists_not_expired() {
         retry_interval_ms,
         1_000,
         MockBatchRequester::new(batch_response),
-        todo!() // validator_verifier,
+        todo!(), // validator_verifier,
     );
 
     let request_start = Instant::now();
@@ -219,14 +210,8 @@ async fn test_batch_request_not_exists_expired() {
     let (ledger_info_with_signatures, validator_verifier) =
         create_ledger_info_with_timestamp(expiration + 1);
 
-    let batch = Batch::new(
-        BatchId::new_for_test(1),
-        vec![],
-        1,
-        expiration,
-        AccountAddress::random(),
-        0,
-    );
+    let batch =
+        Batch::new(BatchId::new_for_test(1), vec![], 1, expiration, AccountAddress::random(), 0);
     let (tx, mut rx) = tokio::sync::oneshot::channel();
     let batch_response = BatchResponse::NotFound(ledger_info_with_signatures);
     let batch_requester = BatchRequester::new(
@@ -237,7 +222,7 @@ async fn test_batch_request_not_exists_expired() {
         retry_interval_ms,
         1_000,
         MockBatchRequester::new(batch_response),
-        todo!() // validator_verifier,
+        todo!(), // validator_verifier,
     );
 
     let request_start = Instant::now();

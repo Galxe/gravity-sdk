@@ -37,7 +37,7 @@ impl OrderOrSet {
             Self::Order(order) => order.push(idx),
             Self::Set(set) => {
                 set.insert(idx);
-            },
+            }
             Self::Empty => unreachable!(),
         }
     }

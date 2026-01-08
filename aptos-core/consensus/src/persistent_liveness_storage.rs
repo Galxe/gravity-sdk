@@ -2,36 +2,35 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{consensusdb::ConsensusDB, epoch_manager::LivenessStorageData, error::DbError};
-use crate::consensusdb::schema::epoch_by_block_number::EpochByBlockNumberSchema;
-use crate::consensusdb::schema::ledger_info::LedgerInfoSchema;
+use crate::{
+    consensusdb::{
+        schema::{epoch_by_block_number::EpochByBlockNumberSchema, ledger_info::LedgerInfoSchema},
+        ConsensusDB,
+    },
+    epoch_manager::LivenessStorageData,
+    error::DbError,
+};
 use anyhow::{format_err, Result};
 use aptos_consensus_types::{
     block::Block, quorum_cert::QuorumCert, timeout_2chain::TwoChainTimeoutCertificate, vote::Vote,
     vote_data::VoteData, wrapped_ledger_info::WrappedLedgerInfo,
 };
-use gaptos::aptos_crypto::{
-    hash::ACCUMULATOR_PLACEHOLDER_HASH,
-    HashValue,
-};
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_storage_interface::DbReader;
-use gaptos::aptos_types::{
-    block_info::Round, epoch_change::EpochChangeProof, ledger_info::LedgerInfoWithSignatures,
-    on_chain_config::ValidatorSet, proof::TransactionAccumulatorSummary, transaction::Version,
-};
 use async_trait::async_trait;
 use block_buffer_manager::get_block_buffer_manager;
-use itertools::Itertools;
-use std::{
-    cmp::max,
-    collections::HashSet,
-    fmt::Debug,
-    sync::Arc,
+use gaptos::{
+    aptos_crypto::{hash::ACCUMULATOR_PLACEHOLDER_HASH, HashValue},
+    aptos_logger::prelude::*,
+    aptos_storage_interface::DbReader,
+    aptos_types::{
+        block_info::Round, epoch_change::EpochChangeProof, ledger_info::LedgerInfoWithSignatures,
+        on_chain_config::ValidatorSet, proof::TransactionAccumulatorSummary, transaction::Version,
+    },
 };
+use itertools::Itertools;
+use std::{cmp::max, collections::HashSet, fmt::Debug, sync::Arc};
 
-/// PersistentLivenessStorage is essential for maintaining liveness when a node crashes.  Specifically,
-/// upon a restart, a correct node will recover.  Even if all nodes crash, liveness is
+/// PersistentLivenessStorage is essential for maintaining liveness when a node crashes.
+/// Specifically, upon a restart, a correct node will recover.  Even if all nodes crash, liveness is
 /// guaranteed.
 /// Blocks persisted are proposed but not yet committed.  The committed state is persisted
 /// via StateComputer.
@@ -42,7 +41,7 @@ pub trait PersistentLivenessStorage: Send + Sync {
         &self,
         blocks: Vec<Block>,
         quorum_certs: Vec<QuorumCert>,
-        block_numbers: Vec<(u64, u64, HashValue)>
+        block_numbers: Vec<(u64, u64, HashValue)>,
     ) -> Result<()>;
 
     /// Delete the corresponding blocks and quorum certs atomically.
@@ -57,8 +56,8 @@ pub trait PersistentLivenessStorage: Send + Sync {
     /// Construct necessary data to start consensus.
     async fn start(&self, order_vote_enabled: bool, epoch: u64) -> LivenessStorageData;
 
-    /// Persist the highest 2chain timeout certificate for improved liveness - proof for other replicas
-    /// to jump to this round
+    /// Persist the highest 2chain timeout certificate for improved liveness - proof for other
+    /// replicas to jump to this round
     fn save_highest_2chain_timeout_cert(
         &self,
         highest_timeout_cert: &TwoChainTimeoutCertificate,
@@ -150,8 +149,9 @@ impl LedgerRecoveryData {
             .clone();
 
         let (root_ordered_cert, root_commit_cert) = if order_vote_enabled {
-            // We are setting ordered_root same as commit_root. As every committed block is also ordered, this is fine.
-            // As the block store inserts all the fetched blocks and quorum certs and execute the blocks, the block store
+            // We are setting ordered_root same as commit_root. As every committed block is also
+            // ordered, this is fine. As the block store inserts all the fetched blocks
+            // and quorum certs and execute the blocks, the block store
             // updates highest_ordered_cert accordingly.
             let root_ordered_cert =
                 WrappedLedgerInfo::new(VoteData::dummy(), latest_ledger_info_sig.clone());
@@ -246,8 +246,9 @@ impl RecoveryData {
             .ok_or_else(|| format_err!("No QC found for root: {}", root_block.id()))?
             .clone();
         let (root_ordered_cert, root_commit_cert) = if order_vote_enabled {
-            // We are setting ordered_root same as commit_root. As every committed block is also ordered, this is fine.
-            // As the block store inserts all the fetched blocks and quorum certs and execute the blocks, the block store
+            // We are setting ordered_root same as commit_root. As every committed block is also
+            // ordered, this is fine. As the block store inserts all the fetched blocks
+            // and quorum certs and execute the blocks, the block store
             // updates highest_ordered_cert accordingly.
             let root_ordered_cert =
                 WrappedLedgerInfo::new(VoteData::dummy(), root_quorum_cert.ledger_info().clone());
@@ -280,7 +281,7 @@ impl RecoveryData {
     ) -> Result<Self> {
         info!("blocks in db: {:?}", blocks.len());
         info!("quorum certs in db: {:?}", quorum_certs.len());
-        
+
         let root;
         if has_root {
             root = Self::find_root_by_block_number(
@@ -372,10 +373,7 @@ pub struct StorageWriteProxy {
 }
 
 impl StorageWriteProxy {
-    pub fn new(
-        db: Arc<ConsensusDB>,
-        aptos_db: Arc<dyn DbReader>,
-    ) -> Self {
+    pub fn new(db: Arc<ConsensusDB>, aptos_db: Arc<dyn DbReader>) -> Self {
         // let db = Arc::new(ConsensusDB::new(config.storage.dir()));
         StorageWriteProxy { db, aptos_db }
     }
@@ -383,7 +381,12 @@ impl StorageWriteProxy {
 
 #[async_trait]
 impl PersistentLivenessStorage for StorageWriteProxy {
-    fn save_tree(&self, blocks: Vec<Block>, quorum_certs: Vec<QuorumCert>, block_numbers: Vec<(u64, u64, HashValue)>) -> Result<()> {
+    fn save_tree(
+        &self,
+        blocks: Vec<Block>,
+        quorum_certs: Vec<QuorumCert>,
+        block_numbers: Vec<(u64, u64, HashValue)>,
+    ) -> Result<()> {
         self.db.save_blocks_and_quorum_certificates(blocks, quorum_certs)?;
         self.db.save_block_numbers(block_numbers)?;
         Ok(())
@@ -428,10 +431,11 @@ impl PersistentLivenessStorage for StorageWriteProxy {
         info!("The following blocks were restored from ConsensusDB : {}", blocks_repr.concat());
         let qc_repr: Vec<String> = quorum_certs.iter().map(|qc| format!("\n\t{}", qc)).collect();
         info!("The following quorum certs were restored from ConsensusDB: {}", qc_repr.concat());
-        
+
         // Check if latest_block_number is the last block number of the previous epoch
         let ledger_db_arc = self.db.ledger_db.metadata_db_arc();
-        let is_last_block_of_prev_epoch = match (&*ledger_db_arc).iter::<EpochByBlockNumberSchema>() {
+        let is_last_block_of_prev_epoch = match (&*ledger_db_arc).iter::<EpochByBlockNumberSchema>()
+        {
             Ok(mut iter) => {
                 iter.seek_to_last();
                 if let Some(Ok((last_block_num, _))) = iter.next() {
@@ -445,13 +449,16 @@ impl PersistentLivenessStorage for StorageWriteProxy {
                 false
             }
         };
-        
+
         // Get ledger_info based on the check result
         let latest_ledger_info = if is_last_block_of_prev_epoch {
             // If it's the last block of previous epoch, get ledger_info from LedgerInfoSchema
             match (&*ledger_db_arc).get::<LedgerInfoSchema>(&latest_block_number) {
                 Ok(Some(ledger_info)) => {
-                    debug!("Using ledger_info from LedgerInfoSchema for block {}", latest_block_number);
+                    debug!(
+                        "Using ledger_info from LedgerInfoSchema for block {}",
+                        latest_block_number
+                    );
                     ledger_info
                 }
                 Ok(None) | Err(_) => {
@@ -464,8 +471,11 @@ impl PersistentLivenessStorage for StorageWriteProxy {
             // Use original method
             self.aptos_db.get_latest_ledger_info().unwrap()
         };
-        info!("is_last_block_of_prev_epoch: {}, latest_ledger_info: {:?}, has_root: {}", is_last_block_of_prev_epoch, latest_ledger_info, raw_data.4);
-        
+        info!(
+            "is_last_block_of_prev_epoch: {}, latest_ledger_info: {:?}, has_root: {}",
+            is_last_block_of_prev_epoch, latest_ledger_info, raw_data.4
+        );
+
         let ledger_recovery_data = LedgerRecoveryData::new(latest_ledger_info);
         match RecoveryData::new(
             last_vote,

@@ -1,12 +1,8 @@
 use crate::stateful_mempool::Mempool;
-use gaptos::api_types::{
-    u256_define::BlockId, ExternalPayloadAttr
-};
+use gaptos::api_types::{u256_define::BlockId, ExternalPayloadAttr};
 use log::info;
-use std::collections::HashMap;
-use std::sync::atomic::AtomicU64;
-use tokio::sync::Mutex;
-use tokio::time::Instant;
+use std::{collections::HashMap, sync::atomic::AtomicU64};
+use tokio::{sync::Mutex, time::Instant};
 
 #[derive(Default)]
 struct BlockStatus {
@@ -83,8 +79,8 @@ static COMPUTE_RES_SUM: AtomicU64 = AtomicU64::new(0);
 //     async fn send_user_txn(&self, txn: ExecTxn) -> Result<TxnHash, ExecError> {
 //         match txn {
 //             ExecTxn::RawTxn(bytes) => self.mempool.add_raw_txn(bytes).await,
-//             ExecTxn::VerifiedTxn(verified_txn) => self.mempool.add_verified_txn(verified_txn).await,
-//         }
+//             ExecTxn::VerifiedTxn(verified_txn) =>
+// self.mempool.add_verified_txn(verified_txn).await,         }
 //         Ok(TxnHash::random())
 //     }
 

@@ -13,7 +13,8 @@ pub enum GetPayloadCommand {
         u64,
         // max number of transactions after filtering in the block
         u64,
-        // soft max number of transactions after filtering in the block (i.e. include one that crosses it)
+        // soft max number of transactions after filtering in the block (i.e. include one that
+        // crosses it)
         u64,
         // max byte size
         u64,
@@ -52,7 +53,7 @@ impl fmt::Display for GetPayloadCommand {
                     "GetPayloadRequest [max_txns: {}, max_txns_after_filtering: {} (soft: {}), max_bytes: {}, max_inline_txns: {}, max_inline_bytes:{}, return_non_full: {},  excluded: {}, block_timestamp: {:?}]",
                     max_txns, max_txns_after_filtering, soft_max_txns_after_filtering, max_bytes, max_inline_txns, max_inline_bytes, return_non_full, excluded, block_timestamp
                 )
-            },
+            }
         }
     }
 }

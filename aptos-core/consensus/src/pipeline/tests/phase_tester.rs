@@ -38,12 +38,7 @@ impl<T: StatelessPipeline> PhaseTester<T> {
         judge: Box<dyn Fn(T::Response)>,
         prompt: Option<String>,
     ) {
-        self.cases.push(PhaseTestCase {
-            index: self.cases.len(),
-            input,
-            judge,
-            prompt,
-        });
+        self.cases.push(PhaseTestCase { index: self.cases.len(), input, judge, prompt });
     }
 
     // unit tests are for phase processors only,
@@ -52,17 +47,8 @@ impl<T: StatelessPipeline> PhaseTester<T> {
         let runtime = consensus_runtime();
 
         timed_block_on(&runtime, async move {
-            for PhaseTestCase {
-                index,
-                input,
-                judge,
-                prompt,
-            } in self.cases
-            {
-                eprint!(
-                    "Unit Test - {}:",
-                    prompt.unwrap_or(format!("Test {}", index))
-                );
+            for PhaseTestCase { index, input, judge, prompt } in self.cases {
+                eprint!("Unit Test - {}:", prompt.unwrap_or(format!("Test {}", index)));
                 let resp = processor.process(input).await;
                 judge(resp);
                 eprintln!(" OK",);
@@ -80,20 +66,9 @@ impl<T: StatelessPipeline> PhaseTester<T> {
         let runtime = consensus_runtime();
 
         timed_block_on(&runtime, async move {
-            for PhaseTestCase {
-                index,
-                input,
-                judge,
-                prompt,
-            } in self.cases
-            {
-                eprint!(
-                    "E2E Test - {}:",
-                    prompt.unwrap_or(format!("Test {}", index))
-                );
-                tx.send(CountedRequest::new(input, Arc::new(AtomicU64::new(0))))
-                    .await
-                    .ok();
+            for PhaseTestCase { index, input, judge, prompt } in self.cases {
+                eprint!("E2E Test - {}:", prompt.unwrap_or(format!("Test {}", index)));
+                tx.send(CountedRequest::new(input, Arc::new(AtomicU64::new(0)))).await.ok();
                 let resp = rx.next().await.unwrap();
                 judge(resp);
                 eprintln!(" OK",);

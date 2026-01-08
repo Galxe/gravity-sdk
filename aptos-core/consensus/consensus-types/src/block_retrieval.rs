@@ -2,13 +2,14 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::block::Block;
-use crate::quorum_cert::QuorumCert;
+use crate::{block::Block, quorum_cert::QuorumCert};
 use anyhow::ensure;
-use gaptos::api_types::ExecutionBlocks;
-use gaptos::aptos_crypto::hash::{HashValue, GENESIS_BLOCK_ID};
-use gaptos::aptos_short_hex_str::AsShortHexStr;
-use gaptos::aptos_types::{ledger_info::LedgerInfoWithSignatures, validator_verifier::ValidatorVerifier};
+use gaptos::{
+    api_types::ExecutionBlocks,
+    aptos_crypto::hash::{HashValue, GENESIS_BLOCK_ID},
+    aptos_short_hex_str::AsShortHexStr,
+    aptos_types::{ledger_info::LedgerInfoWithSignatures, validator_verifier::ValidatorVerifier},
+};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -28,12 +29,7 @@ pub struct BlockRetrievalRequest {
 
 impl BlockRetrievalRequest {
     pub fn new(block_id: HashValue, num_blocks: u64) -> Self {
-        Self {
-            block_id,
-            num_blocks,
-            target_block_id: None,
-            epoch: None,
-        }
+        Self { block_id, num_blocks, target_block_id: None, epoch: None }
     }
 
     pub fn new_with_target_block_id(
@@ -41,12 +37,7 @@ impl BlockRetrievalRequest {
         num_blocks: u64,
         target_block_id: HashValue,
     ) -> Self {
-        Self {
-            block_id,
-            num_blocks,
-            target_block_id: Some(target_block_id),
-            epoch: None,
-        }
+        Self { block_id, num_blocks, target_block_id: Some(target_block_id), epoch: None }
     }
 
     pub fn new_with_epoch(
@@ -55,12 +46,7 @@ impl BlockRetrievalRequest {
         target_block_id: HashValue,
         epoch: u64,
     ) -> Self {
-        Self {
-            block_id,
-            num_blocks,
-            target_block_id: Some(target_block_id),
-            epoch: Some(epoch),
-        }
+        Self { block_id, num_blocks, target_block_id: Some(target_block_id), epoch: Some(epoch) }
     }
 
     pub fn block_id(&self) -> HashValue {
@@ -118,7 +104,12 @@ pub struct BlockRetrievalResponse {
 }
 
 impl BlockRetrievalResponse {
-    pub fn new(status: BlockRetrievalStatus, blocks: Vec<(Block, Option<Vec<u8>>)>, quorum_certs: Vec<QuorumCert>, ledger_infos: Vec<LedgerInfoWithSignatures>) -> Self {
+    pub fn new(
+        status: BlockRetrievalStatus,
+        blocks: Vec<(Block, Option<Vec<u8>>)>,
+        quorum_certs: Vec<QuorumCert>,
+        ledger_infos: Vec<LedgerInfoWithSignatures>,
+    ) -> Self {
         Self { status, blocks, quorum_certs, ledger_infos }
     }
 
@@ -144,8 +135,8 @@ impl BlockRetrievalResponse {
         sig_verifier: &ValidatorVerifier,
     ) -> anyhow::Result<()> {
         ensure!(
-            self.status != BlockRetrievalStatus::Succeeded
-                || self.blocks.len() as u64 == retrieval_request.num_blocks(),
+            self.status != BlockRetrievalStatus::Succeeded ||
+                self.blocks.len() as u64 == retrieval_request.num_blocks(),
             "not enough blocks returned, expect {}, get {}",
             retrieval_request.num_blocks(),
             self.blocks.len(),
@@ -183,7 +174,7 @@ impl fmt::Display for BlockRetrievalResponse {
                     .finish()?;
 
                 write!(f, "]")
-            },
+            }
             _ => write!(f, "[BlockRetrievalResponse: status: {:?}]", self.status()),
         }
     }

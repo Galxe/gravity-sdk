@@ -4,8 +4,14 @@
 
 use crate::{
     block_storage::{
-        pending_blocks::PendingBlocks, tracing::{observe_block, BlockStage}, BlockReader, BlockStore
-    }, consensus_observer::publisher::ConsensusPublisher, dag::{DagBootstrapper, DagCommitSigner, StorageAdapter}, error::{error_kind, DbError}, liveness::{
+        pending_blocks::PendingBlocks,
+        tracing::{observe_block, BlockStage},
+        BlockReader, BlockStore,
+    },
+    consensus_observer::publisher::ConsensusPublisher,
+    dag::{DagBootstrapper, DagCommitSigner, StorageAdapter},
+    error::{error_kind, DbError},
+    liveness::{
         cached_proposer_election::CachedProposerElection,
         leader_reputation::{
             extract_epoch_to_proposers, AptosDBBackend, LeaderReputation,
@@ -17,31 +23,38 @@ use crate::{
         proposer_election::ProposerElection,
         rotating_proposer_election::{choose_leader, RotatingProposer},
         round_proposer_election::RoundProposer,
-        round_state::{ExponentialTimeInterval, RoundState}, unequivocal_proposer_election::UnequivocalProposerElection,
-    }, logging::{LogEvent, LogSchema}, metrics_safety_rules::MetricsSafetyRules, monitor,
-    network::{
-        self, IncomingBatchRetrievalRequest, IncomingBlockRetrievalRequest, IncomingDAGRequest, IncomingRandGenRequest, IncomingRpcRequest, IncomingSyncInfoRequest, NetworkReceivers, NetworkSender
+        round_state::{ExponentialTimeInterval, RoundState},
+        unequivocal_proposer_election::UnequivocalProposerElection,
     },
-    network_interface::{ConsensusMsg, ConsensusNetworkClient}, payload_client::{
+    logging::{LogEvent, LogSchema},
+    metrics_safety_rules::MetricsSafetyRules,
+    monitor,
+    network::{
+        self, IncomingBatchRetrievalRequest, IncomingBlockRetrievalRequest, IncomingDAGRequest,
+        IncomingRandGenRequest, IncomingRpcRequest, IncomingSyncInfoRequest, NetworkReceivers,
+        NetworkSender,
+    },
+    network_interface::{ConsensusMsg, ConsensusNetworkClient},
+    payload_client::{
         mixed::MixedPayloadClient, user::quorum_store_client::QuorumStoreClient, PayloadClient,
-    }, payload_manager::{DirectMempoolPayloadManager, TPayloadManager}, persistent_liveness_storage::{LedgerRecoveryData, PersistentLivenessStorage, RecoveryData}, pipeline::execution_client::TExecutionClient, quorum_store::{
+    },
+    payload_manager::{DirectMempoolPayloadManager, TPayloadManager},
+    persistent_liveness_storage::{LedgerRecoveryData, PersistentLivenessStorage, RecoveryData},
+    pipeline::execution_client::TExecutionClient,
+    quorum_store::{
         quorum_store_builder::{DirectMempoolInnerBuilder, InnerBuilder, QuorumStoreBuilder},
         quorum_store_coordinator::CoordinatorCommand,
         quorum_store_db::QuorumStoreStorage,
-    }, rand::rand_gen::{
+    },
+    rand::rand_gen::{
         storage::interface::RandStorage,
         types::{AugmentedData, RandConfig},
-    }, recovery_manager::RecoveryManager, round_manager::{self, RoundManager, UnverifiedEvent, VerifiedEvent}, util::time_service::TimeService,
+    },
+    recovery_manager::RecoveryManager,
+    round_manager::{self, RoundManager, UnverifiedEvent, VerifiedEvent},
+    util::time_service::TimeService,
 };
 use anyhow::{anyhow, bail, ensure, Context};
-use gaptos::aptos_bounded_executor::BoundedExecutor;
-use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use gaptos::aptos_config::{
-    config::{
-        ConsensusConfig, DagConsensusConfig, ExecutionConfig, NodeConfig, QcAggregatorType,
-    },
-    network_id::{NetworkId, PeerNetworkId},
-};
 use aptos_consensus_types::{
     common::{Author, Round},
     delayed_qc_msg::DelayedQcMsg,
@@ -49,34 +62,8 @@ use aptos_consensus_types::{
     proof_of_store::ProofCache,
     sync_info::SyncInfo,
 };
-use gaptos::aptos_crypto::bls12381::PrivateKey;
-use gaptos::aptos_dkg::{
-    pvss::{traits::Transcript, Player},
-    weighted_vuf::traits::WeightedVUF,
-};
-use gaptos::aptos_event_notifications::ReconfigNotificationListener;
-use gaptos::aptos_infallible::{duration_since_epoch, Mutex};
-use gaptos::aptos_logger::prelude::*;
 use aptos_mempool::QuorumStoreRequest;
-use gaptos::aptos_network::{application::interface::{NetworkClient, NetworkClientInterface}, protocols::network::Event};
 use aptos_safety_rules::{safety_rules_manager, PersistentSafetyStorage, SafetyRulesManager};
-use gaptos::aptos_types::{
-    account_address::AccountAddress,
-    dkg::{real_dkg::maybe_dk_from_bls_sk, DKGState, DKGTrait, DefaultDKG},
-    epoch_change::EpochChangeProof,
-    epoch_state::EpochState,
-    jwks::SupportedOIDCProviders,
-    on_chain_config::{
-        Features, LeaderReputationType, OnChainConfigPayload, OnChainConfigProvider,
-        OnChainConsensusConfig, OnChainExecutionConfig, OnChainJWKConsensusConfig,
-        OnChainRandomnessConfig, ProposerElectionType, RandomnessConfigMoveStruct,
-        RandomnessConfigSeqNum, ValidatorSet,
-    },
-    randomness::{RandKeys, WvufPP, WVUF},
-    validator_signer::ValidatorSigner,
-    validator_verifier::ValidatorVerifier,
-};
-use gaptos::aptos_validator_transaction_pool::VTxnPoolState;
 use fail::fail_point;
 use futures::{
     channel::{
@@ -85,6 +72,46 @@ use futures::{
         oneshot,
     },
     SinkExt, StreamExt,
+};
+use gaptos::{
+    aptos_bounded_executor::BoundedExecutor,
+    aptos_channels::{aptos_channel, message_queues::QueueStyle},
+    aptos_config::{
+        config::{
+            ConsensusConfig, DagConsensusConfig, ExecutionConfig, NodeConfig, QcAggregatorType,
+        },
+        network_id::{NetworkId, PeerNetworkId},
+    },
+    aptos_consensus::counters,
+    aptos_crypto::bls12381::PrivateKey,
+    aptos_dkg::{
+        pvss::{traits::Transcript, Player},
+        weighted_vuf::traits::WeightedVUF,
+    },
+    aptos_event_notifications::ReconfigNotificationListener,
+    aptos_infallible::{duration_since_epoch, Mutex},
+    aptos_logger::prelude::*,
+    aptos_network::{
+        application::interface::{NetworkClient, NetworkClientInterface},
+        protocols::network::Event,
+    },
+    aptos_types::{
+        account_address::AccountAddress,
+        dkg::{real_dkg::maybe_dk_from_bls_sk, DKGState, DKGTrait, DefaultDKG},
+        epoch_change::EpochChangeProof,
+        epoch_state::EpochState,
+        jwks::SupportedOIDCProviders,
+        on_chain_config::{
+            Features, LeaderReputationType, OnChainConfigPayload, OnChainConfigProvider,
+            OnChainConsensusConfig, OnChainExecutionConfig, OnChainJWKConsensusConfig,
+            OnChainRandomnessConfig, ProposerElectionType, RandomnessConfigMoveStruct,
+            RandomnessConfigSeqNum, ValidatorSet,
+        },
+        randomness::{RandKeys, WvufPP, WVUF},
+        validator_signer::ValidatorSigner,
+        validator_verifier::ValidatorVerifier,
+    },
+    aptos_validator_transaction_pool::VTxnPoolState,
 };
 use itertools::Itertools;
 use mini_moka::sync::Cache;
@@ -97,7 +124,6 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use gaptos::aptos_consensus::counters as counters;
 
 /// Range of rounds (window) that we might be calling proposer election
 /// functions with at any given time, in addition to the proposer history length.
@@ -142,8 +168,7 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     epoch_state: Option<Arc<EpochState>>,
     block_retrieval_tx:
         Option<aptos_channel::Sender<AccountAddress, IncomingBlockRetrievalRequest>>,
-    sync_info_request_tx:
-        Option<aptos_channel::Sender<AccountAddress, IncomingSyncInfoRequest>>,
+    sync_info_request_tx: Option<aptos_channel::Sender<AccountAddress, IncomingSyncInfoRequest>>,
     quorum_store_msg_tx: Option<aptos_channel::Sender<AccountAddress, VerifiedEvent>>,
     quorum_store_coordinator_tx: Option<Sender<CoordinatorCommand>>,
     quorum_store_storage: Arc<dyn QuorumStoreStorage>,
@@ -262,9 +287,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     }
 
     fn epoch_state(&self) -> &EpochState {
-        self.epoch_state
-            .as_ref()
-            .expect("EpochManager not started yet")
+        self.epoch_state.as_ref().expect("EpochManager not started yet")
     }
 
     fn epoch(&self) -> u64 {
@@ -299,19 +322,17 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         epoch_state: &EpochState,
         onchain_config: &OnChainConsensusConfig,
     ) -> Arc<dyn ProposerElection + Send + Sync> {
-        let proposers = epoch_state
-            .verifier
-            .get_ordered_account_addresses_iter()
-            .collect::<Vec<_>>();
+        let proposers =
+            epoch_state.verifier.get_ordered_account_addresses_iter().collect::<Vec<_>>();
         match &onchain_config.proposer_election_type() {
             ProposerElectionType::RotatingProposer(contiguous_rounds) => {
                 Arc::new(RotatingProposer::new(proposers, *contiguous_rounds))
-            },
+            }
             // We don't really have a fixed proposer!
             ProposerElectionType::FixedProposer(contiguous_rounds) => {
                 let proposer = choose_leader(proposers);
                 Arc::new(RotatingProposer::new(vec![proposer], *contiguous_rounds))
-            },
+            }
             ProposerElectionType::LeaderReputation(leader_reputation_type) => {
                 let (
                     heuristic,
@@ -319,12 +340,12 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     weight_by_voting_power,
                     use_history_from_previous_epoch_max_count,
                 ) = match &leader_reputation_type {
-                    LeaderReputationType::ProposerAndVoter(proposer_and_voter_config)
-                    | LeaderReputationType::ProposerAndVoterV2(proposer_and_voter_config) => {
-                        let proposer_window_size = proposers.len()
-                            * proposer_and_voter_config.proposer_window_num_validators_multiplier;
-                        let voter_window_size = proposers.len()
-                            * proposer_and_voter_config.voter_window_num_validators_multiplier;
+                    LeaderReputationType::ProposerAndVoter(proposer_and_voter_config) |
+                    LeaderReputationType::ProposerAndVoterV2(proposer_and_voter_config) => {
+                        let proposer_window_size = proposers.len() *
+                            proposer_and_voter_config.proposer_window_num_validators_multiplier;
+                        let voter_window_size = proposers.len() *
+                            proposer_and_voter_config.voter_window_num_validators_multiplier;
                         let heuristic: Box<dyn ReputationHeuristic> =
                             Box::new(ProposerAndVoterHeuristic::new(
                                 self.author,
@@ -342,18 +363,15 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                             proposer_and_voter_config.weight_by_voting_power,
                             proposer_and_voter_config.use_history_from_previous_epoch_max_count,
                         )
-                    },
+                    }
                 };
 
-                let seek_len = onchain_config.leader_reputation_exclude_round() as usize
-                    + onchain_config.max_failed_authors_to_store()
-                    + PROPOSER_ROUND_BEHIND_STORAGE_BUFFER;
+                let seek_len = onchain_config.leader_reputation_exclude_round() as usize +
+                    onchain_config.max_failed_authors_to_store() +
+                    PROPOSER_ROUND_BEHIND_STORAGE_BUFFER;
 
-                let backend = Arc::new(AptosDBBackend::new(
-                    window_size,
-                    seek_len,
-                    self.storage.aptos_db(),
-                ));
+                let backend =
+                    Arc::new(AptosDBBackend::new(window_size, seek_len, self.storage.aptos_db()));
                 let voting_powers: Vec<_> = if weight_by_voting_power {
                     proposers
                         .iter()
@@ -395,28 +413,28 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     leader_reputation_type.use_root_hash_for_seed(),
                     self.config.window_for_chain_health,
                 ));
-                // LeaderReputation is not cheap, so we can cache the amount of rounds round_manager needs.
+                // LeaderReputation is not cheap, so we can cache the amount of rounds round_manager
+                // needs.
                 Arc::new(CachedProposerElection::new(
                     epoch_state.epoch,
                     proposer_election,
-                    onchain_config.max_failed_authors_to_store()
-                        + PROPOSER_ELECTION_CACHING_WINDOW_ADDITION,
+                    onchain_config.max_failed_authors_to_store() +
+                        PROPOSER_ELECTION_CACHING_WINDOW_ADDITION,
                 ))
-            },
+            }
             ProposerElectionType::RoundProposer(round_proposers) => {
                 // Hardcoded to the first proposer
-                let default_proposer = proposers
-                    .first()
-                    .expect("INVARIANT VIOLATION: proposers is empty");
+                let default_proposer =
+                    proposers.first().expect("INVARIANT VIOLATION: proposers is empty");
                 // TODO(gravity_alex): optimize this
-                let proposers = round_proposers.iter()
-                    .map(|(round, author)| (*round, AccountAddress::from_bytes(author.bytes()).unwrap()))
+                let proposers = round_proposers
+                    .iter()
+                    .map(|(round, author)| {
+                        (*round, AccountAddress::from_bytes(author.bytes()).unwrap())
+                    })
                     .collect();
-                Arc::new(RoundProposer::new(
-                    proposers,
-                    *default_proposer,
-                ))
-            },
+                Arc::new(RoundProposer::new(proposers, *default_proposer))
+            }
         }
     }
 
@@ -433,11 +451,10 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         // skew leader elections for exclude_round number of rounds.
         let first_epoch_to_consider = std::cmp::max(
             if epoch_state.epoch == 1 { 1 } else { 2 },
-            epoch_state
-                .epoch
-                .saturating_sub(use_history_from_previous_epoch_max_count as u64),
+            epoch_state.epoch.saturating_sub(use_history_from_previous_epoch_max_count as u64),
         );
-        // If we are considering beyond the current epoch, we need to fetch validators for those epochs
+        // If we are considering beyond the current epoch, we need to fetch validators for those
+        // epochs
         if epoch_state.epoch > first_epoch_to_consider {
             self.storage
                 .aptos_db()
@@ -445,8 +462,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 .map_err(Into::into)
                 .and_then(|proof| {
                     ensure!(
-                        proof.ledger_info_with_sigs.len() as u64
-                            == (epoch_state.epoch - (first_epoch_to_consider - 1))
+                        proof.ledger_info_with_sigs.len() as u64 ==
+                            (epoch_state.epoch - (first_epoch_to_consider - 1))
                     );
                     extract_epoch_to_proposers(proof, epoch_state.epoch, &proposers, needed_rounds)
                 })
@@ -502,22 +519,18 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         );
         match different_epoch.cmp(&self.epoch()) {
             Ordering::Less => {
-                if self
-                    .epoch_state()
-                    .verifier
-                    .get_voting_power(&self.author)
-                    .is_some()
-                {
-                    // Ignore message from lower epoch if we're part of the validator set, the node would eventually see messages from
-                    // higher epoch and request a proof
+                if self.epoch_state().verifier.get_voting_power(&self.author).is_some() {
+                    // Ignore message from lower epoch if we're part of the validator set, the node
+                    // would eventually see messages from higher epoch and
+                    // request a proof
                     sample!(
                         SampleRate::Duration(Duration::from_secs(1)),
                         debug!("Discard message from lower epoch {} from {}", different_epoch, peer_id);
                     );
                     Ok(())
                 } else {
-                    // reply back the epoch change proof if we're not part of the validator set since we won't broadcast
-                    // timeout in this epoch
+                    // reply back the epoch change proof if we're not part of the validator set
+                    // since we won't broadcast timeout in this epoch
                     monitor!(
                         "process_epoch_retrieval",
                         self.process_epoch_retrieval(
@@ -529,7 +542,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                         )
                     )
                 }
-            },
+            }
             // We request proof to join higher epoch
             Ordering::Greater => {
                 let epoch = self.epoch();
@@ -540,17 +553,16 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     error!("Failed to send event to round manager {:?}", e);
                 }
                 Ok(())
-            },
+            }
             Ordering::Equal => {
                 bail!("[EpochManager] Same epoch should not come to process_different_epoch");
-            },
+            }
         }
     }
 
     async fn initiate_new_epoch(&mut self, proof: EpochChangeProof) -> anyhow::Result<()> {
-        let ledger_info = proof
-            .verify(self.epoch_state())
-            .context("[EpochManager] Invalid EpochChangeProof")?;
+        let ledger_info =
+            proof.verify(self.epoch_state()).context("[EpochManager] Invalid EpochChangeProof")?;
         info!(
             LogSchema::new(LogEvent::NewEpoch).epoch(ledger_info.ledger_info().next_block_epoch()),
             "Received verified epoch change",
@@ -559,15 +571,13 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         // shutdown existing processor first to avoid race condition with state sync.
         self.shutdown_current_processor().await;
         *self.pending_blocks.lock() = PendingBlocks::new();
-        // make sure storage is on this ledger_info too, it should be no-op if it's already committed
-        // panic if this doesn't succeed since the current processors are already shutdown.
+        // make sure storage is on this ledger_info too, it should be no-op if it's already
+        // committed panic if this doesn't succeed since the current processors are already
+        // shutdown.
         self.execution_client
             .sync_to(ledger_info.clone())
             .await
-            .context(format!(
-                "[EpochManager] State sync to new epoch {}",
-                ledger_info
-            ))
+            .context(format!("[EpochManager] State sync to new epoch {}", ledger_info))
             .expect("Failed to sync to new epoch");
         monitor!("reconfig", self.await_reconfig_notification().await);
         Ok(())
@@ -608,11 +618,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         tokio::spawn(task);
     }
 
-    fn spawn_sync_info_retrieval_task(
-        &mut self,
-        epoch: u64,
-        block_store: Arc<BlockStore>,
-    ) {
+    fn spawn_sync_info_retrieval_task(&mut self, epoch: u64, block_store: Arc<BlockStore>) {
         let (request_tx, mut request_rx) =
             aptos_channel::new::<_, IncomingSyncInfoRequest>(QueueStyle::KLAST, 10, None);
         let task = async move {
@@ -636,24 +642,16 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         if let Some(close_tx) = self.round_manager_close_tx.take() {
             // Release the previous RoundManager, especially the SafetyRule client
             let (ack_tx, ack_rx) = oneshot::channel();
-            close_tx
-                .send(ack_tx)
-                .expect("[EpochManager] Fail to drop round manager");
-            ack_rx
-                .await
-                .expect("[EpochManager] Fail to drop round manager");
+            close_tx.send(ack_tx).expect("[EpochManager] Fail to drop round manager");
+            ack_rx.await.expect("[EpochManager] Fail to drop round manager");
         }
         self.round_manager_tx = None;
 
         if let Some(close_tx) = self.dag_shutdown_tx.take() {
             // Release the previous RoundManager, especially the SafetyRule client
             let (ack_tx, ack_rx) = oneshot::channel();
-            close_tx
-                .send(ack_tx)
-                .expect("[EpochManager] Fail to drop DAG bootstrapper");
-            ack_rx
-                .await
-                .expect("[EpochManager] Fail to drop DAG bootstrapper");
+            close_tx.send(ack_tx).expect("[EpochManager] Fail to drop DAG bootstrapper");
+            ack_rx.await.expect("[EpochManager] Fail to drop DAG bootstrapper");
         }
         self.dag_shutdown_tx = None;
 
@@ -684,11 +682,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         epoch_state: Arc<EpochState>,
         network_sender: Arc<NetworkSender>,
     ) {
-        let (recovery_manager_tx, recovery_manager_rx) = aptos_channel::new(
-            QueueStyle::KLAST,
-            10,
-            Some(&counters::ROUND_MANAGER_CHANNEL_MSGS),
-        );
+        let (recovery_manager_tx, recovery_manager_rx) =
+            aptos_channel::new(QueueStyle::KLAST, 10, Some(&counters::ROUND_MANAGER_CHANNEL_MSGS));
         self.round_manager_tx = Some(recovery_manager_tx);
         let (close_tx, close_rx) = oneshot::channel();
         self.round_manager_close_tx = Some(close_tx);
@@ -713,11 +708,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         network_sender: NetworkSender,
         consensus_config: &OnChainConsensusConfig,
         consensus_key: Arc<PrivateKey>,
-    ) -> (
-        Arc<dyn TPayloadManager>,
-        QuorumStoreClient,
-        QuorumStoreBuilder,
-    ) {
+    ) -> (Arc<dyn TPayloadManager>, QuorumStoreClient, QuorumStoreBuilder) {
         // Start QuorumStore
         let (consensus_to_quorum_store_tx, consensus_to_quorum_store_rx) =
             mpsc::channel(self.config.intra_consensus_channel_buffer_size);
@@ -782,20 +773,13 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         counters::CURRENT_EPOCH_VALIDATORS.set(epoch_state.verifier.len() as i64);
 
         counters::TOTAL_VOTING_POWER.set(epoch_state.verifier.total_voting_power() as f64);
-        counters::VALIDATOR_VOTING_POWER.set(
-            epoch_state
-                .verifier
-                .get_voting_power(&self.author)
-                .unwrap_or(0) as f64,
-        );
-        epoch_state
-            .verifier
-            .get_ordered_account_addresses_iter()
-            .for_each(|peer_id| {
-                counters::ALL_VALIDATORS_VOTING_POWER
-                    .with_label_values(&[&peer_id.to_string()])
-                    .set(epoch_state.verifier.get_voting_power(&peer_id).unwrap_or(0) as i64)
-            });
+        counters::VALIDATOR_VOTING_POWER
+            .set(epoch_state.verifier.get_voting_power(&self.author).unwrap_or(0) as f64);
+        epoch_state.verifier.get_ordered_account_addresses_iter().for_each(|peer_id| {
+            counters::ALL_VALIDATORS_VOTING_POWER
+                .with_label_values(&[&peer_id.to_string()])
+                .set(epoch_state.verifier.get_voting_power(&peer_id).unwrap_or(0) as i64)
+        });
     }
 
     async fn start_round_manager(
@@ -827,11 +811,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         let mut safety_rules =
             MetricsSafetyRules::new(self.safety_rules_manager.client(), self.storage.clone());
         if let Err(error) = safety_rules.perform_initialize() {
-            error!(
-                epoch = epoch,
-                error = error,
-                "Unable to initialize safety rules.",
-            );
+            error!(epoch = epoch, error = error, "Unable to initialize safety rules.",);
         }
         let (delayed_qc_tx, delayed_qc_rx) = unbounded();
 
@@ -869,7 +849,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             )
             .await;
         let consensus_sk = consensus_key;
-        
+
         let maybe_pipeline_builder = if self.config.enable_pipeline {
             info!(epoch = epoch, "Create PipelineBuilder");
             let signer = Arc::new(ValidatorSigner::new(self.author, consensus_sk.clone()));
@@ -877,29 +857,29 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         } else {
             None
         };
-        
+
         info!(epoch = epoch, "Create BlockStore");
         // Read the last vote, before "moving" `recovery_data`
         let last_vote = recovery_data.last_vote();
-        let block_store = Arc::new(BlockStore::async_new(
-            Arc::clone(&self.storage),
-            recovery_data,
-            self.execution_client.clone(),
-            self.config.max_pruned_blocks_in_mem,
-            Arc::clone(&self.time_service),
-            self.config.vote_back_pressure_limit,
-            payload_manager,
-            onchain_consensus_config.order_vote_enabled(),
-            self.is_current_epoch_validator,
-            self.pending_blocks.clone(),
-            onchain_randomness_config.randomness_enabled(),
-        ).await);
-
-        let (round_manager_tx, round_manager_rx) = aptos_channel::new(
-            QueueStyle::KLAST,
-            10,
-            Some(&counters::ROUND_MANAGER_CHANNEL_MSGS),
+        let block_store = Arc::new(
+            BlockStore::async_new(
+                Arc::clone(&self.storage),
+                recovery_data,
+                self.execution_client.clone(),
+                self.config.max_pruned_blocks_in_mem,
+                Arc::clone(&self.time_service),
+                self.config.vote_back_pressure_limit,
+                payload_manager,
+                onchain_consensus_config.order_vote_enabled(),
+                self.is_current_epoch_validator,
+                self.pending_blocks.clone(),
+                onchain_randomness_config.randomness_enabled(),
+            )
+            .await,
         );
+
+        let (round_manager_tx, round_manager_rx) =
+            aptos_channel::new(QueueStyle::KLAST, 10, Some(&counters::ROUND_MANAGER_CHANNEL_MSGS));
 
         self.round_manager_tx = Some(round_manager_tx.clone());
         let max_blocks_allowed = self
@@ -925,15 +905,12 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 self.config.max_sending_inline_txns,
                 self.config.max_sending_inline_bytes,
                 onchain_consensus_config.max_failed_authors_to_store(),
-                self.config
-                    .min_max_txns_in_block_after_filtering_from_backpressure,
+                self.config.min_max_txns_in_block_after_filtering_from_backpressure,
                 pipeline_backpressure_config,
                 chain_health_backoff_config,
                 self.quorum_store_enabled,
                 onchain_consensus_config.effective_validator_txn_config(),
-                self.config
-                    .quorum_store
-                    .allow_batches_without_pos_in_proposal,
+                self.config.quorum_store.allow_batches_without_pos_in_proposal,
             );
             Some(round_manager::ValidatorComponents::new(
                 Arc::new(UnequivocalProposerElection::new(proposer_election)),
@@ -944,11 +921,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             None
         };
 
-        let (buffered_proposal_tx, buffered_proposal_rx) = aptos_channel::new(
-            QueueStyle::KLAST,
-            10,
-            Some(&counters::ROUND_MANAGER_CHANNEL_MSGS),
-        );
+        let (buffered_proposal_tx, buffered_proposal_rx) =
+            aptos_channel::new(QueueStyle::KLAST, 10, Some(&counters::ROUND_MANAGER_CHANNEL_MSGS));
         self.buffered_proposal_tx = Some(buffered_proposal_tx.clone());
         let mut round_manager = RoundManager::new(
             epoch_state.clone(),
@@ -1049,11 +1023,11 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         )
         .map_err(NoRandomnessReason::SecretShareDecryptionFailed)?;
 
-        let fast_randomness_is_enabled = onchain_randomness_config.fast_randomness_enabled()
-            && sk.fast.is_some()
-            && pk.fast.is_some()
-            && transcript.fast.is_some()
-            && dkg_pub_params.pvss_config.fast_wconfig.is_some();
+        let fast_randomness_is_enabled = onchain_randomness_config.fast_randomness_enabled() &&
+            sk.fast.is_some() &&
+            pk.fast.is_some() &&
+            transcript.fast.is_some() &&
+            dkg_pub_params.pvss_config.fast_wconfig.is_some();
 
         let pk_shares = (0..new_epoch_state.verifier.len())
             .map(|id| {
@@ -1073,10 +1047,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             info!(epoch = new_epoch, "Recovering existing augmented key");
             bcs::from_bytes(&key_pair).map_err(NoRandomnessReason::KeyPairDeserializationError)?
         } else {
-            info!(
-                epoch = new_epoch_state.epoch,
-                "Generating a new augmented key"
-            );
+            info!(epoch = new_epoch_state.epoch, "Generating a new augmented key");
             let mut rng =
                 StdRng::from_rng(thread_rng()).map_err(NoRandomnessReason::RngCreationError)?;
             let augmented_key_pair = WVUF::augment_key_pair(&vuf_pp, sk.main, pk.main, &mut rng);
@@ -1141,9 +1112,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
     async fn start_new_epoch(&mut self, payload: OnChainConfigPayload<P>) {
         info!("start to start new epoch for epoch: {:?}", payload.epoch());
-        let validator_set: ValidatorSet = payload
-            .get()
-            .expect("failed to get ValidatorSet from payload");
+        let validator_set: ValidatorSet =
+            payload.get().expect("failed to get ValidatorSet from payload");
         info!("validator_set read from config storage is : {:?}", validator_set);
 
         self.is_current_epoch_validator = false;
@@ -1156,7 +1126,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 }
             }
         }
-        
+
         let epoch_state = Arc::new(EpochState {
             epoch: payload.epoch(),
             verifier: Arc::new((&validator_set).into()),
@@ -1219,7 +1189,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             Ok(k) => Arc::new(k),
             Err(e) => {
                 panic!("load_consensus_key failed: {e}");
-            },
+            }
         };
 
         let rand_configs = self.try_get_rand_config_for_new_epoch(
@@ -1247,7 +1217,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     }
                 }
                 (None, None)
-            },
+            }
         };
 
         info!(
@@ -1312,11 +1282,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         epoch_state: &EpochState,
         consensus_config: &OnChainConsensusConfig,
         consensus_key: Arc<PrivateKey>,
-    ) -> (
-        NetworkSender,
-        Arc<dyn PayloadClient>,
-        Arc<dyn TPayloadManager>,
-    ) {
+    ) -> (NetworkSender, Arc<dyn PayloadClient>, Arc<dyn TPayloadManager>) {
         self.set_epoch_start_metrics(epoch_state);
         self.quorum_store_enabled = self.enable_quorum_store(consensus_config);
         let network_sender = self.create_network_sender(epoch_state);
@@ -1340,11 +1306,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             self.start_quorum_store(quorum_store_builder);
         }
 
-        (
-            network_sender,
-            Arc::new(mixed_payload_client),
-            payload_manager,
-        )
+        (network_sender, Arc::new(mixed_payload_client), payload_manager)
     }
 
     async fn start_new_epoch_with_joltean(
@@ -1382,7 +1344,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     rand_msg_rx,
                 )
                 .await
-            },
+            }
             LivenessStorageData::PartialRecoveryData(ledger_data) => {
                 self.recovery_mode = true;
                 self.start_recovery_manager(
@@ -1392,7 +1354,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     Arc::new(network_sender),
                 )
                 .await
-            },
+            }
         }
     }
 
@@ -1412,10 +1374,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         rand_msg_rx: aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
     ) {
         let epoch = epoch_state.epoch;
-        let signer = Arc::new(ValidatorSigner::new(
-            self.author,
-            loaded_consensus_key.clone()
-        ));
+        let signer = Arc::new(ValidatorSigner::new(self.author, loaded_consensus_key.clone()));
         let commit_signer = Arc::new(DagCommitSigner::new(signer.clone()));
 
         assert!(
@@ -1476,18 +1435,14 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             self.aptos_time_service.clone(),
             payload_manager,
             payload_client,
-            self.execution_client
-                .get_execution_channel()
-                .expect("unable to get execution channel"),
+            self.execution_client.get_execution_channel().expect("unable to get execution channel"),
             self.execution_client.clone(),
             onchain_consensus_config.quorum_store_enabled(),
             onchain_consensus_config.effective_validator_txn_config(),
             onchain_randomness_config,
             onchain_jwk_consensus_config,
             self.bounded_executor.clone(),
-            self.config
-                .quorum_store
-                .allow_batches_without_pos_in_proposal,
+            self.config.quorum_store.allow_batches_without_pos_in_proposal,
         );
 
         let (dag_rpc_tx, dag_rpc_rx) = aptos_channel::new(QueueStyle::FIFO, 10, None);
@@ -1501,9 +1456,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     fn enable_quorum_store(&mut self, onchain_config: &OnChainConsensusConfig) -> bool {
         fail_point!("consensus::start_new_epoch::disable_qs", |_| false);
         // TODO(gravity_byteyue): Use onchain config in the future
-        std::env::var("ENABLE_QUORUM_STORE")
-                .map(|s| s.parse().unwrap())
-                .unwrap_or(true)
+        std::env::var("ENABLE_QUORUM_STORE").map(|s| s.parse().unwrap()).unwrap_or(true)
         // onchain_config.quorum_store_enabled()
     }
 
@@ -1543,8 +1496,10 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         if let Some(unverified_event) = maybe_unverified_event {
             // filter out quorum store messages if quorum store has not been enabled
             match self.filter_quorum_store_events(peer_id, &unverified_event) {
-                Ok(true) => {},
-                Ok(false) => return Ok(()), // This occurs when the quorum store is not enabled, but the recovery mode is enabled. We filter out the messages, but don't raise any error.
+                Ok(true) => {}
+                Ok(false) => return Ok(()), /* This occurs when the quorum store is not enabled, */
+                // but the recovery mode is enabled. We filter out
+                // the messages, but don't raise any error.
                 Err(err) => return Err(err),
             }
             // same epoch -> run well-formedness + signature check
@@ -1587,7 +1542,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                                 payload_manager,
                                 pending_blocks,
                             );
-                        },
+                        }
                         Err(e) => {
                             error!(
                                 SecurityEvent::ConsensusInvalidMessage,
@@ -1595,7 +1550,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                                 error = ?e,
                                 unverified_event = unverified_event
                             );
-                        },
+                        }
                     }
                 })
                 .await;
@@ -1609,16 +1564,16 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         msg: ConsensusMsg,
     ) -> anyhow::Result<Option<UnverifiedEvent>> {
         match msg {
-            ConsensusMsg::ProposalMsg(_)
-            | ConsensusMsg::SyncInfo(_)
-            | ConsensusMsg::VoteMsg(_)
-            | ConsensusMsg::OrderVoteMsg(_)
-            | ConsensusMsg::CommitVoteMsg(_)
-            | ConsensusMsg::CommitDecisionMsg(_)
-            | ConsensusMsg::BatchMsg(_)
-            | ConsensusMsg::BatchRequestMsg(_)
-            | ConsensusMsg::SignedBatchInfo(_)
-            | ConsensusMsg::ProofOfStoreMsg(_) => {
+            ConsensusMsg::ProposalMsg(_) |
+            ConsensusMsg::SyncInfo(_) |
+            ConsensusMsg::VoteMsg(_) |
+            ConsensusMsg::OrderVoteMsg(_) |
+            ConsensusMsg::CommitVoteMsg(_) |
+            ConsensusMsg::CommitDecisionMsg(_) |
+            ConsensusMsg::BatchMsg(_) |
+            ConsensusMsg::BatchRequestMsg(_) |
+            ConsensusMsg::SignedBatchInfo(_) |
+            ConsensusMsg::ProofOfStoreMsg(_) => {
                 let event: UnverifiedEvent = msg.into();
                 debug!("event epoch: {:?} and self epoch {:?}", event.epoch(), self.epoch());
                 if event.epoch()? == self.epoch() {
@@ -1629,7 +1584,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                         self.process_different_epoch(event.epoch()?, peer_id)
                     )?;
                 }
-            },
+            }
             ConsensusMsg::EpochChangeProof(proof) => {
                 let msg_epoch = proof.epoch()?;
                 debug!(
@@ -1651,7 +1606,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                         .with_label_values(&["epoch_proof_wrong_epoch"])
                         .inc();
                 }
-            },
+            }
             ConsensusMsg::EpochRetrievalRequest(request) => {
                 ensure!(
                     request.end_epoch <= self.epoch(),
@@ -1661,10 +1616,10 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     "process_epoch_retrieval",
                     self.process_epoch_retrieval(*request, peer_id)
                 )?;
-            },
+            }
             _ => {
                 bail!("[EpochManager] Unexpected messages: {:?}", msg);
-            },
+            }
         }
         Ok(None)
     }
@@ -1675,20 +1630,21 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         event: &UnverifiedEvent,
     ) -> anyhow::Result<bool> {
         match event {
-            UnverifiedEvent::BatchMsg(_)
-            | UnverifiedEvent::SignedBatchInfo(_)
-            | UnverifiedEvent::ProofOfStoreMsg(_) => {
+            UnverifiedEvent::BatchMsg(_) |
+            UnverifiedEvent::SignedBatchInfo(_) |
+            UnverifiedEvent::ProofOfStoreMsg(_) => {
                 if self.quorum_store_enabled {
                     Ok(true) // This states that we shouldn't filter out the event
                 } else if self.recovery_mode {
-                    Ok(false) // This states that we should filter out the event, but without an error
+                    Ok(false) // This states that we should filter out the event, but without an
+                              // error
                 } else {
                     Err(anyhow::anyhow!(
                         "Quorum store is not enabled locally, but received msg from sender: {}",
                         peer_id,
                     ))
                 }
-            },
+            }
             _ => Ok(true), // This states that we shouldn't filter out the event
         }
     }
@@ -1723,12 +1679,12 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             );
         }
         if let Err(e) = match event {
-            quorum_store_event @ (VerifiedEvent::SignedBatchInfo(_)
-            | VerifiedEvent::ProofOfStoreMsg(_)
-            | VerifiedEvent::BatchMsg(_)) => {
+            quorum_store_event @ (VerifiedEvent::SignedBatchInfo(_) |
+            VerifiedEvent::ProofOfStoreMsg(_) |
+            VerifiedEvent::BatchMsg(_)) => {
                 Self::forward_event_to(quorum_store_msg_tx, peer_id, quorum_store_event)
                     .context("quorum store sender")
-            },
+            }
             proposal_event @ VerifiedEvent::ProposalMsg(_) => {
                 if let VerifiedEvent::ProposalMsg(p) = &proposal_event {
                     if let Some(payload) = p.proposal().payload() {
@@ -1740,7 +1696,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
                 Self::forward_event_to(buffered_proposal_tx, peer_id, proposal_event)
                     .context("proposal precheck sender")
-            },
+            }
             round_manager_event => Self::forward_event_to(
                 round_manager_tx,
                 (peer_id, discriminant(&round_manager_event)),
@@ -1754,11 +1710,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
     /// Filter out rpc requests that are not relevant to the current epoch role.
     /// Return false if the request is filtered out, true otherwise.
-    fn rpc_request_filter(
-        &self,
-        peer_id: &Author,
-        request: &IncomingRpcRequest,
-    ) -> bool {
+    fn rpc_request_filter(&self, peer_id: &Author, request: &IncomingRpcRequest) -> bool {
         self.is_current_epoch_validator
     }
 
@@ -1783,13 +1735,15 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     self.process_different_epoch(epoch, peer_id)
                 )?;
                 return Ok(());
-            },
+            }
             None => {
-                ensure!(matches!(request, IncomingRpcRequest::BlockRetrieval(_))
-                            || matches!(request, IncomingRpcRequest::BatchRetrieval(_))
-                            || matches!(request, IncomingRpcRequest::SyncInfoRequest(_)));
-            },
-            _ => {},
+                ensure!(
+                    matches!(request, IncomingRpcRequest::BlockRetrieval(_)) ||
+                        matches!(request, IncomingRpcRequest::BatchRetrieval(_)) ||
+                        matches!(request, IncomingRpcRequest::SyncInfoRequest(_))
+                );
+            }
+            _ => {}
         }
 
         match request {
@@ -1800,31 +1754,31 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     error!("Round manager not started");
                     Ok(())
                 }
-            },
+            }
             IncomingRpcRequest::BatchRetrieval(request) => {
                 if let Some(tx) = &self.batch_retrieval_tx {
                     tx.push(peer_id, request)
                 } else {
                     Err(anyhow::anyhow!("Quorum store not started"))
                 }
-            },
+            }
             IncomingRpcRequest::DAGRequest(request) => {
                 if let Some(tx) = &self.dag_rpc_tx {
                     tx.push(peer_id, request)
                 } else {
                     Err(anyhow::anyhow!("DAG not bootstrapped"))
                 }
-            },
+            }
             IncomingRpcRequest::CommitRequest(request) => {
                 self.execution_client.send_commit_msg(peer_id, request)
-            },
+            }
             IncomingRpcRequest::RandGenRequest(request) => {
                 if let Some(tx) = &self.rand_manager_msg_tx {
                     tx.push(peer_id, request)
                 } else {
                     bail!("Rand manager not started");
                 }
-            },
+            }
             IncomingRpcRequest::SyncInfoRequest(request) => {
                 if let Some(tx) = &self.sync_info_request_tx {
                     tx.push(peer_id, request)
@@ -1832,7 +1786,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     error!("Round manager not started");
                     Ok(())
                 }
-            },
+            }
         }
     }
 
@@ -1859,7 +1813,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             return;
         }
         let peer = vfn_peers[thread_rng().gen_range(0, vfn_peers.len())];
-        
+
         let mut sync_info_tx = self.sync_info_tx.clone();
         let client = self.network_sender.network_client.clone();
         tokio::spawn(async move {
@@ -1926,16 +1880,14 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     }
 
     fn process_local_timeout(&mut self, round: u64) {
-        // FIXME(nekomoto): This is a temporary fix to skip unexpected local timeout from non-validator.
+        // FIXME(nekomoto): This is a temporary fix to skip unexpected local timeout from
+        // non-validator.
         if !self.is_current_epoch_validator {
             error!("Not current epoch validator, skipping local timeout for round {round}");
             return;
         }
         let Some(sender) = self.round_manager_tx.as_ref() else {
-            warn!(
-                "Received local timeout for round {} without Round Manager",
-                round
-            );
+            warn!("Received local timeout for round {} without Round Manager", round);
             return;
         };
 
@@ -1952,8 +1904,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .next()
             .await
             .expect("Reconfig sender dropped, unable to start new epoch");
-        self.start_new_epoch(reconfig_notification.on_chain_configs)
-            .await;
+        self.start_new_epoch(reconfig_notification.on_chain_configs).await;
     }
 
     pub async fn start(
@@ -2021,7 +1972,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         }
     }
 
-    /// Before `JWKConsensusConfig` is initialized, convert from `Features` and `SupportedOIDCProviders` instead.
+    /// Before `JWKConsensusConfig` is initialized, convert from `Features` and
+    /// `SupportedOIDCProviders` instead.
     fn equivalent_jwk_consensus_config_from_deprecated_resources(
         payload: &OnChainConfigPayload<P>,
     ) -> OnChainJWKConsensusConfig {
@@ -2042,7 +1994,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 self.key_storage
                     .default_consensus_sk()
                     .map_err(|e| anyhow!("could not load default sk: {e}"))
-            },
+            }
         }
     }
 }

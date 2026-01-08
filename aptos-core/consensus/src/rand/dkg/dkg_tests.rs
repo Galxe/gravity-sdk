@@ -1,17 +1,19 @@
-use gaptos::aptos_dkg::{
-    pvss::{
-        das::{self, unweighted_protocol},
-        insecure_field,
-        test_utils::{
-            get_threshold_configs_for_testing, get_weighted_configs_for_testing,
-            reconstruct_dealt_secret_key_randomly, setup_dealing, DealingArgs, NoAux,
+use gaptos::{
+    aptos_crypto::hash::CryptoHash,
+    aptos_dkg::{
+        pvss::{
+            das::{self, unweighted_protocol},
+            insecure_field,
+            test_utils::{
+                get_threshold_configs_for_testing, get_weighted_configs_for_testing,
+                reconstruct_dealt_secret_key_randomly, setup_dealing, DealingArgs, NoAux,
+            },
+            traits::{SecretSharingConfig, Transcript},
+            GenericWeighting,
         },
-        traits::{SecretSharingConfig, Transcript},
-        GenericWeighting,
+        utils::random::random_scalar,
     },
-    utils::random::random_scalar,
 };
-use gaptos::aptos_crypto::hash::CryptoHash;
 use rand::{rngs::StdRng, thread_rng, SeedableRng};
 use rand_core::SeedableRng as RandCoreSeedableRng;
 
@@ -39,8 +41,8 @@ fn test_dkg_all_weighted() {
     aggregatable_dkg::<das::WeightedTranscript>(wcs.last().unwrap(), seed.to_bytes_le());
 }
 
-/// Deals `n` times, aggregates all transcripts, and attempts to reconstruct the secret dealt in this
-/// aggregated transcript.
+/// Deals `n` times, aggregates all transcripts, and attempts to reconstruct the secret dealt in
+/// this aggregated transcript.
 fn aggregatable_dkg<T: Transcript + CryptoHash>(sc: &T::SecretSharingConfig, seed_bytes: [u8; 32]) {
     let mut rng = StdRng::from_seed(seed_bytes);
 
@@ -72,9 +74,7 @@ fn aggregatable_dkg<T: Transcript + CryptoHash>(sc: &T::SecretSharingConfig, see
         &d.pp,
         &d.spks,
         &d.eks,
-        &(0..total_players)
-            .map(|_| NoAux)
-            .collect::<Vec<NoAux>>(),
+        &(0..total_players).map(|_| NoAux).collect::<Vec<NoAux>>(),
     )
     .expect("aggregated PVSS transcript failed verification");
 

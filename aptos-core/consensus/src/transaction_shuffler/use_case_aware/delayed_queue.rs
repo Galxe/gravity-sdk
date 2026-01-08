@@ -6,8 +6,10 @@ use crate::transaction_shuffler::use_case_aware::{
     utils::StrictMap,
     Config,
 };
-use gaptos::aptos_types::transaction::use_case::{UseCaseAwareTransaction, UseCaseKey};
-use gaptos::move_core_types::account_address::AccountAddress;
+use gaptos::{
+    aptos_types::transaction::use_case::{UseCaseAwareTransaction, UseCaseKey},
+    move_core_types::account_address::AccountAddress,
+};
 use std::{
     collections::{hash_map, BTreeMap, HashMap, VecDeque},
     fmt::Debug,
@@ -25,10 +27,7 @@ struct DelayKey {
 
 impl DelayKey {
     fn new(try_delay_till: OutputIdx, input_idx: InputIdx) -> Self {
-        Self {
-            try_delay_till,
-            input_idx,
-        }
+        Self { try_delay_till, input_idx }
     }
 }
 
@@ -67,19 +66,11 @@ where
 {
     fn new_with_txn(try_delay_till: OutputIdx, input_idx: InputIdx, txn: Txn) -> Self {
         let txns = vec![TxnWithInputIdx { input_idx, txn }].into();
-        Self {
-            try_delay_till,
-            input_idx,
-            txns,
-        }
+        Self { try_delay_till, input_idx, txns }
     }
 
     fn new_empty(try_delay_till: OutputIdx, input_idx: InputIdx) -> Self {
-        Self {
-            try_delay_till,
-            input_idx,
-            txns: VecDeque::new(),
-        }
+        Self { try_delay_till, input_idx, txns: VecDeque::new() }
     }
 
     fn is_empty(&self) -> bool {
@@ -87,10 +78,7 @@ where
     }
 
     fn delay_key(&self) -> DelayKey {
-        DelayKey {
-            try_delay_till: self.try_delay_till,
-            input_idx: self.input_idx,
-        }
+        DelayKey { try_delay_till: self.try_delay_till, input_idx: self.input_idx }
     }
 
     fn expect_first_txn(&self) -> &TxnWithInputIdx<Txn> {
@@ -134,11 +122,7 @@ struct UseCase {
 
 impl UseCase {
     fn new_empty(try_delay_till: OutputIdx, input_idx: InputIdx) -> Self {
-        Self {
-            try_delay_till,
-            input_idx,
-            account_by_delay: BTreeMap::new(),
-        }
+        Self { try_delay_till, input_idx, account_by_delay: BTreeMap::new() }
     }
 
     fn new_with_account<Txn>(
@@ -151,11 +135,7 @@ impl UseCase {
     {
         let mut account_by_delay = BTreeMap::new();
         account_by_delay.strict_insert(account.delay_key(), address);
-        Self {
-            try_delay_till,
-            input_idx: account.input_idx,
-            account_by_delay,
-        }
+        Self { try_delay_till, input_idx: account.input_idx, account_by_delay }
     }
 
     fn is_empty(&self) -> bool {
@@ -166,15 +146,10 @@ impl UseCase {
         // If head account will be ready later than the use case itself, respect that.
         let try_delay_till = std::cmp::max(
             self.try_delay_till,
-            self.account_by_delay
-                .first_key_value()
-                .map_or(0, |(k, _)| k.try_delay_till),
+            self.account_by_delay.first_key_value().map_or(0, |(k, _)| k.try_delay_till),
         );
 
-        DelayKey {
-            try_delay_till,
-            input_idx: self.input_idx,
-        }
+        DelayKey { try_delay_till, input_idx: self.input_idx }
     }
 
     /// Expects head account to exist (otherwise panic) and return both the DelayKey and the
@@ -196,12 +171,8 @@ impl UseCase {
         Txn: UseCaseAwareTransaction,
     {
         let account_delay_key = account.delay_key();
-        self.account_by_delay
-            .strict_insert(account_delay_key, address);
-        let (_, head_address) = self
-            .account_by_delay
-            .first_key_value()
-            .expect("Must exist.");
+        self.account_by_delay.strict_insert(account_delay_key, address);
+        let (_, head_address) = self.account_by_delay.first_key_value().expect("Must exist.");
         if head_address == &address {
             self.input_idx = account_delay_key.input_idx;
         }
@@ -214,8 +185,8 @@ impl UseCase {
 ///     2. all txns that are examined and delayed previously.
 ///
 /// Note:
-///     A delayed txn is attached to an account and the account is attached to a priority queue in a use
-/// case, which has an entry in the main priority queue.
+///     A delayed txn is attached to an account and the account is attached to a priority queue in a
+/// use case, which has an entry in the main priority queue.
 ///     Empty accounts and use cases are still tracked for the delay so that a next txn in the
 /// input stream is properly delayed if associated with such an account or use case.
 #[derive(Debug, Default)]
@@ -226,8 +197,9 @@ pub(crate) struct DelayedQueue<Txn> {
     /// An empty account address is tracked in `account_placeholders_by_delay` while a non-empty
     /// account address is tracked under `use_cases`.
     accounts: HashMap<AccountAddress, Account<Txn>>,
-    /// Registry of all use cases, each of which includes the expected output_idx to delay until and
-    /// a priority queue (might be empty) of non-empty accounts whose head txn belongs to that use case.
+    /// Registry of all use cases, each of which includes the expected output_idx to delay until
+    /// and a priority queue (might be empty) of non-empty accounts whose head txn belongs to
+    /// that use case.
     ///
     /// An empty use case is tracked in `use_case_placeholders_by_delay` while a non-empty use case
     /// is tracked in the top level `use_cases_by_delay`.
@@ -242,12 +214,14 @@ pub(crate) struct DelayedQueue<Txn> {
     /// The head txn of the head account of the head use case in this nested structure is the
     /// next txn to be possibly ready.
     use_cases_by_delay: BTreeMap<DelayKey, UseCaseKey>,
-    /// Empty account addresses by the DelayKey (those w/o known delayed txns), kept to track the delay.
+    /// Empty account addresses by the DelayKey (those w/o known delayed txns), kept to track the
+    /// delay.
     account_placeholders_by_delay: BTreeMap<DelayKey, AccountAddress>,
     /// Empty UseCaseKeys by the DelayKey (those w/o known delayed txns), kept to track the delay.
     use_case_placeholders_by_delay: BTreeMap<DelayKey, UseCaseKey>,
 
-    /// Externally set output index; when an item has try_delay_till <= output_idx, it's deemed ready
+    /// Externally set output index; when an item has try_delay_till <= output_idx, it's deemed
+    /// ready
     output_idx: OutputIdx,
 
     config: Config,
@@ -273,13 +247,13 @@ where
         }
     }
 
-    /// Remove stale (empty use cases and accounts with try_delay_till <= self.output_idx) placeholders.
+    /// Remove stale (empty use cases and accounts with try_delay_till <= self.output_idx)
+    /// placeholders.
     fn drain_placeholders(&mut self) {
         let least_to_keep = DelayKey::new(self.output_idx + 1, 0);
 
-        let remaining_use_case_placeholders = self
-            .use_case_placeholders_by_delay
-            .split_off(&least_to_keep);
+        let remaining_use_case_placeholders =
+            self.use_case_placeholders_by_delay.split_off(&least_to_keep);
         let remaining_account_placeholders =
             self.account_placeholders_by_delay.split_off(&least_to_keep);
 
@@ -296,7 +270,8 @@ where
 
     pub fn bump_output_idx(&mut self, output_idx: OutputIdx) {
         assert!(output_idx >= self.output_idx);
-        // It's possible that the queue returned nothing last round hence the output idx didn't move.
+        // It's possible that the queue returned nothing last round hence the output idx didn't
+        // move.
         if output_idx > self.output_idx {
             self.output_idx = output_idx;
             self.drain_placeholders();
@@ -308,7 +283,7 @@ where
         let use_case_entry = match self.use_cases_by_delay.first_entry() {
             None => {
                 return None;
-            },
+            }
             Some(occupied_entry) => occupied_entry,
         };
         let use_case_delay_key = use_case_entry.key();
@@ -341,22 +316,19 @@ where
         // Add account and original use case back to delay queues.
 
         if account.is_empty() {
-            self.account_placeholders_by_delay
-                .strict_insert(account.delay_key(), address);
+            self.account_placeholders_by_delay.strict_insert(account.delay_key(), address);
             if use_case.is_empty() {
                 self.use_case_placeholders_by_delay
                     .strict_insert(use_case.delay_key(), use_case_key.clone());
             } else {
-                self.use_cases_by_delay
-                    .strict_insert(use_case.delay_key(), use_case_key.clone());
+                self.use_cases_by_delay.strict_insert(use_case.delay_key(), use_case_key.clone());
             }
         } else {
             // See if account now belongs to a different use case.
             let new_use_case_key = account.expect_use_case_key();
             if new_use_case_key == use_case_key {
                 use_case.add_account(address, account);
-                self.use_cases_by_delay
-                    .strict_insert(use_case.delay_key(), use_case_key.clone());
+                self.use_cases_by_delay.strict_insert(use_case.delay_key(), use_case_key.clone());
             } else {
                 // Account now belongs to a different use case.
 
@@ -378,15 +350,14 @@ where
                             self.use_case_placeholders_by_delay
                                 .strict_remove(&new_use_case.delay_key());
                         } else {
-                            self.use_cases_by_delay
-                                .strict_remove(&new_use_case.delay_key());
+                            self.use_cases_by_delay.strict_remove(&new_use_case.delay_key());
                         }
                         // Add account to use case.
                         new_use_case.add_account(address, account);
                         // Add new use case back to delay queue.
                         self.use_cases_by_delay
                             .strict_insert(new_use_case.delay_key(), new_use_case_key.clone());
-                    },
+                    }
                     hash_map::Entry::Vacant(entry) => {
                         // Use case not tracked previously, try_delay_till = output_idx + 1
                         let new_use_case = entry.insert(UseCase::new_with_account(
@@ -396,7 +367,7 @@ where
                         ));
                         self.use_cases_by_delay
                             .strict_insert(new_use_case.delay_key(), new_use_case_key.clone());
-                    },
+                    }
                 }
             }
         }
@@ -415,9 +386,9 @@ where
         match self.accounts.get_mut(&address) {
             Some(account) => {
                 if account.is_empty() {
-                    // Account placeholder exists, move it from the placeholder queue to the main queue.
-                    self.account_placeholders_by_delay
-                        .remove(&account.delay_key());
+                    // Account placeholder exists, move it from the placeholder queue to the main
+                    // queue.
+                    self.account_placeholders_by_delay.remove(&account.delay_key());
                     account.queue_txn(input_idx, txn);
                     match self.use_cases.entry(use_case_key.clone()) {
                         hash_map::Entry::Occupied(occupied) => {
@@ -431,7 +402,7 @@ where
                             use_case.add_account(address, account);
                             self.use_cases_by_delay
                                 .strict_insert(use_case.delay_key(), use_case_key.clone());
-                        },
+                        }
                         hash_map::Entry::Vacant(vacant) => {
                             // Use case not tracked previously, the use case is ready at the current
                             // output_idx, instead of output_idx +1 -- it makes a difference if
@@ -442,14 +413,14 @@ where
                             self.use_cases_by_delay
                                 .strict_insert(use_case.delay_key(), use_case_key.clone());
                             vacant.insert(use_case);
-                        },
+                        }
                     }
                 } else {
-                    // Account tracked and not empty, so appending a new txn to it won't affect positions
-                    // in delay queues
+                    // Account tracked and not empty, so appending a new txn to it won't affect
+                    // positions in delay queues
                     account.queue_txn(input_idx, txn);
                 }
-            },
+            }
             None => {
                 // Account not previously tracked.
                 let account = Account::new_with_txn(self.output_idx + 1, input_idx, txn);
@@ -457,17 +428,15 @@ where
                 // txn whould've been selected for output, bypassing the queue.
                 let use_case = self.use_cases.expect_mut(&use_case_key);
                 if use_case.is_empty() {
-                    self.use_case_placeholders_by_delay
-                        .strict_remove(&use_case.delay_key());
+                    self.use_case_placeholders_by_delay.strict_remove(&use_case.delay_key());
                 } else {
                     self.use_cases_by_delay.strict_remove(&use_case.delay_key());
                 }
                 use_case.add_account(address, &account);
 
                 self.accounts.strict_insert(address, account);
-                self.use_cases_by_delay
-                    .strict_insert(use_case.delay_key(), use_case_key.clone());
-            },
+                self.use_cases_by_delay.strict_insert(use_case.delay_key(), use_case_key.clone());
+            }
         }
     }
 
@@ -492,15 +461,14 @@ where
 
                 self.use_cases_by_delay.strict_remove(&use_case.delay_key());
                 use_case.update_try_delay_till(use_case_try_delay_till);
-                self.use_cases_by_delay
-                    .strict_insert(use_case.delay_key(), use_case_key);
-            },
+                self.use_cases_by_delay.strict_insert(use_case.delay_key(), use_case_key);
+            }
             hash_map::Entry::Vacant(vacant) => {
                 let use_case = UseCase::new_empty(use_case_try_delay_till, input_idx);
                 self.use_case_placeholders_by_delay
                     .strict_insert(use_case.delay_key(), use_case_key);
                 vacant.insert(use_case);
-            },
+            }
         }
 
         // Notice this function is called after the txn is selected for output due to no delaying
@@ -509,8 +477,7 @@ where
         let new_account = Account::new_empty(account_try_delay_till, input_idx);
         let new_account_delay_key = new_account.delay_key();
         self.accounts.strict_insert(address, new_account);
-        self.account_placeholders_by_delay
-            .strict_insert(new_account_delay_key, address);
+        self.account_placeholders_by_delay.strict_insert(new_account_delay_key, address);
     }
 
     /// Return the txn back if relevant use case and sender are not subject to delaying. Otherwise,

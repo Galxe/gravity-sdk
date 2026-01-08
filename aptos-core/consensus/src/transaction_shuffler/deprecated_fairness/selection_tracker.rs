@@ -10,10 +10,7 @@ pub struct SelectionTracker {
 
 impl SelectionTracker {
     pub fn new(num_txns: usize) -> Self {
-        Self {
-            selected_markers: vec![false; num_txns],
-            cur_idx: 0,
-        }
+        Self { selected_markers: vec![false; num_txns], cur_idx: 0 }
     }
 
     pub fn next_unselected(&mut self) -> Option<TxnIdx> {

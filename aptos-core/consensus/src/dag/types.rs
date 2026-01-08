@@ -11,28 +11,30 @@ use crate::{
     network_interface::ConsensusMsg,
 };
 use anyhow::{bail, ensure};
-use gaptos::aptos_bitvec::BitVec;
 use aptos_consensus_types::common::{Author, Payload, Round};
-use gaptos::aptos_crypto::{
-    bls12381::Signature,
-    hash::{CryptoHash, CryptoHasher},
-    CryptoMaterialError, HashValue,
-};
-use gaptos::aptos_crypto as aptos_crypto;
-use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
-use gaptos::aptos_enum_conversion_derive ::EnumConversion;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::debug;
-use gaptos::aptos_reliable_broadcast::{BroadcastStatus, RBMessage};
-use gaptos::aptos_types::{
-    aggregate_signature::{AggregateSignature, PartialSignatures},
-    epoch_state::EpochState,
-    ledger_info::LedgerInfoWithSignatures,
-    validator_signer::ValidatorSigner,
-    validator_txn::ValidatorTransaction,
-    validator_verifier::ValidatorVerifier,
-};
 use futures_channel::oneshot;
+use gaptos::{
+    aptos_bitvec::BitVec,
+    aptos_crypto,
+    aptos_crypto::{
+        bls12381::Signature,
+        hash::{CryptoHash, CryptoHasher},
+        CryptoMaterialError, HashValue,
+    },
+    aptos_crypto_derive::{BCSCryptoHash, CryptoHasher},
+    aptos_enum_conversion_derive::EnumConversion,
+    aptos_infallible::Mutex,
+    aptos_logger::debug,
+    aptos_reliable_broadcast::{BroadcastStatus, RBMessage},
+    aptos_types::{
+        aggregate_signature::{AggregateSignature, PartialSignatures},
+        epoch_state::EpochState,
+        ledger_info::LedgerInfoWithSignatures,
+        validator_signer::ValidatorSigner,
+        validator_txn::ValidatorTransaction,
+        validator_verifier::ValidatorVerifier,
+    },
+};
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::min,
@@ -109,15 +111,7 @@ impl NodeMetadata {
         timestamp: u64,
         digest: HashValue,
     ) -> Self {
-        Self {
-            node_id: NodeId {
-                epoch,
-                round,
-                author,
-            },
-            timestamp,
-            digest,
-        }
+        Self { node_id: NodeId { epoch, round, author }, timestamp, digest }
     }
 
     pub fn digest(&self) -> &HashValue {
@@ -182,15 +176,7 @@ impl Node {
         );
 
         Self {
-            metadata: NodeMetadata {
-                node_id: NodeId {
-                    epoch,
-                    round,
-                    author,
-                },
-                timestamp,
-                digest,
-            },
+            metadata: NodeMetadata { node_id: NodeId { epoch, round, author }, timestamp, digest },
             validator_txns,
             payload,
             parents,
@@ -205,13 +191,7 @@ impl Node {
         parents: Vec<NodeCertificate>,
         extensions: Extensions,
     ) -> Self {
-        Self {
-            metadata,
-            validator_txns: vec![],
-            payload,
-            parents,
-            extensions,
-        }
+        Self { metadata, validator_txns: vec![], payload, parents, extensions }
     }
 
     /// Calculate the node digest based on all fields in the node
@@ -306,7 +286,8 @@ impl Node {
             self.author(),
             sender
         );
-        // TODO: move this check to rpc process logic to delay it as much as possible for performance
+        // TODO: move this check to rpc process logic to delay it as much as possible for
+        // performance
         ensure!(self.digest() == self.calculate_digest(), "invalid digest");
 
         let node_round = self.metadata().round();
@@ -321,9 +302,7 @@ impl Node {
         let prev_round = node_round - 1;
         // check if the parents' round is the node's round - 1
         ensure!(
-            self.parents()
-                .iter()
-                .all(|parent| parent.metadata().round() == prev_round),
+            self.parents().iter().all(|parent| parent.metadata().round() == prev_round),
             "invalid parent round"
         );
 
@@ -331,9 +310,7 @@ impl Node {
         ensure!(
             verifier
                 .check_voting_power(
-                    self.parents()
-                        .iter()
-                        .map(|parent| parent.metadata().author()),
+                    self.parents().iter().map(|parent| parent.metadata().author()),
                     true,
                 )
                 .is_ok(),
@@ -355,11 +332,7 @@ pub struct NodeId {
 
 impl NodeId {
     pub fn new(epoch: u64, round: Round, author: Author) -> Self {
-        Self {
-            epoch,
-            round,
-            author,
-        }
+        Self { epoch, round, author }
     }
 
     pub fn epoch(&self) -> u64 {
@@ -377,11 +350,7 @@ impl NodeId {
 
 impl Display for NodeId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "NodeId: [epoch: {}, round: {}, author: {}]",
-            self.epoch, self.round, self.author
-        )
+        write!(f, "NodeId: [epoch: {}, round: {}, author: {}]", self.epoch, self.round, self.author)
     }
 }
 
@@ -394,10 +363,7 @@ pub struct NodeCertificate {
 
 impl NodeCertificate {
     pub fn new(metadata: NodeMetadata, signatures: AggregateSignature) -> Self {
-        Self {
-            metadata,
-            signatures,
-        }
+        Self { metadata, signatures }
     }
 
     pub fn metadata(&self) -> &NodeMetadata {
@@ -459,10 +425,7 @@ pub struct CertifiedNodeMessage {
 
 impl CertifiedNodeMessage {
     pub fn new(certified_node: CertifiedNode, ledger_info: LedgerInfoWithSignatures) -> Self {
-        Self {
-            certified_node,
-            ledger_info,
-        }
+        Self { certified_node, ledger_info }
     }
 
     pub fn certified_node(self) -> CertifiedNode {
@@ -506,10 +469,7 @@ pub struct Vote {
 
 impl Vote {
     pub(crate) fn new(metadata: NodeMetadata, signature: Signature) -> Self {
-        Self {
-            metadata,
-            signature,
-        }
+        Self { metadata, signature }
     }
 
     pub fn signature(&self) -> &Signature {
@@ -573,9 +533,8 @@ impl BroadcastStatus<DAGMessage, DAGRpcResult> for Arc<SignatureBuilder> {
         let (partial_signatures, tx) = guard.deref_mut();
         partial_signatures.add_signature(peer, ack.signature);
 
-        if tx.is_some()
-            && self
-                .epoch_state
+        if tx.is_some() &&
+            self.epoch_state
                 .verifier
                 .check_voting_power(partial_signatures.signatures().keys(), true)
                 .is_ok()
@@ -591,7 +550,8 @@ impl BroadcastStatus<DAGMessage, DAGRpcResult> for Arc<SignatureBuilder> {
             observe_node(self.metadata.timestamp(), NodeStage::CertAggregated);
             let certificate = NodeCertificate::new(self.metadata.clone(), aggregated_signature);
 
-            // Invariant Violation: The one-shot channel sender must exist to send the NodeCertificate
+            // Invariant Violation: The one-shot channel sender must exist to send the
+            // NodeCertificate
             _ = tx
                 .take()
                 .expect("The one-shot channel sender must exist to send the NodeCertificate")
@@ -613,10 +573,7 @@ pub struct CertificateAckState {
 
 impl CertificateAckState {
     pub fn new(num_validators: usize) -> Arc<Self> {
-        Arc::new(Self {
-            num_validators,
-            received: Mutex::new(HashSet::new()),
-        })
+        Arc::new(Self { num_validators, received: Mutex::new(HashSet::new()) })
     }
 }
 
@@ -663,8 +620,8 @@ impl BroadcastStatus<DAGMessage, DAGRpcResult> for Arc<CertificateAckState> {
 }
 
 /// Represents a request to fetch missing dependencies for `target`, `start_round` represents
-/// the first round we care about in the DAG, `exists_bitmask` is a two dimensional bitmask represents
-/// if a node exist at [start_round + index][validator_index].
+/// the first round we care about in the DAG, `exists_bitmask` is a two dimensional bitmask
+/// represents if a node exist at [start_round + index][validator_index].
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct RemoteFetchRequest {
     epoch: u64,
@@ -674,11 +631,7 @@ pub struct RemoteFetchRequest {
 
 impl RemoteFetchRequest {
     pub fn new(epoch: u64, targets: Vec<NodeMetadata>, exists_bitmask: DagSnapshotBitmask) -> Self {
-        Self {
-            epoch,
-            targets,
-            exists_bitmask,
-        }
+        Self { epoch, targets, exists_bitmask }
     }
 
     pub fn epoch(&self) -> u64 {
@@ -703,10 +656,7 @@ impl RemoteFetchRequest {
 
     pub fn verify(&self, verifier: &ValidatorVerifier) -> anyhow::Result<()> {
         ensure!(
-            self.exists_bitmask
-                .bitmask
-                .iter()
-                .all(|round| round.len() == verifier.len()),
+            self.exists_bitmask.bitmask.iter().all(|round| round.len() == verifier.len()),
             "invalid bitmask: each round length is not equal to validator count"
         );
         ensure!(!self.targets.is_empty(), "Targets is empty");
@@ -716,8 +666,8 @@ impl RemoteFetchRequest {
             "Target round is not consistent"
         );
         ensure!(
-            self.exists_bitmask.first_round() + self.exists_bitmask.bitmask.len() as u64 - 1
-                == target_round,
+            self.exists_bitmask.first_round() + self.exists_bitmask.bitmask.len() as u64 - 1 ==
+                target_round,
             "Bitmask length doesn't match, first_round {}, length {}, target {}",
             self.exists_bitmask.first_round(),
             self.exists_bitmask.bitmask.len(),
@@ -729,7 +679,8 @@ impl RemoteFetchRequest {
 }
 
 /// Represents a response to FetchRequest, `certified_nodes` are indexed by [round][validator_index]
-/// It should fill in gaps from the `exists_bitmask` according to the parents from the `target_digest` node.
+/// It should fill in gaps from the `exists_bitmask` according to the parents from the
+/// `target_digest` node.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct FetchResponse {
     epoch: u64,
@@ -738,10 +689,7 @@ pub struct FetchResponse {
 
 impl FetchResponse {
     pub fn new(epoch: u64, certified_nodes: Vec<CertifiedNode>) -> Self {
-        Self {
-            epoch,
-            certified_nodes,
-        }
+        Self { epoch, certified_nodes }
     }
 
     pub fn certified_nodes(self) -> Vec<CertifiedNode> {
@@ -768,9 +716,7 @@ impl FetchResponse {
             "nodes don't match requested bitmask"
         );
         ensure!(
-            self.certified_nodes
-                .iter()
-                .all(|node| node.verify(validator_verifier).is_ok()),
+            self.certified_nodes.iter().all(|node| node.verify(validator_verifier).is_ok()),
             "unable to verify certified nodes"
         );
 
@@ -852,15 +798,15 @@ impl DAGMessage {
             DAGMessage::NodeMsg(node) => node.verify(sender, verifier),
             DAGMessage::CertifiedNodeMsg(certified_node) => certified_node.verify(sender, verifier),
             DAGMessage::FetchRequest(fetch_request) => fetch_request.verify(verifier),
-            DAGMessage::VoteMsg(_)
-            | DAGMessage::CertifiedAckMsg(_)
-            | DAGMessage::FetchResponse(_) => {
+            DAGMessage::VoteMsg(_) |
+            DAGMessage::CertifiedAckMsg(_) |
+            DAGMessage::FetchResponse(_) => {
                 bail!("Unexpected to verify {} in rpc handler", self.name())
-            },
+            }
             #[cfg(test)]
             DAGMessage::TestMessage(_) | DAGMessage::TestAck(_) => {
                 bail!("Unexpected to verify {}", self.name())
-            },
+            }
         }
     }
 }
@@ -972,10 +918,7 @@ pub struct DagSnapshotBitmask {
 
 impl DagSnapshotBitmask {
     pub fn new(first_round: Round, bitmask: Vec<Vec<bool>>) -> Self {
-        Self {
-            bitmask,
-            first_round,
-        }
+        Self { bitmask, first_round }
     }
 
     pub fn has(&self, round: Round, author_idx: usize) -> bool {

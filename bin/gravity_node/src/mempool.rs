@@ -2,8 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::RethTransactionPool;
 use alloy_consensus::{transaction::SignerRecoverable, Transaction};
-use alloy_eips::Decodable2718;
-use alloy_eips::Encodable2718;
+use alloy_eips::{Decodable2718, Encodable2718};
 use alloy_primitives::Address;
 use block_buffer_manager::TxPool;
 use dashmap::DashMap;
@@ -12,10 +11,11 @@ use gaptos::api_types::{
     u256_define::TxnHash,
     VerifiedTxn,
 };
-use greth::reth_transaction_pool::PoolTransaction;
 use greth::{
     reth_primitives::{Recovered, TransactionSigned},
-    reth_transaction_pool::{EthPooledTransaction, TransactionPool, ValidPoolTransaction},
+    reth_transaction_pool::{
+        EthPooledTransaction, PoolTransaction, TransactionPool, ValidPoolTransaction,
+    },
 };
 
 pub struct Mempool {

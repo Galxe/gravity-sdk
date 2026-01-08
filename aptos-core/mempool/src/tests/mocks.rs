@@ -8,23 +8,19 @@ use crate::{
     MempoolClientSender, QuorumStoreRequest,
 };
 use anyhow::{format_err, Result};
-use gaptos::aptos_channels::{self};
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_mempool_notifications::{self, MempoolNotifier};
-use gaptos::aptos_network::protocols::network::{NewNetworkEvents, NewNetworkSender};
-use gaptos::aptos_storage_interface::DbReaderWriter;
-use gaptos::aptos_types::{
-    mempool_status::MempoolStatusCode,
-    transaction::SignedTransaction,
+use gaptos::{
+    aptos_channels::{self},
+    aptos_infallible::Mutex,
+    aptos_mempool_notifications::{self, MempoolNotifier},
+    aptos_network::protocols::network::{NewNetworkEvents, NewNetworkSender},
+    aptos_storage_interface::DbReaderWriter,
+    aptos_types::{mempool_status::MempoolStatusCode, transaction::SignedTransaction},
 };
 // use aptos_vm_validator::{
 //     mocks::mock_vm_validator::MockVMValidator, vm_validator::TransactionValidation,
 // };
 use futures::channel::mpsc;
-use std::{
-    collections::BTreeMap,
-    sync::Arc,
-};
+use std::{collections::BTreeMap, sync::Arc};
 use tokio::runtime::Handle;
 
 /// Mock of a running instance of shared mempool.
@@ -71,10 +67,7 @@ impl MockSharedMempool {
 
     /// Creates a mock of a running instance of shared mempool inside a tokio runtime;
     /// Holds a runtime handle instead.
-    pub fn new_in_runtime<V>(
-        db: &DbReaderWriter,
-        validator: V,
-    ) -> Self {
+    pub fn new_in_runtime<V>(db: &DbReaderWriter, validator: V) -> Self {
         let handle = Handle::current();
         let (ac_client, mempool, quorum_store_sender, mempool_notifier) =
             Self::start(&handle, db, validator);
@@ -105,8 +98,8 @@ impl MockSharedMempool {
         // let mempool = Arc::new(Mutex::new(CoreMempool::new(&config)));
         // let (network_reqs_tx, _network_reqs_rx) = aptos_channel::new(QueueStyle::FIFO, 8, None);
         // let (connection_reqs_tx, _) = aptos_channel::new(QueueStyle::FIFO, 8, None);
-        // let (_network_notifs_tx, network_notifs_rx) = aptos_channel::new(QueueStyle::FIFO, 8, None);
-        // let network_sender = NetworkSender::new(
+        // let (_network_notifs_tx, network_notifs_rx) = aptos_channel::new(QueueStyle::FIFO, 8,
+        // None); let network_sender = NetworkSender::new(
         //     PeerManagerRequestSender::new(network_reqs_tx),
         //     ConnectionRequestSender::new(connection_reqs_tx),
         // );
@@ -171,8 +164,8 @@ impl MockSharedMempool {
                         None,
                         Some(BroadcastPeerPriority::Primary),
                     )
-                    .code
-                    != MempoolStatusCode::Accepted
+                    .code !=
+                    MempoolStatusCode::Accepted
                 {
                     return Err(format_err!("failed to insert into mock mempool"));
                 };

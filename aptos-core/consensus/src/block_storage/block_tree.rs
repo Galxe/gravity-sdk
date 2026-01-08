@@ -8,24 +8,30 @@ use crate::{
     persistent_liveness_storage::PersistentLivenessStorage,
 };
 use anyhow::bail;
-use aptos_consensus_types::common::Round;
 use aptos_consensus_types::{
-    pipelined_block::PipelinedBlock, quorum_cert::QuorumCert,
-    timeout_2chain::TwoChainTimeoutCertificate, vote_data::VoteData,
+    common::{Payload, Round},
+    pipelined_block::PipelinedBlock,
+    quorum_cert::QuorumCert,
+    timeout_2chain::TwoChainTimeoutCertificate,
+    vote_data::VoteData,
     wrapped_ledger_info::WrappedLedgerInfo,
 };
-use gaptos::aptos_crypto::{hash::GENESIS_BLOCK_ID, HashValue};
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_types::{block_info::BlockInfo, ledger_info::LedgerInfoWithSignatures};
+use gaptos::{
+    aptos_consensus::counters,
+    aptos_crypto::{hash::GENESIS_BLOCK_ID, HashValue},
+    aptos_logger::prelude::*,
+    aptos_types::{block_info::BlockInfo, ledger_info::LedgerInfoWithSignatures},
+};
 use mirai_annotations::{checked_verify_eq, precondition};
 use std::{
-    collections::{vec_deque::VecDeque, HashMap, HashSet}, fmt::{self, Display}, sync::Arc
+    collections::{vec_deque::VecDeque, HashMap, HashSet},
+    fmt::{self, Display},
+    sync::Arc,
 };
-use aptos_consensus_types::common::Payload;
-use gaptos::aptos_consensus::counters as counters;
 
-/// This structure is a wrapper of [`ExecutedBlock`](aptos_consensus_types::pipelined_block::PipelinedBlock)
-/// that adds `children` field to know the parent-child relationship between blocks.
+/// This structure is a wrapper of
+/// [`ExecutedBlock`](aptos_consensus_types::pipelined_block::PipelinedBlock) that adds `children`
+/// field to know the parent-child relationship between blocks.
 struct LinkableBlock {
     /// Executed block that has raw block data and execution output.
     executed_block: Arc<PipelinedBlock>,
@@ -35,10 +41,7 @@ struct LinkableBlock {
 
 impl LinkableBlock {
     pub fn new(block: PipelinedBlock) -> Self {
-        Self {
-            executed_block: Arc::new(block),
-            children: HashSet::new(),
-        }
+        Self { executed_block: Arc::new(block), children: HashSet::new() }
     }
 
     pub fn executed_block(&self) -> &Arc<PipelinedBlock> {
@@ -50,11 +53,7 @@ impl LinkableBlock {
     }
 
     pub fn add_child(&mut self, child_id: HashValue) {
-        assert!(
-            self.children.insert(child_id),
-            "Block {:x} already existed.",
-            child_id,
-        );
+        assert!(self.children.insert(child_id), "Block {:x} already existed.", child_id,);
     }
 }
 
@@ -148,20 +147,32 @@ impl BlockTree {
 
     pub fn is_head_block_qc(&self) -> bool {
         info!("is_last_block_qc {:?}", self.id_to_quorum_cert.get(&self.head_block_id));
-        self.id_to_quorum_cert
-            .get(&self.head_block_id)
-            .is_some()
+        self.id_to_quorum_cert.get(&self.head_block_id).is_some()
     }
 
     fn build_node_string(&self, block_id: &HashValue) -> String {
-        let block = self.id_to_block.get(block_id).expect(&format!("failed to get block for id {:?}", block_id));
+        let block = self
+            .id_to_block
+            .get(block_id)
+            .expect(&format!("failed to get block for id {:?}", block_id));
         let transactions = block.executed_block.input_transactions();
         format!("input {:?}\n, payload is {:?}", transactions, block.executed_block.payload())
     }
-    fn build_tree_string(&self, block_id: &HashValue, result: &mut String, prefix: &str, is_last: bool) {
+    fn build_tree_string(
+        &self,
+        block_id: &HashValue,
+        result: &mut String,
+        prefix: &str,
+        is_last: bool,
+    ) {
         if let Some(block) = self.id_to_block.get(block_id) {
             let node_info = self.build_node_string(block_id);
-            result.push_str(&format!("{}{}── Block ID: {:?}\n", prefix, if is_last { "└" } else { "├" }, block_id));
+            result.push_str(&format!(
+                "{}{}── Block ID: {:?}\n",
+                prefix,
+                if is_last { "└" } else { "├" },
+                block_id
+            ));
             let transaction_prefix = format!("{}{}   ", prefix, if is_last { " " } else { "│" });
             for line in node_info.lines() {
                 result.push_str(&format!("{}│  {}\n", transaction_prefix, line));
@@ -203,10 +214,8 @@ impl BlockTree {
 
         let root_quorum_cert = Arc::new(root_quorum_cert);
         let mut id_to_quorum_cert = HashMap::new();
-        id_to_quorum_cert.insert(
-            root_quorum_cert.certified_block().id(),
-            Arc::clone(&root_quorum_cert),
-        );
+        id_to_quorum_cert
+            .insert(root_quorum_cert.certified_block().id(), Arc::clone(&root_quorum_cert));
 
         let pruned_block_ids = VecDeque::with_capacity(max_pruned_blocks_in_mem);
 
@@ -252,8 +261,7 @@ impl BlockTree {
     // This method is used in pruning and length query,
     // to reflect the actual root, we use commit root
     fn linkable_root(&self) -> &LinkableBlock {
-        self.get_linkable_block(&self.commit_root_id)
-            .expect("Root must exist")
+        self.get_linkable_block(&self.commit_root_id).expect("Root must exist")
     }
 
     fn remove_block(&mut self, block_id: HashValue) {
@@ -267,18 +275,15 @@ impl BlockTree {
     }
 
     pub(super) fn get_block(&self, block_id: &HashValue) -> Option<Arc<PipelinedBlock>> {
-        self.get_linkable_block(block_id)
-            .map(|lb| lb.executed_block().clone())
+        self.get_linkable_block(block_id).map(|lb| lb.executed_block().clone())
     }
 
     pub(super) fn ordered_root(&self) -> Arc<PipelinedBlock> {
-        self.get_block(&self.ordered_root_id)
-            .expect("Root must exist")
+        self.get_block(&self.ordered_root_id).expect("Root must exist")
     }
 
     pub(super) fn commit_root(&self) -> Arc<PipelinedBlock> {
-        self.get_block(&self.commit_root_id)
-            .expect("Commit root must exist")
+        self.get_block(&self.commit_root_id).expect("Commit root must exist")
     }
 
     pub(super) fn highest_certified_block(&self) -> Arc<PipelinedBlock> {
@@ -336,7 +341,7 @@ impl BlockTree {
                     if block.parent_id() != *GENESIS_BLOCK_ID {
                         bail!("Parent block {} not found", block.parent_id())
                     }
-                },
+                }
             };
             let linkable_block = LinkableBlock::new(block);
             let arc_block = Arc::clone(linkable_block.executed_block());
@@ -364,9 +369,9 @@ impl BlockTree {
         precondition!({
             let qc_round = qc.certified_block().round();
             self.id_to_quorum_cert.values().all(|x| {
-                (*(*x).ledger_info()).ledger_info().consensus_data_hash()
-                    == (*(*qc).ledger_info()).ledger_info().consensus_data_hash()
-                    || x.certified_block().round() != qc_round
+                (*(*x).ledger_info()).ledger_info().consensus_data_hash() ==
+                    (*(*qc).ledger_info()).ledger_info().consensus_data_hash() ||
+                    x.certified_block().round() != qc_round
             })
         });
 
@@ -379,16 +384,15 @@ impl BlockTree {
                     }
                     self.highest_quorum_cert = Arc::clone(&qc);
                 }
-            },
+            }
             None => bail!("Block {} not found", block_id),
         }
 
-        self.id_to_quorum_cert
-            .entry(block_id)
-            .or_insert_with(|| Arc::clone(&qc));
+        self.id_to_quorum_cert.entry(block_id).or_insert_with(|| Arc::clone(&qc));
 
         if self.highest_ordered_cert.commit_info().round() < qc.commit_info().round() {
-            // Question: We are updating highest_ordered_cert but not highest_ordered_root. Is that fine?
+            // Question: We are updating highest_ordered_cert but not highest_ordered_root. Is that
+            // fine?
             self.highest_ordered_cert = Arc::new(qc.into_wrapped_ledger_info());
         }
 
@@ -412,7 +416,10 @@ impl BlockTree {
     /// B3--> B4, root = B3
     ///
     /// Note this function is read-only, use with process_pruned_blocks to do the actual prune.
-    pub(super) fn find_blocks_to_prune(&self, next_root_id: HashValue) -> VecDeque<(u64, HashValue)> {
+    pub(super) fn find_blocks_to_prune(
+        &self,
+        next_root_id: HashValue,
+    ) -> VecDeque<(u64, HashValue)> {
         // Nothing to do if this is the commit root
         if next_root_id == self.commit_root_id {
             return VecDeque::new();
@@ -426,13 +433,12 @@ impl BlockTree {
                 if next_root_id == *child_id {
                     continue;
                 }
-                blocks_to_be_pruned.push(
-                    self.get_linkable_block(child_id)
-                        .expect("Child must exist in the tree"),
-                );
+                blocks_to_be_pruned
+                    .push(self.get_linkable_block(child_id).expect("Child must exist in the tree"));
             }
             // Track all the block ids removed
-            blocks_pruned.push_back((block_to_remove.executed_block().epoch(), block_to_remove.id()));
+            blocks_pruned
+                .push_back((block_to_remove.executed_block().epoch(), block_to_remove.id()));
         }
         blocks_pruned
     }
@@ -456,12 +462,17 @@ impl BlockTree {
     /// Note that we do not necessarily remove the pruned blocks: they're kept in a separate buffer
     /// for some time in order to enable other peers to retrieve the blocks even after they've
     /// been committed.
-    pub(super) fn process_pruned_blocks(&mut self, mut newly_pruned_blocks: VecDeque<(u64, HashValue)>) {
+    pub(super) fn process_pruned_blocks(
+        &mut self,
+        mut newly_pruned_blocks: VecDeque<(u64, HashValue)>,
+    ) {
         counters::NUM_BLOCKS_IN_TREE.sub(newly_pruned_blocks.len() as i64);
         // The newly pruned blocks are pushed back to the deque pruned_block_ids.
         // In case the overall number of the elements is greater than the predefined threshold,
         // the oldest elements (in the front of the deque) are removed from the tree.
-        newly_pruned_blocks.into_iter().for_each(|(_, block_id)| self.pruned_block_ids.push_back(block_id));
+        newly_pruned_blocks
+            .into_iter()
+            .for_each(|(_, block_id)| self.pruned_block_ids.push_back(block_id));
         if self.pruned_block_ids.len() > self.max_pruned_blocks_in_mem {
             let num_blocks_to_remove = self.pruned_block_ids.len() - self.max_pruned_blocks_in_mem;
             for _ in 0..num_blocks_to_remove {
@@ -472,8 +483,8 @@ impl BlockTree {
         }
     }
 
-    /// Returns all the blocks between the commit root and the given block, including the given block
-    /// but excluding the root.
+    /// Returns all the blocks between the commit root and the given block, including the given
+    /// block but excluding the root.
     /// In case a given block is not the successor of the root, return None.
     /// While generally the provided blocks should always belong to the active tree, there might be
     /// a race, in which the root of the tree is propagated forward between retrieving the block
@@ -491,11 +502,11 @@ impl BlockTree {
             match self.get_block(&cur_block_id) {
                 Some(ref block) if block.round() <= root_round => {
                     break;
-                },
+                }
                 Some(block) => {
                     cur_block_id = block.parent_id();
                     res.push(block);
-                },
+                }
                 None => return None,
             }
         }
@@ -526,7 +537,8 @@ impl BlockTree {
         self.max_pruned_blocks_in_mem
     }
 
-    /// Update the counters for committed blocks and prune them from the in-memory and persisted store.
+    /// Update the counters for committed blocks and prune them from the in-memory and persisted
+    /// store.
     pub fn commit_callback(
         &mut self,
         storage: Arc<dyn PersistentLivenessStorage>,
@@ -575,9 +587,9 @@ impl BlockTree {
     //         block_id = block_id,
     //     );
 
-    //     let prune_block_id = blocks_to_commit.first().expect("pipeline is empty").clone().parent_id();
-    //     let ids_to_remove = self.find_blocks_to_prune(prune_block_id);
-    //     self.process_pruned_blocks(ids_to_remove);
+    //     let prune_block_id = blocks_to_commit.first().expect("pipeline is
+    // empty").clone().parent_id();     let ids_to_remove =
+    // self.find_blocks_to_prune(prune_block_id);     self.process_pruned_blocks(ids_to_remove);
     //     self.update_highest_commit_cert(commit_proof);
     // }
 }
@@ -592,10 +604,8 @@ impl BlockTree {
         while let Some(block) = to_visit.pop() {
             res += 1;
             for child_id in block.children() {
-                to_visit.push(
-                    self.get_linkable_block(child_id)
-                        .expect("Child must exist in the tree"),
-                );
+                to_visit
+                    .push(self.get_linkable_block(child_id).expect("Child must exist in the tree"));
             }
         }
         res

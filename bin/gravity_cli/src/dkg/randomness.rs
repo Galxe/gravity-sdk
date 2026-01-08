@@ -54,10 +54,7 @@ impl RandomnessCommand {
             .danger_accept_invalid_hostnames(true)
             .build()?;
 
-        let response = client
-            .get(&url)
-            .send()
-            .await?;
+        let response = client.get(&url).send().await?;
 
         let status_code = response.status();
         if !status_code.is_success() {

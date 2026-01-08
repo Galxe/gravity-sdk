@@ -15,11 +15,6 @@ use crate::{
     util::time_service::TimeService,
 };
 use anyhow::{bail, ensure, format_err, Context};
-use gaptos::{api_types::{
-    account::ExternalAccountAddress, compute_res::ComputeRes, u256_define::{BlockId, Random}, ExternalBlock, ExternalBlockMeta
-}, aptos_types::{jwks, randomness::{RandMetadata, Randomness}, validator_txn::ValidatorTransaction}};
-use aptos_mempool::core_mempool::transaction::VerifiedTxn;
-use block_buffer_manager::{block_buffer_manager::BlockHashRef, get_block_buffer_manager};
 use aptos_consensus_types::{
     block::Block,
     common::Round,
@@ -29,16 +24,29 @@ use aptos_consensus_types::{
     timeout_2chain::TwoChainTimeoutCertificate,
     wrapped_ledger_info::WrappedLedgerInfo,
 };
-use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::StateComputeResult;
-use gaptos::aptos_infallible::{Mutex, RwLock};
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_metrics_core::{register_int_gauge_vec, IntGaugeHelper, IntGaugeVec};
-use gaptos::aptos_types::{
-    aggregate_signature::AggregateSignature,
-    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
-};
+use aptos_mempool::core_mempool::transaction::VerifiedTxn;
+use block_buffer_manager::{block_buffer_manager::BlockHashRef, get_block_buffer_manager};
 use futures::executor::block_on;
+use gaptos::{
+    api_types::{
+        account::ExternalAccountAddress,
+        compute_res::ComputeRes,
+        u256_define::{BlockId, Random},
+        ExternalBlock, ExternalBlockMeta,
+    },
+    aptos_crypto::HashValue,
+    aptos_infallible::{Mutex, RwLock},
+    aptos_logger::prelude::*,
+    aptos_metrics_core::{register_int_gauge_vec, IntGaugeHelper, IntGaugeVec},
+    aptos_types::{
+        aggregate_signature::AggregateSignature,
+        jwks,
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+        randomness::{RandMetadata, Randomness},
+        validator_txn::ValidatorTransaction,
+    },
+};
 use once_cell::sync::Lazy;
 
 #[cfg(test)]
@@ -49,7 +57,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::{collections::BTreeMap, io::Read, sync::Arc, time::Duration};
 
-use gaptos::aptos_consensus::counters as counters;
+use gaptos::aptos_consensus::counters;
 
 #[cfg(test)]
 #[path = "block_store_test.rs"]
@@ -59,22 +67,16 @@ mod block_store_test;
 pub mod sync_manager;
 
 static CUR_RECOVER_BLOCK_NUMBER_GAUGE: Lazy<IntGaugeVec> = Lazy::new(|| {
-     register_int_gauge_vec!(
-         "aptos_current_recover_block_number",
-         "Current reccover block number",
-         &[]
-     )
-     .unwrap()
- });
- 
- static RECOVERY_GAUGE: Lazy<IntGaugeVec> = Lazy::new(|| {
-     register_int_gauge_vec!(
-         "aptos_recovery",
-         "is recovery or not",
-         &[]
-     )
-     .unwrap()
- });
+    register_int_gauge_vec!(
+        "aptos_current_recover_block_number",
+        "Current reccover block number",
+        &[]
+    )
+    .unwrap()
+});
+
+static RECOVERY_GAUGE: Lazy<IntGaugeVec> =
+    Lazy::new(|| register_int_gauge_vec!("aptos_recovery", "is recovery or not", &[]).unwrap());
 
 static SET_RANDOMNESS_FROM_DB_COUNTER: Lazy<IntGaugeVec> = Lazy::new(|| {
     register_int_gauge_vec!(
@@ -217,21 +219,24 @@ impl BlockStore {
         RECOVERY_GAUGE.set_with(&[], 1);
         // reproduce the same batches (important for the commit phase)
         let mut certs = self.inner.read().get_all_quorum_certs_with_commit_info();
-        let last_ledger_info = self.storage.consensus_db().ledger_db.metadata_db().get_latest_ledger_info();
+        let last_ledger_info =
+            self.storage.consensus_db().ledger_db.metadata_db().get_latest_ledger_info();
         info!("recover blocks, last_ledger_info: {:?}", last_ledger_info);
         certs.sort_unstable_by_key(|qc| qc.commit_info().round());
         for qc in certs {
             if qc.commit_info().round() > self.commit_root().round() {
                 if let Some(last_ledger_info) = &last_ledger_info {
-                    if last_ledger_info.ledger_info().epoch() == qc.commit_info().epoch()
-                        && qc.commit_info().round() <= last_ledger_info.commit_info().round()
+                    if last_ledger_info.ledger_info().epoch() == qc.commit_info().epoch() &&
+                        qc.commit_info().round() <= last_ledger_info.commit_info().round()
                     {
                         info!(
                             "sending qc {} to execution, current commit round {}",
                             qc.commit_info().round(),
                             self.commit_root().round()
                         );
-                        if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info(), true).await {
+                        if let Err(e) =
+                            self.send_for_execution(qc.into_wrapped_ledger_info(), true).await
+                        {
                             error!("Error in try-committing blocks. {}", e.to_string());
                             break;
                         }
@@ -253,19 +258,18 @@ impl BlockStore {
         let commit_root = self.commit_root();
         let commit_round = commit_root.round();
         let mut cursor = ordered_root.clone();
-        
-        loop {
 
-            if cursor.round() <= commit_round  {
+        loop {
+            if cursor.round() <= commit_round {
                 break;
             }
-            
+
             if cursor.randomness().is_some() {
                 // Found randomness, get the quorum cert for this block
                 let qc = self.get_quorum_cert_for_block(cursor.id()).unwrap();
                 return Arc::new(qc.into_wrapped_ledger_info());
             }
-            
+
             match self.get_block(cursor.parent_id()) {
                 Some(parent) => {
                     cursor = parent;
@@ -273,37 +277,39 @@ impl BlockStore {
                 None => break,
             }
         }
-        
+
         // No randomness found on the path, return highest_commit_cert
         self.highest_commit_cert()
     }
 
-    /// Check if there are blocks without randomness on the path from highest_ordered_cert to highest_commit_cert
-    /// 
+    /// Check if there are blocks without randomness on the path from highest_ordered_cert to
+    /// highest_commit_cert
+    ///
     /// Returns:
     /// - (false, None): Fast return conditions are met, no sync needed
     /// - (true, Some(cert)): Found the closest block to highest_commit_cert without randomness
     /// - (false, Some(cert)): All blocks on path have randomness, use highest_commit_cert
-    /// 
+    ///
     /// Fast return conditions:
     /// - randomness is not enabled
     /// - in epoch 1
     /// - ledger_info round is 0
     pub fn find_missing_randomness_block_on_path(
-        &self, 
-        ledger_info: &LedgerInfoWithSignatures
+        &self,
+        ledger_info: &LedgerInfoWithSignatures,
     ) -> (bool, Option<Arc<WrappedLedgerInfo>>) {
         // Fast return: these conditions mean no special handling is needed
-        if !self.enable_randomness 
-            || self.ordered_root().epoch() == 1 
-            || ledger_info.commit_info().round() == 0 {
+        if !self.enable_randomness ||
+            self.ordered_root().epoch() == 1 ||
+            ledger_info.commit_info().round() == 0
+        {
             return (false, None);
         }
-        
+
         // Start from highest_ordered_cert
         let highest_ordered_cert = self.highest_ordered_cert();
         let highest_ordered_block_id = highest_ordered_cert.commit_info().id();
-        
+
         // Get the starting block
         let Some(mut cursor) = self.get_block(highest_ordered_block_id) else {
             // If we can't find the highest ordered block, return highest_commit_cert
@@ -314,23 +320,23 @@ impl BlockStore {
             );
             return (false, Some(self.highest_commit_cert()));
         };
-        
+
         // Use highest_commit_cert instead of commit_root as the traversal endpoint
         let highest_commit_cert = self.highest_commit_cert();
         let commit_round = highest_commit_cert.commit_info().round();
         let mut closest_block_without_randomness: Option<Arc<PipelinedBlock>> = None;
-        
+
         // Traverse the path from highest_ordered_cert to highest_commit_cert
         loop {
             if cursor.round() <= commit_round {
                 break;
             }
-            
+
             // Record blocks without randomness (keep the one closest to highest_commit_cert)
             if cursor.randomness().is_none() {
                 closest_block_without_randomness = Some(cursor.clone());
             }
-            
+
             match self.get_block(cursor.parent_id()) {
                 Some(parent) => {
                     cursor = parent;
@@ -338,15 +344,16 @@ impl BlockStore {
                 None => break,
             }
         }
-        
+
         // If found a block without randomness
         if let Some(block) = closest_block_without_randomness {
-            let cert = self.get_quorum_cert_for_block(block.id())
+            let cert = self
+                .get_quorum_cert_for_block(block.id())
                 .map(|qc| Arc::new(qc.into_wrapped_ledger_info()))
                 .unwrap_or_else(|| self.highest_commit_cert());
             return (true, Some(cert));
         }
-        
+
         // No block without randomness found, return highest_commit_cert
         (false, Some(self.highest_commit_cert()))
     }
@@ -423,7 +430,9 @@ impl BlockStore {
         for p_block in ordered_blocks {
             if let Some(parent_block) = self.get_block(p_block.parent_id()) {
                 block_number = parent_block.block().block_number().unwrap() + 1;
-            } else if let Ok(Some(parent_block)) = self.storage.consensus_db().get_block(p_block.epoch(), p_block.parent_id()) {
+            } else if let Ok(Some(parent_block)) =
+                self.storage.consensus_db().get_block(p_block.epoch(), p_block.parent_id())
+            {
                 block_number = parent_block.block_number().unwrap() + 1;
             } else {
                 panic!("Cannot find the parent_block id {}", p_block.parent_id());
@@ -434,7 +443,11 @@ impl BlockStore {
             }
             info!("init block {}, block number is {}", p_block.block().id(), block_number);
             p_block.block().set_block_number(block_number);
-            block_numbers.push((p_block.block().epoch(), p_block.block().block_number().unwrap(), p_block.block().id()));
+            block_numbers.push((
+                p_block.block().epoch(),
+                p_block.block().block_number().unwrap(),
+                p_block.block().id(),
+            ));
         }
         if block_numbers.len() != 0 {
             self.storage.save_tree(vec![], vec![], block_numbers).unwrap();
@@ -465,7 +478,8 @@ impl BlockStore {
         let storage = self.storage.clone();
         let finality_proof_clone = finality_proof.clone();
         self.pending_blocks.lock().gc(finality_proof.commit_info().round());
-        // This callback is invoked synchronously with and could be used for multiple batches of blocks.
+        // This callback is invoked synchronously with and could be used for multiple batches of
+        // blocks.
         self.init_block_number(&blocks_to_commit);
         if recovery {
             // Recovery mode: process blocks directly without going through execution pipeline
@@ -492,10 +506,12 @@ impl BlockStore {
                 let verified_txns: Vec<VerifiedTxn> = txns.iter().map(|txn| txn.into()).collect();
                 let txn_num = verified_txns.len() as u64;
                 let verified_txns = verified_txns.into_iter().map(|txn| txn.into()).collect();
-                let block_number = p_block.block().block_number()
-                    .ok_or_else(|| format_err!("Block number not found for block {}", p_block.block().id()))?;
-                let block_number_i64: i64 = block_number.try_into()
-                    .map_err(|_| format_err!("Block number {} is too large to convert to i64", block_number))?;
+                let block_number = p_block.block().block_number().ok_or_else(|| {
+                    format_err!("Block number not found for block {}", p_block.block().id())
+                })?;
+                let block_number_i64: i64 = block_number.try_into().map_err(|_| {
+                    format_err!("Block number {} is too large to convert to i64", block_number)
+                })?;
                 CUR_RECOVER_BLOCK_NUMBER_GAUGE.with_label_values(&[]).set(block_number_i64);
                 let maybe_block_hash = match self
                     .storage
@@ -507,11 +523,11 @@ impl BlockStore {
                     Some(block_hash) => Some(ComputeRes::new(*block_hash, txn_num, vec![], vec![])),
                     None => None,
                 };
-                
+
                 let validator_txns = p_block.block().validator_txns();
                 let extra_data = crate::state_computer::process_validator_transactions_util(
-                    validator_txns.map(|v| &**v), 
-                    p_block.block()
+                    validator_txns.map(|v| &**v),
+                    p_block.block(),
                 );
 
                 // In recovery mode, use existing randomness from the block
@@ -538,7 +554,10 @@ impl BlockStore {
                         epoch: p_block.block().epoch(),
                         randomness,
                         block_hash: maybe_block_hash.clone(),
-                        proposer: p_block.block().author().map(|author| ExternalAccountAddress::new(author.into_bytes())),
+                        proposer: p_block
+                            .block()
+                            .author()
+                            .map(|author| ExternalAccountAddress::new(author.into_bytes())),
                     },
                     extra_data,
                     enable_randomness: self.enable_randomness,
@@ -547,12 +566,13 @@ impl BlockStore {
                     .set_ordered_blocks(BlockId(*p_block.parent_id()), block)
                     .await
                     .context("Failed to set ordered blocks during recovery")?;
-                let compute_res = get_block_buffer_manager().get_executed_res(
-                    BlockId(*p_block.id()),
-                    block_number,
-                    p_block.block().epoch(),
-                ).await
-                .context(format!("Failed to get executed result for block {} during recovery", p_block.block().id()))?;
+                let compute_res = get_block_buffer_manager()
+                    .get_executed_res(BlockId(*p_block.id()), block_number, p_block.block().epoch())
+                    .await
+                    .context(format!(
+                        "Failed to get executed result for block {} during recovery",
+                        p_block.block().id()
+                    ))?;
                 let compute_res = compute_res.execution_output;
                 if let Some(block_hash) = maybe_block_hash {
                     assert_eq!(block_hash.data, compute_res.data);
@@ -563,8 +583,8 @@ impl BlockStore {
                     hash: Some(compute_res.data),
                     persist_notifier: None,
                 };
-                let mut persist_notifiers =
-                    get_block_buffer_manager().set_commit_blocks(vec![commit_block], p_block.block().epoch())
+                let mut persist_notifiers = get_block_buffer_manager()
+                    .set_commit_blocks(vec![commit_block], p_block.block().epoch())
                     .await
                     .context("Failed to set commit blocks during recovery")?;
                 for notifier in persist_notifiers.iter_mut() {
@@ -606,7 +626,11 @@ impl BlockStore {
         Ok(())
     }
 
-    pub async fn append_blocks_for_sync(&self, blocks: Vec<(Block, Option<Vec<u8>>)>, quorum_certs: Vec<QuorumCert>) {
+    pub async fn append_blocks_for_sync(
+        &self,
+        blocks: Vec<(Block, Option<Vec<u8>>)>,
+        quorum_certs: Vec<QuorumCert>,
+    ) {
         for (block, _) in blocks {
             self.insert_block(block, true).await.unwrap_or_else(|e| {
                 panic!("[BlockStore] failed to insert block during append blocks for sync {:?}", e)
@@ -670,15 +694,27 @@ impl BlockStore {
         }
         if let Some(block_number) = block.block_number() {
             if !pipelined_block.has_randomness() {
-                if let Ok(Some(randomness)) = self.storage.consensus_db().get_randomness(block_number) {
-                    debug!("Set randomness from DB for block {}, epoch {}, round {}", block_number, block.epoch(), block.round());
+                if let Ok(Some(randomness)) =
+                    self.storage.consensus_db().get_randomness(block_number)
+                {
+                    debug!(
+                        "Set randomness from DB for block {}, epoch {}, round {}",
+                        block_number,
+                        block.epoch(),
+                        block.round()
+                    );
                     SET_RANDOMNESS_FROM_DB_COUNTER.with_label_values(&[]).inc();
                     pipelined_block.set_randomness(Randomness::new(
                         RandMetadata { epoch: block.epoch(), round: block.round() },
-                        randomness
+                        randomness,
                     ));
                 } else {
-                    warn!("No randomness found for block {}, epoch {}, round {}", block, block.epoch(), block.round());
+                    warn!(
+                        "No randomness found for block {}, epoch {}, round {}",
+                        block,
+                        block.epoch(),
+                        block.round()
+                    );
                 }
             }
         }
@@ -818,7 +854,6 @@ impl BlockStore {
     pub fn check_payload(&self, proposal: &Block) -> bool {
         self.payload_manager.check_payload_availability(proposal)
     }
-
 }
 
 impl BlockReader for BlockStore {
@@ -1007,7 +1042,6 @@ impl BlockStore {
     pub(super) fn pruned_blocks_in_mem(&self) -> usize {
         self.inner.read().pruned_blocks_in_mem()
     }
-
 
     /// Helper function to insert the block with the qc together
     pub async fn insert_block_with_qc(&self, block: Block) -> anyhow::Result<Arc<PipelinedBlock>> {

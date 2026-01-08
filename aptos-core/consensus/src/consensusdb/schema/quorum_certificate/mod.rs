@@ -13,10 +13,12 @@
 use crate::define_schema;
 use anyhow::Result;
 use aptos_consensus_types::quorum_cert::QuorumCert;
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_schemadb::{
-    schema::{KeyCodec, ValueCodec},
-    ColumnFamilyName,
+use gaptos::{
+    aptos_crypto::HashValue,
+    aptos_schemadb::{
+        schema::{KeyCodec, ValueCodec},
+        ColumnFamilyName,
+    },
 };
 
 pub const QC_CF_NAME: ColumnFamilyName = "quorum_certificate";
@@ -35,7 +37,7 @@ impl KeyCodec<QCSchema> for (u64, HashValue) {
     fn decode_key(data: &[u8]) -> Result<Self> {
         let seq_num_bytes: [u8; 8] = data[0..8].try_into()?;
         let seq_num = u64::from_be_bytes(seq_num_bytes);
-        let hash_value_data = &data[8..]; 
+        let hash_value_data = &data[8..];
         let hash_value = HashValue::from_slice(hash_value_data)?;
         Ok((seq_num, hash_value))
     }

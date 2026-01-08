@@ -5,45 +5,52 @@ use std::{
 };
 
 use crate::network::extract_network_ids;
-use aptos_consensus::consensusdb::{BlockNumberSchema, BlockSchema, ConsensusDB};
 use aptos_consensus::{
-    gravity_state_computer::ConsensusAdapterArgs, network_interface::ConsensusMsg,
-    persistent_liveness_storage::StorageWriteProxy, quorum_store::quorum_store_db::QuorumStoreDB,
+    consensusdb::{BlockNumberSchema, BlockSchema, ConsensusDB},
+    gravity_state_computer::ConsensusAdapterArgs,
+    network_interface::ConsensusMsg,
+    persistent_liveness_storage::StorageWriteProxy,
+    quorum_store::quorum_store_db::QuorumStoreDB,
 };
 
 use block_buffer_manager::{get_block_buffer_manager, TxPool};
 use gaptos::{
-    api_types::u256_define::BlockId, aptos_dkg_runtime::DKGMessage, aptos_event_notifications::{
-        DbBackedOnChainConfig, EventNotificationListener, ReconfigNotificationListener,
-    }, aptos_logger::info
-};
-use gaptos::{
+    api_types::u256_define::BlockId,
     aptos_channels::{aptos_channel, message_queues::QueueStyle},
     aptos_config::{
         config::{NetworkConfig, NodeConfig, Peer, PeerRole},
         network_id::NetworkId,
     },
+    aptos_dkg_runtime::{start_dkg_runtime, DKGMessage},
+    aptos_event_notifications::{
+        DbBackedOnChainConfig, EventNotificationListener, ReconfigNotificationListener,
+    },
+    aptos_logger::info,
     aptos_network::{
         protocols::network::{NetworkApplicationConfig, NetworkClientConfig, NetworkServiceConfig},
         ProtocolId,
     },
 };
-use gaptos::aptos_dkg_runtime::start_dkg_runtime;
 
-use aptos_mempool::{core_mempool::CoreMempool, shared_mempool::types::CoreMempoolTrait, MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest};
-use futures::channel::mpsc::{Receiver, Sender};
-use gaptos::aptos_consensus_notifications::ConsensusNotifier;
-use gaptos::aptos_crypto::{hash::GENESIS_BLOCK_ID, x25519, HashValue};
-use gaptos::aptos_event_notifications::EventSubscriptionService;
-use gaptos::aptos_mempool_notifications::MempoolNotificationListener;
-use gaptos::aptos_network::application::{
-    interface::{NetworkClient, NetworkServiceEvents},
-    storage::PeersAndMetadata,
+use aptos_mempool::{
+    core_mempool::CoreMempool, shared_mempool::types::CoreMempoolTrait, MempoolClientRequest,
+    MempoolSyncMsg, QuorumStoreRequest,
 };
-use gaptos::aptos_network_builder::builder::NetworkBuilder;
-use gaptos::aptos_storage_interface::DbReaderWriter;
-use gaptos::aptos_types::account_address::AccountAddress;
-use gaptos::aptos_validator_transaction_pool::VTxnPoolState;
+use futures::channel::mpsc::{Receiver, Sender};
+use gaptos::{
+    aptos_consensus_notifications::ConsensusNotifier,
+    aptos_crypto::{hash::GENESIS_BLOCK_ID, x25519, HashValue},
+    aptos_event_notifications::EventSubscriptionService,
+    aptos_mempool_notifications::MempoolNotificationListener,
+    aptos_network::application::{
+        interface::{NetworkClient, NetworkServiceEvents},
+        storage::PeersAndMetadata,
+    },
+    aptos_network_builder::builder::NetworkBuilder,
+    aptos_storage_interface::DbReaderWriter,
+    aptos_types::account_address::AccountAddress,
+    aptos_validator_transaction_pool::VTxnPoolState,
+};
 use serde::{Deserialize, Serialize};
 use tokio::{runtime::Runtime, sync::Mutex};
 
@@ -122,10 +129,8 @@ pub fn create_dkg_runtime(
     };
     let dkg_runtime = match dkg_network_interfaces {
         Some(interfaces) => {
-            let ApplicationNetworkInterfaces {
-                network_client,
-                network_service_events,
-            } = interfaces;
+            let ApplicationNetworkInterfaces { network_client, network_service_events } =
+                interfaces;
             let (reconfig_events, dkg_start_events) = dkg_subscriptions
                 .expect("DKG needs to listen to NewEpochEvents events and DKGStartEvents");
             let my_addr = node_config.validator_network.as_ref().unwrap().peer_id();
@@ -142,13 +147,12 @@ pub fn create_dkg_runtime(
                 node_config.randomness_override_seq_num,
             );
             Some(dkg_runtime)
-        },
+        }
         _ => None,
     };
 
     dkg_runtime
 }
-
 
 pub fn start_consensus(
     node_config: &NodeConfig,
@@ -236,7 +240,6 @@ pub fn init_jwk_consensus(
     )
 }
 
-
 pub fn init_mempool(
     node_config: &NodeConfig,
     db: &DbReaderWriter,
@@ -292,7 +295,13 @@ pub async fn init_block_buffer_manager(consensus_db: &Arc<ConsensusDB>, latest_b
         let start_key = (epoch_i, HashValue::zero());
         let end_key = (epoch_i, HashValue::new([u8::MAX; HashValue::LENGTH]));
         consensus_db
-            .get_range_with_filter::<BlockNumberSchema, _>(&start_key, &end_key, |(_, block_number)| *block_number >= start_block_number && *block_number <= latest_block_number)
+            .get_range_with_filter::<BlockNumberSchema, _>(
+                &start_key,
+                &end_key,
+                |(_, block_number)| {
+                    *block_number >= start_block_number && *block_number <= latest_block_number
+                },
+            )
             .unwrap()
             .into_iter()
             .for_each(|((epoch, block_id), block_number)| {
@@ -303,8 +312,10 @@ pub async fn init_block_buffer_manager(consensus_db: &Arc<ConsensusDB>, latest_b
                 } else {
                     let (cur_epoch, _) = block_number_to_block_id.get(&block_number).unwrap();
                     if *cur_epoch < epoch {
-                        block_number_to_block_id
-                            .insert(block_number, (epoch, BlockId::from_bytes(block_id.as_slice())));
+                        block_number_to_block_id.insert(
+                            block_number,
+                            (epoch, BlockId::from_bytes(block_id.as_slice())),
+                        );
                     }
                 }
             });
@@ -316,7 +327,8 @@ pub async fn init_block_buffer_manager(consensus_db: &Arc<ConsensusDB>, latest_b
 
     // Keep epoch information in block_number_to_block_id
     if start_block_number == 0 {
-        block_number_to_block_id.insert(0u64, (0, BlockId::from_bytes(GENESIS_BLOCK_ID.as_slice())));
+        block_number_to_block_id
+            .insert(0u64, (0, BlockId::from_bytes(GENESIS_BLOCK_ID.as_slice())));
     }
     get_block_buffer_manager().init(latest_block_number, block_number_to_block_id, max_epoch).await;
 }

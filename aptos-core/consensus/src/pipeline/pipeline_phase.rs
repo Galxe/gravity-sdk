@@ -2,17 +2,16 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{
-    pipeline::buffer_manager::{Receiver, Sender},
-};
-use gaptos::aptos_logger::debug;
+use crate::pipeline::buffer_manager::{Receiver, Sender};
 use async_trait::async_trait;
 use futures::{SinkExt, StreamExt};
+use gaptos::{
+    aptos_consensus::counters::BUFFER_MANAGER_PHASE_PROCESS_SECONDS, aptos_logger::debug,
+};
 use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
     Arc,
 };
-use gaptos::aptos_consensus::counters::BUFFER_MANAGER_PHASE_PROCESS_SECONDS;
 #[async_trait]
 pub trait StatelessPipeline: Send + Sync {
     type Request;
@@ -56,10 +55,7 @@ impl<Request> CountedRequest<Request> {
     }
 
     pub fn spawn<OtherRequest>(&self, other_req: OtherRequest) -> CountedRequest<OtherRequest> {
-        CountedRequest {
-            req: other_req,
-            guard: self.guard.spawn(),
-        }
+        CountedRequest { req: other_req, guard: self.guard.spawn() }
     }
 }
 
@@ -77,12 +73,7 @@ impl<T: StatelessPipeline> PipelinePhase<T> {
         processor: Box<T>,
         reset_flag: Arc<AtomicBool>,
     ) -> Self {
-        Self {
-            rx,
-            maybe_tx,
-            processor,
-            reset_flag,
-        }
+        Self { rx, maybe_tx, processor, reset_flag }
     }
 
     pub async fn start(mut self) {

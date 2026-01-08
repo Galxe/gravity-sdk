@@ -4,8 +4,9 @@
 
 use crate::{block::Block, common::Author, proof_of_store::ProofCache, sync_info::SyncInfo};
 use anyhow::{anyhow, ensure, format_err, Context, Result};
-use gaptos::aptos_short_hex_str::AsShortHexStr;
-use gaptos::aptos_types::validator_verifier::ValidatorVerifier;
+use gaptos::{
+    aptos_short_hex_str::AsShortHexStr, aptos_types::validator_verifier::ValidatorVerifier,
+};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -20,10 +21,7 @@ pub struct ProposalMsg {
 impl ProposalMsg {
     /// Creates a new proposal.
     pub fn new(proposal: Block, sync_info: SyncInfo) -> Self {
-        Self {
-            proposal,
-            sync_info,
-        }
+        Self { proposal, sync_info }
     }
 
     pub fn epoch(&self) -> u64 {
@@ -32,14 +30,8 @@ impl ProposalMsg {
 
     /// Verifies that the ProposalMsg is well-formed.
     pub fn verify_well_formed(&self) -> Result<()> {
-        ensure!(
-            !self.proposal.is_nil_block(),
-            "Proposal {} for a NIL block",
-            self.proposal
-        );
-        self.proposal
-            .verify_well_formed()
-            .context("Fail to verify ProposalMsg's block")?;
+        ensure!(!self.proposal.is_nil_block(), "Proposal {} for a NIL block", self.proposal);
+        self.proposal.verify_well_formed().context("Fail to verify ProposalMsg's block")?;
         ensure!(
             self.proposal.round() > 0,
             "Proposal for {} has an incorrect round of 0",
@@ -50,8 +42,8 @@ impl ProposalMsg {
             "ProposalMsg has different epoch number from SyncInfo"
         );
         ensure!(
-            self.proposal.parent_id()
-                == self.sync_info.highest_quorum_cert().certified_block().id(),
+            self.proposal.parent_id() ==
+                self.sync_info.highest_quorum_cert().certified_block().id(),
             "Proposal HQC in SyncInfo certifies {}, but block parent id is {}",
             self.sync_info.highest_quorum_cert().certified_block().id(),
             self.proposal.parent_id(),
@@ -86,13 +78,11 @@ impl ProposalMsg {
         proof_cache: &ProofCache,
         quorum_store_enabled: bool,
     ) -> Result<()> {
-        self.proposal().payload().map_or(Ok(()), |p| {
-            p.verify(validator, proof_cache, quorum_store_enabled)
-        })?;
-
         self.proposal()
-            .validate_signature(validator)
-            .map_err(|e| format_err!("{:?}", e))?;
+            .payload()
+            .map_or(Ok(()), |p| p.verify(validator, proof_cache, quorum_store_enabled))?;
+
+        self.proposal().validate_signature(validator).map_err(|e| format_err!("{:?}", e))?;
         // if there is a timeout certificate, verify its signatures
         if let Some(tc) = self.sync_info.highest_2chain_timeout_cert() {
             tc.verify(validator).map_err(|e| format_err!("{:?}", e))?;
@@ -114,9 +104,7 @@ impl ProposalMsg {
     }
 
     pub fn proposer(&self) -> Author {
-        self.proposal
-            .author()
-            .expect("Proposal should be verified having an author")
+        self.proposal.author().expect("Proposal should be verified having an author")
     }
 }
 

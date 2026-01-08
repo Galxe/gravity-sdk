@@ -11,10 +11,12 @@ use aptos_consensus_types::{
     vote::Vote,
     vote_proposal::VoteProposal,
 };
-use gaptos::aptos_crypto::bls12381;
-use gaptos::aptos_types::{
-    epoch_change::EpochChangeProof,
-    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+use gaptos::{
+    aptos_crypto::bls12381,
+    aptos_types::{
+        epoch_change::EpochChangeProof,
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+    },
 };
 
 /// Interface for SafetyRules

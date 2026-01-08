@@ -23,26 +23,28 @@ use crate::{
     payload_client::PayloadClient,
 };
 use anyhow::{bail, ensure};
-use gaptos::aptos_collections::BoundedVecDeque;
-use gaptos::aptos_config::config::DagPayloadConfig;
 use aptos_consensus_types::common::{Author, Payload, PayloadFilter};
-use gaptos::aptos_crypto::hash::CryptoHash;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::{debug, error};
-use gaptos::aptos_reliable_broadcast::{DropGuard, ReliableBroadcast};
-use gaptos::aptos_time_service::{TimeService, TimeServiceTrait};
-use gaptos::aptos_types::{block_info::Round, epoch_state::EpochState};
-use gaptos::aptos_validator_transaction_pool as vtxn_pool;
 use async_trait::async_trait;
+use counters::{NODE_PAYLOAD_SIZE, NUM_TXNS_PER_NODE};
 use futures::{
     executor::block_on,
     future::{join, AbortHandle, Abortable},
 };
 use futures_channel::oneshot;
+use gaptos::{
+    aptos_collections::BoundedVecDeque,
+    aptos_config::config::DagPayloadConfig,
+    aptos_consensus::dag::observability::counters,
+    aptos_crypto::hash::CryptoHash,
+    aptos_infallible::Mutex,
+    aptos_logger::{debug, error},
+    aptos_reliable_broadcast::{DropGuard, ReliableBroadcast},
+    aptos_time_service::{TimeService, TimeServiceTrait},
+    aptos_types::{block_info::Round, epoch_state::EpochState},
+    aptos_validator_transaction_pool as vtxn_pool,
+};
 use std::{collections::HashSet, sync::Arc, time::Duration};
 use tokio_retry::strategy::ExponentialBackoff;
-use gaptos::aptos_consensus::dag::observability::counters as counters;
-use counters::{NODE_PAYLOAD_SIZE, NUM_TXNS_PER_NODE};
 
 pub(crate) struct DagDriver {
     author: Author,
@@ -84,9 +86,7 @@ impl DagDriver {
         quorum_store_enabled: bool,
         allow_batches_without_pos_in_proposal: bool,
     ) -> Self {
-        let pending_node = storage
-            .get_pending_node()
-            .expect("should be able to read dag storage");
+        let pending_node = storage.get_pending_node().expect("should be able to read dag storage");
         let highest_strong_links_round =
             dag.read().highest_strong_links_round(&epoch_state.verifier);
 
@@ -114,14 +114,8 @@ impl DagDriver {
         if let Some(node) =
             pending_node.filter(|node| node.round() == highest_strong_links_round + 1)
         {
-            debug!(
-                LogSchema::new(LogEvent::NewRound).round(node.round()),
-                "Resume round"
-            );
-            driver
-                .round_state
-                .set_current_round(node.round())
-                .expect("must succeed");
+            debug!(LogSchema::new(LogEvent::NewRound).round(node.round()), "Resume round");
+            driver.round_state.set_current_round(node.round()).expect("must succeed");
             driver.broadcast_node(node);
         } else {
             // kick start a new round
@@ -162,9 +156,7 @@ impl DagDriver {
     fn check_new_round(&self) {
         let (highest_strong_link_round, strong_links) = self.get_highest_strong_links_round();
 
-        let minimum_delay = self
-            .health_backoff
-            .backoff_duration(highest_strong_link_round + 1);
+        let minimum_delay = self.health_backoff.backoff_duration(highest_strong_link_round + 1);
         self.round_state.check_for_new_round(
             highest_strong_link_round,
             strong_links,
@@ -222,9 +214,8 @@ impl DagDriver {
                     PayloadFilter::Empty,
                 )
             } else {
-                let highest_commit_round = self
-                    .ledger_info_provider
-                    .get_highest_committed_anchor_round();
+                let highest_commit_round =
+                    self.ledger_info_provider.get_highest_committed_anchor_round();
 
                 let nodes = dag_reader
                     .reachable(
@@ -237,10 +228,8 @@ impl DagDriver {
 
                 let payload_filter =
                     PayloadFilter::from(&nodes.iter().map(|node| node.payload()).collect());
-                let validator_txn_hashes = nodes
-                    .iter()
-                    .flat_map(|node| node.validator_txns())
-                    .map(|txn| txn.hash());
+                let validator_txn_hashes =
+                    nodes.iter().flat_map(|node| node.validator_txns()).map(|txn| txn.hash());
                 let validator_payload_filter = vtxn_pool::TransactionFilter::PendingTxnHashSet(
                     HashSet::from_iter(validator_txn_hashes),
                 );
@@ -249,9 +238,8 @@ impl DagDriver {
             }
         };
 
-        let (max_txns, max_size_bytes) = self
-            .health_backoff
-            .calculate_payload_limits(new_round, &self.payload_config);
+        let (max_txns, max_size_bytes) =
+            self.health_backoff.calculate_payload_limits(new_round, &self.payload_config);
 
         let (validator_txns, payload) = match self
             .payload_client
@@ -284,15 +272,12 @@ impl DagDriver {
                         self.allow_batches_without_pos_in_proposal,
                     ),
                 )
-            },
+            }
         };
 
         // TODO: need to wait to pass median of parents timestamp
-        let highest_parent_timestamp = strong_links
-            .iter()
-            .map(|node| node.metadata().timestamp())
-            .max()
-            .unwrap_or(0);
+        let highest_parent_timestamp =
+            strong_links.iter().map(|node| node.metadata().timestamp()).max().unwrap_or(0);
         let timestamp = std::cmp::max(
             self.time_service.now_unix_time().as_micros() as u64,
             highest_parent_timestamp + 1,
@@ -307,9 +292,7 @@ impl DagDriver {
             strong_links,
             Extensions::empty(),
         );
-        self.storage
-            .save_pending_node(&new_node)
-            .expect("node must be saved");
+        self.storage.save_pending_node(&new_node).expect("node must be saved");
         self.broadcast_node(new_node);
     }
 
@@ -330,9 +313,7 @@ impl DagDriver {
             debug!(LogSchema::new(LogEvent::BroadcastNode), id = node.id());
 
             defer!( observe_round(timestamp, RoundStage::NodeBroadcasted); );
-            rb.broadcast(node, signature_builder)
-                .await
-                .expect("Broadcast cannot fail")
+            rb.broadcast(node, signature_builder).await.expect("Broadcast cannot fail")
         };
         let certified_broadcast = async move {
             let Ok(certificate) = rx.await else {
@@ -340,10 +321,7 @@ impl DagDriver {
                 return;
             };
 
-            debug!(
-                LogSchema::new(LogEvent::BroadcastCertifiedNode),
-                id = node_clone.id()
-            );
+            debug!(LogSchema::new(LogEvent::BroadcastCertifiedNode), id = node_clone.id());
 
             defer!( observe_round(timestamp, RoundStage::CertifiedNodeBroadcasted); );
             let certified_node =
@@ -366,10 +344,8 @@ impl DagDriver {
         tokio::spawn(Abortable::new(task, abort_registration));
         // TODO: a bounded vec queue can hold more than window rounds, but we want to limit
         // by number of rounds.
-        if let Some((_handle, prev_round_timestamp)) = self
-            .rb_handles
-            .lock()
-            .push_back((DropGuard::new(abort_handle), timestamp))
+        if let Some((_handle, prev_round_timestamp)) =
+            self.rb_handles.lock().push_back((DropGuard::new(abort_handle), timestamp))
         {
             // TODO: this observation is inaccurate.
             observe_round(prev_round_timestamp, RoundStage::Finished);

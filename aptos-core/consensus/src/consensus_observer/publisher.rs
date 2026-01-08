@@ -11,12 +11,14 @@ use crate::consensus_observer::{
         ConsensusObserverResponse,
     },
 };
-use gaptos::aptos_config::{config::ConsensusObserverConfig, network_id::PeerNetworkId};
-use gaptos::aptos_infallible::RwLock;
-use gaptos::aptos_logger::{info, warn};
-use gaptos::aptos_network::application::interface::NetworkClient;
 use futures::{SinkExt, StreamExt};
 use futures_channel::mpsc;
+use gaptos::{
+    aptos_config::{config::ConsensusObserverConfig, network_id::PeerNetworkId},
+    aptos_infallible::RwLock,
+    aptos_logger::{info, warn},
+    aptos_network::application::interface::NetworkClient,
+};
 use std::{collections::HashSet, sync::Arc, time::Duration};
 use tokio::time::interval;
 use tokio_stream::wrappers::IntervalStream;
@@ -42,10 +44,7 @@ impl ConsensusPublisher {
     pub fn new(
         network_client: NetworkClient<ConsensusObserverMessage>,
         consensus_observer_config: ConsensusObserverConfig,
-    ) -> (
-        Self,
-        mpsc::Receiver<(PeerNetworkId, ConsensusObserverDirectSend)>,
-    ) {
+    ) -> (Self, mpsc::Receiver<(PeerNetworkId, ConsensusObserverDirectSend)>) {
         // Create the outbound message sender and receiver
         let max_network_channel_size = consensus_observer_config.max_network_channel_size as usize;
         let (outbound_message_sender, outbound_message_receiver) =
@@ -82,16 +81,14 @@ impl ConsensusPublisher {
                             error
                         )));
                     return;
-                },
+                }
             };
 
         // Identify the active subscribers that are no longer connected
         let connected_peers: HashSet<PeerNetworkId> =
             connected_peers_and_metadata.keys().cloned().collect();
-        let disconnected_subscribers: HashSet<PeerNetworkId> = active_subscribers
-            .difference(&connected_peers)
-            .cloned()
-            .collect();
+        let disconnected_subscribers: HashSet<PeerNetworkId> =
+            active_subscribers.difference(&connected_peers).cloned().collect();
 
         // Remove any subscriptions from peers that are no longer connected
         for peer_network_id in &disconnected_subscribers {
@@ -162,7 +159,7 @@ impl ConsensusPublisher {
 
                 // Send a simple subscription ACK
                 response_sender.send(ConsensusObserverResponse::SubscribeAck);
-            },
+            }
             ConsensusObserverRequest::Unsubscribe => {
                 // Remove the peer from the set of active subscribers
                 self.active_subscribers.write().remove(peer_network_id);
@@ -175,7 +172,7 @@ impl ConsensusPublisher {
 
                 // Send a simple unsubscription ACK
                 response_sender.send(ConsensusObserverResponse::UnsubscribeAck);
-            },
+            }
         }
     }
 
@@ -188,9 +185,8 @@ impl ConsensusPublisher {
         for peer_network_id in &active_subscribers {
             // Send the message to the outbound receiver for publishing
             let mut outbound_message_sender = self.outbound_message_sender.clone();
-            if let Err(error) = outbound_message_sender
-                .send((*peer_network_id, message.clone()))
-                .await
+            if let Err(error) =
+                outbound_message_sender.send((*peer_network_id, message.clone())).await
             {
                 // The message send failed
                 warn!(LogSchema::new(LogEntry::ConsensusPublisher)
@@ -217,8 +213,7 @@ impl ConsensusPublisher {
 
         // Create a garbage collection ticker
         let mut garbage_collection_interval = IntervalStream::new(interval(Duration::from_millis(
-            self.consensus_observer_config
-                .garbage_collection_interval_ms,
+            self.consensus_observer_config.garbage_collection_interval_ms,
         )))
         .fuse();
 
@@ -286,7 +281,7 @@ fn spawn_message_serializer_and_sender(
                                             peer_network_id, error
                                         )));
                                 }
-                            },
+                            }
                             Err(error) => {
                                 // We failed to serialize the message
                                 warn!(LogSchema::new(LogEntry::ConsensusPublisher)
@@ -295,15 +290,15 @@ fn spawn_message_serializer_and_sender(
                                         "Failed to serialize message for peer: {:?}. Error: {:?}",
                                         peer_network_id, error
                                     )));
-                            },
+                            }
                         }
-                    },
+                    }
                     Err(error) => {
                         // We failed to spawn the serialization task
                         warn!(LogSchema::new(LogEntry::ConsensusPublisher)
                             .event(LogEvent::SendDirectSendMessage)
                             .message(&format!("Failed to spawn the serializer task: {:?}", error)));
-                    },
+                    }
                 }
             })
             .collect::<()>()
@@ -315,19 +310,21 @@ fn spawn_message_serializer_and_sender(
 mod test {
     use super::*;
     use crate::consensus_observer::network_message::BlockTransactionPayload;
-    use gaptos::aptos_config::network_id::NetworkId;
-    use gaptos::aptos_crypto::HashValue;
-    use gaptos::aptos_network::{
-        application::{metadata::ConnectionState, storage::PeersAndMetadata},
-        transport::ConnectionMetadata,
-    };
-    use gaptos::aptos_types::{
-        aggregate_signature::AggregateSignature,
-        block_info::BlockInfo,
-        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
-        PeerId,
-    };
     use futures::FutureExt;
+    use gaptos::{
+        aptos_config::network_id::NetworkId,
+        aptos_crypto::HashValue,
+        aptos_network::{
+            application::{metadata::ConnectionState, storage::PeersAndMetadata},
+            transport::ConnectionMetadata,
+        },
+        aptos_types::{
+            aggregate_signature::AggregateSignature,
+            block_info::BlockInfo,
+            ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+            PeerId,
+        },
+    };
     use maplit::hashmap;
     use tokio_stream::StreamExt;
 
@@ -364,9 +361,12 @@ mod test {
         // Garbage collect the subscriptions and verify that the second peer
         // is removed but not the first (we have no metadata for the second peer).
         consensus_publisher.garbage_collect_subscriptions();
-        verify_active_subscribers(&consensus_publisher, 1, vec![&peer_network_id_1], vec![
-            &peer_network_id_2,
-        ]);
+        verify_active_subscribers(
+            &consensus_publisher,
+            1,
+            vec![&peer_network_id_1],
+            vec![&peer_network_id_2],
+        );
 
         // Add another peer to the peers and metadata
         let peer_network_id_3 = PeerNetworkId::new(network_id, PeerId::random());
@@ -394,9 +394,12 @@ mod test {
 
         // Garbage collect the subscriptions and verify that the first peer is removed
         consensus_publisher.garbage_collect_subscriptions();
-        verify_active_subscribers(&consensus_publisher, 1, vec![&peer_network_id_3], vec![
-            &peer_network_id_1,
-        ]);
+        verify_active_subscribers(
+            &consensus_publisher,
+            1,
+            vec![&peer_network_id_3],
+            vec![&peer_network_id_1],
+        );
     }
 
     #[test]
@@ -432,22 +435,30 @@ mod test {
 
         // Unsubscribe the first peer from consensus updates and verify the unsubscription
         process_unsubscription_for_peer(&consensus_publisher, &peer_network_id_1);
-        verify_active_subscribers(&consensus_publisher, 1, vec![&peer_network_id_2], vec![
-            &peer_network_id_1,
-        ]);
+        verify_active_subscribers(
+            &consensus_publisher,
+            1,
+            vec![&peer_network_id_2],
+            vec![&peer_network_id_1],
+        );
 
         // Unsubscribe the first peer again and verify that the subscription is removed
         process_unsubscription_for_peer(&consensus_publisher, &peer_network_id_1);
-        verify_active_subscribers(&consensus_publisher, 1, vec![&peer_network_id_2], vec![
-            &peer_network_id_1,
-        ]);
+        verify_active_subscribers(
+            &consensus_publisher,
+            1,
+            vec![&peer_network_id_2],
+            vec![&peer_network_id_1],
+        );
 
         // Unsubscribe the second peer and verify that the subscription is removed
         process_unsubscription_for_peer(&consensus_publisher, &peer_network_id_2);
-        verify_active_subscribers(&consensus_publisher, 0, vec![], vec![
-            &peer_network_id_1,
-            &peer_network_id_2,
-        ]);
+        verify_active_subscribers(
+            &consensus_publisher,
+            0,
+            vec![],
+            vec![&peer_network_id_1, &peer_network_id_2],
+        );
     }
 
     #[tokio::test]
@@ -474,9 +485,7 @@ mod test {
                 AggregateSignature::empty(),
             ),
         );
-        consensus_publisher
-            .publish_message(ordered_block_message.clone())
-            .await;
+        consensus_publisher.publish_message(ordered_block_message.clone()).await;
 
         // Verify that the message was sent to the outbound message receiver
         let (peer_network_id, message) = outbound_message_receiver.next().await.unwrap();
@@ -502,17 +511,15 @@ mod test {
             BlockInfo::empty(),
             transaction_payload,
         );
-        consensus_publisher
-            .publish_message(block_payload_message.clone())
-            .await;
+        consensus_publisher.publish_message(block_payload_message.clone()).await;
 
         // Verify that the message was sent to all active subscribers
         let num_expected_messages = additional_peer_network_ids.len() + 1;
         for _ in 0..num_expected_messages {
             let (peer_network_id, message) = outbound_message_receiver.next().await.unwrap();
             assert!(
-                additional_peer_network_ids.contains(&peer_network_id)
-                    || peer_network_id == peer_network_id_1
+                additional_peer_network_ids.contains(&peer_network_id) ||
+                    peer_network_id == peer_network_id_1
             );
             assert_eq!(message, block_payload_message);
         }
@@ -526,9 +533,7 @@ mod test {
                 LedgerInfo::new(BlockInfo::empty(), HashValue::zero()),
                 AggregateSignature::empty(),
             ));
-        consensus_publisher
-            .publish_message(commit_decision_message.clone())
-            .await;
+        consensus_publisher.publish_message(commit_decision_message.clone()).await;
 
         // Verify that the message was sent to all active subscribers except the first peer
         for _ in 0..additional_peer_network_ids.len() {
@@ -547,9 +552,7 @@ mod test {
             BlockInfo::empty(),
             BlockTransactionPayload::empty(),
         );
-        consensus_publisher
-            .publish_message(block_payload_message.clone())
-            .await;
+        consensus_publisher.publish_message(block_payload_message.clone()).await;
 
         // Verify that no messages were sent to the outbound message receiver
         assert!(outbound_message_receiver.next().now_or_never().is_none());

@@ -2,20 +2,22 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::consensusdb::ConsensusDB;
-use crate::payload_client::user::quorum_store_client::QuorumStoreClient;
+use crate::{
+    consensusdb::ConsensusDB, payload_client::user::quorum_store_client::QuorumStoreClient,
+};
 use anyhow::Result;
-use gaptos::api_types::u256_define::BlockId;
 use aptos_executor::block_executor::BlockExecutor;
 use aptos_executor_types::{BlockExecutorTrait, ExecutorResult, StateComputeResult};
-use block_buffer_manager::block_buffer_manager::BlockHashRef;
-use block_buffer_manager::get_block_buffer_manager;
-use gaptos::aptos_consensus::counters::{APTOS_COMMIT_BLOCKS, APTOS_EXECUTION_TXNS};
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_logger::{info, debug};
-use gaptos::aptos_types::block_executor::partitioner::ExecutableBlock;
-use gaptos::aptos_types::{
-    block_executor::config::BlockExecutorConfigFromOnchain, ledger_info::LedgerInfoWithSignatures,
+use block_buffer_manager::{block_buffer_manager::BlockHashRef, get_block_buffer_manager};
+use gaptos::{
+    api_types::u256_define::BlockId,
+    aptos_consensus::counters::{APTOS_COMMIT_BLOCKS, APTOS_EXECUTION_TXNS},
+    aptos_crypto::HashValue,
+    aptos_logger::{debug, info},
+    aptos_types::{
+        block_executor::{config::BlockExecutorConfigFromOnchain, partitioner::ExecutableBlock},
+        ledger_info::LedgerInfoWithSignatures,
+    },
 };
 use std::sync::Arc;
 use tokio::runtime::Runtime;
@@ -47,7 +49,11 @@ pub struct GravityBlockExecutor {
 
 impl GravityBlockExecutor {
     pub(crate) fn new(inner: BlockExecutor, consensus_db: Arc<ConsensusDB>) -> Self {
-        Self { inner, consensus_db, runtime: gaptos::aptos_runtimes::spawn_named_runtime("tmp".into(), None) }
+        Self {
+            inner,
+            consensus_db,
+            runtime: gaptos::aptos_runtimes::spawn_named_runtime("tmp".into(), None),
+        }
     }
 }
 
@@ -91,7 +97,8 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             let block_num = ledger_info_with_sigs.ledger_info().block_number();
             assert!(block_ids.last().unwrap().as_slice() == block_id.as_slice());
             let len = block_ids.len();
-            let _ = self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
+            let _ =
+                self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
             let epoch = ledger_info_with_sigs.ledger_info().epoch();
             self.runtime.block_on(async move {
                 let mut persist_notifiers = get_block_buffer_manager()
@@ -145,14 +152,15 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         let len = block_ids.len();
         assert!(!block_ids.is_empty(), "commit_ledger block_ids is empty");
         let epoch = ledger_info_with_sigs.ledger_info().epoch();
-        
+
         // Persist randomness data
         if !randomness_data.is_empty() {
-            self.consensus_db.put_randomness(&randomness_data)
+            self.consensus_db
+                .put_randomness(&randomness_data)
                 .map_err(|e| anyhow::anyhow!("Failed to persist randomness: {:?}", e))?;
             debug!("Persisted randomness data: {:?}", randomness_data);
         }
-        
+
         self.runtime.block_on(async move {
             let mut persist_notifiers = get_block_buffer_manager()
                 .set_commit_blocks(
@@ -177,7 +185,8 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             for notifier in persist_notifiers.iter_mut() {
                 let _ = notifier.recv().await;
             }
-            let _ = self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
+            let _ =
+                self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
         });
         Ok(())
     }

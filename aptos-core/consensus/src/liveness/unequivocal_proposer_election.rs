@@ -6,9 +6,11 @@ use aptos_consensus_types::{
     block::Block,
     common::{Author, Round},
 };
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::{error, warn, SecurityEvent};
+use gaptos::{
+    aptos_crypto::HashValue,
+    aptos_infallible::Mutex,
+    aptos_logger::{error, warn, SecurityEvent},
+};
 use std::{cmp::Ordering, sync::Arc};
 
 // Wrapper around ProposerElection.
@@ -26,17 +28,13 @@ impl ProposerElection for UnequivocalProposerElection {
     }
 
     fn get_voting_power_participation_ratio(&self, round: Round) -> f64 {
-        self.proposer_election
-            .get_voting_power_participation_ratio(round)
+        self.proposer_election.get_voting_power_participation_ratio(round)
     }
 }
 
 impl UnequivocalProposerElection {
     pub fn new(proposer_election: Arc<dyn ProposerElection + Send + Sync>) -> Self {
-        Self {
-            proposer_election,
-            already_proposed: Mutex::new((0, HashValue::zero())),
-        }
+        Self { proposer_election, already_proposed: Mutex::new((0, HashValue::zero())) }
     }
 
     // Return if a given proposed block is valid:
@@ -65,7 +63,7 @@ impl UnequivocalProposerElection {
                     already_proposed.0 = block.round();
                     already_proposed.1 = block.id();
                     true
-                },
+                }
                 Ordering::Equal => {
                     if already_proposed.1 != block.id() {
                         error!(
@@ -80,7 +78,7 @@ impl UnequivocalProposerElection {
                     } else {
                         true
                     }
-                },
+                }
                 Ordering::Less => false,
             }
         })

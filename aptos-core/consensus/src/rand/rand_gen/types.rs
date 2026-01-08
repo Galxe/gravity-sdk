@@ -3,21 +3,23 @@
 
 use anyhow::{anyhow, bail, ensure};
 use aptos_consensus_types::common::{Author, Round};
-use gaptos::aptos_crypto::bls12381::Signature;
-use gaptos::aptos_crypto as aptos_crypto;
-use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
-use gaptos::aptos_dkg::{
-    pvss::{Player, WeightedConfig},
-    weighted_vuf::traits::WeightedVUF,
-};
-use gaptos::aptos_experimental_runtimes::thread_manager::THREAD_MANAGER;
-use gaptos::aptos_logger::debug;
-use gaptos::aptos_types::{
-    aggregate_signature::AggregateSignature,
-    randomness::{
-        Delta, PKShare, ProofShare, RandKeys, RandMetadata, Randomness, WvufPP, APK, WVUF,
+use gaptos::{
+    aptos_crypto,
+    aptos_crypto::bls12381::Signature,
+    aptos_crypto_derive::{BCSCryptoHash, CryptoHasher},
+    aptos_dkg::{
+        pvss::{Player, WeightedConfig},
+        weighted_vuf::traits::WeightedVUF,
     },
-    validator_verifier::ValidatorVerifier,
+    aptos_experimental_runtimes::thread_manager::THREAD_MANAGER,
+    aptos_logger::debug,
+    aptos_types::{
+        aggregate_signature::AggregateSignature,
+        randomness::{
+            Delta, PKShare, ProofShare, RandKeys, RandMetadata, Randomness, WvufPP, APK, WVUF,
+        },
+        validator_verifier::ValidatorVerifier,
+    },
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha3::{Digest, Sha3_256};
@@ -72,11 +74,7 @@ impl TShare for Share {
                 &self.share,
             )?;
         } else {
-            bail!(
-                "[RandShare] No augmented public key for validator id {}, {}",
-                index,
-                author
-            );
+            bail!("[RandShare] No augmented public key for validator id {}, {}", index, author);
         }
         Ok(())
     }
@@ -112,19 +110,11 @@ impl TShare for Share {
                 .get(share.author())
                 .copied()
                 .ok_or_else(|| {
-                    anyhow!(
-                        "Share::aggregate failed with invalid share author: {}",
-                        share.author
-                    )
+                    anyhow!("Share::aggregate failed with invalid share author: {}", share.author)
                 })?;
-            let apk = rand_config
-                .get_certified_apk(share.author())
-                .ok_or_else(|| {
-                    anyhow!(
-                        "Share::aggregate failed with missing apk for share from {}",
-                        share.author
-                    )
-                })?;
+            let apk = rand_config.get_certified_apk(share.author()).ok_or_else(|| {
+                anyhow!("Share::aggregate failed with missing apk for share from {}", share.author)
+            })?;
             apks_and_proofs.push((Player { id }, apk.clone(), share.share().share));
         }
 
@@ -169,10 +159,7 @@ impl TAugmentedData for AugmentedData {
             None
         };
 
-        let data = AugmentedData {
-            delta: delta.clone(),
-            fast_delta,
-        };
+        let data = AugmentedData { delta: delta.clone(), fast_delta };
         AugData::new(rand_config.epoch(), rand_config.author(), data)
     }
 
@@ -183,9 +170,7 @@ impl TAugmentedData for AugmentedData {
         author: &Author,
     ) {
         let AugmentedData { delta, fast_delta } = self;
-        rand_config
-            .add_certified_delta(author, delta.clone())
-            .expect("Add delta should succeed");
+        rand_config.add_certified_delta(author, delta.clone()).expect("Add delta should succeed");
 
         if let (Some(config), Some(fast_delta)) = (fast_rand_config, fast_delta) {
             config
@@ -200,9 +185,7 @@ impl TAugmentedData for AugmentedData {
         fast_rand_config: &Option<RandConfig>,
         author: &Author,
     ) -> anyhow::Result<()> {
-        rand_config
-            .derive_apk(author, self.delta.clone())
-            .map(|_| ())?;
+        rand_config.derive_apk(author, self.delta.clone()).map(|_| ())?;
 
         ensure!(
             self.fast_delta.is_some() == fast_rand_config.is_some(),
@@ -332,11 +315,7 @@ pub struct RandShare<S> {
 
 impl<S: TShare> RandShare<S> {
     pub fn new(author: Author, metadata: RandMetadata, share: S) -> Self {
-        Self {
-            author,
-            metadata,
-            share,
-        }
+        Self { author, metadata, share }
     }
 
     pub fn author(&self) -> &Author {
@@ -364,11 +343,7 @@ impl<S: TShare> RandShare<S> {
     }
 
     pub fn share_id(&self) -> ShareId {
-        ShareId {
-            epoch: self.epoch(),
-            round: self.round(),
-            author: self.author,
-        }
+        ShareId { epoch: self.epoch(), round: self.round(), author: self.author }
     }
 }
 
@@ -463,11 +438,7 @@ pub struct AugData<D> {
 
 impl<D: TAugmentedData> AugData<D> {
     pub fn new(epoch: u64, author: Author, data: D) -> Self {
-        Self {
-            epoch,
-            author,
-            data,
-        }
+        Self { epoch, author, data }
     }
 
     pub fn epoch(&self) -> u64 {
@@ -475,10 +446,7 @@ impl<D: TAugmentedData> AugData<D> {
     }
 
     pub fn id(&self) -> AugDataId {
-        AugDataId {
-            epoch: self.epoch,
-            author: self.author,
-        }
+        AugDataId { epoch: self.epoch, author: self.author }
     }
 
     pub fn author(&self) -> &Author {
@@ -492,8 +460,7 @@ impl<D: TAugmentedData> AugData<D> {
         sender: Author,
     ) -> anyhow::Result<()> {
         ensure!(self.author == sender, "Invalid author");
-        self.data
-            .verify(rand_config, fast_rand_config, &self.author)?;
+        self.data.verify(rand_config, fast_rand_config, &self.author)?;
         Ok(())
     }
 }
@@ -535,10 +502,7 @@ pub struct CertifiedAugData<D> {
 
 impl<D: TAugmentedData> CertifiedAugData<D> {
     pub fn new(aug_data: AugData<D>, signatures: AggregateSignature) -> Self {
-        Self {
-            aug_data,
-            signatures,
-        }
+        Self { aug_data, signatures }
     }
 
     pub fn epoch(&self) -> u64 {
@@ -610,14 +574,7 @@ impl RandConfig {
         keys: RandKeys,
         wconfig: WeightedConfig,
     ) -> Self {
-        Self {
-            author,
-            epoch,
-            validator,
-            vuf_pp,
-            keys: Arc::new(keys),
-            wconfig,
-        }
+        Self { author, epoch, validator, vuf_pp, keys: Arc::new(keys), wconfig }
     }
 
     pub fn epoch(&self) -> u64 {
@@ -642,11 +599,7 @@ impl RandConfig {
     }
 
     pub fn get_all_certified_apk(&self) -> Vec<Option<APK>> {
-        self.keys
-            .certified_apks
-            .iter()
-            .map(|cell| cell.get().cloned())
-            .collect()
+        self.keys.certified_apks.iter().map(|cell| cell.get().cloned()).collect()
     }
 
     pub fn add_certified_apk(&self, peer: &Author, apk: APK) -> anyhow::Result<()> {
@@ -675,9 +628,7 @@ impl RandConfig {
     }
 
     pub fn get_peer_weight(&self, peer: &Author) -> u64 {
-        let player = Player {
-            id: self.get_id(peer),
-        };
+        let player = Player { id: self.get_id(peer) };
         self.wconfig.get_player_weight(&player) as u64
     }
 

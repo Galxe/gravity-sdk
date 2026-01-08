@@ -3,28 +3,34 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    error::MempoolError, pipeline::pipeline_phase::CountedRequest, state_computer::ExecutionProxy, state_replication::StateComputer, transaction_deduper::NoOpDeduper, transaction_filter::TransactionFilter, transaction_shuffler::NoOpShuffler, txn_notifier::TxnNotifier
+    error::MempoolError, pipeline::pipeline_phase::CountedRequest, state_computer::ExecutionProxy,
+    state_replication::StateComputer, transaction_deduper::NoOpDeduper,
+    transaction_filter::TransactionFilter, transaction_shuffler::NoOpShuffler,
+    txn_notifier::TxnNotifier,
 };
 
-use gaptos::aptos_config::config::transaction_filter_type::Filter;
-use gaptos::aptos_consensus_notifications::{ConsensusNotificationSender, Error};
-use aptos_consensus_types::{block::Block, block_data::BlockData, common::RejectedTransactionSummary};
-use gaptos::aptos_crypto::HashValue;
-use aptos_executor_types::{
-    BlockExecutorTrait, ExecutorResult,
-    StateComputeResult,
+use aptos_consensus_types::{
+    block::Block, block_data::BlockData, common::RejectedTransactionSummary,
 };
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_types::{
-    block_executor::{config::BlockExecutorConfigFromOnchain, partitioner::ExecutableBlock},
-    contract_event::ContractEvent,
-    epoch_state::EpochState,
-    ledger_info::LedgerInfoWithSignatures,
-    transaction::{SignedTransaction, Transaction, TransactionStatus},
-    validator_txn::ValidatorTransaction,
+use aptos_executor_types::{BlockExecutorTrait, ExecutorResult, StateComputeResult};
+use gaptos::{
+    aptos_config::config::transaction_filter_type::Filter,
+    aptos_consensus_notifications::{ConsensusNotificationSender, Error},
+    aptos_crypto::HashValue,
+    aptos_infallible::Mutex,
+    aptos_types::{
+        block_executor::{config::BlockExecutorConfigFromOnchain, partitioner::ExecutableBlock},
+        contract_event::ContractEvent,
+        epoch_state::EpochState,
+        ledger_info::LedgerInfoWithSignatures,
+        transaction::{SignedTransaction, Transaction, TransactionStatus},
+        validator_txn::ValidatorTransaction,
+    },
 };
-use std::sync::{atomic::AtomicU64, Arc};
-use std::time::Duration;
+use std::{
+    sync::{atomic::AtomicU64, Arc},
+    time::Duration,
+};
 use tokio::runtime::Handle;
 
 struct DummyStateSyncNotifier {
@@ -33,9 +39,7 @@ struct DummyStateSyncNotifier {
 
 impl DummyStateSyncNotifier {
     fn new() -> Self {
-        Self {
-            invocations: Mutex::new(vec![]),
-        }
+        Self { invocations: Mutex::new(vec![]) }
     }
 }
 
@@ -47,9 +51,7 @@ impl ConsensusNotificationSender for DummyStateSyncNotifier {
         subscribable_events: Vec<ContractEvent>,
         _block_number: u64,
     ) -> Result<(), Error> {
-        self.invocations
-            .lock()
-            .push((transactions, subscribable_events));
+        self.invocations.lock().push((transactions, subscribable_events));
         Ok(())
     }
 
@@ -83,9 +85,7 @@ struct DummyBlockExecutor {
 
 impl DummyBlockExecutor {
     fn new() -> Self {
-        Self {
-            blocks_received: Mutex::new(vec![]),
-        }
+        Self { blocks_received: Mutex::new(vec![]) }
     }
 }
 
@@ -125,18 +125,17 @@ impl BlockExecutorTrait for DummyBlockExecutor {
     }
 
     fn finish(&self) {}
-    
-    fn pre_commit_block(
-        &self,
-        block_id: HashValue,
-    ) -> ExecutorResult<()> {
+
+    fn pre_commit_block(&self, block_id: HashValue) -> ExecutorResult<()> {
         Ok(())
     }
-    
-    fn commit_ledger(&self,
-        block_ids: Vec<HashValue>, 
+
+    fn commit_ledger(
+        &self,
+        block_ids: Vec<HashValue>,
         ledger_info_with_sigs: LedgerInfoWithSignatures,
-        randomness_data: Vec<(u64, Vec<u8>)>) -> ExecutorResult<()> {
+        randomness_data: Vec<(u64, Vec<u8>)>,
+    ) -> ExecutorResult<()> {
         Ok(())
     }
 }
@@ -187,10 +186,7 @@ async fn schedule_compute_should_discover_validator_txns() {
         .await;
 
     // Get the txns from the view of the dummy executor.
-    let txns = executor.blocks_received.lock()[0]
-        .transactions
-        .clone()
-        .into_txns();
+    let txns = executor.blocks_received.lock()[0].transactions.clone().into_txns();
 
     let supposed_validator_txn_0 = txns[1].expect_valid().try_as_validator_txn().unwrap();
     let supposed_validator_txn_1 = txns[2].expect_valid().try_as_validator_txn().unwrap();

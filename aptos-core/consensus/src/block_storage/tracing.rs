@@ -2,9 +2,8 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use gaptos::aptos_infallible::duration_since_epoch;
+use gaptos::{aptos_consensus::counters, aptos_infallible::duration_since_epoch};
 use std::time::Duration;
-use gaptos::aptos_consensus::counters as counters;
 
 pub struct BlockStage;
 
@@ -35,8 +34,6 @@ impl BlockStage {
 /// Record the time during each stage of a block.
 pub fn observe_block(timestamp: u64, stage: &'static str) {
     if let Some(t) = duration_since_epoch().checked_sub(Duration::from_micros(timestamp)) {
-        counters::BLOCK_TRACING
-            .with_label_values(&[stage])
-            .observe(t.as_secs_f64());
+        counters::BLOCK_TRACING.with_label_values(&[stage]).observe(t.as_secs_f64());
     }
 }

@@ -1,11 +1,8 @@
 use std::sync::OnceLock;
 
-use greth::reth_metrics::{
-    metrics::Histogram,
-    Metrics,
-};
+use greth::reth_metrics::{metrics::Histogram, Metrics};
 
-use greth::reth_metrics::metrics as metrics;
+use greth::reth_metrics::metrics;
 
 #[derive(Metrics)]
 #[metrics(scope = "reth.mempook")]

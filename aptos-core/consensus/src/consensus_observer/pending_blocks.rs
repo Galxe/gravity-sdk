@@ -7,10 +7,12 @@ use crate::consensus_observer::{
     network_message::OrderedBlock,
     payload_store::BlockPayloadStore,
 };
-use gaptos::aptos_config::config::ConsensusObserverConfig;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::{info, warn};
-use gaptos::aptos_types::block_info::Round;
+use gaptos::{
+    aptos_config::config::ConsensusObserverConfig,
+    aptos_infallible::Mutex,
+    aptos_logger::{info, warn},
+    aptos_types::block_info::Round,
+};
 use std::{
     collections::{btree_map::Entry, BTreeMap},
     sync::Arc,
@@ -47,24 +49,18 @@ impl PendingBlockStore {
         let first_block_epoch_round = (first_block.epoch(), first_block.round());
 
         // Insert the block into the store using the round of the first block
-        match self
-            .blocks_without_payloads
-            .lock()
-            .entry(first_block_epoch_round)
-        {
+        match self.blocks_without_payloads.lock().entry(first_block_epoch_round) {
             Entry::Occupied(_) => {
                 // The block is already in the store
-                warn!(
-                    LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                        "A pending block was already found for the given epoch and round: {:?}",
-                        first_block_epoch_round
-                    ))
-                );
-            },
+                warn!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                    "A pending block was already found for the given epoch and round: {:?}",
+                    first_block_epoch_round
+                )));
+            }
             Entry::Vacant(entry) => {
                 // Insert the block into the store
                 entry.insert(ordered_block);
-            },
+            }
         }
 
         // Perform garbage collection if the store is too large
@@ -126,13 +122,11 @@ impl PendingBlockStore {
 
         // Check if any out-of-date blocks were dropped
         if !blocks_without_payloads.is_empty() {
-            info!(
-                LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                    "Dropped {:?} out-of-date pending blocks before epoch and round: {:?}",
-                    blocks_without_payloads.len(),
-                    (received_payload_epoch, received_payload_round)
-                ))
-            );
+            info!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                "Dropped {:?} out-of-date pending blocks before epoch and round: {:?}",
+                blocks_without_payloads.len(),
+                (received_payload_epoch, received_payload_round)
+            )));
         }
 
         // Update the pending blocks to only include the blocks at higher rounds
@@ -154,10 +148,8 @@ impl PendingBlockStore {
         );
 
         // Update the total number of pending blocks
-        let num_pending_blocks = blocks_without_payloads
-            .values()
-            .map(|block| block.blocks().len() as u64)
-            .sum();
+        let num_pending_blocks =
+            blocks_without_payloads.values().map(|block| block.blocks().len() as u64).sum();
         metrics::set_gauge_with_label(
             &metrics::OBSERVER_NUM_PROCESSED_BLOCKS,
             metrics::PENDING_BLOCKS_LABEL,
@@ -187,11 +179,13 @@ mod test {
         pipelined_block::PipelinedBlock,
         quorum_cert::QuorumCert,
     };
-    use gaptos::aptos_crypto::HashValue;
-    use gaptos::aptos_types::{
-        aggregate_signature::AggregateSignature,
-        block_info::BlockInfo,
-        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+    use gaptos::{
+        aptos_crypto::HashValue,
+        aptos_types::{
+            aggregate_signature::AggregateSignature,
+            block_info::BlockInfo,
+            ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+        },
     };
     use rand::Rng;
 
@@ -217,11 +211,7 @@ mod test {
         );
 
         // Verify that the store is not empty
-        verify_pending_blocks(
-            &pending_block_store,
-            max_num_pending_blocks,
-            &missing_blocks,
-        );
+        verify_pending_blocks(&pending_block_store, max_num_pending_blocks, &missing_blocks);
 
         // Clear the missing blocks from the store
         pending_block_store.clear_missing_blocks();
@@ -253,11 +243,7 @@ mod test {
         );
 
         // Verify that all blocks were inserted correctly
-        verify_pending_blocks(
-            &pending_block_store,
-            max_num_pending_blocks,
-            &pending_blocks,
-        );
+        verify_pending_blocks(&pending_block_store, max_num_pending_blocks, &pending_blocks);
 
         // Insert the maximum number of blocks into the store again
         let starting_round = (max_num_pending_blocks * 100) as Round;
@@ -270,11 +256,7 @@ mod test {
         );
 
         // Verify that all blocks were inserted correctly
-        verify_pending_blocks(
-            &pending_block_store,
-            max_num_pending_blocks,
-            &pending_blocks,
-        );
+        verify_pending_blocks(&pending_block_store, max_num_pending_blocks, &pending_blocks);
 
         // Insert one more block into the store (for the next epoch)
         let next_epoch = 1;
@@ -283,11 +265,7 @@ mod test {
             create_and_add_pending_blocks(&pending_block_store, 1, next_epoch, starting_round, 5);
 
         // Verify the new block was inserted correctly
-        verify_pending_blocks(
-            &pending_block_store,
-            max_num_pending_blocks,
-            &new_pending_block,
-        );
+        verify_pending_blocks(&pending_block_store, max_num_pending_blocks, &new_pending_block);
     }
 
     #[test]
@@ -312,11 +290,7 @@ mod test {
         );
 
         // Verify that all blocks were inserted correctly
-        verify_pending_blocks(
-            &pending_block_store,
-            max_num_pending_blocks,
-            &pending_blocks,
-        );
+        verify_pending_blocks(&pending_block_store, max_num_pending_blocks, &pending_blocks);
 
         // Insert multiple blocks into the store (one at a time) and
         // verify that the oldest block is garbage collected each time.
@@ -332,11 +306,7 @@ mod test {
             );
 
             // Verify the new block was inserted correctly
-            verify_pending_blocks(
-                &pending_block_store,
-                max_num_pending_blocks,
-                &new_pending_block,
-            );
+            verify_pending_blocks(&pending_block_store, max_num_pending_blocks, &new_pending_block);
 
             // Get the round of the oldest block (that was garbage collected)
             let oldest_block = pending_blocks.remove(0);
@@ -362,11 +332,7 @@ mod test {
             );
 
             // Verify the new block was inserted correctly
-            verify_pending_blocks(
-                &pending_block_store,
-                max_num_pending_blocks,
-                &new_pending_block,
-            );
+            verify_pending_blocks(&pending_block_store, max_num_pending_blocks, &new_pending_block);
 
             // Get the round of the oldest block (that was garbage collected)
             let oldest_block = pending_blocks.remove(0);
@@ -762,9 +728,7 @@ mod test {
         for pending_block in pending_blocks {
             let first_block = pending_block.first_block();
             assert_eq!(
-                blocks_without_payloads
-                    .get(&(first_block.epoch(), first_block.round()))
-                    .unwrap(),
+                blocks_without_payloads.get(&(first_block.epoch(), first_block.round())).unwrap(),
                 pending_block
             );
         }

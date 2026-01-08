@@ -15,12 +15,14 @@ use crate::{
     },
     state_replication::StateComputer,
 };
-use gaptos::aptos_bounded_executor::BoundedExecutor;
-use gaptos::aptos_channels::aptos_channel::Receiver;
-use gaptos::aptos_config::config::ConsensusObserverConfig;
 use aptos_consensus_types::common::Author;
-use gaptos::aptos_types::{account_address::AccountAddress, epoch_state::EpochState};
 use futures::channel::mpsc::UnboundedReceiver;
+use gaptos::{
+    aptos_bounded_executor::BoundedExecutor,
+    aptos_channels::aptos_channel::Receiver,
+    aptos_config::config::ConsensusObserverConfig,
+    aptos_types::{account_address::AccountAddress, epoch_state::EpochState},
+};
 use std::sync::{
     atomic::{AtomicBool, AtomicU64},
     Arc,
@@ -97,7 +99,8 @@ pub fn prepare_phases_and_buffer_manager(
     let (persisting_phase_response_tx, persisting_phase_response_rx) = create_channel();
 
     let commit_msg_tx_arc = Arc::new(commit_msg_tx);
-    let persisting_phase_processor = PersistingPhase::new(persisting_proxy, commit_msg_tx_arc.clone());
+    let persisting_phase_processor =
+        PersistingPhase::new(persisting_proxy, commit_msg_tx_arc.clone());
     let persisting_phase = PipelinePhase::new(
         persisting_phase_request_rx,
         Some(persisting_phase_response_tx),

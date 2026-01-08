@@ -14,42 +14,44 @@ use crate::{
     test_utils::{mock_execution_client::MockExecutionClient, MockStorage},
     util::time_service::ClockTimeService,
 };
-use gaptos::aptos_consensus::counters as counters;
-use gaptos::aptos_bounded_executor::BoundedExecutor;
-use gaptos::aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
-use gaptos::aptos_config::{
-    config::{NodeConfig, WaypointConfig},
-    generator::{self, ValidatorSwarm},
-    network_id::{NetworkId, PeerNetworkId},
-};
 use aptos_consensus_types::common::{Author, Round};
-use gaptos::aptos_event_notifications::{ReconfigNotification, ReconfigNotificationListener};
 use aptos_mempool::mocks::MockSharedMempool;
-use gaptos::aptos_network::{
-    application::interface::{NetworkClient, NetworkServiceEvents},
-    peer_manager::{ConnectionRequestSender, PeerManagerRequestSender},
-    protocols::{
-        network,
-        network::{NetworkEvents, NewNetworkEvents, NewNetworkSender},
-        wire::handshake::v1::ProtocolIdSet,
-    },
-    transport::ConnectionMetadata,
-    ProtocolId,
-};
-use gaptos::aptos_types::{
-    ledger_info::LedgerInfoWithSignatures,
-    on_chain_config::{
-        ConsensusConfigV1, InMemoryOnChainConfig, OnChainConfig, OnChainConfigPayload,
-        OnChainConsensusConfig,
-        ProposerElectionType::{self, RoundProposer},
-        ValidatorSet,
-    },
-    transaction::SignedTransaction,
-    validator_info::ValidatorInfo,
-    waypoint::Waypoint,
-};
-use gaptos::aptos_validator_transaction_pool::VTxnPoolState;
 use futures::{channel::mpsc, StreamExt};
+use gaptos::{
+    aptos_bounded_executor::BoundedExecutor,
+    aptos_channels::{self, aptos_channel, message_queues::QueueStyle},
+    aptos_config::{
+        config::{NodeConfig, WaypointConfig},
+        generator::{self, ValidatorSwarm},
+        network_id::{NetworkId, PeerNetworkId},
+    },
+    aptos_consensus::counters,
+    aptos_event_notifications::{ReconfigNotification, ReconfigNotificationListener},
+    aptos_network::{
+        application::interface::{NetworkClient, NetworkServiceEvents},
+        peer_manager::{ConnectionRequestSender, PeerManagerRequestSender},
+        protocols::{
+            network,
+            network::{NetworkEvents, NewNetworkEvents, NewNetworkSender},
+            wire::handshake::v1::ProtocolIdSet,
+        },
+        transport::ConnectionMetadata,
+        ProtocolId,
+    },
+    aptos_types::{
+        ledger_info::LedgerInfoWithSignatures,
+        on_chain_config::{
+            ConsensusConfigV1, InMemoryOnChainConfig, OnChainConfig, OnChainConfigPayload,
+            OnChainConsensusConfig,
+            ProposerElectionType::{self, RoundProposer},
+            ValidatorSet,
+        },
+        transaction::SignedTransaction,
+        validator_info::ValidatorInfo,
+        waypoint::Waypoint,
+    },
+    aptos_validator_transaction_pool::VTxnPoolState,
+};
 use maplit::hashmap;
 use std::{collections::HashMap, iter::FromIterator, sync::Arc};
 use tokio::runtime::Runtime;
@@ -115,15 +117,12 @@ impl SMRNode {
             Arc::clone(&storage),
         ));
         let (reconfig_sender, reconfig_events) = aptos_channel::new(QueueStyle::LIFO, 1, None);
-        let reconfig_listener = ReconfigNotificationListener {
-            notification_receiver: reconfig_events,
-        };
+        let reconfig_listener =
+            ReconfigNotificationListener { notification_receiver: reconfig_events };
         let _commit_notifier = Arc::from(DirectMempoolPayloadManager::new());
         let mut configs = HashMap::new();
-        configs.insert(
-            ValidatorSet::CONFIG_ID,
-            bcs::to_bytes(storage.get_validator_set()).unwrap(),
-        );
+        configs
+            .insert(ValidatorSet::CONFIG_ID, bcs::to_bytes(storage.get_validator_set()).unwrap());
         configs.insert(
             OnChainConsensusConfig::CONFIG_ID,
             // Requires double serialization, check deserialize_into_config for more details
@@ -132,10 +131,7 @@ impl SMRNode {
         let payload = OnChainConfigPayload::new(1, InMemoryOnChainConfig::new(configs));
 
         reconfig_sender
-            .push((), ReconfigNotification {
-                version: 1,
-                on_chain_configs: payload,
-            })
+            .push((), ReconfigNotification { version: 1, on_chain_configs: payload })
             .unwrap();
 
         let time_service = Arc::new(ClockTimeService::new(runtime.handle().clone()));
@@ -163,8 +159,7 @@ impl SMRNode {
             gaptos::aptos_time_service::TimeService::real(),
             vtxn_pool,
             Arc::new(InMemRandDb::new()),
-            None
-            // None,
+            None, // None,
         );
         let (network_task, network_receiver) =
             NetworkTask::new(network_service_events, self_receiver);
@@ -177,10 +172,7 @@ impl SMRNode {
             loop {
                 let ordered_blocks = ordered_blocks_events.next().await.unwrap();
                 let commit = ordered_blocks.ordered_proof.clone();
-                execution_client
-                    .commit_to_storage(ordered_blocks)
-                    .await
-                    .unwrap();
+                execution_client.commit_to_storage(ordered_blocks).await.unwrap();
 
                 commit_cb_sender.unbounded_send(commit.clone()).unwrap();
             }
@@ -205,9 +197,8 @@ impl SMRNode {
         round_proposers_idx: Option<HashMap<Round, usize>>,
     ) -> Vec<Self> {
         assert!(num_nodes >= num_twins);
-        let ValidatorSwarm {
-            nodes: mut node_configs,
-        } = generator::validator_swarm_for_testing(num_nodes);
+        let ValidatorSwarm { nodes: mut node_configs } =
+            generator::validator_swarm_for_testing(num_nodes);
         let peers_and_metadata = playground.peer_protocols();
         node_configs.iter().for_each(|config| {
             let peer_id = author_from_config(config);
@@ -218,9 +209,7 @@ impl SMRNode {
                 ProtocolId::ConsensusRpcBcs,
             ]);
             let peer_network_id = PeerNetworkId::new(NetworkId::Validator, peer_id);
-            peers_and_metadata
-                .insert_connection_metadata(peer_network_id, conn_meta)
-                .unwrap();
+            peers_and_metadata.insert_connection_metadata(peer_network_id, conn_meta).unwrap();
         });
 
         node_configs.sort_by_key(author_from_config);
@@ -252,7 +241,7 @@ impl SMRNode {
                 }
                 todo!()
                 // RoundProposer(round_proposers)
-            },
+            }
             _ => proposer_type,
         };
 
@@ -271,13 +260,7 @@ impl SMRNode {
 
             let waypoint = Waypoint::new_epoch_boundary(&storage.get_ledger_info())
                 .expect("Unable to produce waypoint with the provided LedgerInfo");
-            config
-                .consensus
-                .safety_rules
-                .test
-                .as_mut()
-                .unwrap()
-                .waypoint = Some(waypoint);
+            config.consensus.safety_rules.test.as_mut().unwrap().waypoint = Some(waypoint);
             config.base.waypoint = WaypointConfig::FromConfig(waypoint);
             // Disable timeout in twins test to avoid flakiness
             config.consensus.round_initial_timeout_ms = 2_000_000;

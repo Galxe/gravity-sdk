@@ -4,9 +4,11 @@
 
 use crate::common::Author;
 use anyhow::{ensure, Context};
-use gaptos::aptos_crypto::{bls12381, HashValue};
-use gaptos::aptos_short_hex_str::AsShortHexStr;
-use gaptos::aptos_types::{ledger_info::LedgerInfo, validator_verifier::ValidatorVerifier};
+use gaptos::{
+    aptos_crypto::{bls12381, HashValue},
+    aptos_short_hex_str::AsShortHexStr,
+    aptos_types::{ledger_info::LedgerInfo, validator_verifier::ValidatorVerifier},
+};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
 
@@ -45,11 +47,7 @@ impl OrderVote {
         ledger_info: LedgerInfo,
         signature: bls12381::Signature,
     ) -> Self {
-        Self {
-            author,
-            ledger_info,
-            signature,
-        }
+        Self { author, ledger_info, signature }
     }
 
     pub fn author(&self) -> Author {

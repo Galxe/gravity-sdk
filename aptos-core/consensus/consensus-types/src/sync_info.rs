@@ -7,8 +7,8 @@ use crate::{
     wrapped_ledger_info::WrappedLedgerInfo,
 };
 use anyhow::{ensure, Context};
-use gaptos::aptos_types::{block_info::BlockInfo, validator_verifier::ValidatorVerifier};
 use fail::fail_point;
+use gaptos::aptos_types::{block_info::BlockInfo, validator_verifier::ValidatorVerifier};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
 
@@ -119,8 +119,7 @@ impl SyncInfo {
     }
 
     pub fn highest_timeout_round(&self) -> Round {
-        self.highest_2chain_timeout_cert()
-            .map_or(0, |tc| tc.round())
+        self.highest_2chain_timeout_cert().map_or(0, |tc| tc.round())
     }
 
     pub fn highest_ordered_round(&self) -> Round {
@@ -151,8 +150,8 @@ impl SyncInfo {
         }
 
         ensure!(
-            self.highest_quorum_cert.certified_block().round()
-                >= self.highest_ordered_cert().commit_info().round(),
+            self.highest_quorum_cert.certified_block().round() >=
+                self.highest_ordered_cert().commit_info().round(),
             "HQC has lower round than HOC"
         );
 
@@ -217,9 +216,9 @@ impl SyncInfo {
     }
 
     pub fn has_newer_certificates(&self, other: &SyncInfo) -> bool {
-        self.highest_certified_round() > other.highest_certified_round()
-            || self.highest_timeout_round() > other.highest_timeout_round()
-            || self.highest_ordered_round() > other.highest_ordered_round()
-            || self.highest_commit_round() > other.highest_commit_round()
+        self.highest_certified_round() > other.highest_certified_round() ||
+            self.highest_timeout_round() > other.highest_timeout_round() ||
+            self.highest_ordered_round() > other.highest_ordered_round() ||
+            self.highest_commit_round() > other.highest_commit_round()
     }
 }

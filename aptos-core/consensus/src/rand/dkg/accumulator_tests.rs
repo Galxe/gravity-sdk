@@ -1,12 +1,14 @@
+use blstrs::Scalar;
+use ff::Field;
 use gaptos::aptos_dkg::{
     algebra::{
         evaluation_domain::BatchEvaluationDomain,
-        polynomials::{accumulator_poly, accumulator_poly_scheduled, accumulator_poly_slow, poly_eval},
+        polynomials::{
+            accumulator_poly, accumulator_poly_scheduled, accumulator_poly_slow, poly_eval,
+        },
     },
     utils::random::{random_scalar, random_scalars},
 };
-use blstrs::Scalar;
-use ff::Field;
 use rand::thread_rng;
 
 #[test]

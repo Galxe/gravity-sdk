@@ -1,12 +1,11 @@
-use gaptos::aptos_logger::info;
-use gaptos::aptos_logger::warn;
-use axum::response::IntoResponse;
-use axum::Json;
+use axum::{response::IntoResponse, Json};
+use gaptos::aptos_logger::{info, warn};
 use once_cell::sync::Lazy;
-use serde::Deserialize;
-use serde::Serialize;
-use std::env;
-use std::sync::{Arc, Mutex};
+use serde::{Deserialize, Serialize};
+use std::{
+    env,
+    sync::{Arc, Mutex},
+};
 use tikv_jemalloc_ctl::raw;
 
 pub struct HeapProfiler {
@@ -37,9 +36,7 @@ pub async fn control_profiler(request: ControlProfileRequest) -> impl IntoRespon
         Err(e) => Json(ControlProfileResponse { response: e }),
     }
     #[cfg(not(feature = "jemalloc-profiling"))]
-    Json(ControlProfileResponse {
-        response: "jemalloc profiling is not enabled".to_string(),
-    })
+    Json(ControlProfileResponse { response: "jemalloc profiling is not enabled".to_string() })
 }
 
 impl HeapProfiler {

@@ -2,14 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use build_info::build_information;
-use futures::channel::mpsc::Receiver;
-use gaptos::aptos_config::config::NodeConfig;
-use gaptos::aptos_logger::tracing_writer::TracingWriter;
-use gaptos::aptos_logger::{
-    aptos_logger::FileWriter, info, telemetry_log_writer::TelemetryLog, LoggerFilterUpdater,
+use futures::channel::{mpsc, mpsc::Receiver};
+use gaptos::{
+    aptos_config::config::NodeConfig,
+    aptos_logger::{
+        aptos_logger::FileWriter, info, telemetry_log_writer::TelemetryLog,
+        tracing_writer::TracingWriter, LoggerFilterUpdater,
+    },
+    aptos_types::account_config::KeyRotation,
 };
-use futures::channel::mpsc;
-use gaptos::aptos_types::account_config::KeyRotation;
 use std::path::PathBuf;
 
 const TELEMETRY_LOG_INGEST_BUFFER_SIZE: usize = 128;
@@ -48,7 +49,10 @@ pub fn create_logger(
     }
     if let Some(log_file) = log_file {
         logger_builder.printer(Box::new(TracingWriter::new(
-            log_file, node_config.logger.max_log_file_size_mbs, node_config.logger.max_log_files)));
+            log_file,
+            node_config.logger.max_log_file_size_mbs,
+            node_config.logger.max_log_files,
+        )));
     }
     if node_config.logger.enable_telemetry_remote_log {
         let (tx, rx) = mpsc::channel(TELEMETRY_LOG_INGEST_BUFFER_SIZE);
@@ -58,7 +62,8 @@ pub fn create_logger(
 
     // Create the logger and the logger filter updater
     let logger = logger_builder.build();
-    let logger_filter_updater: LoggerFilterUpdater = LoggerFilterUpdater::new(logger, logger_builder);
+    let logger_filter_updater: LoggerFilterUpdater =
+        LoggerFilterUpdater::new(logger, logger_builder);
 
     // Log the build information and the config
     log_config_and_build_information(node_config);
@@ -83,9 +88,8 @@ fn log_config_and_build_information(node_config: &NodeConfig) {
         // "check-vm-features",
         // "consensus-only-perf-test",
         "default",
-        "failpoints"
-        // "indexer",
-        // "tokio-console"
+        "failpoints" /* "indexer",
+                      * "tokio-console" */
     );
 
     // Log the node config

@@ -3,15 +3,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::network::BroadcastPeerPriority;
-use gaptos::api_types::{
-    account::{ExternalAccountAddress, ExternalChainId},
-    u256_define::TxnHash,
-};
-use gaptos::aptos_crypto::{HashValue, Uniform};
-use gaptos::aptos_types::{
-    account_address::AccountAddress,
-    chain_id::{self, ChainId},
-    transaction::{RawTransaction, SignedTransaction, TransactionPayload},
+use gaptos::{
+    api_types::{
+        account::{ExternalAccountAddress, ExternalChainId},
+        u256_define::TxnHash,
+    },
+    aptos_crypto::{HashValue, Uniform},
+    aptos_mempool::counters,
+    aptos_types::{
+        account_address::AccountAddress,
+        chain_id::{self, ChainId},
+        transaction::{RawTransaction, SignedTransaction, TransactionPayload},
+    },
 };
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
@@ -21,7 +24,6 @@ use std::{
     sync::{atomic::AtomicUsize, Arc},
     time::SystemTime,
 };
-use gaptos::aptos_mempool::counters as counters;
 
 /// Estimated per-txn size minus the raw transaction
 pub const TXN_FIXED_ESTIMATED_BYTES: usize = size_of::<MempoolTransaction>();
@@ -33,8 +35,9 @@ static GLOBAL_PUBLIC_KEY: Lazy<gaptos::aptos_crypto::ed25519::Ed25519PublicKey> 
     )
 });
 
-static GLOBAL_SIGNATURE: Lazy<gaptos::aptos_crypto::ed25519::Ed25519Signature> =
-    Lazy::new(|| gaptos::aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap());
+static GLOBAL_SIGNATURE: Lazy<gaptos::aptos_crypto::ed25519::Ed25519Signature> = Lazy::new(|| {
+    gaptos::aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap()
+});
 
 /// TODO(gravity_byteyue): is this function useful? it seems not right
 impl From<&SignedTransaction> for VerifiedTxn {
@@ -123,7 +126,11 @@ pub struct VerifiedTxn {
 
 impl std::fmt::Debug for VerifiedTxn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "VerifiedTxn {{ sender: {:?}, sequence_number: {:?}, committed_hash: {:?} }}", self.sender, self.sequence_number, self.committed_hash)
+        write!(
+            f,
+            "VerifiedTxn {{ sender: {:?}, sequence_number: {:?}, committed_hash: {:?} }}",
+            self.sender, self.sequence_number, self.committed_hash
+        )
     }
 }
 
@@ -275,16 +282,17 @@ pub enum SubmittedBy {
     /// submitted to multiple nodes (by the client) then the end-to-end latency measured will not
     /// be accurate (the measured value will be lower than the correct value).
     Client,
-    /// The transaction was received from a downstream peer, i.e., not a client or a peer validator.
-    /// At a validator, a transaction from downstream can be used as the time a transaction first
-    /// entered the validator network, to measure end-to-end latency within the validator network.
-    /// However, if a transaction enters via multiple validators (due to duplication outside of the
-    /// validator network) then the validator end-to-end latency measured will not be accurate
-    /// (the measured value will be lower than the correct value).
+    /// The transaction was received from a downstream peer, i.e., not a client or a peer
+    /// validator. At a validator, a transaction from downstream can be used as the time a
+    /// transaction first entered the validator network, to measure end-to-end latency within
+    /// the validator network. However, if a transaction enters via multiple validators (due to
+    /// duplication outside of the validator network) then the validator end-to-end latency
+    /// measured will not be accurate (the measured value will be lower than the correct
+    /// value).
     Downstream,
     /// The transaction was received at a validator from another validator, rather than from the
-    /// downstream VFN. This transaction should not be used to measure end-to-end latency within the
-    /// validator network (see Downstream).
+    /// downstream VFN. This transaction should not be used to measure end-to-end latency within
+    /// the validator network (see Downstream).
     /// Note, with Quorum Store enabled, no transactions will be classified as PeerValidator.
     PeerValidator,
 }

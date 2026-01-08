@@ -14,7 +14,10 @@ use greth::{
     reth_tracing::FileWorkerGuard,
 };
 use std::{
-    collections::BTreeMap, ffi::OsString, fmt::{self}, sync::Arc
+    collections::BTreeMap,
+    ffi::OsString,
+    fmt::{self},
+    sync::Arc,
 };
 use tracing::debug;
 
@@ -22,11 +25,14 @@ static BUILD_INFO: std::sync::OnceLock<BTreeMap<String, String>> = std::sync::On
 static LONG_VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 fn short_version() -> &'static str {
-    BUILD_INFO.get_or_init(|| {
-        let build_info = build_information!();
-        build_info
-    })
-    .get(BUILD_PKG_VERSION).map(|s| s.as_str()).unwrap_or("unknown")
+    BUILD_INFO
+        .get_or_init(|| {
+            let build_info = build_information!();
+            build_info
+        })
+        .get(BUILD_PKG_VERSION)
+        .map(|s| s.as_str())
+        .unwrap_or("unknown")
 }
 
 fn long_version() -> &'static str {
@@ -35,11 +41,7 @@ fn long_version() -> &'static str {
             let build_info = build_information!();
             build_info
         });
-        build_info
-            .iter()
-            .map(|(k, v)| format!("{}: {}", k, v))
-            .collect::<Vec<String>>()
-            .join("\n")
+        build_info.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<String>>().join("\n")
     })
 }
 

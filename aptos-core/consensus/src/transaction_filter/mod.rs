@@ -1,9 +1,10 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use gaptos::aptos_config::config::transaction_filter_type::Filter;
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_types::transaction::SignedTransaction;
+use gaptos::{
+    aptos_config::config::transaction_filter_type::Filter, aptos_crypto::HashValue,
+    aptos_types::transaction::SignedTransaction,
+};
 
 pub struct TransactionFilter {
     filter: Filter,
@@ -20,37 +21,35 @@ impl TransactionFilter {
         timestamp: u64,
         txns: Vec<SignedTransaction>,
     ) -> Vec<SignedTransaction> {
-        // Special case for no filter to avoid unnecessary iteration through all transactions in the default case
+        // Special case for no filter to avoid unnecessary iteration through all transactions in the
+        // default case
         if self.filter.is_empty() {
             return txns;
         }
-        txns.into_iter()
-            .filter(|txn| self.filter.allows(block_id, timestamp, txn))
-            .collect()
+        txns.into_iter().filter(|txn| self.filter.allows(block_id, timestamp, txn)).collect()
     }
 }
 
 #[cfg(test)]
 mod test {
     use crate::transaction_filter::TransactionFilter;
-    use gaptos::aptos_config::config::transaction_filter_type::Filter;
-    use gaptos::aptos_crypto::{ed25519::Ed25519PrivateKey, HashValue, PrivateKey, SigningKey, Uniform};
-    use gaptos::aptos_types::{
-        chain_id::ChainId,
-        move_utils::MemberId,
-        transaction::{EntryFunction, RawTransaction, SignedTransaction, TransactionPayload},
+    use gaptos::{
+        aptos_config::config::transaction_filter_type::Filter,
+        aptos_crypto::{ed25519::Ed25519PrivateKey, HashValue, PrivateKey, SigningKey, Uniform},
+        aptos_types::{
+            chain_id::ChainId,
+            move_utils::MemberId,
+            transaction::{EntryFunction, RawTransaction, SignedTransaction, TransactionPayload},
+        },
+        move_core_types::account_address::AccountAddress,
     };
-    use gaptos::move_core_types::account_address::AccountAddress;
 
     fn create_signed_transaction(function: MemberId) -> SignedTransaction {
         let private_key = Ed25519PrivateKey::generate_for_testing();
         let public_key = private_key.public_key();
         let sender = AccountAddress::random();
         let sequence_number = 0;
-        let MemberId {
-            module_id,
-            member_id: function_id,
-        } = function;
+        let MemberId { module_id, member_id: function_id } = function;
 
         let payload = TransactionPayload::EntryFunction(EntryFunction::new(
             module_id,
@@ -138,9 +137,7 @@ mod test {
         let block_id = HashValue::random();
         // Allows all transactions with block timestamp greater than 1000
         let block_timestamp_filter = TransactionFilter::new(
-            Filter::empty()
-                .add_allow_block_timestamp_greater_than(1000)
-                .add_deny_all(),
+            Filter::empty().add_allow_block_timestamp_greater_than(1000).add_deny_all(),
         );
 
         let filtered_txns = block_timestamp_filter.filter(block_id, 0, txns.clone());
@@ -165,9 +162,7 @@ mod test {
         let txns = get_transactions();
         let block_id = HashValue::random();
         let block_list_sender_filter = TransactionFilter::new(
-            Filter::empty()
-                .add_deny_sender(txns[0].sender())
-                .add_deny_sender(txns[1].sender()),
+            Filter::empty().add_deny_sender(txns[0].sender()).add_deny_sender(txns[1].sender()),
         );
         let filtered_txns = block_list_sender_filter.filter(block_id, 0, txns.clone());
         assert_eq!(filtered_txns, txns[2..].to_vec());

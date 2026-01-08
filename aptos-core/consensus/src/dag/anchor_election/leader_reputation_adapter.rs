@@ -13,13 +13,12 @@ use crate::{
         proposer_election::ProposerElection,
     },
 };
-use gaptos::aptos_bitvec::BitVec;
-use gaptos::aptos_collections::BoundedVecDeque;
 use aptos_consensus_types::common::{Author, Round};
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_types::account_config::NewBlockEvent;
-use gaptos::move_core_types::account_address::AccountAddress;
+use gaptos::{
+    aptos_bitvec::BitVec, aptos_collections::BoundedVecDeque, aptos_crypto::HashValue,
+    aptos_infallible::Mutex, aptos_types::account_config::NewBlockEvent,
+    move_core_types::account_address::AccountAddress,
+};
 use std::{collections::HashMap, sync::Arc};
 
 pub struct MetadataBackendAdapter {
@@ -55,19 +54,13 @@ impl MetadataBackendAdapter {
             .expect("Event epoch should map back to validators!");
         let mut bitvec = BitVec::with_num_bits(validators.len() as u16);
         for author in event.parents() {
-            bitvec.set(
-                *validators
-                    .get(author)
-                    .expect("Author should be in validators set!") as u16,
-            );
+            bitvec
+                .set(*validators.get(author).expect("Author should be in validators set!") as u16);
         }
         let mut failed_authors = vec![];
         for author in event.failed_authors() {
-            failed_authors.push(
-                *validators
-                    .get(author)
-                    .expect("Author should be in validators set!") as u64,
-            );
+            failed_authors
+                .push(*validators.get(author).expect("Author should be in validators set!") as u64);
         }
         NewBlockEvent::new(
             AccountAddress::ZERO,

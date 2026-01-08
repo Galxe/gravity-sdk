@@ -187,8 +187,8 @@ fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
                         if let Ok(mut file) = File::create(&proto_path) {
                             if let Ok(profile) = report.pprof() {
                                 let mut content = Vec::new();
-                                if profile.write_to_vec(&mut content).is_ok()
-                                    && std::io::Write::write_all(&mut file, &content).is_ok()
+                                if profile.write_to_vec(&mut content).is_ok() &&
+                                    std::io::Write::write_all(&mut file, &content).is_ok()
                                 {
                                     println!("Wrote protobuf to {}", proto_path);
                                 }
@@ -214,7 +214,10 @@ fn main() {
     let (execution_args_tx, execution_args_rx) = oneshot::channel();
     let (consensus_args, latest_block_number) = run_reth(cli, execution_args_rx);
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let pool = Box::new(Mempool::new(consensus_args.pool.clone(), gcei_config.base.role == RoleType::FullNode));
+    let pool = Box::new(Mempool::new(
+        consensus_args.pool.clone(),
+        gcei_config.base.role == RoleType::FullNode,
+    ));
     let txn_cache = pool.tx_cache();
     rt.block_on(async move {
         let client = Arc::new(RethCli::new(consensus_args, txn_cache).await);
@@ -238,15 +241,17 @@ fn main() {
                 }
             }
             _engine = Some(
-                ConsensusEngine::init(ConsensusEngineArgs {
-                    node_config: gcei_config,
-                    chain_id,
-                    latest_block_number,
-                    config_storage: Some(Arc::new(ConfigStorageWrapper::new(Arc::new(
-                        RethCliConfigStorage::new(client),
-                    )))),
-                }, 
-                pool,)
+                ConsensusEngine::init(
+                    ConsensusEngineArgs {
+                        node_config: gcei_config,
+                        chain_id,
+                        latest_block_number,
+                        config_storage: Some(Arc::new(ConfigStorageWrapper::new(Arc::new(
+                            RethCliConfigStorage::new(client),
+                        )))),
+                    },
+                    pool,
+                )
                 .await,
             );
         }

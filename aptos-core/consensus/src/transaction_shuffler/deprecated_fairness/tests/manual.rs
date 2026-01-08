@@ -13,11 +13,7 @@ struct TestCase {
 
 impl TestCase {
     fn run(self) {
-        let Self {
-            shuffler,
-            conflict_key_registries,
-            expected_order,
-        } = self;
+        let Self { shuffler, conflict_key_registries, expected_order } = self;
 
         let order =
             FairnessShufflerImpl::new(&conflict_key_registries, shuffler.window_sizes()).shuffle();

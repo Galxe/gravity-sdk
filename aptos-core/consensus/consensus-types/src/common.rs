@@ -7,24 +7,30 @@ use crate::{
     proof_of_store::{BatchInfo, ProofCache, ProofOfStore},
 };
 use anyhow::bail;
-use gaptos::aptos_crypto::{
-    hash::{CryptoHash, CryptoHasher},
-    HashValue,
-};
-use gaptos::aptos_crypto as aptos_crypto;
-use gaptos::aptos_crypto_derive::CryptoHasher;
 use aptos_executor_types::ExecutorResult;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_types::{
-    account_address::AccountAddress, transaction::SignedTransaction,
-    validator_verifier::ValidatorVerifier, vm_status::DiscardedVMStatus, PeerId,
+use gaptos::{
+    aptos_crypto,
+    aptos_crypto::{
+        hash::{CryptoHash, CryptoHasher},
+        HashValue,
+    },
+    aptos_crypto_derive::CryptoHasher,
+    aptos_infallible::Mutex,
+    aptos_logger::prelude::*,
+    aptos_types::{
+        account_address::AccountAddress, transaction::SignedTransaction,
+        validator_verifier::ValidatorVerifier, vm_status::DiscardedVMStatus, PeerId,
+    },
 };
 use once_cell::sync::OnceCell;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashSet, fmt::{self, Write}, io::Read, sync::Arc, u64
+    collections::HashSet,
+    fmt::{self, Write},
+    io::Read,
+    sync::Arc,
+    u64,
 };
 use tokio::sync::oneshot;
 
@@ -36,8 +42,7 @@ pub type Round = u64;
 pub type Author = AccountAddress;
 
 // Re-export from gaptos to unify types and avoid O(N) conversion in pull_internal
-pub use gaptos::aptos_consensus_types::common::TransactionSummary;
-pub use gaptos::aptos_consensus_types::common::TransactionInProgress;
+pub use gaptos::aptos_consensus_types::common::{TransactionInProgress, TransactionSummary};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize, Hash, Ord, PartialOrd)]
 pub struct TxnSummaryWithExpiration {
@@ -54,12 +59,7 @@ impl TxnSummaryWithExpiration {
         expiration_timestamp_secs: u64,
         hash: HashValue,
     ) -> Self {
-        Self {
-            sender,
-            sequence_number,
-            expiration_timestamp_secs,
-            hash,
-        }
+        Self { sender, sequence_number, expiration_timestamp_secs, hash }
     }
 }
 
@@ -80,12 +80,7 @@ pub struct RejectedTransactionSummary {
 #[derive(Debug)]
 pub enum DataStatus {
     Cached(Vec<SignedTransaction>),
-    Requested(
-        Vec<(
-            HashValue,
-            oneshot::Receiver<ExecutorResult<Vec<SignedTransaction>>>,
-        )>,
-    ),
+    Requested(Vec<(HashValue, oneshot::Receiver<ExecutorResult<Vec<SignedTransaction>>>)>),
 }
 
 impl DataStatus {
@@ -118,10 +113,7 @@ impl Eq for ProofWithData {}
 
 impl ProofWithData {
     pub fn new(proofs: Vec<ProofOfStore>) -> Self {
-        Self {
-            proofs,
-            status: Arc::new(Mutex::new(None)),
-        }
+        Self { proofs, status: Arc::new(Mutex::new(None)) }
     }
 
     pub fn empty() -> Self {
@@ -141,17 +133,11 @@ impl ProofWithData {
     }
 
     pub fn len(&self) -> usize {
-        self.proofs
-            .iter()
-            .map(|proof| proof.num_txns() as usize)
-            .sum()
+        self.proofs.iter().map(|proof| proof.num_txns() as usize).sum()
     }
 
     pub fn num_bytes(&self) -> usize {
-        self.proofs
-            .iter()
-            .map(|proof| proof.num_bytes() as usize)
-            .sum()
+        self.proofs.iter().map(|proof| proof.num_bytes() as usize).sum()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -167,8 +153,8 @@ pub struct ProofWithDataWithTxnLimit {
 
 impl PartialEq for ProofWithDataWithTxnLimit {
     fn eq(&self, other: &Self) -> bool {
-        self.proof_with_data == other.proof_with_data
-            && self.max_txns_to_execute == other.max_txns_to_execute
+        self.proof_with_data == other.proof_with_data &&
+            self.max_txns_to_execute == other.max_txns_to_execute
     }
 }
 
@@ -176,10 +162,7 @@ impl Eq for ProofWithDataWithTxnLimit {}
 
 impl ProofWithDataWithTxnLimit {
     pub fn new(proof_with_data: ProofWithData, max_txns_to_execute: Option<u64>) -> Self {
-        Self {
-            proof_with_data,
-            max_txns_to_execute,
-        }
+        Self { proof_with_data, max_txns_to_execute }
     }
 
     pub fn extend(&mut self, other: ProofWithDataWithTxnLimit) {
@@ -205,11 +188,7 @@ pub enum Payload {
     DirectMempool(Vec<SignedTransaction>),
     InQuorumStore(ProofWithData),
     InQuorumStoreWithLimit(ProofWithDataWithTxnLimit),
-    QuorumStoreInlineHybrid(
-        Vec<(BatchInfo, Vec<SignedTransaction>)>,
-        ProofWithData,
-        Option<u64>,
-    ),
+    QuorumStoreInlineHybrid(Vec<(BatchInfo, Vec<SignedTransaction>)>, ProofWithData, Option<u64>),
     OptQuorumStore(OptQuorumStorePayload),
 }
 
@@ -225,16 +204,16 @@ impl Payload {
                     proof_with_data,
                     max_txns_to_execute,
                 )
-            },
+            }
             Payload::InQuorumStoreWithLimit(_) => {
                 panic!("Payload is already in quorumStoreV2 format");
-            },
+            }
             Payload::DirectMempool(_) => {
                 panic!("Payload is in direct mempool format");
-            },
+            }
             Payload::OptQuorumStore(_) => {
                 unreachable!("OptQuorumStore Payload is incompatible with QuorumStoreV2");
-            },
+            }
         }
     }
 
@@ -258,14 +237,11 @@ impl Payload {
                 // here we return the actual length of the payload; limit is considered at the stage
                 // where we prepare the block from the payload
                 proof_with_status.proof_with_data.len()
-            },
+            }
             Payload::QuorumStoreInlineHybrid(inline_batches, proof_with_data, _) => {
-                proof_with_data.len()
-                    + inline_batches
-                        .iter()
-                        .map(|(_, txns)| txns.len())
-                        .sum::<usize>()
-            },
+                proof_with_data.len() +
+                    inline_batches.iter().map(|(_, txns)| txns.len()).sum::<usize>()
+            }
             Payload::OptQuorumStore(opt_qs_payload) => opt_qs_payload.num_txns(),
         }
     }
@@ -279,20 +255,18 @@ impl Payload {
                 // where we prepare the block from the payload
                 (proof_with_status.proof_with_data.len() as u64)
                     .min(proof_with_status.max_txns_to_execute.unwrap_or(u64::MAX))
-            },
+            }
             Payload::QuorumStoreInlineHybrid(
                 inline_batches,
                 proof_with_data,
                 max_txns_to_execute,
-            ) => ((proof_with_data.len()
-                + inline_batches
-                    .iter()
-                    .map(|(_, txns)| txns.len())
-                    .sum::<usize>()) as u64)
+            ) => ((proof_with_data.len() +
+                inline_batches.iter().map(|(_, txns)| txns.len()).sum::<usize>())
+                as u64)
                 .min(max_txns_to_execute.unwrap_or(u64::MAX)),
             Payload::OptQuorumStore(opt_qs_payload) => {
                 opt_qs_payload.max_txns_to_execute().unwrap_or(u64::MAX)
-            },
+            }
         }
     }
 
@@ -302,10 +276,10 @@ impl Payload {
             Payload::InQuorumStore(proof_with_status) => proof_with_status.proofs.is_empty(),
             Payload::InQuorumStoreWithLimit(proof_with_status) => {
                 proof_with_status.proof_with_data.proofs.is_empty()
-            },
+            }
             Payload::QuorumStoreInlineHybrid(inline_batches, proof_with_data, _) => {
                 proof_with_data.proofs.is_empty() && inline_batches.is_empty()
-            },
+            }
             Payload::OptQuorumStore(opt_qs_payload) => opt_qs_payload.is_empty(),
         }
     }
@@ -316,17 +290,17 @@ impl Payload {
                 let mut v3 = v1;
                 v3.extend(v2);
                 Payload::DirectMempool(v3)
-            },
+            }
             (Payload::InQuorumStore(p1), Payload::InQuorumStore(p2)) => {
                 let mut p3 = p1;
                 p3.extend(p2);
                 Payload::InQuorumStore(p3)
-            },
+            }
             (Payload::InQuorumStoreWithLimit(p1), Payload::InQuorumStoreWithLimit(p2)) => {
                 let mut p3 = p1;
                 p3.extend(p2);
                 Payload::InQuorumStoreWithLimit(p3)
-            },
+            }
             (
                 Payload::QuorumStoreInlineHybrid(b1, p1, m1),
                 Payload::QuorumStoreInlineHybrid(b2, p2, m2),
@@ -338,36 +312,36 @@ impl Payload {
                 // TODO: What's the right logic here?
                 let m3 = sum_max_txns_to_execute(m1, m2);
                 Payload::QuorumStoreInlineHybrid(b3, p3, m3)
-            },
+            }
             (Payload::QuorumStoreInlineHybrid(b1, p1, m1), Payload::InQuorumStore(p2)) => {
                 // TODO: How to update m1?
                 let mut p3 = p1;
                 p3.extend(p2);
                 Payload::QuorumStoreInlineHybrid(b1, p3, m1)
-            },
+            }
             (Payload::QuorumStoreInlineHybrid(b1, p1, m1), Payload::InQuorumStoreWithLimit(p2)) => {
                 // TODO: What's the right logic here?
                 let m3 = sum_max_txns_to_execute(m1, p2.max_txns_to_execute);
                 let mut p3 = p1;
                 p3.extend(p2.proof_with_data);
                 Payload::QuorumStoreInlineHybrid(b1, p3, m3)
-            },
+            }
             (Payload::InQuorumStore(p1), Payload::QuorumStoreInlineHybrid(b2, p2, m2)) => {
                 let mut p3 = p1;
                 p3.extend(p2);
                 Payload::QuorumStoreInlineHybrid(b2, p3, m2)
-            },
+            }
             (Payload::InQuorumStoreWithLimit(p1), Payload::QuorumStoreInlineHybrid(b2, p2, m2)) => {
                 // TODO: What's the right logic here?
                 let m3 = sum_max_txns_to_execute(p1.max_txns_to_execute, m2);
                 let mut p3 = p1.proof_with_data;
                 p3.extend(p2);
                 Payload::QuorumStoreInlineHybrid(b2, p3, m3)
-            },
+            }
             (Payload::OptQuorumStore(opt_qs1), Payload::OptQuorumStore(opt_qs2)) => {
                 let opt_qs3 = opt_qs1.extend(opt_qs2);
                 Payload::OptQuorumStore(opt_qs3)
-            },
+            }
             (_, _) => unreachable!(),
         }
     }
@@ -383,22 +357,20 @@ impl Payload {
     /// This is potentially computationally expensive
     pub fn size(&self) -> usize {
         match self {
-            Payload::DirectMempool(txns) => txns
-                .par_iter()
-                .with_min_len(100)
-                .map(|txn| txn.raw_txn_bytes_len())
-                .sum(),
+            Payload::DirectMempool(txns) => {
+                txns.par_iter().with_min_len(100).map(|txn| txn.raw_txn_bytes_len()).sum()
+            }
             Payload::InQuorumStore(proof_with_status) => proof_with_status.num_bytes(),
             Payload::InQuorumStoreWithLimit(proof_with_status) => {
                 proof_with_status.proof_with_data.num_bytes()
-            },
+            }
             Payload::QuorumStoreInlineHybrid(inline_batches, proof_with_data, _) => {
-                proof_with_data.num_bytes()
-                    + inline_batches
+                proof_with_data.num_bytes() +
+                    inline_batches
                         .iter()
                         .map(|(batch_info, _)| batch_info.num_bytes() as usize)
                         .sum::<usize>()
-            },
+            }
             Payload::OptQuorumStore(opt_qs_payload) => opt_qs_payload.num_bytes(),
         }
     }
@@ -411,9 +383,9 @@ impl Payload {
         let unverified: Vec<_> = proofs
             .iter()
             .filter(|proof| {
-                proof_cache.get(proof.info()).map_or(true, |cached_proof| {
-                    cached_proof != *proof.multi_signature()
-                })
+                proof_cache
+                    .get(proof.info())
+                    .map_or(true, |cached_proof| cached_proof != *proof.multi_signature())
             })
             .collect();
         unverified
@@ -433,7 +405,7 @@ impl Payload {
             (false, Payload::DirectMempool(_)) => Ok(()),
             (true, Payload::InQuorumStore(proof_with_status)) => {
                 Self::verify_with_cache(&proof_with_status.proofs, validator, proof_cache)
-            },
+            }
             (true, Payload::InQuorumStoreWithLimit(proof_with_status)) => Self::verify_with_cache(
                 &proof_with_status.proof_with_data.proofs,
                 validator,
@@ -451,13 +423,13 @@ impl Payload {
                     }
                 }
                 Ok(())
-            },
+            }
             (true, Payload::OptQuorumStore(opt_quorum_store)) => {
                 let proof_with_data = opt_quorum_store.proof_with_data();
                 Self::verify_with_cache(&proof_with_data.batch_summary, validator, proof_cache)?;
                 // TODO(ibalajiarun): Remove this when ready to support OptQuorumStore.
                 bail!("OptQuorumStore is not supported yet.");
-            },
+            }
             (_, _) => Err(anyhow::anyhow!(
                 "Wrong payload type. Expected Payload::InQuorumStore {} got {} ",
                 quorum_store_enabled,
@@ -472,31 +444,24 @@ impl fmt::Display for Payload {
         match self {
             Payload::DirectMempool(txns) => {
                 write!(f, "InMemory txns: {}", txns.len())
-            },
+            }
             Payload::InQuorumStore(proof_with_status) => {
                 write!(f, "InMemory proofs: {}", proof_with_status.proofs.len())
-            },
+            }
             Payload::InQuorumStoreWithLimit(proof_with_status) => {
-                write!(
-                    f,
-                    "InMemory proofs: {}",
-                    proof_with_status.proof_with_data.proofs.len()
-                )
-            },
+                write!(f, "InMemory proofs: {}", proof_with_status.proof_with_data.proofs.len())
+            }
             Payload::QuorumStoreInlineHybrid(inline_batches, proof_with_data, _) => {
                 write!(
                     f,
                     "Inline txns: {}, InMemory proofs: {}",
-                    inline_batches
-                        .iter()
-                        .map(|(_, txns)| txns.len())
-                        .sum::<usize>(),
+                    inline_batches.iter().map(|(_, txns)| txns.len()).sum::<usize>(),
                     proof_with_data.proofs.len()
                 )
-            },
+            }
             Payload::OptQuorumStore(opt_quorum_store) => {
                 write!(f, "{}", opt_quorum_store)
-            },
+            }
         }
     }
 }
@@ -518,8 +483,8 @@ impl CryptoHash for BatchPayload {
         self.num_bytes.get_or_init(|| bytes.len());
         state.update(&bytes);
         state.finish()
-        // TODO(gravity_kenji): The following code performs well, but there are some correctness issues that need to be addressed later.
-        // for txn in &self.txns {
+        // TODO(gravity_kenji): The following code performs well, but there are some correctness
+        // issues that need to be addressed later. for txn in &self.txns {
         //     state.update(txn.committed_hash().as_ref());
         // }
         // state.finish()
@@ -528,11 +493,7 @@ impl CryptoHash for BatchPayload {
 
 impl BatchPayload {
     pub fn new(author: PeerId, txns: Vec<SignedTransaction>) -> Self {
-        Self {
-            author,
-            txns,
-            num_bytes: OnceCell::new(),
-        }
+        Self { author, txns, num_bytes: OnceCell::new() }
     }
 
     pub fn into_transactions(self) -> Vec<SignedTransaction> {
@@ -595,12 +556,12 @@ impl From<&Vec<&Payload>> for PayloadFilter {
                         for proof in &proof_with_status.proofs {
                             exclude_proofs.insert(proof.info().clone());
                         }
-                    },
+                    }
                     Payload::InQuorumStoreWithLimit(proof_with_status) => {
                         for proof in &proof_with_status.proof_with_data.proofs {
                             exclude_proofs.insert(proof.info().clone());
                         }
-                    },
+                    }
                     Payload::QuorumStoreInlineHybrid(inline_batches, proof_with_data, _) => {
                         for proof in &proof_with_data.proofs {
                             exclude_proofs.insert(proof.info().clone());
@@ -608,10 +569,10 @@ impl From<&Vec<&Payload>> for PayloadFilter {
                         for (batch_info, _) in inline_batches {
                             exclude_proofs.insert(batch_info.clone());
                         }
-                    },
+                    }
                     Payload::DirectMempool(_) => {
                         error!("DirectMempool payload in InQuorumStore filter");
-                    },
+                    }
                     Payload::OptQuorumStore(opt_qs_payload) => {
                         for batch_info in &opt_qs_payload.opt_batches().batch_summary {
                             exclude_proofs.insert(batch_info.clone());
@@ -619,7 +580,7 @@ impl From<&Vec<&Payload>> for PayloadFilter {
                         for proof in &opt_qs_payload.proof_with_data().batch_summary {
                             exclude_proofs.insert(proof.info().clone());
                         }
-                    },
+                    }
                 }
             }
             PayloadFilter::InQuorumStore(exclude_proofs)
@@ -636,17 +597,17 @@ impl fmt::Display for PayloadFilter {
                     write!(txns_str, "{} ", tx)?;
                 }
                 write!(f, "{}", txns_str)
-            },
+            }
             PayloadFilter::InQuorumStore(excluded_proofs) => {
                 let mut proofs_str = "".to_string();
                 for proof in excluded_proofs.iter() {
                     write!(proofs_str, "{} ", proof.digest())?;
                 }
                 write!(f, "{}", proofs_str)
-            },
+            }
             PayloadFilter::Empty => {
                 write!(f, "Empty filter")
-            },
+            }
         }
     }
 }

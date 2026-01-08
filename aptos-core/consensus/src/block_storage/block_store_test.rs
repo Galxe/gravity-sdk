@@ -5,12 +5,9 @@
 use crate::{
     block_storage::{block_store::sync_manager::NeedFetchResult, BlockReader},
     pending_votes::{PendingVotes, VoteReceptionResult},
-    test_utils::{
-        build_empty_tree, build_simple_tree, TreeInserter,
-    },
+    test_utils::{build_empty_tree, build_simple_tree, TreeInserter},
     util::mock_time_service::SimulatedTimeService,
 };
-use gaptos::aptos_config::config::QcAggregatorType;
 use aptos_consensus_types::{
     block::{
         block_test_utils::{
@@ -23,11 +20,14 @@ use aptos_consensus_types::{
     vote::Vote,
     vote_data::VoteData,
 };
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_types::{
-    validator_signer::ValidatorSigner, validator_verifier::random_validator_verifier,
-};
 use futures_channel::mpsc::unbounded;
+use gaptos::{
+    aptos_config::config::QcAggregatorType,
+    aptos_crypto::HashValue,
+    aptos_types::{
+        validator_signer::ValidatorSigner, validator_verifier::random_validator_verifier,
+    },
+};
 use proptest::prelude::*;
 use std::{cmp::min, sync::Arc};
 
@@ -35,29 +35,15 @@ use std::{cmp::min, sync::Arc};
 async fn test_highest_block_and_quorum_cert() {
     let mut inserter = TreeInserter::default().await;
     let block_store = inserter.block_store();
-    assert_eq!(
-        block_store.highest_certified_block().block(),
-        &Block::make_genesis_block()
-    );
-    assert_eq!(
-        block_store.highest_quorum_cert().as_ref(),
-        &certificate_for_genesis()
-    );
+    assert_eq!(block_store.highest_certified_block().block(), &Block::make_genesis_block());
+    assert_eq!(block_store.highest_quorum_cert().as_ref(), &certificate_for_genesis());
 
     let genesis = block_store.ordered_root();
 
     // Genesis block and quorum certificate is still the highest
-    let block_round_1 = inserter
-        .insert_block_with_qc(certificate_for_genesis(), &genesis, 1)
-        .await;
-    assert_eq!(
-        block_store.highest_certified_block().block(),
-        &Block::make_genesis_block()
-    );
-    assert_eq!(
-        block_store.highest_quorum_cert().as_ref(),
-        &certificate_for_genesis()
-    );
+    let block_round_1 = inserter.insert_block_with_qc(certificate_for_genesis(), &genesis, 1).await;
+    assert_eq!(block_store.highest_certified_block().block(), &Block::make_genesis_block());
+    assert_eq!(block_store.highest_quorum_cert().as_ref(), &certificate_for_genesis());
 
     // block_round_1 block and quorum certificate is now the highest
     let block_round_3 = inserter.insert_block(&block_round_1, 3, None).await;
@@ -88,15 +74,10 @@ async fn test_qc_ancestry() {
     let mut inserter = TreeInserter::default().await;
     let block_store = inserter.block_store();
     let genesis = block_store.ordered_root();
-    let block_a_1 = inserter
-        .insert_block_with_qc(certificate_for_genesis(), &genesis, 1)
-        .await;
+    let block_a_1 = inserter.insert_block_with_qc(certificate_for_genesis(), &genesis, 1).await;
     let block_a_2 = inserter.insert_block(&block_a_1, 2, None).await;
 
-    assert_eq!(
-        block_store.get_block(genesis.quorum_cert().certified_block().id()),
-        None
-    );
+    assert_eq!(block_store.get_block(genesis.quorum_cert().certified_block().id()), None);
     assert_eq!(
         block_store.get_block(block_a_1.quorum_cert().certified_block().id()),
         Some(genesis)
@@ -225,9 +206,8 @@ async fn test_block_tree_gc() {
 
     for round in 1..100 {
         if round == 1 {
-            cur_node = inserter
-                .insert_block_with_qc(certificate_for_genesis(), &cur_node, round)
-                .await;
+            cur_node =
+                inserter.insert_block_with_qc(certificate_for_genesis(), &cur_node, round).await;
         } else {
             cur_node = inserter.insert_block(&cur_node, round, None).await;
         }
@@ -245,30 +225,17 @@ async fn test_block_tree_gc() {
 async fn test_path_from_root() {
     let mut inserter = TreeInserter::default().await;
     let block_store = inserter.block_store();
-    let genesis = block_store
-        .get_block(block_store.ordered_root().id())
-        .unwrap();
-    let b1 = inserter
-        .insert_block_with_qc(certificate_for_genesis(), &genesis, 1)
-        .await;
+    let genesis = block_store.get_block(block_store.ordered_root().id()).unwrap();
+    let b1 = inserter.insert_block_with_qc(certificate_for_genesis(), &genesis, 1).await;
     let b2 = inserter.insert_block(&b1, 2, None).await;
     let b3 = inserter.insert_block(&b2, 3, None).await;
 
-    assert_eq!(
-        block_store.path_from_ordered_root(b3.id()),
-        Some(vec![b1, b2.clone(), b3.clone()])
-    );
-    assert_eq!(
-        block_store.path_from_ordered_root(genesis.id()),
-        Some(vec![])
-    );
+    assert_eq!(block_store.path_from_ordered_root(b3.id()), Some(vec![b1, b2.clone(), b3.clone()]));
+    assert_eq!(block_store.path_from_ordered_root(genesis.id()), Some(vec![]));
 
     block_store.prune_tree(b2.id());
 
-    assert_eq!(
-        block_store.path_from_ordered_root(b3.id()),
-        Some(vec![b3.clone()])
-    );
+    assert_eq!(block_store.path_from_ordered_root(b3.id()), Some(vec![b3.clone()]));
     assert_eq!(block_store.path_from_ordered_root(genesis.id()), None);
 }
 
@@ -281,9 +248,7 @@ async fn test_insert_vote() {
     let mut inserter = TreeInserter::new(my_signer).await;
     let block_store = inserter.block_store();
     let genesis = block_store.ordered_root();
-    let block = inserter
-        .insert_block_with_qc(certificate_for_genesis(), &genesis, 1)
-        .await;
+    let block = inserter.insert_block_with_qc(certificate_for_genesis(), &genesis, 1).await;
     let time_service = Arc::new(SimulatedTimeService::new());
     let (delayed_qc_tx, _) = unbounded();
 
@@ -338,13 +303,11 @@ async fn test_insert_vote() {
     match pending_votes.insert_vote(&vote, &validator_verifier) {
         VoteReceptionResult::NewQuorumCertificate(qc) => {
             assert_eq!(qc.certified_block().id(), block.id());
-            block_store
-                .insert_single_quorum_cert(qc.as_ref().clone(), false)
-                .unwrap();
-        },
+            block_store.insert_single_quorum_cert(qc.as_ref().clone(), false).unwrap();
+        }
         _ => {
             panic!("QC not formed!");
-        },
+        }
     }
 
     let block_qc = block_store.get_quorum_cert_for_block(block.id()).unwrap();
@@ -378,9 +341,7 @@ async fn test_highest_qc() {
     // build a tree of the following form
     // genesis <- a1 <- a2 <- a3
     let genesis = block_store.ordered_root();
-    let a1 = inserter
-        .insert_block_with_qc(certificate_for_genesis(), &genesis, 1)
-        .await;
+    let a1 = inserter.insert_block_with_qc(certificate_for_genesis(), &genesis, 1).await;
     assert_eq!(block_store.highest_certified_block(), genesis);
     let a2 = inserter.insert_block(&a1, 2, None).await;
     assert_eq!(block_store.highest_certified_block(), a1);
@@ -396,9 +357,7 @@ async fn test_need_fetch_for_qc() {
     // build a tree of the following form
     // genesis <- a1 <- a2 <- a3
     let genesis = block_store.ordered_root();
-    let a1 = inserter
-        .insert_block_with_qc(certificate_for_genesis(), &genesis, 1)
-        .await;
+    let a1 = inserter.insert_block_with_qc(certificate_for_genesis(), &genesis, 1).await;
     let a2 = inserter.insert_block(&a1, 2, None).await;
     let a3 = inserter.insert_block(&a2, 3, None).await;
     block_store.prune_tree(a2.id());
@@ -418,10 +377,7 @@ async fn test_need_fetch_for_qc() {
         a2.round(),
     );
     let duplicate_qc = block_store.get_quorum_cert_for_block(a2.id()).unwrap();
-    assert_eq!(
-        block_store.need_fetch_for_quorum_cert(&need_fetch_qc),
-        NeedFetchResult::NeedFetch
-    );
+    assert_eq!(block_store.need_fetch_for_quorum_cert(&need_fetch_qc), NeedFetchResult::NeedFetch);
     assert_eq!(
         block_store.need_fetch_for_quorum_cert(&too_old_qc),
         NeedFetchResult::QCRoundBeforeRoot,
@@ -446,11 +402,7 @@ async fn test_need_sync_for_ledger_info() {
         prev = inserter.insert_block(&prev, i, None).await;
     }
     inserter
-        .insert_block(
-            &prev,
-            31,
-            Some(prev.block().gen_block_info(HashValue::zero(), 1, None)),
-        )
+        .insert_block(&prev, 31, Some(prev.block().gen_block_info(HashValue::zero(), 1, None)))
         .await;
     assert_eq!(block_store.ordered_root().round(), 30);
     assert_eq!(block_store.commit_root().round(), 0);

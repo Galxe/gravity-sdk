@@ -1,5 +1,6 @@
 use std::{
-    collections::{hash_map::DefaultHasher, HashSet}, // Needed for DashMap entry key hashing if not directly supported
+    collections::{hash_map::DefaultHasher, HashSet}, /* Needed for DashMap entry key hashing if
+                                                      * not directly supported */
     hash::{Hash, Hasher},
     sync::OnceLock,
     time::SystemTime,
@@ -346,7 +347,8 @@ impl TxnLifeTime {
             }
         }
         if !current_block_txn_keys.is_empty() {
-            // Use entry().or_default().extend() to append if block_id already has txns from other sources (e.g. hybrid)
+            // Use entry().or_default().extend() to append if block_id already has txns from other
+            // sources (e.g. hybrid)
             self.txn_block_id.entry(block_id).or_default().extend(current_block_txn_keys);
         }
     }

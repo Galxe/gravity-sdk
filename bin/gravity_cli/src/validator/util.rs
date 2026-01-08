@@ -48,4 +48,3 @@ pub fn parse_ether(eth_amount: &str) -> Result<U256, anyhow::Error> {
 
     Ok(U256::from_str(&wei_str).map_err(|e| anyhow::anyhow!("Failed to parse ether: {}", e))?)
 }
-

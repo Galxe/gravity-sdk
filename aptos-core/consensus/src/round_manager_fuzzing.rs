@@ -13,8 +13,8 @@ use crate::{
             ChainHealthBackoffConfig, PipelineBackpressureConfig, ProposalGenerator,
         },
         rotating_proposer_election::RotatingProposer,
-        unequivocal_proposer_election::UnequivocalProposerElection,
         round_state::{ExponentialTimeInterval, NewRoundEvent, NewRoundReason, RoundState},
+        unequivocal_proposer_election::UnequivocalProposerElection,
     },
     metrics_safety_rules::MetricsSafetyRules,
     network::NetworkSender,
@@ -26,34 +26,36 @@ use crate::{
     test_utils::{MockPayloadManager, MockStorage},
     util::{mock_time_service::SimulatedTimeService, time_service::TimeService},
 };
-use gaptos::aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
-use gaptos::aptos_config::{
-    config::{ConsensusConfig, QcAggregatorType},
-    network_id::NetworkId,
-};
 use aptos_consensus_types::proposal_msg::ProposalMsg;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_network::{
-    application::{interface::NetworkClient, storage::PeersAndMetadata},
-    peer_manager::{ConnectionRequestSender, PeerManagerRequestSender},
-    protocols::{network, network::NewNetworkSender},
-};
 use aptos_safety_rules::{test_utils, SafetyRules, TSafetyRules};
-use gaptos::aptos_types::{
-    aggregate_signature::AggregateSignature,
-    epoch_change::EpochChangeProof,
-    epoch_state::EpochState,
-    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
-    on_chain_config::{
-        OnChainConsensusConfig, OnChainJWKConsensusConfig, OnChainRandomnessConfig, ValidatorSet,
-        ValidatorTxnConfig,
-    },
-    validator_info::ValidatorInfo,
-    validator_signer::ValidatorSigner,
-    validator_verifier::ValidatorVerifier,
-};
 use futures::{channel::mpsc, executor::block_on};
 use futures_channel::mpsc::unbounded;
+use gaptos::{
+    aptos_channels::{self, aptos_channel, message_queues::QueueStyle},
+    aptos_config::{
+        config::{ConsensusConfig, QcAggregatorType},
+        network_id::NetworkId,
+    },
+    aptos_infallible::Mutex,
+    aptos_network::{
+        application::{interface::NetworkClient, storage::PeersAndMetadata},
+        peer_manager::{ConnectionRequestSender, PeerManagerRequestSender},
+        protocols::{network, network::NewNetworkSender},
+    },
+    aptos_types::{
+        aggregate_signature::AggregateSignature,
+        epoch_change::EpochChangeProof,
+        epoch_state::EpochState,
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+        on_chain_config::{
+            OnChainConsensusConfig, OnChainJWKConsensusConfig, OnChainRandomnessConfig,
+            ValidatorSet, ValidatorTxnConfig,
+        },
+        validator_info::ValidatorInfo,
+        validator_signer::ValidatorSigner,
+        validator_verifier::ValidatorVerifier,
+    },
+};
 use maplit::hashmap;
 use once_cell::sync::Lazy;
 use std::{sync::Arc, time::Duration};
@@ -141,7 +143,8 @@ fn create_node_for_fuzzing() -> RoundManager {
     let validator_set = (&validator).into();
 
     // TODO: EmptyStorage
-    let (initial_data, storage) = futures::executor::block_on(MockStorage::start_for_testing(validator_set));
+    let (initial_data, storage) =
+        futures::executor::block_on(MockStorage::start_for_testing(validator_set));
 
     // TODO: remove
     let proof = make_initial_epoch_change_proof(&signer);
@@ -165,10 +168,8 @@ fn create_node_for_fuzzing() -> RoundManager {
 
     let (self_sender, _self_receiver) = gaptos::aptos_channels::new_unbounded_test();
 
-    let epoch_state = Arc::new(EpochState {
-        epoch: 1,
-        verifier: Arc::new(storage.get_validator_set().into()),
-    });
+    let epoch_state =
+        Arc::new(EpochState { epoch: 1, verifier: Arc::new(storage.get_validator_set().into()) });
     let network = Arc::new(NetworkSender::new(
         signer.author(),
         consensus_network_client,
@@ -229,10 +230,7 @@ fn create_node_for_fuzzing() -> RoundManager {
         Some(ValidatorComponents::new(
             Arc::new(UnequivocalProposerElection::new(proposer_election)),
             Arc::new(proposal_generator),
-            Arc::new(Mutex::new(MetricsSafetyRules::new(
-                Box::new(safety_rules),
-                storage.clone(),
-            ))),
+            Arc::new(Mutex::new(MetricsSafetyRules::new(Box::new(safety_rules), storage.clone()))),
         )),
     )
 }
@@ -249,7 +247,7 @@ pub fn fuzz_proposal(data: &[u8]) {
                 panic!();
             }
             return;
-        },
+        }
     };
 
     let proposal = match proposal.verify_well_formed() {
@@ -260,7 +258,7 @@ pub fn fuzz_proposal(data: &[u8]) {
                 panic!();
             }
             return;
-        },
+        }
     };
 
     block_on(async move {

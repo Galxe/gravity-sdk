@@ -8,7 +8,6 @@ use crate::{
     },
     util::mock_time_service::SimulatedTimeService,
 };
-use gaptos::aptos_config::config::QcAggregatorType;
 use aptos_consensus_types::{
     common::Round,
     quorum_cert::QuorumCert,
@@ -16,14 +15,17 @@ use aptos_consensus_types::{
     timeout_2chain::{TwoChainTimeout, TwoChainTimeoutCertificate},
     vote_data::VoteData,
 };
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_types::{
-    aggregate_signature::AggregateSignature,
-    block_info::BlockInfo,
-    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
-};
 use futures::StreamExt;
 use futures_channel::mpsc::unbounded;
+use gaptos::{
+    aptos_config::config::QcAggregatorType,
+    aptos_crypto::HashValue,
+    aptos_types::{
+        aggregate_signature::AggregateSignature,
+        block_info::BlockInfo,
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+    },
+};
 use std::{sync::Arc, time::Duration};
 
 #[test]
@@ -31,10 +33,7 @@ fn test_round_time_interval() {
     let interval = ExponentialTimeInterval::new(Duration::from_millis(3000), 1.5, 2);
     assert_eq!(3000, interval.get_round_duration(0).as_millis());
     assert_eq!(4500, interval.get_round_duration(1).as_millis());
-    assert_eq!(
-        6750, /* 4500*1.5 */
-        interval.get_round_duration(2).as_millis()
-    );
+    assert_eq!(6750 /* 4500*1.5 */, interval.get_round_duration(2).as_millis());
     // Test that there is no integer overflow
     assert_eq!(6750, interval.get_round_duration(1000).as_millis());
 }
@@ -59,29 +58,15 @@ async fn test_basic_timeout() {
 fn test_round_event_generation() {
     let (mut pm, _) = make_round_state();
     // Happy path with new QC
-    expect_qc(
-        2,
-        pm.process_certificates(generate_sync_info(Some(1), None, None)),
-    );
+    expect_qc(2, pm.process_certificates(generate_sync_info(Some(1), None, None)));
     // Old QC does not generate anything
-    assert!(pm
-        .process_certificates(generate_sync_info(Some(1), None, None))
-        .is_none());
+    assert!(pm.process_certificates(generate_sync_info(Some(1), None, None)).is_none());
     // A TC for a higher round
-    expect_timeout(
-        3,
-        pm.process_certificates(generate_sync_info(None, Some(2), None)),
-    );
+    expect_timeout(3, pm.process_certificates(generate_sync_info(None, Some(2), None)));
     // In case both QC and TC are present choose the one with the higher value
-    expect_timeout(
-        4,
-        pm.process_certificates(generate_sync_info(Some(2), Some(3), None)),
-    );
+    expect_timeout(4, pm.process_certificates(generate_sync_info(Some(2), Some(3), None)));
     // In case both QC and TC are present with the same value, choose QC
-    expect_qc(
-        5,
-        pm.process_certificates(generate_sync_info(Some(4), Some(4), None)),
-    );
+    expect_qc(5, pm.process_certificates(generate_sync_info(Some(4), Some(4), None)));
 }
 
 fn make_round_state() -> (RoundState, gaptos::aptos_channels::Receiver<Round>) {
@@ -122,30 +107,15 @@ fn generate_sync_info(
     let quorum_round = quorum_round.unwrap_or(0);
     let timeout_round = timeout_round.unwrap_or(0);
     let commit_round = commit_round.unwrap_or(0);
-    let commit_block = BlockInfo::new(
-        1,
-        commit_round,
-        HashValue::zero(),
-        HashValue::zero(),
-        0,
-        0,
-        None,
-    );
+    let commit_block =
+        BlockInfo::new(1, commit_round, HashValue::zero(), HashValue::zero(), 0, 0, None);
     let ledger_info = LedgerInfoWithSignatures::new(
         LedgerInfo::new(commit_block, HashValue::zero()),
         AggregateSignature::empty(),
     );
     let quorum_cert = QuorumCert::new(
         VoteData::new(
-            BlockInfo::new(
-                1,
-                quorum_round,
-                HashValue::zero(),
-                HashValue::zero(),
-                0,
-                0,
-                None,
-            ),
+            BlockInfo::new(1, quorum_round, HashValue::zero(), HashValue::zero(), 0, 0, None),
             BlockInfo::empty(),
         ),
         ledger_info,

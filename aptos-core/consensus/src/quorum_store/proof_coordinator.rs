@@ -6,16 +6,20 @@ use crate::{
     monitor,
     network::QuorumStoreSender,
     quorum_store::{
-        batch_generator::BatchGeneratorCommand, batch_store::BatchReader, types::BatchKey, utils::Timeouts
+        batch_generator::BatchGeneratorCommand, batch_store::BatchReader, types::BatchKey,
+        utils::Timeouts,
     },
 };
 use aptos_consensus_types::proof_of_store::{
     BatchInfo, ProofCache, ProofOfStore, SignedBatchInfo, SignedBatchInfoError, SignedBatchInfoMsg,
 };
-use gaptos::aptos_crypto::bls12381;
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_types::{
-    aggregate_signature::PartialSignatures, validator_verifier::ValidatorVerifier, PeerId,
+use gaptos::{
+    aptos_consensus::quorum_store::counters,
+    aptos_crypto::bls12381,
+    aptos_logger::prelude::*,
+    aptos_types::{
+        aggregate_signature::PartialSignatures, validator_verifier::ValidatorVerifier, PeerId,
+    },
 };
 use std::{
     collections::{hash_map::Entry, BTreeMap, HashMap},
@@ -26,7 +30,6 @@ use tokio::{
     sync::{mpsc::Receiver, oneshot as TokioOneshot},
     time,
 };
-use gaptos::aptos_consensus::quorum_store::counters as counters;
 
 #[derive(Debug)]
 pub(crate) enum ProofCoordinatorCommand {
@@ -66,10 +69,7 @@ impl IncrementalProofState {
             )));
         }
 
-        if self
-            .aggregated_signature
-            .contains_key(&signed_batch_info.signer())
-        {
+        if self.aggregated_signature.contains_key(&signed_batch_info.signer()) {
             return Err(SignedBatchInfoError::DuplicatedSignature);
         }
 
@@ -91,14 +91,14 @@ impl IncrementalProofState {
                         signer
                     );
                 }
-            },
+            }
             None => {
                 error!(
                     "Received signature from author not in validator set: {}",
                     signed_batch_info.signer()
                 );
                 return Err(SignedBatchInfoError::InvalidAuthor);
-            },
+            }
         }
 
         Ok(())
@@ -123,9 +123,9 @@ impl IncrementalProofState {
         }
         self.completed = true;
 
-        match validator_verifier
-            .aggregate_signatures(PartialSignatures::new(self.aggregated_signature.clone()).signatures_iter())
-        {
+        match validator_verifier.aggregate_signatures(
+            PartialSignatures::new(self.aggregated_signature.clone()).signatures_iter(),
+        ) {
             Ok(sig) => ProofOfStore::new(self.info.clone(), sig),
             Err(e) => unreachable!("Cannot aggregate signatures on digest err = {:?}", e),
         }
@@ -188,10 +188,7 @@ impl ProofCoordinator {
             return Err(SignedBatchInfoError::WrongAuthor);
         }
 
-        self.timeouts.add(
-            signed_batch_info.batch_info().clone(),
-            self.proof_timeout_ms,
-        );
+        self.timeouts.add(signed_batch_info.batch_info().clone(), self.proof_timeout_ms);
         self.batch_info_to_proof.insert(
             signed_batch_info.batch_info().clone(),
             IncrementalProofState::new(signed_batch_info.batch_info().clone()),
@@ -213,33 +210,23 @@ impl ProofCoordinator {
         signed_batch_info: SignedBatchInfo,
         validator_verifier: &ValidatorVerifier,
     ) -> Result<Option<ProofOfStore>, SignedBatchInfoError> {
-        if !self
-            .batch_info_to_proof
-            .contains_key(signed_batch_info.batch_info())
-        {
+        if !self.batch_info_to_proof.contains_key(signed_batch_info.batch_info()) {
             self.init_proof(&signed_batch_info)?;
         }
-        if let Some(value) = self
-            .batch_info_to_proof
-            .get_mut(signed_batch_info.batch_info())
-        {
+        if let Some(value) = self.batch_info_to_proof.get_mut(signed_batch_info.batch_info()) {
             value.add_signature(&signed_batch_info, validator_verifier)?;
             if !value.completed && value.ready(validator_verifier) {
                 let proof = value.take(validator_verifier);
                 txn_metrics::TxnLifeTime::get_txn_life_time().record_proof(proof.info().batch_id());
                 // proof validated locally, so adding to cache
-                self.proof_cache
-                    .insert(proof.info().clone(), proof.multi_signature().clone());
+                self.proof_cache.insert(proof.info().clone(), proof.multi_signature().clone());
                 // quorum store measurements
                 #[allow(deprecated)]
-                let duration = chrono::Utc::now().naive_utc().timestamp_micros() as u64
-                    - self
-                        .batch_info_to_time
-                        .remove(signed_batch_info.batch_info())
-                        .ok_or(
-                            // Batch created without recording the time!
-                            SignedBatchInfoError::NoTimeStamps,
-                        )?;
+                let duration = chrono::Utc::now().naive_utc().timestamp_micros() as u64 -
+                    self.batch_info_to_time.remove(signed_batch_info.batch_info()).ok_or(
+                        // Batch created without recording the time!
+                        SignedBatchInfoError::NoTimeStamps,
+                    )?;
                 counters::BATCH_TO_POS_DURATION.observe_duration(Duration::from_micros(duration));
                 return Ok(Some(proof));
             }

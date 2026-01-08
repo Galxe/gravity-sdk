@@ -3,24 +3,33 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    block_data::{BlockData, BlockType}, common::{Author, Payload, Round}, pipelined_block::PipelinedBlock, quorum_cert::QuorumCert
+    block_data::{BlockData, BlockType},
+    common::{Author, Payload, Round},
+    pipelined_block::PipelinedBlock,
+    quorum_cert::QuorumCert,
 };
 use anyhow::{bail, ensure, format_err};
-use gaptos::aptos_bitvec::BitVec;
-use gaptos::aptos_crypto::{bls12381, hash::{CryptoHash, GENESIS_BLOCK_ID}, HashValue};
-use gaptos::aptos_infallible::duration_since_epoch;
-use gaptos::aptos_types::{
-    account_address::AccountAddress,
-    block_info::BlockInfo,
-    block_metadata::BlockMetadata,
-    block_metadata_ext::BlockMetadataExt,
-    epoch_state::EpochState,
-    ledger_info::LedgerInfo,
-    randomness::Randomness,
-    transaction::{SignedTransaction, Transaction, Version},
-    validator_signer::ValidatorSigner,
-    validator_txn::ValidatorTransaction,
-    validator_verifier::ValidatorVerifier,
+use gaptos::{
+    aptos_bitvec::BitVec,
+    aptos_crypto::{
+        bls12381,
+        hash::{CryptoHash, GENESIS_BLOCK_ID},
+        HashValue,
+    },
+    aptos_infallible::duration_since_epoch,
+    aptos_types::{
+        account_address::AccountAddress,
+        block_info::BlockInfo,
+        block_metadata::BlockMetadata,
+        block_metadata_ext::BlockMetadataExt,
+        epoch_state::EpochState,
+        ledger_info::LedgerInfo,
+        randomness::Randomness,
+        transaction::{SignedTransaction, Transaction, Version},
+        validator_signer::ValidatorSigner,
+        validator_txn::ValidatorTransaction,
+        validator_verifier::ValidatorVerifier,
+    },
 };
 use mirai_annotations::debug_checked_verify_eq;
 use once_cell::sync::OnceCell;
@@ -62,10 +71,8 @@ impl fmt::Debug for Block {
 
 impl Display for Block {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        let author = self
-            .author()
-            .map(|addr| format!("{}", addr))
-            .unwrap_or_else(|| "(NIL)".to_string());
+        let author =
+            self.author().map(|addr| format!("{}", addr)).unwrap_or_else(|| "(NIL)".to_string());
         write!(
             f,
             "[id: {}, author: {}, epoch: {}, round: {:02}, parent_id: {}, timestamp: {}, block_number: {:?}, payload: {:?}]",
@@ -117,10 +124,10 @@ impl Block {
                 Payload::InQuorumStoreWithLimit(pos) => pos.proof_with_data.proofs.len(),
                 Payload::QuorumStoreInlineHybrid(inline_batches, proof_with_data, _) => {
                     inline_batches.len() + proof_with_data.proofs.len()
-                },
+                }
                 Payload::OptQuorumStore(opt_quorum_store_payload) => {
                     opt_quorum_store_payload.num_txns()
-                },
+                }
             },
         }
     }
@@ -198,12 +205,7 @@ impl Block {
         block_data: BlockData,
         signature: Option<bls12381::Signature>,
     ) -> Self {
-        Block {
-            id,
-            block_data,
-            signature,
-            block_number: OnceCell::new(),
-        }
+        Block { id, block_data, signature, block_number: OnceCell::new() }
     }
 
     /// The NIL blocks are special: they're not carrying any real payload and are generated
@@ -215,12 +217,7 @@ impl Block {
     ) -> Self {
         let block_data = BlockData::new_nil(round, quorum_cert, failed_authors);
 
-        Block {
-            id: block_data.hash(),
-            block_data,
-            signature: None,
-            block_number: OnceCell::new(),
-        }
+        Block { id: block_data.hash(), block_data, signature: None, block_number: OnceCell::new() }
     }
 
     pub fn new_for_dag(
@@ -247,12 +244,7 @@ impl Block {
             parents_bitvec,
             node_digests,
         );
-        Self {
-            id: block_data.hash(),
-            block_data,
-            signature: None,
-            block_number: OnceCell::new(),
-        }
+        Self { id: block_data.hash(), block_data, signature: None, block_number: OnceCell::new() }
     }
 
     pub fn new_proposal(
@@ -302,9 +294,7 @@ impl Block {
         validator_signer: &ValidatorSigner,
     ) -> anyhow::Result<Self> {
         let signature = validator_signer.sign(&block_data)?;
-        Ok(Self::new_proposal_from_block_data_and_signature(
-            block_data, signature,
-        ))
+        Ok(Self::new_proposal_from_block_data_and_signature(block_data, signature))
     }
 
     pub fn new_proposal_from_block_data_and_signature(
@@ -336,7 +326,7 @@ impl Block {
                     .ok_or_else(|| format_err!("Missing signature in Proposal"))?;
                 validator.verify(*author, &self.block_data, signature)?;
                 self.quorum_cert().verify(validator)
-            },
+            }
             BlockType::ProposalExt(proposal_ext) => {
                 let signature = self
                     .signature
@@ -344,7 +334,7 @@ impl Block {
                     .ok_or_else(|| format_err!("Missing signature in Proposal"))?;
                 validator.verify(*proposal_ext.author(), &self.block_data, signature)?;
                 self.quorum_cert().verify(validator)
-            },
+            }
             BlockType::DAGBlock { .. } => bail!("We should not accept DAG block from others"),
         }
     }
@@ -352,19 +342,13 @@ impl Block {
     /// Makes sure that the proposal makes sense, independently of the current state.
     /// If this is the genesis block, we skip these checks.
     pub fn verify_well_formed(&self) -> anyhow::Result<()> {
-        ensure!(
-            !self.is_genesis_block(),
-            "We must not accept genesis from others"
-        );
+        ensure!(!self.is_genesis_block(), "We must not accept genesis from others");
         let parent = self.quorum_cert().certified_block();
         ensure!(
             parent.round() < self.round(),
             "Block must have a greater round than parent's block"
         );
-        ensure!(
-            parent.epoch() == self.epoch(),
-            "block's parent should be in the same epoch"
-        );
+        ensure!(parent.epoch() == self.epoch(), "block's parent should be in the same epoch");
         if parent.has_reconfiguration() {
             ensure!(
                 self.payload().map_or(true, |p| p.is_empty()),
@@ -380,20 +364,14 @@ impl Block {
             // we validate the full correctness of this field in round_manager.process_proposal()
             let succ_round = self.round() + u64::from(self.is_nil_block());
             let skipped_rounds = succ_round.checked_sub(parent.round() + 1);
-            ensure!(
-                skipped_rounds.is_some(),
-                "Block round is smaller than block's parent round"
-            );
+            ensure!(skipped_rounds.is_some(), "Block round is smaller than block's parent round");
             ensure!(
                 failed_authors.len() <= skipped_rounds.unwrap() as usize,
                 "Block has more failed authors than missed rounds"
             );
             let mut bound = parent.round();
             for (round, _) in failed_authors {
-                ensure!(
-                    bound < *round && *round < succ_round,
-                    "Incorrect round in failed authors"
-                );
+                ensure!(bound < *round && *round < succ_round, "Incorrect round in failed authors");
                 bound = *round;
             }
         }
@@ -422,11 +400,7 @@ impl Block {
             !self.quorum_cert().ends_epoch(),
             "Block cannot be proposed in an epoch that has ended"
         );
-        debug_checked_verify_eq!(
-            self.id(),
-            self.block_data.hash(),
-            "Block id mismatch the hash"
-        );
+        debug_checked_verify_eq!(self.id(), self.block_data.hash(), "Block id mismatch the hash");
         Ok(())
     }
 
@@ -436,11 +410,7 @@ impl Block {
         metadata: BlockMetadataExt,
     ) -> Vec<Transaction> {
         once(Transaction::from(metadata))
-            .chain(
-                validator_txns
-                    .into_iter()
-                    .map(Transaction::ValidatorTransaction),
-            )
+            .chain(validator_txns.into_iter().map(Transaction::ValidatorTransaction))
             .chain(txns.into_iter().map(Transaction::UserTransaction))
             .collect()
     }
@@ -461,11 +431,9 @@ impl Block {
             self.author().unwrap_or(AccountAddress::ZERO),
             self.previous_bitvec().into(),
             // For nil block, we use 0x0 which is convention for nil address in move.
-            self.block_data()
-                .failed_authors()
-                .map_or(vec![], |failed_authors| {
-                    Self::failed_authors_to_indices(validators, failed_authors)
-                }),
+            self.block_data().failed_authors().map_or(vec![], |failed_authors| {
+                Self::failed_authors_to_indices(validators, failed_authors)
+            }),
             self.timestamp_usecs(),
         )
     }
@@ -482,11 +450,9 @@ impl Block {
             self.author().unwrap_or(AccountAddress::ZERO),
             self.previous_bitvec().into(),
             // For nil block, we use 0x0 which is convention for nil address in move.
-            self.block_data()
-                .failed_authors()
-                .map_or(vec![], |failed_authors| {
-                    Self::failed_authors_to_indices(validators, failed_authors)
-                }),
+            self.block_data().failed_authors().map_or(vec![], |failed_authors| {
+                Self::failed_authors_to_indices(validators, failed_authors)
+            }),
             self.timestamp_usecs(),
             randomness,
         )
@@ -499,15 +465,12 @@ impl Block {
         failed_authors
             .iter()
             .map(|(_round, failed_author)| {
-                validators
-                    .iter()
-                    .position(|&v| v == *failed_author)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "Failed author {} not in validator list {:?}",
-                            *failed_author, validators
-                        )
-                    })
+                validators.iter().position(|&v| v == *failed_author).unwrap_or_else(|| {
+                    panic!(
+                        "Failed author {} not in validator list {:?}",
+                        *failed_author, validators
+                    )
+                })
             })
             .map(|index| u32::try_from(index).expect("Index is out of bounds for u32"))
             .collect()
@@ -553,23 +516,16 @@ impl<'de> Deserialize<'de> for Block {
             block_number: Option<u64>,
         }
 
-        let BlockWithoutId {
-            block_data,
-            signature,
-            block_number,
-        } = BlockWithoutId::deserialize(deserializer)?;
+        let BlockWithoutId { block_data, signature, block_number } =
+            BlockWithoutId::deserialize(deserializer)?;
 
-        let block = Block {
-            id: block_data.hash(),
-            block_data,
-            signature,
-            block_number: OnceCell::new(),
-        };
+        let block =
+            Block { id: block_data.hash(), block_data, signature, block_number: OnceCell::new() };
 
         if let Some(block_number) = block_number {
             block.set_block_number(block_number);
         }
-    
+
         Ok(block)
     }
 }

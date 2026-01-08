@@ -1,9 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use super::{
-    dag_store::DagStore,
-};
+use super::dag_store::DagStore;
 use crate::{
     block_storage::tracing::{observe_block, BlockStage},
     consensusdb::{CertifiedNodeSchema, ConsensusDB, DagVoteSchema, NodeSchema},
@@ -15,37 +13,41 @@ use crate::{
     pipeline::buffer_manager::OrderedBlocks,
 };
 use anyhow::{anyhow, bail, format_err};
-use gaptos::aptos_bitvec::BitVec;
 use aptos_consensus_types::{
     block::Block,
     common::{Author, Payload, Round},
     pipelined_block::PipelinedBlock,
     quorum_cert::QuorumCert,
 };
-use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::StateComputeResult;
-use gaptos::aptos_infallible::RwLock;
-use gaptos::aptos_logger::{error, info};
-use gaptos::aptos_storage_interface::DbReader;
-use gaptos::aptos_types::{
-    account_config::NewBlockEvent,
-    aggregate_signature::AggregateSignature,
-    block_info::BlockInfo,
-    epoch_change::EpochChangeProof,
-    epoch_state::EpochState,
-    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
-    on_chain_config::CommitHistoryResource,
-    state_store::state_key::StateKey,
-};
 use async_trait::async_trait;
 use futures_channel::mpsc::UnboundedSender;
+use gaptos::{
+    aptos_bitvec::BitVec,
+    aptos_consensus::{
+        counters,
+        dag::observability::counters::{NUM_NODES_PER_BLOCK, NUM_ROUNDS_PER_BLOCK},
+    },
+    aptos_crypto::HashValue,
+    aptos_infallible::RwLock,
+    aptos_logger::{error, info},
+    aptos_storage_interface::DbReader,
+    aptos_types::{
+        account_config::NewBlockEvent,
+        aggregate_signature::AggregateSignature,
+        block_info::BlockInfo,
+        epoch_change::EpochChangeProof,
+        epoch_state::EpochState,
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+        on_chain_config::CommitHistoryResource,
+        state_store::state_key::StateKey,
+    },
+};
 use std::{
     collections::{BTreeMap, HashMap},
     sync::Arc,
     time::{Duration, Instant},
 };
-use gaptos::aptos_consensus::dag::observability::counters::{NUM_NODES_PER_BLOCK, NUM_ROUNDS_PER_BLOCK};
-use gaptos::aptos_consensus::counters as counters;
 
 pub trait OrderedNotifier: Send + Sync {
     fn send_ordered_nodes(
@@ -86,10 +88,7 @@ pub(crate) fn compute_initial_block_and_ledger_info(
             genesis_ledger_info,
         )
     } else {
-        (
-            ledger_info_from_storage.ledger_info().commit_info().clone(),
-            ledger_info_from_storage,
-        )
+        (ledger_info_from_storage.ledger_info().commit_info().clone(), ledger_info_from_storage)
     }
 }
 
@@ -129,7 +128,7 @@ impl OrderedNotifierAdapter {
                 let latency = timestamp.elapsed();
                 info!(round = round, latency = latency, "pipeline pending latency");
                 latency
-            },
+            }
             None => Duration::ZERO,
         }
     }
@@ -141,9 +140,7 @@ impl OrderedNotifier for OrderedNotifierAdapter {
         ordered_nodes: Vec<Arc<CertifiedNode>>,
         failed_author: Vec<(Round, Author)>,
     ) {
-        let anchor = ordered_nodes
-            .last()
-            .expect("ordered_nodes shuld not be empty");
+        let anchor = ordered_nodes.last().expect("ordered_nodes shuld not be empty");
         let epoch = anchor.epoch();
         let round = anchor.round();
         let timestamp = anchor.metadata().timestamp();
@@ -160,7 +157,8 @@ impl OrderedNotifier for OrderedNotifierAdapter {
             node_digests.push(node.digest());
         }
         let parent_block_id = self.parent_block_info.read().id();
-        // construct the bitvec that indicates which nodes present in the previous round in CommitEvent
+        // construct the bitvec that indicates which nodes present in the previous round in
+        // CommitEvent
         let mut parents_bitvec = BitVec::with_num_bits(self.epoch_state.verifier.len() as u16);
         for parent in anchor.parents().iter() {
             if let Some(idx) = self
@@ -203,9 +201,7 @@ impl OrderedNotifier for OrderedNotifierAdapter {
         let dag = self.dag.clone();
         *self.parent_block_info.write() = block_info.clone();
 
-        self.block_ordered_ts
-            .write()
-            .insert(block_info.round(), Instant::now());
+        self.block_ordered_ts.write().insert(block_info.round(), Instant::now());
         let block_created_ts = self.block_ordered_ts.clone();
 
         observe_block(block.block().timestamp_usecs(), BlockStage::ORDERED);
@@ -223,18 +219,12 @@ impl OrderedNotifier for OrderedNotifierAdapter {
                         .write()
                         .retain(|&round, _| round > commit_decision.commit_info().round());
                     dag.commit_callback(commit_decision.commit_info().round());
-                    ledger_info_provider
-                        .write()
-                        .notify_commit_proof(commit_decision);
+                    ledger_info_provider.write().notify_commit_proof(commit_decision);
                     update_counters_for_committed_blocks(committed_blocks);
                 },
             ),
         };
-        if self
-            .executor_channel
-            .unbounded_send(blocks_to_send)
-            .is_err()
-        {
+        if self.executor_channel.unbounded_send(blocks_to_send).is_err() {
             error!("[DAG] execution pipeline closed");
         }
     }
@@ -254,12 +244,7 @@ impl StorageAdapter {
         consensus_db: Arc<ConsensusDB>,
         aptos_db: Arc<dyn DbReader>,
     ) -> Self {
-        Self {
-            epoch,
-            epoch_to_validators,
-            consensus_db,
-            aptos_db,
-        }
+        Self { epoch, epoch_to_validators, consensus_db, aptos_db }
     }
 
     pub fn bitvec_to_validators(
@@ -277,13 +262,15 @@ impl StorageAdapter {
         Ok(validators
             .iter()
             .enumerate()
-            .filter_map(|(index, validator)| {
-                if bitvec.is_set(index as u16) {
-                    Some(*validator)
-                } else {
-                    None
-                }
-            })
+            .filter_map(
+                |(index, validator)| {
+                    if bitvec.is_set(index as u16) {
+                        Some(*validator)
+                    } else {
+                        None
+                    }
+                },
+            )
             .collect())
     }
 
@@ -365,9 +352,7 @@ impl DAGStorage for StorageAdapter {
     }
 
     fn save_certified_node(&self, node: &CertifiedNode) -> anyhow::Result<()> {
-        Ok(self
-            .consensus_db
-            .put::<CertifiedNodeSchema>(&node.digest(), node)?)
+        Ok(self.consensus_db.put::<CertifiedNodeSchema>(&node.digest(), node)?)
     }
 
     fn get_certified_nodes(&self) -> anyhow::Result<Vec<(HashValue, CertifiedNode)>> {
@@ -385,8 +370,8 @@ impl DAGStorage for StorageAdapter {
         let handle = resource.table_handle();
         let mut commit_events = vec![];
         for i in 1..=std::cmp::min(k, resource.length()) {
-            let idx = (resource.next_idx() + resource.max_capacity() - i as u32)
-                % resource.max_capacity();
+            let idx = (resource.next_idx() + resource.max_capacity() - i as u32) %
+                resource.max_capacity();
             // idx is an u32, so it's not possible to fail to convert it to bytes
             let idx_bytes = bcs::to_bytes(&idx)
                 .map_err(|e| anyhow::anyhow!("Failed to serialize index: {:?}", e))?;
@@ -396,10 +381,7 @@ impl DAGStorage for StorageAdapter {
                 .ok_or_else(|| anyhow::anyhow!("Table item doesn't exist"))?;
             let new_block_event = bcs::from_bytes::<NewBlockEvent>(state_value.bytes())
                 .map_err(|e| anyhow::anyhow!("Failed to deserialize NewBlockEvent: {:?}", e))?;
-            if self
-                .epoch_to_validators
-                .contains_key(&new_block_event.epoch())
-            {
+            if self.epoch_to_validators.contains_key(&new_block_event.epoch()) {
                 commit_events.push(self.convert(new_block_event)?);
             }
         }

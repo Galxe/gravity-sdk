@@ -1,11 +1,15 @@
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_logger::info;
-use gaptos::aptos_schemadb::{schema::KeyCodec, batch::SchemaBatch, DB};
-use gaptos::aptos_storage_interface::{AptosDbError, Result};
-use gaptos::aptos_types::ledger_info::LedgerInfoWithSignatures;
+use crate::consensusdb::schema::{
+    epoch_by_block_number::EpochByBlockNumberSchema, ledger_info::LedgerInfoSchema,
+};
 use arc_swap::{access::Access, ArcSwap};
+use gaptos::{
+    aptos_crypto::HashValue,
+    aptos_logger::info,
+    aptos_schemadb::{batch::SchemaBatch, schema::KeyCodec, DB},
+    aptos_storage_interface::{AptosDbError, Result},
+    aptos_types::ledger_info::LedgerInfoWithSignatures,
+};
 use rocksdb::ReadOptions;
-use crate::consensusdb::schema::{ledger_info::LedgerInfoSchema, epoch_by_block_number::EpochByBlockNumberSchema};
 use std::sync::Arc;
 
 const MAX_LEDGER_INFOS: u32 = 256;
@@ -27,7 +31,10 @@ fn get_latest_ledger_info_in_db_impl(db: &DB) -> Result<Option<LedgerInfoWithSig
     }
 }
 
-fn get_ledger_infos_by_range_in_db_impl(db: &DB, range: (u64, u64)) -> Result<Vec<LedgerInfoWithSignatures>> {
+fn get_ledger_infos_by_range_in_db_impl(
+    db: &DB,
+    range: (u64, u64),
+) -> Result<Vec<LedgerInfoWithSignatures>> {
     assert!(range.1 == 0 || range.0 < range.1);
     let mut option = ReadOptions::default();
     let lower_bound = <u64 as KeyCodec<LedgerInfoSchema>>::encode_key(&range.0).unwrap();
@@ -95,10 +102,7 @@ impl LedgerMetadataDb {
     pub(super) fn new(db: Arc<DB>) -> Self {
         let latest_ledger_info = get_latest_ledger_info_in_db_impl(&db).expect("DB read failed.");
         let latest_ledger_info = ArcSwap::from(Arc::new(latest_ledger_info));
-        Self {
-            db,
-            latest_ledger_info,
-        }
+        Self { db, latest_ledger_info }
     }
     pub(super) fn db(&self) -> &DB {
         &self.db
@@ -117,12 +121,12 @@ impl LedgerMetadataDb {
 impl LedgerMetadataDb {
     /// Stores the latest ledger info in memory.
     pub(crate) fn set_latest_ledger_info(&self, ledger_info_with_sigs: LedgerInfoWithSignatures) {
-        self.latest_ledger_info
-            .store(Arc::new(Some(ledger_info_with_sigs)));
+        self.latest_ledger_info.store(Arc::new(Some(ledger_info_with_sigs)));
     }
 
     pub(crate) fn update_latest_ledger_info(&self) {
-        let latest_ledger_info = get_latest_ledger_info_in_db_impl(&self.db).expect("DB read failed.");
+        let latest_ledger_info =
+            get_latest_ledger_info_in_db_impl(&self.db).expect("DB read failed.");
         self.latest_ledger_info.store(Arc::new(latest_ledger_info));
     }
 
@@ -140,7 +144,10 @@ impl LedgerMetadataDb {
         let ledger_info = ledger_info_with_sigs.ledger_info();
         if ledger_info.ends_epoch() {
             // This is the last version of the current epoch, update the epoch by version index.
-            batch.put::<EpochByBlockNumberSchema>(&ledger_info.block_number(), &ledger_info.epoch())?;
+            batch.put::<EpochByBlockNumberSchema>(
+                &ledger_info.block_number(),
+                &ledger_info.epoch(),
+            )?;
         }
         batch.put::<LedgerInfoSchema>(&ledger_info.block_number(), ledger_info_with_sigs)
     }
@@ -156,10 +163,12 @@ impl LedgerMetadataDb {
         }
     }
 
-    pub(crate) fn get_ledger_infos_by_range(&self, range: (u64, u64)) -> Vec<LedgerInfoWithSignatures> {
+    pub(crate) fn get_ledger_infos_by_range(
+        &self,
+        range: (u64, u64),
+    ) -> Vec<LedgerInfoWithSignatures> {
         get_ledger_infos_by_range_in_db_impl(&self.db, range).expect("DB read failed.")
     }
-
 }
 
 #[cfg(test)]
@@ -167,20 +176,22 @@ mod tests {
     use crate::consensusdb::schema::LEDGER_INFO_CF_NAME;
 
     use super::*;
-    
-    
+
     use rocksdb::Options;
 
     fn init_db() -> Arc<DB> {
         let mut opts = Options::default();
         opts.create_if_missing(true);
         opts.create_missing_column_families(true);
-        Arc::new(DB::open(
-            "/tmp/node3/data/consensus_db",
-            "ledger_meta_db_test",
-            vec![LEDGER_INFO_CF_NAME],
-            &opts,
-        ).unwrap())
+        Arc::new(
+            DB::open(
+                "/tmp/node3/data/consensus_db",
+                "ledger_meta_db_test",
+                vec![LEDGER_INFO_CF_NAME],
+                &opts,
+            )
+            .unwrap(),
+        )
     }
 
     #[test]

@@ -2,15 +2,14 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use gaptos::aptos_logger::prelude::*;
 use async_trait::async_trait;
 use futures::{
     future::{AbortHandle, Abortable},
     Future, FutureExt, SinkExt,
 };
+use gaptos::{aptos_consensus::counters, aptos_logger::prelude::*};
 use std::{pin::Pin, time::Duration};
 use tokio::{runtime::Handle, time::sleep};
-use gaptos::aptos_consensus::counters as counters;
 /// Time service is an abstraction for operations that depend on time
 /// It supports implementations that can simulated time or depend on actual time
 /// We can use simulated time in tests so tests can run faster and be more stable.
@@ -20,7 +19,8 @@ use gaptos::aptos_consensus::counters as counters;
 /// that only keeps single task in TaskExecutor
 #[async_trait]
 pub trait TimeService: Send + Sync {
-    /// Sends message to given sender after timeout, returns a handle that could use to cancel the task.
+    /// Sends message to given sender after timeout, returns a handle that could use to cancel the
+    /// task.
     fn run_after(&self, timeout: Duration, task: Box<dyn ScheduledTask>) -> AbortHandle;
 
     /// Retrieve the current time stamp as a Duration (assuming it is on or after the UNIX_EPOCH)
@@ -67,10 +67,7 @@ where
 {
     /// Makes new SendTask for given sender and message and wraps it to Box
     pub fn make(sender: gaptos::aptos_channels::Sender<T>, message: T) -> Box<dyn ScheduledTask> {
-        Box::new(SendTask {
-            sender: Some(sender),
-            message: Some(message),
-        })
+        Box::new(SendTask { sender: Some(sender), message: Some(message) })
     }
 }
 
@@ -79,14 +76,8 @@ where
     T: Send + 'static,
 {
     fn run(&mut self) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        let mut sender = self
-            .sender
-            .take()
-            .expect("Expect to be able to take sender");
-        let message = self
-            .message
-            .take()
-            .expect("Expect to be able to take message");
+        let mut sender = self.sender.take().expect("Expect to be able to take sender");
+        let message = self.message.take().expect("Expect to be able to take message");
         let r = async move {
             if let Err(e) = sender.send(message).await {
                 error!("Error on send: {:?}", e);

@@ -12,22 +12,24 @@ use crate::{
     vote_proposal::VoteProposal,
 };
 use anyhow::Error;
-use gaptos::aptos_crypto::hash::{HashValue, ACCUMULATOR_PLACEHOLDER_HASH};
 use aptos_executor_types::{ExecutorResult, StateComputeResult};
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::{error, warn};
-use gaptos::aptos_types::{
-    block_info::BlockInfo,
-    contract_event::ContractEvent,
-    ledger_info::LedgerInfoWithSignatures,
-    randomness::Randomness,
-    transaction::{
-        signature_verified_transaction::SignatureVerifiedTransaction, SignedTransaction,
-    },
-    validator_txn::ValidatorTransaction,
-};
 use derivative::Derivative;
 use futures::future::{BoxFuture, Shared};
+use gaptos::{
+    aptos_crypto::hash::{HashValue, ACCUMULATOR_PLACEHOLDER_HASH},
+    aptos_infallible::Mutex,
+    aptos_logger::{error, warn},
+    aptos_types::{
+        block_info::BlockInfo,
+        contract_event::ContractEvent,
+        ledger_info::LedgerInfoWithSignatures,
+        randomness::Randomness,
+        transaction::{
+            signature_verified_transaction::SignatureVerifiedTransaction, SignedTransaction,
+        },
+        validator_txn::ValidatorTransaction,
+    },
+};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{
@@ -102,9 +104,9 @@ pub struct PipelineInputRx {
     pub commit_proof_rx: tokio::sync::broadcast::Receiver<LedgerInfoWithSignatures>,
 }
 
-/// A representation of a block that has been added to the execution pipeline. It might either be in ordered
-/// or in executed state. In the ordered state, the block is waiting to be executed. In the executed state,
-/// the block has been executed and the output is available.
+/// A representation of a block that has been added to the execution pipeline. It might either be in
+/// ordered or in executed state. In the ordered state, the block is waiting to be executed. In the
+/// executed state, the block has been executed and the output is available.
 #[derive(Derivative, Clone)]
 #[derivative(Eq, PartialEq)]
 pub struct PipelinedBlock {
@@ -168,12 +170,8 @@ impl<'de> Deserialize<'de> for PipelinedBlock {
             randomness: Option<Randomness>,
         }
 
-        let SerializedBlock {
-            block,
-            input_transactions,
-            state_compute_result,
-            randomness,
-        } = SerializedBlock::deserialize(deserializer)?;
+        let SerializedBlock { block, input_transactions, state_compute_result, randomness } =
+            SerializedBlock::deserialize(deserializer)?;
 
         let block = PipelinedBlock::new(block, input_transactions, StateComputeResult::new_dummy());
         if let Some(r) = randomness {
@@ -192,12 +190,8 @@ impl PipelinedBlock {
         mut self,
         pipeline_execution_result: PipelineExecutionResult,
     ) -> Self {
-        let PipelineExecutionResult {
-            input_txns,
-            result,
-            execution_time,
-            pre_commit_fut,
-        } = pipeline_execution_result;
+        let PipelineExecutionResult { input_txns, result, execution_time, pre_commit_fut } =
+            pipeline_execution_result;
 
         self.state_compute_result = result;
         self.input_transactions = input_txns;
@@ -206,15 +200,10 @@ impl PipelinedBlock {
         let mut to_commit = 0;
         let to_retry = 0;
 
-        to_commit += self.block.payload().map_or(0, |payload| {
-            payload.len() as u64
-        });
+        to_commit += self.block.payload().map_or(0, |payload| payload.len() as u64);
 
         let execution_summary = ExecutionSummary {
-            payload_len: self
-                .block
-                .payload()
-                .map_or(0, |payload| payload.len_for_execution()),
+            payload_len: self.block.payload().map_or(0, |payload| payload.len_for_execution()),
             to_commit,
             to_retry,
             execution_time,
@@ -262,10 +251,7 @@ impl PipelinedBlock {
     }
 
     pub fn take_pre_commit_fut(&self) -> BoxFuture<'static, ExecutorResult<()>> {
-        self.pre_commit_fut
-            .lock()
-            .take()
-            .expect("pre_commit_result_rx missing.")
+        self.pre_commit_fut.lock().take().expect("pre_commit_result_rx missing.")
     }
 }
 
@@ -358,11 +344,8 @@ impl PipelinedBlock {
     }
 
     pub fn block_info(&self) -> BlockInfo {
-        let version = if let Some(block_number) = self.block().block_number() {
-            block_number
-        } else {
-            0
-        };
+        let version =
+            if let Some(block_number) = self.block().block_number() { block_number } else { 0 };
         self.block().gen_block_info(
             self.compute_result().root_hash(),
             version,
@@ -371,11 +354,7 @@ impl PipelinedBlock {
     }
 
     pub fn vote_proposal(&self) -> VoteProposal {
-        VoteProposal::new(
-            self.block.clone(),
-            self.compute_result().epoch_state().clone(),
-            true,
-        )
+        VoteProposal::new(self.block.clone(), self.compute_result().epoch_state().clone(), true)
     }
 
     pub fn order_vote_proposal(&self, quorum_cert: Arc<QuorumCert>) -> OrderVoteProposal {
@@ -385,12 +364,13 @@ impl PipelinedBlock {
     pub fn subscribable_events(&self) -> Vec<ContractEvent> {
         // reconfiguration suffix don't count, the state compute result is carried over from parents
         // TODO(gravity_byteyue): we should have a better way to identify reconfiguration suffix
-        // reconfiguration event之后的block是不应该被执行的. 在gravity-sdk的模型中暂时不会有这个问题 但是可能需要仔细考虑
+        // reconfiguration event之后的block是不应该被执行的. 在gravity-sdk的模型中暂时不会有这个问题
+        // 但是可能需要仔细考虑
         self.state_compute_result.events()
     }
 
-    /// The block is suffix of a reconfiguration block if the state result carries over the epoch state
-    /// from parent but has no transaction.
+    /// The block is suffix of a reconfiguration block if the state result carries over the epoch
+    /// state from parent but has no transaction.
     pub fn is_reconfiguration_suffix(&self) -> bool {
         self.state_compute_result.has_reconfiguration()
     }

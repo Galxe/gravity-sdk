@@ -2,15 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::transaction_shuffler::deprecated_fairness::conflict_key::ConflictKey;
-use gaptos::aptos_types::transaction::{SignedTransaction, TransactionPayload};
-use gaptos::move_core_types::{identifier::Identifier, language_storage::ModuleId};
+use gaptos::{
+    aptos_types::transaction::{SignedTransaction, TransactionPayload},
+    move_core_types::{identifier::Identifier, language_storage::ModuleId},
+};
 
 #[derive(Eq, Hash, PartialEq)]
 pub enum EntryFunKey {
-    EntryFun {
-        module: ModuleId,
-        function: Identifier,
-    },
+    EntryFun { module: ModuleId, function: Identifier },
     Exempt,
 }
 
@@ -29,11 +28,11 @@ impl ConflictKey<SignedTransaction> for EntryFunKey {
                         function: entry_fun.function().to_owned(),
                     }
                 }
-            },
-            TransactionPayload::Multisig(_)
-            | TransactionPayload::Script(_)
-            | TransactionPayload::ModuleBundle(_)
-            | TransactionPayload::GTxnBytes(_) => Self::Exempt,
+            }
+            TransactionPayload::Multisig(_) |
+            TransactionPayload::Script(_) |
+            TransactionPayload::ModuleBundle(_) |
+            TransactionPayload::GTxnBytes(_) => Self::Exempt,
         }
     }
 

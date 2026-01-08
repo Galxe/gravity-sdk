@@ -6,14 +6,16 @@ use crate::{
     pending_votes::{PendingVotes, VoteReceptionResult},
     util::time_service::TimeService,
 };
-use gaptos::aptos_config::config::QcAggregatorType;
 use aptos_consensus_types::{delayed_qc_msg::DelayedQcMsg, vote::Vote};
-use gaptos::aptos_logger::{error, info};
-use gaptos::aptos_types::{
-    ledger_info::LedgerInfoWithVerifiedSignatures, validator_verifier::ValidatorVerifier,
-};
 use futures::SinkExt;
 use futures_channel::mpsc::UnboundedSender;
+use gaptos::{
+    aptos_config::config::QcAggregatorType,
+    aptos_logger::{error, info},
+    aptos_types::{
+        ledger_info::LedgerInfoWithVerifiedSignatures, validator_verifier::ValidatorVerifier,
+    },
+};
 use std::{sync::Arc, time::Duration};
 use tokio::time::sleep;
 
@@ -54,4 +56,3 @@ impl QcAggregator for NoDelayQcAggregator {
         PendingVotes::aggregate_qc_now(validator_verifier, li_with_sig, vote.vote_data())
     }
 }
-

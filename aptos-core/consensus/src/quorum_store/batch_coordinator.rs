@@ -11,15 +11,14 @@ use crate::{
     },
 };
 use anyhow::ensure;
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_types::PeerId;
+use gaptos::{
+    aptos_consensus::quorum_store::counters, aptos_logger::prelude::*, aptos_types::PeerId,
+};
 use std::sync::Arc;
 use tokio::sync::{
     mpsc::{Receiver, Sender},
     oneshot,
 };
-use gaptos::aptos_consensus::quorum_store::counters as counters;
-
 
 #[derive(Debug)]
 pub enum BatchCoordinatorCommand {
@@ -79,22 +78,16 @@ impl BatchCoordinator {
             let batches = persist_requests
                 .iter()
                 .map(|persisted_value| {
-                    (
-                        persisted_value.batch_info().clone(),
-                        persisted_value.summary(),
-                    )
+                    (persisted_value.batch_info().clone(), persisted_value.summary())
                 })
                 .collect();
             let signed_batch_infos = batch_store.persist(persist_requests);
             if !signed_batch_infos.is_empty() {
-                network_sender
-                    .send_signed_batch_info_msg(signed_batch_infos, vec![peer_id])
-                    .await;
+                network_sender.send_signed_batch_info_msg(signed_batch_infos, vec![peer_id]).await;
             }
-            
-            let _ = sender_to_proof_manager
-                .send(ProofManagerCommand::ReceiveBatches(batches))
-                .await;
+
+            let _ =
+                sender_to_proof_manager.send(ProofManagerCommand::ReceiveBatches(batches)).await;
         });
     }
 
@@ -146,14 +139,14 @@ impl BatchCoordinator {
             if batch.author() != self.my_peer_id {
                 // TODO: maybe don't message batch generator if the persist is unsuccessful?
                 if let Err(e) = self
-                        .sender_to_batch_generator
-                        .send(BatchGeneratorCommand::RemoteBatch(batch.clone()))
-                        .await
-                    {
-                        warn!("Failed to send batch to batch generator: {}", e);
-                    }
+                    .sender_to_batch_generator
+                    .send(BatchGeneratorCommand::RemoteBatch(batch.clone()))
+                    .await
+                {
+                    warn!("Failed to send batch to batch generator: {}", e);
+                }
             }
-            
+
             persist_requests.push(batch.into());
         }
         counters::RECEIVED_BATCH_COUNT.inc_by(persist_requests.len() as u64);
@@ -167,18 +160,17 @@ impl BatchCoordinator {
         while let Some(command) = command_rx.recv().await {
             match command {
                 BatchCoordinatorCommand::Shutdown(ack_tx) => {
-                    ack_tx
-                        .send(())
-                        .expect("Failed to send shutdown ack to QuorumStoreCoordinator");
+                    ack_tx.send(()).expect("Failed to send shutdown ack to QuorumStoreCoordinator");
                     break;
-                },
+                }
                 BatchCoordinatorCommand::NewBatches(author, batches) => {
                     for req in batches.iter() {
                         let batch_id = req.batch_info().batch_id();
-                        txn_metrics::TxnLifeTime::get_txn_life_time().record_before_persist(batch_id.clone());
+                        txn_metrics::TxnLifeTime::get_txn_life_time()
+                            .record_before_persist(batch_id.clone());
                     }
                     self.handle_batches_msg(author, batches).await;
-                },
+                }
             }
         }
     }

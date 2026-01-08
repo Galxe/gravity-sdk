@@ -7,13 +7,15 @@ use crate::quorum_store::{
     types::{BatchKey, PersistedValue, StorageMode},
 };
 use aptos_consensus_types::proof_of_store::{BatchId, BatchInfo};
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_temppath::TempPath;
-use gaptos::aptos_types::{
-    account_address::AccountAddress, transaction::SignedTransaction,
-    validator_verifier::random_validator_verifier,
-};
 use claims::{assert_err, assert_ok, assert_ok_eq};
+use gaptos::{
+    aptos_crypto::HashValue,
+    aptos_temppath::TempPath,
+    aptos_types::{
+        account_address::AccountAddress, transaction::SignedTransaction,
+        validator_verifier::random_validator_verifier,
+    },
+};
 use once_cell::sync::Lazy;
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -66,18 +68,9 @@ fn test_insert_expire() {
 
     let digest = HashValue::random();
 
-    assert_ok_eq!(
-        batch_store.insert_to_cache(&request_for_test(&digest, 15, 10, None)),
-        true
-    );
-    assert_ok_eq!(
-        batch_store.insert_to_cache(&request_for_test(&digest, 30, 10, None)),
-        true
-    );
-    assert_ok_eq!(
-        batch_store.insert_to_cache(&request_for_test(&digest, 25, 10, None)),
-        false
-    );
+    assert_ok_eq!(batch_store.insert_to_cache(&request_for_test(&digest, 15, 10, None)), true);
+    assert_ok_eq!(batch_store.insert_to_cache(&request_for_test(&digest, 30, 10, None)), true);
+    assert_ok_eq!(batch_store.insert_to_cache(&request_for_test(&digest, 25, 10, None)), false);
     let expired = batch_store.clear_expired_payload(27);
     assert!(expired.is_empty());
     let expired = batch_store.clear_expired_payload(29);
@@ -145,9 +138,9 @@ async fn test_extend_expiration_vs_save() {
             // Wait until both threads are ready for next experiment.
             loop {
                 let flag_val = start_clone2.load(Ordering::Acquire);
-                if flag_val == 3 * i + 1
-                    || flag_val == 3 * i + 2
-                    || save_error_clone2.load(Ordering::Acquire)
+                if flag_val == 3 * i + 1 ||
+                    flag_val == 3 * i + 2 ||
+                    save_error_clone2.load(Ordering::Acquire)
                 {
                     break;
                 }

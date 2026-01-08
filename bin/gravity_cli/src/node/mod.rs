@@ -3,8 +3,7 @@ mod stop;
 
 use clap::{Parser, Subcommand};
 
-use crate::node::start::StartCommand;
-use crate::node::stop::StopCommand;
+use crate::node::{start::StartCommand, stop::StopCommand};
 
 #[derive(Debug, Parser)]
 pub struct NodeCommand {
@@ -17,4 +16,3 @@ pub enum SubCommands {
     Start(StartCommand),
     Stop(StopCommand),
 }
-

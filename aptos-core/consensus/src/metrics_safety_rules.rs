@@ -14,13 +14,15 @@ use aptos_consensus_types::{
     vote::Vote,
     vote_proposal::VoteProposal,
 };
-use gaptos::aptos_crypto::bls12381;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::prelude::info;
 use aptos_safety_rules::{ConsensusState, Error, TSafetyRules};
-use gaptos::aptos_types::{
-    epoch_change::EpochChangeProof,
-    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+use gaptos::{
+    aptos_crypto::bls12381,
+    aptos_infallible::Mutex,
+    aptos_logger::prelude::info,
+    aptos_types::{
+        epoch_change::EpochChangeProof,
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+    },
 };
 use std::sync::Arc;
 
@@ -42,10 +44,8 @@ impl MetricsSafetyRules {
         let consensus_state = self.consensus_state()?;
         let mut waypoint_version = consensus_state.waypoint().version();
         loop {
-            let proofs = self
-                .storage
-                .retrieve_epoch_change_proof(waypoint_version)
-                .map_err(|e| {
+            let proofs =
+                self.storage.retrieve_epoch_change_proof(waypoint_version).map_err(|e| {
                     Error::InternalError(format!(
                         "Unable to retrieve Waypoint state from storage, encountered Error:{}",
                         e
@@ -63,7 +63,7 @@ impl MetricsSafetyRules {
                     waypoint_version = curr_version;
                     info!("Previous waypoint version {}, updated version {}, current epoch {}, provided epoch {}", prev_version, curr_version, current_epoch, provided_epoch);
                     continue;
-                },
+                }
                 result => return result,
             }
         }
@@ -75,12 +75,12 @@ impl MetricsSafetyRules {
     ) -> Result<T, Error> {
         let result = f(&mut self.inner);
         match result {
-            Err(Error::NotInitialized(_))
-            | Err(Error::IncorrectEpoch(_, _))
-            | Err(Error::WaypointOutOfDate(_, _, _, _)) => {
+            Err(Error::NotInitialized(_)) |
+            Err(Error::IncorrectEpoch(_, _)) |
+            Err(Error::WaypointOutOfDate(_, _, _, _)) => {
                 self.perform_initialize()?;
                 f(&mut self.inner)
-            },
+            }
             _ => result,
         }
     }
@@ -105,10 +105,7 @@ impl TSafetyRules for MetricsSafetyRules {
         timeout_cert: Option<&TwoChainTimeoutCertificate>,
     ) -> Result<bls12381::Signature, Error> {
         self.retry(|inner| {
-            monitor!(
-                "safety_rules",
-                inner.sign_timeout_with_qc(timeout, timeout_cert)
-            )
+            monitor!("safety_rules", inner.sign_timeout_with_qc(timeout, timeout_cert))
         })
     }
 
@@ -130,10 +127,7 @@ impl TSafetyRules for MetricsSafetyRules {
         order_vote_proposal: &OrderVoteProposal,
     ) -> Result<OrderVote, Error> {
         self.retry(|inner| {
-            monitor!(
-                "safety_rules",
-                inner.construct_and_sign_order_vote(order_vote_proposal)
-            )
+            monitor!("safety_rules", inner.construct_and_sign_order_vote(order_vote_proposal))
         })
     }
 
@@ -172,13 +166,15 @@ mod tests {
         vote::Vote,
         vote_proposal::VoteProposal,
     };
-    use gaptos::aptos_crypto::bls12381;
     use aptos_safety_rules::{ConsensusState, Error, TSafetyRules};
-    use gaptos::aptos_types::{
-        epoch_change::EpochChangeProof,
-        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
-    };
     use claims::{assert_matches, assert_ok};
+    use gaptos::{
+        aptos_crypto::bls12381,
+        aptos_types::{
+            epoch_change::EpochChangeProof,
+            ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+        },
+    };
 
     pub struct MockSafetyRules {
         // number of initialize() calls
@@ -197,11 +193,7 @@ mod tests {
             max_init_calls: i32,
             last_init_result: Result<(), Error>,
         ) -> Self {
-            Self {
-                init_calls,
-                max_init_calls,
-                last_init_result,
-            }
+            Self { init_calls, max_init_calls, last_init_result }
         }
     }
 
@@ -273,11 +265,8 @@ mod tests {
     async fn test_perform_initialize_error() {
         ::gaptos::aptos_logger::Logger::init_for_testing();
         let (_, mock_storage) = EmptyStorage::start_for_testing().await;
-        let mock_safety_rules = MockSafetyRules::new(
-            0,
-            10,
-            Err(Error::InvalidEpochChangeProof(String::from("Error"))),
-        );
+        let mock_safety_rules =
+            MockSafetyRules::new(0, 10, Err(Error::InvalidEpochChangeProof(String::from("Error"))));
         let mut metric_safety_rules =
             MetricsSafetyRules::new(Box::new(mock_safety_rules), mock_storage);
         assert_matches!(

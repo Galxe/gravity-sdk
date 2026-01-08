@@ -14,11 +14,13 @@ use crate::{
 };
 use anyhow::ensure;
 use aptos_consensus_types::common::Author;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::info;
-use gaptos::aptos_reliable_broadcast::BroadcastStatus;
-use gaptos::aptos_types::{
-    aggregate_signature::PartialSignatures, epoch_state::EpochState, randomness::RandMetadata,
+use gaptos::{
+    aptos_infallible::Mutex,
+    aptos_logger::info,
+    aptos_reliable_broadcast::BroadcastStatus,
+    aptos_types::{
+        aggregate_signature::PartialSignatures, epoch_state::EpochState, randomness::RandMetadata,
+    },
 };
 use std::{collections::HashSet, sync::Arc};
 
@@ -72,9 +74,7 @@ pub struct CertifiedAugDataAckState {
 
 impl CertifiedAugDataAckState {
     pub fn new(validators: impl Iterator<Item = Author>) -> Self {
-        Self {
-            validators: Mutex::new(validators.collect()),
-        }
+        Self { validators: Mutex::new(validators.collect()) }
     }
 }
 
@@ -87,11 +87,7 @@ impl<S: TShare, D: TAugmentedData> BroadcastStatus<RandMessage<S, D>, RandMessag
 
     fn add(&self, peer: Author, _ack: Self::Response) -> anyhow::Result<Option<Self::Aggregated>> {
         let mut validators_guard = self.validators.lock();
-        ensure!(
-            validators_guard.remove(&peer),
-            "[RandMessage] Unknown author: {}",
-            peer
-        );
+        ensure!(validators_guard.remove(&peer), "[RandMessage] Unknown author: {}", peer);
         // If receive from all validators, stop the reliable broadcast
         if validators_guard.is_empty() {
             Ok(Some(()))
@@ -113,11 +109,7 @@ impl<S> ShareAggregateState<S> {
         rand_metadata: RandMetadata,
         rand_config: RandConfig,
     ) -> Self {
-        Self {
-            rand_store,
-            rand_metadata,
-            rand_config,
-        }
+        Self { rand_store, rand_metadata, rand_config }
     }
 }
 
@@ -142,11 +134,7 @@ impl<S: TShare, D: TAugmentedData> BroadcastStatus<RandMessage<S, D>, RandMessag
             .round(share.metadata().round)
             .remote_peer(*share.author()));
         let mut store = self.rand_store.lock();
-        let aggregated = if store.add_share(share, PathType::Slow)? {
-            Some(())
-        } else {
-            None
-        };
+        let aggregated = if store.add_share(share, PathType::Slow)? { Some(()) } else { None };
         Ok(aggregated)
     }
 }

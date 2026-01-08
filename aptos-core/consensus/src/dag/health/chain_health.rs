@@ -5,10 +5,12 @@ use crate::{
     dag::anchor_election::CommitHistory,
     liveness::{leader_reputation::VotingPowerRatio, proposal_generator::ChainHealthBackoffConfig},
 };
-use gaptos::aptos_config::config::ChainHealthBackoffValues;
 use aptos_consensus_types::common::Round;
+use gaptos::{
+    aptos_config::config::ChainHealthBackoffValues,
+    aptos_consensus::counters::CHAIN_HEALTH_BACKOFF_TRIGGERED,
+};
 use std::{sync::Arc, time::Duration};
-use gaptos::aptos_consensus::counters::CHAIN_HEALTH_BACKOFF_TRIGGERED;
 
 pub trait TChainHealth: Send + Sync {
     fn get_round_backoff(&self, round: Round) -> Option<Duration>;
@@ -50,16 +52,11 @@ impl ChainHealthBackoff {
         config: ChainHealthBackoffConfig,
         commit_history: Arc<dyn CommitHistory>,
     ) -> Arc<Self> {
-        Arc::new(Self {
-            commit_history,
-            config,
-        })
+        Arc::new(Self { commit_history, config })
     }
 
     fn get_chain_health_backoff(&self, round: Round) -> Option<&ChainHealthBackoffValues> {
-        let voting_power_ratio = self
-            .commit_history
-            .get_voting_power_participation_ratio(round);
+        let voting_power_ratio = self.commit_history.get_voting_power_participation_ratio(round);
         let chain_health_backoff = self.config.get_backoff(voting_power_ratio);
 
         chain_health_backoff
@@ -91,7 +88,6 @@ impl TChainHealth for ChainHealthBackoff {
     }
 
     fn voting_power_ratio(&self, round: Round) -> VotingPowerRatio {
-        self.commit_history
-            .get_voting_power_participation_ratio(round)
+        self.commit_history.get_voting_power_participation_ratio(round)
     }
 }

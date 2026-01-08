@@ -18,8 +18,8 @@ use aptos_consensus_types::{
     block::{block_test_utils::certificate_for_genesis, Block},
     common::Author,
 };
-use gaptos::aptos_types::{on_chain_config::ValidatorTxnConfig, validator_signer::ValidatorSigner};
 use futures::{future::BoxFuture, FutureExt};
+use gaptos::aptos_types::{on_chain_config::ValidatorTxnConfig, validator_signer::ValidatorSigner};
 use std::{sync::Arc, time::Duration};
 
 fn empty_callback() -> BoxFuture<'static, ()> {
@@ -100,12 +100,8 @@ async fn test_proposal_generation_parent() {
         RotatingProposer::new(vec![inserter.signer().author()], 1),
     )));
     let genesis = block_store.ordered_root();
-    let a1 = inserter
-        .insert_block_with_qc(certificate_for_genesis(), &genesis, 1)
-        .await;
-    let b1 = inserter
-        .insert_block_with_qc(certificate_for_genesis(), &genesis, 2)
-        .await;
+    let a1 = inserter.insert_block_with_qc(certificate_for_genesis(), &genesis, 1).await;
+    let b1 = inserter.insert_block_with_qc(certificate_for_genesis(), &genesis, 2).await;
 
     let original_res = proposal_generator
         .generate_proposal(10, proposer_election.clone(), empty_callback())
@@ -144,7 +140,8 @@ async fn test_proposal_generation_parent() {
     assert_eq!(b1_child_res.round(), 15);
     assert_eq!(b1_child_res.quorum_cert().certified_block().id(), b1.id());
 
-    // test that we have authors for the skipped rounds (5,  .. 14), as the limit of 10 has been reached
+    // test that we have authors for the skipped rounds (5,  .. 14), as the limit of 10 has been
+    // reached
     assert_eq!(b1_child_res.failed_authors().unwrap().len(), 10);
     assert_eq!(b1_child_res.failed_authors().unwrap().first().unwrap().0, 5);
     assert_eq!(b1_child_res.failed_authors().unwrap().last().unwrap().0, 14);
@@ -177,9 +174,7 @@ async fn test_old_proposal_generation() {
         RotatingProposer::new(vec![inserter.signer().author()], 1),
     )));
     let genesis = block_store.ordered_root();
-    let a1 = inserter
-        .insert_block_with_qc(certificate_for_genesis(), &genesis, 1)
-        .await;
+    let a1 = inserter.insert_block_with_qc(certificate_for_genesis(), &genesis, 1).await;
     inserter.insert_qc_for_block(a1.as_ref(), None);
 
     let proposal_err = proposal_generator

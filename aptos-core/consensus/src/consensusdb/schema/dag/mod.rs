@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! This module defines physical storage schemas for DAG.
-//!
 
 use crate::{
     consensusdb::schema::ensure_slice_len_eq,
@@ -10,10 +9,12 @@ use crate::{
     define_schema,
 };
 use anyhow::Result;
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_schemadb::{
-    schema::{KeyCodec, ValueCodec},
-    ColumnFamilyName,
+use gaptos::{
+    aptos_crypto::HashValue,
+    aptos_schemadb::{
+        schema::{KeyCodec, ValueCodec},
+        ColumnFamilyName,
+    },
 };
 use std::mem::size_of;
 
@@ -68,12 +69,7 @@ impl ValueCodec<DagVoteSchema> for Vote {
 
 pub const CERTIFIED_NODE_CF_NAME: ColumnFamilyName = "certified_node";
 
-define_schema!(
-    CertifiedNodeSchema,
-    HashValue,
-    CertifiedNode,
-    CERTIFIED_NODE_CF_NAME
-);
+define_schema!(CertifiedNodeSchema, HashValue, CertifiedNode, CERTIFIED_NODE_CF_NAME);
 
 impl KeyCodec<CertifiedNodeSchema> for HashValue {
     fn encode_key(&self) -> Result<Vec<u8>> {
