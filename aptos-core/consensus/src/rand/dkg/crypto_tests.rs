@@ -1,4 +1,5 @@
 use blstrs::{G1Projective, G2Projective, Scalar};
+use ff::Field;
 use gaptos::aptos_dkg::{
     algebra::polynomials::{poly_eval, poly_mul_fft, poly_mul_slow, poly_xnmul},
     utils::{
@@ -7,7 +8,6 @@ use gaptos::aptos_dkg::{
     },
     weighted_vuf::pinkas::MIN_MULTIPAIR_NUM_JOBS,
 };
-use ff::Field;
 use group::Group;
 use rand::thread_rng;
 use std::ops::Mul;
@@ -35,8 +35,8 @@ fn test_crypto_g1_multiexp_more_points() {
     assert_eq!(result, bases[0]);
 }
 
-/// TODO(Security): This failed once out of the blue. Can never call G1Projective::multi_exp directly
-///  because of this.
+/// TODO(Security): This failed once out of the blue. Can never call G1Projective::multi_exp
+/// directly  because of this.
 ///
 /// Last reproduced on Dec. 5th, 2023 with blstrs 0.7.1:
 ///  ```
@@ -44,9 +44,15 @@ fn test_crypto_g1_multiexp_more_points() {
 ///
 ///  ---- test_multiexp_less_points stdout ----
 ///  thread 'test_multiexp_less_points' panicked at 'assertion failed: `(left == right)`
-///  left: `G1Projective { x: Fp(0x015216375988dea7b8f1642e6667482a0fe06709923f24e629468da4cf265ea6f03f593188d3557d5cf20a50ff28f870), y: Fp(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), z: Fp(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001) }`,
-///  right: `G1Projective { x: Fp(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), y: Fp(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), z: Fp(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000) }`', crates/aptos-dkg/tests/crypto.rs:32:5
-///  ```
+///  left: `G1Projective { x:
+/// Fp(0x015216375988dea7b8f1642e6667482a0fe06709923f24e629468da4cf265ea6f03f593188d3557d5cf20a50ff28f870),
+/// y: Fp(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000),
+/// z: Fp(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001)
+/// }`,  right: `G1Projective { x:
+/// Fp(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000),
+/// y: Fp(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000),
+/// z: Fp(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000)
+/// }`', crates/aptos-dkg/tests/crypto.rs:32:5  ```
 #[test]
 #[ignore]
 fn test_crypto_g1_multiexp_less_points() {
@@ -130,7 +136,8 @@ fn test_crypto_poly_multiply() {
             let naive_fg_rand = poly_eval(&naive_fg, &r);
             assert_eq!(naive_fg_rand, fg_rand);
 
-            // Lastly, of course the naive result should be the same as the FFT result (since they are both correct)
+            // Lastly, of course the naive result should be the same as the FFT result (since they
+            // are both correct)
             assert_eq!(naive_fg, fft_fg);
         }
     }

@@ -1,13 +1,15 @@
 use clap::Parser;
 use gaptos::{
     api_types::u256_define::AccountAddress,
-    aptos_crypto::{ed25519::{self, Ed25519PublicKey}, PrivateKey, ValidCryptoMaterial},
+    aptos_crypto::{
+        ed25519::{self, Ed25519PublicKey},
+        PrivateKey, ValidCryptoMaterial,
+    },
     aptos_keygen::KeyGen,
     aptos_types::transaction::authenticator::AuthenticationKey,
 };
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 use tracing::info;
-use std::fs;
 
 use crate::command::Executable;
 
@@ -23,7 +25,8 @@ struct ValidatorIndentity {
 
 #[derive(Debug, Parser)]
 pub struct GenerateKey {
-    /// The seed used for key generation, should be a 64 character hex string and only used for testing
+    /// The seed used for key generation, should be a 64 character hex string and only used for
+    /// testing
     ///
     /// If a predictable random seed is used, the key that is produced will be insecure and easy
     /// to reproduce.  Please do not use this unless sufficient randomness is put into the random
@@ -63,7 +66,10 @@ impl Executable for GenerateKey {
         let account_private_key = key_gen.generate_ed25519_private_key();
         let account_address = network_private_key.public_key();
         println!("The account_address is {}", account_address);
-        println!("The last 20bit account_address is 0x{}", hex::encode(&account_address.as_slice()[12..]));
+        println!(
+            "The last 20bit account_address is 0x{}",
+            hex::encode(&account_address.as_slice()[12..])
+        );
         let indentity = ValidatorIndentity {
             account_address: account_address.to_string(),
             account_private_key: hex::encode(account_private_key.to_bytes()),
@@ -78,4 +84,3 @@ impl Executable for GenerateKey {
         Ok(())
     }
 }
-

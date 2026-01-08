@@ -11,10 +11,12 @@ use crate::{
     test_utils::{create_vec_signed_transactions, mock_quorum_store_sender::MockQuorumStoreSender},
 };
 use aptos_consensus_types::proof_of_store::{BatchId, SignedBatchInfo, SignedBatchInfoMsg};
-use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::ExecutorResult;
-use gaptos::aptos_types::{
-    transaction::SignedTransaction, validator_verifier::random_validator_verifier, PeerId,
+use gaptos::{
+    aptos_crypto::HashValue,
+    aptos_types::{
+        transaction::SignedTransaction, validator_verifier::random_validator_verifier, PeerId,
+    },
 };
 use mini_moka::sync::Cache;
 use std::sync::Arc;
@@ -52,9 +54,7 @@ async fn test_proof_coordinator_basic() {
     let proof_coordinator = ProofCoordinator::new(
         100,
         signers[0].author(),
-        Arc::new(MockBatchReader {
-            peer: signers[0].author(),
-        }),
+        Arc::new(MockBatchReader { peer: signers[0].author() }),
         tx,
         proof_cache.clone(),
         true,
@@ -62,7 +62,8 @@ async fn test_proof_coordinator_basic() {
     let (proof_coordinator_tx, proof_coordinator_rx) = channel(100);
     let (tx, mut rx) = channel(100);
     let network_sender = MockQuorumStoreSender::new(tx);
-    todo!(); // tokio::spawn(proof_coordinator.start(proof_coordinator_rx, network_sender, verifier.clone()));
+    todo!(); // tokio::spawn(proof_coordinator.start(proof_coordinator_rx, network_sender,
+             // verifier.clone()));
 
     let batch_author = signers[0].author();
     let batch_id = BatchId::new_for_test(1);
@@ -73,9 +74,9 @@ async fn test_proof_coordinator_basic() {
     for signer in &signers {
         let signed_batch_info = SignedBatchInfo::new(batch.batch_info().clone(), signer).unwrap();
         assert!(proof_coordinator_tx
-            .send(ProofCoordinatorCommand::AppendSignature(
-                SignedBatchInfoMsg::new(vec![signed_batch_info])
-            ))
+            .send(ProofCoordinatorCommand::AppendSignature(SignedBatchInfoMsg::new(vec![
+                signed_batch_info
+            ])))
             .await
             .is_ok());
     }

@@ -5,8 +5,7 @@ mod set_failpoints;
 mod tx;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_logger::info;
+use aptos_consensus::consensusdb::ConsensusDB;
 use axum::{
     body::Body,
     extract::{Path, State},
@@ -18,10 +17,10 @@ use axum::{
 };
 use axum_server::tls_rustls::RustlsConfig;
 use dkg::DkgState;
+use gaptos::{aptos_crypto::HashValue, aptos_logger::info};
 use heap_profiler::control_profiler;
 use set_failpoints::{set_failpoint, FailpointConf};
 use tx::{get_tx_by_hash, submit_tx, TxRequest};
-use aptos_consensus::consensusdb::ConsensusDB;
 
 pub struct HttpsServer {
     pub address: String,
@@ -44,62 +43,59 @@ impl HttpsServer {
         key_pem: Option<PathBuf>,
         consensus_db: Option<Arc<ConsensusDB>>,
     ) -> Self {
-        Self {
-            address,
-            cert_pem,
-            key_pem,
-            consensus_db,
-        }
+        Self { address, cert_pem, key_pem, consensus_db }
     }
 
     pub async fn serve(self) {
         rustls::crypto::ring::default_provider().install_default().unwrap();
-        
+
         let consensus_db = self.consensus_db.clone();
         let dkg_state = DkgState::new(consensus_db);
 
-        let submit_tx_lambda = |Json(request): Json<TxRequest>| async move {
-            submit_tx(request).await
-        };
+        let submit_tx_lambda =
+            |Json(request): Json<TxRequest>| async move { submit_tx(request).await };
 
-        let get_tx_by_hash_lambda = |Path(request): Path<HashValue>| async move {
-            get_tx_by_hash(request).await
-        };
+        let get_tx_by_hash_lambda =
+            |Path(request): Path<HashValue>| async move { get_tx_by_hash(request).await };
 
         let set_fail_point_lambda =
             |Json(request): Json<FailpointConf>| async move { set_failpoint(request).await };
 
-        let control_profiler_lambda = |Json(request): Json<heap_profiler::ControlProfileRequest>| async move {
-            control_profiler(request).await
-        };
+        let control_profiler_lambda = |Json(request): Json<
+            heap_profiler::ControlProfileRequest,
+        >| async move { control_profiler(request).await };
 
-        let get_dkg_status_lambda = |State(state): State<Arc<DkgState>>| async move {
-            state.get_dkg_status()
-        };
+        let get_dkg_status_lambda =
+            |State(state): State<Arc<DkgState>>| async move { state.get_dkg_status() };
 
         let get_latest_ledger_info_lambda = |State(state): State<Arc<DkgState>>| async move {
             consensus::get_latest_ledger_info(state)
         };
 
-        let get_randomness_lambda = |State(state): State<Arc<DkgState>>, Path(block_number): Path<u64>| async move {
-            state.get_randomness(block_number)
-        };
+        let get_randomness_lambda =
+            |State(state): State<Arc<DkgState>>, Path(block_number): Path<u64>| async move {
+                state.get_randomness(block_number)
+            };
 
-        let get_ledger_info_by_epoch_lambda = |State(state): State<Arc<DkgState>>, Path(epoch): Path<u64>| async move {
-            consensus::get_ledger_info_by_epoch(State(state), Path(epoch))
-        };
+        let get_ledger_info_by_epoch_lambda =
+            |State(state): State<Arc<DkgState>>, Path(epoch): Path<u64>| async move {
+                consensus::get_ledger_info_by_epoch(State(state), Path(epoch))
+            };
 
-        let get_block_lambda = |State(state): State<Arc<DkgState>>, Path((epoch, round)): Path<(u64, u64)>| async move {
-            consensus::get_block(State(state), Path((epoch, round)))
-        };
+        let get_block_lambda =
+            |State(state): State<Arc<DkgState>>, Path((epoch, round)): Path<(u64, u64)>| async move {
+                consensus::get_block(State(state), Path((epoch, round)))
+            };
 
-        let get_qc_lambda = |State(state): State<Arc<DkgState>>, Path((epoch, round)): Path<(u64, u64)>| async move {
+        let get_qc_lambda = |State(state): State<Arc<DkgState>>,
+                             Path((epoch, round)): Path<(u64, u64)>| async move {
             consensus::get_qc(State(state), Path((epoch, round)))
         };
 
-        let get_validator_count_lambda = |State(state): State<Arc<DkgState>>, Path(epoch): Path<u64>| async move {
-            consensus::get_validator_count_by_epoch(State(state), Path(epoch))
-        };
+        let get_validator_count_lambda =
+            |State(state): State<Arc<DkgState>>, Path(epoch): Path<u64>| async move {
+                consensus::get_validator_count_by_epoch(State(state), Path(epoch))
+            };
 
         let dkg_state_arc = Arc::new(dkg_state);
         let https_routes = Router::new()
@@ -116,10 +112,7 @@ impl HttpsServer {
             .route("/consensus/validator_count/:epoch", get(get_validator_count_lambda))
             .route("/set_failpoint", post(set_fail_point_lambda))
             .route("/mem_prof", post(control_profiler_lambda));
-        let app = Router::new()
-            .merge(https_routes)
-            .merge(http_routes)
-            .with_state(dkg_state_arc);
+        let app = Router::new().merge(https_routes).merge(http_routes).with_state(dkg_state_arc);
         let addr: SocketAddr = self.address.parse().unwrap();
         match (self.cert_pem.clone(), self.key_pem.clone()) {
             (Some(cert_path), Some(key_path)) => {

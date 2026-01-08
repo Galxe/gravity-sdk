@@ -1,21 +1,17 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{
-    error::QuorumStoreError, monitor,
-    payload_client::user::UserPayloadClient,
-};
+use crate::{error::QuorumStoreError, monitor, payload_client::user::UserPayloadClient};
 use aptos_consensus_types::{
     common::{Payload, PayloadFilter},
     request_response::{GetPayloadCommand, GetPayloadResponse},
 };
-use gaptos::aptos_logger::info;
 use fail::fail_point;
 use futures::future::BoxFuture;
 use futures_channel::{mpsc, oneshot};
+use gaptos::{aptos_consensus::counters::WAIT_FOR_FULL_BLOCKS_TRIGGERED, aptos_logger::info};
 use std::time::{Duration, Instant};
 use tokio::time::{sleep, timeout};
-use gaptos::aptos_consensus::counters::WAIT_FOR_FULL_BLOCKS_TRIGGERED;
 
 const NO_TXN_DELAY: u64 = 30;
 
@@ -23,7 +19,8 @@ const NO_TXN_DELAY: u64 = 30;
 #[derive(Clone)]
 pub struct QuorumStoreClient {
     consensus_to_quorum_store_sender: mpsc::Sender<GetPayloadCommand>,
-    /// Timeout for consensus to pull transactions from quorum store and get a response (in milliseconds)
+    /// Timeout for consensus to pull transactions from quorum store and get a response (in
+    /// milliseconds)
     pull_timeout_ms: u64,
     wait_for_full_blocks_above_recent_fill_threshold: f32,
     wait_for_full_blocks_above_pending_blocks: usize,
@@ -70,10 +67,7 @@ impl QuorumStoreClient {
             block_timestamp,
         );
         // send to shared mempool
-        self.consensus_to_quorum_store_sender
-            .clone()
-            .try_send(req)
-            .map_err(anyhow::Error::from)?;
+        self.consensus_to_quorum_store_sender.clone().try_send(req).map_err(anyhow::Error::from)?;
         // wait for response
         match monitor!(
             "pull_payload",
@@ -81,7 +75,7 @@ impl QuorumStoreClient {
         ) {
             Err(_) => {
                 Err(anyhow::anyhow!("[consensus] did not receive GetBlockResponse on time").into())
-            },
+            }
             Ok(resp) => match resp.map_err(anyhow::Error::from)?? {
                 GetPayloadResponse::GetPayloadResponse(payload) => Ok(payload),
             },
@@ -107,9 +101,9 @@ impl UserPayloadClient for QuorumStoreClient {
         recent_max_fill_fraction: f32,
         block_timestamp: Duration,
     ) -> anyhow::Result<Payload, QuorumStoreError> {
-        let return_non_full = recent_max_fill_fraction
-            < self.wait_for_full_blocks_above_recent_fill_threshold
-            && pending_uncommitted_blocks < self.wait_for_full_blocks_above_pending_blocks;
+        let return_non_full = recent_max_fill_fraction <
+            self.wait_for_full_blocks_above_recent_fill_threshold &&
+            pending_uncommitted_blocks < self.wait_for_full_blocks_above_pending_blocks;
         let return_empty = pending_ordering && return_non_full;
 
         WAIT_FOR_FULL_BLOCKS_TRIGGERED.observe(if !return_non_full { 1.0 } else { 0.0 });
@@ -118,13 +112,15 @@ impl UserPayloadClient for QuorumStoreClient {
             Err(anyhow::anyhow!("Injected error in pull_payload").into())
         });
         let mut callback_wrapper = Some(wait_callback);
-        // keep polling QuorumStore until there's payloads available or there's still pending payloads
+        // keep polling QuorumStore until there's payloads available or there's still pending
+        // payloads
         let start_time = Instant::now();
 
         let payload = loop {
-            // Make sure we don't wait more than expected, due to thread scheduling delays/processing time consumed
-            // let done = start_time.elapsed() >= max_poll_time;
-            // TODO(gravity_byteyue): maybe we don't need to set true as default
+            // Make sure we don't wait more than expected, due to thread scheduling
+            // delays/processing time consumed let done = start_time.elapsed() >=
+            // max_poll_time; TODO(gravity_byteyue): maybe we don't need to set true as
+            // default
             let done = true;
             let payload = self
                 .pull_internal(

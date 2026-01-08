@@ -1,14 +1,14 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{
-    transaction_deduper::TransactionDeduper,
+use crate::transaction_deduper::TransactionDeduper;
+use gaptos::{
+    aptos_consensus::counters::{TXN_DEDUP_FILTERED, TXN_DEDUP_SECONDS},
+    aptos_experimental_runtimes::thread_manager::optimal_min_len,
+    aptos_types::transaction::SignedTransaction,
 };
-use gaptos::aptos_experimental_runtimes::thread_manager::optimal_min_len;
-use gaptos::aptos_types::transaction::SignedTransaction;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
-use gaptos::aptos_consensus::counters::{TXN_DEDUP_FILTERED, TXN_DEDUP_SECONDS};
 
 /// An implementation of TransactionDeduper. Duplicate filtering is done using the pair
 /// (raw_txn.hash(), authenticator). Both the hash and signature are required because dedup
@@ -21,8 +21,8 @@ use gaptos::aptos_consensus::counters::{TXN_DEDUP_FILTERED, TXN_DEDUP_SECONDS};
 /// 1. Mark possible duplicates (sequential): Using a helper HashMap, mark transactions with 2+
 ///    (sender, seq_no) pairs as possible duplicates. If no possible duplicates, return the original
 ///    transactions.
-/// 2. Calculate txn hashes (parallel): For all possible duplicates, calculate the txn hash. This
-///    is an expensive operation.
+/// 2. Calculate txn hashes (parallel): For all possible duplicates, calculate the txn hash. This is
+///    an expensive operation.
 /// 3. Filter duplicates (sequential): Using a helper HashSet with the txn hashes calculated above
 ///    and signatures, filter actual duplicate transactions.
 ///
@@ -45,12 +45,12 @@ impl TransactionDeduper for TxnHashAndAuthenticatorDeduper {
             match seen.get(&(txn.sender(), txn.sequence_number())) {
                 None => {
                     seen.insert((txn.sender(), txn.sequence_number()), i);
-                },
+                }
                 Some(first_index) => {
                     is_possible_duplicate = true;
                     possible_duplicates[*first_index] = true;
                     possible_duplicates[i] = true;
-                },
+                }
             }
         }
         if !is_possible_duplicate {
@@ -85,7 +85,7 @@ impl TransactionDeduper for TxnHashAndAuthenticatorDeduper {
                         num_duplicates += 1;
                         None
                     }
-                },
+                }
             })
             .collect();
 
@@ -253,8 +253,8 @@ impl TxnHashAndAuthenticatorDeduper {
 //         assert_eq!(txns, deduped_txns);
 //     }
 
-//     // The perf tests are simple micro-benchmarks and just output results without checking for regressions
-//     static PERF_TXN_PER_BLOCK: usize = 10_000;
+//     // The perf tests are simple micro-benchmarks and just output results without checking for
+// regressions     static PERF_TXN_PER_BLOCK: usize = 10_000;
 
 //     fn measure_dedup_time(
 //         deduper: TxnHashAndAuthenticatorDeduper,

@@ -3,12 +3,14 @@
 
 use super::{types::DAGMessage, DAGRpcResult};
 use aptos_consensus_types::common::Author;
-use gaptos::aptos_reliable_broadcast::RBNetworkSender;
-use gaptos::aptos_time_service::{Interval, TimeService, TimeServiceTrait};
 use async_trait::async_trait;
 use futures::{
     stream::{FusedStream, FuturesUnordered},
     Future, Stream,
+};
+use gaptos::{
+    aptos_reliable_broadcast::RBNetworkSender,
+    aptos_time_service::{Interval, TimeService, TimeServiceTrait},
 };
 use rand::seq::SliceRandom;
 use std::{
@@ -71,10 +73,7 @@ impl Responders {
         if self.peers.is_empty() {
             return None;
         }
-        Some(
-            self.peers
-                .split_off(self.peers.len().saturating_sub(count as usize)),
-        )
+        Some(self.peers.split_off(self.peers.len().saturating_sub(count as usize)))
     }
 }
 
@@ -185,11 +184,7 @@ struct ExponentialNumberGenerator {
 
 impl ExponentialNumberGenerator {
     fn new(starting_value: u32, factor: u32, max_limit: u32) -> Self {
-        Self {
-            current: starting_value,
-            factor,
-            max_limit,
-        }
+        Self { current: starting_value, factor, max_limit }
     }
 }
 
@@ -199,11 +194,8 @@ impl Iterator for ExponentialNumberGenerator {
     fn next(&mut self) -> Option<Self::Item> {
         let result = self.current;
         if self.current < self.max_limit {
-            self.current = self
-                .current
-                .checked_mul(self.factor)
-                .unwrap_or(self.max_limit)
-                .min(self.max_limit)
+            self.current =
+                self.current.checked_mul(self.factor).unwrap_or(self.max_limit).min(self.max_limit)
         }
 
         Some(result)

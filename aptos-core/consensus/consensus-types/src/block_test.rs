@@ -11,16 +11,18 @@ use crate::{
     quorum_cert::QuorumCert,
     vote_data::VoteData,
 };
-use gaptos::aptos_bitvec::BitVec;
-use gaptos::aptos_crypto::hash::HashValue;
-use gaptos::aptos_types::{
-    account_address::AccountAddress,
-    aggregate_signature::PartialSignatures,
-    block_info::{BlockInfo, Round},
-    ledger_info::{LedgerInfo, LedgerInfoWithVerifiedSignatures},
-    on_chain_config::ValidatorSet,
-    validator_signer::ValidatorSigner,
-    validator_verifier::{random_validator_verifier, ValidatorVerifier},
+use gaptos::{
+    aptos_bitvec::BitVec,
+    aptos_crypto::hash::HashValue,
+    aptos_types::{
+        account_address::AccountAddress,
+        aggregate_signature::PartialSignatures,
+        block_info::{BlockInfo, Round},
+        ledger_info::{LedgerInfo, LedgerInfoWithVerifiedSignatures},
+        on_chain_config::ValidatorSet,
+        validator_signer::ValidatorSigner,
+        validator_verifier::{random_validator_verifier, ValidatorVerifier},
+    },
 };
 use std::sync::Arc;
 
@@ -39,19 +41,14 @@ fn test_nil_block() {
     let quorum_cert = certificate_for_genesis();
 
     let nil_block = Block::new_nil(1, quorum_cert, vec![]);
-    assert_eq!(
-        nil_block.quorum_cert().certified_block().id(),
-        genesis_block.id()
-    );
+    assert_eq!(nil_block.quorum_cert().certified_block().id(), genesis_block.id());
     assert_eq!(nil_block.round(), 1);
     assert_eq!(nil_block.timestamp_usecs(), genesis_block.timestamp_usecs());
     assert!(nil_block.is_nil_block());
     assert!(nil_block.author().is_none());
 
     let dummy_verifier = Arc::new(ValidatorVerifier::new(vec![]));
-    assert!(nil_block
-        .validate_signature(dummy_verifier.as_ref())
-        .is_ok());
+    assert!(nil_block.validate_signature(dummy_verifier.as_ref()).is_ok());
     assert!(nil_block.verify_well_formed().is_ok());
 
     let signer = ValidatorSigner::random(None);
@@ -66,11 +63,7 @@ fn test_nil_block() {
         nil_block.quorum_cert().certified_block().clone(),
         None,
     );
-    println!(
-        "{:?} {:?}",
-        nil_block.id(),
-        nil_block_qc.certified_block().id()
-    );
+    println!("{:?} {:?}", nil_block.id(), nil_block_qc.certified_block().id());
     let nil_block_child = Block::new_proposal(
         Payload::empty(false, true),
         2,
@@ -103,10 +96,7 @@ fn test_block_relation() {
     .unwrap();
     assert_eq!(next_block.round(), 1);
     assert!(genesis_block.is_parent_of(&next_block));
-    assert_eq!(
-        next_block.quorum_cert().certified_block().id(),
-        genesis_block.id()
-    );
+    assert_eq!(next_block.quorum_cert().certified_block().id(), genesis_block.id());
     assert_eq!(next_block.payload(), Some(&payload));
 }
 
@@ -138,9 +128,7 @@ fn test_same_qc_different_authors() {
     ledger_info_altered.add_signature(signer.author(), signature);
     let genesis_qc_altered = QuorumCert::new(
         genesis_qc.vote_data().clone(),
-        ledger_info_altered
-            .aggregate_signatures(&validators)
-            .unwrap(),
+        ledger_info_altered.aggregate_signatures(&validators).unwrap(),
     );
 
     let block_round_1_altered = Block::new_proposal(
@@ -153,15 +141,9 @@ fn test_same_qc_different_authors() {
     )
     .unwrap();
 
-    let block_round_1_same = Block::new_proposal(
-        payload,
-        round,
-        current_timestamp,
-        genesis_qc,
-        signer,
-        Vec::new(),
-    )
-    .unwrap();
+    let block_round_1_same =
+        Block::new_proposal(payload, round, current_timestamp, genesis_qc, signer, Vec::new())
+            .unwrap();
 
     assert_ne!(block_round_1.id(), block_round_1_altered.id());
     assert_eq!(block_round_1.id(), block_round_1_same.id());
@@ -172,9 +154,7 @@ fn test_block_metadata_bitvec() {
     let num_validators = 4;
     let (signers, validator_verifier) = random_validator_verifier(num_validators, None, true);
     let validator_set = ValidatorSet::from(&validator_verifier);
-    let validators: Vec<_> = validator_verifier
-        .get_ordered_account_addresses_iter()
-        .collect();
+    let validators: Vec<_> = validator_verifier.get_ordered_account_addresses_iter().collect();
     let ledger_info = LedgerInfo::mock_genesis(Some(validator_set));
     let genesis_qc = QuorumCert::certificate_for_genesis_from_ledger_info(
         &ledger_info,
@@ -205,13 +185,7 @@ fn test_block_metadata_bitvec() {
     let votes_1 = vec![true, false, true, true];
     votes_1
         .iter()
-        .zip(
-            validators.iter().zip(
-                signers
-                    .iter()
-                    .map(|signer| signer.sign(&ledger_info).unwrap()),
-            ),
-        )
+        .zip(validators.iter().zip(signers.iter().map(|signer| signer.sign(&ledger_info).unwrap())))
         .for_each(|(&voted, (&address, signature))| {
             if voted {
                 ledger_info_1.add_signature(address, signature)
@@ -219,9 +193,7 @@ fn test_block_metadata_bitvec() {
         });
     let qc_1 = QuorumCert::new(
         VoteData::new(BlockInfo::empty(), BlockInfo::empty()),
-        ledger_info_1
-            .aggregate_signatures(&validator_verifier)
-            .unwrap(),
+        ledger_info_1.aggregate_signatures(&validator_verifier).unwrap(),
     );
 
     let block_2 = Block::new_proposal(
@@ -257,60 +229,27 @@ fn test_failed_authors_well_formed() {
     let payload = Payload::empty(false, true);
 
     let create_block = |round: Round, failed_authors: Vec<(Round, Author)>| {
-        Block::new_proposal(
-            payload.clone(),
-            round,
-            1,
-            quorum_cert.clone(),
-            &signer,
-            failed_authors,
-        )
-        .unwrap()
+        Block::new_proposal(payload.clone(), round, 1, quorum_cert.clone(), &signer, failed_authors)
+            .unwrap()
     };
 
     assert!(create_block(1, vec![]).verify_well_formed().is_ok());
     assert!(create_block(2, vec![]).verify_well_formed().is_ok());
-    assert!(create_block(2, vec![(1, other)])
-        .verify_well_formed()
-        .is_ok());
-    assert!(create_block(3, vec![(1, other)])
-        .verify_well_formed()
-        .is_ok());
-    assert!(create_block(3, vec![(2, other)])
-        .verify_well_formed()
-        .is_ok());
-    assert!(create_block(3, vec![(1, other), (2, other)])
-        .verify_well_formed()
-        .is_ok());
+    assert!(create_block(2, vec![(1, other)]).verify_well_formed().is_ok());
+    assert!(create_block(3, vec![(1, other)]).verify_well_formed().is_ok());
+    assert!(create_block(3, vec![(2, other)]).verify_well_formed().is_ok());
+    assert!(create_block(3, vec![(1, other), (2, other)]).verify_well_formed().is_ok());
 
-    assert!(create_block(1, vec![(0, other)])
-        .verify_well_formed()
-        .is_err());
-    assert!(create_block(2, vec![(0, other)])
-        .verify_well_formed()
-        .is_err());
-    assert!(create_block(2, vec![(2, other)])
-        .verify_well_formed()
-        .is_err());
-    assert!(create_block(2, vec![(1, other), (1, other)])
-        .verify_well_formed()
-        .is_err());
-    assert!(create_block(3, vec![(0, other)])
-        .verify_well_formed()
-        .is_err());
-    assert!(create_block(3, vec![(3, other)])
-        .verify_well_formed()
-        .is_err());
-    assert!(create_block(3, vec![(4, other)])
-        .verify_well_formed()
-        .is_err());
+    assert!(create_block(1, vec![(0, other)]).verify_well_formed().is_err());
+    assert!(create_block(2, vec![(0, other)]).verify_well_formed().is_err());
+    assert!(create_block(2, vec![(2, other)]).verify_well_formed().is_err());
+    assert!(create_block(2, vec![(1, other), (1, other)]).verify_well_formed().is_err());
+    assert!(create_block(3, vec![(0, other)]).verify_well_formed().is_err());
+    assert!(create_block(3, vec![(3, other)]).verify_well_formed().is_err());
+    assert!(create_block(3, vec![(4, other)]).verify_well_formed().is_err());
     assert!(create_block(3, vec![(1, other), (1, other), (1, other)])
         .verify_well_formed()
         .is_err());
-    assert!(create_block(3, vec![(1, other), (1, other)])
-        .verify_well_formed()
-        .is_err());
-    assert!(create_block(3, vec![(2, other), (1, other)])
-        .verify_well_formed()
-        .is_err());
+    assert!(create_block(3, vec![(1, other), (1, other)]).verify_well_formed().is_err());
+    assert!(create_block(3, vec![(2, other), (1, other)]).verify_well_formed().is_err());
 }

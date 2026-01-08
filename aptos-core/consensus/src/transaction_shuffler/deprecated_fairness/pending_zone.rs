@@ -27,10 +27,7 @@ impl<'a> PendingZone<'a> {
     }
 
     fn new(key_registry: &'a ConflictKeyRegistry) -> Self {
-        Self {
-            key_registry,
-            pending_by_key: key_registry.new_map_by_id(),
-        }
+        Self { key_registry, pending_by_key: key_registry.new_map_by_id() }
     }
 
     pub fn add(&mut self, txn_idx: TxnIdx) {
@@ -43,11 +40,7 @@ impl<'a> PendingZone<'a> {
     pub fn pop(&mut self, txn_idx: TxnIdx) {
         let key_id = self.key_registry.key_id_for_txn(txn_idx);
         if !self.key_registry.is_conflict_exempt(key_id) {
-            let popped = self
-                .pending_by_key
-                .get_mut(key_id)
-                .pop_front()
-                .expect("Must exist");
+            let popped = self.pending_by_key.get_mut(key_id).pop_front().expect("Must exist");
             assert_eq!(popped, txn_idx);
         }
     }

@@ -7,9 +7,17 @@ use crate::{
         pending_blocks::PendingBlocks,
         tracing::{observe_block, BlockStage},
         BlockReader, BlockStore,
-    }, consensusdb::schema::{
+    },
+    consensusdb::schema::{
         epoch_by_block_number::EpochByBlockNumberSchema, ledger_info::LedgerInfoSchema,
-    }, epoch_manager::LivenessStorageData, logging::{LogEvent, LogSchema}, monitor, network::{IncomingBlockRetrievalRequest, NetworkSender}, network_interface::ConsensusMsg, payload_manager::TPayloadManager, persistent_liveness_storage::PersistentLivenessStorage
+    },
+    epoch_manager::LivenessStorageData,
+    logging::{LogEvent, LogSchema},
+    monitor,
+    network::{IncomingBlockRetrievalRequest, NetworkSender},
+    network_interface::ConsensusMsg,
+    payload_manager::TPayloadManager,
+    persistent_liveness_storage::PersistentLivenessStorage,
 };
 use anyhow::{anyhow, bail};
 use aptos_consensus_types::{
@@ -23,49 +31,47 @@ use aptos_consensus_types::{
     sync_info::SyncInfo,
     wrapped_ledger_info::WrappedLedgerInfo,
 };
-use gaptos::{aptos_metrics_core::{register_int_gauge_vec, IntGaugeHelper, IntGaugeVec}, aptos_types::randomness::{RandMetadata, Randomness}};
-use gaptos::aptos_config::network_id::{NetworkId, PeerNetworkId};
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_schemadb::batch::SchemaBatch;
-use gaptos::aptos_types::{
-    account_address::AccountAddress, epoch_change::EpochChangeProof,
-    ledger_info::{self, LedgerInfoWithSignatures},
-};
 use fail::fail_point;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use futures_channel::oneshot;
+use gaptos::{
+    aptos_config::network_id::{NetworkId, PeerNetworkId},
+    aptos_consensus::counters::{
+        BLOCKS_FETCHED_FROM_NETWORK_IN_BLOCK_RETRIEVER,
+        BLOCKS_FETCHED_FROM_NETWORK_WHILE_FAST_FORWARD_SYNC,
+        BLOCKS_FETCHED_FROM_NETWORK_WHILE_INSERTING_QUORUM_CERT, LATE_EXECUTION_WITH_ORDER_VOTE_QC,
+        SUCCESSFUL_EXECUTED_WITH_ORDER_VOTE_QC, SUCCESSFUL_EXECUTED_WITH_REGULAR_QC,
+    },
+    aptos_crypto::HashValue,
+    aptos_infallible::Mutex,
+    aptos_logger::prelude::*,
+    aptos_metrics_core::{register_int_gauge_vec, IntGaugeHelper, IntGaugeVec},
+    aptos_schemadb::batch::SchemaBatch,
+    aptos_types::{
+        account_address::AccountAddress,
+        epoch_change::EpochChangeProof,
+        ledger_info::{self, LedgerInfoWithSignatures},
+        randomness::{RandMetadata, Randomness},
+    },
+};
 use num_traits::ToPrimitive;
 use once_cell::sync::Lazy;
 use rand::{prelude::*, Rng};
 use sha3::digest::generic_array::typenum::Le;
 use std::{clone::Clone, cmp::min, hash::Hash, sync::Arc, time::Duration};
 use tokio::{time, time::timeout};
-use gaptos::aptos_consensus::counters::{
-    BLOCKS_FETCHED_FROM_NETWORK_IN_BLOCK_RETRIEVER,
-    BLOCKS_FETCHED_FROM_NETWORK_WHILE_FAST_FORWARD_SYNC,
-    BLOCKS_FETCHED_FROM_NETWORK_WHILE_INSERTING_QUORUM_CERT, LATE_EXECUTION_WITH_ORDER_VOTE_QC,
-    SUCCESSFUL_EXECUTED_WITH_ORDER_VOTE_QC, SUCCESSFUL_EXECUTED_WITH_REGULAR_QC,
-};
 
 static CUR_BLOCK_SYNC_BLOCK_SUM_GAUGE: Lazy<IntGaugeVec> = Lazy::new(|| {
-     register_int_gauge_vec!(
-         "aptos_current_block_sync_block_sum",
-         "Current block_sync block sum",
-         &[]
-     )
-     .unwrap()
- });
+    register_int_gauge_vec!(
+        "aptos_current_block_sync_block_sum",
+        "Current block_sync block sum",
+        &[]
+    )
+    .unwrap()
+});
 
- static BLOCK_SYNC_GAUGE: Lazy<IntGaugeVec> = Lazy::new(|| {
-     register_int_gauge_vec!(
-         "aptos_block_sync",
-         "is block_sync or not",
-         &[]
-     )
-     .unwrap()
- });
+static BLOCK_SYNC_GAUGE: Lazy<IntGaugeVec> =
+    Lazy::new(|| register_int_gauge_vec!("aptos_block_sync", "is block_sync or not", &[]).unwrap());
 
 #[derive(Debug, PartialEq, Eq)]
 /// Whether we need to do block retrieval if we want to insert a Quorum Cert.
@@ -81,15 +87,15 @@ impl BlockStore {
     /// This ensures that the block referred by the ledger info is not in buffer manager.
     pub fn need_sync_for_ledger_info(&self, li: &LedgerInfoWithSignatures) -> bool {
         // TODO move min gap to fallback (30) to config.
-        (self.ordered_root().round() < li.commit_info().round()
-            && !self.block_exists(li.commit_info().id()))
-            || self.commit_root().round() + 30.max(2 * self.vote_back_pressure_limit)
-                < li.commit_info().round()
+        (self.ordered_root().round() < li.commit_info().round() &&
+            !self.block_exists(li.commit_info().id())) ||
+            self.commit_root().round() + 30.max(2 * self.vote_back_pressure_limit) <
+                li.commit_info().round()
     }
 
     pub fn need_sync_to_highest_quorum_cert(&self, hqc: &QuorumCert) -> bool {
-        (self.ordered_root().round() < hqc.certified_block().round()
-            && !self.block_exists(hqc.certified_block().id()))
+        (self.ordered_root().round() < hqc.certified_block().round() &&
+            !self.block_exists(hqc.certified_block().id()))
     }
 
     /// Checks if quorum certificate can be inserted in block store without RPC
@@ -98,8 +104,7 @@ impl BlockStore {
         if qc.certified_block().round() < self.ordered_root().round() {
             return NeedFetchResult::QCRoundBeforeRoot;
         }
-        if self.get_quorum_cert_for_block(qc.certified_block().id())
-            .is_some() {
+        if self.get_quorum_cert_for_block(qc.certified_block().id()).is_some() {
             return NeedFetchResult::QCAlreadyExist;
         }
         if self.block_exists(qc.certified_block().id()) {
@@ -117,11 +122,8 @@ impl BlockStore {
         mut retriever: BlockRetriever,
     ) -> anyhow::Result<()> {
         BLOCK_SYNC_GAUGE.set_with(&[], 1);
-        self.sync_to_highest_commit_cert(
-            sync_info.highest_commit_cert().clone(),
-            &mut retriever,
-        )
-        .await?;
+        self.sync_to_highest_commit_cert(sync_info.highest_commit_cert().clone(), &mut retriever)
+            .await?;
 
         // When the local ordered round is very old than the received sync_info, this function will
         // (1) resets the block store with highest commit cert = sync_info.highest_quorum_cert()
@@ -136,23 +138,23 @@ impl BlockStore {
         )
         .await?;
 
-        // The insert_ordered_cert(order_cert) function call expects that order_cert.commit_info().id() block
-        // is already stored in block_store. So, we first call insert_quorum_cert(highest_quorum_cert).
-        // This call will ensure that the highest ceritified block along with all its ancestors are inserted
+        // The insert_ordered_cert(order_cert) function call expects that
+        // order_cert.commit_info().id() block is already stored in block_store. So, we
+        // first call insert_quorum_cert(highest_quorum_cert). This call will ensure that
+        // the highest ceritified block along with all its ancestors are inserted
         // into the block store.
-        self.insert_quorum_cert(sync_info.highest_quorum_cert(), &mut retriever)
-            .await?;
+        self.insert_quorum_cert(sync_info.highest_quorum_cert(), &mut retriever).await?;
 
         // Even though we inserted the highest_quorum_cert (and its ancestors) in the above step,
         // we still need to insert ordered cert explicitly. This will send the highest ordered block
         // to execution.
         if self.order_vote_enabled {
-            self.insert_ordered_cert(&sync_info.highest_ordered_cert())
-                .await?;
+            self.insert_ordered_cert(&sync_info.highest_ordered_cert()).await?;
         } else {
-            // When order votes are disabled, the highest_ordered_cert().certified_block().id() need not be
-            // one of the ancestors of highest_quorum_cert.certified_block().id() due to forks. So, we call
-            // insert_quorum_cert instead of insert_ordered_cert as in the above case. This will ensure that
+            // When order votes are disabled, the highest_ordered_cert().certified_block().id() need
+            // not be one of the ancestors of highest_quorum_cert.certified_block().id()
+            // due to forks. So, we call insert_quorum_cert instead of
+            // insert_ordered_cert as in the above case. This will ensure that
             // highest_ordered_cert().certified_block().id() is inserted the block store.
             self.insert_quorum_cert(
                 &self
@@ -185,8 +187,7 @@ impl BlockStore {
         }
         if self.ordered_root().round() < qc.commit_info().round() {
             SUCCESSFUL_EXECUTED_WITH_REGULAR_QC.inc();
-            self.send_for_execution(qc.into_wrapped_ledger_info(), false)
-                .await?;
+            self.send_for_execution(qc.into_wrapped_ledger_info(), false).await?;
             if qc.ends_epoch() {
                 retriever
                     .network
@@ -200,9 +201,9 @@ impl BlockStore {
         Ok(())
     }
 
-    // Before calling this function, we need to maintain an invariant that ordered_cert.commit_info().id()
-    // is already in the block store. So, currently insert_ordered_cert calls are preceded by insert_quorum_cert calls
-    // to ensure this.
+    // Before calling this function, we need to maintain an invariant that
+    // ordered_cert.commit_info().id() is already in the block store. So, currently
+    // insert_ordered_cert calls are preceded by insert_quorum_cert calls to ensure this.
     pub async fn insert_ordered_cert(
         &self,
         ordered_cert: &WrappedLedgerInfo,
@@ -210,10 +211,7 @@ impl BlockStore {
         if self.ordered_root().round() < ordered_cert.ledger_info().ledger_info().round() {
             if let Some(ordered_block) = self.get_block(ordered_cert.commit_info().id()) {
                 if !ordered_block.block().is_nil_block() {
-                    observe_block(
-                        ordered_block.block().timestamp_usecs(),
-                        BlockStage::OC_ADDED,
-                    );
+                    observe_block(ordered_block.block().timestamp_usecs(), BlockStage::OC_ADDED);
                 }
                 SUCCESSFUL_EXECUTED_WITH_ORDER_VOTE_QC.inc();
                 self.send_for_execution(ordered_cert.clone(), false).await?;
@@ -268,10 +266,14 @@ impl BlockStore {
             self.insert_single_quorum_cert(block_qc, false)?;
             self.insert_block(block.clone(), false).await?;
             if let Some(randomness) = randomness {
-                let pipelined_block = self.get_block(block.id())
-                    .unwrap();
-                pipelined_block.set_randomness(Randomness::new(RandMetadata { epoch: block.epoch(), round: block.round() }, randomness.clone()));
-                self.storage.consensus_db().put_randomness(&vec![(block.block_number().unwrap(), randomness)])?;
+                let pipelined_block = self.get_block(block.id()).unwrap();
+                pipelined_block.set_randomness(Randomness::new(
+                    RandMetadata { epoch: block.epoch(), round: block.round() },
+                    randomness.clone(),
+                ));
+                self.storage
+                    .consensus_db()
+                    .put_randomness(&vec![(block.block_number().unwrap(), randomness)])?;
             }
         }
         self.insert_single_quorum_cert(qc, false)
@@ -304,8 +306,7 @@ impl BlockStore {
         )
         .await?;
 
-        self.append_blocks_for_sync(blocks, quorum_certs)
-            .await;
+        self.append_blocks_for_sync(blocks, quorum_certs).await;
 
         if highest_commit_cert.ledger_info().ledger_info().ends_epoch() {
             retriever
@@ -319,18 +320,20 @@ impl BlockStore {
         Ok(())
     }
 
-    /// Fast-forwards the local consensus state by synchronizing blocks and ledger infos for a given epoch.
-    /// 
-    /// This function retrieves all blocks, quorum certificates, and ledger infos for the specified epoch
-    /// from a remote retriever. It then prefetches payload data for each block, saves the blocks and
-    /// certificates to local storage, and updates the ledger info in the database. After updating storage,
-    /// it attempts to recover the consensus state from the latest ledger info and rebuilds the in-memory
-    /// state. If the epoch ends, it sends an epoch change proof to the network.
-    /// 
+    /// Fast-forwards the local consensus state by synchronizing blocks and ledger infos for a given
+    /// epoch.
+    ///
+    /// This function retrieves all blocks, quorum certificates, and ledger infos for the specified
+    /// epoch from a remote retriever. It then prefetches payload data for each block, saves the
+    /// blocks and certificates to local storage, and updates the ledger info in the database.
+    /// After updating storage, it attempts to recover the consensus state from the latest
+    /// ledger info and rebuilds the in-memory state. If the epoch ends, it sends an epoch
+    /// change proof to the network.
+    ///
     /// # Arguments
     /// * `retriever` - The block retriever used to fetch blocks and related data.
     /// * `epoch` - The epoch to fast-forward to.
-    /// 
+    ///
     /// # Returns
     /// * `Ok(())` if the synchronization and state rebuild succeed.
     /// * `Err` if any step fails.
@@ -363,7 +366,11 @@ impl BlockStore {
             .filter(|(block, _)| block.block_number().is_some())
             .map(|(block, _)| (block.epoch(), block.block_number().unwrap(), block.id()))
             .collect::<Vec<(u64, u64, HashValue)>>();
-        storage.save_tree(blocks.iter().map(|(block, _)| block.clone()).collect(), quorum_certs, block_numbers)?;
+        storage.save_tree(
+            blocks.iter().map(|(block, _)| block.clone()).collect(),
+            quorum_certs,
+            block_numbers,
+        )?;
         if !ledger_infos.is_empty() {
             ledger_infos.reverse();
             let mut ledger_info_batch = SchemaBatch::new();
@@ -376,11 +383,16 @@ impl BlockStore {
             }
             storage.consensus_db().ledger_db.metadata_db().write_schemas(ledger_info_batch)?;
         }
-        storage.consensus_db().put_randomness(&blocks
-                    .iter()
-                    .filter(|(_, randomness)| randomness.is_some())
-                    .map(|(block, randomness)| (block.block_number().unwrap(), randomness.as_ref().unwrap().clone())).collect())?;
-        
+        storage.consensus_db().put_randomness(
+            &blocks
+                .iter()
+                .filter(|(_, randomness)| randomness.is_some())
+                .map(|(block, randomness)| {
+                    (block.block_number().unwrap(), randomness.as_ref().unwrap().clone())
+                })
+                .collect(),
+        )?;
+
         let (root, blocks, quorum_certs) =
             match storage.start(false, ledger_infos.last().unwrap().ledger_info().epoch()).await {
                 LivenessStorageData::FullRecoveryData(recovery_data) => recovery_data,
@@ -390,9 +402,8 @@ impl BlockStore {
         storage.consensus_db().ledger_db.metadata_db().update_latest_ledger_info();
 
         self.rebuild(root, blocks, quorum_certs).await;
-        
-        if !ledger_infos.is_empty() && ledger_infos.last().unwrap().ledger_info().ends_epoch()
-        {
+
+        if !ledger_infos.is_empty() && ledger_infos.last().unwrap().ledger_info().ends_epoch() {
             retriever
                 .network
                 .send_epoch_change(EpochChangeProof::new(
@@ -421,9 +432,9 @@ impl BlockStore {
         );
 
         // we fetch the blocks from
-        let num_blocks = highest_quorum_cert.certified_block().round()
-            - highest_commit_cert.ledger_info().ledger_info().round()
-            + 1;
+        let num_blocks = highest_quorum_cert.certified_block().round() -
+            highest_commit_cert.ledger_info().ledger_info().round() +
+            1;
 
         // although unlikely, we might wrap num_blocks around on a 32-bit machine
         assert!(num_blocks < std::usize::MAX as u64);
@@ -435,9 +446,7 @@ impl BlockStore {
                 num_blocks,
                 highest_commit_cert.commit_info().id(),
                 if is_validator {
-                    highest_quorum_cert
-                        .ledger_info()
-                        .get_voters(&retriever.available_peers)
+                    highest_quorum_cert.ledger_info().get_voters(&retriever.available_peers)
                 } else {
                     retriever.available_peers.clone()
                 },
@@ -455,10 +464,7 @@ impl BlockStore {
 
         let mut quorum_certs = vec![highest_quorum_cert.clone()];
         quorum_certs.extend(
-            blocks
-                .iter()
-                .take(blocks.len() - 1)
-                .map(|(block, _)| block.quorum_cert().clone()),
+            blocks.iter().take(blocks.len() - 1).map(|(block, _)| block.quorum_cert().clone()),
         );
         assert_eq!(blocks.len(), quorum_certs.len());
         info!("[FastForwardSync] Fetched {} blocks. Requested num_blocks {}. Initial block hash {:?}, target block hash {:?}",
@@ -472,21 +478,34 @@ impl BlockStore {
             .filter(|(block, _)| block.block_number().is_some())
             .map(|(block, _)| (block.epoch(), block.block_number().unwrap(), block.id()))
             .collect::<Vec<(u64, u64, HashValue)>>();
-        storage.save_tree(blocks.iter().map(|(block, _)| block.clone()).collect(), quorum_certs.clone(), block_numbers)?;
-        storage.consensus_db().put_randomness(&blocks
-                    .iter()
-                    .filter(|(_, randomness)| randomness.is_some())
-                    .map(|(block, randomness)| (block.block_number().unwrap(), randomness.as_ref().unwrap().clone())).collect())?;
+        storage.save_tree(
+            blocks.iter().map(|(block, _)| block.clone()).collect(),
+            quorum_certs.clone(),
+            block_numbers,
+        )?;
+        storage.consensus_db().put_randomness(
+            &blocks
+                .iter()
+                .filter(|(_, randomness)| randomness.is_some())
+                .map(|(block, randomness)| {
+                    (block.block_number().unwrap(), randomness.as_ref().unwrap().clone())
+                })
+                .collect(),
+        )?;
         if !ledger_infos.is_empty() {
             let mut ledger_info_batch = SchemaBatch::new();
             for ledger_info in ledger_infos {
-                storage.consensus_db().ledger_db.metadata_db().put_ledger_info(&ledger_info, &mut ledger_info_batch);
+                storage
+                    .consensus_db()
+                    .ledger_db
+                    .metadata_db()
+                    .put_ledger_info(&ledger_info, &mut ledger_info_batch);
             }
             storage.consensus_db().ledger_db.metadata_db().write_schemas(ledger_info_batch);
         }
         storage.consensus_db().ledger_db.metadata_db().update_latest_ledger_info();
-            // we do not need to update block_tree.highest_commit_decision_ledger_info here
-            // because the block_tree is going to rebuild itself.
+        // we do not need to update block_tree.highest_commit_decision_ledger_info here
+        // because the block_tree is going to rebuild itself.
         blocks.reverse();
         quorum_certs.reverse();
         Ok((blocks, quorum_certs))
@@ -499,11 +518,11 @@ impl BlockStore {
         retriever: &mut BlockRetriever,
     ) -> anyhow::Result<()> {
         let ledger_info = highest_commit_cert.ledger_info();
-        
+
         // Check if there are blocks missing randomness on the path
-        let (has_missing_randomness, sync_from_cert_opt) = 
+        let (has_missing_randomness, sync_from_cert_opt) =
             self.find_missing_randomness_block_on_path(ledger_info);
-        
+
         info!(
             "find_missing_randomness_block_on_path result: has_missing_randomness={}, sync_from_cert_round={:?}, highest_ordered_round={}, highest_commit_round={}, ledger_info_round={}",
             has_missing_randomness,
@@ -512,33 +531,33 @@ impl BlockStore {
             self.highest_commit_cert().commit_info().round(),
             ledger_info.commit_info().round()
         );
-        
+
         // if the block exists between commit root and ordered root
-        if self.commit_root().round() < ledger_info.commit_info().round()
-            && self.block_exists(ledger_info.commit_info().id())
-            && self.ordered_root().round() >= ledger_info.commit_info().round()
-            && !has_missing_randomness
+        if self.commit_root().round() < ledger_info.commit_info().round() &&
+            self.block_exists(ledger_info.commit_info().id()) &&
+            self.ordered_root().round() >= ledger_info.commit_info().round() &&
+            !has_missing_randomness
         {
             info!("sync_to_highest_commit_cert: block exists between commit root and ordered root {:?}, {:?}", self.commit_root().round(), ledger_info.commit_info().round());
             let proof = ledger_info.clone();
             let network = retriever.network.clone();
             tokio::spawn(async move { network.send_commit_proof(proof).await });
             return Ok(());
-        } else if self.ordered_root().round() < ledger_info.commit_info().round() 
-            && !self.block_exists(ledger_info.commit_info().id())
-            || has_missing_randomness 
+        } else if self.ordered_root().round() < ledger_info.commit_info().round() &&
+            !self.block_exists(ledger_info.commit_info().id()) ||
+            has_missing_randomness
         {
-            // Determine sync start point: use the check result if available, otherwise use highest_commit_cert
-            let sync_from_cert = sync_from_cert_opt.unwrap_or_else(|| {
-                self.highest_commit_cert()
-            });
+            // Determine sync start point: use the check result if available, otherwise use
+            // highest_commit_cert
+            let sync_from_cert = sync_from_cert_opt.unwrap_or_else(|| self.highest_commit_cert());
 
-            if sync_from_cert.commit_info().round() >= ledger_info.commit_info().round()  {
+            if sync_from_cert.commit_info().round() >= ledger_info.commit_info().round() {
                 return Ok(());
             }
-            
+
             // if the block doesnt exist after ordered root
-            let highest_commit_cert = highest_commit_cert.into_quorum_cert(self.order_vote_enabled).unwrap();
+            let highest_commit_cert =
+                highest_commit_cert.into_quorum_cert(self.order_vote_enabled).unwrap();
             let (blocks, quorum_certs) = Self::fast_forward_sync(
                 &highest_commit_cert,
                 &sync_from_cert,
@@ -550,8 +569,7 @@ impl BlockStore {
             )
             .await?;
 
-            self.append_blocks_for_sync(blocks, quorum_certs)
-                .await;
+            self.append_blocks_for_sync(blocks, quorum_certs).await;
         }
         Ok(())
     }
@@ -572,7 +590,7 @@ impl BlockStore {
         let mut blocks = vec![];
         let mut quorum_certs = vec![];
         let mut status = BlockRetrievalStatus::Succeeded;
-        
+
         // Step 1: Determine the retrieval epoch and starting block ID
         // If epoch is specified in the request:
         //   - If block_id is not zero, use the specified epoch and block_id
@@ -585,59 +603,90 @@ impl BlockStore {
             } else {
                 // block_id is zero, need to find the last block of this epoch
                 // Find the block number corresponding to this epoch
-                let all_epoch_blocks = self
-                    .storage
-                    .consensus_db()
-                    .get_all::<EpochByBlockNumberSchema>()
-                    .map_err(|e| anyhow::anyhow!("Failed to get epoch by block number: {:?}", e))?;
+                let all_epoch_blocks =
+                    self.storage.consensus_db().get_all::<EpochByBlockNumberSchema>().map_err(
+                        |e| anyhow::anyhow!("Failed to get epoch by block number: {:?}", e),
+                    )?;
                 let target_block_number = all_epoch_blocks
                     .into_iter()
                     .find(|(_, eppch_)| *eppch_ == epoch)
                     .map(|(block_number, _)| block_number)
-                    .ok_or_else(|| anyhow::anyhow!("Cannot find block number for epoch {}", epoch))?;
-                
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("Cannot find block number for epoch {}", epoch)
+                    })?;
+
                 // Get the ledger info to find the end block ID
                 let wrapped_ledger_info = self
                     .storage
                     .consensus_db()
                     .get::<LedgerInfoSchema>(&target_block_number)
-                    .map_err(|e| anyhow::anyhow!("Failed to get ledger info for block number {}: {:?}", target_block_number, e))?
-                    .ok_or_else(|| anyhow::anyhow!("Ledger info not found for block number {}", target_block_number))?;
+                    .map_err(|e| {
+                        anyhow::anyhow!(
+                            "Failed to get ledger info for block number {}: {:?}",
+                            target_block_number,
+                            e
+                        )
+                    })?
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "Ledger info not found for block number {}",
+                            target_block_number
+                        )
+                    })?;
                 let end_block_id = wrapped_ledger_info.ledger_info().consensus_block_id();
 
                 // Find the quorum cert for the end block in this epoch
                 let start_key = (epoch, HashValue::zero());
                 let end_key = (epoch, HashValue::new([u8::MAX; HashValue::LENGTH]));
-                let qc_range = self
-                    .storage
-                    .consensus_db()
-                    .get_qc_range(&start_key, &end_key)
-                    .map_err(|e| anyhow::anyhow!("Failed to get QC range for epoch {}: {:?}", epoch, e))?;
+                let qc_range =
+                    self.storage.consensus_db().get_qc_range(&start_key, &end_key).map_err(
+                        |e| anyhow::anyhow!("Failed to get QC range for epoch {}: {:?}", epoch, e),
+                    )?;
                 let qc = qc_range
                     .into_iter()
                     .find(|qc| qc.commit_info().id() == end_block_id)
-                    .ok_or_else(|| anyhow::anyhow!("Cannot find QC for end block id {} in epoch {}", end_block_id, epoch))?
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "Cannot find QC for end block id {} in epoch {}",
+                            end_block_id,
+                            epoch
+                        )
+                    })?
                     .clone();
-                
+
                 // Get the block corresponding to the QC
                 let block = self
                     .storage
                     .consensus_db()
                     .get_block(epoch, qc.certified_block().id())
-                    .map_err(|e| anyhow::anyhow!("Failed to get block for QC certified block {}: {:?}", qc.certified_block().id(), e))?
-                    .ok_or_else(|| anyhow::anyhow!("Block not found for QC certified block {}", qc.certified_block().id()))?;
+                    .map_err(|e| {
+                        anyhow::anyhow!(
+                            "Failed to get block for QC certified block {}: {:?}",
+                            qc.certified_block().id(),
+                            e
+                        )
+                    })?
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "Block not found for QC certified block {}",
+                            qc.certified_block().id()
+                        )
+                    })?;
 
                 // Get randomness if it exists for this block
                 let randomness = match block.block_number() {
                     Some(block_number) => {
-                        self.storage
-                            .consensus_db()
-                            .get_randomness(block_number)
-                            .map_err(|e| anyhow::anyhow!("Failed to get randomness for block number {}: {:?}", block_number, e))?
+                        self.storage.consensus_db().get_randomness(block_number).map_err(|e| {
+                            anyhow::anyhow!(
+                                "Failed to get randomness for block number {}: {:?}",
+                                block_number,
+                                e
+                            )
+                        })?
                     }
                     None => None,
                 };
-                
+
                 // Add the initial block and QC to the result
                 quorum_certs.push(qc);
                 blocks.push((block, randomness));
@@ -647,30 +696,36 @@ impl BlockStore {
                     .storage
                     .consensus_db()
                     .get::<LedgerInfoSchema>(&target_block_number)
-                    .map_err(|e| anyhow::anyhow!("Failed to get ledger info for start block: {:?}", e))?
+                    .map_err(|e| {
+                        anyhow::anyhow!("Failed to get ledger info for start block: {:?}", e)
+                    })?
                     .ok_or_else(|| anyhow::anyhow!("Ledger info not found for start block"))?;
-                (
-                    epoch,
-                    start_wrapped_ledger_info.ledger_info().consensus_block_id(),
-                )
+                (epoch, start_wrapped_ledger_info.ledger_info().consensus_block_id())
             }
         } else {
             // No epoch specified, use the current ordered root's epoch
             (self.ordered_root().epoch(), request.req.block_id())
         };
         // Log the retrieval parameters
-        let target_block_id_str = request.req.target_block_id()
+        let target_block_id_str = request
+            .req
+            .target_block_id()
             .map(|id| id.to_string())
             .unwrap_or_else(|| "None".to_string());
-        info!("process_block_retrieval origin_block_id {}, target_block_id {}, retrieval_epoch {}",
-                request.req.block_id(), target_block_id_str, retrieval_epoch);
+        info!(
+            "process_block_retrieval origin_block_id {}, target_block_id {}, retrieval_epoch {}",
+            request.req.block_id(),
+            target_block_id_str,
+            retrieval_epoch
+        );
 
         // Step 2: Retrieve blocks along the parent chain
-        // Continue retrieving blocks until we reach the requested number or encounter a termination condition
+        // Continue retrieving blocks until we reach the requested number or encounter a termination
+        // condition
         while (blocks.len() as u64) < request.req.num_blocks() {
             let mut parent_id = HashValue::zero();
             let mut parent_is_genesis_block = false;
-            
+
             // Try to get the block from memory first (faster)
             if let Some(executed_block) = self.get_block(id) {
                 // Get the quorum cert for this block
@@ -682,20 +737,24 @@ impl BlockStore {
                         break;
                     }
                 };
-                // Check if parent is the genesis block (round == 0 indicates genesis or epoch boundary)
-                parent_is_genesis_block = qc.vote_data().parent().id() != HashValue::zero() && qc.vote_data().parent().round() == 0;
+                // Check if parent is the genesis block (round == 0 indicates genesis or epoch
+                // boundary)
+                parent_is_genesis_block = qc.vote_data().parent().id() != HashValue::zero() &&
+                    qc.vote_data().parent().round() == 0;
                 quorum_certs.push((*qc).clone());
-                
+
                 // Get randomness if available (for randomness-enabled blocks)
                 let randomness = match executed_block.block().block_number() {
                     Some(block_number) => {
-                        self.storage
-                            .consensus_db()
-                            .get_randomness(block_number)
-                            .unwrap_or_else(|e| {
-                                warn!("Failed to get randomness for block number {}: {:?}", block_number, e);
+                        self.storage.consensus_db().get_randomness(block_number).unwrap_or_else(
+                            |e| {
+                                warn!(
+                                    "Failed to get randomness for block number {}: {:?}",
+                                    block_number, e
+                                );
                                 None
-                            })
+                            },
+                        )
                     }
                     None => None,
                 };
@@ -709,29 +768,38 @@ impl BlockStore {
                 let qc = match self.storage.consensus_db().get_qc(retrieval_epoch, id) {
                     Ok(Some(qc)) => qc,
                     Ok(None) => {
-                        info!("Cannot find quorum cert for block id {} in epoch {}", id, retrieval_epoch);
+                        info!(
+                            "Cannot find quorum cert for block id {} in epoch {}",
+                            id, retrieval_epoch
+                        );
                         status = BlockRetrievalStatus::QuorumCertNotFound;
                         break;
                     }
                     Err(e) => {
-                        error!("Error retrieving quorum cert for block id {} in epoch {}: {:?}", id, retrieval_epoch, e);
+                        error!(
+                            "Error retrieving quorum cert for block id {} in epoch {}: {:?}",
+                            id, retrieval_epoch, e
+                        );
                         status = BlockRetrievalStatus::QuorumCertNotFound;
                         break;
                     }
                 };
-                parent_is_genesis_block = qc.vote_data().parent().id() != HashValue::zero() && qc.vote_data().parent().round() == 0;
+                parent_is_genesis_block = qc.vote_data().parent().id() != HashValue::zero() &&
+                    qc.vote_data().parent().round() == 0;
                 quorum_certs.push(qc);
-                
+
                 // Get randomness if available
                 let randomness = match executed_block.block_number() {
                     Some(block_number) => {
-                        self.storage
-                            .consensus_db()
-                            .get_randomness(block_number)
-                            .unwrap_or_else(|e| {
-                                warn!("Failed to get randomness for block number {}: {:?}", block_number, e);
+                        self.storage.consensus_db().get_randomness(block_number).unwrap_or_else(
+                            |e| {
+                                warn!(
+                                    "Failed to get randomness for block number {}: {:?}",
+                                    block_number, e
+                                );
                                 None
-                            })
+                            },
+                        )
                     }
                     None => {
                         warn!("Block {} has no block number", id);
@@ -746,7 +814,7 @@ impl BlockStore {
                 status = BlockRetrievalStatus::NotEnoughBlocks;
                 break;
             }
-            
+
             // Check termination conditions:
             // 1. We've reached the target block ID (if specified)
             // 2. We've reached the last block (round == 0)
@@ -754,7 +822,7 @@ impl BlockStore {
                 status = BlockRetrievalStatus::SucceededWithTarget;
                 break;
             }
-            
+
             // Move to the parent block for the next iteration
             id = parent_id;
         }
@@ -773,23 +841,28 @@ impl BlockStore {
                 lower = block_number;
             }
         }
-        
+
         // Fetch ledger infos for the block number range
         let mut ledger_infos = vec![];
         if upper != 0 {
-            ledger_infos = self.storage.consensus_db().ledger_db.metadata_db().get_ledger_infos_by_range((lower, upper));
+            ledger_infos = self
+                .storage
+                .consensus_db()
+                .ledger_db
+                .metadata_db()
+                .get_ledger_infos_by_range((lower, upper));
             // Filter ledger infos by retrieval_epoch
             ledger_infos.retain(|ledger_info| ledger_info.ledger_info().epoch() == retrieval_epoch);
             // Reverse to get them in ascending order
             ledger_infos.reverse();
         }
-        
+
         // Step 4: Build and send the response
         info!("process block retrieval done. status={:?}, block size={}", status, blocks.len());
-        let response = Box::new(BlockRetrievalResponse::new(status, blocks, quorum_certs, ledger_infos));
-        let response_bytes = request
-            .protocol
-            .to_bytes(&ConsensusMsg::BlockRetrievalResponse(response))?;
+        let response =
+            Box::new(BlockRetrievalResponse::new(status, blocks, quorum_certs, ledger_infos));
+        let response_bytes =
+            request.protocol.to_bytes(&ConsensusMsg::BlockRetrievalResponse(response))?;
         request
             .response_sender
             .send(Ok(response_bytes.into()))
@@ -933,11 +1006,12 @@ impl BlockRetriever {
         num_blocks: u64,
         payload_manager: Arc<dyn TPayloadManager>,
         epoch: Option<u64>,
-    ) -> anyhow::Result<(Vec<(Block, Option<Vec<u8>>)>, Vec<QuorumCert>, Vec<LedgerInfoWithSignatures>)> {
-        info!(
-            "Retrieving blocks starting from {}, the total number is {}",
-            block_id, num_blocks
-        );
+    ) -> anyhow::Result<(
+        Vec<(Block, Option<Vec<u8>>)>,
+        Vec<QuorumCert>,
+        Vec<LedgerInfoWithSignatures>,
+    )> {
+        info!("Retrieving blocks starting from {}, the total number is {}", block_id, num_blocks);
         let mut progress = 0;
         let mut last_block_id = block_id;
         let mut result_blocks = vec![];
@@ -1012,10 +1086,10 @@ impl BlockRetriever {
     /// Retrieves all blocks, quorum certificates, and ledger infos for a given epoch from peers.
     ///
     /// This function first attempts to retrieve a batch of blocks for the specified epoch using
-    /// `retrieve_block_for_id_chunk`. If more blocks are needed, it continues to fetch the remaining
-    /// chain using `retrieve_block_for_id`. For each block, it prefetches the payload data if present.
-    /// The function accumulates all blocks, quorum certificates, and ledger infos into vectors and
-    /// returns them as a tuple.
+    /// `retrieve_block_for_id_chunk`. If more blocks are needed, it continues to fetch the
+    /// remaining chain using `retrieve_block_for_id`. For each block, it prefetches the payload
+    /// data if present. The function accumulates all blocks, quorum certificates, and ledger
+    /// infos into vectors and returns them as a tuple.
     ///
     /// # Arguments
     /// * `epoch` - The epoch to retrieve blocks for.
@@ -1032,7 +1106,11 @@ impl BlockRetriever {
         target_block_id: HashValue,
         peers: Vec<AccountAddress>,
         payload_manager: Arc<dyn TPayloadManager>,
-    ) -> anyhow::Result<(Vec<(Block, Option<Vec<u8>>)>, Vec<QuorumCert>, Vec<LedgerInfoWithSignatures>)> {
+    ) -> anyhow::Result<(
+        Vec<(Block, Option<Vec<u8>>)>,
+        Vec<QuorumCert>,
+        Vec<LedgerInfoWithSignatures>,
+    )> {
         let mut result_blocks = vec![];
         let mut ledger_infos = vec![];
         let mut quorum_certs = vec![];
@@ -1099,10 +1177,21 @@ impl BlockRetriever {
         target_block_id: HashValue,
         peers: Vec<AccountAddress>,
         payload_manager: Arc<dyn TPayloadManager>,
-    ) -> anyhow::Result<(Vec<(Block, Option<Vec<u8>>)>, Vec<QuorumCert>, Vec<LedgerInfoWithSignatures>)> {
+    ) -> anyhow::Result<(
+        Vec<(Block, Option<Vec<u8>>)>,
+        Vec<QuorumCert>,
+        Vec<LedgerInfoWithSignatures>,
+    )> {
         BLOCKS_FETCHED_FROM_NETWORK_IN_BLOCK_RETRIEVER.inc_by(num_blocks);
-        self.retrieve_block_for_id(initial_block_id, target_block_id, peers, num_blocks, payload_manager, None)
-            .await
+        self.retrieve_block_for_id(
+            initial_block_id,
+            target_block_id,
+            peers,
+            num_blocks,
+            payload_manager,
+            None,
+        )
+        .await
     }
 
     fn pick_peer(&self, first_atempt: bool, peers: &mut Vec<AccountAddress>) -> AccountAddress {

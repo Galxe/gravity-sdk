@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use async_trait::async_trait;
 use block_buffer_manager::get_block_buffer_manager;
@@ -170,10 +169,7 @@ impl Relayer for RelayerWrapper {
             self.tracker.init_block_number(&provider.name, block_number).await;
             block_number
         } else {
-            return Err(ExecError::Other(format!(
-                "Provider {} not found in active providers",
-                uri
-            )));
+            return Err(ExecError::Other(format!("Provider {} not found in active providers", uri)));
         };
 
         self.manager

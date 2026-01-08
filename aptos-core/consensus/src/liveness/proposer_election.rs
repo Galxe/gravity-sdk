@@ -29,10 +29,7 @@ pub trait ProposerElection {
         &self,
         round: Round,
     ) -> (Author, f64) {
-        (
-            self.get_valid_proposer(round),
-            self.get_voting_power_participation_ratio(round),
-        )
+        (self.get_valid_proposer(round), self.get_voting_power_participation_ratio(round))
     }
 }
 
@@ -52,20 +49,12 @@ pub(crate) fn choose_index(mut weights: Vec<u128>, state: Vec<u8>) -> usize {
     // Create cumulative weights vector
     // Since we own the vector, we can safely modify it in place
     for w in &mut weights {
-        total_weight = total_weight
-            .checked_add(w)
-            .expect("Total stake shouldn't exceed u128::MAX");
+        total_weight = total_weight.checked_add(w).expect("Total stake shouldn't exceed u128::MAX");
         *w = total_weight;
     }
     let chosen_weight = next_in_range(state, total_weight);
     weights
-        .binary_search_by(|w| {
-            if *w <= chosen_weight {
-                Ordering::Less
-            } else {
-                Ordering::Greater
-            }
-        })
+        .binary_search_by(|w| if *w <= chosen_weight { Ordering::Less } else { Ordering::Greater })
         .expect_err("Comparison never returns equals, so it's always guaranteed to be error")
 }
 

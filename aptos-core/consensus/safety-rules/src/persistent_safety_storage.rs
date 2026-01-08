@@ -7,12 +7,14 @@ use crate::{
     Error,
 };
 use aptos_consensus_types::{common::Author, safety_data::SafetyData};
-use gaptos::aptos_crypto::{bls12381, PrivateKey};
-use gaptos::aptos_global_constants::{CONSENSUS_KEY, OWNER_ACCOUNT, SAFETY_DATA, WAYPOINT};
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_secure_storage::{KVStorage, Storage};
-use gaptos::aptos_types::waypoint::Waypoint;
-use gaptos::aptos_safety_rules::counters as counters;
+use gaptos::{
+    aptos_crypto::{bls12381, PrivateKey},
+    aptos_global_constants::{CONSENSUS_KEY, OWNER_ACCOUNT, SAFETY_DATA, WAYPOINT},
+    aptos_logger::prelude::*,
+    aptos_safety_rules::counters,
+    aptos_secure_storage::{KVStorage, Storage},
+    aptos_types::waypoint::Waypoint,
+};
 
 /// SafetyRules needs an abstract storage interface to act as a common utility for storing
 /// persistent data to local disk, cloud, secrets managers, or even memory (for tests)
@@ -54,9 +56,7 @@ impl PersistentSafetyStorage {
         persisent_safety_storage
             .set_safety_data(safety_data)
             .expect("Unable to initialize safety data");
-        persisent_safety_storage
-            .set_waypoint(&waypoint)
-            .expect("Unable to initialize waypoint");
+        persisent_safety_storage.set_waypoint(&waypoint).expect("Unable to initialize waypoint");
 
         persisent_safety_storage
     }
@@ -84,11 +84,7 @@ impl PersistentSafetyStorage {
     /// Use this to instantiate a PersistentStorage with an existing data store. This is intended
     /// for constructed environments.
     pub fn new(internal_store: Storage, enable_cached_safety_data: bool) -> Self {
-        Self {
-            enable_cached_safety_data,
-            cached_safety_data: None,
-            internal_store,
-        }
+        Self { enable_cached_safety_data, cached_safety_data: None, internal_store }
     }
 
     pub fn author(&self) -> Result<Author, Error> {
@@ -99,9 +95,7 @@ impl PersistentSafetyStorage {
     pub fn default_consensus_sk(
         &self,
     ) -> Result<bls12381::PrivateKey, gaptos::aptos_secure_storage::Error> {
-        self.internal_store
-            .get::<bls12381::PrivateKey>(CONSENSUS_KEY)
-            .map(|v| v.value)
+        self.internal_store.get::<bls12381::PrivateKey>(CONSENSUS_KEY).map(|v| v.value)
     }
 
     pub fn consensus_sk_by_pk(
@@ -121,7 +115,7 @@ impl PersistentSafetyStorage {
             (Err(_), Ok(sk_1)) => sk_1,
             (Err(_), Err(_)) => {
                 return Err(Error::ValidatorKeyNotFound("not found!".to_string()));
-            },
+            }
         };
         if key.public_key() != pk {
             return Err(Error::SecureStorageMissingDataError(format!(
@@ -152,21 +146,18 @@ impl PersistentSafetyStorage {
         let _timer = counters::start_timer("set", SAFETY_DATA);
         counters::set_state(counters::EPOCH, data.epoch as i64);
         counters::set_state(counters::LAST_VOTED_ROUND, data.last_voted_round as i64);
-        counters::set_state(
-            counters::HIGHEST_TIMEOUT_ROUND,
-            data.highest_timeout_round as i64,
-        );
+        counters::set_state(counters::HIGHEST_TIMEOUT_ROUND, data.highest_timeout_round as i64);
         counters::set_state(counters::PREFERRED_ROUND, data.preferred_round as i64);
 
         match self.internal_store.set(SAFETY_DATA, data.clone()) {
             Ok(_) => {
                 self.cached_safety_data = Some(data);
                 Ok(())
-            },
+            }
             Err(error) => {
                 self.cached_safety_data = None;
                 Err(Error::SecureStorageUnexpectedError(error.to_string()))
-            },
+            }
         }
     }
 
@@ -216,8 +207,8 @@ mod tests {
     //             Waypoint::default(),
     //             true,
     //         );
-    //         // they both touch the global counters, running it serially to prevent race condition.
-    //         test_safety_data_counters(&mut safety_storage);
+    //         // they both touch the global counters, running it serially to prevent race
+    // condition.         test_safety_data_counters(&mut safety_storage);
     //         test_waypoint_counters(&mut safety_storage);
     //     }
     // }

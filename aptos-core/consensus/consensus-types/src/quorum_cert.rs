@@ -4,13 +4,15 @@
 
 use crate::{vote_data::VoteData, wrapped_ledger_info::WrappedLedgerInfo};
 use anyhow::{ensure, Context};
-use gaptos::aptos_bitvec::BitVec;
-use gaptos::aptos_crypto::{hash::CryptoHash, HashValue};
-use gaptos::aptos_types::{
-    aggregate_signature::AggregateSignature,
-    block_info::BlockInfo,
-    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
-    validator_verifier::ValidatorVerifier,
+use gaptos::{
+    aptos_bitvec::BitVec,
+    aptos_crypto::{hash::CryptoHash, HashValue},
+    aptos_types::{
+        aggregate_signature::AggregateSignature,
+        block_info::BlockInfo,
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+        validator_verifier::ValidatorVerifier,
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -25,20 +27,13 @@ pub struct QuorumCert {
 
 impl Display for QuorumCert {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "QuorumCert: [{}, {}]",
-            self.vote_data, self.signed_ledger_info
-        )
+        write!(f, "QuorumCert: [{}, {}]", self.vote_data, self.signed_ledger_info)
     }
 }
 
 impl QuorumCert {
     pub fn new(vote_data: VoteData, signed_ledger_info: LedgerInfoWithSignatures) -> Self {
-        QuorumCert {
-            vote_data,
-            signed_ledger_info,
-        }
+        QuorumCert { vote_data, signed_ledger_info }
     }
 
     #[cfg(any(test, feature = "fuzzing"))]
@@ -141,9 +136,7 @@ impl QuorumCert {
             );
             return Ok(());
         }
-        self.ledger_info()
-            .verify_signatures(validator)
-            .context("Fail to verify QuorumCert")?;
+        self.ledger_info().verify_signatures(validator).context("Fail to verify QuorumCert")?;
         self.vote_data.verify()?;
         Ok(())
     }

@@ -10,8 +10,10 @@ use crate::{
 };
 use anyhow::ensure;
 use aptos_consensus_types::common::{Author, Round};
-use gaptos::aptos_logger::warn;
-use gaptos::aptos_types::randomness::{FullRandMetadata, RandMetadata, Randomness};
+use gaptos::{
+    aptos_logger::warn,
+    aptos_types::randomness::{FullRandMetadata, RandMetadata, Randomness},
+};
 use itertools::Either;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -24,12 +26,7 @@ pub struct ShareAggregator<S> {
 
 impl<S: TShare> ShareAggregator<S> {
     pub fn new(author: Author, path_type: PathType) -> Self {
-        Self {
-            author,
-            shares: HashMap::new(),
-            total_weight: 0,
-            path_type,
-        }
+        Self { author, shares: HashMap::new(), total_weight: 0, path_type }
     }
 
     pub fn add_share(&mut self, weight: u64, share: RandShare<S>) {
@@ -49,53 +46,38 @@ impl<S: TShare> ShareAggregator<S> {
         }
         match self.path_type {
             PathType::Fast => {
-                observe_block(
-                    rand_metadata.timestamp,
-                    BlockStage::RAND_ADD_ENOUGH_SHARE_FAST,
-                );
-            },
+                observe_block(rand_metadata.timestamp, BlockStage::RAND_ADD_ENOUGH_SHARE_FAST);
+            }
             PathType::Slow => {
-                observe_block(
-                    rand_metadata.timestamp,
-                    BlockStage::RAND_ADD_ENOUGH_SHARE_SLOW,
-                );
-            },
+                observe_block(rand_metadata.timestamp, BlockStage::RAND_ADD_ENOUGH_SHARE_SLOW);
+            }
         }
 
         let rand_config = rand_config.clone();
-        let self_share = self
-            .get_self_share()
-            .expect("Aggregated item should have self share");
+        let self_share = self.get_self_share().expect("Aggregated item should have self share");
         tokio::task::spawn_blocking(move || {
-            let maybe_randomness = S::aggregate(
-                self.shares.values(),
-                &rand_config,
-                rand_metadata.metadata.clone(),
-            );
+            let maybe_randomness =
+                S::aggregate(self.shares.values(), &rand_config, rand_metadata.metadata.clone());
             match maybe_randomness {
                 Ok(randomness) => {
                     let _ = decision_tx.unbounded_send(randomness);
-                },
+                }
                 Err(e) => {
                     warn!(
                         epoch = rand_metadata.metadata.epoch,
                         round = rand_metadata.metadata.round,
                         "Aggregation error: {e}"
                     );
-                },
+                }
             }
         });
         Either::Right(self_share)
     }
 
     fn retain(&mut self, rand_config: &RandConfig, rand_metadata: &FullRandMetadata) {
-        self.shares
-            .retain(|_, share| share.metadata() == &rand_metadata.metadata);
-        self.total_weight = self
-            .shares
-            .keys()
-            .map(|author| rand_config.get_peer_weight(author))
-            .sum();
+        self.shares.retain(|_, share| share.metadata() == &rand_metadata.metadata);
+        self.total_weight =
+            self.shares.keys().map(|author| rand_config.get_peer_weight(author)).sum();
     }
 
     fn get_self_share(&self) -> Option<RandShare<S>> {
@@ -109,13 +91,8 @@ impl<S: TShare> ShareAggregator<S> {
 
 enum RandItem<S> {
     PendingMetadata(ShareAggregator<S>),
-    PendingDecision {
-        metadata: FullRandMetadata,
-        share_aggregator: ShareAggregator<S>,
-    },
-    Decided {
-        self_share: RandShare<S>,
-    },
+    PendingDecision { metadata: FullRandMetadata, share_aggregator: ShareAggregator<S> },
+    Decided { self_share: RandShare<S> },
 }
 
 impl<S: TShare> RandItem<S> {
@@ -126,9 +103,9 @@ impl<S: TShare> RandItem<S> {
     fn total_weights(&self) -> Option<u64> {
         match self {
             RandItem::PendingMetadata(aggr) => Some(aggr.total_weights()),
-            RandItem::PendingDecision {
-                share_aggregator, ..
-            } => Some(share_aggregator.total_weights()),
+            RandItem::PendingDecision { share_aggregator, .. } => {
+                Some(share_aggregator.total_weights())
+            }
             RandItem::Decided { .. } => None,
         }
     }
@@ -142,11 +119,8 @@ impl<S: TShare> RandItem<S> {
             RandItem::PendingMetadata(aggr) => {
                 aggr.add_share(rand_config.get_peer_weight(share.author()), share);
                 Ok(())
-            },
-            RandItem::PendingDecision {
-                metadata,
-                share_aggregator,
-            } => {
+            }
+            RandItem::PendingDecision { metadata, share_aggregator } => {
                 ensure!(
                     &metadata.metadata == share.metadata(),
                     "[RandStore] RandShare metadata from {} mismatch with block metadata!",
@@ -154,7 +128,7 @@ impl<S: TShare> RandItem<S> {
                 );
                 share_aggregator.add_share(rand_config.get_peer_weight(share.author()), share);
                 Ok(())
-            },
+            }
             RandItem::Decided { .. } => Ok(()),
         }
     }
@@ -162,16 +136,14 @@ impl<S: TShare> RandItem<S> {
     fn try_aggregate(&mut self, rand_config: &RandConfig, decision_tx: Sender<Randomness>) {
         let item = std::mem::replace(self, Self::new(Author::ONE, PathType::Slow));
         let new_item = match item {
-            RandItem::PendingDecision {
-                share_aggregator,
-                metadata,
-            } => match share_aggregator.try_aggregate(rand_config, metadata.clone(), decision_tx) {
-                Either::Left(share_aggregator) => Self::PendingDecision {
-                    metadata,
-                    share_aggregator,
-                },
-                Either::Right(self_share) => Self::Decided { self_share },
-            },
+            RandItem::PendingDecision { share_aggregator, metadata } => {
+                match share_aggregator.try_aggregate(rand_config, metadata.clone(), decision_tx) {
+                    Either::Left(share_aggregator) => {
+                        Self::PendingDecision { metadata, share_aggregator }
+                    }
+                    Either::Right(self_share) => Self::Decided { self_share },
+                }
+            }
             item @ (RandItem::Decided { .. } | RandItem::PendingMetadata(_)) => item,
         };
         let _ = std::mem::replace(self, new_item);
@@ -182,11 +154,8 @@ impl<S: TShare> RandItem<S> {
         let new_item = match item {
             RandItem::PendingMetadata(mut share_aggregator) => {
                 share_aggregator.retain(rand_config, &rand_metadata);
-                Self::PendingDecision {
-                    metadata: rand_metadata,
-                    share_aggregator,
-                }
-            },
+                Self::PendingDecision { metadata: rand_metadata, share_aggregator }
+            }
             item @ (RandItem::PendingDecision { .. } | RandItem::Decided { .. }) => item,
         };
         let _ = std::mem::replace(self, new_item);
@@ -194,22 +163,20 @@ impl<S: TShare> RandItem<S> {
 
     fn get_all_shares_authors(&self) -> Option<HashSet<Author>> {
         match self {
-            RandItem::PendingDecision {
-                share_aggregator, ..
-            } => Some(share_aggregator.shares.keys().cloned().collect()),
+            RandItem::PendingDecision { share_aggregator, .. } => {
+                Some(share_aggregator.shares.keys().cloned().collect())
+            }
             RandItem::Decided { .. } => None,
             RandItem::PendingMetadata(_) => {
                 unreachable!("Should only be called after block is added")
-            },
+            }
         }
     }
 
     fn get_self_share(&self) -> Option<RandShare<S>> {
         match self {
             RandItem::PendingMetadata(aggr) => aggr.get_self_share(),
-            RandItem::PendingDecision {
-                share_aggregator, ..
-            } => share_aggregator.get_self_share(),
+            RandItem::PendingDecision { share_aggregator, .. } => share_aggregator.get_self_share(),
             RandItem::Decided { self_share, .. } => Some(self_share.clone()),
         }
     }
@@ -270,10 +237,7 @@ impl<S: TShare> RandStore<S> {
     }
 
     pub fn add_share(&mut self, share: RandShare<S>, path: PathType) -> anyhow::Result<bool> {
-        ensure!(
-            share.metadata().epoch == self.epoch,
-            "Share from different epoch"
-        );
+        ensure!(share.metadata().epoch == self.epoch, "Share from different epoch");
         ensure!(
             share.metadata().round <= self.highest_known_round + FUTURE_ROUNDS_TO_ACCEPT,
             "Share from future round"
@@ -307,9 +271,7 @@ impl<S: TShare> RandStore<S> {
     /// This should only be called after the block is added, returns None if already decided
     /// Otherwise returns existing shares' authors
     pub fn get_all_shares_authors(&self, round: Round) -> Option<HashSet<Author>> {
-        self.rand_map
-            .get(&round)
-            .and_then(|item| item.get_all_shares_authors())
+        self.rand_map.get(&round).and_then(|item| item.get_all_shares_authors())
     }
 
     pub fn get_self_share(
@@ -339,21 +301,23 @@ mod tests {
         types::{MockShare, PathType, RandConfig},
     };
     use aptos_consensus_types::common::Author;
-    use gaptos::aptos_crypto::{bls12381, HashValue, Uniform};
-    use gaptos::aptos_dkg::{
-        pvss::{traits::Transcript, Player, WeightedConfig},
-        weighted_vuf::traits::WeightedVUF,
-    };
-    use gaptos::aptos_types::{
-        dkg::{real_dkg::maybe_dk_from_bls_sk, DKGSessionMetadata, DKGTrait, DefaultDKG},
-        on_chain_config::OnChainRandomnessConfig,
-        randomness::{FullRandMetadata, RandKeys, WvufPP, WVUF},
-        validator_verifier::{
-            ValidatorConsensusInfo, ValidatorConsensusInfoMoveStruct, ValidatorVerifier,
-        },
-    };
     use futures::StreamExt;
     use futures_channel::mpsc::unbounded;
+    use gaptos::{
+        aptos_crypto::{bls12381, HashValue, Uniform},
+        aptos_dkg::{
+            pvss::{traits::Transcript, Player, WeightedConfig},
+            weighted_vuf::traits::WeightedVUF,
+        },
+        aptos_types::{
+            dkg::{real_dkg::maybe_dk_from_bls_sk, DKGSessionMetadata, DKGTrait, DefaultDKG},
+            on_chain_config::OnChainRandomnessConfig,
+            randomness::{FullRandMetadata, RandKeys, WvufPP, WVUF},
+            validator_verifier::{
+                ValidatorConsensusInfo, ValidatorConsensusInfoMoveStruct, ValidatorVerifier,
+            },
+        },
+    };
     use rand::thread_rng;
     use std::{str::FromStr, sync::Arc};
 
@@ -374,16 +338,12 @@ mod tests {
             let authors: Vec<_> = (0..num_validators)
                 .map(|i| Author::from_str(&format!("{:x}", i)).unwrap())
                 .collect();
-            let private_keys: Vec<bls12381::PrivateKey> = (0..num_validators)
-                .map(|_| bls12381::PrivateKey::generate_for_testing())
-                .collect();
+            let private_keys: Vec<bls12381::PrivateKey> =
+                (0..num_validators).map(|_| bls12381::PrivateKey::generate_for_testing()).collect();
             let public_keys: Vec<bls12381::PublicKey> =
                 private_keys.iter().map(bls12381::PublicKey::from).collect();
             let dkg_decrypt_keys: Vec<<DefaultDKG as DKGTrait>::NewValidatorDecryptKey> =
-                private_keys
-                    .iter()
-                    .map(|sk| maybe_dk_from_bls_sk(sk).unwrap())
-                    .collect();
+                private_keys.iter().map(|sk| maybe_dk_from_bls_sk(sk).unwrap()).collect();
             let consensus_infos: Vec<ValidatorConsensusInfo> = (0..num_validators)
                 .map(|idx| {
                     ValidatorConsensusInfo::new(
@@ -446,12 +406,7 @@ mod tests {
                 weighted_config,
             );
 
-            Self {
-                authors,
-                dealer_epoch,
-                target_epoch,
-                rand_config,
-            }
+            Self { authors, dealer_epoch, target_epoch, rand_config }
         }
     }
 
@@ -459,18 +414,9 @@ mod tests {
     fn test_share_aggregator() {
         let ctxt = TestContext::new(vec![1, 2, 3], 0);
         let mut aggr = ShareAggregator::new(ctxt.authors[0], PathType::Slow);
-        aggr.add_share(
-            1,
-            create_share_for_round(ctxt.target_epoch, 1, ctxt.authors[0]),
-        );
-        aggr.add_share(
-            2,
-            create_share_for_round(ctxt.target_epoch, 2, ctxt.authors[1]),
-        );
-        aggr.add_share(
-            3,
-            create_share_for_round(ctxt.target_epoch, 1, ctxt.authors[2]),
-        );
+        aggr.add_share(1, create_share_for_round(ctxt.target_epoch, 1, ctxt.authors[0]));
+        aggr.add_share(2, create_share_for_round(ctxt.target_epoch, 2, ctxt.authors[1]));
+        aggr.add_share(3, create_share_for_round(ctxt.target_epoch, 1, ctxt.authors[2]));
         assert_eq!(aggr.shares.len(), 3);
         assert_eq!(aggr.total_weight, 6);
         // retain the shares with the same metadata
@@ -511,8 +457,7 @@ mod tests {
             FullRandMetadata::new(ctxt.target_epoch, 2, HashValue::zero(), 1700000000),
         );
         for share in shares[1..].iter() {
-            item.add_share(share.clone(), &ctxt.rand_config)
-                .unwrap_err();
+            item.add_share(share.clone(), &ctxt.rand_config).unwrap_err();
         }
     }
 

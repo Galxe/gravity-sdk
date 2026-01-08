@@ -10,11 +10,13 @@ use crate::dag::{
     },
 };
 use aptos_consensus_types::common::Payload;
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_types::{
-    aggregate_signature::AggregateSignature, validator_verifier::random_validator_verifier,
-};
 use claims::assert_ok;
+use gaptos::{
+    aptos_crypto::HashValue,
+    aptos_types::{
+        aggregate_signature::AggregateSignature, validator_verifier::random_validator_verifier,
+    },
+};
 use std::vec;
 
 #[test]
@@ -29,10 +31,7 @@ fn test_node_verify() {
         Extensions::empty(),
     );
     assert_eq!(
-        invalid_node
-            .verify(sender, &validator_verifier)
-            .unwrap_err()
-            .to_string(),
+        invalid_node.verify(sender, &validator_verifier).unwrap_err().to_string(),
         "invalid digest"
     );
 
@@ -40,29 +39,21 @@ fn test_node_verify() {
     let first_round_node = new_node(1, 10, signers[0].author(), vec![]);
     assert_ok!(first_round_node.verify(sender, &validator_verifier));
     // Mismatch sender
-    first_round_node
-        .verify(signers[1].author(), &validator_verifier)
-        .unwrap_err();
+    first_round_node.verify(signers[1].author(), &validator_verifier).unwrap_err();
 
     // Round 2 node without parents
     let node = new_node(2, 20, signers[0].author(), vec![]);
     assert_eq!(
-        node.verify(sender, &validator_verifier)
-            .unwrap_err()
-            .to_string(),
+        node.verify(sender, &validator_verifier).unwrap_err().to_string(),
         "not enough parents to satisfy voting power",
     );
 
     // Round 1 cert
-    let parent_cert = NodeCertificate::new(
-        first_round_node.metadata().clone(),
-        AggregateSignature::empty(),
-    );
+    let parent_cert =
+        NodeCertificate::new(first_round_node.metadata().clone(), AggregateSignature::empty());
     let node = new_node(3, 20, signers[0].author(), vec![parent_cert]);
     assert_eq!(
-        node.verify(sender, &validator_verifier)
-            .unwrap_err()
-            .to_string(),
+        node.verify(sender, &validator_verifier).unwrap_err().to_string(),
         "invalid parent round"
     );
 }
@@ -79,20 +70,14 @@ fn test_certified_node_verify() {
     );
     let invalid_certified_node = CertifiedNode::new(invalid_node, AggregateSignature::empty());
     assert_eq!(
-        invalid_certified_node
-            .verify(&validator_verifier)
-            .unwrap_err()
-            .to_string(),
+        invalid_certified_node.verify(&validator_verifier).unwrap_err().to_string(),
         "invalid digest"
     );
 
     let certified_node = new_certified_node(0, signers[0].author(), vec![]);
 
     assert_eq!(
-        certified_node
-            .verify(&validator_verifier)
-            .unwrap_err()
-            .to_string(),
+        certified_node.verify(&validator_verifier).unwrap_err().to_string(),
         "Invalid bitvec from the multi-signature"
     );
 }
@@ -152,9 +137,10 @@ fn test_dag_snapshot_bitmask() {
     assert!(!bitmask.has(2, 0));
     assert_eq!(bitmask.first_round(), 1);
 
-    let bitmask = DagSnapshotBitmask::new(1, vec![vec![false, true, true, true], vec![
-        false, true, false, false,
-    ]]);
+    let bitmask = DagSnapshotBitmask::new(
+        1,
+        vec![vec![false, true, true, true], vec![false, true, false, false]],
+    );
 
     assert!(!bitmask.has(1, 0));
     assert!(bitmask.has(1, 3));

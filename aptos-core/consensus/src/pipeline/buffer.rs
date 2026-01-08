@@ -27,12 +27,7 @@ pub struct Buffer<T: Hashable> {
 
 impl<T: Hashable> Buffer<T> {
     pub fn new() -> Self {
-        Self {
-            map: HashMap::new(),
-            count: 0,
-            head: None,
-            tail: None,
-        }
+        Self { map: HashMap::new(), count: 0, head: None, tail: None }
     }
 
     pub fn len(&self) -> usize {
@@ -52,11 +47,7 @@ impl<T: Hashable> Buffer<T> {
     pub fn push_back(&mut self, elem: T) {
         self.count = self.count.checked_add(1).unwrap();
         let t_hash = elem.hash();
-        self.map.insert(t_hash, LinkedItem {
-            elem: Some(elem),
-            index: self.count,
-            next: None,
-        });
+        self.map.insert(t_hash, LinkedItem { elem: Some(elem), index: self.count, next: None });
         if let Some(tail) = self.tail {
             self.map.get_mut(&tail).unwrap().next = Some(t_hash);
         }
@@ -86,31 +77,17 @@ impl<T: Hashable> Buffer<T> {
 
     #[allow(clippy::unwrap_used)]
     pub fn get(&self, cursor: &Cursor) -> &T {
-        self.map
-            .get(cursor.as_ref().unwrap())
-            .unwrap()
-            .elem
-            .as_ref()
-            .unwrap()
+        self.map.get(cursor.as_ref().unwrap()).unwrap().elem.as_ref().unwrap()
     }
 
     #[allow(clippy::unwrap_used)]
     pub fn set(&mut self, cursor: &Cursor, new_val: T) {
-        self.map
-            .get_mut(cursor.as_ref().unwrap())
-            .unwrap()
-            .elem
-            .replace(new_val);
+        self.map.get_mut(cursor.as_ref().unwrap()).unwrap().elem.replace(new_val);
     }
 
     #[allow(clippy::unwrap_used)]
     pub fn take(&mut self, cursor: &Cursor) -> T {
-        self.map
-            .get_mut(cursor.as_ref().unwrap())
-            .unwrap()
-            .elem
-            .take()
-            .unwrap()
+        self.map.get_mut(cursor.as_ref().unwrap()).unwrap().elem.take().unwrap()
     }
 
     pub fn exist(&self, cursor: &Cursor) -> bool {
@@ -167,9 +144,7 @@ mod test {
 
     impl From<u64> for HashWrapper {
         fn from(val: u64) -> Self {
-            Self {
-                inner: HashValue::from_u64(val),
-            }
+            Self { inner: HashValue::from_u64(val) }
         }
     }
 

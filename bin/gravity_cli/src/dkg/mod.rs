@@ -3,8 +3,7 @@ mod status;
 
 use clap::{Parser, Subcommand};
 
-use crate::dkg::randomness::RandomnessCommand;
-use crate::dkg::status::StatusCommand;
+use crate::dkg::{randomness::RandomnessCommand, status::StatusCommand};
 
 #[derive(Debug, Parser)]
 pub struct DKGCommand {
@@ -17,4 +16,3 @@ pub enum SubCommands {
     Status(StatusCommand),
     Randomness(RandomnessCommand),
 }
-

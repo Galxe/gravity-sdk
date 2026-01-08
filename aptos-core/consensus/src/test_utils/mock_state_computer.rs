@@ -12,16 +12,21 @@ use crate::{
     transaction_shuffler::TransactionShuffler,
 };
 use anyhow::Result;
-use aptos_consensus_types::{block::Block, pipeline_execution_result::PipelineExecutionResult, pipelined_block::PipelinedBlock};
-use gaptos::aptos_crypto::HashValue;
-use aptos_executor_types::{ExecutorError, ExecutorResult, StateComputeResult};
-use gaptos::aptos_logger::debug;
-use gaptos::aptos_types::{
-    block_executor::config::BlockExecutorConfigFromOnchain, epoch_state::EpochState,
-    ledger_info::LedgerInfoWithSignatures, randomness::Randomness,
+use aptos_consensus_types::{
+    block::Block, pipeline_execution_result::PipelineExecutionResult,
+    pipelined_block::PipelinedBlock,
 };
+use aptos_executor_types::{ExecutorError, ExecutorResult, StateComputeResult};
 use futures::SinkExt;
 use futures_channel::mpsc::UnboundedSender;
+use gaptos::{
+    aptos_crypto::HashValue,
+    aptos_logger::debug,
+    aptos_types::{
+        block_executor::config::BlockExecutorConfigFromOnchain, epoch_state::EpochState,
+        ledger_info::LedgerInfoWithSignatures, randomness::Randomness,
+    },
+};
 use std::{sync::Arc, time::Duration};
 
 pub struct EmptyStateComputer {
@@ -83,17 +88,16 @@ impl StateComputer for EmptyStateComputer {
 }
 
 /// Random Compute Result State Computer
-/// When compute(), if parent id is random_compute_result_root_hash, it returns Err(Error::BlockNotFound(parent_block_id))
-/// Otherwise, it returns a dummy StateComputeResult with root hash as random_compute_result_root_hash.
+/// When compute(), if parent id is random_compute_result_root_hash, it returns
+/// Err(Error::BlockNotFound(parent_block_id)) Otherwise, it returns a dummy StateComputeResult with
+/// root hash as random_compute_result_root_hash.
 pub struct RandomComputeResultStateComputer {
     random_compute_result_root_hash: HashValue,
 }
 
 impl RandomComputeResultStateComputer {
     pub fn new() -> Self {
-        Self {
-            random_compute_result_root_hash: HashValue::random(),
-        }
+        Self { random_compute_result_root_hash: HashValue::random() }
     }
 
     pub fn get_root_hash(&self) -> HashValue {
@@ -114,9 +118,7 @@ impl StateComputer for RandomComputeResultStateComputer {
         let res = if parent_block_id == self.random_compute_result_root_hash {
             Err(ExecutorError::BlockNotFound(parent_block_id))
         } else {
-            Ok(StateComputeResult::with_root_hash(
-                self.random_compute_result_root_hash,
-            ))
+            Ok(StateComputeResult::with_root_hash(self.random_compute_result_root_hash))
         };
         let pipeline_execution_res = res.map(|res| {
             PipelineExecutionResult::new(

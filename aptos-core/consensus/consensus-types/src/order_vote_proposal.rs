@@ -24,11 +24,7 @@ pub struct OrderVoteProposal {
 
 impl OrderVoteProposal {
     pub fn new(block: Block, block_info: BlockInfo, quorum_cert: Arc<QuorumCert>) -> Self {
-        Self {
-            block,
-            block_info,
-            quorum_cert,
-        }
+        Self { block, block_info, quorum_cert }
     }
 
     pub fn block(&self) -> &Block {

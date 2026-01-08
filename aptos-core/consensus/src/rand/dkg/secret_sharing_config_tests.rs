@@ -1,6 +1,5 @@
 use gaptos::aptos_dkg::pvss::{
-    test_utils::get_weighted_configs_for_benchmarking,
-    traits::SecretSharingConfig,
+    test_utils::get_weighted_configs_for_benchmarking, traits::SecretSharingConfig,
 };
 use rand::thread_rng;
 
@@ -27,10 +26,7 @@ fn print_best_worst_avg_case_subsets() {
         println!(
             "Worst case subset is of size {}. Player IDs are {:?}",
             worst_case.len(),
-            worst_case
-                .iter()
-                .map(|p| p.get_id())
-                .collect::<Vec<usize>>()
+            worst_case.iter().map(|p| p.get_id()).collect::<Vec<usize>>()
         );
 
         let best_case = wc.get_best_case_eligible_subset_of_players(&mut rng);

@@ -3,10 +3,11 @@
 
 use super::proposer_election::ProposerElection;
 use aptos_consensus_types::common::{Author, Round};
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::prelude::info;
+use gaptos::{
+    aptos_consensus::counters::PROPOSER_ELECTION_DURATION, aptos_infallible::Mutex,
+    aptos_logger::prelude::info,
+};
 use std::collections::BTreeMap;
-use gaptos::aptos_consensus::counters::PROPOSER_ELECTION_DURATION;
 
 // Wrapper around ProposerElection.
 //
@@ -29,12 +30,7 @@ impl CachedProposerElection {
         proposer_election: Box<dyn ProposerElection + Send + Sync>,
         window: usize,
     ) -> Self {
-        Self {
-            epoch,
-            proposer_election,
-            recent_elections: Mutex::new(BTreeMap::new()),
-            window,
-        }
+        Self { epoch, proposer_election, recent_elections: Mutex::new(BTreeMap::new()), window }
     }
 
     pub fn get_or_compute_entry(&self, round: Round) -> (Author, f64) {
@@ -49,10 +45,7 @@ impl CachedProposerElection {
             let result = self
                 .proposer_election
                 .get_valid_proposer_and_voting_power_participation_ratio(round);
-            info!(
-                "ProposerElection for epoch {} and round {}: {:?}",
-                self.epoch, round, result
-            );
+            info!("ProposerElection for epoch {} and round {}: {:?}", self.epoch, round, result);
             result
         })
     }

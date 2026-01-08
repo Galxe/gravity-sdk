@@ -9,8 +9,8 @@ use crate::{
 };
 use aptos_consensus_types::{common::Round, pipelined_block::PipelinedBlock};
 use aptos_executor_types::ExecutorResult;
-use gaptos::aptos_types::{epoch_change::EpochChangeProof, ledger_info::LedgerInfoWithSignatures};
 use async_trait::async_trait;
+use gaptos::aptos_types::{epoch_change::EpochChangeProof, ledger_info::LedgerInfoWithSignatures};
 use std::{
     fmt::{Debug, Display, Formatter},
     sync::Arc,
@@ -47,7 +47,10 @@ pub struct PersistingPhase {
 }
 
 impl PersistingPhase {
-    pub fn new(persisting_handle: Arc<dyn StateComputer>, commit_msg_tx: Arc<NetworkSender>) -> Self {
+    pub fn new(
+        persisting_handle: Arc<dyn StateComputer>,
+        commit_msg_tx: Arc<NetworkSender>,
+    ) -> Self {
         Self { persisting_handle, commit_msg_tx }
     }
 }
@@ -60,14 +63,11 @@ impl StatelessPipeline for PersistingPhase {
     const NAME: &'static str = "persisting";
 
     async fn process(&self, req: PersistingRequest) -> PersistingResponse {
-        let PersistingRequest {
-            blocks,
-            commit_ledger_info,
-            callback,
-        } = req;
+        let PersistingRequest { blocks, commit_ledger_info, callback } = req;
         let round = commit_ledger_info.ledger_info().round();
 
-        let response = self.persisting_handle
+        let response = self
+            .persisting_handle
             .commit(&blocks, commit_ledger_info.clone(), callback)
             .await
             .map(|_| round);

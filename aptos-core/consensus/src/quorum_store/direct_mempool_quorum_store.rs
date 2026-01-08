@@ -7,9 +7,7 @@ use aptos_consensus_types::{
     common::{Payload, PayloadFilter, TransactionInProgress, TransactionSummary},
     request_response::{GetPayloadCommand, GetPayloadResponse},
 };
-use gaptos::aptos_logger::prelude::*;
 use aptos_mempool::{QuorumStoreRequest, QuorumStoreResponse};
-use gaptos::aptos_types::transaction::SignedTransaction;
 use futures::{
     channel::{
         mpsc::{Receiver, Sender},
@@ -17,12 +15,15 @@ use futures::{
     },
     StreamExt,
 };
+use gaptos::{
+    aptos_consensus::quorum_store::counters, aptos_logger::prelude::*,
+    aptos_types::transaction::SignedTransaction,
+};
 use std::{
     collections::BTreeMap,
     time::{Duration, Instant},
 };
 use tokio::time::timeout;
-use gaptos::aptos_consensus::quorum_store::counters as counters;
 
 pub struct DirectMempoolQuorumStore {
     consensus_receiver: Receiver<GetPayloadCommand>,
@@ -36,11 +37,7 @@ impl DirectMempoolQuorumStore {
         mempool_sender: Sender<QuorumStoreRequest>,
         mempool_txn_pull_timeout_ms: u64,
     ) -> Self {
-        Self {
-            consensus_receiver,
-            mempool_sender,
-            mempool_txn_pull_timeout_ms,
-        }
+        Self { consensus_receiver, mempool_sender, mempool_txn_pull_timeout_ms }
     }
 
     async fn pull_internal(
@@ -53,9 +50,16 @@ impl DirectMempoolQuorumStore {
         let (callback, callback_rcv) = oneshot::channel();
         let exclude_txns: BTreeMap<_, _> = exclude_txns
             .into_iter()
-            .map(|txn| (
-                gaptos::aptos_consensus_types::common::TransactionSummary::new(txn.sender, txn.sequence_number, txn.hash), 
-                gaptos::aptos_consensus_types::common::TransactionInProgress::new(0)))
+            .map(|txn| {
+                (
+                    gaptos::aptos_consensus_types::common::TransactionSummary::new(
+                        txn.sender,
+                        txn.sequence_number,
+                        txn.hash,
+                    ),
+                    gaptos::aptos_consensus_types::common::TransactionInProgress::new(0),
+                )
+            })
             .collect();
         let msg = QuorumStoreRequest::GetBatchRequest(
             max_items,
@@ -64,33 +68,20 @@ impl DirectMempoolQuorumStore {
             exclude_txns,
             callback,
         );
-        self.mempool_sender
-            .clone()
-            .try_send(msg)
-            .map_err(anyhow::Error::from)?;
+        self.mempool_sender.clone().try_send(msg).map_err(anyhow::Error::from)?;
         // wait for response
         match monitor!(
             "pull_txn",
-            timeout(
-                Duration::from_millis(self.mempool_txn_pull_timeout_ms),
-                callback_rcv
-            )
-            .await
+            timeout(Duration::from_millis(self.mempool_txn_pull_timeout_ms), callback_rcv).await
         ) {
-            Err(_) => {
-                Err(anyhow::anyhow!(
-                    "[direct_mempool_quorum_store] did not receive GetBatchResponse on time"
-                ))
-            },
+            Err(_) => Err(anyhow::anyhow!(
+                "[direct_mempool_quorum_store] did not receive GetBatchResponse on time"
+            )),
             Ok(resp) => match resp.map_err(anyhow::Error::from)?? {
-                QuorumStoreResponse::GetBatchResponse(txns) => {
-                    Ok(txns)
-                },
-                _ => {
-                    Err(anyhow::anyhow!(
-                        "[direct_mempool_quorum_store] did not receive expected GetBatchResponse"
-                    ))
-                },
+                QuorumStoreResponse::GetBatchResponse(txns) => Ok(txns),
+                _ => Err(anyhow::anyhow!(
+                    "[direct_mempool_quorum_store] did not receive expected GetBatchResponse"
+                )),
             },
         }
     }
@@ -108,20 +99,18 @@ impl DirectMempoolQuorumStore {
             PayloadFilter::DirectMempool(exclude_txns) => exclude_txns,
             PayloadFilter::InQuorumStore(_) => {
                 unreachable!("Unknown payload_filter: {}", payload_filter)
-            },
+            }
             PayloadFilter::Empty => Vec::new(),
         };
 
-        let (txns, result) = match self
-            .pull_internal(max_txns, max_bytes, return_non_full, exclude_txns)
-            .await
-        {
-            Err(_) => {
-                error!("GetBatch failed");
-                (vec![], counters::REQUEST_FAIL_LABEL)
-            },
-            Ok(txns) => (txns, counters::REQUEST_SUCCESS_LABEL),
-        };
+        let (txns, result) =
+            match self.pull_internal(max_txns, max_bytes, return_non_full, exclude_txns).await {
+                Err(_) => {
+                    error!("GetBatch failed");
+                    (vec![], counters::REQUEST_FAIL_LABEL)
+                }
+                Ok(txns) => (txns, counters::REQUEST_SUCCESS_LABEL),
+            };
         counters::quorum_store_service_latency(
             counters::GET_BATCH_LABEL,
             result,
@@ -135,7 +124,7 @@ impl DirectMempoolQuorumStore {
             Err(_) => {
                 error!("Callback failed");
                 counters::CALLBACK_FAIL_LABEL
-            },
+            }
             Ok(_) => counters::CALLBACK_SUCCESS_LABEL,
         };
         counters::quorum_store_service_latency(
@@ -167,7 +156,7 @@ impl DirectMempoolQuorumStore {
                     callback,
                 )
                 .await;
-            },
+            }
         }
     }
 

@@ -6,8 +6,10 @@ use aptos_consensus_types::{
     common::{BatchPayload, TxnSummaryWithExpiration},
     proof_of_store::{BatchId, BatchInfo},
 };
-use gaptos::aptos_crypto::{hash::CryptoHash, HashValue};
-use gaptos::aptos_types::{ledger_info::LedgerInfoWithSignatures, transaction::SignedTransaction, PeerId};
+use gaptos::{
+    aptos_crypto::{hash::CryptoHash, HashValue},
+    aptos_types::{ledger_info::LedgerInfoWithSignatures, transaction::SignedTransaction, PeerId},
+};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Display, Formatter},
@@ -53,10 +55,7 @@ pub(crate) enum StorageMode {
 
 impl PersistedValue {
     pub(crate) fn new(info: BatchInfo, maybe_payload: Option<Vec<SignedTransaction>>) -> Self {
-        Self {
-            info,
-            maybe_payload,
-        }
+        Self { info, maybe_payload }
     }
 
     pub(crate) fn payload_storage_mode(&self) -> StorageMode {
@@ -122,9 +121,7 @@ impl TryFrom<PersistedValue> for Batch {
             batch_info: value.info,
             payload: BatchPayload::new(
                 author,
-                value
-                    .maybe_payload
-                    .ok_or_else(|| anyhow::anyhow!("Payload not exist"))?,
+                value.maybe_payload.ok_or_else(|| anyhow::anyhow!("Payload not exist"))?,
             ),
         })
     }
@@ -139,10 +136,7 @@ mod tests {
         use super::*;
         let empty_batch_payload = BatchPayload::new(PeerId::random(), vec![]);
         // We overestimate the ULEB128 encoding of the number of transactions as 128 bytes.
-        assert_eq!(
-            empty_batch_payload.num_bytes() + 127,
-            config::BATCH_PADDING_BYTES
-        );
+        assert_eq!(empty_batch_payload.num_bytes() + 127, config::BATCH_PADDING_BYTES);
     }
 }
 
@@ -172,21 +166,12 @@ impl Batch {
             payload.num_bytes() as u64,
             gas_bucket_start,
         );
-        Self {
-            batch_info,
-            payload,
-        }
+        Self { batch_info, payload }
     }
 
     pub fn verify(&self) -> anyhow::Result<()> {
-        ensure!(
-            self.payload.author() == self.author(),
-            "Payload author doesn't match the info"
-        );
-        ensure!(
-            self.payload.hash() == *self.digest(),
-            "Payload hash doesn't match the digest"
-        );
+        ensure!(self.payload.author() == self.author(), "Payload author doesn't match the info");
+        ensure!(self.payload.hash() == *self.digest(), "Payload hash doesn't match the digest");
         ensure!(
             self.payload.num_txns() as u64 == self.num_txns(),
             "Payload num txns doesn't match batch info"
@@ -206,10 +191,7 @@ impl Batch {
 
     /// Verify the batch, and that it matches the requested digest
     pub fn verify_with_digest(&self, requested_digest: HashValue) -> anyhow::Result<()> {
-        ensure!(
-            requested_digest == *self.digest(),
-            "Response digest doesn't match the request"
-        );
+        ensure!(requested_digest == *self.digest(), "Response digest doesn't match the request");
         self.verify()?;
         Ok(())
     }
@@ -250,11 +232,7 @@ impl Display for BatchRequest {
 
 impl BatchRequest {
     pub fn new(source: PeerId, epoch: u64, digest: HashValue) -> Self {
-        Self {
-            epoch,
-            source,
-            digest,
-        }
+        Self { epoch, source, digest }
     }
 
     pub fn epoch(&self) -> u64 {
@@ -265,11 +243,7 @@ impl BatchRequest {
         if self.source == peer_id {
             Ok(())
         } else {
-            Err(anyhow::anyhow!(
-                "Sender mismatch: peer_id: {}, source: {}",
-                self.source,
-                peer_id
-            ))
+            Err(anyhow::anyhow!("Sender mismatch: peer_id: {}, source: {}", self.source, peer_id))
         }
     }
 
@@ -284,10 +258,7 @@ impl BatchRequest {
 
 impl From<Batch> for PersistedValue {
     fn from(value: Batch) -> Self {
-        let Batch {
-            batch_info,
-            payload,
-        } = value;
+        let Batch { batch_info, payload } = value;
         PersistedValue::new(batch_info, Some(payload.into_transactions()))
     }
 }
@@ -317,10 +288,7 @@ impl BatchMsg {
             max_num_batches
         );
         for batch in self.batches.iter() {
-            ensure!(
-                batch.author() == peer_id,
-                "Batch author doesn't match sender"
-            );
+            ensure!(batch.author() == peer_id, "Batch author doesn't match sender");
             batch.verify()?
         }
         Ok(())
@@ -330,12 +298,7 @@ impl BatchMsg {
         ensure!(!self.batches.is_empty(), "Empty message");
         let epoch = self.batches[0].epoch();
         for batch in self.batches.iter() {
-            ensure!(
-                batch.epoch() == epoch,
-                "Epoch mismatch: {} != {}",
-                batch.epoch(),
-                epoch
-            );
+            ensure!(batch.epoch() == epoch, "Epoch mismatch: {} != {}", batch.epoch(), epoch);
         }
         Ok(epoch)
     }

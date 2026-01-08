@@ -10,11 +10,13 @@ use crate::consensus_observer::{
         ConsensusObserverResponse,
     },
 };
-use gaptos::aptos_config::network_id::PeerNetworkId;
-use gaptos::aptos_logger::{debug, warn};
-use gaptos::aptos_network::application::{interface::NetworkClientInterface, storage::PeersAndMetadata};
-use gaptos::aptos_time_service::{TimeService, TimeServiceTrait};
 use bytes::Bytes;
+use gaptos::{
+    aptos_config::network_id::PeerNetworkId,
+    aptos_logger::{debug, warn},
+    aptos_network::application::{interface::NetworkClientInterface, storage::PeersAndMetadata},
+    aptos_time_service::{TimeService, TimeServiceTrait},
+};
 use rand::Rng;
 use std::{sync::Arc, time::Duration};
 
@@ -30,10 +32,7 @@ impl<NetworkClient: NetworkClientInterface<ConsensusObserverMessage>>
 {
     pub fn new(network_client: NetworkClient) -> Self {
         let time_service = TimeService::real();
-        Self {
-            network_client,
-            time_service,
-        }
+        Self { network_client, time_service }
     }
 
     /// Sends an already serialized (direct send) message to a specific peer
@@ -103,17 +102,15 @@ impl<NetworkClient: NetworkClientInterface<ConsensusObserverMessage>>
             Ok(peer_to_serialized_bytes) => {
                 // Get the serialized bytes for the peer
                 let serialized_bytes =
-                    peer_to_serialized_bytes
-                        .get(peer_network_id)
-                        .ok_or_else(|| {
-                            Error::NetworkError(format!(
-                                "Failed to get serialized bytes for peer: {:?}!",
-                                peer_network_id
-                            ))
-                        })?;
+                    peer_to_serialized_bytes.get(peer_network_id).ok_or_else(|| {
+                        Error::NetworkError(format!(
+                            "Failed to get serialized bytes for peer: {:?}!",
+                            peer_network_id
+                        ))
+                    })?;
 
                 Ok(serialized_bytes.clone())
-            },
+            }
             Err(error) => {
                 // Log the serialization error
                 warn!(LogSchema::new(LogEntry::SendDirectSendMessage)
@@ -130,7 +127,7 @@ impl<NetworkClient: NetworkClientInterface<ConsensusObserverMessage>>
                 );
 
                 Err(Error::NetworkError(error.to_string()))
-            },
+            }
         }
     }
 
@@ -161,11 +158,7 @@ impl<NetworkClient: NetworkClientInterface<ConsensusObserverMessage>>
         // Send the request and wait for the response
         let request_label = request.get_label();
         let result = self
-            .send_rpc_request(
-                *peer_network_id,
-                request,
-                Duration::from_millis(request_timeout_ms),
-            )
+            .send_rpc_request(*peer_network_id, request, Duration::from_millis(request_timeout_ms))
             .await;
 
         // Process the response
@@ -179,7 +172,7 @@ impl<NetworkClient: NetworkClientInterface<ConsensusObserverMessage>>
                 );
 
                 Ok(consensus_observer_response)
-            },
+            }
             Err(error) => {
                 // Log the failed RPC request
                 warn!(LogSchema::new(LogEntry::SendRpcRequest)
@@ -197,7 +190,7 @@ impl<NetworkClient: NetworkClientInterface<ConsensusObserverMessage>>
                 );
 
                 Err(error)
-            },
+            }
         }
     }
 
@@ -215,11 +208,7 @@ impl<NetworkClient: NetworkClientInterface<ConsensusObserverMessage>>
         let request_label = request.get_label();
         let response = self
             .network_client
-            .send_to_peer_rpc(
-                ConsensusObserverMessage::Request(request),
-                timeout,
-                peer_network_id,
-            )
+            .send_to_peer_rpc(ConsensusObserverMessage::Request(request), timeout, peer_network_id)
             .await
             .map_err(|error| Error::NetworkError(error.to_string()))?;
 

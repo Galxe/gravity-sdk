@@ -6,9 +6,11 @@
 
 use aptos_consensus_types::block::block_test_utils;
 use aptos_safety_rules::{test_utils, PersistentSafetyStorage, SafetyRulesManager, TSafetyRules};
-use gaptos::aptos_secure_storage::{InMemoryStorage, KVStorage, OnDiskStorage, Storage, VaultStorage};
-use gaptos::aptos_types::validator_signer::ValidatorSigner;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use gaptos::{
+    aptos_secure_storage::{InMemoryStorage, KVStorage, OnDiskStorage, Storage, VaultStorage},
+    aptos_types::validator_signer::ValidatorSigner,
+};
 use tempfile::NamedTempFile;
 
 const VAULT_HOST: &str = "http://localhost:8200";
@@ -26,30 +28,22 @@ fn lsr(mut safety_rules: Box<dyn TSafetyRules>, signer: ValidatorSigner, n: u64)
 
     round += 1;
     let mut b0 = test_utils::make_proposal_with_qc(round, genesis_qc, &signer);
-    safety_rules
-        .construct_and_sign_vote_two_chain(&b0, None)
-        .unwrap();
+    safety_rules.construct_and_sign_vote_two_chain(&b0, None).unwrap();
 
     round += 1;
     let mut b1 = test_utils::make_proposal_with_parent(data.clone(), round, &b0, None, &signer);
-    safety_rules
-        .construct_and_sign_vote_two_chain(&b1, None)
-        .unwrap();
+    safety_rules.construct_and_sign_vote_two_chain(&b1, None).unwrap();
 
     round += 1;
     let mut b2 = test_utils::make_proposal_with_parent(data.clone(), round, &b1, None, &signer);
-    safety_rules
-        .construct_and_sign_vote_two_chain(&b2, None)
-        .unwrap();
+    safety_rules.construct_and_sign_vote_two_chain(&b2, None).unwrap();
 
     for _i in 0..n {
         round += 1;
         let b3 =
             test_utils::make_proposal_with_parent(data.clone(), round, &b2, Some(&b0), &signer);
 
-        safety_rules
-            .construct_and_sign_vote_two_chain(&b3, None)
-            .unwrap();
+        safety_rules.construct_and_sign_vote_two_chain(&b3, None).unwrap();
 
         b0 = b1;
         b1 = b2;
@@ -145,19 +139,14 @@ pub fn benchmark(c: &mut Criterion) {
     let storage = create_vault_storage();
 
     let enable_vault = if storage.available().is_err() {
-        println!(
-            "Vault ({}) is not availble, experiment will not be launched",
-            VAULT_HOST
-        );
+        println!("Vault ({}) is not availble, experiment will not be launched", VAULT_HOST);
         false
     } else {
         true
     };
 
     let mut group = c.benchmark_group("SafetyRules");
-    group
-        .measurement_time(std::time::Duration::from_secs(duration_secs))
-        .sample_size(samples);
+    group.measurement_time(std::time::Duration::from_secs(duration_secs)).sample_size(samples);
     group.bench_function("InMemory", |b| b.iter(|| in_memory(black_box(count))));
     group.bench_function("OnDisk", |b| b.iter(|| on_disk(black_box(count))));
     group.bench_function("Serializer", |b| b.iter(|| serializer(black_box(count))));
@@ -169,15 +158,7 @@ pub fn benchmark(c: &mut Criterion) {
 }
 
 fn create_vault_storage() -> VaultStorage {
-    VaultStorage::new(
-        VAULT_HOST.to_string(),
-        VAULT_TOKEN.to_string(),
-        None,
-        None,
-        true,
-        None,
-        None,
-    )
+    VaultStorage::new(VAULT_HOST.to_string(), VAULT_TOKEN.to_string(), None, None, true, None, None)
 }
 
 criterion_group!(benches, benchmark);

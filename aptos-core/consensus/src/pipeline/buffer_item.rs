@@ -7,17 +7,19 @@ use anyhow::anyhow;
 use aptos_consensus_types::{
     common::Author, pipeline::commit_vote::CommitVote, pipelined_block::PipelinedBlock,
 };
-use gaptos::aptos_crypto::{bls12381, HashValue};
 use aptos_executor_types::ExecutorResult;
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_reliable_broadcast::DropGuard;
-use gaptos::aptos_types::{
-    aggregate_signature::PartialSignatures,
-    block_info::BlockInfo,
-    ledger_info::{LedgerInfo, LedgerInfoWithVerifiedSignatures, LedgerInfoWithSignatures},
-    validator_verifier::ValidatorVerifier,
-};
 use futures::future::BoxFuture;
+use gaptos::{
+    aptos_crypto::{bls12381, HashValue},
+    aptos_logger::prelude::*,
+    aptos_reliable_broadcast::DropGuard,
+    aptos_types::{
+        aggregate_signature::PartialSignatures,
+        block_info::BlockInfo,
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures, LedgerInfoWithVerifiedSignatures},
+        validator_verifier::ValidatorVerifier,
+    },
+};
 use itertools::zip_eq;
 use tokio::time::Instant;
 
@@ -71,9 +73,7 @@ fn generate_executed_item_from_ordered(
     order_vote_enabled: bool,
 ) -> BufferItem {
     debug!("{} advance to executed from ordered", commit_info);
-    let block = executed_blocks
-            .last()
-            .expect("execute_blocks should not be empty!");
+    let block = executed_blocks.last().expect("execute_blocks should not be empty!");
     let new_commit_info = BlockInfo::new(
         commit_info.epoch(),
         commit_info.round(),
@@ -90,10 +90,8 @@ fn generate_executed_item_from_ordered(
         block.compute_result().root_hash(),
         block.block().block_number().unwrap(),
     );
-    let partial_commit_proof = LedgerInfoWithVerifiedSignatures::new(
-        commit_ledger_info,
-        verified_signatures,
-    );
+    let partial_commit_proof =
+        LedgerInfoWithVerifiedSignatures::new(commit_ledger_info, verified_signatures);
     BufferItem::Executed(Box::new(ExecutedItem {
         executed_blocks,
         partial_commit_proof,
@@ -198,28 +196,20 @@ impl BufferItem {
                 for (b1, b2) in zip_eq(ordered_blocks.iter(), executed_blocks.iter()) {
                     assert_eq!(b1.id(), b2.id());
                 }
-                let block = executed_blocks
-                    .last()
-                    .expect("execute_blocks should not be empty!");
+                let block = executed_blocks.last().expect("execute_blocks should not be empty!");
                 let mut commit_info = block.block_info();
                 match epoch_end_timestamp {
                     Some(timestamp) if commit_info.timestamp_usecs() != timestamp => {
-                        assert!(executed_blocks
-                            .last()
-                            .expect("")
-                            .is_reconfiguration_suffix());
+                        assert!(executed_blocks.last().expect("").is_reconfiguration_suffix());
                         commit_info.change_timestamp(timestamp);
-                    },
+                    }
                     _ => (),
                 }
                 if let Some(commit_proof) = commit_proof {
                     // We have already received the commit proof in fast forward sync path,
                     // we can just use that proof and proceed to aggregated
                     assert_eq!(commit_proof.commit_info().clone(), commit_info);
-                    debug!(
-                        "{} advance to aggregated from ordered",
-                        commit_proof.commit_info()
-                    );
+                    debug!("{} advance to aggregated from ordered", commit_proof.commit_info());
                     Self::Aggregated(Box::new(AggregatedItem {
                         executed_blocks,
                         commit_proof,
@@ -243,10 +233,7 @@ impl BufferItem {
                             &verified_signatures,
                             validator,
                         );
-                        debug!(
-                            "{} advance to aggregated from ordered",
-                            commit_proof.commit_info()
-                        );
+                        debug!("{} advance to aggregated from ordered", commit_proof.commit_info());
                         Self::Aggregated(Box::new(AggregatedItem {
                             executed_blocks,
                             commit_proof,
@@ -263,24 +250,21 @@ impl BufferItem {
                         )
                     }
                 }
-            },
+            }
             _ => {
                 panic!("Only ordered blocks can advance to executed blocks.")
-            },
+            }
         }
     }
 
     pub fn advance_to_signed(self, author: Author, signature: bls12381::Signature) -> Self {
         match self {
             Self::Executed(executed_item) => {
-                let ExecutedItem {
-                    executed_blocks,
-                    callback,
-                    partial_commit_proof,
-                    ..
-                } = *executed_item;
+                let ExecutedItem { executed_blocks, callback, partial_commit_proof, .. } =
+                    *executed_item;
 
-                // we don't add the signature here, it'll be added when receiving the commit vote from self
+                // we don't add the signature here, it'll be added when receiving the commit vote
+                // from self
                 let commit_vote = CommitVote::new_with_signature(
                     author,
                     partial_commit_proof.ledger_info().clone(),
@@ -295,15 +279,15 @@ impl BufferItem {
                     commit_vote,
                     rb_handle: None,
                 }))
-            },
+            }
             _ => {
                 panic!("Only executed buffer items can advance to signed blocks.")
-            },
+            }
         }
     }
 
-    /// this function assumes block id matches and the validity of ledger_info and that it has the voting power
-    /// it returns an updated item
+    /// this function assumes block id matches and the validity of ledger_info and that it has the
+    /// voting power it returns an updated item
     pub fn try_advance_to_aggregated_with_ledger_info(
         self,
         commit_proof: LedgerInfoWithSignatures,
@@ -317,35 +301,24 @@ impl BufferItem {
                     ..
                 } = *signed_item;
                 assert_eq!(local_commit_proof.commit_info(), commit_proof.commit_info(),);
-                debug!(
-                    "{} advance to aggregated with commit decision",
-                    commit_proof.commit_info()
-                );
+                debug!("{} advance to aggregated with commit decision", commit_proof.commit_info());
                 Self::Aggregated(Box::new(AggregatedItem {
                     executed_blocks,
                     callback,
                     commit_proof,
                 }))
-            },
+            }
             Self::Executed(executed_item) => {
-                let ExecutedItem {
-                    executed_blocks,
-                    callback,
-                    commit_info,
-                    ..
-                } = *executed_item;
+                let ExecutedItem { executed_blocks, callback, commit_info, .. } = *executed_item;
                 assert_eq!(commit_info, *commit_proof.commit_info());
-                debug!(
-                    "{} advance to aggregated with commit decision",
-                    commit_proof.commit_info()
-                );
+                debug!("{} advance to aggregated with commit decision", commit_proof.commit_info());
                 let block = executed_blocks.last().unwrap();
                 Self::Aggregated(Box::new(AggregatedItem {
                     executed_blocks,
                     callback,
                     commit_proof,
                 }))
-            },
+            }
             Self::Ordered(ordered_item) => {
                 let ordered = *ordered_item;
                 assert!(ordered
@@ -353,18 +326,12 @@ impl BufferItem {
                     .commit_info()
                     .match_ordered_only(commit_proof.commit_info()));
                 // can't aggregate it without execution, only store the signatures
-                debug!(
-                    "{} received commit decision in ordered stage",
-                    commit_proof.commit_info()
-                );
-                Self::Ordered(Box::new(OrderedItem {
-                    commit_proof: Some(commit_proof),
-                    ..ordered
-                }))
-            },
+                debug!("{} received commit decision in ordered stage", commit_proof.commit_info());
+                Self::Ordered(Box::new(OrderedItem { commit_proof: Some(commit_proof), ..ordered }))
+            }
             Self::Aggregated(_) => {
                 unreachable!("Found aggregated buffer item but any aggregated buffer item should get dequeued right away.");
-            },
+            }
         }
     }
 
@@ -376,20 +343,20 @@ impl BufferItem {
                     .is_ok()
                 {
                     let commit_proof = aggregate_commit_proof(
-                            signed_item.partial_commit_proof.ledger_info(),
-                            signed_item.partial_commit_proof.partial_sigs(),
-                            validator,
+                        signed_item.partial_commit_proof.ledger_info(),
+                        signed_item.partial_commit_proof.partial_sigs(),
+                        validator,
                     );
                     let block = signed_item.executed_blocks.last().unwrap();
                     Self::Aggregated(Box::new(AggregatedItem {
                         executed_blocks: signed_item.executed_blocks,
-                        commit_proof: commit_proof,
+                        commit_proof,
                         callback: signed_item.callback,
                     }))
                 } else {
                     Self::Signed(signed_item)
                 }
-            },
+            }
             Self::Executed(executed_item) => {
                 if validator
                     .check_voting_power(
@@ -410,7 +377,7 @@ impl BufferItem {
                 } else {
                     Self::Executed(executed_item)
                 }
-            },
+            }
             _ => self,
         }
     }
@@ -426,10 +393,7 @@ impl BufferItem {
     }
 
     pub fn block_id(&self) -> HashValue {
-        self.get_blocks()
-            .last()
-            .expect("Vec<PipelinedBlock> should not be empty")
-            .id()
+        self.get_blocks().last().expect("Vec<PipelinedBlock> should not be empty").id()
     }
 
     pub fn commit_info(&self) -> &BlockInfo {
@@ -447,42 +411,34 @@ impl BufferItem {
         let signature = vote.signature().clone();
         match self {
             Self::Ordered(ordered) => {
-                if ordered
-                    .ordered_proof
-                    .commit_info()
-                    .match_ordered_only(target_commit_info)
-                {
+                if ordered.ordered_proof.commit_info().match_ordered_only(target_commit_info) {
                     // we optimistically assume the vote will be valid in the future.
                     // when advancing to executed item, we will check if the sigs are valid.
                     // each author at most stores a single sig for each item,
                     // so an adversary will not be able to flood our memory.
-                    ordered
-                        .unverified_signatures
-                        .add_signature(author, signature);
+                    ordered.unverified_signatures.add_signature(author, signature);
                     return Ok(());
                 }
-            },
+            }
             Self::Executed(executed) => {
                 if executed.commit_info == *target_commit_info {
-                    executed
-                        .partial_commit_proof
-                        .add_signature(author, signature);
+                    executed.partial_commit_proof.add_signature(author, signature);
                     return Ok(());
                 }
-            },
+            }
             Self::Signed(signed) => {
                 if signed.partial_commit_proof.commit_info() == target_commit_info {
                     signed.partial_commit_proof.add_signature(author, signature);
                     return Ok(());
                 }
-            },
+            }
             Self::Aggregated(aggregated) => {
                 // we do not need to do anything for aggregated
                 // but return true is helpful to stop the outer loop early
                 if aggregated.commit_proof.commit_info() == target_commit_info {
                     return Ok(());
                 }
-            },
+            }
         }
         Err(anyhow!("Inconsistent commit info."))
     }

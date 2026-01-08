@@ -6,11 +6,13 @@ use crate::consensus_observer::{
     metrics,
     network_message::{CommitDecision, OrderedBlock},
 };
-use gaptos::aptos_config::config::ConsensusObserverConfig;
 use aptos_consensus_types::common::Round;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::{debug, warn};
-use gaptos::aptos_types::{block_info::BlockInfo, ledger_info::LedgerInfoWithSignatures};
+use gaptos::{
+    aptos_config::config::ConsensusObserverConfig,
+    aptos_infallible::Mutex,
+    aptos_logger::{debug, warn},
+    aptos_types::{block_info::BlockInfo, ledger_info::LedgerInfoWithSignatures},
+};
 use std::{collections::BTreeMap, sync::Arc};
 
 /// A simple struct to store ordered blocks
@@ -26,10 +28,7 @@ pub struct OrderedBlockStore {
 
 impl OrderedBlockStore {
     pub fn new(consensus_observer_config: ConsensusObserverConfig) -> Self {
-        Self {
-            consensus_observer_config,
-            ordered_blocks: Arc::new(Mutex::new(BTreeMap::new())),
-        }
+        Self { consensus_observer_config, ordered_blocks: Arc::new(Mutex::new(BTreeMap::new())) }
     }
 
     /// Clears all ordered blocks
@@ -67,23 +66,19 @@ impl OrderedBlockStore {
         // Verify that the number of ordered blocks doesn't exceed the maximum
         let max_num_ordered_blocks = self.consensus_observer_config.max_num_pending_blocks as usize;
         if self.ordered_blocks.lock().len() >= max_num_ordered_blocks {
-            warn!(
-                LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                    "Exceeded the maximum number of ordered blocks: {:?}. Dropping block: {:?}.",
-                    max_num_ordered_blocks,
-                    ordered_block.proof_block_info()
-                ))
-            );
+            warn!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                "Exceeded the maximum number of ordered blocks: {:?}. Dropping block: {:?}.",
+                max_num_ordered_blocks,
+                ordered_block.proof_block_info()
+            )));
             return; // Drop the block if we've exceeded the maximum
         }
 
         // Otherwise, we can add the block to the ordered blocks
-        debug!(
-            LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                "Adding ordered block to the ordered blocks: {:?}",
-                ordered_block.proof_block_info()
-            ))
-        );
+        debug!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+            "Adding ordered block to the ordered blocks: {:?}",
+            ordered_block.proof_block_info()
+        )));
 
         // Get the epoch and round of the last ordered block
         let last_block = ordered_block.last_block();
@@ -167,9 +162,11 @@ mod test {
         pipelined_block::PipelinedBlock,
         quorum_cert::QuorumCert,
     };
-    use gaptos::aptos_crypto::HashValue;
-    use gaptos::aptos_types::{
-        aggregate_signature::AggregateSignature, ledger_info::LedgerInfo, transaction::Version,
+    use gaptos::{
+        aptos_crypto::HashValue,
+        aptos_types::{
+            aggregate_signature::AggregateSignature, ledger_info::LedgerInfo, transaction::Version,
+        },
     };
 
     #[test]
@@ -206,10 +203,7 @@ mod test {
         // Verify the last ordered block is the block with the highest round
         let last_ordered_block = ordered_blocks.last().unwrap();
         let last_ordered_block_info = last_ordered_block.last_block().block_info();
-        assert_eq!(
-            last_ordered_block_info,
-            ordered_block_store.get_last_ordered_block().unwrap()
-        );
+        assert_eq!(last_ordered_block_info, ordered_block_store.get_last_ordered_block().unwrap());
 
         // Insert several ordered blocks for the next epoch
         let next_epoch = current_epoch + 1;
@@ -220,10 +214,7 @@ mod test {
         // Verify the last ordered block is the block with the highest epoch and round
         let last_ordered_block = ordered_blocks.last().unwrap();
         let last_ordered_block_info = last_ordered_block.last_block().block_info();
-        assert_eq!(
-            last_ordered_block_info,
-            ordered_block_store.get_last_ordered_block().unwrap()
-        );
+        assert_eq!(last_ordered_block_info, ordered_block_store.get_last_ordered_block().unwrap());
     }
 
     #[test]
@@ -342,14 +333,12 @@ mod test {
 
         // Verify the first ordered block was removed
         let all_ordered_blocks = ordered_block_store.get_all_ordered_blocks();
-        assert!(!all_ordered_blocks.contains_key(&(
-            first_ordered_block_info.epoch(),
-            first_ordered_block_info.round()
-        )));
+        assert!(!all_ordered_blocks
+            .contains_key(&(first_ordered_block_info.epoch(), first_ordered_block_info.round())));
         assert_eq!(
             all_ordered_blocks.len(),
-            num_ordered_blocks + num_ordered_blocks_next_epoch + num_ordered_blocks_future_epoch
-                - 1
+            num_ordered_blocks + num_ordered_blocks_next_epoch + num_ordered_blocks_future_epoch -
+                1
         );
 
         // Create a commit decision for the last ordered block (in the current epoch)
@@ -416,10 +405,7 @@ mod test {
 
         // Ensure the ordered blocks were all inserted
         let all_ordered_blocks = ordered_block_store.get_all_ordered_blocks();
-        assert_eq!(
-            all_ordered_blocks.len(),
-            num_ordered_blocks + num_ordered_blocks_next_epoch
-        );
+        assert_eq!(all_ordered_blocks.len(), num_ordered_blocks + num_ordered_blocks_next_epoch);
 
         // Verify the ordered blocks don't have any commit decisions
         for (_, (_, commit_decision)) in all_ordered_blocks.iter() {
@@ -438,11 +424,7 @@ mod test {
         ordered_block_store.update_commit_decision(&commit_decision);
 
         // Verify the commit decision was updated
-        verify_commit_decision(
-            &ordered_block_store,
-            &first_ordered_block_info,
-            commit_decision,
-        );
+        verify_commit_decision(&ordered_block_store, &first_ordered_block_info, commit_decision);
 
         // Create a commit decision for the last ordered block (in the current epoch)
         let last_ordered_block = ordered_blocks.last().unwrap();
@@ -456,11 +438,7 @@ mod test {
         ordered_block_store.update_commit_decision(&commit_decision);
 
         // Verify the commit decision was updated
-        verify_commit_decision(
-            &ordered_block_store,
-            &last_ordered_block_info,
-            commit_decision,
-        );
+        verify_commit_decision(&ordered_block_store, &last_ordered_block_info, commit_decision);
 
         // Verify the commit decisions for the remaining blocks are still missing
         let all_ordered_blocks = ordered_block_store.get_all_ordered_blocks();
@@ -481,11 +459,7 @@ mod test {
         ordered_block_store.update_commit_decision(&commit_decision);
 
         // Verify the commit decision was updated
-        verify_commit_decision(
-            &ordered_block_store,
-            &last_ordered_block_info,
-            commit_decision,
-        );
+        verify_commit_decision(&ordered_block_store, &last_ordered_block_info, commit_decision);
 
         // Verify the commit decisions for the remaining blocks are still missing
         let all_ordered_blocks = ordered_block_store.get_all_ordered_blocks();
@@ -543,10 +517,7 @@ mod test {
     /// Creates and returns a new ledger info with the specified epoch and round
     fn create_ledger_info(epoch: u64, round: Round) -> LedgerInfoWithSignatures {
         LedgerInfoWithSignatures::new(
-            LedgerInfo::new(
-                BlockInfo::random_with_epoch(epoch, round),
-                HashValue::random(),
-            ),
+            LedgerInfo::new(BlockInfo::random_with_epoch(epoch, round), HashValue::random()),
             AggregateSignature::empty(),
         )
     }
@@ -559,14 +530,10 @@ mod test {
     ) {
         // Get the commit decision for the block
         let all_ordered_blocks = ordered_block_store.get_all_ordered_blocks();
-        let (_, updated_commit_decision) = all_ordered_blocks
-            .get(&(block_info.epoch(), block_info.round()))
-            .unwrap();
+        let (_, updated_commit_decision) =
+            all_ordered_blocks.get(&(block_info.epoch(), block_info.round())).unwrap();
 
         // Verify the commit decision is expected
-        assert_eq!(
-            commit_decision,
-            updated_commit_decision.as_ref().unwrap().clone()
-        );
+        assert_eq!(commit_decision, updated_commit_decision.as_ref().unwrap().clone());
     }
 }

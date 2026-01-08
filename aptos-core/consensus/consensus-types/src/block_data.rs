@@ -8,15 +8,17 @@ use crate::{
     quorum_cert::QuorumCert,
     vote_data::VoteData,
 };
-use gaptos::aptos_bitvec::BitVec;
-use gaptos::aptos_crypto::hash::HashValue;
-use gaptos::aptos_crypto as aptos_crypto;
-use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
-use gaptos::aptos_types::{
-    aggregate_signature::AggregateSignature,
-    block_info::BlockInfo,
-    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
-    validator_txn::ValidatorTransaction,
+use gaptos::{
+    aptos_bitvec::BitVec,
+    aptos_crypto,
+    aptos_crypto::hash::HashValue,
+    aptos_crypto_derive::{BCSCryptoHash, CryptoHasher},
+    aptos_types::{
+        aggregate_signature::AggregateSignature,
+        block_info::BlockInfo,
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+        validator_txn::ValidatorTransaction,
+    },
 };
 use mirai_annotations::*;
 use serde::{Deserialize, Serialize};
@@ -41,10 +43,10 @@ pub enum BlockType {
         /// immediately preceeding rounds that didn't produce a successful block.
         failed_authors: Vec<(Round, Author)>,
     },
-    /// A genesis block is the first committed block in any epoch that is identically constructed on
-    /// all validators by any (potentially different) LedgerInfo that justifies the epoch change
-    /// from the previous epoch.  The genesis block is used as the first root block of the
-    /// BlockTree for all epochs.
+    /// A genesis block is the first committed block in any epoch that is identically constructed
+    /// on all validators by any (potentially different) LedgerInfo that justifies the epoch
+    /// change from the previous epoch.  The genesis block is used as the first root block of
+    /// the BlockTree for all epochs.
     Genesis,
 
     /// Proposal with extensions (e.g. system transactions).
@@ -79,16 +81,16 @@ pub struct BlockData {
     /// * Clients determining if they are relatively up-to-date with respect to the block chain.
     ///
     /// It makes the following guarantees:
-    ///   1. Time Monotonicity: Time is monotonically increasing in the block chain.
-    ///      (i.e. If H1 < H2, H1.Time < H2.Time).
-    ///   2. If a block of transactions B is agreed on with timestamp T, then at least
-    ///      f+1 honest validators think that T is in the past. An honest validator will
-    ///      only vote on a block when its own clock >= timestamp T.
-    ///   3. If a block of transactions B has a QC with timestamp T, an honest validator
-    ///      will not serve such a block to other validators until its own clock >= timestamp T.
-    ///   4. Current: an honest validator is not issuing blocks with a timestamp in the
-    ///       future. Currently we consider a block is malicious if it was issued more
-    ///       that 5 minutes in the future.
+    ///   1. Time Monotonicity: Time is monotonically increasing in the block chain. (i.e. If H1 <
+    ///      H2, H1.Time < H2.Time).
+    ///   2. If a block of transactions B is agreed on with timestamp T, then at least f+1 honest
+    ///      validators think that T is in the past. An honest validator will only vote on a block
+    ///      when its own clock >= timestamp T.
+    ///   3. If a block of transactions B has a QC with timestamp T, an honest validator will not
+    ///      serve such a block to other validators until its own clock >= timestamp T.
+    ///   4. Current: an honest validator is not issuing blocks with a timestamp in the future.
+    ///      Currently we consider a block is malicious if it was issued more that 5 minutes in the
+    ///      future.
     timestamp_usecs: u64,
     /// Contains the quorum certified ancestor and whether the quorum certified ancestor was
     /// voted on successfully
@@ -102,7 +104,7 @@ impl BlockData {
         match &self.block_type {
             BlockType::Proposal { author, .. } | BlockType::DAGBlock { author, .. } => {
                 Some(*author)
-            },
+            }
             BlockType::ProposalExt(p) => Some(*p.author()),
             _ => None,
         }
@@ -117,10 +119,7 @@ impl BlockData {
     }
 
     pub fn parent_id(&self) -> HashValue {
-        if let BlockType::DAGBlock {
-            parent_block_id, ..
-        } = self.block_type()
-        {
+        if let BlockType::DAGBlock { parent_block_id, .. } = self.block_type() {
             *parent_block_id
         } else {
             self.quorum_cert.certified_block().id()
@@ -131,7 +130,7 @@ impl BlockData {
         match &self.block_type {
             BlockType::Proposal { payload, .. } | BlockType::DAGBlock { payload, .. } => {
                 Some(payload)
-            },
+            }
             BlockType::ProposalExt(p) => p.payload(),
             _ => None,
         }
@@ -146,11 +145,7 @@ impl BlockData {
     }
 
     pub fn dag_nodes(&self) -> Option<&Vec<HashValue>> {
-        if let BlockType::DAGBlock {
-            node_digests: nodes_digests,
-            ..
-        } = &self.block_type
-        {
+        if let BlockType::DAGBlock { node_digests: nodes_digests, .. } = &self.block_type {
             Some(nodes_digests)
         } else {
             None
@@ -181,9 +176,9 @@ impl BlockData {
     /// rounds that didn't produce a successful block
     pub fn failed_authors(&self) -> Option<&Vec<(Round, Author)>> {
         match &self.block_type {
-            BlockType::Proposal { failed_authors, .. }
-            | BlockType::NilBlock { failed_authors, .. }
-            | BlockType::DAGBlock { failed_authors, .. } => Some(failed_authors),
+            BlockType::Proposal { failed_authors, .. } |
+            BlockType::NilBlock { failed_authors, .. } |
+            BlockType::DAGBlock { failed_authors, .. } => Some(failed_authors),
             BlockType::ProposalExt(p) => Some(p.failed_authors()),
             BlockType::Genesis => None,
         }
@@ -223,13 +218,7 @@ impl BlockData {
         quorum_cert: QuorumCert,
         block_type: BlockType,
     ) -> Self {
-        Self {
-            epoch,
-            round,
-            timestamp_usecs,
-            quorum_cert,
-            block_type,
-        }
+        Self { epoch, round, timestamp_usecs, quorum_cert, block_type }
     }
 
     #[cfg(any(test, feature = "fuzzing"))]
@@ -323,11 +312,7 @@ impl BlockData {
             round,
             timestamp_usecs,
             quorum_cert,
-            block_type: BlockType::Proposal {
-                payload,
-                author,
-                failed_authors,
-            },
+            block_type: BlockType::Proposal { payload, author, failed_authors },
         }
     }
 
@@ -354,7 +339,8 @@ impl BlockData {
         }
     }
 
-    /// It's a reconfiguration suffix block if the parent block's executed state indicates next epoch.
+    /// It's a reconfiguration suffix block if the parent block's executed state indicates next
+    /// epoch.
     pub fn is_reconfiguration_suffix(&self) -> bool {
         self.quorum_cert.certified_block().has_reconfiguration()
     }

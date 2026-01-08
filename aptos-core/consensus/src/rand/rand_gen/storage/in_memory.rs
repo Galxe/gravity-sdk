@@ -31,9 +31,7 @@ impl<D: TAugmentedData> RandStorage<D> for InMemRandDb<D> {
     }
 
     fn save_aug_data(&self, aug_data: &AugData<D>) -> anyhow::Result<()> {
-        self.aug_data
-            .write()
-            .insert(aug_data.id(), aug_data.clone());
+        self.aug_data.write().insert(aug_data.id(), aug_data.clone());
         Ok(())
     }
 
@@ -41,9 +39,7 @@ impl<D: TAugmentedData> RandStorage<D> for InMemRandDb<D> {
         &self,
         certified_aug_data: &CertifiedAugData<D>,
     ) -> anyhow::Result<()> {
-        self.certified_aug_data
-            .write()
-            .insert(certified_aug_data.id(), certified_aug_data.clone());
+        self.certified_aug_data.write().insert(certified_aug_data.id(), certified_aug_data.clone());
         Ok(())
     }
 

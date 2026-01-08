@@ -5,23 +5,25 @@ use crate::{
     quorum_store::{
         batch_coordinator::BatchCoordinatorCommand, batch_generator::BatchGenerator,
         batch_store::BatchWriter, quorum_store_db::MockQuorumStoreDB, types::PersistedValue,
-    }, test_utils::{
+    },
+    test_utils::{
         create_signed_transaction, create_vec_signed_transactions,
         create_vec_signed_transactions_with_gas,
-    }
+    },
 };
-use gaptos::aptos_config::config::QuorumStoreConfig;
 use aptos_consensus_types::{
     common::{TransactionInProgress, TransactionSummary},
     proof_of_store::{BatchId, SignedBatchInfo},
 };
 use aptos_mempool::{QuorumStoreRequest, QuorumStoreResponse};
-use gaptos::aptos_types::transaction::SignedTransaction;
 use futures::{
     channel::mpsc::{channel, Receiver},
     StreamExt,
 };
-use gaptos::move_core_types::account_address::AccountAddress;
+use gaptos::{
+    aptos_config::config::QuorumStoreConfig, aptos_types::transaction::SignedTransaction,
+    move_core_types::account_address::AccountAddress,
+};
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use tokio::{sync::mpsc::channel as TokioChannel, time::timeout};
 
@@ -51,12 +53,10 @@ async fn queue_mempool_batch_response(
         _return_non_full,
         exclude_txns,
         callback,
-    ) = timeout(
-        Duration::from_millis(1_000),
-        quorum_store_to_mempool_receiver.select_next_some(),
-    )
-    .await
-    .unwrap()
+    ) =
+        timeout(Duration::from_millis(1_000), quorum_store_to_mempool_receiver.select_next_some())
+            .await
+            .unwrap()
     {
         let mut size = 0;
         let mut sorted_txns = txns.clone();
@@ -70,14 +70,15 @@ async fn queue_mempool_batch_response(
             })
             .collect();
         let ret: Vec<_> = chosen_txns.into_iter().rev().collect();
-        callback
-            .send(Ok(QuorumStoreResponse::GetBatchResponse(ret)))
-            .unwrap();
+        callback.send(Ok(QuorumStoreResponse::GetBatchResponse(ret))).unwrap();
         exclude_txns
             .into_iter()
-            .map(|(txn, txn_in_progress)| (
-                TransactionSummary::new(txn.sender, txn.sequence_number, txn.hash), 
-                TransactionInProgress::new(txn_in_progress.gas_unit_price)))
+            .map(|(txn, txn_in_progress)| {
+                (
+                    TransactionSummary::new(txn.sender, txn.sequence_number, txn.hash),
+                    TransactionInProgress::new(txn_in_progress.gas_unit_price),
+                )
+            })
             .collect()
     } else {
         panic!("Unexpected variant")
@@ -92,10 +93,7 @@ async fn test_batch_creation() {
     let txn_size = 168;
     let max_size = 9 * txn_size;
 
-    let config = QuorumStoreConfig {
-        sender_max_total_bytes: max_size,
-        ..Default::default()
-    };
+    let config = QuorumStoreConfig { sender_max_total_bytes: max_size, ..Default::default() };
 
     let author = AccountAddress::random();
     let mut batch_generator = BatchGenerator::new(
@@ -187,10 +185,7 @@ async fn test_batch_creation() {
             .await
             .unwrap();
     }
-    timeout(Duration::from_millis(10_000), join_handle)
-        .await
-        .unwrap()
-        .unwrap();
+    timeout(Duration::from_millis(10_000), join_handle).await.unwrap().unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -201,10 +196,7 @@ async fn test_bucketed_batch_creation() {
     let txn_size = 168;
     let max_size = 9 * txn_size;
 
-    let config = QuorumStoreConfig {
-        sender_max_total_bytes: max_size,
-        ..Default::default()
-    };
+    let config = QuorumStoreConfig { sender_max_total_bytes: max_size, ..Default::default() };
     let buckets = config.batch_buckets.clone();
 
     let author = AccountAddress::random();
@@ -304,10 +296,7 @@ async fn test_bucketed_batch_creation() {
             assert_eq!(1, data.len());
             let data = data[0].clone();
             assert_eq!(data.batch_id(), BatchId::new_for_test(5));
-            assert_eq!(
-                data.batch_info().gas_bucket_start(),
-                buckets[buckets.len() - 1]
-            );
+            assert_eq!(data.batch_info().gas_bucket_start(), buckets[buckets.len() - 1]);
             let txns = data.into_transactions();
             assert_eq!(txns.len(), signed_txns.len());
         } else {
@@ -322,10 +311,7 @@ async fn test_bucketed_batch_creation() {
             .await
             .unwrap();
     }
-    timeout(Duration::from_millis(10_000), join_handle)
-        .await
-        .unwrap()
-        .unwrap();
+    timeout(Duration::from_millis(10_000), join_handle).await.unwrap().unwrap();
 }
 
 #[tokio::test]
@@ -333,10 +319,7 @@ async fn test_max_batch_txns() {
     let (quorum_store_to_mempool_tx, mut quorum_store_to_mempool_rx) = channel(1_024);
     let (batch_coordinator_cmd_tx, mut batch_coordinator_cmd_rx) = TokioChannel(100);
 
-    let config = QuorumStoreConfig {
-        sender_max_batch_txns: 10,
-        ..Default::default()
-    };
+    let config = QuorumStoreConfig { sender_max_batch_txns: 10, ..Default::default() };
     let max_batch_bytes = config.sender_max_batch_bytes;
 
     let author = AccountAddress::random();
@@ -380,10 +363,7 @@ async fn test_max_batch_txns() {
         .await
         .unwrap();
 
-    timeout(Duration::from_millis(10_000), join_handle)
-        .await
-        .unwrap()
-        .unwrap();
+    timeout(Duration::from_millis(10_000), join_handle).await.unwrap().unwrap();
 }
 
 #[tokio::test]
@@ -392,14 +372,9 @@ async fn test_max_batch_bytes() {
     let (batch_coordinator_cmd_tx, mut batch_coordinator_cmd_rx) = TokioChannel(100);
 
     let txn_bytes_len = 168;
-    assert_eq!(
-        create_vec_signed_transactions(1)[0].txn_bytes_len(),
-        txn_bytes_len
-    );
-    let config = QuorumStoreConfig {
-        sender_max_batch_bytes: txn_bytes_len * 10,
-        ..Default::default()
-    };
+    assert_eq!(create_vec_signed_transactions(1)[0].txn_bytes_len(), txn_bytes_len);
+    let config =
+        QuorumStoreConfig { sender_max_batch_bytes: txn_bytes_len * 10, ..Default::default() };
 
     let author = AccountAddress::random();
     let mut batch_generator = BatchGenerator::new(
@@ -442,10 +417,7 @@ async fn test_max_batch_bytes() {
         .await
         .unwrap();
 
-    timeout(Duration::from_millis(10_000), join_handle)
-        .await
-        .unwrap()
-        .unwrap();
+    timeout(Duration::from_millis(10_000), join_handle).await.unwrap().unwrap();
 }
 
 #[tokio::test]
@@ -499,10 +471,7 @@ async fn test_max_num_batches() {
         .await
         .unwrap();
 
-    timeout(Duration::from_millis(10_000), join_handle)
-        .await
-        .unwrap()
-        .unwrap();
+    timeout(Duration::from_millis(10_000), join_handle).await.unwrap().unwrap();
 }
 
 #[tokio::test]
@@ -510,10 +479,7 @@ async fn test_last_bucketed_batch() {
     let (quorum_store_to_mempool_tx, mut quorum_store_to_mempool_rx) = channel(1_024);
     let (batch_coordinator_cmd_tx, mut batch_coordinator_cmd_rx) = TokioChannel(100);
 
-    let config = QuorumStoreConfig {
-        sender_max_batch_txns: 10,
-        ..Default::default()
-    };
+    let config = QuorumStoreConfig { sender_max_batch_txns: 10, ..Default::default() };
     let max_batch_bytes = config.sender_max_batch_bytes;
     let buckets = config.batch_buckets.clone();
 
@@ -561,10 +527,7 @@ async fn test_last_bucketed_batch() {
         .await
         .unwrap();
 
-    timeout(Duration::from_millis(10_000), join_handle)
-        .await
-        .unwrap()
-        .unwrap();
+    timeout(Duration::from_millis(10_000), join_handle).await.unwrap().unwrap();
 }
 
 #[tokio::test]
@@ -619,10 +582,7 @@ async fn test_sender_max_num_batches_single_bucket() {
         .await
         .unwrap();
 
-    timeout(Duration::from_millis(10_000), join_handle)
-        .await
-        .unwrap()
-        .unwrap();
+    timeout(Duration::from_millis(10_000), join_handle).await.unwrap().unwrap();
 }
 
 #[tokio::test]
@@ -688,10 +648,7 @@ async fn test_sender_max_num_batches_multi_buckets() {
         .await
         .unwrap();
 
-    timeout(Duration::from_millis(10_000), join_handle)
-        .await
-        .unwrap()
-        .unwrap();
+    timeout(Duration::from_millis(10_000), join_handle).await.unwrap().unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -733,10 +690,7 @@ async fn test_batches_in_progress_same_txn_across_batches() {
     assert_eq!(first_three_result.len(), 1);
     assert_eq!(batch_generator.txns_in_progress_sorted_len(), 3);
 
-    timeout(Duration::from_millis(10_000), join_handle)
-        .await
-        .unwrap()
-        .unwrap();
+    timeout(Duration::from_millis(10_000), join_handle).await.unwrap().unwrap();
 
     // After all batches are complete, txns_in_progress_sorted will be empty.
     batch_generator
@@ -784,8 +738,5 @@ async fn test_remote_batches_in_progress() {
     assert_eq!(result.len(), 1);
     assert_eq!(batch_generator.txns_in_progress_sorted_len(), 3);
 
-    timeout(Duration::from_millis(10_000), join_handle)
-        .await
-        .unwrap()
-        .unwrap();
+    timeout(Duration::from_millis(10_000), join_handle).await.unwrap().unwrap();
 }

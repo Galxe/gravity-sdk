@@ -1,29 +1,36 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 use crate::{
-    monitor, network::{NetworkSender, QuorumStoreSender}, quorum_store::{
+    monitor,
+    network::{NetworkSender, QuorumStoreSender},
+    quorum_store::{
         batch_store::BatchWriter,
         quorum_store_db::QuorumStoreStorage,
         types::Batch,
         utils::{MempoolProxy, TimeExpirations},
-    }
+    },
 };
-use gaptos::{ aptos_config::config::QuorumStoreConfig};
 use aptos_consensus_types::{
     common::{TransactionInProgress, TransactionSummary},
     proof_of_store::{BatchId, BatchInfo},
 };
-use gaptos::aptos_experimental_runtimes::thread_manager::optimal_min_len;
-use gaptos::aptos_logger::prelude::*;
 use aptos_mempool::QuorumStoreRequest;
-use gaptos::aptos_types::{transaction::SignedTransaction, PeerId};
 use futures_channel::mpsc::Sender;
+use gaptos::{
+    aptos_config::config::QuorumStoreConfig,
+    aptos_consensus::quorum_store::counters,
+    aptos_experimental_runtimes::thread_manager::optimal_min_len,
+    aptos_logger::prelude::*,
+    aptos_types::{transaction::SignedTransaction, PeerId},
+};
 use rayon::prelude::*;
 use std::{
-    collections::{btree_map::Entry, BTreeMap, HashMap, HashSet}, hash::Hash, sync::Arc, time::{Duration, Instant}
+    collections::{btree_map::Entry, BTreeMap, HashMap, HashSet},
+    hash::Hash,
+    sync::Arc,
+    time::{Duration, Instant},
 };
 use tokio::time::Interval;
-use gaptos::aptos_consensus::quorum_store::counters as counters;
 
 #[derive(Debug)]
 pub enum BatchGeneratorCommand {
@@ -46,10 +53,7 @@ struct BatchInProgress {
 
 impl BatchInProgress {
     fn new(txns: Vec<TransactionSummary>, expiry_time_usecs: u64) -> Self {
-        Self {
-            txns,
-            expiry_time_usecs,
-        }
+        Self { txns, expiry_time_usecs }
     }
 }
 
@@ -81,9 +85,8 @@ impl BatchGenerator {
         mempool_tx: Sender<QuorumStoreRequest>,
         mempool_txn_pull_timeout_ms: u64,
     ) -> Self {
-        let batch_id = if let Some(mut id) = db
-            .clean_and_get_batch_id(epoch)
-            .expect("Could not read from db")
+        let batch_id = if let Some(mut id) =
+            db.clean_and_get_batch_id(epoch).expect("Could not read from db")
         {
             // If the node shut down mid-batch, then this increment is needed
             id.increment();
@@ -94,8 +97,7 @@ impl BatchGenerator {
         debug!("Initialized with batch_id of {}", batch_id);
         let mut incremented_batch_id = batch_id;
         incremented_batch_id.increment();
-        db.save_batch_id(epoch, incremented_batch_id)
-            .expect("Could not save to db");
+        db.save_batch_id(epoch, incremented_batch_id).expect("Could not save to db");
 
         Self {
             epoch,
@@ -111,10 +113,7 @@ impl BatchGenerator {
             batch_expirations: TimeExpirations::new(),
             latest_block_timestamp: 0,
             last_end_batch_time: Instant::now(),
-            back_pressure: BackPressure {
-                txn_count: false,
-                proof_count: false,
-            },
+            back_pressure: BackPressure { txn_count: false, proof_count: false },
         }
     }
 
@@ -160,12 +159,9 @@ impl BatchGenerator {
             .map_or(expiry_time_usecs, |batch_in_progress| {
                 expiry_time_usecs.max(batch_in_progress.expiry_time_usecs)
             });
-        self.batches_in_progress.insert(
-            (author, batch_id),
-            BatchInProgress::new(txns, updated_expiry_time_usecs),
-        );
-        self.batch_expirations
-            .add_item((author, batch_id), updated_expiry_time_usecs);
+        self.batches_in_progress
+            .insert((author, batch_id), BatchInProgress::new(txns, updated_expiry_time_usecs));
+        self.batch_expirations.add_item((author, batch_id), updated_expiry_time_usecs);
     }
 
     fn create_new_batch(
@@ -176,23 +172,14 @@ impl BatchGenerator {
     ) -> Batch {
         let batch_id = self.batch_id;
         self.batch_id.increment();
-        self.db
-            .save_batch_id(self.epoch, self.batch_id)
-            .expect("Could not save to db");
+        self.db.save_batch_id(self.epoch, self.batch_id).expect("Could not save to db");
 
         self.insert_batch(self.my_peer_id, batch_id, txns.clone(), expiry_time);
 
         counters::CREATED_BATCHES_COUNT.inc();
         counters::num_txn_per_batch(bucket_start.to_string().as_str(), txns.len());
         txn_metrics::TxnLifeTime::get_txn_life_time().record_batch(batch_id, &txns);
-        Batch::new(
-            batch_id,
-            txns,
-            self.epoch,
-            expiry_time,
-            self.my_peer_id,
-            bucket_start,
-        )
+        Batch::new(batch_id, txns, self.epoch, expiry_time, self.my_peer_id, bucket_start)
     }
 
     /// Push num_txns from txns into batches. If num_txns is larger than max size, then multiple
@@ -245,14 +232,8 @@ impl BatchGenerator {
         // so will not reorder accounts or their sequence numbers as long as they have the same gas.
         pulled_txns.sort_by_key(|txn| u64::MAX - txn.gas_unit_price());
 
-        let reverse_buckets_excluding_zero: Vec<_> = self
-            .config
-            .batch_buckets
-            .iter()
-            .skip(1)
-            .rev()
-            .cloned()
-            .collect();
+        let reverse_buckets_excluding_zero: Vec<_> =
+            self.config.batch_buckets.iter().skip(1).rev().cloned().collect();
 
         let mut max_batches_remaining = self.config.sender_max_num_batches as u64;
         let mut batches = vec![];
@@ -300,10 +281,7 @@ impl BatchGenerator {
         match removed {
             Some(batch_in_progress) => {
                 for txn in batch_in_progress.txns {
-                    debug!(
-                        "QS: removing txn from txns_in_progress_sorted: {:?}",
-                        txn
-                    );
+                    debug!("QS: removing txn from txns_in_progress_sorted: {:?}", txn);
                     if let Entry::Occupied(mut o) = self.txns_in_progress_sorted.entry(txn) {
                         let info = o.get_mut();
                         if info.decrement() == 0 {
@@ -312,7 +290,7 @@ impl BatchGenerator {
                     }
                 }
                 true
-            },
+            }
             None => false,
         }
     }
@@ -329,10 +307,7 @@ impl BatchGenerator {
 
     pub(crate) async fn handle_scheduled_pull(&mut self, max_count: u64) -> Vec<Batch> {
         counters::BATCH_PULL_EXCLUDED_TXNS.observe(self.txns_in_progress_sorted.len() as f64);
-        trace!(
-            "QS: excluding txs len: {:?}",
-            self.txns_in_progress_sorted.len()
-        );
+        trace!("QS: excluding txs len: {:?}", self.txns_in_progress_sorted.len());
         let mut exclude_transactions = self.txns_in_progress_sorted.clone();
         for (txn_summary, txn_in_progress) in self.commited_txns_buffer.iter() {
             exclude_transactions.insert(txn_summary.clone(), txn_in_progress.clone());
@@ -348,7 +323,7 @@ impl BatchGenerator {
             .unwrap_or_default();
 
         trace!("QS: pulled_txns len: {:?}", pulled_txns.len());
-        
+
         if pulled_txns.is_empty() {
             counters::PULLED_EMPTY_TXNS_COUNT.inc();
             // Quorum store metrics
@@ -368,8 +343,8 @@ impl BatchGenerator {
         counters::BATCH_CREATION_DURATION.observe_duration(self.last_end_batch_time.elapsed());
 
         let bucket_compute_start = Instant::now();
-        let expiry_time = gaptos::aptos_infallible::duration_since_epoch().as_micros() as u64
-            + self.config.batch_expiry_gap_when_init_usecs;
+        let expiry_time = gaptos::aptos_infallible::duration_since_epoch().as_micros() as u64 +
+            self.config.batch_expiry_gap_when_init_usecs;
         let batches = self.bucket_into_batches(&mut pulled_txns, expiry_time);
         self.last_end_batch_time = Instant::now();
         counters::BATCH_CREATION_COMPUTE_LATENCY.observe_duration(bucket_compute_start.elapsed());
@@ -383,8 +358,8 @@ impl BatchGenerator {
         batch_id: BatchId,
         txns: Vec<SignedTransaction>,
     ) {
-        let expiry_time_usecs = gaptos::aptos_infallible::duration_since_epoch().as_micros() as u64
-            + self.config.remote_batch_expiry_gap_when_init_usecs;
+        let expiry_time_usecs = gaptos::aptos_infallible::duration_since_epoch().as_micros() as u64 +
+            self.config.remote_batch_expiry_gap_when_init_usecs;
         self.insert_batch(author, batch_id, txns, expiry_time_usecs);
     }
 
@@ -404,14 +379,15 @@ impl BatchGenerator {
             Duration::from_millis(self.config.back_pressure.increase_duration_ms);
         let mut back_pressure_decrease_latest = start;
         let mut back_pressure_increase_latest = start;
-        let mut dynamic_pull_txn_per_s = (self.config.back_pressure.dynamic_min_txn_per_s
-            + self.config.back_pressure.dynamic_max_txn_per_s)
-            / 2;
+        let mut dynamic_pull_txn_per_s = (self.config.back_pressure.dynamic_min_txn_per_s +
+            self.config.back_pressure.dynamic_max_txn_per_s) /
+            2;
         loop {
             let _timer = counters::BATCH_GENERATOR_MAIN_LOOP.start_timer();
             counters::PROCESS_TXN_IN_BATCH_GENERATOR.reset();
-            counters::PROCESS_TXN_IN_BATCH_GENERATOR.inc_by(self.txns_in_progress_sorted.len() as u64);
-        tokio::select! {
+            counters::PROCESS_TXN_IN_BATCH_GENERATOR
+                .inc_by(self.txns_in_progress_sorted.len() as u64);
+            tokio::select! {
                 biased;
                 Some(cmd) = cmd_rx.recv() => monitor!("batch_generator_handle_command", {
                     match cmd {
@@ -425,7 +401,7 @@ impl BatchGenerator {
                                 "Decreasing block timestamp"
                             );
                             self.latest_block_timestamp = block_timestamp;
-                            
+
                             // keep the last commited txn for each sender to avoid duplicate txn
                             self.commited_txns_buffer.clear();
                             for (author, batch_id) in batches.iter().map(|b| (b.author(), b.batch_id())) {
@@ -436,7 +412,7 @@ impl BatchGenerator {
                                         }
                                     }
                                 }
-                                
+
                                 if self.remove_batch_in_progress(author, batch_id) {
                                     counters::BATCH_IN_PROGRESS_COMMITTED.inc();
                                 }
@@ -541,17 +517,17 @@ impl BatchGenerator {
                             );
                         let batches = self.handle_scheduled_pull(pull_max_txn).await;
                         if !batches.is_empty() {
-                            info!("QS: batches {:?} take {:?}[{:?}]({:?}) ms, dynamic_pull_max_txn {:?}, dynamic_pull_txn_per_s {:?}, pull_max_txn {:?}, batch in progress {:?}", 
-                                batches.len(), 
-                                since_last_non_empty_pull_ms, 
+                            info!("QS: batches {:?} take {:?}[{:?}]({:?}) ms, dynamic_pull_max_txn {:?}, dynamic_pull_txn_per_s {:?}, pull_max_txn {:?}, batch in progress {:?}",
+                                batches.len(),
+                                since_last_non_empty_pull_ms,
                                 actual_since_last_non_empty_pull_ms,
                                 tick_start.elapsed().as_millis(),
-                                dynamic_pull_max_txn, 
-                                dynamic_pull_txn_per_s, 
+                                dynamic_pull_max_txn,
+                                dynamic_pull_txn_per_s,
                                 pull_max_txn,
                                 self.batches_in_progress.len());
                             last_non_empty_pull = tick_start;
-                        
+
                             let persist_start = Instant::now();
                             let mut persist_requests = vec![];
                             for batch in batches.clone().into_iter() {

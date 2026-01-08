@@ -60,12 +60,8 @@ fn test_safety_data_upgrade() {
         pub preferred_round: u64,
         pub last_vote: Option<Vote>,
     }
-    let old_data = OldSafetyData {
-        epoch: 1,
-        last_voted_round: 10,
-        preferred_round: 100,
-        last_vote: None,
-    };
+    let old_data =
+        OldSafetyData { epoch: 1, last_voted_round: 10, preferred_round: 100, last_vote: None };
     let value = serde_json::to_value(old_data).unwrap();
     let _: SafetyData = serde_json::from_value(value).unwrap();
 }

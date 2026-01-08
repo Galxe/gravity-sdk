@@ -11,23 +11,25 @@ use crate::liveness::{
     },
     proposer_election::{choose_index, ProposerElection},
 };
-use gaptos::aptos_bitvec::BitVec;
 use aptos_consensus_types::common::{Author, Round};
-use gaptos::aptos_crypto::{bls12381, HashValue};
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_keygen::KeyGen;
-use gaptos::aptos_storage_interface::DbReader;
-use gaptos::aptos_types::{
-    account_address::AccountAddress,
-    account_config::{new_block_event_key, NewBlockEvent},
-    contract_event::{ContractEvent, EventWithVersion},
-    epoch_state::EpochState,
-    transaction::Version,
-    validator_verifier::{ValidatorConsensusInfo, ValidatorVerifier},
-};
 use claims::assert_err;
+use gaptos::{
+    aptos_bitvec::BitVec,
+    aptos_crypto::{bls12381, HashValue},
+    aptos_infallible::Mutex,
+    aptos_keygen::KeyGen,
+    aptos_storage_interface::DbReader,
+    aptos_types::{
+        account_address::AccountAddress,
+        account_config::{new_block_event_key, NewBlockEvent},
+        contract_event::{ContractEvent, EventWithVersion},
+        epoch_state::EpochState,
+        transaction::Version,
+        validator_verifier::{ValidatorConsensusInfo, ValidatorVerifier},
+    },
+    move_core_types::{language_storage::TypeTag, move_resource::MoveStructType},
+};
 use itertools::Itertools;
-use gaptos::move_core_types::{language_storage::TypeTag, move_resource::MoveStructType};
 use num_traits::Pow;
 use std::{collections::HashMap, sync::Arc};
 
@@ -104,12 +106,7 @@ impl Example1 {
         let aptos_db = Arc::new(MockDbReader::new());
         let backend = AptosDBBackend::new(window_size, 0, aptos_db.clone());
 
-        Self {
-            validators0,
-            validators1,
-            aptos_db,
-            backend,
-        }
+        Self { validators0, validators1, aptos_db, backend }
     }
 
     fn history(&self) -> Vec<NewBlockEvent> {
@@ -117,27 +114,20 @@ impl Example1 {
     }
 
     fn step1(&mut self) {
-        self.aptos_db
-            .add_event_with_data(self.validators0[0], vec![1, 2], vec![3]);
-        self.aptos_db
-            .add_event_with_data(self.validators0[0], vec![1, 2], vec![]);
-        self.aptos_db
-            .add_event_with_data(self.validators0[1], vec![0, 2], vec![2]);
-        self.aptos_db
-            .add_event_with_data(self.validators0[2], vec![0, 1], vec![]);
+        self.aptos_db.add_event_with_data(self.validators0[0], vec![1, 2], vec![3]);
+        self.aptos_db.add_event_with_data(self.validators0[0], vec![1, 2], vec![]);
+        self.aptos_db.add_event_with_data(self.validators0[1], vec![0, 2], vec![2]);
+        self.aptos_db.add_event_with_data(self.validators0[2], vec![0, 1], vec![]);
     }
 
     fn step2(&mut self) {
-        self.aptos_db
-            .add_event_with_data(self.validators0[3], vec![0, 1], vec![1]);
-        self.aptos_db
-            .add_event_with_data(self.validators0[3], vec![0, 1], vec![1]);
+        self.aptos_db.add_event_with_data(self.validators0[3], vec![0, 1], vec![1]);
+        self.aptos_db.add_event_with_data(self.validators0[3], vec![0, 1], vec![1]);
     }
 
     fn step3(&mut self) {
         self.aptos_db.new_epoch();
-        self.aptos_db
-            .add_event_with_data(self.validators1[3], vec![0, 1], vec![0]);
+        self.aptos_db.add_event_with_data(self.validators1[3], vec![0, 1], vec![0]);
     }
 }
 
@@ -152,11 +142,7 @@ fn test_aggregation_counting() {
 
     assert_eq!(
         aggregation.count_proposals(&epoch_to_validators, &example1.history()),
-        HashMap::from([
-            (validators0[0], 2),
-            (validators0[1], 1),
-            (validators0[2], 1),
-        ])
+        HashMap::from([(validators0[0], 2), (validators0[1], 1), (validators0[2], 1),])
     );
     assert_eq!(
         aggregation.count_failed_proposals(&epoch_to_validators, &example1.history()),
@@ -164,11 +150,7 @@ fn test_aggregation_counting() {
     );
     assert_eq!(
         aggregation.count_votes(&epoch_to_validators, &example1.history()),
-        HashMap::from([
-            (validators0[0], 2),
-            (validators0[1], 1),
-            (validators0[2], 1),
-        ])
+        HashMap::from([(validators0[0], 2), (validators0[1], 1), (validators0[2], 1),])
     );
 
     example1.step2();
@@ -225,11 +207,7 @@ fn test_aggregation_counting() {
     );
     assert_eq!(
         aggregation.count_failed_proposals(&epoch_to_validators, &example1.history()),
-        HashMap::from([
-            (validators1[0], 1),
-            (validators1[2], 1),
-            (validators1[1], 2),
-        ])
+        HashMap::from([(validators1[0], 1), (validators1[2], 1), (validators1[1], 2),])
     );
     assert_eq!(
         aggregation.count_votes(&epoch_to_validators, &example1.history()),
@@ -313,14 +291,8 @@ fn test_api(use_root_hash: bool) {
 
     for epoch in 1..1000 {
         aptos_db.new_epoch();
-        assert_eq!(
-            (epoch, 1),
-            aptos_db.add_event_with_data(proposers[0], vec![1, 2], vec![])
-        );
-        assert_eq!(
-            (epoch, 2),
-            aptos_db.add_event_with_data(proposers[0], vec![3], vec![])
-        );
+        assert_eq!((epoch, 1), aptos_db.add_event_with_data(proposers[0], vec![1, 2], vec![]));
+        assert_eq!((epoch, 2), aptos_db.add_event_with_data(proposers[0], vec![3], vec![]));
         let backend = Arc::new(AptosDBBackend::new(1, 4, aptos_db.clone()));
         let leader_reputation = LeaderReputation::new(
             epoch,
@@ -490,12 +462,7 @@ impl DbReader for MockDbReader {
         *self.fetched.lock() += 1;
         let events = self.events.lock();
         // println!("Events {:?}", *events);
-        Ok(events
-            .iter()
-            .skip(events.len().saturating_sub(num_events))
-            .rev()
-            .cloned()
-            .collect())
+        Ok(events.iter().skip(events.len().saturating_sub(num_events)).rev().cloned().collect())
     }
 
     /// Returns the latest version, error on on non-bootstrapped DB.
@@ -533,12 +500,8 @@ fn backend_wrapper_test() {
     let mut fetch_count = 0;
 
     let mut assert_history = |round, expected_history: Vec<Round>, to_fetch| {
-        let history: Vec<Round> = backend
-            .get_block_metadata(1, round)
-            .0
-            .iter()
-            .map(|e| e.round())
-            .collect();
+        let history: Vec<Round> =
+            backend.get_block_metadata(1, round).0.iter().map(|e| e.round()).collect();
         assert_eq!(expected_history, history, "At round {}", round);
         if to_fetch {
             fetch_count += 1;
@@ -705,11 +668,7 @@ fn test_extract_epoch_to_proposers_impl() {
     assert_eq!(
         HashMap::from([(2, vec![authors[2]]), (3, vec![authors[3]])]),
         extract_epoch_to_proposers_impl(
-            &[
-                (&epoch_states[1], 100u64),
-                (&epoch_states[2], 100u64),
-                (&epoch_states[3], 10000u64)
-            ],
+            &[(&epoch_states[1], 100u64), (&epoch_states[2], 100u64), (&epoch_states[3], 10000u64)],
             3,
             &[authors[3]],
             1000

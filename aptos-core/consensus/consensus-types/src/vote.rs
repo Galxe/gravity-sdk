@@ -6,11 +6,13 @@ use crate::{
     common::Author, quorum_cert::QuorumCert, timeout_2chain::TwoChainTimeout, vote_data::VoteData,
 };
 use anyhow::{ensure, Context};
-use gaptos::aptos_crypto::{bls12381, hash::CryptoHash, CryptoMaterialError};
-use gaptos::aptos_short_hex_str::AsShortHexStr;
-use gaptos::aptos_types::{
-    ledger_info::LedgerInfo, validator_signer::ValidatorSigner,
-    validator_verifier::ValidatorVerifier,
+use gaptos::{
+    aptos_crypto::{bls12381, hash::CryptoHash, CryptoMaterialError},
+    aptos_short_hex_str::AsShortHexStr,
+    aptos_types::{
+        ledger_info::LedgerInfo, validator_signer::ValidatorSigner,
+        validator_verifier::ValidatorVerifier,
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
@@ -64,12 +66,7 @@ impl Vote {
     ) -> Result<Self, CryptoMaterialError> {
         ledger_info_placeholder.set_consensus_data_hash(vote_data.hash());
         let signature = validator_signer.sign(&ledger_info_placeholder)?;
-        Ok(Self::new_with_signature(
-            vote_data,
-            author,
-            ledger_info_placeholder,
-            signature,
-        ))
+        Ok(Self::new_with_signature(vote_data, author, ledger_info_placeholder, signature))
     }
 
     /// Generates a new Vote using a signature over the specified ledger_info
@@ -79,13 +76,7 @@ impl Vote {
         ledger_info: LedgerInfo,
         signature: bls12381::Signature,
     ) -> Self {
-        Self {
-            vote_data,
-            author,
-            ledger_info,
-            signature,
-            two_chain_timeout: None,
-        }
+        Self { vote_data, author, ledger_info, signature, two_chain_timeout: None }
     }
 
     /// Add the 2-chain timeout and signature in the vote.
@@ -149,8 +140,8 @@ impl Vote {
             .context("Failed to verify Vote")?;
         if let Some((timeout, signature)) = &self.two_chain_timeout {
             ensure!(
-                (timeout.epoch(), timeout.round())
-                    == (self.epoch(), self.vote_data.proposed().round()),
+                (timeout.epoch(), timeout.round()) ==
+                    (self.epoch(), self.vote_data.proposed().round()),
                 "2-chain timeout has different (epoch, round) than Vote"
             );
             timeout.verify(validator)?;

@@ -4,15 +4,17 @@
 
 use crate::{common::Author, quorum_cert::QuorumCert};
 use anyhow::ensure;
-use gaptos::aptos_crypto::{bls12381, CryptoMaterialError};
-use gaptos::aptos_crypto as aptos_crypto;
-use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
-use gaptos::aptos_types::{
-    account_address::AccountAddress,
-    aggregate_signature::{AggregateSignature, PartialSignatures},
-    block_info::Round,
-    validator_signer::ValidatorSigner,
-    validator_verifier::{ValidatorVerifier, VerifyError},
+use gaptos::{
+    aptos_crypto,
+    aptos_crypto::{bls12381, CryptoMaterialError},
+    aptos_crypto_derive::{BCSCryptoHash, CryptoHasher},
+    aptos_types::{
+        account_address::AccountAddress,
+        aggregate_signature::{AggregateSignature, PartialSignatures},
+        block_info::Round,
+        validator_signer::ValidatorSigner,
+        validator_verifier::{ValidatorVerifier, VerifyError},
+    },
 };
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -27,7 +29,8 @@ use std::{
 pub struct TwoChainTimeout {
     /// Epoch number corresponds to the set of validators that are active for this round.
     epoch: u64,
-    /// The consensus protocol executes proposals (blocks) in rounds, which monotonically increase per epoch.
+    /// The consensus protocol executes proposals (blocks) in rounds, which monotonically increase
+    /// per epoch.
     round: Round,
     /// The highest quorum cert the signer has seen.
     quorum_cert: QuorumCert,
@@ -35,11 +38,7 @@ pub struct TwoChainTimeout {
 
 impl TwoChainTimeout {
     pub fn new(epoch: u64, round: Round, quorum_cert: QuorumCert) -> Self {
-        Self {
-            epoch,
-            round,
-            quorum_cert,
-        }
+        Self { epoch, round, quorum_cert }
     }
 
     pub fn epoch(&self) -> u64 {
@@ -66,11 +65,7 @@ impl TwoChainTimeout {
     }
 
     pub fn signing_format(&self) -> TimeoutSigningRepr {
-        TimeoutSigningRepr {
-            epoch: self.epoch(),
-            round: self.round(),
-            hqc_round: self.hqc_round(),
-        }
+        TimeoutSigningRepr { epoch: self.epoch(), round: self.round(), hqc_round: self.hqc_round() }
     }
 
     pub fn verify(&self, validators: &ValidatorVerifier) -> anyhow::Result<()> {
@@ -95,8 +90,8 @@ impl Display for TwoChainTimeout {
     }
 }
 
-/// Validators sign this structure that allows the TwoChainTimeoutCertificate to store a round number
-/// instead of a quorum cert per validator in the signatures field.
+/// Validators sign this structure that allows the TwoChainTimeoutCertificate to store a round
+/// number instead of a quorum cert per validator in the signatures field.
 #[derive(Serialize, Deserialize, Debug, CryptoHasher, BCSCryptoHash)]
 pub struct TimeoutSigningRepr {
     pub epoch: u64,
@@ -105,8 +100,9 @@ pub struct TimeoutSigningRepr {
 }
 
 /// TimeoutCertificate is a proof that 2f+1 participants in epoch i
-/// have voted in round r and we can now move to round r+1. AptosBFT v4 requires signature to sign on
-/// the TimeoutSigningRepr and carry the TimeoutWithHighestQC with highest quorum cert among 2f+1.
+/// have voted in round r and we can now move to round r+1. AptosBFT v4 requires signature to sign
+/// on the TimeoutSigningRepr and carry the TimeoutWithHighestQC with highest quorum cert among
+/// 2f+1.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct TwoChainTimeoutCertificate {
     timeout: TwoChainTimeout,
@@ -128,14 +124,11 @@ impl Display for TwoChainTimeoutCertificate {
 impl TwoChainTimeoutCertificate {
     /// Creates new TimeoutCertificate
     pub fn new(timeout: TwoChainTimeout) -> Self {
-        Self {
-            timeout,
-            signatures_with_rounds: AggregateSignatureWithRounds::empty(),
-        }
+        Self { timeout, signatures_with_rounds: AggregateSignatureWithRounds::empty() }
     }
 
-    /// Verifies the signatures for each validator, the signature is on the TimeoutSigningRepr where the
-    /// hqc_round is in the signature map.
+    /// Verifies the signatures for each validator, the signature is on the TimeoutSigningRepr where
+    /// the hqc_round is in the signature map.
     /// We verify the following:
     /// 1. the highest quorum cert is valid
     /// 2. all signatures are properly formed (timeout.epoch, timeout.round, round)
@@ -146,11 +139,7 @@ impl TwoChainTimeoutCertificate {
         let hqc_round = self.timeout.hqc_round();
         let timeout_messages: Vec<_> = self
             .signatures_with_rounds
-            .get_voters_and_rounds(
-                &validators
-                    .get_ordered_account_addresses_iter()
-                    .collect_vec(),
-            )
+            .get_voters_and_rounds(&validators.get_ordered_account_addresses_iter().collect_vec())
             .into_iter()
             .map(|(_, round)| TimeoutSigningRepr {
                 epoch: self.timeout.epoch(),
@@ -208,10 +197,7 @@ pub struct TwoChainTimeoutWithPartialSignatures {
 
 impl TwoChainTimeoutWithPartialSignatures {
     pub fn new(timeout: TwoChainTimeout) -> Self {
-        Self {
-            timeout,
-            signatures: PartialSignaturesWithRound::empty(),
-        }
+        Self { timeout, signatures: PartialSignaturesWithRound::empty() }
     }
 
     /// The epoch of the timeout.
@@ -234,7 +220,8 @@ impl TwoChainTimeoutWithPartialSignatures {
         self.signatures.signatures().iter().map(|(k, _)| k)
     }
 
-    /// Add a new timeout message from author, the timeout should already be verified in upper layer.
+    /// Add a new timeout message from author, the timeout should already be verified in upper
+    /// layer.
     pub fn add(
         &mut self,
         author: Author,
@@ -264,9 +251,8 @@ impl TwoChainTimeoutWithPartialSignatures {
         &self,
         verifier: &ValidatorVerifier,
     ) -> Result<TwoChainTimeoutCertificate, VerifyError> {
-        let (partial_sig, ordered_rounds) = self
-            .signatures
-            .get_partial_sig_with_rounds(verifier.address_to_validator_index());
+        let (partial_sig, ordered_rounds) =
+            self.signatures.get_partial_sig_with_rounds(verifier.address_to_validator_index());
         let aggregated_sig = verifier.aggregate_signatures(partial_sig.signatures_iter())?;
         Ok(TwoChainTimeoutCertificate {
             timeout: self.timeout.clone(),
@@ -319,9 +305,7 @@ impl PartialSignaturesWithRound {
         round: Round,
         signature: bls12381::Signature,
     ) {
-        self.signatures
-            .entry(validator)
-            .or_insert((round, signature));
+        self.signatures.entry(validator).or_insert((round, signature));
     }
 
     /// Returns partial signature and a vector of rounds ordered by validator index in the validator
@@ -342,10 +326,11 @@ impl PartialSignaturesWithRound {
     }
 }
 
-/// This struct stores the aggregated signatures and corresponding rounds for timeout messages. Please
-/// note that the order of the round is same as the bitmask in the aggregated signature i.e.,
+/// This struct stores the aggregated signatures and corresponding rounds for timeout messages.
+/// Please note that the order of the round is same as the bitmask in the aggregated signature i.e.,
 /// first entry in the rounds corresponds to validator address with the first bitmask set in the
-/// aggregated signature and so on. The ordering is crucial for verification of the timeout messages.
+/// aggregated signature and so on. The ordering is crucial for verification of the timeout
+/// messages.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct AggregateSignatureWithRounds {
     sig: AggregateSignature,
@@ -359,10 +344,7 @@ impl AggregateSignatureWithRounds {
     }
 
     pub fn empty() -> Self {
-        Self {
-            sig: AggregateSignature::empty(),
-            rounds: vec![],
-        }
+        Self { sig: AggregateSignature::empty(), rounds: vec![] }
     }
 
     pub fn get_voters(
@@ -403,12 +385,14 @@ mod tests {
     #[test]
     fn test_2chain_timeout_certificate() {
         use crate::vote_data::VoteData;
-        use gaptos::aptos_crypto::hash::CryptoHash;
-        use gaptos::aptos_types::{
-            aggregate_signature::PartialSignatures,
-            block_info::BlockInfo,
-            ledger_info::{LedgerInfo, LedgerInfoWithVerifiedSignatures},
-            validator_verifier::random_validator_verifier,
+        use gaptos::{
+            aptos_crypto::hash::CryptoHash,
+            aptos_types::{
+                aggregate_signature::PartialSignatures,
+                block_info::BlockInfo,
+                ledger_info::{LedgerInfo, LedgerInfoWithVerifiedSignatures},
+                validator_verifier::random_validator_verifier,
+            },
         };
 
         let num_nodes = 4;
@@ -424,18 +408,13 @@ mod tests {
                 let signature = signer.sign(ledger_info.ledger_info()).unwrap();
                 ledger_info.add_signature(signer.author(), signature);
             }
-            QuorumCert::new(
-                vote_data,
-                ledger_info.aggregate_signatures(&validators).unwrap(),
-            )
+            QuorumCert::new(vote_data, ledger_info.aggregate_signatures(&validators).unwrap())
         };
         let generate_timeout = |round, qc_round| {
             TwoChainTimeout::new(1, round, generate_quorum(qc_round, quorum_size))
         };
 
-        let timeouts: Vec<_> = (1..=3)
-            .map(|qc_round| generate_timeout(4, qc_round))
-            .collect();
+        let timeouts: Vec<_> = (1..=3).map(|qc_round| generate_timeout(4, qc_round)).collect();
         // timeout cert with (round, hqc round) = (4, 1), (4, 2), (4, 3)
         let mut tc_with_partial_sig =
             TwoChainTimeoutWithPartialSignatures::new(timeouts[0].clone());
@@ -447,18 +426,15 @@ mod tests {
             );
         }
 
-        let tc_with_sig = tc_with_partial_sig
-            .aggregate_signatures(&validators)
-            .unwrap();
+        let tc_with_sig = tc_with_partial_sig.aggregate_signatures(&validators).unwrap();
         tc_with_sig.verify(&validators).unwrap();
 
         // timeout round < hqc round
         let mut invalid_tc_with_partial_sig = tc_with_partial_sig.clone();
         invalid_tc_with_partial_sig.timeout.round = 1;
 
-        let invalid_tc_with_sig = invalid_tc_with_partial_sig
-            .aggregate_signatures(&validators)
-            .unwrap();
+        let invalid_tc_with_sig =
+            invalid_tc_with_partial_sig.aggregate_signatures(&validators).unwrap();
         invalid_tc_with_sig.verify(&validators).unwrap_err();
 
         // invalid signature
@@ -469,19 +445,13 @@ mod tests {
             bls12381::Signature::dummy_signature(),
         );
 
-        let invalid_tc_with_sig = invalid_timeout_cert
-            .aggregate_signatures(&validators)
-            .unwrap();
+        let invalid_tc_with_sig = invalid_timeout_cert.aggregate_signatures(&validators).unwrap();
         invalid_tc_with_sig.verify(&validators).unwrap_err();
 
         // not enough signatures
         let mut invalid_timeout_cert = invalid_tc_with_partial_sig.clone();
-        invalid_timeout_cert
-            .signatures
-            .remove_signature(&signers[0].author());
-        let invalid_tc_with_sig = invalid_timeout_cert
-            .aggregate_signatures(&validators)
-            .unwrap();
+        invalid_timeout_cert.signatures.remove_signature(&signers[0].author());
+        let invalid_tc_with_sig = invalid_timeout_cert.aggregate_signatures(&validators).unwrap();
 
         invalid_tc_with_sig.verify(&validators).unwrap_err();
 
@@ -489,17 +459,13 @@ mod tests {
         let mut invalid_timeout_cert = invalid_tc_with_partial_sig.clone();
         invalid_timeout_cert.timeout.quorum_cert = generate_quorum(2, quorum_size);
 
-        let invalid_tc_with_sig = invalid_timeout_cert
-            .aggregate_signatures(&validators)
-            .unwrap();
+        let invalid_tc_with_sig = invalid_timeout_cert.aggregate_signatures(&validators).unwrap();
         invalid_tc_with_sig.verify(&validators).unwrap_err();
 
         // invalid quorum cert
         let mut invalid_timeout_cert = invalid_tc_with_partial_sig;
         invalid_timeout_cert.timeout.quorum_cert = generate_quorum(3, quorum_size - 1);
-        let invalid_tc_with_sig = invalid_timeout_cert
-            .aggregate_signatures(&validators)
-            .unwrap();
+        let invalid_tc_with_sig = invalid_timeout_cert.aggregate_signatures(&validators).unwrap();
 
         invalid_tc_with_sig.verify(&validators).unwrap_err();
     }

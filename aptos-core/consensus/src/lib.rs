@@ -6,7 +6,6 @@
 #![allow(unreachable_code)]
 #![allow(clippy::all)]
 #![allow(unexpected_cfgs)]
-
 #![forbid(unsafe_code)]
 
 //! Consensus for the Aptos Core blockchain
@@ -60,6 +59,7 @@ pub mod consensus_provider;
 /// Required by the telemetry service
 pub mod counters;
 mod execution_pipeline;
+pub mod gravity_state_computer;
 /// AptosNet interface.
 pub mod network_interface;
 mod payload_manager;
@@ -68,12 +68,11 @@ mod transaction_deduper;
 mod transaction_filter;
 mod transaction_shuffler;
 mod txn_hash_and_authenticator_deduper;
-pub mod gravity_state_computer;
 
-use gaptos::aptos_metrics_core::IntGauge;
 pub use consensusdb::create_checkpoint;
 /// Required by the smoke tests
 pub use consensusdb::CONSENSUS_DB_NAME;
+use gaptos::aptos_metrics_core::IntGauge;
 pub use quorum_store::quorum_store_db::QUORUM_STORE_DB_NAME;
 #[cfg(feature = "fuzzing")]
 pub use round_manager::round_manager_fuzzing;
@@ -101,8 +100,8 @@ impl Drop for IntGaugeGuard {
 #[macro_export]
 macro_rules! monitor {
     ($name:literal, $fn:expr) => {{
-        use $crate::IntGaugeGuard;
         use gaptos::aptos_consensus::counters::OP_COUNTERS;
+        use $crate::IntGaugeGuard;
         let _timer = OP_COUNTERS.timer($name);
         let _guard = IntGaugeGuard::new(OP_COUNTERS.gauge(concat!($name, "_running")));
         $fn

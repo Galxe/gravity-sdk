@@ -10,11 +10,13 @@ use crate::{
     payload_client::{user::UserPayloadClient, PayloadClient},
 };
 use aptos_consensus_types::common::{Payload, PayloadFilter};
-use gaptos::aptos_logger::debug;
-use gaptos::aptos_types::{on_chain_config::ValidatorTxnConfig, validator_txn::ValidatorTransaction};
-use gaptos::aptos_validator_transaction_pool as vtxn_pool;
 use fail::fail_point;
 use futures::future::BoxFuture;
+use gaptos::{
+    aptos_logger::debug,
+    aptos_types::{on_chain_config::ValidatorTxnConfig, validator_txn::ValidatorTransaction},
+    aptos_validator_transaction_pool as vtxn_pool,
+};
 #[cfg(test)]
 use std::collections::HashSet;
 use std::{
@@ -37,24 +39,19 @@ impl MixedPayloadClient {
         >,
         user_payload_client: Arc<dyn UserPayloadClient>,
     ) -> Self {
-        Self {
-            validator_txn_config,
-            validator_txn_pool_client,
-            user_payload_client,
-        }
+        Self { validator_txn_config, validator_txn_pool_client, user_payload_client }
     }
 
     /// When enabled in smoke tests, generate 2 random validator transactions, 1 valid, 1 invalid.
     fn extra_test_only_vtxns(&self) -> Vec<ValidatorTransaction> {
         fail_point!("mixed_payload_client::extra_test_only_vtxns", |_| {
-            use gaptos::aptos_types::dkg::{DKGTranscript, DKGTranscriptMetadata};
-            use gaptos::move_core_types::account_address::AccountAddress;
+            use gaptos::{
+                aptos_types::dkg::{DKGTranscript, DKGTranscriptMetadata},
+                move_core_types::account_address::AccountAddress,
+            };
 
             vec![ValidatorTransaction::DKGResult(DKGTranscript {
-                metadata: DKGTranscriptMetadata {
-                    epoch: 999,
-                    author: AccountAddress::ZERO,
-                },
+                metadata: DKGTranscriptMetadata { epoch: 999, author: AccountAddress::ZERO },
                 transcript_bytes: vec![],
             })]
         });
@@ -87,14 +84,8 @@ impl PayloadClient for MixedPayloadClient {
             .validator_txn_pool_client
             .pull(
                 max_poll_time,
-                min(
-                    max_items,
-                    self.validator_txn_config.per_block_limit_txn_count(),
-                ),
-                min(
-                    max_bytes,
-                    self.validator_txn_config.per_block_limit_total_bytes(),
-                ),
+                min(max_items, self.validator_txn_config.per_block_limit_txn_count()),
+                min(max_bytes, self.validator_txn_config.per_block_limit_total_bytes()),
                 validator_txn_filter,
             )
             .await;
@@ -106,10 +97,7 @@ impl PayloadClient for MixedPayloadClient {
         max_items -= validator_txns.len() as u64;
         max_items_after_filtering -= validator_txns.len() as u64;
         soft_max_items_after_filtering -= validator_txns.len() as u64;
-        max_bytes -= validator_txns
-            .iter()
-            .map(|txn| txn.size_in_bytes())
-            .sum::<usize>() as u64;
+        max_bytes -= validator_txns.iter().map(|txn| txn.size_in_bytes()).sum::<usize>() as u64;
         max_poll_time = max_poll_time.saturating_sub(validator_txn_pull_timer.elapsed());
 
         // Pull user payload.

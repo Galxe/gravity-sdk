@@ -2,23 +2,25 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::transaction_shuffler::TransactionShuffler;
-use gaptos::aptos_consensus::counters::NUM_SENDERS_IN_BLOCK;
-use gaptos::aptos_types::transaction::SignedTransaction;
-use gaptos::move_core_types::account_address::AccountAddress;
+use gaptos::{
+    aptos_consensus::counters::NUM_SENDERS_IN_BLOCK, aptos_types::transaction::SignedTransaction,
+    move_core_types::account_address::AccountAddress,
+};
 use std::collections::{HashMap, VecDeque};
 
 /// An implementation of transaction shuffler, which tries to spread transactions from same senders
 /// in a block in order to reduce conflict. On a high level, it works as follows - It defines a
-/// `conflict_window_size`, which maintains a set of senders added to the block in last `conflict_window_size`
-/// transactions. When trying to select a new transaction to the block, the shuffler tries to find
-/// a transaction which are not part of the conflicting senders in the window. If it does, it adds
-/// the first non-conflicting transaction it finds to the block, if it doesn't then it preserves the
-/// order and adds the first transaction in the remaining block. It always maintains the following
-/// invariant in terms of ordering
+/// `conflict_window_size`, which maintains a set of senders added to the block in last
+/// `conflict_window_size` transactions. When trying to select a new transaction to the block, the
+/// shuffler tries to find a transaction which are not part of the conflicting senders in the
+/// window. If it does, it adds the first non-conflicting transaction it finds to the block, if it
+/// doesn't then it preserves the order and adds the first transaction in the remaining block. It
+/// always maintains the following invariant in terms of ordering
 /// 1. Relative ordering of all transactions from the same before and after shuffling is same
-/// 2. Relative ordering of all transactions across different senders will also be maintained if they are
-/// non-conflicting. In other words, if the input block has only one transaction per sender, the output
-/// ordering will remain unchanged.
+/// 2. Relative ordering of all transactions across different senders will also be maintained if
+///    they are
+/// non-conflicting. In other words, if the input block has only one transaction per sender, the
+/// output ordering will remain unchanged.
 ///
 /// The shuffling algorithm is O(n) and following is the pseudo code for it.
 /// loop:
@@ -42,7 +44,8 @@ impl TransactionShuffler for SenderAwareShuffler {
             return txns;
         }
 
-        // handle the corner case of conflict window being 0, in which case we don't do any shuffling
+        // handle the corner case of conflict window being 0, in which case we don't do any
+        // shuffling
         if self.conflict_window_size == 0 {
             return txns;
         }
@@ -53,8 +56,9 @@ impl TransactionShuffler for SenderAwareShuffler {
         let num_transactions = txns.len();
         let mut orig_txns = VecDeque::from(txns);
         let mut next_to_add = |sliding_window: &mut SlidingWindowState| -> SignedTransaction {
-            // First check if we have a sender dropped off of conflict window in previous step, if so,
-            // we try to find pending transaction from the corresponding sender and add it to the block.
+            // First check if we have a sender dropped off of conflict window in previous step, if
+            // so, we try to find pending transaction from the corresponding sender and
+            // add it to the block.
             if let Some(sender) = sliding_window.last_dropped_sender() {
                 if let Some(txn) = pending_txns.remove_pending_from_sender(sender) {
                     return txn;
@@ -71,9 +75,7 @@ impl TransactionShuffler for SenderAwareShuffler {
 
             // If we can't find any candidate in above steps, then lastly
             // add pending transactions in the order if we can't find any other candidate
-            pending_txns
-                .remove_first_pending()
-                .expect("Pending should return a transaction")
+            pending_txns.remove_first_pending().expect("Pending should return a transaction")
         };
         while sliding_window.num_txns() < num_transactions {
             let txn = next_to_add(&mut sliding_window);
@@ -85,50 +87,41 @@ impl TransactionShuffler for SenderAwareShuffler {
 
 impl SenderAwareShuffler {
     pub fn new(conflict_window_size: usize) -> Self {
-        Self {
-            conflict_window_size,
-        }
+        Self { conflict_window_size }
     }
 }
 
-/// A structure to maintain a set of transactions that are pending to be added to the block indexed by
-/// the sender. For a particular sender, relative ordering of transactions are maintained,
-/// so that the final block preserves the ordering of transactions by sender. It also maintains a vector
-/// to preserve the original order of the transactions. This is needed in case we can't find
+/// A structure to maintain a set of transactions that are pending to be added to the block indexed
+/// by the sender. For a particular sender, relative ordering of transactions are maintained,
+/// so that the final block preserves the ordering of transactions by sender. It also maintains a
+/// vector to preserve the original order of the transactions. This is needed in case we can't find
 /// any non-conflicting transactions and we need to add the first pending transaction to the block.
 struct PendingTransactions {
     txns_by_senders: HashMap<AccountAddress, VecDeque<SignedTransaction>>,
-    // Transactions are kept in the original order. This is not kept in sync with pending transactions,
-    // so this can contain a bunch of transactions that are already added to the block.
+    // Transactions are kept in the original order. This is not kept in sync with pending
+    // transactions, so this can contain a bunch of transactions that are already added to the
+    // block.
     ordered_txns: VecDeque<SignedTransaction>,
 }
 
 impl PendingTransactions {
     pub fn new() -> Self {
-        Self {
-            txns_by_senders: HashMap::new(),
-            ordered_txns: VecDeque::new(),
-        }
+        Self { txns_by_senders: HashMap::new(), ordered_txns: VecDeque::new() }
     }
 
     pub fn add_transaction(&mut self, txn: SignedTransaction) {
         self.ordered_txns.push_back(txn.clone());
-        self.txns_by_senders
-            .entry(txn.sender())
-            .or_default()
-            .push_back(txn);
+        self.txns_by_senders.entry(txn.sender()).or_default().push_back(txn);
     }
 
-    /// Removes the first pending transaction from the sender. Please note that the transaction is not
-    /// removed from the `ordered_txns`, so the `ordered_txns` will contain a set of transactions that
-    /// are removed from pending transactions already.
+    /// Removes the first pending transaction from the sender. Please note that the transaction is
+    /// not removed from the `ordered_txns`, so the `ordered_txns` will contain a set of
+    /// transactions that are removed from pending transactions already.
     pub fn remove_pending_from_sender(
         &mut self,
         sender: AccountAddress,
     ) -> Option<SignedTransaction> {
-        self.txns_by_senders
-            .get_mut(&sender)
-            .and_then(|txns| txns.pop_front())
+        self.txns_by_senders.get_mut(&sender).and_then(|txns| txns.pop_front())
     }
 
     pub fn remove_first_pending(&mut self) -> Option<SignedTransaction> {
@@ -145,15 +138,15 @@ impl PendingTransactions {
 }
 
 /// A stateful data structure maintained by the transaction shuffler during shuffling. On a
-/// high level, it maintains a sliding window of the conflicting transactions, which helps the payload
-/// generator include a set of transactions which are non-conflicting with each other within a particular
-/// window size.
+/// high level, it maintains a sliding window of the conflicting transactions, which helps the
+/// payload generator include a set of transactions which are non-conflicting with each other within
+/// a particular window size.
 struct SlidingWindowState {
     // Please note that the start index can be negative in case the window size is larger than the
     // end_index.
     start_index: i64,
-    // Hashmap of senders to the number of transactions included in the window for the corresponding
-    // sender.
+    // Hashmap of senders to the number of transactions included in the window for the
+    // corresponding sender.
     senders_in_window: HashMap<AccountAddress, usize>,
     // Partially ordered transactions, needs to be updated every time add_transactions is called.
     txns: Vec<SignedTransaction>,
@@ -173,38 +166,26 @@ impl SlidingWindowState {
     pub fn add_transaction(&mut self, txn: SignedTransaction) {
         if self.start_index >= 0 {
             // if the start_index is negative, then no sender falls out of the window.
-            let sender = self
-                .txns
-                .get(self.start_index as usize)
-                .expect("Transaction expected")
-                .sender();
-            self.senders_in_window
-                .entry(sender)
-                .and_modify(|count| *count -= 1);
+            let sender =
+                self.txns.get(self.start_index as usize).expect("Transaction expected").sender();
+            self.senders_in_window.entry(sender).and_modify(|count| *count -= 1);
         }
-        let count = self
-            .senders_in_window
-            .entry(txn.sender())
-            .or_insert_with(|| 0);
+        let count = self.senders_in_window.entry(txn.sender()).or_insert_with(|| 0);
         *count += 1;
         self.txns.push(txn);
         self.start_index += 1;
     }
 
     pub fn has_conflict(&self, addr: &AccountAddress) -> bool {
-        self.senders_in_window
-            .get(addr)
-            .map_or(false, |count| *count != 0)
+        self.senders_in_window.get(addr).map_or(false, |count| *count != 0)
     }
 
     /// Returns the sender which was dropped off of the conflict window in previous iteration.
     pub fn last_dropped_sender(&self) -> Option<AccountAddress> {
         if self.start_index > 0 {
             let prev_start_index = self.start_index - 1;
-            if let Some(last_sender) = self
-                .txns
-                .get(prev_start_index as usize)
-                .map(|txn| txn.sender())
+            if let Some(last_sender) =
+                self.txns.get(prev_start_index as usize).map(|txn| txn.sender())
             {
                 if let Some(&count) = self.senders_in_window.get(&last_sender) {
                     if count == 0 {
@@ -229,12 +210,14 @@ impl SlidingWindowState {
 #[cfg(test)]
 mod tests {
     use crate::transaction_shuffler::{sender_aware::SenderAwareShuffler, TransactionShuffler};
-    use gaptos::aptos_crypto::{ed25519::Ed25519PrivateKey, PrivateKey, SigningKey, Uniform};
-    use gaptos::aptos_types::{
-        chain_id::ChainId,
-        transaction::{RawTransaction, Script, SignedTransaction, TransactionPayload},
+    use gaptos::{
+        aptos_crypto::{ed25519::Ed25519PrivateKey, PrivateKey, SigningKey, Uniform},
+        aptos_types::{
+            chain_id::ChainId,
+            transaction::{RawTransaction, Script, SignedTransaction, TransactionPayload},
+        },
+        move_core_types::account_address::AccountAddress,
     };
-    use gaptos::move_core_types::account_address::AccountAddress;
     use rand::{rngs::OsRng, Rng};
     use std::{
         collections::{HashMap, HashSet},
@@ -355,10 +338,7 @@ mod tests {
         let optimized_txns = txn_shuffler.shuffle(orig_txns.clone());
         let mut optimized_txns_by_sender = HashMap::new();
         for txn in optimized_txns {
-            optimized_txns_by_sender
-                .entry(txn.sender())
-                .or_insert_with(Vec::new)
-                .push(txn);
+            optimized_txns_by_sender.entry(txn.sender()).or_insert_with(Vec::new).push(txn);
         }
 
         for (sender, orig_txns) in orig_txns_by_sender {
@@ -380,18 +360,9 @@ mod tests {
         orig_txns.extend(sender3_txns.clone());
         let txn_shuffler = SenderAwareShuffler::new(3);
         let optimized_txns = txn_shuffler.shuffle(orig_txns);
-        assert_eq!(
-            optimized_txns.first().unwrap(),
-            sender1_txns.first().unwrap()
-        );
-        assert_eq!(
-            optimized_txns.get(1).unwrap(),
-            sender2_txns.first().unwrap()
-        );
-        assert_eq!(
-            optimized_txns.get(2).unwrap(),
-            sender3_txns.first().unwrap()
-        );
+        assert_eq!(optimized_txns.first().unwrap(), sender1_txns.first().unwrap());
+        assert_eq!(optimized_txns.get(1).unwrap(), sender2_txns.first().unwrap());
+        assert_eq!(optimized_txns.get(2).unwrap(), sender3_txns.first().unwrap());
         assert_eq!(optimized_txns.get(3).unwrap(), sender3_txns.get(1).unwrap());
     }
 
@@ -414,33 +385,18 @@ mod tests {
         orig_txns.extend(sender5_txns.clone());
         let txn_shuffler = SenderAwareShuffler::new(3);
         let optimized_txns = txn_shuffler.shuffle(orig_txns);
-        assert_eq!(
-            optimized_txns.first().unwrap(),
-            sender1_txns.first().unwrap()
-        );
-        assert_eq!(
-            optimized_txns.get(1).unwrap(),
-            sender2_txns.first().unwrap()
-        );
-        assert_eq!(
-            optimized_txns.get(2).unwrap(),
-            sender3_txns.first().unwrap()
-        );
-        assert_eq!(
-            optimized_txns.get(3).unwrap(),
-            sender4_txns.first().unwrap()
-        );
+        assert_eq!(optimized_txns.first().unwrap(), sender1_txns.first().unwrap());
+        assert_eq!(optimized_txns.get(1).unwrap(), sender2_txns.first().unwrap());
+        assert_eq!(optimized_txns.get(2).unwrap(), sender3_txns.first().unwrap());
+        assert_eq!(optimized_txns.get(3).unwrap(), sender4_txns.first().unwrap());
         assert_eq!(optimized_txns.get(4).unwrap(), sender1_txns.get(1).unwrap());
-        assert_eq!(
-            optimized_txns.get(5).unwrap(),
-            sender5_txns.first().unwrap()
-        );
+        assert_eq!(optimized_txns.get(5).unwrap(), sender5_txns.first().unwrap());
     }
 
     #[test]
     // S1_1, S1_2, S2_1, S3_1, S3_2, S4_1, S5_1, S6_1
-    // with conflict_window_size=3, should return (each batches are separated from the point they appear on):
-    // S1_1, S2_1, S3_1, S4_1, S1_2, S5_1, S3_2, S6_1
+    // with conflict_window_size=3, should return (each batches are separated from the point they
+    // appear on): S1_1, S2_1, S3_1, S4_1, S1_2, S5_1, S3_2, S6_1
     fn test_6_sender_shuffling() {
         let mut orig_txns = Vec::new();
         let sender1_txns = create_signed_transaction(2);
@@ -457,32 +413,14 @@ mod tests {
         orig_txns.extend(sender6_txns.clone());
         let txn_shuffler = SenderAwareShuffler::new(3);
         let optimized_txns = txn_shuffler.shuffle(orig_txns);
-        assert_eq!(
-            optimized_txns.first().unwrap(),
-            sender1_txns.first().unwrap()
-        );
-        assert_eq!(
-            optimized_txns.get(1).unwrap(),
-            sender2_txns.first().unwrap()
-        );
-        assert_eq!(
-            optimized_txns.get(2).unwrap(),
-            sender3_txns.first().unwrap()
-        );
-        assert_eq!(
-            optimized_txns.get(3).unwrap(),
-            sender4_txns.first().unwrap()
-        );
+        assert_eq!(optimized_txns.first().unwrap(), sender1_txns.first().unwrap());
+        assert_eq!(optimized_txns.get(1).unwrap(), sender2_txns.first().unwrap());
+        assert_eq!(optimized_txns.get(2).unwrap(), sender3_txns.first().unwrap());
+        assert_eq!(optimized_txns.get(3).unwrap(), sender4_txns.first().unwrap());
         assert_eq!(optimized_txns.get(4).unwrap(), sender1_txns.get(1).unwrap());
-        assert_eq!(
-            optimized_txns.get(5).unwrap(),
-            sender5_txns.first().unwrap()
-        );
+        assert_eq!(optimized_txns.get(5).unwrap(), sender5_txns.first().unwrap());
         assert_eq!(optimized_txns.get(6).unwrap(), sender3_txns.get(1).unwrap());
-        assert_eq!(
-            optimized_txns.get(7).unwrap(),
-            sender6_txns.first().unwrap()
-        );
+        assert_eq!(optimized_txns.get(7).unwrap(), sender6_txns.first().unwrap());
     }
 
     #[test]

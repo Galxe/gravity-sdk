@@ -18,19 +18,21 @@ use crate::{
     util::is_vtxn_expected,
 };
 use anyhow::{bail, ensure};
-use gaptos::aptos_config::config::DagPayloadConfig;
 use aptos_consensus_types::common::{Author, Round};
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::{debug, error};
-use gaptos::aptos_types::{
-    epoch_state::EpochState,
-    on_chain_config::{OnChainJWKConsensusConfig, OnChainRandomnessConfig, ValidatorTxnConfig},
-    validator_signer::ValidatorSigner,
-    validator_txn::ValidatorTransaction,
-};
 use async_trait::async_trait;
 use claims::assert_some;
 use dashmap::DashSet;
+use gaptos::{
+    aptos_config::config::DagPayloadConfig,
+    aptos_infallible::Mutex,
+    aptos_logger::{debug, error},
+    aptos_types::{
+        epoch_state::EpochState,
+        on_chain_config::{OnChainJWKConsensusConfig, OnChainRandomnessConfig, ValidatorTxnConfig},
+        validator_signer::ValidatorSigner,
+        validator_txn::ValidatorTransaction,
+    },
+};
 use std::{collections::BTreeMap, mem, sync::Arc};
 
 pub(crate) struct NodeBroadcastHandler {
@@ -126,11 +128,9 @@ impl NodeBroadcastHandler {
                 vtxn.topic()
             );
         }
-        let vtxn_total_bytes = node
-            .validator_txns()
-            .iter()
-            .map(ValidatorTransaction::size_in_bytes)
-            .sum::<usize>() as u64;
+        let vtxn_total_bytes =
+            node.validator_txns().iter().map(ValidatorTransaction::size_in_bytes).sum::<usize>()
+                as u64;
         ensure!(vtxn_total_bytes <= self.vtxn_config.per_block_limit_total_bytes());
 
         let num_txns = num_vtxns + node.payload().len() as u64;
@@ -143,10 +143,7 @@ impl NodeBroadcastHandler {
         let dag_reader = self.dag.read();
         let lowest_round = dag_reader.lowest_round();
 
-        ensure!(
-            current_round >= lowest_round,
-            NodeBroadcastHandleError::StaleRound(current_round)
-        );
+        ensure!(current_round >= lowest_round, NodeBroadcastHandleError::StaleRound(current_round));
 
         // check which parents are missing in the DAG
         let missing_parents: Vec<NodeCertificate> = node
@@ -213,16 +210,10 @@ impl RpcHandler for NodeBroadcastHandler {
     type Response = Vote;
 
     async fn process(&self, node: Self::Request) -> anyhow::Result<Self::Response> {
-        ensure!(
-            !self.health_backoff.stop_voting(),
-            NodeBroadcastHandleError::VoteRefused
-        );
+        ensure!(!self.health_backoff.stop_voting(), NodeBroadcastHandleError::VoteRefused);
 
         let key = (node.round(), *node.author());
-        ensure!(
-            self.votes_fine_grained_lock.insert(key),
-            "concurrent insertion"
-        );
+        ensure!(self.votes_fine_grained_lock.insert(key), "concurrent insertion");
         defer!({
             assert_some!(self.votes_fine_grained_lock.remove(&key));
         });
@@ -233,12 +224,8 @@ impl RpcHandler for NodeBroadcastHandler {
             .remote_peer(*node.author())
             .round(node.round()));
 
-        if let Some(ack) = self
-            .votes_by_round_peer
-            .lock()
-            .entry(node.round())
-            .or_default()
-            .get(node.author())
+        if let Some(ack) =
+            self.votes_by_round_peer.lock().entry(node.round()).or_default().get(node.author())
         {
             return Ok(ack.clone());
         }
@@ -255,9 +242,7 @@ impl RpcHandler for NodeBroadcastHandler {
         self.dag.write().update_votes(&node, false);
         self.order_rule.process_new_node(node.metadata());
 
-        debug!(LogSchema::new(LogEvent::Vote)
-            .remote_peer(*node.author())
-            .round(node.round()));
+        debug!(LogSchema::new(LogEvent::Vote).remote_peer(*node.author()).round(node.round()));
         Ok(vote)
     }
 }

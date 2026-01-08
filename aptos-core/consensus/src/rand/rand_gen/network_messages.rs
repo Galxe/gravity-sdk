@@ -12,12 +12,14 @@ use crate::{
 };
 use anyhow::{bail, ensure};
 use aptos_consensus_types::common::Author;
-use gaptos::aptos_enum_conversion_derive ::EnumConversion;
-use gaptos::aptos_network::{protocols::network::RpcError, ProtocolId};
-use gaptos::aptos_reliable_broadcast::RBMessage;
-use gaptos::aptos_types::epoch_state::EpochState;
 use bytes::Bytes;
 use futures_channel::oneshot;
+use gaptos::{
+    aptos_enum_conversion_derive::EnumConversion,
+    aptos_network::{protocols::network::RpcError, ProtocolId},
+    aptos_reliable_broadcast::RBMessage,
+    aptos_types::epoch_state::EpochState,
+};
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
 
@@ -46,15 +48,15 @@ impl<S: TShare, D: TAugmentedData> RandMessage<S, D> {
             RandMessage::Share(share) => share.verify(rand_config),
             RandMessage::AugData(aug_data) => {
                 aug_data.verify(rand_config, fast_rand_config, sender)
-            },
+            }
             RandMessage::CertifiedAugData(certified_aug_data) => {
                 certified_aug_data.verify(&epoch_state.verifier)
-            },
+            }
             RandMessage::FastShare(share) => {
                 share.share.verify(fast_rand_config.as_ref().ok_or_else(|| {
                     anyhow::anyhow!("[RandMessage] rand config for fast path not found")
                 })?)
-            },
+            }
             _ => bail!("[RandMessage] unexpected message type"),
         }
     }

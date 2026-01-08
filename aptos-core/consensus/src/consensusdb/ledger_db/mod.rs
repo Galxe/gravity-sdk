@@ -1,7 +1,9 @@
-use std::sync::Arc;
-use gaptos::aptos_schemadb::{batch::SchemaBatch, DB};
-use gaptos::aptos_storage_interface::Result;
+use gaptos::{
+    aptos_schemadb::{batch::SchemaBatch, DB},
+    aptos_storage_interface::Result,
+};
 use ledger_metadata_db::LedgerMetadataDb;
+use std::sync::Arc;
 
 mod ledger_metadata_db;
 pub(crate) const MAX_NUM_EPOCH_ENDING_LEDGER_INFO: usize = 100;
@@ -13,9 +15,7 @@ pub struct LedgerDbSchemaBatches {
 }
 impl Default for LedgerDbSchemaBatches {
     fn default() -> Self {
-        Self {
-            ledger_metadata_db_batches: SchemaBatch::new(),
-        }
+        Self { ledger_metadata_db_batches: SchemaBatch::new() }
     }
 }
 impl LedgerDbSchemaBatches {
@@ -28,12 +28,8 @@ pub struct LedgerDb {
     ledger_metadata_db: LedgerMetadataDb,
 }
 impl LedgerDb {
-    pub(crate) fn new(
-        db: Arc<DB>,
-    ) -> Self {
-        Self {
-            ledger_metadata_db: LedgerMetadataDb::new(db),
-        }
+    pub(crate) fn new(db: Arc<DB>) -> Self {
+        Self { ledger_metadata_db: LedgerMetadataDb::new(db) }
     }
     pub(crate) fn metadata_db(&self) -> &LedgerMetadataDb {
         &self.ledger_metadata_db
@@ -43,7 +39,6 @@ impl LedgerDb {
         self.ledger_metadata_db.db_arc()
     }
     pub fn write_schemas(&self, schemas: LedgerDbSchemaBatches) -> Result<()> {
-        self.ledger_metadata_db
-            .write_schemas(schemas.ledger_metadata_db_batches)
+        self.ledger_metadata_db.write_schemas(schemas.ledger_metadata_db_batches)
     }
 }

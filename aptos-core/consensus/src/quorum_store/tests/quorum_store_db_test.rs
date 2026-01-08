@@ -9,9 +9,8 @@ use crate::{
     test_utils::create_vec_signed_transactions,
 };
 use aptos_consensus_types::proof_of_store::BatchId;
-use gaptos::aptos_temppath::TempPath;
-use gaptos::aptos_types::account_address::AccountAddress;
 use claims::assert_ok;
+use gaptos::{aptos_temppath::TempPath, aptos_types::account_address::AccountAddress};
 
 #[test]
 fn test_db_for_data() {
@@ -54,8 +53,10 @@ fn test_db_for_data() {
 
     let all_batches = db.get_all_batches().expect("could not read from db");
     assert_eq!(all_batches.len(), 2);
-    assert!(all_batches.contains_key(&BatchKey::new(persist_request_1.epoch(), *persist_request_1.digest())));
-    assert!(all_batches.contains_key(&BatchKey::new(persist_request_2.epoch(), *persist_request_2.digest())));
+    assert!(all_batches
+        .contains_key(&BatchKey::new(persist_request_1.epoch(), *persist_request_1.digest())));
+    assert!(all_batches
+        .contains_key(&BatchKey::new(persist_request_2.epoch(), *persist_request_2.digest())));
 }
 
 #[test]
@@ -63,24 +64,17 @@ fn test_db_for_batch_id() {
     let tmp_dir = TempPath::new();
     let db = QuorumStoreDB::new(&tmp_dir);
 
-    assert!(db
-        .clean_and_get_batch_id(0)
-        .expect("could not read from db")
-        .is_none());
+    assert!(db.clean_and_get_batch_id(0).expect("could not read from db").is_none());
     assert_ok!(db.save_batch_id(0, BatchId::new_for_test(0)));
     assert_ok!(db.save_batch_id(0, BatchId::new_for_test(4)));
     assert_eq!(
-        db.clean_and_get_batch_id(0)
-            .expect("could not read from db")
-            .unwrap(),
+        db.clean_and_get_batch_id(0).expect("could not read from db").unwrap(),
         BatchId::new_for_test(4)
     );
     assert_ok!(db.save_batch_id(1, BatchId::new_for_test(1)));
     assert_ok!(db.save_batch_id(2, BatchId::new_for_test(2)));
     assert_eq!(
-        db.clean_and_get_batch_id(2)
-            .expect("could not read from db")
-            .unwrap(),
+        db.clean_and_get_batch_id(2).expect("could not read from db").unwrap(),
         BatchId::new_for_test(2)
     );
 }

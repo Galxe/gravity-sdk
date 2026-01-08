@@ -4,15 +4,16 @@
 use crate::quorum_store::types::{BatchKey, PersistedValue};
 use anyhow::Result;
 use aptos_consensus_types::proof_of_store::BatchId;
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_schemadb::{
-    schema::{KeyCodec, Schema, ValueCodec},
-    ColumnFamilyName,
+use gaptos::{
+    aptos_crypto::HashValue,
+    aptos_schemadb::{
+        schema::{KeyCodec, Schema, ValueCodec},
+        ColumnFamilyName,
+    },
 };
 
 pub(crate) const BATCH_CF_NAME: ColumnFamilyName = "batch";
 pub(crate) const BATCH_ID_CF_NAME: ColumnFamilyName = "batch_ID";
-
 
 #[derive(Debug)]
 pub(crate) struct BatchSchema;

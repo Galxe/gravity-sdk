@@ -2,18 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    payload_manager::TPayloadManager,
-    transaction_deduper::TransactionDeduper,
-    transaction_filter::TransactionFilter,
-    transaction_shuffler::TransactionShuffler,
+    payload_manager::TPayloadManager, transaction_deduper::TransactionDeduper,
+    transaction_filter::TransactionFilter, transaction_shuffler::TransactionShuffler,
 };
 use aptos_consensus_types::block::Block;
 use aptos_executor_types::ExecutorResult;
-use gaptos::aptos_types::transaction::SignedTransaction;
-use fail::fail_point;
-use std::{sync::Arc, time::Instant};
-use gaptos::aptos_consensus::counters as counters;
 use counters::{MAX_TXNS_FROM_BLOCK_TO_EXECUTE, TXN_SHUFFLE_SECONDS};
+use fail::fail_point;
+use gaptos::{aptos_consensus::counters, aptos_types::transaction::SignedTransaction};
+use std::{sync::Arc, time::Instant};
 
 pub struct BlockPreparer {
     payload_manager: Arc<dyn TPayloadManager>,
@@ -29,12 +26,7 @@ impl BlockPreparer {
         txn_deduper: Arc<dyn TransactionDeduper>,
         txn_shuffler: Arc<dyn TransactionShuffler>,
     ) -> Self {
-        Self {
-            payload_manager,
-            txn_filter,
-            txn_deduper,
-            txn_shuffler,
-        }
+        Self { payload_manager, txn_filter, txn_deduper, txn_shuffler }
     }
 
     pub async fn prepare_block(&self, block: &Block) -> ExecutorResult<Vec<SignedTransaction>> {
@@ -52,7 +44,8 @@ impl BlockPreparer {
         let txn_shuffler = self.txn_shuffler.clone();
         let block_id = block.id();
         let block_timestamp_usecs = block.timestamp_usecs();
-        // Transaction filtering, deduplication and shuffling are CPU intensive tasks, so we run them in a blocking task.
+        // Transaction filtering, deduplication and shuffling are CPU intensive tasks, so we run
+        // them in a blocking task.
         let result = tokio::task::spawn_blocking(move || {
             let filtered_txns = txn_filter.filter(block_id, block_timestamp_usecs, txns);
             let deduped_txns = txn_deduper.dedup(filtered_txns);
@@ -71,6 +64,6 @@ impl BlockPreparer {
         .await
         .expect("Failed to spawn blocking task for transaction generation");
         counters::BLOCK_PREPARER_LATENCY.observe_duration(start_time.elapsed());
-            result
+        result
     }
 }

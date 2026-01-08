@@ -16,21 +16,23 @@ use aptos_consensus_types::{
     vote_data::VoteData,
     vote_proposal::VoteProposal,
 };
-use gaptos::aptos_crypto::{
-    bls12381,
-    hash::{HashValue, TransactionAccumulatorHasher},
-    test_utils::TEST_SEED,
-    traits::{SigningKey, Uniform},
-};
-use gaptos::aptos_types::{
-    account_address::AccountAddress,
-    epoch_change::EpochChangeProof,
-    epoch_state::EpochState,
-    ledger_info::LedgerInfoWithSignatures,
-    proof::AccumulatorExtensionProof,
-    proptest_types::{AccountInfoUniverse, BlockInfoGen},
-    transaction::SignedTransaction,
-    validator_verifier::{ValidatorConsensusInfo, ValidatorVerifier},
+use gaptos::{
+    aptos_crypto::{
+        bls12381,
+        hash::{HashValue, TransactionAccumulatorHasher},
+        test_utils::TEST_SEED,
+        traits::{SigningKey, Uniform},
+    },
+    aptos_types::{
+        account_address::AccountAddress,
+        epoch_change::EpochChangeProof,
+        epoch_state::EpochState,
+        ledger_info::LedgerInfoWithSignatures,
+        proof::AccumulatorExtensionProof,
+        proptest_types::{AccountInfoUniverse, BlockInfoGen},
+        transaction::SignedTransaction,
+        validator_verifier::{ValidatorConsensusInfo, ValidatorVerifier},
+    },
 };
 use proptest::prelude::*;
 use rand::{rngs::StdRng, SeedableRng};
@@ -243,11 +245,7 @@ prop_compose! {
 
 // This generates an arbitrary BlockType enum.
 fn arb_block_type() -> impl Strategy<Value = BlockType> {
-    prop_oneof![
-        arb_block_type_proposal(),
-        arb_nil_block(),
-        Just(BlockType::Genesis),
-    ]
+    prop_oneof![arb_block_type_proposal(), arb_nil_block(), Just(BlockType::Genesis),]
 }
 
 // This generates an arbitrary SafetyRulesInput enum.
@@ -274,8 +272,7 @@ pub mod fuzzing {
         block_data::BlockData, order_vote::OrderVote, order_vote_proposal::OrderVoteProposal,
         timeout_2chain::TwoChainTimeout, vote::Vote, vote_proposal::VoteProposal,
     };
-    use gaptos::aptos_crypto::bls12381;
-    use gaptos::aptos_types::epoch_change::EpochChangeProof;
+    use gaptos::{aptos_crypto::bls12381, aptos_types::epoch_change::EpochChangeProof};
 
     pub fn fuzz_initialize(proof: EpochChangeProof) -> Result<(), Error> {
         let mut safety_rules = test_utils::test_safety_rules_uninitialized();

@@ -7,8 +7,10 @@ use crate::dag::{
 };
 use anyhow::ensure;
 use aptos_consensus_types::common::Round;
-use gaptos::aptos_infallible::{duration_since_epoch, Mutex};
-use gaptos::aptos_types::epoch_state::EpochState;
+use gaptos::{
+    aptos_infallible::{duration_since_epoch, Mutex},
+    aptos_types::epoch_state::EpochState,
+};
 use std::{cmp::Ordering, sync::Arc, time::Duration};
 use tokio::task::JoinHandle;
 
@@ -23,11 +25,7 @@ impl RoundState {
         event_sender: tokio::sync::mpsc::UnboundedSender<Round>,
         responsive_check: Box<dyn ResponsiveCheck>,
     ) -> Self {
-        Self {
-            current_round: Mutex::new(0),
-            event_sender,
-            responsive_check,
-        }
+        Self { current_round: Mutex::new(0), event_sender, responsive_check }
     }
 
     pub fn check_for_new_round(
@@ -42,7 +40,7 @@ impl RoundState {
             Ordering::Less => {
                 // the receiver can be dropped if we move to a new epoch
                 let _ = self.event_sender.send(highest_strong_links_round + 1);
-            },
+            }
             Ordering::Equal => self.responsive_check.check_for_new_round(
                 highest_strong_links_round,
                 strong_links,
@@ -159,10 +157,7 @@ impl ResponsiveCheck for AdaptiveResponsive {
             return;
         }
         let new_round = highest_strong_links_round + 1;
-        observe_round(
-            inner.start_time.as_micros() as u64,
-            RoundStage::StrongLinkReceived,
-        );
+        observe_round(inner.start_time.as_micros() as u64, RoundStage::StrongLinkReceived);
         let voting_power = self
             .epoch_state
             .verifier
@@ -177,8 +172,8 @@ impl ResponsiveCheck for AdaptiveResponsive {
 
         // voting power == 3f+1 and pass wait time if health backoff
         let duration_since_start = duration_since_epoch().saturating_sub(inner.start_time);
-        if voting_power == self.epoch_state.verifier.total_voting_power()
-            && (duration_since_start >= wait_time || !is_health_backoff)
+        if voting_power == self.epoch_state.verifier.total_voting_power() &&
+            (duration_since_start >= wait_time || !is_health_backoff)
         {
             let _ = self.event_sender.send(new_round);
             if let State::Scheduled(handle) = std::mem::replace(&mut inner.state, State::Sent) {

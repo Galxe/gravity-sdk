@@ -2,32 +2,32 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{
-    liveness::proposer_election::{choose_index, ProposerElection},
-};
+use crate::liveness::proposer_election::{choose_index, ProposerElection};
 use anyhow::{ensure, Result};
-use gaptos::aptos_bitvec::BitVec;
 use aptos_consensus_types::common::{Author, Round};
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_infallible::{Mutex, MutexGuard};
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_storage_interface::DbReader;
-use gaptos::aptos_types::{
-    account_config::NewBlockEvent, epoch_change::EpochChangeProof, epoch_state::EpochState,
+use gaptos::{
+    aptos_bitvec::BitVec,
+    aptos_consensus::counters::{
+        CHAIN_HEALTH_PARTICIPATING_NUM_VALIDATORS, CHAIN_HEALTH_PARTICIPATING_VOTING_POWER,
+        CHAIN_HEALTH_REPUTATION_PARTICIPATING_VOTING_POWER_FRACTION,
+        CHAIN_HEALTH_TOTAL_NUM_VALIDATORS, CHAIN_HEALTH_TOTAL_VOTING_POWER,
+        CHAIN_HEALTH_WINDOW_SIZES, COMMITTED_PROPOSALS_IN_WINDOW, COMMITTED_VOTES_IN_WINDOW,
+        CONSENSUS_PARTICIPATION_STATUS, FAILED_PROPOSALS_IN_WINDOW,
+        LEADER_REPUTATION_ROUND_HISTORY_SIZE,
+    },
+    aptos_crypto::HashValue,
+    aptos_infallible::{Mutex, MutexGuard},
+    aptos_logger::prelude::*,
+    aptos_storage_interface::DbReader,
+    aptos_types::{
+        account_config::NewBlockEvent, epoch_change::EpochChangeProof, epoch_state::EpochState,
+    },
 };
 use std::{
     cmp::max,
     collections::{HashMap, HashSet},
     convert::TryFrom,
     sync::Arc,
-};
-use gaptos::aptos_consensus::counters::{
-    CHAIN_HEALTH_PARTICIPATING_NUM_VALIDATORS, CHAIN_HEALTH_PARTICIPATING_VOTING_POWER,
-    CHAIN_HEALTH_REPUTATION_PARTICIPATING_VOTING_POWER_FRACTION,
-    CHAIN_HEALTH_TOTAL_NUM_VALIDATORS, CHAIN_HEALTH_TOTAL_VOTING_POWER,
-    CHAIN_HEALTH_WINDOW_SIZES, COMMITTED_PROPOSALS_IN_WINDOW, COMMITTED_VOTES_IN_WINDOW,
-    CONSENSUS_PARTICIPATION_STATUS, FAILED_PROPOSALS_IN_WINDOW,
-    LEADER_REPUTATION_ROUND_HISTORY_SIZE,
 };
 
 pub type VotingPowerRatio = f64;
@@ -60,12 +60,7 @@ pub struct AptosDBBackend {
 
 impl AptosDBBackend {
     pub fn new(window_size: usize, seek_len: usize, aptos_db: Arc<dyn DbReader>) -> Self {
-        Self {
-            window_size,
-            seek_len,
-            aptos_db,
-            db_result: Mutex::new(None),
-        }
+        Self { window_size, seek_len, aptos_db, db_result: Mutex::new(None) }
     }
 
     fn refresh_db_result(
@@ -92,11 +87,8 @@ impl AptosDBBackend {
 
         let hit_end = new_block_events.len() < limit;
 
-        let result = (
-            new_block_events,
-            std::cmp::max(latest_db_version, max_returned_version),
-            hit_end,
-        );
+        let result =
+            (new_block_events, std::cmp::max(latest_db_version, max_returned_version), hit_end);
         **locked = Some(result.clone());
         Ok(result)
     }
@@ -115,8 +107,8 @@ impl AptosDBBackend {
                 (e.event.epoch(), e.event.round()) >= (target_epoch, target_round)
             });
             if !has_larger {
-                // error, and not a fatal, in an unlikely scenario that we have many failed consecutive rounds,
-                // and nobody has any newer successful blocks.
+                // error, and not a fatal, in an unlikely scenario that we have many failed
+                // consecutive rounds, and nobody has any newer successful blocks.
                 warn!(
                     "Local history is too old, asking for {} epoch and {} round, and latest from db is {} epoch and {} round! Elected proposers are unlikely to match!!",
                     target_epoch, target_round, events.first().map_or(0, |e| e.event.epoch()), events.first().map_or(0, |e| e.event.round()))
@@ -126,8 +118,8 @@ impl AptosDBBackend {
         let mut max_version = 0;
         let mut result = vec![];
         for event in events {
-            if (event.event.epoch(), event.event.round()) <= (target_epoch, target_round)
-                && result.len() < self.window_size
+            if (event.event.epoch(), event.event.round()) <= (target_epoch, target_round) &&
+                result.len() < self.window_size
             {
                 max_version = std::cmp::max(max_version, event.version);
                 result.push(event.event.clone());
@@ -191,23 +183,23 @@ impl MetadataBackend for AptosDBBackend {
             (&result.0, result.1, result.2)
         };
 
-        let has_larger = events.first().map_or(false, |e| {
-            (e.event.epoch(), e.event.round()) >= (target_epoch, target_round)
-        });
+        let has_larger = events
+            .first()
+            .map_or(false, |e| (e.event.epoch(), e.event.round()) >= (target_epoch, target_round));
         // check if fresher data has potential to give us different result
         if !has_larger && version < latest_db_version {
             let fresh_db_result = self.refresh_db_result(&mut locked, latest_db_version);
             match fresh_db_result {
                 Ok((events, _version, hit_end)) => {
                     self.get_from_db_result(target_epoch, target_round, &events, hit_end)
-                },
+                }
                 Err(e) => {
                     // fails if requested events were pruned / or we never backfil them.
                     warn!(
                         error = ?e, "[leader reputation] Fail to refresh window",
                     );
                     (vec![], HashValue::zero())
-                },
+                }
             }
         } else {
             self.get_from_db_result(target_epoch, target_round, events, hit_end)
@@ -241,11 +233,7 @@ impl NewBlockEventAggregation {
         proposer_window_size: usize,
         reputation_window_from_stale_end: bool,
     ) -> Self {
-        Self {
-            voter_window_size,
-            proposer_window_size,
-            reputation_window_from_stale_end,
-        }
+        Self { voter_window_size, proposer_window_size, reputation_window_from_stale_end }
     }
 
     pub fn bitvec_to_voters<'a>(
@@ -263,13 +251,15 @@ impl NewBlockEventAggregation {
         Ok(validators
             .iter()
             .enumerate()
-            .filter_map(|(index, validator)| {
-                if bitvec.is_set(index as u16) {
-                    Some(validator)
-                } else {
-                    None
-                }
-            })
+            .filter_map(
+                |(index, validator)| {
+                    if bitvec.is_set(index as u16) {
+                        Some(validator)
+                    } else {
+                        None
+                    }
+                },
+            )
             .collect())
     }
 
@@ -300,28 +290,18 @@ impl NewBlockEventAggregation {
         from_stale_end: bool,
     ) -> impl Iterator<Item = &'a NewBlockEvent> {
         let sub_history = if from_stale_end {
-            let start = if history.len() > window_size {
-                history.len() - window_size
-            } else {
-                0
-            };
+            let start = if history.len() > window_size { history.len() - window_size } else { 0 };
 
             &history[start..]
         } else {
             if let (Some(first), Some(last)) = (history.first(), history.last()) {
                 assert!((first.epoch(), first.round()) >= (last.epoch(), last.round()));
             }
-            let end = if history.len() > window_size {
-                window_size
-            } else {
-                history.len()
-            };
+            let end = if history.len() > window_size { window_size } else { history.len() };
 
             &history[..end]
         };
-        sub_history
-            .iter()
-            .filter(move |&meta| epoch_to_candidates.contains_key(&meta.epoch()))
+        sub_history.iter().filter(move |&meta| epoch_to_candidates.contains_key(&meta.epoch()))
     }
 
     pub fn get_aggregated_metrics(
@@ -329,11 +309,7 @@ impl NewBlockEventAggregation {
         epoch_to_candidates: &HashMap<u64, Vec<Author>>,
         history: &[NewBlockEvent],
         author: &Author,
-    ) -> (
-        HashMap<Author, u32>,
-        HashMap<Author, u32>,
-        HashMap<Author, u32>,
-    ) {
+    ) -> (HashMap<Author, u32>, HashMap<Author, u32>, HashMap<Author, u32>) {
         let votes = self.count_votes(epoch_to_candidates, history);
         let proposals = self.count_proposals(epoch_to_candidates, history);
         let failed_proposals = self.count_failed_proposals(epoch_to_candidates, history);
@@ -380,7 +356,7 @@ impl NewBlockEventAggregation {
                             let count = map.entry(voter).or_insert(0);
                             *count += 1;
                         }
-                    },
+                    }
                     Err(msg) => {
                         error!(
                             "Voter conversion from bitmap failed at epoch {}, round {}: {}",
@@ -388,7 +364,7 @@ impl NewBlockEventAggregation {
                             meta.round(),
                             msg
                         )
-                    },
+                    }
                 }
                 map
             },
@@ -445,7 +421,7 @@ impl NewBlockEventAggregation {
                         let count = map.entry(failed_proposer).or_insert(0);
                         *count += 1;
                     }
-                },
+                }
                 Err(msg) => {
                     error!(
                         "Failed proposer conversion from indices failed at epoch {}, round {}: {}",
@@ -453,7 +429,7 @@ impl NewBlockEventAggregation {
                         meta.round(),
                         msg
                     )
-                },
+                }
             }
             map
         })
@@ -467,21 +443,24 @@ impl NewBlockEventAggregation {
 /// but we also, in combinatoin with staking rewards logic, need to be reasonably fair.
 ///
 /// Logic is:
-///  * if proposer round failure rate within the proposer window is strictly above threshold, use failed_weight (default 1).
-///  * otherwise, if node had no proposal rounds and no successful votes, use inactive_weight (default 10).
+///  * if proposer round failure rate within the proposer window is strictly above threshold, use
+///    failed_weight (default 1).
+///  * otherwise, if node had no proposal rounds and no successful votes, use inactive_weight
+///    (default 10).
 ///  * otherwise, use the default active_weight (default 100).
 ///
 /// We primarily want to avoid failed rounds, as they have a largest negative effect on the network.
-/// So if we see a node having failures to propose, when it was the leader, we want to avoid that node.
-/// We add a threshold (instead of penalizing on a single failure), so that transient issues in the network,
-/// or malicious behaviour of the next leader is avoided. In general, we expect there to be
-/// proposer_window_size/num_validators opportunities for a node to be a leader, so a single failure, or a
-/// subset of following leaders being malicious will not be enough to exclude a node.
-/// On the other hand, single failure, without any successes before will exclude the note.
+/// So if we see a node having failures to propose, when it was the leader, we want to avoid that
+/// node. We add a threshold (instead of penalizing on a single failure), so that transient issues
+/// in the network, or malicious behaviour of the next leader is avoided. In general, we expect
+/// there to be proposer_window_size/num_validators opportunities for a node to be a leader, so a
+/// single failure, or a subset of following leaders being malicious will not be enough to exclude a
+/// node. On the other hand, single failure, without any successes before will exclude the note.
 /// Threshold probably makes the most sense to be between:
 ///  * 10% (aggressive exclusion with 1 failure in 10 proposals being enough for exclusion)
-///  * and 33% (much less aggressive exclusion, with 1 failure for every 2 successes, should still reduce failed
-///    rounds by at least 66%, and is enough to avoid byzantine attacks as well as the rest of the protocol)
+///  * and 33% (much less aggressive exclusion, with 1 failure for every 2 successes, should still
+///    reduce failed rounds by at least 66%, and is enough to avoid byzantine attacks as well as the
+///    rest of the protocol)
 pub struct ProposerAndVoterHeuristic {
     author: Author,
     active_weight: u64,
@@ -527,8 +506,7 @@ impl ReputationHeuristic for ProposerAndVoterHeuristic {
         assert!(epoch_to_candidates.contains_key(&epoch));
 
         let (votes, proposals, failed_proposals) =
-            self.aggregation
-                .get_aggregated_metrics(epoch_to_candidates, history, &self.author);
+            self.aggregation.get_aggregated_metrics(epoch_to_candidates, history, &self.author);
 
         epoch_to_candidates[&epoch]
             .iter()
@@ -537,8 +515,8 @@ impl ReputationHeuristic for ProposerAndVoterHeuristic {
                 let cur_proposals = *proposals.get(author).unwrap_or(&0);
                 let cur_failed_proposals = *failed_proposals.get(author).unwrap_or(&0);
 
-                if cur_failed_proposals * 100
-                    > (cur_proposals + cur_failed_proposals) * self.failure_threshold_percent
+                if cur_failed_proposals * 100 >
+                    (cur_proposals + cur_failed_proposals) * self.failure_threshold_percent
                 {
                     self.failed_weight
                 } else if cur_proposals > 0 || cur_votes > 0 {
@@ -598,10 +576,8 @@ impl LeaderReputation {
         history: &[NewBlockEvent],
         round: Round,
     ) -> VotingPowerRatio {
-        let candidates = self
-            .epoch_to_proposers
-            .get(&self.epoch)
-            .expect("Epoch should always map to proposers");
+        let candidates =
+            self.epoch_to_proposers.get(&self.epoch).expect("Epoch should always map to proposers");
         // use f64 counter, as total voting power is u128
         let total_voting_power = self.voting_powers.iter().map(|v| *v as f64).sum();
         CHAIN_HEALTH_TOTAL_VOTING_POWER.set(total_voting_power);
@@ -662,19 +638,19 @@ impl LeaderReputation {
                     .set(participants.len() as i64);
 
                 if chosen {
-                    // do not treat chain as unhealthy, if chain just started, and we don't have enough history to decide.
-                    let voting_power_participation_ratio: VotingPowerRatio =
-                        if history.len() < *participants_window_size && self.epoch <= 2 {
-                            1.0
-                        } else if total_voting_power >= 1.0 {
-                            participating_voting_power / total_voting_power
-                        } else {
-                            error!(
-                                "Total voting power is {}, should never happen",
-                                total_voting_power
-                            );
-                            1.0
-                        };
+                    // do not treat chain as unhealthy, if chain just started, and we don't have
+                    // enough history to decide.
+                    let voting_power_participation_ratio: VotingPowerRatio = if history.len() <
+                        *participants_window_size &&
+                        self.epoch <= 2
+                    {
+                        1.0
+                    } else if total_voting_power >= 1.0 {
+                        participating_voting_power / total_voting_power
+                    } else {
+                        error!("Total voting power is {}, should never happen", total_voting_power);
+                        1.0
+                    };
                     CHAIN_HEALTH_REPUTATION_PARTICIPATING_VOTING_POWER_FRACTION
                         .set(voting_power_participation_ratio);
                     result = Some(voting_power_participation_ratio);
@@ -701,8 +677,7 @@ impl ProposerElection for LeaderReputation {
         let voting_power_participation_ratio =
             self.compute_chain_health_and_add_metrics(&sliding_window, round);
         let mut weights =
-            self.heuristic
-                .get_weights(self.epoch, &self.epoch_to_proposers, &sliding_window);
+            self.heuristic.get_weights(self.epoch, &self.epoch_to_proposers, &sliding_window);
         let proposers = &self.epoch_to_proposers[&self.epoch];
         assert_eq!(weights.len(), proposers.len());
 
@@ -714,18 +689,10 @@ impl ProposerElection for LeaderReputation {
             .collect();
 
         let state = if self.use_root_hash {
-            [
-                root_hash.to_vec(),
-                self.epoch.to_le_bytes().to_vec(),
-                round.to_le_bytes().to_vec(),
-            ]
-            .concat()
+            [root_hash.to_vec(), self.epoch.to_le_bytes().to_vec(), round.to_le_bytes().to_vec()]
+                .concat()
         } else {
-            [
-                self.epoch.to_le_bytes().to_vec(),
-                round.to_le_bytes().to_vec(),
-            ]
-            .concat()
+            [self.epoch.to_le_bytes().to_vec(), round.to_le_bytes().to_vec()].concat()
         };
 
         let chosen_index = choose_index(stake_weights, state);
@@ -733,13 +700,11 @@ impl ProposerElection for LeaderReputation {
     }
 
     fn get_valid_proposer(&self, round: Round) -> Author {
-        self.get_valid_proposer_and_voting_power_participation_ratio(round)
-            .0
+        self.get_valid_proposer_and_voting_power_participation_ratio(round).0
     }
 
     fn get_voting_power_participation_ratio(&self, round: Round) -> VotingPowerRatio {
-        self.get_valid_proposer_and_voting_power_participation_ratio(round)
-            .1
+        self.get_valid_proposer_and_voting_power_participation_ratio(round).1
     }
 }
 
@@ -752,15 +717,11 @@ pub(crate) fn extract_epoch_to_proposers_impl(
     let last_index = next_epoch_states_and_cur_epoch_rounds.len() - 1;
     let mut num_rounds = 0;
     let mut result = HashMap::new();
-    for (index, (next_epoch_state, cur_epoch_rounds)) in next_epoch_states_and_cur_epoch_rounds
-        .iter()
-        .enumerate()
-        .rev()
+    for (index, (next_epoch_state, cur_epoch_rounds)) in
+        next_epoch_states_and_cur_epoch_rounds.iter().enumerate().rev()
     {
-        let next_epoch_proposers = next_epoch_state
-            .verifier
-            .get_ordered_account_addresses_iter()
-            .collect::<Vec<_>>();
+        let next_epoch_proposers =
+            next_epoch_state.verifier.get_ordered_account_addresses_iter().collect::<Vec<_>>();
         if index == last_index {
             ensure!(
                 epoch == next_epoch_state.epoch,

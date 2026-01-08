@@ -10,11 +10,13 @@ use crate::dag::{
     NodeId, Vote,
 };
 use aptos_consensus_types::common::Author;
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_types::{
-    epoch_state::EpochState, ledger_info::LedgerInfoWithSignatures,
-    validator_signer::ValidatorSigner, validator_verifier::random_validator_verifier,
+use gaptos::{
+    aptos_crypto::HashValue,
+    aptos_infallible::Mutex,
+    aptos_types::{
+        epoch_state::EpochState, ledger_info::LedgerInfoWithSignatures,
+        validator_signer::ValidatorSigner, validator_verifier::random_validator_verifier,
+    },
 };
 use std::{collections::HashMap, sync::Arc};
 
@@ -83,19 +85,12 @@ impl DAGStorage for MockStorage {
     }
 
     fn save_certified_node(&self, node: &CertifiedNode) -> anyhow::Result<()> {
-        self.certified_node_data
-            .lock()
-            .insert(node.digest(), node.clone());
+        self.certified_node_data.lock().insert(node.digest(), node.clone());
         Ok(())
     }
 
     fn get_certified_nodes(&self) -> anyhow::Result<Vec<(HashValue, CertifiedNode)>> {
-        Ok(self
-            .certified_node_data
-            .lock()
-            .clone()
-            .into_iter()
-            .collect())
+        Ok(self.certified_node_data.lock().clone().into_iter().collect())
     }
 
     fn delete_certified_nodes(&self, digests: Vec<HashValue>) -> anyhow::Result<()> {
@@ -110,45 +105,29 @@ impl DAGStorage for MockStorage {
     }
 
     fn get_latest_ledger_info(&self) -> anyhow::Result<LedgerInfoWithSignatures> {
-        self.latest_ledger_info
-            .clone()
-            .ok_or_else(|| anyhow::anyhow!("ledger info not set"))
+        self.latest_ledger_info.clone().ok_or_else(|| anyhow::anyhow!("ledger info not set"))
     }
 
     fn get_epoch_to_proposers(&self) -> HashMap<u64, Vec<Author>> {
         self.epoch_state
             .as_ref()
             .map(|epoch_state| {
-                [(
-                    epoch_state.epoch,
-                    epoch_state.verifier.get_ordered_account_addresses(),
-                )]
-                .into()
+                [(epoch_state.epoch, epoch_state.verifier.get_ordered_account_addresses())].into()
             })
             .unwrap_or_default()
     }
 }
 
-fn setup() -> (
-    Vec<ValidatorSigner>,
-    Arc<EpochState>,
-    DagStore,
-    Arc<MockStorage>,
-) {
+fn setup() -> (Vec<ValidatorSigner>, Arc<EpochState>, DagStore, Arc<MockStorage>) {
     let (signers, validator_verifier) = random_validator_verifier(4, None, false);
     let epoch_state = Arc::new(EpochState {
         epoch: 1,
-        verifier: todo!() //validator_verifier,
+        verifier: todo!(), //validator_verifier,
     });
     let storage = Arc::new(MockStorage::new());
     let payload_manager = Arc::new(MockPayloadManager {});
-    let dag = DagStore::new(
-        epoch_state.clone(),
-        storage.clone(),
-        payload_manager,
-        1,
-        TEST_DAG_WINDOW,
-    );
+    let dag =
+        DagStore::new(epoch_state.clone(), storage.clone(), payload_manager, 1, TEST_DAG_WINDOW);
     (signers, epoch_state, dag, storage)
 }
 
@@ -161,10 +140,7 @@ fn test_dag_insertion_succeed() {
         let node = new_certified_node(1, signer.author(), vec![]);
         assert!(dag.write().add_node_for_test(node).is_ok());
     }
-    let parents = dag
-        .read()
-        .get_strong_links_for_round(1, &epoch_state.verifier)
-        .unwrap();
+    let parents = dag.read().get_strong_links_for_round(1, &epoch_state.verifier).unwrap();
 
     // Round 2 nodes 0, 1, 2 links to 0, 1, 2
     for signer in &signers[0..3] {
@@ -173,10 +149,7 @@ fn test_dag_insertion_succeed() {
     }
 
     // Round 3 nodes 1, 2 links to 0, 1, 2
-    let parents = dag
-        .read()
-        .get_strong_links_for_round(2, &epoch_state.verifier)
-        .unwrap();
+    let parents = dag.read().get_strong_links_for_round(2, &epoch_state.verifier).unwrap();
 
     for signer in &signers[1..3] {
         let node = new_certified_node(3, signer.author(), parents.clone());
@@ -184,10 +157,7 @@ fn test_dag_insertion_succeed() {
     }
 
     // not enough strong links
-    assert!(dag
-        .read()
-        .get_strong_links_for_round(3, &epoch_state.verifier)
-        .is_none());
+    assert!(dag.read().get_strong_links_for_round(3, &epoch_state.verifier).is_none());
 }
 
 #[test]
@@ -203,10 +173,7 @@ fn test_dag_insertion_failure() {
     }
 
     let missing_node = new_certified_node(1, signers[3].author(), vec![]);
-    let mut parents = dag
-        .read()
-        .get_strong_links_for_round(1, &epoch_state.verifier)
-        .unwrap();
+    let mut parents = dag.read().get_strong_links_for_round(1, &epoch_state.verifier).unwrap();
     parents.push(missing_node.certificate());
 
     let node = new_certified_node(2, signers[0].author(), parents.clone());
@@ -231,10 +198,8 @@ fn test_dag_recover_from_storage() {
     let mut metadatas = vec![];
 
     for round in 1..10 {
-        let parents = dag
-            .read()
-            .get_strong_links_for_round(round, &epoch_state.verifier)
-            .unwrap_or_default();
+        let parents =
+            dag.read().get_strong_links_for_round(round, &epoch_state.verifier).unwrap_or_default();
         for signer in &signers[0..3] {
             let node = new_certified_node(round, signer.author(), parents.clone());
             metadatas.push(node.metadata().clone());
@@ -253,10 +218,7 @@ fn test_dag_recover_from_storage() {
         assert!(new_dag.read().exists(metadata));
     }
 
-    let new_epoch_state = Arc::new(EpochState {
-        epoch: 2,
-        verifier: epoch_state.verifier.clone(),
-    });
+    let new_epoch_state = Arc::new(EpochState { epoch: 2, verifier: epoch_state.verifier.clone() });
 
     let _new_epoch_dag = DagStore::new(
         new_epoch_state,
@@ -306,12 +268,6 @@ fn test_dag_bitmask() {
         let node = new_certified_node(round, signers[3].author(), parents.clone());
         assert!(dag.write().add_node_for_test(node).is_ok());
     }
-    assert_eq!(
-        dag.read().bitmask(10),
-        DagSnapshotBitmask::new(5, vec![vec![false; 4]; 6])
-    );
-    assert_eq!(
-        dag.read().bitmask(6),
-        DagSnapshotBitmask::new(5, vec![vec![false; 4]; 2])
-    );
+    assert_eq!(dag.read().bitmask(10), DagSnapshotBitmask::new(5, vec![vec![false; 4]; 6]));
+    assert_eq!(dag.read().bitmask(6), DagSnapshotBitmask::new(5, vec![vec![false; 4]; 2]));
 }

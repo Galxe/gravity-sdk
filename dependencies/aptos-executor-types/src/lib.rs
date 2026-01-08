@@ -2,15 +2,16 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use gaptos::api_types::compute_res::{ComputeRes, TxnStatus};
-use gaptos::aptos_crypto::hash::{HashValue, ACCUMULATOR_PLACEHOLDER_HASH};
-use gaptos::aptos_types::block_executor::partitioner::ExecutableBlock;
-use gaptos::aptos_types::contract_event::ContractEvent;
-use gaptos::aptos_types::epoch_state::EpochState;
-use gaptos::aptos_types::ledger_info::LedgerInfoWithSignatures;
-use gaptos::aptos_types::transaction::block_epilogue::BlockEndInfo;
-use gaptos::aptos_types::{
-    block_executor::config::BlockExecutorConfigFromOnchain, transaction::Transaction,
+use gaptos::{
+    api_types::compute_res::{ComputeRes, TxnStatus},
+    aptos_crypto::hash::{HashValue, ACCUMULATOR_PLACEHOLDER_HASH},
+    aptos_types::{
+        block_executor::{config::BlockExecutorConfigFromOnchain, partitioner::ExecutableBlock},
+        contract_event::ContractEvent,
+        epoch_state::EpochState,
+        ledger_info::LedgerInfoWithSignatures,
+        transaction::{block_epilogue::BlockEndInfo, Transaction},
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::{fmt::Display, sync::Arc};
@@ -67,7 +68,8 @@ pub trait BlockExecutorTrait: Send + Sync {
     /// Get the latest committed block id
     fn committed_block_id(&self) -> HashValue;
 
-    /// Reset the internal state including cache with newly fetched latest committed block from storage.
+    /// Reset the internal state including cache with newly fetched latest committed block from
+    /// storage.
     fn reset(&self) -> anyhow::Result<()>;
 
     /// Executes a block and returns the state checkpoint output.

@@ -1,4 +1,6 @@
-use crate::{dkg::DKGCommand, genesis::GenesisCommand, node::NodeCommand, validator::ValidatorCommand};
+use crate::{
+    dkg::DKGCommand, genesis::GenesisCommand, node::NodeCommand, validator::ValidatorCommand,
+};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]

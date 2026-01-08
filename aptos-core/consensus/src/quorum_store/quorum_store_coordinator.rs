@@ -9,11 +9,13 @@ use crate::{
     },
     round_manager::VerifiedEvent,
 };
-use gaptos::aptos_channels::aptos_channel;
 use aptos_consensus_types::proof_of_store::BatchInfo;
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_types::{account_address::AccountAddress, PeerId};
 use futures::StreamExt;
+use gaptos::{
+    aptos_channels::aptos_channel,
+    aptos_logger::prelude::*,
+    aptos_types::{account_address::AccountAddress, PeerId},
+};
 use tokio::sync::{mpsc, oneshot};
 
 pub enum CoordinatorCommand {
@@ -75,14 +77,15 @@ impl QuorumStoreCoordinator {
                             ))
                             .await
                             .expect("Failed to send to BatchGenerator");
-                    },
+                    }
                     CoordinatorCommand::Shutdown(ack_tx) => {
                         // Note: Shutdown is done from the back of the quorum store pipeline to the
-                        // front, so senders are always shutdown before receivers. This avoids sending
-                        // messages through closed channels during shutdown.
-                        // Oneshots that send data in the reverse order of the pipeline must assume that
-                        // the receiver could be unavailable during shutdown, and resolve this without
-                        // panicking.
+                        // front, so senders are always shutdown before receivers. This avoids
+                        // sending messages through closed channels during
+                        // shutdown. Oneshots that send data in the reverse
+                        // order of the pipeline must assume that
+                        // the receiver could be unavailable during shutdown, and resolve this
+                        // without panicking.
 
                         let (network_listener_shutdown_tx, network_listener_shutdown_rx) =
                             oneshot::channel();
@@ -93,9 +96,7 @@ impl QuorumStoreCoordinator {
                             Ok(()) => info!("QS: shutdown network listener sent"),
                             Err(err) => panic!("Failed to send to NetworkListener, Err {:?}", err),
                         };
-                        network_listener_shutdown_rx
-                            .await
-                            .expect("Failed to stop NetworkListener");
+                        network_listener_shutdown_rx.await.expect("Failed to stop NetworkListener");
 
                         let (batch_generator_shutdown_tx, batch_generator_shutdown_rx) =
                             oneshot::channel();
@@ -103,9 +104,7 @@ impl QuorumStoreCoordinator {
                             .send(BatchGeneratorCommand::Shutdown(batch_generator_shutdown_tx))
                             .await
                             .expect("Failed to send to BatchGenerator");
-                        batch_generator_shutdown_rx
-                            .await
-                            .expect("Failed to stop BatchGenerator");
+                        batch_generator_shutdown_rx.await.expect("Failed to stop BatchGenerator");
 
                         for remote_batch_coordinator_cmd_tx in self.remote_batch_coordinator_cmd_tx
                         {
@@ -127,9 +126,7 @@ impl QuorumStoreCoordinator {
                         let (proof_coordinator_shutdown_tx, proof_coordinator_shutdown_rx) =
                             oneshot::channel();
                         self.proof_coordinator_cmd_tx
-                            .send(ProofCoordinatorCommand::Shutdown(
-                                proof_coordinator_shutdown_tx,
-                            ))
+                            .send(ProofCoordinatorCommand::Shutdown(proof_coordinator_shutdown_tx))
                             .await
                             .expect("Failed to send to ProofCoordinator");
                         proof_coordinator_shutdown_rx
@@ -142,15 +139,11 @@ impl QuorumStoreCoordinator {
                             .send(ProofManagerCommand::Shutdown(proof_manager_shutdown_tx))
                             .await
                             .expect("Failed to send to ProofManager");
-                        proof_manager_shutdown_rx
-                            .await
-                            .expect("Failed to stop ProofManager");
+                        proof_manager_shutdown_rx.await.expect("Failed to stop ProofManager");
 
-                        ack_tx
-                            .send(())
-                            .expect("Failed to send shutdown ack from QuorumStore");
+                        ack_tx.send(()).expect("Failed to send shutdown ack from QuorumStore");
                         break;
-                    },
+                    }
                 }
             })
         }

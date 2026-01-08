@@ -4,17 +4,16 @@ pub mod block_executor {
     use anyhow::{Ok, Result};
     use std::sync::RwLock;
 
-    use gaptos::aptos_crypto::HashValue;
-    use aptos_executor_types::{
-        BlockExecutorTrait, ExecutorResult, StateComputeResult,
-    };
-    use gaptos::aptos_storage_interface::DbReaderWriter;
-    use gaptos::aptos_types::{
-        block_executor::{
-            config::BlockExecutorConfigFromOnchain,
-            partitioner::ExecutableBlock,
+    use aptos_executor_types::{BlockExecutorTrait, ExecutorResult, StateComputeResult};
+    use gaptos::{
+        aptos_crypto::HashValue,
+        aptos_storage_interface::DbReaderWriter,
+        aptos_types::{
+            block_executor::{
+                config::BlockExecutorConfigFromOnchain, partitioner::ExecutableBlock,
+            },
+            ledger_info::LedgerInfoWithSignatures,
         },
-        ledger_info::LedgerInfoWithSignatures,
     };
 
     use crate::mock_block_tree::MockBlockTree;

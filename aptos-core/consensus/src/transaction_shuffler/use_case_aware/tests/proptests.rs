@@ -11,9 +11,7 @@ use proptest::{collection::vec, prelude::*};
 use std::collections::HashMap;
 
 fn txn_indices_by_account(txns: &[Transaction]) -> HashMap<u8, Vec<usize>> {
-    txns.iter()
-        .map(|txn| (txn.sender.0, txn.original_idx))
-        .into_group_map()
+    txns.iter().map(|txn| (txn.sender.0, txn.original_idx)).into_group_map()
 }
 
 proptest! {

@@ -5,22 +5,31 @@
 
 use crate::{
     epoch_manager::LivenessStorageData,
-    persistent_liveness_storage::{
-        LedgerRecoveryData, PersistentLivenessStorage, RecoveryData,
-    },
+    persistent_liveness_storage::{LedgerRecoveryData, PersistentLivenessStorage, RecoveryData},
 };
 use anyhow::Result;
 use aptos_consensus_types::{
     block::Block, quorum_cert::QuorumCert, timeout_2chain::TwoChainTimeoutCertificate, vote::Vote,
 };
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_storage_interface::DbReader;
-use gaptos::aptos_types::{
-    aggregate_signature::AggregateSignature, epoch_change::EpochChangeProof, ledger_info::{LedgerInfo, LedgerInfoWithSignatures}, on_chain_config::ValidatorSet
-};
 use async_trait::async_trait;
-use std::{collections::HashMap, sync::{atomic::{AtomicU64, Ordering}, Arc}};
+use gaptos::{
+    aptos_crypto::HashValue,
+    aptos_infallible::Mutex,
+    aptos_storage_interface::DbReader,
+    aptos_types::{
+        aggregate_signature::AggregateSignature,
+        epoch_change::EpochChangeProof,
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+        on_chain_config::ValidatorSet,
+    },
+};
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+};
 
 pub struct MockSharedStorage {
     // Safety state
@@ -66,14 +75,8 @@ impl MockStorage {
             LedgerInfo::mock_genesis(validator_set)
         };
         let lis = LedgerInfoWithSignatures::new(li, AggregateSignature::empty());
-        shared_storage
-            .lis
-            .lock()
-            .insert(lis.ledger_info().version(), lis);
-        MockStorage {
-            shared_storage,
-            storage_ledger: Mutex::new(ledger_info),
-        }
+        shared_storage.lis.lock().insert(lis.ledger_info().version(), lis);
+        MockStorage { shared_storage, storage_ledger: Mutex::new(ledger_info) }
     }
 
     pub fn get_ledger_info(&self) -> LedgerInfo {
@@ -100,27 +103,11 @@ impl MockStorage {
     }
     pub fn try_start(&self, order_vote_enabled: bool) -> Result<RecoveryData> {
         let ledger_recovery_data = self.get_ledger_recovery_data();
-        let mut blocks: Vec<_> = self
-            .shared_storage
-            .block
-            .lock()
-            .clone()
-            .into_values()
-            .collect();
-        let quorum_certs = self
-            .shared_storage
-            .qc
-            .lock()
-            .clone()
-            .into_values()
-            .collect();
+        let mut blocks: Vec<_> = self.shared_storage.block.lock().clone().into_values().collect();
+        let quorum_certs = self.shared_storage.qc.lock().clone().into_values().collect();
         blocks.sort_by_key(Block::round);
         let last_vote = self.shared_storage.last_vote.lock().clone();
-        let qc = self
-            .shared_storage
-            .highest_2chain_timeout_certificate
-            .lock()
-            .clone();
+        let qc = self.shared_storage.highest_2chain_timeout_certificate.lock().clone();
         RecoveryData::new(
             last_vote,
             ledger_recovery_data,
@@ -129,7 +116,7 @@ impl MockStorage {
             quorum_certs,
             qc,
             order_vote_enabled,
-            todo!()
+            todo!(),
         )
     }
 
@@ -158,22 +145,24 @@ impl PersistentLivenessStorage for MockStorage {
         unimplemented!("")
     }
 
-    fn save_tree(&self, blocks: Vec<Block>, quorum_certs: Vec<QuorumCert>, block_numbers: Vec<(u64, u64, HashValue)>) -> Result<()> {
+    fn save_tree(
+        &self,
+        blocks: Vec<Block>,
+        quorum_certs: Vec<QuorumCert>,
+        block_numbers: Vec<(u64, u64, HashValue)>,
+    ) -> Result<()> {
         // When the shared storage is empty, we are expected to not able to construct an block tree
         // from it. During test we will intentionally clear shared_storage to simulate the situation
         // of restarting from an empty consensusDB
         // info!("step 1.3.4.2.3.1");
-        let should_check_for_consistency = !(self.shared_storage.block.lock().is_empty()
-            && self.shared_storage.qc.lock().is_empty());
+        let should_check_for_consistency = !(self.shared_storage.block.lock().is_empty() &&
+            self.shared_storage.qc.lock().is_empty());
         for block in blocks {
             self.shared_storage.block.lock().insert(block.id(), block);
         }
         // info!("step 1.3.4.2.3.2");
         for qc in quorum_certs {
-            self.shared_storage
-                .qc
-                .lock()
-                .insert(qc.certified_block().id(), qc);
+            self.shared_storage.qc.lock().insert(qc.certified_block().id(), qc);
         }
         // info!("step 1.3.4.2.3.3");
         if should_check_for_consistency {
@@ -196,10 +185,7 @@ impl PersistentLivenessStorage for MockStorage {
     }
 
     fn save_vote(&self, last_vote: &Vote) -> Result<()> {
-        self.shared_storage
-            .last_vote
-            .lock()
-            .replace(last_vote.clone());
+        self.shared_storage.last_vote.lock().replace(last_vote.clone());
         Ok(())
     }
 
@@ -252,9 +238,7 @@ pub struct EmptyStorage {
 
 impl EmptyStorage {
     pub fn new() -> Self {
-        Self {
-            next_block_number: AtomicU64::new(1),
-        }
+        Self { next_block_number: AtomicU64::new(1) }
     }
 
     pub async fn start_for_testing() -> (RecoveryData, Arc<Self>) {
@@ -273,7 +257,12 @@ impl PersistentLivenessStorage for EmptyStorage {
         unimplemented!("")
     }
 
-    fn save_tree(&self, _: Vec<Block>, _: Vec<QuorumCert>, _: Vec<(u64, u64, HashValue)>) -> Result<()> {
+    fn save_tree(
+        &self,
+        _: Vec<Block>,
+        _: Vec<QuorumCert>,
+        _: Vec<(u64, u64, HashValue)>,
+    ) -> Result<()> {
         Ok(())
     }
 
@@ -301,13 +290,13 @@ impl PersistentLivenessStorage for EmptyStorage {
             vec![],
             None,
             order_vote_enabled,
-            todo!()
+            todo!(),
         ) {
             Ok(recovery_data) => LivenessStorageData::FullRecoveryData(recovery_data),
             Err(e) => {
                 eprintln!("{}", e);
                 panic!("Construct recovery data during genesis should never fail");
-            },
+            }
         }
     }
 

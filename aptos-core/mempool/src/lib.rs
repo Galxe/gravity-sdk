@@ -59,12 +59,11 @@
 #[cfg(any(test, feature = "fuzzing"))]
 mod tests;
 
-
 #[cfg(any(test, feature = "fuzzing"))]
 pub use tests::mocks;
 
 pub mod core_mempool;
-pub use gaptos::aptos_mempool::shared_mempool as shared_mempool;
+pub use gaptos::aptos_mempool::shared_mempool;
 // pub(crate) mod thread_pool;
 
 pub use shared_mempool::{

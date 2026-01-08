@@ -23,22 +23,24 @@ use crate::{
     },
     test_utils::MockPayloadManager as MockPayloadClient,
 };
-use gaptos::aptos_bounded_executor::BoundedExecutor;
-use gaptos::aptos_config::config::DagPayloadConfig;
 use aptos_consensus_types::common::{Author, Round};
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_reliable_broadcast::{RBNetworkSender, ReliableBroadcast};
-use gaptos::aptos_time_service::TimeService;
-use gaptos::aptos_types::{
-    epoch_state::EpochState,
-    ledger_info::{generate_ledger_info_with_sig, LedgerInfo, LedgerInfoWithSignatures},
-    validator_signer::ValidatorSigner,
-    validator_verifier::{random_validator_verifier, ValidatorVerifier},
-};
 use async_trait::async_trait;
 use bytes::Bytes;
 use claims::{assert_ok, assert_ok_eq};
 use futures_channel::mpsc::unbounded;
+use gaptos::{
+    aptos_bounded_executor::BoundedExecutor,
+    aptos_config::config::DagPayloadConfig,
+    aptos_infallible::Mutex,
+    aptos_reliable_broadcast::{RBNetworkSender, ReliableBroadcast},
+    aptos_time_service::TimeService,
+    aptos_types::{
+        epoch_state::EpochState,
+        ledger_info::{generate_ledger_info_with_sig, LedgerInfo, LedgerInfoWithSignatures},
+        validator_signer::ValidatorSigner,
+        validator_verifier::{random_validator_verifier, ValidatorVerifier},
+    },
+};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{runtime::Handle, sync::oneshot};
 use tokio_retry::strategy::ExponentialBackoff;
@@ -137,15 +139,13 @@ fn setup(
 ) -> DagDriver {
     let epoch_state = Arc::new(EpochState {
         epoch: 1,
-        verifier: todo!()//validator_verifier,
+        verifier: todo!(), //validator_verifier,
     });
 
     let mock_ledger_info = LedgerInfo::mock_genesis(None);
     let mock_ledger_info = generate_ledger_info_with_sig(signers, mock_ledger_info);
-    let storage = Arc::new(MockStorage::new_with_ledger_info(
-        mock_ledger_info.clone(),
-        epoch_state.clone(),
-    ));
+    let storage =
+        Arc::new(MockStorage::new_with_ledger_info(mock_ledger_info.clone(), epoch_state.clone()));
     let dag = Arc::new(DagStore::new(
         epoch_state.clone(),
         storage.clone(),
@@ -179,14 +179,11 @@ fn setup(
 
     let fetch_requester = Arc::new(MockFetchRequester {});
 
-    let ledger_info_provider = Arc::new(MockLedgerInfoProvider {
-        latest_ledger_info: mock_ledger_info,
-    });
+    let ledger_info_provider =
+        Arc::new(MockLedgerInfoProvider { latest_ledger_info: mock_ledger_info });
     let (round_tx, _round_rx) = tokio::sync::mpsc::unbounded_channel();
-    let round_state = RoundState::new(
-        round_tx.clone(),
-        Box::new(OptimisticResponsive::new(round_tx)),
-    );
+    let round_state =
+        RoundState::new(round_tx.clone(), Box::new(OptimisticResponsive::new(round_tx)));
 
     DagDriver::new(
         signers[0].author(),
@@ -202,11 +199,7 @@ fn setup(
         round_state,
         TEST_DAG_WINDOW as Round,
         DagPayloadConfig::default(),
-        HealthBackoff::new(
-            epoch_state,
-            NoChainHealth::new(),
-            NoPipelineBackpressure::new(),
-        ),
+        HealthBackoff::new(epoch_state, NoChainHealth::new(), NoPipelineBackpressure::new()),
         false,
         true,
     )
@@ -215,9 +208,7 @@ fn setup(
 #[tokio::test]
 async fn test_certified_node_handler() {
     let (signers, validator_verifier) = random_validator_verifier(4, None, false);
-    let network_sender = Arc::new(MockNetworkSender {
-        _drop_notifier: None,
-    });
+    let network_sender = Arc::new(MockNetworkSender { _drop_notifier: None });
     let driver = setup(&signers, validator_verifier, network_sender);
 
     let first_round_node = new_certified_node(1, signers[0].author(), vec![]);
@@ -240,9 +231,7 @@ async fn test_dag_driver_drop() {
 
     let (signers, validator_verifier) = random_validator_verifier(4, None, false);
     let (tx, rx) = oneshot::channel();
-    let network_sender = Arc::new(MockNetworkSender {
-        _drop_notifier: Some(tx),
-    });
+    let network_sender = Arc::new(MockNetworkSender { _drop_notifier: Some(tx) });
     let driver = setup(&signers, validator_verifier, network_sender);
 
     driver.enter_new_round(1).await;

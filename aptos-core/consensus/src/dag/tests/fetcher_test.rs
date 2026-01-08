@@ -9,8 +9,8 @@ use crate::dag::{
     types::{DagSnapshotBitmask, FetchResponse, RemoteFetchRequest},
     RpcHandler,
 };
-use gaptos::aptos_types::{epoch_state::EpochState, validator_verifier::random_validator_verifier};
 use claims::assert_ok_eq;
+use gaptos::aptos_types::{epoch_state::EpochState, validator_verifier::random_validator_verifier};
 use std::sync::Arc;
 
 #[tokio::test]
@@ -18,7 +18,7 @@ async fn test_dag_fetcher_receiver() {
     let (signers, validator_verifier) = random_validator_verifier(4, None, false);
     let epoch_state = Arc::new(EpochState {
         epoch: 1,
-        verifier: todo!() //validator_verifier,
+        verifier: todo!(), //validator_verifier,
     });
     let storage = Arc::new(MockStorage::new());
     let dag = Arc::new(DagStore::new(
@@ -41,18 +41,15 @@ async fn test_dag_fetcher_receiver() {
     }
 
     // Round 2 - node 0
-    let target_node = new_certified_node(2, signers[0].author(), vec![
-        first_round_nodes[0].certificate(),
-        first_round_nodes[1].certificate(),
-    ]);
+    let target_node = new_certified_node(
+        2,
+        signers[0].author(),
+        vec![first_round_nodes[0].certificate(), first_round_nodes[1].certificate()],
+    );
 
     let request = RemoteFetchRequest::new(
         target_node.epoch(),
-        target_node
-            .parents()
-            .iter()
-            .map(|parent| parent.metadata().clone())
-            .collect(),
+        target_node.parents().iter().map(|parent| parent.metadata().clone()).collect(),
         DagSnapshotBitmask::new(1, vec![vec![true, false]]),
     );
     assert_ok_eq!(

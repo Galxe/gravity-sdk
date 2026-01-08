@@ -20,19 +20,21 @@ use crate::{
     pipeline::execution_client::DummyExecutionClient,
 };
 use aptos_consensus_types::common::{Author, Round};
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_reliable_broadcast::RBNetworkSender;
-use gaptos::aptos_time_service::TimeService;
-use gaptos::aptos_types::{
-    aggregate_signature::AggregateSignature,
-    block_info::BlockInfo,
-    epoch_state::EpochState,
-    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
-    validator_verifier::random_validator_verifier,
-};
 use async_trait::async_trait;
 use bytes::Bytes;
 use claims::assert_none;
+use gaptos::{
+    aptos_crypto::HashValue,
+    aptos_reliable_broadcast::RBNetworkSender,
+    aptos_time_service::TimeService,
+    aptos_types::{
+        aggregate_signature::AggregateSignature,
+        block_info::BlockInfo,
+        epoch_state::EpochState,
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+        validator_verifier::random_validator_verifier,
+    },
+};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 struct MockDAGNetworkSender {}
@@ -157,17 +159,12 @@ async fn test_dag_state_sync() {
     let validators = validator_verifier.get_ordered_account_addresses();
     let epoch_state = Arc::new(EpochState {
         epoch: 1,
-        verifier: todo!() //validator_verifier,
+        verifier: todo!(), //validator_verifier,
     });
     let storage = Arc::new(MockStorage::new());
 
     let virtual_dag = (0..NUM_ROUNDS)
-        .map(|_| {
-            signers
-                .iter()
-                .map(|_| Some(vec![true; signers.len() * 2 / 3 + 1]))
-                .collect()
-        })
+        .map(|_| signers.iter().map(|_| Some(vec![true; signers.len() * 2 / 3 + 1])).collect())
         .collect::<Vec<_>>();
     let nodes = generate_dag_nodes(&virtual_dag, &validators);
 
@@ -197,11 +194,7 @@ async fn test_dag_state_sync() {
         }
     }
 
-    let li_node = nodes[LI_ROUNDS as usize - 1]
-        .first()
-        .unwrap()
-        .clone()
-        .unwrap();
+    let li_node = nodes[LI_ROUNDS as usize - 1].first().unwrap().clone().unwrap();
     let sync_to_li = LedgerInfoWithSignatures::new(
         LedgerInfo::new(
             BlockInfo::new(
@@ -217,19 +210,13 @@ async fn test_dag_state_sync() {
         ),
         AggregateSignature::empty(),
     );
-    let sync_to_node = nodes[NUM_ROUNDS as usize - 1]
-        .first()
-        .unwrap()
-        .clone()
-        .unwrap();
+    let sync_to_node = nodes[NUM_ROUNDS as usize - 1].first().unwrap().clone().unwrap();
 
     let sync_node_li = CertifiedNodeMessage::new(sync_to_node, sync_to_li);
 
     let state_sync = setup(epoch_state.clone(), storage.clone());
-    let dag_fetcher = MockDagFetcher {
-        target_dag: fast_dag.clone(),
-        epoch_state: epoch_state.clone(),
-    };
+    let dag_fetcher =
+        MockDagFetcher { target_dag: fast_dag.clone(), epoch_state: epoch_state.clone() };
 
     let (request, responders, sync_dag_store) =
         state_sync.build_request(&sync_node_li, slow_dag.clone(), 0);
@@ -245,10 +232,7 @@ async fn test_dag_state_sync() {
         .await;
     let new_dag = sync_result.unwrap();
 
-    assert_eq!(
-        new_dag.read().lowest_round(),
-        (LI_ROUNDS - TEST_DAG_WINDOW) as Round
-    );
+    assert_eq!(new_dag.read().lowest_round(), (LI_ROUNDS - TEST_DAG_WINDOW) as Round);
     assert_eq!(new_dag.read().highest_round(), NUM_ROUNDS as Round);
     assert_none!(new_dag.read().highest_ordered_anchor_round(),);
 }

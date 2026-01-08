@@ -15,8 +15,6 @@ fn main() -> shadow_rs::SdResult<()> {
     if git_head.exists() {
         println!("cargo:rerun-if-changed=../../.git/HEAD");
     }
-    shadow_rs::ShadowBuilder::builder()
-        .deny_const(Default::default())
-        .build()?;
+    shadow_rs::ShadowBuilder::builder().deny_const(Default::default()).build()?;
     Ok(())
 }

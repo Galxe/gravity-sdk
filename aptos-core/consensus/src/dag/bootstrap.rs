@@ -35,31 +35,33 @@ use crate::{
     payload_manager::TPayloadManager,
     pipeline::{buffer_manager::OrderedBlocks, execution_client::TExecutionClient},
 };
-use gaptos::aptos_bounded_executor::BoundedExecutor;
-use gaptos::aptos_channels::{
-    aptos_channel::{self, Receiver},
-    message_queues::QueueStyle,
-};
-use gaptos::aptos_config::config::DagConsensusConfig;
 use aptos_consensus_types::common::{Author, Round};
-use gaptos::aptos_infallible::{Mutex, RwLock};
-use gaptos::aptos_logger::{debug, info};
-use gaptos::aptos_reliable_broadcast::{RBNetworkSender, ReliableBroadcast};
-use gaptos::aptos_types::{
-    epoch_state::EpochState,
-    on_chain_config::{
-        AnchorElectionMode, DagConsensusConfigV1,
-        LeaderReputationType::{ProposerAndVoter, ProposerAndVoterV2},
-        OnChainJWKConsensusConfig, OnChainRandomnessConfig, ProposerAndVoterConfig,
-        ValidatorTxnConfig,
-    },
-    validator_signer::ValidatorSigner,
-};
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
 use futures_channel::{
     mpsc::{UnboundedReceiver, UnboundedSender},
     oneshot,
+};
+use gaptos::{
+    aptos_bounded_executor::BoundedExecutor,
+    aptos_channels::{
+        aptos_channel::{self, Receiver},
+        message_queues::QueueStyle,
+    },
+    aptos_config::config::DagConsensusConfig,
+    aptos_infallible::{Mutex, RwLock},
+    aptos_logger::{debug, info},
+    aptos_reliable_broadcast::{RBNetworkSender, ReliableBroadcast},
+    aptos_types::{
+        epoch_state::EpochState,
+        on_chain_config::{
+            AnchorElectionMode, DagConsensusConfigV1,
+            LeaderReputationType::{ProposerAndVoter, ProposerAndVoterV2},
+            OnChainJWKConsensusConfig, OnChainRandomnessConfig, ProposerAndVoterConfig,
+            ValidatorTxnConfig,
+        },
+        validator_signer::ValidatorSigner,
+    },
 };
 use std::{fmt, ops::Deref, sync::Arc, time::Duration};
 use tokio::{
@@ -117,10 +119,7 @@ impl TDagMode for ActiveMode {
         dag_rpc_rx: &mut Receiver<Author, IncomingDAGRequest>,
         bootstrapper: &DagBootstrapper,
     ) -> Option<Mode> {
-        monitor!(
-            "dag_active_mode",
-            self.run_internal(dag_rpc_rx, bootstrapper).await
-        )
+        monitor!("dag_active_mode", self.run_internal(dag_rpc_rx, bootstrapper).await)
     }
 }
 
@@ -133,17 +132,9 @@ impl ActiveMode {
         info!(
             LogSchema::new(LogEvent::ActiveMode)
                 .round(self.base_state.dag_store.deref().read().highest_round()),
-            highest_committed_round = self
-                .base_state
-                .ledger_info_provider
-                .get_latest_ledger_info()
-                .commit_info()
-                .round(),
-            highest_ordered_round = self
-                .base_state
-                .dag_store
-                .read()
-                .highest_ordered_anchor_round(),
+            highest_committed_round =
+                self.base_state.ledger_info_provider.get_latest_ledger_info().commit_info().round(),
+            highest_ordered_round = self.base_state.dag_store.read().highest_ordered_anchor_round(),
         );
 
         // Spawn the fetch service
@@ -157,10 +148,8 @@ impl ActiveMode {
         });
 
         // Run the network handler until it returns with state sync status.
-        let sync_outcome = self
-            .handler
-            .run(dag_rpc_rx, bootstrapper.executor.clone(), self.buffer)
-            .await;
+        let sync_outcome =
+            self.handler.run(dag_rpc_rx, bootstrapper.executor.clone(), self.buffer).await;
 
         info!(
             LogSchema::new(LogEvent::SyncOutcome),
@@ -168,10 +157,9 @@ impl ActiveMode {
         );
 
         match sync_outcome {
-            SyncOutcome::NeedsSync(certified_node_msg) => Some(Mode::Sync(SyncMode {
-                certified_node_msg,
-                base_state: self.base_state,
-            })),
+            SyncOutcome::NeedsSync(certified_node_msg) => {
+                Some(Mode::Sync(SyncMode { certified_node_msg, base_state: self.base_state }))
+            }
             SyncOutcome::EpochEnds => None,
             _ => unreachable!(),
         }
@@ -190,10 +178,7 @@ impl TDagMode for SyncMode {
         dag_rpc_rx: &mut Receiver<Author, IncomingDAGRequest>,
         bootstrapper: &DagBootstrapper,
     ) -> Option<Mode> {
-        monitor!(
-            "dag_sync_mode",
-            self.run_internal(dag_rpc_rx, bootstrapper).await
-        )
+        monitor!("dag_sync_mode", self.run_internal(dag_rpc_rx, bootstrapper).await)
     }
 }
 
@@ -209,25 +194,17 @@ impl SyncMode {
             bootstrapper.execution_client.clone(),
             bootstrapper.storage.clone(),
             bootstrapper.payload_manager.clone(),
-            bootstrapper
-                .onchain_config
-                .dag_ordering_causal_history_window as Round,
+            bootstrapper.onchain_config.dag_ordering_causal_history_window as Round,
         );
 
-        let highest_committed_anchor_round = self
-            .base_state
-            .ledger_info_provider
-            .get_highest_committed_anchor_round();
+        let highest_committed_anchor_round =
+            self.base_state.ledger_info_provider.get_highest_committed_anchor_round();
 
         info!(
             LogSchema::new(LogEvent::SyncMode)
                 .round(self.base_state.dag_store.read().highest_round()),
             target_round = self.certified_node_msg.round(),
-            local_ordered_round = self
-                .base_state
-                .dag_store
-                .read()
-                .highest_ordered_anchor_round(),
+            local_ordered_round = self.base_state.dag_store.read().highest_ordered_anchor_round(),
             local_committed_round = highest_committed_anchor_round
         );
         let dag_fetcher = DagFetcher::new(
@@ -249,9 +226,7 @@ impl SyncMode {
             bootstrapper.epoch_state.clone(),
             request.start_round(),
             request.target_round(),
-            bootstrapper
-                .onchain_config
-                .dag_ordering_causal_history_window as u64,
+            bootstrapper.onchain_config.dag_ordering_causal_history_window as u64,
         );
 
         let (res_tx, res_rx) = oneshot::channel();
@@ -399,19 +374,12 @@ impl DagBootstrapper {
         let epoch_to_validator_map = epoch_to_validators_vec
             .iter()
             .map(|(key, value)| {
-                (
-                    *key,
-                    value
-                        .iter()
-                        .enumerate()
-                        .map(|(idx, author)| (*author, idx))
-                        .collect(),
-                )
+                (*key, value.iter().enumerate().map(|(idx, author)| (*author, idx)).collect())
             })
             .collect();
         let metadata_adapter = Arc::new(MetadataBackendAdapter::new(
-            num_validators
-                * std::cmp::max(
+            num_validators *
+                std::cmp::max(
                     config.proposer_window_num_validators_multiplier,
                     config.voter_window_num_validators_multiplier,
                 ),
@@ -452,18 +420,14 @@ impl DagBootstrapper {
 
     fn build_anchor_election(
         &self,
-    ) -> (
-        Arc<dyn AnchorElection>,
-        Arc<dyn CommitHistory>,
-        Option<Vec<CommitEvent>>,
-    ) {
+    ) -> (Arc<dyn AnchorElection>, Arc<dyn CommitHistory>, Option<Vec<CommitEvent>>) {
         match &self.onchain_config.anchor_election_mode {
             AnchorElectionMode::RoundRobin => {
                 let election = Arc::new(RoundRobinAnchorElection::new(
                     self.epoch_state.verifier.get_ordered_account_addresses(),
                 ));
                 (election.clone(), election, None)
-            },
+            }
             AnchorElectionMode::LeaderReputation(reputation_type) => {
                 let (commit_events, leader_reputation) = match reputation_type {
                     ProposerAndVoterV2(config) => {
@@ -473,24 +437,17 @@ impl DagBootstrapper {
                                 std::cmp::max(
                                     config.proposer_window_num_validators_multiplier,
                                     config.voter_window_num_validators_multiplier,
-                                ) as u64
-                                    * self.epoch_state.verifier.len() as u64,
+                                ) as u64 *
+                                    self.epoch_state.verifier.len() as u64,
                             )
                             .expect("Failed to read commit events from storage");
-                        (
-                            commit_events,
-                            self.build_leader_reputation_components(config),
-                        )
-                    },
+                        (commit_events, self.build_leader_reputation_components(config))
+                    }
                     ProposerAndVoter(_) => unreachable!("unsupported mode"),
                 };
 
-                (
-                    leader_reputation.clone(),
-                    leader_reputation,
-                    Some(commit_events),
-                )
-            },
+                (leader_reputation.clone(), leader_reputation, Some(commit_events))
+            }
         }
     }
 
@@ -501,26 +458,18 @@ impl DagBootstrapper {
         commit_events: Option<Vec<CommitEvent>>,
         dag_window_size_config: u64,
     ) -> BootstrapBaseState {
-        let ledger_info_from_storage = self
-            .storage
-            .get_latest_ledger_info()
-            .expect("latest ledger info must exist");
+        let ledger_info_from_storage =
+            self.storage.get_latest_ledger_info().expect("latest ledger info must exist");
         let (parent_block_info, ledger_info) =
             compute_initial_block_and_ledger_info(ledger_info_from_storage);
 
         let ledger_info_provider = Arc::new(RwLock::new(LedgerInfoProvider::new(ledger_info)));
 
-        let initial_ledger_info = ledger_info_provider
-            .get_latest_ledger_info()
-            .ledger_info()
-            .clone();
+        let initial_ledger_info =
+            ledger_info_provider.get_latest_ledger_info().ledger_info().clone();
         let commit_round = initial_ledger_info.round();
-        let initial_round = std::cmp::max(
-            1,
-            initial_ledger_info
-                .round()
-                .saturating_sub(dag_window_size_config),
-        );
+        let initial_round =
+            std::cmp::max(1, initial_ledger_info.round().saturating_sub(dag_window_size_config));
 
         let dag = Arc::new(DagStore::new(
             self.epoch_state.clone(),
@@ -566,7 +515,8 @@ impl DagBootstrapper {
         let rb_config = self.config.rb_config.clone();
         let round_state_config = self.config.round_state_config.clone();
 
-        // A backoff policy that starts at _base_*_factor_ ms and multiplies by _base_ each iteration.
+        // A backoff policy that starts at _base_*_factor_ ms and multiplies by _base_ each
+        // iteration.
         let rb_backoff_policy = ExponentialBackoff::from_millis(rb_config.backoff_policy_base_ms)
             .factor(rb_config.backoff_policy_factor)
             .max_delay(Duration::from_millis(rb_config.backoff_policy_max_delay_ms));
@@ -622,10 +572,7 @@ impl DagBootstrapper {
         let pipeline_health = PipelineLatencyBasedBackpressure::new(
             Duration::from_millis(self.config.health_config.voter_pipeline_latency_limit_ms),
             PipelineBackpressureConfig::new(
-                self.config
-                    .health_config
-                    .pipeline_backpressure_config
-                    .clone(),
+                self.config.health_config.pipeline_backpressure_config.clone(),
                 // TODO: add pipeline backpressure based on execution speed to DAG config
                 None,
             ),
@@ -699,19 +646,12 @@ impl DagBootstrapper {
         mut dag_rpc_rx: Receiver<Author, IncomingDAGRequest>,
         mut shutdown_rx: oneshot::Receiver<oneshot::Sender<()>>,
     ) {
-        info!(
-            LogSchema::new(LogEvent::EpochStart),
-            epoch = self.epoch_state.epoch,
-        );
+        info!(LogSchema::new(LogEvent::EpochStart), epoch = self.epoch_state.epoch,);
 
         let (base_state, handler, fetch_service) = self.full_bootstrap();
 
-        let mut mode = Mode::Active(ActiveMode {
-            handler,
-            fetch_service,
-            base_state,
-            buffer: Vec::new(),
-        });
+        let mut mode =
+            Mode::Active(ActiveMode { handler, fetch_service, base_state, buffer: Vec::new() });
         loop {
             select! {
                 biased;
@@ -777,9 +717,7 @@ pub(super) fn bootstrap_dag_for_test(
 
     let dh_handle = tokio::spawn(async move {
         let mut dag_rpc_rx = dag_rpc_rx;
-        handler
-            .run(&mut dag_rpc_rx, bootstraper.executor.clone(), Vec::new())
-            .await
+        handler.run(&mut dag_rpc_rx, bootstraper.executor.clone(), Vec::new()).await
     });
     let df_handle = tokio::spawn(fetch_service.start());
 

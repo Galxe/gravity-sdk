@@ -174,10 +174,7 @@ impl ConflictKey<FakeTxn> for FakeEntryFunKey {
         if txn.entry_fun.module.exempt() {
             Self::Exempt
         } else {
-            Self::EntryFun {
-                module: txn.entry_fun.module.id,
-                function: txn.entry_fun.id,
-            }
+            Self::EntryFun { module: txn.entry_fun.module.id, function: txn.entry_fun.id }
         }
     }
 

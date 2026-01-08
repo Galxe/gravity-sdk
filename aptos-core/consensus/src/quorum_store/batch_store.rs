@@ -12,15 +12,18 @@ use crate::{
 };
 use anyhow::bail;
 use aptos_consensus_types::proof_of_store::SignedBatchInfo;
-use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::{ExecutorError, ExecutorResult};
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_types::{transaction::SignedTransaction, validator_signer::ValidatorSigner, PeerId};
 use dashmap::{
     mapref::entry::Entry::{Occupied, Vacant},
     DashMap,
 };
 use fail::fail_point;
+use gaptos::{
+    aptos_consensus::quorum_store::counters,
+    aptos_crypto::HashValue,
+    aptos_logger::prelude::*,
+    aptos_types::{transaction::SignedTransaction, validator_signer::ValidatorSigner, PeerId},
+};
 use once_cell::sync::OnceCell;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::{
@@ -31,7 +34,6 @@ use std::{
     time::Duration,
 };
 use tokio::sync::oneshot;
-use gaptos::aptos_consensus::quorum_store::counters as counters;
 
 // Pub(crate) for testing only.
 pub(crate) struct QuotaManager {
@@ -189,10 +191,8 @@ impl BatchStore {
     }
 
     fn free_quota(&self, value: PersistedValue) {
-        let mut quota_manager = self
-            .peer_quota
-            .get_mut(&value.author())
-            .expect("No QuotaManager for batch author");
+        let mut quota_manager =
+            self.peer_quota.get_mut(&value.author()).expect("No QuotaManager for batch author");
         quota_manager.free_quota(value.num_bytes() as usize, value.payload_storage_mode());
     }
 
@@ -215,23 +215,16 @@ impl BatchStore {
 
             if let Occupied(entry) = &cache_entry {
                 if entry.get().expiration() >= expiration_time {
-                    debug!(
-                        "QS: already have the digest with higher expiration {}",
-                        digest
-                    );
+                    debug!("QS: already have the digest with higher expiration {}", digest);
                     return Ok(false);
                 }
             };
             let value_to_be_stored = if self
                 .peer_quota
                 .entry(author)
-                .or_insert(QuotaManager::new(
-                    self.db_quota,
-                    self.memory_quota,
-                    self.batch_quota,
-                ))
-                .update_quota(value.num_bytes() as usize)?
-                == StorageMode::PersistedOnly
+                .or_insert(QuotaManager::new(self.db_quota, self.memory_quota, self.batch_quota))
+                .update_quota(value.num_bytes() as usize)? ==
+                StorageMode::PersistedOnly
             {
                 PersistedValue::new(value.batch_info().clone(), None)
             } else {
@@ -243,20 +236,17 @@ impl BatchStore {
                     let (k, prev_value) = entry.replace_entry(value_to_be_stored);
                     debug_assert!(k == digest);
                     self.free_quota(prev_value);
-                },
+                }
                 Vacant(slot) => {
                     slot.insert(value_to_be_stored);
-                },
+                }
             }
         }
 
         // Add expiration for the inserted entry, no need to be atomic w. insertion.
         #[allow(clippy::unwrap_used)]
         {
-            self.expirations
-                .lock()
-                .unwrap()
-                .add_item(digest, expiration_time);
+            self.expirations.lock().unwrap().add_item(digest, expiration_time);
         }
         Ok(true)
     }
@@ -301,7 +291,7 @@ impl BatchStore {
                     } else {
                         None
                     }
-                },
+                }
                 Vacant(_) => unreachable!("Expired entry not in cache"),
             };
             // No longer holding the lock on db_cache entry.
@@ -320,25 +310,21 @@ impl BatchStore {
                 trace!("QS: sign digest {}", persist_request.digest());
                 if needs_db {
                     #[allow(clippy::unwrap_in_result)]
-                    self.db
-                        .save_batch(persist_request)
-                        .expect("Could not write to DB");
+                    self.db.save_batch(persist_request).expect("Could not write to DB");
                 }
                 SignedBatchInfo::new(batch_info, &self.validator_signer).ok()
-            },
+            }
 
             Err(e) => {
                 debug!("QS: failed to store to cache {:?}", e);
                 None
-            },
+            }
         }
     }
 
     pub fn update_certified_timestamp(&self, certified_time: u64) {
         trace!("QS: batch reader updating time {:?}", certified_time);
-        let prev_time = self
-            .last_certified_time
-            .fetch_max(certified_time, Ordering::SeqCst);
+        let prev_time = self.last_certified_time.fetch_max(certified_time, Ordering::SeqCst);
         // Note: prev_time may be equal to certified_time due to state-sync
         // at the epoch boundary.
         assert!(
@@ -367,17 +353,14 @@ impl BatchStore {
                 warn!("Could not get batch from db because the key {} doesnt exist", key.digest);
                 Err(ExecutorError::CouldNotGetData)
             }
-            Err(e) => { 
+            Err(e) => {
                 warn!("Could not get batch from db {}", e);
                 Err(ExecutorError::CouldNotGetData)
-            },
+            }
         }
     }
 
-    pub(crate) fn get_batch_from_local(
-        &self,
-        key: &BatchKey,
-    ) -> ExecutorResult<PersistedValue> {
+    pub(crate) fn get_batch_from_local(&self, key: &BatchKey) -> ExecutorResult<PersistedValue> {
         if let Some(value) = self.db_cache.get(&key.digest) {
             if value.payload_storage_mode() == StorageMode::PersistedOnly {
                 return self.get_batch_from_db(key);
@@ -390,7 +373,7 @@ impl BatchStore {
             Ok(value) => {
                 info!("QS: get_batch_from_db success {}", key.digest);
                 Ok(value)
-            },
+            }
             Err(e) => {
                 error!("QS: get_batch_from_db error {}", e);
                 Err(e)
@@ -415,10 +398,7 @@ impl BatchStore {
         rx
     }
     fn notify_subscribers(&self, value: PersistedValue) {
-        let key = BatchKey {
-            epoch: value.epoch(),
-            digest: value.digest().clone(),
-        };
+        let key = BatchKey { epoch: value.epoch(), digest: value.digest().clone() };
         if let Some((_, subscribers)) = self.persist_subscribers.remove(&key) {
             for subscriber in subscribers {
                 subscriber.send(value.clone()).ok();
@@ -474,19 +454,13 @@ pub struct BatchReaderImpl<T> {
 
 impl<T: QuorumStoreSender + Clone + Send + Sync + 'static> BatchReaderImpl<T> {
     pub(crate) fn new(batch_store: Arc<BatchStore>, batch_requester: BatchRequester<T>) -> Self {
-        Self {
-            batch_store,
-            batch_requester: Arc::new(batch_requester),
-        }
+        Self { batch_store, batch_requester: Arc::new(batch_requester) }
     }
 }
 
 impl<T: QuorumStoreSender + Clone + Send + Sync + 'static> BatchReader for BatchReaderImpl<T> {
     fn exists(&self, key: &BatchKey) -> Option<PeerId> {
-        self.batch_store
-            .get_batch_from_local(key)
-            .map(|v| v.author())
-            .ok()
+        self.batch_store.get_batch_from_local(key).map(|v| v.author()).ok()
     }
 
     fn get_batch(
@@ -500,22 +474,15 @@ impl<T: QuorumStoreSender + Clone + Send + Sync + 'static> BatchReader for Batch
         let batch_requester = self.batch_requester.clone();
         tokio::spawn(async move {
             if let Ok(mut value) = batch_store.get_batch_from_local(&key) {
-                if tx
-                    .send(Ok(value.take_payload().expect("Must have payload")))
-                    .is_err()
-                {
-                    debug!(
-                        "Receiver of local batch not available for digest {}",
-                        key.digest,
-                    )
+                if tx.send(Ok(value.take_payload().expect("Must have payload"))).is_err() {
+                    debug!("Receiver of local batch not available for digest {}", key.digest,)
                 };
             } else {
                 // Quorum store metrics
                 counters::MISSED_BATCHES_COUNT.inc();
                 let subscriber_rx = batch_store.subscribe(&key);
-                if let Some((batch_info, payload)) = batch_requester
-                    .request_batch(key, expiration, signers, tx, subscriber_rx)
-                    .await
+                if let Some((batch_info, payload)) =
+                    batch_requester.request_batch(key, expiration, signers, tx, subscriber_rx).await
                 {
                     batch_store.persist(vec![PersistedValue::new(batch_info, Some(payload))]);
                 }

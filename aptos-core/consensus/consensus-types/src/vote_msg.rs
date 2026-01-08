@@ -4,8 +4,7 @@
 
 use crate::{sync_info::SyncInfo, vote::Vote};
 use anyhow::ensure;
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_types::validator_verifier::ValidatorVerifier;
+use gaptos::{aptos_crypto::HashValue, aptos_types::validator_verifier::ValidatorVerifier};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
@@ -23,11 +22,7 @@ pub struct VoteMsg {
 
 impl Display for VoteMsg {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "VoteMsg: [{}], SyncInfo: [{}]",
-            self.vote, self.sync_info
-        )
+        write!(f, "VoteMsg: [{}], SyncInfo: [{}]", self.vote, self.sync_info)
     }
 }
 
@@ -55,10 +50,7 @@ impl VoteMsg {
     }
 
     pub fn verify(&self, validator: &ValidatorVerifier) -> anyhow::Result<()> {
-        ensure!(
-            self.vote().epoch() == self.sync_info.epoch(),
-            "VoteMsg has different epoch"
-        );
+        ensure!(self.vote().epoch() == self.sync_info.epoch(), "VoteMsg has different epoch");
         ensure!(
             self.vote().vote_data().proposed().round() > self.sync_info.highest_round(),
             "Vote Round should be higher than SyncInfo"

@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::consensus_observer::error::Error;
-use gaptos::aptos_config::network_id::PeerNetworkId;
-use gaptos::aptos_logger as aptos_logger;
-use gaptos::aptos_logger::Schema;
+use gaptos::{aptos_config::network_id::PeerNetworkId, aptos_logger, aptos_logger::Schema};
 use serde::Serialize;
 
 #[derive(Schema)]

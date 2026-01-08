@@ -19,10 +19,12 @@ use aptos_consensus_types::{
     pipelined_block::PipelinedBlock,
     quorum_cert::QuorumCert,
 };
-use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::{ExecutorError, StateComputeResult};
-use gaptos::aptos_types::{ledger_info::LedgerInfo, validator_verifier::random_validator_verifier};
 use async_trait::async_trait;
+use gaptos::{
+    aptos_crypto::HashValue,
+    aptos_types::{ledger_info::LedgerInfo, validator_verifier::random_validator_verifier},
+};
 use std::sync::{
     atomic::{AtomicBool, AtomicU64},
     Arc,
@@ -39,10 +41,7 @@ impl ExecutionPhaseForTest {
     pub fn new(execution_proxy: Arc<dyn StateComputer>) -> Self {
         let schedule_phase = ExecutionSchedulePhase::new(execution_proxy);
         let wait_phase = ExecutionWaitPhase;
-        Self {
-            schedule_phase,
-            wait_phase,
-        }
+        Self { schedule_phase, wait_phase }
     }
 }
 
@@ -77,15 +76,9 @@ fn add_execution_phase_test_cases(
 ) {
     let genesis_qc = certificate_for_genesis();
     let (signers, _validators) = random_validator_verifier(1, None, false);
-    let block = Block::new_proposal(
-        Payload::empty(false, true),
-        1,
-        1,
-        genesis_qc,
-        &signers[0],
-        Vec::new(),
-    )
-    .unwrap();
+    let block =
+        Block::new_proposal(Payload::empty(false, true), 1, 1, genesis_qc, &signers[0], Vec::new())
+            .unwrap();
 
     // happy path
     phase_tester.add_test_case(
@@ -98,19 +91,13 @@ fn add_execution_phase_test_cases(
             lifetime_guard: dummy_guard(),
         },
         Box::new(move |resp| {
-            assert_eq!(
-                resp.inner.unwrap()[0].compute_result().root_hash(),
-                random_hash_value
-            );
+            assert_eq!(resp.inner.unwrap()[0].compute_result().root_hash(), random_hash_value);
         }),
     );
 
     // empty block
     phase_tester.add_test_case(
-        ExecutionRequest {
-            ordered_blocks: vec![],
-            lifetime_guard: dummy_guard(),
-        },
+        ExecutionRequest { ordered_blocks: vec![], lifetime_guard: dummy_guard() },
         Box::new(move |resp| assert!(matches!(resp.inner, Err(ExecutorError::EmptyBlocks)))),
     );
 
@@ -119,15 +106,9 @@ fn add_execution_phase_test_cases(
         &LedgerInfo::mock_genesis(None),
         random_hash_value,
     );
-    let bad_block = Block::new_proposal(
-        Payload::empty(false, true),
-        1,
-        1,
-        bad_qc,
-        &signers[0],
-        Vec::new(),
-    )
-    .unwrap();
+    let bad_block =
+        Block::new_proposal(Payload::empty(false, true), 1, 1, bad_qc, &signers[0], Vec::new())
+            .unwrap();
     phase_tester.add_test_case(
         ExecutionRequest {
             ordered_blocks: vec![PipelinedBlock::new(

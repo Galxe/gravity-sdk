@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_types::block_executor::partitioner::ExecutableBlock;
+use gaptos::{aptos_crypto::HashValue, aptos_types::block_executor::partitioner::ExecutableBlock};
 
 pub struct MockBlockTree {
     pub id_to_block: HashMap<HashValue, ExecutableBlock>,
@@ -10,12 +9,6 @@ pub struct MockBlockTree {
 
 impl MockBlockTree {
     pub fn new() -> Self {
-        Self {
-            id_to_block: HashMap::new(),
-            commited_blocks: vec![],
-        }
+        Self { id_to_block: HashMap::new(), commited_blocks: vec![] }
     }
-
-
-
 }

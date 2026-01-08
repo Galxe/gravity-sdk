@@ -7,11 +7,13 @@ use aptos_consensus_types::{
     common::Author,
     pipeline::{commit_decision::CommitDecision, commit_vote::CommitVote},
 };
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_reliable_broadcast::{BroadcastStatus, RBMessage, RBNetworkSender};
-use gaptos::aptos_types::{validator_verifier::ValidatorVerifier, PeerId};
 use async_trait::async_trait;
 use bytes::Bytes;
+use gaptos::{
+    aptos_infallible::Mutex,
+    aptos_reliable_broadcast::{BroadcastStatus, RBMessage, RBNetworkSender},
+    aptos_types::{validator_verifier::ValidatorVerifier, PeerId},
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
@@ -60,9 +62,7 @@ pub struct AckState {
 
 impl AckState {
     pub fn new(validators: impl Iterator<Item = Author>) -> Arc<Self> {
-        Arc::new(Self {
-            validators: Mutex::new(validators.collect()),
-        })
+        Arc::new(Self { validators: Mutex::new(validators.collect()) })
     }
 }
 
@@ -75,16 +75,16 @@ impl BroadcastStatus<CommitMessage> for Arc<AckState> {
         match ack {
             CommitMessage::Vote(_) => {
                 bail!("unexected Vote reply to broadcast");
-            },
+            }
             CommitMessage::Decision(_) => {
                 bail!("unexected Decision reply to broadcast");
-            },
+            }
             CommitMessage::Ack(_) => {
                 // okay! continue
-            },
+            }
             CommitMessage::Nack => {
                 bail!("unexected Nack reply to broadcast");
-            },
+            }
         }
         let mut validators = self.validators.lock();
         if validators.remove(&peer) {
@@ -115,7 +115,7 @@ impl RBNetworkSender<CommitMessage> for NetworkSender {
             ConsensusMsg::CommitMessage(resp) if matches!(*resp, CommitMessage::Ack(_)) => *resp,
             ConsensusMsg::CommitMessage(resp) if matches!(*resp, CommitMessage::Nack) => {
                 bail!("Received nack, will retry")
-            },
+            }
             _ => bail!("Invalid response to request"),
         };
 
@@ -133,7 +133,7 @@ impl RBNetworkSender<CommitMessage> for NetworkSender {
             ConsensusMsg::CommitMessage(resp) if matches!(*resp, CommitMessage::Ack(_)) => *resp,
             ConsensusMsg::CommitMessage(resp) if matches!(*resp, CommitMessage::Nack) => {
                 bail!("Received nack, will retry")
-            },
+            }
             _ => bail!("Invalid response to request"),
         };
 
@@ -146,8 +146,7 @@ impl RBNetworkSender<CommitMessage> for NetworkSender {
         message: CommitMessage,
     ) -> Result<HashMap<Author, bytes::Bytes>, anyhow::Error> {
         let msg = ConsensusMsg::CommitMessage(Box::new(message));
-        self.consensus_network_client
-            .to_bytes_by_protocol(peers, msg)
+        self.consensus_network_client.to_bytes_by_protocol(peers, msg)
     }
 
     fn sort_peers_by_latency(&self, peers: &mut [PeerId]) {

@@ -10,14 +10,16 @@ use crate::dag::{
     RpcHandler, RpcWithFallback,
 };
 use anyhow::{bail, ensure};
-use gaptos::aptos_bitvec::BitVec;
-use gaptos::aptos_config::config::DagFetcherConfig;
 use aptos_consensus_types::common::{Author, Round};
-use gaptos::aptos_logger::{debug, error, info};
-use gaptos::aptos_time_service::TimeService;
-use gaptos::aptos_types::epoch_state::EpochState;
 use async_trait::async_trait;
 use futures::{future::Shared, stream::FuturesUnordered, Future, FutureExt, Stream, StreamExt};
+use gaptos::{
+    aptos_bitvec::BitVec,
+    aptos_config::config::DagFetcherConfig,
+    aptos_logger::{debug, error, info},
+    aptos_time_service::TimeService,
+    aptos_types::epoch_state::EpochState,
+};
 use std::{
     collections::HashMap,
     pin::Pin,
@@ -40,10 +42,7 @@ pub struct FetchWaiter<T> {
 
 impl<T> FetchWaiter<T> {
     fn new(rx: Receiver<oneshot::Receiver<T>>) -> Self {
-        Self {
-            rx,
-            futures: Box::pin(FuturesUnordered::new()),
-        }
+        Self { rx, futures: Box::pin(FuturesUnordered::new()) }
     }
 }
 
@@ -85,10 +84,7 @@ impl TFetchRequester for FetchRequester {
         let (res_tx, res_rx) = oneshot::channel();
         let fetch_req = LocalFetchRequest::CertifiedNode(node, res_tx);
         self.request_tx.try_send(fetch_req).map_err(|e| {
-            anyhow::anyhow!(
-                "unable to send certified node fetch request to channel: {}",
-                e
-            )
+            anyhow::anyhow!("unable to send certified node fetch request to channel: {}", e)
         })?;
         self.certified_node_waiter_tx.try_send(res_rx)?;
         Ok(())
@@ -107,7 +103,7 @@ impl LocalFetchRequest {
             LocalFetchRequest::Node(node, _) => vec![*node.author()],
             LocalFetchRequest::CertifiedNode(node, _) => {
                 node.signatures().get_signers_addresses(validators)
-            },
+            }
         }
     }
 
@@ -151,12 +147,7 @@ impl DagFetcherService {
         dag: Arc<DagStore>,
         time_service: TimeService,
         config: DagFetcherConfig,
-    ) -> (
-        Self,
-        FetchRequester,
-        FetchWaiter<Node>,
-        FetchWaiter<CertifiedNode>,
-    ) {
+    ) -> (Self, FetchRequester, FetchWaiter<Node>, FetchWaiter<CertifiedNode>) {
         let (request_tx, request_rx) = tokio::sync::mpsc::channel(16);
         let (node_tx, node_rx) = tokio::sync::mpsc::channel(100);
         let (certified_node_tx, certified_node_rx) = tokio::sync::mpsc::channel(100);
@@ -224,10 +215,8 @@ impl DagFetcherService {
                 dag_reader.lowest_incomplete_round()
             );
 
-            let missing_parents: Vec<NodeMetadata> = dag_reader
-                .filter_missing(node.parents_metadata())
-                .cloned()
-                .collect();
+            let missing_parents: Vec<NodeMetadata> =
+                dag_reader.filter_missing(node.parents_metadata()).cloned().collect();
 
             if missing_parents.is_empty() {
                 return Ok(async { Ok(()) }.boxed().shared());
@@ -289,12 +278,7 @@ impl DagFetcher {
         time_service: TimeService,
         config: DagFetcherConfig,
     ) -> Self {
-        Self {
-            network,
-            time_service,
-            epoch_state,
-            config,
-        }
+        Self { network, time_service, epoch_state, config }
     }
 }
 
@@ -344,18 +328,18 @@ impl TDagFetcher for DagFetcher {
                             if dag.read().all_exists(remote_request.targets()) {
                                 return Ok(());
                             }
-                        },
+                        }
                         Err(err) => {
                             info!(error = ?err, "failure parsing/verifying fetch response from {}", responder);
-                        },
+                        }
                     };
-                },
+                }
                 Ok(DAGRpcResult(Err(dag_rpc_error))) => {
                     info!(error = ?dag_rpc_error, responder = responder, "fetch failure: target {} returned error", responder);
-                },
+                }
                 Err(err) => {
                     info!(error = ?err, responder = responder, "rpc failed to {}", responder);
-                },
+                }
             }
         }
         Err(DagFetchError::Failed)
@@ -369,10 +353,7 @@ pub struct FetchRequestHandler {
 
 impl FetchRequestHandler {
     pub fn new(dag: Arc<DagStore>, epoch_state: Arc<EpochState>) -> Self {
-        Self {
-            dag,
-            author_to_index: epoch_state.verifier.address_to_validator_index().clone(),
-        }
+        Self { dag, author_to_index: epoch_state.verifier.address_to_validator_index().clone() }
     }
 }
 
@@ -402,32 +383,24 @@ impl RpcHandler for FetchRequestHandler {
             ),
         );
 
-        let missing_targets: BitVec = message
-            .targets()
-            .map(|node| !dag_reader.exists(node))
-            .collect();
+        let missing_targets: BitVec =
+            message.targets().map(|node| !dag_reader.exists(node)).collect();
         ensure!(
             missing_targets.all_zeros(),
             FetchRequestHandleError::TargetsMissing(missing_targets)
         );
 
         let certified_nodes: Vec<_> = dag_reader
-            .reachable(
-                message.targets(),
-                Some(message.exists_bitmask().first_round()),
-                |_| true,
-            )
+            .reachable(message.targets(), Some(message.exists_bitmask().first_round()), |_| true)
             .filter_map(|node_status| {
                 let arc_node = node_status.as_node();
-                self.author_to_index
-                    .get(arc_node.author())
-                    .and_then(|author_idx| {
-                        if !message.exists_bitmask().has(arc_node.round(), *author_idx) {
-                            Some(arc_node.as_ref().clone())
-                        } else {
-                            None
-                        }
-                    })
+                self.author_to_index.get(arc_node.author()).and_then(|author_idx| {
+                    if !message.exists_bitmask().has(arc_node.round(), *author_idx) {
+                        Some(arc_node.as_ref().clone())
+                    } else {
+                        None
+                    }
+                })
             })
             .collect();
 

@@ -3,12 +3,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{block::Block, vote_data::VoteData};
-use gaptos::aptos_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH;
-use gaptos::aptos_crypto as aptos_crypto;
-use gaptos::aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
-use gaptos::aptos_types::{
-    epoch_state::EpochState,
-    proof::accumulator::InMemoryTransactionAccumulator,
+use gaptos::{
+    aptos_crypto,
+    aptos_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH,
+    aptos_crypto_derive::{BCSCryptoHash, CryptoHasher},
+    aptos_types::{epoch_state::EpochState, proof::accumulator::InMemoryTransactionAccumulator},
 };
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -32,11 +31,7 @@ impl VoteProposal {
         next_epoch_state: Option<EpochState>,
         decoupled_execution: bool,
     ) -> Self {
-        Self {
-            block,
-            next_epoch_state,
-            decoupled_execution,
-        }
+        Self { block, next_epoch_state, decoupled_execution }
     }
 
     pub fn block(&self) -> &Block {

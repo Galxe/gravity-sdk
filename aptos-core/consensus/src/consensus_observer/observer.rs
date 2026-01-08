@@ -27,36 +27,38 @@ use crate::{
     pipeline::execution_client::TExecutionClient,
     state_replication::StateComputerCommitCallBackType,
 };
-use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use gaptos::aptos_config::{config::NodeConfig, network_id::PeerNetworkId};
 use aptos_consensus_types::{pipeline, pipelined_block::PipelinedBlock};
-use gaptos::aptos_crypto::{bls12381, Genesis};
-use gaptos::aptos_event_notifications::{DbBackedOnChainConfig, ReconfigNotificationListener};
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::{debug, error, info, warn};
-use gaptos::aptos_network::{
-    application::{interface::NetworkClient, metadata::PeerMetadata},
-    protocols::wire::handshake::v1::ProtocolId,
-};
-use gaptos::aptos_reliable_broadcast::DropGuard;
-use gaptos::aptos_storage_interface::DbReader;
-use gaptos::aptos_time_service::TimeService;
-use gaptos::aptos_types::{
-    block_info::{BlockInfo, Round},
-    epoch_state::EpochState,
-    ledger_info::LedgerInfoWithSignatures,
-    on_chain_config::{
-        OnChainConsensusConfig, OnChainExecutionConfig, OnChainRandomnessConfig,
-        RandomnessConfigMoveStruct, RandomnessConfigSeqNum, ValidatorSet,
-    },
-    validator_signer::ValidatorSigner,
-};
 use futures::{
     future::{AbortHandle, Abortable},
     StreamExt,
 };
 use futures_channel::oneshot;
-use gaptos::move_core_types::account_address::AccountAddress;
+use gaptos::{
+    aptos_channels::{aptos_channel, message_queues::QueueStyle},
+    aptos_config::{config::NodeConfig, network_id::PeerNetworkId},
+    aptos_crypto::{bls12381, Genesis},
+    aptos_event_notifications::{DbBackedOnChainConfig, ReconfigNotificationListener},
+    aptos_infallible::Mutex,
+    aptos_logger::{debug, error, info, warn},
+    aptos_network::{
+        application::{interface::NetworkClient, metadata::PeerMetadata},
+        protocols::wire::handshake::v1::ProtocolId,
+    },
+    aptos_reliable_broadcast::DropGuard,
+    aptos_storage_interface::DbReader,
+    aptos_time_service::TimeService,
+    aptos_types::{
+        block_info::{BlockInfo, Round},
+        epoch_state::EpochState,
+        ledger_info::LedgerInfoWithSignatures,
+        on_chain_config::{
+            OnChainConsensusConfig, OnChainExecutionConfig, OnChainRandomnessConfig,
+            RandomnessConfigMoveStruct, RandomnessConfigSeqNum, ValidatorSet,
+        },
+        validator_signer::ValidatorSigner,
+    },
+    move_core_types::account_address::AccountAddress,
+};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{sync::mpsc::UnboundedSender, time::interval};
 use tokio_stream::wrappers::IntervalStream;
@@ -120,9 +122,7 @@ impl ConsensusObserver {
         time_service: TimeService,
     ) -> Self {
         // Read the latest ledger info from storage
-        let root = db_reader
-            .get_latest_ledger_info()
-            .expect("Failed to read latest ledger info!");
+        let root = db_reader.get_latest_ledger_info().expect("Failed to read latest ledger info!");
 
         // Get the consensus observer config
         let consensus_observer_config = node_config.consensus_observer;
@@ -166,12 +166,10 @@ impl ConsensusObserver {
 
         // If we're in state sync mode, we should wait for state sync to complete
         if self.in_state_sync_mode() {
-            info!(
-                LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                    "Waiting for state sync to reach target: {:?}!",
-                    self.root.lock().commit_info()
-                ))
-            );
+            info!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                "Waiting for state sync to reach target: {:?}!",
+                self.root.lock().commit_info()
+            )));
             return;
         }
 
@@ -186,12 +184,10 @@ impl ConsensusObserver {
         if let Some(active_subscription_peer) = active_subscription_peer {
             if let Err(error) = self.check_active_subscription() {
                 // Log the subscription termination
-                warn!(
-                    LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                        "Terminating subscription to peer: {:?}! Error: {:?}",
-                        active_subscription_peer, error
-                    ))
-                );
+                warn!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                    "Terminating subscription to peer: {:?}! Error: {:?}",
+                    active_subscription_peer, error
+                )));
 
                 // Unsubscribe from the peer
                 self.unsubscribe_from_peer(active_subscription_peer);
@@ -206,8 +202,7 @@ impl ConsensusObserver {
         // excluded from the selection process.
         if self.active_observer_subscription.is_none() {
             // Create a new observer subscription
-            self.create_new_observer_subscription(active_subscription_peer)
-                .await;
+            self.create_new_observer_subscription(active_subscription_peer).await;
 
             // If we successfully created a new subscription, clear the state and update the metrics
             if let Some(active_subscription) = &self.active_observer_subscription {
@@ -228,9 +223,8 @@ impl ConsensusObserver {
         if let Some(mut active_subscription) = active_observer_subscription {
             // Check if the peer for the subscription is still connected
             let peer_network_id = active_subscription.get_peer_network_id();
-            let peer_still_connected = self
-                .get_connected_peers_and_metadata()
-                .map_or(false, |peers_and_metadata| {
+            let peer_still_connected =
+                self.get_connected_peers_and_metadata().map_or(false, |peers_and_metadata| {
                     peers_and_metadata.contains_key(&peer_network_id)
                 });
 
@@ -274,12 +268,10 @@ impl ConsensusObserver {
         // Reset the execution pipeline for the root
         let root = self.root.lock().clone();
         if let Err(error) = self.execution_client.reset(&root).await {
-            error!(
-                LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                    "Failed to reset the execution pipeline for the root! Error: {:?}",
-                    error
-                ))
-            );
+            error!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                "Failed to reset the execution pipeline for the root! Error: {:?}",
+                error
+            )));
         }
     }
 
@@ -299,13 +291,11 @@ impl ConsensusObserver {
             // Verify the ledger info is for the same epoch
             let mut root = root.lock();
             if ledger_info.commit_info().epoch() != root.commit_info().epoch() {
-                warn!(
-                    LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                        "Received commit callback for a different epoch! Ledger info: {:?}, Root: {:?}",
-                        ledger_info.commit_info(),
-                        root.commit_info()
-                    ))
-                );
+                warn!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                    "Received commit callback for a different epoch! Ledger info: {:?}, Root: {:?}",
+                    ledger_info.commit_info(),
+                    root.commit_info()
+                )));
                 return;
             }
 
@@ -332,7 +322,7 @@ impl ConsensusObserver {
                 error!(LogSchema::new(LogEntry::ConsensusObserver)
                     .message("Failed to sort peers for subscription requests!"));
                 return;
-            },
+            }
         };
 
         // Verify that we have potential peers
@@ -345,20 +335,13 @@ impl ConsensusObserver {
         // Go through the sorted peers and attempt to subscribe to a single peer.
         // The first peer that responds successfully will be the selected peer.
         for selected_peer in &sorted_peers {
-            info!(
-                LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                    "Attempting to subscribe to peer: {}!",
-                    selected_peer
-                ))
-            );
+            info!(LogSchema::new(LogEntry::ConsensusObserver)
+                .message(&format!("Attempting to subscribe to peer: {}!", selected_peer)));
 
             // Send a subscription request to the peer and wait for the response.
             // Note: it is fine to block here because we assume only a single active subscription.
             let subscription_request = ConsensusObserverRequest::Subscribe;
-            let request_timeout_ms = self
-                .node_config
-                .consensus_observer
-                .network_request_timeout_ms;
+            let request_timeout_ms = self.node_config.consensus_observer.network_request_timeout_ms;
             let response = self
                 .consensus_observer_client
                 .send_rpc_request_to_peer(selected_peer, subscription_request, request_timeout_ms)
@@ -367,12 +350,8 @@ impl ConsensusObserver {
             // Process the response and update the active subscription
             match response {
                 Ok(ConsensusObserverResponse::SubscribeAck) => {
-                    info!(
-                        LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                            "Successfully subscribed to peer: {}!",
-                            selected_peer
-                        ))
-                    );
+                    info!(LogSchema::new(LogEntry::ConsensusObserver)
+                        .message(&format!("Successfully subscribed to peer: {}!", selected_peer)));
 
                     // Update the active subscription
                     let subscription = ConsensusObserverSubscription::new(
@@ -384,45 +363,37 @@ impl ConsensusObserver {
                     self.active_observer_subscription = Some(subscription);
 
                     return; // Return after successfully subscribing
-                },
+                }
                 Ok(response) => {
                     // We received an invalid response
-                    warn!(
-                        LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                            "Got unexpected response type: {:?}",
-                            response.get_label()
-                        ))
-                    );
-                },
+                    warn!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                        "Got unexpected response type: {:?}",
+                        response.get_label()
+                    )));
+                }
                 Err(error) => {
                     // We encountered an error while sending the request
-                    error!(
-                        LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                            "Failed to send subscription request to peer: {}! Error: {:?}",
-                            selected_peer, error
-                        ))
-                    );
-                },
+                    error!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                        "Failed to send subscription request to peer: {}! Error: {:?}",
+                        selected_peer, error
+                    )));
+                }
             }
         }
 
         // We failed to connect to any peers
-        warn!(
-            LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                "Failed to subscribe to any peers! Num peers attempted: {:?}",
-                sorted_peers.len()
-            ))
-        );
+        warn!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+            "Failed to subscribe to any peers! Num peers attempted: {:?}",
+            sorted_peers.len()
+        )));
     }
 
     /// Finalizes the ordered block by sending it to the execution pipeline
     async fn finalize_ordered_block(&mut self, ordered_block: OrderedBlock) {
-        info!(
-            LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                "Forwarding ordered blocks to the execution pipeline: {}",
-                ordered_block.proof_block_info()
-            ))
-        );
+        info!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+            "Forwarding ordered blocks to the execution pipeline: {}",
+            ordered_block.proof_block_info()
+        )));
 
         // Send the ordered block to the execution pipeline
         if let Err(error) = self
@@ -434,12 +405,8 @@ impl ConsensusObserver {
             )
             .await
         {
-            error!(
-                LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                    "Failed to finalize ordered block! Error: {:?}",
-                    error
-                ))
-            );
+            error!(LogSchema::new(LogEntry::ConsensusObserver)
+                .message(&format!("Failed to finalize ordered block! Error: {:?}", error)));
         }
     }
 
@@ -456,24 +423,19 @@ impl ConsensusObserver {
         };
 
         // Send the message to the execution client
-        if let Err(error) = self
-            .execution_client
-            .send_commit_msg(AccountAddress::ONE, commit_request)
+        if let Err(error) =
+            self.execution_client.send_commit_msg(AccountAddress::ONE, commit_request)
         {
-            error!(
-                LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                    "Failed to send commit decision to the execution pipeline! Error: {:?}",
-                    error
-                ))
-            )
+            error!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                "Failed to send commit decision to the execution pipeline! Error: {:?}",
+                error
+            )))
         };
     }
 
     /// Returns the current epoch state, and panics if it is not set
     fn get_epoch_state(&self) -> Arc<EpochState> {
-        self.epoch_state
-            .clone()
-            .expect("The epoch state is not set! This should never happen!")
+        self.epoch_state.clone().expect("The epoch state is not set! This should never happen!")
     }
 
     /// Returns the last known block
@@ -496,14 +458,12 @@ impl ConsensusObserver {
         {
             Ok(connected_peers_and_metadata) => Some(connected_peers_and_metadata),
             Err(error) => {
-                error!(
-                    LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                        "Failed to get connected peers and metadata! Error: {:?}",
-                        error
-                    ))
-                );
+                error!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                    "Failed to get connected peers and metadata! Error: {:?}",
+                    error
+                )));
                 None
-            },
+            }
         }
     }
 
@@ -543,12 +503,10 @@ impl ConsensusObserver {
 
         // Verify the block payload digests
         if let Err(error) = block_payload.verify_payload_digests() {
-            error!(
-                LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                    "Failed to verify block payload digests! Ignoring block: {:?}. Error: {:?}",
-                    block_payload.block, error
-                ))
-            );
+            error!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                "Failed to verify block payload digests! Ignoring block: {:?}. Error: {:?}",
+                block_payload.block, error
+            )));
             return;
         }
 
@@ -557,12 +515,10 @@ impl ConsensusObserver {
         let verified_payload = if block_epoch == epoch_state.epoch {
             // Verify the block proof signatures
             if let Err(error) = block_payload.verify_payload_signatures(&epoch_state) {
-                error!(
-                    LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                        "Failed to verify block payload signatures! Ignoring block: {:?}. Error: {:?}",
-                        block_payload.block, error
-                    ))
-                );
+                error!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                    "Failed to verify block payload signatures! Ignoring block: {:?}. Error: {:?}",
+                    block_payload.block, error
+                )));
                 return;
             }
 
@@ -572,15 +528,13 @@ impl ConsensusObserver {
         };
 
         // Update the payload store with the payload
-        self.block_payload_store
-            .insert_block_payload(block_payload, verified_payload);
+        self.block_payload_store.insert_block_payload(block_payload, verified_payload);
 
         // Check if there are blocks that were missing payloads but are
         // now ready because of the new payload. Note: this should only
         // be done if the payload has been verified correctly.
         if verified_payload {
-            self.order_ready_pending_block(block_epoch, block_round)
-                .await;
+            self.order_ready_pending_block(block_epoch, block_round).await;
         }
     }
 
@@ -599,13 +553,11 @@ impl ConsensusObserver {
         if commit_decision_epoch == epoch_state.epoch {
             // Verify the commit decision
             if let Err(error) = commit_decision.verify_commit_proof(&epoch_state) {
-                error!(
-                    LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                        "Failed to verify commit decision! Ignoring: {:?}, Error: {:?}",
-                        commit_decision.proof_block_info(),
-                        error
-                    ))
-                );
+                error!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                    "Failed to verify commit decision! Ignoring: {:?}, Error: {:?}",
+                    commit_decision.proof_block_info(),
+                    error
+                )));
                 return;
             }
 
@@ -638,19 +590,14 @@ impl ConsensusObserver {
             }
 
             // Otherwise, we should start the state sync process
-            info!(
-                LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                    "Started syncing to {}!",
-                    commit_decision.proof_block_info()
-                ))
-            );
+            info!(LogSchema::new(LogEntry::ConsensusObserver)
+                .message(&format!("Started syncing to {}!", commit_decision.proof_block_info())));
 
             // Update the root and clear the pending blocks (up to the commit)
             *self.root.lock() = commit_decision.commit_proof().clone();
             self.block_payload_store
                 .remove_blocks_for_epoch_round(commit_decision_epoch, commit_decision_round);
-            self.ordered_block_store
-                .remove_blocks_for_commit(commit_decision.commit_proof());
+            self.ordered_block_store.remove_blocks_for_commit(commit_decision.commit_proof());
 
             // Start the state sync process
             let abort_handle = sync_to_commit_decision(
@@ -677,23 +624,18 @@ impl ConsensusObserver {
         if let Some(pending_block) = pending_block {
             // If all payloads exist, add the commit decision to the pending blocks
             if self.all_payloads_exist(pending_block.blocks()) {
-                debug!(
-                    LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                        "Adding decision to pending block: {}",
-                        commit_decision.proof_block_info()
-                    ))
-                );
-                self.ordered_block_store
-                    .update_commit_decision(commit_decision);
+                debug!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                    "Adding decision to pending block: {}",
+                    commit_decision.proof_block_info()
+                )));
+                self.ordered_block_store.update_commit_decision(commit_decision);
 
                 // If we are not in sync mode, forward the commit decision to the execution pipeline
                 if !self.in_state_sync_mode() {
-                    info!(
-                        LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                            "Forwarding commit decision to the execution pipeline: {}",
-                            commit_decision.proof_block_info()
-                        ))
-                    );
+                    info!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                        "Forwarding commit decision to the execution pipeline: {}",
+                        commit_decision.proof_block_info()
+                    )));
                     self.forward_commit_decision(commit_decision.clone());
                 }
 
@@ -713,24 +655,20 @@ impl ConsensusObserver {
         // Verify the message is from the peer we've subscribed to
         if let Some(active_subscription) = &mut self.active_observer_subscription {
             if let Err(error) = active_subscription.verify_message_sender(&peer_network_id) {
-                warn!(
-                    LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                        "Message failed subscription sender verification! Error: {:?}",
-                        error,
-                    ))
-                );
+                warn!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                    "Message failed subscription sender verification! Error: {:?}",
+                    error,
+                )));
 
                 // Send another unsubscription request to the peer
                 self.unsubscribe_from_peer(peer_network_id);
                 return;
             }
         } else {
-            warn!(
-                LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                    "Received message from unexpected peer: {}! No active subscription found!",
-                    peer_network_id
-                ))
-            );
+            warn!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                "Received message from unexpected peer: {}! No active subscription found!",
+                peer_network_id
+            )));
 
             // Send an unsubscription request to the peer
             self.unsubscribe_from_peer(peer_network_id);
@@ -757,7 +695,7 @@ impl ConsensusObserver {
 
                 // Process the ordered block message
                 self.process_ordered_block_message(ordered_block).await;
-            },
+            }
             ConsensusObserverDirectSend::CommitDecision(commit_decision) => {
                 // Log the received commit decision message
                 let log_message = format!(
@@ -769,7 +707,7 @@ impl ConsensusObserver {
 
                 // Process the commit decision message
                 self.process_commit_decision_message(commit_decision);
-            },
+            }
             ConsensusObserverDirectSend::BlockPayload(block_payload) => {
                 // Log the received block payload message
                 let log_message = format!(
@@ -780,7 +718,7 @@ impl ConsensusObserver {
 
                 // Process the block payload message
                 self.process_block_payload_message(block_payload).await;
-            },
+            }
         }
 
         // Update the metrics for the processed blocks
@@ -791,13 +729,11 @@ impl ConsensusObserver {
     async fn process_ordered_block_message(&mut self, ordered_block: OrderedBlock) {
         // Verify the ordered blocks before processing
         if let Err(error) = ordered_block.verify_ordered_blocks() {
-            error!(
-                LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                    "Failed to verify ordered blocks! Ignoring: {:?}, Error: {:?}",
-                    ordered_block.proof_block_info(),
-                    error
-                ))
-            );
+            error!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                "Failed to verify ordered blocks! Ignoring: {:?}, Error: {:?}",
+                ordered_block.proof_block_info(),
+                error
+            )));
             return;
         };
 
@@ -817,30 +753,25 @@ impl ConsensusObserver {
         let epoch_state = self.get_epoch_state();
         if ordered_block.proof_block_info().epoch() == epoch_state.epoch {
             if let Err(error) = ordered_block.verify_ordered_proof(&epoch_state) {
-                warn!(
-                    LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                        "Failed to verify ordered proof! Ignoring: {:?}, Error: {:?}",
-                        ordered_block.proof_block_info(),
-                        error
-                    ))
-                );
+                warn!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                    "Failed to verify ordered proof! Ignoring: {:?}, Error: {:?}",
+                    ordered_block.proof_block_info(),
+                    error
+                )));
                 return;
             }
         } else {
             // Drop the block and log an error (the block should always be for the current epoch)
-            error!(
-                LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                    "Received ordered block for a different epoch! Ignoring: {:?}",
-                    ordered_block.proof_block_info()
-                ))
-            );
+            error!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                "Received ordered block for a different epoch! Ignoring: {:?}",
+                ordered_block.proof_block_info()
+            )));
             return;
         };
 
         // Verify the block payloads against the ordered block
-        if let Err(error) = self
-            .block_payload_store
-            .verify_payloads_against_ordered_block(&ordered_block)
+        if let Err(error) =
+            self.block_payload_store.verify_payloads_against_ordered_block(&ordered_block)
         {
             error!(
                 LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
@@ -856,20 +787,17 @@ impl ConsensusObserver {
         // last block, we can insert it into the ordered block store.
         if self.get_last_block().id() == ordered_block.first_block().parent_id() {
             // Insert the ordered block into the pending blocks
-            self.ordered_block_store
-                .insert_ordered_block(ordered_block.clone());
+            self.ordered_block_store.insert_ordered_block(ordered_block.clone());
 
             // If we're not in sync mode, finalize the ordered blocks
             if !self.in_state_sync_mode() {
                 self.finalize_ordered_block(ordered_block).await;
             }
         } else {
-            warn!(
-                LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                    "Parent block for ordered block is missing! Ignoring: {:?}",
-                    ordered_block.proof_block_info()
-                ))
-            );
+            warn!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                "Parent block for ordered block is missing! Ignoring: {:?}",
+                ordered_block.proof_block_info()
+            )));
         }
     }
 
@@ -884,14 +812,10 @@ impl ConsensusObserver {
         let response_sender = match response_sender {
             Some(response_sender) => response_sender,
             None => {
-                error!(
-                    LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                        "Missing response sender for RCP request: {:?}",
-                        request
-                    ))
-                );
+                error!(LogSchema::new(LogEntry::ConsensusObserver)
+                    .message(&format!("Missing response sender for RCP request: {:?}", request)));
                 return; // Something has gone wrong!
-            },
+            }
         };
 
         // Forward the request to the consensus publisher
@@ -907,21 +831,17 @@ impl ConsensusObserver {
     /// Processes the sync complete notification for the given epoch and round
     async fn process_sync_notification(&mut self, epoch: u64, round: Round) {
         // Log the sync notification
-        info!(
-            LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                "Received sync complete notification for epoch {}, round: {}",
-                epoch, round
-            ))
-        );
+        info!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+            "Received sync complete notification for epoch {}, round: {}",
+            epoch, round
+        )));
 
         // Verify that the sync notification is for the current epoch and round
         if !check_root_epoch_and_round(self.root.clone(), epoch, round) {
-            info!(
-                LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+            info!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
                 "Received invalid sync notification for epoch: {}, round: {}! Current root: {:?}",
                 epoch, round, self.root
-                ))
-            );
+            )));
             return;
         }
 
@@ -934,14 +854,13 @@ impl ConsensusObserver {
 
             // Verify the block payloads for the new epoch
             let new_epoch_state = self.get_epoch_state();
-            let verified_payload_rounds = self
-                .block_payload_store
-                .verify_payload_signatures(&new_epoch_state);
+            let verified_payload_rounds =
+                self.block_payload_store.verify_payload_signatures(&new_epoch_state);
 
-            // Order all the pending blocks that are now ready (these were buffered during state sync)
+            // Order all the pending blocks that are now ready (these were buffered during state
+            // sync)
             for payload_round in verified_payload_rounds {
-                self.order_ready_pending_block(new_epoch_state.epoch, payload_round)
-                    .await;
+                self.order_ready_pending_block(new_epoch_state.epoch, payload_round).await;
             }
         };
 
@@ -1014,31 +933,25 @@ impl ConsensusObserver {
             // Process the response
             match response {
                 Ok(ConsensusObserverResponse::UnsubscribeAck) => {
-                    info!(
-                        LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                            "Successfully unsubscribed from peer: {}!",
-                            peer_network_id
-                        ))
-                    );
-                },
+                    info!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                        "Successfully unsubscribed from peer: {}!",
+                        peer_network_id
+                    )));
+                }
                 Ok(response) => {
                     // We received an invalid response
-                    warn!(
-                        LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                            "Got unexpected response type: {:?}",
-                            response.get_label()
-                        ))
-                    );
-                },
+                    warn!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                        "Got unexpected response type: {:?}",
+                        response.get_label()
+                    )));
+                }
                 Err(error) => {
                     // We encountered an error while sending the request
-                    error!(
-                        LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                            "Failed to send unsubscribe request to peer: {}! Error: {:?}",
-                            peer_network_id, error
-                        ))
-                    );
-                },
+                    error!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                        "Failed to send unsubscribe request to peer: {}! Error: {:?}",
+                        peer_network_id, error
+                    )));
+                }
             }
         });
     }
@@ -1109,12 +1022,10 @@ impl ConsensusObserver {
         // Update the local epoch state and quorum store config
         self.epoch_state = Some(epoch_state.clone());
         self.quorum_store_enabled = consensus_config.quorum_store_enabled();
-        info!(
-            LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                "New epoch started: {:?}. Updated the epoch state! Quorum store enabled: {:?}",
-                epoch_state.epoch, self.quorum_store_enabled,
-            ))
-        );
+        info!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+            "New epoch started: {:?}. Updated the epoch state! Quorum store enabled: {:?}",
+            epoch_state.epoch, self.quorum_store_enabled,
+        )));
 
         // Create the payload manager
         let payload_manager: Arc<dyn TPayloadManager> = if self.quorum_store_enabled {
@@ -1159,19 +1070,16 @@ impl ConsensusObserver {
     ) {
         // If the consensus publisher is enabled but the observer is disabled,
         // we should only forward incoming requests to the consensus publisher.
-        if self.node_config.consensus_observer.publisher_enabled
-            && !self.node_config.consensus_observer.observer_enabled
+        if self.node_config.consensus_observer.publisher_enabled &&
+            !self.node_config.consensus_observer.observer_enabled
         {
-            self.start_publisher_forwarding(&mut network_service_events)
-                .await;
+            self.start_publisher_forwarding(&mut network_service_events).await;
             return; // We should never return from this function
         }
 
         // Create a progress check ticker
         let mut progress_check_interval = IntervalStream::new(interval(Duration::from_millis(
-            self.node_config
-                .consensus_observer
-                .progress_check_interval_ms,
+            self.node_config.consensus_observer.progress_check_interval_ms,
         )))
         .fuse();
 
@@ -1279,23 +1187,15 @@ fn check_root_epoch_and_round(
 async fn extract_on_chain_configs(
     node_config: &NodeConfig,
     reconfig_events: &mut ReconfigNotificationListener<DbBackedOnChainConfig>,
-) -> (
-    Arc<EpochState>,
-    OnChainConsensusConfig,
-    OnChainExecutionConfig,
-    OnChainRandomnessConfig,
-) {
+) -> (Arc<EpochState>, OnChainConsensusConfig, OnChainExecutionConfig, OnChainRandomnessConfig) {
     // Fetch the next reconfiguration notification
-    let reconfig_notification = reconfig_events
-        .next()
-        .await
-        .expect("Failed to get reconfig notification!");
+    let reconfig_notification =
+        reconfig_events.next().await.expect("Failed to get reconfig notification!");
 
     // Extract the epoch state from the reconfiguration notification
     let on_chain_configs = reconfig_notification.on_chain_configs;
-    let validator_set: ValidatorSet = on_chain_configs
-        .get()
-        .expect("Failed to get the validator set from the on-chain configs!");
+    let validator_set: ValidatorSet =
+        on_chain_configs.get().expect("Failed to get the validator set from the on-chain configs!");
     let epoch_state = Arc::new(EpochState {
         epoch: on_chain_configs.epoch(),
         verifier: Arc::new((&validator_set).into()),
@@ -1304,24 +1204,16 @@ async fn extract_on_chain_configs(
     // Extract the consensus config (or use the default if it's missing)
     let onchain_consensus_config: anyhow::Result<OnChainConsensusConfig> = on_chain_configs.get();
     if let Err(error) = &onchain_consensus_config {
-        error!(
-            LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                "Failed to read on-chain consensus config! Error: {:?}",
-                error
-            ))
-        );
+        error!(LogSchema::new(LogEntry::ConsensusObserver)
+            .message(&format!("Failed to read on-chain consensus config! Error: {:?}", error)));
     }
     let consensus_config = onchain_consensus_config.unwrap_or_default();
 
     // Extract the execution config (or use the default if it's missing)
     let onchain_execution_config: anyhow::Result<OnChainExecutionConfig> = on_chain_configs.get();
     if let Err(error) = &onchain_execution_config {
-        error!(
-            LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                "Failed to read on-chain execution config! Error: {:?}",
-                error
-            ))
-        );
+        error!(LogSchema::new(LogEntry::ConsensusObserver)
+            .message(&format!("Failed to read on-chain execution config! Error: {:?}", error)));
     }
     let execution_config =
         onchain_execution_config.unwrap_or_else(|_| OnChainExecutionConfig::default_if_missing());
@@ -1330,12 +1222,10 @@ async fn extract_on_chain_configs(
     let onchain_randomness_config_seq_num: anyhow::Result<RandomnessConfigSeqNum> =
         on_chain_configs.get();
     if let Err(error) = &onchain_randomness_config_seq_num {
-        error!(
-            LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                "Failed to read on-chain randomness config seq num! Error: {:?}",
-                error
-            ))
-        );
+        error!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+            "Failed to read on-chain randomness config seq num! Error: {:?}",
+            error
+        )));
     }
     let onchain_randomness_config_seq_num = onchain_randomness_config_seq_num
         .unwrap_or_else(|_| RandomnessConfigSeqNum::default_if_missing());
@@ -1344,12 +1234,8 @@ async fn extract_on_chain_configs(
     let onchain_randomness_config: anyhow::Result<RandomnessConfigMoveStruct> =
         on_chain_configs.get();
     if let Err(error) = &onchain_randomness_config {
-        error!(
-            LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                "Failed to read on-chain randomness config! Error: {:?}",
-                error
-            ))
-        );
+        error!(LogSchema::new(LogEntry::ConsensusObserver)
+            .message(&format!("Failed to read on-chain randomness config! Error: {:?}", error)));
     }
     let onchain_randomness_config = OnChainRandomnessConfig::from_configs(
         node_config.randomness_override_seq_num,
@@ -1358,12 +1244,7 @@ async fn extract_on_chain_configs(
     );
 
     // Return the extracted epoch state and on-chain configs
-    (
-        epoch_state,
-        consensus_config,
-        execution_config,
-        onchain_randomness_config,
-    )
+    (epoch_state, consensus_config, execution_config, onchain_randomness_config)
 }
 
 /// Logs the received message using an appropriate log level
@@ -1391,17 +1272,13 @@ fn sync_to_commit_decision(
     tokio::spawn(Abortable::new(
         async move {
             // Sync to the commit decision
-            if let Err(error) = execution_client
-                .clone()
-                .sync_to(commit_decision.commit_proof().clone())
-                .await
+            if let Err(error) =
+                execution_client.clone().sync_to(commit_decision.commit_proof().clone()).await
             {
-                warn!(
-                    LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                        "Failed to sync to commit decision: {:?}! Error: {:?}",
-                        commit_decision, error
-                    ))
-                );
+                warn!(LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                    "Failed to sync to commit decision: {:?}! Error: {:?}",
+                    commit_decision, error
+                )));
             }
 
             // Notify the consensus observer that the sync is complete

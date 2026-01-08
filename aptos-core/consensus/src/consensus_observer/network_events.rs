@@ -4,14 +4,6 @@
 use crate::consensus_observer::network_message::{
     ConsensusObserverMessage, ConsensusObserverResponse,
 };
-use gaptos::aptos_config::network_id::{NetworkId, PeerNetworkId};
-use gaptos::aptos_network::{
-    application::interface::NetworkServiceEvents,
-    protocols::{
-        network::{Event, RpcError},
-        wire::handshake::v1::ProtocolId,
-    },
-};
 use bytes::Bytes;
 use futures::{
     future,
@@ -19,6 +11,16 @@ use futures::{
     Stream,
 };
 use futures_channel::oneshot;
+use gaptos::{
+    aptos_config::network_id::{NetworkId, PeerNetworkId},
+    aptos_network::{
+        application::interface::NetworkServiceEvents,
+        protocols::{
+            network::{Event, RpcError},
+            wire::handshake::v1::ProtocolId,
+        },
+    },
+};
 use std::{
     pin::Pin,
     task::{Context, Poll},
@@ -55,9 +57,7 @@ impl ConsensusObserverNetworkEvents {
             })
             .boxed();
 
-        Self {
-            network_message_stream,
-        }
+        Self { network_message_stream }
     }
 
     /// Transforms each network event into a network message
@@ -76,7 +76,7 @@ impl ConsensusObserverNetworkEvents {
                     response_sender: None,
                 };
                 Some(network_message)
-            },
+            }
             Event::RpcRequest(peer_id, consensus_observer_message, protocol_id, response_tx) => {
                 // Transform the RPC request event into a network message
                 let response_sender = ResponseSender::new(response_tx);
@@ -88,7 +88,7 @@ impl ConsensusObserverNetworkEvents {
                     response_sender: Some(response_sender),
                 };
                 Some(network_message)
-            },
+            }
         }
     }
 }
@@ -114,18 +114,15 @@ impl ResponseSender {
     #[cfg(test)]
     /// Creates a new response sender for testing purposes.
     pub fn new_for_test() -> Self {
-        Self {
-            response_tx: oneshot::channel().0,
-        }
+        Self { response_tx: oneshot::channel().0 }
     }
 
     /// Send the response to the pending RPC request
     pub fn send(self, response: ConsensusObserverResponse) {
         // Create and serialize the response message
         let consensus_observer_message = ConsensusObserverMessage::Response(response);
-        let result = bcs::to_bytes(&consensus_observer_message)
-            .map(Bytes::from)
-            .map_err(RpcError::BcsError);
+        let result =
+            bcs::to_bytes(&consensus_observer_message).map(Bytes::from).map_err(RpcError::BcsError);
 
         // Send the response
         let _ = self.response_tx.send(result);

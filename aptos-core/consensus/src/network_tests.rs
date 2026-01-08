@@ -7,8 +7,6 @@ use crate::{
     network_interface::{ConsensusMsg, ConsensusNetworkClient},
     test_utils::{self, consensus_runtime, placeholder_ledger_info, timed_block_on},
 };
-use gaptos::aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
-use gaptos::aptos_config::network_id::{NetworkId, PeerNetworkId};
 use aptos_consensus_types::{
     block::{block_test_utils::certificate_for_genesis, Block},
     common::Author,
@@ -18,21 +16,25 @@ use aptos_consensus_types::{
     vote_data::VoteData,
     vote_msg::VoteMsg,
 };
-use gaptos::aptos_infallible::{Mutex, RwLock};
-use gaptos::aptos_network::{
-    application::storage::PeersAndMetadata,
-    peer_manager::{ConnectionRequestSender, PeerManagerRequest, PeerManagerRequestSender},
-    protocols::{
-        network::{NewNetworkEvents, ReceivedMessage, RpcError, SerializedRequest},
-        wire::{
-            handshake::v1::ProtocolIdSet,
-            messaging::v1::{DirectSendMsg, NetworkMessage, RpcRequest},
-        },
-    },
-    ProtocolId,
-};
-use gaptos::aptos_types::{block_info::BlockInfo, PeerId};
 use futures::{channel::mpsc, SinkExt, StreamExt};
+use gaptos::{
+    aptos_channels::{self, aptos_channel, message_queues::QueueStyle},
+    aptos_config::network_id::{NetworkId, PeerNetworkId},
+    aptos_infallible::{Mutex, RwLock},
+    aptos_network::{
+        application::storage::PeersAndMetadata,
+        peer_manager::{ConnectionRequestSender, PeerManagerRequest, PeerManagerRequestSender},
+        protocols::{
+            network::{NewNetworkEvents, ReceivedMessage, RpcError, SerializedRequest},
+            wire::{
+                handshake::v1::ProtocolIdSet,
+                messaging::v1::{DirectSendMsg, NetworkMessage, RpcRequest},
+            },
+        },
+        ProtocolId,
+    },
+    aptos_types::{block_info::BlockInfo, PeerId},
+};
 use std::{
     collections::{HashMap, HashSet},
     iter::FromIterator,
@@ -63,7 +65,6 @@ pub struct NetworkPlayground {
     /// Maps each Author to a Sender of their inbound network notifications.
     /// These events will usually be handled by the event loop spawned in
     /// `ConsensusNetworkImpl`.
-    ///
     node_consensus_txs:
         Arc<Mutex<HashMap<TwinId, aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>>>>,
     /// Nodes' outbound handlers forward their outbound non-rpc messages to this
@@ -147,18 +148,13 @@ impl NetworkPlayground {
                     let dst_twin_ids = author_to_twin_ids.read().get_twin_ids(dst);
 
                     let dst_twin_id = match dst_twin_ids.iter().find(|dst_twin_id| {
-                        !drop_config
-                            .read()
-                            .is_message_dropped(&src_twin_id, dst_twin_id)
+                        !drop_config.read().is_message_dropped(&src_twin_id, dst_twin_id)
                     }) {
                         Some(id) => id,
                         None => continue, // drop rpc
                     };
 
-                    if timeout_config
-                        .read()
-                        .is_message_timedout(&src_twin_id, dst_twin_id)
-                    {
+                    if timeout_config.read().is_message_timedout(&src_twin_id, dst_twin_id) {
                         outbound_req.res_tx.send(Err(RpcError::TimedOut)).unwrap();
                         continue;
                     }
@@ -185,12 +181,12 @@ impl NetworkPlayground {
                             },
                         )
                         .unwrap();
-                },
+                }
                 // Other PeerManagerRequest get buffered for `deliver_messages` to
                 // synchronously drain.
                 net_req => {
                     let _ = outbound_msgs_tx.send((src_twin_id, net_req)).await;
-                },
+                }
             }
         }
     }
@@ -201,7 +197,9 @@ impl NetworkPlayground {
         twin_id: TwinId,
         consensus_tx: aptos_channel::Sender<(PeerId, ProtocolId), ReceivedMessage>,
         network_reqs_rx: aptos_channel::Receiver<(PeerId, ProtocolId), PeerManagerRequest>,
-        conn_mgr_reqs_rx: gaptos::aptos_channels::Receiver<gaptos::aptos_network::ConnectivityRequest>,
+        conn_mgr_reqs_rx: gaptos::aptos_channels::Receiver<
+            gaptos::aptos_network::ConnectivityRequest,
+        >,
     ) {
         self.node_consensus_txs.lock().insert(twin_id, consensus_tx);
         self.drop_config.write().add_node(twin_id);
@@ -231,31 +229,20 @@ impl NetworkPlayground {
         dst_twin_id: TwinId,
         rmsg: ReceivedMessage,
     ) -> (Author, ConsensusMsg) {
-        let node_consensus_tx = self
-            .node_consensus_txs
-            .lock()
-            .get(&dst_twin_id)
-            .unwrap()
-            .clone();
+        let node_consensus_tx = self.node_consensus_txs.lock().get(&dst_twin_id).unwrap().clone();
 
         // copy message data
         let source_address = rmsg.sender.peer_id();
         let consensus_msg = match &rmsg.message {
-            NetworkMessage::DirectSendMsg(dmsg) => dmsg
-                .protocol_id
-                .from_bytes(dmsg.raw_msg.as_slice())
-                .unwrap(),
+            NetworkMessage::DirectSendMsg(dmsg) => {
+                dmsg.protocol_id.from_bytes(dmsg.raw_msg.as_slice()).unwrap()
+            }
             wrong_message => {
-                panic!(
-                    "[network playground] Unexpected ReceivedMessage: {:?}",
-                    wrong_message
-                );
-            },
+                panic!("[network playground] Unexpected ReceivedMessage: {:?}", wrong_message);
+            }
         };
-        let _ = node_consensus_tx.push(
-            (src_twin_id.author, ProtocolId::ConsensusDirectSendBcs),
-            rmsg,
-        );
+        let _ =
+            node_consensus_tx.push((src_twin_id.author, ProtocolId::ConsensusDirectSendBcs), rmsg);
         (source_address, consensus_msg)
     }
 
@@ -282,11 +269,10 @@ impl NetworkPlayground {
             let (dst, msg) = match &net_req {
                 PeerManagerRequest::SendDirectSend(dst_inner, msg_inner) => {
                     (*dst_inner, msg_inner.clone())
-                },
-                msg_inner => panic!(
-                    "[network playground] Unexpected PeerManagerRequest: {:?}",
-                    msg_inner
-                ),
+                }
+                msg_inner => {
+                    panic!("[network playground] Unexpected PeerManagerRequest: {:?}", msg_inner)
+                }
             };
 
             let dst_twin_ids = self.get_twin_ids(dst);
@@ -345,9 +331,7 @@ impl NetworkPlayground {
     }
 
     pub fn extend_author_to_twin_ids(&mut self, author: Author, twin_id: TwinId) {
-        self.author_to_twin_ids
-            .write()
-            .extend_author_to_twin_ids(author, twin_id);
+        self.author_to_twin_ids.write().extend_author_to_twin_ids(author, twin_id);
     }
 
     pub fn get_twin_ids(&self, author: Author) -> Vec<TwinId> {
@@ -355,10 +339,9 @@ impl NetworkPlayground {
     }
 
     fn is_message_dropped(&self, src: &TwinId, dst: &TwinId, msg: ConsensusMsg) -> bool {
-        self.drop_config.read().is_message_dropped(src, dst)
-            || Self::get_message_round(msg).map_or(false, |r| {
-                self.drop_config_round.is_message_dropped(src, dst, r)
-            })
+        self.drop_config.read().is_message_dropped(src, dst) ||
+            Self::get_message_round(msg)
+                .map_or(false, |r| self.drop_config_round.is_message_dropped(src, dst, r))
     }
 
     pub fn split_network(
@@ -366,12 +349,11 @@ impl NetworkPlayground {
         partition_first: Vec<TwinId>,
         partition_second: Vec<TwinId>,
     ) -> bool {
-        self.drop_config
-            .write()
-            .split_network(&partition_first, &partition_second)
+        self.drop_config.write().split_network(&partition_first, &partition_second)
     }
 
-    /// Check if the message from 'src_twin_id' to 'dst_twin_id' should be dropped in the given round
+    /// Check if the message from 'src_twin_id' to 'dst_twin_id' should be dropped in the given
+    /// round
     pub fn is_message_dropped_round(&self, src: &TwinId, dst: &TwinId, round: u64) -> bool {
         self.drop_config_round.is_message_dropped(src, dst, round)
     }
@@ -386,9 +368,7 @@ impl NetworkPlayground {
         for (round, partitions) in round_partitions.iter() {
             partitions.iter().enumerate().for_each(|(i, p1)| {
                 partitions.iter().skip(i + 1).for_each(|p2| {
-                    ret &= self
-                        .drop_config_round
-                        .drop_message_for_round(*round, p1, p2)
+                    ret &= self.drop_config_round.drop_message_for_round(*round, p1, p2)
                 })
             })
         }
@@ -407,11 +387,10 @@ impl NetworkPlayground {
             let (dst, msg) = match &net_req {
                 PeerManagerRequest::SendDirectSend(dst_inner, msg_inner) => {
                     (*dst_inner, msg_inner.clone())
-                },
-                msg_inner => panic!(
-                    "[network playground] Unexpected PeerManagerRequest: {:?}",
-                    msg_inner
-                ),
+                }
+                msg_inner => {
+                    panic!("[network playground] Unexpected PeerManagerRequest: {:?}", msg_inner)
+                }
             };
 
             let dst_twin_ids = self.get_twin_ids(dst);
@@ -509,9 +488,7 @@ struct DropConfigRound(HashMap<u64, DropConfig>);
 impl DropConfigRound {
     /// Check if the message from 'src' to 'dst' should be dropped in the given round
     fn is_message_dropped(&self, src: &TwinId, dst: &TwinId, round: u64) -> bool {
-        self.0
-            .get(&round)
-            .map_or(false, |config| config.is_message_dropped(src, dst))
+        self.0.get(&round).map_or(false, |config| config.is_message_dropped(src, dst))
     }
 
     /// Create partition for the round
@@ -533,26 +510,28 @@ mod tests {
         network::{IncomingRpcRequest, NetworkTask},
         network_interface::{DIRECT_SEND, RPC},
     };
-    use gaptos::aptos_config::network_id::{NetworkId, PeerNetworkId};
     use aptos_consensus_types::{
         block_retrieval::{BlockRetrievalRequest, BlockRetrievalResponse, BlockRetrievalStatus},
         common::Payload,
     };
-    use gaptos::aptos_crypto::HashValue;
-    use gaptos::aptos_network::{
-        application::{
-            interface::{NetworkClient, NetworkServiceEvents},
-            storage::PeersAndMetadata,
-        },
-        protocols::{
-            network,
-            network::{NetworkEvents, NewNetworkSender},
-        },
-        transport::ConnectionMetadata,
-    };
-    use gaptos::aptos_types::validator_verifier::random_validator_verifier;
     use bytes::Bytes;
     use futures::{channel::oneshot, future};
+    use gaptos::{
+        aptos_config::network_id::{NetworkId, PeerNetworkId},
+        aptos_crypto::HashValue,
+        aptos_network::{
+            application::{
+                interface::{NetworkClient, NetworkServiceEvents},
+                storage::PeersAndMetadata,
+            },
+            protocols::{
+                network,
+                network::{NetworkEvents, NewNetworkSender},
+            },
+            transport::ConnectionMetadata,
+        },
+        aptos_types::validator_verifier::random_validator_verifier,
+    };
     use maplit::hashmap;
 
     #[test]
@@ -565,10 +544,7 @@ mod tests {
 
         let mut nodes = Vec::new();
         for (i, signer) in signers.iter().enumerate() {
-            nodes.push(TwinId {
-                id: i,
-                author: signer.author(),
-            });
+            nodes.push(TwinId { id: i, author: signer.author() });
         }
 
         // Create per round partitions
@@ -576,9 +552,7 @@ mod tests {
         // Round 1 partitions: [0], [1,2]
         round_partitions.insert(1, vec![vec![nodes[0]], vec![nodes[1], nodes[2]]]);
         // Round 2 partitions: [1], [2], [3,4]
-        round_partitions.insert(2, vec![vec![nodes[1]], vec![nodes[2]], vec![
-            nodes[3], nodes[4],
-        ]]);
+        round_partitions.insert(2, vec![vec![nodes[1]], vec![nodes[2]], vec![nodes[3], nodes[4]]]);
         assert!(playground.split_network_round(&round_partitions));
 
         // Round 1 checks (partitions: [0], [1,2])
@@ -610,9 +584,7 @@ mod tests {
         let peer_network_id = PeerNetworkId::new(NetworkId::Validator, *peer);
         let mut conn_meta = ConnectionMetadata::mock(*peer);
         conn_meta.application_protocols = ProtocolIdSet::from_iter(protocols);
-        peers_and_metadata
-            .insert_connection_metadata(peer_network_id, conn_meta)
-            .unwrap();
+        peers_and_metadata.insert_connection_metadata(peer_network_id, conn_meta).unwrap();
     }
 
     #[test]
@@ -634,11 +606,15 @@ mod tests {
             let (consensus_tx, consensus_rx) = aptos_channel::new(QueueStyle::FIFO, 8, None);
             let (_conn_mgr_reqs_tx, conn_mgr_reqs_rx) = gaptos::aptos_channels::new_test(1024);
 
-            add_peer_to_storage(&peers_and_metadata, peer, &[
-                ProtocolId::ConsensusDirectSendJson,
-                ProtocolId::ConsensusDirectSendBcs,
-                ProtocolId::ConsensusRpcBcs,
-            ]);
+            add_peer_to_storage(
+                &peers_and_metadata,
+                peer,
+                &[
+                    ProtocolId::ConsensusDirectSendJson,
+                    ProtocolId::ConsensusDirectSendBcs,
+                    ProtocolId::ConsensusRpcBcs,
+                ],
+            );
 
             let network_sender = network::NetworkSender::new(
                 PeerManagerRequestSender::new(network_reqs_tx),
@@ -652,10 +628,7 @@ mod tests {
             );
             let consensus_network_client = ConsensusNetworkClient::new(network_client);
 
-            let twin_id = TwinId {
-                id: peer_id,
-                author: *peer,
-            };
+            let twin_id = TwinId { id: peer_id, author: *peer };
             playground.add_node(twin_id, consensus_tx, network_reqs_rx, conn_mgr_reqs_rx);
 
             let (self_sender, self_receiver) = gaptos::aptos_channels::new_unbounded_test();
@@ -663,7 +636,7 @@ mod tests {
                 *peer,
                 consensus_network_client,
                 self_sender,
-                todo!() // validator_verifier.clone(),
+                todo!(), // validator_verifier.clone(),
             );
 
             let network_events = NetworkEvents::new(consensus_rx, None, true);
@@ -696,19 +669,11 @@ mod tests {
                 Vec::new(),
             )
             .unwrap(),
-            SyncInfo::new(
-                previous_qc.clone(),
-                previous_qc.into_wrapped_ledger_info(),
-                None,
-            ),
+            SyncInfo::new(previous_qc.clone(), previous_qc.into_wrapped_ledger_info(), None),
         );
         timed_block_on(&runtime, async {
-            nodes[0]
-                .send_vote(vote_msg.clone(), peers[2..5].to_vec())
-                .await;
-            playground
-                .wait_for_messages(3, NetworkPlayground::take_all)
-                .await;
+            nodes[0].send_vote(vote_msg.clone(), peers[2..5].to_vec()).await;
+            playground.wait_for_messages(3, NetworkPlayground::take_all).await;
             for r in receivers.iter_mut().take(5).skip(2) {
                 let (_, msg) = r.consensus_messages.next().await.unwrap();
                 match msg {
@@ -717,9 +682,7 @@ mod tests {
                 }
             }
             nodes[0].broadcast_proposal(proposal.clone()).await;
-            playground
-                .wait_for_messages(4, NetworkPlayground::take_all)
-                .await;
+            playground.wait_for_messages(4, NetworkPlayground::take_all).await;
             for r in receivers.iter_mut().take(num_nodes - 1) {
                 let (_, msg) = r.consensus_messages.next().await.unwrap();
                 match msg {
@@ -762,16 +725,17 @@ mod tests {
             );
             let consensus_network_client = ConsensusNetworkClient::new(network_client);
 
-            add_peer_to_storage(&peers_and_metadata, peer, &[
-                ProtocolId::ConsensusDirectSendJson,
-                ProtocolId::ConsensusDirectSendBcs,
-                ProtocolId::ConsensusRpcJson,
-            ]);
+            add_peer_to_storage(
+                &peers_and_metadata,
+                peer,
+                &[
+                    ProtocolId::ConsensusDirectSendJson,
+                    ProtocolId::ConsensusDirectSendBcs,
+                    ProtocolId::ConsensusRpcJson,
+                ],
+            );
 
-            let twin_id = TwinId {
-                id: peer_id,
-                author: *peer,
-            };
+            let twin_id = TwinId { id: peer_id, author: *peer };
             playground.add_node(twin_id, consensus_tx, network_reqs_rx, conn_mgr_reqs_rx);
 
             let (self_sender, self_receiver) = gaptos::aptos_channels::new_unbounded_test();
@@ -779,7 +743,7 @@ mod tests {
                 *peer,
                 consensus_network_client.clone(),
                 self_sender,
-                todo!() // validator_verifier.clone(),
+                todo!(), // validator_verifier.clone(),
             );
 
             let network_events = NetworkEvents::new(consensus_rx, None, true);
@@ -815,17 +779,19 @@ mod tests {
                 // we can not process 2 votes and the test will timeout
                 node0.send_vote(vote_msg.clone(), vec![peer1]).await;
                 node0.send_vote(vote_msg.clone(), vec![peer1]).await;
-                playground
-                    .wait_for_messages(2, NetworkPlayground::votes_only)
-                    .await;
-                let response =
-                    BlockRetrievalResponse::new(BlockRetrievalStatus::IdNotFound, vec![], vec![], vec![]);
+                playground.wait_for_messages(2, NetworkPlayground::votes_only).await;
+                let response = BlockRetrievalResponse::new(
+                    BlockRetrievalStatus::IdNotFound,
+                    vec![],
+                    vec![],
+                    vec![],
+                );
                 let response = ConsensusMsg::BlockRetrievalResponse(Box::new(response));
                 let bytes = Bytes::from(serde_json::to_vec(&response).unwrap());
                 match request {
                     IncomingRpcRequest::BlockRetrieval(request) => {
                         request.response_sender.send(Ok(bytes)).unwrap()
-                    },
+                    }
                     _ => panic!("unexpected message"),
                 }
             }
@@ -873,9 +839,7 @@ mod tests {
             rpc_replier: None,
         };
 
-        peer_mgr_notifs_tx
-            .push((peer_id, protocol_id), bad_msg)
-            .unwrap();
+        peer_mgr_notifs_tx.push((peer_id, protocol_id), bad_msg).unwrap();
 
         let liveness_check_msg = ConsensusMsg::BlockRetrievalRequest(Box::new(
             BlockRetrievalRequest::new(HashValue::random(), 1),
@@ -895,9 +859,7 @@ mod tests {
             rpc_replier: Some(Arc::new(res_tx)),
         };
 
-        peer_mgr_notifs_tx
-            .push((peer_id, protocol_id), liveness_check_msg)
-            .unwrap();
+        peer_mgr_notifs_tx.push((peer_id, protocol_id), liveness_check_msg).unwrap();
 
         let f_check = async move {
             assert!(network_receivers.rpc_rx.next().await.is_some());

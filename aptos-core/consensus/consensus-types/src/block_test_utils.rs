@@ -10,18 +10,20 @@ use crate::{
     quorum_cert::QuorumCert,
     vote_data::VoteData,
 };
-use gaptos::aptos_crypto::{
-    bls12381,
-    ed25519::Ed25519PrivateKey,
-    hash::{CryptoHash, HashValue},
-    PrivateKey, Uniform,
-};
-use gaptos::aptos_types::{
-    account_address::AccountAddress,
-    block_info::BlockInfo,
-    ledger_info::{generate_ledger_info_with_sig, LedgerInfo},
-    test_helpers::transaction_test_helpers::get_test_signed_txn,
-    validator_signer::{proptests, ValidatorSigner},
+use gaptos::{
+    aptos_crypto::{
+        bls12381,
+        ed25519::Ed25519PrivateKey,
+        hash::{CryptoHash, HashValue},
+        PrivateKey, Uniform,
+    },
+    aptos_types::{
+        account_address::AccountAddress,
+        block_info::BlockInfo,
+        ledger_info::{generate_ledger_info_with_sig, LedgerInfo},
+        test_helpers::transaction_test_helpers::get_test_signed_txn,
+        validator_signer::{proptests, ValidatorSigner},
+    },
 };
 use once_cell::sync::OnceCell;
 use proptest::prelude::*;
@@ -174,12 +176,7 @@ pub fn block_forest_and_its_keys(
     depth: u32,
 ) -> impl Strategy<Value = (Vec<bls12381::PrivateKey>, LinearizedBlockForest)> {
     proptest::collection::vec(proptests::arb_signing_key(), quorum_size).prop_flat_map(
-        move |private_key| {
-            (
-                Just(private_key.clone()),
-                block_forest_from_keys(depth, private_key),
-            )
-        },
+        move |private_key| (Just(private_key.clone()), block_forest_from_keys(depth, private_key)),
     )
 }
 
@@ -200,13 +197,10 @@ pub fn gen_test_certificate(
             let mut placeholder = placeholder_ledger_info();
             placeholder.set_consensus_data_hash(vote_data.hash());
             placeholder
-        },
+        }
     };
 
-    QuorumCert::new(
-        vote_data,
-        generate_ledger_info_with_sig(signers, ledger_info),
-    )
+    QuorumCert::new(vote_data, generate_ledger_info_with_sig(signers, ledger_info))
 }
 
 pub fn placeholder_certificate_for_block(

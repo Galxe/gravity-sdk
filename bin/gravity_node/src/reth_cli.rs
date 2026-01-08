@@ -3,8 +3,8 @@ use alloy_consensus::{transaction::SignerRecoverable, Transaction};
 use alloy_eips::{eip4895::Withdrawals, Decodable2718, Encodable2718};
 use alloy_primitives::{Address, TxHash, B256, U256};
 use block_buffer_manager::get_block_buffer_manager;
-use dashmap::DashMap;
 use core::panic;
+use dashmap::DashMap;
 use gaptos::api_types::{
     account::{ExternalAccountAddress, ExternalChainId},
     compute_res::TxnStatus,
@@ -31,7 +31,10 @@ use greth::{
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use std::{
     collections::{HashMap, VecDeque},
-    sync::{Arc, atomic::{AtomicU64, Ordering}},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
     time::{Instant, SystemTime},
 };
 
@@ -92,7 +95,12 @@ fn calculate_txn_hash(bytes: &Vec<u8>) -> [u8; 32] {
 }
 
 impl<EthApi: RethEthCall> RethCli<EthApi> {
-    pub async fn new(args: ConsensusArgs<EthApi>, txn_cache: Arc<DashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>>) -> Self {
+    pub async fn new(
+        args: ConsensusArgs<EthApi>,
+        txn_cache: Arc<
+            DashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>,
+        >,
+    ) -> Self {
         let chian_info = args.provider.chain_spec().chain;
         let chain_id = match chian_info.into_kind() {
             greth::reth_chainspec::ChainKind::Named(n) => n as u64,
@@ -164,7 +172,9 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         let transactions: Vec<_> = transactions.into_iter().map(|x| x.unwrap()).collect();
 
         let (randao, randomness) = match block.block_meta.randomness {
-            Some(randao) => (B256::from_slice(randao.0.as_ref()), U256::from_be_slice(randao.0.as_ref())),
+            Some(randao) => {
+                (B256::from_slice(randao.0.as_ref()), U256::from_be_slice(randao.0.as_ref()))
+            }
             None => (B256::ZERO, U256::from(0)),
         };
 
@@ -182,10 +192,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             transactions,
             senders,
             epoch: block.block_meta.epoch,
-            proposer: block
-                .block_meta
-                .proposer
-                .map(|x| x.bytes().into()),
+            proposer: block.block_meta.proposer.map(|x| x.bytes().into()),
             extra_data: block.extra_data,
             randomness,
             enable_randomness: block.enable_randomness,
@@ -230,18 +237,20 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         let buffer_epoch = get_block_buffer_manager().get_current_epoch().await;
         self.current_epoch.store(buffer_epoch, Ordering::SeqCst);
         info!("start_execution initialized with epoch {}", buffer_epoch);
-        
+
         loop {
             let current_epoch = self.current_epoch.load(Ordering::SeqCst);
             // max executing block number
-            let exec_blocks =
-                get_block_buffer_manager().get_ordered_blocks(start_ordered_block, None, current_epoch).await;
+            let exec_blocks = get_block_buffer_manager()
+                .get_ordered_blocks(start_ordered_block, None, current_epoch)
+                .await;
             if let Err(e) = exec_blocks {
                 let from = start_ordered_block;
                 if e.to_string().contains("Buffer is in epoch change") {
                     // consume_epoch_change returns the new epoch
                     let new_epoch = get_block_buffer_manager().consume_epoch_change().await;
-                    let latest_epoch_change_block_number = get_block_buffer_manager().latest_epoch_change_block_number().await;
+                    let latest_epoch_change_block_number =
+                        get_block_buffer_manager().latest_epoch_change_block_number().await;
                     start_ordered_block = latest_epoch_change_block_number + 1;
                     let old_epoch = self.current_epoch.swap(new_epoch, Ordering::SeqCst);
                     warn!("Buffer is in epoch change, reset start_ordered_block from {} to {}, epoch from {} to {}", 
@@ -256,12 +265,15 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                 info!("no ordered blocks");
                 continue;
             }
-            
+
             start_ordered_block = exec_blocks.last().unwrap().0.block_meta.block_number + 1;
             for (block, parent_id) in exec_blocks {
                 info!(
                     "send reth ordered block num {:?} id {:?} epoch {:?} with parent id {}",
-                    block.block_meta.block_number, block.block_meta.block_id, block.block_meta.epoch, parent_id
+                    block.block_meta.block_number,
+                    block.block_meta.block_id,
+                    block.block_meta.epoch,
+                    parent_id
                 );
                 let parent_id = B256::from_slice(parent_id.as_bytes());
                 self.push_ordered_block(block, parent_id).await?;
@@ -302,8 +314,9 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         let mut start_commit_num = self.provider.last_block_number().unwrap() + 1;
         loop {
             let epoch = self.current_epoch.load(Ordering::SeqCst);
-            let block_ids =
-                get_block_buffer_manager().get_committed_blocks(start_commit_num, None, epoch).await;
+            let block_ids = get_block_buffer_manager()
+                .get_committed_blocks(start_commit_num, None, epoch)
+                .await;
             if let Err(e) = block_ids {
                 warn!("failed to get committed blocks: {}", e);
                 continue;

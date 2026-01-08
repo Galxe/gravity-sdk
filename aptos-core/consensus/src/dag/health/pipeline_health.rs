@@ -48,11 +48,7 @@ impl PipelineLatencyBasedBackpressure {
         pipeline_config: PipelineBackpressureConfig,
         adapter: Arc<OrderedNotifierAdapter>,
     ) -> Arc<Self> {
-        Arc::new(Self {
-            voter_pipeline_latency_limit,
-            pipeline_config,
-            adapter,
-        })
+        Arc::new(Self { voter_pipeline_latency_limit, pipeline_config, adapter })
     }
 }
 

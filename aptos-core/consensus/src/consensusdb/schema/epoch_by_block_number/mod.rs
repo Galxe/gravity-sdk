@@ -1,10 +1,10 @@
 use super::{ensure_slice_len_eq, EPOCH_BY_BLOCK_NUMBER_CF_NAME};
 use anyhow::Result;
+use byteorder::{BigEndian, ReadBytesExt};
 use gaptos::aptos_schemadb::{
     define_pub_schema,
     schema::{KeyCodec, ValueCodec},
 };
-use byteorder::{BigEndian, ReadBytesExt};
 use std::mem::size_of;
 
 define_pub_schema!(

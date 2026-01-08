@@ -3,47 +3,62 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    consensus_observer::publisher::ConsensusPublisher, consensusdb::ConsensusDB, error::StateSyncError, network::{IncomingCommitRequest, IncomingRandGenRequest, NetworkSender}, network_interface::{ConsensusMsg, ConsensusNetworkClient}, payload_manager::TPayloadManager, pipeline::{
+    consensus_observer::publisher::ConsensusPublisher,
+    consensusdb::ConsensusDB,
+    error::StateSyncError,
+    network::{IncomingCommitRequest, IncomingRandGenRequest, NetworkSender},
+    network_interface::{ConsensusMsg, ConsensusNetworkClient},
+    payload_manager::TPayloadManager,
+    pipeline::{
         buffer_manager::{OrderedBlocks, ResetAck, ResetRequest, ResetSignal},
         decoupled_execution_utils::prepare_phases_and_buffer_manager,
         errors::Error,
         signing_phase::CommitSignerProvider,
-    }, rand::rand_gen::{
+    },
+    rand::rand_gen::{
         rand_manager::RandManager,
         storage::interface::RandStorage,
         types::{AugmentedData, RandConfig, Share},
-    }, state_computer::ExecutionProxy, state_replication::{StateComputer, StateComputerCommitCallBackType}, transaction_deduper::create_transaction_deduper, transaction_shuffler::create_transaction_shuffler
+    },
+    state_computer::ExecutionProxy,
+    state_replication::{StateComputer, StateComputerCommitCallBackType},
+    transaction_deduper::create_transaction_deduper,
+    transaction_shuffler::create_transaction_shuffler,
 };
 use anyhow::Result;
-use gaptos::aptos_bounded_executor::BoundedExecutor;
-use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use gaptos::aptos_config::config::{ConsensusConfig, ConsensusObserverConfig};
 use aptos_consensus_types::{
     common::{Author, Round},
     pipelined_block::PipelinedBlock,
 };
-use gaptos::aptos_crypto::bls12381::PrivateKey;
 use aptos_executor_types::ExecutorResult;
-use gaptos::aptos_infallible::RwLock;
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_network::{application::interface::NetworkClient, protocols::network::Event};
-use gaptos::aptos_types::{
-    epoch_state::EpochState,
-    ledger_info::LedgerInfoWithSignatures,
-    on_chain_config::{OnChainConsensusConfig, OnChainExecutionConfig, OnChainRandomnessConfig},
-    validator_signer::ValidatorSigner,
-};
 use fail::fail_point;
 use futures::{
     channel::{mpsc::UnboundedSender, oneshot},
     SinkExt,
 };
 use futures_channel::mpsc::unbounded;
-use gaptos::move_core_types::account_address::AccountAddress;
+use gaptos::{
+    aptos_bounded_executor::BoundedExecutor,
+    aptos_channels::{aptos_channel, message_queues::QueueStyle},
+    aptos_config::config::{ConsensusConfig, ConsensusObserverConfig},
+    aptos_crypto::bls12381::PrivateKey,
+    aptos_infallible::RwLock,
+    aptos_logger::prelude::*,
+    aptos_network::{application::interface::NetworkClient, protocols::network::Event},
+    aptos_types::{
+        epoch_state::EpochState,
+        ledger_info::LedgerInfoWithSignatures,
+        on_chain_config::{
+            OnChainConsensusConfig, OnChainExecutionConfig, OnChainRandomnessConfig,
+        },
+        validator_signer::ValidatorSigner,
+    },
+    move_core_types::account_address::AccountAddress,
+};
 use std::sync::Arc;
 
 use super::pipeline_builder::PipelineBuilder;
-use gaptos::aptos_consensus::counters as counters;
+use gaptos::aptos_consensus::counters;
 
 #[async_trait::async_trait]
 pub trait TExecutionClient: Send + Sync {
@@ -126,10 +141,7 @@ impl BufferManagerHandle {
 
     pub fn reset(
         &mut self,
-    ) -> (
-        Option<UnboundedSender<ResetRequest>>,
-        Option<UnboundedSender<ResetRequest>>,
-    ) {
+    ) -> (Option<UnboundedSender<ResetRequest>>, Option<UnboundedSender<ResetRequest>>) {
         let reset_tx_to_rand_manager = self.reset_tx_to_rand_manager.take();
         let reset_tx_to_buffer_manager = self.reset_tx_to_buffer_manager.take();
         self.execute_tx = None;
@@ -212,7 +224,7 @@ impl ExecutionProxyClient {
             if let Some(rand_config) = rand_config {
                 let (ordered_block_tx, ordered_block_rx) = unbounded::<OrderedBlocks>();
                 let (rand_ready_block_tx, rand_ready_block_rx) = unbounded::<OrderedBlocks>();
-                
+
                 let (reset_tx_to_rand_manager, reset_rand_manager_rx) = unbounded::<ResetRequest>();
                 let signer = Arc::new(ValidatorSigner::new(self.author, consensus_sk.clone()));
 
@@ -238,11 +250,7 @@ impl ExecutionProxyClient {
                     highest_committed_round,
                 ));
 
-                (
-                    ordered_block_tx,
-                    rand_ready_block_rx,
-                    Some(reset_tx_to_rand_manager),
-                )
+                (ordered_block_tx, rand_ready_block_rx, Some(reset_tx_to_rand_manager))
             } else {
                 let (ordered_block_tx, ordered_block_rx) = unbounded();
                 (ordered_block_tx, ordered_block_rx, None)
@@ -324,8 +332,8 @@ impl TExecutionClient for ExecutionProxyClient {
             onchain_execution_config.block_executor_onchain_config();
         let transaction_deduper =
             create_transaction_deduper(onchain_execution_config.transaction_deduper_type());
-        let randomness_enabled = onchain_consensus_config.is_vtxn_enabled()
-            && onchain_randomness_config.randomness_enabled();
+        let randomness_enabled = onchain_consensus_config.is_vtxn_enabled() &&
+            onchain_randomness_config.randomness_enabled();
         self.execution_proxy.new_epoch(
             &epoch_state,
             payload_manager,
@@ -354,7 +362,7 @@ impl TExecutionClient for ExecutionProxyClient {
             None => {
                 debug!("Failed to send to buffer manager, maybe epoch ends");
                 return Ok(());
-            },
+            }
         };
 
         for block in blocks {
@@ -411,10 +419,7 @@ impl TExecutionClient for ExecutionProxyClient {
     async fn reset(&self, target: &LedgerInfoWithSignatures) -> Result<()> {
         let (reset_tx_to_rand_manager, reset_tx_to_buffer_manager) = {
             let handle = self.handle.read();
-            (
-                handle.reset_tx_to_rand_manager.clone(),
-                handle.reset_tx_to_buffer_manager.clone(),
-            )
+            (handle.reset_tx_to_rand_manager.clone(), handle.reset_tx_to_buffer_manager.clone())
         };
 
         if let Some(mut reset_tx) = reset_tx_to_rand_manager {
@@ -453,28 +458,18 @@ impl TExecutionClient for ExecutionProxyClient {
 
         if let Some(mut tx) = reset_tx_to_rand_manager {
             let (ack_tx, ack_rx) = oneshot::channel();
-            tx.send(ResetRequest {
-                tx: ack_tx,
-                signal: ResetSignal::Stop,
-            })
-            .await
-            .expect("[EpochManager] Fail to drop rand manager");
-            ack_rx
+            tx.send(ResetRequest { tx: ack_tx, signal: ResetSignal::Stop })
                 .await
                 .expect("[EpochManager] Fail to drop rand manager");
+            ack_rx.await.expect("[EpochManager] Fail to drop rand manager");
         }
 
         if let Some(mut tx) = reset_tx_to_buffer_manager {
             let (ack_tx, ack_rx) = oneshot::channel();
-            tx.send(ResetRequest {
-                tx: ack_tx,
-                signal: ResetSignal::Stop,
-            })
-            .await
-            .expect("[EpochManager] Fail to drop buffer manager");
-            ack_rx
+            tx.send(ResetRequest { tx: ack_tx, signal: ResetSignal::Stop })
                 .await
                 .expect("[EpochManager] Fail to drop buffer manager");
+            ack_rx.await.expect("[EpochManager] Fail to drop buffer manager");
         }
         self.execution_proxy.end_epoch();
     }
@@ -482,7 +477,6 @@ impl TExecutionClient for ExecutionProxyClient {
     fn pipeline_builder(&self, signer: Arc<ValidatorSigner>) -> PipelineBuilder {
         self.execution_proxy.pipeline_builder(signer)
     }
-
 }
 
 pub struct DummyExecutionClient;

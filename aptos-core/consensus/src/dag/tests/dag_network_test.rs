@@ -8,14 +8,16 @@ use crate::dag::{
 };
 use anyhow::{anyhow, bail};
 use aptos_consensus_types::common::Author;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_reliable_broadcast::RBNetworkSender;
-use gaptos::aptos_time_service::{TimeService, TimeServiceTrait};
-use gaptos::aptos_types::validator_verifier::random_validator_verifier;
 use async_trait::async_trait;
 use bytes::Bytes;
 use claims::{assert_err, assert_ok};
 use futures::StreamExt;
+use gaptos::{
+    aptos_infallible::Mutex,
+    aptos_reliable_broadcast::RBNetworkSender,
+    aptos_time_service::{TimeService, TimeServiceTrait},
+    aptos_types::validator_verifier::random_validator_verifier,
+};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 #[derive(Clone)]
@@ -83,11 +85,11 @@ impl TDAGNetworkSender for MockDAGNetworkSender {
             TestPeerState::Slow(duration) => {
                 self.time_service.sleep(duration).await;
                 Ok(Ok(TestAck(message.0).into()).into())
-            },
+            }
             TestPeerState::FailSlow(duration) => {
                 self.time_service.sleep(duration).await;
                 bail!("failed to respond");
-            },
+            }
         }
     }
 
@@ -123,15 +125,9 @@ async fn test_send_rpc_with_fallback() {
         time_service: time_service.clone(),
         test_peer_state: Arc::new(Mutex::new(HashMap::from([
             (validators[0], TestPeerState::Fast),
-            (
-                validators[1],
-                TestPeerState::FailSlow(Duration::from_secs(1)),
-            ),
+            (validators[1], TestPeerState::FailSlow(Duration::from_secs(1))),
             (validators[2], TestPeerState::Slow(Duration::from_secs(5))),
-            (
-                validators[3],
-                TestPeerState::FailSlow(Duration::from_secs(3)),
-            ),
+            (validators[3], TestPeerState::FailSlow(Duration::from_secs(3))),
             (validators[4], TestPeerState::Slow(Duration::from_secs(2))),
         ]))),
     };

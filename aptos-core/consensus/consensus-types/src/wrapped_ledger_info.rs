@@ -4,10 +4,12 @@
 
 use crate::{quorum_cert::QuorumCert, vote_data::VoteData};
 use anyhow::{ensure, Context};
-use gaptos::aptos_crypto::hash::CryptoHash;
-use gaptos::aptos_types::{
-    block_info::BlockInfo, ledger_info::LedgerInfoWithSignatures,
-    validator_verifier::ValidatorVerifier,
+use gaptos::{
+    aptos_crypto::hash::CryptoHash,
+    aptos_types::{
+        block_info::BlockInfo, ledger_info::LedgerInfoWithSignatures,
+        validator_verifier::ValidatorVerifier,
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -28,20 +30,13 @@ pub struct WrappedLedgerInfo {
 
 impl Display for WrappedLedgerInfo {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "WrappedLedgerInfo: [{}, {}]",
-            self.vote_data, self.signed_ledger_info
-        )
+        write!(f, "WrappedLedgerInfo: [{}, {}]", self.vote_data, self.signed_ledger_info)
     }
 }
 
 impl WrappedLedgerInfo {
     pub fn new(vote_data: VoteData, signed_ledger_info: LedgerInfoWithSignatures) -> Self {
-        WrappedLedgerInfo {
-            vote_data,
-            signed_ledger_info,
-        }
+        WrappedLedgerInfo { vote_data, signed_ledger_info }
     }
 
     #[cfg(any(test, feature = "fuzzing"))]
@@ -127,9 +122,6 @@ impl WrappedLedgerInfo {
             "wrapped_ledger_info.into_quorum_cert should not be called when order votes are enabled"
         );
         self.verify_consensus_data_hash()?;
-        Ok(QuorumCert::new(
-            self.vote_data.clone(),
-            self.signed_ledger_info.clone(),
-        ))
+        Ok(QuorumCert::new(self.vote_data.clone(), self.signed_ledger_info.clone()))
     }
 }

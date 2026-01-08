@@ -2,16 +2,15 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::block_storage::tracing::{observe_block, BlockStage};
-use crate::counters::update_counters_for_compute_res;
-use crate::pipeline::pipeline_builder::PipelineBuilder;
 use crate::{
     block_preparer::BlockPreparer,
+    block_storage::tracing::{observe_block, BlockStage},
+    counters::update_counters_for_compute_res,
     error::StateSyncError,
     execution_pipeline::ExecutionPipeline,
     monitor,
     payload_manager::TPayloadManager,
-    pipeline::pipeline_phase::CountedRequest,
+    pipeline::{pipeline_builder::PipelineBuilder, pipeline_phase::CountedRequest},
     state_replication::{StateComputer, StateComputerCommitCallBackType},
     transaction_deduper::TransactionDeduper,
     transaction_filter::TransactionFilter,
@@ -19,39 +18,48 @@ use crate::{
     txn_notifier::TxnNotifier,
 };
 use anyhow::Result;
-use gaptos::api_types::account::{ExternalAccountAddress, ExternalChainId};
-use gaptos::api_types::u256_define::{BlockId, Random, TxnHash};
-use gaptos::api_types::{ExternalBlock, ExternalBlockMeta, ExtraDataType};
-use aptos_consensus_types::common::RejectedTransactionSummary;
-use gaptos::aptos_consensus_notifications::ConsensusNotificationSender;
 use aptos_consensus_types::{
-    block::Block, common::Round, pipeline_execution_result::PipelineExecutionResult,
+    block::Block,
+    common::{RejectedTransactionSummary, Round},
+    pipeline_execution_result::PipelineExecutionResult,
     pipelined_block::PipelinedBlock,
 };
-use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::{BlockExecutorTrait, ExecutorResult, StateComputeResult};
-use gaptos::aptos_infallible::RwLock;
-use gaptos::aptos_logger::prelude::*;
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
-
-use gaptos::aptos_types::jwks::jwk::JWK;
-use gaptos::aptos_types::jwks::{self, ProviderJWKs};
-use gaptos::aptos_types::transaction::SignedTransaction;
-use gaptos::aptos_types::validator_signer::ValidatorSigner;
-use gaptos::aptos_types::validator_txn::ValidatorTransaction;
-use gaptos::aptos_types::{
-    account_address::AccountAddress, block_executor::config::BlockExecutorConfigFromOnchain,
-    contract_event::ContractEvent, epoch_state::EpochState, ledger_info::LedgerInfoWithSignatures,
-    randomness::Randomness, transaction::Transaction, vm_status::{DiscardedVMStatus, StatusCode}
+use gaptos::{
+    api_types::{
+        account::{ExternalAccountAddress, ExternalChainId},
+        u256_define::{BlockId, Random, TxnHash},
+        ExternalBlock, ExternalBlockMeta, ExtraDataType,
+    },
+    aptos_consensus_notifications::ConsensusNotificationSender,
+    aptos_crypto::HashValue,
+    aptos_infallible::RwLock,
+    aptos_logger::prelude::*,
 };
+
 use block_buffer_manager::get_block_buffer_manager;
+use counters::APTOS_EXECUTION_TXNS;
 use fail::fail_point;
 use futures::{future::BoxFuture, SinkExt, StreamExt};
-use std::iter::once;
-use std::{boxed::Box, sync::Arc, time::Duration};
+use gaptos::{
+    aptos_consensus::counters,
+    aptos_types::{
+        account_address::AccountAddress,
+        block_executor::config::BlockExecutorConfigFromOnchain,
+        contract_event::ContractEvent,
+        epoch_state::EpochState,
+        jwks::{self, jwk::JWK, ProviderJWKs},
+        ledger_info::LedgerInfoWithSignatures,
+        randomness::Randomness,
+        transaction::{SignedTransaction, Transaction},
+        validator_signer::ValidatorSigner,
+        validator_txn::ValidatorTransaction,
+        vm_status::{DiscardedVMStatus, StatusCode},
+    },
+};
+use std::{boxed::Box, iter::once, sync::Arc, time::Duration};
 use tokio::sync::Mutex as AsyncMutex;
-use gaptos::aptos_consensus::counters as counters;
-use counters::APTOS_EXECUTION_TXNS;
 
 pub type StateComputeResultFut = BoxFuture<'static, ExecutorResult<PipelineExecutionResult>>;
 
@@ -59,7 +67,7 @@ type NotificationType = (
     Box<dyn FnOnce() + Send + Sync>,
     Vec<Transaction>,
     Vec<ContractEvent>, // Subscribable events, e.g. NewEpochEvent, DKGStartEvent
-    u64, // block number
+    u64,                // block number
 );
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
@@ -126,8 +134,10 @@ impl ExecutionProxy {
         txn_filter: TransactionFilter,
         enable_pre_commit: bool,
     ) -> Self {
-        let (tx, mut rx) =
-            gaptos::aptos_channels::new::<NotificationType>(10, &counters::PENDING_STATE_SYNC_NOTIFICATION);
+        let (tx, mut rx) = gaptos::aptos_channels::new::<NotificationType>(
+            10,
+            &counters::PENDING_STATE_SYNC_NOTIFICATION,
+        );
         let notifier = state_sync_notifier.clone();
         handle.spawn(async move {
             while let Some((callback, txns, subscribable_events, block_number)) = rx.next().await {
@@ -176,7 +186,8 @@ impl ExecutionProxy {
             executed_block.block().new_block_metadata(validators).into()
         };
 
-        // let input_txns = Block::combine_to_input_transactions(validator_txns, user_txns, metadata);
+        // let input_txns = Block::combine_to_input_transactions(validator_txns, user_txns,
+        // metadata);
 
         // TODO(gravity_byteyue): We manually skipped the validator txns and metadata here.
         // we might need to re-add them back
@@ -186,8 +197,8 @@ impl ExecutionProxy {
             .collect()
         // executed_block
         //     .compute_result()
-        //     .transactions_to_commit(user_txns.into_iter().map(Transaction::UserTransaction).collect())
-        // input_txns
+        //     .transactions_to_commit(user_txns.into_iter().map(Transaction::UserTransaction).
+        // collect()) input_txns
     }
 
     pub fn pipeline_builder(&self, commit_signer: Arc<ValidatorSigner>) -> PipelineBuilder {
@@ -226,14 +237,14 @@ impl ExecutionProxy {
         block: &Block,
     ) -> Vec<ExtraDataType> {
         let mut extra_data = Vec::new();
-        
+
         if let Some(validator_txns) = validator_txns {
             extra_data = validator_txns
                 .iter()
                 .map(|txn| self.process_single_validator_transaction(txn, block))
                 .collect();
         }
-        
+
         extra_data
     }
 
@@ -248,7 +259,9 @@ impl ExecutionProxy {
                 let transcript = gaptos::api_types::on_chain_config::dkg::DKGTranscript {
                     metadata: gaptos::api_types::on_chain_config::dkg::DKGTranscriptMetadata {
                         epoch: transcript.metadata.epoch,
-                        author: ExternalAccountAddress::new(transcript.metadata.author.into_bytes()),
+                        author: ExternalAccountAddress::new(
+                            transcript.metadata.author.into_bytes(),
+                        ),
                     },
                     transcript_bytes: transcript.transcript_bytes.clone(),
                 };
@@ -257,18 +270,12 @@ impl ExecutionProxy {
             ValidatorTransaction::ObservedJWKUpdate(jwks::QuorumCertifiedUpdate {
                 update,
                 multi_sig,
-            }) => {
-                ExtraDataType::JWK(self.process_jwk_update(&update, block))
-            }
+            }) => ExtraDataType::JWK(self.process_jwk_update(&update, block)),
         }
     }
 
     /// Process JWK update and convert to gaptos format
-    fn process_jwk_update(
-        &self,
-        update: &ProviderJWKs,
-        block: &Block,
-    ) -> Vec<u8> {
+    fn process_jwk_update(&self, update: &ProviderJWKs, block: &Block) -> Vec<u8> {
         use gaptos::api_types::on_chain_config::jwks::{JWKStruct, ProviderJWKs};
         // TODO(Gravity): Check the signature here instead of execution layer
         info!(
@@ -291,10 +298,7 @@ impl ExecutionProxy {
                             data: serde_json::to_vec(&rsa_jwk).unwrap(),
                         },
                         JWK::Unsupported(unsupported_jwk) => {
-                            JWKStruct {
-                                type_name: "1".to_string(),
-                                data: unsupported_jwk.payload,
-                            }
+                            JWKStruct { type_name: "1".to_string(), data: unsupported_jwk.payload }
                         }
                     }
                 })
@@ -311,14 +315,14 @@ pub fn process_validator_transactions_util(
     block: &Block,
 ) -> Vec<ExtraDataType> {
     let mut extra_data = Vec::new();
-    
+
     if let Some(validator_txns) = validator_txns {
         extra_data = validator_txns
             .iter()
             .map(|txn| process_single_validator_transaction_util(txn, block))
             .collect();
     }
-    
+
     extra_data
 }
 
@@ -341,17 +345,12 @@ pub fn process_single_validator_transaction_util(
         ValidatorTransaction::ObservedJWKUpdate(jwks::QuorumCertifiedUpdate {
             update,
             multi_sig,
-        }) => {
-            ExtraDataType::JWK(process_jwk_update_util(&update, block))
-        }
+        }) => ExtraDataType::JWK(process_jwk_update_util(&update, block)),
     }
 }
 
 /// Public utility function to process JWK update
-pub fn process_jwk_update_util(
-    update: &ProviderJWKs,
-    block: &Block,
-) -> Vec<u8> {
+pub fn process_jwk_update_util(update: &ProviderJWKs, block: &Block) -> Vec<u8> {
     use gaptos::api_types::on_chain_config::jwks::{JWKStruct, ProviderJWKs};
     // TODO(Gravity): Check the signature here instead of execution layer
     info!(
@@ -374,10 +373,7 @@ pub fn process_jwk_update_util(
                         data: serde_json::to_vec(&rsa_jwk).unwrap(),
                     },
                     JWK::Unsupported(unsupported_jwk) => {
-                        JWKStruct {
-                            type_name: "1".to_string(),
-                            data: unsupported_jwk.payload,
-                        }
+                        JWKStruct { type_name: "1".to_string(), data: unsupported_jwk.payload }
                     }
                 }
             })
@@ -402,7 +398,7 @@ impl StateComputer for ExecutionProxy {
         let txns = self.get_block_txns(block).await;
         let validator_txns = block.validator_txns();
         let extra_data = process_validator_transactions_util(validator_txns.map(|v| &**v), block);
-        
+
         let meta_data = ExternalBlockMeta {
             block_id: BlockId(*block.id()),
             block_number: block.block_number().unwrap_or_else(|| panic!("No block number")),
@@ -435,34 +431,41 @@ impl StateComputer for ExecutionProxy {
         Box::pin(async move {
             let block_id = meta_data.block_id;
             let block_timestamp = meta_data.usecs;
-            txn_metrics::TxnLifeTime::get_txn_life_time().record_executing(block_id_hashvalue.clone());
+            txn_metrics::TxnLifeTime::get_txn_life_time()
+                .record_executing(block_id_hashvalue.clone());
             get_block_buffer_manager()
-                .set_ordered_blocks(BlockId::from_bytes(parent_block_id.as_slice()), ExternalBlock {
-                    block_meta: meta_data.clone(),
-                    txns: real_txns,
-                    extra_data,
-                    enable_randomness: enable_randomness,
-                })
-                .await.unwrap_or_else(|e| panic!("Failed to push ordered blocks {}", e));
+                .set_ordered_blocks(
+                    BlockId::from_bytes(parent_block_id.as_slice()),
+                    ExternalBlock {
+                        block_meta: meta_data.clone(),
+                        txns: real_txns,
+                        extra_data,
+                        enable_randomness,
+                    },
+                )
+                .await
+                .unwrap_or_else(|e| panic!("Failed to push ordered blocks {}", e));
             let u_ts = meta_data.usecs;
             let compute_result = get_block_buffer_manager()
                 .get_executed_res(block_id, meta_data.block_number, meta_data.epoch)
                 .await?;
             txn_metrics::TxnLifeTime::get_txn_life_time().record_executed(block_id_hashvalue);
             update_counters_for_compute_res(&compute_result.execution_output);
-           
+
             observe_block(u_ts, BlockStage::EXECUTED);
             let txn_status = compute_result.execution_output.txn_status.clone();
             match (*txn_status).as_ref() {
                 Some(txn_status) => {
-                    let rejected_txns = txn_status.iter().filter(|txn| txn.is_discarded).map(|discard_txn_info| {
-                        RejectedTransactionSummary {
+                    let rejected_txns = txn_status
+                        .iter()
+                        .filter(|txn| txn.is_discarded)
+                        .map(|discard_txn_info| RejectedTransactionSummary {
                             sender: discard_txn_info.sender.into(),
                             sequence_number: discard_txn_info.nonce,
                             hash: HashValue::new(discard_txn_info.txn_hash),
                             reason: DiscardedVMStatus::from(StatusCode::SEQUENCE_NONCE_INVALID),
-                        }
-                    }).collect::<Vec<_>>();
+                        })
+                        .collect::<Vec<_>>();
                     if let Err(e) = txn_notifier.notify_failed_txn(rejected_txns).await {
                         error!(error = ?e, "Failed to notify mempool of rejected txns");
                     }
@@ -471,11 +474,7 @@ impl StateComputer for ExecutionProxy {
             }
 
             let pre_commit_fut: BoxFuture<'static, ExecutorResult<()>> =
-                    {
-                        Box::pin(async move {
-                            Ok(())
-                        })
-                    };
+                { Box::pin(async move { Ok(()) }) };
             Ok(PipelineExecutionResult::new(txns, compute_result, Duration::ZERO, pre_commit_fut))
         })
     }
@@ -487,7 +486,10 @@ impl StateComputer for ExecutionProxy {
         finality_proof: LedgerInfoWithSignatures,
         callback: StateComputerCommitCallBackType,
     ) -> ExecutorResult<()> {
-        let block_id_num = blocks.iter().map(|block| (block.id(), block.block().block_number())).collect::<Vec<_>>();
+        let block_id_num = blocks
+            .iter()
+            .map(|block| (block.id(), block.block().block_number()))
+            .collect::<Vec<_>>();
         info!(
             "Received a commit request for blocks {:?} at round {}",
             block_id_num,
@@ -506,8 +508,8 @@ impl StateComputer for ExecutionProxy {
         let MutableState { payload_manager, validators, is_randomness_enabled, .. } =
             self.state.read().as_ref().cloned().expect("must be set within an epoch");
         let mut committed_block_ids = vec![];
-        // TODO(gravity_lightman): The take_pre_commit_fut will cause a coredump. 
-        // The reason has not been found yet, 
+        // TODO(gravity_lightman): The take_pre_commit_fut will cause a coredump.
+        // The reason has not been found yet,
         // but this asynchronous function is an empty one and can be skipped
         // let mut pre_commit_futs = Vec::with_capacity(blocks.len());
         let mut block_ids = vec![];
@@ -526,7 +528,7 @@ impl StateComputer for ExecutionProxy {
             subscribable_txn_events.extend(block.subscribable_events());
             // pre_commit_futs.push(block.take_pre_commit_fut());
             block_ids.push(block.id());
-            
+
             // Collect randomness data for persistence
             if let Some(randomness) = block.randomness() {
                 if let Some(block_number) = block.block().block_number() {
@@ -546,14 +548,21 @@ impl StateComputer for ExecutionProxy {
         monitor!(
             "commit_block",
             tokio::task::spawn_blocking(move || {
-                executor.commit_ledger(block_ids, proof, randomness_data).expect("Failed to commit blocks");
+                executor
+                    .commit_ledger(block_ids, proof, randomness_data)
+                    .expect("Failed to commit blocks");
             })
             .await
         )
         .expect("spawn_blocking failed");
 
         let blocks = blocks.to_vec();
-        let block_number = blocks.last().unwrap().block().block_number().unwrap_or_else(|| panic!("No block number"));
+        let block_number = blocks
+            .last()
+            .unwrap()
+            .block()
+            .block_number()
+            .unwrap_or_else(|| panic!("No block number"));
         let wrapped_callback = move || {
             payload_manager.notify_commit(block_timestamp, payloads);
             callback(&blocks, finality_proof);
@@ -654,17 +663,20 @@ async fn test_commit_sync_race() {
         transaction_shuffler::create_transaction_shuffler,
     };
 
-    use gaptos::aptos_config::config::transaction_filter_type::Filter;
-    use gaptos::aptos_consensus_notifications::Error;
-    
-    use gaptos::aptos_infallible::Mutex;
-    use gaptos::aptos_types::{
-        aggregate_signature::AggregateSignature,
-        block_executor::partitioner::ExecutableBlock,
-        block_info::BlockInfo,
-        ledger_info::LedgerInfo,
-        on_chain_config::{TransactionDeduperType, TransactionShufflerType},
-        transaction::{SignedTransaction, TransactionStatus},
+    use gaptos::{
+        aptos_config::config::transaction_filter_type::Filter, aptos_consensus_notifications::Error,
+    };
+
+    use gaptos::{
+        aptos_infallible::Mutex,
+        aptos_types::{
+            aggregate_signature::AggregateSignature,
+            block_executor::partitioner::ExecutableBlock,
+            block_info::BlockInfo,
+            ledger_info::LedgerInfo,
+            on_chain_config::{TransactionDeduperType, TransactionShufflerType},
+            transaction::{SignedTransaction, TransactionStatus},
+        },
     };
 
     struct RecordedCommit {

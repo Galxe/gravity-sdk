@@ -13,8 +13,9 @@ use std::collections::VecDeque;
 pub(crate) struct ConflictZone<'a> {
     sliding_window_size: usize,
     sliding_window: VecDeque<ConflictKeyId>,
-    /// Number of transactions in the sliding window for each key_id. `ConflictZone::is_conflict(key)`
-    /// returns true is the count for `key` is greater than 0, unless the key is exempt from conflict.
+    /// Number of transactions in the sliding window for each key_id.
+    /// `ConflictZone::is_conflict(key)` returns true is the count for `key` is greater than 0,
+    /// unless the key is exempt from conflict.
     counts_by_id: MapByKeyId<usize>,
     key_registry: &'a ConflictKeyRegistry,
 }

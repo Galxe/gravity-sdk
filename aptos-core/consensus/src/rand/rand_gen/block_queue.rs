@@ -6,8 +6,10 @@ use crate::{
     pipeline::buffer_manager::OrderedBlocks,
 };
 use aptos_consensus_types::{common::Round, pipelined_block::PipelinedBlock};
-use gaptos::aptos_reliable_broadcast::DropGuard;
-use gaptos::aptos_types::randomness::{FullRandMetadata, Randomness};
+use gaptos::{
+    aptos_reliable_broadcast::DropGuard,
+    aptos_types::randomness::{FullRandMetadata, Randomness},
+};
 use std::collections::{BTreeMap, HashMap};
 
 /// Maintain the ordered blocks received from consensus and corresponding randomness
@@ -29,17 +31,9 @@ impl QueueItem {
             .map(|(idx, b)| (b.round(), idx))
             .collect();
         // Count only blocks that don't have randomness yet
-        let num_undecided_blocks = ordered_blocks
-            .ordered_blocks
-            .iter()
-            .filter(|b| !b.has_randomness())
-            .count();
-        Self {
-            ordered_blocks,
-            offsets_by_round,
-            num_undecided_blocks,
-            broadcast_handle,
-        }
+        let num_undecided_blocks =
+            ordered_blocks.ordered_blocks.iter().filter(|b| !b.has_randomness()).count();
+        Self { ordered_blocks, offsets_by_round, num_undecided_blocks, broadcast_handle }
     }
 
     pub fn num_blocks(&self) -> usize {
@@ -52,10 +46,7 @@ impl QueueItem {
     }
 
     pub fn offset(&self, round: Round) -> usize {
-        *self
-            .offsets_by_round
-            .get(&round)
-            .expect("Round should be in the queue")
+        *self.offsets_by_round.get(&round).expect("Round should be in the queue")
     }
 
     pub fn num_undecided(&self) -> usize {
@@ -63,19 +54,13 @@ impl QueueItem {
     }
 
     pub fn all_rand_metadata(&self) -> Vec<FullRandMetadata> {
-        self.blocks()
-            .iter()
-            .map(|block| FullRandMetadata::from(block.block()))
-            .collect()
+        self.blocks().iter().map(|block| FullRandMetadata::from(block.block())).collect()
     }
 
     pub fn set_randomness(&mut self, round: Round, rand: Randomness) -> bool {
         let offset = self.offset(round);
         if !self.blocks()[offset].has_randomness() {
-            observe_block(
-                self.blocks()[offset].timestamp_usecs(),
-                BlockStage::RAND_ADD_DECISION,
-            );
+            observe_block(self.blocks()[offset].timestamp_usecs(), BlockStage::RAND_ADD_DECISION);
             self.blocks_mut()[offset].set_randomness(rand);
             self.num_undecided_blocks -= 1;
             true
@@ -100,9 +85,7 @@ pub struct BlockQueue {
 }
 impl BlockQueue {
     pub fn new() -> Self {
-        Self {
-            queue: BTreeMap::new(),
-        }
+        Self { queue: BTreeMap::new() }
     }
 
     pub fn queue(&self) -> &BTreeMap<Round, QueueItem> {

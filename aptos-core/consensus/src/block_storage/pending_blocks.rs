@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use aptos_consensus_types::{block::Block, common::Round};
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_logger::info;
 use futures_channel::oneshot;
+use gaptos::{
+    aptos_consensus::counters::BLOCK_RETRIEVAL_LOCAL_FULFILL_COUNT, aptos_crypto::HashValue,
+    aptos_logger::info,
+};
 use std::collections::{BTreeMap, HashMap};
-use gaptos::aptos_consensus::counters::BLOCK_RETRIEVAL_LOCAL_FULFILL_COUNT;
 
 /// A local buffer to hold incoming blocks before it reaches round manager.
 /// Which can be used to fulfill block request from local due to out of order messages.

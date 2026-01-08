@@ -7,22 +7,24 @@
 #![allow(clippy::ptr_arg)]
 #![allow(clippy::let_and_return)]
 
-use gaptos::aptos_crypto::hash::CryptoHash;
-use gaptos::aptos_dkg::{
-    constants::{G1_PROJ_NUM_BYTES, G2_PROJ_NUM_BYTES},
-    pvss::{
-        das,
-        das::unweighted_protocol,
-        insecure_field,
-        test_utils::{
-            get_threshold_configs_for_benchmarking, get_threshold_configs_for_testing,
-            get_weighted_configs_for_benchmarking, get_weighted_configs_for_testing,
-            reconstruct_dealt_secret_key_randomly, NoAux,
+use gaptos::{
+    aptos_crypto::hash::CryptoHash,
+    aptos_dkg::{
+        constants::{G1_PROJ_NUM_BYTES, G2_PROJ_NUM_BYTES},
+        pvss::{
+            das,
+            das::unweighted_protocol,
+            insecure_field,
+            test_utils::{
+                get_threshold_configs_for_benchmarking, get_threshold_configs_for_testing,
+                get_weighted_configs_for_benchmarking, get_weighted_configs_for_testing,
+                reconstruct_dealt_secret_key_randomly, NoAux,
+            },
+            traits::{transcript::Transcript, SecretSharingConfig},
+            GenericWeighting, ThresholdConfig, WeightedConfig,
         },
-        traits::{transcript::Transcript, SecretSharingConfig},
-        GenericWeighting, ThresholdConfig, WeightedConfig,
+        utils::random::random_scalar,
     },
-    utils::random::random_scalar,
 };
 use rand::{rngs::StdRng, thread_rng};
 
@@ -61,7 +63,8 @@ fn test_pvss_all_weighted() {
         let seed = random_scalar(&mut rng);
 
         // Generically-weighted Das
-        // WARNING: Insecure, due to encrypting different shares with the same randomness, do not use!
+        // WARNING: Insecure, due to encrypting different shares with the same randomness, do not
+        // use!
         pvss_deal_verify_and_reconstruct::<GenericWeighting<das::Transcript>>(
             &wc,
             seed.to_bytes_le(),
@@ -124,16 +127,7 @@ fn pvss_deal_verify_and_reconstruct<T: Transcript + CryptoHash>(
     let d = gaptos::aptos_dkg::pvss::test_utils::setup_dealing::<T, StdRng>(sc, &mut rng);
 
     // Test dealing
-    let trx = T::deal(
-        &sc,
-        &d.pp,
-        &d.ssks[0],
-        &d.eks,
-        &d.s,
-        &NoAux,
-        &sc.get_player(0),
-        &mut rng,
-    );
+    let trx = T::deal(&sc, &d.pp, &d.ssks[0], &d.eks, &d.s, &NoAux, &sc.get_player(0), &mut rng);
     trx.verify(&sc, &d.pp, &vec![d.spks[0].clone()], &d.eks, &vec![NoAux])
         .expect("PVSS transcript failed verification");
 
@@ -160,8 +154,8 @@ fn expected_transcript_size<T: Transcript<SecretSharingConfig = ThresholdConfig>
     sc: &ThresholdConfig,
 ) -> usize {
     if T::scheme_name() == unweighted_protocol::DAS_SK_IN_G1 {
-        G2_PROJ_NUM_BYTES
-            + (sc.get_total_num_players() + 1) * (G2_PROJ_NUM_BYTES + G1_PROJ_NUM_BYTES)
+        G2_PROJ_NUM_BYTES +
+            (sc.get_total_num_players() + 1) * (G2_PROJ_NUM_BYTES + G1_PROJ_NUM_BYTES)
     } else {
         panic!("Did not implement support for '{}' yet", T::scheme_name())
     }
@@ -219,12 +213,12 @@ mod test {
 
     #[test]
     fn test_ldt_correctness() {
+        use blstrs::Scalar;
         use gaptos::aptos_dkg::{
             algebra::{evaluation_domain::BatchEvaluationDomain, fft::fft_assign},
             pvss::{test_utils, LowDegreeTest},
             utils::random::random_scalars,
         };
-        use blstrs::Scalar;
         use rand::{prelude::ThreadRng, thread_rng};
 
         let mut rng = thread_rng();
@@ -274,12 +268,12 @@ mod test {
     /// Test the soundness of the LDT: a polynomial of degree > t - 1 should not pass the check.
     #[test]
     fn test_ldt_soundness() {
+        use blstrs::Scalar;
         use gaptos::aptos_dkg::{
             algebra::{evaluation_domain::BatchEvaluationDomain, fft::fft_assign},
             pvss::LowDegreeTest,
             utils::random::random_scalars,
         };
-        use blstrs::Scalar;
         use rand::{prelude::ThreadRng, thread_rng};
 
         let mut rng = thread_rng();
@@ -287,7 +281,9 @@ mod test {
         for t in 1..8 {
             for n in (t + 1)..(3 * t + 1) {
                 let sc = ThresholdConfig::new(t, n).unwrap();
-                let sc_higher_degree = ThresholdConfig::new(sc.get_threshold() + 1, sc.get_total_num_players()).unwrap();
+                let sc_higher_degree =
+                    ThresholdConfig::new(sc.get_threshold() + 1, sc.get_total_num_players())
+                        .unwrap();
 
                 // A degree t polynomial p(X), higher by 1 than what the LDT expects
                 let (p_0, batch_dom, mut evals) =
@@ -328,5 +324,3 @@ mod test {
         }
     }
 }
-
-

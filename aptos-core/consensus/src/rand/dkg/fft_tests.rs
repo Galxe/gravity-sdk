@@ -1,3 +1,5 @@
+use blstrs::Scalar;
+use ff::Field;
 use gaptos::aptos_dkg::{
     algebra::{
         evaluation_domain::{BatchEvaluationDomain, EvaluationDomain},
@@ -6,8 +8,6 @@ use gaptos::aptos_dkg::{
     },
     utils::random::random_scalars,
 };
-use blstrs::Scalar;
-use ff::Field;
 use rand::thread_rng;
 
 #[test]
@@ -95,4 +95,3 @@ mod test {
         }
     }
 }
-

@@ -4,29 +4,26 @@
 #![forbid(unsafe_code)]
 
 use crate::{
-    block_preparer::BlockPreparer,
-    counters::log_executor_error_occurred,
-    monitor,
-    pipeline::pipeline_phase::CountedRequest,
-    state_computer::StateComputeResultFut,
+    block_preparer::BlockPreparer, counters::log_executor_error_occurred, monitor,
+    pipeline::pipeline_phase::CountedRequest, state_computer::StateComputeResultFut,
 };
 use aptos_consensus_types::{block::Block, pipeline_execution_result::PipelineExecutionResult};
-use gaptos::aptos_crypto::HashValue;
-use aptos_executor_types::{
-    BlockExecutorTrait, ExecutorError,
-    ExecutorResult,
-};
-use gaptos::aptos_experimental_runtimes::thread_manager::optimal_min_len;
-use gaptos::aptos_logger::{debug, warn};
-use gaptos::aptos_types::{
-    block_executor::{config::BlockExecutorConfigFromOnchain, partitioner::ExecutableBlock},
-    block_metadata_ext::BlockMetadataExt,
-    transaction::{
-        signature_verified_transaction::SignatureVerifiedTransaction, SignedTransaction,
-    },
-};
+use aptos_executor_types::{BlockExecutorTrait, ExecutorError, ExecutorResult};
 use fail::fail_point;
 use futures::future::BoxFuture;
+use gaptos::{
+    aptos_consensus::counters,
+    aptos_crypto::HashValue,
+    aptos_experimental_runtimes::thread_manager::optimal_min_len,
+    aptos_logger::{debug, warn},
+    aptos_types::{
+        block_executor::{config::BlockExecutorConfigFromOnchain, partitioner::ExecutableBlock},
+        block_metadata_ext::BlockMetadataExt,
+        transaction::{
+            signature_verified_transaction::SignatureVerifiedTransaction, SignedTransaction,
+        },
+    },
+};
 use once_cell::sync::Lazy;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use std::{
@@ -34,7 +31,6 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::{mpsc, oneshot};
-use gaptos::aptos_consensus::counters as counters;
 
 #[allow(clippy::unwrap_used)]
 pub static SIG_VERIFY_POOL: Lazy<Arc<rayon::ThreadPool>> = Lazy::new(|| {
@@ -62,10 +58,7 @@ impl ExecutionPipeline {
         let (ledger_apply_tx, ledger_apply_rx) = mpsc::unbounded_channel();
         let (pre_commit_tx, pre_commit_rx) = mpsc::unbounded_channel();
 
-        runtime.spawn(Self::prepare_block_stage(
-            prepare_block_rx,
-            execute_block_tx,
-        ));
+        runtime.spawn(Self::prepare_block_stage(prepare_block_rx, execute_block_tx));
         runtime.spawn(Self::ledger_apply_stage(
             ledger_apply_rx,
             pre_commit_tx,
@@ -101,14 +94,12 @@ impl ExecutionPipeline {
             .expect("Failed to send block to execution pipeline.");
 
         Box::pin(async move {
-            result_rx
-                .await
-                .map_err(|err| ExecutorError::InternalError {
-                    error: format!(
-                        "Failed to receive execution result for block {}: {:?}.",
-                        block_id, err
-                    ),
-                })?
+            result_rx.await.map_err(|err| ExecutorError::InternalError {
+                error: format!(
+                    "Failed to receive execution result for block {}: {:?}.",
+                    block_id, err
+                ),
+            })?
         })
     }
 
@@ -174,10 +165,7 @@ impl ExecutionPipeline {
         execute_block_tx: mpsc::UnboundedSender<ExecuteBlockCommand>,
     ) {
         while let Some(command) = prepare_block_rx.recv().await {
-            monitor!(
-                "prepare_block",
-                Self::prepare_block(execute_block_tx.clone(), command).await
-            );
+            monitor!("prepare_block", Self::prepare_block(execute_block_tx.clone(), command).await);
         }
         debug!("prepare_block_stage quitting.");
     }
@@ -277,11 +265,9 @@ impl ExecutionPipeline {
                         // decide to commit (in the commit phase)
                         let executor = executor.clone();
                         Box::pin(async move {
-                            tokio::task::spawn_blocking(move || {
-                                executor.pre_commit_block(block_id)
-                            })
-                            .await
-                            .expect("failed to spawn_blocking")
+                            tokio::task::spawn_blocking(move || executor.pre_commit_block(block_id))
+                                .await
+                                .expect("failed to spawn_blocking")
                         })
                     } else {
                         // kick off pre-commit right away
@@ -295,9 +281,7 @@ impl ExecutionPipeline {
                             })
                             .expect("Failed to send block to pre_commit stage.");
                         Box::pin(async {
-                            pre_commit_result_rx
-                                .await
-                                .map_err(ExecutorError::internal_err)?
+                            pre_commit_result_rx.await.map_err(ExecutorError::internal_err)?
                         })
                     };
 
@@ -314,28 +298,21 @@ impl ExecutionPipeline {
         mut block_rx: mpsc::UnboundedReceiver<PreCommitCommand>,
         executor: Arc<dyn BlockExecutorTrait>,
     ) {
-        while let Some(PreCommitCommand {
-            block_id,
-            result_tx,
-            lifetime_guard,
-        }) = block_rx.recv().await
+        while let Some(PreCommitCommand { block_id, result_tx, lifetime_guard }) =
+            block_rx.recv().await
         {
             debug!("pre_commit stage received block {}.", block_id);
             let res = async {
                 let executor = executor.clone();
                 monitor!(
                     "pre_commit",
-                    tokio::task::spawn_blocking(move || {
-                        executor.pre_commit_block(block_id)
-                    })
+                    tokio::task::spawn_blocking(move || { executor.pre_commit_block(block_id) })
                 )
                 .await
                 .expect("Failed to spawn_blocking().")
             }
             .await;
-            result_tx
-                .send(res)
-                .unwrap_or_else(log_failed_to_send_result("pre_commit", block_id));
+            result_tx.send(res).unwrap_or_else(log_failed_to_send_result("pre_commit", block_id));
             drop(lifetime_guard);
         }
         debug!("pre_commit stage quitting.");

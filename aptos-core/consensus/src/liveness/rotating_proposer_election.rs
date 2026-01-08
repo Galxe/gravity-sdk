@@ -26,10 +26,7 @@ pub fn choose_leader(peers: Vec<Author>) -> Author {
 impl RotatingProposer {
     /// With only one proposer in the vector, it behaves the same as a fixed proposer strategy.
     pub fn new(proposers: Vec<Author>, contiguous_rounds: u32) -> Self {
-        Self {
-            proposers,
-            contiguous_rounds,
-        }
+        Self { proposers, contiguous_rounds }
     }
 }
 

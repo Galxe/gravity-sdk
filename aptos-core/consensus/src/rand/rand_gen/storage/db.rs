@@ -15,8 +15,10 @@ use crate::{
     },
 };
 use anyhow::Result;
-use gaptos::aptos_logger::info;
-use gaptos::aptos_schemadb::{schema::Schema, Options, batch::SchemaBatch, DB};
+use gaptos::{
+    aptos_logger::info,
+    aptos_schemadb::{batch::SchemaBatch, schema::Schema, Options, DB},
+};
 use std::{path::Path, sync::Arc, time::Instant};
 
 pub struct RandDb {
@@ -27,11 +29,7 @@ pub const RAND_DB_NAME: &str = "rand_db";
 
 impl RandDb {
     pub(crate) fn new<P: AsRef<Path> + Clone>(db_root_path: P) -> Self {
-        let column_families = vec![
-            KEY_PAIR_CF_NAME,
-            AUG_DATA_CF_NAME,
-            CERTIFIED_AUG_DATA_CF_NAME,
-        ];
+        let column_families = vec![KEY_PAIR_CF_NAME, AUG_DATA_CF_NAME, CERTIFIED_AUG_DATA_CF_NAME];
 
         let path = db_root_path.as_ref().join(RAND_DB_NAME);
         let instant = Instant::now();
@@ -43,11 +41,7 @@ impl RandDb {
                 .expect("RandDB open failed; unable to continue"),
         );
 
-        info!(
-            "Opened RandDB at {:?} in {} ms",
-            path,
-            instant.elapsed().as_millis()
-        );
+        info!("Opened RandDB at {:?} in {} ms", path, instant.elapsed().as_millis());
 
         Self { db }
     }

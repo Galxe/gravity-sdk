@@ -3,29 +3,42 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    consensusdb::ConsensusDB, error::StateSyncError, network::{IncomingCommitRequest, IncomingRandGenRequest}, payload_manager::{DirectMempoolPayloadManager, TPayloadManager}, pipeline::{
-        buffer_manager::OrderedBlocks, execution_client::TExecutionClient, pipeline_builder::PipelineBuilder, signing_phase::CommitSignerProvider
-    }, rand::rand_gen::types::RandConfig, state_replication::StateComputerCommitCallBackType, test_utils::mock_storage::MockStorage
+    consensusdb::ConsensusDB,
+    error::StateSyncError,
+    network::{IncomingCommitRequest, IncomingRandGenRequest},
+    payload_manager::{DirectMempoolPayloadManager, TPayloadManager},
+    pipeline::{
+        buffer_manager::OrderedBlocks, execution_client::TExecutionClient,
+        pipeline_builder::PipelineBuilder, signing_phase::CommitSignerProvider,
+    },
+    rand::rand_gen::types::RandConfig,
+    state_replication::StateComputerCommitCallBackType,
+    test_utils::mock_storage::MockStorage,
 };
 use anyhow::{format_err, Result};
-use gaptos::aptos_channels::aptos_channel;
 use aptos_consensus_types::{
     common::{Payload, Round},
     pipelined_block::PipelinedBlock,
 };
-use gaptos::aptos_crypto::{bls12381::PrivateKey, HashValue};
 use aptos_executor_types::ExecutorResult;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_types::{
-    epoch_state::EpochState,
-    ledger_info::LedgerInfoWithSignatures,
-    on_chain_config::{OnChainConsensusConfig, OnChainExecutionConfig, OnChainRandomnessConfig},
-    transaction::SignedTransaction, validator_signer::ValidatorSigner,
-};
 use futures::{channel::mpsc, SinkExt};
 use futures_channel::mpsc::UnboundedSender;
-use gaptos::move_core_types::account_address::AccountAddress;
+use gaptos::{
+    aptos_channels::aptos_channel,
+    aptos_crypto::{bls12381::PrivateKey, HashValue},
+    aptos_infallible::Mutex,
+    aptos_logger::prelude::*,
+    aptos_types::{
+        epoch_state::EpochState,
+        ledger_info::LedgerInfoWithSignatures,
+        on_chain_config::{
+            OnChainConsensusConfig, OnChainExecutionConfig, OnChainRandomnessConfig,
+        },
+        transaction::SignedTransaction,
+        validator_signer::ValidatorSigner,
+    },
+    move_core_types::account_address::AccountAddress,
+};
 use std::{collections::HashMap, sync::Arc};
 
 pub struct MockExecutionClient {
@@ -52,14 +65,9 @@ impl MockExecutionClient {
     }
 
     pub async fn commit_to_storage(&self, blocks: OrderedBlocks) -> ExecutorResult<()> {
-        let OrderedBlocks {
-            ordered_blocks,
-            ordered_proof,
-            callback,
-        } = blocks;
+        let OrderedBlocks { ordered_blocks, ordered_proof, callback } = blocks;
 
-        self.consensus_db
-            .commit_to_storage(ordered_proof.ledger_info().clone());
+        self.consensus_db.commit_to_storage(ordered_proof.ledger_info().clone());
         // mock sending commit notif to state sync
         let mut txns = vec![];
         for block in &ordered_blocks {
@@ -74,10 +82,7 @@ impl MockExecutionClient {
         // they may fail during shutdown
         let _ = self.state_sync_client.unbounded_send(txns);
 
-        callback(
-            &ordered_blocks.into_iter().map(Arc::new).collect::<Vec<_>>(),
-            ordered_proof,
-        );
+        callback(&ordered_blocks.into_iter().map(Arc::new).collect::<Vec<_>>(), ordered_proof);
 
         Ok(())
     }
@@ -121,10 +126,7 @@ impl TExecutionClient for MockExecutionClient {
         for block in blocks {
             self.block_cache.lock().insert(
                 block.id(),
-                block
-                    .payload()
-                    .unwrap_or(&Payload::empty(false, true))
-                    .clone(),
+                block.payload().unwrap_or(&Payload::empty(false, true)).clone(),
             );
         }
 
@@ -157,12 +159,8 @@ impl TExecutionClient for MockExecutionClient {
     }
 
     async fn sync_to(&self, commit: LedgerInfoWithSignatures) -> Result<(), StateSyncError> {
-        debug!(
-            "Fake sync to block id {}",
-            commit.ledger_info().consensus_block_id()
-        );
-        self.consensus_db
-            .commit_to_storage(commit.ledger_info().clone());
+        debug!("Fake sync to block id {}", commit.ledger_info().consensus_block_id());
+        self.consensus_db.commit_to_storage(commit.ledger_info().clone());
         Ok(())
     }
 

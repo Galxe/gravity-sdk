@@ -24,34 +24,36 @@ use crate::{
         RandomComputeResultStateComputer,
     },
 };
-use gaptos::aptos_bounded_executor::BoundedExecutor;
-use gaptos::aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use gaptos::aptos_config::{config::ConsensusObserverConfig, network_id::NetworkId};
 use aptos_consensus_types::{
     block::block_test_utils::certificate_for_genesis, pipelined_block::PipelinedBlock,
     vote_proposal::VoteProposal,
 };
-use gaptos::aptos_crypto::{hash::ACCUMULATOR_PLACEHOLDER_HASH, HashValue};
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_network::{
-    application::{interface::NetworkClient, storage::PeersAndMetadata},
-    peer_manager::{ConnectionRequestSender, PeerManagerRequestSender},
-    protocols::{
-        network,
-        network::{Event, NewNetworkSender},
+use aptos_safety_rules::{PersistentSafetyStorage, SafetyRulesManager};
+use futures::{channel::oneshot, FutureExt, SinkExt, StreamExt};
+use gaptos::{
+    aptos_bounded_executor::BoundedExecutor,
+    aptos_channels::{aptos_channel, message_queues::QueueStyle},
+    aptos_config::{config::ConsensusObserverConfig, network_id::NetworkId},
+    aptos_crypto::{hash::ACCUMULATOR_PLACEHOLDER_HASH, HashValue},
+    aptos_infallible::Mutex,
+    aptos_network::{
+        application::{interface::NetworkClient, storage::PeersAndMetadata},
+        peer_manager::{ConnectionRequestSender, PeerManagerRequestSender},
+        protocols::{
+            network,
+            network::{Event, NewNetworkSender},
+        },
+    },
+    aptos_secure_storage::Storage,
+    aptos_types::{
+        account_address::AccountAddress,
+        epoch_state::EpochState,
+        ledger_info::LedgerInfo,
+        validator_signer::ValidatorSigner,
+        validator_verifier::{random_validator_verifier, ValidatorVerifier},
+        waypoint::Waypoint,
     },
 };
-use aptos_safety_rules::{PersistentSafetyStorage, SafetyRulesManager};
-use gaptos::aptos_secure_storage::Storage;
-use gaptos::aptos_types::{
-    account_address::AccountAddress,
-    epoch_state::EpochState,
-    ledger_info::LedgerInfo,
-    validator_signer::ValidatorSigner,
-    validator_verifier::{random_validator_verifier, ValidatorVerifier},
-    waypoint::Waypoint,
-};
-use futures::{channel::oneshot, FutureExt, SinkExt, StreamExt};
 use itertools::enumerate;
 use maplit::hashmap;
 use std::sync::Arc;
@@ -118,7 +120,7 @@ pub async fn prepare_buffer_manager(
         author,
         consensus_network_client,
         self_loop_tx,
-        todo!() // validators.clone(),
+        todo!(), // validators.clone(),
     );
 
     let (msg_tx, msg_rx) = aptos_channel::new::<AccountAddress, IncomingCommitRequest>(
@@ -153,7 +155,7 @@ pub async fn prepare_buffer_manager(
         buffer_reset_rx,
         Arc::new(EpochState {
             epoch: 1,
-            verifier: todo!() // validators.clone(),
+            verifier: todo!(), // validators.clone(),
         }),
         bounded_executor,
         false,
@@ -215,17 +217,7 @@ pub async fn launch_buffer_manager() -> (
     runtime.spawn(persisting_phase_pipeline.start());
     runtime.spawn(buffer_manager.start());
 
-    (
-        block_tx,
-        reset_tx,
-        msg_tx,
-        self_loop_rx,
-        hash_val,
-        runtime,
-        signers,
-        result_rx,
-        validators,
-    )
+    (block_tx, reset_tx, msg_tx, self_loop_rx, hash_val, runtime, signers, result_rx, validators)
 }
 
 async fn loopback_commit_vote(
@@ -237,18 +229,15 @@ async fn loopback_commit_vote(
         Event::RpcRequest(author, msg, protocol, callback) => {
             if let ConsensusMsg::CommitMessage(msg) = msg {
                 msg.verify(verifier).unwrap();
-                let request = IncomingCommitRequest {
-                    req: *msg,
-                    protocol,
-                    response_sender: callback,
-                };
+                let request =
+                    IncomingCommitRequest { req: *msg, protocol, response_sender: callback };
                 // verify the message and send the message into self loop
                 msg_tx.push(author, request).ok();
             }
-        },
+        }
         _ => {
             panic!("We are expecting a commit vote message.");
-        },
+        }
     };
 }
 
@@ -399,16 +388,11 @@ async fn buffer_manager_sync_test() {
         // reset
         let (tx, rx) = oneshot::channel::<ResetAck>();
 
-        reset_tx
-            .send(ResetRequest {
-                tx,
-                signal: ResetSignal::TargetRound(1),
-            })
-            .await
-            .ok();
+        reset_tx.send(ResetRequest { tx, signal: ResetSignal::TargetRound(1) }).await.ok();
         rx.await.ok();
 
-        // start sending back commit vote after reset, to avoid [0..dropped_batches] being sent to result_rx
+        // start sending back commit vote after reset, to avoid [0..dropped_batches] being sent to
+        // result_rx
         tokio::spawn(async move {
             while let Some(msg) = self_loop_rx.next().await {
                 loopback_commit_vote(msg, &msg_tx, &verifier).await;

@@ -5,11 +5,13 @@ use crate::consensus_observer::{
     error::Error,
     logging::{LogEntry, LogSchema},
 };
-use gaptos::aptos_config::{config::ConsensusObserverConfig, network_id::PeerNetworkId};
-use gaptos::aptos_logger::warn;
-use gaptos::aptos_network::application::metadata::PeerMetadata;
-use gaptos::aptos_storage_interface::DbReader;
-use gaptos::aptos_time_service::{TimeService, TimeServiceTrait};
+use gaptos::{
+    aptos_config::{config::ConsensusObserverConfig, network_id::PeerNetworkId},
+    aptos_logger::warn,
+    aptos_network::application::metadata::PeerMetadata,
+    aptos_storage_interface::DbReader,
+    aptos_time_service::{TimeService, TimeServiceTrait},
+};
 use ordered_float::OrderedFloat;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -88,7 +90,8 @@ impl ConsensusObserverSubscription {
         // self.last_peer_optimality_check = time_now;
 
         // // Verify that we're subscribed to the most optimal peer
-        // if let Some(optimal_peer) = sort_peers_by_distance_and_latency(peers_and_metadata).first() {
+        // if let Some(optimal_peer) =
+        // sort_peers_by_distance_and_latency(peers_and_metadata).first() {
         //     if *optimal_peer != self.peer_network_id {
         //         return Err(Error::SubscriptionSuboptimal(format!(
         //             "Subscription to peer: {} is no longer optimal! New optimal peer: {}",
@@ -108,8 +111,8 @@ impl ConsensusObserverSubscription {
         let duration_since_last_message = time_now.duration_since(self.last_message_receive_time);
 
         // Check if the subscription has timed out
-        if duration_since_last_message
-            > Duration::from_millis(self.consensus_observer_config.max_subscription_timeout_ms)
+        if duration_since_last_message >
+            Duration::from_millis(self.consensus_observer_config.max_subscription_timeout_ms)
         {
             return Err(Error::SubscriptionTimeout(format!(
                 "Subscription to peer: {} has timed out! No message received for: {:?}",
@@ -144,12 +147,12 @@ impl ConsensusObserverSubscription {
         //     let duration_since_highest_seen = time_now.duration_since(highest_version_timestamp);
         //     if duration_since_highest_seen
         //         > Duration::from_millis(
-        //             self.consensus_observer_config.max_synced_version_timeout_ms,
+        //         > self.consensus_observer_config.max_synced_version_timeout_ms,
         //         )
         //     {
         //         return Err(Error::SubscriptionProgressStopped(format!(
-        //             "The DB is not making sync progress! Highest synced version: {}, elapsed: {:?}",
-        //             highest_synced_version, duration_since_highest_seen
+        //             "The DB is not making sync progress! Highest synced version: {}, elapsed:
+        // {:?}",             highest_synced_version, duration_since_highest_seen
         //         )));
         //     }
         // }
@@ -196,12 +199,8 @@ fn get_distance_for_peer(
 
     // If the distance is missing, log a warning
     if distance.is_none() {
-        warn!(
-            LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                "Unable to get distance for peer! Peer: {:?}",
-                peer_network_id
-            ))
-        );
+        warn!(LogSchema::new(LogEntry::ConsensusObserver)
+            .message(&format!("Unable to get distance for peer! Peer: {:?}", peer_network_id)));
     }
 
     distance
@@ -218,12 +217,8 @@ fn get_latency_for_peer(
 
     // If the latency is missing, log a warning
     if latency.is_none() {
-        warn!(
-            LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                "Unable to get latency for peer! Peer: {:?}",
-                peer_network_id
-            ))
-        );
+        warn!(LogSchema::new(LogEntry::ConsensusObserver)
+            .message(&format!("Unable to get latency for peer! Peer: {:?}", peer_network_id)));
     }
 
     latency
@@ -244,8 +239,8 @@ pub fn sort_peers_by_distance_and_latency(
         let latency = get_latency_for_peer(&peer_network_id, &peer_metadata);
 
         // If the distance is not found, use the maximum distance
-        let distance =
-            distance.unwrap_or(gaptos::aptos_peer_monitoring_service_types::MAX_DISTANCE_FROM_VALIDATORS);
+        let distance = distance
+            .unwrap_or(gaptos::aptos_peer_monitoring_service_types::MAX_DISTANCE_FROM_VALIDATORS);
 
         // If the latency is not found, use a large latency
         let latency = latency.unwrap_or(MAX_PING_LATENCY_SECS);
@@ -265,11 +260,8 @@ pub fn sort_peers_by_distance_and_latency(
         peers_and_latencies.sort_by_key(|(_, latency)| *latency);
 
         // Add the peers to the sorted list (in sorted order)
-        sorted_peers.extend(
-            peers_and_latencies
-                .into_iter()
-                .map(|(peer_network_id, _)| peer_network_id),
-        );
+        sorted_peers
+            .extend(peers_and_latencies.into_iter().map(|(peer_network_id, _)| peer_network_id));
     }
 
     sorted_peers
@@ -378,8 +370,8 @@ mod test {
     //         time_service.clone(),
     //     );
 
-    //     // Verify that the subscription has not timed out and that the last message time is updated
-    //     let current_time = time_service.now();
+    //     // Verify that the subscription has not timed out and that the last message time is
+    // updated     let current_time = time_service.now();
     //     assert!(subscription.check_subscription_timeout().is_ok());
     //     assert_eq!(subscription.last_message_receive_time, current_time);
 
@@ -392,8 +384,8 @@ mod test {
     //     // Verify that the subscription has not timed out
     //     assert!(subscription.check_subscription_timeout().is_ok());
 
-    //     // Verify a new message is received successfully and that the last message time is updated
-    //     let current_time = mock_time_service.now();
+    //     // Verify a new message is received successfully and that the last message time is
+    // updated     let current_time = mock_time_service.now();
     //     subscription
     //         .verify_message_sender(&peer_network_id)
     //         .unwrap();
@@ -423,7 +415,8 @@ mod test {
     //         .times(2); // Only allow two calls for the first version
     //     mock_db_reader
     //         .expect_get_latest_ledger_info_version()
-    //         .returning(move || Ok(second_synced_version)); // Allow multiple calls for the second version
+    //         .returning(move || Ok(second_synced_version)); // Allow multiple calls for the second
+    // version
 
     //     // Create a new observer subscription
     //     let consensus_observer_config = ConsensusObserverConfig::default();
@@ -436,8 +429,8 @@ mod test {
     //         time_service.clone(),
     //     );
 
-    //     // Verify that the DB is making sync progress and that the highest synced version is updated
-    //     let current_time = time_service.now();
+    //     // Verify that the DB is making sync progress and that the highest synced version is
+    // updated     let current_time = time_service.now();
     //     assert!(subscription.check_syncing_progress().is_ok());
     //     assert_eq!(
     //         subscription.highest_synced_version_and_time,
@@ -512,8 +505,8 @@ mod test {
     //     // Elapse more time
     //     mock_time_service.advance(Duration::from_secs(10));
 
-    //     // Verify that the message sender is the expected peer and that the last message time is updated
-    //     let current_time = mock_time_service.now();
+    //     // Verify that the message sender is the expected peer and that the last message time is
+    // updated     let current_time = mock_time_service.now();
     //     assert!(subscription.verify_message_sender(&peer_network_id).is_ok());
     //     assert_eq!(subscription.last_message_receive_time, current_time);
     // }

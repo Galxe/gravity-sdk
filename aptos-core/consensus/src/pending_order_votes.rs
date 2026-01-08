@@ -3,12 +3,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use aptos_consensus_types::{common::Author, order_vote::OrderVote};
-use gaptos::aptos_crypto::{hash::CryptoHash, HashValue};
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_types::{
-    aggregate_signature::PartialSignatures,
-    ledger_info::{LedgerInfo, LedgerInfoWithVerifiedSignatures, LedgerInfoWithSignatures},
-    validator_verifier::{ValidatorVerifier, VerifyError},
+use gaptos::{
+    aptos_crypto::{hash::CryptoHash, HashValue},
+    aptos_logger::prelude::*,
+    aptos_types::{
+        aggregate_signature::PartialSignatures,
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures, LedgerInfoWithVerifiedSignatures},
+        validator_verifier::{ValidatorVerifier, VerifyError},
+    },
 };
 use std::collections::HashMap;
 
@@ -37,17 +39,16 @@ enum OrderVoteStatus {
 
 /// A PendingVotes structure keep track of order votes for the last few rounds
 pub struct PendingOrderVotes {
-    /// Maps LedgerInfo digest to associated signatures (contained in a partial LedgerInfoWithSignatures).
-    /// Order vote status stores caches the information on whether the votes are enough to form a QC.
+    /// Maps LedgerInfo digest to associated signatures (contained in a partial
+    /// LedgerInfoWithSignatures). Order vote status stores caches the information on whether
+    /// the votes are enough to form a QC.
     li_digest_to_votes: HashMap<HashValue /* LedgerInfo digest */, OrderVoteStatus>,
 }
 
 impl PendingOrderVotes {
     /// Creates an empty PendingOrderVotes structure
     pub fn new() -> Self {
-        Self {
-            li_digest_to_votes: HashMap::new(),
-        }
+        Self { li_digest_to_votes: HashMap::new() }
     }
 
     /// Add a vote to the pending votes
@@ -73,26 +74,20 @@ impl PendingOrderVotes {
             OrderVoteStatus::EnoughVotes(li_with_sig) => {
                 // we already have enough votes for this ledger info
                 OrderVoteReceptionResult::NewLedgerInfoWithSignatures(li_with_sig.clone())
-            },
+            }
             OrderVoteStatus::NotEnoughVotes(li_with_sig) => {
                 // we don't have enough votes for this ledger info yet
                 let validator_voting_power =
                     validator_verifier.get_voting_power(&order_vote.author());
                 if validator_voting_power.is_none() {
-                    warn!(
-                        "Received order vote from an unknown author: {}",
-                        order_vote.author()
-                    );
+                    warn!("Received order vote from an unknown author: {}", order_vote.author());
                     return OrderVoteReceptionResult::UnknownAuthor(order_vote.author());
                 }
                 let validator_voting_power =
                     validator_voting_power.expect("Author must exist in the validator set.");
 
                 if validator_voting_power == 0 {
-                    warn!(
-                        "Received vote with no voting power, from {}",
-                        order_vote.author()
-                    );
+                    warn!("Received vote with no voting power, from {}", order_vote.author());
                 }
                 li_with_sig.add_signature(order_vote.author(), order_vote.signature().clone());
                 // check if we have enough signatures to create a QC
@@ -110,15 +105,15 @@ impl PendingOrderVotes {
                                 OrderVoteReceptionResult::NewLedgerInfoWithSignatures(
                                     ledger_info_with_sig,
                                 )
-                            },
+                            }
                             Err(e) => OrderVoteReceptionResult::ErrorAggregatingSignature(e),
                         }
-                    },
+                    }
 
                     // not enough votes
                     Err(VerifyError::TooLittleVotingPower { voting_power, .. }) => {
                         OrderVoteReceptionResult::VoteAdded(voting_power)
-                    },
+                    }
 
                     // error
                     Err(error) => {
@@ -127,9 +122,9 @@ impl PendingOrderVotes {
                             error, order_vote
                         );
                         OrderVoteReceptionResult::ErrorAddingVote(error)
-                    },
+                    }
                 }
-            },
+            }
         }
     }
 
@@ -138,10 +133,10 @@ impl PendingOrderVotes {
         self.li_digest_to_votes.retain(|_, status| match status {
             OrderVoteStatus::EnoughVotes(li_with_sig) => {
                 li_with_sig.ledger_info().round() > highest_ordered_round
-            },
+            }
             OrderVoteStatus::NotEnoughVotes(li_with_sig) => {
                 li_with_sig.ledger_info().round() > highest_ordered_round
-            },
+            }
         });
     }
 
@@ -158,10 +153,12 @@ impl PendingOrderVotes {
 mod tests {
     use super::{OrderVoteReceptionResult, PendingOrderVotes};
     use aptos_consensus_types::order_vote::OrderVote;
-    use gaptos::aptos_crypto::HashValue;
-    use gaptos::aptos_types::{
-        block_info::BlockInfo, ledger_info::LedgerInfo,
-        validator_verifier::random_validator_verifier,
+    use gaptos::{
+        aptos_crypto::HashValue,
+        aptos_types::{
+            block_info::BlockInfo, ledger_info::LedgerInfo,
+            validator_verifier::random_validator_verifier,
+        },
     };
 
     /// Creates a random ledger info for epoch 1 and round 1.
@@ -223,10 +220,10 @@ mod tests {
         match pending_order_votes.insert_order_vote(&order_vote_2_author_2, &validator) {
             OrderVoteReceptionResult::NewLedgerInfoWithSignatures(li_with_sig) => {
                 assert!(li_with_sig.check_voting_power(&validator).is_ok());
-            },
+            }
             _ => {
                 panic!("No QC formed.");
-            },
+            }
         };
         assert!(!pending_order_votes.has_enough_order_votes(&li1));
         assert!(pending_order_votes.has_enough_order_votes(&li2));

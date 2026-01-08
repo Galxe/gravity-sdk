@@ -89,11 +89,11 @@ impl From<gaptos::aptos_secure_storage::Error> for Error {
                     "A permission error was thrown: {:?}. Maybe the storage token needs to be renewed?",
                     error
                 );
-            },
-            gaptos::aptos_secure_storage::Error::KeyVersionNotFound(_, _)
-            | gaptos::aptos_secure_storage::Error::KeyNotSet(_) => {
+            }
+            gaptos::aptos_secure_storage::Error::KeyVersionNotFound(_, _) |
+            gaptos::aptos_secure_storage::Error::KeyNotSet(_) => {
                 Self::SecureStorageMissingDataError(error.to_string())
-            },
+            }
             _ => Self::SecureStorageUnexpectedError(error.to_string()),
         }
     }

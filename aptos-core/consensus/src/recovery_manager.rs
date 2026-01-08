@@ -12,21 +12,24 @@ use crate::{
     round_manager::VerifiedEvent,
 };
 use anyhow::{anyhow, ensure, Context, Result};
-use gaptos::aptos_channels::aptos_channel;
 use aptos_consensus_types::{
     common::Author, proposal_msg::ProposalMsg, sync_info::SyncInfo, vote_msg::VoteMsg,
 };
-use gaptos::aptos_config::network_id::NetworkId;
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_types::{block_info::Round, epoch_state::EpochState};
 use futures::{FutureExt, StreamExt};
 use futures_channel::oneshot;
+use gaptos::{
+    aptos_channels::aptos_channel,
+    aptos_config::network_id::NetworkId,
+    aptos_consensus::counters,
+    aptos_infallible::Mutex,
+    aptos_logger::prelude::*,
+    aptos_types::{block_info::Round, epoch_state::EpochState},
+};
 use std::{mem::Discriminant, process, sync::Arc};
-use gaptos::aptos_consensus::counters as counters;
 
-/// If the node can't recover corresponding blocks from local storage, RecoveryManager is responsible
-/// for processing the events carrying sync info and use the info to retrieve blocks from peers
+/// If the node can't recover corresponding blocks from local storage, RecoveryManager is
+/// responsible for processing the events carrying sync info and use the info to retrieve blocks
+/// from peers
 pub struct RecoveryManager {
     epoch_state: Arc<EpochState>,
     network: Arc<NetworkSender>,
@@ -93,10 +96,7 @@ impl RecoveryManager {
             NetworkId::Validator,
             self.network.clone(),
             peer,
-            self.epoch_state
-                .verifier
-                .get_ordered_account_addresses_iter()
-                .collect(),
+            self.epoch_state.verifier.get_ordered_account_addresses_iter().collect(),
             self.max_blocks_to_request,
             self.pending_blocks.clone(),
         );

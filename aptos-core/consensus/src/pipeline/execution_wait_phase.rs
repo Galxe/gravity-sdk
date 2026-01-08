@@ -4,9 +4,9 @@
 
 use crate::pipeline::{buffer_item::ExecutionFut, pipeline_phase::StatelessPipeline};
 use aptos_consensus_types::pipelined_block::PipelinedBlock;
-use gaptos::aptos_crypto::HashValue;
 use aptos_executor_types::ExecutorResult;
 use async_trait::async_trait;
+use gaptos::aptos_crypto::HashValue;
 use std::fmt::{Debug, Display, Formatter};
 
 /// [ This class is used when consensus.decoupled = true ]
@@ -47,9 +47,6 @@ impl StatelessPipeline for ExecutionWaitPhase {
     async fn process(&self, req: ExecutionWaitRequest) -> ExecutionResponse {
         let ExecutionWaitRequest { block_id, fut } = req;
 
-        ExecutionResponse {
-            block_id,
-            inner: fut.await,
-        }
+        ExecutionResponse { block_id, inner: fut.await }
     }
 }

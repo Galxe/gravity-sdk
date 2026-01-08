@@ -39,11 +39,7 @@ impl Display for ConsensusState {
 
 impl ConsensusState {
     pub fn new(safety_data: SafetyData, waypoint: Waypoint, in_validator_set: bool) -> Self {
-        Self {
-            safety_data,
-            waypoint,
-            in_validator_set,
-        }
+        Self { safety_data, waypoint, in_validator_set }
     }
 
     /// Returns the current epoch

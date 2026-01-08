@@ -14,10 +14,12 @@ use crate::{
 };
 use anyhow::{anyhow, ensure};
 use aptos_consensus_types::common::{Author, Round};
-use gaptos::aptos_crypto::HashValue;
-use gaptos::aptos_infallible::RwLock;
-use gaptos::aptos_logger::{debug, error, warn};
-use gaptos::aptos_types::{epoch_state::EpochState, validator_verifier::ValidatorVerifier};
+use gaptos::{
+    aptos_crypto::HashValue,
+    aptos_infallible::RwLock,
+    aptos_logger::{debug, error, warn},
+    aptos_types::{epoch_state::EpochState, validator_verifier::ValidatorVerifier},
+};
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     ops::Deref,
@@ -62,13 +64,7 @@ impl InMemDag {
     pub fn new_empty(epoch_state: Arc<EpochState>, start_round: Round, window_size: u64) -> Self {
         let author_to_index = epoch_state.verifier.address_to_validator_index().clone();
         let nodes_by_round = BTreeMap::new();
-        Self {
-            nodes_by_round,
-            author_to_index,
-            start_round,
-            epoch_state,
-            window_size,
-        }
+        Self { nodes_by_round, author_to_index, start_round, epoch_state, window_size }
     }
 
     pub(crate) fn lowest_round(&self) -> Round {
@@ -112,9 +108,8 @@ impl InMemDag {
         let node = Arc::new(node);
         // Invariant violation, we must get the node ref (COMMENT ME)
         #[allow(clippy::unwrap_in_result)]
-        let round_ref = self
-            .get_node_ref_mut(node.round(), node.author())
-            .expect("must be present");
+        let round_ref =
+            self.get_node_ref_mut(node.round(), node.author()).expect("must be present");
         ensure!(round_ref.is_none(), "race during insertion");
         *round_ref = Some(NodeStatus::Unordered {
             node: node.clone(),
@@ -133,10 +128,7 @@ impl InMemDag {
             self.epoch_state.epoch
         );
         let author = node.metadata().author();
-        let index = *self
-            .author_to_index
-            .get(author)
-            .ok_or_else(|| anyhow!("unknown author"))?;
+        let index = *self.author_to_index.get(author).ok_or_else(|| anyhow!("unknown author"))?;
         let round = node.metadata().round();
         ensure!(
             round >= self.lowest_round(),
@@ -168,16 +160,12 @@ impl InMemDag {
             return;
         }
 
-        let voting_power = self
-            .epoch_state
-            .verifier
-            .get_voting_power(node.author())
-            .expect("must exist");
+        let voting_power =
+            self.epoch_state.verifier.get_voting_power(node.author()).expect("must exist");
 
         for parent in node.parents_metadata() {
-            let node_status = self
-                .get_node_ref_mut(parent.round(), parent.author())
-                .expect("must exist");
+            let node_status =
+                self.get_node_ref_mut(parent.round(), parent.author()).expect("must exist");
             match node_status {
                 Some(NodeStatus::Unordered {
                     aggregated_weak_voting_power,
@@ -189,8 +177,8 @@ impl InMemDag {
                     } else {
                         *aggregated_weak_voting_power += voting_power as u128;
                     }
-                },
-                Some(NodeStatus::Ordered(_)) => {},
+                }
+                Some(NodeStatus::Ordered(_)) => {}
                 None => unreachable!("parents must exist before voting for a node"),
             }
         }
@@ -239,14 +227,11 @@ impl InMemDag {
     }
 
     fn get_round_iter(&self, round: Round) -> Option<impl Iterator<Item = &NodeStatus>> {
-        self.nodes_by_round
-            .get(&round)
-            .map(|round_ref| round_ref.iter().flatten())
+        self.nodes_by_round.get(&round).map(|round_ref| round_ref.iter().flatten())
     }
 
     pub fn get_node(&self, metadata: &NodeMetadata) -> Option<Arc<CertifiedNode>> {
-        self.get_node_ref_by_metadata(metadata)
-            .map(|node_status| node_status.as_node().clone())
+        self.get_node_ref_by_metadata(metadata).map(|node_status| node_status.as_node().clone())
     }
 
     pub fn get_node_by_round_author(
@@ -254,8 +239,7 @@ impl InMemDag {
         round: Round,
         author: &Author,
     ) -> Option<&Arc<CertifiedNode>> {
-        self.get_node_ref(round, author)
-            .map(|node_status| node_status.as_node())
+        self.get_node_ref(round, author).map(|node_status| node_status.as_node())
     }
 
     pub fn check_votes_for_node(
@@ -272,15 +256,15 @@ impl InMemDag {
                 } => {
                     validator_verifier
                         .check_aggregated_voting_power(*aggregated_weak_voting_power, true)
-                        .is_ok()
-                        || validator_verifier
+                        .is_ok() ||
+                        validator_verifier
                             .check_aggregated_voting_power(*aggregated_strong_voting_power, false)
                             .is_ok()
-                },
+                }
                 NodeStatus::Ordered(_) => {
                     error!("checking voting power for Ordered node");
                     true
-                },
+                }
             })
             .unwrap_or(false)
     }
@@ -312,8 +296,8 @@ impl InMemDag {
             .flat_map(|(_, round_ref)| round_ref.iter_mut())
             .flatten()
             .filter(move |node_status| {
-                matches!(node_status, NodeStatus::Unordered { .. })
-                    && reachable_filter(node_status.as_node())
+                matches!(node_status, NodeStatus::Unordered { .. }) &&
+                    reachable_filter(node_status.as_node())
             })
     }
 
@@ -325,11 +309,8 @@ impl InMemDag {
         filter: impl Fn(&NodeStatus) -> bool,
     ) -> impl Iterator<Item = &NodeStatus> {
         let until = until.unwrap_or(self.lowest_round());
-        let initial_round = targets
-            .clone()
-            .map(|t| t.round())
-            .max()
-            .expect("Round should be not empty!");
+        let initial_round =
+            targets.clone().map(|t| t.round()).max().expect("Round should be not empty!");
         let initial = targets.map(|t| *t.digest()).collect();
 
         let mut reachable_filter = Self::reachable_filter(initial);
@@ -480,10 +461,7 @@ impl DagStore {
             error!("Error deleting expired nodes: {:?}", e);
         }
         if dag.read().is_empty() {
-            warn!(
-                "[DAG] Start with empty DAG store at {}, need state sync",
-                start_round
-            );
+            warn!("[DAG] Start with empty DAG store at {}, need state sync", start_round);
         }
         dag
     }
@@ -496,11 +474,7 @@ impl DagStore {
         window_size: u64,
     ) -> Self {
         let dag = InMemDag::new_empty(epoch_state, start_round, window_size);
-        Self {
-            dag: RwLock::new(dag),
-            storage,
-            payload_manager,
-        }
+        Self { dag: RwLock::new(dag), storage, payload_manager }
     }
 
     pub fn new_for_test(
@@ -508,11 +482,7 @@ impl DagStore {
         storage: Arc<dyn DAGStorage>,
         payload_manager: Arc<dyn TPayloadManager>,
     ) -> Self {
-        Self {
-            dag: RwLock::new(dag),
-            storage,
-            payload_manager,
-        }
+        Self { dag: RwLock::new(dag), storage, payload_manager }
     }
 
     pub fn add_node(&self, node: CertifiedNode) -> anyhow::Result<()> {
@@ -526,8 +496,7 @@ impl DagStore {
         self.storage.save_certified_node(&node)?;
 
         debug!("Added node {}", node.id());
-        self.payload_manager
-            .prefetch_payload_data(node.payload(), node.metadata().timestamp());
+        self.payload_manager.prefetch_payload_data(node.payload(), node.metadata().timestamp());
 
         self.dag.write().add_validated_node(node)
     }

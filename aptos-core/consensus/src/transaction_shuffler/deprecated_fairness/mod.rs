@@ -79,10 +79,7 @@ impl<'a, const NUM_CONFLICT_ZONES: usize> FairnessShufflerImpl<'a, NUM_CONFLICT_
         window_sizes: [usize; NUM_CONFLICT_ZONES],
     ) -> Self {
         let num_txns = conflict_key_registries[0].num_txns();
-        assert!(conflict_key_registries
-            .iter()
-            .skip(1)
-            .all(|r| r.num_txns() == num_txns));
+        assert!(conflict_key_registries.iter().skip(1).all(|r| r.num_txns() == num_txns));
 
         Self {
             selected_order: Vec::with_capacity(num_txns),
@@ -97,9 +94,9 @@ impl<'a, const NUM_CONFLICT_ZONES: usize> FairnessShufflerImpl<'a, NUM_CONFLICT_
     /// key, i.e. the transaction sender, the module, and the entry function, etc., the order of
     /// transactions with the same key is preserved -- unless the key is exempt from conflict.
     ///
-    /// For example, all transactions from a single sender will preserve their order; all transactions
-    /// from the same module will preserve their order, unless they are of the aptos framework
-    /// module -- p2p transfers of APT can violate this invariant.
+    /// For example, all transactions from a single sender will preserve their order; all
+    /// transactions from the same module will preserve their order, unless they are of the
+    /// aptos framework module -- p2p transfers of APT can violate this invariant.
     ///
     /// Each transaction comes at most once out of `self.selection_tracker.next_unselected()` for
     /// both passes, that's O(2n). And each transaction comes out of each conflict zones at most
@@ -162,9 +159,7 @@ impl<'a, const NUM_CONFLICT_ZONES: usize> FairnessShufflerImpl<'a, NUM_CONFLICT_
     }
 
     fn is_head_of_line_blocked(&self, txn_idx: TxnIdx) -> bool {
-        self.pending_zones
-            .iter()
-            .any(|z| z.head_of_line_blocked(txn_idx))
+        self.pending_zones.iter().any(|z| z.head_of_line_blocked(txn_idx))
     }
 
     fn add_pending(&mut self, txn_idx: TxnIdx) {

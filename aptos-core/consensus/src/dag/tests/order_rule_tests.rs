@@ -14,17 +14,19 @@ use crate::dag::{
     CertifiedNode,
 };
 use aptos_consensus_types::common::{Author, Round};
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_types::{epoch_state::EpochState, validator_verifier::random_validator_verifier};
 use async_trait::async_trait;
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
+use gaptos::{
+    aptos_infallible::Mutex,
+    aptos_types::{epoch_state::EpochState, validator_verifier::random_validator_verifier},
+};
 use proptest::prelude::*;
 use std::sync::Arc;
 
 /// Generate a virtual dag that first layer represents round
 /// second layer represents nodes, Some => node exist, None => not exist
-/// third layer is a bitmask that represents compressed strong links (true => linked, false => not linked),
-/// the bitmask ignores non-existing nodes
+/// third layer is a bitmask that represents compressed strong links (true => linked, false => not
+/// linked), the bitmask ignores non-existing nodes
 fn generate_virtual_dag(
     num_nodes: usize,
     num_holes: usize,
@@ -50,10 +52,7 @@ fn generate_virtual_dag(
                 .into_iter()
                 .map(|exist| {
                     if exist {
-                        Just(strong_links.clone())
-                            .prop_shuffle()
-                            .prop_map(Some)
-                            .boxed()
+                        Just(strong_links.clone()).prop_shuffle().prop_map(Some).boxed()
                     } else {
                         Just(None).boxed()
                     }
@@ -70,10 +69,7 @@ fn generate_permutations(
     num_perm: usize,
     total_number: usize,
 ) -> impl Strategy<Value = Vec<Vec<usize>>> {
-    proptest::collection::vec(
-        Just((0..total_number).collect::<Vec<_>>()).prop_shuffle(),
-        num_perm,
-    )
+    proptest::collection::vec(Just((0..total_number).collect::<Vec<_>>()).prop_shuffle(), num_perm)
 }
 
 pub struct TestNotifier {
@@ -219,7 +215,7 @@ fn test_order_rule_basic() {
     let nodes = generate_dag_nodes(&dag, &validators);
     let epoch_state = Arc::new(EpochState {
         epoch: 1,
-        verifier: todo!() //validator_verifier,
+        verifier: todo!(), //validator_verifier,
     });
     let mut dag = InMemDag::new_empty(epoch_state.clone(), 0, TEST_DAG_WINDOW);
     for round_nodes in &nodes {
@@ -253,10 +249,7 @@ fn test_order_rule_basic() {
     let mut batch = 0;
     while let Ok(Some(ordered_nodes)) = receiver.try_next() {
         assert_eq!(
-            ordered_nodes
-                .iter()
-                .map(|node| display(node.metadata()))
-                .collect::<Vec<_>>(),
+            ordered_nodes.iter().map(|node| display(node.metadata())).collect::<Vec<_>>(),
             expected_order[batch]
         );
         batch += 1;

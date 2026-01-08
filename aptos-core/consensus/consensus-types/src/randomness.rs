@@ -6,11 +6,6 @@ use gaptos::aptos_types::randomness::FullRandMetadata;
 
 impl From<&Block> for FullRandMetadata {
     fn from(block: &Block) -> Self {
-        Self::new(
-            block.epoch(),
-            block.round(),
-            block.id(),
-            block.timestamp_usecs(),
-        )
+        Self::new(block.epoch(), block.round(), block.id(), block.timestamp_usecs())
     }
 }

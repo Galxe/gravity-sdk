@@ -10,19 +10,22 @@ use aptos_consensus_types::{
     quorum_cert::QuorumCert,
     vote_proposal::VoteProposal,
 };
-use gaptos::aptos_crypto::{hash::ACCUMULATOR_PLACEHOLDER_HASH, HashValue};
 use aptos_executor_types::StateComputeResult;
-use gaptos::aptos_infallible::Mutex;
 use aptos_safety_rules::{
     // test_utils::{make_proposal_with_parent, make_proposal_with_qc},
-    PersistentSafetyStorage, SafetyRulesManager,
+    PersistentSafetyStorage,
+    SafetyRulesManager,
 };
-use gaptos::aptos_secure_storage::Storage;
-use gaptos::aptos_types::{
-    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
-    validator_signer::ValidatorSigner,
-    validator_verifier::random_validator_verifier,
-    waypoint::Waypoint,
+use gaptos::{
+    aptos_crypto::{hash::ACCUMULATOR_PLACEHOLDER_HASH, HashValue},
+    aptos_infallible::Mutex,
+    aptos_secure_storage::Storage,
+    aptos_types::{
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+        validator_signer::ValidatorSigner,
+        validator_verifier::random_validator_verifier,
+        waypoint::Waypoint,
+    },
 };
 use std::sync::Arc;
 
@@ -62,11 +65,7 @@ pub fn prepare_executed_blocks_with_ledger_info(
     some_parent: Option<VoteProposal>,
     init_qc: Option<QuorumCert>,
     init_round: Round,
-) -> (
-    Vec<PipelinedBlock>,
-    LedgerInfoWithSignatures,
-    Vec<VoteProposal>,
-) {
+) -> (Vec<PipelinedBlock>, LedgerInfoWithSignatures, Vec<VoteProposal>) {
     // assert!(num_blocks > 0);
 
     // let p1 = if let Some(parent) = some_parent {

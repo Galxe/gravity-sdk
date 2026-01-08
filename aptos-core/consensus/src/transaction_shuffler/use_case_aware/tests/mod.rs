@@ -3,8 +3,10 @@
 
 #![allow(non_local_definitions)]
 
-use gaptos::aptos_types::transaction::use_case::{UseCaseAwareTransaction, UseCaseKey};
-use gaptos::move_core_types::account_address::AccountAddress;
+use gaptos::{
+    aptos_types::transaction::use_case::{UseCaseAwareTransaction, UseCaseKey},
+    move_core_types::account_address::AccountAddress,
+};
 use proptest_derive::Arbitrary;
 use std::fmt::Debug;
 
@@ -22,11 +24,15 @@ impl Debug for Contract {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Contract::*;
 
-        write!(f, "c{}", match self {
-            Platform => "PP".to_string(),
-            Others => "OO".to_string(),
-            User(addr) => hex::encode_upper(addr.to_be_bytes()),
-        })
+        write!(
+            f,
+            "c{}",
+            match self {
+                Platform => "PP".to_string(),
+                Others => "OO".to_string(),
+                User(addr) => hex::encode_upper(addr.to_be_bytes()),
+            }
+        )
     }
 }
 
@@ -55,11 +61,7 @@ struct Transaction {
 
 impl Debug for Transaction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "t{}:{:?}{:?}",
-            self.original_idx, self.contract, self.sender
-        )
+        write!(f, "t{}:{:?}{:?}", self.original_idx, self.contract, self.sender)
     }
 }
 
@@ -83,11 +85,7 @@ fn into_txns(txns: impl IntoIterator<Item = (Contract, Account)>) -> Vec<Transac
     let mut original_idx = 0;
     txns.into_iter()
         .map(|(contract, sender)| {
-            let txn = Transaction {
-                contract,
-                sender,
-                original_idx,
-            };
+            let txn = Transaction { contract, sender, original_idx };
 
             original_idx += 1;
             txn

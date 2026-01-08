@@ -3,10 +3,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::pipeline::pipeline_phase::StatelessPipeline;
-use gaptos::aptos_crypto::bls12381;
 use aptos_safety_rules::Error;
-use gaptos::aptos_types::ledger_info::{LedgerInfo, LedgerInfoWithSignatures};
 use async_trait::async_trait;
+use gaptos::{
+    aptos_crypto::bls12381,
+    aptos_types::ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+};
 use std::{
     fmt::{Debug, Display, Formatter},
     sync::Arc,
@@ -30,11 +32,7 @@ impl Debug for SigningRequest {
 
 impl Display for SigningRequest {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "SigningRequest({}, {})",
-            self.ordered_ledger_info, self.commit_ledger_info
-        )
+        write!(f, "SigningRequest({}, {})", self.ordered_ledger_info, self.commit_ledger_info)
     }
 }
 
@@ -69,10 +67,7 @@ impl StatelessPipeline for SigningPhase {
     const NAME: &'static str = "signing";
 
     async fn process(&self, req: SigningRequest) -> SigningResponse {
-        let SigningRequest {
-            ordered_ledger_info,
-            commit_ledger_info,
-        } = req;
+        let SigningRequest { ordered_ledger_info, commit_ledger_info } = req;
 
         SigningResponse {
             signature_result: self

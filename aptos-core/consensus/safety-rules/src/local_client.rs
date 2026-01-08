@@ -11,11 +11,13 @@ use aptos_consensus_types::{
     vote::Vote,
     vote_proposal::VoteProposal,
 };
-use gaptos::aptos_crypto::bls12381;
-use gaptos::aptos_infallible::RwLock;
-use gaptos::aptos_types::{
-    epoch_change::EpochChangeProof,
-    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+use gaptos::{
+    aptos_crypto::bls12381,
+    aptos_infallible::RwLock,
+    aptos_types::{
+        epoch_change::EpochChangeProof,
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+    },
 };
 use std::sync::Arc;
 
@@ -50,9 +52,7 @@ impl TSafetyRules for LocalClient {
         timeout: &TwoChainTimeout,
         timeout_cert: Option<&TwoChainTimeoutCertificate>,
     ) -> Result<bls12381::Signature, Error> {
-        self.internal
-            .write()
-            .sign_timeout_with_qc(timeout, timeout_cert)
+        self.internal.write().sign_timeout_with_qc(timeout, timeout_cert)
     }
 
     fn construct_and_sign_vote_two_chain(
@@ -60,18 +60,14 @@ impl TSafetyRules for LocalClient {
         vote_proposal: &VoteProposal,
         timeout_cert: Option<&TwoChainTimeoutCertificate>,
     ) -> Result<Vote, Error> {
-        self.internal
-            .write()
-            .construct_and_sign_vote_two_chain(vote_proposal, timeout_cert)
+        self.internal.write().construct_and_sign_vote_two_chain(vote_proposal, timeout_cert)
     }
 
     fn construct_and_sign_order_vote(
         &mut self,
         order_vote_proposal: &OrderVoteProposal,
     ) -> Result<OrderVote, Error> {
-        self.internal
-            .write()
-            .construct_and_sign_order_vote(order_vote_proposal)
+        self.internal.write().construct_and_sign_order_vote(order_vote_proposal)
     }
 
     fn sign_commit_vote(
@@ -79,8 +75,6 @@ impl TSafetyRules for LocalClient {
         ledger_info: LedgerInfoWithSignatures,
         new_ledger_info: LedgerInfo,
     ) -> Result<bls12381::Signature, Error> {
-        self.internal
-            .write()
-            .sign_commit_vote(ledger_info, new_ledger_info)
+        self.internal.write().sign_commit_vote(ledger_info, new_ledger_info)
     }
 }

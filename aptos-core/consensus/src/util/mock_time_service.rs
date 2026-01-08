@@ -3,10 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::util::time_service::{ScheduledTask, TimeService};
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_logger::prelude::*;
 use async_trait::async_trait;
 use futures::future::AbortHandle;
+use gaptos::{aptos_infallible::Mutex, aptos_logger::prelude::*};
 use std::{sync::Arc, time::Duration};
 
 /// SimulatedTimeService implements TimeService, however it does not depend on actual time
@@ -44,11 +43,7 @@ impl TimeService for SimulatedTimeService {
             );
             inner.pending.push((deadline, t));
         } else {
-            debug!(
-                "exec deadline: {}, now: {}",
-                deadline.as_millis(),
-                now.as_millis()
-            );
+            debug!("exec deadline: {}, now: {}", deadline.as_millis(), now.as_millis());
             inner.now = deadline;
             if inner.now > inner.max {
                 inner.now = inner.max;
@@ -131,8 +126,6 @@ impl SimulatedTimeService {
 
 impl Clone for SimulatedTimeService {
     fn clone(&self) -> SimulatedTimeService {
-        SimulatedTimeService {
-            inner: self.inner.clone(),
-        }
+        SimulatedTimeService { inner: self.inner.clone() }
     }
 }

@@ -5,9 +5,11 @@ use crate::{
     common::DataStatus,
     proof_of_store::{BatchInfo, ProofOfStore},
 };
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_types::{transaction::SignedTransaction, PeerId};
 use core::fmt;
+use gaptos::{
+    aptos_infallible::Mutex,
+    aptos_types::{transaction::SignedTransaction, PeerId},
+};
 use serde::{Deserialize, Serialize};
 use std::{
     ops::{Deref, DerefMut},
@@ -36,10 +38,7 @@ where
     T: TDataInfo,
 {
     pub fn new(metadata: Vec<T>) -> Self {
-        Self {
-            batch_summary: metadata,
-            status: Arc::new(Mutex::new(None)),
-        }
+        Self { batch_summary: metadata, status: Arc::new(Mutex::new(None)) }
     }
 
     pub fn extend(&mut self, other: BatchPointer<T>) {
@@ -51,22 +50,16 @@ where
             Some(status) => {
                 status.extend(other_data_status);
                 return;
-            },
+            }
         };
     }
 
     pub fn num_txns(&self) -> usize {
-        self.batch_summary
-            .iter()
-            .map(|info| info.num_txns() as usize)
-            .sum()
+        self.batch_summary.iter().map(|info| info.num_txns() as usize).sum()
     }
 
     pub fn num_bytes(&self) -> usize {
-        self.batch_summary
-            .iter()
-            .map(|info| info.num_bytes() as usize)
-            .sum()
+        self.batch_summary.iter().map(|info| info.num_bytes() as usize).sum()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -76,8 +69,8 @@ where
 
 impl<T: PartialEq> PartialEq for BatchPointer<T> {
     fn eq(&self, other: &Self) -> bool {
-        self.batch_summary == other.batch_summary
-            && Arc::as_ptr(&self.status) == Arc::as_ptr(&other.status)
+        self.batch_summary == other.batch_summary &&
+            Arc::as_ptr(&self.status) == Arc::as_ptr(&other.status)
     }
 }
 
@@ -130,17 +123,11 @@ pub struct InlineBatches(Vec<InlineBatch>);
 
 impl InlineBatches {
     fn num_txns(&self) -> usize {
-        self.0
-            .iter()
-            .map(|batch| batch.batch_info.num_txns() as usize)
-            .sum()
+        self.0.iter().map(|batch| batch.batch_info.num_txns() as usize).sum()
     }
 
     fn num_bytes(&self) -> usize {
-        self.0
-            .iter()
-            .map(|batch| batch.batch_info.num_bytes() as usize)
-            .sum()
+        self.0.iter().map(|batch| batch.batch_info.num_bytes() as usize).sum()
     }
 
     fn is_empty(&self) -> bool {
@@ -148,17 +135,11 @@ impl InlineBatches {
     }
 
     pub fn transactions(&self) -> Vec<SignedTransaction> {
-        self.0
-            .iter()
-            .flat_map(|inline_batch| inline_batch.transactions.clone())
-            .collect()
+        self.0.iter().flat_map(|inline_batch| inline_batch.transactions.clone()).collect()
     }
 
     pub fn batch_infos(&self) -> Vec<BatchInfo> {
-        self.0
-            .iter()
-            .map(|inline_batch| inline_batch.batch_info.clone())
-            .collect()
+        self.0.iter().map(|inline_batch| inline_batch.batch_info.clone()).collect()
     }
 }
 
@@ -186,12 +167,7 @@ pub struct OptQuorumStorePayloadV1 {
 
 impl OptQuorumStorePayloadV1 {
     pub fn get_all_batch_infos(self) -> Vec<BatchInfo> {
-        let Self {
-            inline_batches,
-            opt_batches,
-            proofs,
-            execution_limits: _,
-        } = self;
+        let Self { inline_batches, opt_batches, proofs, execution_limits: _ } = self;
         inline_batches
             .0
             .into_iter()

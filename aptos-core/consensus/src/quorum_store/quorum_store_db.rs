@@ -5,14 +5,15 @@ use crate::{
     error::DbError,
     quorum_store::{
         schema::{BatchIdSchema, BatchSchema, BATCH_CF_NAME, BATCH_ID_CF_NAME},
-        types::BatchKey,
-        types::PersistedValue,
+        types::{BatchKey, PersistedValue},
     },
 };
 use anyhow::Result;
 use aptos_consensus_types::proof_of_store::BatchId;
-use gaptos::aptos_logger::prelude::*;
-use gaptos::aptos_schemadb::{Options, batch::SchemaBatch, DB};
+use gaptos::{
+    aptos_logger::prelude::*,
+    aptos_schemadb::{batch::SchemaBatch, Options, DB},
+};
 use std::{collections::HashMap, path::Path, time::Instant};
 
 pub trait QuorumStoreStorage: Sync + Send {
@@ -51,11 +52,7 @@ impl QuorumStoreDB {
         let db = DB::open(path.clone(), QUORUM_STORE_DB_NAME, column_families, &opts)
             .expect("QuorumstoreDB open failed; unable to continue");
 
-        info!(
-            "Opened QuorumstoreDB at {:?} in {} ms",
-            path,
-            instant.elapsed().as_millis()
-        );
+        info!("Opened QuorumstoreDB at {:?} in {} ms", path, instant.elapsed().as_millis());
 
         Self { db }
     }
@@ -91,11 +88,7 @@ impl QuorumStoreStorage for QuorumStoreDB {
     }
 
     fn get_batch(&self, key: &BatchKey) -> Result<Option<PersistedValue>, DbError> {
-        trace!(
-            "QS: db gets epoch {} digest {}",
-            key.epoch,
-            key.digest
-        );
+        trace!("QS: db gets epoch {} digest {}", key.epoch, key.digest);
         Ok(self.db.get::<BatchSchema>(key)?)
     }
 
@@ -109,9 +102,8 @@ impl QuorumStoreStorage for QuorumStoreDB {
     fn clean_and_get_batch_id(&self, current_epoch: u64) -> Result<Option<BatchId>, DbError> {
         let mut iter = self.db.iter::<BatchIdSchema>()?;
         iter.seek_to_first();
-        let epoch_batch_id = iter
-            .map(|res| res.map_err(Into::into))
-            .collect::<Result<HashMap<u64, BatchId>>>()?;
+        let epoch_batch_id =
+            iter.map(|res| res.map_err(Into::into)).collect::<Result<HashMap<u64, BatchId>>>()?;
         let mut ret = None;
         for (epoch, batch_id) in epoch_batch_id {
             assert!(current_epoch >= epoch);

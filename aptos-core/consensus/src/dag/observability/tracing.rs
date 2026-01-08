@@ -1,10 +1,11 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use gaptos::aptos_infallible::duration_since_epoch;
-use gaptos::aptos_metrics_core::HistogramVec;
+use gaptos::{
+    aptos_consensus::dag::observability::counters, aptos_infallible::duration_since_epoch,
+    aptos_metrics_core::HistogramVec,
+};
 use std::time::Duration;
-use gaptos::aptos_consensus::dag::observability::counters as counters;
 
 #[derive(strum_macros::AsRefStr)]
 pub enum NodeStage {

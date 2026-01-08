@@ -28,10 +28,8 @@ macro_rules! build_information {
     () => {{
         let mut build_information = build_info::get_build_information();
 
-        build_information.insert(
-            build_info::BUILD_PKG_VERSION.into(),
-            env!("CARGO_PKG_VERSION").into(),
-        );
+        build_information
+            .insert(build_info::BUILD_PKG_VERSION.into(), env!("CARGO_PKG_VERSION").into());
 
         build_information
     }};
@@ -77,10 +75,8 @@ pub fn get_build_information() -> BTreeMap<String, String> {
     // Compilation information
     build_information.insert(BUILD_IS_RELEASE_BUILD.into(), is_release().to_string());
     build_information.insert(BUILD_PROFILE_NAME.into(), get_build_profile_name());
-    build_information.insert(
-        BUILD_USING_TOKIO_UNSTABLE.into(),
-        std::env!("USING_TOKIO_UNSTABLE").to_string(),
-    );
+    build_information
+        .insert(BUILD_USING_TOKIO_UNSTABLE.into(), std::env!("USING_TOKIO_UNSTABLE").to_string());
 
     // Get Git metadata from environment variables set during build-time.
     // This is applicable for docker based builds  where the cargo cannot

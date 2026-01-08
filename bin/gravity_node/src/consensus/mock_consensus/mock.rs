@@ -1,12 +1,16 @@
 use alloy_primitives::address;
-use tracing::{info, warn};
 use std::{
-    collections::HashMap, hash::{DefaultHasher, Hash, Hasher}, sync::{atomic::AtomicU64, Arc, Condvar, Mutex, OnceLock}, time::{Instant, SystemTime}
+    collections::HashMap,
+    hash::{DefaultHasher, Hash, Hasher},
+    sync::{atomic::AtomicU64, Arc, Condvar, Mutex, OnceLock},
+    time::{Instant, SystemTime},
 };
+use tracing::{info, warn};
 
 use super::mempool::{Mempool, TxnId};
 use gaptos::api_types::{
-    account::ExternalAccountAddress, events::contract_event::GravityEvent, u256_define::BlockId, ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn
+    account::ExternalAccountAddress, events::contract_event::GravityEvent, u256_define::BlockId,
+    ExternalBlock, ExternalBlockMeta, ExternalPayloadAttr, VerifiedTxn,
 };
 
 use block_buffer_manager::{block_buffer_manager::BlockHashRef, get_block_buffer_manager, TxPool};
@@ -39,10 +43,7 @@ fn get_max_txn_num() -> usize {
 static MAX_EXECUTED_GAP: OnceLock<u64> = OnceLock::new();
 fn get_max_executed_gap() -> u64 {
     *MAX_EXECUTED_GAP.get_or_init(|| {
-        std::env::var("MAX_EXECUTED_GAP")
-            .unwrap_or_else(|_| "16".to_string())
-            .parse()
-            .unwrap_or(16)
+        std::env::var("MAX_EXECUTED_GAP").unwrap_or_else(|_| "16".to_string()).parse().unwrap_or(16)
     })
 }
 
@@ -71,7 +72,7 @@ impl MockConsensus {
         block_number: u64,
         txns: Vec<VerifiedTxn>,
         attr: ExternalPayloadAttr,
-        epoch: u64
+        epoch: u64,
     ) -> ExternalBlock {
         let mut hasher = DefaultHasher::new();
         txns.hash(&mut hasher);
@@ -81,7 +82,10 @@ impl MockConsensus {
         bytes[0..8].copy_from_slice(&block_id.to_be_bytes());
 
         let mut proposer = [0u8; 32];
-        proposer[0..32].copy_from_slice(&hex::decode("2d86b40a1d692c0749a0a0426e2021ee24e2430da0f5bb9c2ae6c586bf3e0a0f").unwrap());
+        proposer[0..32].copy_from_slice(
+            &hex::decode("2d86b40a1d692c0749a0a0426e2021ee24e2430da0f5bb9c2ae6c586bf3e0a0f")
+                .unwrap(),
+        );
         return ExternalBlock {
             block_meta: ExternalBlockMeta {
                 block_id: BlockId(bytes),
@@ -90,9 +94,7 @@ impl MockConsensus {
                 epoch,
                 randomness: None,
                 block_hash: None,
-                proposer: Some(
-                    ExternalAccountAddress::new(proposer)
-                ),
+                proposer: Some(ExternalAccountAddress::new(proposer)),
             },
             txns,
             extra_data: Vec::new(), // TODO: add validator transaction extra_data (DKG, JWK)
@@ -140,7 +142,8 @@ impl MockConsensus {
             let executed_jam_wait = self.executed_jam_wait.clone();
             let epoch = self.epoch.clone();
             async move {
-                let mut block_number = epoch_start_block_number.load(std::sync::atomic::Ordering::SeqCst);
+                let mut block_number =
+                    epoch_start_block_number.load(std::sync::atomic::Ordering::SeqCst);
                 let mut current_epoch = epoch.load(std::sync::atomic::Ordering::SeqCst);
                 loop {
                     if current_epoch != epoch.load(std::sync::atomic::Ordering::SeqCst) {
@@ -149,17 +152,23 @@ impl MockConsensus {
                         let mut pool = pool.lock().await;
                         pool.reset_epoch();
                         drop(pool);
-                        block_number = epoch_start_block_number.load(std::sync::atomic::Ordering::SeqCst);
+                        block_number =
+                            epoch_start_block_number.load(std::sync::atomic::Ordering::SeqCst);
                     }
                     block_number += 1;
                     let attr = ExternalPayloadAttr {
                         ts: SystemTime::now()
-                        .duration_since(SystemTime::UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs(),
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs(),
                     };
-                    let block =
-                        Self::check_and_construct_block(&pool, block_number, attr.clone(), current_epoch).await;
+                    let block = Self::check_and_construct_block(
+                        &pool,
+                        block_number,
+                        attr.clone(),
+                        current_epoch,
+                    )
+                    .await;
 
                     let head_meta = block.block_meta.clone();
                     get_block_buffer_manager().set_ordered_blocks(parent_id, block).await.unwrap();
@@ -175,7 +184,11 @@ impl MockConsensus {
                             executed_number = cvar.wait(executed_number).unwrap();
                         }
                         if large_gap > get_max_executed_gap() {
-                            info!("large executed gap = {}, wait more {}ms", large_gap, start.elapsed().as_millis());
+                            info!(
+                                "large executed gap = {}, wait more {}ms",
+                                large_gap,
+                                start.elapsed().as_millis()
+                            );
                         }
                     }
                     tokio::time::sleep(tokio::time::Duration::from_millis(
@@ -203,17 +216,20 @@ impl MockConsensus {
             let epoch = block_meta.epoch;
 
             let res = loop {
-                match get_block_buffer_manager().get_executed_res(block_id, block_number, epoch).await {
+                match get_block_buffer_manager()
+                    .get_executed_res(block_id, block_number, epoch)
+                    .await
+                {
                     Ok(r) => {
                         break r;
-                    },
+                    }
                     Err(e) => {
                         let msg = format!("{}", e);
                         warn!("get executed result failed: {}", msg);
                         if !msg.contains("get_executed_res timeout") {
                             panic!("get executed result failed: {}", msg);
                         }
-                    },
+                    }
                 }
             };
 
@@ -225,12 +241,15 @@ impl MockConsensus {
             }
 
             get_block_buffer_manager()
-                .set_commit_blocks(vec![BlockHashRef {
-                    block_id,
-                    num: block_number,
-                    hash: Some(res.execution_output.data),
-                    persist_notifier: None,
-                }], epoch)
+                .set_commit_blocks(
+                    vec![BlockHashRef {
+                        block_id,
+                        num: block_number,
+                        hash: Some(res.execution_output.data),
+                        persist_notifier: None,
+                    }],
+                    epoch,
+                )
                 .await
                 .unwrap();
             self.process_epoch_change(&res.execution_output.events, block_number);
@@ -255,9 +274,10 @@ impl MockConsensus {
             match event {
                 GravityEvent::NewEpoch(epoch, _) => {
                     assert_eq!(self.epoch.load(std::sync::atomic::Ordering::SeqCst), *epoch - 1);
-                    self.epoch_start_block_number.store(block_number, std::sync::atomic::Ordering::SeqCst);
+                    self.epoch_start_block_number
+                        .store(block_number, std::sync::atomic::Ordering::SeqCst);
                     self.epoch.store(*epoch, std::sync::atomic::Ordering::SeqCst);
-                },
+                }
                 _ => {}
             }
         }

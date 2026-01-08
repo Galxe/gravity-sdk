@@ -3,9 +3,11 @@
 
 use crate::error::QuorumStoreError;
 use aptos_consensus_types::common::{Payload, PayloadFilter};
-use gaptos::aptos_types::validator_txn::ValidatorTransaction;
-use gaptos::aptos_validator_transaction_pool::TransactionFilter;
 use futures::future::BoxFuture;
+use gaptos::{
+    aptos_types::validator_txn::ValidatorTransaction,
+    aptos_validator_transaction_pool::TransactionFilter,
+};
 use std::time::Duration;
 
 pub mod mixed;

@@ -14,15 +14,18 @@ use crate::{
     pipeline::execution_client::TExecutionClient,
 };
 use anyhow::{bail, ensure};
-use gaptos::aptos_channels::aptos_channel;
 use aptos_consensus_types::common::{Author, Round};
-use gaptos::aptos_logger::{debug, error};
-use gaptos::aptos_time_service::TimeService;
-use gaptos::aptos_types::{
-    epoch_change::EpochChangeProof, epoch_state::EpochState, ledger_info::LedgerInfoWithSignatures,
-};
 use core::fmt;
 use futures::StreamExt;
+use gaptos::{
+    aptos_channels::aptos_channel,
+    aptos_logger::{debug, error},
+    aptos_time_service::TimeService,
+    aptos_types::{
+        epoch_change::EpochChangeProof, epoch_state::EpochState,
+        ledger_info::LedgerInfoWithSignatures,
+    },
+};
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -109,30 +112,20 @@ impl StateSyncTrigger {
     async fn notify_commit_proof(&self, ledger_info: &LedgerInfoWithSignatures) {
         // if the anchor exists between ledger info round and highest ordered round
         // Note: ledger info round <= highest ordered round
-        if self
-            .ledger_info_provider
-            .get_highest_committed_anchor_round()
-            < ledger_info.commit_info().round()
-            && self
-                .dag_store
-                .read()
-                .highest_ordered_anchor_round()
-                .unwrap_or_default()
-                >= ledger_info.commit_info().round()
+        if self.ledger_info_provider.get_highest_committed_anchor_round() <
+            ledger_info.commit_info().round() &&
+            self.dag_store.read().highest_ordered_anchor_round().unwrap_or_default() >=
+                ledger_info.commit_info().round()
         {
-            self.proof_notifier
-                .send_commit_proof(ledger_info.clone())
-                .await
+            self.proof_notifier.send_commit_proof(ledger_info.clone()).await
         }
     }
 
     /// Check if we're far away from this ledger info and need to sync.
     /// This ensures that the block referred by the ledger info is not in buffer manager.
     fn need_sync_for_ledger_info(&self, li: &LedgerInfoWithSignatures) -> bool {
-        if li.commit_info().round()
-            <= self
-                .ledger_info_provider
-                .get_highest_committed_anchor_round()
+        if li.commit_info().round() <=
+            self.ledger_info_provider.get_highest_committed_anchor_round()
         {
             return false;
         }
@@ -140,18 +133,16 @@ impl StateSyncTrigger {
         let dag_reader = self.dag_store.read();
         // check whether if DAG order round is behind the given ledger info committed round
         // (meaning consensus is behind) or
-        // the local highest committed anchor round is 2*DAG_WINDOW behind the given ledger info round
-        // (meaning execution is behind the DAG window)
+        // the local highest committed anchor round is 2*DAG_WINDOW behind the given ledger info
+        // round (meaning execution is behind the DAG window)
 
         // fetch can't work since nodes are garbage collected
-        dag_reader.is_empty()
-            || dag_reader.highest_round() + 1 + self.dag_window_size_config
-                < li.commit_info().round()
-            || self
-                .ledger_info_provider
-                .get_highest_committed_anchor_round()
-                + 2 * self.dag_window_size_config
-                < li.commit_info().round()
+        dag_reader.is_empty() ||
+            dag_reader.highest_round() + 1 + self.dag_window_size_config <
+                li.commit_info().round() ||
+            self.ledger_info_provider.get_highest_committed_anchor_round() +
+                2 * self.dag_window_size_config <
+                li.commit_info().round()
     }
 }
 
@@ -194,24 +185,21 @@ impl DagStateSynchronizer {
         {
             let dag_reader = current_dag_store.read();
             assert!(
-                dag_reader
-                    .highest_ordered_anchor_round()
-                    .unwrap_or_default()
-                    < commit_li.commit_info().round()
-                    || highest_committed_anchor_round + self.dag_window_size_config
-                        < commit_li.commit_info().round()
+                dag_reader.highest_ordered_anchor_round().unwrap_or_default() <
+                    commit_li.commit_info().round() ||
+                    highest_committed_anchor_round + self.dag_window_size_config <
+                        commit_li.commit_info().round()
             );
         }
 
-        // TODO: there is a case where DAG fetches missing nodes in window and a crash happens and when we restart,
-        // we end up with a gap between the DAG and we need to be smart enough to clean up the DAG before the gap.
+        // TODO: there is a case where DAG fetches missing nodes in window and a crash happens and
+        // when we restart, we end up with a gap between the DAG and we need to be smart
+        // enough to clean up the DAG before the gap.
 
         // Create a new DAG store and Fetch blocks
         let target_round = node.round();
-        let start_round = commit_li
-            .commit_info()
-            .round()
-            .saturating_sub(self.dag_window_size_config);
+        let start_round =
+            commit_li.commit_info().round().saturating_sub(self.dag_window_size_config);
         let sync_dag_store = Arc::new(DagStore::new_empty(
             self.epoch_state.clone(),
             self.storage.clone(),
@@ -220,11 +208,8 @@ impl DagStateSynchronizer {
             self.dag_window_size_config,
         ));
         let bitmask = { sync_dag_store.read().bitmask(target_round) };
-        let request = RemoteFetchRequest::new(
-            self.epoch_state.epoch,
-            vec![node.metadata().clone()],
-            bitmask,
-        );
+        let request =
+            RemoteFetchRequest::new(self.epoch_state.epoch, vec![node.metadata().clone()], bitmask);
 
         let responders = node
             .certificate()
@@ -243,15 +228,12 @@ impl DagStateSynchronizer {
         sync_dag_store: Arc<DagStore>,
         commit_li: LedgerInfoWithSignatures,
     ) -> anyhow::Result<DagStore> {
-        match dag_fetcher
-            .fetch(request, responders, sync_dag_store.clone())
-            .await
-        {
-            Ok(_) => {},
+        match dag_fetcher.fetch(request, responders, sync_dag_store.clone()).await {
+            Ok(_) => {}
             Err(err) => {
                 error!("error fetching nodes {}", err);
                 bail!(err)
-            },
+            }
         }
 
         self.execution_client.sync_to(commit_li).await?;
@@ -276,12 +258,7 @@ impl SyncModeMessageHandler {
         target_round: Round,
         window: u64,
     ) -> Self {
-        Self {
-            epoch_state,
-            start_round,
-            target_round,
-            window,
-        }
+        Self { epoch_state, start_round, target_round, window }
     }
 
     pub(crate) async fn run(
@@ -295,10 +272,10 @@ impl SyncModeMessageHandler {
                     if let Some(next_sync_msg) = may_be_cert_node {
                         return Some(next_sync_msg);
                     }
-                },
+                }
                 Err(err) => {
                     error!("error processing {}", err);
-                },
+                }
             }
         }
         None
@@ -311,17 +288,13 @@ impl SyncModeMessageHandler {
     ) -> anyhow::Result<Option<CertifiedNodeMessage>> {
         let dag_message: DAGMessage = rpc_request.req.try_into()?;
 
-        debug!(
-            "processing rpc message {} from {}",
-            dag_message.name(),
-            rpc_request.sender
-        );
+        debug!("processing rpc message {} from {}", dag_message.name(), rpc_request.sender);
 
         match dag_message.verify(rpc_request.sender, &self.epoch_state.verifier) {
             Ok(_) => match dag_message {
                 DAGMessage::NodeMsg(_) => {
                     debug!("ignoring node msg");
-                },
+                }
                 DAGMessage::CertifiedNodeMsg(ref cert_node_msg) => {
                     if cert_node_msg.round() < self.start_round {
                         debug!("ignoring stale certified node msg");
@@ -331,16 +304,16 @@ impl SyncModeMessageHandler {
                     } else {
                         buffer.push(dag_message);
                     }
-                },
+                }
                 DAGMessage::FetchRequest(_) => {
                     debug!("ignoring fetch msg");
-                },
+                }
                 _ => unreachable!("verification must catch this error"),
             },
             Err(err) => {
                 error!(error = ?err, "error verifying message");
                 return Err(err);
-            },
+            }
         };
         Ok(None)
     }

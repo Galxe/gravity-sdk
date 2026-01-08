@@ -14,9 +14,11 @@ use aptos_consensus_types::{
     quorum_cert::QuorumCert,
     sync_info::SyncInfo,
 };
-use gaptos::aptos_crypto::{HashValue, PrivateKey, Uniform};
-use gaptos::aptos_logger::Level;
-use gaptos::aptos_types::{ledger_info::LedgerInfo, validator_signer::ValidatorSigner};
+use gaptos::{
+    aptos_crypto::{HashValue, PrivateKey, Uniform},
+    aptos_logger::Level,
+    aptos_types::{ledger_info::LedgerInfo, validator_signer::ValidatorSigner},
+};
 use std::{future::Future, sync::Arc, time::Duration};
 use tokio::{runtime, time::timeout};
 
@@ -33,12 +35,15 @@ use crate::{
     util::mock_time_service::SimulatedTimeService,
 };
 use aptos_consensus_types::{block::block_test_utils::gen_test_certificate, common::Payload};
-use gaptos::aptos_crypto::ed25519::{Ed25519PrivateKey, Ed25519Signature};
-use gaptos::aptos_infallible::Mutex;
-use gaptos::aptos_types::{
-    block_info::BlockInfo,
-    chain_id::ChainId,
-    transaction::{RawTransaction, Script, SignedTransaction, TransactionPayload},
+use gaptos::{
+    aptos_crypto::ed25519::{Ed25519PrivateKey, Ed25519Signature},
+    aptos_infallible::Mutex,
+    aptos_types::{
+        block_info::BlockInfo,
+        chain_id::ChainId,
+        transaction::{RawTransaction, Script, SignedTransaction, TransactionPayload},
+    },
+    move_core_types::account_address::AccountAddress,
 };
 pub use mock_payload_manager::MockPayloadManager;
 #[cfg(test)]
@@ -46,8 +51,6 @@ pub use mock_state_computer::EmptyStateComputer;
 #[cfg(test)]
 pub use mock_state_computer::RandomComputeResultStateComputer;
 pub use mock_storage::{EmptyStorage, MockStorage};
-use gaptos::move_core_types::account_address::AccountAddress;
-
 
 pub const TEST_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -56,9 +59,7 @@ pub async fn build_simple_tree() -> (Vec<Arc<PipelinedBlock>>, Arc<BlockStore>) 
     let block_store = inserter.block_store();
     let genesis = block_store.ordered_root();
     let genesis_block_id = genesis.id();
-    let genesis_block = block_store
-        .get_block(genesis_block_id)
-        .expect("genesis block must exist");
+    let genesis_block = block_store.get_block(genesis_block_id).expect("genesis block must exist");
     assert_eq!(block_store.len(), 1);
     assert_eq!(block_store.child_links(), block_store.len() - 1);
     assert!(block_store.block_exists(genesis_block.id()));
@@ -66,16 +67,10 @@ pub async fn build_simple_tree() -> (Vec<Arc<PipelinedBlock>>, Arc<BlockStore>) 
     //       ╭--> A1--> A2--> A3
     // Genesis--> B1--> B2
     //             ╰--> C1
-    let a1 = inserter
-        .insert_block_with_qc(certificate_for_genesis(), &genesis_block, 1)
-        .await;
+    let a1 = inserter.insert_block_with_qc(certificate_for_genesis(), &genesis_block, 1).await;
     let a2 = inserter.insert_block(&a1, 2, None).await;
-    let a3 = inserter
-        .insert_block(&a2, 3, Some(genesis.block_info()))
-        .await;
-    let b1 = inserter
-        .insert_block_with_qc(certificate_for_genesis(), &genesis_block, 4)
-        .await;
+    let a3 = inserter.insert_block(&a2, 3, Some(genesis.block_info())).await;
+    let b1 = inserter.insert_block_with_qc(certificate_for_genesis(), &genesis_block, 4).await;
     let b2 = inserter.insert_block(&b1, 5, None).await;
     let c1 = inserter.insert_block(&b1, 6, None).await;
 
@@ -114,17 +109,11 @@ impl TreeInserter {
 
     pub async fn new(signer: ValidatorSigner) -> Self {
         let block_store = build_empty_tree().await;
-        Self {
-            signer,
-            block_store,
-        }
+        Self { signer, block_store }
     }
 
     pub fn new_with_store(signer: ValidatorSigner, block_store: Arc<BlockStore>) -> Self {
-        Self {
-            signer,
-            block_store,
-        }
+        Self { signer, block_store }
     }
 
     pub fn signer(&self) -> &ValidatorSigner {
@@ -234,9 +223,7 @@ pub fn timed_block_on<F>(runtime: &runtime::Runtime, f: F) -> <F as Future>::Out
 where
     F: Future,
 {
-    runtime
-        .block_on(async { timeout(TEST_TIMEOUT, f).await })
-        .expect("test timed out")
+    runtime.block_on(async { timeout(TEST_TIMEOUT, f).await }).expect("test timed out")
 }
 
 // Creates a single test transaction for a random account
@@ -254,11 +241,7 @@ pub(crate) fn create_signed_transaction(gas_unit_price: u64) -> SignedTransactio
         0,
         ChainId::new(10),
     );
-    SignedTransaction::new(
-        raw_transaction,
-        public_key,
-        Ed25519Signature::dummy_signature(),
-    )
+    SignedTransaction::new(raw_transaction, public_key, Ed25519Signature::dummy_signature())
 }
 
 pub(crate) fn create_vec_signed_transactions(size: u64) -> Vec<SignedTransaction> {
@@ -269,7 +252,5 @@ pub(crate) fn create_vec_signed_transactions_with_gas(
     size: u64,
     gas_unit_price: u64,
 ) -> Vec<SignedTransaction> {
-    (0..size)
-        .map(|_| create_signed_transaction(gas_unit_price))
-        .collect()
+    (0..size).map(|_| create_signed_transaction(gas_unit_price)).collect()
 }
