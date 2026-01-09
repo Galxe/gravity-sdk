@@ -37,7 +37,7 @@ impl TestConsensusLayer {
                     latest_block_number: 0,
                     config_storage: None,
                 },
-                EmptyTxPool::new(),
+                EmptyTxPool::boxed(),
             )
             .await,
         }
