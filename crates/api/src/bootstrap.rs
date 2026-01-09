@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-    sync::Arc,
-};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use crate::network::extract_network_ids;
 use aptos_consensus::{
@@ -30,8 +26,7 @@ use gaptos::{
 };
 
 use aptos_mempool::{
-    core_mempool::CoreMempool, MempoolClientRequest,
-    MempoolSyncMsg, QuorumStoreRequest,
+    core_mempool::CoreMempool, MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest,
 };
 use futures::channel::mpsc::{Receiver, Sender};
 use gaptos::{
@@ -270,7 +265,7 @@ pub fn init_peers_and_metadata(
     _consensus_db: &Arc<ConsensusDB>,
 ) -> Arc<PeersAndMetadata> {
     let network_ids = extract_network_ids(node_config);
-    
+
     PeersAndMetadata::new(&network_ids)
 }
 

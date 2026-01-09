@@ -235,9 +235,7 @@ impl DkgState {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     JsonResponse(ErrorResponse {
-                        error: format!(
-                            "Failed to get randomness for block {block_number}: {e:?}"
-                        ),
+                        error: format!("Failed to get randomness for block {block_number}: {e:?}"),
                     }),
                 )
                     .into_response()

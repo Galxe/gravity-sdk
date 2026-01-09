@@ -57,8 +57,7 @@ impl HeapProfiler {
             return Err(err);
         }
         if let Err(err) = unsafe { raw::write(PROF_THREAD_ACTIVE_INIT, prof) } {
-            let err =
-                format!("jemalloc heap profiling thread_active_init failed: {err}");
+            let err = format!("jemalloc heap profiling thread_active_init failed: {err}");
             warn!("{}", err);
             return Err(err);
         }

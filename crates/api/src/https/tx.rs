@@ -1,4 +1,3 @@
-
 use axum::{http::StatusCode, response::Json as JsonResponse};
 use gaptos::{aptos_crypto::HashValue, aptos_logger::info};
 use serde::{Deserialize, Serialize};
