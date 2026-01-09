@@ -1,5 +1,6 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
+use crate::reth_cli::TxnCache;
 use crate::RethTransactionPool;
 use alloy_consensus::{transaction::SignerRecoverable, Transaction};
 use alloy_eips::{Decodable2718, Encodable2718};
@@ -20,9 +21,7 @@ use greth::{
 
 pub struct Mempool {
     pool: RethTransactionPool,
-    txn_cache: Arc<
-        DashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>,
-    >,
+    txn_cache: TxnCache,
     runtime: tokio::runtime::Runtime,
     enable_broadcast: bool,
 }
@@ -37,10 +36,7 @@ impl Mempool {
         }
     }
 
-    pub fn tx_cache(
-        &self,
-    ) -> Arc<DashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>>
-    {
+    pub fn tx_cache(&self) -> TxnCache {
         self.txn_cache.clone()
     }
 }
@@ -162,7 +158,7 @@ impl TxPool for Mempool {
             let txn = TransactionSigned::decode_2718(&mut txn.bytes.as_ref());
             match txn {
                 Ok(txn) => {
-                    eth_txn_hashes.push(txn.hash().clone());
+                    eth_txn_hashes.push(*txn.hash());
                 }
                 Err(e) => tracing::error!("Failed to decode transaction: {}", e),
             }

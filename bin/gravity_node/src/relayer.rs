@@ -25,10 +25,10 @@ impl RelayerConfig {
     /// Load configuration from a JSON file
     pub fn from_file(path: &PathBuf) -> Result<Self, String> {
         let content = std::fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read relayer config file: {}", e))?;
+            .map_err(|e| format!("Failed to read relayer config file: {e}"))?;
 
         serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse relayer config JSON: {}", e))
+            .map_err(|e| format!("Failed to parse relayer config JSON: {e}"))
     }
 
     /// Get RPC URL for a given URI
@@ -150,10 +150,10 @@ impl RelayerWrapper {
 
 #[async_trait]
 impl Relayer for RelayerWrapper {
-    async fn add_uri(&self, uri: &str, rpc_url: &str) -> Result<(), ExecError> {
+    async fn add_uri(&self, uri: &str, _rpc_url: &str) -> Result<(), ExecError> {
         // Use local config URL if available, otherwise fall back to the provided rpc_url
         let actual_url = self.config.get_url(uri).ok_or_else(|| {
-            ExecError::Other(format!("Provider {} not found in local config", uri))
+            ExecError::Other(format!("Provider {uri} not found in local config"))
         })?;
 
         info!(
@@ -169,7 +169,7 @@ impl Relayer for RelayerWrapper {
             self.tracker.init_block_number(&provider.name, block_number).await;
             block_number
         } else {
-            return Err(ExecError::Other(format!("Provider {} not found in active providers", uri)));
+            return Err(ExecError::Other(format!("Provider {uri} not found in active providers")));
         };
 
         self.manager
@@ -183,7 +183,7 @@ impl Relayer for RelayerWrapper {
         let active_providers = Self::get_active_providers().await;
 
         let provider = active_providers.iter().find(|p| p.name == uri).ok_or_else(|| {
-            ExecError::Other(format!("Provider {} not found in active providers", uri))
+            ExecError::Other(format!("Provider {uri} not found in active providers"))
         })?;
 
         let onchain_block_number = provider.onchain_block_number.unwrap_or(0);
@@ -200,8 +200,7 @@ impl Relayer for RelayerWrapper {
                 uri
             );
             return Err(ExecError::Other(format!(
-                "Block number hasn't progressed for uri: {} (waiting for consumption)",
-                uri
+                "Block number hasn't progressed for uri: {uri} (waiting for consumption)"
             )));
         }
 

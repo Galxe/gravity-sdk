@@ -1,4 +1,3 @@
-pub mod queue;
 use std::sync::Arc;
 
 use crate::reth_cli::{RethCli, RethEthCall};
@@ -16,7 +15,7 @@ pub struct RethCoordinator<EthApi: RethEthCall> {
 impl<EthApi: RethEthCall> RethCoordinator<EthApi> {
     pub fn new(
         reth_cli: Arc<RethCli<EthApi>>,
-        latest_block_number: u64,
+        _latest_block_number: u64,
         execution_args_tx: oneshot::Sender<ExecutionArgs>,
     ) -> Self {
         Self { reth_cli, execution_args_tx: Arc::new(Mutex::new(Some(execution_args_tx))) }
