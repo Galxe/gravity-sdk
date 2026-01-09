@@ -28,6 +28,9 @@ use gaptos::api_types::{
     ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum,
 };
 
+// Type alias to reduce complexity
+type TxFilterFn = Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>;
+
 pub struct TxnItem {
     pub txns: Vec<VerifiedTxnWithAccountSeqNum>,
     pub gas_limit: u64,
@@ -37,12 +40,12 @@ pub struct TxnItem {
 pub trait TxPool: Send + Sync + 'static {
     fn best_txns(
         &self,
-        filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>,
+        filter: Option<TxFilterFn>,
     ) -> Box<dyn Iterator<Item = VerifiedTxn>>;
 
     fn get_broadcast_txns(
         &self,
-        filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>,
+        filter: Option<TxFilterFn>,
     ) -> Box<dyn Iterator<Item = VerifiedTxn>>;
 
     // add external txns to the tx pool
@@ -54,7 +57,7 @@ pub trait TxPool: Send + Sync + 'static {
 pub struct EmptyTxPool {}
 
 impl EmptyTxPool {
-    pub fn new() -> Box<dyn TxPool> {
+    pub fn boxed() -> Box<dyn TxPool> {
         Box::new(Self {})
     }
 }
@@ -62,14 +65,14 @@ impl EmptyTxPool {
 impl TxPool for EmptyTxPool {
     fn best_txns(
         &self,
-        _filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>,
+        _filter: Option<TxFilterFn>,
     ) -> Box<dyn Iterator<Item = VerifiedTxn>> {
         Box::new(vec![].into_iter())
     }
 
     fn get_broadcast_txns(
         &self,
-        _filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>,
+        _filter: Option<TxFilterFn>,
     ) -> Box<dyn Iterator<Item = VerifiedTxn>> {
         Box::new(vec![].into_iter())
     }
@@ -629,7 +632,7 @@ impl BlockBufferManager {
 
     async fn calculate_new_epoch_state(
         &self,
-        events: &Vec<GravityEvent>,
+        events: &[GravityEvent],
         block_num: u64,
         block_state_machine: &mut BlockStateMachine,
     ) -> Result<Option<EpochState>, anyhow::Error> {
