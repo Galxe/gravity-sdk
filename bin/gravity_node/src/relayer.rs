@@ -152,9 +152,10 @@ impl RelayerWrapper {
 impl Relayer for RelayerWrapper {
     async fn add_uri(&self, uri: &str, _rpc_url: &str) -> Result<(), ExecError> {
         // Use local config URL if available, otherwise fall back to the provided rpc_url
-        let actual_url = self.config.get_url(uri).ok_or_else(|| {
-            ExecError::Other(format!("Provider {uri} not found in local config"))
-        })?;
+        let actual_url = self
+            .config
+            .get_url(uri)
+            .ok_or_else(|| ExecError::Other(format!("Provider {uri} not found in local config")))?;
 
         info!(
             "Adding URI: {}, RPC URL: {} ({})",

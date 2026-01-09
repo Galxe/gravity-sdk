@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 
 use block_buffer_manager::TxPool;
-use gaptos::api_types::{
-    account::ExternalAccountAddress, u256_define::TxnHash, VerifiedTxn,
-};
+use gaptos::api_types::{account::ExternalAccountAddress, u256_define::TxnHash, VerifiedTxn};
 
 pub struct Mempool {
     pool_txns: Box<dyn TxPool>,
@@ -18,10 +16,7 @@ pub struct TxnId {
 
 impl Mempool {
     pub fn new(pool_txns: Box<dyn TxPool>) -> Self {
-        Self {
-            pool_txns,
-            next_sequence_numbers: HashMap::new(),
-        }
+        Self { pool_txns, next_sequence_numbers: HashMap::new() }
     }
 
     pub fn reset_epoch(&mut self) {

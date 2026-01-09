@@ -22,9 +22,7 @@ use greth::{
     reth_node_ethereum::EthereumNode,
     reth_pipe_exec_layer_ext_v2::{ExecutionResult, OrderedBlock, PipeExecLayerApi},
     reth_primitives::TransactionSigned,
-    reth_provider::{
-        providers::BlockchainProvider, BlockNumReader, ChainSpecProvider,
-    },
+    reth_provider::{providers::BlockchainProvider, BlockNumReader, ChainSpecProvider},
     reth_rpc_api::eth::{helpers::EthCall, RpcTypes},
     reth_transaction_pool::{EthPooledTransaction, ValidPoolTransaction},
 };
@@ -96,10 +94,7 @@ fn calculate_txn_hash(bytes: &Vec<u8>) -> [u8; 32] {
 }
 
 impl<EthApi: RethEthCall> RethCli<EthApi> {
-    pub async fn new(
-        args: ConsensusArgs<EthApi>,
-        txn_cache: TxnCache,
-    ) -> Self {
+    pub async fn new(args: ConsensusArgs<EthApi>, txn_cache: TxnCache) -> Self {
         let chian_info = args.provider.chain_spec().chain;
         let chain_id = match chian_info.into_kind() {
             greth::reth_chainspec::ChainKind::Named(n) => n as u64,

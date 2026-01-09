@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
-use crate::reth_cli::TxnCache;
-use crate::RethTransactionPool;
+use crate::{reth_cli::TxnCache, RethTransactionPool};
 use alloy_consensus::{transaction::SignerRecoverable, Transaction};
 use alloy_eips::{Decodable2718, Encodable2718};
 use alloy_primitives::Address;
