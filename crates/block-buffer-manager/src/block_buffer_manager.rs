@@ -1,11 +1,7 @@
 use anyhow::format_err;
 use aptos_executor_types::StateComputeResult;
 use gaptos::{
-    api_types::{
-        self,
-        account::ExternalAccountAddress,
-        u256_define::TxnHash,
-    },
+    api_types::{self, account::ExternalAccountAddress, u256_define::TxnHash},
     aptos_types::{epoch_state::EpochState, idl::convert_validator_set},
 };
 use std::{
@@ -264,9 +260,8 @@ impl BlockBufferManager {
         // Initialize current_epoch from the parameter
         block_state_machine.current_epoch = initial_epoch;
         if !block_number_to_block_id_with_epoch.is_empty() {
-            let (commit_block_epoch, commit_block_id) = *block_number_to_block_id_with_epoch
-                .get(&latest_commit_block_number)
-                .unwrap();
+            let (commit_block_epoch, commit_block_id) =
+                *block_number_to_block_id_with_epoch.get(&latest_commit_block_number).unwrap();
             block_state_machine.blocks.insert(
                 BlockKey::new(commit_block_epoch, latest_commit_block_number),
                 BlockState::Committed {
