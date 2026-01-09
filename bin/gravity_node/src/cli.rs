@@ -15,7 +15,6 @@ use greth::{
 };
 use std::{
     collections::BTreeMap,
-    ffi::OsString,
     fmt::{self},
     sync::Arc,
 };
@@ -41,7 +40,7 @@ fn long_version() -> &'static str {
             let build_info = build_information!();
             build_info
         });
-        build_info.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<String>>().join("\n")
+        build_info.iter().map(|(k, v)| format!("{k}: {v}")).collect::<Vec<String>>().join("\n")
     })
 }
 
@@ -92,22 +91,6 @@ pub(crate) struct Cli<
 
     #[command(flatten)]
     pub gravity_node_config: GravityNodeArgs,
-}
-
-impl Cli {
-    /// Parsers only the default CLI arguments
-    pub fn parse_args() -> Self {
-        Self::parse()
-    }
-
-    /// Parsers only the default CLI arguments from the given iterator
-    pub fn try_parse_args_from<I, T>(itr: I) -> Result<Self, clap::error::Error>
-    where
-        I: IntoIterator<Item = T>,
-        T: Into<OsString> + Clone,
-    {
-        Self::try_parse_from(itr)
-    }
 }
 
 impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cli<C, Ext> {
@@ -169,7 +152,7 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
         debug!(target: "reth::cli", "Initialized tracing, log directory: {}, log level {:?}", self.logs.log_file_directory, self.logs.verbosity);
 
         let runner = CliRunner::try_default_runtime()?;
-        let components = |spec: Arc<C::ChainSpec>| {
+        let _components = |spec: Arc<C::ChainSpec>| {
             (EthEvmConfig::ethereum(spec.clone()), EthBeaconConsensus::new(spec))
         };
         match self.command {
@@ -191,8 +174,6 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
                 runner.run_blocking_until_ctrl_c(command.execute::<EthereumNode>())
             }
             Commands::P2P(command) => runner.run_until_ctrl_c(command.execute::<EthereumNode>()),
-            #[cfg(feature = "dev")]
-            Commands::TestVectors(command) => runner.run_until_ctrl_c(command.execute()),
             Commands::Config(command) => runner.run_until_ctrl_c(command.execute()),
             Commands::Prune(command) => runner.run_until_ctrl_c(command.execute::<EthereumNode>()),
             _ => todo!("not implemented"),

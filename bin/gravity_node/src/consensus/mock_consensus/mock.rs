@@ -1,4 +1,3 @@
-use alloy_primitives::address;
 use std::{
     collections::HashMap,
     hash::{DefaultHasher, Hash, Hasher},
@@ -55,7 +54,7 @@ impl MockConsensus {
         ]);
         let mut block_number_to_block_id = HashMap::new();
         // Genesis block is at epoch 0
-        block_number_to_block_id.insert(0u64, (0, genesis_block_id.clone()));
+        block_number_to_block_id.insert(0u64, (0, genesis_block_id));
         // Initialize with epoch 1 to match the mock consensus epoch
         get_block_buffer_manager().init(0, block_number_to_block_id, 1).await;
 
@@ -86,7 +85,7 @@ impl MockConsensus {
             &hex::decode("2d86b40a1d692c0749a0a0426e2021ee24e2430da0f5bb9c2ae6c586bf3e0a0f")
                 .unwrap(),
         );
-        return ExternalBlock {
+        ExternalBlock {
             block_meta: ExternalBlockMeta {
                 block_id: BlockId(bytes),
                 block_number,
@@ -99,7 +98,7 @@ impl MockConsensus {
             txns,
             extra_data: Vec::new(), // TODO: add validator transaction extra_data (DKG, JWK)
             enable_randomness: false,
-        };
+        }
     }
 
     async fn check_and_construct_block(
@@ -172,7 +171,7 @@ impl MockConsensus {
 
                     let head_meta = block.block_meta.clone();
                     get_block_buffer_manager().set_ordered_blocks(parent_id, block).await.unwrap();
-                    parent_id = head_meta.block_id.clone();
+                    parent_id = head_meta.block_id;
                     let _ = block_meta_tx.send(head_meta).await;
                     // wait if there's large gap between executed block and ordered block
                     {
@@ -224,10 +223,10 @@ impl MockConsensus {
                         break r;
                     }
                     Err(e) => {
-                        let msg = format!("{}", e);
+                        let msg = format!("{e}");
                         warn!("get executed result failed: {}", msg);
                         if !msg.contains("get_executed_res timeout") {
-                            panic!("get executed result failed: {}", msg);
+                            panic!("get executed result failed: {msg}");
                         }
                     }
                 }
@@ -271,14 +270,11 @@ impl MockConsensus {
 
     fn process_epoch_change(&mut self, events: &[GravityEvent], block_number: u64) {
         for event in events {
-            match event {
-                GravityEvent::NewEpoch(epoch, _) => {
-                    assert_eq!(self.epoch.load(std::sync::atomic::Ordering::SeqCst), *epoch - 1);
-                    self.epoch_start_block_number
-                        .store(block_number, std::sync::atomic::Ordering::SeqCst);
-                    self.epoch.store(*epoch, std::sync::atomic::Ordering::SeqCst);
-                }
-                _ => {}
+            if let GravityEvent::NewEpoch(epoch, _) = event {
+                assert_eq!(self.epoch.load(std::sync::atomic::Ordering::SeqCst), *epoch - 1);
+                self.epoch_start_block_number
+                    .store(block_number, std::sync::atomic::Ordering::SeqCst);
+                self.epoch.store(*epoch, std::sync::atomic::Ordering::SeqCst);
             }
         }
     }

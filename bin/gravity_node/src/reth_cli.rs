@@ -1,16 +1,16 @@
-use crate::{metrics::fetch_reth_txn_metrics, ConsensusArgs};
-use alloy_consensus::{transaction::SignerRecoverable, Transaction};
-use alloy_eips::{eip4895::Withdrawals, Decodable2718, Encodable2718};
+use crate::ConsensusArgs;
+use alloy_consensus::transaction::SignerRecoverable;
+use alloy_eips::{eip4895::Withdrawals, Decodable2718};
 use alloy_primitives::{Address, TxHash, B256, U256};
 use block_buffer_manager::get_block_buffer_manager;
 use core::panic;
 use dashmap::DashMap;
 use gaptos::api_types::{
-    account::{ExternalAccountAddress, ExternalChainId},
+    account::ExternalAccountAddress,
     compute_res::TxnStatus,
     config_storage::{BlockNumber, ConfigStorage, OnChainConfig, OnChainConfigResType},
-    u256_define::{BlockId as ExternalBlockId, TxnHash},
-    ExternalBlock, VerifiedTxn, VerifiedTxnWithAccountSeqNum, GLOBAL_CRYPTO_TXN_HASHER,
+    u256_define::BlockId as ExternalBlockId,
+    ExternalBlock, GLOBAL_CRYPTO_TXN_HASHER,
 };
 
 use alloy_rpc_types_eth::TransactionRequest;
@@ -22,20 +22,17 @@ use greth::{
     reth_node_ethereum::EthereumNode,
     reth_pipe_exec_layer_ext_v2::{ExecutionResult, OrderedBlock, PipeExecLayerApi},
     reth_primitives::TransactionSigned,
-    reth_provider::{
-        providers::BlockchainProvider, AccountReader, BlockNumReader, ChainSpecProvider,
-    },
+    reth_provider::{providers::BlockchainProvider, BlockNumReader, ChainSpecProvider},
     reth_rpc_api::eth::{helpers::EthCall, RpcTypes},
-    reth_transaction_pool::{EthPooledTransaction, TransactionPool, ValidPoolTransaction},
+    reth_transaction_pool::{EthPooledTransaction, ValidPoolTransaction},
 };
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use std::{
-    collections::{HashMap, VecDeque},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
     },
-    time::{Instant, SystemTime},
+    time::Instant,
 };
 
 use tokio::sync::Mutex;
@@ -70,17 +67,18 @@ impl<T> RethEthCall for T where
 pub(crate) type RethPipeExecLayerApi<EthApi> =
     PipeExecLayerApi<BlockViewStorage<RethBlockChainProvider>, EthApi>;
 
+pub(crate) type TxnCache =
+    Arc<DashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>>;
+
 pub struct RethCli<EthApi: RethEthCall> {
-    auth: AuthServerHandle,
+    _auth: AuthServerHandle,
     pipe_api: RethPipeExecLayerApi<EthApi>,
     chain_id: u64,
     provider: RethBlockChainProvider,
-    txn_listener: Mutex<tokio::sync::mpsc::Receiver<TxHash>>,
-    pool: RethTransactionPool,
-    txn_cache: Arc<
-        DashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>,
-    >,
-    txn_batch_size: usize,
+    _txn_listener: Mutex<tokio::sync::mpsc::Receiver<TxHash>>,
+    _pool: RethTransactionPool,
+    txn_cache: TxnCache,
+    _txn_batch_size: usize,
     current_epoch: AtomicU64,
 }
 
@@ -90,17 +88,13 @@ pub fn convert_account(acc: Address) -> ExternalAccountAddress {
     ExternalAccountAddress::new(bytes)
 }
 
+#[allow(clippy::ptr_arg)]
 fn calculate_txn_hash(bytes: &Vec<u8>) -> [u8; 32] {
-    alloy_primitives::utils::keccak256(bytes.clone()).as_slice().try_into().unwrap()
+    alloy_primitives::utils::keccak256(bytes).as_slice().try_into().unwrap()
 }
 
 impl<EthApi: RethEthCall> RethCli<EthApi> {
-    pub async fn new(
-        args: ConsensusArgs<EthApi>,
-        txn_cache: Arc<
-            DashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>,
-        >,
-    ) -> Self {
+    pub async fn new(args: ConsensusArgs<EthApi>, txn_cache: TxnCache) -> Self {
         let chian_info = args.provider.chain_spec().chain;
         let chain_id = match chian_info.into_kind() {
             greth::reth_chainspec::ChainKind::Named(n) => n as u64,
@@ -108,14 +102,14 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         };
         GLOBAL_CRYPTO_TXN_HASHER.get_or_init(|| Box::new(calculate_txn_hash));
         RethCli {
-            auth: args.engine_api,
+            _auth: args.engine_api,
             pipe_api: args.pipeline_api,
             chain_id,
             provider: args.provider,
-            txn_listener: Mutex::new(args.tx_listener),
-            pool: args.pool,
+            _txn_listener: Mutex::new(args.tx_listener),
+            _pool: args.pool,
             txn_cache,
-            txn_batch_size: 2000,
+            _txn_batch_size: 2000,
             current_epoch: AtomicU64::new(0),
         }
     }
@@ -124,7 +118,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         self.chain_id
     }
 
-    fn txn_to_signed(bytes: &mut [u8], chain_id: u64) -> (Address, TransactionSigned) {
+    fn txn_to_signed(bytes: &mut [u8], _chain_id: u64) -> (Address, TransactionSigned) {
         let mut slice = &bytes[..];
         let txn = TransactionSigned::decode_2718(&mut slice).unwrap();
         (txn.recover_signer().unwrap(), txn)
@@ -192,7 +186,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             transactions,
             senders,
             epoch: block.block_meta.epoch,
-            proposer: block.block_meta.proposer.map(|x| x.bytes().into()),
+            proposer: block.block_meta.proposer.map(|x| x.bytes()),
             extra_data: block.extra_data,
             randomness,
             enable_randomness: block.enable_randomness,
@@ -376,6 +370,6 @@ impl<EthApi: RethEthCall> ConfigStorage for RethCliConfigStorage<EthApi> {
         config_name: OnChainConfig,
         block_number: BlockNumber,
     ) -> Option<OnChainConfigResType> {
-        self.reth_cli.pipe_api.fetch_config_bytes(config_name, block_number.into())
+        self.reth_cli.pipe_api.fetch_config_bytes(config_name, block_number)
     }
 }

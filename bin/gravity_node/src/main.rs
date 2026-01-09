@@ -32,7 +32,6 @@ use tracing::info;
 mod cli;
 mod consensus;
 mod mempool;
-mod metrics;
 pub mod relayer;
 mod reth_cli;
 mod reth_coordinator;
@@ -183,14 +182,14 @@ fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
                             format!("{:02}", time.millisecond())
                         };
 
-                        let proto_path = format!("profile_{}_proto_{:?}.pb", count, formatted_time);
+                        let proto_path = format!("profile_{count}_proto_{formatted_time:?}.pb");
                         if let Ok(mut file) = File::create(&proto_path) {
                             if let Ok(profile) = report.pprof() {
                                 let mut content = Vec::new();
                                 if profile.write_to_vec(&mut content).is_ok() &&
                                     std::io::Write::write_all(&mut file, &content).is_ok()
                                 {
-                                    println!("Wrote protobuf to {}", proto_path);
+                                    println!("Wrote protobuf to {proto_path}");
                                 }
                             }
                         }
