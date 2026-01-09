@@ -1,10 +1,10 @@
-use anyhow::{anyhow, format_err};
+use anyhow::format_err;
 use aptos_executor_types::StateComputeResult;
 use gaptos::{
     api_types::{
         self,
         account::ExternalAccountAddress,
-        u256_define::{HashValue, TxnHash},
+        u256_define::TxnHash,
     },
     aptos_types::{epoch_state::EpochState, idl::convert_validator_set},
 };
@@ -264,10 +264,9 @@ impl BlockBufferManager {
         // Initialize current_epoch from the parameter
         block_state_machine.current_epoch = initial_epoch;
         if !block_number_to_block_id_with_epoch.is_empty() {
-            let (commit_block_epoch, commit_block_id) = block_number_to_block_id_with_epoch
+            let (commit_block_epoch, commit_block_id) = *block_number_to_block_id_with_epoch
                 .get(&latest_commit_block_number)
-                .unwrap()
-                .clone();
+                .unwrap();
             block_state_machine.blocks.insert(
                 BlockKey::new(commit_block_epoch, latest_commit_block_number),
                 BlockState::Committed {
@@ -491,9 +490,7 @@ impl BlockBufferManager {
                     expected_epoch, current_epoch
                 );
                 return Err(anyhow::anyhow!(
-                    "Epoch mismatch: expected {} but current is {}",
-                    expected_epoch,
-                    current_epoch
+                    "Epoch mismatch: expected {expected_epoch} but current is {current_epoch}"
                 ));
             }
         }
@@ -530,8 +527,7 @@ impl BlockBufferManager {
                     }
                     Some(state) => {
                         panic!(
-                            "get_ordered_blocks: found block (epoch: {}, num: {}) in non-Ordered state: {:?}",
-                            expected_epoch, current_num, state
+                            "get_ordered_blocks: found block (epoch: {expected_epoch}, num: {current_num}) in non-Ordered state: {state:?}"
                         );
                     }
                     None => {
@@ -628,10 +624,10 @@ impl BlockBufferManager {
                 // )
                 let latest_epoch_change_block_number =
                     *self.latest_epoch_change_block_number.lock().await;
-                let msg = format!("There is no Ordered Block but try to get executed result for block {:?} and block num {:?}, 
-                                            latest epoch change block number {:?}", block_id, block_num, latest_epoch_change_block_number);
+                let msg = format!("There is no Ordered Block but try to get executed result for block {block_id:?} and block num {block_num:?}, 
+                                            latest epoch change block number {latest_epoch_change_block_number:?}");
                 warn!("{}", msg);
-                return Err(anyhow::anyhow!("{}", msg));
+                return Err(anyhow::anyhow!("{msg}"));
             }
         }
     }
@@ -663,10 +659,10 @@ impl BlockBufferManager {
         };
         let api_validator_set = bcs::from_bytes::<
             api_types::on_chain_config::validator_set::ValidatorSet,
-        >(&bytes)
-        .map_err(|e| format_err!("[on-chain config] Failed to deserialize into config: {}", e))?;
+        >(bytes)
+        .map_err(|e| format_err!("[on-chain config] Failed to deserialize into config: {e}"))?;
         let validator_set = convert_validator_set(api_validator_set)
-            .map_err(|e| format_err!("[on-chain config] Failed to convert validator set: {}", e))?;
+            .map_err(|e| format_err!("[on-chain config] Failed to convert validator set: {e}"))?;
         info!(
             "block number {} get validator set from new epoch {} event {:?}",
             block_num, new_epoch, validator_set
@@ -738,7 +734,7 @@ impl BlockBufferManager {
             let _ = block_state_machine.sender.send(());
             return Ok(());
         }
-        panic!("There is no Ordered Block but try to push compute result for block {:?}", block_id)
+        panic!("There is no Ordered Block but try to push compute result for block {block_id:?}")
     }
 
     pub async fn set_commit_blocks(
