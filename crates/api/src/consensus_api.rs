@@ -22,10 +22,7 @@ use build_info::build_information;
 use futures::channel::mpsc;
 use gaptos::{
     api_types::config_storage::{ConfigStorage, GLOBAL_CONFIG_STORAGE},
-    aptos_config::{
-        config::{NodeConfig, RoleType},
-        network_id::NetworkId,
-    },
+    aptos_config::config::{NodeConfig, RoleType},
     aptos_dkg_runtime::DKGMessage,
     aptos_event_notifications::EventNotificationSender,
     aptos_logger::{info, warn},
@@ -42,6 +39,7 @@ use tokio::{runtime::Runtime, sync::Mutex};
 static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 pub struct ConsensusEngine {
+    #[allow(dead_code)]
     runtimes: Vec<Runtime>,
 }
 
@@ -55,8 +53,7 @@ fn fail_point_check(node_config: &NodeConfig) {
             for (point, actions) in failpoints {
                 fail::cfg(point, actions).unwrap_or_else(|_| {
                     panic!(
-                        "Failed to set actions for failpoint! Failpoint: {:?}, Actions: {:?}",
-                        point, actions
+                        "Failed to set actions for failpoint! Failpoint: {point:?}, Actions: {actions:?}"
                     )
                 });
             }
@@ -135,8 +132,8 @@ impl ConsensusEngine {
                 gaptos::aptos_infallible::RwLock::new(db.clone()),
             ));
         // It seems stupid, refactor when debugging finished
-        if config_storage.is_some() {
-            match GLOBAL_CONFIG_STORAGE.set(config_storage.unwrap()) {
+        if let Some(config) = config_storage {
+            match GLOBAL_CONFIG_STORAGE.set(config) {
                 Ok(_) => {}
                 Err(_) => {
                     panic!("Failed to set config storage");

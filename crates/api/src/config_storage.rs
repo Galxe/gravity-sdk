@@ -21,7 +21,7 @@ impl ConfigStorage for ConfigStorageWrapper {
         config_name: OnChainConfig,
         block_number: BlockNumber,
     ) -> Option<OnChainConfigResType> {
-        println!("fetch_config_bytes: {:?}, block_number: {:?}", config_name, block_number);
+        println!("fetch_config_bytes: {config_name:?}, block_number: {block_number:?}");
 
         info!("fetch_config_bytes: {:?}, block_number: {:?}", config_name, block_number);
         match config_name {
@@ -30,7 +30,7 @@ impl ConfigStorage for ConfigStorageWrapper {
             OnChainConfig::JWKConsensusConfig |
             OnChainConfig::ObservedJWKs |
             OnChainConfig::DKGState => {
-                self.config_storage.fetch_config_bytes(config_name, block_number.into())
+                self.config_storage.fetch_config_bytes(config_name, block_number)
             }
             OnChainConfig::ConsensusConfig => {
                 // let bytes = vec![
