@@ -32,7 +32,7 @@ pub async fn set_failpoint(request: FailpointConf) -> impl IntoResponse {
         }
         Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to set failpoint: {}", e),
+            format!("Failed to set failpoint: {e}"),
         )
             .into_response(),
     }

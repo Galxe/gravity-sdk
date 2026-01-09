@@ -1,12 +1,12 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     path::PathBuf,
     sync::Arc,
 };
 
 use crate::network::extract_network_ids;
 use aptos_consensus::{
-    consensusdb::{BlockNumberSchema, BlockSchema, ConsensusDB},
+    consensusdb::{BlockNumberSchema, ConsensusDB},
     gravity_state_computer::ConsensusAdapterArgs,
     network_interface::ConsensusMsg,
     persistent_liveness_storage::StorageWriteProxy,
@@ -17,10 +17,7 @@ use block_buffer_manager::{get_block_buffer_manager, TxPool};
 use gaptos::{
     api_types::u256_define::BlockId,
     aptos_channels::{aptos_channel, message_queues::QueueStyle},
-    aptos_config::{
-        config::{NetworkConfig, NodeConfig, Peer, PeerRole},
-        network_id::NetworkId,
-    },
+    aptos_config::config::NodeConfig,
     aptos_dkg_runtime::{start_dkg_runtime, DKGMessage},
     aptos_event_notifications::{
         DbBackedOnChainConfig, EventNotificationListener, ReconfigNotificationListener,
@@ -33,26 +30,23 @@ use gaptos::{
 };
 
 use aptos_mempool::{
-    core_mempool::CoreMempool, shared_mempool::types::CoreMempoolTrait, MempoolClientRequest,
+    core_mempool::CoreMempool, MempoolClientRequest,
     MempoolSyncMsg, QuorumStoreRequest,
 };
 use futures::channel::mpsc::{Receiver, Sender};
 use gaptos::{
     aptos_consensus_notifications::ConsensusNotifier,
-    aptos_crypto::{hash::GENESIS_BLOCK_ID, x25519, HashValue},
+    aptos_crypto::{hash::GENESIS_BLOCK_ID, HashValue},
     aptos_event_notifications::EventSubscriptionService,
     aptos_mempool_notifications::MempoolNotificationListener,
     aptos_network::application::{
         interface::{NetworkClient, NetworkServiceEvents},
         storage::PeersAndMetadata,
     },
-    aptos_network_builder::builder::NetworkBuilder,
     aptos_storage_interface::DbReaderWriter,
-    aptos_types::account_address::AccountAddress,
     aptos_validator_transaction_pool::VTxnPoolState,
 };
-use serde::{Deserialize, Serialize};
-use tokio::{runtime::Runtime, sync::Mutex};
+use tokio::runtime::Runtime;
 
 const RECENT_BLOCKS_RANGE: u64 = 256;
 
@@ -154,6 +148,7 @@ pub fn create_dkg_runtime(
     dkg_runtime
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn start_consensus(
     node_config: &NodeConfig,
     event_subscription_service: &mut EventSubscriptionService,
@@ -169,7 +164,7 @@ pub fn start_consensus(
         .expect("Consensus must subscribe to reconfigurations");
     // TODO(gravity_byteyue: return quorum store client also)
     aptos_consensus::consensus_provider::start_consensus(
-        &node_config,
+        node_config,
         consensus_network_interfaces.network_client,
         consensus_network_interfaces.network_service_events,
         Arc::new(consensus_notifier),
@@ -240,6 +235,7 @@ pub fn init_jwk_consensus(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn init_mempool(
     node_config: &NodeConfig,
     db: &DbReaderWriter,
@@ -256,7 +252,7 @@ pub fn init_mempool(
         .expect("Mempool must subscribe to reconfigurations");
     let mempool = Box::new(CoreMempool::new(node_config, pool));
     vec![aptos_mempool::bootstrap(
-        &node_config,
+        node_config,
         Arc::clone(&db.reader),
         mempool_interfaces.network_client,
         mempool_interfaces.network_service_events,
@@ -271,20 +267,16 @@ pub fn init_mempool(
 
 pub fn init_peers_and_metadata(
     node_config: &NodeConfig,
-    consensus_db: &Arc<ConsensusDB>,
+    _consensus_db: &Arc<ConsensusDB>,
 ) -> Arc<PeersAndMetadata> {
     let network_ids = extract_network_ids(node_config);
-    let peers_and_metadata = PeersAndMetadata::new(&network_ids);
-    peers_and_metadata
+    
+    PeersAndMetadata::new(&network_ids)
 }
 
 pub async fn init_block_buffer_manager(consensus_db: &Arc<ConsensusDB>, latest_block_number: u64) {
     info!("init_block_buffer_manager start");
-    let start_block_number = if latest_block_number > RECENT_BLOCKS_RANGE {
-        latest_block_number - RECENT_BLOCKS_RANGE
-    } else {
-        0
-    };
+    let start_block_number = latest_block_number.saturating_sub(RECENT_BLOCKS_RANGE);
 
     let max_epoch = consensus_db.get_max_epoch();
 

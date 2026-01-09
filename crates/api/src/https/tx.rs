@@ -1,4 +1,3 @@
-use std::sync::Arc;
 
 use axum::{http::StatusCode, response::Json as JsonResponse};
 use gaptos::{aptos_crypto::HashValue, aptos_logger::info};
@@ -26,7 +25,7 @@ pub struct TxResponse {
 
 // example:
 // curl -X POST -H "Content-Type:application/json" -d '{"tx": [1, 2, 3, 4]}' https://127.0.0.1:1024/tx/submit_tx
-pub async fn submit_tx(request: TxRequest) -> Result<JsonResponse<SubmitResponse>, StatusCode> {
+pub async fn submit_tx(_request: TxRequest) -> Result<JsonResponse<SubmitResponse>, StatusCode> {
     todo!()
 }
 

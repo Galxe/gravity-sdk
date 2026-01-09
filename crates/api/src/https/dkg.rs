@@ -97,7 +97,7 @@ impl DkgState {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     JsonResponse(ErrorResponse {
-                        error: format!("Failed to get latest ledger info: {:?}", e),
+                        error: format!("Failed to get latest ledger info: {e:?}"),
                     }),
                 )
                     .into_response();
@@ -134,8 +134,7 @@ impl DkgState {
                                         StatusCode::NOT_FOUND,
                                         JsonResponse(ErrorResponse {
                                             error: format!(
-                                                "No last_completed DKG session found at block {}",
-                                                block
+                                                "No last_completed DKG session found at block {block}"
                                             ),
                                         }),
                                     )
@@ -147,7 +146,7 @@ impl DkgState {
                                 return (
                                     StatusCode::INTERNAL_SERVER_ERROR,
                                     JsonResponse(ErrorResponse {
-                                        error: format!("Failed to deserialize DKG state: {:?}", e),
+                                        error: format!("Failed to deserialize DKG state: {e:?}"),
                                     }),
                                 )
                                     .into_response();
@@ -159,7 +158,7 @@ impl DkgState {
                         return (
                             StatusCode::INTERNAL_SERVER_ERROR,
                             JsonResponse(ErrorResponse {
-                                error: format!("Failed to convert config bytes: {:?}", e),
+                                error: format!("Failed to convert config bytes: {e:?}"),
                             }),
                         )
                             .into_response();
@@ -171,8 +170,7 @@ impl DkgState {
                     StatusCode::NOT_FOUND,
                     JsonResponse(ErrorResponse {
                         error: format!(
-                            "Failed to fetch DKG state from config storage at block {}",
-                            block
+                            "Failed to fetch DKG state from config storage at block {block}"
                         ),
                     }),
                 )
@@ -238,8 +236,7 @@ impl DkgState {
                     StatusCode::INTERNAL_SERVER_ERROR,
                     JsonResponse(ErrorResponse {
                         error: format!(
-                            "Failed to get randomness for block {}: {:?}",
-                            block_number, e
+                            "Failed to get randomness for block {block_number}: {e:?}"
                         ),
                     }),
                 )

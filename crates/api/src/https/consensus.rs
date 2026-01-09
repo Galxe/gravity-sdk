@@ -89,7 +89,7 @@ pub fn get_latest_ledger_info(dkg_state: Arc<DkgState>) -> impl IntoResponse {
         Err(e) => {
             error!("Failed to get latest ledger info: {:?}", e);
             JsonResponse(ErrorResponse {
-                error: format!("Failed to get latest ledger info: {:?}", e),
+                error: format!("Failed to get latest ledger info: {e:?}"),
             })
             .into_response()
         }
@@ -122,7 +122,7 @@ pub fn get_ledger_info_by_epoch(
             error!("Failed to get epoch by block number: {:?}", e);
             return Err(error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get epoch by block number: {:?}", e),
+                &format!("Failed to get epoch by block number: {e:?}"),
             ));
         }
     };
@@ -136,7 +136,7 @@ pub fn get_ledger_info_by_epoch(
             error!("Cannot find block number for epoch {}", epoch);
             error_response(
                 StatusCode::NOT_FOUND,
-                &format!("Cannot find block number for epoch {}", epoch),
+                &format!("Cannot find block number for epoch {epoch}"),
             )
         })?;
 
@@ -164,8 +164,7 @@ pub fn get_ledger_info_by_epoch(
             Err(error_response(
                 StatusCode::NOT_FOUND,
                 &format!(
-                    "Ledger info not found for block_number={} (epoch={})",
-                    target_block_number, epoch
+                    "Ledger info not found for block_number={target_block_number} (epoch={epoch})"
                 ),
             ))
         }
@@ -173,7 +172,7 @@ pub fn get_ledger_info_by_epoch(
             error!("Failed to get ledger info for block_number={}: {:?}", target_block_number, e);
             Err(error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get ledger info: {:?}", e),
+                &format!("Failed to get ledger info: {e:?}"),
             ))
         }
     }
@@ -198,7 +197,7 @@ pub fn get_block(
     };
 
     // Get block by epoch and round
-    match get_block_by_round(&consensus_db, epoch, round) {
+    match get_block_by_round(consensus_db, epoch, round) {
         Some(block_info) => {
             info!("Successfully retrieved block for epoch={}, round={}", epoch, round);
             Ok((StatusCode::OK, JsonResponse(block_info)))
@@ -207,7 +206,7 @@ pub fn get_block(
             error!("Block not found for epoch={}, round={}", epoch, round);
             Err(error_response(
                 StatusCode::NOT_FOUND,
-                &format!("Block not found for epoch={}, round={}", epoch, round),
+                &format!("Block not found for epoch={epoch}, round={round}"),
             ))
         }
     }
@@ -232,7 +231,7 @@ pub fn get_qc(
     };
 
     // Get QC by epoch and round
-    match get_qc_by_round(&consensus_db, epoch, round) {
+    match get_qc_by_round(consensus_db, epoch, round) {
         Some(qc_info) => {
             info!("Successfully retrieved QC for epoch={}, round={}", epoch, round);
             Ok((StatusCode::OK, JsonResponse(qc_info)))
@@ -241,7 +240,7 @@ pub fn get_qc(
             error!("QC not found for epoch={}, round={}", epoch, round);
             Err(error_response(
                 StatusCode::NOT_FOUND,
-                &format!("QC not found for epoch={}, round={}", epoch, round),
+                &format!("QC not found for epoch={epoch}, round={round}"),
             ))
         }
     }
@@ -275,7 +274,7 @@ pub fn get_validator_count_by_epoch(
             error!("Failed to get epoch by block number: {:?}", e);
             return Err(error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get epoch by block number: {:?}", e),
+                &format!("Failed to get epoch by block number: {e:?}"),
             ));
         }
     };
@@ -289,7 +288,7 @@ pub fn get_validator_count_by_epoch(
             error!("Cannot find block number for epoch {}", epoch);
             error_response(
                 StatusCode::NOT_FOUND,
-                &format!("Cannot find block number for epoch {}", epoch),
+                &format!("Cannot find block number for epoch {epoch}"),
             )
         })?;
 
@@ -312,7 +311,7 @@ pub fn get_validator_count_by_epoch(
                                 error!("Failed to deserialize ValidatorSet: {:?}", e);
                                 return Err(error_response(
                                     StatusCode::INTERNAL_SERVER_ERROR,
-                                    &format!("Failed to deserialize ValidatorSet: {:?}", e),
+                                    &format!("Failed to deserialize ValidatorSet: {e:?}"),
                                 ));
                             }
                         }
@@ -321,7 +320,7 @@ pub fn get_validator_count_by_epoch(
                         error!("Failed to convert config bytes: {:?}", e);
                         return Err(error_response(
                             StatusCode::INTERNAL_SERVER_ERROR,
-                            &format!("Failed to convert config bytes: {:?}", e),
+                            &format!("Failed to convert config bytes: {e:?}"),
                         ));
                     }
                 },
@@ -329,7 +328,7 @@ pub fn get_validator_count_by_epoch(
                     error!("ValidatorSet not found for block_number {}", target_block_number);
                     return Err(error_response(
                         StatusCode::NOT_FOUND,
-                        &format!("ValidatorSet not found for block_number {}", target_block_number),
+                        &format!("ValidatorSet not found for block_number {target_block_number}"),
                     ));
                 }
             }

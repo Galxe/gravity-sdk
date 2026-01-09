@@ -129,13 +129,13 @@ impl HttpsServer {
                     .serve(app.into_make_service())
                     .await
                     .unwrap_or_else(|e| {
-                        panic!("failed to bind rustls due to {:?}", e);
+                        panic!("failed to bind rustls due to {e:?}");
                     });
             }
             _ => {
                 info!("http server listen address {}", addr);
                 axum_server::bind(addr).serve(app.into_make_service()).await.unwrap_or_else(|e| {
-                    panic!("failed to bind http due to {:?}", e);
+                    panic!("failed to bind http due to {e:?}");
                 });
             }
         }
@@ -207,14 +207,14 @@ mod test {
         map.insert("action", "return");
         let res =
             client.post("http://127.0.0.1:5425/set_failpoint").json(&map).send().await.unwrap();
-        assert!(res.status().is_success(), "res is {:?}", res);
+        assert!(res.status().is_success(), "res is {res:?}");
         assert!(test_fail_point().is_some());
 
         let body = client.get("https://127.0.0.1:5425/tx/get_tx_by_hash/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
             .send()
             .await
             .unwrap_or_else(|e| {
-                panic!("failed to send due to {:?}", e)
+                panic!("failed to send due to {e:?}")
             })
             .json::<TxResponse>()
             .await.unwrap();

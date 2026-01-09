@@ -108,13 +108,14 @@ pub fn jwk_consensus_network_configuration(node_config: &NodeConfig) -> NetworkA
 }
 
 // used for UT
+#[allow(dead_code)]
 pub async fn mock_mempool_client_sender(mut mc_sender: aptos_mempool::MempoolClientSender) {
     let addr = gaptos::aptos_types::account_address::AccountAddress::random();
     let mut seq_num = 0;
     loop {
         let txn: SignedTransaction = SignedTransaction::new(
             RawTransaction::new_script(
-                addr.clone(),
+                addr,
                 seq_num,
                 Script::new(vec![], vec![], vec![]),
                 0,
@@ -126,8 +127,8 @@ pub async fn mock_mempool_client_sender(mut mc_sender: aptos_mempool::MempoolCli
             gaptos::aptos_crypto::ed25519::Ed25519Signature::try_from(&[1u8; 64][..]).unwrap(),
         );
         seq_num += 1;
-        let (sender, receiver) = oneshot::channel();
-        mc_sender.send(MempoolClientRequest::SubmitTransaction(txn, sender)).await;
+        let (sender, _receiver) = oneshot::channel();
+        let _ = mc_sender.send(MempoolClientRequest::SubmitTransaction(txn, sender)).await;
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
 }

@@ -6,10 +6,9 @@ use futures::channel::{mpsc, mpsc::Receiver};
 use gaptos::{
     aptos_config::config::NodeConfig,
     aptos_logger::{
-        aptos_logger::FileWriter, info, telemetry_log_writer::TelemetryLog,
+        info, telemetry_log_writer::TelemetryLog,
         tracing_writer::TracingWriter, LoggerFilterUpdater,
     },
-    aptos_types::account_config::KeyRotation,
 };
 use std::path::PathBuf;
 

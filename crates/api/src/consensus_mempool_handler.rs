@@ -37,7 +37,7 @@ impl<M: MempoolNotificationSender> MempoolNotificationHandler<M> {
             .notify_new_commit(committed_transactions, block_timestamp_usecs)
             .await;
 
-        if let Err(error) = result {
+        if let Err(_error) = result {
             todo!()
         } else {
             Ok(())
@@ -102,12 +102,12 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
                         sync_notification.get_target().ledger_info().block_number(),
                     )
                     .unwrap();
-                self.consensus_notification_listener
+                let _ = self.consensus_notification_listener
                     .respond_to_sync_target_notification(sync_notification, Ok(()))
                     .map_err(|e| anyhow::anyhow!(e));
                 Ok(())
             }
-            ConsensusNotification::SyncForDuration(consensus_sync_duration_notification) => todo!(),
+            ConsensusNotification::SyncForDuration(_consensus_sync_duration_notification) => todo!(),
         };
 
         // Log any errors from notification handling
