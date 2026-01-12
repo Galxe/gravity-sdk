@@ -15,7 +15,6 @@ use gaptos::{
     api_types::{account::ExternalAccountAddress, u256_define::TxnHash},
     aptos_config::config::NodeConfig,
     aptos_crypto::HashValue,
-    aptos_logger::prelude::*,
     aptos_mempool::shared_mempool::types::CoreMempoolTrait,
     aptos_types::{
         account_address::AccountAddress,
@@ -54,6 +53,212 @@ impl TxnCache {
 
     fn is_contains(&self, txn_hash: &TxnHash) -> bool {
         self.cache.contains(txn_hash) || self.old_cache.contains(txn_hash)
+    }
+}
+
+pub struct Mempool {
+    // Stores the metadata of all transactions in mempool (of all states).
+    pool: Box<dyn TxPool>,
+    txn_cache: Arc<Mutex<TxnCache>>,
+}
+
+impl CoreMempoolTrait for Mempool {
+    fn timeline_range(
+        &self,
+        _sender_bucket: MempoolSenderBucket,
+        _start_end_pairs: HashMap<TimelineIndexIdentifier, (u64, u64)>,
+    ) -> Vec<(SignedTransaction, u64)> {
+        vec![]
+    }
+
+    fn timeline_range_of_message(
+        &self,
+        _sender_start_end_pairs: HashMap<
+            MempoolSenderBucket,
+            HashMap<TimelineIndexIdentifier, (u64, u64)>,
+        >,
+    ) -> Vec<(SignedTransaction, u64)> {
+        vec![]
+    }
+
+    fn get_parking_lot_addresses(&self) -> Vec<(AccountAddress, u64)> {
+        // don't need to implement
+        vec![]
+    }
+
+    fn read_timeline(
+        &self,
+        _sender_bucket: MempoolSenderBucket,
+        _timeline_id: &MultiBucketTimelineIndexIds,
+        _count: usize,
+        _before: Option<Instant>,
+        _priority_of_receiver: BroadcastPeerPriority,
+    ) -> (Vec<(SignedTransaction, u64)>, MultiBucketTimelineIndexIds) {
+        let visited = self.txn_cache.clone();
+        let filter = Box::new(move |txn: (ExternalAccountAddress, u64, TxnHash)| {
+            !visited.lock().unwrap().is_contains(&txn.2)
+        });
+        let iter = self.pool.get_broadcast_txns(Some(filter));
+        let mut broacasted_txns = vec![];
+        let mut visited_cache = self.txn_cache.lock().unwrap();
+        for txn in iter {
+            visited_cache.insert(TxnHash::from_bytes(txn.committed_hash().as_slice()));
+            broacasted_txns.push((VerifiedTxn::from(txn).into(), 0));
+        }
+        let len = broacasted_txns.len();
+
+        (broacasted_txns, MultiBucketTimelineIndexIds { id_per_bucket: vec![0; len] })
+    }
+
+    fn gc(&mut self) {
+        // don't need to implement
+    }
+
+    fn gen_snapshot(&self) -> gaptos::aptos_mempool::logging::TxnsLog {
+        panic!("don't need to implement")
+    }
+
+    fn get_by_hash(&self, _hash: HashValue) -> Option<SignedTransaction> {
+        panic!("don't need to implement")
+    }
+
+    fn add_txn(
+        &mut self,
+        txn: SignedTransaction,
+        _ranking_score: u64,
+        _sequence_info: u64,
+        _timeline_state: gaptos::aptos_mempool::core_mempool::TimelineState,
+        _client_submitted: bool,
+        _ready_time_at_sender: Option<u64>,
+        _priority: Option<BroadcastPeerPriority>,
+    ) -> MempoolStatus {
+        self.txn_cache.lock().unwrap().insert(TxnHash::new(*txn.committed_hash()));
+        let verfited_txn = crate::core_mempool::transaction::VerifiedTxn::from(txn);
+        let res = self.pool.add_external_txn(verfited_txn.into());
+        if res {
+            MempoolStatus::new(MempoolStatusCode::Accepted)
+        } else {
+            MempoolStatus::new(MempoolStatusCode::UnknownStatus)
+        }
+    }
+
+    fn gc_by_expiration_time(&mut self, _block_time: Duration) {
+        // don't need to implement
+    }
+
+    fn get_batch(
+        &self,
+        max_txns: u64,
+        max_bytes: u64,
+        _return_non_full: bool,
+        exclude_transactions: BTreeMap<
+            gaptos::aptos_consensus_types::common::TransactionSummary,
+            gaptos::aptos_consensus_types::common::TransactionInProgress,
+        >,
+    ) -> Vec<SignedTransaction> {
+        self.get_batch_inner(max_txns, max_bytes, _return_non_full, exclude_transactions)
+    }
+
+    fn reject_transaction(
+        &mut self,
+        _sender: &AccountAddress,
+        _sequence_number: u64,
+        _hash: &HashValue,
+        _reason: &DiscardedVMStatus,
+    ) {
+        // don't need to implement
+    }
+
+    fn commit_transaction(&mut self, sender: &AccountAddress, sequence_number: u64) {
+        txn_metrics::TxnLifeTime::get_txn_life_time().record_committed(sender, sequence_number);
+    }
+
+    fn log_commit_transaction(
+        &self,
+        _sender: &AccountAddress,
+        _sequence_number: u64,
+        _tracked_use_case: Option<(UseCaseKey, &String)>,
+        _block_timestamp: Duration,
+    ) {
+        // don't need to implement
+    }
+}
+
+impl Mempool {
+    pub fn new(_config: &NodeConfig, pool: Box<dyn TxPool>) -> Self {
+        Self { pool, txn_cache: Arc::new(Mutex::new(TxnCache::new(100000))) }
+    }
+
+    /// This function will be called once the transaction has been stored.
+    #[allow(dead_code)]
+    pub(crate) fn commit_transaction(&mut self, _sender: &AccountAddress, _sequence_number: u64) {
+        // debug!(
+        //     "commit txn {} {}",
+        //     sender,
+        //     sequence_number
+        // );
+        // counters::MEMPOOL_TXN_COMMIT_COUNT.inc();
+        // self.transactions
+        //     .commit_transaction(sender, sequence_number);
+    }
+    /// Used to add a transaction to the Mempool.
+    /// Performs basic validation: checks account's sequence number.
+    #[allow(dead_code)]
+    pub(crate) fn send_user_txn(
+        &mut self,
+        _txn: VerifiedTxn,
+        _db_sequence_number: u64,
+        _timeline_state: TimelineState,
+        _client_submitted: bool,
+        // The time at which the transaction was inserted into the mempool of the
+        // downstream node (sender of the mempool transaction) in millis since epoch
+        _ready_time_at_sender: Option<u64>,
+        // The prority of this node for the peer that sent the transaction
+        _priority: Option<BroadcastPeerPriority>,
+    ) -> MempoolStatus {
+        panic!()
+    }
+
+    /// Fetches next block of transactions for consensus.
+    /// `return_non_full` - if false, only return transactions when max_txns or max_bytes is reached
+    ///                     Should always be true for Quorum Store.
+    /// `include_gas_upgraded` - Return transactions that had gas upgraded, even if they are in
+    ///                          exclude_transactions. Should only be true for Quorum Store.
+    /// `exclude_transactions` - transactions that were sent to Consensus but were not committed yet
+    ///  mempool should filter out such transactions.
+    #[allow(clippy::explicit_counter_loop)]
+    pub(crate) fn get_batch_inner(
+        &self,
+        max_txns: u64,
+        max_bytes: u64,
+        _return_non_full: bool,
+        exclude_transactions: BTreeMap<
+            gaptos::aptos_consensus_types::common::TransactionSummary,
+            gaptos::aptos_consensus_types::common::TransactionInProgress,
+        >,
+    ) -> Vec<SignedTransaction> {
+        let filter = Box::new(move |txn: (ExternalAccountAddress, u64, TxnHash)| {
+            let summary = gaptos::aptos_consensus_types::common::TransactionSummary {
+                sender: AccountAddress::new(txn.0.bytes()),
+                sequence_number: txn.1,
+                hash: HashValue::new(txn.2 .0),
+            };
+            !exclude_transactions.contains_key(&summary)
+        });
+        let mut transactions = vec![];
+        let best_txns = self.pool.best_txns(Some(filter));
+        for txn in best_txns {
+            let signed_txn = VerifiedTxn::from(txn).into();
+            transactions.push(signed_txn);
+            if transactions.len() >= max_txns as usize || transactions.len() >= max_bytes as usize {
+                break;
+            }
+        }
+        transactions
+    }
+
+    pub fn gen_snapshot(&self) -> Vec<SignedTransaction> {
+        panic!()
     }
 }
 
@@ -104,209 +309,5 @@ mod tests {
         assert_eq!(cache.cache.len(), 1);
         assert_eq!(cache.old_cache.len(), 3);
         assert!(cache.cache.contains(&h4));
-    }
-}
-
-pub struct Mempool {
-    // Stores the metadata of all transactions in mempool (of all states).
-    pool: Box<dyn TxPool>,
-    txn_cache: Arc<Mutex<TxnCache>>,
-}
-
-impl CoreMempoolTrait for Mempool {
-    fn timeline_range(
-        &self,
-        sender_bucket: MempoolSenderBucket,
-        start_end_pairs: HashMap<TimelineIndexIdentifier, (u64, u64)>,
-    ) -> Vec<(SignedTransaction, u64)> {
-        vec![]
-    }
-
-    fn timeline_range_of_message(
-        &self,
-        sender_start_end_pairs: HashMap<
-            MempoolSenderBucket,
-            HashMap<TimelineIndexIdentifier, (u64, u64)>,
-        >,
-    ) -> Vec<(SignedTransaction, u64)> {
-        vec![]
-    }
-
-    fn get_parking_lot_addresses(&self) -> Vec<(AccountAddress, u64)> {
-        // don't need to implement
-        vec![]
-    }
-
-    fn read_timeline(
-        &self,
-        sender_bucket: MempoolSenderBucket,
-        timeline_id: &MultiBucketTimelineIndexIds,
-        count: usize,
-        before: Option<Instant>,
-        priority_of_receiver: BroadcastPeerPriority,
-    ) -> (Vec<(SignedTransaction, u64)>, MultiBucketTimelineIndexIds) {
-        let visited = self.txn_cache.clone();
-        let filter = Box::new(move |txn: (ExternalAccountAddress, u64, TxnHash)| {
-            !visited.lock().unwrap().is_contains(&txn.2)
-        });
-        let iter = self.pool.get_broadcast_txns(Some(filter));
-        let mut broacasted_txns = vec![];
-        let mut visited_cache = self.txn_cache.lock().unwrap();
-        for txn in iter {
-            visited_cache.insert(TxnHash::from_bytes(txn.committed_hash().as_slice()));
-            broacasted_txns.push((VerifiedTxn::from(txn).into(), 0));
-        }
-        let len = broacasted_txns.len();
-
-        (broacasted_txns, MultiBucketTimelineIndexIds { id_per_bucket: vec![0; len] })
-    }
-
-    fn gc(&mut self) {
-        // don't need to implement
-    }
-
-    fn gen_snapshot(&self) -> gaptos::aptos_mempool::logging::TxnsLog {
-        panic!("don't need to implement")
-    }
-
-    fn get_by_hash(&self, hash: HashValue) -> Option<SignedTransaction> {
-        panic!("don't need to implement")
-    }
-
-    fn add_txn(
-        &mut self,
-        txn: SignedTransaction,
-        ranking_score: u64,
-        sequence_info: u64,
-        timeline_state: gaptos::aptos_mempool::core_mempool::TimelineState,
-        client_submitted: bool,
-        ready_time_at_sender: Option<u64>,
-        priority: Option<BroadcastPeerPriority>,
-    ) -> MempoolStatus {
-        self.txn_cache.lock().unwrap().insert(TxnHash::new(*txn.committed_hash()));
-        let verfited_txn = crate::core_mempool::transaction::VerifiedTxn::from(txn);
-        let res = self.pool.add_external_txn(verfited_txn.into());
-        if res {
-            MempoolStatus::new(MempoolStatusCode::Accepted)
-        } else {
-            MempoolStatus::new(MempoolStatusCode::UnknownStatus)
-        }
-    }
-
-    fn gc_by_expiration_time(&mut self, block_time: Duration) {
-        // don't need to implement
-    }
-
-    fn get_batch(
-        &self,
-        max_txns: u64,
-        max_bytes: u64,
-        return_non_full: bool,
-        exclude_transactions: BTreeMap<
-            gaptos::aptos_consensus_types::common::TransactionSummary,
-            gaptos::aptos_consensus_types::common::TransactionInProgress,
-        >,
-    ) -> Vec<SignedTransaction> {
-        self.get_batch_inner(max_txns, max_bytes, return_non_full, exclude_transactions)
-    }
-
-    fn reject_transaction(
-        &mut self,
-        sender: &AccountAddress,
-        sequence_number: u64,
-        hash: &HashValue,
-        reason: &DiscardedVMStatus,
-    ) {
-        // don't need to implement
-    }
-
-    fn commit_transaction(&mut self, sender: &AccountAddress, sequence_number: u64) {
-        txn_metrics::TxnLifeTime::get_txn_life_time().record_committed(sender, sequence_number);
-    }
-
-    fn log_commit_transaction(
-        &self,
-        sender: &AccountAddress,
-        sequence_number: u64,
-        tracked_use_case: Option<(UseCaseKey, &String)>,
-        block_timestamp: Duration,
-    ) {
-        // don't need to implement
-    }
-}
-
-impl Mempool {
-    pub fn new(_config: &NodeConfig, pool: Box<dyn TxPool>) -> Self {
-        Self { pool, txn_cache: Arc::new(Mutex::new(TxnCache::new(100000))) }
-    }
-
-    /// This function will be called once the transaction has been stored.
-    pub(crate) fn commit_transaction(&mut self, _sender: &AccountAddress, _sequence_number: u64) {
-        // debug!(
-        //     "commit txn {} {}",
-        //     sender,
-        //     sequence_number
-        // );
-        // counters::MEMPOOL_TXN_COMMIT_COUNT.inc();
-        // self.transactions
-        //     .commit_transaction(sender, sequence_number);
-    }
-    /// Used to add a transaction to the Mempool.
-    /// Performs basic validation: checks account's sequence number.
-    pub(crate) fn send_user_txn(
-        &mut self,
-        txn: VerifiedTxn,
-        db_sequence_number: u64,
-        timeline_state: TimelineState,
-        client_submitted: bool,
-        // The time at which the transaction was inserted into the mempool of the
-        // downstream node (sender of the mempool transaction) in millis since epoch
-        ready_time_at_sender: Option<u64>,
-        // The prority of this node for the peer that sent the transaction
-        priority: Option<BroadcastPeerPriority>,
-    ) -> MempoolStatus {
-        panic!()
-    }
-
-    /// Fetches next block of transactions for consensus.
-    /// `return_non_full` - if false, only return transactions when max_txns or max_bytes is reached
-    ///                     Should always be true for Quorum Store.
-    /// `include_gas_upgraded` - Return transactions that had gas upgraded, even if they are in
-    ///                          exclude_transactions. Should only be true for Quorum Store.
-    /// `exclude_transactions` - transactions that were sent to Consensus but were not committed yet
-    ///  mempool should filter out such transactions.
-    #[allow(clippy::explicit_counter_loop)]
-    pub(crate) fn get_batch_inner(
-        &self,
-        max_txns: u64,
-        max_bytes: u64,
-        return_non_full: bool,
-        exclude_transactions: BTreeMap<
-            gaptos::aptos_consensus_types::common::TransactionSummary,
-            gaptos::aptos_consensus_types::common::TransactionInProgress,
-        >,
-    ) -> Vec<SignedTransaction> {
-        let filter = Box::new(move |txn: (ExternalAccountAddress, u64, TxnHash)| {
-            let summary = gaptos::aptos_consensus_types::common::TransactionSummary {
-                sender: AccountAddress::new(txn.0.bytes()),
-                sequence_number: txn.1,
-                hash: HashValue::new(txn.2 .0),
-            };
-            !exclude_transactions.contains_key(&summary)
-        });
-        let mut transactions = vec![];
-        let best_txns = self.pool.best_txns(Some(filter));
-        for txn in best_txns {
-            let signed_txn = VerifiedTxn::from(txn).into();
-            transactions.push(signed_txn);
-            if transactions.len() >= max_txns as usize || transactions.len() >= max_bytes as usize {
-                break;
-            }
-        }
-        transactions
-    }
-
-    pub fn gen_snapshot(&self) -> Vec<SignedTransaction> {
-        panic!()
     }
 }

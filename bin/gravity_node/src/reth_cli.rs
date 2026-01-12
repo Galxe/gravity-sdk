@@ -12,6 +12,7 @@ use gaptos::api_types::{
     u256_define::BlockId as ExternalBlockId,
     ExternalBlock, GLOBAL_CRYPTO_TXN_HASHER,
 };
+use greth::reth_transaction_pool::{EthPooledTransaction, ValidPoolTransaction};
 
 use alloy_rpc_types_eth::TransactionRequest;
 use greth::{
@@ -24,7 +25,6 @@ use greth::{
     reth_primitives::TransactionSigned,
     reth_provider::{providers::BlockchainProvider, BlockNumReader, ChainSpecProvider},
     reth_rpc_api::eth::{helpers::EthCall, RpcTypes},
-    reth_transaction_pool::{EthPooledTransaction, ValidPoolTransaction},
 };
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use std::{

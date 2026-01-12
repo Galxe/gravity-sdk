@@ -57,22 +57,22 @@ impl From<&SignedTransaction> for VerifiedTxn {
     }
 }
 
-impl Into<SignedTransaction> for VerifiedTxn {
-    fn into(self) -> SignedTransaction {
+impl From<VerifiedTxn> for SignedTransaction {
+    fn from(val: VerifiedTxn) -> Self {
         let raw_txn = RawTransaction::new(
-            self.sender,
-            self.sequence_number,
-            TransactionPayload::GTxnBytes(self.bytes.clone()),
+            val.sender,
+            val.sequence_number,
+            TransactionPayload::GTxnBytes(val.bytes.clone()),
             u64::MAX,
             0,
             u64::MAX,
-            self.chain_id,
+            val.chain_id,
         );
         SignedTransaction::new_with_committed_hash(
             raw_txn,
             GLOBAL_PUBLIC_KEY.clone(),
             GLOBAL_SIGNATURE.clone(),
-            self.committed_hash,
+            val.committed_hash,
         )
     }
 }
@@ -177,6 +177,7 @@ impl From<SignedTransaction> for VerifiedTxn {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct MempoolTransaction {
     verified_txn: SignedTransaction,
     pub timeline_state: TimelineState,
@@ -186,6 +187,7 @@ pub struct MempoolTransaction {
     sequence_info: SequenceInfo,
 }
 
+#[allow(dead_code)]
 impl MempoolTransaction {
     pub(crate) fn new(
         verified_txn: VerifiedTxn,

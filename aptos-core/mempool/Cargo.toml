@@ -46,6 +46,3 @@ default = []
 failpoints = ["fail/failpoints"]
 fuzzing = ["proptest"]
 consensus-only-perf-test = []
-
-[lints]
-workspace = true
