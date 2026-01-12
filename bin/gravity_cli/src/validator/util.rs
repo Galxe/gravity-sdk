@@ -23,12 +23,12 @@ pub fn parse_ether(eth_amount: &str) -> Result<U256, anyhow::Error> {
     if parts.len() == 1 {
         // If integer, append 18 zeros directly
         let s = format!("{}{}", parts[0], "0".repeat(DECIMALS));
-        return Ok(U256::from_str(&s).map_err(|e| anyhow::anyhow!("Failed to parse ether: {}", e))?);
+        return U256::from_str(&s).map_err(|e| anyhow::anyhow!("Failed to parse ether: {e}"));
     }
 
     if parts.len() > 2 {
         // Multiple decimal points are invalid input
-        return Err(anyhow::anyhow!("Invalid ether amount: {}", eth_amount));
+        return Err(anyhow::anyhow!("Invalid ether amount: {eth_amount}"));
     }
 
     let integer_part = parts[0];
@@ -37,7 +37,7 @@ pub fn parse_ether(eth_amount: &str) -> Result<U256, anyhow::Error> {
     // Check if fractional part length exceeds 18 digits
     if fractional_part.len() > DECIMALS {
         // Exceeding 18-digit precision is considered invalid or overflow
-        return Err(anyhow::anyhow!("Invalid ether amount: {}", eth_amount));
+        return Err(anyhow::anyhow!("Invalid ether amount: {eth_amount}"));
     }
 
     // Calculate the number of padding zeros needed
@@ -46,5 +46,5 @@ pub fn parse_ether(eth_amount: &str) -> Result<U256, anyhow::Error> {
     // Construct final Wei string: [integer part][fractional part][padding zeros]
     let wei_str = format!("{}{}{}", integer_part, fractional_part, "0".repeat(padding_zeros));
 
-    Ok(U256::from_str(&wei_str).map_err(|e| anyhow::anyhow!("Failed to parse ether: {}", e))?)
+    U256::from_str(&wei_str).map_err(|e| anyhow::anyhow!("Failed to parse ether: {e}"))
 }

@@ -1,7 +1,7 @@
 use bcs;
 use clap::Parser;
 use gaptos::{
-    aptos_crypto::hash::{HashValue, ACCUMULATOR_PLACEHOLDER_HASH},
+    aptos_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH,
     aptos_types::{
         account_address::AccountAddress, ledger_info::LedgerInfoWithSignatures,
         on_chain_config::ValidatorSet, validator_config::ValidatorConfig,
@@ -16,6 +16,7 @@ use crate::command::Executable;
 #[derive(Debug, Deserialize)]
 struct TestConfig {
     #[serde(rename = "validatorAddresses")]
+    #[allow(unused)]
     validator_addresses: Vec<String>,
     #[serde(rename = "consensusPublicKeys")]
     consensus_public_keys: Vec<String>,
@@ -92,8 +93,8 @@ impl GenerateWaypoint {
         let ledger_info_with_signatures =
             LedgerInfoWithSignatures::genesis(*ACCUMULATOR_PLACEHOLDER_HASH, validator_set);
         let waypoint_hash =
-            Waypoint::new_epoch_boundary(&ledger_info_with_signatures.ledger_info())?;
-        let waypoint_string = format!("{}", waypoint_hash);
+            Waypoint::new_epoch_boundary(ledger_info_with_signatures.ledger_info())?;
+        let waypoint_string = format!("{waypoint_hash}");
 
         Ok(waypoint_string)
     }
@@ -105,7 +106,7 @@ impl Executable for GenerateWaypoint {
         println!("Reading input file: {:?}", self.input_file);
 
         let waypoint_string = self.generate_waypoint()?;
-        println!("Generated waypoint: {}", waypoint_string);
+        println!("Generated waypoint: {waypoint_string}");
 
         println!("--- Write Output File ---");
         fs::write(&self.output_file, &waypoint_string)?;
