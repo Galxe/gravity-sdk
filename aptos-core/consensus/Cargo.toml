@@ -91,11 +91,3 @@ randomness_disabled = ["gaptos/randomness_disabled"]
 
 [package.metadata.cargo-machete]
 ignored = ["serde_bytes"]
-[lints.rust]
-warnings = "allow"
-
-[lints.clippy]
-all = "allow"
-pedantic = "allow"
-restriction = "allow"
-nursery = "allow"
