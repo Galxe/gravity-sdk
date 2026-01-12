@@ -72,6 +72,11 @@ from gravity_e2e.tests.test_cases.test_validator_add_remove import (
     test_validator_add_remove_delayed,
 )
 
+# Epoch switch tests
+from gravity_e2e.tests.test_cases.test_epoch_switch import (
+    test_epoch_switch,
+)
+
 
 # Register all tests with the registry
 # Basic transfer tests
@@ -109,6 +114,9 @@ register_test("epoch_consistency_extended", suite="epoch", self_managed=True)(te
 register_test("validator_add_remove", suite="validator", self_managed=True)(test_validator_add_remove)
 register_test("validator_add_remove_delayed", suite="validator", self_managed=True)(test_validator_add_remove_delayed)
 
+# Epoch switch tests (self-managed)
+register_test("epoch_switch", suite="epoch_switch", self_managed=True)(test_epoch_switch)
+
 
 # Define default test list for "all" suite
 DEFAULT_TESTS = [
@@ -145,6 +153,7 @@ __all__ = [
     'test_validator_add_remove',
     'test_validator_add_remove_immediate',
     'test_validator_add_remove_delayed',
+    'test_epoch_switch',
     # Default test list
     'DEFAULT_TESTS',
 ]
