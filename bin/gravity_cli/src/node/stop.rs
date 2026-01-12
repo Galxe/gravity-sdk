@@ -26,12 +26,12 @@ impl Executable for StopCommand {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow::anyhow!("Failed to stop node: {}", stderr));
+            return Err(anyhow::anyhow!("Failed to stop node: {stderr}"));
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         if !stdout.is_empty() {
-            print!("{}", stdout);
+            print!("{stdout}");
         }
 
         println!("Node stopped successfully");

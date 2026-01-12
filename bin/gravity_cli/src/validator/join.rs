@@ -82,18 +82,18 @@ impl JoinCommand {
         let private_key_str = self.private_key.strip_prefix("0x").unwrap_or(&self.private_key);
         let private_key_bytes = hex::decode(private_key_str)?;
         let private_key = SigningKey::from_slice(private_key_bytes.as_slice())
-            .map_err(|e| anyhow::anyhow!("Invalid private key: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Invalid private key: {e}"))?;
         let signer = PrivateKeySigner::from(private_key);
         let wallet_address = signer.address();
-        println!("   Wallet address: {:?}", wallet_address);
+        println!("   Wallet address: {wallet_address:?}");
 
-        println!("   Contract address: {:?}", VALIDATOR_MANAGER_ADDRESS);
+        println!("   Contract address: {VALIDATOR_MANAGER_ADDRESS:?}");
 
         // Create provider
         let provider = ProviderBuilder::new().wallet(signer).connect_http(self.rpc_url.parse()?);
 
         let chain_id = provider.get_chain_id().await?;
-        println!("   Chain ID: {}", chain_id);
+        println!("   Chain ID: {chain_id}");
         let balance = provider.get_balance(wallet_address).await?;
         println!("   Wallet balance: {} ETH\n", format_ether(balance));
 
@@ -150,7 +150,7 @@ impl JoinCommand {
             })
             .await?;
         let validator_set_data = <ValidatorSetData as SolType>::abi_decode(&result)
-            .map_err(|e| anyhow::anyhow!("Failed to decode validator set data: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to decode validator set data: {e}"))?;
         println!(
             "   Current total voting power: {} ETH",
             format_ether(validator_set_data.totalVotingPower)
@@ -170,7 +170,7 @@ impl JoinCommand {
             })
             .await?;
         let validator_set = <ValidatorSet as SolType>::abi_decode(&result)
-            .map_err(|e| anyhow::anyhow!("Failed to decode validator set: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to decode validator set: {e}"))?;
         println!("   Active validators count: {}", validator_set.activeValidators.len());
         println!("   Pending active validators count: {}", validator_set.pendingActive.len());
 
@@ -187,8 +187,8 @@ impl JoinCommand {
             })
             .await?;
         let is_registered = bool::abi_decode(&result)
-            .map_err(|e| anyhow::anyhow!("Failed to decode is registered: {}", e))?;
-        println!("   Is registered: {}", is_registered);
+            .map_err(|e| anyhow::anyhow!("Failed to decode is registered: {e}"))?;
+        println!("   Is registered: {is_registered}");
         if is_registered {
             println!("   Validator is already registered, skipping registration step\n");
         } else {
@@ -210,7 +210,7 @@ impl JoinCommand {
                 .with_timeout(Some(std::time::Duration::from_secs(60)))
                 .watch()
                 .await?;
-            println!("   Transaction hash: {}", tx_hash);
+            println!("   Transaction hash: {tx_hash}");
             let receipt = provider
                 .get_transaction_receipt(tx_hash)
                 .await?
@@ -229,16 +229,13 @@ impl JoinCommand {
             // Check registration event
             let mut found = false;
             for log in receipt.logs() {
-                match ValidatorManager::ValidatorRegistered::decode_log(&log.inner) {
-                    Ok(event) => {
-                        println!("   Registration successful! Event details:");
-                        println!("   - Validator address: {}", event.validator);
-                        println!("   - Operator address: {}", event.operator);
-                        println!("   - Validator moniker: {}", event.moniker);
-                        found = true;
-                        break;
-                    }
-                    Err(_) => {}
+                if let Ok(event) = ValidatorManager::ValidatorRegistered::decode_log(&log.inner) {
+                    println!("   Registration successful! Event details:");
+                    println!("   - Validator address: {}", event.validator);
+                    println!("   - Operator address: {}", event.operator);
+                    println!("   - Validator moniker: {}", event.moniker);
+                    found = true;
+                    break;
                 }
             }
             if !found {
@@ -259,7 +256,7 @@ impl JoinCommand {
             })
             .await?;
         let validator_info = <ValidatorInfo as SolType>::abi_decode(&result)
-            .map_err(|e| anyhow::anyhow!("Failed to decode validator info: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to decode validator info: {e}"))?;
         println!("   Validator information:");
         println!("   - Registered: {}", validator_info.registered);
         println!("   - Status: {:?}", validator_info.status);
@@ -271,13 +268,13 @@ impl JoinCommand {
         println!(
             "   - Validator network addresses: {}",
             bcs::from_bytes::<String>(&validator_info.validatorNetworkAddresses).map_err(
-                |e| anyhow::anyhow!("Failed to decode validator network addresses: {}", e)
+                |e| anyhow::anyhow!("Failed to decode validator network addresses: {e}")
             )?
         );
         println!(
             "   - Fullnode network addresses: {}",
             bcs::from_bytes::<String>(&validator_info.fullnodeNetworkAddresses).map_err(
-                |e| anyhow::anyhow!("Failed to decode fullnode network addresses: {}", e)
+                |e| anyhow::anyhow!("Failed to decode fullnode network addresses: {e}")
             )?
         );
         println!("   - Aptos address: {}", validator_info.aptosAddress);
@@ -301,7 +298,7 @@ impl JoinCommand {
             .with_timeout(Some(std::time::Duration::from_secs(60)))
             .watch()
             .await?;
-        println!("   Transaction hash: {}", tx_hash);
+        println!("   Transaction hash: {tx_hash}");
         let receipt = provider
             .get_transaction_receipt(tx_hash)
             .await?
@@ -318,16 +315,13 @@ impl JoinCommand {
         // Check join event
         let mut found = false;
         for log in receipt.logs() {
-            match ValidatorManager::ValidatorJoinRequested::decode_log(&log.inner) {
-                Ok(event) => {
-                    println!("   Join successful! Event details:");
-                    println!("   - Validator address: {}", event.validator);
-                    println!("   - Voting power: {}", format_ether(event.votingPower));
-                    println!("   - Epoch: {}", event.epoch);
-                    found = true;
-                    break;
-                }
-                Err(_) => {}
+            if let Ok(event) = ValidatorManager::ValidatorJoinRequested::decode_log(&log.inner) {
+                println!("   Join successful! Event details:");
+                println!("   - Validator address: {}", event.validator);
+                println!("   - Voting power: {}", format_ether(event.votingPower));
+                println!("   - Epoch: {}", event.epoch);
+                found = true;
+                break;
             }
         }
         if !found {
@@ -347,7 +341,7 @@ impl JoinCommand {
             })
             .await?;
         let validator_status = <ValidatorStatus as SolType>::abi_decode(&result)
-            .map_err(|e| anyhow::anyhow!("Failed to decode validator status: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to decode validator status: {e}"))?;
         match validator_status {
             ValidatorStatus::PENDING_ACTIVE => {
                 println!("   Validator status is PENDING_ACTIVE, please wait for the next epoch to automatically become ACTIVE\n");
@@ -356,8 +350,8 @@ impl JoinCommand {
                 println!("   Validator status is ACTIVE, successfully joined the validator set\n");
             }
             _ => {
-                println!("   Validator status is {:?}, unexpected status\n", validator_status);
-                return Err(anyhow::anyhow!("Unexpected validator status: {:?}", validator_status));
+                println!("   Validator status is {validator_status:?}, unexpected status\n");
+                return Err(anyhow::anyhow!("Unexpected validator status: {validator_status:?}"));
             }
         }
         Ok(())

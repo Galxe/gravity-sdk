@@ -80,24 +80,24 @@ impl ListCommand {
 
         // Decode ValidatorSet
         let validator_set = <ValidatorSet as SolType>::abi_decode(&result)
-            .map_err(|e| anyhow::anyhow!("Failed to decode validator set: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to decode validator set: {e}"))?;
 
         // Convert to serializable format
         let serializable_set = SerializableValidatorSet {
             active_validators: validator_set
                 .activeValidators
                 .iter()
-                .map(|v| convert_validator_info(v))
+                .map(convert_validator_info)
                 .collect(),
             pending_inactive: validator_set
                 .pendingInactive
                 .iter()
-                .map(|v| convert_validator_info(v))
+                .map(convert_validator_info)
                 .collect(),
             pending_active: validator_set
                 .pendingActive
                 .iter()
-                .map(|v| convert_validator_info(v))
+                .map(convert_validator_info)
                 .collect(),
             total_voting_power: format_ether(validator_set.totalVotingPower),
             total_joining_power: format_ether(validator_set.totalJoiningPower),
@@ -105,7 +105,7 @@ impl ListCommand {
 
         // Output as JSON
         let json = serde_json::to_string_pretty(&serializable_set)?;
-        println!("{}", json);
+        println!("{json}");
 
         Ok(())
     }

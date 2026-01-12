@@ -1,13 +1,12 @@
 use clap::Parser;
 
 use k256::ecdsa::SigningKey;
-use rand_core::{OsRng, RngCore};
+use rand_core::OsRng;
 use sha3::{Digest, Keccak256};
 
 use std::{fs, path::PathBuf};
-use tracing::info;
 
-use crate::{command::Executable, genesis::account};
+use crate::command::Executable;
 
 use serde::Serialize;
 
