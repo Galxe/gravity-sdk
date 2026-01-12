@@ -9,10 +9,8 @@ use crate::{
 };
 use anyhow::{format_err, Result};
 use gaptos::{
-    aptos_channels::{self},
     aptos_infallible::Mutex,
-    aptos_mempool_notifications::{self, MempoolNotifier},
-    aptos_network::protocols::network::{NewNetworkEvents, NewNetworkSender},
+    aptos_mempool_notifications::MempoolNotifier,
     aptos_storage_interface::DbReaderWriter,
     aptos_types::{mempool_status::MempoolStatusCode, transaction::SignedTransaction},
 };
@@ -82,9 +80,9 @@ impl MockSharedMempool {
     }
 
     pub fn start<V>(
-        handle: &Handle,
-        db: &DbReaderWriter,
-        validator: V,
+        _handle: &Handle,
+        _db: &DbReaderWriter,
+        _validator: V,
     ) -> (
         MempoolClientSender,
         Arc<Mutex<CoreMempool>>,

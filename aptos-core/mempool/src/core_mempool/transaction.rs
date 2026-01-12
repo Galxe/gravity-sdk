@@ -177,6 +177,7 @@ impl From<SignedTransaction> for VerifiedTxn {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct MempoolTransaction {
     verified_txn: SignedTransaction,
     pub timeline_state: TimelineState,
@@ -186,6 +187,7 @@ pub struct MempoolTransaction {
     sequence_info: SequenceInfo,
 }
 
+#[allow(dead_code)]
 impl MempoolTransaction {
     pub(crate) fn new(
         verified_txn: VerifiedTxn,

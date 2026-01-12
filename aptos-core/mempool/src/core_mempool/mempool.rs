@@ -15,7 +15,6 @@ use gaptos::{
     api_types::{account::ExternalAccountAddress, u256_define::TxnHash},
     aptos_config::config::NodeConfig,
     aptos_crypto::HashValue,
-    aptos_logger::prelude::*,
     aptos_mempool::shared_mempool::types::CoreMempoolTrait,
     aptos_types::{
         account_address::AccountAddress,
@@ -116,15 +115,15 @@ pub struct Mempool {
 impl CoreMempoolTrait for Mempool {
     fn timeline_range(
         &self,
-        sender_bucket: MempoolSenderBucket,
-        start_end_pairs: HashMap<TimelineIndexIdentifier, (u64, u64)>,
+        _sender_bucket: MempoolSenderBucket,
+        _start_end_pairs: HashMap<TimelineIndexIdentifier, (u64, u64)>,
     ) -> Vec<(SignedTransaction, u64)> {
         vec![]
     }
 
     fn timeline_range_of_message(
         &self,
-        sender_start_end_pairs: HashMap<
+        _sender_start_end_pairs: HashMap<
             MempoolSenderBucket,
             HashMap<TimelineIndexIdentifier, (u64, u64)>,
         >,
@@ -139,11 +138,11 @@ impl CoreMempoolTrait for Mempool {
 
     fn read_timeline(
         &self,
-        sender_bucket: MempoolSenderBucket,
-        timeline_id: &MultiBucketTimelineIndexIds,
-        count: usize,
-        before: Option<Instant>,
-        priority_of_receiver: BroadcastPeerPriority,
+        _sender_bucket: MempoolSenderBucket,
+        _timeline_id: &MultiBucketTimelineIndexIds,
+        _count: usize,
+        _before: Option<Instant>,
+        _priority_of_receiver: BroadcastPeerPriority,
     ) -> (Vec<(SignedTransaction, u64)>, MultiBucketTimelineIndexIds) {
         let visited = self.txn_cache.clone();
         let filter = Box::new(move |txn: (ExternalAccountAddress, u64, TxnHash)| {
@@ -169,19 +168,19 @@ impl CoreMempoolTrait for Mempool {
         panic!("don't need to implement")
     }
 
-    fn get_by_hash(&self, hash: HashValue) -> Option<SignedTransaction> {
+    fn get_by_hash(&self, _hash: HashValue) -> Option<SignedTransaction> {
         panic!("don't need to implement")
     }
 
     fn add_txn(
         &mut self,
         txn: SignedTransaction,
-        ranking_score: u64,
-        sequence_info: u64,
-        timeline_state: gaptos::aptos_mempool::core_mempool::TimelineState,
-        client_submitted: bool,
-        ready_time_at_sender: Option<u64>,
-        priority: Option<BroadcastPeerPriority>,
+        _ranking_score: u64,
+        _sequence_info: u64,
+        _timeline_state: gaptos::aptos_mempool::core_mempool::TimelineState,
+        _client_submitted: bool,
+        _ready_time_at_sender: Option<u64>,
+        _priority: Option<BroadcastPeerPriority>,
     ) -> MempoolStatus {
         self.txn_cache.lock().unwrap().insert(TxnHash::new(*txn.committed_hash()));
         let verfited_txn = crate::core_mempool::transaction::VerifiedTxn::from(txn);
@@ -193,7 +192,7 @@ impl CoreMempoolTrait for Mempool {
         }
     }
 
-    fn gc_by_expiration_time(&mut self, block_time: Duration) {
+    fn gc_by_expiration_time(&mut self, _block_time: Duration) {
         // don't need to implement
     }
 
@@ -201,21 +200,21 @@ impl CoreMempoolTrait for Mempool {
         &self,
         max_txns: u64,
         max_bytes: u64,
-        return_non_full: bool,
+        _return_non_full: bool,
         exclude_transactions: BTreeMap<
             gaptos::aptos_consensus_types::common::TransactionSummary,
             gaptos::aptos_consensus_types::common::TransactionInProgress,
         >,
     ) -> Vec<SignedTransaction> {
-        self.get_batch_inner(max_txns, max_bytes, return_non_full, exclude_transactions)
+        self.get_batch_inner(max_txns, max_bytes, _return_non_full, exclude_transactions)
     }
 
     fn reject_transaction(
         &mut self,
-        sender: &AccountAddress,
-        sequence_number: u64,
-        hash: &HashValue,
-        reason: &DiscardedVMStatus,
+        _sender: &AccountAddress,
+        _sequence_number: u64,
+        _hash: &HashValue,
+        _reason: &DiscardedVMStatus,
     ) {
         // don't need to implement
     }
@@ -226,10 +225,10 @@ impl CoreMempoolTrait for Mempool {
 
     fn log_commit_transaction(
         &self,
-        sender: &AccountAddress,
-        sequence_number: u64,
-        tracked_use_case: Option<(UseCaseKey, &String)>,
-        block_timestamp: Duration,
+        _sender: &AccountAddress,
+        _sequence_number: u64,
+        _tracked_use_case: Option<(UseCaseKey, &String)>,
+        _block_timestamp: Duration,
     ) {
         // don't need to implement
     }
@@ -241,6 +240,7 @@ impl Mempool {
     }
 
     /// This function will be called once the transaction has been stored.
+    #[allow(dead_code)]
     pub(crate) fn commit_transaction(&mut self, _sender: &AccountAddress, _sequence_number: u64) {
         // debug!(
         //     "commit txn {} {}",
@@ -253,17 +253,18 @@ impl Mempool {
     }
     /// Used to add a transaction to the Mempool.
     /// Performs basic validation: checks account's sequence number.
+    #[allow(dead_code)]
     pub(crate) fn send_user_txn(
         &mut self,
-        txn: VerifiedTxn,
-        db_sequence_number: u64,
-        timeline_state: TimelineState,
-        client_submitted: bool,
+        _txn: VerifiedTxn,
+        _db_sequence_number: u64,
+        _timeline_state: TimelineState,
+        _client_submitted: bool,
         // The time at which the transaction was inserted into the mempool of the
         // downstream node (sender of the mempool transaction) in millis since epoch
-        ready_time_at_sender: Option<u64>,
+        _ready_time_at_sender: Option<u64>,
         // The prority of this node for the peer that sent the transaction
-        priority: Option<BroadcastPeerPriority>,
+        _priority: Option<BroadcastPeerPriority>,
     ) -> MempoolStatus {
         panic!()
     }
@@ -280,7 +281,7 @@ impl Mempool {
         &self,
         max_txns: u64,
         max_bytes: u64,
-        return_non_full: bool,
+        _return_non_full: bool,
         exclude_transactions: BTreeMap<
             gaptos::aptos_consensus_types::common::TransactionSummary,
             gaptos::aptos_consensus_types::common::TransactionInProgress,
