@@ -1,8 +1,6 @@
 use clap::Parser;
 use gaptos::{
-    aptos_crypto::{
-        PrivateKey, ValidCryptoMaterial,
-    },
+    aptos_crypto::{PrivateKey, ValidCryptoMaterial},
     aptos_keygen::KeyGen,
 };
 use std::{fs, path::PathBuf};

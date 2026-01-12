@@ -273,9 +273,8 @@ impl JoinCommand {
         );
         println!(
             "   - Fullnode network addresses: {}",
-            bcs::from_bytes::<String>(&validator_info.fullnodeNetworkAddresses).map_err(
-                |e| anyhow::anyhow!("Failed to decode fullnode network addresses: {e}")
-            )?
+            bcs::from_bytes::<String>(&validator_info.fullnodeNetworkAddresses)
+                .map_err(|e| anyhow::anyhow!("Failed to decode fullnode network addresses: {e}"))?
         );
         println!("   - Aptos address: {}", validator_info.aptosAddress);
         if !matches!(validator_info.status, ValidatorStatus::INACTIVE) {

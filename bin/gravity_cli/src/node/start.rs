@@ -20,8 +20,7 @@ impl StartCommand {
         // Read PID from file
         let pid_str = fs::read_to_string(pid_path)?;
         let pid_str = pid_str.trim();
-        let pid: i32 =
-            pid_str.parse().map_err(|e| anyhow::anyhow!("Invalid PID in file: {e}"))?;
+        let pid: i32 = pid_str.parse().map_err(|e| anyhow::anyhow!("Invalid PID in file: {e}"))?;
 
         // Check if process is still running using ps command
         // This works on Unix-like systems (Linux, macOS, etc.)
