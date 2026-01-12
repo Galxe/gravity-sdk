@@ -5,7 +5,6 @@ use alloy_primitives::{Address, TxHash, B256, U256};
 use block_buffer_manager::get_block_buffer_manager;
 use core::panic;
 use dashmap::DashMap;
-use greth::reth_transaction_pool::{EthPooledTransaction, ValidPoolTransaction};
 use gaptos::api_types::{
     account::ExternalAccountAddress,
     compute_res::TxnStatus,
@@ -13,6 +12,7 @@ use gaptos::api_types::{
     u256_define::BlockId as ExternalBlockId,
     ExternalBlock, GLOBAL_CRYPTO_TXN_HASHER,
 };
+use greth::reth_transaction_pool::{EthPooledTransaction, ValidPoolTransaction};
 
 use alloy_rpc_types_eth::TransactionRequest;
 use greth::{
