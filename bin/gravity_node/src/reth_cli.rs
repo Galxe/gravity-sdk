@@ -5,6 +5,7 @@ use alloy_primitives::{Address, TxHash, B256, U256};
 use block_buffer_manager::get_block_buffer_manager;
 use core::panic;
 use dashmap::DashMap;
+use greth::reth_transaction_pool::{EthPooledTransaction, ValidPoolTransaction};
 use gaptos::api_types::{
     account::ExternalAccountAddress,
     compute_res::TxnStatus,
@@ -24,7 +25,6 @@ use greth::{
     reth_primitives::TransactionSigned,
     reth_provider::{providers::BlockchainProvider, BlockNumReader, ChainSpecProvider},
     reth_rpc_api::eth::{helpers::EthCall, RpcTypes},
-    reth_transaction_pool::{EthPooledTransaction, ValidPoolTransaction},
 };
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use std::{
