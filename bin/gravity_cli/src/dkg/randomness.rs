@@ -39,7 +39,7 @@ impl RandomnessCommand {
         if url.starts_with("https://") || url.starts_with("http://") {
             url.to_string()
         } else {
-            format!("http://{}", url)
+            format!("http://{url}")
         }
     }
 
@@ -61,9 +61,9 @@ impl RandomnessCommand {
             // Try to parse error message from response
             let error_msg = match response.json::<ErrorResponse>().await {
                 Ok(error_response) => format!("HTTP {}: {}", status_code, error_response.error),
-                Err(_) => format!("HTTP {}", status_code),
+                Err(_) => format!("HTTP {status_code}"),
             };
-            return Err(anyhow::anyhow!("Failed to get randomness: {}", error_msg));
+            return Err(anyhow::anyhow!("Failed to get randomness: {error_msg}"));
         }
 
         let result: RandomnessResponse = response.json().await?;

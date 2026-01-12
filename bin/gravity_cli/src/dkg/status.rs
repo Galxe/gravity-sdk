@@ -37,15 +37,15 @@ impl StatusCommand {
         if url.starts_with("https://") || url.starts_with("http://") {
             url.to_string()
         } else {
-            format!("http://{}", url)
+            format!("http://{url}")
         }
     }
 
     async fn execute_async(self) -> Result<(), anyhow::Error> {
         let base_url = Self::normalize_url(&self.server_url);
-        let url = format!("{}/dkg/status", base_url);
+        let url = format!("{base_url}/dkg/status");
 
-        println!("Fetching DKG status from: {}", url);
+        println!("Fetching DKG status from: {url}");
 
         let client = reqwest::Client::builder()
             .danger_accept_invalid_certs(true)
@@ -59,9 +59,9 @@ impl StatusCommand {
             // Try to parse error message from response
             let error_msg = match response.json::<ErrorResponse>().await {
                 Ok(error_response) => format!("HTTP {}: {}", status_code, error_response.error),
-                Err(_) => format!("HTTP {}", status_code),
+                Err(_) => format!("HTTP {status_code}"),
             };
-            return Err(anyhow::anyhow!("Failed to get DKG status: {}", error_msg));
+            return Err(anyhow::anyhow!("Failed to get DKG status: {error_msg}"));
         }
 
         let status: DKGStatusResponse = response.json().await?;

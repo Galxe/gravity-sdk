@@ -1,15 +1,9 @@
 use clap::Parser;
 use gaptos::{
-    api_types::u256_define::AccountAddress,
-    aptos_crypto::{
-        ed25519::{self, Ed25519PublicKey},
-        PrivateKey, ValidCryptoMaterial,
-    },
+    aptos_crypto::{PrivateKey, ValidCryptoMaterial},
     aptos_keygen::KeyGen,
-    aptos_types::transaction::authenticator::AuthenticationKey,
 };
 use std::{fs, path::PathBuf};
-use tracing::info;
 
 use crate::command::Executable;
 
@@ -65,7 +59,7 @@ impl Executable for GenerateKey {
 
         let account_private_key = key_gen.generate_ed25519_private_key();
         let account_address = network_private_key.public_key();
-        println!("The account_address is {}", account_address);
+        println!("The account_address is {account_address}");
         println!(
             "The last 20bit account_address is 0x{}",
             hex::encode(&account_address.as_slice()[12..])
