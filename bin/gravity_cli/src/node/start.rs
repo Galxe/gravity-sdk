@@ -20,8 +20,7 @@ impl StartCommand {
         // Read PID from file
         let pid_str = fs::read_to_string(pid_path)?;
         let pid_str = pid_str.trim();
-        let pid: i32 =
-            pid_str.parse().map_err(|e| anyhow::anyhow!("Invalid PID in file: {}", e))?;
+        let pid: i32 = pid_str.parse().map_err(|e| anyhow::anyhow!("Invalid PID in file: {e}"))?;
 
         // Check if process is still running using ps command
         // This works on Unix-like systems (Linux, macOS, etc.)
@@ -29,18 +28,18 @@ impl StartCommand {
 
         if output.status.success() {
             // Process is still running
-            return Err(anyhow::anyhow!(
+            Err(anyhow::anyhow!(
                 "Node is already running with PID {} (PID file: {})",
                 pid,
                 pid_path.display()
-            ));
+            ))
         } else {
             // Process doesn't exist, but PID file exists (zombie PID file)
-            return Err(anyhow::anyhow!(
+            Err(anyhow::anyhow!(
                 "PID file exists but process {} is not running (zombie PID file: {})",
                 pid,
                 pid_path.display()
-            ));
+            ))
         }
     }
 }
@@ -80,7 +79,7 @@ impl Executable for StartCommand {
             let pid_str = fs::read_to_string(&pid_path)?;
             let pid_str = pid_str.trim();
             if !pid_str.is_empty() {
-                println!("Node started successfully (PID: {})", pid_str);
+                println!("Node started successfully (PID: {pid_str})");
             } else {
                 println!("Node started successfully");
             }

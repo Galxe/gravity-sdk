@@ -55,18 +55,18 @@ impl LeaveCommand {
         let private_key_str = self.private_key.strip_prefix("0x").unwrap_or(&self.private_key);
         let private_key_bytes = hex::decode(private_key_str)?;
         let private_key = SigningKey::from_slice(private_key_bytes.as_slice())
-            .map_err(|e| anyhow::anyhow!("Invalid private key: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Invalid private key: {e}"))?;
         let signer = PrivateKeySigner::from(private_key);
         let wallet_address = signer.address();
-        println!("   Wallet address: {:?}", wallet_address);
+        println!("   Wallet address: {wallet_address:?}");
 
-        println!("   Contract address: {:?}", VALIDATOR_MANAGER_ADDRESS);
+        println!("   Contract address: {VALIDATOR_MANAGER_ADDRESS:?}");
 
         // Create provider
         let provider = ProviderBuilder::new().wallet(signer).connect_http(self.rpc_url.parse()?);
 
         let chain_id = provider.get_chain_id().await?;
-        println!("   Chain ID: {}", chain_id);
+        println!("   Chain ID: {chain_id}");
 
         // 2. Check validator information
         println!("2. Checking validator information...");
@@ -82,7 +82,7 @@ impl LeaveCommand {
             })
             .await?;
         let validator_info = <ValidatorInfo as SolType>::abi_decode(&result)
-            .map_err(|e| anyhow::anyhow!("Failed to decode validator info: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to decode validator info: {e}"))?;
         println!("   Validator information:");
         println!("   - Registered: {}", validator_info.registered);
         println!("   - Status: {:?}", validator_info.status);
@@ -135,7 +135,7 @@ impl LeaveCommand {
             .with_timeout(Some(std::time::Duration::from_secs(60)))
             .watch()
             .await?;
-        println!("   Transaction hash: {}", tx_hash);
+        println!("   Transaction hash: {tx_hash}");
         let receipt = provider
             .get_transaction_receipt(tx_hash)
             .await?
@@ -155,39 +155,33 @@ impl LeaveCommand {
         let mut found_status_change_event = false;
         for log in receipt.logs() {
             // Check for ValidatorLeaveRequested event
-            match ValidatorManager::ValidatorLeaveRequested::decode_log(&log.inner) {
-                Ok(event) => {
-                    println!("   Leave request successful! Event details:");
-                    println!("   - Validator address: {}", event.validator);
-                    println!("   - Epoch: {}", event.epoch);
-                    found_leave_event = true;
-                    continue;
-                }
-                Err(_) => {}
+            if let Ok(event) = ValidatorManager::ValidatorLeaveRequested::decode_log(&log.inner) {
+                println!("   Leave request successful! Event details:");
+                println!("   - Validator address: {}", event.validator);
+                println!("   - Epoch: {}", event.epoch);
+                found_leave_event = true;
+                continue;
             }
 
             // Check for ValidatorStatusChanged event
-            match ValidatorManager::ValidatorStatusChanged::decode_log(&log.inner) {
-                Ok(event) => {
-                    if event.validator == validator_address {
-                        println!("   Status changed! Event details:");
-                        println!("   - Validator address: {}", event.validator);
-                        println!(
-                            "   - Old status: {:?}",
-                            ValidatorStatus::try_from(event.oldStatus)
-                                .unwrap_or(ValidatorStatus::__Invalid)
-                        );
-                        println!(
-                            "   - New status: {:?}",
-                            ValidatorStatus::try_from(event.newStatus)
-                                .unwrap_or(ValidatorStatus::__Invalid)
-                        );
-                        println!("   - Epoch: {}", event.epoch);
-                        found_status_change_event = true;
-                        continue;
-                    }
+            if let Ok(event) = ValidatorManager::ValidatorStatusChanged::decode_log(&log.inner) {
+                if event.validator == validator_address {
+                    println!("   Status changed! Event details:");
+                    println!("   - Validator address: {}", event.validator);
+                    println!(
+                        "   - Old status: {:?}",
+                        ValidatorStatus::try_from(event.oldStatus)
+                            .unwrap_or(ValidatorStatus::__Invalid)
+                    );
+                    println!(
+                        "   - New status: {:?}",
+                        ValidatorStatus::try_from(event.newStatus)
+                            .unwrap_or(ValidatorStatus::__Invalid)
+                    );
+                    println!("   - Epoch: {}", event.epoch);
+                    found_status_change_event = true;
+                    continue;
                 }
-                Err(_) => {}
             }
         }
 
@@ -214,7 +208,7 @@ impl LeaveCommand {
             })
             .await?;
         let validator_status = <ValidatorStatus as SolType>::abi_decode(&result)
-            .map_err(|e| anyhow::anyhow!("Failed to decode validator status: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to decode validator status: {e}"))?;
         match validator_status {
             ValidatorStatus::PENDING_INACTIVE => {
                 println!(
@@ -225,8 +219,8 @@ impl LeaveCommand {
                 println!("   Validator status is INACTIVE, successfully left the validator set\n");
             }
             _ => {
-                println!("   Validator status is {:?}, unexpected status\n", validator_status);
-                return Err(anyhow::anyhow!("Unexpected validator status: {:?}", validator_status));
+                println!("   Validator status is {validator_status:?}, unexpected status\n");
+                return Err(anyhow::anyhow!("Unexpected validator status: {validator_status:?}"));
             }
         }
         Ok(())
