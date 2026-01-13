@@ -158,7 +158,7 @@ async def test_epoch_consistency_fast(
 @pytest.mark.slow
 @pytest.mark.epoch
 @pytest.mark.self_managed
-@pytest.mark.asyncio
+@test_case
 async def test_epoch_consistency(run_helper: RunHelper, test_result: TestResult):
     """Pytest wrapper for slow epoch consistency test"""
     await test_epoch_consistency_slow(run_helper=run_helper, test_result=test_result)
@@ -167,7 +167,7 @@ async def test_epoch_consistency(run_helper: RunHelper, test_result: TestResult)
 @pytest.mark.slow
 @pytest.mark.epoch
 @pytest.mark.self_managed
-@pytest.mark.asyncio
+@test_case
 async def test_epoch_consistency_extended(run_helper: RunHelper, test_result: TestResult):
     """Pytest wrapper for fast epoch consistency test (extended)"""
     await test_epoch_consistency_fast(run_helper=run_helper, test_result=test_result)
