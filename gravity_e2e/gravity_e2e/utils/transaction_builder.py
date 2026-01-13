@@ -596,9 +596,13 @@ class TransactionBuilder:
 
         # Build constructor data
         if args:
-            data = contract.constructor(*args).data_in_transaction
+            constructor = contract.constructor(*args)
         else:
-            data = contract.constructor().data_in_transaction
+            constructor = contract.constructor()
+        
+        # Get constructor data using build_transaction
+        tx = constructor.build_transaction({'from': self.account.address, 'gas': 0, 'gasPrice': 0})
+        data = tx.get('data', '0x')
 
         # Deploy transaction (to field is None for contract deployment)
         return await self.build_and_send_tx(
