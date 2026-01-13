@@ -7,7 +7,7 @@ including node connections, account management, and test helpers.
 Usage:
     # In test files, fixtures are automatically injected:
     
-    @pytest.mark.asyncio
+    @test_case
     async def test_something(run_helper, test_result):
         account = await run_helper.create_test_account("test", fund_wei=10**18)
         # ... test code
