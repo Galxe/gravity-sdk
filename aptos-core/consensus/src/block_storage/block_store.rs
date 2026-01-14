@@ -554,10 +554,10 @@ impl BlockStore {
                         epoch: p_block.block().epoch(),
                         randomness,
                         block_hash: maybe_block_hash.clone(),
-                        proposer: p_block
-                            .block()
-                            .author()
-                            .map(|author| ExternalAccountAddress::new(author.into_bytes())),
+                        // In recovery mode, we don't have access to the validator set,
+                        // so we set proposer_index to None. This is acceptable since
+                        // the block hash is already verified from storage.
+                        proposer_index: None,
                     },
                     extra_data,
                     enable_randomness: self.enable_randomness,

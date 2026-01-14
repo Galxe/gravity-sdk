@@ -75,8 +75,9 @@ impl GenerateWaypoint {
             );
 
             // Create validator info
+            // TODO(gravity_neko): Fix it
             let validator_info =
-                ValidatorInfo::new(account_address, voting_power, validator_config);
+                ValidatorInfo::new(account_address, voting_power, validator_config, vec![]);
             validators.push(validator_info);
         }
 

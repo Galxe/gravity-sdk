@@ -80,11 +80,6 @@ impl MockConsensus {
         let mut bytes = [0u8; 32];
         bytes[0..8].copy_from_slice(&block_id.to_be_bytes());
 
-        let mut proposer = [0u8; 32];
-        proposer[0..32].copy_from_slice(
-            &hex::decode("2d86b40a1d692c0749a0a0426e2021ee24e2430da0f5bb9c2ae6c586bf3e0a0f")
-                .unwrap(),
-        );
         ExternalBlock {
             block_meta: ExternalBlockMeta {
                 block_id: BlockId(bytes),
@@ -93,7 +88,8 @@ impl MockConsensus {
                 epoch,
                 randomness: None,
                 block_hash: None,
-                proposer: Some(ExternalAccountAddress::new(proposer)),
+                // Mock consensus uses index 0 (first validator in the mock set)
+                proposer_index: Some(0),
             },
             txns,
             extra_data: Vec::new(), // TODO: add validator transaction extra_data (DKG, JWK)

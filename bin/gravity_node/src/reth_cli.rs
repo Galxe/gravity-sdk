@@ -186,10 +186,9 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             transactions,
             senders,
             epoch: block.block_meta.epoch,
-            proposer: block.block_meta.proposer.map(|x| x.bytes()),
+            proposer_index: block.block_meta.proposer_index,
             extra_data: block.extra_data,
             randomness,
-            enable_randomness: block.enable_randomness,
         });
         Ok(())
     }

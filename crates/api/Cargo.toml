@@ -29,7 +29,6 @@ async-trait = { workspace = true }
 either = { workspace = true }
 arc-swap = { workspace = true }
 byteorder = { workspace = true }
-rocksdb = { workspace = true }
 itertools = { workspace = true }
 # api-types = { workspace = true }
 fail = { workspace = true }
