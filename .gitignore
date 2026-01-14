@@ -167,3 +167,4 @@ gravity_e2e/tests/contracts/**/output/
 gravity_e2e/logs/
 ./external
 cluster/output/
+cluster/cluster.toml
