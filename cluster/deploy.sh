@@ -12,15 +12,11 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Configure node function (Rendering logic)
 configure_node() {
     local node_id="$1"
-    local host="$2"
-    local p2p_port="$3"
-    local rpc_port="$4"
-    local metrics_port="$5"
-    local data_dir="$6"
-    local genesis_path="$7"
-    local binary_path="$8"
-    local identity_src="$9"
-    local waypoint_src="${10}"
+    local data_dir="$2"
+    local genesis_path="$3"
+    local binary_path="$4"
+    local identity_src="$5"
+    local waypoint_src="$6"
     
     local config_dir="$data_dir/config"
     
@@ -33,28 +29,12 @@ configure_node() {
     cp "$identity_src" "$config_dir/validator-identity.yaml"
     cp "$waypoint_src" "$config_dir/waypoint.txt"
     
-    # Calculate derived ports
-    local vfn_port=$((p2p_port + 10))
-    local inspection_port=$((10000 + ${node_id##node} - 1))
-    local https_port=$((1024 + ${node_id##node} - 1))
-    local authrpc_port=$((8551 + ${node_id##node} - 1))
-    local p2p_port_reth=$((12024 + ${node_id##node} - 1))
-    
-    # Export variables for envsubst
-    # Note: DATA_DIR and CONFIG_DIR used in templates
+    # Export paths validation
+    # (Port variables HOST, P2P_PORT etc expected to be exported by caller)
     export NODE_ID="$node_id"
-    export HOST="$host"
-    export P2P_PORT="$p2p_port"
-    export RPC_PORT="$rpc_port"
-    export METRICS_PORT="$metrics_port"
     export DATA_DIR="$data_dir"
     export CONFIG_DIR="$config_dir"
     export GENESIS_PATH="$genesis_path"
-    export VFN_PORT="$vfn_port"
-    export INSPECTION_PORT="$inspection_port"
-    export HTTPS_PORT="$https_port"
-    export AUTHRPC_PORT="$authrpc_port"
-    export P2P_PORT_RETH="$p2p_port_reth"
     export BINARY_PATH="$binary_path"
     
     # Generate validator.yaml from template
@@ -164,7 +144,7 @@ main() {
         binary_path="$(cd "$SCRIPT_DIR" && realpath "$binary_path")"
     fi
      
-    # Find/Validate binary logic (reused from init.sh concept)
+    # Find/Validate binary checking
     if [ ! -f "$binary_path" ]; then
         log_warn "Configured binary not found at: $binary_path"
         FOUND_BIN=$(find_binary "gravity_node" "$PROJECT_ROOT") || true
@@ -199,36 +179,44 @@ main() {
     
     for i in $(seq 0 $((node_count - 1))); do
         node=$(echo "$config_json" | jq ".nodes[$i]")
-        node_id=$(echo "$node" | jq -r '.id')
-        host=$(echo "$node" | jq -r '.host')
-        p2p_port=$(echo "$node" | jq -r '.p2p_port')
-        rpc_port=$(echo "$node" | jq -r '.rpc_port')
-        metrics_port=$(echo "$node" | jq -r '.metrics_port')
-        data_dir=$(echo "$node" | jq -r '.data_dir // empty')
         
+        # Extract and Export config
+        export NODE_ID=$(echo "$node" | jq -r '.id')
+        export HOST=$(echo "$node" | jq -r '.host')
+        export P2P_PORT=$(echo "$node" | jq -r '.p2p_port')
+        export VFN_PORT=$(echo "$node" | jq -r '.vfn_port')
+        export RPC_PORT=$(echo "$node" | jq -r '.rpc_port')
+        export METRICS_PORT=$(echo "$node" | jq -r '.metrics_port')
+        export INSPECTION_PORT=$(echo "$node" | jq -r '.inspection_port')
+        export HTTPS_PORT=$(echo "$node" | jq -r '.https_port')
+        export AUTHRPC_PORT=$(echo "$node" | jq -r '.authrpc_port')
+        export P2P_PORT_RETH=$(echo "$node" | jq -r '.reth_p2p_port')
+        
+        data_dir=$(echo "$node" | jq -r '.data_dir // empty')
         if [ -z "$data_dir" ]; then
-            data_dir="$base_dir/$node_id"
+            data_dir="$base_dir/$NODE_ID"
         fi
         
         # Prepare dirs
         mkdir -p "$data_dir"/{config,data,logs,execution_logs,consensus_log,script}
         
-        
         # Artifact sources
-        identity_src="$OUTPUT_DIR/$node_id/config/validator-identity.yaml"
+        identity_src="$OUTPUT_DIR/$NODE_ID/config/validator-identity.yaml"
         waypoint_src="$OUTPUT_DIR/waypoint.txt"
         
         if [ ! -f "$identity_src" ]; then
-            log_error "Identity not found for $node_id at $identity_src"
+            log_error "Identity not found for $NODE_ID at $identity_src"
             exit 1
         fi
         
+        # Validate required ports (simple check)
+        if [ "$P2P_PORT" == "null" ] || [ "$VFN_PORT" == "null" ]; then
+             log_error "Missing required ports in config for $NODE_ID"
+             exit 1
+        fi
+        
         configure_node \
-            "$node_id" \
-            "$host" \
-            "$p2p_port" \
-            "$rpc_port" \
-            "$metrics_port" \
+            "$NODE_ID" \
             "$data_dir" \
             "$genesis_path" \
             "$binary_path" \

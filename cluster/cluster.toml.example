@@ -20,30 +20,46 @@ binary_path = "../target/quick-release/gravity_node"
 id = "node1"
 host = "127.0.0.1"
 p2p_port = 6180
+vfn_port = 6190
 rpc_port = 8545
 metrics_port = 9001
-# Optional: override data_dir (default: {base_dir}/{id})
-# data_dir = "/custom/path/node1"
+inspection_port = 10000
+https_port = 1024
+authrpc_port = 8551
+reth_p2p_port = 12024
 
-# Uncomment below to add more nodes:
+[[nodes]]
+id = "node2"
+host = "127.0.0.1"
+p2p_port = 6181
+vfn_port = 6191
+rpc_port = 8546
+metrics_port = 9002
+inspection_port = 10001
+https_port = 1025
+authrpc_port = 8552
+reth_p2p_port = 12025
 
-# [[nodes]]
-# id = "node2"
-# host = "127.0.0.1"
-# p2p_port = 6181
-# rpc_port = 8546
-# metrics_port = 9002
+[[nodes]]
+id = "node3"
+host = "127.0.0.1"
+p2p_port = 6182
+vfn_port = 6192
+rpc_port = 8547
+metrics_port = 9003
+inspection_port = 10002
+https_port = 1026
+authrpc_port = 8553
+reth_p2p_port = 12026
 
-# [[nodes]]
-# id = "node3"
-# host = "127.0.0.1"
-# p2p_port = 6182
-# rpc_port = 8547
-# metrics_port = 9003
-
-# [[nodes]]
-# id = "node4"
-# host = "127.0.0.1"
-# p2p_port = 6183
-# rpc_port = 8548
-# metrics_port = 9004
+[[nodes]]
+id = "node4"
+host = "127.0.0.1"
+p2p_port = 6183
+vfn_port = 6193
+rpc_port = 8548
+metrics_port = 9004
+inspection_port = 10003
+https_port = 1027
+authrpc_port = 8554
+reth_p2p_port = 12027

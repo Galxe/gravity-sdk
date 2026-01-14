@@ -92,7 +92,7 @@ def main():
         # Network info
         host = node['host']
         p2p_port = node['p2p_port']
-        vfn_port = p2p_port + 10
+        vfn_port = node['vfn_port']
         
         # Build addresses
         val_net_addr = f"/ip4/{host}/tcp/{p2p_port}/noise-ik/{network_pk}/handshake/0"
