@@ -90,7 +90,7 @@ book/site/*
 deploy_utils/ansible/server_confs
 
 gravity.json
-start.sh
+./start.sh
 *.pb
 *.svg
 /profile/*
