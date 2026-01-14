@@ -29,7 +29,7 @@ from typing import Dict, List, Optional
 
 from gravity_e2e.helpers.test_helpers import RunHelper, TestResult, test_case
 from gravity_e2e.utils.contract_deployer import ContractDeployer, DeploymentOptions
-from gravity_e2e.utils.transaction_builder import TransactionBuilder, TransactionOptions
+from gravity_e2e.utils.transaction_builder import TransactionBuilder, TransactionOptions, run_sync
 from gravity_e2e.utils.event_poller import EventPoller, wait_for_transfer_event
 from gravity_e2e.utils.exceptions import ContractError, TransactionError, EventError
 from eth_account import Account
@@ -46,7 +46,7 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
         # 1. Create test accounts
         deployer = await run_helper.create_test_account("deployer", fund_wei=10 * 10**18)  # 10 ETH
         recipient = await run_helper.create_test_account("recipient")
-        another_recipient = await run_helper.create_test_account("another_recipient")
+        another_recipient = await run_helper.create_test_account("another_recipient", fund_wei=1 * 10**18)  # 1 ETH for gas
 
         LOG.info(f"Deployer: {deployer['address']}")
         LOG.info(f"Recipient 1: {recipient['address']}")
@@ -111,10 +111,10 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
         LOG.info("Testing ERC20 view functions...")
 
         # Test token metadata
-        name = await contract.functions.name().call()
-        symbol = await contract.functions.symbol().call()
-        decimals = await contract.functions.decimals().call()
-        total_supply = await contract.functions.totalSupply().call()
+        name = await run_sync(contract.functions.name().call)
+        symbol = await run_sync(contract.functions.symbol().call)
+        decimals = await run_sync(contract.functions.decimals().call)
+        total_supply = await run_sync(contract.functions.totalSupply().call)
 
         LOG.info(f"Token name: {name}")
         LOG.info(f"Token symbol: {symbol}")
@@ -128,9 +128,9 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
             )
 
         # 6. Test initial balances
-        deployer_balance = await contract.functions.balanceOf(deployer['address']).call()
-        recipient_balance = await contract.functions.balanceOf(recipient['address']).call()
-        another_balance = await contract.functions.balanceOf(another_recipient['address']).call()
+        deployer_balance = await run_sync(contract.functions.balanceOf(deployer['address']).call)
+        recipient_balance = await run_sync(contract.functions.balanceOf(recipient['address']).call)
+        another_balance = await run_sync(contract.functions.balanceOf(another_recipient['address']).call)
 
         LOG.info(f"Deployer initial balance: {deployer_balance / 10**decimals} tokens")
         LOG.info(f"Recipient initial balance: {recipient_balance / 10**decimals} tokens")
@@ -153,15 +153,17 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
                 contract=contract,
                 event_name="Transfer",
                 timeout=30,
-                from_address=deployer['address'],
-                to_address=recipient['address']
+                argument_filters={
+                    'from': deployer['address'],
+                    'to': recipient['address']
+                }
             )
         )
 
         # Execute transfer
         transfer_result_1 = await tx_builder.build_and_send_tx(
             to=contract_address,
-            data=contract.functions.transfer(recipient['address'], transfer_amount_1).data_in_transaction,
+            data=contract.encode_abi('transfer', [recipient['address'], transfer_amount_1]),
             options=TransactionOptions(gas_limit=100000)
         )
 
@@ -175,13 +177,13 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
         transfer_event = await transfer_event_task
         if transfer_event:
             LOG.info(f"Transfer event detected: {transfer_event['args']}")
-            assert transfer_event['args']['from'] == deployer['address'].lower()
-            assert transfer_event['args']['to'] == recipient['address'].lower()
+            assert transfer_event['args']['from'].lower() == deployer['address'].lower()
+            assert transfer_event['args']['to'].lower() == recipient['address'].lower()
             assert transfer_event['args']['value'] == transfer_amount_1
 
         # 8. Verify balances after first transfer
-        new_deployer_balance = await contract.functions.balanceOf(deployer['address']).call()
-        new_recipient_balance = await contract.functions.balanceOf(recipient['address']).call()
+        new_deployer_balance = await run_sync(contract.functions.balanceOf(deployer['address']).call)
+        new_recipient_balance = await run_sync(contract.functions.balanceOf(recipient['address']).call)
 
         expected_deployer = deployer_balance - transfer_amount_1
         expected_recipient = recipient_balance + transfer_amount_1
@@ -207,7 +209,7 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
         # Approve another recipient to spend tokens
         approve_result = await tx_builder.build_and_send_tx(
             to=contract_address,
-            data=contract.functions.approve(another_recipient['address'], approval_amount).data_in_transaction,
+            data=contract.encode_abi('approve', [another_recipient['address'], approval_amount]),
             options=TransactionOptions(gas_limit=50000)
         )
 
@@ -218,7 +220,7 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
             )
 
         # Check allowance
-        allowance = await contract.functions.allowance(deployer['address'], another_recipient['address']).call()
+        allowance = await run_sync(contract.functions.allowance(deployer['address'], another_recipient['address']).call)
         if allowance != approval_amount:
             raise ContractError(
                 f"Allowance mismatch: expected {approval_amount}, got {allowance}"
@@ -239,11 +241,11 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
         # Execute transferFrom
         transfer_from_result = await another_builder.build_and_send_tx(
             to=contract_address,
-            data=contract.functions.transferFrom(
+            data=contract.encode_abi('transferFrom', [
                 deployer['address'],
                 another_recipient['address'],
                 transfer_amount_2
-            ).data_in_transaction,
+            ]),
             options=TransactionOptions(gas_limit=100000)
         )
 
@@ -254,9 +256,9 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
             )
 
         # 11. Verify final balances and allowance
-        final_deployer_balance = await contract.functions.balanceOf(deployer['address']).call()
-        final_another_balance = await contract.functions.balanceOf(another_recipient['address']).call()
-        final_allowance = await contract.functions.allowance(deployer['address'], another_recipient['address']).call()
+        final_deployer_balance = await run_sync(contract.functions.balanceOf(deployer['address']).call)
+        final_another_balance = await run_sync(contract.functions.balanceOf(another_recipient['address']).call)
+        final_allowance = await run_sync(contract.functions.allowance(deployer['address'], another_recipient['address']).call)
 
         expected_final_deployer = new_deployer_balance - transfer_amount_2
         expected_final_another = another_balance + transfer_amount_2
@@ -299,7 +301,7 @@ async def test_erc20_deploy_and_transfer(run_helper: RunHelper, test_result: Tes
             transfer_2_amount=transfer_amount_2,
             approval_amount=approval_amount,
             final_deployer_balance=final_deployer_balance,
-            final_recipient_balance=await contract.functions.balanceOf(recipient['address']).call(),
+            final_recipient_balance=await run_sync(contract.functions.balanceOf(recipient['address']).call),
             final_another_balance=final_another_balance,
             total_transfer_events=len(all_events.events),
             deployment_gas_used=deploy_result.gas_used,
@@ -384,7 +386,7 @@ async def test_erc20_batch_transfers(run_helper: RunHelper, test_result: TestRes
             # Execute transfer
             result = await tx_builder.build_and_send_tx(
                 to=contract_address,
-                data=contract.functions.transfer(recipient['address'], transfer_amount).data_in_transaction,
+                data=contract.encode_abi('transfer', [recipient['address'], transfer_amount]),
                 options=TransactionOptions(gas_limit=100000)
             )
 
@@ -407,7 +409,7 @@ async def test_erc20_batch_transfers(run_helper: RunHelper, test_result: TestRes
         LOG.info(f"Found {len(all_events.events)} Transfer events")
 
         # 6. Verify all transfers
-        deployer_balance = await contract.functions.balanceOf(deployer['address']).call()
+        deployer_balance = await run_sync(contract.functions.balanceOf(deployer['address']).call)
         expected_deployer_balance = initial_supply - total_transferred
 
         if deployer_balance != expected_deployer_balance:
@@ -417,14 +419,17 @@ async def test_erc20_batch_transfers(run_helper: RunHelper, test_result: TestRes
 
         # Verify each recipient balance
         for i, recipient in enumerate(recipients):
-            balance = await contract.functions.balanceOf(recipient['address']).call()
+            balance = await run_sync(contract.functions.balanceOf(recipient['address']).call)
             if balance != transfer_amount:
                 raise ContractError(
                     f"Recipient {i} balance mismatch: expected {transfer_amount}, got {balance}"
                 )
 
-        # 7. Analyze events
-        transfer_events = [e for e in all_events.events if e['event'] == 'Transfer']
+        # 7. Analyze events (filter out initial mint from zero address)
+        transfer_events = [
+            e for e in all_events.events 
+            if e['event'] == 'Transfer' and e['args'].get('from', '').lower() != '0x0000000000000000000000000000000000000000'
+        ]
         if len(transfer_events) != len(recipients):
             raise EventError(
                 f"Event count mismatch: expected {len(recipients)}, got {len(transfer_events)}"
@@ -489,7 +494,7 @@ async def test_erc20_edge_cases(run_helper: RunHelper, test_result: TestResult):
         )
 
         # 4. Test edge case: Transfer more than balance
-        deployer_balance = await contract.functions.balanceOf(deployer['address']).call()
+        deployer_balance = await run_sync(contract.functions.balanceOf(deployer['address']).call)
         over_transfer_amount = deployer_balance + (10 ** 18)  # Try to transfer 1 token more than balance
 
         LOG.info(f"Testing transfer of more than balance: {over_transfer_amount / 10**18} tokens")
@@ -498,7 +503,7 @@ async def test_erc20_edge_cases(run_helper: RunHelper, test_result: TestResult):
         try:
             result = await tx_builder.build_and_send_tx(
                 to=contract_address,
-                data=contract.functions.transfer(recipient['address'], over_transfer_amount).data_in_transaction,
+                data=contract.encode_abi('transfer', [recipient['address'], over_transfer_amount]),
                 options=TransactionOptions(gas_limit=100000)
             )
 
@@ -519,7 +524,7 @@ async def test_erc20_edge_cases(run_helper: RunHelper, test_result: TestResult):
         try:
             result = await tx_builder.build_and_send_tx(
                 to=contract_address,
-                data=contract.functions.transfer("0x0000000000000000000000000000000000000000", zero_transfer_amount).data_in_transaction,
+                data=contract.encode_abi('transfer', ["0x0000000000000000000000000000000000000000", zero_transfer_amount]),
                 options=TransactionOptions(gas_limit=100000)
             )
 
@@ -536,7 +541,7 @@ async def test_erc20_edge_cases(run_helper: RunHelper, test_result: TestResult):
         zero_amount = 0
         result = await tx_builder.build_and_send_tx(
             to=contract_address,
-            data=contract.functions.transfer(recipient['address'], zero_amount).data_in_transaction,
+            data=contract.encode_abi('transfer', [recipient['address'], zero_amount]),
             options=TransactionOptions(gas_limit=50000)
         )
 
@@ -563,7 +568,7 @@ async def test_erc20_edge_cases(run_helper: RunHelper, test_result: TestResult):
 
         result = await tx_builder.build_and_send_tx(
             to=contract_address,
-            data=contract.functions.approve(recipient['address'], 0).data_in_transaction,
+            data=contract.encode_abi('approve', [recipient['address'], 0]),
             options=TransactionOptions(gas_limit=50000)
         )
 
@@ -571,7 +576,7 @@ async def test_erc20_edge_cases(run_helper: RunHelper, test_result: TestResult):
             LOG.info("Zero amount approval succeeded")
 
             # Check allowance
-            allowance = await contract.functions.allowance(deployer['address'], recipient['address']).call()
+            allowance = await run_sync(contract.functions.allowance(deployer['address'], recipient['address']).call)
             if allowance == 0:
                 LOG.info("Zero allowance correctly set")
         else:
@@ -586,7 +591,7 @@ async def test_erc20_edge_cases(run_helper: RunHelper, test_result: TestResult):
         # Approve small amount
         await tx_builder.build_and_send_tx(
             to=contract_address,
-            data=contract.functions.approve(recipient['address'], small_approval).data_in_transaction,
+            data=contract.encode_abi('approve', [recipient['address'], small_approval]),
             options=TransactionOptions(gas_limit=50000)
         )
 
@@ -599,11 +604,11 @@ async def test_erc20_edge_cases(run_helper: RunHelper, test_result: TestResult):
         try:
             result = await recipient_builder.build_and_send_tx(
                 to=contract_address,
-                data=contract.functions.transferFrom(
+                data=contract.encode_abi('transferFrom', [
                     deployer['address'],
                     recipient['address'],
                     large_transfer
-                ).data_in_transaction,
+                ]),
                 options=TransactionOptions(gas_limit=100000)
             )
 
@@ -622,7 +627,7 @@ async def test_erc20_edge_cases(run_helper: RunHelper, test_result: TestResult):
             zero_amount_test=True,
             zero_approval_test=True,
             insufficient_allowance_test=True,
-            final_deployer_balance=await contract.functions.balanceOf(deployer['address']).call()
+            final_deployer_balance=await run_sync(contract.functions.balanceOf(deployer['address']).call)
         )
 
         LOG.info("ERC20 edge cases test completed successfully")
