@@ -9,7 +9,7 @@ base_dir = "/tmp/gravity-cluster"
 
 [build]
 # Path to gravity_node binary
-binary_path = "./target/release/gravity_node"
+binary_path = "../target/quick-release/gravity_node"
 
 # Node definitions
 # Each node requires: id, host, and ports
