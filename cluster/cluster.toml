@@ -1,0 +1,40 @@
+[cluster]
+name = "gravity-devnet"
+base_dir = "/tmp/gravity-cluster"
+
+[genesis]
+# Using the specific genesis file requested by user
+path = "../genesis1.json"
+
+[build]
+binary_path = "../target/quick-release/gravity_node"
+
+# 4-Node Cluster Configuration
+
+[[nodes]]
+id = "node1"
+host = "127.0.0.1"
+p2p_port = 6180
+rpc_port = 8545
+metrics_port = 9001
+
+[[nodes]]
+id = "node2"
+host = "127.0.0.1"
+p2p_port = 6181
+rpc_port = 8546
+metrics_port = 9002
+
+[[nodes]]
+id = "node3"
+host = "127.0.0.1"
+p2p_port = 6182
+rpc_port = 8547
+metrics_port = 9003
+
+[[nodes]]
+id = "node4"
+host = "127.0.0.1"
+p2p_port = 6183
+rpc_port = 8548
+metrics_port = 9004

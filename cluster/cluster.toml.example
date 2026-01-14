@@ -1,0 +1,52 @@
+# Gravity Cluster Configuration
+# Copy this file to cluster.toml and modify as needed
+
+[cluster]
+name = "gravity-devnet"
+# Base directory for all node data (each node gets a subdirectory)
+base_dir = "/tmp/gravity-cluster"
+
+[genesis]
+# Path to genesis.json file (required)
+path = "./genesis.json"
+
+[build]
+# Path to gravity_node binary
+binary_path = "./target/release/gravity_node"
+
+# Node definitions
+# Each node requires: id, host, and ports
+# For local development, use 127.0.0.1 with different ports
+# For distributed deployment, use different hosts
+
+[[nodes]]
+id = "node1"
+host = "127.0.0.1"
+p2p_port = 6180
+rpc_port = 8545
+metrics_port = 9001
+# Optional: override data_dir (default: {base_dir}/{id})
+# data_dir = "/custom/path/node1"
+
+# Uncomment below to add more nodes:
+
+# [[nodes]]
+# id = "node2"
+# host = "127.0.0.1"
+# p2p_port = 6181
+# rpc_port = 8546
+# metrics_port = 9002
+
+# [[nodes]]
+# id = "node3"
+# host = "127.0.0.1"
+# p2p_port = 6182
+# rpc_port = 8547
+# metrics_port = 9003
+
+# [[nodes]]
+# id = "node4"
+# host = "127.0.0.1"
+# p2p_port = 6183
+# rpc_port = 8548
+# metrics_port = 9004
