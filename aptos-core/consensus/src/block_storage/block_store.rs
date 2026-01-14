@@ -1006,7 +1006,7 @@ impl BlockReader for BlockStore {
             match cur_block {
                 Some(block) => {
                     if let Some(execution_time_and_size) = block.get_execution_summary() {
-                        info!(
+                        debug!(
                             "Found execution time for {}, {:?}",
                             block.id(),
                             execution_time_and_size
@@ -1016,7 +1016,7 @@ impl BlockReader for BlockStore {
                             return res;
                         }
                     } else {
-                        info!("Couldn't find execution time for {}", block.id());
+                        debug!("Couldn't find execution time for {}", block.id());
                     }
                     cur_block = self.get_block(block.parent_id());
                 }
