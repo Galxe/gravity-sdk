@@ -6,9 +6,6 @@ name = "gravity-devnet"
 # Base directory for all node data (each node gets a subdirectory)
 base_dir = "/tmp/gravity-cluster"
 
-[genesis]
-# Path to genesis.json file (required)
-path = "./genesis.json"
 
 [build]
 # Path to gravity_node binary

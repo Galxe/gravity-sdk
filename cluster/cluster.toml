@@ -2,9 +2,6 @@
 name = "gravity-devnet"
 base_dir = "/tmp/gravity-cluster"
 
-[genesis]
-# Using the specific genesis file requested by user
-path = "../genesis1.json"
 
 [build]
 binary_path = "../target/quick-release/gravity_node"
