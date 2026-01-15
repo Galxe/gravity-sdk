@@ -118,7 +118,7 @@ python3 -m pip install -r requirements.txt --quiet --break-system-packages
 echo "Installing Foundry..."
 curl -L https://foundry.paradigm.xyz | bash
 export PATH="$HOME/.foundry/bin:$PATH"
-foundryup --quiet
+foundryup
 
 # Compile ERC20 test contracts
 if [ -d "tests/contracts/erc20-test" ]; then
