@@ -30,7 +30,7 @@ use gaptos::{
     },
     aptos_crypto::{hash::CryptoHash, HashValue},
     aptos_infallible::Mutex,
-    aptos_logger::{error, info, sample, sample::SampleRate, warn},
+    aptos_logger::{debug, error, info, sample, sample::SampleRate, warn},
     aptos_types::{on_chain_config::ValidatorTxnConfig, validator_txn::ValidatorTransaction},
     aptos_validator_transaction_pool as vtxn_pool,
 };
@@ -591,19 +591,38 @@ impl ProposalGenerator {
             (max_block_txns_after_filtering, None)
         };
 
-        warn!(
-            pipeline_pending_latency = pipeline_pending_latency.as_millis(),
-            proposal_delay_ms = proposal_delay.as_millis(),
-            max_block_txns_after_filtering = max_block_txns_after_filtering,
-            max_txns_from_block_to_execute =
-                max_txns_from_block_to_execute.unwrap_or(max_block_txns_after_filtering),
-            max_block_bytes = max_block_bytes,
-            is_pipeline_backpressure = pipeline_backpressure.is_some(),
-            is_execution_backpressure = execution_backpressure_applied,
-            is_chain_health_backoff = chain_health_backoff.is_some(),
-            round = round,
-            "Proposal generation backpressure details",
-        );
+        if pipeline_backpressure.is_some() ||
+            execution_backpressure_applied ||
+            chain_health_backoff.is_some()
+        {
+            warn!(
+                pipeline_pending_latency = pipeline_pending_latency.as_millis(),
+                proposal_delay_ms = proposal_delay.as_millis(),
+                max_block_txns_after_filtering = max_block_txns_after_filtering,
+                max_txns_from_block_to_execute =
+                    max_txns_from_block_to_execute.unwrap_or(max_block_txns_after_filtering),
+                max_block_bytes = max_block_bytes,
+                is_pipeline_backpressure = pipeline_backpressure.is_some(),
+                is_execution_backpressure = execution_backpressure_applied,
+                is_chain_health_backoff = chain_health_backoff.is_some(),
+                round = round,
+                "Proposal generation backpressure details",
+            );
+        } else {
+            debug!(
+                pipeline_pending_latency = pipeline_pending_latency.as_millis(),
+                proposal_delay_ms = proposal_delay.as_millis(),
+                max_block_txns_after_filtering = max_block_txns_after_filtering,
+                max_txns_from_block_to_execute =
+                    max_txns_from_block_to_execute.unwrap_or(max_block_txns_after_filtering),
+                max_block_bytes = max_block_bytes,
+                is_pipeline_backpressure = pipeline_backpressure.is_some(),
+                is_execution_backpressure = execution_backpressure_applied,
+                is_chain_health_backoff = chain_health_backoff.is_some(),
+                round = round,
+                "Proposal generation backpressure details",
+            );
+        }
 
         (
             max_block_txns_after_filtering,
