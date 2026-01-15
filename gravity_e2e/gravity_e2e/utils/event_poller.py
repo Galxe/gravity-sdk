@@ -24,6 +24,7 @@ from web3.types import FilterParams, LogReceipt, EventData
 from eth_utils import decode_hex, encode_hex
 from .exceptions import EventError, NodeConnectionError
 from .async_retry import AsyncRetry
+from .transaction_builder import run_sync
 
 LOG = logging.getLogger(__name__)
 
@@ -114,10 +115,7 @@ class EventPoller:
         opts = options or self.default_options
 
         try:
-            logs = await self.retry.execute(
-                self.web3.eth.get_logs,
-                filter_params
-            )
+            logs = await run_sync(self.web3.eth.get_logs, filter_params)
 
             LOG.debug(f"Retrieved {len(logs)} logs")
             return logs
@@ -125,8 +123,7 @@ class EventPoller:
         except Exception as e:
             raise EventError(
                 f"Failed to get logs: {e}",
-                block_number=filter_params.get('fromBlock'),
-                cause=e
+                block_number=filter_params.get('fromBlock')
             )
 
     async def get_events(
@@ -236,10 +233,10 @@ class EventPoller:
             First matching event or None if timeout
         """
         start_time = asyncio.get_event_loop().time()
-        last_block = from_block or await self.retry.execute(self.web3.eth.block_number) - 1
+        last_block = from_block or await run_sync(lambda: self.web3.eth.block_number) - 1
 
         while True:
-            current_block = await self.retry.execute(self.web3.eth.block_number)
+            current_block = await run_sync(lambda: self.web3.eth.block_number)
 
             # Poll for events since last check
             result = await self.get_events(
@@ -394,10 +391,10 @@ class EventPoller:
             poll_interval: Polling interval
             from_block: Starting block number
         """
-        last_block = from_block or await self.retry.execute(self.web3.eth.block_number) - 1
+        last_block = from_block or await run_sync(lambda: self.web3.eth.block_number) - 1
 
         while True:
-            current_block = await self.retry.execute(self.web3.eth.block_number)
+            current_block = await run_sync(lambda: self.web3.eth.block_number)
 
             # Check each event type
             for event_name in event_names:
@@ -502,11 +499,13 @@ class EventPoller:
         if value is None:
             return None
 
-        # Handle addresses
+        # Handle addresses - must be padded to 32 bytes (64 hex chars)
         if input_def['type'] == 'address':
             if isinstance(value, str):
-                return value.lower() if value.startswith('0x') else f"0x{value.lower()}"
-            return f"0x{value:040x}"
+                # Remove 0x if present, then pad to 64 chars
+                addr = value[2:].lower() if value.startswith('0x') else value.lower()
+                return f"0x{addr.zfill(64)}"
+            return f"0x{value:064x}"
 
         # Handle uint256
         elif input_def['type'].startswith('uint'):

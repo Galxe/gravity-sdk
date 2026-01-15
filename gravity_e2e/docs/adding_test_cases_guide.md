@@ -53,7 +53,6 @@ if str(_package_root) not in sys.path:
 
 import asyncio
 import logging
-import pytest
 
 from gravity_e2e.helpers.test_helpers import RunHelper, TestResult, test_case
 
@@ -424,7 +423,6 @@ if str(_package_root) not in sys.path:
 
 import asyncio
 import logging
-import pytest
 
 from gravity_e2e.helpers.test_helpers import RunHelper, TestResult, test_case
 from gravity_e2e.utils.contract_deployer import ContractDeployer
@@ -479,13 +477,6 @@ async def test_my_erc20(run_helper: RunHelper, test_result: TestResult):
     LOG.info("Test 'My ERC20 Token Test' PASSED!")
     LOG.info("=" * 70)
 
-
-# Pytest compatibility entry
-@pytest.mark.asyncio
-async def test_my_erc20_pytest(run_helper: RunHelper, test_result: TestResult):
-    """Pytest wrapper"""
-    await test_my_erc20(run_helper=run_helper, test_result=test_result)
-```
 
 ### 4.2 Self-Managed Test Example
 
@@ -571,15 +562,6 @@ async def test_my_node_feature(run_helper: RunHelper, test_result: TestResult):
             node_manager.stop_node(deploy_path)
 
 
-# Pytest compatibility entry
-@pytest.mark.slow
-@pytest.mark.self_managed
-@pytest.mark.asyncio
-async def test_my_node_feature_pytest(run_helper: RunHelper, test_result: TestResult):
-    """Pytest wrapper for self-managed test"""
-    await test_my_node_feature(run_helper=run_helper, test_result=test_result)
-
-
 # Direct execution entry
 if __name__ == "__main__":
     logging.basicConfig(
@@ -623,9 +605,9 @@ if __name__ == "__main__":
 @pytest.mark.randomness     # Randomness-related tests
 @pytest.mark.epoch          # Epoch-related tests
 @pytest.mark.validator      # Validator-related tests
-@pytest.mark.cross_chain    # Cross-chain tests
-@pytest.mark.asyncio        # Async tests (required)
 ```
+
+> **Note**: Use `@test_case` decorator for async test functions instead of `@pytest.mark.asyncio`.
 
 ### 5.4 Resource Management
 

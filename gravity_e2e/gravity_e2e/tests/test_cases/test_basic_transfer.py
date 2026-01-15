@@ -9,17 +9,16 @@ Run with:
     pytest gravity_e2e/tests/test_cases/test_basic_transfer.py -v
 """
 
-import pytest
 import logging
 
-from gravity_e2e.helpers.test_helpers import RunHelper, TestResult, handle_test_exception
+from gravity_e2e.helpers.test_helpers import RunHelper, TestResult, handle_test_exception, test_case
 from gravity_e2e.utils.transaction_builder import TransactionBuilder, TransactionOptions
 from gravity_e2e.utils.exceptions import TransactionError
 
 LOG = logging.getLogger(__name__)
 
 
-@pytest.mark.asyncio
+@test_case
 async def test_eth_transfer(run_helper: RunHelper, test_result: TestResult):
     """Test basic ETH transfer functionality"""
     LOG.info("Starting ETH transfer test")
@@ -100,7 +99,7 @@ async def test_eth_transfer(run_helper: RunHelper, test_result: TestResult):
     LOG.info("ETH transfer test completed successfully")
 
 
-@pytest.mark.asyncio
+@test_case
 async def test_multiple_transfers(run_helper: RunHelper, test_result: TestResult):
     """Test multiple ETH transfers to verify nonce management"""
     LOG.info("Starting multiple transfers test")
@@ -159,7 +158,7 @@ async def test_multiple_transfers(run_helper: RunHelper, test_result: TestResult
     LOG.info("Multiple transfers test completed successfully")
 
 
-@pytest.mark.asyncio
+@test_case
 async def test_transfer_with_insufficient_funds(run_helper: RunHelper, test_result: TestResult):
     """Test that transfers with insufficient funds fail gracefully"""
     LOG.info("Starting insufficient funds test")

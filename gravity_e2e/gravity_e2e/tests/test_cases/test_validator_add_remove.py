@@ -157,7 +157,7 @@ async def test_validator_add_remove_delayed(
 @pytest.mark.slow
 @pytest.mark.validator
 @pytest.mark.self_managed
-@pytest.mark.asyncio
+@test_case
 async def test_validator_add_remove(run_helper: RunHelper, test_result: TestResult):
     """Pytest wrapper for immediate validator add/remove test"""
     await test_validator_add_remove_immediate(run_helper=run_helper, test_result=test_result)

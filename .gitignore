@@ -90,7 +90,7 @@ book/site/*
 deploy_utils/ansible/server_confs
 
 gravity.json
-start.sh
+./start.sh
 *.pb
 *.svg
 /profile/*
@@ -165,3 +165,6 @@ gravity_e2e/tests/contracts/**/lib/.forge-snapshot
 gravity_e2e/tests/contracts/**/broadcast/
 gravity_e2e/tests/contracts/**/output/
 gravity_e2e/logs/
+./external
+cluster/output/
+cluster/cluster.toml
