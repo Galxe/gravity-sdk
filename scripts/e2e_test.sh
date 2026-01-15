@@ -112,7 +112,7 @@ echo "[5.5/7] Running gravity_e2e tests..."
 cd /app/gravity_e2e
 
 # Install Python dependencies
-python3 -m pip install -r requirements.txt --quiet
+python3 -m pip install -r requirements.txt --quiet --break-system-packages
 
 # Install Foundry (for tests that need forge to compile contracts)
 echo "Installing Foundry..."
