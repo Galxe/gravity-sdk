@@ -44,7 +44,7 @@ impl Reader {
                     file.seek(SeekFrom::Start(*offset))?;
                     let reader = BufReader::new(file);
                     
-                    let mut bytes_read = 0;
+                    let _ = 0;
                     for line in reader.lines() {
                         if let Ok(l) = line {
                             // +1 for newline character approximation (though could be CRLF)
