@@ -7,8 +7,8 @@ mod state;
 mod watcher;
 
 use crate::{
-    analyzer::Analyzer, config::Config, notifier::Notifier, probe::Probe, reader::Reader, state::State,
-    watcher::Watcher,
+    analyzer::Analyzer, config::Config, notifier::Notifier, probe::Probe, reader::Reader,
+    state::State, watcher::Watcher,
 };
 use anyhow::{Context, Result};
 use std::{env, path::PathBuf, time::Duration};
