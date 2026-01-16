@@ -15,3 +15,9 @@ ignore_pattern = "execute_block_barrier"
 # Fill in your webhook URLs
 feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/..."
 slack_webhook = "https://hooks.slack.com/services/..."
+
+[probe]
+# Probe reth node health via JSON-RPC eth_blockNumber
+url = "http://localhost:8545"
+check_interval_seconds = 10
+failure_threshold = 3

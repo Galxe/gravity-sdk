@@ -1,12 +1,13 @@
 mod analyzer;
 mod config;
 mod notifier;
+mod probe;
 mod reader;
 mod state;
 mod watcher;
 
 use crate::{
-    analyzer::Analyzer, config::Config, notifier::Notifier, reader::Reader, state::State,
+    analyzer::Analyzer, config::Config, notifier::Notifier, probe::Probe, reader::Reader, state::State,
     watcher::Watcher,
 };
 use anyhow::{Context, Result};
@@ -40,6 +41,15 @@ async fn main() -> Result<()> {
     let analyzer =
         Analyzer::new(&config.monitoring.error_pattern, config.monitoring.ignore_pattern.clone())?;
     let notifier = Notifier::new(config.alerting.clone());
+
+    // Start Probe if configured
+    if let Some(probe_config) = config.probe {
+        let probe = Probe::new(probe_config, notifier.clone());
+        println!("Starting health probe...");
+        tokio::spawn(async move {
+            probe.run().await;
+        });
+    }
 
     // Initial discovery
     let files = watcher.discover()?;
