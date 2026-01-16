@@ -30,10 +30,10 @@ async fn main() -> Result<()> {
     let state_path =
         if args.len() > 2 { PathBuf::from(&args[2]) } else { PathBuf::from(STATE_FILE) };
 
-    println!("Loading config from {}", config_path);
+    println!("Loading config from {config_path}");
     let config = Config::load(config_path).context("Failed to load config")?;
 
-    println!("Loading state from {:?}", state_path);
+    println!("Loading state from {state_path:?}");
     let mut state = State::load(&state_path).context("Failed to load state")?;
 
     let mut watcher = Watcher::new(config.monitoring.clone());
@@ -55,7 +55,7 @@ async fn main() -> Result<()> {
     let files = watcher.discover()?;
     println!("Found {} files to monitor", files.len());
     for file in files {
-        println!("Monitoring: {:?}", file);
+        println!("Monitoring: {file:?}");
         reader.add_file(file).await?;
     }
 
@@ -71,18 +71,18 @@ async fn main() -> Result<()> {
         match watcher.discover() {
             Ok(new_files) => {
                 for file in new_files {
-                    println!("New file discovered: {:?}", file);
+                    println!("New file discovered: {file:?}");
                     if let Err(e) = reader.add_file(&file).await {
-                        eprintln!("Failed to watch file: {:?}", e);
+                        eprintln!("Failed to watch file: {e:?}");
                     }
                 }
             }
-            Err(e) => eprintln!("Discovery failed: {:?}", e),
+            Err(e) => eprintln!("Discovery failed: {e:?}"),
         }
 
         // Periodic save state
         if let Err(e) = state.save(&state_path) {
-            eprintln!("Failed to save state: {:?}", e);
+            eprintln!("Failed to save state: {e:?}");
         }
 
         // Poll files
@@ -92,17 +92,17 @@ async fn main() -> Result<()> {
                     if analyzer.is_error(&line) {
                         let fingerprint = analyzer.fingerprint(&line);
                         if state.is_new(fingerprint) {
-                            println!("New Error in {:?}: {}", path, line);
+                            println!("New Error in {path:?}: {line}");
                             if let Err(e) =
                                 notifier.alert(&line, path.to_str().unwrap_or("unknown")).await
                             {
-                                eprintln!("Failed to send alert: {:?}", e);
+                                eprintln!("Failed to send alert: {e:?}");
                             }
                         }
                     }
                 }
             }
-            Err(e) => eprintln!("Reader error: {:?}", e),
+            Err(e) => eprintln!("Reader error: {e:?}"),
         }
     }
 }

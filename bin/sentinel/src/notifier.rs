@@ -16,8 +16,7 @@ impl Notifier {
 
     pub async fn alert(&self, message: &str, file: &str) -> Result<()> {
         let text = format!(
-            "🚨 **Log Sentinel Alert** 🚨\nFile: `{}`\nError:\n```\n{}\n```",
-            file, message
+            "🚨 **Log Sentinel Alert** 🚨\nFile: `{file}`\nError:\n```\n{message}\n```"
         );
 
         if let Some(feishu) = &self.config.feishu_webhook {
