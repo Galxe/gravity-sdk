@@ -1,10 +1,12 @@
 use crate::config::MonitoringConfig;
-use glob::glob;
-use std::collections::HashSet;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::Result;
+use glob::glob;
+use std::{
+    collections::HashSet,
+    fs,
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 pub struct Watcher {
     config: MonitoringConfig,
@@ -13,10 +15,7 @@ pub struct Watcher {
 
 impl Watcher {
     pub fn new(config: MonitoringConfig) -> Self {
-        Self {
-            config,
-            known_files: HashSet::new(),
-        }
+        Self { config, known_files: HashSet::new() }
     }
 
     pub fn discover(&mut self) -> Result<Vec<PathBuf>> {
@@ -27,11 +26,11 @@ impl Watcher {
             for entry in glob(pattern)? {
                 match entry {
                     Ok(path) => {
-                         if self.should_monitor(&path, now) {
-                             if self.known_files.insert(path.clone()) {
-                                 new_files.push(path);
-                             }
-                         }
+                        if self.should_monitor(&path, now) {
+                            if self.known_files.insert(path.clone()) {
+                                new_files.push(path);
+                            }
+                        }
                     }
                     Err(e) => eprintln!("Glob error: {:?}", e),
                 }
