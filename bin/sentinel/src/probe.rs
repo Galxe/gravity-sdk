@@ -1,9 +1,8 @@
-use crate::config::ProbeConfig;
-use crate::notifier::Notifier;
- // Not unused anymore? Wait, run() returns nothing. 
-// Ah, run() is async fn run(self). 
-// Let's check probe.rs content again. I used it in probe.rs but maybe just imported it and didn't use it in function signature?
-// "warning: unused import: `anyhow::Result`"
+use crate::{config::ProbeConfig, notifier::Notifier};
+// Not unused anymore? Wait, run() returns nothing.
+// Ah, run() is async fn run(self).
+// Let's check probe.rs content again. I used it in probe.rs but maybe just imported it and didn't
+// use it in function signature? "warning: unused import: `anyhow::Result`"
 // I will remove it.
 use reqwest::Client;
 use std::time::Duration;
@@ -33,7 +32,7 @@ impl Probe {
         let mut timer = time::interval(interval);
 
         // First tick completes immediately, skip it or wait? Usually standard is wait first.
-        timer.tick().await; 
+        timer.tick().await;
 
         loop {
             timer.tick().await;
@@ -48,12 +47,20 @@ impl Probe {
                         }
                     } else {
                         failures += 1;
-                        println!("Probe failed (status {}): {} (count: {})", resp.status(), self.config.url, failures);
+                        println!(
+                            "Probe failed (status {}): {} (count: {})",
+                            resp.status(),
+                            self.config.url,
+                            failures
+                        );
                     }
                 }
                 Err(e) => {
                     failures += 1;
-                    println!("Probe failed (error): {} - {} (count: {})", self.config.url, e, failures);
+                    println!(
+                        "Probe failed (error): {} - {} (count: {})",
+                        self.config.url, e, failures
+                    );
                 }
             }
 
@@ -63,7 +70,7 @@ impl Probe {
                 if let Err(e) = self.notifier.alert(&msg, "PROBE").await {
                     eprintln!("Failed to send probe alert: {e:?}");
                 }
-                // Reset failures to avoid spamming every cycle? 
+                // Reset failures to avoid spamming every cycle?
                 // Or keep alerting? "timer post ... if several times ... then error"
                 // Usually we alert once per threshold breach or distinct incident.
                 // Let's reset to 0 to alert again if it persists for another N cycles.

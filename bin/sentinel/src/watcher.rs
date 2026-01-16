@@ -26,10 +26,10 @@ impl Watcher {
             for entry in glob(pattern)? {
                 match entry {
                     Ok(path) => {
-                        if self.should_monitor(&path, now)
-                            && self.known_files.insert(path.clone()) {
-                                new_files.push(path);
-                            }
+                        if self.should_monitor(&path, now) && self.known_files.insert(path.clone())
+                        {
+                            new_files.push(path);
+                        }
                     }
                     Err(e) => eprintln!("Glob error: {e:?}"),
                 }
