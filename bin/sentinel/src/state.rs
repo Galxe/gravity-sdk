@@ -1,9 +1,11 @@
-use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
-use std::fs::{self, File};
-use std::io::Write;
-use std::path::Path;
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::HashSet,
+    fs::{self, File},
+    io::Write,
+    path::Path,
+};
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct State {

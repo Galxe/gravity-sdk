@@ -1,8 +1,10 @@
-use std::collections::HashMap;
-use std::fs::{self, File};
-use std::io::{BufRead, BufReader, Seek, SeekFrom};
-use std::path::{Path, PathBuf};
 use anyhow::Result;
+use std::{
+    collections::HashMap,
+    fs::{self, File},
+    io::{BufRead, BufReader, Seek, SeekFrom},
+    path::{Path, PathBuf},
+};
 
 pub struct Reader {
     files: HashMap<PathBuf, u64>,
@@ -10,9 +12,7 @@ pub struct Reader {
 
 impl Reader {
     pub fn new() -> Result<Self> {
-        Ok(Self {
-            files: HashMap::new(),
-        })
+        Ok(Self { files: HashMap::new() })
     }
 
     pub async fn add_file<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
@@ -43,7 +43,7 @@ impl Reader {
                 if current_len > *offset {
                     file.seek(SeekFrom::Start(*offset))?;
                     let reader = BufReader::new(file);
-                    
+
                     let _ = 0;
                     for line in reader.lines() {
                         if let Ok(l) = line {
@@ -53,7 +53,7 @@ impl Reader {
                             // We need to advance offset correctly.
                             // Simplification: Read to end.
                             // But we need exact bytes.
-                             new_lines.push((path.clone(), l));
+                            new_lines.push((path.clone(), l));
                         }
                     }
                     *offset = current_len;

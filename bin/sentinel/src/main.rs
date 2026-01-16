@@ -5,16 +5,12 @@ mod reader;
 mod state;
 mod watcher;
 
-use crate::analyzer::Analyzer;
-use crate::config::Config;
-use crate::notifier::Notifier;
-use crate::reader::Reader;
-use crate::state::State;
-use crate::watcher::Watcher;
+use crate::{
+    analyzer::Analyzer, config::Config, notifier::Notifier, reader::Reader, state::State,
+    watcher::Watcher,
+};
 use anyhow::{Context, Result};
-use std::env;
-use std::path::PathBuf;
-use std::time::Duration;
+use std::{env, path::PathBuf, time::Duration};
 use tokio::time;
 
 const STATE_FILE: &str = "sentinel_state.json";
@@ -22,29 +18,27 @@ const STATE_FILE: &str = "sentinel_state.json";
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
-    
+
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         eprintln!("Usage: {} <config.toml> [state_file]", args[0]);
         std::process::exit(1);
     }
-    
+
     let config_path = &args[1];
-    let state_path = if args.len() > 2 {
-        PathBuf::from(&args[2])
-    } else {
-        PathBuf::from(STATE_FILE)
-    };
+    let state_path =
+        if args.len() > 2 { PathBuf::from(&args[2]) } else { PathBuf::from(STATE_FILE) };
 
     println!("Loading config from {}", config_path);
     let config = Config::load(config_path).context("Failed to load config")?;
-    
+
     println!("Loading state from {:?}", state_path);
     let mut state = State::load(&state_path).context("Failed to load state")?;
 
     let mut watcher = Watcher::new(config.monitoring.clone());
     let mut reader = Reader::new()?;
-    let analyzer = Analyzer::new(&config.monitoring.error_pattern, config.monitoring.ignore_pattern.clone())?;
+    let analyzer =
+        Analyzer::new(&config.monitoring.error_pattern, config.monitoring.ignore_pattern.clone())?;
     let notifier = Notifier::new(config.alerting.clone());
 
     // Initial discovery
@@ -75,7 +69,7 @@ async fn main() -> Result<()> {
             }
             Err(e) => eprintln!("Discovery failed: {:?}", e),
         }
-        
+
         // Periodic save state
         if let Err(e) = state.save(&state_path) {
             eprintln!("Failed to save state: {:?}", e);
@@ -89,7 +83,9 @@ async fn main() -> Result<()> {
                         let fingerprint = analyzer.fingerprint(&line);
                         if state.is_new(fingerprint) {
                             println!("New Error in {:?}: {}", path, line);
-                            if let Err(e) = notifier.alert(&line, path.to_str().unwrap_or("unknown")).await {
+                            if let Err(e) =
+                                notifier.alert(&line, path.to_str().unwrap_or("unknown")).await
+                            {
                                 eprintln!("Failed to send alert: {:?}", e);
                             }
                         }

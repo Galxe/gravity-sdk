@@ -1,6 +1,6 @@
+use anyhow::Result;
 use regex::Regex;
 use sha2::{Digest, Sha256};
-use anyhow::Result;
 
 pub struct Analyzer {
     error_regex: Regex,
@@ -8,7 +8,7 @@ pub struct Analyzer {
     // Regex for fingerprinting
     hex_regex: Regex,
     digit_regex: Regex,
-    iso_date_regex: Regex, // "2024-01-01T12:00:00" or similar
+    iso_date_regex: Regex,    // "2024-01-01T12:00:00" or similar
     simple_date_regex: Regex, // "2024/01/01"
 }
 
@@ -43,13 +43,13 @@ impl Analyzer {
         // 1. Remove dates
         let no_iso = self.iso_date_regex.replace_all(line, "");
         let no_date = self.simple_date_regex.replace_all(&no_iso, "");
-        
+
         // 2. Mask hex
         let no_hex = self.hex_regex.replace_all(&no_date, "<HEX>");
-        
+
         // 3. Mask digits (avoid masking the hex replacement)
         let normalized = self.digit_regex.replace_all(&no_hex, "<NUM>");
-        
+
         // 4. Hash
         let mut hasher = Sha256::new();
         hasher.update(normalized.as_bytes());

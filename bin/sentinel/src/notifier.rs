@@ -10,14 +10,14 @@ pub struct Notifier {
 
 impl Notifier {
     pub fn new(config: AlertingConfig) -> Self {
-        Self {
-            client: Client::new(),
-            config,
-        }
+        Self { client: Client::new(), config }
     }
 
     pub async fn alert(&self, message: &str, file: &str) -> Result<()> {
-        let text = format!("🚨 **Log Sentinel Alert** 🚨\nFile: `{}`\nError:\n```\n{}\n```", file, message);
+        let text = format!(
+            "🚨 **Log Sentinel Alert** 🚨\nFile: `{}`\nError:\n```\n{}\n```",
+            file, message
+        );
 
         if let Some(feishu) = &self.config.feishu_webhook {
             if !feishu.is_empty() {
