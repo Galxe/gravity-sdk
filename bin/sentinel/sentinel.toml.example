@@ -1,0 +1,17 @@
+[general]
+check_interval_ms = 2000
+
+[monitoring]
+# Match all .log files in the logs directory
+file_patterns = ["logs/*.log", "test.log"]
+# Only monitor files modified in the last 24 hours (86400 seconds)
+recent_file_threshold_seconds = 86400
+# Regex to identify error lines
+error_pattern = "(?i)error|panic|fatal"
+# Regex to ignore specific lines
+ignore_pattern = "execute_block_barrier"
+
+[alerting]
+# Fill in your webhook URLs
+feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/..."
+slack_webhook = "https://hooks.slack.com/services/..."

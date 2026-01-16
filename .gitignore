@@ -172,3 +172,7 @@ gravity_e2e/output/
 gravity_e2e/configs/test_accounts_generated.json
 __pycache__/
 *.egg-info/
+
+# Sentinel
+sentinel.toml
+sentinel_state.json
