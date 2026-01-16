@@ -1,6 +1,6 @@
 use crate::config::ProbeConfig;
 use crate::notifier::Notifier;
-use anyhow::Result; // Not unused anymore? Wait, run() returns nothing. 
+ // Not unused anymore? Wait, run() returns nothing. 
 // Ah, run() is async fn run(self). 
 // Let's check probe.rs content again. I used it in probe.rs but maybe just imported it and didn't use it in function signature?
 // "warning: unused import: `anyhow::Result`"
@@ -59,9 +59,9 @@ impl Probe {
 
             if failures >= self.config.failure_threshold {
                 let msg = format!("Probe failed {} times for URL: {}", failures, self.config.url);
-                println!("TRIGGERING ALERT: {}", msg);
+                println!("TRIGGERING ALERT: {msg}");
                 if let Err(e) = self.notifier.alert(&msg, "PROBE").await {
-                    eprintln!("Failed to send probe alert: {:?}", e);
+                    eprintln!("Failed to send probe alert: {e:?}");
                 }
                 // Reset failures to avoid spamming every cycle? 
                 // Or keep alerting? "timer post ... if several times ... then error"
