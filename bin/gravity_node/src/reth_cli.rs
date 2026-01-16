@@ -178,7 +178,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             parent_id,
             id: B256::from_slice(block.block_meta.block_id.as_bytes()),
             number: block.block_meta.block_number,
-            timestamp_us: block.block_meta.usecs / 1000000,
+            timestamp_us: block.block_meta.usecs,
             // TODO(gravity_jan): add reth coinbase
             coinbase: Address::ZERO,
             prev_randao: randao,
