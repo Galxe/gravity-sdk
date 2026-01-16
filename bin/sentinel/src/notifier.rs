@@ -3,6 +3,7 @@ use anyhow::Result;
 use reqwest::Client;
 use serde_json::json;
 
+#[derive(Clone)]
 pub struct Notifier {
     client: Client,
     config: AlertingConfig,

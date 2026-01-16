@@ -7,6 +7,14 @@ pub struct Config {
     pub general: GeneralConfig,
     pub monitoring: MonitoringConfig,
     pub alerting: AlertingConfig,
+    pub probe: Option<ProbeConfig>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ProbeConfig {
+    pub url: String,
+    pub check_interval_seconds: u64,
+    pub failure_threshold: u32,
 }
 
 #[derive(Debug, Deserialize, Clone)]
