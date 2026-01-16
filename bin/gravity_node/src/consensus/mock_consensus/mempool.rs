@@ -30,7 +30,7 @@ impl Mempool {
             let next_nonce = *next_txns.get(&txn.0).unwrap_or(&0);
             next_nonce <= txn.1
         });
-        for txn in self.pool_txns.best_txns(Some(filter)) {
+        for txn in self.pool_txns.best_txns(Some(filter), max_block_size) {
             let account = txn.sender();
             let nonce = txn.seq_number();
             self.next_sequence_numbers.insert(account.clone(), nonce + 1);

@@ -246,7 +246,7 @@ impl Mempool {
             !exclude_transactions.contains_key(&summary)
         });
         let mut transactions = vec![];
-        let best_txns = self.pool.best_txns(Some(filter));
+        let best_txns = self.pool.best_txns(Some(filter), max_txns as usize);
         for txn in best_txns {
             let signed_txn = VerifiedTxn::from(txn).into();
             transactions.push(signed_txn);
