@@ -399,6 +399,14 @@ impl StateComputer for ExecutionProxy {
         let validator_txns = block.validator_txns();
         let extra_data = process_validator_transactions_util(validator_txns.map(|v| &**v), block);
 
+        let MutableState { validators, .. } =
+            self.state.read().as_ref().cloned().expect("must be set within an epoch");
+
+        // Look up the proposer's index in the validator set (None for NIL blocks)
+        let proposer_index = block
+            .author()
+            .and_then(|author| validators.iter().position(|&v| v == author).map(|i| i as u64));
+
         let meta_data = ExternalBlockMeta {
             block_id: BlockId(*block.id()),
             block_number: block.block_number().unwrap_or_else(|| panic!("No block number")),
@@ -406,7 +414,7 @@ impl StateComputer for ExecutionProxy {
             epoch: block.epoch(),
             randomness: randomness.map(|r| Random::from_bytes(r.randomness())),
             block_hash: None,
-            proposer: block.author().map(|author| ExternalAccountAddress::new(author.into_bytes())),
+            proposer_index,
         };
 
         // We would export the empty block detail to the outside GCEI caller

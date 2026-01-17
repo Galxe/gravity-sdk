@@ -445,6 +445,11 @@ impl PipelineBuilder {
                 )
             })
             .collect();
+        // Look up the proposer's index in the validator set (None for NIL blocks)
+        let proposer_index = block
+            .author()
+            .and_then(|author| validator.iter().position(|&v| v == author).map(|i| i as u64));
+
         let meta_data = ExternalBlockMeta {
             block_id: BlockId(*block.id()),
             block_number: block.block_number().unwrap_or_else(|| panic!("No block number")),
@@ -452,7 +457,7 @@ impl PipelineBuilder {
             epoch: block.epoch(),
             randomness: maybe_rand.map(|r| Random::from_bytes(r.randomness())),
             block_hash: None,
-            proposer: block.author().map(|author| ExternalAccountAddress::new(author.into_bytes())),
+            proposer_index,
         };
         // TODO: add extra_data (validator transactions)
         get_block_buffer_manager()
