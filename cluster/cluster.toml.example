@@ -63,3 +63,50 @@ inspection_port = 10003
 https_port = 1027
 authrpc_port = 8554
 reth_p2p_port = 12027
+
+# Genesis configuration
+# These values are used when generating the genesis.json
+[genesis]
+epoch_interval_micros = 7200000000  # 2 hours in microseconds
+major_version = 1
+consensus_config = "0x00"
+execution_config = "0x00"
+
+[genesis.validator_config]
+minimum_bond = "1000000000000000000"
+maximum_bond = "1000000000000000000000000"
+unbonding_delay_micros = 604800000000
+allow_validator_set_change = true
+voting_power_increase_limit_pct = 20
+max_validator_set_size = "100"
+
+[genesis.staking_config]
+minimum_stake = "1000000000000000000"
+lockup_duration_micros = 86400000000
+unbonding_delay_micros = 86400000000
+minimum_proposal_stake = "10000000000000000000"
+
+[genesis.governance_config]
+min_voting_threshold = "1000000000000000000"
+required_proposer_stake = "10000000000000000000"
+voting_duration_micros = 604800000000
+
+[genesis.randomness_config]
+variant = 0
+secrecy_threshold = 0
+reconstruction_threshold = 0
+fast_path_secrecy_threshold = 0
+
+[genesis.oracle_config]
+source_types = [1]
+callbacks = ["0x00000000000000000000000000000001625F2018"]
+
+# JWK config - Google OIDC provider
+[genesis.jwk_config]
+issuers = ["0x68747470733a2f2f6163636f756e74732e676f6f676c652e636f6d"]
+
+[[genesis.jwk_config.jwks]]
+kid = "f5f4c0ae6e6090a65ab0a694d6ba6f19d5d0b4e6"
+alg = "RS256"
+e = "AQAB"
+n = "2K7epoJWl_aBoYGpXmDBBiEnwQ0QdVRU1gsbGXNrEbrZEQdY5KjH5P5gZMq3d3KvT1j5KsD2tF_9jFMDLqV4VWDNJRLgSNJxhJuO_oLO2BXUSL9a7fLHxnZCUfJvT2K-O8AXjT3_ZM8UuL8d4jBn_fZLzdEI4MHrZLVSaHDvvKqL_mExQo6cFD-qyLZ-T6aHv2x8R7L_3X7E1nGMjKVVZMveQ_HMeXvnGxKf5yfEP0hIQlC_kFm4L_1kV1S0UPmMptZL2qI4VnXqmqI6TZJyE-3VXHgNn1Z1O_9QZlPC0fF0spLHf2S3nNqI0v3k2E7q3DkqxVf5xvn7q_X-gPqzVE9Jw"

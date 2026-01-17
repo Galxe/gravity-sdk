@@ -24,6 +24,129 @@ def parse_simple_yaml(path):
                 data[key] = value
     return data
 
+def get_genesis_defaults():
+    """Returns default genesis configuration values."""
+    return {
+        "epochIntervalMicros": 7200000000,
+        "majorVersion": 1,
+        "consensusConfig": "0x00",
+        "executionConfig": "0x00",
+        "validatorConfig": {
+            "minimumBond": "1000000000000000000",
+            "maximumBond": "1000000000000000000000000",
+            "unbondingDelayMicros": 604800000000,
+            "allowValidatorSetChange": True,
+            "votingPowerIncreaseLimitPct": 20,
+            "maxValidatorSetSize": "100"
+        },
+        "stakingConfig": {
+            "minimumStake": "1000000000000000000",
+            "lockupDurationMicros": 86400000000,
+            "unbondingDelayMicros": 86400000000,
+            "minimumProposalStake": "10000000000000000000"
+        },
+        "governanceConfig": {
+            "minVotingThreshold": "1000000000000000000",
+            "requiredProposerStake": "10000000000000000000",
+            "votingDurationMicros": 604800000000
+        },
+        "randomnessConfig": {
+            "variant": 0,
+            "configV2": {
+                "secrecyThreshold": 0,
+                "reconstructionThreshold": 0,
+                "fastPathSecrecyThreshold": 0
+            }
+        },
+        "oracleConfig": {
+            "sourceTypes": [1],
+            "callbacks": ["0x00000000000000000000000000000001625F2018"]
+        },
+        "jwkConfig": {
+            "issuers": ["0x68747470733a2f2f6163636f756e74732e676f6f676c652e636f6d"],
+            "jwks": [[{
+                "kid": "f5f4c0ae6e6090a65ab0a694d6ba6f19d5d0b4e6",
+                "alg": "RS256",
+                "e": "AQAB",
+                "n": "2K7epoJWl_aBoYGpXmDBBiEnwQ0QdVRU1gsbGXNrEbrZEQdY5KjH5P5gZMq3d3KvT1j5KsD2tF_9jFMDLqV4VWDNJRLgSNJxhJuO_oLO2BXUSL9a7fLHxnZCUfJvT2K-O8AXjT3_ZM8UuL8d4jBn_fZLzdEI4MHrZLVSaHDvvKqL_mExQo6cFD-qyLZ-T6aHv2x8R7L_3X7E1nGMjKVVZMveQ_HMeXvnGxKf5yfEP0hIQlC_kFm4L_1kV1S0UPmMptZL2qI4VnXqmqI6TZJyE-3VXHgNn1Z1O_9QZlPC0fF0spLHf2S3nNqI0v3k2E7q3DkqxVf5xvn7q_X-gPqzVE9Jw"
+            }]]
+        }
+    }
+
+def build_genesis_config(config, genesis_cfg):
+    """Build genesis config from cluster config, using defaults where not specified."""
+    defaults = get_genesis_defaults()
+    
+    # Override with values from cluster.toml if present
+    result = {}
+    
+    # Top-level fields
+    result["epochIntervalMicros"] = genesis_cfg.get("epoch_interval_micros", defaults["epochIntervalMicros"])
+    result["majorVersion"] = genesis_cfg.get("major_version", defaults["majorVersion"])
+    result["consensusConfig"] = genesis_cfg.get("consensus_config", defaults["consensusConfig"])
+    result["executionConfig"] = genesis_cfg.get("execution_config", defaults["executionConfig"])
+    
+    # validatorConfig
+    vc = genesis_cfg.get("validator_config", {})
+    result["validatorConfig"] = {
+        "minimumBond": vc.get("minimum_bond", defaults["validatorConfig"]["minimumBond"]),
+        "maximumBond": vc.get("maximum_bond", defaults["validatorConfig"]["maximumBond"]),
+        "unbondingDelayMicros": vc.get("unbonding_delay_micros", defaults["validatorConfig"]["unbondingDelayMicros"]),
+        "allowValidatorSetChange": vc.get("allow_validator_set_change", defaults["validatorConfig"]["allowValidatorSetChange"]),
+        "votingPowerIncreaseLimitPct": vc.get("voting_power_increase_limit_pct", defaults["validatorConfig"]["votingPowerIncreaseLimitPct"]),
+        "maxValidatorSetSize": vc.get("max_validator_set_size", defaults["validatorConfig"]["maxValidatorSetSize"])
+    }
+    
+    # stakingConfig
+    sc = genesis_cfg.get("staking_config", {})
+    result["stakingConfig"] = {
+        "minimumStake": sc.get("minimum_stake", defaults["stakingConfig"]["minimumStake"]),
+        "lockupDurationMicros": sc.get("lockup_duration_micros", defaults["stakingConfig"]["lockupDurationMicros"]),
+        "unbondingDelayMicros": sc.get("unbonding_delay_micros", defaults["stakingConfig"]["unbondingDelayMicros"]),
+        "minimumProposalStake": sc.get("minimum_proposal_stake", defaults["stakingConfig"]["minimumProposalStake"])
+    }
+    
+    # governanceConfig
+    gc = genesis_cfg.get("governance_config", {})
+    result["governanceConfig"] = {
+        "minVotingThreshold": gc.get("min_voting_threshold", defaults["governanceConfig"]["minVotingThreshold"]),
+        "requiredProposerStake": gc.get("required_proposer_stake", defaults["governanceConfig"]["requiredProposerStake"]),
+        "votingDurationMicros": gc.get("voting_duration_micros", defaults["governanceConfig"]["votingDurationMicros"])
+    }
+    
+    # randomnessConfig
+    rc = genesis_cfg.get("randomness_config", {})
+    result["randomnessConfig"] = {
+        "variant": rc.get("variant", defaults["randomnessConfig"]["variant"]),
+        "configV2": {
+            "secrecyThreshold": rc.get("secrecy_threshold", defaults["randomnessConfig"]["configV2"]["secrecyThreshold"]),
+            "reconstructionThreshold": rc.get("reconstruction_threshold", defaults["randomnessConfig"]["configV2"]["reconstructionThreshold"]),
+            "fastPathSecrecyThreshold": rc.get("fast_path_secrecy_threshold", defaults["randomnessConfig"]["configV2"]["fastPathSecrecyThreshold"])
+        }
+    }
+    
+    # oracleConfig
+    oc = genesis_cfg.get("oracle_config", {})
+    result["oracleConfig"] = {
+        "sourceTypes": oc.get("source_types", defaults["oracleConfig"]["sourceTypes"]),
+        "callbacks": oc.get("callbacks", defaults["oracleConfig"]["callbacks"])
+    }
+    
+    # jwkConfig
+    jc = genesis_cfg.get("jwk_config", {})
+    if jc:
+        jwks_list = jc.get("jwks", [])
+        # Convert TOML array of tables to nested array format
+        jwks_formatted = [[jwk] for jwk in jwks_list] if jwks_list else defaults["jwkConfig"]["jwks"]
+        result["jwkConfig"] = {
+            "issuers": jc.get("issuers", defaults["jwkConfig"]["issuers"]),
+            "jwks": jwks_formatted
+        }
+    else:
+        result["jwkConfig"] = defaults["jwkConfig"]
+    
+    return result
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: aggregate_genesis.py <cluster_config_json_string>")
@@ -38,14 +161,9 @@ def main():
         sys.exit(1)
         
     base_dir = config['cluster']['base_dir']
+    genesis_cfg = config.get('genesis', {})
     
-    validator_addresses = []
-    consensus_keys = []
-    voting_powers = []
-    validator_network_addrs = []
-    fullnode_network_addrs = []
-    aptos_addresses = []
-
+    validators = []
     nodes = config['nodes']
     print(f"[Aggregator] Processing {len(nodes)} nodes for genesis configuration...")
 
@@ -76,14 +194,11 @@ def main():
             raw_addr = account_addr
             
         # validatorAddresses: ETH-style, last 20 bytes (40 hex chars)
-        # account_address is 32 bytes (64 hex chars)
-        # See gravity_cli key.rs: hex::encode(&account_address.as_slice()[12..])
         val_addr = f"0x{raw_addr[-40:]}"
-        aptos_addr = raw_addr
             
         consensus_pk = identity['consensus_public_key']
-        if consensus_pk.startswith('0x'):
-            consensus_pk = consensus_pk[2:]
+        if not consensus_pk.startswith('0x'):
+            consensus_pk = f"0x{consensus_pk}"
             
         network_pk = identity['network_public_key']
         if network_pk.startswith('0x'):
@@ -98,23 +213,23 @@ def main():
         val_net_addr = f"/ip4/{host}/tcp/{p2p_port}/noise-ik/{network_pk}/handshake/0"
         vfn_net_addr = f"/ip4/{host}/tcp/{vfn_port}/noise-ik/{network_pk}/handshake/0"
         
-        # Append
-        validator_addresses.append(val_addr)
-        consensus_keys.append(consensus_pk)
-        voting_powers.append("20000")
-        validator_network_addrs.append(val_net_addr)
-        fullnode_network_addrs.append(vfn_net_addr)
-        aptos_addresses.append(aptos_addr)
+        # Create validator entry in new format
+        validator = {
+            "operator": val_addr,
+            "owner": val_addr,
+            "stakeAmount": "20000000000000000000000",
+            "moniker": f"validator-{len(validators) + 1}",
+            "consensusPubkey": consensus_pk,
+            "consensusPop": "0x",
+            "networkAddresses": val_net_addr,
+            "fullnodeAddresses": vfn_net_addr,
+            "votingPower": "20000000000000000000000"
+        }
+        validators.append(validator)
 
-    # Construct final JSON
-    output = {
-        "validatorAddresses": validator_addresses,
-        "consensusPublicKeys": consensus_keys,
-        "votingPowers": voting_powers,
-        "validatorNetworkAddresses": validator_network_addrs,
-        "fullnodeNetworkAddresses": fullnode_network_addrs,
-        "aptosAddresses": aptos_addresses
-    }
+    # Build complete genesis config
+    output = build_genesis_config(config, genesis_cfg)
+    output["validators"] = validators
     
     # Write to validator_genesis.json in base_dir
     output_path = os.path.join(base_dir, "validator_genesis.json")
@@ -122,6 +237,7 @@ def main():
         json.dump(output, f, indent=2)
         
     print(f"[Aggregator] Successfully wrote {output_path}")
+    print(f"[Aggregator] Configured {len(validators)} validators")
 
 if __name__ == "__main__":
     main()
