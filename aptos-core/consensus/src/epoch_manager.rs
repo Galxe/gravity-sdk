@@ -1083,31 +1083,31 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             dkg_pub_params.pvss_config.wconfig.clone(),
         );
 
-        //let fast_rand_config = if let (Some((ask, apk)), Some(trx), Some(wconfig)) = (
-        //    fast_augmented_key_pair,
-        //    transcript.fast.as_ref(),
-        //    dkg_pub_params.pvss_config.fast_wconfig.as_ref(),
-        //) {
-        //    let pk_shares = (0..new_epoch_state.verifier.len())
-        //        .map(|id| trx.get_public_key_share(wconfig, &Player { id }))
-        //        .collect::<Vec<_>>();
+        let fast_rand_config = if let (Some((ask, apk)), Some(trx), Some(wconfig)) = (
+            fast_augmented_key_pair,
+            transcript.fast.as_ref(),
+            dkg_pub_params.pvss_config.fast_wconfig.as_ref(),
+        ) {
+            let pk_shares = (0..new_epoch_state.verifier.len())
+                .map(|id| trx.get_public_key_share(wconfig, &Player { id }))
+                .collect::<Vec<_>>();
 
-        //    let fast_keys = RandKeys::new(ask, apk, pk_shares, new_epoch_state.verifier.len());
-        //    let fast_wconfig = wconfig.clone();
+            let fast_keys = RandKeys::new(ask, apk, pk_shares, new_epoch_state.verifier.len());
+            let fast_wconfig = wconfig.clone();
 
-        //    Some(RandConfig::new(
-        //        self.author,
-        //        new_epoch,
-        //        new_epoch_state.verifier.clone(),
-        //        vuf_pp,
-        //        fast_keys,
-        //        fast_wconfig,
-        //    ))
-        //} else {
-        //    None
-        //};
+            Some(RandConfig::new(
+                self.author,
+                new_epoch,
+                new_epoch_state.verifier.clone(),
+                vuf_pp,
+                fast_keys,
+                fast_wconfig,
+            ))
+        } else {
+            None
+        };
 
-        Ok((rand_config, None))
+        Ok((rand_config, fast_rand_config))
     }
 
     async fn start_new_epoch(&mut self, payload: OnChainConfigPayload<P>) {
