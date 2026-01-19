@@ -96,6 +96,22 @@ main() {
         mkdir -p "$EXTERNAL_DIR"
         git clone "$GENESIS_REPO" "$GENESIS_CONTRACT_DIR"
     fi
+
+    # Auto-install dependencies if missing
+    if [ ! -d "$GENESIS_CONTRACT_DIR/node_modules" ]; then
+        log_info "Installing dependencies for gravity_chain_core_contracts..."
+        (
+            cd "$GENESIS_CONTRACT_DIR"
+            if command -v yarn &> /dev/null; then
+                yarn install
+            elif command -v npm &> /dev/null; then
+                npm install
+            else
+                log_error "Neither yarn nor npm found. Cannot install dependencies."
+                exit 1
+            fi
+        )
+    fi
     
     if [ -f "$GEN_SCRIPT" ]; then
          if ! command -v forge &> /dev/null; then

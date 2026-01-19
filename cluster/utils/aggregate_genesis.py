@@ -217,19 +217,62 @@ def main():
         validator = {
             "operator": val_addr,
             "owner": val_addr,
-            "stakeAmount": "20000000000000000000000",
+            "stakeAmount": "2000000000000000000",
             "moniker": f"validator-{len(validators) + 1}",
             "consensusPubkey": consensus_pk,
             "consensusPop": "0x",
             "networkAddresses": val_net_addr,
             "fullnodeAddresses": vfn_net_addr,
-            "votingPower": "20000000000000000000000"
+            "votingPower": "2000000000000000000"
         }
         validators.append(validator)
+
+    # Build parallel arrays for gravity_cli compatibility
+    # TestConfig struct requirements:
+    # validatorAddresses (Vec<String>)
+    # consensusPublicKeys (Vec<String>) - hex decoded, so no 0x
+    # votingPowers (Vec<String>)
+    # validatorNetworkAddresses (Vec<String>)
+    # fullnodeNetworkAddresses (Vec<String>)
+    # aptosAddresses (Vec<String>) - prepended with 0x in rust, so no 0x here
+
+    validator_addresses = []
+    consensus_public_keys = []
+    voting_powers = []
+    validator_network_addresses = []
+    fullnode_network_addresses = []
+    aptos_addresses = []
+
+    for v in validators:
+        validator_addresses.append(v["operator"]) # 0x...
+        
+        # Strip 0x for hex::decode
+        cpk = v["consensusPubkey"]
+        if cpk.startswith("0x"):
+            cpk = cpk[2:]
+        consensus_public_keys.append(cpk)
+        
+        voting_powers.append(v["votingPower"])
+        validator_network_addresses.append(v["networkAddresses"])
+        fullnode_network_addresses.append(v["fullnodeAddresses"])
+        
+        # operator is 0x..., aptosAddresses needs raw hex (rust prepends 0x)
+        aptos_addr = v["operator"]
+        if aptos_addr.startswith("0x"):
+            aptos_addr = aptos_addr[2:]
+        aptos_addresses.append(aptos_addr)
 
     # Build complete genesis config
     output = build_genesis_config(config, genesis_cfg)
     output["validators"] = validators
+    
+    # Add legacy fields
+    output["validatorAddresses"] = validator_addresses
+    output["consensusPublicKeys"] = consensus_public_keys
+    output["votingPowers"] = voting_powers
+    output["validatorNetworkAddresses"] = validator_network_addresses
+    output["fullnodeNetworkAddresses"] = fullnode_network_addresses
+    output["aptosAddresses"] = aptos_addresses
     
     # Write to validator_genesis.json in base_dir
     output_path = os.path.join(base_dir, "validator_genesis.json")

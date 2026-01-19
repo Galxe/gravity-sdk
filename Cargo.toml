@@ -20,8 +20,12 @@ members = [
     "bin/gravity_node", 
     "crates/block-buffer-manager",
     "crates/txn_metrics",
-    "crates/build-info"
-, "crates/gravity-sdk"]
+    "crates/build-info",
+    "crates/gravity-sdk"
+]
+exclude = [
+    "external"
+]
 
 # Workspace-level lint configuration - applies to all members
 [workspace.lints.clippy]
