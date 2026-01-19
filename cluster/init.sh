@@ -85,14 +85,14 @@ main() {
     fi
     
     # Step 3: Genesis Generation (Call External)
-    GEN_SCRIPT="$PROJECT_ROOT/external/gravity-genesis-contract/generate_genesis.sh"
+    GEN_SCRIPT="$PROJECT_ROOT/external/gravity_chain_core_contracts/scripts/generate_genesis.sh"
     EXTERNAL_DIR="$PROJECT_ROOT/external"
-    GENESIS_CONTRACT_DIR="$EXTERNAL_DIR/gravity-genesis-contract"
-    GENESIS_REPO="https://github.com/Galxe/gravity-genesis-contract.git"  
+    GENESIS_CONTRACT_DIR="$EXTERNAL_DIR/gravity_chain_core_contracts"
+    GENESIS_REPO="https://github.com/Galxe/gravity_chain_core_contracts.git"  
     
     # Auto-clone
     if [ ! -d "$GENESIS_CONTRACT_DIR" ]; then
-        log_warn "gravity-genesis-contract not found. Cloning..."
+        log_warn "gravity_chain_core_contracts not found. Cloning..."
         mkdir -p "$EXTERNAL_DIR"
         git clone "$GENESIS_REPO" "$GENESIS_CONTRACT_DIR"
     fi
@@ -108,12 +108,12 @@ main() {
          ABS_VAL_GENESIS_PATH="$(cd "$(dirname "$val_genesis_path")" && pwd)/$(basename "$val_genesis_path")"
          
          (
-            cd "$GEN_DIR"
-            ./generate_genesis.sh --config "$ABS_VAL_GENESIS_PATH" > /dev/null
+            cd "$GENESIS_CONTRACT_DIR"
+            ./scripts/generate_genesis.sh -c "$ABS_VAL_GENESIS_PATH" > /dev/null
          )
          
-         if [ -f "$GEN_DIR/genesis.json" ]; then
-             cp "$GEN_DIR/genesis.json" "$OUTPUT_DIR/genesis.json"
+         if [ -f "$GENESIS_CONTRACT_DIR/genesis.json" ]; then
+             cp "$GENESIS_CONTRACT_DIR/genesis.json" "$OUTPUT_DIR/genesis.json"
              log_info "Genesis generated at $OUTPUT_DIR/genesis.json"
          else
              log_error "Genesis generation failed."
