@@ -60,14 +60,28 @@ impl Executable for GenerateKey {
         println!("The consensus_public_key is {:?}", consensus_private_key.public_key());
 
         let account_private_key = key_gen.generate_ed25519_private_key();
-        let account_address = network_private_key.public_key();
+
+        // Derive account_address from consensus_public_key using SHA3-256
+        // This MUST match the derivation in:
+        // - genesis-tool/genesis.rs (derive_account_address_from_consensus_pubkey)
+        // - gravity-reth/types.rs (derive_account_address_from_consensus_pubkey)
+        // - waypoint.rs (generate_validator_set)
+        let account_address = {
+            use tiny_keccak::{Hasher, Sha3};
+            let consensus_pubkey_bytes = consensus_private_key.public_key().to_bytes();
+            let mut hasher = Sha3::v256();
+            hasher.update(&consensus_pubkey_bytes);
+            let mut output = [0u8; 32];
+            hasher.finalize(&mut output);
+            hex::encode(output)
+        };
         println!("The account_address is {account_address}");
         println!(
-            "The last 20bit account_address is 0x{}",
-            hex::encode(&account_address.as_slice()[12..])
+            "The last 20bit account_address (ETH format) is 0x{}",
+            &account_address[24..] // Last 20 bytes = 40 hex chars = offset 24
         );
         let indentity = ValidatorIndentity {
-            account_address: account_address.to_string(),
+            account_address,
             account_private_key: hex::encode(account_private_key.to_bytes()),
             consensus_private_key: hex::encode(consensus_private_key.to_bytes()),
             network_private_key: hex::encode(network_private_key.to_bytes()),

@@ -7905,6 +7905,7 @@ dependencies = [
  "serde_yaml 0.8.26",
  "sha3 0.9.1",
  "thiserror 1.0.69",
+ "tiny-keccak",
  "tokio",
  "tracing",
 ]

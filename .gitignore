@@ -168,3 +168,4 @@ gravity_e2e/logs/
 ./external
 cluster/output/
 cluster/cluster.toml
+bin/sentinel/sentinel.toml
