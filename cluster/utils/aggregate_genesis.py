@@ -66,6 +66,7 @@ def get_genesis_defaults():
             "issuers": ["0x68747470733a2f2f6163636f756e74732e676f6f676c652e636f6d"],
             "jwks": [[{
                 "kid": "f5f4c0ae6e6090a65ab0a694d6ba6f19d5d0b4e6",
+                "kty": "RSA",
                 "alg": "RS256",
                 "e": "AQAB",
                 "n": "2K7epoJWl_aBoYGpXmDBBiEnwQ0QdVRU1gsbGXNrEbrZEQdY5KjH5P5gZMq3d3KvT1j5KsD2tF_9jFMDLqV4VWDNJRLgSNJxhJuO_oLO2BXUSL9a7fLHxnZCUfJvT2K-O8AXjT3_ZM8UuL8d4jBn_fZLzdEI4MHrZLVSaHDvvKqL_mExQo6cFD-qyLZ-T6aHv2x8R7L_3X7E1nGMjKVVZMveQ_HMeXvnGxKf5yfEP0hIQlC_kFm4L_1kV1S0UPmMptZL2qI4VnXqmqI6TZJyE-3VXHgNn1Z1O_9QZlPC0fF0spLHf2S3nNqI0v3k2E7q3DkqxVf5xvn7q_X-gPqzVE9Jw"
@@ -227,52 +228,9 @@ def main():
         }
         validators.append(validator)
 
-    # Build parallel arrays for gravity_cli compatibility
-    # TestConfig struct requirements:
-    # validatorAddresses (Vec<String>)
-    # consensusPublicKeys (Vec<String>) - hex decoded, so no 0x
-    # votingPowers (Vec<String>)
-    # validatorNetworkAddresses (Vec<String>)
-    # fullnodeNetworkAddresses (Vec<String>)
-    # aptosAddresses (Vec<String>) - prepended with 0x in rust, so no 0x here
-
-    validator_addresses = []
-    consensus_public_keys = []
-    voting_powers = []
-    validator_network_addresses = []
-    fullnode_network_addresses = []
-    aptos_addresses = []
-
-    for v in validators:
-        validator_addresses.append(v["operator"]) # 0x...
-        
-        # Strip 0x for hex::decode
-        cpk = v["consensusPubkey"]
-        if cpk.startswith("0x"):
-            cpk = cpk[2:]
-        consensus_public_keys.append(cpk)
-        
-        voting_powers.append(v["votingPower"])
-        validator_network_addresses.append(v["networkAddresses"])
-        fullnode_network_addresses.append(v["fullnodeAddresses"])
-        
-        # operator is 0x..., aptosAddresses needs raw hex (rust prepends 0x)
-        aptos_addr = v["operator"]
-        if aptos_addr.startswith("0x"):
-            aptos_addr = aptos_addr[2:]
-        aptos_addresses.append(aptos_addr)
-
-    # Build complete genesis config
+    # Build complete genesis config (matching GenesisConfig struct in genesis.rs)
     output = build_genesis_config(config, genesis_cfg)
     output["validators"] = validators
-    
-    # Add legacy fields
-    output["validatorAddresses"] = validator_addresses
-    output["consensusPublicKeys"] = consensus_public_keys
-    output["votingPowers"] = voting_powers
-    output["validatorNetworkAddresses"] = validator_network_addresses
-    output["fullnodeNetworkAddresses"] = fullnode_network_addresses
-    output["aptosAddresses"] = aptos_addresses
     
     # Write to validator_genesis.json in base_dir
     output_path = os.path.join(base_dir, "validator_genesis.json")
@@ -284,3 +242,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
