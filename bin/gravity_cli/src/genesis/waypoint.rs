@@ -16,7 +16,6 @@ use crate::command::Executable;
 /// Validator entry matching the InitialValidator struct from genesis-tool
 #[derive(Debug, Deserialize)]
 struct ValidatorEntry {
-    operator: String,
     #[serde(rename = "consensusPubkey")]
     consensus_pubkey: String,
     #[serde(rename = "networkAddresses")]

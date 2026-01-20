@@ -88,14 +88,28 @@ main() {
     GEN_SCRIPT="$PROJECT_ROOT/external/gravity_chain_core_contracts/scripts/generate_genesis.sh"
     EXTERNAL_DIR="$PROJECT_ROOT/external"
     GENESIS_CONTRACT_DIR="$EXTERNAL_DIR/gravity_chain_core_contracts"
-    GENESIS_REPO="https://github.com/Galxe/gravity_chain_core_contracts.git"  
+    
+    # Read repo config from cluster.toml (with defaults)
+    GENESIS_REPO=$(echo "$config_json" | jq -r '.dependencies.genesis_contracts.repo // "https://github.com/Galxe/gravity_chain_core_contracts.git"')
+    GENESIS_REF=$(echo "$config_json" | jq -r '.dependencies.genesis_contracts.ref // "main"')
     
     # Auto-clone
     if [ ! -d "$GENESIS_CONTRACT_DIR" ]; then
-        log_warn "gravity_chain_core_contracts not found. Cloning..."
+        log_warn "gravity_chain_core_contracts not found. Cloning from $GENESIS_REPO..."
         mkdir -p "$EXTERNAL_DIR"
         git clone "$GENESIS_REPO" "$GENESIS_CONTRACT_DIR"
     fi
+    
+    # Checkout specified ref (commit, branch, or tag)
+    log_info "Checking out ref: $GENESIS_REF"
+    (
+        cd "$GENESIS_CONTRACT_DIR"
+        git fetch origin
+        git checkout "$GENESIS_REF" 2>/dev/null || git checkout -b "$GENESIS_REF" "origin/$GENESIS_REF" 2>/dev/null || {
+            # If it's a commit hash, just check it out directly
+            git checkout "$GENESIS_REF"
+        }
+    )
 
     # Auto-install dependencies if missing
     if [ ! -d "$GENESIS_CONTRACT_DIR/node_modules" ]; then
