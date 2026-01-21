@@ -66,6 +66,7 @@ def get_genesis_defaults():
             "issuers": ["0x68747470733a2f2f6163636f756e74732e676f6f676c652e636f6d"],
             "jwks": [[{
                 "kid": "f5f4c0ae6e6090a65ab0a694d6ba6f19d5d0b4e6",
+                "kty": "RSA",
                 "alg": "RS256",
                 "e": "AQAB",
                 "n": "2K7epoJWl_aBoYGpXmDBBiEnwQ0QdVRU1gsbGXNrEbrZEQdY5KjH5P5gZMq3d3KvT1j5KsD2tF_9jFMDLqV4VWDNJRLgSNJxhJuO_oLO2BXUSL9a7fLHxnZCUfJvT2K-O8AXjT3_ZM8UuL8d4jBn_fZLzdEI4MHrZLVSaHDvvKqL_mExQo6cFD-qyLZ-T6aHv2x8R7L_3X7E1nGMjKVVZMveQ_HMeXvnGxKf5yfEP0hIQlC_kFm4L_1kV1S0UPmMptZL2qI4VnXqmqI6TZJyE-3VXHgNn1Z1O_9QZlPC0fF0spLHf2S3nNqI0v3k2E7q3DkqxVf5xvn7q_X-gPqzVE9Jw"
@@ -217,17 +218,17 @@ def main():
         validator = {
             "operator": val_addr,
             "owner": val_addr,
-            "stakeAmount": "20000000000000000000000",
+            "stakeAmount": "2000000000000000000",
             "moniker": f"validator-{len(validators) + 1}",
             "consensusPubkey": consensus_pk,
             "consensusPop": "0x",
             "networkAddresses": val_net_addr,
             "fullnodeAddresses": vfn_net_addr,
-            "votingPower": "20000000000000000000000"
+            "votingPower": "2000000000000000000"
         }
         validators.append(validator)
 
-    # Build complete genesis config
+    # Build complete genesis config (matching GenesisConfig struct in genesis.rs)
     output = build_genesis_config(config, genesis_cfg)
     output["validators"] = validators
     
@@ -241,3 +242,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -11,6 +11,14 @@ base_dir = "/tmp/gravity-cluster"
 # Path to gravity_node binary
 binary_path = "../target/quick-release/gravity_node"
 
+# External dependencies configuration
+[dependencies.genesis_contracts]
+# Git repository URL for gravity_chain_core_contracts
+repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
+# Git ref (branch, tag, or commit hash) to checkout
+# Use "main" for latest, or specific commit hash for reproducibility
+ref = "main"
+
 # Node definitions
 # Each node requires: id, host, and ports
 # For local development, use 127.0.0.1 with different ports

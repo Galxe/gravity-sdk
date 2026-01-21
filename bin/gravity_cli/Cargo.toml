@@ -22,6 +22,7 @@ serde_json.workspace = true
 tracing.workspace = true
 bcs.workspace = true
 sha3.workspace = true
+tiny-keccak = { version = "2.0", features = ["sha3"] }
 rand_core = { version = "0.6", features = ["std"] }
 k256 = { version = "0.13.0", features = ["ecdsa"] }
 tokio = { version = "1.35", features = ["full"] }
