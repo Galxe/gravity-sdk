@@ -35,7 +35,7 @@ use std::{
     time::Instant,
 };
 
-use tokio::sync::Mutex;
+use tokio::sync::{broadcast, Mutex};
 use tracing::*;
 
 pub(crate) type RethBlockChainProvider =
@@ -80,6 +80,7 @@ pub struct RethCli<EthApi: RethEthCall> {
     txn_cache: TxnCache,
     _txn_batch_size: usize,
     current_epoch: AtomicU64,
+    shutdown: broadcast::Receiver<()>,
 }
 
 pub fn convert_account(acc: Address) -> ExternalAccountAddress {
@@ -94,7 +95,11 @@ fn calculate_txn_hash(bytes: &Vec<u8>) -> [u8; 32] {
 }
 
 impl<EthApi: RethEthCall> RethCli<EthApi> {
-    pub async fn new(args: ConsensusArgs<EthApi>, txn_cache: TxnCache) -> Self {
+    pub async fn new(
+        args: ConsensusArgs<EthApi>,
+        txn_cache: TxnCache,
+        shutdown: broadcast::Receiver<()>,
+    ) -> Self {
         let chian_info = args.provider.chain_spec().chain;
         let chain_id = match chian_info.into_kind() {
             greth::reth_chainspec::ChainKind::Named(n) => n as u64,
@@ -111,6 +116,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             txn_cache,
             _txn_batch_size: 2000,
             current_epoch: AtomicU64::new(0),
+            shutdown,
         }
     }
 
@@ -193,12 +199,12 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         Ok(())
     }
 
-    pub async fn recv_compute_res(&self) -> Result<ExecutionResult, ()> {
+    pub async fn recv_compute_res(&self) -> Result<ExecutionResult, String> {
         let pipe_api = &self.pipe_api;
         let result = pipe_api
             .pull_executed_block_hash()
             .await
-            .expect("failed to recv compute res in recv_compute_res");
+            .ok_or_else(|| "failed to recv compute res: channel closed".to_string())?;
         debug!("recv compute res done");
         Ok(result)
     }
@@ -234,9 +240,14 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         loop {
             let current_epoch = self.current_epoch.load(Ordering::SeqCst);
             // max executing block number
-            let exec_blocks = get_block_buffer_manager()
-                .get_ordered_blocks(start_ordered_block, None, current_epoch)
-                .await;
+            let mut shutdown = self.shutdown.resubscribe();
+            let exec_blocks = tokio::select! {
+                res = get_block_buffer_manager().get_ordered_blocks(start_ordered_block, None, current_epoch) => res,
+                _ = shutdown.recv() => {
+                    info!("Shutdown signal received, stopping execution loop");
+                    break;
+                }
+            };
             if let Err(e) = exec_blocks {
                 let from = start_ordered_block;
                 if e.to_string().contains("Buffer is in epoch change") {
@@ -272,12 +283,27 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                 self.push_ordered_block(block, parent_id).await?;
             }
         }
+        Ok(())
     }
 
     pub async fn start_commit_vote(&self) -> Result<(), String> {
         loop {
-            let execution_result =
-                self.recv_compute_res().await.expect("failed to recv compute res");
+            let mut shutdown = self.shutdown.resubscribe();
+            let execution_result = tokio::select! {
+                res = self.recv_compute_res() => res,
+                _ = shutdown.recv() => {
+                    info!("Shutdown signal received, stopping commit vote loop");
+                    break;
+                }
+            };
+
+            let execution_result = match execution_result {
+                Ok(res) => res,
+                Err(e) => {
+                    warn!("recv_compute_res failed: {}. Stopping commit vote loop.", e);
+                    break;
+                }
+            };
             let mut block_hash_data = [0u8; 32];
             block_hash_data.copy_from_slice(execution_result.block_hash.as_slice());
             let block_id = ExternalBlockId::from_bytes(execution_result.block_id.as_slice());
@@ -301,15 +327,21 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                 .await
                 .expect("failed to pop ordered block ids");
         }
+        Ok(())
     }
 
     pub async fn start_commit(&self) -> Result<(), String> {
         let mut start_commit_num = self.provider.last_block_number().unwrap() + 1;
         loop {
             let epoch = self.current_epoch.load(Ordering::SeqCst);
-            let block_ids = get_block_buffer_manager()
-                .get_committed_blocks(start_commit_num, None, epoch)
-                .await;
+            let mut shutdown = self.shutdown.resubscribe();
+            let block_ids = tokio::select! {
+                res = get_block_buffer_manager().get_committed_blocks(start_commit_num, None, epoch) => res,
+                _ = shutdown.recv() => {
+                    info!("Shutdown signal received, stopping commit loop");
+                    break;
+                }
+            };
             if let Err(e) = block_ids {
                 warn!("failed to get committed blocks: {}", e);
                 continue;
@@ -351,6 +383,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                 let _ = persist_notifier.send(()).await;
             }
         }
+        Ok(())
     }
 }
 pub struct RethCliConfigStorage<EthApi: RethEthCall> {

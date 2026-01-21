@@ -27,7 +27,10 @@ use reth_coordinator::RethCoordinator;
 use reth_db::DatabaseEnv;
 use reth_node_builder::{NodeBuilder, WithLaunchContext};
 use reth_provider::{BlockHashReader, BlockNumReader, BlockReader};
-use tokio::sync::oneshot;
+use tokio::{
+    signal::unix::{signal, SignalKind},
+    sync::{broadcast, oneshot},
+};
 use tracing::info;
 mod cli;
 mod consensus;
@@ -61,6 +64,7 @@ struct ConsensusArgs<EthApi: RethEthCall> {
 fn run_reth(
     cli: Cli<EthereumChainSpecParser>,
     execution_args_rx: oneshot::Receiver<ExecutionArgs>,
+    mut shutdown: broadcast::Receiver<()>,
 ) -> (ConsensusArgs<impl RethEthCall>, u64) {
     reth_cli_util::sigsegv_handler::install();
 
@@ -128,7 +132,15 @@ fn run_reth(
                         pool,
                     };
                     let _ = tx.send((args, recover_block_number));
-                    handle.node_exit_future.await
+
+                    tokio::select! {
+                        _ = handle.node_exit_future => {},
+                        _ = shutdown.recv() => {
+                            info!("Reth node shutdown signal received");
+                        }
+                    }
+
+                    Ok(())
                 }
             },
         );
@@ -210,16 +222,40 @@ fn main() {
     let cli = Cli::parse();
     let relayer_config_path = cli.gravity_node_config.relayer_config_path.clone();
     let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
+
+    let (shutdown_tx, _shutdown_rx) = broadcast::channel(1);
+    let shutdown_tx_clone = shutdown_tx.clone();
+
+    // Spawn Ctrl+C handler
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        rt.block_on(async {
+            let mut sigterm = signal(SignalKind::terminate()).unwrap();
+
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {
+                    info!("Received Ctrl+C, initiating shutdown...");
+                }
+                _ = sigterm.recv() => {
+                    info!("Received SIGTERM, initiating shutdown...");
+                }
+            }
+            let _ = shutdown_tx_clone.send(());
+        });
+    });
+
     let (execution_args_tx, execution_args_rx) = oneshot::channel();
-    let (consensus_args, latest_block_number) = run_reth(cli, execution_args_rx);
+    let (consensus_args, latest_block_number) =
+        run_reth(cli, execution_args_rx, shutdown_tx.subscribe());
     let rt = tokio::runtime::Runtime::new().unwrap();
     let pool = Box::new(Mempool::new(
         consensus_args.pool.clone(),
         gcei_config.base.role == RoleType::FullNode,
     ));
     let txn_cache = pool.tx_cache();
+    let shutdown_rx_cli = shutdown_tx.subscribe();
     rt.block_on(async move {
-        let client = Arc::new(RethCli::new(consensus_args, txn_cache).await);
+        let client = Arc::new(RethCli::new(consensus_args, txn_cache, shutdown_rx_cli).await);
         let chain_id = client.chain_id();
 
         let coordinator =
@@ -256,6 +292,9 @@ fn main() {
         }
         coordinator.send_execution_args().await;
         coordinator.run().await;
-        tokio::signal::ctrl_c().await.unwrap();
+
+        let mut shutdown_rx = shutdown_tx.subscribe();
+        let _ = shutdown_rx.recv().await;
+        info!("Main shutdown complete");
     });
 }
