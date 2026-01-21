@@ -237,20 +237,27 @@ impl<S: TShare, D: TAugmentedData> RandManager<S, D> {
                 .spawn(async move {
                     match bcs::from_bytes::<RandMessage<S, D>>(rand_gen_msg.req.data()) {
                         Ok(msg) => {
-                            if msg
-                                .verify(
-                                    &epoch_state_clone,
-                                    &config_clone,
-                                    &fast_config_clone,
-                                    rand_gen_msg.sender,
-                                )
-                                .is_ok()
-                            {
-                                let _ = tx.unbounded_send(RpcRequest {
-                                    req: msg,
-                                    protocol: rand_gen_msg.protocol,
-                                    response_sender: rand_gen_msg.response_sender,
-                                });
+                            match msg.verify(
+                                &epoch_state_clone,
+                                &config_clone,
+                                &fast_config_clone,
+                                rand_gen_msg.sender,
+                            ) {
+                                Ok(()) => {
+                                    let _ = tx.unbounded_send(RpcRequest {
+                                        req: msg,
+                                        protocol: rand_gen_msg.protocol,
+                                        response_sender: rand_gen_msg.response_sender,
+                                    });
+                                }
+                                Err(e) => {
+                                    warn!(
+                                        "[RandManager] Message verification failed from sender {}: {:?}, msg_epoch: {}",
+                                        rand_gen_msg.sender,
+                                        e,
+                                        msg.epoch()
+                                    );
+                                }
                             }
                         }
                         Err(e) => {
