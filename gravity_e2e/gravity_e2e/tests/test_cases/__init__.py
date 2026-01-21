@@ -72,6 +72,12 @@ from gravity_e2e.tests.test_cases.test_validator_add_remove import (
     test_validator_add_remove_delayed,
 )
 
+# Cluster Operations tests (Self-managed)
+from gravity_e2e.tests.test_cases.test_cluster_ops import (
+    test_cluster_lifecycle,
+    test_fault_tolerance,
+)
+
 
 # Register all tests with the registry
 # Basic transfer tests
@@ -109,6 +115,10 @@ register_test("epoch_consistency_extended", suite="epoch", self_managed=True)(te
 register_test("validator_add_remove", suite="validator", self_managed=True)(test_validator_add_remove)
 register_test("validator_add_remove_delayed", suite="validator", self_managed=True)(test_validator_add_remove_delayed)
 
+# Cluster Ops tests (self-managed)
+register_test("cluster_lifecycle", suite="cluster_ops", self_managed=True)(test_cluster_lifecycle)
+register_test("cluster_fault_tolerance", suite="cluster_ops", self_managed=True)(test_fault_tolerance)
+
 
 # Define default test list for "all" suite
 DEFAULT_TESTS = [
@@ -144,7 +154,10 @@ __all__ = [
     'test_epoch_consistency_fast',
     'test_validator_add_remove',
     'test_validator_add_remove_immediate',
+    'test_validator_add_remove_immediate',
     'test_validator_add_remove_delayed',
+    'test_cluster_lifecycle',
+    'test_fault_tolerance',
     # Default test list
     'DEFAULT_TESTS',
 ]

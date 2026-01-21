@@ -31,8 +31,8 @@ import pytest
 import pytest_asyncio
 
 # Use absolute imports now that path is set
-from gravity_e2e.core.node_connector import NodeConnector
-from gravity_e2e.core.client.gravity_client import GravityClient
+from gravity_e2e.cluster.manager import Cluster
+from gravity_e2e.cluster.client.gravity_client import GravityClient
 from gravity_e2e.helpers.account_manager import TestAccountManager
 from gravity_e2e.helpers.test_helpers import RunHelper, TestResult
 
@@ -40,7 +40,8 @@ LOG = logging.getLogger(__name__)
 
 
 # Configuration defaults
-DEFAULT_NODES_CONFIG = "configs/nodes.json"
+DEFAULT_NODES_CONFIG = "configs/nodes.json" # Legacy default, but we prefer cluster.toml logic
+DEFAULT_CLUSTER_CONFIG = "../cluster/cluster.toml" # Relative to this file if not specified
 DEFAULT_ACCOUNTS_CONFIG = "configs/test_accounts.json"
 DEFAULT_OUTPUT_DIR = "output"
 
@@ -51,7 +52,13 @@ def pytest_addoption(parser):
         "--nodes-config",
         action="store",
         default=DEFAULT_NODES_CONFIG,
-        help="Path to nodes configuration file"
+        help="Path to nodes configuration file (Legacy, prefer --cluster-config)"
+    )
+    parser.addoption(
+        "--cluster-config",
+        action="store",
+        default=None,
+        help="Path to cluster.toml configuration file"
     )
     parser.addoption(
         "--accounts-config",
@@ -77,6 +84,22 @@ def pytest_addoption(parser):
         default=None,
         help="Cluster name to test"
     )
+
+
+@pytest.fixture(scope="session")
+def cluster_config_path(request) -> Path:
+    """Get cluster configuration path."""
+    val = request.config.getoption("--cluster-config")
+    if val:
+        return Path(val).resolve()
+    
+    # Try default locations
+    # 1. ../cluster/cluster.toml relative to tests/
+    default_loc = Path(__file__).parent.parent.parent / "cluster" / "cluster.toml"
+    if default_loc.exists():
+        return default_loc
+        
+    return Path("cluster.toml").resolve()
 
 
 @pytest.fixture(scope="session")
@@ -112,38 +135,34 @@ def target_cluster(request) -> Optional[str]:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def node_connector(nodes_config_path: str) -> AsyncGenerator[NodeConnector, None]:
+async def cluster(cluster_config_path: Path) -> AsyncGenerator[Cluster, None]:
     """
-    Create and manage node connector for the test session.
+    Create and manage Cluster for the test session.
+    Yields a Cluster instance ready for use.
+    """
+    LOG.info(f"Loading cluster from {cluster_config_path}")
+    c = Cluster(cluster_config_path)
     
-    Yields:
-        Connected NodeConnector instance
-    """
-    connector = None
-    try:
-        connector = NodeConnector(nodes_config_path)
-        
-        # Connect to all nodes
-        LOG.info("Connecting to nodes...")
-        results = await connector.connect_all()
-        
-        connected = [n for n, s in results.items() if s]
-        failed = [n for n, s in results.items() if not s]
-        
-        if failed:
-            LOG.warning(f"Failed to connect to nodes: {failed}")
-        
-        if not connected:
-            pytest.skip("No nodes available for testing")
-        
-        LOG.info(f"Connected to nodes: {connected}")
-        
-        yield connector
-        
-    finally:
-        # Cleanup
-        if connector:
-            await connector.close_all()
+    # Optional: ensure we can talk to at least one node?
+    # Or just yield it and let tests decide.
+    # Given existing tests expect connection, maybe we should verify.
+    
+    # For now, just yield. Tests that need connectivity will fail fast if nodes are down.
+    yield c
+    
+    # Cleanup? Cluster object doesn't really have open resources except clients inside nodes
+    # We could explicitly close clients if we wanted.
+    for node in c.nodes.values():
+        if node.client.session:
+            await node.client.session.close()
+
+
+# Alias for backward compatibility if tests request 'node_connector'
+# But ideally tests should migrate to 'cluster'
+@pytest_asyncio.fixture(scope="session")
+async def node_connector(cluster: Cluster) -> Cluster:
+    """DEPRECATED: Compatibility shim. Returns cluster object."""
+    return cluster
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -159,7 +178,7 @@ async def account_manager(accounts_config_path: str) -> TestAccountManager:
 
 @pytest_asyncio.fixture(scope="function")
 async def gravity_client(
-    node_connector: NodeConnector,
+    cluster: Cluster,
     target_node_id: Optional[str]
 ) -> GravityClient:
     """
@@ -168,23 +187,34 @@ async def gravity_client(
     Creates a new client for each test function to avoid aiohttp session
     sharing issues across different async tasks.
     """
-    # Get node info
+    node = None
+    node_id = None
+    
     if target_node_id:
-        node = node_connector.get_node(target_node_id)
+        node = cluster.get_node(target_node_id)
         if not node:
-            pytest.skip(f"Node {target_node_id} not found")
-        rpc_url = node.rpc_url
+            pytest.skip(f"Node {target_node_id} not found in cluster")
         node_id = target_node_id
     else:
-        # Get first connected node
-        connected_nodes = list(node_connector.clients.keys())
-        if not connected_nodes:
-            pytest.skip("No nodes connected")
-        node_id = connected_nodes[0]
-        node = node_connector.get_node(node_id)
-        rpc_url = node.rpc_url
+        # Get first connected/running node
+        # Prefer RUNNING nodes
+        live_nodes = await cluster.get_live_nodes()
+        if live_nodes:
+            node = live_nodes[0]
+            node_id = node.id
+        else:
+            # Fallback to any node if none are confirmed live (maybe they are starting up)
+            # Connectivity test might fail, but we try.
+            all_nodes = list(cluster.nodes.values())
+            if not all_nodes:
+                pytest.skip("No nodes in cluster config")
+            node = all_nodes[0]
+            node_id = node.id
+
+    rpc_url = node.url
     
     # Create a fresh client for this test function
+    # Note: We are using the NEW client class in cluster.client
     client = GravityClient(rpc_url, node_id)
     async with client:
         yield client
