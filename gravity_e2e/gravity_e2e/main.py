@@ -16,6 +16,7 @@ from .core.node_connector import NodeConnector
 from .helpers.account_manager import TestAccountManager
 from .helpers.test_helpers import RunHelper
 from .utils.logging import setup_logging
+from .cluster.manager import Cluster # New import
 
 # Import test cases to trigger registration
 from .tests import test_cases  # noqa: F401
@@ -32,13 +33,14 @@ from .tests.test_cases import DEFAULT_TESTS
 LOG = logging.getLogger(__name__)
 
 
-async def run_test(test_name: str, test_helper: RunHelper) -> dict:
+async def run_test(test_name: str, test_helper: RunHelper, cluster: Cluster = None) -> dict:
     """
     Run a single test by name.
     
     Args:
         test_name: The registered test name
         test_helper: RunHelper instance for the test
+        cluster: Optional Cluster instance for cluster_ops tests
     
     Returns:
         Test result dictionary or TestResult object
@@ -54,7 +56,19 @@ async def run_test(test_name: str, test_helper: RunHelper) -> dict:
     
     try:
         LOG.info(f"Running test: {test_name}")
-        result = await test_func(run_helper=test_helper)
+        
+        # Dependency Injection based on arguments
+        # Simple check: if test_func accepts 'cluster', pass it
+        import inspect
+        sig = inspect.signature(test_func)
+        kwargs = {"run_helper": test_helper}
+        
+        if "cluster" in sig.parameters:
+            if cluster is None:
+                raise ValueError(f"Test '{test_name}' requires 'cluster' fixture but no --cluster-config provided")
+            kwargs["cluster"] = cluster
+            
+        result = await test_func(**kwargs)
         return result
     except Exception as e:
         LOG.error(f"Test {test_name} failed: {e}", exc_info=True)
@@ -75,6 +89,8 @@ async def main():
                        help="Path to nodes configuration file")
     parser.add_argument("--accounts-config", default="configs/test_accounts.json",
                        help="Path to accounts configuration file")
+    parser.add_argument("--cluster-config", default=None,
+                       help="Path to cluster.toml configuration for Cluster Ops tests")
     parser.add_argument("--test-suite", default="all",
                        help=f"Test suite to run. Available: {', '.join(available_choices[:10])}...")
     parser.add_argument("--list-tests", action="store_true",
@@ -184,6 +200,16 @@ async def main():
                     else:
                         LOG.error(f"  {node_id}: {status['status']} - {status.get('error', 'Unknown error')}")
             
+            # Initialize Cluster if config provided
+            cluster_manager = None
+            if args.cluster_config:
+                try:
+                    cluster_manager = Cluster(Path(args.cluster_config))
+                    LOG.info(f"Initialized Cluster Manager with config: {args.cluster_config}")
+                except Exception as e:
+                    LOG.error(f"Failed to initialize Cluster: {e}")
+                    sys.exit(1)
+
             # Run self-managed tests first (they don't need pre-connected nodes)
             self_managed_tests = [t for t in tests_to_run if is_self_managed(t)]
             regular_tests = [t for t in tests_to_run if not is_self_managed(t)]
@@ -203,7 +229,7 @@ async def main():
                 )
                 
                 for test_name in self_managed_tests:
-                    result = await run_test(test_name, test_helper)
+                    result = await run_test(test_name, test_helper, cluster=cluster_manager)
                     test_results.append(result)
             
             # Run regular tests on connected nodes
@@ -226,7 +252,8 @@ async def main():
                     LOG.info(f"Running {len(regular_tests)} tests on node {node_id}")
                     
                     for test_name in regular_tests:
-                        result = await run_test(test_name, test_helper)
+                        # Cluster manager passed here too, though regular tests might not use it
+                        result = await run_test(test_name, test_helper, cluster=cluster_manager)
                         test_results.append(result)
             
             # Generate test report

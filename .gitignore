@@ -169,3 +169,7 @@ gravity_e2e/logs/
 cluster/output/
 cluster/cluster.toml
 bin/sentinel/sentinel.toml
+gravity_e2e/output/
+gravity_e2e/configs/test_accounts_generated.json
+__pycache__/
+*.egg-info/
