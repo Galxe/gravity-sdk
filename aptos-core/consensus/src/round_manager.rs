@@ -322,7 +322,11 @@ impl RoundManager {
         let (network_id, available_peers) = if self.is_validator() {
             (
                 NetworkId::Validator,
-                self.epoch_state.verifier.get_ordered_account_addresses_iter().collect(),
+                self.epoch_state
+                    .verifier
+                    .get_ordered_account_addresses_iter()
+                    .filter(|addr| *addr != author)
+                    .collect(),
             )
         } else {
             let available_peers = self
