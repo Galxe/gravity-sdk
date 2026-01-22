@@ -124,8 +124,8 @@ impl<T: QuorumStoreSender + Sync + 'static> BatchRequester<T> {
     ) -> Option<(BatchInfo, Vec<SignedTransaction>)> {
         debug!("QS: request_batch, digest:{}", key.digest);
         let validator_verifier = self.validator_verifier.clone();
-        let available_peers = if self.my_peer_id.network_id() == NetworkId::Validator {
-            signers
+        let available_peers: Vec<PeerId> = if self.my_peer_id.network_id() == NetworkId::Validator {
+            signers.into_iter().filter(|peer| *peer != self.my_peer_id.peer_id()).collect()
         } else {
             self.network_sender
                 .get_available_peers()
@@ -134,7 +134,7 @@ impl<T: QuorumStoreSender + Sync + 'static> BatchRequester<T> {
                         .iter()
                         .filter(|peer| peer.network_id() == self.my_peer_id.network_id())
                         .map(|peer| peer.peer_id())
-                        .collect::<Vec<_>>()
+                        .collect()
                 })
                 .unwrap_or_else(|e| {
                     error!("Failed to get available peers: {:?}", e);

@@ -1803,6 +1803,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .network_client
             .get_available_peers()
             .expect("failed to get available peers");
+        // TODO(nekomoto): Check if this peer self is in available peers
         let vfn_peers = peers
             .iter()
             .filter(|peer| peer.network_id() == NetworkId::Vfn)
