@@ -55,7 +55,9 @@ use std::collections::VecDeque;
 use std::sync::atomic::AtomicBool;
 #[cfg(any(test, feature = "fuzzing"))]
 use std::sync::atomic::Ordering;
-use std::{collections::BTreeMap, io::Read, sync::Arc, time::Duration};
+use std::{collections::{BTreeMap, HashMap}, io::Read, sync::Arc, time::Duration};
+
+use gaptos::aptos_types::account_address::AccountAddress;
 
 use gaptos::aptos_consensus::counters;
 
@@ -126,6 +128,9 @@ pub struct BlockStore {
     is_validator: bool,
     pending_blocks: Arc<Mutex<PendingBlocks>>,
     enable_randomness: bool,
+    /// Mapping from validator address to their index in the ordered validator set.
+    /// Used during recovery to compute proposer_index for blocks.
+    validator_indices: HashMap<AccountAddress, u64>,
 }
 
 impl BlockStore {
@@ -141,6 +146,7 @@ impl BlockStore {
         is_validator: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
         enable_randomness: bool,
+        validator_indices: HashMap<AccountAddress, u64>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -160,6 +166,7 @@ impl BlockStore {
             is_validator,
             pending_blocks,
             enable_randomness,
+            validator_indices,
         ));
         block_on(block_store.recover_blocks());
         block_store
@@ -177,6 +184,7 @@ impl BlockStore {
         is_validator: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
         enable_randomness: bool,
+        validator_indices: HashMap<AccountAddress, u64>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -196,6 +204,7 @@ impl BlockStore {
             is_validator,
             pending_blocks,
             enable_randomness,
+            validator_indices,
         )
         .await;
         block_store.recover_blocks().await;
@@ -373,6 +382,7 @@ impl BlockStore {
         is_validator: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
         enable_randomness: bool,
+        validator_indices: HashMap<AccountAddress, u64>,
     ) -> Self {
         let RootInfo(root_block, root_qc, root_ordered_cert, root_commit_cert) = root;
 
@@ -407,6 +417,7 @@ impl BlockStore {
             is_validator,
             pending_blocks,
             enable_randomness,
+            validator_indices,
         };
 
         for block in blocks {
@@ -545,6 +556,12 @@ impl BlockStore {
                     None
                 };
 
+                // Look up the proposer's index in the validator set (None for NIL blocks)
+                let proposer_index = p_block
+                    .block()
+                    .author()
+                    .and_then(|author| self.validator_indices.get(&author).copied());
+
                 let block = ExternalBlock {
                     txns: verified_txns,
                     block_meta: ExternalBlockMeta {
@@ -554,10 +571,7 @@ impl BlockStore {
                         epoch: p_block.block().epoch(),
                         randomness,
                         block_hash: maybe_block_hash.clone(),
-                        // In recovery mode, we don't have access to the validator set,
-                        // so we set proposer_index to None. This is acceptable since
-                        // the block hash is already verified from storage.
-                        proposer_index: None,
+                        proposer_index,
                     },
                     extra_data,
                     enable_randomness: self.enable_randomness,
@@ -669,6 +683,7 @@ impl BlockStore {
             self.is_validator,
             self.pending_blocks.clone(),
             self.enable_randomness,
+            self.validator_indices.clone(),
         )
         .await;
 
