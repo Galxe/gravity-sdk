@@ -624,8 +624,7 @@ impl BlockBufferManager {
                 // )
                 let latest_epoch_change_block_number =
                     *self.latest_epoch_change_block_number.lock().await;
-                let msg = format!("There is no Ordered Block but try to get executed result for block {block_id:?} and block num {block_num:?}, 
-                                            latest epoch change block number {latest_epoch_change_block_number:?}");
+                let msg = format!("There is no Ordered Block but try to get executed result for block {block_id:?} and block num {block_num:?}, latest epoch change block number {latest_epoch_change_block_number:?}");
                 warn!("{}", msg);
                 return Err(anyhow::anyhow!("{msg}"));
             }
