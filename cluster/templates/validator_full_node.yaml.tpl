@@ -1,5 +1,5 @@
 base:
-  role: "validator"
+  role: "full_node"
   data_dir: "${DATA_DIR}/data"
   waypoint:
     from_file: "${CONFIG_DIR}/waypoint.txt"
@@ -13,7 +13,7 @@ consensus:
       from_file:
         waypoint:
           from_file: ${CONFIG_DIR}/waypoint.txt
-        identity_blob_path: ${CONFIG_DIR}/validator-identity.yaml
+        identity_blob_path: ${CONFIG_DIR}/vfn-identity.yaml
   enable_pipeline: true
   max_sending_block_txns_after_filtering: 5000
   max_sending_block_txns: 5000
@@ -34,30 +34,20 @@ consensus:
       backlog_txn_limit_count: 50000
       backlog_per_validator_batch_limit_count: 2000
 
-validator_network:
-  network_id: validator
-  listen_address: "/ip4/${HOST}/tcp/${P2P_PORT}"
-  discovery_method:
-    onchain
-  mutual_authentication: true
-  identity:
-    type: "from_file"
-    path: ${CONFIG_DIR}/validator-identity.yaml
-
 full_node_networks:
   - network_id:
       private: "vfn"
-    listen_address: "/ip4/${HOST}/tcp/${VFN_PORT}"
+    listen_address: "/ip4/${HOST}/tcp/${P2P_PORT}"
     identity:
       type: "from_file"
-      path: ${CONFIG_DIR}/validator-identity.yaml
-    discovery_method: none
-    mutual_authentication: false
+      path: ${CONFIG_DIR}/vfn-identity.yaml
+    discovery_method:
+      onchain
 
 storage:
   dir: "${DATA_DIR}/data"
 
-log_file_path: "${DATA_DIR}/consensus_log/validator.log"
+log_file_path: "${DATA_DIR}/consensus_log/vfn.log"
 
 inspection_service:
   port: ${INSPECTION_PORT}
@@ -66,4 +56,5 @@ inspection_service:
 mempool:
   capacity_per_user: 20000
 
-https_server_address: 0.0.0.0:${HTTPS_PORT}
+logger:
+  level: INFO

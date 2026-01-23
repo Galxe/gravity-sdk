@@ -117,6 +117,126 @@ STOP_SCRIPT
     chmod +x "$data_dir/script/stop.sh"
 }
 
+# Configure VFN node function
+configure_vfn() {
+    local node_id="$1"
+    local data_dir="$2"
+    local genesis_path="$3"
+    local binary_path="$4"
+    local waypoint_src="$5"
+    local seed_peer_id="$6"
+    local seed_host="$7"
+    local seed_vfn_port="$8"
+    local seed_network_pk="$9"
+    
+    local config_dir="$data_dir/config"
+    
+    log_info "  [$node_id] configuring VFN..."
+    
+    # Create config dir
+    mkdir -p "$config_dir"
+    
+    # Copy waypoint from artifacts
+    cp "$waypoint_src" "$config_dir/waypoint.txt"
+    
+    # Generate VFN identity if not exists
+    local identity_file="$config_dir/vfn-identity.yaml"
+    if [ ! -f "$identity_file" ]; then
+        log_info "  [$node_id] Generating VFN identity..."
+        "$GRAVITY_CLI" genesis generate-key --output-file="$identity_file" > /dev/null
+    fi
+    
+    # Export paths
+    export NODE_ID="$node_id"
+    export DATA_DIR="$data_dir"
+    export CONFIG_DIR="$config_dir"
+    export GENESIS_PATH="$genesis_path"
+    export BINARY_PATH="$binary_path"
+    export SEED_PEER_ID="$seed_peer_id"
+    export SEED_HOST="$seed_host"
+    export SEED_VFN_PORT="$seed_vfn_port"
+    export SEED_NETWORK_PK="$seed_network_pk"
+    
+    # Generate validator_full_node.yaml from template
+    envsubst < "$SCRIPT_DIR/templates/validator_full_node.yaml.tpl" > "$config_dir/validator_full_node.yaml"
+    
+    # Generate reth_config.json from template
+    envsubst < "$SCRIPT_DIR/templates/reth_config_vfn.json.tpl" > "$config_dir/reth_config.json"
+    
+    # Generate start script for this node
+    cat > "$data_dir/script/start.sh" << 'START_SCRIPT'
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE="$SCRIPT_DIR/.."
+
+if [ -e "${WORKSPACE}/script/node.pid" ]; then
+    pid=$(cat "${WORKSPACE}/script/node.pid")
+    if [ -d "/proc/$pid" ]; then
+        echo "Node is already running with PID $pid"
+        exit 1
+    fi
+fi
+
+reth_config="${WORKSPACE}/config/reth_config.json"
+
+if ! command -v jq &> /dev/null; then
+    echo "Error: 'jq' is required but not installed."
+    exit 1
+fi
+
+reth_args_array=()
+while IFS= read -r key && IFS= read -r value; do
+    if [ -z "$value" ] || [ "$value" == "null" ]; then
+        reth_args_array+=( "--${key}" )
+    else
+        reth_args_array+=( "--${key}=${value}" )
+    fi
+done < <(jq -r '.reth_args | to_entries[] | .key, .value' "$reth_config")
+
+env_vars_array=()
+while IFS= read -r key && IFS= read -r value; do
+    if [ -n "$value" ] && [ "$value" != "null" ]; then
+        env_vars_array+=( "${key}=${value}" )
+    fi
+done < <(jq -r '.env_vars | to_entries[] | .key, .value' "$reth_config")
+
+export RUST_BACKTRACE=1
+pid=$(
+    env ${env_vars_array[*]} BINARY_PATH node \
+        ${reth_args_array[*]} \
+        > "${WORKSPACE}/logs/debug.log" 2>&1 &
+    echo $!
+)
+echo $pid > "${WORKSPACE}/script/node.pid"
+echo "Started VFN node with PID $pid"
+START_SCRIPT
+
+    # Replace BINARY_PATH placeholder
+    sed -i "s|BINARY_PATH|$binary_path|g" "$data_dir/script/start.sh"
+    chmod +x "$data_dir/script/start.sh"
+    
+    # Generate stop script
+    cat > "$data_dir/script/stop.sh" << 'STOP_SCRIPT'
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE="$SCRIPT_DIR/.."
+
+if [ -e "${WORKSPACE}/script/node.pid" ]; then
+    pid=$(cat "${WORKSPACE}/script/node.pid")
+    if [ -d "/proc/$pid" ]; then
+        kill "$pid"
+        echo "Stopped node (PID: $pid)"
+    else
+        echo "Node not running (stale PID file)"
+    fi
+    rm -f "${WORKSPACE}/script/node.pid"
+else
+    echo "No PID file found"
+fi
+STOP_SCRIPT
+    chmod +x "$data_dir/script/stop.sh"
+}
+
 
 main() {
     if [ ! -f "$CONFIG_FILE" ]; then
@@ -173,8 +293,37 @@ main() {
     fi
     genesis_path="$base_dir/genesis.json"
     
-    # Deploy Nodes
+    # Find gravity_cli for VFN identity generation
+    GRAVITY_CLI=$(find_binary "gravity_cli" "$PROJECT_ROOT") || true
+    if [ -z "$GRAVITY_CLI" ]; then
+        log_warn "gravity_cli not found - VFN identity generation may fail"
+    fi
+    export GRAVITY_CLI
+    
+    # Build validator info map (for VFN seed lookup)
+    declare -A VALIDATOR_INFO
     node_count=$(echo "$config_json" | jq '.nodes | length')
+    
+    for i in $(seq 0 $((node_count - 1))); do
+        node=$(echo "$config_json" | jq ".nodes[$i]")
+        node_id=$(echo "$node" | jq -r '.id')
+        role=$(echo "$node" | jq -r '.role // "validator"')
+        
+        if [ "$role" == "validator" ]; then
+            host=$(echo "$node" | jq -r '.host')
+            vfn_port=$(echo "$node" | jq -r '.vfn_port')
+            identity_file="$OUTPUT_DIR/$node_id/config/validator-identity.yaml"
+            
+            if [ -f "$identity_file" ]; then
+                peer_id=$(grep "account_address:" "$identity_file" | awk '{print $2}')
+                # Extract network_public_key (strip 0x prefix if present)
+                network_pk=$(grep "network_public_key:" "$identity_file" | awk '{print $2}' | sed 's/^0x//')
+                VALIDATOR_INFO["$node_id"]="$peer_id|$host|$vfn_port|$network_pk"
+            fi
+        fi
+    done
+    
+    # Deploy Nodes
     log_info "Deploying $node_count nodes..."
     
     for i in $(seq 0 $((node_count - 1))); do
@@ -184,13 +333,15 @@ main() {
         export NODE_ID=$(echo "$node" | jq -r '.id')
         export HOST=$(echo "$node" | jq -r '.host')
         export P2P_PORT=$(echo "$node" | jq -r '.p2p_port')
-        export VFN_PORT=$(echo "$node" | jq -r '.vfn_port')
+        export VFN_PORT=$(echo "$node" | jq -r '.vfn_port // "null"')
         export RPC_PORT=$(echo "$node" | jq -r '.rpc_port')
         export METRICS_PORT=$(echo "$node" | jq -r '.metrics_port')
         export INSPECTION_PORT=$(echo "$node" | jq -r '.inspection_port')
-        export HTTPS_PORT=$(echo "$node" | jq -r '.https_port')
+        export HTTPS_PORT=$(echo "$node" | jq -r '.https_port // "null"')
         export AUTHRPC_PORT=$(echo "$node" | jq -r '.authrpc_port')
         export P2P_PORT_RETH=$(echo "$node" | jq -r '.reth_p2p_port')
+        
+        role=$(echo "$node" | jq -r '.role // "validator"')
         
         data_dir=$(echo "$node" | jq -r '.data_dir // empty')
         if [ -z "$data_dir" ]; then
@@ -200,28 +351,57 @@ main() {
         # Prepare dirs
         mkdir -p "$data_dir"/{config,data,logs,execution_logs,consensus_log,script}
         
-        # Artifact sources
-        identity_src="$OUTPUT_DIR/$NODE_ID/config/validator-identity.yaml"
         waypoint_src="$OUTPUT_DIR/waypoint.txt"
         
-        if [ ! -f "$identity_src" ]; then
-            log_error "Identity not found for $NODE_ID at $identity_src"
-            exit 1
+        if [ "$role" == "vfn" ]; then
+            # VFN node
+            attached_to=$(echo "$node" | jq -r '.attached_to')
+            
+            if [ -z "$attached_to" ] || [ "$attached_to" == "null" ]; then
+                log_error "VFN node $NODE_ID must specify 'attached_to' (validator node id)"
+                exit 1
+            fi
+            
+            if [ -z "${VALIDATOR_INFO[$attached_to]}" ]; then
+                log_error "Validator '$attached_to' not found for VFN $NODE_ID"
+                exit 1
+            fi
+            
+            IFS='|' read -r seed_peer_id seed_host seed_vfn_port seed_network_pk <<< "${VALIDATOR_INFO[$attached_to]}"
+            
+            configure_vfn \
+                "$NODE_ID" \
+                "$data_dir" \
+                "$genesis_path" \
+                "$binary_path" \
+                "$waypoint_src" \
+                "$seed_peer_id" \
+                "$seed_host" \
+                "$seed_vfn_port" \
+                "$seed_network_pk"
+        else
+            # Validator node
+            identity_src="$OUTPUT_DIR/$NODE_ID/config/validator-identity.yaml"
+            
+            if [ ! -f "$identity_src" ]; then
+                log_error "Identity not found for $NODE_ID at $identity_src"
+                exit 1
+            fi
+            
+            # Validate required ports (simple check)
+            if [ "$P2P_PORT" == "null" ] || [ "$VFN_PORT" == "null" ]; then
+                 log_error "Missing required ports in config for $NODE_ID"
+                 exit 1
+            fi
+            
+            configure_node \
+                "$NODE_ID" \
+                "$data_dir" \
+                "$genesis_path" \
+                "$binary_path" \
+                "$identity_src" \
+                "$waypoint_src"
         fi
-        
-        # Validate required ports (simple check)
-        if [ "$P2P_PORT" == "null" ] || [ "$VFN_PORT" == "null" ]; then
-             log_error "Missing required ports in config for $NODE_ID"
-             exit 1
-        fi
-        
-        configure_node \
-            "$NODE_ID" \
-            "$data_dir" \
-            "$genesis_path" \
-            "$binary_path" \
-            "$identity_src" \
-            "$waypoint_src"
     done
     
     log_success "Deployment complete! Environment ready at $base_dir"

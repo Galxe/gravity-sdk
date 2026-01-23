@@ -55,13 +55,20 @@ main() {
     fi
     log_info "Using gravity_cli: $GRAVITY_CLI"
     
-    # Step 1: Keys
+    # Step 1: Keys (only for validator nodes)
     log_info "Step 1: generating node keys..."
     node_count=$(echo "$config_json" | jq '.nodes | length')
     
     for i in $(seq 0 $((node_count - 1))); do
         node=$(echo "$config_json" | jq ".nodes[$i]")
         node_id=$(echo "$node" | jq -r '.id')
+        role=$(echo "$node" | jq -r '.role // "validator"')
+        
+        # Skip VFN nodes - they don't need validator identity
+        if [ "$role" == "vfn" ]; then
+            log_info "  [$node_id] Skipping VFN node (no validator identity needed)"
+            continue
+        fi
         
         # Structure: output/nodeX/config/validator-identity.yaml
         # This structure matches what aggregate_genesis.py expects relative to a base_dir

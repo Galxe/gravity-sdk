@@ -166,9 +166,12 @@ def main():
     
     validators = []
     nodes = config['nodes']
-    print(f"[Aggregator] Processing {len(nodes)} nodes for genesis configuration...")
+    
+    # Filter to only validator nodes (exclude VFN nodes)
+    validator_nodes = [n for n in nodes if n.get('role', 'validator') == 'validator']
+    print(f"[Aggregator] Processing {len(validator_nodes)} validator nodes for genesis configuration (skipping {len(nodes) - len(validator_nodes)} VFN nodes)...")
 
-    for node in nodes:
+    for node in validator_nodes:
         node_id = node['id']
         data_dir = node.get('data_dir') or os.path.join(base_dir, node_id)
         identity_path = os.path.join(data_dir, "config", "validator-identity.yaml")
