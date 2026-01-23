@@ -124,10 +124,6 @@ configure_vfn() {
     local genesis_path="$3"
     local binary_path="$4"
     local waypoint_src="$5"
-    local seed_peer_id="$6"
-    local seed_host="$7"
-    local seed_vfn_port="$8"
-    local seed_network_pk="$9"
     
     local config_dir="$data_dir/config"
     
@@ -152,10 +148,6 @@ configure_vfn() {
     export CONFIG_DIR="$config_dir"
     export GENESIS_PATH="$genesis_path"
     export BINARY_PATH="$binary_path"
-    export SEED_PEER_ID="$seed_peer_id"
-    export SEED_HOST="$seed_host"
-    export SEED_VFN_PORT="$seed_vfn_port"
-    export SEED_NETWORK_PK="$seed_network_pk"
     
     # Generate validator_full_node.yaml from template
     envsubst < "$SCRIPT_DIR/templates/validator_full_node.yaml.tpl" > "$config_dir/validator_full_node.yaml"
@@ -300,28 +292,7 @@ main() {
     fi
     export GRAVITY_CLI
     
-    # Build validator info map (for VFN seed lookup)
-    declare -A VALIDATOR_INFO
     node_count=$(echo "$config_json" | jq '.nodes | length')
-    
-    for i in $(seq 0 $((node_count - 1))); do
-        node=$(echo "$config_json" | jq ".nodes[$i]")
-        node_id=$(echo "$node" | jq -r '.id')
-        role=$(echo "$node" | jq -r '.role // "validator"')
-        
-        if [ "$role" == "validator" ]; then
-            host=$(echo "$node" | jq -r '.host')
-            vfn_port=$(echo "$node" | jq -r '.vfn_port')
-            identity_file="$OUTPUT_DIR/$node_id/config/validator-identity.yaml"
-            
-            if [ -f "$identity_file" ]; then
-                peer_id=$(grep "account_address:" "$identity_file" | awk '{print $2}')
-                # Extract network_public_key (strip 0x prefix if present)
-                network_pk=$(grep "network_public_key:" "$identity_file" | awk '{print $2}' | sed 's/^0x//')
-                VALIDATOR_INFO["$node_id"]="$peer_id|$host|$vfn_port|$network_pk"
-            fi
-        fi
-    done
     
     # Deploy Nodes
     log_info "Deploying $node_count nodes..."
@@ -354,31 +325,13 @@ main() {
         waypoint_src="$OUTPUT_DIR/waypoint.txt"
         
         if [ "$role" == "vfn" ]; then
-            # VFN node
-            attached_to=$(echo "$node" | jq -r '.attached_to')
-            
-            if [ -z "$attached_to" ] || [ "$attached_to" == "null" ]; then
-                log_error "VFN node $NODE_ID must specify 'attached_to' (validator node id)"
-                exit 1
-            fi
-            
-            if [ -z "${VALIDATOR_INFO[$attached_to]}" ]; then
-                log_error "Validator '$attached_to' not found for VFN $NODE_ID"
-                exit 1
-            fi
-            
-            IFS='|' read -r seed_peer_id seed_host seed_vfn_port seed_network_pk <<< "${VALIDATOR_INFO[$attached_to]}"
-            
+            # VFN node - uses onchain discovery, no seed required
             configure_vfn \
                 "$NODE_ID" \
                 "$data_dir" \
                 "$genesis_path" \
                 "$binary_path" \
-                "$waypoint_src" \
-                "$seed_peer_id" \
-                "$seed_host" \
-                "$seed_vfn_port" \
-                "$seed_network_pk"
+                "$waypoint_src"
         else
             # Validator node
             identity_src="$OUTPUT_DIR/$NODE_ID/config/validator-identity.yaml"
