@@ -312,7 +312,13 @@ main() {
         export AUTHRPC_PORT=$(echo "$node" | jq -r '.authrpc_port')
         export P2P_PORT_RETH=$(echo "$node" | jq -r '.reth_p2p_port')
         
-        role=$(echo "$node" | jq -r '.role // "validator"')
+        role=$(echo "$node" | jq -r '.role // empty')
+        
+        # Validate role is specified
+        if [ -z "$role" ]; then
+            log_error "Node $NODE_ID must specify 'role' (genesis, validator, or vfn)"
+            exit 1
+        fi
         
         data_dir=$(echo "$node" | jq -r '.data_dir // empty')
         if [ -z "$data_dir" ]; then
@@ -333,7 +339,7 @@ main() {
                 "$binary_path" \
                 "$waypoint_src"
         else
-            # Validator node
+            # Validator node (includes both 'genesis' and 'validator' roles)
             identity_src="$OUTPUT_DIR/$NODE_ID/config/validator-identity.yaml"
             
             if [ ! -f "$identity_src" ]; then

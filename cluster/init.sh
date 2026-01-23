@@ -62,9 +62,16 @@ main() {
     for i in $(seq 0 $((node_count - 1))); do
         node=$(echo "$config_json" | jq ".nodes[$i]")
         node_id=$(echo "$node" | jq -r '.id')
-        role=$(echo "$node" | jq -r '.role // "validator"')
+        role=$(echo "$node" | jq -r '.role // empty')
+        
+        # Validate role is specified
+        if [ -z "$role" ]; then
+            log_error "Node $node_id must specify 'role' (genesis, validator, or vfn)"
+            exit 1
+        fi
         
         # Skip VFN nodes - they don't need validator identity
+        # Both 'genesis' and 'validator' roles need validator identity
         if [ "$role" == "vfn" ]; then
             log_info "  [$node_id] Skipping VFN node (no validator identity needed)"
             continue

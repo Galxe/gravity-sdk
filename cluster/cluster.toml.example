@@ -21,12 +21,15 @@ ref = "main"
 
 # Node definitions
 # Each node requires: id, host, and ports
-# For local development, use 127.0.0.1 with different ports
-# For distributed deployment, use different hosts
+# Role types:
+#   - "genesis": Included in initial validator set in genesis.json
+#   - "validator": Validator node but NOT in initial genesis (can join later)
+#   - "vfn": Full node, uses onchain discovery
 
 [[nodes]]
 id = "node1"
 host = "127.0.0.1"
+role = "genesis"
 p2p_port = 6180
 vfn_port = 6190
 rpc_port = 8545
@@ -39,6 +42,7 @@ reth_p2p_port = 12024
 [[nodes]]
 id = "node2"
 host = "127.0.0.1"
+role = "genesis"
 p2p_port = 6181
 vfn_port = 6191
 rpc_port = 8546
@@ -51,6 +55,7 @@ reth_p2p_port = 12025
 [[nodes]]
 id = "node3"
 host = "127.0.0.1"
+role = "genesis"
 p2p_port = 6182
 vfn_port = 6192
 rpc_port = 8547
@@ -63,6 +68,7 @@ reth_p2p_port = 12026
 [[nodes]]
 id = "node4"
 host = "127.0.0.1"
+role = "genesis"
 p2p_port = 6183
 vfn_port = 6193
 rpc_port = 8548
