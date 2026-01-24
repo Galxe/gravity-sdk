@@ -13,7 +13,7 @@ consensus:
       from_file:
         waypoint:
           from_file: ${CONFIG_DIR}/waypoint.txt
-        identity_blob_path: ${CONFIG_DIR}/validator-identity.yaml
+        identity_blob_path: ${CONFIG_DIR}/identity.yaml
   enable_pipeline: true
   max_sending_block_txns_after_filtering: 5000
   max_sending_block_txns: 5000
@@ -42,7 +42,7 @@ validator_network:
   mutual_authentication: true
   identity:
     type: "from_file"
-    path: ${CONFIG_DIR}/validator-identity.yaml
+    path: ${CONFIG_DIR}/identity.yaml
 
 full_node_networks:
   - network_id:
@@ -50,7 +50,7 @@ full_node_networks:
     listen_address: "/ip4/${HOST}/tcp/${VFN_PORT}"
     identity:
       type: "from_file"
-      path: ${CONFIG_DIR}/validator-identity.yaml
+      path: ${CONFIG_DIR}/identity.yaml
     discovery_method: none
     mutual_authentication: false
 
