@@ -83,7 +83,6 @@ use gaptos::{
         },
         network_id::{NetworkId, PeerNetworkId},
     },
-    aptos_consensus::counters,
     aptos_crypto::bls12381::PrivateKey,
     aptos_dkg::{
         pvss::{traits::Transcript, Player},
@@ -1125,7 +1124,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         info!("validator_set read from config storage is : {:?}", validator_set);
 
         // Update global proposer reth address map for current epoch
-        proposer_reth_map::update_proposer_reth_address_map(&validator_set);
+        proposer_reth_map::update_proposer_reth_index_map(&validator_set);
         info!(
             "Updated proposer reth address map for epoch {}",
             payload.epoch()
