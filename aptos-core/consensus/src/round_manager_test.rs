@@ -89,6 +89,7 @@ use gaptos::{
 };
 use maplit::hashmap;
 use std::{
+    collections::HashMap,
     iter::FromIterator,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -298,6 +299,7 @@ impl NodeSetup {
             true,
             Arc::new(Mutex::new(PendingBlocks::new())),
             false,
+            HashMap::new(), // validator_indices: empty for tests
         ));
 
         let proposer_election = Self::create_proposer_election(proposers.clone());
