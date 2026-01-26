@@ -292,6 +292,14 @@ impl BlockBufferManager {
         self.ready_notifier.notify_waiters();
     }
 
+    /// Update the current epoch. Called by EpochManager at start to set the correct epoch
+    /// from epoch_state after reconfig notification.
+    pub async fn update_epoch(&self, epoch: u64) {
+        info!("update_epoch: updating current_epoch to {}", epoch);
+        let mut block_state_machine = self.block_state_machine.lock().await;
+        block_state_machine.current_epoch = epoch;
+    }
+
     // Helper method to wait for changes
     async fn wait_for_change(&self, timeout: Duration) -> Result<(), anyhow::Error> {
         let mut receiver = {
