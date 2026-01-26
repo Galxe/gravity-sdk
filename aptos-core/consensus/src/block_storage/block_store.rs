@@ -135,7 +135,7 @@ pub struct BlockStore {
     enable_randomness: bool,
     /// Mapping from validator address to their index in the ordered validator set.
     /// Used during recovery to compute proposer_index for blocks.
-    validator_indices: HashMap<AccountAddress, u64>,
+    validator_indices: HashMap<AccountAddress, usize>,
 }
 
 impl BlockStore {
@@ -151,7 +151,7 @@ impl BlockStore {
         is_validator: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
         enable_randomness: bool,
-        validator_indices: HashMap<AccountAddress, u64>,
+        validator_indices: HashMap<AccountAddress, usize>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -189,7 +189,7 @@ impl BlockStore {
         is_validator: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
         enable_randomness: bool,
-        validator_indices: HashMap<AccountAddress, u64>,
+        validator_indices: HashMap<AccountAddress, usize>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -387,7 +387,7 @@ impl BlockStore {
         is_validator: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
         enable_randomness: bool,
-        validator_indices: HashMap<AccountAddress, u64>,
+        validator_indices: HashMap<AccountAddress, usize>,
     ) -> Self {
         let RootInfo(root_block, root_qc, root_ordered_cert, root_commit_cert) = root;
 
@@ -565,7 +565,8 @@ impl BlockStore {
                 let proposer_index = p_block
                     .block()
                     .author()
-                    .and_then(|author| self.validator_indices.get(&author).copied());
+                    .and_then(|author| self.validator_indices.get(&author).copied())
+                    .map(|i| i as u64);
 
                 let block = ExternalBlock {
                     txns: verified_txns,
