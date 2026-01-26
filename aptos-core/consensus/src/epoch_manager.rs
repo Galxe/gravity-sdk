@@ -73,6 +73,7 @@ use futures::{
     },
     SinkExt, StreamExt,
 };
+use gaptos::aptos_consensus::counters;
 use gaptos::{
     aptos_bounded_executor::BoundedExecutor,
     aptos_channels::{aptos_channel, message_queues::QueueStyle},
@@ -115,6 +116,7 @@ use gaptos::{
 };
 use itertools::Itertools;
 use mini_moka::sync::Cache;
+use proposer_reth_map;
 use rand::{prelude::StdRng, thread_rng, Rng, SeedableRng};
 use std::{
     cmp::Ordering,
@@ -124,8 +126,6 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use gaptos::aptos_consensus::counters as counters;
-use proposer_reth_map;
 
 /// Range of rounds (window) that we might be calling proposer election
 /// functions with at any given time, in addition to the proposer history length.

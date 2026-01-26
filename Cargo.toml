@@ -21,16 +21,12 @@ members = [
     "crates/block-buffer-manager",
     "crates/txn_metrics",
     "crates/build-info",
-<<<<<<< HEAD
-    "crates/gravity-sdk"
+    "crates/gravity-sdk",
+    "crates/proposer-reth-map"
 ]
 exclude = [
     "external"
 ]
-=======
-    "crates/gravity-sdk",
-    "crates/proposer-reth-map"]
->>>>>>> 26b8f4c2 (feat: Add true coinbase addr)
 
 # Workspace-level lint configuration - applies to all members
 [workspace.lints.clippy]
@@ -503,3 +499,5 @@ serde-reflection = { git = "https://github.com/aptos-labs/serde-reflection", rev
 merlin = { git = "https://github.com/aptos-labs/merlin" }
 tonic = { git = "https://github.com/aptos-labs/tonic.git", rev = "0da1ba8b1751d6e19eb55be24cccf9ae933c666e" }
 darling = { git = "https://github.com/TedDriggs/darling.git", rev = "v0.20.10"}
+alloy-tx-macros = { git = "https://github.com/alloy-rs/alloy", tag = "v1.0.37" }
+
