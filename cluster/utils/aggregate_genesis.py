@@ -166,9 +166,12 @@ def main():
     
     validators = []
     nodes = config['nodes']
-    print(f"[Aggregator] Processing {len(nodes)} nodes for genesis configuration...")
+    
+    # Filter to only genesis nodes (only role='genesis' nodes go into initial validator set)
+    genesis_nodes = [n for n in nodes if n.get('role') == 'genesis']
+    print(f"[Aggregator] Processing {len(genesis_nodes)} genesis nodes for initial validator set (skipping {len(nodes) - len(genesis_nodes)} non-genesis nodes)...")
 
-    for node in nodes:
+    for node in genesis_nodes:
         node_id = node['id']
         data_dir = node.get('data_dir') or os.path.join(base_dir, node_id)
         identity_path = os.path.join(data_dir, "config", "validator-identity.yaml")
