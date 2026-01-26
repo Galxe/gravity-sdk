@@ -58,7 +58,7 @@ use gaptos::{
 };
 use maplit::hashmap;
 use once_cell::sync::Lazy;
-use std::{sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::runtime::Runtime;
 
 // This generates a proposal for round 1
@@ -101,7 +101,8 @@ fn build_empty_store(
         false,
         false, // enable_randomness
         Arc::new(Mutex::new(PendingBlocks::new())),
-        false, // check_ordered_only
+        false,          // check_ordered_only
+        HashMap::new(), // validator_indices: empty for fuzzing
     ))
 }
 

@@ -861,6 +861,11 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         info!(epoch = epoch, "Create BlockStore");
         // Read the last vote, before "moving" `recovery_data`
         let last_vote = recovery_data.last_vote();
+
+        // Build address -> index mapping for recovery mode proposer_index calculation
+        let validator_indices: HashMap<_, _> =
+            epoch_state.verifier.address_to_validator_index().clone();
+
         let block_store = Arc::new(
             BlockStore::async_new(
                 Arc::clone(&self.storage),
@@ -874,6 +879,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 self.is_current_epoch_validator,
                 self.pending_blocks.clone(),
                 onchain_randomness_config.randomness_enabled(),
+                validator_indices,
             )
             .await,
         );

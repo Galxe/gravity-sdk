@@ -19,7 +19,7 @@ use gaptos::{
     aptos_logger::Level,
     aptos_types::{ledger_info::LedgerInfo, validator_signer::ValidatorSigner},
 };
-use std::{future::Future, sync::Arc, time::Duration};
+use std::{collections::HashMap, future::Future, sync::Arc, time::Duration};
 use tokio::{runtime, time::timeout};
 
 #[cfg(test)]
@@ -94,6 +94,7 @@ pub async fn build_empty_tree() -> Arc<BlockStore> {
         true,
         Arc::new(Mutex::new(PendingBlocks::new())),
         false,
+        HashMap::new(), // validator_indices: empty for tests
     ))
 }
 
