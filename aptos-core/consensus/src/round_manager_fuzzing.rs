@@ -101,7 +101,7 @@ fn build_empty_store(
         false,
         false, // enable_randomness
         Arc::new(Mutex::new(PendingBlocks::new())),
-        false, // check_ordered_only
+        false,          // check_ordered_only
         HashMap::new(), // validator_indices: empty for fuzzing
     ))
 }

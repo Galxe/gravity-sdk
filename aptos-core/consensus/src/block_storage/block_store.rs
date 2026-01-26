@@ -55,7 +55,12 @@ use std::collections::VecDeque;
 use std::sync::atomic::AtomicBool;
 #[cfg(any(test, feature = "fuzzing"))]
 use std::sync::atomic::Ordering;
-use std::{collections::{BTreeMap, HashMap}, io::Read, sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeMap, HashMap},
+    io::Read,
+    sync::Arc,
+    time::Duration,
+};
 
 use gaptos::aptos_types::account_address::AccountAddress;
 
