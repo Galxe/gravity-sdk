@@ -863,12 +863,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         let last_vote = recovery_data.last_vote();
 
         // Build address -> index mapping for recovery mode proposer_index calculation
-        let validator_indices: HashMap<_, _> = epoch_state
-            .verifier
-            .get_ordered_account_addresses_iter()
-            .enumerate()
-            .map(|(i, addr)| (addr, i as u64))
-            .collect();
+        let validator_indices: HashMap<_, _> = epoch_state.verifier.address_to_validator_index().clone();
 
         let block_store = Arc::new(
             BlockStore::async_new(
