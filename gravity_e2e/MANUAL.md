@@ -3,13 +3,38 @@
 ## Overview
 The Gravity E2E Framework is a Python-based test runner that orchestrates local cluster environments for integration testing. It leverages the existing `cluster/` scripts to provision nodes and uses `pytest` for test execution.
 
+## Prerequisites
+
+### macOS Users
+The cluster scripts use GNU sed syntax. macOS ships with BSD sed which is incompatible. Install GNU sed first:
+```bash
+brew install gnu-sed
+export PATH="/opt/homebrew/opt/gnu-sed/libexec/gnubin:$PATH"
+```
+Add the export line to your shell profile (`~/.zshrc` or `~/.bashrc`) to make it permanent.
+
+### Python Environment
+Python 3.8+ is required. It's recommended to use a virtual environment:
+```bash
+cd gravity_e2e
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
 ## Quick Start
 ```bash
 # 1. Build Binaries (Host)
-cargo build --bin gravity_node --profile quick-release
-cargo build --bin gravity_cli --release
+# Option A: Use make (recommended, handles RUSTFLAGS automatically)
+make BINARY=gravity_node MODE=quick-release
+make BINARY=gravity_cli MODE=release
 
-# 2. Run Tests
+# Option B: Use cargo directly (must set RUSTFLAGS)
+RUSTFLAGS="--cfg tokio_unstable" cargo build --bin gravity_node --profile quick-release
+RUSTFLAGS="--cfg tokio_unstable" cargo build --bin gravity_cli --release
+
+# 2. Run Tests (ensure venv is activated)
+source gravity_e2e/.venv/bin/activate
 ./gravity_e2e/run_test.sh
 ```
 
@@ -64,7 +89,7 @@ from gravity_e2e.cluster.manager import Cluster
 async def test_my_feature(cluster: Cluster):
     # Ensure cluster is ready
     await cluster.set_full_live()
-    
+
     # Get a node and interact
     node = cluster.get_node("node1")
     # ...
