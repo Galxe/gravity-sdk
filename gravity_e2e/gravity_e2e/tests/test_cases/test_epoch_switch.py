@@ -160,8 +160,8 @@ class EpochSwitchTestContext:
             private_key=account["private_key"],
             validator_address=account["address"],
             consensus_public_key=node.consensus_public_key,
-            validator_network_address=f"/ip4/127.0.0.1/tcp/{node.p2p_port}/noise-ik/{node.account_address}/handshake/0",
-            fullnode_network_address=f"/ip4/127.0.0.1/tcp/{node.vfn_port}/noise-ik/{node.account_address}/handshake/0",
+            validator_network_address=f"/ip4/127.0.0.1/tcp/{node.p2p_port}/noise-ik/{node.identity.network_public_key}/handshake/0",
+            fullnode_network_address=f"/ip4/127.0.0.1/tcp/{node.vfn_port}/noise-ik/{node.identity.network_public_key}/handshake/0",
             aptos_address=node.account_address,
             moniker=node_name.upper(),
         )
