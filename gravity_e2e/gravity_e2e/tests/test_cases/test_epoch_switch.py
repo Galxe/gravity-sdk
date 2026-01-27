@@ -358,10 +358,9 @@ async def test_epoch_switch(
 
     Test steps:
     1. Ensure all nodes are running (set_full_live)
-    2. Wait for nodes to be ready
-    3. Create EVM accounts for candidate nodes
-    4. Fuzzy validator candidate nodes join and leave (lazy init validator join params)
-    5. Check node block height gap between all nodes
+    2. Create EVM accounts for candidate nodes
+    3. Fuzzy validator candidate nodes join and leave (lazy init validator join params)
+    4. Check node block height gap between all nodes
     """
     LOG.info("=" * 70)
     LOG.info("Test: Epoch Switch Test (Declarative API)")
@@ -382,23 +381,17 @@ async def test_epoch_switch(
             f"✅ All {len(live_nodes)} nodes are RUNNING: {[n.id for n in live_nodes]}"
         )
 
-        # Step 2: Wait for nodes to be ready
-        LOG.info("\n[Step 2] Waiting 10 seconds for nodes to be ready...")
-        await asyncio.sleep(10)
-        LOG.info("\n✅ All nodes ready!")
-        LOG.info("=" * 70)
-
-        # Step 3: Create EVM accounts for candidate nodes
-        LOG.info("\n[Step 3] Funding EVM accounts for candidate nodes...")
+        # Step 2: Create EVM accounts for candidate nodes
+        LOG.info("\n[Step 2] Funding EVM accounts for candidate nodes...")
         await test_context.fund_nodes()
         LOG.info("✅ All candidate nodes EVM accounts created successfully")
 
         tasks = []
-        # Step 4: Fuzzy validator candidate nodes join and leave
-        LOG.info("\n[Step 4] Fuzzy validator candidate nodes join and leave...")
+        # Step 3: Fuzzy validator candidate nodes join and leave
+        LOG.info("\n[Step 3] Fuzzy validator candidate nodes join and leave...")
         tasks.append(asyncio.create_task(test_context.fuzzy_validator_join_and_leave()))
-        # Step 5: Check node block height gap between all nodes
-        LOG.info("\n[Step 5] Checking node block height gap between all nodes...")
+        # Step 4: Check node block height gap between all nodes
+        LOG.info("\n[Step 4] Checking node block height gap between all nodes...")
         tasks.append(asyncio.create_task(test_context.check_node_block_height()))
         await asyncio.gather(*tasks)
 
