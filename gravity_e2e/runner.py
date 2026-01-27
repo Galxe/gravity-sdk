@@ -1,0 +1,212 @@
+import os
+import sys
+import subprocess
+import glob
+import time
+import signal
+import logging
+import argparse
+import shutil
+from pathlib import Path
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("GravityRunner")
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+E2E_ROOT = PROJECT_ROOT / "gravity_e2e"
+TESTS_ROOT = E2E_ROOT / "cluster_test_cases"
+CLUSTER_SCRIPTS_DIR = PROJECT_ROOT / "cluster"
+
+def run_command(command, cwd=None, env=None, check=True):
+    """Run a shell command and stream output."""
+    logger.info(f"Running: {' '.join(command)}")
+    try:
+        result = subprocess.run(
+            command,
+            cwd=cwd,
+            env=env,
+            check=check,
+            capture_output=False 
+        )
+        return result.returncode == 0
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Command failed: {e}")
+        if check:
+            raise
+        return False
+
+
+def cleanup_cluster():
+    """Kill any running gravity_node processes."""
+    logger.info("Cleaning up running nodes...")
+    # This is a bit aggressive but necessary for clean slate in docker
+    subprocess.run(["pkill", "-9", "gravity_node"], check=False)
+    
+
+def run_test_suite(test_dir: Path, no_cleanup: bool = False, pytest_args: list = None, force_init: bool = False):
+    """
+    Run tests in a specific directory.
+    """
+    cluster_config = test_dir / "cluster.toml"
+    
+    if not cluster_config.exists():
+        logger.warning(f"No cluster.toml found in {test_dir}, skimming...")
+        return
+
+    logger.info(f"===== Running Suite: {test_dir.name} =====")
+    
+    # Always clean start unless specifically investigating
+    cleanup_cluster()
+    
+    # Define artifact paths
+    # We now instruct init.sh/deploy.sh to use this directory directly
+    suite_artifacts_dir = test_dir / "artifacts"
+    env = os.environ.copy()
+    env["GRAVITY_ARTIFACTS_DIR"] = str(suite_artifacts_dir)
+    
+    # 1. Init Cluster (with Caching)
+    should_run_init = True
+    
+    # Check if valid artifacts exist
+    if not force_init and suite_artifacts_dir.exists() and (suite_artifacts_dir / "genesis.json").exists():
+        logger.info(f"Found cached artifacts in {suite_artifacts_dir}. Using cache.")
+        should_run_init = False
+            
+    if should_run_init:
+        logger.info(f"Initializing cluster (Generating artifacts in {suite_artifacts_dir})...")
+        init_script = CLUSTER_SCRIPTS_DIR / "init.sh"
+        run_command([str(init_script), str(cluster_config)], cwd=CLUSTER_SCRIPTS_DIR, env=env)
+    
+    # 2. Deploy Cluster
+    logger.info("Deploying cluster...")
+    deploy_script = CLUSTER_SCRIPTS_DIR / "deploy.sh"
+    run_command([str(deploy_script), str(cluster_config)], cwd=CLUSTER_SCRIPTS_DIR, env=env)
+    
+    # 3. Start Nodes
+    start_script = CLUSTER_SCRIPTS_DIR / "start.sh"
+    if start_script.exists():
+         logger.info("Starting cluster nodes...")
+         # start.sh doesn't mostly need artifacts dir (it uses config from deploy), 
+         # but passing env doesn't hurt.
+         run_command([str(start_script), "--config", str(cluster_config)], cwd=CLUSTER_SCRIPTS_DIR, env=env)
+         
+         logger.info("Waiting 5s for nodes to warmup...")
+         time.sleep(5)
+    else:
+        logger.error("cluster/start.sh missing, cannot start nodes!")
+        raise RuntimeError("Missing start.sh")
+
+    # 4. Run Pytests
+    logger.info(f"Running pytst in {test_dir}...")
+    success = False
+    try:
+        # We need to make sure gravity_e2e is in python path
+        # env already has GRAVITY_ARTIFACTS_DIR, but pytest might not need it
+        env["PYTHONPATH"] = f"{E2E_ROOT}:{env.get('PYTHONPATH', '')}"
+        env["GRAVITY_CLUSTER_CONFIG"] = str(cluster_config)
+        
+        # Build pytest command
+        cmd = ["pytest", "-s", str(test_dir)]
+        if pytest_args:
+            cmd.extend(pytest_args)
+            
+        run_command(cmd, cwd=E2E_ROOT, env=env)
+        logger.info(f"Suite {test_dir.name} PASSED")
+        success = True
+        
+    except Exception as e:
+        logger.error(f"Suite {test_dir.name} FAILED: {e}")
+        raise
+    finally:
+        # 5. Teardown
+        if no_cleanup and not success:
+            logger.warning(f"Test failed and --no-cleanup set. Cluster left running using config: {cluster_config}")
+            logger.warning("Run 'shutdown_cluster()' or kill manually when done.")
+        else:
+            stop_script = CLUSTER_SCRIPTS_DIR / "stop.sh"
+            if stop_script.exists():
+                 run_command([str(stop_script), "--config", str(cluster_config)], cwd=CLUSTER_SCRIPTS_DIR, env=env, check=False)
+            cleanup_cluster()
+
+def main():
+    parser = argparse.ArgumentParser(description="Gravity E2E Runner")
+    parser.add_argument("--no-cleanup", action="store_true", help="Leave cluster running if tests fail (for debugging)")
+    parser.add_argument("--force-init", action="store_true", help="Force regeneration of cluster artifacts (ignore cache)")
+    # We use parse_known_args to let everything else slide through as potential pytest args or suites
+    args, unknown = parser.parse_known_args()
+
+    try:
+        # Discover test directories
+        all_test_dirs = [p for p in TESTS_ROOT.iterdir() if p.is_dir()]
+        
+        # Smart separation of suites vs pytest flags
+        # Anything starting with '-' is a pytest flag.
+        # Anything matching a directory name is a suite.
+        # Anything else is likely a pytest arg (e.g. regex for -k)
+        
+        suites_to_run = []
+        pytest_args = []
+        
+        # Iterate over unknown args (positionals + unparsed flags)
+        # Note: argparsing is tricky. We'll iterate simply.
+        
+        for arg in unknown:
+            if arg.startswith("-"):
+                pytest_args.append(arg)
+                continue
+                
+            # Check if it matches a suite name
+            matched_suite = None
+            for p in all_test_dirs:
+                if p.name == arg:
+                    matched_suite = p
+                    break
+            
+            if matched_suite:
+                suites_to_run.append(matched_suite)
+            else:
+                # If not a suite, assume it's an argument to a previous flag (like 'test_foo' after '-k')
+                pytest_args.append(arg)
+
+        # If no specific suites named, run all
+        if not suites_to_run:
+            test_dirs = all_test_dirs
+        else:
+            test_dirs = suites_to_run
+
+        if not test_dirs:
+            logger.error("No valid test suites found to run.")
+            sys.exit(1)
+            
+        logger.info(f"Running {len(test_dirs)} test directories: {[t.name for t in test_dirs]}")
+        if pytest_args:
+             logger.info(f"Forwarding args to pytest: {pytest_args}")
+        
+        failed_suites = []
+        
+        for test_dir in sorted(test_dirs):
+            # Skip __pycache__ etc
+            if test_dir.name.startswith("__") or test_dir.name.startswith("."):
+                continue
+                
+            try:
+                run_test_suite(test_dir, no_cleanup=args.no_cleanup, pytest_args=pytest_args, force_init=args.force_init)
+            except Exception:
+                failed_suites.append(test_dir.name)
+        
+        if failed_suites:
+            logger.error(f"The following suites failed: {failed_suites}")
+            sys.exit(1)
+            
+        logger.info("All suites passed!")
+        
+    except Exception as e:
+        logger.exception("Global runner failure")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

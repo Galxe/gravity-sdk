@@ -3,7 +3,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${1:-$SCRIPT_DIR/cluster.toml}"
-OUTPUT_DIR="$SCRIPT_DIR/output"
+OUTPUT_DIR="${GRAVITY_ARTIFACTS_DIR:-$SCRIPT_DIR/output}"
 
 source "$SCRIPT_DIR/utils/common.sh"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
