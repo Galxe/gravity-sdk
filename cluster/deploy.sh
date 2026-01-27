@@ -17,16 +17,17 @@ configure_node() {
     local binary_path="$4"
     local identity_src="$5"
     local waypoint_src="$6"
+    local role="$7"
     
     local config_dir="$data_dir/config"
     
-    log_info "  [$node_id] configuring..."
+    log_info "  [$node_id] [$role] configuring..."
     
     # Create config dir
     mkdir -p "$config_dir"
     
     # Copy identity and waypoint from artifacts
-    cp "$identity_src" "$config_dir/validator-identity.yaml"
+    cp "$identity_src" "$config_dir/identity.yaml"
     cp "$waypoint_src" "$config_dir/waypoint.txt"
     
     # Export paths validation
@@ -127,7 +128,7 @@ configure_vfn() {
     
     local config_dir="$data_dir/config"
     
-    log_info "  [$node_id] configuring VFN..."
+    log_info "  [$node_id] [vfn] configuring..."
     
     # Create config dir
     mkdir -p "$config_dir"
@@ -136,7 +137,7 @@ configure_vfn() {
     cp "$waypoint_src" "$config_dir/waypoint.txt"
     
     # Generate VFN identity if not exists
-    local identity_file="$config_dir/vfn-identity.yaml"
+    local identity_file="$config_dir/identity.yaml"
     if [ ! -f "$identity_file" ]; then
         log_info "  [$node_id] Generating VFN identity..."
         "$GRAVITY_CLI" genesis generate-key --output-file="$identity_file" > /dev/null
@@ -340,7 +341,7 @@ main() {
                 "$waypoint_src"
         else
             # Validator node (includes both 'genesis' and 'validator' roles)
-            identity_src="$OUTPUT_DIR/$NODE_ID/config/validator-identity.yaml"
+            identity_src="$OUTPUT_DIR/$NODE_ID/config/identity.yaml"
             
             if [ ! -f "$identity_src" ]; then
                 log_error "Identity not found for $NODE_ID at $identity_src"
@@ -359,7 +360,8 @@ main() {
                 "$genesis_path" \
                 "$binary_path" \
                 "$identity_src" \
-                "$waypoint_src"
+                "$waypoint_src" \
+                "$role"
         fi
     done
     

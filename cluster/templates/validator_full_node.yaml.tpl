@@ -13,7 +13,7 @@ consensus:
       from_file:
         waypoint:
           from_file: ${CONFIG_DIR}/waypoint.txt
-        identity_blob_path: ${CONFIG_DIR}/vfn-identity.yaml
+        identity_blob_path: ${CONFIG_DIR}/identity.yaml
   enable_pipeline: true
   max_sending_block_txns_after_filtering: 5000
   max_sending_block_txns: 5000
@@ -40,7 +40,7 @@ full_node_networks:
     listen_address: "/ip4/${HOST}/tcp/${P2P_PORT}"
     identity:
       type: "from_file"
-      path: ${CONFIG_DIR}/vfn-identity.yaml
+      path: ${CONFIG_DIR}/identity.yaml
     discovery_method:
       onchain
 

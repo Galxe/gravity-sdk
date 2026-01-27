@@ -174,7 +174,7 @@ def main():
     for node in genesis_nodes:
         node_id = node['id']
         data_dir = node.get('data_dir') or os.path.join(base_dir, node_id)
-        identity_path = os.path.join(data_dir, "config", "validator-identity.yaml")
+        identity_path = os.path.join(data_dir, "config", "identity.yaml")
         
         if not os.path.exists(identity_path):
             print(f"Error: Identity file not found: {identity_path}")

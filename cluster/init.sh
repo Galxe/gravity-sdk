@@ -14,7 +14,7 @@ prepare_node_keys() {
     local node_config_dir="$2"
     
     mkdir -p "$node_config_dir"
-    local identity_file="$node_config_dir/validator-identity.yaml"
+    local identity_file="$node_config_dir/identity.yaml"
     
     log_info "  [$node_id] Checking identity..."
     
@@ -77,7 +77,7 @@ main() {
             continue
         fi
         
-        # Structure: output/nodeX/config/validator-identity.yaml
+        # Structure: output/nodeX/config/identity.yaml
         # This structure matches what aggregate_genesis.py expects relative to a base_dir
         node_conf_out="$OUTPUT_DIR/$node_id/config"
         prepare_node_keys "$node_id" "$node_conf_out"

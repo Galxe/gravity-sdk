@@ -43,7 +43,7 @@ Congratulations! Your cluster is now running.
 
 ### 1. Initialization (`make init`)
 This step generates the static "metadata" for the cluster and stores it in the `./output` directory.
-*   **Keys**: Generates `validator-identity.yaml` for each node.
+*   **Keys**: Generates `identity.yaml` for each node.
 *   **Genesis**: Aggregates validator info and uses `forge` to compile and generate `genesis.json`.
 *   **Waypoint**: Generates `waypoint.txt` from the genesis.
 

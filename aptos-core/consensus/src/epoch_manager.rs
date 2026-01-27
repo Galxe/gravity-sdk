@@ -215,18 +215,29 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         consensus_publisher: Option<Arc<ConsensusPublisher>>,
     ) -> Self {
         let is_validator = node_config.base.role.is_validator();
-        let author = if is_validator {
-            node_config.validator_network.as_ref().expect("validator network must be set").peer_id()
-        } else {
-            let mut vfn_peer_id = None;
-            for network in node_config.full_node_networks.iter() {
-                if network.network_id == NetworkId::Vfn {
-                    vfn_peer_id = Some(network.peer_id());
-                    break;
-                }
-            }
-            vfn_peer_id.expect("VFN must have a VFN network")
-        };
+        // Read author from identity_blob_path in safety_rules config
+        let author = node_config
+            .consensus
+            .safety_rules
+            .initial_safety_rules_config
+            .identity_blob()
+            .expect("identity_blob must be configured in safety_rules.initial_safety_rules_config")
+            .account_address
+            .expect("account_address must be set in identity blob");
+        if is_validator {
+            assert_eq!(
+                node_config
+                    .validator_network
+                    .as_ref()
+                    .expect("validator network must be set")
+                    .peer_id(),
+                author,
+                "validator network peer id must match author"
+            );
+        }
+        for network in node_config.full_node_networks.iter() {
+            assert_eq!(network.peer_id(), author, "full node network peer id must match author");
+        }
         let config = node_config.consensus.clone();
         let execution_config = node_config.execution.clone();
         let dag_config = node_config.dag_consensus.clone();
