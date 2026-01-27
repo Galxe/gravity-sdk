@@ -123,8 +123,7 @@ register_test("validator_add_remove_delayed", suite="validator", self_managed=Tr
 # Cluster Ops tests (self-managed)
 register_test("cluster_lifecycle", suite="cluster_ops", self_managed=True)(test_cluster_lifecycle)
 register_test("cluster_fault_tolerance", suite="cluster_ops", self_managed=True)(test_fault_tolerance)
-# Epoch switch tests (self-managed)
-register_test("epoch_switch", suite="epoch_switch", self_managed=True)(test_epoch_switch)
+# Epoch switch tests are now registered via @register_test decorator in the file itself
 
 
 # Define default test list for "all" suite
