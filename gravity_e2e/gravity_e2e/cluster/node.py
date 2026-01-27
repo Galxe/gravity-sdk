@@ -5,7 +5,7 @@ from typing import Tuple, Dict, Any, Optional
 from enum import Enum, auto
 from web3 import Web3
 
-from ..utils.aptos_identity import AptosIdentity, parse_identity_from_yaml
+from .identity import AptosIdentity, parse_identity_from_yaml
 
 TransactionReceipt = Dict[str, Any]
 
