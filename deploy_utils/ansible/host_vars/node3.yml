@@ -1,8 +1,0 @@
-reth_compile_options: "MODE=quick-release"
-reth_env: ""
-tag_or_brach: "main"
-reth_node_arg: "--install_dir /home/${USER} --mode cluster --node node3 --bin_version quick-release"
-reth_root_dir: "/home/${USER}/projects/gravity-sdk/"
-reth_start_arg: ""
-reth_node_id: "node3"
-reth_install_dir: "/home/${USER}"
