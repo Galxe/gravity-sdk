@@ -94,3 +94,9 @@ async def test_my_feature(cluster: Cluster):
     node = cluster.get_node("node1")
     # ...
 ```
+
+## Benchmarking
+
+For performance benchmarking against local clusters, use [gravity_bench](https://github.com/Galxe/gravity_bench).
+
+**Note:** Cluster configurations include a pre-funded faucet account (`0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266`) for benchmark use. See `[[genesis.faucet_accounts]]` in `cluster.toml`.

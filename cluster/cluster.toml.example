@@ -82,6 +82,14 @@ reth_p2p_port = 12027
 # These values are used when generating the genesis.json
 [genesis]
 epoch_interval_micros = 7200000000  # 2 hours in microseconds
+
+# Faucet/test accounts - pre-funded accounts for testing and benchmarking
+# These accounts will be added to genesis.json with the specified balance
+[[genesis.faucet_accounts]]
+# Standard dev account (Hardhat/Foundry/Reth default)
+# Private key: 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+balance = "0x1999999999999999999999999999999999999999999999999999999999999999"
 major_version = 1
 consensus_config = "0x00"
 execution_config = "0x00"
