@@ -17,6 +17,7 @@ ref = "main"
 # Node definitions
 [[nodes]]
 id = "node1"
+role = "genesis"
 host = "127.0.0.1"
 p2p_port = 6180
 vfn_port = 6190
