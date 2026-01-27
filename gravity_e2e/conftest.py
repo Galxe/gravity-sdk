@@ -17,15 +17,17 @@ Usage:
 import asyncio
 import logging
 import sys
+import os
 from pathlib import Path
 from typing import AsyncGenerator, Optional
 
 # Add the parent package to path for imports
 # This allows pytest to find the gravity_e2e package
 _current_dir = Path(__file__).resolve().parent
-_package_root = _current_dir.parent.parent  # gravity_e2e/gravity_e2e -> gravity_e2e
-if str(_package_root) not in sys.path:
-    sys.path.insert(0, str(_package_root))
+# We are in the root of the repo (gravity_e2e/), so we add this directory to path
+# to allow 'import gravity_e2e.cluster' (which resolves to gravity_e2e/gravity_e2e/cluster)
+if str(_current_dir) not in sys.path:
+    sys.path.insert(0, str(_current_dir))
 
 import pytest
 import pytest_asyncio
@@ -92,6 +94,11 @@ def cluster_config_path(request) -> Path:
     val = request.config.getoption("--cluster-config")
     if val:
         return Path(val).resolve()
+    
+    # Check env var set by runner
+    env_val = os.environ.get("GRAVITY_CLUSTER_CONFIG")
+    if env_val:
+        return Path(env_val).resolve()
     
     # Try default locations
     # 1. ../cluster/cluster.toml relative to tests/

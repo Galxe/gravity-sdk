@@ -63,6 +63,14 @@ class Node:
         except Exception:
             return None
 
+    async def get_block_number(self) -> int:
+        """
+        Fetch the current block number from the node.
+        Returns block number or raises Exception.
+        """
+        async with self.client:
+            return await self.client.get_block_number()
+
     async def get_state(self) -> Tuple[NodeState, int]:
         """
         Fetch the current state from the node (live).

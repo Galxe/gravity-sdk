@@ -1,35 +1,20 @@
-# Gravity Cluster Configuration
-# Copy this file to cluster.toml and modify as needed
+# Gravity Cluster Configuration - Four Validator Suite
 
 [cluster]
-name = "gravity-devnet"
-# Base directory for all node data (each node gets a subdirectory)
-base_dir = "/tmp/gravity-cluster"
-
+name = "gravity-devnet-four"
+base_dir = "/tmp/gravity-cluster-four"
 
 [build]
-# Path to gravity_node binary
 binary_path = "../target/quick-release/gravity_node"
 
-# External dependencies configuration
 [dependencies.genesis_contracts]
-# Git repository URL for gravity_chain_core_contracts
 repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
-# Git ref (branch, tag, or commit hash) to checkout
-# Use "main" for latest, or specific commit hash for reproducibility
 ref = "main"
-
-# Node definitions
-# Each node requires: id, host, and ports
-# Role types:
-#   - "genesis": Included in initial validator set in genesis.json
-#   - "validator": Validator node but NOT in initial genesis (can join later)
-#   - "vfn": Full node, uses onchain discovery
 
 [[nodes]]
 id = "node1"
-host = "127.0.0.1"
 role = "genesis"
+host = "127.0.0.1"
 p2p_port = 6180
 vfn_port = 6190
 rpc_port = 8545
@@ -41,8 +26,8 @@ reth_p2p_port = 12024
 
 [[nodes]]
 id = "node2"
-host = "127.0.0.1"
 role = "genesis"
+host = "127.0.0.1"
 p2p_port = 6181
 vfn_port = 6191
 rpc_port = 8546
@@ -54,8 +39,8 @@ reth_p2p_port = 12025
 
 [[nodes]]
 id = "node3"
-host = "127.0.0.1"
 role = "genesis"
+host = "127.0.0.1"
 p2p_port = 6182
 vfn_port = 6192
 rpc_port = 8547
@@ -67,8 +52,8 @@ reth_p2p_port = 12026
 
 [[nodes]]
 id = "node4"
-host = "127.0.0.1"
 role = "genesis"
+host = "127.0.0.1"
 p2p_port = 6183
 vfn_port = 6193
 rpc_port = 8548
@@ -78,10 +63,8 @@ https_port = 1027
 authrpc_port = 8554
 reth_p2p_port = 12027
 
-# Genesis configuration
-# These values are used when generating the genesis.json
 [genesis]
-epoch_interval_micros = 7200000000  # 2 hours in microseconds
+epoch_interval_micros = 7200000000
 major_version = 1
 consensus_config = "0x00"
 execution_config = "0x00"
@@ -115,12 +98,10 @@ fast_path_secrecy_threshold = 0
 source_types = [1]
 callbacks = ["0x00000000000000000000000000000001625F2018"]
 
-# JWK config - Google OIDC provider
 [genesis.jwk_config]
 issuers = ["0x68747470733a2f2f6163636f756e74732e676f6f676c652e636f6d"]
 
 [[genesis.jwk_config.jwks]]
-kty = "RSA"
 kid = "f5f4c0ae6e6090a65ab0a694d6ba6f19d5d0b4e6"
 kty = "RSA"
 alg = "RS256"
