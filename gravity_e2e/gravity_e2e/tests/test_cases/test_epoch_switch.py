@@ -84,10 +84,8 @@ class EpochSwitchTestContext:
 
     async def validator_join(self, node_name: str):
         params = self.get_validator_join_params(node_name)
-        # Get gravity_cli_path from cluster's base_dir (assuming it's in the repo)
-        gravity_cli_path = self.cluster.cluster_root.parent / "gravity-cli"
         await execute_validator_join(
-            gravity_cli_path=gravity_cli_path,
+            gravity_cli_path=self.cluster.gravity_cli_path,
             rpc_url=self.run_helper.client.rpc_url,
             params=params,
             start_new_session=True,
@@ -96,9 +94,8 @@ class EpochSwitchTestContext:
 
     async def validator_leave(self, node_name: str):
         params = self.get_validator_join_params(node_name)
-        gravity_cli_path = self.cluster.cluster_root.parent / "gravity-cli"
         await execute_validator_leave(
-            gravity_cli_path=gravity_cli_path,
+            gravity_cli_path=self.cluster.gravity_cli_path,
             rpc_url=self.run_helper.client.rpc_url,
             params=params,
             start_new_session=True,

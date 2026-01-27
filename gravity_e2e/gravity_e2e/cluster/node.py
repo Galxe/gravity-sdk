@@ -6,7 +6,7 @@ from enum import Enum, auto
 
 # Use local client copy
 from .client.gravity_client import GravityClient
-from ..utils.aptos_identity import AptosIdentity, parse_identity_from_yaml
+from .identity import AptosIdentity, parse_identity_from_yaml
 
 TransactionReceipt = Dict[str, Any]
 
