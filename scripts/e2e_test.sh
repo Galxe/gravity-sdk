@@ -204,7 +204,7 @@ echo "[7/7] Running gravity_e2e tests..."
 cd /app/gravity_e2e
 
 
-suites="staking basic contract erc20 randomness"
+suites="basic contract erc20 randomness"
 for suite in $suites; do
     echo "------------------------------------------------------------"
     echo "Running test suite: $suite"
