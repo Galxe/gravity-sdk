@@ -151,7 +151,7 @@ impl JoinCommand {
             let block = provider.get_block_by_number(current_block.into()).await?;
             let current_timestamp =
                 block.ok_or(anyhow::anyhow!("Failed to get current block"))?.header.timestamp;
-            println!("   Current timestamp: {}", current_timestamp);
+            println!("   Current timestamp: {current_timestamp}");
             println!("   Lockup duration: {}", self.lockup_duration);
             // Convert to microseconds and add lockup duration
             let locked_until = (current_timestamp + self.lockup_duration) * 1_000_000;
@@ -307,7 +307,7 @@ impl JoinCommand {
         println!("   Validator information:");
         println!("   - Validator: {}", validator_record.validator);
         println!("   - Moniker: {}", validator_record.moniker);
-        println!("   - Status: {:?}", status);
+        println!("   - Status: {status:?}");
         println!("   - Bond: {} ETH", format_ether(validator_record.bond));
         println!("   - Fee recipient: {}", validator_record.feeRecipient);
         println!("   - StakePool: {}", validator_record.stakingPool);

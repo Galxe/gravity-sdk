@@ -180,6 +180,6 @@ fn convert_validator_info(
             .unwrap_or_else(|_| hex::encode(&info.networkAddresses)),
         fullnode_addresses: bcs::from_bytes::<String>(&info.fullnodeAddresses)
             .unwrap_or_else(|_| hex::encode(&info.fullnodeAddresses)),
-        status: format!("{:?}", status),
+        status: format!("{status:?}"),
     }
 }

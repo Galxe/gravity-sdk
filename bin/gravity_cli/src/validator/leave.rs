@@ -110,7 +110,7 @@ impl LeaveCommand {
         println!("   Validator information:");
         println!("   - Validator: {}", validator_record.validator);
         println!("   - Moniker: {}", validator_record.moniker);
-        println!("   - Status: {:?}", status);
+        println!("   - Status: {status:?}");
         println!("   - Bond: {} ETH", format_ether(validator_record.bond));
 
         // Check if validator status allows leaving
@@ -127,7 +127,7 @@ impl LeaveCommand {
                 return Ok(());
             }
             _ => {
-                return Err(anyhow::anyhow!("Validator status {:?} does not allow leaving", status));
+                return Err(anyhow::anyhow!("Validator status {status:?} does not allow leaving"));
             }
         }
 
