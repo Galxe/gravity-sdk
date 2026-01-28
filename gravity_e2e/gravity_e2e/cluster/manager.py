@@ -18,6 +18,13 @@ LOG = logging.getLogger(__name__)
 
 from eth_account import Account
 
+# Standard devnet keys (Anvil/Hardhat defaults)
+KNOWN_DEV_KEYS = [
+    "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", # 0xf39F...
+    "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d", # 0x7099...
+    "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"  # 0x3C44...
+]
+
 class Cluster:
     """
     Unified entry point for interacting with a Gravity Cluster.
@@ -53,6 +60,7 @@ class Cluster:
         """
         Returns all faucet configurations.
         Enrich with private keys from 'genesis.secrets.keys' by matching addresses.
+        Also checks KNOWN_DEV_KEYS.
         """
         genesis = self.config.get("genesis", {})
         faucet_config = genesis.get("faucet", [])
@@ -70,9 +78,10 @@ class Cluster:
             return []
 
         # Gather potential private keys
-        # 1. From genesis.secrets.keys
-        # 2. From explicit private_key in faucet items (if any legacy ones exist)
-        candidate_keys = set()
+        # 1. From KNOWN_DEV_KEYS (Built-in)
+        # 2. From genesis.secrets.keys (Config)
+        # 3. From explicit private_key in faucet items (Legacy)
+        candidate_keys = set(KNOWN_DEV_KEYS)
         
         secrets = genesis.get("secrets", {})
         if secrets and "keys" in secrets:
