@@ -12,8 +12,8 @@ env:
   CARGO_INCREMENTAL: "0"
   RUSTFLAGS: "--cfg tokio_unstable"
 
-# NOTE: Container image is hardcoded to ghcr.io/richard1048576/gravity-sdk/rust-ci:latest for fork testing
-# For upstream, change to ghcr.io/galxe/gravity-sdk/rust-ci:latest
+# NOTE: Using rust:1.88.0-bookworm with runtime dependency installation
+# After merging to main, switch to ghcr.io/galxe/gravity-sdk/rust-ci:latest (custom image with pre-installed deps)
 
 # Cancel redundant builds on PRs
 concurrency:
@@ -43,12 +43,14 @@ jobs:
     name: Clippy
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/richard1048576/gravity-sdk/rust-ci:latest
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      image: rust:1.88.0-bookworm
     steps:
       - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            clang llvm libudev-dev libssl-dev pkg-config \
+          && rm -rf /var/lib/apt/lists/*
       - name: Run cargo cache
         uses: Swatinem/rust-cache@v2
       - name: Run clippy
@@ -58,12 +60,14 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/richard1048576/gravity-sdk/rust-ci:latest
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      image: rust:1.88.0-bookworm
     steps:
       - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            clang llvm libudev-dev libssl-dev pkg-config \
+          && rm -rf /var/lib/apt/lists/*
       - name: Run cargo cache
         uses: Swatinem/rust-cache@v2
       - name: Build gravity_node
