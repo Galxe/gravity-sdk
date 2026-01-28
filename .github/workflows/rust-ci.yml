@@ -44,9 +44,6 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: rust:1.88.0-bookworm
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - name: Install build dependencies
@@ -64,9 +61,6 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: rust:1.88.0-bookworm
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - name: Install build dependencies
@@ -90,9 +84,6 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: rust:1.88.0-bookworm
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
     if: |
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
@@ -120,9 +111,6 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: rust:1.88.0-bookworm
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
     if: |
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
@@ -148,9 +136,6 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: rust:1.88.0-bookworm
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
     if: |
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
@@ -180,9 +165,6 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: rust:1.88.0-bookworm
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
     if: |
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
@@ -206,9 +188,6 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: rust:1.88.0-bookworm
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
     needs: [test-core, test-consensus]
     if: |
       github.event_name == 'push' ||
