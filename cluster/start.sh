@@ -97,25 +97,27 @@ start_node() {
     local pid_file="$data_dir/script/node.pid"
     if [ -f "$pid_file" ]; then
         local pid=$(cat "$pid_file")
-        if [ -d "/proc/$pid" ]; then
+        # Use kill -0 for cross-platform compatibility (works on both Linux and macOS)
+        if kill -0 "$pid" 2>/dev/null; then
             log_warn "$node_id is already running (PID: $pid)"
             return 0
         fi
     fi
-    
+
     log_info "Starting $node_id..."
     bash "$start_script"
-    
+
     # Wait and verify
     sleep 1
     if [ -f "$pid_file" ]; then
         local pid=$(cat "$pid_file")
-        if [ -d "/proc/$pid" ]; then
+        # Use kill -0 for cross-platform compatibility (works on both Linux and macOS)
+        if kill -0 "$pid" 2>/dev/null; then
             log_info "$node_id started successfully (PID: $pid)"
             return 0
         fi
     fi
-    
+
     log_error "$node_id failed to start. Check logs at: $data_dir/logs/"
     return 1
 }

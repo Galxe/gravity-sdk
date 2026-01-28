@@ -159,6 +159,24 @@ main() {
          if [ -f "$GENESIS_CONTRACT_DIR/genesis.json" ]; then
              cp "$GENESIS_CONTRACT_DIR/genesis.json" "$OUTPUT_DIR/genesis.json"
              log_info "Genesis generated at $OUTPUT_DIR/genesis.json"
+
+             # Add faucet accounts if configured
+             faucet_accounts=$(echo "$config_json" | jq -c '.genesis.faucet_accounts // []')
+             if [ "$faucet_accounts" != "[]" ] && [ "$faucet_accounts" != "null" ]; then
+                 log_info "Adding faucet accounts to genesis..."
+                 # Build jq filter to add each faucet account to alloc
+                 jq_filter='.'
+                 for account in $(echo "$faucet_accounts" | jq -c '.[]'); do
+                     addr=$(echo "$account" | jq -r '.address')
+                     balance=$(echo "$account" | jq -r '.balance')
+                     # Normalize address to lowercase
+                     addr_lower=$(echo "$addr" | tr '[:upper:]' '[:lower:]')
+                     jq_filter="$jq_filter | .alloc[\"$addr_lower\"] = {\"balance\": \"$balance\"}"
+                 done
+                 jq "$jq_filter" "$OUTPUT_DIR/genesis.json" > "$OUTPUT_DIR/genesis.json.tmp"
+                 mv "$OUTPUT_DIR/genesis.json.tmp" "$OUTPUT_DIR/genesis.json"
+                 log_info "Faucet accounts added to genesis"
+             fi
          else
              log_error "Genesis generation failed."
              exit 1
