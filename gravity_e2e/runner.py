@@ -8,6 +8,12 @@ import logging
 import argparse
 import shutil
 from pathlib import Path
+try:
+    import tomli
+except ImportError:
+    # Fallback to toml if tomli is not available, or just fail if requirements not met
+    # Assuming tomli is installed via requirements.txt
+    import tomli
 
 # Configure logging
 logging.basicConfig(
@@ -38,6 +44,26 @@ def run_command(command, cwd=None, env=None, check=True):
         if check:
             raise
         return False
+
+def init_faucet_if_needed(test_dir: Path, cluster_config_path: Path, env: dict):
+    """
+    Check if cluster.toml requests faucet init, and run faucet.sh if so.
+    """
+    # Simply call the shell script. It handles the parsing and logic itself.
+    # But we want to avoid calling it if not needed?
+    # Actually, the shell script checks for num_accounts > 0 and exits cleanly if not match.
+    # So we can just call it. But to avoid process overhead, we can check basic condition here if needed.
+    # However, for consistency and simplicity, let's just calling it.
+    
+    faucet_script = CLUSTER_SCRIPTS_DIR / "faucet.sh"
+    if not faucet_script.exists():
+         logger.warning("cluster/faucet.sh not found.")
+         return
+
+    logger.info("Checking/Running faucet init...")
+    # Passing the config file is key
+    run_command([str(faucet_script), str(cluster_config_path)], cwd=CLUSTER_SCRIPTS_DIR, env=env, check=True)
+
 
 
 def cleanup_cluster():
@@ -99,6 +125,9 @@ def run_test_suite(test_dir: Path, no_cleanup: bool = False, pytest_args: list =
     else:
         logger.error("cluster/start.sh missing, cannot start nodes!")
         raise RuntimeError("Missing start.sh")
+
+    # 3.5 Faucet Initialization
+    init_faucet_if_needed(test_dir, cluster_config, env)
 
     # 4. Run Pytests
     logger.info(f"Running pytst in {test_dir}...")

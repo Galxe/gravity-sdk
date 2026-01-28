@@ -59,7 +59,16 @@ This step prepares the runtime environment (default: `/tmp/gravity-cluster`).
 ### 3. Execution (`make start` / `make stop`)
 *   `make start`: Launches all nodes in the background. Logs are written to the node's data directory.
 *   `make stop`: Gracefully stops all nodes.
+*   `make start`: Launches all nodes in the background. Logs are written to the node's data directory.
+*   `make stop`: Gracefully stops all nodes.
 *   `make status`: Shows the PID, status, and current block number of each node.
+
+### 4. Faucet Initialization (`make faucet`)
+Optional step to distribute initial funds to a large number of testing accounts.
+1.  Configure `[faucet_init]` in `cluster.toml`.
+2.  Run `make faucet` after the cluster is started.
+3.  Generated accounts are saved to `./output/accounts.csv`.
+
 
 ---
 
@@ -82,3 +91,10 @@ An array of node configurations. You can add as many nodes as you like.
 *   **rpc_port**: Port for JSON-RPC API.
 *   **metrics_port**: Port for Prometheus metrics.
 *   **data_dir** (Optional): Override the default data directory path for this node.
+
+### `[faucet_init]`
+Optional configuration for auto-generating funded accounts.
+*   **num_accounts**: Number of accounts to create and fund (set to 0 to disable).
+*   **private_key**: Private key of the faucet (must hold initial funds in genesis).
+*   **eth_balance**: Amount of Wei to send to each generated account.
+

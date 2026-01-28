@@ -1,0 +1,25 @@
+
+contract_config_path = "/home/kenji/galxe/gravity-sdk-dev/gravity_e2e/cluster_test_cases/single_node/artifacts/contracts.json"
+num_tokens = 0
+target_tps = 1
+enable_swap_token = false
+address_pool_type = "random"
+log_path = "/home/kenji/galxe/gravity-sdk-dev/gravity_e2e/cluster_test_cases/single_node/faucet_bench.log"
+
+[[nodes]]
+rpc_url = "http://127.0.0.1:8545"
+chain_id = 7771625
+
+[faucet]
+private_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+faucet_level = 3
+wait_duration_secs = 2
+fauce_eth_balance = "1000000000000000000"
+
+[accounts]
+num_accounts = 100
+
+[performance]
+num_senders = 10
+max_pool_size = 1000
+duration_secs = 60

@@ -12,6 +12,10 @@ deploy:
 start:
 	@bash start.sh
 
+# Run faucet initialization
+faucet:
+	@bash faucet.sh
+
 # Stop the cluster
 stop:
 	@bash stop.sh
