@@ -36,8 +36,8 @@ async def test_early_unstake_restrictions(cluster: Cluster):
 
     assert await cluster.set_full_live(timeout=60), "Cluster failed to start"
     node = cluster.get_node("node1")
-    w3 = Web3(Web3.HTTPProvider(node.url))
-    faucet_key = cluster.faucet["private_key"]
+    w3 = node.w3
+    faucet_key = cluster.faucet.key
 
     try:
         # Step 1: Create account and pool
