@@ -9,7 +9,7 @@ use gaptos::api_types::{
     relayer::{PollResult, Relayer},
     ExecError,
 };
-use greth::reth_pipe_exec_layer_ext_v2::RelayerManager;
+use greth::reth_pipe_exec_layer_relayer::OracleRelayerManager;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tracing::{info, warn};
@@ -39,9 +39,9 @@ impl RelayerConfig {
 
 #[derive(Debug, Clone, Default)]
 struct ProviderState {
-    /// Last fetched block number
-    fetched_block_number: u64,
-    /// Whether the last poll returned data
+    /// Last nonce we returned from polling
+    fetched_nonce: Option<u64>,
+    /// Whether the last poll returned new data
     last_had_update: bool,
 }
 
@@ -59,25 +59,17 @@ impl ProviderProgressTracker {
         guard.get(name).cloned().unwrap_or_default()
     }
 
-    async fn update_state(&self, name: &str, block_number: u64, had_update: bool) {
+    async fn update_state(&self, name: &str, nonce: Option<u64>, had_update: bool) {
         let mut guard = self.states.lock().await;
         guard.insert(
             name.to_string(),
-            ProviderState { fetched_block_number: block_number, last_had_update: had_update },
+            ProviderState { fetched_nonce: nonce, last_had_update: had_update },
         );
-    }
-
-    async fn init_block_number(&self, name: &str, block_number: u64) {
-        let mut guard = self.states.lock().await;
-        guard.entry(name.to_string()).or_insert_with(|| ProviderState {
-            fetched_block_number: block_number,
-            last_had_update: false,
-        });
     }
 }
 
 pub struct RelayerWrapper {
-    manager: RelayerManager,
+    manager: OracleRelayerManager,
     tracker: ProviderProgressTracker,
     config: RelayerConfig,
 }
@@ -98,7 +90,7 @@ impl RelayerWrapper {
             .unwrap_or_default();
         info!("relayer config: {:?}", config);
 
-        let manager = RelayerManager::new();
+        let manager = OracleRelayerManager::new();
         Self { manager, tracker: ProviderProgressTracker::new(), config }
     }
 
@@ -118,30 +110,38 @@ impl RelayerWrapper {
         jwk_config.oidc_providers
     }
 
-    fn should_block_poll(state: &ProviderState, onchain_block_number: u64) -> bool {
-        state.last_had_update && state.fetched_block_number == onchain_block_number
+    /// Block poll if we returned data and on-chain hasn't caught up
+    fn should_block_poll(state: &ProviderState, onchain_nonce: Option<u64>) -> bool {
+        if let Some(fetched) = state.fetched_nonce {
+            if let Some(onchain) = onchain_nonce {
+                // Block if we returned data and on-chain nonce hasn't caught up
+                return state.last_had_update && fetched > onchain;
+            }
+        }
+        false
     }
 
     async fn poll_and_update_state(
         &self,
         uri: &str,
-        onchain_block_number: u64,
+        onchain_nonce: Option<u64>,
         state: &ProviderState,
     ) -> Result<PollResult, ExecError> {
         info!(
-            "Polling uri: {} (onchain: {}, last_fetched: {}, last_had_update: {})",
-            uri, onchain_block_number, state.fetched_block_number, state.last_had_update
+            "Polling uri: {} (onchain_nonce: {:?}, fetched_nonce: {:?}, last_had_update: {})",
+            uri, onchain_nonce, state.fetched_nonce, state.last_had_update
         );
 
         let result =
             self.manager.poll_uri(uri).await.map_err(|e| ExecError::Other(e.to_string()))?;
 
         let has_update = result.updated;
-        self.tracker.update_state(uri, result.max_block_number, has_update).await;
+        // Track the nonce we returned (from PollResult)
+        self.tracker.update_state(uri, result.nonce, has_update).await;
 
         info!(
-            "Poll completed for uri: {} - block_number: {}, has_update: {}",
-            uri, result.max_block_number, has_update
+            "Poll completed for uri: {} - nonce: {:?}, has_update: {}",
+            uri, result.nonce, has_update
         );
 
         Ok(result)
@@ -157,24 +157,19 @@ impl Relayer for RelayerWrapper {
             .get_url(uri)
             .ok_or_else(|| ExecError::Other(format!("Provider {uri} not found in local config")))?;
 
-        info!(
-            "Adding URI: {}, RPC URL: {} ({})",
-            uri,
-            actual_url,
-            if self.config.get_url(uri).is_some() { "from local config" } else { "from parameter" }
-        );
-
+        // Get onchain_nonce from active providers for warm-start
         let active_providers = Self::get_active_providers().await;
-        let from_block = if let Some(provider) = active_providers.iter().find(|p| p.name == uri) {
-            let block_number = provider.onchain_block_number.unwrap_or(0);
-            self.tracker.init_block_number(&provider.name, block_number).await;
-            block_number
-        } else {
-            return Err(ExecError::Other(format!("Provider {uri} not found in active providers")));
-        };
+        let onchain_nonce = active_providers
+            .iter()
+            .find(|p| p.name == uri)
+            .and_then(|p| p.onchain_nonce)
+            .unwrap_or(0) as u128;
 
+        info!("Adding URI: {}, RPC URL: {}, onchain_nonce: {}", uri, actual_url, onchain_nonce);
+
+        // Pass onchain_nonce to manager for warm-start
         self.manager
-            .add_uri(uri, actual_url, from_block)
+            .add_uri(uri, actual_url, onchain_nonce)
             .await
             .map_err(|e| ExecError::Other(e.to_string()))
     }
@@ -187,24 +182,25 @@ impl Relayer for RelayerWrapper {
             ExecError::Other(format!("Provider {uri} not found in active providers"))
         })?;
 
-        let onchain_block_number = provider.onchain_block_number.unwrap_or(0);
+        // Get on-chain nonce for comparison
+        let onchain_nonce = provider.onchain_nonce;
         let state = self.tracker.get_state(uri).await;
 
         info!(
-            "get_last_state - uri: {}, onchain: {}, state: {:?}",
-            uri, onchain_block_number, state
+            "get_last_state - uri: {}, onchain_nonce: {:?}, fetched_nonce: {:?}, last_had_update: {}",
+            uri, onchain_nonce, state.fetched_nonce, state.last_had_update
         );
 
-        if Self::should_block_poll(&state, onchain_block_number) {
+        if Self::should_block_poll(&state, onchain_nonce) {
             warn!(
-                "Blocking poll for uri: {} - waiting for consumption (onchain block unchanged)",
-                uri
+                "Blocking poll for uri: {} - waiting for consumption (fetched_nonce: {:?} > onchain_nonce: {:?})",
+                uri, state.fetched_nonce, onchain_nonce
             );
             return Err(ExecError::Other(format!(
-                "Block number hasn't progressed for uri: {uri} (waiting for consumption)"
+                "Nonce hasn't progressed for uri: {uri} (waiting for consumption)"
             )));
         }
 
-        self.poll_and_update_state(uri, onchain_block_number, &state).await
+        self.poll_and_update_state(uri, onchain_nonce, &state).await
     }
 }
