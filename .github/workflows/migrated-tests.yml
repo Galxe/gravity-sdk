@@ -60,12 +60,31 @@ jobs:
       - name: Run safety-rules tests
         run: cargo test --manifest-path aptos-core/consensus/safety-rules/Cargo.toml --no-fail-fast -- --test-threads=1
 
+  test-mempool:
+    name: Test Mempool
+    runs-on: ubuntu-latest
+    container:
+      image: rust:1.88.0-bookworm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            clang llvm libudev-dev libssl-dev pkg-config \
+          && rm -rf /var/lib/apt/lists/*
+      - name: Run cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "test-mempool"
+      - name: Run mempool tests
+        run: cargo test --manifest-path aptos-core/mempool/Cargo.toml --no-fail-fast
+
   test-consensus-core:
     name: Test Consensus Core
     runs-on: ubuntu-latest
     container:
       image: rust:1.88.0-bookworm
-    needs: [test-consensus-types, test-safety-rules]
+    needs: [test-consensus-types, test-safety-rules, test-mempool]
     steps:
       - uses: actions/checkout@v4
       - name: Install build dependencies
@@ -89,7 +108,7 @@ jobs:
   migrated-test-results:
     name: All Migrated Tests
     runs-on: ubuntu-latest
-    needs: [test-consensus-types, test-safety-rules, test-consensus-core]
+    needs: [test-consensus-types, test-safety-rules, test-mempool, test-consensus-core]
     if: always()
     steps:
       - name: Check test results
@@ -97,11 +116,13 @@ jobs:
           echo "=== Migrated Test Results ==="
           echo "consensus-types: ${{ needs.test-consensus-types.result }}"
           echo "safety-rules: ${{ needs.test-safety-rules.result }}"
+          echo "mempool: ${{ needs.test-mempool.result }}"
           echo "consensus-core: ${{ needs.test-consensus-core.result }}"
 
-          # consensus-types and safety-rules must pass
+          # consensus-types, safety-rules, and mempool must pass
           if [ "${{ needs.test-consensus-types.result }}" != "success" ] || \
-             [ "${{ needs.test-safety-rules.result }}" != "success" ]; then
+             [ "${{ needs.test-safety-rules.result }}" != "success" ] || \
+             [ "${{ needs.test-mempool.result }}" != "success" ]; then
             echo "Critical tests failed!"
             exit 1
           fi
