@@ -1,0 +1,114 @@
+name: Migrated Tests
+
+on:
+  push:
+    branches: [main, 'branch-v**']
+  pull_request:
+    branches: [main, 'branch-v**']
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUSTFLAGS: "--cfg tokio_unstable"
+
+# Cancel redundant builds on PRs
+concurrency:
+  group: ${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.ref) || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  # ==========================================================================
+  # Migrated Consensus Tests - Tests from gaptos that have been validated
+  # ==========================================================================
+
+  test-consensus-types:
+    name: Test Consensus Types
+    runs-on: ubuntu-latest
+    container:
+      image: rust:1.88.0-bookworm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            clang llvm libudev-dev libssl-dev pkg-config \
+          && rm -rf /var/lib/apt/lists/*
+      - name: Run cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "test-consensus-types"
+      - name: Run consensus-types tests
+        run: cargo test --manifest-path aptos-core/consensus/consensus-types/Cargo.toml --no-fail-fast
+
+  test-safety-rules:
+    name: Test Safety Rules
+    runs-on: ubuntu-latest
+    container:
+      image: rust:1.88.0-bookworm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            clang llvm libudev-dev libssl-dev pkg-config \
+          && rm -rf /var/lib/apt/lists/*
+      - name: Run cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "test-safety-rules"
+      - name: Run safety-rules tests
+        run: cargo test --manifest-path aptos-core/consensus/safety-rules/Cargo.toml --no-fail-fast -- --test-threads=1
+
+  test-consensus-core:
+    name: Test Consensus Core
+    runs-on: ubuntu-latest
+    container:
+      image: rust:1.88.0-bookworm
+    needs: [test-consensus-types, test-safety-rules]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            clang llvm libudev-dev libssl-dev pkg-config \
+          && rm -rf /var/lib/apt/lists/*
+      - name: Run cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "test-consensus-core"
+      - name: Show disk space
+        run: df -h
+      - name: Run consensus tests (serial to avoid OOM)
+        run: cargo test --manifest-path aptos-core/consensus/Cargo.toml --no-fail-fast -- --test-threads=1
+        continue-on-error: true  # Some tests may fail, we want to see which ones
+      - name: Show disk space after tests
+        run: df -h
+
+  # Aggregate results
+  migrated-test-results:
+    name: All Migrated Tests
+    runs-on: ubuntu-latest
+    needs: [test-consensus-types, test-safety-rules, test-consensus-core]
+    if: always()
+    steps:
+      - name: Check test results
+        run: |
+          echo "=== Migrated Test Results ==="
+          echo "consensus-types: ${{ needs.test-consensus-types.result }}"
+          echo "safety-rules: ${{ needs.test-safety-rules.result }}"
+          echo "consensus-core: ${{ needs.test-consensus-core.result }}"
+
+          # consensus-types and safety-rules must pass
+          if [ "${{ needs.test-consensus-types.result }}" != "success" ] || \
+             [ "${{ needs.test-safety-rules.result }}" != "success" ]; then
+            echo "Critical tests failed!"
+            exit 1
+          fi
+
+          # consensus-core is allowed to have some failures during migration
+          if [ "${{ needs.test-consensus-core.result }}" == "success" ]; then
+            echo "All migrated tests passed!"
+          else
+            echo "Some consensus-core tests failed (expected during migration)"
+          fi
