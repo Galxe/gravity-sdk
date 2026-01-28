@@ -1,7 +1,7 @@
 import pytest
 import logging
-from web3 import Web3
 from eth_account import Account
+from web3 import Web3
 from gravity_e2e.cluster.manager import Cluster, NodeState
 from gravity_e2e.utils.transaction_builder import TransactionBuilder
 
@@ -13,7 +13,6 @@ async def test_single_node_connectivity(cluster: Cluster):
     LOG.info("Testing connectivity to single node...")
     
     # 1. Use Declarative API to ensure node is live
-    # (Runner typically starts it, but this ensures it's reachable)
     assert await cluster.set_full_live(timeout=30), "Cluster failed to become fully live"
     
     node = cluster.get_node("node1")
@@ -31,34 +30,28 @@ async def test_faucet_transfer(cluster: Cluster):
     """Verify faucet functionality by sending funds to a random address."""
     LOG.info("Testing faucet transfer...")
     
-    faucet_cfg = cluster.faucet
-    assert faucet_cfg, "Faucet config not found"
-    assert "private_key" in faucet_cfg, "Faucet private key not found via manager"
-    
-    # Setup Web3
-    node = cluster.get_node("node1")
-    web3 = Web3(Web3.HTTPProvider(node.url))
-    
-    # Setup Sender
-    sender = Account.from_key(faucet_cfg["private_key"])
+    sender = cluster.faucet
+    assert sender, "Faucet not configured"
     LOG.info(f"Faucet Address: {sender.address}")
+    
+    # Use node's web3 directly
+    node = cluster.get_node("node1")
     
     # Setup Receiver
     receiver = Account.create()
     LOG.info(f"Receiver Address: {receiver.address}")
     
     # Build & Send
-    tb = TransactionBuilder(web3, sender)
+    tb = TransactionBuilder(node.w3, sender)
     amount_wei = Web3.to_wei(1, 'ether')
     
-    initial_balance = web3.eth.get_balance(receiver.address)
+    initial_balance = node.w3.eth.get_balance(receiver.address)
     assert initial_balance == 0
     
     result = await tb.send_ether(receiver.address, amount_wei)
-    
     assert result.success, f"Transfer failed: {result.error}"
     
     # Verify
-    new_balance = web3.eth.get_balance(receiver.address)
+    new_balance = node.w3.eth.get_balance(receiver.address)
     assert new_balance == amount_wei
     LOG.info("Faucet transfer verified successfully!")

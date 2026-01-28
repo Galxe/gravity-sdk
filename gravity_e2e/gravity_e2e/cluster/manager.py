@@ -9,14 +9,14 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Dict, Optional, List, Any, Tuple
+from typing import Dict, Optional, List, Tuple
+
+from eth_account import Account
+from eth_account.signers.local import LocalAccount
 
 from .node import Node, NodeState
 
 LOG = logging.getLogger(__name__)
-
-
-from eth_account import Account
 
 # Standard devnet keys (Anvil/Hardhat defaults)
 KNOWN_DEV_KEYS = [
@@ -50,17 +50,18 @@ class Cluster:
         self.stop_script = self.cluster_root / "stop.sh"
 
     @property
-    def faucet(self) -> Dict[str, str]:
-        """Returns primary (first) faucet configuration."""
+    def faucet(self) -> Optional[LocalAccount]:
+        """Returns primary (first) faucet account."""
         f = self.faucets
-        return f[0] if f else {}
+        return f[0] if f else None
 
     @property
-    def faucets(self) -> List[Dict[str, str]]:
+    def faucets(self) -> List[LocalAccount]:
         """
-        Returns all faucet configurations.
-        Enrich with private keys from 'genesis.secrets.keys' by matching addresses.
-        Also checks KNOWN_DEV_KEYS.
+        Returns all faucet accounts as LocalAccount instances.
+        Matches addresses from config with private keys from:
+        1. KNOWN_DEV_KEYS (Built-in devnet keys)
+        2. genesis.secrets.keys (Config)
         """
         genesis = self.config.get("genesis", {})
         faucet_config = genesis.get("faucet", [])
@@ -73,46 +74,39 @@ class Cluster:
         else:
             faucets = []
             
-        # If empty, return empty
         if not faucets:
             return []
 
         # Gather potential private keys
-        # 1. From KNOWN_DEV_KEYS (Built-in)
-        # 2. From genesis.secrets.keys (Config)
-        # 3. From explicit private_key in faucet items (Legacy)
         candidate_keys = set(KNOWN_DEV_KEYS)
         
         secrets = genesis.get("secrets", {})
         if secrets and "keys" in secrets:
             candidate_keys.update(secrets["keys"])
 
-        # Mapping: valid_address_lower -> private_key
-        key_map = {}
+        # Build address -> LocalAccount mapping
+        key_map: Dict[str, LocalAccount] = {}
         for k in candidate_keys:
             try:
-                # Assuming hex private key
                 if not k.startswith("0x"):
                     k = "0x" + k
                 account = Account.from_key(k)
-                key_map[account.address.lower()] = k
+                key_map[account.address.lower()] = account
             except Exception as e:
                 LOG.warning(f"Failed to derive address from key {k[:6]}...: {e}")
 
-        # Enrich faucets
-        enriched = []
+        # Match faucet addresses to accounts
+        accounts: List[LocalAccount] = []
         for f in faucets:
-            item = f.copy()
-            addr = item.get("address")
+            addr = f.get("address")
             if addr:
-                # If private_key not present, try to find it
-                if "private_key" not in item:
-                    found_key = key_map.get(addr.lower())
-                    if found_key:
-                        item["private_key"] = found_key
-            enriched.append(item)
+                account = key_map.get(addr.lower())
+                if account:
+                    accounts.append(account)
+                else:
+                    LOG.warning(f"Faucet address {addr} has no matching private key")
             
-        return enriched
+        return accounts
 
     def _discover_nodes(self) -> Dict[str, Node]:
         nodes = {}
