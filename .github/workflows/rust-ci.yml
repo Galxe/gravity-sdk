@@ -154,11 +154,11 @@ jobs:
       - name: Show disk space
         run: df -h
       - name: Run aptos-consensus tests (serial)
-        run: cargo test -p aptos-consensus --no-fail-fast -- --test-threads=1
+        run: cargo test --manifest-path aptos-core/consensus/Cargo.toml --no-fail-fast -- --test-threads=1
       - name: Clean intermediate artifacts
-        run: cargo clean -p aptos-consensus
+        run: cargo clean --manifest-path aptos-core/consensus/Cargo.toml
       - name: Run aptos-executor tests (serial)
-        run: cargo test -p aptos-executor --no-fail-fast -- --test-threads=1
+        run: cargo test --manifest-path dependencies/aptos-executor/Cargo.toml --no-fail-fast -- --test-threads=1
 
   test-dependencies:
     name: Test Dependencies
