@@ -11,8 +11,9 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
   RUSTFLAGS: "--cfg tokio_unstable"
-  # Use official Rust image (switch to custom image after ghcr.io/galxe/gravity-sdk/rust-ci:latest is built)
-  CI_IMAGE: rust:1.88.0-bookworm
+
+# NOTE: Container image is hardcoded below as rust:1.88.0-bookworm
+# Switch to ghcr.io/galxe/gravity-sdk/rust-ci:latest after custom image is published
 
 # Cancel redundant builds on PRs
 concurrency:
@@ -42,7 +43,7 @@ jobs:
     name: Clippy
     runs-on: ubuntu-latest
     container:
-      image: ${{ env.CI_IMAGE }}
+      image: rust:1.88.0-bookworm
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -62,7 +63,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     container:
-      image: ${{ env.CI_IMAGE }}
+      image: rust:1.88.0-bookworm
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -88,7 +89,7 @@ jobs:
     name: Test Core Crates
     runs-on: ubuntu-latest
     container:
-      image: ${{ env.CI_IMAGE }}
+      image: rust:1.88.0-bookworm
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -118,7 +119,7 @@ jobs:
     name: Test Consensus
     runs-on: ubuntu-latest
     container:
-      image: ${{ env.CI_IMAGE }}
+      image: rust:1.88.0-bookworm
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -146,7 +147,7 @@ jobs:
     name: Test Aptos Crates
     runs-on: ubuntu-latest
     container:
-      image: ${{ env.CI_IMAGE }}
+      image: rust:1.88.0-bookworm
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -178,7 +179,7 @@ jobs:
     name: Test Dependencies
     runs-on: ubuntu-latest
     container:
-      image: ${{ env.CI_IMAGE }}
+      image: rust:1.88.0-bookworm
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -204,7 +205,7 @@ jobs:
     name: Test Binaries
     runs-on: ubuntu-latest
     container:
-      image: ${{ env.CI_IMAGE }}
+      image: rust:1.88.0-bookworm
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
