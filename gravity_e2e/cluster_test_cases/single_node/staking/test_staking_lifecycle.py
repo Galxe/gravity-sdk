@@ -38,8 +38,8 @@ async def test_staking_lifecycle(cluster: Cluster):
     assert await cluster.set_full_live(timeout=60), "Cluster failed to start"
     
     node = cluster.get_node("node1")
-    w3 = Web3(Web3.HTTPProvider(node.url))
-    faucet_key = cluster.faucet["private_key"]
+    w3 = node.w3
+    faucet_key = cluster.faucet.key
 
     try:
         # Step 1: Create test account

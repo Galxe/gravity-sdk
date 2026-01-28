@@ -21,7 +21,7 @@ async def test_validator_minimum_bond(cluster: Cluster):
     
     assert await cluster.set_full_live(timeout=60), "Cluster failed to start"
     node = cluster.get_node("node1")
-    w3 = Web3(Web3.HTTPProvider(node.url))
+    w3 = node.w3
     
     LOG.info("NOTE: This test requires a pre-registered active validator.")
     LOG.info("Skipping actual validator interaction - testing pool logic only.")
