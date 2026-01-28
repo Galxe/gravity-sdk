@@ -11,6 +11,8 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
   RUSTFLAGS: "--cfg tokio_unstable"
+  # Use official Rust image (switch to custom image after ghcr.io/galxe/gravity-sdk/rust-ci:latest is built)
+  CI_IMAGE: rust:1.88.0-bookworm
 
 # Cancel redundant builds on PRs
 concurrency:
@@ -18,41 +20,59 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Rust formatting check
+  # ==========================================================================
+  # Lightweight jobs - run directly on runner (fast, no container overhead)
+  # ==========================================================================
+
   fmt:
     name: Rust Format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Install nightly rustfmt
-        run: |
-          rustup toolchain install nightly --component rustfmt
+        run: rustup toolchain install nightly --component rustfmt
       - name: Check formatting
         run: cargo +nightly fmt --all -- --check
 
-  # Rust linting with clippy
+  # ==========================================================================
+  # Heavyweight jobs - run in container (clean environment, more disk space)
+  # ==========================================================================
+
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
+    container:
+      image: ${{ env.CI_IMAGE }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev
-      - name: Install clippy
-        run: rustup component add clippy
+      - name: Install build dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            clang llvm libudev-dev libssl-dev pkg-config \
+          && rm -rf /var/lib/apt/lists/*
       - name: Run cargo cache
         uses: Swatinem/rust-cache@v2
       - name: Run clippy
-        run: RUSTFLAGS="--cfg tokio_unstable" cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
-  # Build gravity_node and gravity_cli
   build:
     name: Build
     runs-on: ubuntu-latest
+    container:
+      image: ${{ env.CI_IMAGE }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev
+      - name: Install build dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            clang llvm libudev-dev libssl-dev pkg-config \
+          && rm -rf /var/lib/apt/lists/*
       - name: Run cargo cache
         uses: Swatinem/rust-cache@v2
       - name: Build gravity_node
@@ -60,24 +80,184 @@ jobs:
       - name: Build gravity_cli
         run: cargo build --bin gravity_cli --profile quick-release
 
-  # Run unit tests (triggered by label or on main branch push)
-  test:
-    name: Unit Tests
+  # ==========================================================================
+  # Unit Tests - Split into parallel jobs, run in containers
+  # ==========================================================================
+
+  test-core:
+    name: Test Core Crates
     runs-on: ubuntu-latest
+    container:
+      image: ${{ env.CI_IMAGE }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     if: |
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
       contains(github.event.pull_request.labels.*.name, 'CICD:run-tests')
     steps:
       - uses: actions/checkout@v4
-      - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev
+      - name: Install build dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            clang llvm libudev-dev libssl-dev pkg-config \
+          && rm -rf /var/lib/apt/lists/*
       - name: Run cargo cache
         uses: Swatinem/rust-cache@v2
-      - name: Run tests
-        run: cargo test --workspace --exclude smoke-test
+        with:
+          prefix-key: "test-core"
+      - name: Run core tests
+        run: |
+          cargo test -p gravity-primitives --no-fail-fast
+          cargo test -p gravity-storage --no-fail-fast
+          cargo test -p api --no-fail-fast
+          cargo test -p api-types --no-fail-fast
 
-  # Check gravity-reth dependency for branch-v* branches
+  test-consensus:
+    name: Test Consensus
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ env.CI_IMAGE }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'CICD:run-tests')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            clang llvm libudev-dev libssl-dev pkg-config \
+          && rm -rf /var/lib/apt/lists/*
+      - name: Run cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "test-consensus"
+      - name: Run consensus tests
+        run: |
+          cargo test -p block-buffer-manager --no-fail-fast
+          cargo test -p txn-metrics --no-fail-fast
+
+  test-aptos:
+    name: Test Aptos Crates
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ env.CI_IMAGE }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'CICD:run-tests')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            clang llvm libudev-dev libssl-dev pkg-config \
+          && rm -rf /var/lib/apt/lists/*
+      - name: Run cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "test-aptos"
+      - name: Show disk space
+        run: df -h
+      - name: Run aptos-consensus tests (serial)
+        run: cargo test -p aptos-consensus --no-fail-fast -- --test-threads=1
+      - name: Clean intermediate artifacts
+        run: cargo clean -p aptos-consensus
+      - name: Run aptos-executor tests (serial)
+        run: cargo test -p aptos-executor --no-fail-fast -- --test-threads=1
+
+  test-dependencies:
+    name: Test Dependencies
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ env.CI_IMAGE }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'CICD:run-tests')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            clang llvm libudev-dev libssl-dev pkg-config \
+          && rm -rf /var/lib/apt/lists/*
+      - name: Run cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "test-deps"
+      - name: Run dependency tests
+        run: cargo test -p gaptos --no-fail-fast
+
+  test-binaries:
+    name: Test Binaries
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ env.CI_IMAGE }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    needs: [test-core, test-consensus]
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'CICD:run-tests')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            clang llvm libudev-dev libssl-dev pkg-config \
+          && rm -rf /var/lib/apt/lists/*
+      - name: Run cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "test-binaries"
+      - name: Show disk space
+        run: df -h
+      - name: Run gravity_node tests (serial)
+        run: cargo test -p gravity_node --no-fail-fast -- --test-threads=1
+      - name: Clean to free space
+        run: |
+          cargo clean -p gravity_node
+          df -h
+      - name: Run gravity_cli tests
+        run: cargo test -p gravity_cli --no-fail-fast
+
+  # Aggregate test results
+  test-results:
+    name: All Tests
+    runs-on: ubuntu-latest
+    needs: [test-core, test-consensus, test-aptos, test-dependencies, test-binaries]
+    if: always()
+    steps:
+      - name: Check test results
+        run: |
+          if [ "${{ needs.test-core.result }}" != "success" ] || \
+             [ "${{ needs.test-consensus.result }}" != "success" ] || \
+             [ "${{ needs.test-aptos.result }}" != "success" ] || \
+             [ "${{ needs.test-dependencies.result }}" != "success" ] || \
+             [ "${{ needs.test-binaries.result }}" != "success" ]; then
+            echo "One or more test jobs failed"
+            exit 1
+          fi
+          echo "All tests passed!"
+
+  # ==========================================================================
+  # Dependency checks
+  # ==========================================================================
+
   dependency-check:
     name: Check gravity-reth Dependency
     runs-on: ubuntu-latest
@@ -88,7 +268,6 @@ jobs:
         run: |
           set -e
 
-          # 提取版本号，例如 branch-v1.2 -> v1.2
           VERSION=$(echo "${{ github.ref_name }}" | sed 's/^branch-//')
           EXPECTED_BRANCH="gravity-devnet-${VERSION}"
 
@@ -104,7 +283,6 @@ jobs:
             exit 1
           fi
 
-          # 检查 greth 依赖是否使用正确的 branch
           if grep -q 'greth = .*branch = "' "${CARGO_FILE}"; then
             ACTUAL_BRANCH=$(grep 'greth = ' "${CARGO_FILE}" | sed -n 's/.*branch = "\([^"]*\)".*/\1/p')
 
