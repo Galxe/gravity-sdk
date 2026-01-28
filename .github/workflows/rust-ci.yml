@@ -12,8 +12,8 @@ env:
   CARGO_INCREMENTAL: "0"
   RUSTFLAGS: "--cfg tokio_unstable"
 
-# NOTE: Container image is hardcoded below as rust:1.88.0-bookworm
-# Switch to ghcr.io/galxe/gravity-sdk/rust-ci:latest after custom image is published
+# NOTE: Container image is hardcoded to ghcr.io/richard1048576/gravity-sdk/rust-ci:latest for fork testing
+# For upstream, change to ghcr.io/galxe/gravity-sdk/rust-ci:latest
 
 # Cancel redundant builds on PRs
 concurrency:
@@ -43,14 +43,12 @@ jobs:
     name: Clippy
     runs-on: ubuntu-latest
     container:
-      image: rust:1.88.0-bookworm
+      image: ghcr.io/richard1048576/gravity-sdk/rust-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install build dependencies
-        run: |
-          apt-get update && apt-get install -y --no-install-recommends \
-            clang llvm libudev-dev libssl-dev pkg-config \
-          && rm -rf /var/lib/apt/lists/*
       - name: Run cargo cache
         uses: Swatinem/rust-cache@v2
       - name: Run clippy
@@ -60,14 +58,12 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     container:
-      image: rust:1.88.0-bookworm
+      image: ghcr.io/richard1048576/gravity-sdk/rust-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install build dependencies
-        run: |
-          apt-get update && apt-get install -y --no-install-recommends \
-            clang llvm libudev-dev libssl-dev pkg-config \
-          && rm -rf /var/lib/apt/lists/*
       - name: Run cargo cache
         uses: Swatinem/rust-cache@v2
       - name: Build gravity_node
@@ -83,18 +79,16 @@ jobs:
     name: Test Core Crates
     runs-on: ubuntu-latest
     container:
-      image: rust:1.88.0-bookworm
+      image: ghcr.io/richard1048576/gravity-sdk/rust-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     if: |
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
       contains(github.event.pull_request.labels.*.name, 'CICD:run-tests')
     steps:
       - uses: actions/checkout@v4
-      - name: Install build dependencies
-        run: |
-          apt-get update && apt-get install -y --no-install-recommends \
-            clang llvm libudev-dev libssl-dev pkg-config \
-          && rm -rf /var/lib/apt/lists/*
       - name: Run cargo cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -110,18 +104,16 @@ jobs:
     name: Test Consensus
     runs-on: ubuntu-latest
     container:
-      image: rust:1.88.0-bookworm
+      image: ghcr.io/richard1048576/gravity-sdk/rust-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     if: |
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
       contains(github.event.pull_request.labels.*.name, 'CICD:run-tests')
     steps:
       - uses: actions/checkout@v4
-      - name: Install build dependencies
-        run: |
-          apt-get update && apt-get install -y --no-install-recommends \
-            clang llvm libudev-dev libssl-dev pkg-config \
-          && rm -rf /var/lib/apt/lists/*
       - name: Run cargo cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -135,18 +127,16 @@ jobs:
     name: Test Aptos Crates
     runs-on: ubuntu-latest
     container:
-      image: rust:1.88.0-bookworm
+      image: ghcr.io/richard1048576/gravity-sdk/rust-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     if: |
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
       contains(github.event.pull_request.labels.*.name, 'CICD:run-tests')
     steps:
       - uses: actions/checkout@v4
-      - name: Install build dependencies
-        run: |
-          apt-get update && apt-get install -y --no-install-recommends \
-            clang llvm libudev-dev libssl-dev pkg-config \
-          && rm -rf /var/lib/apt/lists/*
       - name: Run cargo cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -164,18 +154,16 @@ jobs:
     name: Test Dependencies
     runs-on: ubuntu-latest
     container:
-      image: rust:1.88.0-bookworm
+      image: ghcr.io/richard1048576/gravity-sdk/rust-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     if: |
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
       contains(github.event.pull_request.labels.*.name, 'CICD:run-tests')
     steps:
       - uses: actions/checkout@v4
-      - name: Install build dependencies
-        run: |
-          apt-get update && apt-get install -y --no-install-recommends \
-            clang llvm libudev-dev libssl-dev pkg-config \
-          && rm -rf /var/lib/apt/lists/*
       - name: Run cargo cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -187,7 +175,10 @@ jobs:
     name: Test Binaries
     runs-on: ubuntu-latest
     container:
-      image: rust:1.88.0-bookworm
+      image: ghcr.io/richard1048576/gravity-sdk/rust-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     needs: [test-core, test-consensus]
     if: |
       github.event_name == 'push' ||
@@ -195,11 +186,6 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'CICD:run-tests')
     steps:
       - uses: actions/checkout@v4
-      - name: Install build dependencies
-        run: |
-          apt-get update && apt-get install -y --no-install-recommends \
-            clang llvm libudev-dev libssl-dev pkg-config \
-          && rm -rf /var/lib/apt/lists/*
       - name: Run cargo cache
         uses: Swatinem/rust-cache@v2
         with:
