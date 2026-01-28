@@ -158,7 +158,22 @@ main() {
          
          if [ -f "$GENESIS_CONTRACT_DIR/genesis.json" ]; then
              cp "$GENESIS_CONTRACT_DIR/genesis.json" "$OUTPUT_DIR/genesis.json"
+             
+             
+             # Copy intermediate files for verification
+             GENESIS_CONFIG_OUT="$OUTPUT_DIR/genesis_config"
+             mkdir -p "$GENESIS_CONFIG_OUT"
+             
+             if [ -f "$GENESIS_CONTRACT_DIR/output/genesis_config_modified.json" ]; then
+                 cp "$GENESIS_CONTRACT_DIR/output/genesis_config_modified.json" "$GENESIS_CONFIG_OUT/genesis_config.json"
+             fi
+             if [ -f "$GENESIS_CONTRACT_DIR/account_alloc.json" ]; then
+                 cp "$GENESIS_CONTRACT_DIR/account_alloc.json" "$GENESIS_CONFIG_OUT/account_alloc.json"
+             fi
+             
              log_info "Genesis generated at $OUTPUT_DIR/genesis.json"
+
+
          else
              log_error "Genesis generation failed."
              exit 1
