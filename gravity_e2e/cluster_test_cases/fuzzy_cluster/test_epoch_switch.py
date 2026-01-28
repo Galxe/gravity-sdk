@@ -11,8 +11,10 @@ from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import Dict, Set
 
+from web3 import Web3
+from eth_account import Account
 from gravity_e2e.tests.test_registry import register_test
-from gravity_e2e.helpers.test_helpers import RunHelper, TestResult, test_case
+from gravity_e2e.utils.transaction_builder import TransactionBuilder
 from gravity_e2e.cluster.manager import Cluster
 from gravity_e2e.cluster.node import NodeRole
 from gravity_e2e.utils.validator_utils import (
@@ -21,7 +23,6 @@ from gravity_e2e.utils.validator_utils import (
     execute_validator_leave,
     execute_validator_list,
 )
-from gravity_e2e.core.client.gravity_client import GravityClient
 from gravity_e2e.core.client.gravity_http_client import GravityHttpClient
 
 LOG = logging.getLogger(__name__)
@@ -32,9 +33,8 @@ class EpochSwitchTestContext:
     Context for epoch switch test, using the declarative Cluster API.
     """
 
-    def __init__(self, cluster: Cluster, run_helper: RunHelper):
+    def __init__(self, cluster: Cluster):
         self.cluster = cluster
-        self.run_helper = run_helper
 
         self.genesis_node_names = []
         self.candidate_node_names = []
@@ -44,10 +44,9 @@ class EpochSwitchTestContext:
             elif node.role == NodeRole.VALIDATOR:
                 self.candidate_node_names.append(node_name)
 
-        self.run_helper.client = GravityClient(
-            rpc_url=f"{self.cluster.nodes[self.genesis_node_names[0]].url}",
-            node_id=self.genesis_node_names[0],
-        )
+        first_genesis = self.genesis_node_names[0]
+        self.rpc_url = self.cluster.nodes[first_genesis].url
+        self.web3 = Web3(Web3.HTTPProvider(self.rpc_url))
 
         self.node_to_account: Dict[str, Dict] = dict()
         self.node_to_validator_join_params: Dict[str, ValidatorJoinParams] = dict()
@@ -55,38 +54,35 @@ class EpochSwitchTestContext:
         signal.signal(signal.SIGTERM, self.signal_handler)
         signal.signal(signal.SIGINT, self.signal_handler)
 
-    async def __aenter__(self):
-        await self.run_helper.client.__aenter__()
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.run_helper.client.__aexit__(exc_type, exc_val, exc_tb)
-
     def signal_handler(self, signum, frame):
         self.should_stop = True
         LOG.info(f"收到信号 {signal.Signals(signum).name}，准备停止...")
 
     async def fund_nodes(self):
-        faucet_address = self.run_helper.faucet_address()
-        faucet_nonce = await self.run_helper.client.get_transaction_count(
-            faucet_address
-        )
-        accounts = await asyncio.gather(
-            *[
-                self.run_helper.create_test_account(
-                    node_name, fund_wei=10**24, nonce=faucet_nonce + i
-                )
-                for i, node_name in enumerate(self.candidate_node_names)
-            ]
-        )
-        for node_name, account in zip(self.candidate_node_names, accounts):
-            self.node_to_account[node_name] = account
+        """Fund candidate nodes using faucet via web3 TransactionBuilder."""
+        faucet_cfg = self.cluster.faucet
+        assert faucet_cfg, "Faucet config not found"
+
+        sender = Account.from_key(faucet_cfg["private_key"])
+        tb = TransactionBuilder(self.web3, sender)
+        fund_amount = 10**24  # 1M ether in wei
+
+        for node_name in self.candidate_node_names:
+            receiver = Account.create()
+            LOG.info(f"Funding {node_name}: {receiver.address} with {fund_amount} wei")
+            result = await tb.send_ether(receiver.address, fund_amount)
+            assert result.success, f"Transfer to {node_name} failed: {result.error}"
+            self.node_to_account[node_name] = {
+                "address": receiver.address,
+                "private_key": receiver.key.hex(),
+            }
+            LOG.info(f"✅ Funded {node_name} at {receiver.address}")
 
     async def validator_join(self, node_name: str):
         params = self.get_validator_join_params(node_name)
         await execute_validator_join(
             gravity_cli_path=self.cluster.gravity_cli_path,
-            rpc_url=self.run_helper.client.rpc_url,
+            rpc_url=self.rpc_url,
             params=params,
             start_new_session=True,
         )
@@ -96,7 +92,7 @@ class EpochSwitchTestContext:
         params = self.get_validator_join_params(node_name)
         await execute_validator_leave(
             gravity_cli_path=self.cluster.gravity_cli_path,
-            rpc_url=self.run_helper.client.rpc_url,
+            rpc_url=self.rpc_url,
             params=params,
             start_new_session=True,
         )
@@ -110,10 +106,9 @@ class EpochSwitchTestContext:
             pending_inactive_node_names: set of node names in pending inactive validator set
             pending_active_node_names: set of node names in pending active validator set
         """
-        gravity_cli_path = self.cluster.cluster_root.parent / "gravity-cli"
         result = await execute_validator_list(
-            gravity_cli_path=gravity_cli_path,
-            rpc_url=self.run_helper.client.rpc_url,
+            gravity_cli_path=self.cluster.gravity_cli_path,
+            rpc_url=self.rpc_url,
             start_new_session=True,
         )
 
@@ -349,10 +344,7 @@ class EpochSwitchTestContext:
 
 
 @register_test("epoch_switch", suite="epoch_switch", self_managed=True)
-@test_case
-async def test_epoch_switch(
-    cluster: Cluster, run_helper: RunHelper, test_result: TestResult
-):
+async def test_epoch_switch(cluster: Cluster):
     """
     Test epoch switching with multiple nodes using declarative Cluster API.
 
@@ -366,14 +358,13 @@ async def test_epoch_switch(
     LOG.info("Test: Epoch Switch Test (Declarative API)")
     LOG.info("=" * 70)
 
-    test_context = EpochSwitchTestContext(cluster, run_helper)
-    await test_context.__aenter__()
+    test_context = EpochSwitchTestContext(cluster)
     try:
         # Step 1: Ensure all nodes are running using declarative API
         LOG.info("\n[Step 1] Ensuring all nodes are running (set_full_live)...")
-        if not await cluster.set_full_live(timeout=120):
-            test_result.error = "Failed to bring all nodes to RUNNING"
-            return
+        assert await cluster.set_full_live(
+            timeout=120
+        ), "Failed to bring all nodes to RUNNING"
 
         # Log current state
         live_nodes = await cluster.get_live_nodes()
@@ -395,11 +386,8 @@ async def test_epoch_switch(
         tasks.append(asyncio.create_task(test_context.check_node_block_height()))
         await asyncio.gather(*tasks)
 
-        test_result.mark_success()
+        LOG.info("✅ Epoch switch test completed successfully")
 
     except Exception as e:
         LOG.error(f"❌ Test failed: {e}")
-        test_result.mark_failure(str(e))
         raise
-    finally:
-        await test_context.__aexit__(None, None, None)
