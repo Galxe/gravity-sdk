@@ -16,6 +16,15 @@ from .node import Node, NodeState
 LOG = logging.getLogger(__name__)
 
 
+from eth_account import Account
+
+# Standard devnet keys (Anvil/Hardhat defaults)
+KNOWN_DEV_KEYS = [
+    "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", # 0xf39F...
+    "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d", # 0x7099...
+    "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"  # 0x3C44...
+]
+
 class Cluster:
     """
     Unified entry point for interacting with a Gravity Cluster.
@@ -39,6 +48,71 @@ class Cluster:
         # Cluster control scripts
         self.start_script = self.cluster_root / "start.sh"
         self.stop_script = self.cluster_root / "stop.sh"
+
+    @property
+    def faucet(self) -> Dict[str, str]:
+        """Returns primary (first) faucet configuration."""
+        f = self.faucets
+        return f[0] if f else {}
+
+    @property
+    def faucets(self) -> List[Dict[str, str]]:
+        """
+        Returns all faucet configurations.
+        Enrich with private keys from 'genesis.secrets.keys' by matching addresses.
+        Also checks KNOWN_DEV_KEYS.
+        """
+        genesis = self.config.get("genesis", {})
+        faucet_config = genesis.get("faucet", [])
+        
+        # Normalize to list
+        if isinstance(faucet_config, dict):
+            faucets = [faucet_config]
+        elif isinstance(faucet_config, list):
+            faucets = faucet_config
+        else:
+            faucets = []
+            
+        # If empty, return empty
+        if not faucets:
+            return []
+
+        # Gather potential private keys
+        # 1. From KNOWN_DEV_KEYS (Built-in)
+        # 2. From genesis.secrets.keys (Config)
+        # 3. From explicit private_key in faucet items (Legacy)
+        candidate_keys = set(KNOWN_DEV_KEYS)
+        
+        secrets = genesis.get("secrets", {})
+        if secrets and "keys" in secrets:
+            candidate_keys.update(secrets["keys"])
+
+        # Mapping: valid_address_lower -> private_key
+        key_map = {}
+        for k in candidate_keys:
+            try:
+                # Assuming hex private key
+                if not k.startswith("0x"):
+                    k = "0x" + k
+                account = Account.from_key(k)
+                key_map[account.address.lower()] = k
+            except Exception as e:
+                LOG.warning(f"Failed to derive address from key {k[:6]}...: {e}")
+
+        # Enrich faucets
+        enriched = []
+        for f in faucets:
+            item = f.copy()
+            addr = item.get("address")
+            if addr:
+                # If private_key not present, try to find it
+                if "private_key" not in item:
+                    found_key = key_map.get(addr.lower())
+                    if found_key:
+                        item["private_key"] = found_key
+            enriched.append(item)
+            
+        return enriched
 
     def _discover_nodes(self) -> Dict[str, Node]:
         nodes = {}

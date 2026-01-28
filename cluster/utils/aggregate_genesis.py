@@ -243,6 +243,26 @@ def main():
     print(f"[Aggregator] Successfully wrote {output_path}")
     print(f"[Aggregator] Configured {len(validators)} validators")
 
+    # Extract and write faucet allocation
+    faucet_cfg = genesis_cfg.get("faucet")
+    faucet_alloc = {}
+    
+    if faucet_cfg:
+        # Normalize to list
+        accounts = faucet_cfg if isinstance(faucet_cfg, list) else [faucet_cfg]
+        
+        for acc in accounts:
+            if "address" in acc and "balance" in acc:
+                faucet_alloc[acc["address"]] = {
+                    "balance": acc["balance"]
+                }
+                
+    if faucet_alloc:
+        faucet_alloc_path = os.path.join(base_dir, "faucet_alloc.json")
+        with open(faucet_alloc_path, 'w') as f:
+            json.dump(faucet_alloc, f, indent=2)
+        print(f"[Aggregator] Exported faucet allocation ({len(faucet_alloc)} accounts) to {faucet_alloc_path}")
+
 if __name__ == "__main__":
     main()
 
