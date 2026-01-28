@@ -4,7 +4,7 @@ This directory contains the End-to-End (E2E) testing framework for Gravity. It o
 
 ## Key Documentation
 
--   **[User Manual](./MANUAL.md)**: Main guide for running and configuring tests.
+-   **[User Manual](./docs/MANUAL.md)**: Main guide for running and configuring tests.
 -   **[Adding Test Cases](./docs/adding_test_cases_guide.md)**: Developer guide for writing new test suites.
 
 ## Quick Start
