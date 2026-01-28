@@ -129,7 +129,7 @@ jobs:
       - name: Run consensus tests
         run: |
           cargo test -p block-buffer-manager --no-fail-fast
-          cargo test -p txn-metrics --no-fail-fast
+          cargo test -p txn_metrics --no-fail-fast
 
   test-aptos:
     name: Test Aptos Crates
