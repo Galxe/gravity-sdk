@@ -1,0 +1,6 @@
+{
+  "uri_mappings": {
+    "gravity://0/31337/events?contract=0xcbEAF3BDe82155F56486Fb5a1072cb8baAf547cc&eventSignature=0xd53bfb630c04654c6d1da5020f14674f190f92c257c92d9b15d8ecb405057c14&fromBlock=0": "http://localhost:8546"
+  }
+}
+
