@@ -4,9 +4,7 @@ import logging
 from pathlib import Path
 from typing import Tuple, Dict, Any, Optional
 from enum import Enum, auto
-
-# Use local client copy
-from .client.gravity_client import GravityClient
+from web3 import Web3
 
 TransactionReceipt = Dict[str, Any]
 
@@ -32,7 +30,7 @@ class Node:
         self.id = id
         self.rpc_port = rpc_port
         self.url = f"http://127.0.0.1:{rpc_port}"
-        self.client = GravityClient(self.url, node_id=id)
+        self.w3 = Web3(Web3.HTTPProvider(self.url))
         self._infra_path = infra_path
         self._cluster_config_path = cluster_config_path
         
@@ -53,23 +51,21 @@ class Node:
         except (ValueError, ProcessLookupError, OSError):
             return False
     
-    async def get_txn_receipt(self, txn_hash: str) -> Optional[TransactionReceipt]:
+    def get_txn_receipt(self, txn_hash: str) -> Optional[TransactionReceipt]:
         """
         Fetch the transaction receipt from the node.
         """
         try:
-            async with self.client:
-                return await self.client.get_transaction_receipt(txn_hash)
+            return dict(self.w3.eth.get_transaction_receipt(txn_hash))
         except Exception:
             return None
 
-    async def get_block_number(self) -> int:
+    def get_block_number(self) -> int:
         """
         Fetch the current block number from the node.
         Returns block number or raises Exception.
         """
-        async with self.client:
-            return await self.client.get_block_number()
+        return self.w3.eth.block_number
 
     async def get_state(self) -> Tuple[NodeState, int]:
         """
@@ -81,9 +77,8 @@ class Node:
         rpc_ok = False
         block_height = -1
         try:
-            async with self.client:
-                block_height = await self.client.get_block_number()
-                rpc_ok = block_height >= 0
+            block_height = self.w3.eth.block_number
+            rpc_ok = block_height >= 0
         except Exception:
             rpc_ok = False
 
@@ -240,12 +235,9 @@ class Node:
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
-                # We need to use the async context manager to ensure connection logic runs
-                async with self.client:
-                    # Depending on client impl, get_block_number might be enough
-                    bn = await self.client.get_block_number()
-                    if bn >= 0:
-                        return True
+                bn = self.w3.eth.block_number
+                if bn >= 0:
+                    return True
             except Exception:
                 # Connection refused or other transient error
                 await asyncio.sleep(1)
@@ -262,8 +254,7 @@ class Node:
         # Get start height
         start_height = -1
         try:
-            async with self.client:
-                start_height = await self.client.get_block_number()
+            start_height = self.w3.eth.block_number
         except Exception:
             LOG.warning(f"Node {self.id} RPC unavailable for initial block check")
             return False
@@ -273,11 +264,10 @@ class Node:
         
         while time.time() - start_time < timeout:
             try:
-                async with self.client:
-                    current = await self.client.get_block_number()
-                    if current >= target_height:
-                        LOG.info(f"Node {self.id} reached height {current} (progress verified)")
-                        return True
+                current = self.w3.eth.block_number
+                if current >= target_height:
+                    LOG.info(f"Node {self.id} reached height {current} (progress verified)")
+                    return True
             except Exception:
                 pass
             
