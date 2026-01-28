@@ -92,12 +92,22 @@ main() {
     
     python3 "$SCRIPT_DIR/utils/aggregate_genesis.py" "$modified_json"
     
-    val_genesis_path="$OUTPUT_DIR/validator_genesis.json"
-    if [ ! -f "$val_genesis_path" ]; then
-        log_error "Failed to generate $val_genesis_path"
+    # Organize Config Files
+    GEN_CONFIG_DIR="$OUTPUT_DIR/genesis_config"
+    mkdir -p "$GEN_CONFIG_DIR"
+    
+    val_genesis_path="$GEN_CONFIG_DIR/validator_genesis.json"
+    if [ -f "$OUTPUT_DIR/validator_genesis.json" ]; then
+        mv "$OUTPUT_DIR/validator_genesis.json" "$val_genesis_path"
+    else
+        log_error "Failed to generate validator_genesis.json"
         exit 1
     fi
     
+    if [ -f "$OUTPUT_DIR/faucet_alloc.json" ]; then
+        mv "$OUTPUT_DIR/faucet_alloc.json" "$GEN_CONFIG_DIR/faucet_alloc.json"
+    fi
+
     # Step 3: Genesis Generation (Call External)
     GEN_SCRIPT="$PROJECT_ROOT/external/gravity_chain_core_contracts/scripts/generate_genesis.sh"
     EXTERNAL_DIR="$PROJECT_ROOT/external"
@@ -115,15 +125,6 @@ main() {
     fi
     
     # Checkout specified ref (commit, branch, or tag)
-    log_info "Checking out ref: $GENESIS_REF"
-    (
-        cd "$GENESIS_CONTRACT_DIR"
-        git fetch origin
-        git checkout "$GENESIS_REF" 2>/dev/null || git checkout -b "$GENESIS_REF" "origin/$GENESIS_REF" 2>/dev/null || {
-            # If it's a commit hash, just check it out directly
-            git checkout "$GENESIS_REF"
-        }
-    )
 
     # Auto-install dependencies if missing
     if [ ! -d "$GENESIS_CONTRACT_DIR/node_modules" ]; then
@@ -151,27 +152,44 @@ main() {
          GEN_DIR="$(dirname "$GEN_SCRIPT")"
          ABS_VAL_GENESIS_PATH="$(cd "$(dirname "$val_genesis_path")" && pwd)/$(basename "$val_genesis_path")"
          
-         (
-            cd "$GENESIS_CONTRACT_DIR"
-            ./scripts/generate_genesis.sh -c "$ABS_VAL_GENESIS_PATH" > /dev/null
-         )
-         
-         if [ -f "$GENESIS_CONTRACT_DIR/genesis.json" ]; then
-             cp "$GENESIS_CONTRACT_DIR/genesis.json" "$OUTPUT_DIR/genesis.json"
-             
-             
-             # Copy intermediate files for verification
-             GENESIS_CONFIG_OUT="$OUTPUT_DIR/genesis_config"
-             mkdir -p "$GENESIS_CONFIG_OUT"
-             
-             if [ -f "$GENESIS_CONTRACT_DIR/output/genesis_config_modified.json" ]; then
-                 cp "$GENESIS_CONTRACT_DIR/output/genesis_config_modified.json" "$GENESIS_CONFIG_OUT/genesis_config.json"
-             fi
-             if [ -f "$GENESIS_CONTRACT_DIR/account_alloc.json" ]; then
-                 cp "$GENESIS_CONTRACT_DIR/account_alloc.json" "$GENESIS_CONFIG_OUT/account_alloc.json"
-             fi
-             
-             log_info "Genesis generated at $OUTPUT_DIR/genesis.json"
+       # Prepare genesis template (inject faucet if present)
+    local genesis_template="$GENESIS_CONTRACT_DIR/genesis-tool/config/genesis_template.json"
+    local faucet_alloc="$GEN_CONFIG_DIR/faucet_alloc.json"
+    local final_template="$GEN_CONFIG_DIR/genesis_template_merged.json"
+    
+    if [ -f "$faucet_alloc" ]; then
+        log_info "Injecting faucet allocation from cluster.toml..."
+        # Use jq to merge faucet alloc into the template's alloc
+        jq -s '.[0] * {alloc: (.[0].alloc + .[1])}' "$genesis_template" "$faucet_alloc" > "$final_template"
+        genesis_template="$final_template"
+    fi
+
+    # Generate Genesis using the (possibly modified) template
+    log_info "Generating genesis block..."
+    cd "$GENESIS_CONTRACT_DIR"
+    
+    # Run the generation script with the custom template
+    CONFIG_FILE="$ABS_VAL_GENESIS_PATH" \
+    OUTPUT_DIR="$GENESIS_CONTRACT_DIR/output" \
+    ./scripts/generate_genesis.sh \
+        --config "$ABS_VAL_GENESIS_PATH" \
+        --template "$genesis_template"
+
+    log_info "Deploying Genesis..."
+    
+    # Copy artifacts back
+    if [ -f "$GENESIS_CONTRACT_DIR/genesis.json" ]; then
+        cp "$GENESIS_CONTRACT_DIR/genesis.json" "$OUTPUT_DIR/genesis.json"
+        
+        # Copy intermediate files for verification
+        if [ -f "$GENESIS_CONTRACT_DIR/output/genesis_config_modified.json" ]; then
+            cp "$GENESIS_CONTRACT_DIR/output/genesis_config_modified.json" "$GEN_CONFIG_DIR/debug_genesis_config.json"
+        fi
+        if [ -f "$GENESIS_CONTRACT_DIR/account_alloc.json" ]; then
+            cp "$GENESIS_CONTRACT_DIR/account_alloc.json" "$GEN_CONFIG_DIR/debug_account_alloc.json"
+        fi
+        
+        log_info "Genesis generated at $OUTPUT_DIR/genesis.json"
 
 
          else
@@ -189,7 +207,12 @@ main() {
         --input-file="$val_genesis_path" \
         --output-file="$OUTPUT_DIR/waypoint.txt"
         
-    log_info "Init complete! Artifacts in $OUTPUT_DIR"
+    echo ""
+    log_info "Init complete!"
+    log_info "Main artifacts:"
+    log_info "  - $OUTPUT_DIR/genesis.json"
+    log_info "  - $OUTPUT_DIR/waypoint.txt"
+    log_info "Config artifacts in: $GEN_CONFIG_DIR"
     log_info "Run 'make deploy' next."
 }
 

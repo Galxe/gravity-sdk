@@ -16,6 +16,8 @@ from .node import Node, NodeState
 LOG = logging.getLogger(__name__)
 
 
+from eth_account import Account
+
 class Cluster:
     """
     Unified entry point for interacting with a Gravity Cluster.
@@ -39,6 +41,69 @@ class Cluster:
         # Cluster control scripts
         self.start_script = self.cluster_root / "start.sh"
         self.stop_script = self.cluster_root / "stop.sh"
+
+    @property
+    def faucet(self) -> Dict[str, str]:
+        """Returns primary (first) faucet configuration."""
+        f = self.faucets
+        return f[0] if f else {}
+
+    @property
+    def faucets(self) -> List[Dict[str, str]]:
+        """
+        Returns all faucet configurations.
+        Enrich with private keys from 'genesis.secrets.keys' by matching addresses.
+        """
+        genesis = self.config.get("genesis", {})
+        faucet_config = genesis.get("faucet", [])
+        
+        # Normalize to list
+        if isinstance(faucet_config, dict):
+            faucets = [faucet_config]
+        elif isinstance(faucet_config, list):
+            faucets = faucet_config
+        else:
+            faucets = []
+            
+        # If empty, return empty
+        if not faucets:
+            return []
+
+        # Gather potential private keys
+        # 1. From genesis.secrets.keys
+        # 2. From explicit private_key in faucet items (if any legacy ones exist)
+        candidate_keys = set()
+        
+        secrets = genesis.get("secrets", {})
+        if secrets and "keys" in secrets:
+            candidate_keys.update(secrets["keys"])
+
+        # Mapping: valid_address_lower -> private_key
+        key_map = {}
+        for k in candidate_keys:
+            try:
+                # Assuming hex private key
+                if not k.startswith("0x"):
+                    k = "0x" + k
+                account = Account.from_key(k)
+                key_map[account.address.lower()] = k
+            except Exception as e:
+                LOG.warning(f"Failed to derive address from key {k[:6]}...: {e}")
+
+        # Enrich faucets
+        enriched = []
+        for f in faucets:
+            item = f.copy()
+            addr = item.get("address")
+            if addr:
+                # If private_key not present, try to find it
+                if "private_key" not in item:
+                    found_key = key_map.get(addr.lower())
+                    if found_key:
+                        item["private_key"] = found_key
+            enriched.append(item)
+            
+        return enriched
 
     def _discover_nodes(self) -> Dict[str, Node]:
         nodes = {}
