@@ -151,9 +151,10 @@ impl JoinCommand {
             let block = provider.get_block_by_number(current_block.into()).await?;
             let current_timestamp =
                 block.ok_or(anyhow::anyhow!("Failed to get current block"))?.header.timestamp;
+            println!("   Current timestamp: {}", current_timestamp);
+            println!("   Lockup duration: {}", self.lockup_duration);
             // Convert to microseconds and add lockup duration
             let locked_until = (current_timestamp + self.lockup_duration) * 1_000_000;
-            println!("   Lockup until: {} (timestamp in microseconds)", locked_until);
 
             let call = Staking::createPoolCall {
                 owner: wallet_address,
