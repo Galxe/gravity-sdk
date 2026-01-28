@@ -65,8 +65,7 @@ class Node:
         Fetch the current block number from the node.
         Returns block number or raises Exception.
         """
-        async with self.client:
-            return await self.client.get_block_number()
+        return self.w3.eth.block_number
 
     async def get_state(self) -> Tuple[NodeState, int]:
         """

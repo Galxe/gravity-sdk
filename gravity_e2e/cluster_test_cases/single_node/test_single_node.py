@@ -20,7 +20,7 @@ async def test_single_node_connectivity(cluster: Cluster):
     assert node, "node1 not found in cluster config"
     
     # 2. Check block progress
-    current_height = await node.get_block_number()
+    current_height = node.get_block_number()
     LOG.info(f"Connected to {node.id}! Current block: {current_height}")
     
     assert isinstance(current_height, int)

@@ -18,7 +18,7 @@ async def test_four_node_connectivity(cluster: Cluster):
     # 2. Verify each node individually
     for node_id, node in cluster.nodes.items():
         try:
-            height = await node.get_block_number()
+            height = node.get_block_number()
             LOG.info(f"{node_id} connected at port {node.rpc_port}! Height: {height}")
             assert height >= 0
         except Exception as e:
