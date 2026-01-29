@@ -8,6 +8,12 @@ import logging
 import argparse
 import shutil
 from pathlib import Path
+try:
+    import tomli
+except ImportError:
+    # Fallback to toml if tomli is not available, or just fail if requirements not met
+    # Assuming tomli is installed via requirements.txt
+    import tomli
 
 # Configure logging
 logging.basicConfig(
@@ -30,14 +36,53 @@ def run_command(command, cwd=None, env=None, check=True):
             cwd=cwd,
             env=env,
             check=check,
-            capture_output=False 
+            capture_output=True,  # Capture to show on error
+            text=True
         )
+        # Print stdout if any
+        if result.stdout:
+            for line in result.stdout.strip().split('\n'):
+                if line:
+                    print(line)
         return result.returncode == 0
     except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed: {e}")
+        logger.error(f"Command failed with exit code {e.returncode}")
+        if e.stdout:
+            logger.info("--- STDOUT ---")
+            for line in e.stdout.strip().split('\n'):
+                logger.info(line)
+        if e.stderr:
+            logger.error("--- STDERR ---")
+            for line in e.stderr.strip().split('\n'):
+                logger.error(line)
         if check:
             raise
         return False
+    except Exception as e:
+        logger.error(f"Unexpected error running command: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise
+
+def init_faucet_if_needed(test_dir: Path, cluster_config_path: Path, env: dict):
+    """
+    Check if cluster.toml requests faucet init, and run faucet.sh if so.
+    """
+    # Simply call the shell script. It handles the parsing and logic itself.
+    # But we want to avoid calling it if not needed?
+    # Actually, the shell script checks for num_accounts > 0 and exits cleanly if not match.
+    # So we can just call it. But to avoid process overhead, we can check basic condition here if needed.
+    # However, for consistency and simplicity, let's just calling it.
+    
+    faucet_script = CLUSTER_SCRIPTS_DIR / "faucet.sh"
+    if not faucet_script.exists():
+         logger.warning("cluster/faucet.sh not found.")
+         return
+
+    logger.info("Checking/Running faucet init...")
+    # Passing the config file is key
+    run_command(["bash", str(faucet_script), str(cluster_config_path)], cwd=CLUSTER_SCRIPTS_DIR, env=env, check=True)
+
 
 
 def cleanup_cluster():
@@ -79,12 +124,12 @@ def run_test_suite(test_dir: Path, no_cleanup: bool = False, pytest_args: list =
     if should_run_init:
         logger.info(f"Initializing cluster (Generating artifacts in {suite_artifacts_dir})...")
         init_script = CLUSTER_SCRIPTS_DIR / "init.sh"
-        run_command([str(init_script), str(cluster_config)], cwd=CLUSTER_SCRIPTS_DIR, env=env)
+        run_command(["bash", str(init_script), str(cluster_config)], cwd=CLUSTER_SCRIPTS_DIR, env=env)
     
     # 2. Deploy Cluster
     logger.info("Deploying cluster...")
     deploy_script = CLUSTER_SCRIPTS_DIR / "deploy.sh"
-    run_command([str(deploy_script), str(cluster_config)], cwd=CLUSTER_SCRIPTS_DIR, env=env)
+    run_command(["bash", str(deploy_script), str(cluster_config)], cwd=CLUSTER_SCRIPTS_DIR, env=env)
     
     # 3. Start Nodes
     start_script = CLUSTER_SCRIPTS_DIR / "start.sh"
@@ -92,13 +137,16 @@ def run_test_suite(test_dir: Path, no_cleanup: bool = False, pytest_args: list =
          logger.info("Starting cluster nodes...")
          # start.sh doesn't mostly need artifacts dir (it uses config from deploy), 
          # but passing env doesn't hurt.
-         run_command([str(start_script), "--config", str(cluster_config)], cwd=CLUSTER_SCRIPTS_DIR, env=env)
+         run_command(["bash", str(start_script), "--config", str(cluster_config)], cwd=CLUSTER_SCRIPTS_DIR, env=env)
          
          logger.info("Waiting 5s for nodes to warmup...")
          time.sleep(5)
     else:
         logger.error("cluster/start.sh missing, cannot start nodes!")
         raise RuntimeError("Missing start.sh")
+
+    # 3.5 Faucet Initialization
+    init_faucet_if_needed(test_dir, cluster_config, env)
 
     # 4. Run Pytests
     logger.info(f"Running pytst in {test_dir}...")
@@ -129,7 +177,7 @@ def run_test_suite(test_dir: Path, no_cleanup: bool = False, pytest_args: list =
         else:
             stop_script = CLUSTER_SCRIPTS_DIR / "stop.sh"
             if stop_script.exists():
-                 run_command([str(stop_script), "--config", str(cluster_config)], cwd=CLUSTER_SCRIPTS_DIR, env=env, check=False)
+                 run_command(["bash", str(stop_script), "--config", str(cluster_config)], cwd=CLUSTER_SCRIPTS_DIR, env=env, check=False)
             cleanup_cluster()
 
 def main():
