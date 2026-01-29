@@ -7,6 +7,9 @@ import asyncio
 import logging
 import random
 import signal
+import time
+
+import pytest
 from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import Set
@@ -19,14 +22,26 @@ from gravity_e2e.core.client.gravity_http_client import GravityHttpClient
 
 LOG = logging.getLogger(__name__)
 
+# Fuzzy test duration in seconds.
+# Default: 1800s (30 minutes).
+# Set to 0 to run indefinitely until signal is received.
+FUZZY_TEST_DURATION = 1800
+
 
 class EpochSwitchTestContext:
     """
     Context for epoch switch test, using the declarative Cluster API.
+
+    Args:
+        cluster: The Cluster instance to test against.
+        duration: Test duration in seconds. Default is 1800s (30 minutes).
+                  Set to 0 to run indefinitely until signal is received.
     """
 
-    def __init__(self, cluster: Cluster):
+    def __init__(self, cluster: Cluster, duration: int = 1800):
         self.cluster = cluster
+        self.duration = duration
+        self.start_time = time.monotonic()
 
         self.genesis_node_names = []
         self.candidate_node_names = []
@@ -40,13 +55,34 @@ class EpochSwitchTestContext:
         self.rpc_url = self.cluster.nodes[first_genesis].url
         self.web3 = Web3(Web3.HTTPProvider(self.rpc_url))
 
-        self.should_stop = False
+        self._signal_received = False
         signal.signal(signal.SIGTERM, self.signal_handler)
         signal.signal(signal.SIGINT, self.signal_handler)
 
     def signal_handler(self, signum, frame):
-        self.should_stop = True
+        self._signal_received = True
         LOG.info(f"Received signal {signal.Signals(signum).name}, stopping...")
+
+    @property
+    def elapsed_time(self) -> float:
+        """Get elapsed time in seconds since test started."""
+        return time.monotonic() - self.start_time
+
+    @property
+    def should_stop(self) -> bool:
+        """
+        Check if the test should stop.
+
+        Returns True if:
+        - A signal was received (SIGTERM or SIGINT)
+        - Duration > 0 and elapsed time exceeds duration
+        """
+        if self._signal_received:
+            return True
+        if self.duration > 0 and self.elapsed_time >= self.duration:
+            LOG.info(f"Test duration ({self.duration}s) reached, stopping...")
+            return True
+        return False
 
     async def validator_join(self, node_name: str):
         """Join a node to the validator set using Cluster API."""
@@ -257,7 +293,7 @@ class EpochSwitchTestContext:
             raise RuntimeError(f"Failed to check node block height: {e}")
 
 
-@register_test("epoch_switch", suite="epoch_switch", self_managed=True)
+@pytest.mark.asyncio
 async def test_epoch_switch(cluster: Cluster):
     """
     Test epoch switching with multiple nodes using declarative Cluster API.
@@ -270,9 +306,15 @@ async def test_epoch_switch(cluster: Cluster):
     """
     LOG.info("=" * 70)
     LOG.info("Test: Epoch Switch Test (Declarative API)")
+    if FUZZY_TEST_DURATION > 0:
+        LOG.info(
+            f"Test duration: {FUZZY_TEST_DURATION}s ({FUZZY_TEST_DURATION / 60:.1f} minutes)"
+        )
+    else:
+        LOG.info("Test duration: indefinite (until signal received)")
     LOG.info("=" * 70)
 
-    test_context = EpochSwitchTestContext(cluster)
+    test_context = EpochSwitchTestContext(cluster, duration=FUZZY_TEST_DURATION)
     try:
         # Step 1: Ensure all nodes are running using declarative API
         LOG.info("\n[Step 1] Ensuring all nodes are running (set_full_live)...")

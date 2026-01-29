@@ -6,7 +6,7 @@ including cluster management and node connections.
 
 Usage:
     # In test files, fixtures are automatically injected:
-    
+
     @pytest.mark.asyncio
     async def test_something(cluster: Cluster):
         node = cluster.get_node("node1")
@@ -44,25 +44,22 @@ def pytest_addoption(parser):
         "--cluster-config",
         action="store",
         default=None,
-        help="Path to cluster.toml configuration file"
+        help="Path to cluster.toml configuration file",
     )
     parser.addoption(
         "--output-dir",
         action="store",
         default=DEFAULT_OUTPUT_DIR,
-        help="Output directory for test results"
+        help="Output directory for test results",
     )
     parser.addoption(
         "--node-id",
         action="store",
         default=None,
-        help="Specific node ID to test against"
+        help="Specific node ID to test against",
     )
     parser.addoption(
-        "--cluster",
-        action="store",
-        default=None,
-        help="Cluster name to test"
+        "--cluster", action="store", default=None, help="Cluster name to test"
     )
 
 
@@ -72,17 +69,17 @@ def cluster_config_path(request) -> Path:
     val = request.config.getoption("--cluster-config")
     if val:
         return Path(val).resolve()
-    
+
     # Check env var set by runner
     env_val = os.environ.get("GRAVITY_CLUSTER_CONFIG")
     if env_val:
         return Path(env_val).resolve()
-    
+
     # Try default locations
     default_loc = Path(__file__).parent.parent.parent / "cluster" / "cluster.toml"
     if default_loc.exists():
         return default_loc
-        
+
     return Path("cluster.toml").resolve()
 
 
@@ -110,36 +107,30 @@ def target_cluster(request) -> Optional[str]:
 def cluster(cluster_config_path: Path) -> Cluster:
     """
     Create Cluster for the test module.
-    
+
     Uses module scope so all tests in a file share the same cluster instance.
     The cluster lifecycle (start/stop) is managed externally by runner.py.
     """
     LOG.info(f"Loading cluster from {cluster_config_path}")
     c = Cluster(cluster_config_path)
-    
+
     yield c
-    
+
     # No cleanup needed - Web3 HTTPProvider doesn't hold connections
 
 
 # Markers
 def pytest_configure(config):
     """Configure custom pytest markers."""
-    config.addinivalue_line(
-        "markers", "slow: mark test as slow running"
-    )
+    config.addinivalue_line("markers", "slow: mark test as slow running")
     config.addinivalue_line(
         "markers", "self_managed: mark test as managing its own nodes"
     )
     config.addinivalue_line(
         "markers", "cross_chain: mark test as requiring cross-chain setup"
     )
-    config.addinivalue_line(
-        "markers", "randomness: mark test as randomness-related"
-    )
-    config.addinivalue_line(
-        "markers", "epoch: mark test as epoch consistency test"
-    )
+    config.addinivalue_line("markers", "randomness: mark test as randomness-related")
+    config.addinivalue_line("markers", "epoch: mark test as epoch consistency test")
     config.addinivalue_line(
         "markers", "validator: mark test as validator management test"
     )
@@ -149,4 +140,4 @@ def pytest_collection_modifyitems(session, config, items):
     """
     Filter out test_case decorator from being collected as a test.
     """
-    items[:] = [item for item in items if item.name != 'test_case']
+    items[:] = [item for item in items if item.name != "test_case"]
