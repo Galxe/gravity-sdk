@@ -12,9 +12,6 @@ env:
   CARGO_INCREMENTAL: "0"
   RUSTFLAGS: "--cfg tokio_unstable"
 
-# NOTE: Using rust:1.88.0-bookworm with runtime dependency installation
-# After merging to main, switch to ghcr.io/galxe/gravity-sdk/rust-ci:latest (custom image with pre-installed deps)
-
 # Cancel redundant builds on PRs
 concurrency:
   group: ${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.ref) || github.sha }}
@@ -22,9 +19,8 @@ concurrency:
 
 jobs:
   # ==========================================================================
-  # Lightweight jobs - run directly on runner (fast, no container overhead)
+  # Format check - lightweight, runs directly on runner
   # ==========================================================================
-
   fmt:
     name: Rust Format
     runs-on: ubuntu-latest
@@ -36,218 +32,153 @@ jobs:
         run: cargo +nightly fmt --all -- --check
 
   # ==========================================================================
-  # Heavyweight jobs - run in container (clean environment, more disk space)
+  # Clippy - uses pre-built image with cached dependencies
   # ==========================================================================
-
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
     container:
-      image: rust:1.88.0-bookworm
+      image: ghcr.io/galxe/gravity-sdk/rust-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install build dependencies
-        run: |
-          apt-get update && apt-get install -y --no-install-recommends \
-            clang llvm libudev-dev libssl-dev pkg-config \
-          && rm -rf /var/lib/apt/lists/*
-      - name: Run cargo cache
+      - name: Restore cargo cache
         uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "clippy-v1"
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
+  # ==========================================================================
+  # Build - uses pre-built image
+  # ==========================================================================
   build:
     name: Build
     runs-on: ubuntu-latest
     container:
-      image: rust:1.88.0-bookworm
+      image: ghcr.io/galxe/gravity-sdk/rust-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install build dependencies
-        run: |
-          apt-get update && apt-get install -y --no-install-recommends \
-            clang llvm libudev-dev libssl-dev pkg-config \
-          && rm -rf /var/lib/apt/lists/*
-      - name: Run cargo cache
+      - name: Restore cargo cache
         uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "build-v1"
       - name: Build gravity_node
         run: cargo build --bin gravity_node --profile quick-release
       - name: Build gravity_cli
         run: cargo build --bin gravity_cli --profile quick-release
 
   # ==========================================================================
-  # Unit Tests - Split into parallel jobs, run in containers
+  # Unit Tests - MERGED into single job to avoid redundant compilation
+  # Compile once, run all tests sequentially
   # ==========================================================================
-
-  test-core:
-    name: Test Core Crates
+  test:
+    name: Unit Tests
     runs-on: ubuntu-latest
     container:
-      image: rust:1.88.0-bookworm
+      image: ghcr.io/galxe/gravity-sdk/rust-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     if: |
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
       contains(github.event.pull_request.labels.*.name, 'CICD:run-tests')
     steps:
       - uses: actions/checkout@v4
-      - name: Install build dependencies
-        run: |
-          apt-get update && apt-get install -y --no-install-recommends \
-            clang llvm libudev-dev libssl-dev pkg-config \
-          && rm -rf /var/lib/apt/lists/*
-      - name: Run cargo cache
+
+      - name: Restore cargo cache
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: "test-core"
-      - name: Run core tests
+          prefix-key: "test-v1"
+          # Cache the entire target directory for test builds
+          cache-targets: "true"
+
+      - name: Show disk space
+        run: df -h
+
+      # ========== Build all tests first (compile once) ==========
+      - name: Build all tests
+        run: cargo build --tests --workspace --exclude smoke-test
+
+      - name: Show disk space after build
+        run: df -h
+
+      # ========== Run tests by group ==========
+      - name: Run core crate tests
         run: |
+          echo "::group::gravity-primitives"
           cargo test -p gravity-primitives --no-fail-fast
+          echo "::endgroup::"
+          echo "::group::gravity-storage"
           cargo test -p gravity-storage --no-fail-fast
+          echo "::endgroup::"
+          echo "::group::api"
           cargo test -p api --no-fail-fast
+          echo "::endgroup::"
+          echo "::group::api-types"
           cargo test -p api-types --no-fail-fast
+          echo "::endgroup::"
 
-  test-consensus:
-    name: Test Consensus
-    runs-on: ubuntu-latest
-    container:
-      image: rust:1.88.0-bookworm
-    if: |
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.pull_request.labels.*.name, 'CICD:run-tests')
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install build dependencies
-        run: |
-          apt-get update && apt-get install -y --no-install-recommends \
-            clang llvm libudev-dev libssl-dev pkg-config \
-          && rm -rf /var/lib/apt/lists/*
-      - name: Run cargo cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: "test-consensus"
       - name: Run consensus tests
         run: |
+          echo "::group::block-buffer-manager"
           cargo test -p block-buffer-manager --no-fail-fast
+          echo "::endgroup::"
+          echo "::group::txn_metrics"
           cargo test -p txn_metrics --no-fail-fast
+          echo "::endgroup::"
 
-  test-aptos:
-    name: Test Aptos Crates
-    runs-on: ubuntu-latest
-    container:
-      image: rust:1.88.0-bookworm
-    if: |
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.pull_request.labels.*.name, 'CICD:run-tests')
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install build dependencies
+      - name: Run gaptos tests
         run: |
-          apt-get update && apt-get install -y --no-install-recommends \
-            clang llvm libudev-dev libssl-dev pkg-config \
-          && rm -rf /var/lib/apt/lists/*
-      - name: Run cargo cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: "test-aptos"
-      - name: Show disk space
-        run: df -h
+          echo "::group::gaptos"
+          cargo test -p gaptos --no-fail-fast
+          echo "::endgroup::"
+
       - name: Run aptos-consensus tests (validated subset - 45 tests)
         run: |
-          # Run consensus-types tests (11 tests)
+          echo "::group::consensus-types (11 tests)"
           cargo test --manifest-path aptos-core/consensus/consensus-types/Cargo.toml --no-fail-fast
-          # Run safety-rules tests (10 tests, skip hanging thread test)
+          echo "::endgroup::"
+          echo "::group::safety-rules (10 tests)"
           cargo test --manifest-path aptos-core/consensus/safety-rules/Cargo.toml --no-fail-fast -- --skip tests::thread --test-threads=1
-          # Run mempool tests (1 test)
+          echo "::endgroup::"
+          echo "::group::mempool (1 test)"
           cargo test --manifest-path aptos-core/mempool/Cargo.toml --no-fail-fast
-          # Run DAG tests (19 tests, skip E2E which requires more infrastructure)
+          echo "::endgroup::"
+          echo "::group::DAG tests (19 tests)"
           cargo test --manifest-path aptos-core/consensus/Cargo.toml "dag::tests::" --no-fail-fast -- --skip integration_tests::test_dag_e2e --test-threads=1
-          # Run network tests (4 tests)
+          echo "::endgroup::"
+          echo "::group::network tests (4 tests)"
           cargo test --manifest-path aptos-core/consensus/Cargo.toml "network_tests::" --no-fail-fast
-      - name: Clean intermediate artifacts
-        run: cargo clean --manifest-path aptos-core/consensus/Cargo.toml
-      - name: Run aptos-executor tests (serial)
-        run: cargo test --manifest-path dependencies/aptos-executor/Cargo.toml --no-fail-fast -- --test-threads=1
+          echo "::endgroup::"
 
-  test-dependencies:
-    name: Test Dependencies
-    runs-on: ubuntu-latest
-    container:
-      image: rust:1.88.0-bookworm
-    if: |
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.pull_request.labels.*.name, 'CICD:run-tests')
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install build dependencies
+      - name: Run aptos-executor tests
         run: |
-          apt-get update && apt-get install -y --no-install-recommends \
-            clang llvm libudev-dev libssl-dev pkg-config \
-          && rm -rf /var/lib/apt/lists/*
-      - name: Run cargo cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: "test-deps"
-      - name: Run dependency tests
-        run: cargo test -p gaptos --no-fail-fast
+          echo "::group::aptos-executor"
+          cargo test --manifest-path dependencies/aptos-executor/Cargo.toml --no-fail-fast -- --test-threads=1
+          echo "::endgroup::"
 
-  test-binaries:
-    name: Test Binaries
-    runs-on: ubuntu-latest
-    container:
-      image: rust:1.88.0-bookworm
-    needs: [test-core, test-consensus]
-    if: |
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.pull_request.labels.*.name, 'CICD:run-tests')
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install build dependencies
+      - name: Run binary tests
         run: |
-          apt-get update && apt-get install -y --no-install-recommends \
-            clang llvm libudev-dev libssl-dev pkg-config \
-          && rm -rf /var/lib/apt/lists/*
-      - name: Run cargo cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: "test-binaries"
-      - name: Show disk space
+          echo "::group::gravity_node"
+          cargo test -p gravity_node --no-fail-fast -- --test-threads=1
+          echo "::endgroup::"
+          echo "::group::gravity_cli"
+          cargo test -p gravity_cli --no-fail-fast
+          echo "::endgroup::"
+
+      - name: Show final disk space
         run: df -h
-      - name: Run gravity_node tests (serial)
-        run: cargo test -p gravity_node --no-fail-fast -- --test-threads=1
-      - name: Clean to free space
-        run: |
-          cargo clean -p gravity_node
-          df -h
-      - name: Run gravity_cli tests
-        run: cargo test -p gravity_cli --no-fail-fast
-
-  # Aggregate test results
-  test-results:
-    name: All Tests
-    runs-on: ubuntu-latest
-    needs: [test-core, test-consensus, test-aptos, test-dependencies, test-binaries]
-    if: always()
-    steps:
-      - name: Check test results
-        run: |
-          if [ "${{ needs.test-core.result }}" != "success" ] || \
-             [ "${{ needs.test-consensus.result }}" != "success" ] || \
-             [ "${{ needs.test-aptos.result }}" != "success" ] || \
-             [ "${{ needs.test-dependencies.result }}" != "success" ] || \
-             [ "${{ needs.test-binaries.result }}" != "success" ]; then
-            echo "One or more test jobs failed"
-            exit 1
-          fi
-          echo "All tests passed!"
 
   # ==========================================================================
   # Dependency checks
   # ==========================================================================
-
   dependency-check:
     name: Check gravity-reth Dependency
     runs-on: ubuntu-latest

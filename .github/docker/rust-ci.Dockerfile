@@ -1,56 +1,92 @@
-# Gravity SDK CI Runner - Minimal Rust Build Environment
-# This image contains only what's needed for building and testing Gravity SDK
+# Gravity SDK CI Runner - Pre-compiled Rust Build Environment
+# This image pre-compiles dependencies to speed up CI builds significantly
 #
-# Image size: ~1.2GB (vs 30GB+ on default GitHub runner)
-# Includes: Ubuntu 22.04 + build tools + clang/llvm + Rust 1.88.0
+# Build strategy:
+# 1. Install system dependencies
+# 2. Copy Cargo.toml files and create dummy sources
+# 3. Pre-compile all dependencies (cached in image)
+# 4. In CI, real source replaces dummies, only project code compiles
 
-FROM ubuntu:22.04
+FROM rust:1.88.0-bookworm
 
 LABEL maintainer="Gravity Team"
-LABEL description="Minimal CI environment for Gravity SDK"
+LABEL description="Pre-compiled CI environment for Gravity SDK"
 
-# Prevent interactive prompts
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install essential build dependencies
-# - build-essential, pkg-config: basic build tools
-# - clang, llvm: required for RocksDB and native dependencies
-# - libudev-dev, libssl-dev: required by Gravity SDK crates
-# - git: for cargo git dependencies
+# Install system build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    pkg-config \
     clang \
     llvm \
     libudev-dev \
     libssl-dev \
+    pkg-config \
     git \
-    curl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Rust (version must match rust-toolchain.toml)
-ENV RUSTUP_HOME=/usr/local/rustup \
-    CARGO_HOME=/usr/local/cargo \
-    PATH=/usr/local/cargo/bin:$PATH \
-    RUST_VERSION=1.88.0
-
-# Install Rust toolchain with clippy and rustfmt
-# Also install nightly for rustfmt (used by cargo +nightly fmt)
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
-    --default-toolchain ${RUST_VERSION} \
-    --profile default \
-    -c clippy \
-    -c rustfmt \
-    && rustup toolchain install nightly --component rustfmt \
-    && chmod -R a+w $RUSTUP_HOME $CARGO_HOME
-
-# Set RUSTFLAGS for tokio_unstable (required by gravity_node)
+# Set environment variables
+ENV CARGO_TERM_COLOR=always
+ENV CARGO_INCREMENTAL=0
 ENV RUSTFLAGS="--cfg tokio_unstable"
 
-# Set working directory
-WORKDIR /workspace
+# Install rustfmt nightly for formatting checks
+RUN rustup toolchain install nightly --component rustfmt
+
+# Create workspace directory for pre-compilation
+WORKDIR /prebuild
+
+# Copy workspace Cargo files for dependency pre-compilation
+COPY Cargo.toml Cargo.lock ./
+COPY aptos-core/consensus/Cargo.toml aptos-core/consensus/
+COPY aptos-core/consensus/consensus-types/Cargo.toml aptos-core/consensus/consensus-types/
+COPY aptos-core/consensus/safety-rules/Cargo.toml aptos-core/consensus/safety-rules/
+COPY aptos-core/mempool/Cargo.toml aptos-core/mempool/
+COPY bin/bench/Cargo.toml bin/bench/
+COPY bin/gravity_cli/Cargo.toml bin/gravity_cli/
+COPY bin/gravity_node/Cargo.toml bin/gravity_node/
+COPY crates/api/Cargo.toml crates/api/
+COPY crates/block-buffer-manager/Cargo.toml crates/block-buffer-manager/
+COPY crates/build-info/Cargo.toml crates/build-info/
+COPY crates/gravity-sdk/Cargo.toml crates/gravity-sdk/
+COPY crates/txn_metrics/Cargo.toml crates/txn_metrics/
+COPY dependencies/aptos-executor/Cargo.toml dependencies/aptos-executor/
+COPY dependencies/aptos-executor-types/Cargo.toml dependencies/aptos-executor-types/
+COPY external/gravity_chain_core_contracts/genesis-tool/Cargo.toml external/gravity_chain_core_contracts/genesis-tool/
+
+# Create dummy source files to allow cargo to resolve and compile dependencies
+RUN mkdir -p aptos-core/consensus/src && echo "pub fn _dummy() {}" > aptos-core/consensus/src/lib.rs && \
+    mkdir -p aptos-core/consensus/consensus-types/src && echo "pub fn _dummy() {}" > aptos-core/consensus/consensus-types/src/lib.rs && \
+    mkdir -p aptos-core/consensus/safety-rules/src && echo "pub fn _dummy() {}" > aptos-core/consensus/safety-rules/src/lib.rs && \
+    mkdir -p aptos-core/mempool/src && echo "pub fn _dummy() {}" > aptos-core/mempool/src/lib.rs && \
+    mkdir -p bin/bench/src && echo "fn main() {}" > bin/bench/src/main.rs && \
+    mkdir -p bin/gravity_cli/src && echo "fn main() {}" > bin/gravity_cli/src/main.rs && \
+    mkdir -p bin/gravity_node/src && echo "fn main() {}" > bin/gravity_node/src/main.rs && \
+    mkdir -p crates/api/src && echo "pub fn _dummy() {}" > crates/api/src/lib.rs && \
+    mkdir -p crates/block-buffer-manager/src && echo "pub fn _dummy() {}" > crates/block-buffer-manager/src/lib.rs && \
+    mkdir -p crates/build-info/src && echo "pub fn _dummy() {}" > crates/build-info/src/lib.rs && \
+    mkdir -p crates/gravity-sdk/src && echo "pub fn _dummy() {}" > crates/gravity-sdk/src/lib.rs && \
+    mkdir -p crates/txn_metrics/src && echo "pub fn _dummy() {}" > crates/txn_metrics/src/lib.rs && \
+    mkdir -p dependencies/aptos-executor/src && echo "pub fn _dummy() {}" > dependencies/aptos-executor/src/lib.rs && \
+    mkdir -p dependencies/aptos-executor-types/src && echo "pub fn _dummy() {}" > dependencies/aptos-executor-types/src/lib.rs && \
+    mkdir -p external/gravity_chain_core_contracts/genesis-tool/src && echo "fn main() {}" > external/gravity_chain_core_contracts/genesis-tool/src/main.rs
+
+# Fetch all dependencies
+RUN cargo fetch
+
+# Pre-compile dependencies in debug mode (for tests)
+# The build will "fail" on our dummy files but dependencies get compiled and cached
+RUN cargo build --tests 2>/dev/null || true
+
+# Move compiled dependencies to a known location
+# These will be copied to the actual workspace in CI
+RUN mkdir -p /cargo-cache && \
+    cp -r /usr/local/cargo/registry /cargo-cache/ && \
+    cp -r /usr/local/cargo/git /cargo-cache/ && \
+    cp -r target /cargo-cache/
+
+# Clean up prebuild directory
+RUN rm -rf /prebuild/*
+
+# Set working directory for CI
+WORKDIR /github/workspace
 
 # Default command
 CMD ["/bin/bash"]
