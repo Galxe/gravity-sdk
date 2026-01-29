@@ -19,7 +19,7 @@ use aptos_consensus_types::{
 };
 use gaptos::{
     aptos_crypto::{
-        hash::{CryptoHash, TransactionAccumulatorHasher},
+        hash::{CryptoHash, TransactionAccumulatorHasher, ACCUMULATOR_PLACEHOLDER_HASH},
         HashValue,
     },
     aptos_secure_storage::{InMemoryStorage, Storage},
@@ -73,7 +73,7 @@ pub fn make_proposal_with_qc_and_proof(
         )
         .unwrap(),
         None,
-        false,
+        true, // decoupled_execution must be true for gen_vote_data()
     )
 }
 
@@ -99,7 +99,8 @@ pub fn make_proposal_with_parent_and_overrides(
         _ => parent.block().epoch(),
     };
 
-    let executed_state_id = HashValue::random();
+    // Use ACCUMULATOR_PLACEHOLDER_HASH for ordering-only mode (decoupled_execution=true)
+    let executed_state_id = *ACCUMULATOR_PLACEHOLDER_HASH;
     let proposed_block = BlockInfo::new(
         block_epoch,
         parent.block().round(),

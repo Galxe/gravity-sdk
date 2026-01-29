@@ -159,7 +159,7 @@ async fn test_dag_state_sync() {
     let validators = validator_verifier.get_ordered_account_addresses();
     let epoch_state = Arc::new(EpochState {
         epoch: 1,
-        verifier: todo!(), //validator_verifier,
+        verifier: Arc::new(validator_verifier),
     });
     let storage = Arc::new(MockStorage::new());
 

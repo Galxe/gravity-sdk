@@ -139,7 +139,7 @@ fn setup(
 ) -> DagDriver {
     let epoch_state = Arc::new(EpochState {
         epoch: 1,
-        verifier: todo!(), //validator_verifier,
+        verifier: Arc::new(validator_verifier),
     });
 
     let mock_ledger_info = LedgerInfo::mock_genesis(None);

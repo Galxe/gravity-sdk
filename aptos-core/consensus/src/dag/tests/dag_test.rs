@@ -122,7 +122,7 @@ fn setup() -> (Vec<ValidatorSigner>, Arc<EpochState>, DagStore, Arc<MockStorage>
     let (signers, validator_verifier) = random_validator_verifier(4, None, false);
     let epoch_state = Arc::new(EpochState {
         epoch: 1,
-        verifier: todo!(), //validator_verifier,
+        verifier: Arc::new(validator_verifier),
     });
     let storage = Arc::new(MockStorage::new());
     let payload_manager = Arc::new(MockPayloadManager {});
