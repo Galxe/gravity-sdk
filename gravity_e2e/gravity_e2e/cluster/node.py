@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Tuple, Dict, Any, Optional
 from enum import Enum, auto
 from web3 import Web3
+from eth_account.signers.local import LocalAccount
 
 from .identity import AptosIdentity, parse_identity_from_yaml
 
@@ -61,6 +62,7 @@ class Node:
         p2p_port: int,
         vfn_port: int,
         stake_pool: Optional[str] = None,
+        evm_account: Optional[LocalAccount] = None,
     ):
         self.id = id
         self.rpc_port = rpc_port
@@ -75,6 +77,8 @@ class Node:
         self._cluster_config_path = cluster_config_path
         # StakePool contract address (discovered on-chain via validator_list)
         self.stake_pool: Optional[str] = stake_pool
+        # EVM account for staking operations (assigned from accounts.csv)
+        self.evm_account: Optional[LocalAccount] = evm_account
 
         # Paths to control scripts
         self.start_script = self._infra_path / "script" / "start.sh"

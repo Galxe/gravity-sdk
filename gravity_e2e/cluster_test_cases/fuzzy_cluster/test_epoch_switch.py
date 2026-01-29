@@ -9,12 +9,10 @@ import random
 import signal
 from contextlib import AsyncExitStack
 from pathlib import Path
-from typing import Dict, Set
+from typing import Set
 
 from web3 import Web3
-from eth_account import Account
 from gravity_e2e.tests.test_registry import register_test
-from gravity_e2e.utils.transaction_builder import TransactionBuilder
 from gravity_e2e.cluster.manager import Cluster
 from gravity_e2e.cluster.node import NodeRole
 from gravity_e2e.core.client.gravity_http_client import GravityHttpClient
@@ -42,7 +40,6 @@ class EpochSwitchTestContext:
         self.rpc_url = self.cluster.nodes[first_genesis].url
         self.web3 = Web3(Web3.HTTPProvider(self.rpc_url))
 
-        self.node_to_account: Dict[str, Dict] = dict()
         self.should_stop = False
         signal.signal(signal.SIGTERM, self.signal_handler)
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -51,43 +48,17 @@ class EpochSwitchTestContext:
         self.should_stop = True
         LOG.info(f"收到信号 {signal.Signals(signum).name}，准备停止...")
 
-    async def fund_nodes(self):
-        """Fund candidate nodes using faucet via web3 TransactionBuilder."""
-        faucet_cfg = self.cluster.faucet
-        assert faucet_cfg, "Faucet config not found"
-
-        sender = Account.from_key(faucet_cfg["private_key"])
-        tb = TransactionBuilder(self.web3, sender)
-        fund_amount = 10**24  # 1M ether in wei
-
-        for node_name in self.candidate_node_names:
-            receiver = Account.create()
-            LOG.info(f"Funding {node_name}: {receiver.address} with {fund_amount} wei")
-            result = await tb.send_ether(receiver.address, fund_amount)
-            assert result.success, f"Transfer to {node_name} failed: {result.error}"
-            self.node_to_account[node_name] = {
-                "address": receiver.address,
-                "private_key": receiver.key.hex(),
-            }
-            LOG.info(f"✅ Funded {node_name} at {receiver.address}")
-
     async def validator_join(self, node_name: str):
         """Join a node to the validator set using Cluster API."""
-        account = self.node_to_account[node_name]
         await self.cluster.validator_join(
             node_id=node_name,
-            private_key=account["private_key"],
             moniker=node_name.upper(),
         )
         LOG.info(f"✅ Validator {node_name} join command executed successfully")
 
     async def validator_leave(self, node_name: str):
         """Remove a node from the validator set using Cluster API."""
-        account = self.node_to_account[node_name]
-        await self.cluster.validator_leave(
-            node_id=node_name,
-            private_key=account["private_key"],
-        )
+        await self.cluster.validator_leave(node_id=node_name)
         LOG.info(f"✅ Validator {node_name} leave command executed successfully")
 
     async def validator_list(self):
@@ -110,10 +81,7 @@ class EpochSwitchTestContext:
         """
         模糊测试：持续随机地让节点加入和离开 validator set
         """
-        # validator set not include genesis validators
-        validator_set: Set[str] = set(self.genesis_node_names)
-        pending_joins: Set[str] = set()
-        pending_leaves: Set[str] = set()
+        validator_set, pending_joins, pending_leaves = await self.validator_list()
 
         # Get HTTP port from first node
         first_node = list(self.cluster.nodes.values())[0]
@@ -317,10 +285,12 @@ async def test_epoch_switch(cluster: Cluster):
             f"✅ All {len(live_nodes)} nodes are RUNNING: {[n.id for n in live_nodes]}"
         )
 
-        # Step 2: Create EVM accounts for candidate nodes
-        LOG.info("\n[Step 2] Funding EVM accounts for candidate nodes...")
-        await test_context.fund_nodes()
-        LOG.info("✅ All candidate nodes EVM accounts created successfully")
+        # Step 2: Log candidate nodes info
+        LOG.info("\n[Step 2] Candidate nodes for fuzzy testing:")
+        for node_name in test_context.candidate_node_names:
+            node = cluster.get_node(node_name)
+            LOG.info(f"  {node_name}: role={node.role.value}")
+        LOG.info(f"✅ {len(test_context.candidate_node_names)} candidate nodes ready")
 
         tasks = []
         # Step 3: Fuzzy validator candidate nodes join and leave
