@@ -59,8 +59,6 @@ This step prepares the runtime environment (default: `/tmp/gravity-cluster`).
 ### 3. Execution (`make start` / `make stop`)
 *   `make start`: Launches all nodes in the background. Logs are written to the node's data directory.
 *   `make stop`: Gracefully stops all nodes.
-*   `make start`: Launches all nodes in the background. Logs are written to the node's data directory.
-*   `make stop`: Gracefully stops all nodes.
 *   `make status`: Shows the PID, status, and current block number of each node.
 
 ### 4. Faucet Initialization (`make faucet`)
