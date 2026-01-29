@@ -18,7 +18,7 @@ import logging
 import sys
 import os
 from pathlib import Path
-from typing import AsyncGenerator, Optional
+from typing import Optional
 
 # Add the parent package to path for imports
 # This allows pytest to find the gravity_e2e package
@@ -27,7 +27,6 @@ if str(_current_dir) not in sys.path:
     sys.path.insert(0, str(_current_dir))
 
 import pytest
-import pytest_asyncio
 
 from gravity_e2e.cluster.manager import Cluster
 
@@ -107,11 +106,13 @@ def target_cluster(request) -> Optional[str]:
     return request.config.getoption("--cluster")
 
 
-@pytest_asyncio.fixture(scope="session")
-async def cluster(cluster_config_path: Path) -> AsyncGenerator[Cluster, None]:
+@pytest.fixture(scope="module")
+def cluster(cluster_config_path: Path) -> Cluster:
     """
-    Create and manage Cluster for the test session.
-    Yields a Cluster instance ready for use.
+    Create Cluster for the test module.
+    
+    Uses module scope so all tests in a file share the same cluster instance.
+    The cluster lifecycle (start/stop) is managed externally by runner.py.
     """
     LOG.info(f"Loading cluster from {cluster_config_path}")
     c = Cluster(cluster_config_path)

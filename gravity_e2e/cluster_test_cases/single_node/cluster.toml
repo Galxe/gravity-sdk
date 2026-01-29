@@ -19,14 +19,14 @@ ref = "main"
 id = "node1"
 role = "genesis"
 host = "127.0.0.1"
-p2p_port = 6180
-vfn_port = 6190
-rpc_port = 8545
-metrics_port = 9001
-inspection_port = 10000
-https_port = 1024
-authrpc_port = 8551
-reth_p2p_port = 12024
+p2p_port = 6182
+vfn_port = 6192
+rpc_port = 8547
+metrics_port = 9003
+inspection_port = 10002
+https_port = 1026
+authrpc_port = 8553
+reth_p2p_port = 12026
 
 # Genesis configuration (Copied from example)
 [genesis]
@@ -81,4 +81,4 @@ n = "2K7epoJWl_aBoYGpXmDBBiEnwQ0QdVRU1gsbGXNrEbrZEQdY5KjH5P5gZMq3d3KvT1j5KsD2tF_
 
 
 [faucet_init]
-num_accounts = 100
+num_accounts = 1000000

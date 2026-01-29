@@ -55,3 +55,26 @@ async def test_faucet_transfer(cluster: Cluster):
     new_balance = node.w3.eth.get_balance(receiver.address)
     assert new_balance == amount_wei
     LOG.info("Faucet transfer verified successfully!")
+
+
+@pytest.mark.asyncio
+async def test_bench_accounts(cluster: Cluster):
+    """Verify bench accounts are loaded and have balance."""
+    LOG.info("Testing bench accounts...")
+    
+    # Load a sample of accounts (limit for performance)
+    accounts = cluster.get_bench_accounts(limit=10)
+    assert len(accounts) > 0, "No bench accounts found - check GRAVITY_ARTIFACTS_DIR and accounts.csv"
+    LOG.info(f"Loaded {len(accounts)} bench accounts for testing")
+    
+    node = cluster.get_node("node1")
+    
+    # Sample a few accounts to verify they have balance
+    sample_size = min(10, len(accounts))
+    for i in range(sample_size):
+        account = accounts[i]
+        balance = node.w3.eth.get_balance(account.address)
+        LOG.info(f"  Account {i}: {account.address[:10]}... balance: {Web3.from_wei(balance, 'ether')} ETH")
+        assert balance > 0, f"Account {account.address} has zero balance"
+    
+    LOG.info(f"Verified {sample_size} bench accounts have non-zero balance")

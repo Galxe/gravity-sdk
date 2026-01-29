@@ -124,11 +124,11 @@ print(total)
     
     cat > "$bench_config_path" <<EOF
 contract_config_path = "$contracts_json"
+log_path = "console"
 num_tokens = 0
-target_tps = 1
+target_tps = $(( num_accounts < 10000 ? num_accounts : 10000 ))
 enable_swap_token = false
 address_pool_type = "random"
-log_path = "$log_path"
 
 [[nodes]]
 rpc_url = "$rpc_url"
@@ -136,17 +136,17 @@ chain_id = $chain_id
 
 [faucet]
 private_key = "$private_key"
-faucet_level = 3
-wait_duration_secs = 2
+faucet_level = 10
+wait_duration_secs = 1
 fauce_eth_balance = "$fauce_eth_balance"
 
 [accounts]
 num_accounts = $num_accounts
 
 [performance]
-num_senders = 10
-max_pool_size = 1000
-duration_secs = 60
+num_senders = 100
+max_pool_size = 10000
+duration_secs = 0
 EOF
 
     log_info "Generated bench config at $bench_config_path"
