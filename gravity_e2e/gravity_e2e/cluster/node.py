@@ -60,6 +60,7 @@ class Node:
         http_port: int,
         p2p_port: int,
         vfn_port: int,
+        stake_pool: Optional[str] = None,
     ):
         self.id = id
         self.rpc_port = rpc_port
@@ -72,6 +73,8 @@ class Node:
         self.vfn_port = vfn_port
         self._infra_path = infra_path
         self._cluster_config_path = cluster_config_path
+        # StakePool contract address (discovered on-chain via validator_list)
+        self.stake_pool: Optional[str] = stake_pool
 
         # Paths to control scripts
         self.start_script = self._infra_path / "script" / "start.sh"

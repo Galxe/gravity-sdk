@@ -17,12 +17,6 @@ from gravity_e2e.tests.test_registry import register_test
 from gravity_e2e.utils.transaction_builder import TransactionBuilder
 from gravity_e2e.cluster.manager import Cluster
 from gravity_e2e.cluster.node import NodeRole
-from gravity_e2e.utils.validator_utils import (
-    ValidatorJoinParams,
-    execute_validator_join,
-    execute_validator_leave,
-    execute_validator_list,
-)
 from gravity_e2e.core.client.gravity_http_client import GravityHttpClient
 
 LOG = logging.getLogger(__name__)
@@ -49,7 +43,6 @@ class EpochSwitchTestContext:
         self.web3 = Web3(Web3.HTTPProvider(self.rpc_url))
 
         self.node_to_account: Dict[str, Dict] = dict()
-        self.node_to_validator_join_params: Dict[str, ValidatorJoinParams] = dict()
         self.should_stop = False
         signal.signal(signal.SIGTERM, self.signal_handler)
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -79,87 +72,39 @@ class EpochSwitchTestContext:
             LOG.info(f"✅ Funded {node_name} at {receiver.address}")
 
     async def validator_join(self, node_name: str):
-        params = self.get_validator_join_params(node_name)
-        await execute_validator_join(
-            gravity_cli_path=self.cluster.gravity_cli_path,
-            rpc_url=self.rpc_url,
-            params=params,
-            start_new_session=True,
+        """Join a node to the validator set using Cluster API."""
+        account = self.node_to_account[node_name]
+        await self.cluster.validator_join(
+            node_id=node_name,
+            private_key=account["private_key"],
+            moniker=node_name.upper(),
         )
         LOG.info(f"✅ Validator {node_name} join command executed successfully")
 
     async def validator_leave(self, node_name: str):
-        params = self.get_validator_join_params(node_name)
-        await execute_validator_leave(
-            gravity_cli_path=self.cluster.gravity_cli_path,
-            rpc_url=self.rpc_url,
-            params=params,
-            start_new_session=True,
+        """Remove a node from the validator set using Cluster API."""
+        account = self.node_to_account[node_name]
+        await self.cluster.validator_leave(
+            node_id=node_name,
+            private_key=account["private_key"],
         )
         LOG.info(f"✅ Validator {node_name} leave command executed successfully")
 
     async def validator_list(self):
         """
-        Get validator list from gravity node
+        Get validator list from gravity node using Cluster API.
         Returns:
             active_node_names: set of node names in active validator set
             pending_inactive_node_names: set of node names in pending inactive validator set
             pending_active_node_names: set of node names in pending active validator set
         """
-        result = await execute_validator_list(
-            gravity_cli_path=self.cluster.gravity_cli_path,
-            rpc_url=self.rpc_url,
-            start_new_session=True,
-        )
+        validator_set = await self.cluster.validator_list()
 
-        # Build address to node name mapping from cluster nodes
-        aptos_address_to_node_name = {}
-        for node_name, node in self.cluster.nodes.items():
-            aptos_address_to_node_name[node.account_address] = node_name
-
-        # Map aptos addresses to node names
-        active_node_names = set()
-        pending_inactive_node_names = set()
-        pending_active_node_names = set()
-
-        for aptos_address in result.get_active_aptos_addresses():
-            if aptos_address in aptos_address_to_node_name:
-                active_node_names.add(aptos_address_to_node_name[aptos_address])
-
-        for aptos_address in result.get_pending_inactive_aptos_addresses():
-            if aptos_address in aptos_address_to_node_name:
-                pending_inactive_node_names.add(
-                    aptos_address_to_node_name[aptos_address]
-                )
-
-        for aptos_address in result.get_pending_active_aptos_addresses():
-            if aptos_address in aptos_address_to_node_name:
-                pending_active_node_names.add(aptos_address_to_node_name[aptos_address])
+        active_node_names = {n.id for n in validator_set.active}
+        pending_inactive_node_names = {n.id for n in validator_set.pending_inactive}
+        pending_active_node_names = {n.id for n in validator_set.pending_active}
 
         return active_node_names, pending_inactive_node_names, pending_active_node_names
-
-    def get_validator_join_params(self, node_name: str) -> ValidatorJoinParams:
-        """
-        Get validator join params for a node (lazy initialization).
-        Uses node.p2p_port for validator_network_address and node.vfn_port for fullnode_network_address.
-        """
-        if node_name in self.node_to_validator_join_params:
-            return self.node_to_validator_join_params[node_name]
-
-        node = self.cluster.get_node(node_name)
-        account = self.node_to_account[node_name]
-        params = ValidatorJoinParams(
-            private_key=account["private_key"],
-            validator_address=account["address"],
-            consensus_public_key=node.consensus_public_key,
-            validator_network_address=f"/ip4/127.0.0.1/tcp/{node.p2p_port}/noise-ik/{node.identity.network_public_key}/handshake/0",
-            fullnode_network_address=f"/ip4/127.0.0.1/tcp/{node.vfn_port}/noise-ik/{node.identity.network_public_key}/handshake/0",
-            aptos_address=node.account_address,
-            moniker=node_name.upper(),
-        )
-        LOG.info(f"Initialized validator join params for {node_name}: {params}")
-        self.node_to_validator_join_params[node_name] = params
-        return params
 
     async def fuzzy_validator_join_and_leave(self):
         """

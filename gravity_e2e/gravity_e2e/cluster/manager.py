@@ -9,6 +9,7 @@ else:
 import json
 import shutil
 import subprocess
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional, List, Tuple
 
@@ -19,12 +20,37 @@ from .node import Node, NodeState, NodeRole
 
 LOG = logging.getLogger(__name__)
 
+
+@dataclass
+class ValidatorJoinParams:
+    """Parameters for joining a validator to the network."""
+
+    private_key: str
+    stake_pool: Optional[str]  # EVM address of the StakePool contract
+    consensus_public_key: str
+    validator_network_address: str
+    fullnode_network_address: str
+    stake_amount: str = "10001.0"
+    moniker: Optional[str] = None
+    lockup_duration: int = 2592000  # 30 days in seconds
+
+
+@dataclass
+class ValidatorSet:
+    """Result of validator list: 3 lists of Nodes."""
+
+    active: List[Node] = field(default_factory=list)
+    pending_inactive: List[Node] = field(default_factory=list)
+    pending_active: List[Node] = field(default_factory=list)
+
+
 # Standard devnet keys (Anvil/Hardhat defaults)
 KNOWN_DEV_KEYS = [
-    "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", # 0xf39F...
-    "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d", # 0x7099...
-    "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"  # 0x3C44...
+    "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",  # 0xf39F...
+    "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",  # 0x7099...
+    "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",  # 0x3C44...
 ]
+
 
 class Cluster:
     """
@@ -112,7 +138,7 @@ class Cluster:
         """
         genesis = self.config.get("genesis", {})
         faucet_config = genesis.get("faucet", [])
-        
+
         # Normalize to list
         if isinstance(faucet_config, dict):
             faucets = [faucet_config]
@@ -120,13 +146,13 @@ class Cluster:
             faucets = faucet_config
         else:
             faucets = []
-            
+
         if not faucets:
             return []
 
         # Gather potential private keys
         candidate_keys = set(KNOWN_DEV_KEYS)
-        
+
         secrets = genesis.get("secrets", {})
         if secrets and "keys" in secrets:
             candidate_keys.update(secrets["keys"])
@@ -152,7 +178,7 @@ class Cluster:
                     accounts.append(account)
                 else:
                     LOG.warning(f"Faucet address {addr} has no matching private key")
-            
+
         return accounts
 
     def _discover_nodes(self) -> Dict[str, Node]:
@@ -503,3 +529,259 @@ class Cluster:
             else:
                 LOG.error("Some nodes failed to make progress.")
             return success
+
+    # ========== Validator Management API ==========
+
+    def _get_first_rpc_url(self) -> str:
+        """Get RPC URL from the first node."""
+        first_node = next(iter(self.nodes.values()))
+        return first_node.url
+
+    async def validator_list(self, timeout: int = 60) -> ValidatorSet:
+        """
+        Get the current validator set from the chain.
+        Updates each matched node's stake_pool field based on consensus_public_key matching.
+
+        Returns:
+            ValidatorSet with active, pending_inactive, and pending_active node lists.
+        """
+        rpc_url = self._get_first_rpc_url()
+        list_cmd = [
+            str(self.gravity_cli_path),
+            "validator",
+            "list",
+            "--rpc-url",
+            rpc_url,
+        ]
+
+        LOG.info(f"Executing validator list command...")
+        LOG.debug(f"Command: {' '.join(list_cmd)}")
+
+        process = await asyncio.create_subprocess_exec(
+            *list_cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        stdout_str = stdout.decode() if stdout else ""
+        stderr_str = stderr.decode() if stderr else ""
+
+        if process.returncode != 0:
+            LOG.error(f"Failed to list validators: {stderr_str}")
+            raise RuntimeError(f"Failed to list validators: {stderr_str}")
+
+        # Parse JSON output
+        validator_data = json.loads(stdout_str)
+        LOG.debug(f"Validator list output: {json.dumps(validator_data, indent=2)}")
+
+        # Build consensus_public_key -> Node mapping
+        consensus_key_to_node: Dict[str, Node] = {}
+        for node in self.nodes.values():
+            try:
+                consensus_key_to_node[node.consensus_public_key] = node
+            except FileNotFoundError:
+                # Node identity not available
+                pass
+
+        result = ValidatorSet()
+
+        def process_validators(validator_list: List[dict], target_list: List[Node]):
+            for v in validator_list:
+                consensus_pubkey = v.get("consensus_pubkey", "")
+                validator_addr = v.get("validator", "")  # stake_pool address
+                # Clean up address format (remove 0x prefix if present for matching)
+                if validator_addr.startswith("0x"):
+                    stake_pool_addr = validator_addr
+                else:
+                    stake_pool_addr = f"0x{validator_addr}"
+
+                # Match by consensus_public_key
+                matched_node = consensus_key_to_node.get(consensus_pubkey)
+                if matched_node:
+                    # Update node's stake_pool
+                    matched_node.stake_pool = stake_pool_addr
+                    target_list.append(matched_node)
+                    LOG.debug(
+                        f"Matched validator {stake_pool_addr} to node {matched_node.id}"
+                    )
+
+        process_validators(validator_data.get("active_validators", []), result.active)
+        process_validators(
+            validator_data.get("pending_inactive", []), result.pending_inactive
+        )
+        process_validators(
+            validator_data.get("pending_active", []), result.pending_active
+        )
+
+        LOG.info(
+            f"Validator list: active={[n.id for n in result.active]}, "
+            f"pending_inactive={[n.id for n in result.pending_inactive]}, "
+            f"pending_active={[n.id for n in result.pending_active]}"
+        )
+
+        return result
+
+    async def validator_join(
+        self,
+        node_id: str,
+        private_key: str,
+        stake_amount: str = "10001.0",
+        moniker: Optional[str] = None,
+        timeout: int = 120,
+    ):
+        """
+        Join a node to the validator set.
+
+        Args:
+            node_id: ID of the node to join.
+            private_key: Private key for signing transactions.
+            stake_amount: Amount to stake in ETH (for creating StakePool if needed).
+            moniker: Display name for the validator.
+            timeout: Command timeout in seconds.
+
+        Raises:
+            ValueError: If node role is not VALIDATOR or GENESIS.
+            RuntimeError: If command fails.
+        """
+        node = self.get_node(node_id)
+        if not node:
+            raise ValueError(f"Node {node_id} not found")
+
+        # Validate node role
+        if node.role not in (NodeRole.VALIDATOR, NodeRole.GENESIS):
+            raise ValueError(
+                f"Node {node_id} has role {node.role.value}, "
+                f"expected VALIDATOR or GENESIS"
+            )
+
+        # Ensure stake_pool is populated
+        if node.stake_pool is None:
+            LOG.info(
+                f"Node {node_id} has no stake_pool, fetching via validator_list..."
+            )
+            await self.validator_list()
+
+        rpc_url = self._get_first_rpc_url()
+
+        # Build join command
+        join_cmd = [
+            str(self.gravity_cli_path),
+            "validator",
+            "join",
+            "--rpc-url",
+            rpc_url,
+            "--private-key",
+            private_key,
+            "--stake-amount",
+            stake_amount,
+            "--consensus-public-key",
+            node.consensus_public_key,
+            "--validator-network-address",
+            f"/ip4/127.0.0.1/tcp/{node.p2p_port}/noise-ik/{node.identity.network_public_key}/handshake/0",
+            "--fullnode-network-address",
+            f"/ip4/127.0.0.1/tcp/{node.vfn_port}/noise-ik/{node.identity.network_public_key}/handshake/0",
+        ]
+
+        # Add stake_pool if available (for existing validators)
+        if node.stake_pool:
+            join_cmd.extend(["--stake-pool", node.stake_pool])
+
+        # Add moniker
+        effective_moniker = moniker or node_id.upper()
+        join_cmd.extend(["--moniker", effective_moniker])
+
+        LOG.info(f"Executing validator join for {node_id}...")
+        LOG.debug(f"Command: {' '.join(join_cmd)}")
+
+        process = await asyncio.create_subprocess_exec(
+            *join_cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,
+        )
+
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        stdout_str = stdout.decode() if stdout else ""
+        stderr_str = stderr.decode() if stderr else ""
+
+        if process.returncode != 0:
+            LOG.error(f"Failed to join validator {node_id}: {stderr_str}")
+            raise RuntimeError(f"Failed to join validator {node_id}: {stderr_str}")
+
+        LOG.info(f"Validator {node_id} join command executed successfully")
+        if stdout_str:
+            LOG.debug(f"Command output: {stdout_str}")
+
+    async def validator_leave(self, node_id: str, private_key: str, timeout: int = 120):
+        """
+        Remove a node from the validator set.
+
+        Args:
+            node_id: ID of the node to leave.
+            private_key: Private key for signing transactions.
+            timeout: Command timeout in seconds.
+
+        Raises:
+            ValueError: If node role is not VALIDATOR or GENESIS, or stake_pool is unknown.
+            RuntimeError: If command fails.
+        """
+        node = self.get_node(node_id)
+        if not node:
+            raise ValueError(f"Node {node_id} not found")
+
+        # Validate node role
+        if node.role not in (NodeRole.VALIDATOR, NodeRole.GENESIS):
+            raise ValueError(
+                f"Node {node_id} has role {node.role.value}, "
+                f"expected VALIDATOR or GENESIS"
+            )
+
+        # Ensure stake_pool is populated
+        if node.stake_pool is None:
+            LOG.info(
+                f"Node {node_id} has no stake_pool, fetching via validator_list..."
+            )
+            await self.validator_list()
+
+        if node.stake_pool is None:
+            raise ValueError(
+                f"Node {node_id} stake_pool is still None after validator_list. "
+                f"The node may not be registered as a validator."
+            )
+
+        rpc_url = self._get_first_rpc_url()
+
+        leave_cmd = [
+            str(self.gravity_cli_path),
+            "validator",
+            "leave",
+            "--rpc-url",
+            rpc_url,
+            "--private-key",
+            private_key,
+            "--stake-pool",
+            node.stake_pool,
+        ]
+
+        LOG.info(f"Executing validator leave for {node_id}...")
+        LOG.debug(f"Command: {' '.join(leave_cmd)}")
+
+        process = await asyncio.create_subprocess_exec(
+            *leave_cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,
+        )
+
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        stdout_str = stdout.decode() if stdout else ""
+        stderr_str = stderr.decode() if stderr else ""
+
+        if process.returncode != 0:
+            LOG.error(f"Failed to leave validator {node_id}: {stderr_str}")
+            raise RuntimeError(f"Failed to leave validator {node_id}: {stderr_str}")
+
+        LOG.info(f"Validator {node_id} leave command executed successfully")
+        if stdout_str:
+            LOG.debug(f"Command output: {stdout_str}")
