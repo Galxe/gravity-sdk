@@ -1,113 +1,158 @@
 use alloy_primitives::{address, Address};
 use std::fmt::{Debug, Formatter};
 
-pub const VALIDATOR_MANAGER_ADDRESS: Address =
-    address!("0x0000000000000000000000000000000000002013");
+/// ValidatorManagement contract address (from SystemAddresses.VALIDATOR_MANAGER)
+pub const VALIDATOR_MANAGER_ADDRESS: Address = address!("00000000000000000000000000000001625F2001");
+
+/// Staking contract address (from SystemAddresses.STAKING)
+pub const STAKING_ADDRESS: Address = address!("00000000000000000000000000000001625F2000");
 
 // Define contract interface using alloy_sol_macro
 alloy_sol_macro::sol! {
-    // Commission structure
-    struct Commission {
-        uint64 rate; // the commission rate charged to delegators(10000 is 100%)
-        uint64 maxRate; // maximum commission rate which validator can ever charge
-        uint64 maxChangeRate; // maximum daily increase of the validator commission
-    }
+    // ============================================================================
+    // VALIDATOR STATUS
+    // ============================================================================
 
+    /// Validator lifecycle status (v2 - note the order!)
     enum ValidatorStatus {
-        PENDING_ACTIVE, // 0
-        ACTIVE, // 1
-        PENDING_INACTIVE, // 2
-        INACTIVE // 3
+        INACTIVE,         // 0: Not in validator set
+        PENDING_ACTIVE,   // 1: Queued to join next epoch
+        ACTIVE,           // 2: Currently validating
+        PENDING_INACTIVE  // 3: Queued to leave next epoch
     }
 
-    // Validator registration parameters
-    struct ValidatorRegistrationParams {
-        bytes consensusPublicKey;
-        bytes blsProof; // BLS proof
-        Commission commission; // Changed from uint64 commissionRate to Commission struct
-        string moniker;
-        address initialOperator;
-        address initialBeneficiary; // Passed directly to StakeCredit
-        // Network addresses for Aptos compatibility
-        bytes validatorNetworkAddresses; // BCS serialized Vec<NetworkAddress>
-        bytes fullnodeNetworkAddresses; // BCS serialized Vec<NetworkAddress>
-        bytes aptosAddress; // Aptos validator address
+    // ============================================================================
+    // VALIDATOR TYPES (from Types.sol)
+    // ============================================================================
+
+    /// Validator consensus info (for consensus engine)
+    struct ValidatorConsensusInfo {
+        address validator;           // Validator identity address (= stakePool)
+        bytes consensusPubkey;       // BLS public key for consensus
+        bytes consensusPop;          // Proof of possession for BLS key
+        uint256 votingPower;         // Voting power derived from bond
+        uint64 validatorIndex;       // Index in active validator array
+        bytes networkAddresses;      // Network addresses for P2P
+        bytes fullnodeAddresses;     // Fullnode addresses for sync
     }
 
-    struct ValidatorInfo {
-        // Basic information (from ValidatorManager)
-        bytes consensusPublicKey;
-        Commission commission;
-        string moniker;
-        bool registered;
-        address stakeCreditAddress;
-        ValidatorStatus status;
-        uint256 votingPower; // Changed from uint64 to uint256 to prevent overflow
-        uint256 validatorIndex;
-        uint256 updateTime;
-        address operator;
-        bytes validatorNetworkAddresses; // BCS serialized Vec<NetworkAddress>
-        bytes fullnodeNetworkAddresses; // BCS serialized Vec<NetworkAddress>
-        bytes aptosAddress; // Aptos validator address
+    /// Full validator record
+    struct ValidatorRecord {
+        address validator;           // Immutable validator identity address
+        string moniker;              // Display name (max 31 bytes)
+        uint8 status;                // ValidatorStatus enum value
+        uint256 bond;                // Current validator bond (voting power snapshot)
+        bytes consensusPubkey;       // BLS consensus public key
+        bytes consensusPop;          // Proof of possession for BLS key
+        bytes networkAddresses;      // Network addresses for P2P
+        bytes fullnodeAddresses;     // Fullnode addresses
+        address feeRecipient;        // Current fee recipient address
+        address pendingFeeRecipient; // Pending fee recipient (applied next epoch)
+        address stakingPool;         // Address of the StakePool
+        uint64 validatorIndex;       // Index in active validator array
     }
 
-    struct ValidatorSetData {
-        uint256 totalVotingPower; // Total voting power - Changed from uint128 to uint256
-        uint256 totalJoiningPower; // Total pending voting power - Changed from uint128 to uint256
-    }
+    // ============================================================================
+    // VALIDATOR MANAGEMENT CONTRACT (v2)
+    // ============================================================================
 
-    struct ValidatorSet {
-        ValidatorInfo[] activeValidators; // Active validators for the current epoch
-        ValidatorInfo[] pendingInactive; // Pending validators to leave in next epoch (still active)
-        ValidatorInfo[] pendingActive; // Pending validators to join in next epoch
-        uint256 totalVotingPower; // Current total voting power
-        uint256 totalJoiningPower; // Total voting power waiting to join in the next epoch
-    }
-
-    contract ValidatorManager {
+    contract ValidatorManagement {
+        // === Registration ===
         function registerValidator(
-            ValidatorRegistrationParams calldata params
-        ) external payable;
+            address stakePool,
+            string calldata moniker,
+            bytes calldata consensusPubkey,
+            bytes calldata consensusPop,
+            bytes calldata networkAddresses,
+            bytes calldata fullnodeAddresses
+        ) external;
 
-        function joinValidatorSet(address validator) external;
+        // === Lifecycle ===
+        function joinValidatorSet(address stakePool) external;
+        function leaveValidatorSet(address stakePool) external;
 
-        function leaveValidatorSet(address validator) external;
+        // === Operator Functions ===
+        function rotateConsensusKey(
+            address stakePool,
+            bytes calldata newPubkey,
+            bytes calldata newPop
+        ) external;
+        function setFeeRecipient(address stakePool, address newRecipient) external;
 
-        function getValidatorInfo(
-            address validator
-        ) external view returns (ValidatorInfo memory);
+        // === View Functions ===
+        function getValidator(address stakePool) external view returns (ValidatorRecord memory);
+        function getActiveValidators() external view returns (ValidatorConsensusInfo[] memory);
+        function getActiveValidatorByIndex(uint64 index) external view returns (ValidatorConsensusInfo memory);
+        function getTotalVotingPower() external view returns (uint256);
+        function getActiveValidatorCount() external view returns (uint256);
+        function isValidator(address stakePool) external view returns (bool);
+        function getValidatorStatus(address stakePool) external view returns (uint8);
+        function getCurrentEpoch() external view returns (uint64);
+        function getPendingActiveValidators() external view returns (ValidatorConsensusInfo[] memory);
+        function getPendingInactiveValidators() external view returns (ValidatorConsensusInfo[] memory);
 
-        function isValidatorRegistered(address validator) external view returns (bool);
+        // === Events ===
+        event ValidatorRegistered(address indexed stakePool, string moniker);
+        event ValidatorJoinRequested(address indexed stakePool);
+        event ValidatorActivated(address indexed stakePool, uint64 validatorIndex, uint256 votingPower);
+        event ValidatorLeaveRequested(address indexed stakePool);
+        event ValidatorDeactivated(address indexed stakePool);
+        event ConsensusKeyRotated(address indexed stakePool, bytes newPubkey);
+        event FeeRecipientUpdated(address indexed stakePool, address newRecipient);
+        event EpochProcessed(uint64 epoch, uint256 activeCount, uint256 totalVotingPower);
+    }
 
-        function getValidatorStatus(address validator) external view returns (uint8);
+    // ============================================================================
+    // STAKING CONTRACT (for creating StakePools)
+    // ============================================================================
 
-        function getValidatorSetData() external view returns (ValidatorSetData memory);
+    contract Staking {
+        /// Create a new StakePool
+        function createPool(
+            address owner,
+            address staker,
+            address operator,
+            address voter,
+            uint64 lockedUntil
+        ) external payable returns (address pool);
 
-        function getValidatorSet() external view returns (ValidatorSet memory);
+        /// Check if an address is a valid pool
+        function isPool(address pool) external view returns (bool);
 
-        event ValidatorRegistered(
-            address indexed validator,
-            address indexed operator,
-            bytes consensusPublicKey,
-            string moniker
-        );
+        /// Get pool's voting power at a given time
+        function getPoolVotingPower(address pool, uint64 atTime) external view returns (uint256);
 
-        event ValidatorJoinRequested(
-            address indexed validator,
-            uint256 votingPower,
-            uint64 epoch
-        );
+        /// Get pool's current voting power
+        function getPoolVotingPowerNow(address pool) external view returns (uint256);
 
-        event ValidatorLeaveRequested(
-            address indexed validator,
-            uint64 epoch
-        );
+        /// Get pool's operator
+        function getPoolOperator(address pool) external view returns (address);
 
-        event ValidatorStatusChanged(
-            address indexed validator,
-            uint8 oldStatus,
-            uint8 newStatus,
-            uint64 epoch
+        /// Get pool's owner
+        function getPoolOwner(address pool) external view returns (address);
+
+        /// Get pool's lockup expiration
+        function getPoolLockedUntil(address pool) external view returns (uint64);
+
+        /// Get pool's active stake
+        function getPoolActiveStake(address pool) external view returns (uint256);
+
+        /// Get total pool count
+        function getPoolCount() external view returns (uint256);
+
+        /// Get pool by index
+        function getPool(uint256 index) external view returns (address);
+
+        /// Get all pools
+        function getAllPools() external view returns (address[] memory);
+
+        // === Events ===
+        event PoolCreated(
+            address indexed creator,
+            address indexed pool,
+            address indexed owner,
+            address staker,
+            uint256 poolIndex
         );
     }
 }
@@ -115,11 +160,22 @@ alloy_sol_macro::sol! {
 impl Debug for ValidatorStatus {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
+            ValidatorStatus::INACTIVE => write!(f, "INACTIVE"),
             ValidatorStatus::PENDING_ACTIVE => write!(f, "PENDING_ACTIVE"),
             ValidatorStatus::ACTIVE => write!(f, "ACTIVE"),
             ValidatorStatus::PENDING_INACTIVE => write!(f, "PENDING_INACTIVE"),
-            ValidatorStatus::INACTIVE => write!(f, "INACTIVE"),
             _ => write!(f, "UNKNOWN"),
         }
+    }
+}
+
+/// Helper to convert u8 to ValidatorStatus
+pub fn status_from_u8(value: u8) -> ValidatorStatus {
+    match value {
+        0 => ValidatorStatus::INACTIVE,
+        1 => ValidatorStatus::PENDING_ACTIVE,
+        2 => ValidatorStatus::ACTIVE,
+        3 => ValidatorStatus::PENDING_INACTIVE,
+        _ => ValidatorStatus::__Invalid,
     }
 }
