@@ -46,7 +46,7 @@ class EpochSwitchTestContext:
 
     def signal_handler(self, signum, frame):
         self.should_stop = True
-        LOG.info(f"收到信号 {signal.Signals(signum).name}，准备停止...")
+        LOG.info(f"Received signal {signal.Signals(signum).name}, stopping...")
 
     async def validator_join(self, node_name: str):
         """Join a node to the validator set using Cluster API."""
@@ -79,38 +79,40 @@ class EpochSwitchTestContext:
 
     async def fuzzy_validator_join_and_leave(self):
         """
-        模糊测试：持续随机地让节点加入和离开 validator set
+        Fuzzy test: Continuously and randomly make nodes join and leave the validator set
         """
         validator_set, pending_joins, pending_leaves = await self.validator_list()
 
         # Get HTTP port from first node
         first_node = list(self.cluster.nodes.values())[0]
         # FIXME: derive http_port from config if available
-        # 初始化 HTTP 客户端
+        # Initialize HTTP client
         http_client = GravityHttpClient(
             self.cluster.get_node(self.genesis_node_names[0]).http_url
         )
         async with http_client:
-            # 获取初始 epoch
+            # Get initial epoch
             try:
                 current_epoch = await http_client.get_current_epoch()
-                LOG.info(f"初始 epoch: {current_epoch}")
+                LOG.info(f"Initial epoch: {current_epoch}")
             except Exception as e:
-                LOG.error(f"❌ 无法获取初始 epoch: {e}")
-                # 如果无法获取初始 epoch，设置为 0 并继续
+                LOG.error(f"❌ Failed to get initial epoch: {e}")
+                # If unable to get initial epoch, raise error
                 raise RuntimeError(f"Failed to get epoch: {e}")
 
-            # 主循环：检查停止标志
+            # Main loop: check stop signal
             try:
                 while not self.should_stop:
-                    # 每隔 10 秒检查 epoch 是否切换
+                    # Check for epoch switch every 10 seconds
                     await asyncio.sleep(10)
 
-                    # 检查 epoch 是否切换
+                    # Check if epoch switched
                     try:
                         new_epoch = await http_client.get_current_epoch()
                     except Exception as e:
-                        LOG.warning(f"⚠️ 无法获取当前 epoch: {e}，跳过本次检查")
+                        LOG.warning(
+                            f"⚠️ Failed to get current epoch: {e}, skipping this check"
+                        )
                         raise RuntimeError(f"Failed to get epoch: {e}")
 
                     if new_epoch == current_epoch:
@@ -121,18 +123,18 @@ class EpochSwitchTestContext:
                             f"Epoch decreased from {current_epoch} to {new_epoch}"
                         )
                     elif new_epoch > current_epoch:
-                        LOG.info(f"Epoch 从 {current_epoch} 切换到 {new_epoch}")
+                        LOG.info(f"Epoch switched from {current_epoch} to {new_epoch}")
                         current_epoch = new_epoch
 
-                    # 将成功 join 的节点加入 validator_set
+                    # Add successfully joined nodes to validator_set
                     validator_set.update(pending_joins)
                     if pending_joins:
-                        LOG.info(f"节点 {pending_joins} 进入 validator_set")
+                        LOG.info(f"Nodes {pending_joins} entered validator_set")
 
-                    # 将成功 leave 的节点从 validator_set 移除
+                    # Remove successfully left nodes from validator_set
                     validator_set.difference_update(pending_leaves)
                     if pending_leaves:
-                        LOG.info(f"节点 {pending_leaves} 退出 validator_set")
+                        LOG.info(f"Nodes {pending_leaves} exited validator_set")
 
                     actual_active_nodes, _, _ = await self.validator_list()
                     if actual_active_nodes != validator_set:
@@ -140,15 +142,15 @@ class EpochSwitchTestContext:
                             f"Actual active nodes: {actual_active_nodes} != expected active nodes: {validator_set}"
                         )
 
-                    # 重置待处理的 join 和 leave
+                    # Reset pending joins and leaves
                     pending_joins.clear()
                     pending_leaves.clear()
 
-                    # 更新当前 epoch
-                    LOG.info(f"当前 validator_set: {validator_set}")
+                    # Show current validator_set
+                    LOG.info(f"Current validator_set: {validator_set}")
 
-                    # 在每个 epoch 期间执行随机 join 和 leave
-                    # 随机选择 1-3 个候选节点调用 validator join
+                    # Perform random join and leave during each epoch
+                    # Randomly select 1-3 candidate nodes to call validator join
                     nodes_not_in_validator = [
                         node
                         for node in self.candidate_node_names
@@ -156,7 +158,7 @@ class EpochSwitchTestContext:
                     ]
 
                     if nodes_not_in_validator:
-                        # 随机选择 1-3 个节点
+                        # Randomly select 1-3 nodes
                         if len(nodes_not_in_validator) > 1:
                             num_joins = random.randint(
                                 1, min(3, len(nodes_not_in_validator))
@@ -168,20 +170,22 @@ class EpochSwitchTestContext:
                             nodes_to_join = nodes_not_in_validator
 
                         for node_name in nodes_to_join:
-                            LOG.info(f"尝试让节点 {node_name} join validator set...")
+                            LOG.info(
+                                f"Attempting to let node {node_name} join validator set..."
+                            )
                             await self.validator_join(node_name)
                             pending_joins.add(node_name)
                             LOG.info(
-                                f"✅ 节点 {node_name} join 成功，将在下一个 epoch 进入 validator_set"
+                                f"✅ Node {node_name} joined successfully, will enter validator_set in the next epoch"
                             )
-                    # 随机选择 1-3 个候选节点调用 validator leave
+                    # Randomly select 1-3 candidate nodes to call validator leave
                     candidate_nodes_in_validator_set = [
                         node
                         for node in validator_set
                         if node not in self.genesis_node_names
                     ]
                     if candidate_nodes_in_validator_set:
-                        # 随机选择 1-3 个节点
+                        # Randomly select 1-3 nodes
                         if len(candidate_nodes_in_validator_set) > 1:
                             num_leaves = random.randint(
                                 1, min(3, len(candidate_nodes_in_validator_set))
@@ -193,11 +197,13 @@ class EpochSwitchTestContext:
                             nodes_to_leave = candidate_nodes_in_validator_set
 
                         for node_name in nodes_to_leave:
-                            LOG.info(f"尝试让节点 {node_name} leave validator set...")
+                            LOG.info(
+                                f"Attempting to let node {node_name} leave validator set..."
+                            )
                             await self.validator_leave(node_name)
                             pending_leaves.add(node_name)
                             LOG.info(
-                                f"✅ 节点 {node_name} leave 成功，将在下一个 epoch 退出 validator_set"
+                                f"✅ Node {node_name} left successfully, will exit validator_set in the next epoch"
                             )
 
                     _, pending_inactive_nodes, pending_active_nodes = (
@@ -216,44 +222,39 @@ class EpochSwitchTestContext:
 
     async def check_node_block_height(self):
         all_node_names = self.genesis_node_names + self.candidate_node_names
-        clients = []
-        for node_name in all_node_names:
-            node = self.cluster.get_node(node_name)
-            client = GravityClient(rpc_url=node.url, node_id=node_name)
-            clients.append(client)
 
-        async with AsyncExitStack() as stack:
-            await asyncio.gather(*[stack.enter_async_context(c) for c in clients])
-            try:
-                while not self.should_stop:
-                    await asyncio.sleep(10)
+        try:
+            while not self.should_stop:
+                await asyncio.sleep(10)
 
-                    async def get_and_log_block_number(client, node_name):
-                        block_height = await client.get_block_number()
-                        LOG.info(f"{node_name} block height: {block_height}")
-                        return block_height
-
-                    block_heights = await asyncio.gather(
-                        *[
-                            get_and_log_block_number(client, node_name)
-                            for client, node_name in zip(clients, all_node_names)
-                        ]
+                async def get_and_log_block_number(node_name):
+                    node = self.cluster.get_node(node_name)
+                    # Run sync web3 call in a thread to avoid blocking the loop
+                    block_height = await asyncio.to_thread(
+                        lambda: node.w3.eth.block_number
                     )
-                    max_block_height = max(block_heights)
-                    LOG.info(f"Max block height: {max_block_height}")
-                    is_gap_too_large = False
-                    for node_name, block_height in zip(all_node_names, block_heights):
-                        if block_height + 100 < max_block_height:
-                            LOG.warning(
-                                f"{node_name} block height is too low: {block_height}"
-                            )
-                            is_gap_too_large = True
-                    if is_gap_too_large:
-                        raise RuntimeError(
-                            f"Gap between node block heights is too large"
+                    LOG.info(f"{node_name} block height: {block_height}")
+                    return block_height
+
+                block_heights = await asyncio.gather(
+                    *[
+                        get_and_log_block_number(node_name)
+                        for node_name in all_node_names
+                    ]
+                )
+                max_block_height = max(block_heights)
+                LOG.info(f"Max block height: {max_block_height}")
+                is_gap_too_large = False
+                for node_name, block_height in zip(all_node_names, block_heights):
+                    if block_height + 100 < max_block_height:
+                        LOG.warning(
+                            f"{node_name} block height is too low: {block_height}"
                         )
-            except Exception as e:
-                raise RuntimeError(f"Failed to check node block height: {e}")
+                        is_gap_too_large = True
+                if is_gap_too_large:
+                    raise RuntimeError(f"Gap between node block heights is too large")
+        except Exception as e:
+            raise RuntimeError(f"Failed to check node block height: {e}")
 
 
 @register_test("epoch_switch", suite="epoch_switch", self_managed=True)
