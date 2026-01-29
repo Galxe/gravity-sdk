@@ -13,6 +13,7 @@ use gaptos::api_types::{
     ExternalBlock, GLOBAL_CRYPTO_TXN_HASHER,
 };
 use greth::reth_transaction_pool::{EthPooledTransaction, ValidPoolTransaction};
+use proposer_reth_map::get_reth_address_by_index;
 
 use alloy_rpc_types_eth::TransactionRequest;
 use greth::{
@@ -130,6 +131,38 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         (txn.recover_signer().unwrap(), txn)
     }
 
+    /// Get reth coinbase address from proposer's validator index
+    /// Returns the reth account address of the proposer if found, otherwise returns Address::ZERO
+    fn get_coinbase_from_proposer_index(
+        proposer_index: Option<u64>,
+        _block_number: u64,
+    ) -> Address {
+        let index = match proposer_index {
+            Some(idx) => idx,
+            None => return Address::ZERO,
+        };
+
+        // Get reth address from global map (built in epoch_manager when epoch starts)
+        match get_reth_address_by_index(index) {
+            Some(reth_addr_bytes) => {
+                if reth_addr_bytes.len() == 20 {
+                    Address::from_slice(&reth_addr_bytes)
+                } else {
+                    warn!(
+                        "Reth address length {} is not 20 bytes for proposer index {}, using ZERO",
+                        reth_addr_bytes.len(),
+                        index
+                    );
+                    Address::ZERO
+                }
+            }
+            None => {
+                warn!("Failed to get reth coinbase for proposer index {}, using ZERO", index);
+                Address::ZERO
+            }
+        }
+    }
+
     pub async fn push_ordered_block(
         &self,
         mut block: ExternalBlock,
@@ -179,14 +212,23 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         };
 
         info!("push ordered block time deserialize {:?}ms", system_time.elapsed().as_millis());
-        // TODO: make zero make sense
+
+        // Get reth coinbase from proposer's validator index
+        let coinbase = Self::get_coinbase_from_proposer_index(
+            block.block_meta.proposer_index,
+            block.block_meta.block_number,
+        );
+        info!(
+            "block_number: {:?} proposer_index: {:?} coinbase: {:?}",
+            block.block_meta.block_number, block.block_meta.proposer_index, coinbase
+        );
+
         pipe_api.push_ordered_block(OrderedBlock {
             parent_id,
             id: B256::from_slice(block.block_meta.block_id.as_bytes()),
             number: block.block_meta.block_number,
             timestamp_us: block.block_meta.usecs,
-            // TODO(gravity_jan): add reth coinbase
-            coinbase: Address::ZERO,
+            coinbase,
             prev_randao: randao,
             withdrawals: Withdrawals::new(Vec::new()),
             transactions,

@@ -78,6 +78,14 @@ from gravity_e2e.tests.test_cases.test_cluster_ops import (
     test_fault_tolerance,
 )
 
+# Staking tests (each in separate file)
+from gravity_e2e.tests.test_cases.test_staking_lifecycle import test_staking_lifecycle
+from gravity_e2e.tests.test_cases.test_staking_early_unstake import test_early_unstake_restrictions
+from gravity_e2e.tests.test_cases.test_staking_minimum_bond import test_validator_minimum_bond
+from gravity_e2e.tests.test_cases.test_staking_voting_power import test_voting_power_calculation
+from gravity_e2e.tests.test_cases.test_staking_delegation import test_delegation_role_separation
+from gravity_e2e.tests.test_cases.test_staking_operations import test_operations_maintenance
+
 
 # Register all tests with the registry
 # Basic transfer tests
@@ -119,6 +127,14 @@ register_test("validator_add_remove_delayed", suite="validator", self_managed=Tr
 register_test("cluster_lifecycle", suite="cluster_ops", self_managed=True)(test_cluster_lifecycle)
 register_test("cluster_fault_tolerance", suite="cluster_ops", self_managed=True)(test_fault_tolerance)
 
+# Staking tests
+register_test("staking_lifecycle", suite="staking")(test_staking_lifecycle)
+register_test("staking_early_unstake", suite="staking")(test_early_unstake_restrictions)
+register_test("staking_minimum_bond", suite="staking")(test_validator_minimum_bond)
+register_test("staking_voting_power", suite="staking")(test_voting_power_calculation)
+register_test("staking_delegation", suite="staking")(test_delegation_role_separation)
+register_test("staking_operations", suite="staking")(test_operations_maintenance)
+
 
 # Define default test list for "all" suite
 DEFAULT_TESTS = [
@@ -158,6 +174,13 @@ __all__ = [
     'test_validator_add_remove_delayed',
     'test_cluster_lifecycle',
     'test_fault_tolerance',
+    # Staking tests
+    'test_staking_lifecycle',
+    'test_early_unstake_restrictions',
+    'test_validator_minimum_bond',
+    'test_voting_power_calculation',
+    'test_delegation_role_separation',
+    'test_operations_maintenance',
     # Default test list
     'DEFAULT_TESTS',
 ]
