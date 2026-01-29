@@ -70,9 +70,7 @@ class Cluster:
         # Assuming config_path is like .../cluster/cluster.toml
         self.cluster_root = self.config_path.parent
         self.base_dir = Path(self.config["cluster"]["base_dir"])
-        self.gravity_cli_path = (
-            Path(self.config["build"]["binary_path"]).parent / "gravity-cli"
-        )
+        self.gravity_cli_path = self.base_dir / "gravity_cli"
 
         self.nodes: Dict[str, Node] = self._discover_nodes()
 
