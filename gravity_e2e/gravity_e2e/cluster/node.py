@@ -1,43 +1,122 @@
-
 import asyncio
 import logging
 from pathlib import Path
 from typing import Tuple, Dict, Any, Optional
 from enum import Enum, auto
 from web3 import Web3
+from eth_account.signers.local import LocalAccount
+
+from .identity import AptosIdentity, parse_identity_from_yaml
 
 TransactionReceipt = Dict[str, Any]
 
 LOG = logging.getLogger(__name__)
 
+
 class NodeState(Enum):
     """Represents the lifecycle state of a node."""
-    UNKNOWN = auto()      # Initial state, not yet checked
-    STOPPED = auto()      # Node is not running (PID file missing or process dead)
-    STARTING = auto()     # Start command issued, waiting for RPC
-    RUNNING = auto()      # RPC is responding
-    STOPPING = auto()     # Stop command issued
-    STALE = auto()        # PID file exists but process is dead or RPC unresponsive
-    SYNCING = auto()      # Node is running but catching up (block height < peer)
+
+    UNKNOWN = auto()  # Initial state, not yet checked
+    STOPPED = auto()  # Node is not running (PID file missing or process dead)
+    STARTING = auto()  # Start command issued, waiting for RPC
+    RUNNING = auto()  # RPC is responding
+    STOPPING = auto()  # Stop command issued
+    STALE = auto()  # PID file exists but process is dead or RPC unresponsive
+    SYNCING = auto()  # Node is running but catching up (block height < peer)
+
+
 # Add Live, block height is increasing
+
+
+class NodeRole(Enum):
+    """Represents the role of a node in the cluster."""
+
+    GENESIS = "genesis"  # Included in initial validator set in genesis.json
+    # Validator node but NOT in initial genesis (can join later)
+    VALIDATOR = "validator"
+    VFN = "vfn"  # Full node, uses onchain discovery
+
+    @classmethod
+    def from_str(cls, value: str) -> "NodeRole":
+        """Convert string to NodeRole, defaults to VALIDATOR if unknown."""
+        try:
+            return cls(value.lower())
+        except ValueError:
+            raise ValueError(f"Invalid node role: {value}")
+
 
 class Node:
     """
     Represents a single node in the cluster.
     Maintains internal state and provides lifecycle operations.
     """
-    def __init__(self, id: str, rpc_port: int, infra_path: Path, cluster_config_path: Path):
+
+    def __init__(
+        self,
+        id: str,
+        rpc_port: int,
+        infra_path: Path,
+        cluster_config_path: Path,
+        role: NodeRole,
+        http_port: int,
+        p2p_port: int,
+        vfn_port: int,
+        stake_pool: Optional[str] = None,
+        evm_account: Optional[LocalAccount] = None,
+    ):
         self.id = id
         self.rpc_port = rpc_port
+        self.role = role  # Role from cluster.toml: GENESIS, VALIDATOR, or VFN
         self.url = f"http://127.0.0.1:{rpc_port}"
         self.w3 = Web3(Web3.HTTPProvider(self.url))
+        self.http_port = http_port
+        self.http_url = f"http://127.0.0.1:{http_port}"
+        self.p2p_port = p2p_port
+        self.vfn_port = vfn_port
         self._infra_path = infra_path
         self._cluster_config_path = cluster_config_path
-        
+        # StakePool contract address (discovered on-chain via validator_list)
+        self.stake_pool: Optional[str] = stake_pool
+        # EVM account for staking operations (assigned from accounts.csv)
+        self.evm_account: Optional[LocalAccount] = evm_account
+
         # Paths to control scripts
         self.start_script = self._infra_path / "script" / "start.sh"
         self.stop_script = self._infra_path / "script" / "stop.sh"
         self.pid_file = self._infra_path / "script" / "node.pid"
+
+        # Identity (lazy-loaded)
+        self._identity: Optional[AptosIdentity] = None
+
+    @property
+    def identity(self) -> AptosIdentity:
+        """
+        Get the node's Aptos identity, loading from config/identity.yaml if not already loaded.
+        """
+        if self._identity is None:
+            self._identity = self._load_identity()
+        return self._identity
+
+    def _load_identity(self) -> AptosIdentity:
+        """Load identity from config/identity.yaml"""
+        identity_path = self._infra_path / "config" / "identity.yaml"
+        if not identity_path.exists():
+            raise FileNotFoundError(f"Identity file not found: {identity_path}")
+        identity = parse_identity_from_yaml(identity_path)
+        LOG.debug(
+            f"Loaded identity for {self.id}: account_address={identity.account_address}"
+        )
+        return identity
+
+    @property
+    def account_address(self) -> str:
+        """Shortcut to get account address from identity."""
+        return self.identity.account_address
+
+    @property
+    def consensus_public_key(self) -> str:
+        """Shortcut to get consensus public key from identity."""
+        return self.identity.consensus_public_key
 
     def _pid_exists(self) -> bool:
         """Check if process from PID file is alive."""
@@ -46,11 +125,12 @@ class Node:
         try:
             pid = int(self.pid_file.read_text().strip())
             import os
+
             os.kill(pid, 0)
             return True
         except (ValueError, ProcessLookupError, OSError):
             return False
-    
+
     def get_txn_receipt(self, txn_hash: str) -> Optional[TransactionReceipt]:
         """
         Fetch the transaction receipt from the node.
@@ -99,7 +179,9 @@ class Node:
         Returns True if node is now RUNNING.
         """
         if not self.start_script.exists():
-            LOG.warning(f"Start script not found for {self.id} (remote node?). Cannot start.")
+            LOG.warning(
+                f"Start script not found for {self.id} (remote node?). Cannot start."
+            )
             return False
 
         # First, check live state
@@ -110,7 +192,9 @@ class Node:
             return True
 
         if current_state == NodeState.STALE:
-            LOG.warning(f"Node {self.id} is STALE (PID alive but RPC down). Stopping first...")
+            LOG.warning(
+                f"Node {self.id} is STALE (PID alive but RPC down). Stopping first..."
+            )
             await self.stop()
 
         LOG.info(f"Starting node {self.id} (config={self._cluster_config_path})...")
@@ -119,13 +203,15 @@ class Node:
             # We assume the parent structure if start script exists
             # Call start script
             proc = await asyncio.create_subprocess_exec(
-                "bash", str(self.start_script),
-                "--config", str(self._cluster_config_path),
+                "bash",
+                str(self.start_script),
+                "--config",
+                str(self._cluster_config_path),
                 cwd=str(self.start_script.parent.parent),
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
-            
+
             async def log_stream(stream, level):
                 while True:
                     line = await stream.readline()
@@ -138,9 +224,9 @@ class Node:
             # Non-blocking stream logging
             await asyncio.gather(
                 log_stream(proc.stdout, logging.INFO),
-                log_stream(proc.stderr, logging.WARNING)
+                log_stream(proc.stderr, logging.WARNING),
             )
-            
+
             returncode = await proc.wait()
 
             if returncode != 0:
@@ -165,8 +251,10 @@ class Node:
         Returns True if node is now STOPPED.
         """
         if not self.stop_script.exists():
-             LOG.warning(f"Stop script not found for {self.id} (remote node?). Cannot stop.")
-             return False
+            LOG.warning(
+                f"Stop script not found for {self.id} (remote node?). Cannot stop."
+            )
+            return False
 
         # Check live state
         current_state, _ = await self.get_state()
@@ -179,10 +267,11 @@ class Node:
 
         try:
             proc = await asyncio.create_subprocess_exec(
-                "bash", str(self.stop_script),
+                "bash",
+                str(self.stop_script),
                 cwd=str(self.stop_script.parent.parent),
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await proc.communicate()
 
@@ -199,7 +288,9 @@ class Node:
                 LOG.info(f"Node {self.id} stopped and verified.")
                 return True
             else:
-                LOG.warning(f"Node {self.id} stop script succeeded but state is {final_state.name}")
+                LOG.warning(
+                    f"Node {self.id} stop script succeeded but state is {final_state.name}"
+                )
                 return False
 
         except Exception as e:
@@ -210,9 +301,9 @@ class Node:
         """Bounce the node."""
         if not await self.stop():
             return False
-        await asyncio.sleep(2) # Grace period
+        await asyncio.sleep(2)  # Grace period
         return await self.start()
-        
+
     def is_running(self) -> bool:
         """Check if node process is running based on PID file."""
         if not self.pid_file.exists():
@@ -221,6 +312,7 @@ class Node:
             pid = int(self.pid_file.read_text().strip())
             # Check if process exists (signal 0 does nothing but checks permission/existence)
             import os
+
             os.kill(pid, 0)
             return True
         except (ValueError, ProcessLookupError, OSError):
@@ -232,6 +324,7 @@ class Node:
         Polls the get_block_number method until it succeeds or timeout is reached.
         """
         import time
+
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
@@ -249,8 +342,9 @@ class Node:
         Returns True if progress observed, False if timeout.
         """
         import time
+
         start_time = time.time()
-        
+
         # Get start height
         start_height = -1
         try:
@@ -258,20 +352,26 @@ class Node:
         except Exception:
             LOG.warning(f"Node {self.id} RPC unavailable for initial block check")
             return False
-            
+
         target_height = start_height + delta
-        LOG.info(f"Node {self.id} current height {start_height}, waiting for {target_height} (timeout={timeout}s)")
-        
+        LOG.info(
+            f"Node {self.id} current height {start_height}, waiting for {target_height} (timeout={timeout}s)"
+        )
+
         while time.time() - start_time < timeout:
             try:
                 current = self.w3.eth.block_number
                 if current >= target_height:
-                    LOG.info(f"Node {self.id} reached height {current} (progress verified)")
+                    LOG.info(
+                        f"Node {self.id} reached height {current} (progress verified)"
+                    )
                     return True
             except Exception:
                 pass
-            
+
             await asyncio.sleep(1)
-            
-        LOG.warning(f"Node {self.id} failed to produce {delta} blocks in {timeout}s (started at {start_height})")
+
+        LOG.warning(
+            f"Node {self.id} failed to produce {delta} blocks in {timeout}s (started at {start_height})"
+        )
         return False

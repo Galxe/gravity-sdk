@@ -1,0 +1,214 @@
+# Gravity Cluster Configuration
+# Copy this file to cluster.toml and modify as needed
+
+[cluster]
+name = "gravity-devnet"
+# Base directory for all node data (each node gets a subdirectory)
+base_dir = "/tmp/gravity-cluster-fuzzy"
+
+
+[build]
+# Path to gravity_node binary
+binary_path = "../target/quick-release/gravity_node"
+
+# External dependencies configuration
+[dependencies.genesis_contracts]
+# Git repository URL for gravity_chain_core_contracts
+repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
+# Git ref (branch, tag, or commit hash) to checkout
+# Use "main" for latest, or specific commit hash for reproducibility
+ref = "main"
+
+# Node definitions
+# Each node requires: id, host, and ports
+# For local development, use 127.0.0.1 with different ports
+# For distributed deployment, use different hosts
+
+# ============ Genesis Nodes (node1-node4) ============
+
+[[nodes]]
+id = "node1"
+host = "127.0.0.1"
+role = "genesis"
+p2p_port = 6180
+vfn_port = 6190
+rpc_port = 8545
+metrics_port = 9001
+inspection_port = 10000
+https_port = 1024
+authrpc_port = 8561
+reth_p2p_port = 12024
+
+[[nodes]]
+id = "node2"
+host = "127.0.0.1"
+role = "genesis"
+p2p_port = 6181
+vfn_port = 6191
+rpc_port = 8546
+metrics_port = 9002
+inspection_port = 10001
+https_port = 1025
+authrpc_port = 8562
+reth_p2p_port = 12025
+
+[[nodes]]
+id = "node3"
+host = "127.0.0.1"
+role = "genesis"
+p2p_port = 6182
+vfn_port = 6192
+rpc_port = 8547
+metrics_port = 9003
+inspection_port = 10002
+https_port = 1026
+authrpc_port = 8563
+reth_p2p_port = 12026
+
+[[nodes]]
+id = "node4"
+host = "127.0.0.1"
+role = "genesis"
+p2p_port = 6183
+vfn_port = 6193
+rpc_port = 8548
+metrics_port = 9004
+inspection_port = 10003
+https_port = 1027
+authrpc_port = 8564
+reth_p2p_port = 12027
+
+# ============ Validator Nodes (node5-node10) ============
+
+[[nodes]]
+id = "node5"
+host = "127.0.0.1"
+role = "validator"
+p2p_port = 6184
+vfn_port = 6194
+rpc_port = 8549
+metrics_port = 9005
+inspection_port = 10004
+https_port = 1028
+authrpc_port = 8565
+reth_p2p_port = 12028
+
+[[nodes]]
+id = "node6"
+host = "127.0.0.1"
+role = "validator"
+p2p_port = 6185
+vfn_port = 6195
+rpc_port = 8550
+metrics_port = 9006
+inspection_port = 10005
+https_port = 1029
+authrpc_port = 8566
+reth_p2p_port = 12029
+
+[[nodes]]
+id = "node7"
+host = "127.0.0.1"
+role = "validator"
+p2p_port = 6186
+vfn_port = 6196
+rpc_port = 8551
+metrics_port = 9007
+inspection_port = 10006
+https_port = 1030
+authrpc_port = 8567
+reth_p2p_port = 12030
+
+[[nodes]]
+id = "node8"
+host = "127.0.0.1"
+role = "validator"
+p2p_port = 6187
+vfn_port = 6197
+rpc_port = 8552
+metrics_port = 9008
+inspection_port = 10007
+https_port = 1031
+authrpc_port = 8568
+reth_p2p_port = 12031
+
+[[nodes]]
+id = "node9"
+host = "127.0.0.1"
+role = "validator"
+p2p_port = 6188
+vfn_port = 6198
+rpc_port = 8553
+metrics_port = 9009
+inspection_port = 10008
+https_port = 1032
+authrpc_port = 8569
+reth_p2p_port = 12032
+
+[[nodes]]
+id = "node10"
+host = "127.0.0.1"
+role = "validator"
+p2p_port = 6189
+vfn_port = 6199
+rpc_port = 8554
+metrics_port = 9010
+inspection_port = 10009
+https_port = 1033
+authrpc_port = 8570
+reth_p2p_port = 12033
+
+# Genesis configuration
+# These values are used when generating the genesis.json
+[genesis]
+epoch_interval_micros = 120000000  # 2 min in microseconds
+major_version = 1
+consensus_config = "0x00"
+execution_config = "0x00"
+
+[genesis.validator_config]
+minimum_bond = "1000000000000000000"
+maximum_bond = "1000000000000000000000000"
+unbonding_delay_micros = 604800000000
+allow_validator_set_change = true
+voting_power_increase_limit_pct = 20
+max_validator_set_size = "100"
+
+[genesis.staking_config]
+minimum_stake = "1000000000000000000"
+lockup_duration_micros = 86400000000
+unbonding_delay_micros = 86400000000
+minimum_proposal_stake = "10000000000000000000"
+
+[genesis.governance_config]
+min_voting_threshold = "1000000000000000000"
+required_proposer_stake = "10000000000000000000"
+voting_duration_micros = 604800000000
+
+[genesis.randomness_config]
+variant = 0
+secrecy_threshold = 0
+reconstruction_threshold = 0
+fast_path_secrecy_threshold = 0
+
+[genesis.oracle_config]
+source_types = [1]
+callbacks = ["0x00000000000000000000000000000001625F2018"]
+
+# JWK config - Google OIDC provider
+[genesis.jwk_config]
+issuers = ["0x68747470733a2f2f6163636f756e74732e676f6f676c652e636f6d"]
+
+[[genesis.jwk_config.jwks]]
+kid = "f5f4c0ae6e6090a65ab0a694d6ba6f19d5d0b4e6"
+kty = "RSA" 
+alg = "RS256"
+e = "AQAB"
+n = "2K7epoJWl_aBoYGpXmDBBiEnwQ0QdVRU1gsbGXNrEbrZEQdY5KjH5P5gZMq3d3KvT1j5KsD2tF_9jFMDLqV4VWDNJRLgSNJxhJuO_oLO2BXUSL9a7fLHxnZCUfJvT2K-O8AXjT3_ZM8UuL8d4jBn_fZLzdEI4MHrZLVSaHDvvKqL_mExQo6cFD-qyLZ-T6aHv2x8R7L_3X7E1nGMjKVVZMveQ_HMeXvnGxKf5yfEP0hIQlC_kFm4L_1kV1S0UPmMptZL2qI4VnXqmqI6TZJyE-3VXHgNn1Z1O_9QZlPC0fF0spLHf2S3nNqI0v3k2E7q3DkqxVf5xvn7q_X-gPqzVE9Jw"
+
+# Faucet initialization configuration
+# Generates funded accounts for validator nodes (node5-node10) to use for staking
+[faucet_init]
+num_accounts = 6  # One account per validator node (node5-node10)
+private_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+eth_balance = "1000000000000000000000000"  # 1M ETH in wei for staking operations

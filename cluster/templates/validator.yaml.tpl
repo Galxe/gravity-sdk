@@ -51,7 +51,8 @@ full_node_networks:
     identity:
       type: "from_file"
       path: ${CONFIG_DIR}/identity.yaml
-    discovery_method: none
+    discovery_method:
+      onchain
     mutual_authentication: false
 
 storage:

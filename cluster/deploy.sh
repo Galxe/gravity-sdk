@@ -269,13 +269,24 @@ main() {
             exit 1
         fi
     fi
-
     # Clean old environment
     if [ -d "$base_dir" ]; then
         log_warn "Cleaning old environment at $base_dir..."
         rm -rf "$base_dir"
     fi
     mkdir -p "$base_dir"
+    
+    # Find gravity_cli and create hardlink
+    gravity_cli_path=$(find_binary "gravity_cli" "$PROJECT_ROOT") || true
+    if [ -n "$gravity_cli_path" ]; then
+        log_info "Found gravity_cli at: $gravity_cli_path"
+        log_info "Creating gravity_cli hardlink in $base_dir..."
+        ln "$gravity_cli_path" "$base_dir/gravity_cli"
+        export GRAVITY_CLI="$gravity_cli_path"
+    else
+        log_error "gravity_cli not found - VFN identity generation may fail and hardlink not created"
+        exit 1
+    fi
     
     # Deploy Genesis
     if [ -f "$OUTPUT_DIR/genesis.json" ]; then
@@ -285,13 +296,6 @@ main() {
         exit 1
     fi
     genesis_path="$base_dir/genesis.json"
-    
-    # Find gravity_cli for VFN identity generation
-    GRAVITY_CLI=$(find_binary "gravity_cli" "$PROJECT_ROOT") || true
-    if [ -z "$GRAVITY_CLI" ]; then
-        log_warn "gravity_cli not found - VFN identity generation may fail"
-    fi
-    export GRAVITY_CLI
     
     node_count=$(echo "$config_json" | jq '.nodes | length')
     

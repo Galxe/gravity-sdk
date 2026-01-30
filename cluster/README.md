@@ -27,6 +27,11 @@ make init
 ```
 *Note: The first run will clone and build the genesis contract, which may take a few minutes.*
 
+> ⚠️ **Important**: The `init.sh` script will clone `gravity_chain_core_contracts` to `external/` if it doesn't exist, but will **NOT** automatically update it if it already exists. If the contracts have been updated upstream, you need to manually pull the latest changes:
+> ```bash
+> cd external/gravity_chain_core_contracts && git pull origin main
+> ```
+
 ### 4. Deploy and Start
 Deploy the configurations to the runtime directory and start the nodes.
 ```bash
