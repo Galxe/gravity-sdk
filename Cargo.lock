@@ -7858,6 +7858,7 @@ dependencies = [
  "anyhow",
  "aptos-consensus 0.1.0",
  "bcs 0.1.4",
+ "build-info",
  "bytes",
  "clap 4.5.54",
  "gaptos",

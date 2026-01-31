@@ -234,7 +234,7 @@ impl JoinCommand {
             let call = ValidatorManagement::registerValidatorCall {
                 stakePool: stake_pool,
                 moniker: self.moniker.clone(),
-                consensusPubkey: self.consensus_public_key.clone().into_bytes().into(),
+                consensusPubkey: hex::decode(self.consensus_public_key)?.into(),
                 consensusPop: if self.consensus_pop.is_empty() {
                     Bytes::new()
                 } else {
