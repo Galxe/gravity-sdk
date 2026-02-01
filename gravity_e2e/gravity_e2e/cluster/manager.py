@@ -683,7 +683,7 @@ class Cluster:
     async def validator_join(
         self,
         node_id: str,
-        stake_amount: str = "10001.0",
+        stake_amount: str = "1.0",
         moniker: Optional[str] = None,
         timeout: int = 120,
     ):

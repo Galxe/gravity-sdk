@@ -171,7 +171,7 @@ minimum_bond = "1000000000000000000"
 maximum_bond = "1000000000000000000000000"
 unbonding_delay_micros = 604800000000
 allow_validator_set_change = true
-voting_power_increase_limit_pct = 20
+voting_power_increase_limit_pct = 50
 max_validator_set_size = "100"
 
 [genesis.staking_config]
