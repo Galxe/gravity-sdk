@@ -69,6 +69,13 @@ Use `--no-cleanup` to inspect the cluster after a failure.
 ./gravity_e2e/run_test.sh single_node --no-cleanup
 ```
 
+### 4. Custom Logging
+You can control the Python logging level by passing standard pytest flags to the runner.
+```bash
+# Enable CLI logging at DEBUG level to see internal logs
+./gravity_e2e/run_test.sh --log-cli-level=DEBUG
+```
+
 ## Writing Tests
 
 ### Directory Structure

@@ -705,7 +705,7 @@ class Cluster:
             raise ValueError(f"Node {node_id} not found")
 
         # Validate node role
-        if node.role not in (NodeRole.VALIDATOR):
+        if node.role != NodeRole.VALIDATOR:
             raise ValueError(
                 f"Node {node_id} has role {node.role.value}, " f"expected VALIDATOR"
             )
