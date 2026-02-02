@@ -73,7 +73,6 @@ use futures::{
     },
     SinkExt, StreamExt,
 };
-use gaptos::aptos_consensus::counters;
 use gaptos::{
     aptos_bounded_executor::BoundedExecutor,
     aptos_channels::{aptos_channel, message_queues::QueueStyle},
@@ -83,6 +82,7 @@ use gaptos::{
         },
         network_id::{NetworkId, PeerNetworkId},
     },
+    aptos_consensus::counters,
     aptos_crypto::bls12381::PrivateKey,
     aptos_dkg::{
         pvss::{traits::Transcript, Player},
@@ -1136,10 +1136,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
         // Update global proposer reth address map for current epoch
         proposer_reth_map::update_proposer_reth_index_map(&validator_set);
-        info!(
-            "Updated proposer reth address map for epoch {}",
-            payload.epoch()
-        );
+        info!("Updated proposer reth address map for epoch {}", payload.epoch());
 
         self.is_current_epoch_validator = false;
         if self.is_validator {

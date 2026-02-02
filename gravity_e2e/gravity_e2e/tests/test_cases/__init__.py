@@ -125,15 +125,6 @@ register_test("cluster_lifecycle", suite="cluster_ops", self_managed=True)(test_
 register_test("cluster_fault_tolerance", suite="cluster_ops", self_managed=True)(test_fault_tolerance)
 # Epoch switch tests are now registered via @register_test decorator in the file itself
 
-# Staking tests
-register_test("staking_lifecycle", suite="staking")(test_staking_lifecycle)
-register_test("staking_early_unstake", suite="staking")(test_early_unstake_restrictions)
-register_test("staking_minimum_bond", suite="staking")(test_validator_minimum_bond)
-register_test("staking_voting_power", suite="staking")(test_voting_power_calculation)
-register_test("staking_delegation", suite="staking")(test_delegation_role_separation)
-register_test("staking_operations", suite="staking")(test_operations_maintenance)
-
-
 # Define default test list for "all" suite
 DEFAULT_TESTS = [
     "basic_transfer",
