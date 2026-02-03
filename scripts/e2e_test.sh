@@ -55,6 +55,7 @@ fi
 
 docker run --rm -i \
     -p 9001:9001 \
+    -p 8545:8545 \
     -e GIT_REF="${GIT_REF}" \
     -e CLONE_URL="${CLONE_URL}" \
     -e DURATION="${DURATION}" \
@@ -192,7 +193,24 @@ cleanup() {
 trap cleanup EXIT
 
 echo "Waiting for node to be ready..."
-sleep 5
+MAX_RETRIES=60
+RETRY_INTERVAL=2
+for i in $(seq 1 $MAX_RETRIES); do
+    if curl -s -X POST -H "Content-Type: application/json" \
+        --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_blockNumber\",\"params\":[],\"id\":1}" \
+        http://localhost:8545 > /dev/null 2>&1; then
+        echo "Node is ready after $((i * RETRY_INTERVAL)) seconds"
+        break
+    fi
+    if [ $i -eq $MAX_RETRIES ]; then
+        echo "ERROR: Node failed to start after $((MAX_RETRIES * RETRY_INTERVAL)) seconds"
+        echo "Checking node logs..."
+        cat /tmp/gravity-cluster-single/node1/logs/*.log 2>/dev/null | tail -50 || echo "No logs found"
+        exit 1
+    fi
+    echo "  Waiting for RPC... (attempt $i/$MAX_RETRIES)"
+    sleep $RETRY_INTERVAL
+done
 
 echo "Check node is up..."
 curl -X POST -H "Content-Type: application/json" --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_blockNumber\",\"params\":[],\"id\":1}" http://localhost:8545
