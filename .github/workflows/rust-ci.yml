@@ -23,7 +23,7 @@ jobs:
     name: Rust Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install nightly rustfmt
         run: |
           rustup toolchain install nightly --component rustfmt
@@ -35,7 +35,7 @@ jobs:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
       - name: Install clippy
@@ -50,7 +50,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
       - name: Run cargo cache
@@ -69,7 +69,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       contains(github.event.pull_request.labels.*.name, 'CICD:run-tests')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
       - name: Run cargo cache
@@ -83,7 +83,7 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref_name, 'branch-v')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Check gravity-reth branch dependency
         run: |
           set -e
