@@ -608,7 +608,7 @@ impl BlockBufferManager {
                     }
                     BlockState::Historical { id } => {
                         // Historical blocks don't have compute_result, this is an error case
-                        return Err(anyhow::anyhow!(
+                        return Err(format!(
                             "Cannot get executed result for historical block {:?} num {:?}",
                             id,
                             block_num
