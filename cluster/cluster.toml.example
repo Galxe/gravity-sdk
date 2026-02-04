@@ -124,7 +124,6 @@ callbacks = ["0x00000000000000000000000000000001625F2018"]
 issuers = ["0x68747470733a2f2f6163636f756e74732e676f6f676c652e636f6d"]
 
 [[genesis.jwk_config.jwks]]
-kty = "RSA"
 kid = "f5f4c0ae6e6090a65ab0a694d6ba6f19d5d0b4e6"
 kty = "RSA"
 alg = "RS256"

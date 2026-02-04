@@ -126,6 +126,10 @@ pub enum BlockState {
         id: BlockId,
         persist_notifier: Option<Sender<()>>,
     },
+    /// Historical block recovered from storage, only has block id
+    Historical {
+        id: BlockId,
+    },
 }
 
 impl BlockState {
@@ -134,6 +138,7 @@ impl BlockState {
             BlockState::Ordered { block, .. } => block.block_meta.block_id,
             BlockState::Computed { id, .. } => *id,
             BlockState::Committed { id, .. } => *id,
+            BlockState::Historical { id } => *id,
         }
     }
 }
@@ -269,21 +274,7 @@ impl BlockBufferManager {
                 *block_number_to_block_id_with_epoch.get(&latest_commit_block_number).unwrap();
             block_state_machine.blocks.insert(
                 BlockKey::new(commit_block_epoch, latest_commit_block_number),
-                BlockState::Committed {
-                    hash: None,
-                    compute_result: StateComputeResult::new(
-                        ComputeRes {
-                            data: [0; 32],
-                            txn_num: 0,
-                            txn_status: Arc::new(None),
-                            events: vec![],
-                        },
-                        None,
-                        None,
-                    ),
-                    id: commit_block_id,
-                    persist_notifier: None,
-                },
+                BlockState::Historical { id: commit_block_id },
             );
             *self.latest_epoch_change_block_number.lock().await = latest_commit_block_number;
         }
@@ -615,6 +606,12 @@ impl BlockBufferManager {
                         assert_eq!(id, &block_id);
                         return Ok(compute_result.clone());
                     }
+                    BlockState::Historical { id } => {
+                        // Historical blocks don't have compute_result, this is an error case
+                        return Err(anyhow::anyhow!(
+                            "Cannot get executed result for historical block {id:?} num {block_num:?}"
+                        ));
+                    }
                 }
             } else {
                 // invariant: the missed block is removed after epoch change
@@ -796,6 +793,16 @@ impl BlockBufferManager {
                             "Set commit block meet ordered block for block id {:?} num {}",
                             block_id_num_hash.block_id, block_id_num_hash.num
                         );
+                    }
+                    BlockState::Historical { id } => {
+                        // Historical blocks are already committed/persisted, just verify the id
+                        // matches
+                        if *id != block_id_num_hash.block_id {
+                            panic!(
+                                "Historical Block id mismatch: {:?} != {:?} num: {}",
+                                block_id_num_hash.block_id, *id, block_id_num_hash.num
+                            );
+                        }
                     }
                 }
             } else {
