@@ -24,7 +24,7 @@ vfn_port = 6192
 rpc_port = 8545
 metrics_port = 9003
 inspection_port = 10002
-https_port = 1026
+https_port = 1024
 authrpc_port = 8553
 reth_p2p_port = 12026
 
