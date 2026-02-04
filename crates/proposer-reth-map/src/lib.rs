@@ -19,8 +19,9 @@ pub fn update_proposer_reth_index_map(
     validator_set: &gaptos::aptos_types::on_chain_config::ValidatorSet,
 ) {
     let mut reth_address_map = HashMap::new();
-    for (index, validator) in validator_set.active_validators.iter().enumerate() {
-        reth_address_map.insert(index as u64, validator.reth_account_address.clone());
+    for validator in validator_set.active_validators.iter() {
+        let validator_index = validator.config().validator_index;
+        reth_address_map.insert(validator_index, validator.reth_account_address.clone());
     }
     *PROPOSER_RETH_ADDRESS_MAP.write() = reth_address_map;
 }
