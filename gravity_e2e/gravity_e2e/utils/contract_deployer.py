@@ -164,11 +164,21 @@ class ContractDeployer:
                     contract_name=contract_name
                 )
 
+            # Extract bytecode - handle both simple hex string and Foundry's object format
+            bytecode = contract_json['bytecode']
+            if isinstance(bytecode, dict) and 'object' in bytecode:
+                bytecode = bytecode['object']
+
+            # Extract deployed bytecode
+            deployed_bytecode = contract_json.get('deployedBytecode')
+            if isinstance(deployed_bytecode, dict) and 'object' in deployed_bytecode:
+                deployed_bytecode = deployed_bytecode['object']
+
             # Create contract data
             contract_data = ContractData(
-                bytecode=contract_json['bytecode'],
+                bytecode=bytecode,
                 abi=contract_json['abi'],
-                deployed_bytecode=contract_json.get('deployedBytecode'),
+                deployed_bytecode=deployed_bytecode,
                 metadata=contract_json.get('metadata')
             )
 
