@@ -1166,10 +1166,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             error!("Failed to read on-chain consensus config {}", error);
         }
 
-        if let Err(error) = &onchain_execution_config {
-            error!("Failed to read on-chain execution config {}", error);
-        }
-
         if let Err(error) = &randomness_config_move_struct {
             error!("Failed to read on-chain randomness config {}", error);
         }
@@ -1830,7 +1826,10 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .map(|peer| peer.peer_id())
             .collect::<Vec<_>>();
         if vfn_peers.is_empty() {
-            warn!("No vfn peers available");
+            sample!(
+                SampleRate::Duration(Duration::from_secs(5)),
+                warn!("No vfn peers available");
+            );
             return;
         }
         let peer = vfn_peers[thread_rng().gen_range(0, vfn_peers.len())];
