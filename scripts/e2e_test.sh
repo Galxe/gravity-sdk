@@ -109,8 +109,8 @@ NODES_EOF
 cat > configs/test_accounts.json << ACCOUNTS_EOF
 {
   "faucet": {
-    "private_key": "0x047a5466f6f9e08c8bcc56213d6530d517c1ef126eefbbdf85ffe8d893ed0e9f",
-    "address": "0xAEd2a948892475F800A337427B3275D190EA3e94"
+    "private_key": "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+    "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
   }
 }
 ACCOUNTS_EOF
