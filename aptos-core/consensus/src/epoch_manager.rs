@@ -64,6 +64,7 @@ use aptos_consensus_types::{
 };
 use aptos_mempool::QuorumStoreRequest;
 use aptos_safety_rules::{safety_rules_manager, PersistentSafetyStorage, SafetyRulesManager};
+use block_buffer_manager::get_block_buffer_manager;
 use fail::fail_point;
 use futures::{
     channel::{
@@ -1937,6 +1938,9 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     ) {
         // initial start of the processor
         self.await_reconfig_notification().await;
+
+        // Update block buffer manager with the correct epoch from epoch_state
+        get_block_buffer_manager().update_epoch(self.epoch()).await;
 
         let mut request_sync_info_interval = tokio::time::interval(Duration::from_millis(
             std::env::var("GRAVITY_REQUEST_SYNC_INFO_INTERVAL_MS")
