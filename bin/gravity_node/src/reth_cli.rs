@@ -133,9 +133,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
 
     /// Get reth coinbase address from proposer's validator index
     /// Returns the reth account address of the proposer if found, otherwise returns Address::ZERO
-    fn get_coinbase_from_proposer_index(
-        proposer_index: Option<u64>,
-    ) -> Address {
+    fn get_coinbase_from_proposer_index(proposer_index: Option<u64>) -> Address {
         let index = match proposer_index {
             Some(idx) => idx,
             None => return Address::ZERO,
