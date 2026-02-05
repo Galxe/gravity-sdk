@@ -252,7 +252,7 @@ tikv-jemallocator = { version = "0.6" }
 # Configure jemalloc to reduce TLS usage
 tikv-jemalloc-sys = { version = "0.6", features = ["disable_initial_exec_tls"] }
 json-patch = "0.2.6"
-jsonwebtoken = "8.1"
+jsonwebtoken = "9.3"
 jwt = "0.16.0"
 lazy_static = "1.4.0"
 libc = "0.2.147"
