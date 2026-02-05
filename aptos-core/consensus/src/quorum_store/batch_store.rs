@@ -344,6 +344,8 @@ impl BatchStore {
         self.last_certified_time.load(Ordering::Relaxed)
     }
 
+    /// Get batch from db, return CouldNotGetData if the key doesnt exist,
+    /// return InternalError if the db returns an error.
     fn get_batch_from_db(&self, key: &BatchKey) -> ExecutorResult<PersistedValue> {
         counters::GET_BATCH_FROM_DB_COUNT.inc();
 
@@ -353,10 +355,7 @@ impl BatchStore {
                 debug!("Could not get batch from db because the key {} doesnt exist", key.digest);
                 Err(ExecutorError::CouldNotGetData)
             }
-            Err(e) => {
-                warn!("Could not get batch from db {}", e);
-                Err(ExecutorError::CouldNotGetData)
-            }
+            Err(e) => Err(ExecutorError::InternalError { error: e.to_string() }),
         }
     }
 
@@ -374,6 +373,7 @@ impl BatchStore {
                 info!("QS: get_batch_from_db success {}", key.digest);
                 Ok(value)
             }
+            Err(ExecutorError::CouldNotGetData) => Err(ExecutorError::CouldNotGetData),
             Err(e) => {
                 error!("QS: get_batch_from_db error {}", e);
                 Err(e)
