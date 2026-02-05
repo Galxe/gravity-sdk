@@ -71,6 +71,13 @@ class Cluster:
         self.cluster_root = self.config_path.parent
         self.base_dir = Path(self.config["cluster"]["base_dir"])
         self.gravity_cli_path = self.base_dir / "gravity_cli"
+        
+        # Load genesis.toml if it exists (for faucet and genesis settings)
+        self.genesis_config = {}
+        genesis_config_path = self.cluster_root / "genesis.toml"
+        if genesis_config_path.exists():
+            with open(genesis_config_path, "rb") as f:
+                self.genesis_config = tomllib.load(f)
 
         self.nodes: Dict[str, Node] = self._discover_nodes()
 
@@ -193,8 +200,10 @@ class Cluster:
         Matches addresses from config with private keys from:
         1. KNOWN_DEV_KEYS (Built-in devnet keys)
         2. genesis.secrets.keys (Config)
+        3. genesis.faucet.private_key (if specified directly)
         """
-        genesis = self.config.get("genesis", {})
+        # Check genesis_config first (new split config), then fall back to cluster config
+        genesis = self.genesis_config.get("genesis", {}) or self.config.get("genesis", {})
         faucet_config = genesis.get("faucet", [])
 
         # Normalize to list
@@ -214,6 +223,11 @@ class Cluster:
         secrets = genesis.get("secrets", {})
         if secrets and "keys" in secrets:
             candidate_keys.update(secrets["keys"])
+        
+        # Also check for private_key directly in faucet configs
+        for f in faucets:
+            if "private_key" in f:
+                candidate_keys.add(f["private_key"])
 
         # Build address -> LocalAccount mapping
         key_map: Dict[str, LocalAccount] = {}

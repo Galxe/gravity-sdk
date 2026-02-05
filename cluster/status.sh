@@ -37,16 +37,26 @@ NC='\033[0m'
 # Parse TOML using Python
 parse_toml() {
     python3 << 'PYTHON_SCRIPT'
-import tomllib
 import json
 import sys
 import os
 
+try:
+    import tomllib
+    def load_toml(f):
+        return tomllib.load(f)
+    open_mode = 'rb'
+except ImportError:
+    import toml
+    def load_toml(f):
+        return toml.load(f)
+    open_mode = 'r'
+
 config_file = os.environ.get('CONFIG_FILE', 'cluster.toml')
 
 try:
-    with open(config_file, 'rb') as f:
-        config = tomllib.load(f)
+    with open(config_file, open_mode) as f:
+        config = load_toml(f)
     print(json.dumps(config))
 except Exception as e:
     print(f"Error: {e}", file=sys.stderr)
