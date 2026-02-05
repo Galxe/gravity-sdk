@@ -96,7 +96,7 @@ echo "Started node with PID $pid"
 START_SCRIPT
 
     # Replace BINARY_PATH placeholder
-    sed -i "s|BINARY_PATH|$binary_path|g" "$data_dir/script/start.sh"
+    sed -i '' "s|BINARY_PATH|$binary_path|g" "$data_dir/script/start.sh"
     chmod +x "$data_dir/script/start.sh"
     
     # Generate stop script
@@ -208,7 +208,7 @@ echo "Started VFN node with PID $pid"
 START_SCRIPT
 
     # Replace BINARY_PATH placeholder
-    sed -i "s|BINARY_PATH|$binary_path|g" "$data_dir/script/start.sh"
+    sed -i '' "s|BINARY_PATH|$binary_path|g" "$data_dir/script/start.sh"
     chmod +x "$data_dir/script/start.sh"
     
     # Generate stop script
@@ -295,11 +295,30 @@ main() {
         exit 1
     fi
     
+    # Create gravity_node hardlink (self-contained deployment)
+    log_info "Creating gravity_node hardlink in $base_dir..."
+    ln "$binary_path" "$base_dir/gravity_node"
+    local_binary_path="$base_dir/gravity_node"
+    
+    # Read genesis source paths from config (with defaults)
+    genesis_path=$(echo "$config_json" | jq -r '.genesis_source.genesis_path // "./output/genesis.json"')
+    waypoint_path=$(echo "$config_json" | jq -r '.genesis_source.waypoint_path // "./output/waypoint.txt"')
+    
+    # Resolve relative paths (relative to CONFIG_FILE location, not SCRIPT_DIR)
+    local config_dir="$(dirname "$CONFIG_FILE")"
+    if [[ "$genesis_path" != /* ]]; then
+        genesis_path="$(cd "$config_dir" && realpath "$genesis_path" 2>/dev/null || echo "$genesis_path")"
+    fi
+    if [[ "$waypoint_path" != /* ]]; then
+        waypoint_path="$(cd "$config_dir" && realpath "$waypoint_path" 2>/dev/null || echo "$waypoint_path")"
+    fi
+    
     # Deploy Genesis
-    if [ -f "$OUTPUT_DIR/genesis.json" ]; then
-        cp "$OUTPUT_DIR/genesis.json" "$base_dir/genesis.json"
+    if [ -f "$genesis_path" ]; then
+        cp "$genesis_path" "$base_dir/genesis.json"
+        log_info "Deployed genesis from: $genesis_path"
     else
-        log_error "Genesis file not found in artifacts!"
+        log_error "Genesis file not found: $genesis_path"
         exit 1
     fi
     genesis_path="$base_dir/genesis.json"
