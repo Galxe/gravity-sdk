@@ -1171,10 +1171,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             error!("Failed to read on-chain consensus config {}", error);
         }
 
-        if let Err(error) = &onchain_execution_config {
-            error!("Failed to read on-chain execution config {}", error);
-        }
-
         if let Err(error) = &randomness_config_move_struct {
             error!("Failed to read on-chain randomness config {}", error);
         }
@@ -1488,7 +1484,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     fn consensus_msg_filter(&self, peer_id: &AccountAddress, consensus_msg: &ConsensusMsg) -> bool {
         match consensus_msg {
             ConsensusMsg::EpochChangeProof(_) => peer_id == &self.author,
-            ConsensusMsg::SyncInfoRequest => true,
             _ => self.is_current_epoch_validator,
         }
     }
@@ -1734,7 +1729,10 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     /// Filter out rpc requests that are not relevant to the current epoch role.
     /// Return false if the request is filtered out, true otherwise.
     fn rpc_request_filter(&self, peer_id: &Author, request: &IncomingRpcRequest) -> bool {
-        self.is_current_epoch_validator
+        match request {
+            IncomingRpcRequest::BlockRetrieval(_) | IncomingRpcRequest::SyncInfoRequest(_) => true,
+            _ => self.is_current_epoch_validator,
+        }
     }
 
     fn process_rpc_request(
@@ -1833,7 +1831,10 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .map(|peer| peer.peer_id())
             .collect::<Vec<_>>();
         if vfn_peers.is_empty() {
-            warn!("No vfn peers available");
+            sample!(
+                SampleRate::Duration(Duration::from_secs(5)),
+                warn!("No vfn peers available");
+            );
             return;
         }
         let peer = vfn_peers[thread_rng().gen_range(0, vfn_peers.len())];
@@ -1951,6 +1952,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
         loop {
             tokio::select! {
+                // Handles Direct Send/Broadcast messages (e.g. ProposalMsg, VoteMsg, etc).
+                // "Fire and forget" style messages that do not require an immediate response.
                 (peer, msg) = network_receivers.consensus_messages.select_next_some() => {
                     info!("consensus message peer {:?} msg {:?}", peer, msg);
                     monitor!("epoch_manager_process_consensus_messages",
@@ -1964,6 +1967,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                         error!(epoch = self.epoch(), error = ?e, kind = error_kind(&e));
                     });
                 },
+                // Handles RPC (Request-Response) style messages (e.g. BlockRetrievalRequest, SyncInfoRequest).
+                // These requests expect a response sent back via a one-shot channel.
                 (peer, request) = network_receivers.rpc_rx.select_next_some() => {
                     monitor!("epoch_manager_process_rpc",
                     if let Err(e) = self.process_rpc_request(peer, request) {
