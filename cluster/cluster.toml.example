@@ -30,6 +30,8 @@ ref = "main"
 #   - "validator": Validator node but NOT in initial genesis (can join later)
 #   - "vfn": Full node, uses onchain discovery
 
+# ============ Genesis Nodes (node1-node4) ============
+
 [[nodes]]
 id = "node1"
 host = "127.0.0.1"
@@ -81,6 +83,35 @@ inspection_port = 10003
 https_port = 1027
 authrpc_port = 8554
 reth_p2p_port = 12027
+
+# ============ Validator Nodes (node5) ============
+
+[[nodes]]
+id = "node5"
+host = "127.0.0.1"
+role = "validator"
+p2p_port = 6184
+vfn_port = 6194
+rpc_port = 8549
+metrics_port = 9005
+inspection_port = 10004
+https_port = 1028
+authrpc_port = 8565
+reth_p2p_port = 12028
+
+# ============ Full Nodes (vfn1) ============
+
+[[nodes]]
+id = "vfn1"
+host = "127.0.0.1"
+role = "vfn"
+vfn_port = 6195
+rpc_port = 8550
+metrics_port = 9006
+inspection_port = 10005
+https_port = 1029
+authrpc_port = 8566
+reth_p2p_port = 12029
 
 # Genesis configuration
 # These values are used when generating the genesis.json
