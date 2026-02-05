@@ -55,95 +55,195 @@ fi
 
 docker run --rm -i \
     -p 9001:9001 \
+    -p 8545:8545 \
     -e GIT_REF="${GIT_REF}" \
     -e CLONE_URL="${CLONE_URL}" \
     -e DURATION="${DURATION}" \
     -v "${BENCH_CONFIG_PATH}:/bench_config.toml:ro" \
-    -v "${SCRIPT_DIR}/genesis.json:/genesis.json:ro" \
     rust:1.88.0-bookworm \
     bash -c '
 set -e
 
-echo "[1/6] Installing dependencies..."
+echo "===== Phase 1: Environment Setup ====="
+
+echo "[1/7] Installing system dependencies..."
 apt-get update && apt-get install -y --no-install-recommends \
-    clang llvm build-essential pkg-config libssl-dev libudev-dev procps git jq curl python3 python3-pip python3-venv nodejs npm > /dev/null 2>&1
+    libzstd-dev clang llvm build-essential pkg-config libssl-dev libudev-dev procps git jq curl python3 python3-pip python3-venv nodejs npm gettext-base protobuf-compiler bc > /dev/null 2>&1
 ln -sf /usr/bin/python3 /usr/bin/python
 
-echo "[2/6] Cloning ${GIT_REF}..."
+echo "[1.1/7] Installing Foundry..."
+curl -L https://foundry.paradigm.xyz | bash
+export PATH="$HOME/.foundry/bin:$PATH"
+foundryup
+
+echo "[2/7] Cloning ${GIT_REF}..."
 git clone --depth 50 --branch "${GIT_REF}"  "${CLONE_URL}" /app
 cd /app
 echo "Checked out: $(git rev-parse --short HEAD)"
 
-echo "[2.5/6] Configuring Genesis..."
-cp /genesis.json ./
-echo "Genesis file size: $(wc -c < /app/genesis.json) bytes"
+echo "===== Phase 2: Preparation (Fast Fail) ====="
 
-echo "Updating reth_config.json template..."
-echo "reth_config.json exists: $(test -f deploy_utils/node1/config/reth_config.json && echo yes || echo no)"
-if jq ".reth_args.chain = \"/app/genesis.json\"" deploy_utils/node1/config/reth_config.json > deploy_utils/node1/config/reth_config.json.tmp; then
-    mv deploy_utils/node1/config/reth_config.json.tmp deploy_utils/node1/config/reth_config.json
-    echo "jq command completed successfully"
-    echo "New reth_config.json content preview:"
-    head -5 deploy_utils/node1/config/reth_config.json || echo "Cannot read file"
+echo "[2.5/7] Preparing E2E test environment..."
+cd /app/gravity_e2e
+
+echo "  - Installing Python dependencies..."
+python3 -m pip install -r requirements.txt --quiet --break-system-packages
+echo "  - Python dependencies installed."
+
+echo "  - Creating test configuration files..."
+mkdir -p configs
+cat > configs/nodes.json << NODES_EOF
+{
+  "nodes": {
+    "local_node": {
+      "type": "validator",
+      "role": "primary",
+      "host": "localhost",
+      "rpc_port": 8545,
+      "metrics_port": 9001
+    }
+  }
+}
+NODES_EOF
+
+cat > configs/test_accounts.json << ACCOUNTS_EOF
+{
+  "faucet": {
+    "private_key": "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+    "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+  }
+}
+ACCOUNTS_EOF
+echo "  - Test configurations created."
+
+echo "  - Compiling test contracts..."
+if [ -d "tests/contracts/erc20-test" ]; then
+    echo "    Compiling ERC20 test contracts..."
+    cd tests/contracts/erc20-test
+    forge build --quiet || { echo "ERROR: forge build failed for erc20-test"; exit 1; }
+    cd /app/gravity_e2e
+    mkdir -p contracts_data
+    cp tests/contracts/erc20-test/out/SimpleStorage.sol/SimpleStorage.json contracts_data/ 2>/dev/null || true
+    cp tests/contracts/erc20-test/out/SimpleToken.sol/SimpleToken.json contracts_data/ 2>/dev/null || true
 else
-    echo "jq command FAILED with exit code: $?"
-    exit 1
+    echo "    WARN: tests/contracts/erc20-test not found, skipping"
 fi
 
+if [ -d "tests/contracts/randomness" ]; then
+    echo "    Compiling RandomDice contract..."
+    cd tests/contracts/randomness
+    forge build --quiet || { echo "ERROR: forge build failed for randomness"; exit 1; }
+    cd /app/gravity_e2e
+    cp tests/contracts/randomness/out/RandomDice.sol/RandomDice.json contracts_data/ 2>/dev/null || true
+else
+    echo "    WARN: tests/contracts/randomness not found, skipping"
+fi
+echo "  - Test contracts compiled."
 
-echo "[3/6] Building gravity_node (quick-release)..."
+cd /app
+
+echo "[2.6/7] Creating cluster configuration..."
+# Use the cluster.toml from gravity_e2e/cluster_test_cases/single_node
+cp /app/gravity_e2e/cluster_test_cases/single_node/cluster.toml /app/single_node.toml
+
+# Fix binary_path for Docker environment
+sed -i "s|binary_path = \"../target/quick-release/gravity_node\"|binary_path = \"/app/target/quick-release/gravity_node\"|" /app/single_node.toml
+
+echo "  - Cluster configuration created."
+
+echo ""
+echo "===== Phase 2 Complete: Preparation Passed ====="
+echo ""
+
+echo "===== Phase 3: Building Binaries (Long) ====="
+
+echo "[3/7] Building binaries..."
+echo "  Building gravity_node..."
 RUSTFLAGS="--cfg tokio_unstable" cargo build --bin gravity_node --profile quick-release
+echo "  Building gravity_cli..."
+RUSTFLAGS="--cfg tokio_unstable" cargo build --bin gravity_cli --profile quick-release
 
-echo "[4/6] Deploying..."
-rm -rf /tmp/node1
-bash deploy_utils/deploy.sh --install_dir /tmp/ --mode single --node node1 -v quick-release
+echo "[4/7] Initializing Cluster..."
+export PATH=$PATH:/app/target/quick-release
+npm config set registry https://registry.npmmirror.com
+npm config set fetch-retries 5
+npm config set fetch-retry-mintimeout 20000
+bash cluster/init.sh /app/single_node.toml
 
-echo "[5/6] Running node..."
-bash /tmp/node1/script/start.sh &
-NODE_PID=$!
-echo "Node started with PID $NODE_PID. Waiting for node to be ready..."
-sleep 2
+echo "Injecting faucet account into genesis..."
+GENESIS_FILE="cluster/output/genesis.json"
+FAUCET_ADDR="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+jq ".alloc[\"${FAUCET_ADDR}\"] = {\"balance\": \"0x21e19e0c9bab2400000\"}" "$GENESIS_FILE" > "$GENESIS_FILE.tmp" && mv "$GENESIS_FILE.tmp" "$GENESIS_FILE"
+echo "Genesis injected with faucet account."
+
+echo ""
+echo "===== Phase 4: Deployment ====="
+
+echo "[5/7] Deploying Cluster..."
+bash cluster/deploy.sh /app/single_node.toml
+
+echo "[6/7] Starting Cluster..."
+bash cluster/start.sh --config /app/single_node.toml
+
+# Function to stop cluster on exit
+cleanup() {
+    echo "Stopping cluster..."
+    bash /app/cluster/stop.sh --config /app/single_node.toml
+}
+trap cleanup EXIT
+
+echo "Waiting for node to be ready..."
+MAX_RETRIES=60
+RETRY_INTERVAL=2
+for i in $(seq 1 $MAX_RETRIES); do
+    if curl -s -X POST -H "Content-Type: application/json" \
+        --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_blockNumber\",\"params\":[],\"id\":1}" \
+        http://localhost:8545 > /dev/null 2>&1; then
+        echo "Node is ready after $((i * RETRY_INTERVAL)) seconds"
+        break
+    fi
+    if [ $i -eq $MAX_RETRIES ]; then
+        echo "ERROR: Node failed to start after $((MAX_RETRIES * RETRY_INTERVAL)) seconds"
+        echo "Checking node logs..."
+        cat /tmp/gravity-cluster-single/node1/logs/*.log 2>/dev/null | tail -50 || echo "No logs found"
+        exit 1
+    fi
+    echo "  Waiting for RPC... (attempt $i/$MAX_RETRIES)"
+    sleep $RETRY_INTERVAL
+done
 
 echo "Check node is up..."
 curl -X POST -H "Content-Type: application/json" --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_blockNumber\",\"params\":[],\"id\":1}" http://localhost:8545
 
-echo "[6/6] Running benchmark..."
+echo ""
+echo "===== Phase 5: Running Tests ====="
+
+echo "[7/7] Running gravity_e2e tests..."
+cd /app/gravity_e2e
+
+
+suites="basic contract erc20 randomness"
+for suite in $suites; do
+    echo "------------------------------------------------------------"
+    echo "Running test suite: $suite"
+    echo "------------------------------------------------------------"
+    python3 -m gravity_e2e --test-suite "$suite" --nodes-config configs/nodes.json --accounts-config configs/test_accounts.json
+    echo "Test suite $suite PASSED"
+    echo ""
+done
+
+echo "gravity_e2e tests PASSED!"
+
 cd /
-git clone --depth 1 https://github.com/Galxe/gravity_bench.git /gravity_bench || true
-cd /gravity_bench
-
-echo "Using mounted benchmark config:"
-cp /bench_config.toml ./
-cat bench_config.toml
-source setup.sh
-# Run benchmark
-cargo run --release 2>&1 || echo "Benchmark completed or failed"
-
-echo "Benchmark execution finished. Displaying latest log..."
-LATEST_LOG=$(ls -t log.*.log 2>/dev/null | head -n 1)
-if [ -n "$LATEST_LOG" ]; then
-    echo "Found log: $LATEST_LOG"
-    tail "$LATEST_LOG"
-    
-    # Run verification script (located in /app/scripts/verify_benchmark.py)
-    echo "Verifying benchmark results..."
-    if python3 /app/scripts/verify_benchmark.py "$LATEST_LOG"; then
-        echo "Verification PASSED."
-    else
-        echo "Verification FAILED."
-        exit 1
-    fi
-else
-    echo "No benchmark log file found."
-    exit 1
-fi
 
 echo "Final block number check..."
 curl -X POST -H "Content-Type: application/json" --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_blockNumber\",\"params\":[],\"id\":1}" http://localhost:8545
-kill $NODE_PID 2>/dev/null || true
 
+echo ""
 echo "===== E2E Test Completed ====="
-'
+
 
 echo "Done."
+'
+
 

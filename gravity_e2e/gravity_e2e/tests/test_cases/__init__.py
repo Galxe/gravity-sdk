@@ -78,10 +78,7 @@ from gravity_e2e.tests.test_cases.test_cluster_ops import (
     test_fault_tolerance,
 )
 
-# Epoch switch tests
-from gravity_e2e.tests.test_cases.test_epoch_switch import (
-    test_epoch_switch,
-)
+# Note: test_epoch_switch is in cluster_test_cases/fuzzy_cluster/, not here
 
 
 # Register all tests with the registry
@@ -125,7 +122,6 @@ register_test("cluster_lifecycle", suite="cluster_ops", self_managed=True)(test_
 register_test("cluster_fault_tolerance", suite="cluster_ops", self_managed=True)(test_fault_tolerance)
 # Epoch switch tests are now registered via @register_test decorator in the file itself
 
-
 # Define default test list for "all" suite
 DEFAULT_TESTS = [
     "basic_transfer",
@@ -164,7 +160,6 @@ __all__ = [
     'test_validator_add_remove_delayed',
     'test_cluster_lifecycle',
     'test_fault_tolerance',
-    'test_epoch_switch',
     # Default test list
     'DEFAULT_TESTS',
 ]

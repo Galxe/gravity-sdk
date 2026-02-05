@@ -196,9 +196,10 @@ class ContractError(GravityE2EError):
         contract_address: Optional[str] = None,
         contract_name: Optional[str] = None,
         method: Optional[str] = None,
-        revert_reason: Optional[str] = None
+        revert_reason: Optional[str] = None,
+        cause: Optional[Exception] = None
     ):
-        super().__init__(message, code)
+        super().__init__(message, code, cause=cause)
         if contract_address:
             self.details["contract_address"] = contract_address
         if contract_name:

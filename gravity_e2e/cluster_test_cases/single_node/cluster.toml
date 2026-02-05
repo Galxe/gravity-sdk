@@ -21,10 +21,10 @@ role = "genesis"
 host = "127.0.0.1"
 p2p_port = 6182
 vfn_port = 6192
-rpc_port = 8547
+rpc_port = 8545
 metrics_port = 9003
 inspection_port = 10002
-https_port = 1026
+https_port = 1024
 authrpc_port = 8553
 reth_p2p_port = 12026
 
@@ -60,10 +60,10 @@ required_proposer_stake = "10000000000000000000"
 voting_duration_micros = 604800000000
 
 [genesis.randomness_config]
-variant = 0
-secrecy_threshold = 0
-reconstruction_threshold = 0
-fast_path_secrecy_threshold = 0
+variant = 1
+secrecy_threshold = 9223372036854775808
+reconstruction_threshold = 12297829382473033728
+fast_path_secrecy_threshold = 12297829382473033728
 
 [genesis.oracle_config]
 source_types = [1]

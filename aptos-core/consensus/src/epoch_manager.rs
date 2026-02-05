@@ -116,6 +116,7 @@ use gaptos::{
 };
 use itertools::Itertools;
 use mini_moka::sync::Cache;
+use proposer_reth_map;
 use rand::{prelude::StdRng, thread_rng, Rng, SeedableRng};
 use std::{
     cmp::Ordering,
@@ -1133,6 +1134,10 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         let validator_set: ValidatorSet =
             payload.get().expect("failed to get ValidatorSet from payload");
         info!("validator_set read from config storage is : {:?}", validator_set);
+
+        // Update global proposer reth address map for current epoch
+        proposer_reth_map::update_proposer_reth_index_map(&validator_set);
+        info!("Updated proposer reth address map for epoch {}", payload.epoch());
 
         self.is_current_epoch_validator = false;
         if self.is_validator {
