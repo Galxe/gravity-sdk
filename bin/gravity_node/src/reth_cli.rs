@@ -211,10 +211,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         info!("push ordered block time deserialize {:?}ms", system_time.elapsed().as_millis());
 
         // Get reth coinbase from proposer's validator index
-        let coinbase = Self::get_coinbase_from_proposer_index(
-            block.block_meta.proposer_index,
-            block.block_meta.block_number,
-        );
+        let coinbase = Self::get_coinbase_from_proposer_index(block.block_meta.proposer_index);
         info!(
             "block_number: {:?} proposer_index: {:?} coinbase: {:?}",
             block.block_meta.block_number, block.block_meta.proposer_index, coinbase
