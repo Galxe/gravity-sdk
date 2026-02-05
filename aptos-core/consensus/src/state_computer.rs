@@ -598,7 +598,7 @@ impl StateComputer for ExecutionProxy {
 
         // The pipeline phase already committed beyond the target block timestamp, just return.
         if *latest_logical_time >= logical_time {
-            warn!(
+            info!(
                 "State sync target {:?} is lower than already committed logical time {:?}",
                 logical_time, *latest_logical_time
             );

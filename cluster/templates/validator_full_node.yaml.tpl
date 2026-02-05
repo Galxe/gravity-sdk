@@ -37,7 +37,7 @@ consensus:
 full_node_networks:
   - network_id:
       private: "vfn"
-    listen_address: "/ip4/${HOST}/tcp/${P2P_PORT}"
+    listen_address: "/ip4/${HOST}/tcp/${VFN_PORT}"
     identity:
       type: "from_file"
       path: ${CONFIG_DIR}/identity.yaml
