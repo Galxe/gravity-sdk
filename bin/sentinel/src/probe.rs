@@ -1,9 +1,4 @@
 use crate::{config::ProbeConfig, notifier::Notifier};
-// Not unused anymore? Wait, run() returns nothing.
-// Ah, run() is async fn run(self).
-// Let's check probe.rs content again. I used it in probe.rs but maybe just imported it and didn't
-// use it in function signature? "warning: unused import: `anyhow::Result`"
-// I will remove it.
 use reqwest::Client;
 use std::time::Duration;
 use tokio::time;
