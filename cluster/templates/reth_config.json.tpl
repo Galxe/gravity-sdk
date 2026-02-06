@@ -2,6 +2,7 @@
     "reth_args": {
         "chain": "${GENESIS_PATH}",
         "http": "",
+        "relayer_config": "${CONFIG_DIR}/relayer_config.json",
         "http.port": ${RPC_PORT},
         "http.corsdomain": "*",
         "http.api": "debug,eth,net,trace,txpool,web3,rpc",

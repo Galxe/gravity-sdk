@@ -123,8 +123,15 @@ main() {
         mkdir -p "$EXTERNAL_DIR"
         git clone "$GENESIS_REPO" "$GENESIS_CONTRACT_DIR"
     fi
-    
+
     # Checkout specified ref (commit, branch, or tag)
+    log_info "Checking out ref: $GENESIS_REF..."
+    (
+        cd "$GENESIS_CONTRACT_DIR"
+        git fetch origin
+        git checkout "$GENESIS_REF"
+        cd -
+    )
 
     # Auto-install dependencies if missing
     if [ ! -d "$GENESIS_CONTRACT_DIR/node_modules" ]; then

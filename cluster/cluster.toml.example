@@ -148,7 +148,17 @@ fast_path_secrecy_threshold = 12297829382473033728
 
 [genesis.oracle_config]
 source_types = [1]
-callbacks = ["0x00000000000000000000000000000001625F2018"]
+callbacks = ["0x00000000000000000000000000000001625F4001"]
+
+[genesis.oracle_config.bridge_config]
+deploy = true
+trusted_bridge = "0xcbEAF3BDe82155F56486Fb5a1072cb8baAf547cc"
+
+[[genesis.oracle_config.tasks]]
+source_type = 0
+source_id = 11155111
+task_name = "sepolia"
+config = "gravity://0/11155111/events?contract=0x0f761B1B3c1aC9232C9015A7276692560aD6a05F&eventSignature=0x5646e682c7d994bf11f5a2c8addb60d03c83cda3b65025a826346589df43406e&fromBlock=10201260"
 
 # JWK config - Google OIDC provider
 [genesis.jwk_config]

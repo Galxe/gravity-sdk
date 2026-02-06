@@ -354,8 +354,10 @@ pub fn process_jwk_update_util(update: &ProviderJWKs, block: &Block) -> Vec<u8> 
     use gaptos::api_types::on_chain_config::jwks::{JWKStruct, ProviderJWKs};
     // TODO(Gravity): Check the signature here instead of execution layer
     info!(
-        "jwk txn block number {} , {:?}",
+        "jwk txn epoch {}, block number {}, data len {}, {:?}",
+        block.epoch(),
         block.block_number().unwrap_or_else(|| panic!("No block number")),
+        update.jwks.len(),
         update.version
     );
 

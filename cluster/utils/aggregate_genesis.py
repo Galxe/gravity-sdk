@@ -60,7 +60,9 @@ def get_genesis_defaults():
         },
         "oracleConfig": {
             "sourceTypes": [1],
-            "callbacks": ["0x00000000000000000000000000000001625F2018"]
+            "callbacks": ["0x00000000000000000000000000000001625F2018"],
+            "bridgeConfig": None,
+            "tasks": []
         },
         "jwkConfig": {
             "issuers": ["0x68747470733a2f2f6163636f756e74732e676f6f676c652e636f6d"],
@@ -132,6 +134,27 @@ def build_genesis_config(config, genesis_cfg):
         "sourceTypes": oc.get("source_types", defaults["oracleConfig"]["sourceTypes"]),
         "callbacks": oc.get("callbacks", defaults["oracleConfig"]["callbacks"])
     }
+    
+    # bridgeConfig (optional)
+    bc = oc.get("bridge_config", {})
+    if bc:
+        result["oracleConfig"]["bridgeConfig"] = {
+            "deploy": bc.get("deploy", False),
+            "trustedBridge": bc.get("trusted_bridge", "0x0000000000000000000000000000000000000000")
+        }
+    
+    # tasks (optional)
+    tasks_cfg = oc.get("tasks", [])
+    if tasks_cfg:
+        result["oracleConfig"]["tasks"] = [
+            {
+                "sourceType": t.get("source_type"),
+                "sourceId": t.get("source_id"),
+                "taskName": t.get("task_name"),
+                "config": t.get("config")
+            }
+            for t in tasks_cfg
+        ]
     
     # jwkConfig
     jc = genesis_cfg.get("jwk_config", {})
