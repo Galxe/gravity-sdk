@@ -41,6 +41,7 @@ mod reth_coordinator;
 use crate::{cli::Cli, mempool::Mempool, relayer::RelayerWrapper};
 use std::{
     fs::File,
+    path::PathBuf,
     sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant},
@@ -60,12 +61,12 @@ struct ConsensusArgs<EthApi: RethEthCall> {
     pub pool: RethTransactionPool,
 }
 
-/// Run the reth node in a separate thread and return the consensus args and the latest block number
 fn run_reth(
     cli: Cli<EthereumChainSpecParser>,
     execution_args_rx: oneshot::Receiver<ExecutionArgs>,
     mut shutdown: broadcast::Receiver<()>,
-) -> (ConsensusArgs<impl RethEthCall>, u64) {
+) -> (ConsensusArgs<impl RethEthCall>, u64, oneshot::Receiver<PathBuf>) {
+    let (datadir_tx, datadir_rx) = oneshot::channel::<PathBuf>();
     reth_cli_util::sigsegv_handler::install();
 
     if std::env::var_os("RUST_BACKTRACE").is_none() {
@@ -91,9 +92,12 @@ fn run_reth(
                         .with_components(EthereumNode::components())
                         .with_add_ons(EthereumAddOns::default())
                         .launch_with_fn(|builder| {
+                            let datadir = builder.config().datadir();
+                            // Send datadir via oneshot channel
+                            let _ = datadir_tx.send(datadir.data_dir().to_path_buf());
                             let launcher = EngineNodeLauncher::new(
                                 builder.task_executor().clone(),
-                                builder.config().datadir(),
+                                datadir,
                                 reth_node_api::TreeConfig::default(),
                             );
                             builder.launch_with(launcher)
@@ -150,7 +154,8 @@ fn run_reth(
         }
     });
 
-    rx.recv().unwrap()
+    let (args, block_number) = rx.recv().unwrap();
+    (args, block_number, datadir_rx)
 }
 
 struct ProfilingState {
@@ -245,7 +250,7 @@ fn main() {
     });
 
     let (execution_args_tx, execution_args_rx) = oneshot::channel();
-    let (consensus_args, latest_block_number) =
+    let (consensus_args, latest_block_number, datadir_rx) =
         run_reth(cli, execution_args_rx, shutdown_tx.subscribe());
     let rt = tokio::runtime::Runtime::new().unwrap();
     let pool = Box::new(Mempool::new(
@@ -255,6 +260,7 @@ fn main() {
     let txn_cache = pool.tx_cache();
     let shutdown_rx_cli = shutdown_tx.subscribe();
     rt.block_on(async move {
+        let datadir = datadir_rx.await.expect("datadir should be sent");
         let client = Arc::new(RethCli::new(consensus_args, txn_cache, shutdown_rx_cli).await);
         let chain_id = client.chain_id();
 
@@ -268,7 +274,7 @@ fn main() {
                 mock.run().await;
             });
         } else {
-            let relayer = Arc::new(RelayerWrapper::new(relayer_config_path));
+            let relayer = Arc::new(RelayerWrapper::new(relayer_config_path, datadir));
             match GLOBAL_RELAYER.set(relayer) {
                 Ok(_) => {}
                 Err(_) => {
