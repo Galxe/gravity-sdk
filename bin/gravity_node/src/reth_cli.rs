@@ -293,7 +293,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                         get_block_buffer_manager().latest_epoch_change_block_number().await;
                     start_ordered_block = latest_epoch_change_block_number + 1;
                     let old_epoch = self.current_epoch.swap(new_epoch, Ordering::SeqCst);
-                    warn!("Buffer is in epoch change, reset start_ordered_block from {} to {}, epoch from {} to {}", 
+                    info!("Buffer is in epoch change, reset start_ordered_block from {} to {}, epoch from {} to {}", 
                         from, start_ordered_block, old_epoch, new_epoch);
                 } else {
                     warn!("failed to get ordered blocks: {}", e);
