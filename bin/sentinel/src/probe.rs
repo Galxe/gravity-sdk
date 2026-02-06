@@ -26,7 +26,7 @@ impl Probe {
         let interval = Duration::from_secs(self.config.check_interval_seconds);
         let mut timer = time::interval(interval);
 
-        // First tick completes immediately, skip it or wait? Usually standard is wait first.
+        // First tick completes immediately
         timer.tick().await;
 
         loop {
@@ -38,7 +38,6 @@ impl Probe {
                             // Recovered
                             println!("Probe recovered: {}", self.config.url);
                             failures = 0;
-                            // Optionally alert on recovery? For now, silence is golden.
                         }
                     } else {
                         failures += 1;
@@ -65,9 +64,7 @@ impl Probe {
                 if let Err(e) = self.notifier.alert(&msg, "PROBE").await {
                     eprintln!("Failed to send probe alert: {e:?}");
                 }
-                // Reset failures to avoid spamming every cycle?
-                // Or keep alerting? "timer post ... if several times ... then error"
-                // Usually we alert once per threshold breach or distinct incident.
+                // Reset failures to avoid spamming every cycle
                 // Let's reset to 0 to alert again if it persists for another N cycles.
                 failures = 0;
             }
