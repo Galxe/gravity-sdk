@@ -44,17 +44,14 @@ impl Reader {
                     file.seek(SeekFrom::Start(*offset))?;
                     let reader = BufReader::new(file);
 
-                    let _ = 0;
-                    for line in reader.lines() {
-                        if let Ok(l) = line {
-                            // +1 for newline character approximation (though could be CRLF)
-                            // Better: use lines and count bytes manually or just use current_len
-                            // Note: BufReader lines() strips newline.
-                            // We need to advance offset correctly.
-                            // Simplification: Read to end.
-                            // But we need exact bytes.
-                            new_lines.push((path.clone(), l));
-                        }
+                    for line in reader.lines().map_while(Result::ok) {
+                        // +1 for newline character approximation (though could be CRLF)
+                        // Better: use lines and count bytes manually or just use current_len
+                        // Note: BufReader lines() strips newline.
+                        // We need to advance offset correctly.
+                        // Simplification: Read to end.
+                        // But we need exact bytes.
+                        new_lines.push((path.clone(), line));
                     }
                     *offset = current_len;
                 }
