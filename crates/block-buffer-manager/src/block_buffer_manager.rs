@@ -448,7 +448,7 @@ impl BlockBufferManager {
             parent_id
         } else {
             // TODO(gravity_alex): assert epoch
-            warn!("set_ordered_blocks parent_id is not the same as actual_parent_id {:?} {:?}, might be epoch change", parent_id, actual_parent_id);
+            info!("set_ordered_blocks parent_id is not the same as actual_parent_id {:?} {:?}, might be epoch change", parent_id, actual_parent_id);
             actual_parent_id
         };
 
