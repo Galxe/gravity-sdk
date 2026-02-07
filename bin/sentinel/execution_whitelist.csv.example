@@ -1,0 +1,19 @@
+# Execution Whitelist Configuration
+# Format: "RegexPattern",Threshold
+# Threshold: -1 (always ignore/never alert)
+# Threshold: >0 (alert if count > N in 5 mins)
+
+# OracleTaskConfig: oidc_providers task has empty config
+# Cause: Optional configuration missing
+# Governance: Expected if OIDC is not used
+"OracleTaskConfig: oidc_providers task has empty config",-1
+
+# failed to get ordered blocks: Timeout
+# Cause: Consensus synchronization delay or startup
+# Governance: Alert if frequent (e.g. > 5 times in 5 mins)
+"failed to get ordered blocks: Timeout",5
+
+# failed to get committed blocks: Timeout
+# Cause: Consensus synchronization delay or startup
+# Governance: Alert if frequent (e.g. > 5 times in 5 mins)
+"failed to get committed blocks: Timeout",5

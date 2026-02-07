@@ -1,0 +1,31 @@
+# Consensus Whitelist Configuration
+# Format: RegexPattern,Threshold
+# Lines starting with # are comments
+# Threshold: -1 (always ignore/never alert)
+# Threshold: >0 (alert if count > N in 5 mins)
+
+# Unauthenticated peer id
+# Cause: New validators dialing active validators before joining the set
+# Governance: Expected behavior during dynamic join, can be ignored
+"client connecting with unauthenticated peer id",-1
+
+# No vfn peers available
+# Cause: Initialization delay during node startup (first ~6s)
+# Governance: Expected behavior during startup, can be ignored
+"No vfn peers available",-1
+
+# Local timeout
+# Cause: Network jitter or busy leader
+# Governance: Alert if frequent (e.g. > 10 times in 5 mins)
+"Local timeout",10
+
+# Local timeout redundant logs
+# Cause: Redundant logs triggered by "Local timeout"
+# Governance: Ignored to avoid duplicate alerts (covered by Local timeout)
+"""event"":""Timeout""",-1
+"Round .* timeout, broadcast to all peers",-1
+
+# Failed to request sync info from peer
+# Cause: Network instability
+# Governance: Alert if frequent (e.g. > 10 times in 5 mins)
+"Failed to request sync info from peer",10
