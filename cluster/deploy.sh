@@ -279,12 +279,16 @@ main() {
     fi
     mkdir -p "$base_dir"
     
-    # Find gravity_cli and create hardlink
+    # Find gravity_cli and create hardlink (or copy if cross-device)
     gravity_cli_path=$(find_binary "gravity_cli" "$PROJECT_ROOT") || true
     if [ -n "$gravity_cli_path" ]; then
         log_info "Found gravity_cli at: $gravity_cli_path"
-        log_info "Creating gravity_cli hardlink in $base_dir..."
-        ln "$gravity_cli_path" "$base_dir/gravity_cli"
+        log_info "Creating gravity_cli in $base_dir..."
+        # Try hardlink first, fallback to cp if cross-device (e.g., Docker)
+        if ! ln "$gravity_cli_path" "$base_dir/gravity_cli" 2>/dev/null; then
+            log_warn "Hardlink failed (cross-device?), copying instead..."
+            cp "$gravity_cli_path" "$base_dir/gravity_cli"
+        fi
         export GRAVITY_CLI="$gravity_cli_path"
     else
         log_error "gravity_cli not found - VFN identity generation may fail and hardlink not created"
