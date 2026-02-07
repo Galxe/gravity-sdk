@@ -87,6 +87,7 @@ GRAVITY_PORTAL_ABI = [
     {
         "type": "event",
         "name": "MessageSent",
+        "anonymous": False,
         "inputs": [
             {"name": "nonce", "type": "uint128", "indexed": True},
             {"name": "block_number", "type": "uint256", "indexed": True},
@@ -106,6 +107,7 @@ BRIDGE_RECEIVER_ABI = [
     {
         "type": "event",
         "name": "NativeMinted",
+        "anonymous": False,
         "inputs": [
             {"name": "recipient", "type": "address", "indexed": True},
             {"name": "amount", "type": "uint256", "indexed": False},
@@ -212,7 +214,7 @@ class BridgeHelper:
 
     def query_message_sent_events(self, from_block: int = 0) -> list:
         """Query MessageSent events from GravityPortal on Anvil."""
-        logs = self.portal.events.MessageSent().get_logs(fromBlock=from_block)
+        logs = self.portal.events.MessageSent().get_logs(from_block=from_block)
         return logs
 
     def _tx_params(self) -> dict:

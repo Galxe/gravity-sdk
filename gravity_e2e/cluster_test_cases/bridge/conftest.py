@@ -1,17 +1,25 @@
 """
 Pytest configuration and fixtures for Bridge E2E tests.
 
-Provides:
-- anvil_bridge: Starts Anvil, deploys bridge contracts, configures relayer
-- bridge_helper: web3.py-based bridge interaction utility
+Provides bridge-specific fixtures only. Shared fixtures (cluster, cluster_config_path,
+output_dir, target_node_id, target_cluster) are inherited from the parent conftest.py.
+
+IMPORTANT lifecycle note:
+  The runner (runner.py) starts gravity_node BEFORE pytest runs. But the
+  relayer reads relayer_config.json ONCE at startup. So we must:
+    1. Stop nodes (already started by runner with stale relayer_config)
+    2. Start Anvil + deploy bridge contracts
+    3. Write relayer_config.json with Anvil URI mapping
+    4. Restart nodes (so relayer picks up the new config)
 """
 
 import json
 import logging
+import subprocess
 import sys
 import os
+import time
 from pathlib import Path
-from typing import Optional
 
 _current_dir = Path(__file__).resolve().parent
 # Add gravity_e2e parent to path
@@ -25,18 +33,12 @@ if str(_gravity_e2e_parent) not in sys.path:
 
 import pytest
 
-from gravity_e2e.cluster.manager import Cluster
 from gravity_e2e.utils.anvil_manager import AnvilManager, BridgeContracts
 from gravity_e2e.utils.bridge_utils import BridgeHelper
 
 LOG = logging.getLogger(__name__)
 
-# Default paths
-DEFAULT_CLUSTER_CONFIG = "../cluster/cluster.toml"
-DEFAULT_OUTPUT_DIR = "output"
-
-# Gravity chain core contracts repo (cloned during init.sh)
-# The runner sets GRAVITY_ARTIFACTS_DIR; the contracts repo is cloned beside it
+# Gravity chain core contracts repo
 CONTRACTS_DIR_ENV = "GRAVITY_CONTRACTS_DIR"
 DEFAULT_CONTRACTS_DIR = Path.home() / "projects" / "gravity_chain_core_contracts"
 
@@ -49,31 +51,7 @@ ANVIL_RELAYER_CONFIG = {
 
 
 def pytest_addoption(parser):
-    """Add custom command line options for pytest."""
-    parser.addoption(
-        "--cluster-config",
-        action="store",
-        default=None,
-        help="Path to cluster.toml configuration file",
-    )
-    parser.addoption(
-        "--output-dir",
-        action="store",
-        default=DEFAULT_OUTPUT_DIR,
-        help="Output directory for test results",
-    )
-    parser.addoption(
-        "--node-id",
-        action="store",
-        default=None,
-        help="Specific node ID to test against",
-    )
-    parser.addoption(
-        "--cluster",
-        action="store",
-        default=None,
-        help="Cluster name to test",
-    )
+    """Add bridge-specific command line options (shared options come from parent conftest)."""
     parser.addoption(
         "--contracts-dir",
         action="store",
@@ -86,40 +64,6 @@ def pytest_addoption(parser):
         default="600",
         help="Duration in seconds for bridge continuous test (default: 600 = 10 min)",
     )
-
-
-@pytest.fixture(scope="session")
-def cluster_config_path(request) -> Path:
-    """Get cluster configuration path."""
-    val = request.config.getoption("--cluster-config")
-    if val:
-        return Path(val).resolve()
-    env_val = os.environ.get("GRAVITY_CLUSTER_CONFIG")
-    if env_val:
-        return Path(env_val).resolve()
-    # Default: cluster.toml in this directory
-    local = _current_dir / "cluster.toml"
-    if local.exists():
-        return local
-    return Path("cluster.toml").resolve()
-
-
-@pytest.fixture(scope="session")
-def output_dir(request) -> Path:
-    """Get output directory and create if needed."""
-    output_path = Path(request.config.getoption("--output-dir"))
-    output_path.mkdir(parents=True, exist_ok=True)
-    return output_path
-
-
-@pytest.fixture(scope="session")
-def target_node_id(request) -> Optional[str]:
-    return request.config.getoption("--node-id")
-
-
-@pytest.fixture(scope="session")
-def target_cluster(request) -> Optional[str]:
-    return request.config.getoption("--cluster")
 
 
 @pytest.fixture(scope="session")
@@ -146,34 +90,51 @@ def bridge_duration(request) -> int:
 
 
 @pytest.fixture(scope="module")
-def cluster(cluster_config_path: Path) -> Cluster:
-    """Create Cluster for the test module."""
-    LOG.info(f"Loading cluster from {cluster_config_path}")
-    c = Cluster(cluster_config_path)
-    yield c
-
-
-@pytest.fixture(scope="module")
-def anvil_bridge(cluster: Cluster, contracts_dir: Path) -> BridgeContracts:
+def anvil_bridge(cluster, contracts_dir: Path) -> BridgeContracts:
     """
     Start Anvil, deploy bridge contracts, and update relayer_config for each node.
 
-    Lifecycle:
-    1. Start Anvil on port 8546
-    2. Deploy MockGToken, GravityPortal, GBridgeSender via forge
-    3. Write relayer_config.json to each node's config dir
-    4. Yield BridgeContracts
-    5. Teardown: stop Anvil
+    Lifecycle (handles the relayer_config timing constraint):
+    1. Stop gravity_node (runner already started it with stale relayer_config)
+    2. Start Anvil on port 8546
+    3. Deploy MockGToken, GravityPortal, GBridgeSender via forge
+    4. Write relayer_config.json with Anvil URI mapping to each node's config dir
+    5. Restart gravity_node (relayer now reads the correct config)
+    6. Yield BridgeContracts
+    7. Teardown: stop Anvil
     """
     mgr = AnvilManager()
-    mgr.start(port=8546, block_time=1)
+
+    # Resolve the cluster scripts directory (gravity-sdk/cluster/)
+    sdk_root = _gravity_e2e_parent.parent  # gravity-sdk/
+    cluster_scripts_dir = sdk_root / "cluster"
+    stop_script = cluster_scripts_dir / "stop.sh"
+    start_script = cluster_scripts_dir / "start.sh"
+    config_path_str = str(cluster.config_path)
+
+    env = os.environ.copy()
+    artifacts_dir = _current_dir / "artifacts"
+    env["GRAVITY_ARTIFACTS_DIR"] = str(artifacts_dir)
 
     try:
+        # Step 1: Stop nodes so we can update config before restart
+        # (runner.py already started them with stale/template relayer_config)
+        LOG.info("Stopping gravity nodes to update relayer_config...")
+        subprocess.run(
+            ["bash", str(stop_script), "--config", config_path_str],
+            cwd=str(cluster_scripts_dir),
+            env=env,
+            check=True,
+        )
+        time.sleep(2)
+
+        # Step 2-3: Start Anvil and deploy contracts
+        mgr.start(port=8546, block_time=1)
         contracts = mgr.deploy_bridge_contracts(contracts_dir)
 
-        # Update relayer_config.json for each node
+        # Step 4: Write relayer_config.json for each node
         for node_id, node in cluster.nodes.items():
-            relayer_path = node.infra_path / "config" / "relayer_config.json"
+            relayer_path = node._infra_path / "config" / "relayer_config.json"
             if relayer_path.parent.exists():
                 LOG.info(f"Writing relayer_config.json for {node_id} at {relayer_path}")
                 with open(relayer_path, "w") as f:
@@ -183,6 +144,16 @@ def anvil_bridge(cluster: Cluster, contracts_dir: Path) -> BridgeContracts:
                     f"Config dir not found for {node_id}: {relayer_path.parent}. "
                     f"Relayer config not written."
                 )
+
+        # Step 5: Restart nodes with updated config
+        LOG.info("Restarting gravity nodes with updated relayer_config...")
+        subprocess.run(
+            ["bash", str(start_script), "--config", config_path_str],
+            cwd=str(cluster_scripts_dir),
+            env=env,
+            check=True,
+        )
+        time.sleep(5)  # warmup
 
         yield contracts
     finally:
@@ -204,12 +175,5 @@ def bridge_helper(anvil_bridge: BridgeContracts) -> BridgeHelper:
 
 # Markers
 def pytest_configure(config):
-    """Configure custom pytest markers."""
-    config.addinivalue_line("markers", "slow: mark test as slow running")
-    config.addinivalue_line("markers", "cross_chain: mark test as requiring cross-chain setup")
+    """Configure bridge-specific markers."""
     config.addinivalue_line("markers", "bridge: mark test as bridge-related")
-
-
-def pytest_collection_modifyitems(session, config, items):
-    """Filter out test_case decorator from being collected as a test."""
-    items[:] = [item for item in items if item.name != "test_case"]
