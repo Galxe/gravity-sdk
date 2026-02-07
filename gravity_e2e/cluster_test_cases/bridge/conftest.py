@@ -41,6 +41,9 @@ LOG = logging.getLogger(__name__)
 # Gravity chain core contracts repo
 CONTRACTS_DIR_ENV = "GRAVITY_CONTRACTS_DIR"
 DEFAULT_CONTRACTS_DIR = Path.home() / "projects" / "gravity_chain_core_contracts"
+# In Docker/CI, init.sh clones contracts to external/
+_sdk_root = _gravity_e2e_parent.parent  # gravity-sdk/
+EXTERNAL_CONTRACTS_DIR = _sdk_root / "external" / "gravity_chain_core_contracts"
 
 # Relayer config content for Anvil bridge
 ANVIL_RELAYER_CONFIG = {
@@ -77,6 +80,8 @@ def contracts_dir(request) -> Path:
         return Path(env_val).resolve()
     if DEFAULT_CONTRACTS_DIR.exists():
         return DEFAULT_CONTRACTS_DIR
+    if EXTERNAL_CONTRACTS_DIR.exists():
+        return EXTERNAL_CONTRACTS_DIR
     raise RuntimeError(
         f"gravity_chain_core_contracts not found. "
         f"Set --contracts-dir or {CONTRACTS_DIR_ENV} env var."
