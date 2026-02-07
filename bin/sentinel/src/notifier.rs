@@ -2,8 +2,10 @@ use crate::config::AlertingConfig;
 use anyhow::Result;
 use reqwest::Client;
 use serde_json::json;
-use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::{
+    sync::Mutex,
+    time::{Duration, Instant},
+};
 
 #[derive(Clone)]
 pub struct Notifier {

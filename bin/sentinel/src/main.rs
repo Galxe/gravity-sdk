@@ -89,7 +89,7 @@ async fn main() -> Result<()> {
                     }
                     CheckResult::Alert { count } => {
                         // Matched whitelist rule and above threshold
-                        let msg = format!("{} [Frequency Alert: >{}/5min]", line, count);
+                        let msg = format!("{line} [Frequency Alert: >{count}/5min]");
                         println!("Frequency Alert in {path:?}: {msg}");
                         if let Err(e) = notifier.alert(&msg, file_str).await {
                             eprintln!("Failed to send alert: {e:?}");

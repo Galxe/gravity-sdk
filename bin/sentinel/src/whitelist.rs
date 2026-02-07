@@ -48,14 +48,9 @@ impl WhitelistRule {
 }
 
 /// Whitelist checker that loads rules from CSV and checks log lines.
+#[derive(Default)]
 pub struct Whitelist {
     rules: Vec<WhitelistRule>,
-}
-
-impl Default for Whitelist {
-    fn default() -> Self {
-        Self { rules: Vec::new() }
-    }
 }
 
 impl Whitelist {
@@ -83,15 +78,15 @@ impl Whitelist {
             if let Some((pattern, threshold)) = parse_csv_line(trimmed) {
                 match WhitelistRule::new(&pattern, threshold) {
                     Ok(rule) => {
-                        println!("  Loaded rule: pattern='{}', threshold={}", pattern, threshold);
+                        println!("  Loaded rule: pattern='{pattern}', threshold={threshold}");
                         rules.push(rule);
                     }
                     Err(e) => {
-                        eprintln!("Warning: Failed to compile pattern '{}': {}", pattern, e);
+                        eprintln!("Warning: Failed to compile pattern '{pattern}': {e}");
                     }
                 }
             } else {
-                eprintln!("Warning: Invalid CSV line: {}", trimmed);
+                eprintln!("Warning: Invalid CSV line: {trimmed}");
             }
         }
 
@@ -143,11 +138,11 @@ impl Whitelist {
 fn parse_csv_line(line: &str) -> Option<(String, i32)> {
     let line = line.trim();
 
-    if line.starts_with('"') {
+    if let Some(stripped) = line.strip_prefix('"') {
         // Quoted pattern - find the closing quote
         // Handle escaped quotes ("") inside the pattern
         let mut pattern = String::new();
-        let mut chars = line[1..].chars().peekable();
+        let mut chars = stripped.chars().peekable();
         let mut found_end = false;
 
         while let Some(c) = chars.next() {
