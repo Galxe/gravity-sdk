@@ -8,13 +8,18 @@ file_patterns = ["logs/*.log", "test.log"]
 recent_file_threshold_seconds = 86400
 # Regex to identify error lines
 error_pattern = "(?i)error|panic|fatal"
-# Regex to ignore specific lines
-ignore_pattern = "execute_block_barrier"
+# Path to whitelist CSV file (optional)
+# Format: "Pattern",Threshold
+#   -1 = always ignore
+#   >0 = alert if count > threshold in 5 minutes
+whitelist_path = "whitelist.csv"
 
 [alerting]
 # Fill in your webhook URLs
 feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/..."
 slack_webhook = "https://hooks.slack.com/services/..."
+# Minimum interval between alerts (seconds)
+min_alert_interval = 5
 
 [probe]
 # Probe reth node health via JSON-RPC eth_blockNumber

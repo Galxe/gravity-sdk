@@ -27,13 +27,19 @@ pub struct MonitoringConfig {
     pub file_patterns: Vec<String>,
     pub recent_file_threshold_seconds: u64,
     pub error_pattern: String,
-    pub ignore_pattern: Option<String>,
+    pub whitelist_path: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AlertingConfig {
     pub feishu_webhook: Option<String>,
     pub slack_webhook: Option<String>,
+    #[serde(default = "default_min_alert_interval")]
+    pub min_alert_interval: u64,
+}
+
+fn default_min_alert_interval() -> u64 {
+    5
 }
 
 impl Config {
