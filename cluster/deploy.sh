@@ -134,7 +134,8 @@ configure_vfn() {
     local data_dir="$2"
     local genesis_path="$3"
     local binary_path="$4"
-    local waypoint_src="$5"
+    local identity_src="$5"
+    local waypoint_src="$6"
     
     local config_dir="$data_dir/config"
     
@@ -143,15 +144,9 @@ configure_vfn() {
     # Create config dir
     mkdir -p "$config_dir"
     
-    # Copy waypoint from artifacts
+    # Copy identity and waypoint from artifacts
+    cp "$identity_src" "$config_dir/identity.yaml"
     cp "$waypoint_src" "$config_dir/waypoint.txt"
-    
-    # Generate VFN identity if not exists
-    local identity_file="$config_dir/identity.yaml"
-    if [ ! -f "$identity_file" ]; then
-        log_info "  [$node_id] Generating VFN identity..."
-        "$GRAVITY_CLI" genesis generate-key --output-file="$identity_file" > /dev/null
-    fi
     
     # Export paths
     export NODE_ID="$node_id"
@@ -365,12 +360,20 @@ main() {
         waypoint_src="$OUTPUT_DIR/waypoint.txt"
         
         if [ "$role" == "vfn" ]; then
-            # VFN node - uses onchain discovery, no seed required
+            # VFN node
+            identity_src="$OUTPUT_DIR/$NODE_ID/config/identity.yaml"
+            
+            if [ ! -f "$identity_src" ]; then
+                log_error "Identity not found for $NODE_ID at $identity_src"
+                exit 1
+            fi
+            
             configure_vfn \
                 "$NODE_ID" \
                 "$data_dir" \
                 "$genesis_path" \
                 "$local_binary_path" \
+                "$identity_src" \
                 "$waypoint_src"
         else
             # Validator node (includes both 'genesis' and 'validator' roles)

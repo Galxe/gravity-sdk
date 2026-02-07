@@ -98,12 +98,6 @@ main() {
             node_id=$(echo "$node" | jq -r '.id')
             role=$(echo "$node" | jq -r '.role // empty')
             
-            # Skip VFN nodes - they don't need validator identity
-            if [ "$role" == "vfn" ]; then
-                log_info "  [$node_id] Skipping VFN node (no validator identity needed)"
-                continue
-            fi
-            
             # Add to list if not already there (from genesis.toml)
             if [[ ! " ${nodes_to_process[*]} " =~ " ${node_id} " ]]; then
                 nodes_to_process+=("$node_id")
