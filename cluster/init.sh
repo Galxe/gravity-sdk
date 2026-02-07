@@ -124,12 +124,17 @@ main() {
         git clone "$GENESIS_REPO" "$GENESIS_CONTRACT_DIR"
     fi
 
-    # Checkout specified ref (commit, branch, or tag)
+    # Checkout specified ref and pull latest (critical for branches to avoid stale bytecode)
     log_info "Checking out ref: $GENESIS_REF..."
     (
         cd "$GENESIS_CONTRACT_DIR"
         git fetch origin
         git checkout "$GENESIS_REF"
+        # Pull latest if on a branch (no-op for detached HEAD / commit hash)
+        if git symbolic-ref -q HEAD &>/dev/null; then
+            log_info "Pulling latest changes for branch $GENESIS_REF..."
+            git pull origin "$GENESIS_REF"
+        fi
         cd -
     )
 
