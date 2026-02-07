@@ -1,12 +1,7 @@
 use anyhow::Result;
+use csv::ReaderBuilder;
 use regex::Regex;
-use std::{
-    collections::VecDeque,
-    fs::File,
-    io::{BufRead, BufReader},
-    path::Path,
-    time::Instant,
-};
+use std::{collections::VecDeque, fs::File, path::Path, time::Instant};
 
 const WINDOW_SECONDS: u64 = 300; // 5 minutes
 
@@ -62,31 +57,45 @@ impl Whitelist {
     /// - Threshold > 0: alert if count > threshold in 5 minutes
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
         let file = File::open(path)?;
-        let reader = BufReader::new(file);
+        let mut reader = ReaderBuilder::new()
+            .has_headers(false)
+            .comment(Some(b'#'))
+            .flexible(true) // Allow flexible number of fields to handle potential issues gracefully
+            .from_reader(file);
+
         let mut rules = Vec::new();
 
-        for line in reader.lines() {
-            let line = line?;
-            let trimmed = line.trim();
+        for result in reader.records() {
+            let record = result?;
 
-            // Skip empty lines and comments
-            if trimmed.is_empty() || trimmed.starts_with('#') {
+            // Expected format: pattern, threshold
+            if record.len() < 2 {
                 continue;
             }
 
-            // Parse CSV line (simple parsing, handles quoted patterns)
-            if let Some((pattern, threshold)) = parse_csv_line(trimmed) {
-                match WhitelistRule::new(&pattern, threshold) {
-                    Ok(rule) => {
-                        println!("  Loaded rule: pattern='{pattern}', threshold={threshold}");
-                        rules.push(rule);
-                    }
-                    Err(e) => {
-                        eprintln!("Warning: Failed to compile pattern '{pattern}': {e}");
-                    }
+            let pattern = record[0].trim();
+            let threshold_str = record[1].trim();
+
+            if pattern.is_empty() {
+                continue;
+            }
+
+            let threshold: i32 = match threshold_str.parse() {
+                Ok(t) => t,
+                Err(e) => {
+                    eprintln!("Warning: Invalid threshold '{threshold_str}': {e}");
+                    continue;
                 }
-            } else {
-                eprintln!("Warning: Invalid CSV line: {trimmed}");
+            };
+
+            match WhitelistRule::new(pattern, threshold) {
+                Ok(rule) => {
+                    println!("  Loaded rule: pattern='{pattern}', threshold={threshold}");
+                    rules.push(rule);
+                }
+                Err(e) => {
+                    eprintln!("Warning: Failed to compile pattern '{pattern}': {e}");
+                }
             }
         }
 
@@ -130,80 +139,5 @@ impl Whitelist {
 
         // No rule matched, alert normally
         CheckResult::Normal
-    }
-}
-
-/// Parse a CSV line into (pattern, threshold).
-/// Handles quoted patterns with escaped quotes ("").
-fn parse_csv_line(line: &str) -> Option<(String, i32)> {
-    let line = line.trim();
-
-    if let Some(stripped) = line.strip_prefix('"') {
-        // Quoted pattern - find the closing quote
-        // Handle escaped quotes ("") inside the pattern
-        let mut pattern = String::new();
-        let mut chars = stripped.chars().peekable();
-        let mut found_end = false;
-
-        while let Some(c) = chars.next() {
-            if c == '"' {
-                if chars.peek() == Some(&'"') {
-                    // Escaped quote
-                    pattern.push('"');
-                    chars.next();
-                } else {
-                    // End of quoted string
-                    found_end = true;
-                    break;
-                }
-            } else {
-                pattern.push(c);
-            }
-        }
-
-        if !found_end {
-            return None;
-        }
-
-        // Rest should be ,threshold
-        let rest: String = chars.collect();
-        let rest = rest.trim_start_matches(',').trim();
-        let threshold: i32 = rest.parse().ok()?;
-
-        Some((pattern, threshold))
-    } else {
-        // Unquoted - simple split by comma
-        let parts: Vec<&str> = line.splitn(2, ',').collect();
-        if parts.len() != 2 {
-            return None;
-        }
-
-        let pattern = parts[0].trim().to_string();
-        let threshold: i32 = parts[1].trim().parse().ok()?;
-
-        Some((pattern, threshold))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_csv_line_unquoted() {
-        let result = parse_csv_line("pattern,-1");
-        assert_eq!(result, Some(("pattern".to_string(), -1)));
-    }
-
-    #[test]
-    fn test_parse_csv_line_quoted() {
-        let result = parse_csv_line("\"pattern with, comma\",-1");
-        assert_eq!(result, Some(("pattern with, comma".to_string(), -1)));
-    }
-
-    #[test]
-    fn test_parse_csv_line_escaped_quote() {
-        let result = parse_csv_line("\"\"\"event\"\":\"\"Timeout\"\"\",-1");
-        assert_eq!(result, Some(("\"event\":\"Timeout\"".to_string(), -1)));
     }
 }
