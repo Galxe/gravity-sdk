@@ -1,6 +1,13 @@
 #!/bin/bash
 set -e
 
+# Cross-platform sed -i
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    SED_INPLACE=(sed -i '')
+else
+    SED_INPLACE=(sed -i)
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${1:-$SCRIPT_DIR/cluster.toml}"
 OUTPUT_DIR="${GRAVITY_ARTIFACTS_DIR:-$SCRIPT_DIR/output}"
@@ -96,7 +103,7 @@ echo "Started node with PID $pid"
 START_SCRIPT
 
     # Replace BINARY_PATH placeholder
-    sed -i '' "s|BINARY_PATH|$binary_path|g" "$data_dir/script/start.sh"
+    "${SED_INPLACE[@]}" "s|BINARY_PATH|$binary_path|g" "$data_dir/script/start.sh"
     chmod +x "$data_dir/script/start.sh"
     
     # Generate stop script
@@ -208,7 +215,7 @@ echo "Started VFN node with PID $pid"
 START_SCRIPT
 
     # Replace BINARY_PATH placeholder
-    sed -i '' "s|BINARY_PATH|$binary_path|g" "$data_dir/script/start.sh"
+    "${SED_INPLACE[@]}" "s|BINARY_PATH|$binary_path|g" "$data_dir/script/start.sh"
     chmod +x "$data_dir/script/start.sh"
     
     # Generate stop script
