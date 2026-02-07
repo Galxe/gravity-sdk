@@ -290,21 +290,17 @@ main() {
     gravity_cli_path=$(find_binary "gravity_cli" "$PROJECT_ROOT") || true
     if [ -n "$gravity_cli_path" ]; then
         log_info "Found gravity_cli at: $gravity_cli_path"
-        log_info "Creating gravity_cli in $base_dir..."
-        # Try hardlink first, fallback to cp if cross-device (e.g., Docker)
-        if ! ln "$gravity_cli_path" "$base_dir/gravity_cli" 2>/dev/null; then
-            log_warn "Hardlink failed (cross-device?), copying instead..."
-            cp "$gravity_cli_path" "$base_dir/gravity_cli"
-        fi
+        log_info "Copying gravity_cli to $base_dir..."
+        cp "$gravity_cli_path" "$base_dir/gravity_cli"
         export GRAVITY_CLI="$gravity_cli_path"
     else
         log_error "gravity_cli not found - VFN identity generation may fail and hardlink not created"
         exit 1
     fi
     
-    # Create gravity_node hardlink (self-contained deployment)
-    log_info "Creating gravity_node hardlink in $base_dir..."
-    ln "$binary_path" "$base_dir/gravity_node"
+    # Copy gravity_node binary (self-contained deployment)
+    log_info "Copying gravity_node to $base_dir..."
+    cp "$binary_path" "$base_dir/gravity_node"
     local_binary_path="$base_dir/gravity_node"
     
     # Read genesis source paths from config (with defaults)
@@ -374,7 +370,7 @@ main() {
                 "$NODE_ID" \
                 "$data_dir" \
                 "$genesis_path" \
-                "$binary_path" \
+                "$local_binary_path" \
                 "$waypoint_src"
         else
             # Validator node (includes both 'genesis' and 'validator' roles)
@@ -395,7 +391,7 @@ main() {
                 "$NODE_ID" \
                 "$data_dir" \
                 "$genesis_path" \
-                "$binary_path" \
+                "$local_binary_path" \
                 "$identity_src" \
                 "$waypoint_src" \
                 "$role"
