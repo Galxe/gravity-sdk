@@ -5,10 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      duration:
-        description: 'Run duration in seconds'
+      suite:
+        description: 'Test suite to run (empty = all)'
         required: false
-        default: '60'
+        default: ''
 
 jobs:
   e2e-test:
@@ -17,17 +17,10 @@ jobs:
     timeout-minutes: 120
 
     steps:
-    - name: Checkout (to get scripts)
+    - name: Checkout
       uses: actions/checkout@v4
-      with:
-        sparse-checkout: scripts
 
-    - name: Run E2E Test
-      env:
-        REPO: ${{ github.repository }}
-        GIT_REF: ${{ github.head_ref || github.ref_name }}
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        DURATION: ${{ github.event.inputs.duration || '60' }}
+    - name: Run E2E Tests
       run: |
-        chmod +x scripts/e2e_test.sh
-        ./scripts/e2e_test.sh "${GIT_REF}"
+        chmod +x gravity_e2e/run_docker.sh
+        ./gravity_e2e/run_docker.sh ${{ github.event.inputs.suite }}
