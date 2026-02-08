@@ -770,7 +770,7 @@ class Cluster:
 
         LOG.info(f"Validator {node_id} join command executed successfully")
         if stdout_str:
-            LOG.debug(f"Command output: {stdout_str}")
+            LOG.info(f"Command output: {stdout_str}")
 
     async def validator_leave(self, node_id: str, timeout: int = 120):
         """
