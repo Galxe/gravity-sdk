@@ -135,7 +135,7 @@ impl LeaveCommand {
         println!("3. Leaving validator set...");
         let call = ValidatorManagement::leaveValidatorSetCall { stakePool: stake_pool };
         let input: Bytes = call.abi_encode().into();
-        let tx_hash = provider
+        let pending_tx = provider
             .send_transaction(TransactionRequest {
                 from: Some(wallet_address),
                 to: Some(TxKind::Call(VALIDATOR_MANAGER_ADDRESS)),
@@ -144,12 +144,14 @@ impl LeaveCommand {
                 gas_price: Some(self.gas_price),
                 ..Default::default()
             })
-            .await?
+            .await?;
+        let tx_hash = *pending_tx.tx_hash();
+        println!("   Transaction hash: {tx_hash}");
+        let _ = pending_tx
             .with_required_confirmations(2)
             .with_timeout(Some(std::time::Duration::from_secs(60)))
             .watch()
             .await?;
-        println!("   Transaction hash: {tx_hash}");
 
         let receipt = provider
             .get_transaction_receipt(tx_hash)
