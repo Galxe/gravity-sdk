@@ -35,28 +35,49 @@ jobs:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache
+          sudo docker image prune --all --force
+          df -h
       - uses: actions/checkout@v4
       - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev mold
       - name: Install clippy
         run: rustup component add clippy
       - name: Run cargo cache
         uses: Swatinem/rust-cache@v2
       - name: Run clippy
-        run: RUSTFLAGS="--cfg tokio_unstable" cargo clippy --all-targets --all-features -- -D warnings
+        run: RUSTFLAGS="--cfg tokio_unstable -C link-arg=-fuse-ld=mold" cargo clippy --all-targets --all-features -- -D warnings
+        env:
+          CARGO_BUILD_JOBS: "2"
 
   # Run unit tests (triggered by label or on main branch push)
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
     steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache
+          sudo docker image prune --all --force
+          df -h
       - uses: actions/checkout@v4
       - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev mold
       - name: Run cargo cache
         uses: Swatinem/rust-cache@v2
       - name: Run tests
         run: cargo test --workspace --exclude smoke-test
+        env:
+          CARGO_BUILD_JOBS: "2"
+          RUSTFLAGS: "--cfg tokio_unstable -C link-arg=-fuse-ld=mold"
 
   # Check gravity-reth dependency for branch-v* branches
   dependency-check:
