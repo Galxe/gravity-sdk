@@ -9,13 +9,11 @@ use std::str::FromStr;
 
 use crate::{
     command::Executable,
-    validator::{
-        contract::{
-            status_from_u8, Staking, ValidatorManagement, ValidatorRecord, ValidatorStatus,
-            STAKING_ADDRESS, VALIDATOR_MANAGER_ADDRESS,
-        },
-        util::{format_ether, parse_ether},
+    contract::{
+        status_from_u8, Staking, ValidatorManagement, ValidatorRecord, ValidatorStatus,
+        STAKING_ADDRESS, VALIDATOR_MANAGER_ADDRESS,
     },
+    util::format_ether,
 };
 
 #[derive(Debug, Parser)]
@@ -36,17 +34,13 @@ pub struct JoinCommand {
     #[clap(long, default_value = "20")]
     pub gas_price: u128,
 
-    /// Stake amount in ETH (for creating new StakePool)
+    /// StakePool address to use for validator registration
     #[clap(long)]
-    pub stake_amount: String,
+    pub stake_pool: String,
 
     /// Moniker (display name, max 31 bytes)
     #[clap(long, default_value = "Gravity1")]
     pub moniker: String,
-
-    /// Existing StakePool address to use (if not provided, creates a new one)
-    #[clap(long)]
-    pub stake_pool: Option<String>,
 
     /// Consensus public key (BLS key)
     #[clap(long)]
@@ -56,17 +50,17 @@ pub struct JoinCommand {
     #[clap(long, default_value = "")]
     pub consensus_pop: String,
 
-    /// Validator network address (/ip4/{host}/tcp/{port}/noise-ik/{public-key}/handshake/0)
+    /// Network public key (64 hex characters)
+    #[clap(long)]
+    pub network_public_key: String,
+
+    /// Validator network address in /ip4/{host}/tcp/{port} format
     #[clap(long)]
     pub validator_network_address: String,
 
-    /// Fullnode network address (/ip4/{host}/tcp/{port}/noise-ik/{public-key}/handshake/0)
+    /// Fullnode network address in /ip4/{host}/tcp/{port} format
     #[clap(long)]
     pub fullnode_network_address: String,
-
-    /// Lockup duration in seconds (default 30 days, used when creating new StakePool)
-    #[clap(long, default_value = "2592000")]
-    pub lockup_duration: u64,
 }
 
 impl Executable for JoinCommand {
@@ -101,113 +95,41 @@ impl JoinCommand {
         let balance = provider.get_balance(wallet_address).await?;
         println!("   Wallet balance: {} ETH\n", format_ether(balance));
 
-        // 2. Determine StakePool address (use existing or create new)
-        let stake_pool: Address;
+        // 2. Validate existing StakePool
+        let stake_pool = Address::from_str(&self.stake_pool)?;
+        println!("2. Validating StakePool: {stake_pool:?}");
 
-        if let Some(pool_str) = &self.stake_pool {
-            // Use existing StakePool
-            stake_pool = Address::from_str(pool_str)?;
-            println!("2. Using existing StakePool: {stake_pool:?}");
-
-            // Verify it's a valid pool
-            let call = Staking::isPoolCall { pool: stake_pool };
-            let input: Bytes = call.abi_encode().into();
-            let result = provider
-                .call(TransactionRequest {
-                    from: Some(wallet_address),
-                    to: Some(TxKind::Call(STAKING_ADDRESS)),
-                    input: TransactionInput::new(input),
-                    ..Default::default()
-                })
-                .await?;
-            let is_pool = bool::abi_decode(&result)
-                .map_err(|e| anyhow::anyhow!("Failed to decode isPool result: {e}"))?;
-            if !is_pool {
-                return Err(anyhow::anyhow!("Address is not a valid StakePool"));
-            }
-
-            // Check voting power
-            let call = Staking::getPoolVotingPowerNowCall { pool: stake_pool };
-            let input: Bytes = call.abi_encode().into();
-            let result = provider
-                .call(TransactionRequest {
-                    from: Some(wallet_address),
-                    to: Some(TxKind::Call(STAKING_ADDRESS)),
-                    input: TransactionInput::new(input),
-                    ..Default::default()
-                })
-                .await?;
-            let voting_power = U256::abi_decode(&result)
-                .map_err(|e| anyhow::anyhow!("Failed to decode voting power: {e}"))?;
-            println!("   Current voting power: {} ETH\n", format_ether(voting_power));
-        } else {
-            // Create new StakePool
-            println!("2. Creating new StakePool...");
-            let stake_wei = parse_ether(&self.stake_amount)?;
-            println!("   Stake amount: {} ETH", self.stake_amount);
-
-            // Calculate lockup timestamp (current time + lockup duration in microseconds)
-            let current_block = provider.get_block_number().await?;
-            let block = provider.get_block_by_number(current_block.into()).await?;
-            let current_timestamp =
-                block.ok_or(anyhow::anyhow!("Failed to get current block"))?.header.timestamp;
-            println!("   Current timestamp: {current_timestamp}");
-            println!("   Lockup duration: {}", self.lockup_duration);
-            // Convert to microseconds and add lockup duration
-            let locked_until = (current_timestamp + self.lockup_duration) * 1_000_000;
-
-            let call = Staking::createPoolCall {
-                owner: wallet_address,
-                staker: wallet_address,
-                operator: wallet_address,
-                voter: wallet_address,
-                lockedUntil: locked_until,
-            };
-            let input: Bytes = call.abi_encode().into();
-            let pending_tx = provider
-                .send_transaction(TransactionRequest {
-                    from: Some(wallet_address),
-                    to: Some(TxKind::Call(STAKING_ADDRESS)),
-                    input: TransactionInput::new(input),
-                    value: Some(stake_wei),
-                    gas: Some(self.gas_limit),
-                    gas_price: Some(self.gas_price),
-                    ..Default::default()
-                })
-                .await?;
-            let tx_hash = *pending_tx.tx_hash();
-            println!("   Transaction hash: {tx_hash}");
-            let _ = pending_tx
-                .with_required_confirmations(2)
-                .with_timeout(Some(std::time::Duration::from_secs(60)))
-                .watch()
-                .await?;
-
-            let receipt = provider
-                .get_transaction_receipt(tx_hash)
-                .await?
-                .ok_or(anyhow::anyhow!("Failed to get transaction receipt"))?;
-            println!(
-                "   Transaction confirmed, block number: {}",
-                receipt.block_number.ok_or(anyhow::anyhow!("Failed to get block number"))?
-            );
-            println!("   Gas used: {}", receipt.gas_used);
-
-            // Parse PoolCreated event to get the new pool address
-            let mut found_pool = None;
-            for log in receipt.logs() {
-                if let Ok(event) = Staking::PoolCreated::decode_log(&log.inner) {
-                    println!("   StakePool created successfully!");
-                    println!("   - Pool address: {}", event.pool);
-                    println!("   - Owner: {}", event.owner);
-                    println!("   - Pool index: {}", event.poolIndex);
-                    found_pool = Some(event.pool);
-                    break;
-                }
-            }
-            stake_pool = found_pool.ok_or(anyhow::anyhow!("Failed to find PoolCreated event"))?;
-            println!();
+        // Verify it's a valid pool
+        let call = Staking::isPoolCall { pool: stake_pool };
+        let input: Bytes = call.abi_encode().into();
+        let result = provider
+            .call(TransactionRequest {
+                from: Some(wallet_address),
+                to: Some(TxKind::Call(STAKING_ADDRESS)),
+                input: TransactionInput::new(input),
+                ..Default::default()
+            })
+            .await?;
+        let is_pool = bool::abi_decode(&result)
+            .map_err(|e| anyhow::anyhow!("Failed to decode isPool result: {e}"))?;
+        if !is_pool {
+            return Err(anyhow::anyhow!("Address is not a valid StakePool"));
         }
+
+        // Check voting power
+        let call = Staking::getPoolVotingPowerNowCall { pool: stake_pool };
+        let input: Bytes = call.abi_encode().into();
+        let result = provider
+            .call(TransactionRequest {
+                from: Some(wallet_address),
+                to: Some(TxKind::Call(STAKING_ADDRESS)),
+                input: TransactionInput::new(input),
+                ..Default::default()
+            })
+            .await?;
+        let voting_power = U256::abi_decode(&result)
+            .map_err(|e| anyhow::anyhow!("Failed to decode voting power: {e}"))?;
+        println!("   Current voting power: {} ETH\n", format_ether(voting_power));
 
         // 3. Check if already registered as validator
         println!("3. Checking if already registered as validator...");
@@ -230,20 +152,91 @@ impl JoinCommand {
         } else {
             // 4. Register validator
             println!("4. Registering validator...");
+
+            // Validate moniker length (must not exceed 31 bytes, matching on-chain
+            // MAX_MONIKER_LENGTH)
+            if self.moniker.len() > 31 {
+                return Err(anyhow::anyhow!(
+                    "Moniker too long: max 31 bytes, got {} bytes",
+                    self.moniker.len()
+                ));
+            }
+
+            // Validate consensus public key format: must be exactly 96 hex characters (48 bytes BLS
+            // key)
+            let consensus_pk =
+                self.consensus_public_key.strip_prefix("0x").unwrap_or(&self.consensus_public_key);
+            if consensus_pk.len() != 96 {
+                return Err(anyhow::anyhow!(
+                    "Invalid consensus public key: expected 96 hex characters (48 bytes), got {} characters",
+                    consensus_pk.len()
+                ));
+            }
+            if !consensus_pk.chars().all(|c| c.is_ascii_hexdigit()) {
+                return Err(anyhow::anyhow!(
+                    "Invalid consensus public key: contains non-hexadecimal characters"
+                ));
+            }
+
+            // Validate network public key: must be exactly 64 hex characters (32 bytes)
+            let network_pk =
+                self.network_public_key.strip_prefix("0x").unwrap_or(&self.network_public_key);
+            if network_pk.len() != 64 {
+                return Err(anyhow::anyhow!(
+                    "Invalid network public key: expected 64 hex characters (32 bytes), got {} characters",
+                    network_pk.len()
+                ));
+            }
+            if !network_pk.chars().all(|c| c.is_ascii_hexdigit()) {
+                return Err(anyhow::anyhow!(
+                    "Invalid network public key: contains non-hexadecimal characters"
+                ));
+            }
+
+            // Validate address format: /ip4/{host}/tcp/{port}
+            fn validate_network_address(addr: &str, label: &str) -> Result<(), anyhow::Error> {
+                let parts: Vec<&str> = addr.split('/').collect();
+                // Expected: ["", "ip4", "{host}", "tcp", "{port}"]
+                if parts.len() != 5 ||
+                    !parts[0].is_empty() ||
+                    parts[1] != "ip4" ||
+                    parts[2].is_empty() ||
+                    parts[3] != "tcp" ||
+                    parts[4].parse::<u16>().is_err()
+                {
+                    return Err(anyhow::anyhow!(
+                        "Invalid {label} address: expected /ip4/{{host}}/tcp/{{port}} format, got '{addr}'"
+                    ));
+                }
+                Ok(())
+            }
+            validate_network_address(&self.validator_network_address, "validator network")?;
+            validate_network_address(&self.fullnode_network_address, "fullnode network")?;
+
+            // Construct full addresses:
+            // /ip4/{host}/tcp/{port}/noise-ik/{network_public_key}/handshake/0
+            let validator_full_addr =
+                format!("{}/noise-ik/{}/handshake/0", self.validator_network_address, network_pk);
+            let fullnode_full_addr =
+                format!("{}/noise-ik/{}/handshake/0", self.fullnode_network_address, network_pk);
+
             println!("   Moniker: \"{}\"", self.moniker);
-            println!("   Consensus public key length: {} bytes", self.consensus_public_key.len());
+            println!("   Consensus public key: {consensus_pk} ({} bytes)", consensus_pk.len() / 2);
+            println!("   Network public key: {network_pk}");
+            println!("   Validator address: {validator_full_addr}");
+            println!("   Fullnode address: {fullnode_full_addr}");
 
             let call = ValidatorManagement::registerValidatorCall {
                 stakePool: stake_pool,
                 moniker: self.moniker.clone(),
-                consensusPubkey: hex::decode(self.consensus_public_key)?.into(),
+                consensusPubkey: hex::decode(consensus_pk)?.into(),
                 consensusPop: if self.consensus_pop.is_empty() {
                     Bytes::new()
                 } else {
                     hex::decode(&self.consensus_pop)?.into()
                 },
-                networkAddresses: bcs::to_bytes(&self.validator_network_address)?.into(),
-                fullnodeAddresses: bcs::to_bytes(&self.fullnode_network_address)?.into(),
+                networkAddresses: bcs::to_bytes(&validator_full_addr)?.into(),
+                fullnodeAddresses: bcs::to_bytes(&fullnode_full_addr)?.into(),
             };
             let input: Bytes = call.abi_encode().into();
             let pending_tx = provider

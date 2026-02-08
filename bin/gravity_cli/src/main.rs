@@ -1,7 +1,10 @@
 pub mod command;
+pub mod contract;
 pub mod dkg;
 pub mod genesis;
 pub mod node;
+pub mod stake;
+pub mod util;
 pub mod validator;
 
 use clap::Parser;
@@ -26,6 +29,10 @@ fn main() {
             validator::SubCommands::Leave(leave_cmd) => leave_cmd.execute(),
             // Example: gravity-cli validator list --rpc-url="http://127.0.0.1:8545"
             validator::SubCommands::List(list_cmd) => list_cmd.execute(),
+        },
+        command::SubCommands::Stake(stake_cmd) => match stake_cmd.command {
+            stake::SubCommands::Create(create_cmd) => create_cmd.execute(),
+            stake::SubCommands::Get(get_cmd) => get_cmd.execute(),
         },
         command::SubCommands::Node(node_cmd) => match node_cmd.command {
             // Example: gravity-cli node start --deploy-path="./deploy_utils/node1"

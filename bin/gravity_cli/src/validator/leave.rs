@@ -9,13 +9,11 @@ use std::str::FromStr;
 
 use crate::{
     command::Executable,
-    validator::{
-        contract::{
-            status_from_u8, ValidatorManagement, ValidatorRecord, ValidatorStatus,
-            VALIDATOR_MANAGER_ADDRESS,
-        },
-        util::format_ether,
+    contract::{
+        status_from_u8, ValidatorManagement, ValidatorRecord, ValidatorStatus,
+        VALIDATOR_MANAGER_ADDRESS,
     },
+    util::format_ether,
 };
 
 #[derive(Debug, Parser)]

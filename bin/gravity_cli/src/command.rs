@@ -1,5 +1,6 @@
 use crate::{
-    dkg::DKGCommand, genesis::GenesisCommand, node::NodeCommand, validator::ValidatorCommand,
+    dkg::DKGCommand, genesis::GenesisCommand, node::NodeCommand, stake::StakeCommand,
+    validator::ValidatorCommand,
 };
 use build_info::{build_information, BUILD_PKG_VERSION};
 use clap::{Parser, Subcommand};
@@ -40,6 +41,7 @@ pub struct Command {
 pub enum SubCommands {
     Genesis(GenesisCommand),
     Validator(ValidatorCommand),
+    Stake(StakeCommand),
     Node(NodeCommand),
     Dkg(DKGCommand),
 }
