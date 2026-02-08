@@ -473,7 +473,15 @@ async def poll_all_native_minted(
         f"(nonces 1→{max_nonce}), timeout={timeout}s..."
     )
 
+    first_iter = True  # one-time extended diagnostics on first poll
+
     while time.time() - start_time < timeout:
+        # Current gravity block height (for CI log correlation)
+        try:
+            cur_block = gravity_w3.eth.block_number
+        except Exception:
+            cur_block = -1
+
         # Fast-path: check if the highest nonce is processed
         try:
             is_last_done = receiver.functions.isProcessed(max_nonce).call()
@@ -487,9 +495,30 @@ async def poll_all_native_minted(
             )
             break
 
+        # One-time diagnostic on first iteration
+        if first_iter:
+            first_iter = False
+            try:
+                is_first = receiver.functions.isProcessed(1).call()
+                LOG.info(f"  [diag] isProcessed(1)={is_first}, gravity block={cur_block}")
+            except Exception as e:
+                LOG.warning(f"  [diag] isProcessed(1) call failed: {e}")
+            # Log receiver contract code size (sanity check contract exists)
+            try:
+                code = gravity_w3.eth.get_code(
+                    Web3.to_checksum_address(receiver_address)
+                )
+                LOG.info(
+                    f"  [diag] GBridgeReceiver code size = {len(code)} bytes "
+                    f"at {receiver_address}"
+                )
+            except Exception as e:
+                LOG.warning(f"  [diag] get_code failed: {e}")
+
         # Progress check: check a few nonces to report progress
+        checkpoints = [1, max_nonce // 4, max_nonce // 2, 3 * max_nonce // 4, max_nonce]
         processed_count = 0
-        for n in [1, max_nonce // 4, max_nonce // 2, 3 * max_nonce // 4, max_nonce]:
+        for n in checkpoints:
             if n < 1 or n > max_nonce:
                 continue
             try:
@@ -501,13 +530,25 @@ async def poll_all_native_minted(
         elapsed = time.time() - start_time
         LOG.info(
             f"  Waiting... {elapsed:.0f}s elapsed, "
-            f"checkpoints processed: {processed_count}/5"
+            f"checkpoints processed: {processed_count}/5, "
+            f"gravity block: {cur_block}"
         )
 
         await asyncio.sleep(poll_interval)
     else:
         # Timeout reached without isProcessed(max_nonce) being True
         LOG.warning(f"  Timeout after {timeout}s waiting for isProcessed({max_nonce})")
+        # Dump extra diagnostics on timeout
+        try:
+            final_block = gravity_w3.eth.block_number
+            is_first_done = receiver.functions.isProcessed(1).call()
+            LOG.warning(
+                f"  [timeout-diag] gravity block={final_block}, "
+                f"isProcessed(1)={is_first_done}, "
+                f"blocks since start={final_block - start_block}"
+            )
+        except Exception as e:
+            LOG.warning(f"  [timeout-diag] failed: {e}")
 
     processing_time = time.time() - start_time
 

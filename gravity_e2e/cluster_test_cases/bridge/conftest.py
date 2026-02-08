@@ -9,6 +9,7 @@ Pre-Load & Verify pattern:
   5. Test verifies all N NativeMinted events on gravity chain
 """
 
+import glob
 import json
 import logging
 import subprocess
@@ -192,6 +193,9 @@ def preloaded_bridge(cluster, contracts_dir: Path, bridge_count: int):
                 with open(relayer_path, "w") as f:
                     json.dump(ANVIL_RELAYER_CONFIG, f, indent=2)
 
+            # --- Diagnostic: verify config was written correctly ---
+            _dump_relayer_diagnostics(node_id, node._infra_path)
+
         subprocess.run(
             ["bash", str(start_script), "--config", config_path_str],
             cwd=str(cluster_scripts_dir),
@@ -199,6 +203,10 @@ def preloaded_bridge(cluster, contracts_dir: Path, bridge_count: int):
             check=True,
         )
         time.sleep(15)  # warmup — node needs time to init relayer
+
+        # --- Diagnostic: dump early node logs for relayer init ---
+        for node_id, node in cluster.nodes.items():
+            _dump_node_logs(node_id, node._infra_path, tail_lines=30, label="post-warmup")
 
         yield {
             "contracts": contracts,
@@ -211,6 +219,103 @@ def preloaded_bridge(cluster, contracts_dir: Path, bridge_count: int):
 
     finally:
         mgr.stop()
+
+
+
+# ============================================================================
+# Diagnostic helpers
+# ============================================================================
+
+def _dump_relayer_diagnostics(node_id: str, infra_path: Path) -> None:
+    """Verify relayer and reth config are correct after writing."""
+    # 1. Read back relayer_config.json
+    relayer_path = infra_path / "config" / "relayer_config.json"
+    if relayer_path.exists():
+        with open(relayer_path) as f:
+            content = json.load(f)
+        LOG.info(f"  [{node_id}] relayer_config.json verified: {json.dumps(content)}")
+    else:
+        LOG.warning(f"  [{node_id}] relayer_config.json NOT FOUND at {relayer_path}")
+
+    # 2. Read reth_config.json to verify relayer_config path reference
+    reth_config_path = infra_path / "config" / "reth_config.json"
+    if reth_config_path.exists():
+        with open(reth_config_path) as f:
+            reth_cfg = json.load(f)
+        rc_ref = reth_cfg.get("reth_args", {}).get("relayer_config", "NOT SET")
+        LOG.info(f"  [{node_id}] reth_config.json gravity.relayer-config = {rc_ref}")
+        # Check that the referenced path matches our written file
+        if rc_ref != str(relayer_path):
+            LOG.warning(
+                f"  [{node_id}] MISMATCH: reth_config points to {rc_ref} "
+                f"but we wrote to {relayer_path}"
+            )
+    else:
+        LOG.warning(f"  [{node_id}] reth_config.json NOT FOUND at {reth_config_path}")
+
+    # 3. Check that relayer_state.json does NOT exist (clean slate)
+    state_path = infra_path / "data" / "reth" / "relayer_state.json"
+    if state_path.exists():
+        with open(state_path) as f:
+            state = json.load(f)
+        LOG.warning(
+            f"  [{node_id}] relayer_state.json STILL EXISTS after cleanup: "
+            f"{json.dumps(state)}"
+        )
+    else:
+        LOG.info(f"  [{node_id}] relayer_state.json absent (clean slate) ✓")
+
+    # 4. Verify Anvil is reachable
+    try:
+        from web3 import Web3
+        w3_check = Web3(Web3.HTTPProvider("http://localhost:8546", request_kwargs={"timeout": 5}))
+        if w3_check.is_connected():
+            bn = w3_check.eth.block_number
+            LOG.info(f"  [{node_id}] Anvil connectivity check OK (block={bn})")
+        else:
+            LOG.warning(f"  [{node_id}] Anvil connectivity FAILED (not connected)")
+    except Exception as e:
+        LOG.warning(f"  [{node_id}] Anvil connectivity FAILED: {e}")
+
+
+def _dump_node_logs(node_id: str, infra_path: Path, tail_lines: int = 30, label: str = "") -> None:
+    """Dump tail of debug.log and reth.log for diagnostics."""
+    prefix = f"  [{node_id}] [{label}]" if label else f"  [{node_id}]"
+
+    # debug.log (stdout/stderr of gravity_node)
+    debug_log = infra_path / "logs" / "debug.log"
+    if debug_log.exists():
+        lines = debug_log.read_text().splitlines()
+        tail = lines[-tail_lines:] if len(lines) > tail_lines else lines
+        LOG.info(f"{prefix} debug.log (last {len(tail)} lines):")
+        for line in tail:
+            LOG.info(f"    {line}")
+    else:
+        LOG.warning(f"{prefix} debug.log NOT FOUND at {debug_log}")
+
+    # reth.log (execution layer file logging)
+    exec_log_dir = infra_path / "execution_logs"
+    if exec_log_dir.exists():
+        # Find all reth.log files in subdirectories
+        reth_logs = sorted(exec_log_dir.glob("*/reth.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if reth_logs:
+            reth_log = reth_logs[0]  # most recent
+            lines = reth_log.read_text().splitlines()
+            # Filter for relayer-related lines
+            relayer_lines = [l for l in lines if any(kw in l.lower() for kw in
+                            ["relayer", "data source", "blockchain_source", "event",
+                             "oracle", "8546", "connection", "error", "warn"])]
+            if relayer_lines:
+                tail = relayer_lines[-tail_lines:]
+                LOG.info(f"{prefix} reth.log relayer lines (last {len(tail)}):")
+                for line in tail:
+                    LOG.info(f"    {line}")
+            else:
+                LOG.info(f"{prefix} reth.log: no relayer-related lines found ({len(lines)} total lines)")
+        else:
+            LOG.info(f"{prefix} execution_logs: no reth.log files found")
+    else:
+        LOG.warning(f"{prefix} execution_logs dir NOT FOUND at {exec_log_dir}")
 
 
 # Markers

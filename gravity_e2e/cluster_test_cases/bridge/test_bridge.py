@@ -100,6 +100,15 @@ async def test_bridge_preloaded(
     LOG.info(f"{'=' * 60}")
 
     # Assertions
+    if len(missing) > 0:
+        # Dump node logs for CI diagnosis before assertion fails
+        LOG.warning(f"  {len(missing)} missing nonces — dumping node logs for diagnosis:")
+        for node_id, node_obj in cluster.nodes.items():
+            from gravity_e2e.cluster_test_cases.bridge.conftest import (
+                _dump_node_logs,
+            )
+            _dump_node_logs(node_id, node_obj._infra_path, tail_lines=50, label="on-failure")
+
     assert len(missing) == 0, (
         f"{len(missing)} nonces not found (out of {bridge_count}): "
         f"{sorted(missing)[:20]}{'...' if len(missing) > 20 else ''}"
