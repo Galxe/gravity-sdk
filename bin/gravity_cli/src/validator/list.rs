@@ -7,10 +7,8 @@ use serde::Serialize;
 
 use crate::{
     command::Executable,
-    validator::{
-        contract::{ValidatorManagement, ValidatorStatus, VALIDATOR_MANAGER_ADDRESS},
-        util::format_ether,
-    },
+    contract::{ValidatorManagement, ValidatorStatus, VALIDATOR_MANAGER_ADDRESS},
+    util::format_ether,
 };
 
 #[derive(Debug, Parser)]
@@ -168,7 +166,7 @@ impl ListCommand {
 }
 
 fn convert_validator_info(
-    info: &crate::validator::contract::ValidatorConsensusInfo,
+    info: &crate::contract::ValidatorConsensusInfo,
     status: ValidatorStatus,
 ) -> SerializableValidatorInfo {
     SerializableValidatorInfo {
