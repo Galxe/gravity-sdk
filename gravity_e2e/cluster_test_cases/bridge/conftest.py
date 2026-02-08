@@ -1,16 +1,12 @@
 """
 Pytest configuration and fixtures for Bridge E2E tests.
 
-Provides bridge-specific fixtures only. Shared fixtures (cluster, cluster_config_path,
-output_dir, target_node_id, target_cluster) are inherited from the parent conftest.py.
-
-IMPORTANT lifecycle note:
-  The runner (runner.py) starts gravity_node BEFORE pytest runs. But the
-  relayer reads relayer_config.json ONCE at startup. So we must:
-    1. Stop nodes (already started by runner with stale relayer_config)
-    2. Start Anvil + deploy bridge contracts
-    3. Write relayer_config.json with Anvil URI mapping
-    4. Restart nodes (so relayer picks up the new config)
+Pre-Load & Verify pattern:
+  1. Stop nodes (runner already started them)
+  2. Start Anvil + deploy bridge contracts
+  3. Pre-load N bridge transactions on Anvil (gravity_node NOT running)
+  4. Write relayer_config + restart gravity_node
+  5. Test verifies all N NativeMinted events on gravity chain
 """
 
 import json
@@ -20,6 +16,7 @@ import sys
 import os
 import time
 from pathlib import Path
+from typing import List
 
 _current_dir = Path(__file__).resolve().parent
 # Add gravity_e2e parent to path
@@ -32,6 +29,7 @@ if str(_gravity_e2e_parent) not in sys.path:
     sys.path.insert(0, str(_gravity_e2e_parent))
 
 import pytest
+from web3 import Web3
 
 from gravity_e2e.utils.anvil_manager import AnvilManager, BridgeContracts
 from gravity_e2e.utils.bridge_utils import BridgeHelper
@@ -52,9 +50,12 @@ ANVIL_RELAYER_CONFIG = {
     }
 }
 
+# Bridge amount per transaction: 1000 G tokens (in wei)
+BRIDGE_AMOUNT = 1000 * 10**18
+
 
 def pytest_addoption(parser):
-    """Add bridge-specific command line options (shared options come from parent conftest)."""
+    """Add bridge-specific command line options."""
     parser.addoption(
         "--contracts-dir",
         action="store",
@@ -62,10 +63,16 @@ def pytest_addoption(parser):
         help="Path to gravity_chain_core_contracts directory",
     )
     parser.addoption(
-        "--bridge-duration",
+        "--bridge-count",
         action="store",
-        default="600",
-        help="Duration in seconds for bridge continuous test (default: 600 = 10 min)",
+        default="200",
+        help="Number of bridge transactions to pre-load (default: 200)",
+    )
+    parser.addoption(
+        "--bridge-verify-timeout",
+        action="store",
+        default="300",
+        help="Timeout in seconds for verifying all NativeMinted events (default: 300)",
     )
 
 
@@ -89,29 +96,32 @@ def contracts_dir(request) -> Path:
 
 
 @pytest.fixture(scope="session")
-def bridge_duration(request) -> int:
-    """Get bridge test loop duration in seconds."""
-    return int(request.config.getoption("--bridge-duration"))
+def bridge_count(request) -> int:
+    """Number of bridge transactions to pre-load."""
+    return int(request.config.getoption("--bridge-count"))
+
+
+@pytest.fixture(scope="session")
+def bridge_verify_timeout(request) -> int:
+    """Timeout for verifying all NativeMinted events."""
+    return int(request.config.getoption("--bridge-verify-timeout"))
 
 
 @pytest.fixture(scope="module")
-def anvil_bridge(cluster, contracts_dir: Path) -> BridgeContracts:
+def preloaded_bridge(cluster, contracts_dir: Path, bridge_count: int):
     """
-    Start Anvil, deploy bridge contracts, and update relayer_config for each node.
+    Full bridge lifecycle fixture with pre-loading.
 
-    Lifecycle (handles the relayer_config timing constraint):
-    1. Stop gravity_node (runner already started it with stale relayer_config)
-    2. Start Anvil on port 8546
-    3. Deploy MockGToken, GravityPortal, GBridgeSender via forge
-    4. Write relayer_config.json with Anvil URI mapping to each node's config dir
-    5. Restart gravity_node (relayer now reads the correct config)
-    6. Yield BridgeContracts
-    7. Teardown: stop Anvil
+    Lifecycle:
+    1. Stop gravity_node (runner already started it)
+    2. Start Anvil + deploy bridge contracts
+    3. Pre-load N bridge transactions on Anvil
+    4. Write relayer_config + restart gravity_node
+    5. Yield (contracts, nonces, bridge_helper)
+    6. Teardown: stop Anvil
     """
     mgr = AnvilManager()
-
-    # Resolve the cluster scripts directory (gravity-sdk/cluster/)
-    sdk_root = _gravity_e2e_parent.parent  # gravity-sdk/
+    sdk_root = _gravity_e2e_parent.parent
     cluster_scripts_dir = sdk_root / "cluster"
     stop_script = cluster_scripts_dir / "stop.sh"
     start_script = cluster_scripts_dir / "start.sh"
@@ -122,9 +132,8 @@ def anvil_bridge(cluster, contracts_dir: Path) -> BridgeContracts:
     env["GRAVITY_ARTIFACTS_DIR"] = str(artifacts_dir)
 
     try:
-        # Step 1: Stop nodes so we can update config before restart
-        # (runner.py already started them with stale/template relayer_config)
-        LOG.info("Stopping gravity nodes to update relayer_config...")
+        # Phase 1: Stop nodes
+        LOG.info("Phase 1: Stopping gravity nodes...")
         subprocess.run(
             ["bash", str(stop_script), "--config", config_path_str],
             cwd=str(cluster_scripts_dir),
@@ -133,49 +142,75 @@ def anvil_bridge(cluster, contracts_dir: Path) -> BridgeContracts:
         )
         time.sleep(2)
 
-        # Step 2-3: Start Anvil and deploy contracts
+        # Phase 2: Start Anvil with block_time=1 and deploy contracts
+        LOG.info("Phase 2: Starting Anvil and deploying contracts...")
         mgr.start(port=8546, block_time=1)
         contracts = mgr.deploy_bridge_contracts(contracts_dir)
 
-        # Step 4: Write relayer_config.json for each node
+        # Create bridge helper
+        helper = BridgeHelper(
+            anvil_rpc_url=contracts.rpc_url,
+            gtoken_address=contracts.gtoken_address,
+            portal_address=contracts.portal_address,
+            sender_address=contracts.sender_address,
+            deployer_private_key=contracts.deployer_private_key,
+            deployer_address=contracts.deployer_address,
+        )
+
+        # Phase 3: Pre-load bridge transactions (fire-and-forget, Anvil mines at own pace)
+        recipient = Web3.to_checksum_address(contracts.deployer_address)
+        LOG.info(
+            f"Phase 3: Pre-loading {bridge_count} bridge transactions "
+            f"(amount={BRIDGE_AMOUNT} wei each)..."
+        )
+        nonces = helper.batch_mint_and_bridge(
+            count=bridge_count,
+            amount=BRIDGE_AMOUNT,
+            recipient=recipient,
+        )
+
+        # Verify all MessageSent events exist on Anvil
+        events = helper.query_message_sent_events(from_block=0)
+        LOG.info(f"  Anvil MessageSent events: {len(events)} (expected {bridge_count})")
+        assert len(events) >= bridge_count, (
+            f"Expected {bridge_count} MessageSent events on Anvil, got {len(events)}"
+        )
+
+        # Phase 4: Clean stale relayer state + write config + restart gravity_node
+        LOG.info("Phase 4: Cleaning relayer state, writing config, restarting nodes...")
         for node_id, node in cluster.nodes.items():
+            # Delete stale relayer_state.json so the relayer does a cold start
+            # against the fresh Anvil instance
+            relayer_state = node._infra_path / "data" / "reth" / "relayer_state.json"
+            if relayer_state.exists():
+                LOG.info(f"  Removing stale relayer_state.json for {node_id}")
+                relayer_state.unlink()
+
             relayer_path = node._infra_path / "config" / "relayer_config.json"
             if relayer_path.parent.exists():
-                LOG.info(f"Writing relayer_config.json for {node_id} at {relayer_path}")
+                LOG.info(f"  Writing relayer_config.json for {node_id}")
                 with open(relayer_path, "w") as f:
                     json.dump(ANVIL_RELAYER_CONFIG, f, indent=2)
-            else:
-                LOG.warning(
-                    f"Config dir not found for {node_id}: {relayer_path.parent}. "
-                    f"Relayer config not written."
-                )
 
-        # Step 5: Restart nodes with updated config
-        LOG.info("Restarting gravity nodes with updated relayer_config...")
         subprocess.run(
             ["bash", str(start_script), "--config", config_path_str],
             cwd=str(cluster_scripts_dir),
             env=env,
             check=True,
         )
-        time.sleep(5)  # warmup
+        time.sleep(15)  # warmup — node needs time to init relayer
 
-        yield contracts
+        yield {
+            "contracts": contracts,
+            "nonces": nonces,
+            "helper": helper,
+            "bridge_count": bridge_count,
+            "amount": BRIDGE_AMOUNT,
+            "recipient": recipient,
+        }
+
     finally:
         mgr.stop()
-
-
-@pytest.fixture(scope="module")
-def bridge_helper(anvil_bridge: BridgeContracts) -> BridgeHelper:
-    """Create BridgeHelper for web3.py bridge interactions."""
-    return BridgeHelper(
-        anvil_rpc_url=anvil_bridge.rpc_url,
-        gtoken_address=anvil_bridge.gtoken_address,
-        portal_address=anvil_bridge.portal_address,
-        sender_address=anvil_bridge.sender_address,
-        deployer_private_key=anvil_bridge.deployer_private_key,
-        deployer_address=anvil_bridge.deployer_address,
-    )
 
 
 # Markers

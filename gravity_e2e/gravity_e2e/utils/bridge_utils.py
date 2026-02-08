@@ -145,7 +145,10 @@ class BridgeHelper:
         deployer_private_key: str,
         deployer_address: str,
     ):
-        self.w3 = Web3(Web3.HTTPProvider(anvil_rpc_url))
+        self.w3 = Web3(Web3.HTTPProvider(
+            anvil_rpc_url,
+            request_kwargs={"timeout": 120},
+        ))
         assert self.w3.is_connected(), f"Cannot connect to Anvil at {anvil_rpc_url}"
 
         self.deployer_key = deployer_private_key
@@ -212,6 +215,93 @@ class BridgeHelper:
         LOG.info(f"  Bridge complete. Portal nonce: {portal_nonce}")
         return portal_nonce
 
+    def batch_mint_and_bridge(
+        self,
+        count: int,
+        amount: int,
+        recipient: str,
+        interval: float = 0.0,
+    ) -> List[int]:
+        """
+        Pre-load Anvil with N bridge transactions efficiently.
+
+        Uses fire-and-forget pattern: sends all raw transactions with
+        manually managed nonces, then polls portal.nonce() until all
+        are mined. This avoids blocking on each send_raw_transaction.
+
+        Args:
+            count: Number of bridge transactions to send.
+            amount: Amount per bridge transaction (in wei).
+            recipient: Recipient address on gravity chain.
+            interval: Seconds between bridge calls (0 = as fast as possible).
+
+        Returns:
+            List of bridge nonces (1..count).
+        """
+        recipient = Web3.to_checksum_address(recipient)
+        total_amount = amount * count
+
+        # 1. Single large mint (synchronous — just 1 tx)
+        LOG.info(f"  Batch: minting {total_amount} GTokens ({count} × {amount})...")
+        tx = self.gtoken.functions.mint(
+            self.deployer_address, total_amount
+        ).build_transaction(self._tx_params())
+        self._send_tx(tx)
+
+        # 2. Single large approve (synchronous — just 1 tx)
+        LOG.info(f"  Batch: approving GBridgeSender for {total_amount}...")
+        tx = self.gtoken.functions.approve(
+            self.sender.address, total_amount
+        ).build_transaction(self._tx_params())
+        self._send_tx(tx)
+
+        # 3. Get fee (same for all since amount is identical)
+        fee = self.sender.functions.calculateBridgeFee(amount, recipient).call()
+        LOG.info(f"  Batch: fee per bridge = {fee} wei")
+
+        # 4. Fire-and-forget: send N bridge transactions with manual nonce management
+        eth_nonce = self.w3.eth.get_transaction_count(self.deployer_address)
+        tx_hashes = []
+        for i in range(count):
+            tx = self.sender.functions.bridgeToGravity(
+                amount, recipient
+            ).build_transaction({
+                "from": self.deployer_address,
+                "nonce": eth_nonce,
+                "gas": 500_000,
+                "gasPrice": self.w3.eth.gas_price,
+                "chainId": self.w3.eth.chain_id,
+                "value": fee,
+            })
+            signed = self.w3.eth.account.sign_transaction(tx, self.deployer_key)
+            tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
+            tx_hashes.append(tx_hash)
+            eth_nonce += 1
+
+            if (i + 1) % 20 == 0 or (i + 1) == count:
+                LOG.info(f"  Batch: submitted {i + 1}/{count} bridge txns")
+
+            if interval > 0 and i < count - 1:
+                time.sleep(interval)
+
+        # 5. Poll portal.nonce() until all bridge txns are mined
+        LOG.info(f"  Batch: all {count} txns submitted, waiting for mining...")
+        deadline = time.time() + 600  # 10 min max
+        while time.time() < deadline:
+            portal_nonce = self.portal.functions.nonce().call()
+            if portal_nonce >= count:
+                LOG.info(f"  Batch complete: portal nonce={portal_nonce}, all {count} bridges mined")
+                break
+            LOG.info(f"  Batch: waiting for mining... portal nonce={portal_nonce}/{count}")
+            time.sleep(3)
+        else:
+            raise RuntimeError(
+                f"Timed out waiting for bridge txns to mine. "
+                f"Portal nonce: {portal_nonce}/{count}"
+            )
+
+        return list(range(1, count + 1))
+
     def query_message_sent_events(self, from_block: int = 0) -> list:
         """Query MessageSent events from GravityPortal on Anvil."""
         logs = self.portal.events.MessageSent().get_logs(from_block=from_block)
@@ -231,7 +321,7 @@ class BridgeHelper:
         """Sign and send a transaction, wait for receipt."""
         signed = self.w3.eth.account.sign_transaction(tx, self.deployer_key)
         tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
-        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=30)
+        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         if receipt.status != 1:
             raise RuntimeError(
                 f"Transaction failed: {tx_hash.hex()}, receipt: {receipt}"
@@ -340,6 +430,139 @@ async def poll_native_minted(
         pass
 
     return None
+
+
+async def poll_all_native_minted(
+    gravity_w3: Web3,
+    max_nonce: int,
+    timeout: float = 300.0,
+    poll_interval: float = 3.0,
+    receiver_address: str = GBRIDGE_RECEIVER_ADDRESS,
+) -> Dict[str, Any]:
+    """
+    Poll gravity chain until all nonces 1..max_nonce have NativeMinted events.
+
+    Uses isProcessed(max_nonce) as a fast-path check, then scans logs
+    for all events to collect detailed data.
+
+    Args:
+        gravity_w3: Web3 instance connected to gravity chain.
+        max_nonce: The highest expected nonce (assumes 1..max_nonce).
+        timeout: Maximum seconds to wait.
+        poll_interval: Seconds between polls.
+        receiver_address: GBridgeReceiver contract address.
+
+    Returns:
+        Dict with:
+            - events: list of {recipient, amount, nonce, block_number, tx_hash}
+            - found_nonces: set of nonces found
+            - missing_nonces: set of nonces NOT found
+            - processing_time: seconds from start to all-found
+    """
+    receiver = gravity_w3.eth.contract(
+        address=Web3.to_checksum_address(receiver_address),
+        abi=BRIDGE_RECEIVER_ABI,
+    )
+
+    expected_nonces = set(range(1, max_nonce + 1))
+    start_time = time.time()
+    start_block = max(0, gravity_w3.eth.block_number - 1)
+
+    LOG.info(
+        f"  Polling for {max_nonce} NativeMinted events "
+        f"(nonces 1→{max_nonce}), timeout={timeout}s..."
+    )
+
+    while time.time() - start_time < timeout:
+        # Fast-path: check if the highest nonce is processed
+        try:
+            is_last_done = receiver.functions.isProcessed(max_nonce).call()
+        except Exception:
+            is_last_done = False
+
+        if is_last_done:
+            LOG.info(
+                f"  isProcessed({max_nonce})=True after "
+                f"{time.time() - start_time:.1f}s — scanning logs..."
+            )
+            break
+
+        # Progress check: check a few nonces to report progress
+        processed_count = 0
+        for n in [1, max_nonce // 4, max_nonce // 2, 3 * max_nonce // 4, max_nonce]:
+            if n < 1 or n > max_nonce:
+                continue
+            try:
+                if receiver.functions.isProcessed(n).call():
+                    processed_count += 1
+            except Exception:
+                pass
+
+        elapsed = time.time() - start_time
+        LOG.info(
+            f"  Waiting... {elapsed:.0f}s elapsed, "
+            f"checkpoints processed: {processed_count}/5"
+        )
+
+        await asyncio.sleep(poll_interval)
+    else:
+        # Timeout reached without isProcessed(max_nonce) being True
+        LOG.warning(f"  Timeout after {timeout}s waiting for isProcessed({max_nonce})")
+
+    processing_time = time.time() - start_time
+
+    # Now scan all logs to collect event details
+    current_block = gravity_w3.eth.block_number
+    all_events = []
+    found_nonces = set()
+
+    # Scan in chunks to avoid huge responses
+    CHUNK_SIZE = 5000
+    scan_from = start_block
+    while scan_from <= current_block:
+        scan_to = min(scan_from + CHUNK_SIZE, current_block)
+        try:
+            logs = gravity_w3.eth.get_logs(
+                {
+                    "address": Web3.to_checksum_address(receiver_address),
+                    "fromBlock": scan_from,
+                    "toBlock": scan_to,
+                    "topics": [NATIVE_MINTED_TOPIC0],
+                }
+            )
+            for log_entry in logs:
+                event = receiver.events.NativeMinted().process_log(log_entry)
+                nonce_val = event.args.nonce
+                if nonce_val in expected_nonces:
+                    found_nonces.add(nonce_val)
+                    all_events.append(
+                        {
+                            "recipient": event.args.recipient,
+                            "amount": event.args.amount,
+                            "nonce": nonce_val,
+                            "block_number": log_entry["blockNumber"],
+                            "tx_hash": log_entry["transactionHash"].hex(),
+                        }
+                    )
+        except Exception as e:
+            LOG.warning(f"  Log scan error for blocks {scan_from}-{scan_to}: {e}")
+
+        scan_from = scan_to + 1
+
+    missing_nonces = expected_nonces - found_nonces
+    LOG.info(
+        f"  Log scan complete: {len(found_nonces)}/{max_nonce} events found, "
+        f"{len(missing_nonces)} missing"
+    )
+    if missing_nonces and len(missing_nonces) <= 20:
+        LOG.info(f"  Missing nonces: {sorted(missing_nonces)}")
+
+    return {
+        "events": sorted(all_events, key=lambda e: e["nonce"]),
+        "found_nonces": found_nonces,
+        "missing_nonces": missing_nonces,
+        "processing_time": processing_time,
+    }
 
 
 # ============================================================================

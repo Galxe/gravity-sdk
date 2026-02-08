@@ -65,13 +65,13 @@ class AnvilManager:
     def is_running(self) -> bool:
         return self._process is not None and self._process.poll() is None
 
-    def start(self, port: int = 8546, block_time: int = 1) -> None:
+    def start(self, port: int = 8546, block_time: int = None) -> None:
         """
         Start Anvil local testnet.
 
         Args:
             port: Port to run Anvil on.
-            block_time: Block time in seconds.
+            block_time: Block time in seconds. None = auto-mine (instant).
         """
         if self.is_running:
             LOG.warning("Anvil already running, stopping first...")
@@ -86,9 +86,15 @@ class AnvilManager:
         self._port = port
         self._rpc_url = f"http://localhost:{port}"
 
-        LOG.info(f"Starting Anvil on port {port} (block-time: {block_time}s)...")
+        cmd = ["anvil", "--port", str(port)]
+        if block_time is not None:
+            cmd.extend(["--block-time", str(block_time)])
+            LOG.info(f"Starting Anvil on port {port} (block-time: {block_time}s)...")
+        else:
+            LOG.info(f"Starting Anvil on port {port} (auto-mine mode)...")
+
         self._process = subprocess.Popen(
-            ["anvil", "--port", str(port), "--block-time", str(block_time)],
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
@@ -99,6 +105,35 @@ class AnvilManager:
             raise RuntimeError("Anvil failed to start within timeout")
 
         LOG.info(f"Anvil running at {self._rpc_url} (PID: {self._process.pid})")
+
+    def set_interval_mining(self, interval: int = 1) -> None:
+        """
+        Switch Anvil to interval mining mode (timed block production).
+
+        Uses evm_setIntervalMining RPC. Keeps all existing state intact.
+
+        Args:
+            interval: Block interval in seconds.
+        """
+        if not self.is_running:
+            raise RuntimeError("Anvil is not running")
+
+        import requests
+        resp = requests.post(
+            self._rpc_url,
+            json={
+                "jsonrpc": "2.0",
+                "method": "evm_setIntervalMining",
+                "params": [interval],
+                "id": 1,
+            },
+            timeout=5,
+        )
+        resp.raise_for_status()
+        result = resp.json()
+        if "error" in result:
+            raise RuntimeError(f"evm_setIntervalMining failed: {result['error']}")
+        LOG.info(f"Switched Anvil to interval mining: {interval}s per block")
 
     def deploy_bridge_contracts(self, contracts_dir: Path) -> BridgeContracts:
         """
