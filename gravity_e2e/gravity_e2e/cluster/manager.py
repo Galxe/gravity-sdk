@@ -763,14 +763,14 @@ class Cluster:
         stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
         stdout_str = stdout.decode() if stdout else ""
         stderr_str = stderr.decode() if stderr else ""
+        LOG.info(f"Validator {node_id} join command executed successfully")
+        if stdout_str:
+            LOG.info(f"Command output: {stdout_str}")
 
         if process.returncode != 0:
             LOG.error(f"Failed to join validator {node_id}: {stderr_str}")
             raise RuntimeError(f"Failed to join validator {node_id}: {stderr_str}")
 
-        LOG.info(f"Validator {node_id} join command executed successfully")
-        if stdout_str:
-            LOG.info(f"Command output: {stdout_str}")
 
     async def validator_leave(self, node_id: str, timeout: int = 120):
         """
