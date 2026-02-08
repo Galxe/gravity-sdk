@@ -13,16 +13,32 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 # Parse TOML using Python
 parse_toml() {
     python3 << 'PYTHON_SCRIPT'
-import tomllib
 import json
 import sys
 import os
 
+# Try tomllib (Python 3.11+) first, then fall back to toml
+try:
+    import tomllib
+    def load_toml(f):
+        return tomllib.load(f)
+    open_mode = 'rb'
+except ImportError:
+    try:
+        import toml
+        def load_toml(f):
+            return toml.load(f)
+        open_mode = 'r'
+    except ImportError:
+        print("Error: Neither tomllib (Python 3.11+) nor toml package available.", file=sys.stderr)
+        print("Install toml: pip3 install toml", file=sys.stderr)
+        sys.exit(1)
+
 config_file = os.environ.get('CONFIG_FILE', 'cluster.toml')
 
 try:
-    with open(config_file, 'rb') as f:
-        config = tomllib.load(f)
+    with open(config_file, open_mode) as f:
+        config = load_toml(f)
     print(json.dumps(config))
 except FileNotFoundError:
     print(f"Error: Config file not found: {config_file}", file=sys.stderr)

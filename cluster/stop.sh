@@ -46,16 +46,26 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 # Parse TOML using Python
 parse_toml() {
     python3 << 'PYTHON_SCRIPT'
-import tomllib
 import json
 import sys
 import os
 
+try:
+    import tomllib
+    def load_toml(f):
+        return tomllib.load(f)
+    open_mode = 'rb'
+except ImportError:
+    import toml
+    def load_toml(f):
+        return toml.load(f)
+    open_mode = 'r'
+
 config_file = os.environ.get('CONFIG_FILE', 'cluster.toml')
 
 try:
-    with open(config_file, 'rb') as f:
-        config = tomllib.load(f)
+    with open(config_file, open_mode) as f:
+        config = load_toml(f)
     print(json.dumps(config))
 except Exception as e:
     print(f"Error: {e}", file=sys.stderr)
@@ -94,7 +104,8 @@ stop_node() {
     
     local pid=$(cat "$pid_file")
     
-    if [ ! -d "/proc/$pid" ]; then
+    # Use kill -0 to check if process exists (works on macOS and Linux)
+    if ! kill -0 "$pid" 2>/dev/null; then
         log_warn "$node_id: Process $pid not running (stale PID file)"
         rm -f "$pid_file"
         return 0
@@ -105,7 +116,7 @@ stop_node() {
     
     # Wait for graceful shutdown
     for i in {1..10}; do
-        if [ ! -d "/proc/$pid" ]; then
+        if ! kill -0 "$pid" 2>/dev/null; then
             rm -f "$pid_file"
             log_info "$node_id stopped"
             return 0

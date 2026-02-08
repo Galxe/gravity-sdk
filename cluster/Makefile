@@ -1,6 +1,10 @@
-.PHONY: init deploy start stop clean status restart
+.PHONY: genesis init deploy start stop clean status restart faucet deploy_start
 
-# Initialize artifacts (Keys, Genesis, Waypoint) into ./output
+# Generate genesis.json and waypoint.txt (only for new networks)
+genesis:
+	@bash genesis.sh
+
+# Generate node identity keys
 init:
 	@bash init.sh
 
@@ -12,10 +16,6 @@ deploy:
 start:
 	@bash start.sh
 
-# Run faucet initialization
-faucet:
-	@bash faucet.sh
-
 # Stop the cluster
 stop:
 	@bash stop.sh
@@ -23,6 +23,10 @@ stop:
 # Check cluster status
 status:
 	@bash status.sh
+
+# Run faucet initialization
+faucet:
+	@bash faucet.sh
 
 # Clean generated artifacts
 clean:
@@ -32,4 +36,5 @@ clean:
 # Full redeploy cycle (Stop -> Deploy -> Start)
 restart: stop deploy start
 
+# Convenience: deploy and start
 deploy_start: deploy start

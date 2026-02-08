@@ -1,6 +1,13 @@
 #!/bin/bash
 set -e
 
+# Cross-platform sed -i
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    SED_INPLACE=(sed -i '')
+else
+    SED_INPLACE=(sed -i)
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${1:-$SCRIPT_DIR/cluster.toml}"
 OUTPUT_DIR="${GRAVITY_ARTIFACTS_DIR:-$SCRIPT_DIR/output}"
@@ -96,7 +103,7 @@ echo "Started node with PID $pid"
 START_SCRIPT
 
     # Replace BINARY_PATH placeholder
-    sed -i "s|BINARY_PATH|$binary_path|g" "$data_dir/script/start.sh"
+    "${SED_INPLACE[@]}" "s|BINARY_PATH|$binary_path|g" "$data_dir/script/start.sh"
     chmod +x "$data_dir/script/start.sh"
     
     # Generate stop script
@@ -127,7 +134,8 @@ configure_vfn() {
     local data_dir="$2"
     local genesis_path="$3"
     local binary_path="$4"
-    local waypoint_src="$5"
+    local identity_src="$5"
+    local waypoint_src="$6"
     
     local config_dir="$data_dir/config"
     
@@ -136,15 +144,9 @@ configure_vfn() {
     # Create config dir
     mkdir -p "$config_dir"
     
-    # Copy waypoint from artifacts
+    # Copy identity and waypoint from artifacts
+    cp "$identity_src" "$config_dir/identity.yaml"
     cp "$waypoint_src" "$config_dir/waypoint.txt"
-    
-    # Generate VFN identity if not exists
-    local identity_file="$config_dir/identity.yaml"
-    if [ ! -f "$identity_file" ]; then
-        log_info "  [$node_id] Generating VFN identity..."
-        "$GRAVITY_CLI" genesis generate-key --output-file="$identity_file" > /dev/null
-    fi
     
     # Export paths
     export NODE_ID="$node_id"
@@ -208,7 +210,7 @@ echo "Started VFN node with PID $pid"
 START_SCRIPT
 
     # Replace BINARY_PATH placeholder
-    sed -i "s|BINARY_PATH|$binary_path|g" "$data_dir/script/start.sh"
+    "${SED_INPLACE[@]}" "s|BINARY_PATH|$binary_path|g" "$data_dir/script/start.sh"
     chmod +x "$data_dir/script/start.sh"
     
     # Generate stop script
@@ -272,10 +274,19 @@ main() {
             exit 1
         fi
     fi
-    # Clean old environment
-    if [ -d "$base_dir" ]; then
-        log_warn "Cleaning old environment at $base_dir..."
-        rm -rf "$base_dir"
+    # Handle existing environment
+    if [ -d "$base_dir" ] && [ "$(ls -A "$base_dir" 2>/dev/null)" ]; then
+        log_warn "Existing deployment found at $base_dir:"
+        ls -1 "$base_dir"
+        echo ""
+        read -p "[?] Clean old environment before deploying? [y/N] " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            log_warn "Cleaning old environment at $base_dir..."
+            rm -rf "$base_dir"
+        else
+            log_info "Keeping existing environment, overwriting configs..."
+        fi
     fi
     mkdir -p "$base_dir"
     
@@ -283,23 +294,38 @@ main() {
     gravity_cli_path=$(find_binary "gravity_cli" "$PROJECT_ROOT") || true
     if [ -n "$gravity_cli_path" ]; then
         log_info "Found gravity_cli at: $gravity_cli_path"
-        log_info "Creating gravity_cli in $base_dir..."
-        # Try hardlink first, fallback to cp if cross-device (e.g., Docker)
-        if ! ln "$gravity_cli_path" "$base_dir/gravity_cli" 2>/dev/null; then
-            log_warn "Hardlink failed (cross-device?), copying instead..."
-            cp "$gravity_cli_path" "$base_dir/gravity_cli"
-        fi
+        log_info "Copying gravity_cli to $base_dir..."
+        cp "$gravity_cli_path" "$base_dir/gravity_cli"
         export GRAVITY_CLI="$gravity_cli_path"
     else
         log_error "gravity_cli not found - VFN identity generation may fail and hardlink not created"
         exit 1
     fi
     
+    # Copy gravity_node binary (self-contained deployment)
+    log_info "Copying gravity_node to $base_dir..."
+    cp "$binary_path" "$base_dir/gravity_node"
+    local_binary_path="$base_dir/gravity_node"
+    
+    # Read genesis source paths from config (with defaults)
+    genesis_path=$(echo "$config_json" | jq -r '.genesis_source.genesis_path // "./output/genesis.json"')
+    waypoint_path=$(echo "$config_json" | jq -r '.genesis_source.waypoint_path // "./output/waypoint.txt"')
+    
+    # Resolve relative paths (relative to CONFIG_FILE location, not SCRIPT_DIR)
+    local config_dir="$(dirname "$CONFIG_FILE")"
+    if [[ "$genesis_path" != /* ]]; then
+        genesis_path="$(cd "$config_dir" && realpath "$genesis_path" 2>/dev/null || echo "$genesis_path")"
+    fi
+    if [[ "$waypoint_path" != /* ]]; then
+        waypoint_path="$(cd "$config_dir" && realpath "$waypoint_path" 2>/dev/null || echo "$waypoint_path")"
+    fi
+    
     # Deploy Genesis
-    if [ -f "$OUTPUT_DIR/genesis.json" ]; then
-        cp "$OUTPUT_DIR/genesis.json" "$base_dir/genesis.json"
+    if [ -f "$genesis_path" ]; then
+        cp "$genesis_path" "$base_dir/genesis.json"
+        log_info "Deployed genesis from: $genesis_path"
     else
-        log_error "Genesis file not found in artifacts!"
+        log_error "Genesis file not found: $genesis_path"
         exit 1
     fi
     genesis_path="$base_dir/genesis.json"
@@ -343,12 +369,20 @@ main() {
         waypoint_src="$OUTPUT_DIR/waypoint.txt"
         
         if [ "$role" == "vfn" ]; then
-            # VFN node - uses onchain discovery, no seed required
+            # VFN node
+            identity_src="$OUTPUT_DIR/$NODE_ID/config/identity.yaml"
+            
+            if [ ! -f "$identity_src" ]; then
+                log_error "Identity not found for $NODE_ID at $identity_src"
+                exit 1
+            fi
+            
             configure_vfn \
                 "$NODE_ID" \
                 "$data_dir" \
                 "$genesis_path" \
-                "$binary_path" \
+                "$local_binary_path" \
+                "$identity_src" \
                 "$waypoint_src"
         else
             # Validator node (includes both 'genesis' and 'validator' roles)
@@ -369,7 +403,7 @@ main() {
                 "$NODE_ID" \
                 "$data_dir" \
                 "$genesis_path" \
-                "$binary_path" \
+                "$local_binary_path" \
                 "$identity_src" \
                 "$waypoint_src" \
                 "$role"
