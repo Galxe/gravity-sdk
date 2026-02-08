@@ -37,8 +37,8 @@ voting_duration_micros = 604800000000
 [genesis.randomness_config]
 variant = 1
 secrecy_threshold = 9223372036854775808
-reconstruction_threshold = 12297829382473033728
-fast_path_secrecy_threshold = 12297829382473033728
+reconstruction_threshold = 12297829382473034410
+fast_path_secrecy_threshold = 12297829382473034410
 
 [genesis.oracle_config]
 source_types = [1]
