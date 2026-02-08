@@ -1,10 +1,14 @@
 name: Rust CI
 
 on:
-  push:
-    branches: [main, 'branch-v**']
   pull_request:
     branches: [main, 'branch-v**']
+    paths-ignore:
+      - 'book/**'
+      - 'scripts/**'
+      - 'template_config/**'
+      - 'bin/sentinel/**'
+      - '*.md'
   workflow_dispatch:
 
 env:

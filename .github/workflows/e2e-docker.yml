@@ -1,8 +1,6 @@
 name: E2E Test in Docker
 
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
     inputs:
       suite:
