@@ -45,29 +45,10 @@ jobs:
       - name: Run clippy
         run: RUSTFLAGS="--cfg tokio_unstable" cargo clippy --all-targets --all-features -- -D warnings
 
-  # Build gravity_node and gravity_cli
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev
-      - name: Run cargo cache
-        uses: Swatinem/rust-cache@v2
-      - name: Build gravity_node
-        run: cargo build --bin gravity_node --profile quick-release
-      - name: Build gravity_cli
-        run: cargo build --bin gravity_cli --profile quick-release
-
   # Run unit tests (triggered by label or on main branch push)
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.pull_request.labels.*.name, 'CICD:run-tests')
     steps:
       - uses: actions/checkout@v4
       - name: Install system dependencies
