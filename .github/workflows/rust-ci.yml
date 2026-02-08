@@ -49,10 +49,6 @@ jobs:
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.pull_request.labels.*.name, 'CICD:run-tests')
     steps:
       - uses: actions/checkout@v4
       - name: Install system dependencies
