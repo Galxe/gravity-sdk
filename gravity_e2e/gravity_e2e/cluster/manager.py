@@ -680,12 +680,163 @@ class Cluster:
 
         return result
 
+    async def get_stake(self, node_id: str, timeout: int = 60) -> Optional[str]:
+        """
+        Query StakePools for a node's EVM account and return the last pool address.
+        Updates node.stake_pool if found.
+
+        Args:
+            node_id: ID of the node to query.
+            timeout: Command timeout in seconds.
+
+        Returns:
+            The stake pool address if found, None otherwise.
+        """
+        node = self.get_node(node_id)
+        if not node:
+            raise ValueError(f"Node {node_id} not found")
+
+        evm_account = self._ensure_evm_account(node)
+        rpc_url = self._get_first_rpc_url()
+
+        get_cmd = [
+            str(self.gravity_cli_path),
+            "stake",
+            "get",
+            "--rpc-url",
+            rpc_url,
+            "--owner",
+            evm_account.address,
+        ]
+
+        LOG.info(
+            f"Querying StakePools for node {node_id} (owner={evm_account.address})..."
+        )
+        LOG.debug(f"Command: {' '.join(get_cmd)}")
+
+        process = await asyncio.create_subprocess_exec(
+            *get_cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        stdout_str = stdout.decode() if stdout else ""
+        stderr_str = stderr.decode() if stderr else ""
+
+        if process.returncode != 0:
+            LOG.warning(f"Failed to query stakes for {node_id}: {stderr_str}")
+            return None
+
+        # Parse pool addresses from table rows after the header:
+        #   Pool Address                                 Voting Power     Block Number
+        #   --------------------------------------------------------------------------
+        #   0x2f3eaf272bf50acd32fe9c4c4c7c8f3f9cb6bde4   1. ETH           136
+        import re
+
+        pool_address = None
+        in_table = False
+        for line in stdout_str.splitlines():
+            if line.startswith("Pool Address"):
+                in_table = True
+                continue
+            if in_table and line.startswith("---"):
+                continue  # skip separator
+            if in_table:
+                match = re.match(r"^(0x[0-9a-fA-F]{40})\s+", line)
+                if match:
+                    pool_address = match.group(1)
+                    # Don't break — we want the LAST pool address
+
+        if pool_address:
+            node.stake_pool = pool_address
+            LOG.info(f"Found stake pool for node {node_id}: {pool_address}")
+        else:
+            LOG.info(f"No stake pool found for node {node_id}")
+
+        return pool_address
+
+    async def create_stake(
+        self,
+        node_id: str,
+        stake_amount: str = "1.0",
+        timeout: int = 120,
+    ) -> str:
+        """
+        Create a new StakePool for a node's EVM account.
+        Updates node.stake_pool on success.
+
+        Args:
+            node_id: ID of the node.
+            stake_amount: Amount to stake in ETH.
+            timeout: Command timeout in seconds.
+
+        Returns:
+            The new stake pool address.
+
+        Raises:
+            RuntimeError: If stake creation fails.
+        """
+        node = self.get_node(node_id)
+        if not node:
+            raise ValueError(f"Node {node_id} not found")
+
+        evm_account = self._ensure_evm_account(node)
+        private_key = evm_account.key.hex()
+        rpc_url = self._get_first_rpc_url()
+
+        create_cmd = [
+            str(self.gravity_cli_path),
+            "stake",
+            "create",
+            "--rpc-url",
+            rpc_url,
+            "--private-key",
+            private_key,
+            "--stake-amount",
+            stake_amount,
+        ]
+
+        LOG.info(f"Creating StakePool for node {node_id} with {stake_amount} ETH...")
+        LOG.debug(f"Command: {' '.join(create_cmd)}")
+
+        process = await asyncio.create_subprocess_exec(
+            *create_cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        stdout_str = stdout.decode() if stdout else ""
+        stderr_str = stderr.decode() if stderr else ""
+
+        if process.returncode != 0:
+            LOG.error(f"Failed to create stake for {node_id}: {stderr_str}")
+            raise RuntimeError(f"Failed to create stake for {node_id}: {stderr_str}")
+
+        # Parse pool address from output line like:
+        #    Pool address: 0x2F3Eaf272bf50aCd32fe9C4C4c7C8F3f9CB6bde4
+        import re
+
+        match = re.search(r"Pool address:\s*(0x[0-9a-fA-F]{40})", stdout_str)
+        if not match:
+            LOG.error(f"Could not parse pool address from stake create output")
+            raise RuntimeError(
+                f"Failed to parse pool address from stake create output: {stdout_str}"
+            )
+
+        pool_address = match.group(1)
+        node.stake_pool = pool_address
+        LOG.info(f"Created stake pool for node {node_id}: {pool_address}")
+        return pool_address
+
     async def validator_join(
         self,
         node_id: str,
         stake_amount: str = "1.0",
         moniker: Optional[str] = None,
         timeout: int = 120,
+        lockup_duration: Optional[int] = None,
     ):
         """
         Join a node to the validator set.
@@ -716,10 +867,12 @@ class Cluster:
 
         # Ensure stake_pool is populated
         if node.stake_pool is None:
-            LOG.info(
-                f"Node {node_id} has no stake_pool, fetching via validator_list..."
-            )
-            await self.validator_list()
+            LOG.info(f"Node {node_id} has no stake_pool, trying get_stake...")
+            await self.get_stake(node_id)
+
+        if node.stake_pool is None:
+            LOG.info(f"Node {node_id} still has no stake_pool, creating new stake...")
+            await self.create_stake(node_id, stake_amount=stake_amount)
 
         rpc_url = self._get_first_rpc_url()
 
@@ -732,19 +885,17 @@ class Cluster:
             rpc_url,
             "--private-key",
             private_key,
-            "--stake-amount",
-            stake_amount,
+            "--stake-pool",
+            node.stake_pool,
             "--consensus-public-key",
             node.consensus_public_key,
+            "--network-public-key",
+            node.identity.network_public_key,
             "--validator-network-address",
-            f"/ip4/127.0.0.1/tcp/{node.p2p_port}/noise-ik/{node.identity.network_public_key}/handshake/0",
+            f"/ip4/127.0.0.1/tcp/{node.p2p_port}",
             "--fullnode-network-address",
-            f"/ip4/127.0.0.1/tcp/{node.vfn_port}/noise-ik/{node.identity.network_public_key}/handshake/0",
+            f"/ip4/127.0.0.1/tcp/{node.vfn_port}",
         ]
-
-        # Add stake_pool if available (for existing validators)
-        if node.stake_pool:
-            join_cmd.extend(["--stake-pool", node.stake_pool])
 
         # Add moniker
         effective_moniker = moniker or node_id.upper()
