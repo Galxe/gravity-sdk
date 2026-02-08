@@ -274,10 +274,19 @@ main() {
             exit 1
         fi
     fi
-    # Clean old environment
-    if [ -d "$base_dir" ]; then
-        log_warn "Cleaning old environment at $base_dir..."
-        rm -rf "$base_dir"
+    # Handle existing environment
+    if [ -d "$base_dir" ] && [ "$(ls -A "$base_dir" 2>/dev/null)" ]; then
+        log_warn "Existing deployment found at $base_dir:"
+        ls -1 "$base_dir"
+        echo ""
+        read -p "[?] Clean old environment before deploying? [y/N] " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            log_warn "Cleaning old environment at $base_dir..."
+            rm -rf "$base_dir"
+        else
+            log_info "Keeping existing environment, overwriting configs..."
+        fi
     fi
     mkdir -p "$base_dir"
     
