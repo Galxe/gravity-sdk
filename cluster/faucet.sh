@@ -87,22 +87,29 @@ print(total)
         log_info "gravity_bench not found. Cloning from $bench_repo..."
         mkdir -p "$(dirname "$GRAVITY_BENCH_DIR")"
         git clone "$bench_repo" "$GRAVITY_BENCH_DIR"
-        
-        (
-            cd "$GRAVITY_BENCH_DIR"
-            log_info "Checking out $bench_ref..."
-            git checkout "$bench_ref"
-            
-            log_info "Initializing submodules..."
-            git submodule update --init --recursive
-
-            # Install python dependencies for deploy.py if needed
-            if [ -f "requirements.txt" ]; then
-                 log_info "Installing gravity_bench requirements..."
-                 pip install -r requirements.txt || true
-            fi
-        )
     fi
+
+    # Always fetch + checkout + pull to ensure latest code
+    (
+        cd "$GRAVITY_BENCH_DIR"
+        log_info "Checking out gravity_bench ref: $bench_ref..."
+        git fetch origin
+        git checkout "$bench_ref"
+        # Pull latest if on a branch (no-op for detached HEAD / commit hash)
+        if git symbolic-ref -q HEAD &>/dev/null; then
+            log_info "Pulling latest changes for branch $bench_ref..."
+            git pull origin "$bench_ref"
+        fi
+
+        log_info "Initializing submodules..."
+        git submodule update --init --recursive
+
+        # Install python dependencies for deploy.py if needed
+        if [ -f "requirements.txt" ]; then
+             log_info "Installing gravity_bench requirements..."
+             pip install -r requirements.txt || true
+        fi
+    )
     
     # Ensure gravity_bench is set up (contracts cloned, etc.)
     if [ -f "$GRAVITY_BENCH_DIR/setup.sh" ]; then
