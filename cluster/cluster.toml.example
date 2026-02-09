@@ -118,7 +118,13 @@ reth_p2p_port = 12029
 [genesis]
 epoch_interval_micros = 7200000000  # 2 hours in microseconds
 major_version = 1
-consensus_config = "0x00"
+# The consensus_config bytes are BCS-serialized from the following Rust struct:
+# V4 { alg: JolteonV2 { main: ConsensusConfigV1 { decoupled_execution: true,
+# back_pressure_limit: 10, exclude_round: 40, proposer_election_type:
+# RotatingProposer(1), max_failed_authors_to_store: 10 }, quorum_store_enabled:
+# true, order_vote_enabled: false }, vtxn: V1 { per_block_limit_txn_count: 2,
+# per_block_limit_total_bytes: 2097152 }, window_size: None }
+consensus_config = "0x0301010a00000000000000280000000000000001010000000a000000000000000100010200000000000000000020000000000000"
 execution_config = "0x00"
 
 [genesis.validator_config]
