@@ -3,6 +3,8 @@ Aptos Identity utilities
 Parse Aptos identity from YAML files
 """
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 from pathlib import Path

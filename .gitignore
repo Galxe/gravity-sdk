@@ -167,6 +167,7 @@ gravity_e2e/logs/
 external/*
 cluster/output/
 cluster/cluster.toml
+cluster/genesis.toml
 bin/sentinel/sentinel.toml
 gravity_e2e/output/
 gravity_e2e/configs/test_accounts_generated.json

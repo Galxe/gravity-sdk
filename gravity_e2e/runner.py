@@ -110,6 +110,7 @@ def run_test_suite(
     Run tests in a specific directory.
     """
     cluster_config = test_dir / "cluster.toml"
+    genesis_config = test_dir / "genesis.toml"
 
     if not cluster_config.exists():
         logger.warning(f"No cluster.toml found in {test_dir}, skimming...")
@@ -125,6 +126,10 @@ def run_test_suite(
     suite_artifacts_dir = test_dir / "artifacts"
     env = os.environ.copy()
     env["GRAVITY_ARTIFACTS_DIR"] = str(suite_artifacts_dir)
+    
+    # Set genesis config path if it exists
+    if genesis_config.exists():
+        env["GENESIS_CONFIG_FILE"] = str(genesis_config)
 
     # 1. Init Cluster (with Caching)
     should_run_init = True
@@ -142,12 +147,32 @@ def run_test_suite(
         logger.info(
             f"Initializing cluster (Generating artifacts in {suite_artifacts_dir})..."
         )
+        
+        # Step 1: init.sh (generate identity keys)
         init_script = CLUSTER_SCRIPTS_DIR / "init.sh"
-        run_command(
-            ["bash", str(init_script), str(cluster_config)],
-            cwd=CLUSTER_SCRIPTS_DIR,
-            env=env,
-        )
+        if genesis_config.exists():
+            run_command(
+                ["bash", str(init_script), str(genesis_config)],
+                cwd=CLUSTER_SCRIPTS_DIR,
+                env=env,
+            )
+        else:
+            # Fallback to cluster.toml for backwards compatibility
+            run_command(
+                ["bash", str(init_script), str(cluster_config)],
+                cwd=CLUSTER_SCRIPTS_DIR,
+                env=env,
+            )
+        
+        # Step 2: genesis.sh (generate genesis.json)
+        genesis_script = CLUSTER_SCRIPTS_DIR / "genesis.sh"
+        if genesis_script.exists() and genesis_config.exists():
+            logger.info("Generating genesis...")
+            run_command(
+                ["bash", str(genesis_script), str(genesis_config)],
+                cwd=CLUSTER_SCRIPTS_DIR,
+                env=env,
+            )
 
     # 2. Deploy Cluster
     logger.info("Deploying cluster...")
@@ -157,6 +182,7 @@ def run_test_suite(
         cwd=CLUSTER_SCRIPTS_DIR,
         env=env,
     )
+
 
     # 3. Start Nodes
     start_script = CLUSTER_SCRIPTS_DIR / "start.sh"
@@ -189,7 +215,7 @@ def run_test_suite(
         env["GRAVITY_CLUSTER_CONFIG"] = str(cluster_config)
 
         # Build pytest command
-        cmd = ["pytest", "-s", str(test_dir)]
+        cmd = ["python3", "-m", "pytest", "-s", str(test_dir)]
         if pytest_args:
             cmd.extend(pytest_args)
 
