@@ -36,7 +36,7 @@ consensus:
 
 validator_network:
   network_id: validator
-  listen_address: "/ip4/${HOST}/tcp/${P2P_PORT}"
+  listen_address: "/ip4/0.0.0.0/tcp/${P2P_PORT}"
   discovery_method:
     onchain
   mutual_authentication: true
@@ -47,7 +47,7 @@ validator_network:
 full_node_networks:
   - network_id:
       private: "vfn"
-    listen_address: "/ip4/${HOST}/tcp/${VFN_PORT}"
+    listen_address: "/ip4/0.0.0.0/tcp/${VFN_PORT}"
     identity:
       type: "from_file"
       path: ${CONFIG_DIR}/identity.yaml

@@ -11,7 +11,7 @@ checksum = "fe438c63458706e03479442743baae6c88256498e6431708f6dfc520a26515d3"
 [[package]]
 name = "abstract-domain-derive"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -512,9 +512,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-rlp"
-version = "0.3.12"
+version = "0.3.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f70d83b765fdc080dbcd4f4db70d8d23fe4761f2f02ebfa9146b833900634b4"
+checksum = "e93e50f64a77ad9c5470bf2ad0ca02f228da70c792a8f06634801e202579f35e"
 dependencies = [
  "alloy-rlp-derive",
  "arrayvec 0.7.6",
@@ -523,9 +523,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-rlp-derive"
-version = "0.3.12"
+version = "0.3.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64b728d511962dda67c1bc7ea7c03736ec275ed2cf4c35d9585298ac9ccf3b73"
+checksum = "ce8849c74c9ca0f5a03da1c865e3eb6f768df816e67dd3721a398a8a7e398011"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -763,9 +763,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-sol-macro"
-version = "1.5.3"
+version = "1.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25d4b140adc0e4f7bd2b4928d2772fbdf4db114312c4619eff08eba7b6440b9e"
+checksum = "f5fa1ca7e617c634d2bd9fa71f9ec8e47c07106e248b9fcbd3eaddc13cabd625"
 dependencies = [
  "alloy-sol-macro-expander",
  "alloy-sol-macro-input",
@@ -777,9 +777,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-sol-macro-expander"
-version = "1.5.3"
+version = "1.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0512730c0658dab978c9706b592c378974fe49cd14614083a37f7f396aaf2eb5"
+checksum = "27c00c0c3a75150a9dc7c8c679ca21853a137888b4e1c5569f92d7e2b15b5102"
 dependencies = [
  "alloy-sol-macro-input",
  "const-hex",
@@ -788,16 +788,16 @@ dependencies = [
  "proc-macro-error2",
  "proc-macro2",
  "quote",
+ "sha3 0.10.8",
  "syn 2.0.114",
  "syn-solidity",
- "tiny-keccak",
 ]
 
 [[package]]
 name = "alloy-sol-macro-input"
-version = "1.5.3"
+version = "1.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7f5b5f9e6fc8af3420d527cab5eecddc9c437227df251b3c7eb70b0941d8bd5"
+checksum = "297db260eb4d67c105f68d6ba11b8874eec681caec5505eab8fbebee97f790bc"
 dependencies = [
  "const-hex",
  "dunce",
@@ -811,9 +811,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-sol-type-parser"
-version = "1.5.3"
+version = "1.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6dbdf239d997b705e1c23cc8bb43f301db615b187379fa923d87723d47fcd31"
+checksum = "94b91b13181d3bcd23680fd29d7bc861d1f33fbe90fdd0af67162434aeba902d"
 dependencies = [
  "serde",
  "winnow 0.7.14",
@@ -910,9 +910,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-trie"
-version = "0.9.3"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "428aa0f0e0658ff091f8f667c406e034b431cb10abd39de4f507520968acc499"
+checksum = "4d7fd448ab0a017de542de1dcca7a58e7019fe0e7a34ed3f9543ebddf6aceffa"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -921,6 +921,7 @@ dependencies = [
  "nybbles",
  "serde",
  "smallvec",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -1024,9 +1025,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.100"
+version = "1.0.101"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
+checksum = "5f0e0fee31ef5ed1ba1316088939cea399010ed7731dba877ed44aeb407a75ea"
 
 [[package]]
 name = "api"
@@ -1045,7 +1046,7 @@ dependencies = [
  "build-info",
  "byteorder",
  "bytes",
- "clap 4.5.55",
+ "clap 4.5.57",
  "either",
  "fail",
  "futures",
@@ -1072,7 +1073,7 @@ dependencies = [
 [[package]]
 name = "api-types"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1094,7 +1095,7 @@ dependencies = [
 [[package]]
 name = "aptos-abstract-gas-usage"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-gas-algebra",
@@ -1107,7 +1108,7 @@ dependencies = [
 [[package]]
 name = "aptos-accumulator"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -1117,7 +1118,7 @@ dependencies = [
 [[package]]
 name = "aptos-aggregator"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-types",
  "bcs 0.1.4",
@@ -1130,7 +1131,7 @@ dependencies = [
 [[package]]
 name = "aptos-api"
 version = "0.2.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-api-types",
@@ -1141,7 +1142,7 @@ dependencies = [
  "aptos-gas-schedule",
  "aptos-global-constants",
  "aptos-logger",
- "aptos-mempool 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-mempool 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-metrics-core",
  "aptos-runtimes",
  "aptos-sdk",
@@ -1171,7 +1172,7 @@ dependencies = [
 [[package]]
 name = "aptos-api-types"
 version = "0.0.1"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-config",
@@ -1201,7 +1202,7 @@ dependencies = [
 [[package]]
 name = "aptos-bcs-utils"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "hex",
@@ -1210,7 +1211,7 @@ dependencies = [
 [[package]]
 name = "aptos-bitvec"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "proptest",
  "serde",
@@ -1220,7 +1221,7 @@ dependencies = [
 [[package]]
 name = "aptos-block-executor"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "ambassador",
  "anyhow",
@@ -1258,14 +1259,14 @@ dependencies = [
 [[package]]
 name = "aptos-block-partitioner"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-crypto",
  "aptos-logger",
  "aptos-metrics-core",
  "aptos-types",
  "bcs 0.1.4",
- "clap 4.5.55",
+ "clap 4.5.57",
  "dashmap 5.5.3",
  "itertools 0.13.0",
  "move-core-types",
@@ -1281,7 +1282,7 @@ dependencies = [
 [[package]]
 name = "aptos-bounded-executor"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "futures",
  "rustversion",
@@ -1291,7 +1292,7 @@ dependencies = [
 [[package]]
 name = "aptos-build-info"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "shadow-rs",
 ]
@@ -1299,7 +1300,7 @@ dependencies = [
 [[package]]
 name = "aptos-cached-packages"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-framework",
@@ -1313,7 +1314,7 @@ dependencies = [
 [[package]]
 name = "aptos-channels"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-infallible",
@@ -1324,12 +1325,12 @@ dependencies = [
 [[package]]
 name = "aptos-collections"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 
 [[package]]
 name = "aptos-compression"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-logger",
  "aptos-metrics-core",
@@ -1341,7 +1342,7 @@ dependencies = [
 [[package]]
 name = "aptos-config"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -1387,7 +1388,7 @@ dependencies = [
  "bytes",
  "chrono",
  "claims",
- "clap 4.5.55",
+ "clap 4.5.57",
  "dashmap 5.5.3",
  "enum_dispatch",
  "fail",
@@ -1432,7 +1433,7 @@ dependencies = [
 [[package]]
 name = "aptos-consensus"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-bitvec",
@@ -1441,25 +1442,25 @@ dependencies = [
  "aptos-collections",
  "aptos-config",
  "aptos-consensus-notifications",
- "aptos-consensus-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-consensus-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-crypto",
  "aptos-crypto-derive",
  "aptos-dkg",
  "aptos-enum-conversion-derive",
  "aptos-event-notifications",
- "aptos-executor 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
- "aptos-executor-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-executor 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
+ "aptos-executor-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-experimental-runtimes",
  "aptos-fallible",
  "aptos-infallible",
  "aptos-logger",
- "aptos-mempool 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-mempool 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-metrics-core",
  "aptos-network",
  "aptos-peer-monitoring-service-types",
  "aptos-reliable-broadcast",
  "aptos-runtimes",
- "aptos-safety-rules 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-safety-rules 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-schemadb",
  "aptos-secure-storage",
  "aptos-short-hex-str",
@@ -1475,7 +1476,7 @@ dependencies = [
  "bytes",
  "chrono",
  "claims",
- "clap 4.5.55",
+ "clap 4.5.57",
  "dashmap 5.5.3",
  "enum_dispatch",
  "fail",
@@ -1510,7 +1511,7 @@ dependencies = [
 [[package]]
 name = "aptos-consensus-notifications"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-crypto",
  "aptos-runtimes",
@@ -1548,13 +1549,13 @@ dependencies = [
 [[package]]
 name = "aptos-consensus-types"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-bitvec",
  "aptos-crypto",
  "aptos-crypto-derive",
- "aptos-executor-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-executor-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-infallible",
  "aptos-logger",
  "aptos-short-hex-str",
@@ -1576,7 +1577,7 @@ dependencies = [
 [[package]]
 name = "aptos-crash-handler"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-logger",
  "backtrace",
@@ -1588,7 +1589,7 @@ dependencies = [
 [[package]]
 name = "aptos-crypto"
 version = "0.0.3"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -1642,7 +1643,7 @@ dependencies = [
 [[package]]
 name = "aptos-crypto-derive"
 version = "0.0.3"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1652,7 +1653,7 @@ dependencies = [
 [[package]]
 name = "aptos-data-client"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-config",
  "aptos-crypto",
@@ -1683,7 +1684,7 @@ dependencies = [
 [[package]]
 name = "aptos-data-streaming-service"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-channels",
  "aptos-config",
@@ -1709,7 +1710,7 @@ dependencies = [
 [[package]]
 name = "aptos-db"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-accumulator",
@@ -1717,7 +1718,7 @@ dependencies = [
  "aptos-crypto",
  "aptos-db-indexer",
  "aptos-db-indexer-schemas",
- "aptos-executor-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-executor-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-experimental-runtimes",
  "aptos-infallible",
  "aptos-jellyfish-merkle",
@@ -1755,7 +1756,7 @@ dependencies = [
 [[package]]
 name = "aptos-db-indexer"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-config",
@@ -1777,7 +1778,7 @@ dependencies = [
 [[package]]
 name = "aptos-db-indexer-schemas"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -1794,7 +1795,7 @@ dependencies = [
 [[package]]
 name = "aptos-dkg"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -1826,13 +1827,13 @@ dependencies = [
 [[package]]
 name = "aptos-dkg-runtime"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-bounded-executor",
  "aptos-channels",
  "aptos-config",
- "aptos-consensus-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-consensus-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-crypto",
  "aptos-crypto-derive",
  "aptos-enum-conversion-derive",
@@ -1843,7 +1844,7 @@ dependencies = [
  "aptos-network",
  "aptos-reliable-broadcast",
  "aptos-runtimes",
- "aptos-safety-rules 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-safety-rules 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-time-service",
  "aptos-types",
  "aptos-validator-transaction-pool",
@@ -1865,7 +1866,7 @@ dependencies = [
 [[package]]
 name = "aptos-drop-helper"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-infallible",
  "aptos-metrics-core",
@@ -1876,7 +1877,7 @@ dependencies = [
 [[package]]
 name = "aptos-enum-conversion-derive"
 version = "0.0.3"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "quote",
  "syn 1.0.109",
@@ -1885,7 +1886,7 @@ dependencies = [
 [[package]]
 name = "aptos-event-notifications"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "api-types",
@@ -1915,15 +1916,15 @@ dependencies = [
 [[package]]
 name = "aptos-executor"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-block-executor",
- "aptos-consensus-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-consensus-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-crypto",
  "aptos-drop-helper",
  "aptos-executor-service",
- "aptos-executor-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-executor-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-experimental-runtimes",
  "aptos-indexer-grpc-table-info",
  "aptos-infallible",
@@ -1946,7 +1947,7 @@ dependencies = [
 [[package]]
 name = "aptos-executor-service"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-block-executor",
  "aptos-block-partitioner",
@@ -1962,7 +1963,7 @@ dependencies = [
  "aptos-types",
  "aptos-vm",
  "bcs 0.1.4",
- "clap 4.5.55",
+ "clap 4.5.57",
  "crossbeam-channel",
  "ctrlc",
  "dashmap 5.5.3",
@@ -1977,16 +1978,16 @@ dependencies = [
 [[package]]
 name = "aptos-executor-test-helpers"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-cached-packages",
  "aptos-config",
- "aptos-consensus-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-consensus-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-crypto",
  "aptos-db",
- "aptos-executor 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
- "aptos-executor-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-executor 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
+ "aptos-executor-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-sdk",
  "aptos-storage-interface",
  "aptos-temppath",
@@ -2010,7 +2011,7 @@ dependencies = [
 [[package]]
 name = "aptos-executor-types"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -2035,7 +2036,7 @@ dependencies = [
 [[package]]
 name = "aptos-experimental-layered-map"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "ahash 0.8.12",
  "aptos-crypto",
@@ -2050,7 +2051,7 @@ dependencies = [
 [[package]]
 name = "aptos-experimental-runtimes"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-runtimes",
  "core_affinity",
@@ -2063,7 +2064,7 @@ dependencies = [
 [[package]]
 name = "aptos-fallible"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "thiserror 1.0.69",
 ]
@@ -2071,7 +2072,7 @@ dependencies = [
 [[package]]
 name = "aptos-framework"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-aggregator",
@@ -2094,7 +2095,7 @@ dependencies = [
  "blake2-rfc",
  "bulletproofs",
  "byteorder",
- "clap 4.5.55",
+ "clap 4.5.57",
  "codespan-reporting",
  "curve25519-dalek-ng",
  "either",
@@ -2142,7 +2143,7 @@ dependencies = [
 [[package]]
 name = "aptos-gas-algebra"
 version = "0.0.1"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "either",
  "move-core-types",
@@ -2151,7 +2152,7 @@ dependencies = [
 [[package]]
 name = "aptos-gas-meter"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-gas-algebra",
  "aptos-gas-schedule",
@@ -2166,7 +2167,7 @@ dependencies = [
 [[package]]
 name = "aptos-gas-profiling"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-gas-algebra",
@@ -2186,7 +2187,7 @@ dependencies = [
 [[package]]
 name = "aptos-gas-schedule"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-gas-algebra",
  "aptos-global-constants",
@@ -2199,17 +2200,17 @@ dependencies = [
 [[package]]
 name = "aptos-global-constants"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 
 [[package]]
 name = "aptos-id-generator"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 
 [[package]]
 name = "aptos-indexer-grpc-fullnode"
 version = "1.0.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-api",
@@ -2218,7 +2219,7 @@ dependencies = [
  "aptos-config",
  "aptos-indexer-grpc-utils",
  "aptos-logger",
- "aptos-mempool 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-mempool 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-metrics-core",
  "aptos-moving-average",
  "aptos-protos",
@@ -2245,7 +2246,7 @@ dependencies = [
 [[package]]
 name = "aptos-indexer-grpc-table-info"
 version = "1.0.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-api",
@@ -2255,7 +2256,7 @@ dependencies = [
  "aptos-indexer-grpc-fullnode",
  "aptos-indexer-grpc-utils",
  "aptos-logger",
- "aptos-mempool 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-mempool 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-metrics-core",
  "aptos-runtimes",
  "aptos-storage-interface",
@@ -2277,7 +2278,7 @@ dependencies = [
 [[package]]
 name = "aptos-indexer-grpc-utils"
 version = "1.0.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-metrics-core",
@@ -2313,12 +2314,12 @@ dependencies = [
 [[package]]
 name = "aptos-infallible"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 
 [[package]]
 name = "aptos-inspection-service"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-build-info",
@@ -2344,7 +2345,7 @@ dependencies = [
 [[package]]
 name = "aptos-jellyfish-merkle"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -2372,7 +2373,7 @@ dependencies = [
 [[package]]
 name = "aptos-jwk-consensus"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "api-types",
@@ -2380,7 +2381,7 @@ dependencies = [
  "aptos-bounded-executor",
  "aptos-channels",
  "aptos-config",
- "aptos-consensus-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-consensus-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-crypto",
  "aptos-enum-conversion-derive",
  "aptos-event-notifications",
@@ -2391,7 +2392,7 @@ dependencies = [
  "aptos-network",
  "aptos-reliable-broadcast",
  "aptos-runtimes",
- "aptos-safety-rules 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-safety-rules 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-time-service",
  "aptos-types",
  "aptos-validator-transaction-pool",
@@ -2410,7 +2411,7 @@ dependencies = [
 [[package]]
 name = "aptos-jwk-utils"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-types",
@@ -2425,7 +2426,7 @@ dependencies = [
 [[package]]
 name = "aptos-keygen"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-crypto",
  "aptos-types",
@@ -2435,7 +2436,7 @@ dependencies = [
 [[package]]
 name = "aptos-language-e2e-tests"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-abstract-gas-usage",
@@ -2481,7 +2482,7 @@ dependencies = [
 [[package]]
 name = "aptos-ledger"
 version = "0.2.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-crypto",
  "aptos-types",
@@ -2494,7 +2495,7 @@ dependencies = [
 [[package]]
 name = "aptos-log-derive"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2504,7 +2505,7 @@ dependencies = [
 [[package]]
 name = "aptos-logger"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-infallible",
@@ -2530,7 +2531,7 @@ dependencies = [
 [[package]]
 name = "aptos-memory-usage-tracker"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-gas-algebra",
  "aptos-gas-meter",
@@ -2571,13 +2572,13 @@ dependencies = [
 [[package]]
 name = "aptos-mempool"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-bounded-executor",
  "aptos-channels",
  "aptos-config",
- "aptos-consensus-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-consensus-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-crypto",
  "aptos-event-notifications",
  "aptos-infallible",
@@ -2612,7 +2613,7 @@ dependencies = [
 [[package]]
 name = "aptos-mempool-notifications"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-types",
  "async-trait",
@@ -2625,7 +2626,7 @@ dependencies = [
 [[package]]
 name = "aptos-memsocket"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-infallible",
  "bytes",
@@ -2636,7 +2637,7 @@ dependencies = [
 [[package]]
 name = "aptos-metrics-core"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "prometheus",
@@ -2645,7 +2646,7 @@ dependencies = [
 [[package]]
 name = "aptos-move-stdlib"
 version = "0.1.1"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-gas-schedule",
  "aptos-native-interface",
@@ -2670,7 +2671,7 @@ dependencies = [
 [[package]]
 name = "aptos-mvhashmap"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-aggregator",
@@ -2691,7 +2692,7 @@ dependencies = [
 [[package]]
 name = "aptos-native-interface"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-gas-algebra",
  "aptos-gas-schedule",
@@ -2708,7 +2709,7 @@ dependencies = [
 [[package]]
 name = "aptos-netcore"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-memsocket",
  "aptos-proxy",
@@ -2725,7 +2726,7 @@ dependencies = [
 [[package]]
 name = "aptos-network"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-bitvec",
@@ -2774,7 +2775,7 @@ dependencies = [
 [[package]]
 name = "aptos-network-builder"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-channels",
  "aptos-config",
@@ -2797,7 +2798,7 @@ dependencies = [
 [[package]]
 name = "aptos-network-discovery"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-channels",
@@ -2822,7 +2823,7 @@ dependencies = [
 [[package]]
 name = "aptos-node-resource-metrics"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-build-info",
  "aptos-infallible",
@@ -2832,14 +2833,14 @@ dependencies = [
  "once_cell",
  "procfs 0.14.2",
  "prometheus",
- "rlimit",
+ "rlimit 0.10.2",
  "sysinfo 0.28.4",
 ]
 
 [[package]]
 name = "aptos-num-variants"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2849,7 +2850,7 @@ dependencies = [
 [[package]]
 name = "aptos-openapi"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "percent-encoding",
  "poem",
@@ -2861,7 +2862,7 @@ dependencies = [
 [[package]]
 name = "aptos-package-builder"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-framework",
@@ -2874,7 +2875,7 @@ dependencies = [
 [[package]]
 name = "aptos-peer-monitoring-service-types"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-config",
  "aptos-types",
@@ -2886,7 +2887,7 @@ dependencies = [
 [[package]]
 name = "aptos-proptest-helpers"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "crossbeam",
  "proptest",
@@ -2896,7 +2897,7 @@ dependencies = [
 [[package]]
 name = "aptos-protos"
 version = "1.3.1"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "pbjson",
  "prost",
@@ -2907,7 +2908,7 @@ dependencies = [
 [[package]]
 name = "aptos-proxy"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "ipnet",
 ]
@@ -2915,7 +2916,7 @@ dependencies = [
 [[package]]
 name = "aptos-push-metrics"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-logger",
  "aptos-metrics-core",
@@ -2927,11 +2928,11 @@ dependencies = [
 [[package]]
 name = "aptos-reliable-broadcast"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-bounded-executor",
- "aptos-consensus-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-consensus-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-enum-conversion-derive",
  "aptos-infallible",
  "aptos-logger",
@@ -2949,7 +2950,7 @@ dependencies = [
 [[package]]
 name = "aptos-resource-viewer"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-types",
@@ -2964,7 +2965,7 @@ dependencies = [
 [[package]]
 name = "aptos-rest-client"
 version = "0.0.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-api-types",
@@ -2987,7 +2988,7 @@ dependencies = [
 [[package]]
 name = "aptos-rocksdb-options"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-config",
  "rocksdb",
@@ -2996,7 +2997,7 @@ dependencies = [
 [[package]]
 name = "aptos-runtimes"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "rayon",
  "tokio",
@@ -3024,10 +3025,10 @@ dependencies = [
 [[package]]
 name = "aptos-safety-rules"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-config",
- "aptos-consensus-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-consensus-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-crypto",
  "aptos-global-constants",
  "aptos-infallible",
@@ -3048,7 +3049,7 @@ dependencies = [
 [[package]]
 name = "aptos-schemadb"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-drop-helper",
@@ -3065,7 +3066,7 @@ dependencies = [
 [[package]]
 name = "aptos-scratchpad"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-crypto",
  "aptos-drop-helper",
@@ -3085,7 +3086,7 @@ dependencies = [
 [[package]]
 name = "aptos-sdk"
 version = "0.0.3"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-cached-packages",
@@ -3111,12 +3112,12 @@ dependencies = [
 [[package]]
 name = "aptos-sdk-builder"
 version = "0.2.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-types",
  "bcs 0.1.4",
- "clap 4.5.55",
+ "clap 4.5.57",
  "heck 0.4.1",
  "move-core-types",
  "once_cell",
@@ -3129,7 +3130,7 @@ dependencies = [
 [[package]]
 name = "aptos-secure-net"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-logger",
  "aptos-metrics-core",
@@ -3147,7 +3148,7 @@ dependencies = [
 [[package]]
 name = "aptos-secure-storage"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-crypto",
  "aptos-infallible",
@@ -3168,7 +3169,7 @@ dependencies = [
 [[package]]
 name = "aptos-short-hex-str"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "mirai-annotations",
  "serde",
@@ -3179,7 +3180,7 @@ dependencies = [
 [[package]]
 name = "aptos-speculative-state-helper"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-infallible",
@@ -3190,7 +3191,7 @@ dependencies = [
 [[package]]
 name = "aptos-state-sync-driver"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-config",
@@ -3199,7 +3200,7 @@ dependencies = [
  "aptos-data-client",
  "aptos-data-streaming-service",
  "aptos-event-notifications",
- "aptos-executor-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-executor-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-infallible",
  "aptos-logger",
  "aptos-mempool-notifications",
@@ -3223,7 +3224,7 @@ dependencies = [
 [[package]]
 name = "aptos-storage-interface"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -3251,7 +3252,7 @@ dependencies = [
 [[package]]
 name = "aptos-storage-service-client"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-config",
  "aptos-network",
@@ -3262,7 +3263,7 @@ dependencies = [
 [[package]]
 name = "aptos-storage-service-notifications"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-channels",
  "async-trait",
@@ -3274,7 +3275,7 @@ dependencies = [
 [[package]]
 name = "aptos-storage-service-types"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-compression",
  "aptos-config",
@@ -3290,7 +3291,7 @@ dependencies = [
 [[package]]
 name = "aptos-table-natives"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-gas-schedule",
  "aptos-native-interface",
@@ -3308,17 +3309,17 @@ dependencies = [
 [[package]]
 name = "aptos-telemetry"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-api",
  "aptos-config",
- "aptos-consensus 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-consensus 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-crypto",
  "aptos-db",
  "aptos-infallible",
  "aptos-logger",
- "aptos-mempool 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-mempool 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-metrics-core",
  "aptos-network",
  "aptos-node-resource-metrics",
@@ -3347,7 +3348,7 @@ dependencies = [
 [[package]]
 name = "aptos-telemetry-service"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-config",
@@ -3360,7 +3361,7 @@ dependencies = [
  "base64 0.13.1",
  "bcs 0.1.4",
  "chrono",
- "clap 4.5.55",
+ "clap 4.5.57",
  "debug-ignore",
  "flate2",
  "futures",
@@ -3387,7 +3388,7 @@ dependencies = [
 [[package]]
 name = "aptos-temppath"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "hex",
  "rand 0.7.3",
@@ -3396,7 +3397,7 @@ dependencies = [
 [[package]]
 name = "aptos-time-service"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-infallible",
  "enum_dispatch",
@@ -3409,7 +3410,7 @@ dependencies = [
 [[package]]
 name = "aptos-transaction-filter"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-protos",
@@ -3427,7 +3428,7 @@ dependencies = [
 [[package]]
 name = "aptos-types"
 version = "0.0.3"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "api-types",
@@ -3491,12 +3492,12 @@ dependencies = [
 [[package]]
 name = "aptos-utils"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 
 [[package]]
 name = "aptos-validator-transaction-pool"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-channels",
  "aptos-crypto",
@@ -3509,7 +3510,7 @@ dependencies = [
 [[package]]
 name = "aptos-vault-client"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-crypto",
  "base64 0.13.1",
@@ -3525,7 +3526,7 @@ dependencies = [
 [[package]]
 name = "aptos-vm"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-aggregator",
@@ -3577,7 +3578,7 @@ dependencies = [
 [[package]]
 name = "aptos-vm-environment"
 version = "0.0.1"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-framework",
  "aptos-gas-algebra",
@@ -3600,7 +3601,7 @@ dependencies = [
 [[package]]
 name = "aptos-vm-genesis"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-cached-packages",
  "aptos-crypto",
@@ -3624,7 +3625,7 @@ dependencies = [
 [[package]]
 name = "aptos-vm-logging"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "aptos-crypto",
  "aptos-logger",
@@ -3639,7 +3640,7 @@ dependencies = [
 [[package]]
 name = "aptos-vm-types"
 version = "0.0.1"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "ambassador",
  "anyhow",
@@ -3662,7 +3663,7 @@ dependencies = [
 [[package]]
 name = "aptos-vm-validator"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "aptos-logger",
@@ -3704,9 +3705,9 @@ dependencies = [
 
 [[package]]
 name = "arc-swap"
-version = "1.8.0"
+version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51d03449bb8ca2cc2ef70869af31463d1ae5ccc8fa3e334b307203fbf815207e"
+checksum = "9ded5f9a03ac8f24d1b8a25101ee812cd32cdc8c50a4c50237de2c4915850e73"
 dependencies = [
  "rustversion",
 ]
@@ -4189,9 +4190,9 @@ checksum = "155a5a185e42c6b77ac7b88a15143d930a9e9727a5b7b77eed417404ab15c247"
 
 [[package]]
 name = "async-compression"
-version = "0.4.37"
+version = "0.4.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d10e4f991a553474232bc0a31799f6d24b034a84c0971d80d2e2f78b2e576e40"
+checksum = "68650b7df54f0293fd061972a0fb05aaf4fc0879d3b3d21a638a182c5c543b9f"
 dependencies = [
  "compression-codecs",
  "compression-core",
@@ -4542,7 +4543,7 @@ dependencies = [
  "api",
  "async-trait",
  "block-buffer-manager",
- "clap 4.5.55",
+ "clap 4.5.57",
  "clap-verbosity-flag",
  "clap_complete",
  "clap_derive",
@@ -5062,9 +5063,9 @@ checksum = "175812e0be2bccb6abe50bb8d566126198344f707e304f45c648fd8f2cc0365e"
 
 [[package]]
 name = "bytemuck"
-version = "1.24.0"
+version = "1.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fbdf580320f38b612e485521afda1ee26d10cc9884efaaa750d383e13e3c5f4"
+checksum = "c8efb64bd706a16a1bdde310ae86b351e4d21550d98d056f22f8a7f7a2183fec"
 dependencies = [
  "bytemuck_derive",
 ]
@@ -5088,9 +5089,9 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "bytes"
-version = "1.11.0"
+version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b35204fbdc0b3f4446b89fc1ac2cf84a8a68971995d0bf2e925ec7cd960f9cb3"
+checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
 dependencies = [
  "serde",
 ]
@@ -5210,9 +5211,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.54"
+version = "1.2.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6354c81bbfd62d9cfa9cb3c773c2b7b2a3a482d569de977fd0e961f6e7c00583"
+checksum = "47b26a0954ae34af09b50f0de26458fa95369a0d478d8236d3f93082b219bd29"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -5373,9 +5374,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.55"
+version = "4.5.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e34525d5bbbd55da2bb745d34b36121baac88d07619a9a09cfcf4a6c0832785"
+checksum = "6899ea499e3fb9305a65d5ebf6e3d2248c5fab291f300ad0a704fbe142eae31a"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -5387,15 +5388,15 @@ version = "2.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34c77f67047557f62582784fd7482884697731b2932c7d37ced54bce2312e1e2"
 dependencies = [
- "clap 4.5.55",
+ "clap 4.5.57",
  "log",
 ]
 
 [[package]]
 name = "clap_builder"
-version = "4.5.55"
+version = "4.5.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59a20016a20a3da95bef50ec7238dbd09baeef4311dcdd38ec15aba69812fb61"
+checksum = "7b12c8b680195a62a8364d16b8447b01b6c2c8f9aaf68bee653be34d4245e238"
 dependencies = [
  "anstream",
  "anstyle",
@@ -5410,7 +5411,7 @@ version = "4.5.65"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "430b4dc2b5e3861848de79627b2bedc9f3342c7da5173a14eaa5d0f8dc18ae5d"
 dependencies = [
- "clap 4.5.55",
+ "clap 4.5.57",
 ]
 
 [[package]]
@@ -5771,9 +5772,9 @@ dependencies = [
 
 [[package]]
 name = "cpp_demangle"
-version = "0.4.5"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2bb79cb74d735044c972aae58ed0aaa9a837e85b01106a54c39e42e97f62253"
+checksum = "0667304c32ea56cb4cd6d2d7c0cfe9a2f8041229db8c033af7f8d69492429def"
 dependencies = [
  "cfg-if",
 ]
@@ -7145,9 +7146,9 @@ dependencies = [
 
 [[package]]
 name = "find-msvc-tools"
-version = "0.1.8"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8591b0bcc8a98a64310a2fae1bb3e9b8564dd10e381e6e28010fde8e8e8568db"
+checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 
 [[package]]
 name = "findshlibs"
@@ -7211,9 +7212,9 @@ checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
 
 [[package]]
 name = "flate2"
-version = "1.1.8"
+version = "1.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b375d6465b98090a5f25b1c7703f3859783755aa9a80433b36e0379a3ec2f369"
+checksum = "843fba2746e448b37e26a819579957415c8cef339bf08564fe8b7ddbd959573c"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
@@ -7311,9 +7312,9 @@ checksum = "28dd6caf6059519a65843af8fe2a3ae298b14b80179855aeb4adc2c1934ee619"
 
 [[package]]
 name = "fs-err"
-version = "3.2.2"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "baf68cef89750956493a66a10f512b9e58d9db21f2a573c079c0bdf1207a54a7"
+checksum = "73fde052dbfc920003cfd2c8e2c6e6d4cc7c1091538c3a24226cec0665ab08c0"
 dependencies = [
  "autocfg",
  "tokio",
@@ -7469,7 +7470,7 @@ dependencies = [
 [[package]]
 name = "gaptos"
 version = "0.0.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "api-types",
  "aptos-bitvec",
@@ -7480,9 +7481,9 @@ dependencies = [
  "aptos-collections",
  "aptos-compression",
  "aptos-config",
- "aptos-consensus 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-consensus 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-consensus-notifications",
- "aptos-consensus-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-consensus-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-crash-handler",
  "aptos-crypto",
  "aptos-crypto-derive",
@@ -7490,9 +7491,9 @@ dependencies = [
  "aptos-dkg-runtime",
  "aptos-enum-conversion-derive",
  "aptos-event-notifications",
- "aptos-executor 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-executor 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-executor-test-helpers",
- "aptos-executor-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-executor-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-experimental-runtimes",
  "aptos-fallible",
  "aptos-global-constants",
@@ -7503,7 +7504,7 @@ dependencies = [
  "aptos-keygen",
  "aptos-log-derive",
  "aptos-logger",
- "aptos-mempool 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-mempool 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-mempool-notifications",
  "aptos-memsocket",
  "aptos-metrics-core",
@@ -7519,7 +7520,7 @@ dependencies = [
  "aptos-reliable-broadcast",
  "aptos-rest-client",
  "aptos-runtimes",
- "aptos-safety-rules 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a)",
+ "aptos-safety-rules 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869)",
  "aptos-schemadb",
  "aptos-secure-net",
  "aptos-secure-storage",
@@ -7656,9 +7657,9 @@ checksum = "e629b9b98ef3dd8afe6ca2bd0f89306cec16d43d907889945bc5d6687f2f13c7"
 
 [[package]]
 name = "git2"
-version = "0.20.3"
+version = "0.20.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e2b37e2f62729cdada11f0e6b3b6fe383c69c29fc619e391223e12856af308c"
+checksum = "7b88256088d75a56f8ecfa070513a775dd9107f6530ef14919dac831af9cfe2b"
 dependencies = [
  "bitflags 2.10.0",
  "libc",
@@ -7755,12 +7756,13 @@ dependencies = [
 
 [[package]]
 name = "goldenfile"
-version = "1.9.1"
+version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ef8d7e733be5a2b7b473a8bf6865d6dda7911ca010241f459439bac27df0013"
+checksum = "4ce2238f730d493a06ef6746713fe0b56acecc88485892ae65c50d2db9bf977b"
 dependencies = [
  "scopeguard",
  "similar-asserts",
+ "static_assertions",
  "tempfile",
  "yansi",
 ]
@@ -7840,7 +7842,7 @@ dependencies = [
 [[package]]
 name = "gravity-primitives"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 
 [[package]]
 name = "gravity-sdk"
@@ -7854,7 +7856,7 @@ dependencies = [
 [[package]]
 name = "gravity-storage"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-primitives",
  "async-trait",
@@ -7894,7 +7896,7 @@ dependencies = [
  "bcs 0.1.4",
  "build-info",
  "bytes",
- "clap 4.5.55",
+ "clap 4.5.57",
  "gaptos",
  "hex",
  "k256",
@@ -7928,7 +7930,7 @@ dependencies = [
  "block-buffer-manager",
  "build-info",
  "bytes",
- "clap 4.5.55",
+ "clap 4.5.57",
  "dashmap 5.5.3",
  "dirs 5.0.1",
  "eyre",
@@ -7962,7 +7964,7 @@ dependencies = [
 [[package]]
 name = "greth"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "async-trait",
  "gravity-primitives",
@@ -8611,7 +8613,7 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.26.4",
  "tower-service",
- "webpki-roots 1.0.5",
+ "webpki-roots 1.0.6",
 ]
 
 [[package]]
@@ -8658,14 +8660,13 @@ dependencies = [
 
 [[package]]
 name = "hyper-util"
-version = "0.1.19"
+version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "727805d60e7938b76b826a6ef209eb70eaa1812794f9424d4a4e2d740662df5f"
+checksum = "96547c2556ec9d12fb1578c4eaf448b04993e7fb79cbaad930a656880a6bdfa0"
 dependencies = [
  "base64 0.22.1",
  "bytes",
  "futures-channel",
- "futures-core",
  "futures-util",
  "http 1.4.0",
  "http-body 1.0.1",
@@ -8675,7 +8676,7 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "socket2 0.6.2",
- "system-configuration 0.6.1",
+ "system-configuration 0.7.0",
  "tokio",
  "tower-service",
  "tracing",
@@ -8684,9 +8685,9 @@ dependencies = [
 
 [[package]]
 name = "iana-time-zone"
-version = "0.1.64"
+version = "0.1.65"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33e57f83510bb73707521ebaffa789ec8caf86f9657cad665b092b581d40e9fb"
+checksum = "e31bc9ad994ba00e440a8aa5c9ef0ec67d5cb5e5cb0cc7f8b744a35b389cc470"
 dependencies = [
  "android_system_properties",
  "core-foundation-sys",
@@ -9114,7 +9115,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "232929e1d75fe899576a3d5c7416ad0d88dbfbb3c3d6aa00873a7408a50ddb88"
 dependencies = [
  "ahash 0.8.12",
- "clap 4.5.55",
+ "clap 4.5.57",
  "crossbeam-channel",
  "crossbeam-utils",
  "dashmap 6.1.0",
@@ -9211,9 +9212,9 @@ dependencies = [
 
 [[package]]
 name = "interprocess"
-version = "2.2.3"
+version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d941b405bd2322993887859a8ee6ac9134945a24ec5ec763a8a962fc64dfec2d"
+checksum = "53bf2b0e0785c5394a7392f66d7c4fb9c653633c29b27a932280da3cb344c66a"
 dependencies = [
  "doctest-file",
  "futures-core",
@@ -10002,12 +10003,9 @@ dependencies = [
 
 [[package]]
 name = "mach2"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a1b95cd5421ec55b445b5ae102f5ea0e768de1f82bd3001e11f426c269c3aea"
-dependencies = [
- "libc",
-]
+checksum = "dae608c151f68243f2b000364e1f7b186d9c29845f7d2d85bd31b9ad77ad552b"
 
 [[package]]
 name = "macro-string"
@@ -10060,9 +10058,9 @@ checksum = "0e7465ac9959cc2b1404e8e2367b43684a6d13790fe23056cc8c6c5a6b7bcb94"
 
 [[package]]
 name = "memchr"
-version = "2.7.6"
+version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f52b00d39961fc5b2736ea853c9cc86238e165017a493d1d5c8eac6bdc4cc273"
+checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "memmap2"
@@ -10105,13 +10103,12 @@ dependencies = [
 
 [[package]]
 name = "metrics-derive"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3dbdd96ed57d565ec744cba02862d707acf373c5772d152abae6ec5c4e24f6c"
+checksum = "37a87f4b19620e4c561f7b48f5e6ca085b1780def671696a6a3d9d0c137360ec"
 dependencies = [
  "proc-macro2",
  "quote",
- "regex",
  "syn 2.0.114",
 ]
 
@@ -10131,9 +10128,9 @@ dependencies = [
 
 [[package]]
 name = "metrics-process"
-version = "2.4.2"
+version = "2.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f615e08e049bd14a44c4425415782efb9bcd479fc1e19ddeb971509074c060d0"
+checksum = "4268d87f64a752f5a651314fc683f04da10be65701ea3e721ba4d74f79163cac"
 dependencies = [
  "libc",
  "libproc",
@@ -10141,7 +10138,7 @@ dependencies = [
  "metrics",
  "once_cell",
  "procfs 0.18.0",
- "rlimit",
+ "rlimit 0.11.0",
  "windows 0.62.2",
 ]
 
@@ -10312,7 +10309,7 @@ checksum = "1fafa6961cabd9c63bcd77a45d7e3b7f3b552b70417831fb0f56db717e72407e"
 [[package]]
 name = "move-abigen"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
@@ -10329,7 +10326,7 @@ dependencies = [
 [[package]]
 name = "move-binary-format"
 version = "0.0.3"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "backtrace",
@@ -10344,12 +10341,12 @@ dependencies = [
 [[package]]
 name = "move-borrow-graph"
 version = "0.0.1"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 
 [[package]]
 name = "move-bytecode-source-map"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
@@ -10364,7 +10361,7 @@ dependencies = [
 [[package]]
 name = "move-bytecode-spec"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "once_cell",
  "quote",
@@ -10374,7 +10371,7 @@ dependencies = [
 [[package]]
 name = "move-bytecode-utils"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "move-binary-format",
@@ -10386,7 +10383,7 @@ dependencies = [
 [[package]]
 name = "move-bytecode-verifier"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "fail",
  "move-binary-format",
@@ -10400,10 +10397,10 @@ dependencies = [
 [[package]]
 name = "move-bytecode-viewer"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
- "clap 4.5.55",
+ "clap 4.5.57",
  "crossterm 0.26.1",
  "move-binary-format",
  "move-bytecode-source-map",
@@ -10415,10 +10412,10 @@ dependencies = [
 [[package]]
 name = "move-cli"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
- "clap 4.5.55",
+ "clap 4.5.57",
  "codespan-reporting",
  "colored",
  "move-binary-format",
@@ -10445,7 +10442,7 @@ dependencies = [
 [[package]]
 name = "move-command-line-common"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "difference",
@@ -10462,11 +10459,11 @@ dependencies = [
 [[package]]
 name = "move-compiler"
 version = "0.0.1"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
- "clap 4.5.55",
+ "clap 4.5.57",
  "codespan-reporting",
  "hex",
  "move-binary-format",
@@ -10485,12 +10482,12 @@ dependencies = [
 [[package]]
 name = "move-compiler-v2"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "abstract-domain-derive",
  "anyhow",
  "bcs 0.1.4",
- "clap 4.5.55",
+ "clap 4.5.57",
  "codespan",
  "codespan-reporting",
  "ethnum",
@@ -10519,7 +10516,7 @@ dependencies = [
 [[package]]
 name = "move-core-types"
 version = "0.0.4"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "arbitrary",
@@ -10545,11 +10542,11 @@ dependencies = [
 [[package]]
 name = "move-coverage"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
- "clap 4.5.55",
+ "clap 4.5.57",
  "codespan",
  "colored",
  "move-binary-format",
@@ -10564,10 +10561,10 @@ dependencies = [
 [[package]]
 name = "move-disassembler"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
- "clap 4.5.55",
+ "clap 4.5.57",
  "colored",
  "move-binary-format",
  "move-bytecode-source-map",
@@ -10581,10 +10578,10 @@ dependencies = [
 [[package]]
 name = "move-docgen"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
- "clap 4.5.55",
+ "clap 4.5.57",
  "codespan",
  "codespan-reporting",
  "itertools 0.13.0",
@@ -10600,7 +10597,7 @@ dependencies = [
 [[package]]
 name = "move-errmapgen"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "move-command-line-common",
@@ -10612,11 +10609,11 @@ dependencies = [
 [[package]]
 name = "move-ir-compiler"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
- "clap 4.5.55",
+ "clap 4.5.57",
  "move-binary-format",
  "move-bytecode-source-map",
  "move-bytecode-verifier",
@@ -10628,7 +10625,7 @@ dependencies = [
 [[package]]
 name = "move-ir-to-bytecode"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "codespan-reporting",
@@ -10646,7 +10643,7 @@ dependencies = [
 [[package]]
 name = "move-ir-to-bytecode-syntax"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "hex",
@@ -10659,7 +10656,7 @@ dependencies = [
 [[package]]
 name = "move-ir-types"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "hex",
  "move-command-line-common",
@@ -10672,7 +10669,7 @@ dependencies = [
 [[package]]
 name = "move-model"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "codespan",
@@ -10699,10 +10696,10 @@ dependencies = [
 [[package]]
 name = "move-package"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
- "clap 4.5.55",
+ "clap 4.5.57",
  "colored",
  "itertools 0.13.0",
  "move-abigen",
@@ -10733,11 +10730,11 @@ dependencies = [
 [[package]]
 name = "move-prover"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "atty",
- "clap 4.5.55",
+ "clap 4.5.57",
  "codespan-reporting",
  "itertools 0.13.0",
  "log",
@@ -10760,7 +10757,7 @@ dependencies = [
 [[package]]
 name = "move-prover-boogie-backend"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -10789,7 +10786,7 @@ dependencies = [
 [[package]]
 name = "move-prover-bytecode-pipeline"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "abstract-domain-derive",
  "anyhow",
@@ -10805,11 +10802,11 @@ dependencies = [
 [[package]]
 name = "move-prover-lab"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "chrono",
- "clap 4.5.55",
+ "clap 4.5.57",
  "codespan-reporting",
  "itertools 0.13.0",
  "move-model",
@@ -10823,7 +10820,7 @@ dependencies = [
 [[package]]
 name = "move-resource-viewer"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "hex",
@@ -10836,7 +10833,7 @@ dependencies = [
 [[package]]
 name = "move-stackless-bytecode"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "abstract-domain-derive",
  "anyhow",
@@ -10858,7 +10855,7 @@ dependencies = [
 [[package]]
 name = "move-stdlib"
 version = "0.1.1"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "hex",
@@ -10881,7 +10878,7 @@ dependencies = [
 [[package]]
 name = "move-symbol-pool"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "once_cell",
  "serde",
@@ -10890,7 +10887,7 @@ dependencies = [
 [[package]]
 name = "move-table-extension"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "better_any",
  "bytes",
@@ -10905,11 +10902,11 @@ dependencies = [
 [[package]]
 name = "move-unit-test"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "better_any",
- "clap 4.5.55",
+ "clap 4.5.57",
  "codespan-reporting",
  "colored",
  "itertools 0.13.0",
@@ -10937,7 +10934,7 @@ dependencies = [
 [[package]]
 name = "move-vm-metrics"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "once_cell",
  "prometheus",
@@ -10946,7 +10943,7 @@ dependencies = [
 [[package]]
 name = "move-vm-runtime"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "ambassador",
  "better_any",
@@ -10971,7 +10968,7 @@ dependencies = [
 [[package]]
 name = "move-vm-test-utils"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "anyhow",
  "bytes",
@@ -10988,7 +10985,7 @@ dependencies = [
 [[package]]
 name = "move-vm-types"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?rev=a94549a#a94549a8bb11ea6e2dbbe2b3b47ce9673bbe7877"
+source = "git+https://github.com/Galxe/gravity-aptos.git?rev=c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869#c9ae04b476ba4a0e847f2bcb33ddd4d6e7167869"
 dependencies = [
  "ambassador",
  "bcs 0.1.4",
@@ -11477,9 +11474,9 @@ dependencies = [
 
 [[package]]
 name = "nybbles"
-version = "0.4.7"
+version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b5676b5c379cf5b03da1df2b3061c4a4e2aa691086a56ac923e08c143f53f59"
+checksum = "0d49ff0c0d00d4a502b39df9af3a525e1efeb14b9dabb5bb83335284c1309210"
 dependencies = [
  "alloy-rlp",
  "cfg-if",
@@ -11925,9 +11922,9 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "pest"
-version = "2.8.5"
+version = "2.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c9eb05c21a464ea704b53158d358a31e6425db2f63a1a7312268b05fe2b75f7"
+checksum = "e0848c601009d37dfa3430c4666e147e49cdcf1b92ecd3e63657d8a5f19da662"
 dependencies = [
  "memchr",
  "ucd-trie",
@@ -11935,9 +11932,9 @@ dependencies = [
 
 [[package]]
 name = "pest_derive"
-version = "2.8.5"
+version = "2.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68f9dbced329c441fa79d80472764b1a2c7e57123553b8519b36663a2fb234ed"
+checksum = "11f486f1ea21e6c10ed15d5a7c77165d0ee443402f0780849d1768e7d9d6fe77"
 dependencies = [
  "pest",
  "pest_generator",
@@ -11945,9 +11942,9 @@ dependencies = [
 
 [[package]]
 name = "pest_generator"
-version = "2.8.5"
+version = "2.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bb96d5051a78f44f43c8f712d8e810adb0ebf923fc9ed2655a7f66f63ba8ee5"
+checksum = "8040c4647b13b210a963c1ed407c1ff4fdfa01c31d6d2a098218702e6664f94f"
 dependencies = [
  "pest",
  "pest_meta",
@@ -11958,9 +11955,9 @@ dependencies = [
 
 [[package]]
 name = "pest_meta"
-version = "2.8.5"
+version = "2.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "602113b5b5e8621770cfd490cfd90b9f84ab29bd2b0e49ad83eb6d186cef2365"
+checksum = "89815c69d36021a140146f26659a81d6c2afa33d216d736dd4be5381a7362220"
 dependencies = [
  "pest",
  "sha2 0.10.9",
@@ -12315,9 +12312,9 @@ dependencies = [
 
 [[package]]
 name = "portable-atomic"
-version = "1.13.0"
+version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f89776e4d69bb58bc6993e99ffa1d11f228b839984854c7daeb5d37f87cbe950"
+checksum = "c33a9471896f1c69cecef8d20cbe2f7accd12527ce60845ff44c153bb2a21b49"
 
 [[package]]
 name = "poseidon-ark"
@@ -12630,9 +12627,9 @@ dependencies = [
 
 [[package]]
 name = "proptest"
-version = "1.9.0"
+version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bee689443a2bd0a16ab0348b52ee43e3b2d1b1f931c8aa5c9f8de4c86fbe8c40"
+checksum = "37566cb3fdacef14c0737f9546df7cfeadbfbc9fef10991038bf5015d0c80532"
 dependencies = [
  "bit-set",
  "bit-vec",
@@ -13239,9 +13236,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.12.2"
+version = "1.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "843bc0191f75f3e22651ae5f1e72939ab2f72a4bc30fa80a066bd66edefc24d4"
+checksum = "e10754a14b9137dd7b1e3e5b0493cc9171fdd105e0ab477f51b72e7f3ac0e276"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -13251,9 +13248,9 @@ dependencies = [
 
 [[package]]
 name = "regex-automata"
-version = "0.4.13"
+version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5276caf25ac86c8d810222b3dbb938e512c55c6831a10f3e6ed1c93b84041f1c"
+checksum = "6e1dd4122fc1595e8162618945476892eefca7b88c52820e74af6262213cae8f"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -13262,9 +13259,9 @@ dependencies = [
 
 [[package]]
 name = "regex-syntax"
-version = "0.8.8"
+version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
+checksum = "a96887878f22d7bad8a3b6dc5b7440e0ada9a245242924394987b21cf2210a4c"
 
 [[package]]
 name = "regress"
@@ -13371,7 +13368,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams",
  "web-sys",
- "webpki-roots 1.0.5",
+ "webpki-roots 1.0.6",
 ]
 
 [[package]]
@@ -13421,11 +13418,11 @@ checksum = "1e061d1b48cb8d38042de4ae0a7a6401009d6143dc80d2e2d6f31f0bdd6470c7"
 [[package]]
 name = "reth"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-rpc-types",
  "aquamarine",
- "clap 4.5.55",
+ "clap 4.5.57",
  "eyre",
  "reth-chainspec",
  "reth-cli-runner",
@@ -13467,7 +13464,7 @@ dependencies = [
 [[package]]
 name = "reth-basic-payload-builder"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -13491,7 +13488,7 @@ dependencies = [
 [[package]]
 name = "reth-chain-state"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -13520,7 +13517,7 @@ dependencies = [
 [[package]]
 name = "reth-chainspec"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-chains",
  "alloy-consensus",
@@ -13540,10 +13537,10 @@ dependencies = [
 [[package]]
 name = "reth-cli"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-genesis",
- "clap 4.5.55",
+ "clap 4.5.57",
  "eyre",
  "reth-cli-runner",
  "reth-db",
@@ -13554,7 +13551,7 @@ dependencies = [
 [[package]]
 name = "reth-cli-commands"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-chains",
  "alloy-consensus",
@@ -13562,7 +13559,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-rlp",
  "backon",
- "clap 4.5.55",
+ "clap 4.5.57",
  "comfy-table",
  "crossterm 0.28.1",
  "eyre",
@@ -13631,7 +13628,7 @@ dependencies = [
 [[package]]
 name = "reth-cli-runner"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "reth-tasks",
  "tokio",
@@ -13641,7 +13638,7 @@ dependencies = [
 [[package]]
 name = "reth-cli-util"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -13659,7 +13656,7 @@ dependencies = [
 [[package]]
 name = "reth-codecs"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -13677,7 +13674,7 @@ dependencies = [
 [[package]]
 name = "reth-codecs-derive"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "convert_case 0.7.1",
  "proc-macro2",
@@ -13688,7 +13685,7 @@ dependencies = [
 [[package]]
 name = "reth-config"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "eyre",
  "humantime-serde",
@@ -13703,7 +13700,7 @@ dependencies = [
 [[package]]
 name = "reth-consensus"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -13716,7 +13713,7 @@ dependencies = [
 [[package]]
 name = "reth-consensus-common"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -13728,7 +13725,7 @@ dependencies = [
 [[package]]
 name = "reth-consensus-debug-client"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -13754,7 +13751,7 @@ dependencies = [
 [[package]]
 name = "reth-db"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-primitives",
  "derive_more 2.1.1",
@@ -13775,7 +13772,7 @@ dependencies = [
 [[package]]
 name = "reth-db-api"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-genesis",
@@ -13800,7 +13797,7 @@ dependencies = [
 [[package]]
 name = "reth-db-common"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-genesis",
@@ -13831,7 +13828,7 @@ dependencies = [
 [[package]]
 name = "reth-db-models"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -13845,7 +13842,7 @@ dependencies = [
 [[package]]
 name = "reth-discv4"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -13871,7 +13868,7 @@ dependencies = [
 [[package]]
 name = "reth-discv5"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -13895,7 +13892,7 @@ dependencies = [
 [[package]]
 name = "reth-dns-discovery"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-primitives",
  "data-encoding",
@@ -13919,7 +13916,7 @@ dependencies = [
 [[package]]
 name = "reth-downloaders"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -13949,7 +13946,7 @@ dependencies = [
 [[package]]
 name = "reth-ecies"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "aes",
  "alloy-primitives",
@@ -13980,7 +13977,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-local"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -14002,7 +13999,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-primitives"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14027,7 +14024,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-service"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "futures",
  "pin-project",
@@ -14050,7 +14047,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-tree"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14101,7 +14098,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-util"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-rpc-types-engine",
@@ -14129,7 +14126,7 @@ dependencies = [
 [[package]]
 name = "reth-era"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14145,7 +14142,7 @@ dependencies = [
 [[package]]
 name = "reth-era-downloader"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-primitives",
  "bytes",
@@ -14160,7 +14157,7 @@ dependencies = [
 [[package]]
 name = "reth-era-utils"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -14182,7 +14179,7 @@ dependencies = [
 [[package]]
 name = "reth-errors"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "reth-consensus",
  "reth-execution-errors",
@@ -14193,7 +14190,7 @@ dependencies = [
 [[package]]
 name = "reth-eth-wire"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-chains",
  "alloy-primitives",
@@ -14221,7 +14218,7 @@ dependencies = [
 [[package]]
 name = "reth-eth-wire-types"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-chains",
  "alloy-consensus",
@@ -14242,9 +14239,9 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-cli"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
- "clap 4.5.55",
+ "clap 4.5.57",
  "eyre",
  "reth-chainspec",
  "reth-cli",
@@ -14264,7 +14261,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-consensus"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14280,7 +14277,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-engine-primitives"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -14298,7 +14295,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-forks"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-eip2124",
  "alloy-hardforks",
@@ -14311,7 +14308,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-payload-builder"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14340,7 +14337,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-primitives"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14359,7 +14356,7 @@ dependencies = [
 [[package]]
 name = "reth-etl"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "rayon",
  "reth-db-api",
@@ -14369,7 +14366,7 @@ dependencies = [
 [[package]]
 name = "reth-evm"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14392,7 +14389,7 @@ dependencies = [
 [[package]]
 name = "reth-evm-ethereum"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14414,7 +14411,7 @@ dependencies = [
 [[package]]
 name = "reth-execution-errors"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-evm",
  "alloy-primitives",
@@ -14427,7 +14424,7 @@ dependencies = [
 [[package]]
 name = "reth-execution-types"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14445,7 +14442,7 @@ dependencies = [
 [[package]]
 name = "reth-exex"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14483,7 +14480,7 @@ dependencies = [
 [[package]]
 name = "reth-exex-types"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -14497,7 +14494,7 @@ dependencies = [
 [[package]]
 name = "reth-fs-util"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "serde",
  "serde_json",
@@ -14507,7 +14504,7 @@ dependencies = [
 [[package]]
 name = "reth-invalid-block-hooks"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -14534,7 +14531,7 @@ dependencies = [
 [[package]]
 name = "reth-ipc"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "bytes",
  "futures",
@@ -14554,7 +14551,7 @@ dependencies = [
 [[package]]
 name = "reth-metrics"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "futures",
  "metrics",
@@ -14566,7 +14563,7 @@ dependencies = [
 [[package]]
 name = "reth-net-banlist"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-primitives",
 ]
@@ -14574,7 +14571,7 @@ dependencies = [
 [[package]]
 name = "reth-net-nat"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "futures-util",
  "if-addrs",
@@ -14588,7 +14585,7 @@ dependencies = [
 [[package]]
 name = "reth-network"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14643,7 +14640,7 @@ dependencies = [
 [[package]]
 name = "reth-network-api"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -14668,7 +14665,7 @@ dependencies = [
 [[package]]
 name = "reth-network-p2p"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14690,7 +14687,7 @@ dependencies = [
 [[package]]
 name = "reth-network-peers"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -14705,7 +14702,7 @@ dependencies = [
 [[package]]
 name = "reth-network-types"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-eip2124",
  "humantime-serde",
@@ -14719,7 +14716,7 @@ dependencies = [
 [[package]]
 name = "reth-nippy-jar"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "anyhow",
  "bincode",
@@ -14736,7 +14733,7 @@ dependencies = [
 [[package]]
 name = "reth-node-api"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-rpc-types-engine",
  "eyre",
@@ -14760,7 +14757,7 @@ dependencies = [
 [[package]]
 name = "reth-node-builder"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14829,13 +14826,13 @@ dependencies = [
 [[package]]
 name = "reth-node-core"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
  "alloy-primitives",
  "alloy-rpc-types-engine",
- "clap 4.5.55",
+ "clap 4.5.57",
  "derive_more 2.1.1",
  "dirs-next",
  "eyre",
@@ -14882,7 +14879,7 @@ dependencies = [
 [[package]]
 name = "reth-node-ethereum"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-eips",
  "alloy-network",
@@ -14920,7 +14917,7 @@ dependencies = [
 [[package]]
 name = "reth-node-ethstats"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -14944,7 +14941,7 @@ dependencies = [
 [[package]]
 name = "reth-node-events"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14968,7 +14965,7 @@ dependencies = [
 [[package]]
 name = "reth-node-metrics"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "eyre",
  "http 1.4.0",
@@ -14989,7 +14986,7 @@ dependencies = [
 [[package]]
 name = "reth-node-types"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "reth-chainspec",
  "reth-db-api",
@@ -15001,7 +14998,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-builder"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -15022,7 +15019,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-builder-primitives"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "pin-project",
  "reth-payload-primitives",
@@ -15034,7 +15031,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-primitives"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -15054,7 +15051,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-validator"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-rpc-types-engine",
@@ -15064,7 +15061,7 @@ dependencies = [
 [[package]]
 name = "reth-pipe-exec-layer-event-bus"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-primitives",
  "once_cell",
@@ -15077,7 +15074,7 @@ dependencies = [
 [[package]]
 name = "reth-pipe-exec-layer-ext-v2"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -15122,7 +15119,7 @@ dependencies = [
 [[package]]
 name = "reth-pipe-exec-layer-relayer"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-network",
  "alloy-primitives",
@@ -15146,7 +15143,7 @@ dependencies = [
 [[package]]
 name = "reth-primitives"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "once_cell",
@@ -15159,7 +15156,7 @@ dependencies = [
 [[package]]
 name = "reth-primitives-traits"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -15189,7 +15186,7 @@ dependencies = [
 [[package]]
 name = "reth-provider"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -15232,7 +15229,7 @@ dependencies = [
 [[package]]
 name = "reth-prune"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -15260,7 +15257,7 @@ dependencies = [
 [[package]]
 name = "reth-prune-types"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-primitives",
  "derive_more 2.1.1",
@@ -15273,7 +15270,7 @@ dependencies = [
 [[package]]
 name = "reth-ress-protocol"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -15292,7 +15289,7 @@ dependencies = [
 [[package]]
 name = "reth-ress-provider"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -15319,7 +15316,7 @@ dependencies = [
 [[package]]
 name = "reth-revm"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-primitives",
  "reth-primitives-traits",
@@ -15332,7 +15329,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-dyn-abi",
@@ -15411,7 +15408,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-api"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-eips",
  "alloy-genesis",
@@ -15439,7 +15436,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-builder"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-network",
  "alloy-provider",
@@ -15478,7 +15475,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-convert"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-json-rpc",
@@ -15499,7 +15496,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-engine-api"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -15529,7 +15526,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-eth-api"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-dyn-abi",
@@ -15573,7 +15570,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-eth-types"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -15620,7 +15617,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-layer"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-rpc-types-engine",
  "http 1.4.0",
@@ -15634,7 +15631,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-server-types"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -15650,7 +15647,7 @@ dependencies = [
 [[package]]
 name = "reth-stages"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -15694,7 +15691,7 @@ dependencies = [
 [[package]]
 name = "reth-stages-api"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -15721,7 +15718,7 @@ dependencies = [
 [[package]]
 name = "reth-stages-types"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-primitives",
  "bytes",
@@ -15734,7 +15731,7 @@ dependencies = [
 [[package]]
 name = "reth-static-file"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-primitives",
  "parking_lot 0.12.5",
@@ -15754,10 +15751,10 @@ dependencies = [
 [[package]]
 name = "reth-static-file-types"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-primitives",
- "clap 4.5.55",
+ "clap 4.5.57",
  "derive_more 2.1.1",
  "serde",
  "strum 0.27.2",
@@ -15766,7 +15763,7 @@ dependencies = [
 [[package]]
 name = "reth-storage-api"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -15796,7 +15793,7 @@ dependencies = [
 [[package]]
 name = "reth-storage-errors"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -15812,7 +15809,7 @@ dependencies = [
 [[package]]
 name = "reth-tasks"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "auto_impl",
  "dyn-clone",
@@ -15830,7 +15827,7 @@ dependencies = [
 [[package]]
 name = "reth-tokio-util"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "tokio",
  "tokio-stream",
@@ -15840,9 +15837,9 @@ dependencies = [
 [[package]]
 name = "reth-tracing"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
- "clap 4.5.55",
+ "clap 4.5.57",
  "eyre",
  "rolling-file",
  "tracing",
@@ -15855,7 +15852,7 @@ dependencies = [
 [[package]]
 name = "reth-transaction-pool"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -15897,7 +15894,7 @@ dependencies = [
 [[package]]
 name = "reth-trie"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -15921,7 +15918,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-common"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -15948,7 +15945,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-db"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-primitives",
  "reth-db-api",
@@ -15961,7 +15958,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-parallel"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -15990,7 +15987,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-sparse"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -16009,7 +16006,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-sparse-parallel"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -16027,7 +16024,7 @@ dependencies = [
 [[package]]
 name = "reth-zstd-compressors"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=6ddb557#6ddb557b5ee22d94ceb4b271e0d5c7de22afdc3f"
+source = "git+https://github.com/Galxe/gravity-reth?rev=491dae783c663affb66144b7e9ee436b83ad0a4e#491dae783c663affb66144b7e9ee436b83ad0a4e"
 dependencies = [
  "zstd",
 ]
@@ -16317,6 +16314,15 @@ name = "rlimit"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7043b63bd0cd1aaa628e476b80e6d4023a3b50eb32789f2728908107bd0c793a"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "rlimit"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f35ee2729c56bb610f6dba436bf78135f728b7373bdffae2ec815b2d3eb98cc3"
 dependencies = [
  "libc",
 ]
@@ -16730,9 +16736,9 @@ dependencies = [
 
 [[package]]
 name = "ryu"
-version = "1.0.22"
+version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a50f4cf475b65d88e057964e0e9bb1f0aa9bbb2036dc65c64596b42932536984"
+checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
 name = "ryu-js"
@@ -16772,9 +16778,9 @@ dependencies = [
 
 [[package]]
 name = "schemars"
-version = "1.2.0"
+version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54e910108742c57a770f492731f99be216a52fadd361b06c8fb59d74ccc267d2"
+checksum = "a2b42f36aa1cd011945615b92222f6bf73c599a102a300334cd7f8dbeec726cc"
 dependencies = [
  "dyn-clone",
  "ref-cast",
@@ -17140,7 +17146,7 @@ dependencies = [
  "indexmap 1.9.3",
  "indexmap 2.13.0",
  "schemars 0.9.0",
- "schemars 1.2.0",
+ "schemars 1.2.1",
  "serde_core",
  "serde_json",
  "serde_with_macros",
@@ -17459,9 +17465,9 @@ checksum = "c1e9a774a6c28142ac54bb25d25562e6bcf957493a184f15ad4eebccb23e410a"
 
 [[package]]
 name = "slab"
-version = "0.4.11"
+version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a2ae44ef20feb57a68b23d846850f861394c2e02dc425a50098ae8c90267589"
+checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
 name = "slug"
@@ -17779,9 +17785,9 @@ checksum = "734676eb262c623cec13c3155096e08d1f8f29adce39ba17948b18dad1e54142"
 
 [[package]]
 name = "symbolic-common"
-version = "12.17.1"
+version = "12.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "520cf51c674f8b93d533f80832babe413214bb766b6d7cb74ee99ad2971f8467"
+checksum = "751a2823d606b5d0a7616499e4130a516ebd01a44f39811be2b9600936509c23"
 dependencies = [
  "debugid",
  "memmap2",
@@ -17791,9 +17797,9 @@ dependencies = [
 
 [[package]]
 name = "symbolic-demangle"
-version = "12.17.1"
+version = "12.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f0de2ee0ffa2641e17ba715ad51d48b9259778176517979cb38b6aa86fa7425"
+checksum = "79b237cfbe320601dd24b4ac817a5b68bb28f5508e33f08d42be0682cadc8ac9"
 dependencies = [
  "cpp_demangle",
  "rustc-demangle",
@@ -17824,9 +17830,9 @@ dependencies = [
 
 [[package]]
 name = "syn-solidity"
-version = "1.5.3"
+version = "1.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e629391be459480417646f7ca78894442249262a6e095dbd6e4ab6988cfafce0"
+checksum = "2379beea9476b89d0237078be761cf8e012d92d5ae4ae0c9a329f974838870fc"
 dependencies = [
  "paste",
  "proc-macro2",
@@ -17901,9 +17907,9 @@ dependencies = [
 
 [[package]]
 name = "system-configuration"
-version = "0.6.1"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c879d448e9d986b661742763247d3693ed13609438cf3d006f51f5368a5ba6b"
+checksum = "a13f3d0daba03132c0aa9767f98351b3488edc2c100cda2d2ec2b04f3d8d3c8b"
 dependencies = [
  "bitflags 2.10.0",
  "core-foundation 0.9.4",
@@ -18149,9 +18155,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.46"
+version = "0.3.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9da98b7d9b7dad93488a84b8248efc35352b0b2657397d4167e7ad67e5d535e5"
+checksum = "743bd48c283afc0388f9b8827b976905fb217ad9e647fae3a379a9283c4def2c"
 dependencies = [
  "deranged",
  "itoa",
@@ -18173,9 +18179,9 @@ checksum = "7694e1cfe791f8d31026952abf09c69ca6f6fa4e1a1229e18988f06a04a12dca"
 
 [[package]]
 name = "time-macros"
-version = "0.2.26"
+version = "0.2.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78cc610bac2dcee56805c99642447d4c5dbde4d01f752ffea0199aee1f601dc4"
+checksum = "2e70e4c5a0e0a8a4823ad65dfe1a6930e4f4d756dcd9dd7939022b5e8c501215"
 dependencies = [
  "num-conv",
  "time-core",
@@ -18724,9 +18730,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-logfmt"
-version = "0.3.5"
+version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b1f47d22deb79c3f59fcf2a1f00f60cbdc05462bf17d1cd356c1fefa3f444bd"
+checksum = "a250055a3518b5efba928a18ffac8d32d42ea607a9affff4532144cd5b2e378e"
 dependencies = [
  "time",
  "tracing",
@@ -18959,9 +18965,9 @@ dependencies = [
 
 [[package]]
 name = "tz-rs"
-version = "0.7.2"
+version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b2df019c305771deac375d9657fc75fa394bde69102a870c923e779c3746642"
+checksum = "4fc6c929ffa10fb34f4a3c7e9a73620a83ef2e85e47f9ec3381b8289e6762f42"
 
 [[package]]
 name = "tzdb"
@@ -19042,9 +19048,9 @@ checksum = "5c1cb5db39152898a79168971543b1cb5020dff7fe43c8dc468b0885f5e29df5"
 
 [[package]]
 name = "unicode-ident"
-version = "1.0.22"
+version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9312f7c4f6ff9069b165498234ce8be658059c6728633667c526e27dc2cf1df5"
+checksum = "537dd038a89878be9b64dd4bd1b260315c1bb94f4d784956b81e27a088d9a09e"
 
 [[package]]
 name = "unicode-linebreak"
@@ -19497,14 +19503,14 @@ version = "0.26.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75c7f0ef91146ebfb530314f5f1d24528d7f0767efbfd31dce919275413e393e"
 dependencies = [
- "webpki-root-certs 1.0.5",
+ "webpki-root-certs 1.0.6",
 ]
 
 [[package]]
 name = "webpki-root-certs"
-version = "1.0.5"
+version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36a29fc0408b113f68cf32637857ab740edfafdf460c326cd2afaa2d84cc05dc"
+checksum = "804f18a4ac2676ffb4e8b5b5fa9ae38af06df08162314f96a68d2a363e21a8ca"
 dependencies = [
  "rustls-pki-types",
 ]
@@ -19521,14 +19527,14 @@ version = "0.26.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "521bc38abb08001b01866da9f51eb7c5d647a19260e00054a8c7fd5f9e57f7a9"
 dependencies = [
- "webpki-roots 1.0.5",
+ "webpki-roots 1.0.6",
 ]
 
 [[package]]
 name = "webpki-roots"
-version = "1.0.5"
+version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12bed680863276c63889429bfd6cab3b99943659923822de1c8a39c49e4d722c"
+checksum = "22cfaf3c063993ff62e73cb4311efde4db1efb31ab78a3e5c457939ad5cc0bed"
 dependencies = [
  "rustls-pki-types",
 ]
@@ -20289,18 +20295,18 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.34"
+version = "0.8.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71ddd76bcebeed25db614f82bf31a9f4222d3fbba300e6fb6c00afa26cbd4d9d"
+checksum = "db6d35d663eadb6c932438e763b262fe1a70987f9ae936e60158176d710cae4a"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.34"
+version = "0.8.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8187381b52e32220d50b255276aa16a084ec0a9017a0ca2152a1f55c539758d"
+checksum = "4122cd3169e94605190e77839c9a40d40ed048d305bfdc146e7df40ab0f3e517"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -20405,9 +20411,9 @@ dependencies = [
 
 [[package]]
 name = "zmij"
-version = "1.0.17"
+version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02aae0f83f69aafc94776e879363e9771d7ecbffe2c7fbb6c14c5e00dfe88439"
+checksum = "4de98dfa5d5b7fef4ee834d0073d560c9ca7b6c46a71d058c48db7960f8cfaf7"
 
 [[package]]
 name = "zstd"
