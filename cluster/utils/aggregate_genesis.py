@@ -286,21 +286,6 @@ def main():
             "votingPower": voting_power
         }
         validators.append(validator)
-    
-    # Validate: votingPowerIncreaseLimitPct% * sum(voting_power) > minimum_bond
-    vc = genesis_cfg.get('validator_config', {})
-    minimum_bond = int(vc.get('minimum_bond', '1000000000000000000'))
-    limit_pct = int(vc.get('voting_power_increase_limit_pct', 20))
-    
-    total_voting_power = sum(int(v['votingPower']) for v in validators)
-    max_increase = (total_voting_power * limit_pct) // 100
-    
-    if max_increase < minimum_bond:
-        print(f"Error: Invalid config: {limit_pct}% of total voting power ({max_increase}) < minimum_bond ({minimum_bond})")
-        print("New validators cannot be activated with this configuration.")
-        sys.exit(1)
-    
-    print(f"[Aggregator] Validation passed: max_increase ({max_increase}) >= minimum_bond ({minimum_bond})")
 
     # Build complete genesis config (matching GenesisConfig struct in genesis.rs)
     output = build_genesis_config(config, genesis_cfg)
