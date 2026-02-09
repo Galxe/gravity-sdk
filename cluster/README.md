@@ -14,26 +14,39 @@ Ensure you have the following installed:
 *   **envsubst**: Usually part of the `gettext` package.
 
 ### 2. Setup Configuration
-Copy the example configuration file:
+
+**For a new network:**
+```bash
+cp genesis.toml.example genesis.toml    # Genesis/validator config
+cp cluster.toml.example cluster.toml    # Node deployment config
+```
+
+**For joining an existing network:**
 ```bash
 cp cluster.toml.example cluster.toml
+# Edit cluster.toml to point genesis_source to the existing genesis files
 ```
-*The default configuration sets up 4 nodes on localhost starting at port 6180.*
 
-### 3. Initialize Artifacts
-Generate validator keys and the genesis block. This acts as the "setup" phase.
+*The default configuration sets up 4 nodes on localhost.*
+
+### 3. Initialize Node Keys
 ```bash
 make init
 ```
-*Note: The first run will clone and build the genesis contract, which may take a few minutes.*
+*This generates `identity.yaml` for each validator node.*
 
-> ⚠️ **Important**: The `init.sh` script will clone `gravity_chain_core_contracts` to `external/` if it doesn't exist, but will **NOT** automatically update it if it already exists. If the contracts have been updated upstream, you need to manually pull the latest changes:
+### 4. Generate Genesis (New Network Only)
+```bash
+make genesis
+```
+*This generates `genesis.json` and `waypoint.txt` in `./output`.*
+
+> ⚠️ **Important**: The `genesis.sh` script will clone `gravity_chain_core_contracts` to `external/` if it doesn't exist, but will **NOT** automatically update it. To update:
 > ```bash
 > cd external/gravity_chain_core_contracts && git pull origin main
 > ```
 
-### 4. Deploy and Start
-Deploy the configurations to the runtime directory and start the nodes.
+### 5. Deploy and Start
 ```bash
 make deploy_start
 ```
@@ -46,84 +59,104 @@ Congratulations! Your cluster is now running.
 
 ## Detailed Workflow
 
-### 1. Initialization (`make init`)
-This step generates the static "metadata" for the cluster and stores it in the `./output` directory.
-*   **Keys**: Generates `identity.yaml` for each node.
-*   **Genesis**: Aggregates validator info and uses `forge` to compile and generate `genesis.json`.
-*   **Waypoint**: Generates `waypoint.txt` from the genesis.
+### 1. Genesis Generation (`make genesis`)
+Only needed when creating a **new network**. Reads `genesis.toml` and generates:
+*   `./output/genesis.json` - The genesis block
+*   `./output/waypoint.txt` - Initial waypoint for node sync
 
-**Why separate?** This ensures that your chain ID and validator keys remain consistent even if you redeploy the node configurations.
+### 2. Initialization (`make init`)
+Generates node identity keys. Reads `cluster.toml` and creates:
+*   `./output/nodeX/config/identity.yaml` for each validator node
 
-### 2. Deployment (`make deploy`)
-This step prepares the runtime environment (default: `/tmp/gravity-cluster`).
-*   **Cleans** the target directory to remove old data.
-*   **Copies** the generated artifacts (keys, genesis) from `./output`.
-*   **Renders** configuration templates (`validator.yaml`, `reth_config.json`) with the correct ports and paths defined in `cluster.toml`.
-*   **Generates** control scripts (`start.sh`, `stop.sh`) for each node.
+### 3. Deployment (`make deploy`)
+Prepares the runtime environment (default: `/tmp/gravity-cluster`).
+*   **Creates hardlinks** for `gravity_node` and `gravity_cli` binaries
+*   **Copies** genesis and node keys from `./output` or configured `genesis_source`
+*   **Renders** configuration templates for each node
+*   **Generates** control scripts (`start.sh`, `stop.sh`)
 
-### 3. Execution (`make start` / `make stop`)
-*   `make start`: Launches all nodes in the background. Logs are written to the node's data directory.
-*   `make stop`: Gracefully stops all nodes.
-*   `make status`: Shows the PID, status, and current block number of each node.
+### 4. Execution (`make start` / `make stop`)
+*   `make start`: Launches all nodes in the background
+*   `make stop`: Gracefully stops all nodes
+*   `make status`: Shows PID, status, and current block number
 
-### 4. Faucet Initialization (`make faucet`)
-Optional step to distribute initial funds to a large number of testing accounts.
-1.  Configure `[faucet_init]` in `cluster.toml`.
-2.  Run `make faucet` after the cluster is started.
-3.  Generated accounts are saved to `./output/accounts.csv`.
-
+### 5. Faucet Initialization (`make faucet`)
+Optional step to fund testing accounts after the cluster is started.
 
 ---
 
-## Configuration Reference (`cluster.toml`)
+## Configuration Reference
 
-The `cluster.toml` file controls the entire setup.
+### `genesis.toml` (New Networks Only)
 
-### `[cluster]`
-*   **name**: Name of the cluster (display only).
-*   **base_dir**: The runtime directory where nodes are deployed (e.g., `/tmp/gravity-cluster`).
+Contains network-wide genesis parameters:
 
-### `[build]`
-*   **binary_path**: Path to the compiled `gravity_node` binary.
+| Section | Description |
+|---------|-------------|
+| `[genesis]` | Core genesis parameters (epoch interval, etc.) |
+| `[genesis.validator_config]` | Validator bond limits and restrictions |
+| `[[genesis_validators]]` | Genesis validator list with addresses and stake |
 
-### `[[nodes]]`
-An array of node configurations. You can add as many nodes as you like.
-*   **id**: Unique identifier (e.g., "node1"). Used for directory names.
-*   **host**: IP address (use `127.0.0.1` for local).
-*   **p2p_port**: The primary P2P port. Other ports are derived relative to this if not specified, but explicit configuration is safer.
-*   **rpc_port**: Port for JSON-RPC API.
-*   **metrics_port**: Port for Prometheus metrics.
-*   **data_dir** (Optional): Override the default data directory path for this node.
+**Important validator fields:**
+*   `address` - Validator's ETH address (required)
+*   `stake_amount` - Initial stake in Wei (required)  
+*   `voting_power` - Initial voting power (must be >= stake_amount)
 
-### `[faucet_init]`
-Optional configuration for auto-generating funded accounts.
-*   **num_accounts**: Number of accounts to create and fund (set to 0 to disable).
-*   **private_key**: Private key of the faucet (must hold initial funds in genesis).
-*   **eth_balance**: Amount of Wei to send to each generated account.
+### `cluster.toml` (Node Deployment)
+
+Controls node deployment:
+
+| Section | Description |
+|---------|-------------|
+| `[cluster]` | Cluster name and base directory |
+| `[build]` | Path to `gravity_node` binary |
+| `[genesis_source]` | Paths to genesis.json and waypoint.txt |
+| `[[nodes]]` | Node definitions with ports and roles |
+| `[faucet_init]` | Optional faucet configuration |
+
+**Node roles:**
+*   `genesis` - Included in genesis validator set
+*   `validator` - Validator node (can join via on-chain transaction)
+*   `vfn` - Full node using onchain discovery
 
 ---
 
-## IMPORTANT: Hardcoded Genesis Stake Amount
+## Use Cases
 
-> ⚠️ **ATTENTION**: The `aggregate_genesis.py` script contains a hardcoded stake amount for Genesis Validators.
-
-Even if you modify `minimumBond` or other parameters in `cluster.toml`, the initial Genesis Validators are currently created with a fixed stake amount and voting power of **2 ETH (2 * 10^18 Wei)**.
-
-This is defined in `utils/aggregate_genesis.py`:
-
-```python
-# Create validator entry in new format
-validator = {
-    "operator": val_addr,
-    "owner": val_addr,
-    "stakeAmount": "2000000000000000000",  # 2 ETH hardcoded
-    "moniker": f"validator-{len(validators) + 1}",
-    "consensusPubkey": consensus_pk,
-    "consensusPop": "0x",
-    "networkAddresses": val_net_addr,
-    "fullnodeAddresses": vfn_net_addr,
-    "votingPower": "2000000000000000000"   # 2 ETH hardcoded
-}
+### Create a New Network
+```bash
+vim genesis.toml        # Configure validators and network params
+vim cluster.toml        # Configure node deployment
+make init               # Generate node identity keys
+make genesis            # Generate genesis.json + waypoint.txt
+make deploy_start       # Deploy and start
 ```
 
-If you need to change the initial voting power of Genesis Validators, you must modify this value in `utils/aggregate_genesis.py`.
+### Join an Existing Network
+```bash
+vim cluster.toml
+# Set genesis_source paths:
+#   genesis_path = "/path/to/genesis.json"
+#   waypoint_path = "/path/to/waypoint.txt"
+#   nodes[0].role = "vfn"
+
+make init               # Generate node keys
+make deploy_start       # Deploy and start
+```
+
+---
+
+## Makefile Targets
+
+| Target | Description |
+|--------|-------------|
+| `make genesis` | Generate genesis.json + waypoint.txt |
+| `make init` | Generate node identity keys |
+| `make deploy` | Deploy node configurations |
+| `make start` | Start all nodes |
+| `make stop` | Stop all nodes |
+| `make status` | Check cluster status |
+| `make faucet` | Initialize faucet accounts |
+| `make clean` | Remove generated artifacts |
+| `make deploy_start` | Deploy and start (convenience) |
+| `make restart` | Stop, deploy, and start |

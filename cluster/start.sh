@@ -46,16 +46,26 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 # Parse TOML using Python
 parse_toml() {
     python3 << 'PYTHON_SCRIPT'
-import tomllib
 import json
 import sys
 import os
 
+try:
+    import tomllib
+    def load_toml(f):
+        return tomllib.load(f)
+    open_mode = 'rb'
+except ImportError:
+    import toml
+    def load_toml(f):
+        return toml.load(f)
+    open_mode = 'r'
+
 config_file = os.environ.get('CONFIG_FILE', 'cluster.toml')
 
 try:
-    with open(config_file, 'rb') as f:
-        config = tomllib.load(f)
+    with open(config_file, open_mode) as f:
+        config = load_toml(f)
     print(json.dumps(config))
 except Exception as e:
     print(f"Error: {e}", file=sys.stderr)
@@ -97,7 +107,8 @@ start_node() {
     local pid_file="$data_dir/script/node.pid"
     if [ -f "$pid_file" ]; then
         local pid=$(cat "$pid_file")
-        if [ -d "/proc/$pid" ]; then
+        # Use kill -0 to check if process exists (works on macOS and Linux)
+        if kill -0 "$pid" 2>/dev/null; then
             log_warn "$node_id is already running (PID: $pid)"
             return 0
         fi
@@ -110,7 +121,7 @@ start_node() {
     sleep 1
     if [ -f "$pid_file" ]; then
         local pid=$(cat "$pid_file")
-        if [ -d "/proc/$pid" ]; then
+        if kill -0 "$pid" 2>/dev/null; then
             log_info "$node_id started successfully (PID: $pid)"
             return 0
         fi
