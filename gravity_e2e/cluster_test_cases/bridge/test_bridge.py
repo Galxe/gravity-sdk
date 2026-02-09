@@ -44,13 +44,14 @@ async def test_bridge_preloaded(
     3. Poll for all NativeMinted events (nonces 1..N)
     4. Verify: balance delta == N × amount
     5. Verify: all nonces continuous, no missing
-    6. Report throughput stats
+    6. Compute per-event latency and report stats
     """
     contracts_info = preloaded_bridge
     bridge_count = contracts_info["bridge_count"]
     amount = contracts_info["amount"]
     recipient = contracts_info["recipient"]
     nonces = contracts_info["nonces"]
+    helper = contracts_info["helper"]
 
     # Ensure gravity node is live
     LOG.info("Verifying gravity nodes are live...")
@@ -99,6 +100,34 @@ async def test_bridge_preloaded(
         LOG.info(f"  Throughput:       {throughput:.2f} bridges/sec")
     LOG.info(f"{'=' * 60}")
 
+    # ---- Per-Event Latency Measurement ----
+    if len(found) > 0:
+        LOG.info("Computing per-event bridge latency...")
+        # Get source-chain (Anvil) timestamps for each nonce
+        anvil_timestamps = helper.query_message_sent_timestamps(from_block=0)
+
+        stats = BridgeStats()
+        skipped = 0
+        for evt in events:
+            nonce_val = evt["nonce"]
+            gravity_ts = evt.get("block_timestamp")
+            anvil_ts = anvil_timestamps.get(nonce_val)
+
+            if gravity_ts is not None and anvil_ts is not None:
+                latency = gravity_ts - anvil_ts
+                stats.record(nonce=nonce_val, latency=float(latency), amount=amount)
+            else:
+                skipped += 1
+                LOG.debug(
+                    f"  Nonce {nonce_val}: missing timestamp "
+                    f"(gravity_ts={gravity_ts}, anvil_ts={anvil_ts})"
+                )
+
+        if skipped > 0:
+            LOG.warning(f"  Skipped {skipped} events due to missing timestamps")
+
+        stats.report()
+
     # Assertions
     if len(missing) > 0:
         # Dump node logs for CI diagnosis before assertion fails
@@ -146,3 +175,4 @@ async def test_bridge_preloaded(
     )
 
     LOG.info(f"✓ All {bridge_count} bridge transactions verified successfully!")
+

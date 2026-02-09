@@ -32,7 +32,7 @@ reth_p2p_port = 12026
 [genesis]
 epoch_interval_micros = 7200000000  # 2 hours in microseconds
 major_version = 1
-consensus_config = "0x00"
+consensus_config = "0x0301010a00000000000000280000000000000001010000000a000000000000000100010200000000000000000020000000000000"
 execution_config = "0x00"
 
 [[genesis.faucet]]
