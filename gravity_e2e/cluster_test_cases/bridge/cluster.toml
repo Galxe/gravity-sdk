@@ -1,5 +1,5 @@
 # Gravity Cluster Configuration - Bridge E2E Test Suite
-# Single node with oracle + bridge configuration pointing to local Anvil
+# Node deployment configuration only (genesis params in genesis.toml)
 
 [cluster]
 name = "gravity-devnet-bridge"
@@ -8,9 +8,9 @@ base_dir = "/tmp/gravity-cluster-bridge"
 [build]
 binary_path = "../target/quick-release/gravity_node"
 
-[dependencies.genesis_contracts]
-repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
-ref = "main"
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
 
 # Single genesis node
 [[nodes]]
@@ -25,71 +25,6 @@ inspection_port = 10002
 https_port = 1024
 authrpc_port = 8575
 reth_p2p_port = 12026
-
-# Genesis configuration
-[genesis]
-epoch_interval_micros = 7200000000  # 2 hours
-major_version = 1
-consensus_config = "0x0301010a00000000000000280000000000000001010000000a000000000000000100010200000000000000000020000000000000"
-execution_config = "0x00"
-
-[[genesis.faucet]]
-address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-balance = "0x2000000000000000000000000000000000000000000000000000000000000000"
-
-[genesis.validator_config]
-minimum_bond = "1000000000000000000"
-maximum_bond = "1000000000000000000000000"
-unbonding_delay_micros = 604800000000
-allow_validator_set_change = true
-voting_power_increase_limit_pct = 20
-max_validator_set_size = "100"
-
-[genesis.staking_config]
-minimum_stake = "1000000000000000000"
-lockup_duration_micros = 86400000000
-unbonding_delay_micros = 86400000000
-minimum_proposal_stake = "10000000000000000000"
-
-[genesis.governance_config]
-min_voting_threshold = "1000000000000000000"
-required_proposer_stake = "10000000000000000000"
-voting_duration_micros = 604800000000
-
-[genesis.randomness_config]
-variant = 1
-secrecy_threshold = 9223372036854775808
-reconstruction_threshold = 12297829382473033728
-fast_path_secrecy_threshold = 12297829382473033728
-
-# Oracle config: source_types includes Blockchain (0) for bridge
-[genesis.oracle_config]
-source_types = [1]
-callbacks = ["0x00000000000000000000000000000001625F2018"]
-
-# Bridge config: deploy GBridgeReceiver at genesis
-[genesis.oracle_config.bridge_config]
-deploy = true
-# GBridgeSender deterministic address on Anvil (deployer nonce=2)
-trusted_bridge = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
-
-# Oracle task: watch Anvil (chainId 31337) for MessageSent events
-[[genesis.oracle_config.tasks]]
-source_type = 0
-source_id = 31337
-task_name = "anvil"
-config = "gravity://0/31337/events?contract=0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512&eventSignature=0x5646e682c7d994bf11f5a2c8addb60d03c83cda3b65025a826346589df43406e&fromBlock=0"
-
-# JWK config
-[genesis.jwk_config]
-issuers = ["0x68747470733a2f2f6163636f756e74732e676f6f676c652e636f6d"]
-
-[[genesis.jwk_config.jwks]]
-kid = "f5f4c0ae6e6090a65ab0a694d6ba6f19d5d0b4e6"
-kty = "RSA"
-alg = "RS256"
-e = "AQAB"
-n = "2K7epoJWl_aBoYGpXmDBBiEnwQ0QdVRU1gsbGXNrEbrZEQdY5KjH5P5gZMq3d3KvT1j5KsD2tF_9jFMDLqV4VWDNJRLgSNJxhJuO_oLO2BXUSL9a7fLHxnZCUfJvT2K-O8AXjT3_ZM8UuL8d4jBn_fZLzdEI4MHrZLVSaHDvvKqL_mExQo6cFD-qyLZ-T6aHv2x8R7L_3X7E1nGMjKVVZMveQ_HMeXvnGxKf5yfEP0hIQlC_kFm4L_1kV1S0UPmMptZL2qI4VnXqmqI6TZJyE-3VXHgNn1Z1O_9QZlPC0fF0spLHf2S3nNqI0v3k2E7q3DkqxVf5xvn7q_X-gPqzVE9Jw"
 
 [faucet_init]
 num_accounts = 0

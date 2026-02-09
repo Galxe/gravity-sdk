@@ -121,6 +121,21 @@ def run_test_suite(
     # Always clean start unless specifically investigating
     cleanup_cluster()
 
+    # Remove stale cluster data directory.
+    # deploy.sh has an interactive prompt that defaults to N in
+    # non-interactive mode, so we must clean it here.
+    import shutil
+    try:
+        import tomllib
+    except ImportError:
+        import toml as tomllib
+    with open(cluster_config, "rb") as f:
+        toml_data = tomllib.load(f) if hasattr(tomllib, 'load') else {}
+    base_dir = toml_data.get("cluster", {}).get("base_dir", "")
+    if base_dir and os.path.exists(base_dir):
+        logger.info(f"Removing stale cluster data at {base_dir}")
+        shutil.rmtree(base_dir)
+
     # Define artifact paths
     # We now instruct init.sh/deploy.sh to use this directory directly
     suite_artifacts_dir = test_dir / "artifacts"
@@ -177,12 +192,30 @@ def run_test_suite(
     # 2. Deploy Cluster
     logger.info("Deploying cluster...")
     deploy_script = CLUSTER_SCRIPTS_DIR / "deploy.sh"
+
+    # Auto-detect per-test-case relayer config
+    custom_relayer_config = test_dir / "relayer_config.json"
+    if custom_relayer_config.exists():
+        env["RELAYER_CONFIG_TPL"] = str(custom_relayer_config)
+        logger.info(f"Using custom relayer config: {custom_relayer_config}")
+
     run_command(
         ["bash", str(deploy_script), str(cluster_config)],
         cwd=CLUSTER_SCRIPTS_DIR,
         env=env,
     )
 
+    # 2.5 Pre-start hook (e.g. start MockAnvil before node)
+    hooks = None
+    hooks_path = test_dir / "hooks.py"
+    if hooks_path.exists():
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("hooks", hooks_path)
+        hooks = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(hooks)
+        if hasattr(hooks, "pre_start"):
+            logger.info(f"Running pre_start hook from {hooks_path}")
+            hooks.pre_start(test_dir, env, pytest_args or [])
 
     # 3. Start Nodes
     start_script = CLUSTER_SCRIPTS_DIR / "start.sh"
@@ -242,7 +275,19 @@ def run_test_suite(
                     env=env,
                     check=False,
                 )
+
             cleanup_cluster()
+
+        # Post-stop hook ALWAYS runs (e.g. stop MockAnvil).
+        # MockAnvil runs as a daemon thread in this process — it dies
+        # when we exit anyway, but explicit cleanup is cleaner and
+        # prevents the relayer from crashing on connection loss.
+        if hooks and hasattr(hooks, "post_stop"):
+            logger.info("Running post_stop hook...")
+            try:
+                hooks.post_stop(test_dir, env)
+            except Exception as e:
+                logger.warning(f"post_stop hook failed: {e}")
 
 
 def main():
