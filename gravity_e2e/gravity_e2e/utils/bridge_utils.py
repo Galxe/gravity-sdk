@@ -8,6 +8,7 @@ and polling utilities for NativeMinted events on the Gravity chain.
 import asyncio
 import json
 import logging
+import statistics
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -307,6 +308,37 @@ class BridgeHelper:
         logs = self.portal.events.MessageSent().get_logs(from_block=from_block)
         return logs
 
+    def query_message_sent_timestamps(self, from_block: int = 0) -> Dict[int, int]:
+        """
+        Query MessageSent events and return a mapping of nonce → block timestamp.
+
+        Fetches block timestamps for each unique block containing MessageSent
+        events and maps them back to the nonce in each event.
+
+        Returns:
+            Dict mapping bridge nonce to the unix timestamp of the Anvil block
+            in which the MessageSent event was emitted.
+        """
+        events = self.query_message_sent_events(from_block=from_block)
+        nonce_to_timestamp: Dict[int, int] = {}
+        block_ts_cache: Dict[int, int] = {}  # block_number → timestamp
+
+        for evt in events:
+            block_num = evt["blockNumber"]
+            nonce_val = evt.args.nonce
+
+            if block_num not in block_ts_cache:
+                block = self.w3.eth.get_block(block_num)
+                block_ts_cache[block_num] = block["timestamp"]
+
+            nonce_to_timestamp[nonce_val] = block_ts_cache[block_num]
+
+        LOG.info(
+            f"  Fetched timestamps for {len(nonce_to_timestamp)} MessageSent events "
+            f"across {len(block_ts_cache)} blocks"
+        )
+        return nonce_to_timestamp
+
     def _tx_params(self) -> dict:
         """Common transaction parameters."""
         return {
@@ -556,6 +588,7 @@ async def poll_all_native_minted(
     current_block = gravity_w3.eth.block_number
     all_events = []
     found_nonces = set()
+    gravity_block_numbers = set()  # unique blocks for timestamp lookup
 
     # Scan in chunks to avoid huge responses
     CHUNK_SIZE = 5000
@@ -576,19 +609,35 @@ async def poll_all_native_minted(
                 nonce_val = event.args.nonce
                 if nonce_val in expected_nonces:
                     found_nonces.add(nonce_val)
+                    blk_num = log_entry["blockNumber"]
                     all_events.append(
                         {
                             "recipient": event.args.recipient,
                             "amount": event.args.amount,
                             "nonce": nonce_val,
-                            "block_number": log_entry["blockNumber"],
+                            "block_number": blk_num,
                             "tx_hash": log_entry["transactionHash"].hex(),
                         }
                     )
+                    # Collect unique block numbers for timestamp lookup
+                    gravity_block_numbers.add(blk_num)
         except Exception as e:
             LOG.warning(f"  Log scan error for blocks {scan_from}-{scan_to}: {e}")
 
         scan_from = scan_to + 1
+
+    # Batch-fetch block timestamps for all unique gravity blocks
+    gravity_block_ts: Dict[int, int] = {}
+    for blk_num in gravity_block_numbers:
+        try:
+            block = gravity_w3.eth.get_block(blk_num)
+            gravity_block_ts[blk_num] = block["timestamp"]
+        except Exception as e:
+            LOG.warning(f"  Failed to fetch gravity block {blk_num} timestamp: {e}")
+
+    # Enrich events with block_timestamp
+    for evt in all_events:
+        evt["block_timestamp"] = gravity_block_ts.get(evt["block_number"])
 
     missing_nonces = expected_nonces - found_nonces
     LOG.info(
@@ -645,6 +694,12 @@ class BridgeStats:
         avg_lat = sum(self.latencies) / len(self.latencies)
         min_lat = min(self.latencies)
         max_lat = max(self.latencies)
+        median_lat = statistics.median(self.latencies)
+        p95_lat = (
+            sorted(self.latencies)[int(len(self.latencies) * 0.95)]
+            if len(self.latencies) >= 2
+            else max_lat
+        )
 
         # Check nonce continuity
         nonces_sorted = sorted(self.nonces)
@@ -662,10 +717,12 @@ class BridgeStats:
             f"  Failed:           {self.failed}\n"
             f"  Success rate:     {self.success / self.total * 100:.1f}%\n"
             f"  \n"
-            f"  Latency (bridge → NativeMinted):\n"
-            f"    Average:        {avg_lat:.1f}s\n"
+            f"  Latency (MessageSent → NativeMinted):\n"
             f"    Min:            {min_lat:.1f}s\n"
             f"    Max:            {max_lat:.1f}s\n"
+            f"    Average:        {avg_lat:.1f}s\n"
+            f"    Median:         {median_lat:.1f}s\n"
+            f"    P95:            {p95_lat:.1f}s\n"
             f"  \n"
             f"  Total bridged:    {self.total_bridged} wei\n"
             f"  Nonce range:      {nonces_sorted[0]} → {nonces_sorted[-1]}\n"
