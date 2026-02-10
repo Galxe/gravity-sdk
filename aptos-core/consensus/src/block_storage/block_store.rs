@@ -620,24 +620,29 @@ impl BlockStore {
             );
         } else {
             info!("send the blocks to execution {:?}", blocks_to_commit);
-            self.execution_client
-                .finalize_order(
-                    &blocks_to_commit,
-                    finality_proof.ledger_info().clone(),
-                    Box::new(
-                        move |committed_blocks: &[Arc<PipelinedBlock>],
-                              commit_decision: LedgerInfoWithSignatures| {
-                            block_tree.write().commit_callback(
-                                storage,
-                                committed_blocks,
-                                finality_proof,
-                                commit_decision,
-                            );
-                        },
-                    ),
-                )
-                .await
-                .expect("Failed to persist commit");
+            for block in &blocks_to_commit {
+                let block_tree = block_tree.clone();
+                let storage = storage.clone();
+                let finality_proof = finality_proof.clone();
+                self.execution_client
+                    .finalize_order(
+                        std::slice::from_ref(block),
+                        finality_proof.ledger_info().clone(),
+                        Box::new(
+                            move |committed_blocks: &[Arc<PipelinedBlock>],
+                                  commit_decision: LedgerInfoWithSignatures| {
+                                block_tree.write().commit_callback(
+                                    storage,
+                                    committed_blocks,
+                                    finality_proof,
+                                    commit_decision,
+                                );
+                            },
+                        ),
+                    )
+                    .await
+                    .expect("Failed to persist commit");
+            }
         }
 
         self.inner.write().update_ordered_root(block_to_commit.id());
