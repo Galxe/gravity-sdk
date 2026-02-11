@@ -4,9 +4,6 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     branches: [main, 'gravity-testnet-v**']
-    paths:
-      - '**/*.rs'
-      - 'rustfmt.toml'
   workflow_dispatch:
 
 # Cancel redundant runs on the same PR
