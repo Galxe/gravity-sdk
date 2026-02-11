@@ -1,15 +1,8 @@
 name: E2E Test in Docker
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-    branches: [main, 'gravity-testnet-v**']
-    paths-ignore:
-      - 'book/**'
-      - 'scripts/**'
-      - 'template_config/**'
-      - '*.md'
-      - 'bin/sentinel/**'
+  pull_request_review:
+    types: [submitted]
   workflow_dispatch:
     inputs:
       suite:
@@ -27,17 +20,48 @@ jobs:
     name: E2E Test
     runs-on: [self-hosted, linux]
     timeout-minutes: 120
-    # Requires environment approval before running (shows "Waiting for review" status)
-    environment: default
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request_review' && github.event.review.state == 'approved' &&
+       (github.event.pull_request.base.ref == 'main' ||
+        startsWith(github.event.pull_request.base.ref, 'gravity-testnet-v')))
 
     steps:
+    - name: Check changed files
+      if: github.event_name == 'pull_request_review'
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        CHANGED_FILES=$(gh api \
+          "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" \
+          --paginate --jq '.[].filename')
+
+        HAS_RELEVANT_CHANGES=false
+        while IFS= read -r file; do
+          case "${file}" in
+            book/*|scripts/*|template_config/*|*.md|bin/sentinel/*)
+              echo "  [IGNORED] ${file}"
+              ;;
+            *)
+              echo "  [RELEVANT] ${file}"
+              HAS_RELEVANT_CHANGES=true
+              ;;
+          esac
+        done <<< "${CHANGED_FILES}"
+
+        if [ "${HAS_RELEVANT_CHANGES}" = "false" ]; then
+          echo "All changes are in ignored paths. Skipping E2E test."
+          exit 1
+        fi
+        echo "✓ Found relevant code changes."
+
     - name: Checkout
       uses: actions/checkout@v4
 
     - name: Run E2E Tests
       run: |
         chmod +x gravity_e2e/run_docker.sh
-        if [ "${{ github.event_name }}" = "pull_request" ]; then
+        if [ "${{ github.event_name }}" = "pull_request_review" ]; then
           ./gravity_e2e/run_docker.sh --exclude fuzzy_cluster
         else
           ./gravity_e2e/run_docker.sh ${{ github.event.inputs.suite }}

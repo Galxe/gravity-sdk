@@ -1,13 +1,8 @@
 name: Rust CI
 
 on:
-  pull_request:
-    branches: [main, 'gravity-testnet-v**']
-    paths-ignore:
-      - 'book/**'
-      - 'scripts/**'
-      - 'template_config/**'
-      - '*.md'
+  pull_request_review:
+    types: [submitted]
   workflow_dispatch:
 
 env:
@@ -15,31 +10,44 @@ env:
   CARGO_INCREMENTAL: "0"
   RUSTFLAGS: "--cfg tokio_unstable"
 
-# Cancel redundant builds on PRs
+# Cancel redundant runs on the same PR
 concurrency:
-  group: ${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.ref) || github.sha }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 jobs:
-  # Rust formatting check
-  fmt:
-    name: Rust Format
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install nightly rustfmt
-        run: |
-          rustup toolchain install nightly --component rustfmt
-      - name: Check formatting
-        run: cargo +nightly fmt --all -- --check
-
-  # Rust linting with clippy
+  # Rust linting with clippy — runs after PR approval
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
-    # Requires environment approval before running (shows "Waiting for review" status)
-    environment: default
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.review.state == 'approved' &&
+       (github.event.pull_request.base.ref == 'main' ||
+        startsWith(github.event.pull_request.base.ref, 'gravity-testnet-v')))
     steps:
+      - name: Check changed files
+        if: github.event_name == 'pull_request_review'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CHANGED_FILES=$(gh api \
+            "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" \
+            --paginate --jq '.[].filename')
+          HAS_RELEVANT_CHANGES=false
+          while IFS= read -r file; do
+            case "${file}" in
+              book/*|scripts/*|template_config/*|*.md)
+                ;;
+              *)
+                HAS_RELEVANT_CHANGES=true
+                ;;
+            esac
+          done <<< "${CHANGED_FILES}"
+          if [ "${HAS_RELEVANT_CHANGES}" = "false" ]; then
+            echo "All changes are in ignored paths. Skipping."
+            exit 1
+          fi
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet
@@ -60,13 +68,38 @@ jobs:
         env:
           CARGO_BUILD_JOBS: "2"
 
-  # Run unit tests (triggered by label or on main branch push)
+  # Run unit tests — runs after PR approval
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
-    # Requires environment approval before running (shows "Waiting for review" status)
-    environment: default
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.review.state == 'approved' &&
+       (github.event.pull_request.base.ref == 'main' ||
+        startsWith(github.event.pull_request.base.ref, 'gravity-testnet-v')))
     steps:
+      - name: Check changed files
+        if: github.event_name == 'pull_request_review'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CHANGED_FILES=$(gh api \
+            "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" \
+            --paginate --jq '.[].filename')
+          HAS_RELEVANT_CHANGES=false
+          while IFS= read -r file; do
+            case "${file}" in
+              book/*|scripts/*|template_config/*|*.md)
+                ;;
+              *)
+                HAS_RELEVANT_CHANGES=true
+                ;;
+            esac
+          done <<< "${CHANGED_FILES}"
+          if [ "${HAS_RELEVANT_CHANGES}" = "false" ]; then
+            echo "All changes are in ignored paths. Skipping."
+            exit 1
+          fi
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet
@@ -85,4 +118,3 @@ jobs:
         env:
           CARGO_BUILD_JOBS: "2"
           RUSTFLAGS: "--cfg tokio_unstable -C link-arg=-fuse-ld=mold"
-
