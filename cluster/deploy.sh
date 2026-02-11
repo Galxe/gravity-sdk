@@ -167,6 +167,9 @@ configure_vfn() {
     # Generate reth_config.json from template
     envsubst < "$SCRIPT_DIR/templates/reth_config_vfn.json.tpl" > "$config_dir/reth_config.json"
     
+    # Copy relayer_config.json from template
+    cp "$SCRIPT_DIR/templates/relayer_config.json.tpl" "$config_dir/relayer_config.json"
+    
     # Generate start script for this node
     cat > "$data_dir/script/start.sh" << 'START_SCRIPT'
 #!/bin/bash
