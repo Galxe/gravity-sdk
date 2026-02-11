@@ -5,12 +5,13 @@ set -e
 # Gravity E2E Docker Runner (CI/CD)
 #
 # Usage:
-#   ./gravity_e2e/run_docker.sh [suite1] [suite2] ... [pytest_args]
+#   ./gravity_e2e/run_docker.sh [suite1] [suite2] ... [--exclude suite] [pytest_args]
 #
 # Examples:
 #   ./gravity_e2e/run_docker.sh                    # Run all test suites
 #   ./gravity_e2e/run_docker.sh single_node        # Run only single_node suite
 #   ./gravity_e2e/run_docker.sh single_node -k test_transfer
+#   ./gravity_e2e/run_docker.sh --exclude fuzzy_cluster  # Run all except fuzzy_cluster
 #
 # Description:
 #   Runs the complete E2E pipeline inside Docker (no host mount):
