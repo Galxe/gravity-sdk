@@ -71,7 +71,7 @@ class Cluster:
         self.cluster_root = self.config_path.parent
         self.base_dir = Path(self.config["cluster"]["base_dir"])
         self.gravity_cli_path = self.base_dir / "gravity_cli"
-        
+
         # Load genesis.toml if it exists (for faucet and genesis settings)
         self.genesis_config = {}
         genesis_config_path = self.cluster_root / "genesis.toml"
@@ -203,7 +203,9 @@ class Cluster:
         3. genesis.faucet.private_key (if specified directly)
         """
         # Check genesis_config first (new split config), then fall back to cluster config
-        genesis = self.genesis_config.get("genesis", {}) or self.config.get("genesis", {})
+        genesis = self.genesis_config.get("genesis", {}) or self.config.get(
+            "genesis", {}
+        )
         faucet_config = genesis.get("faucet", [])
 
         # Normalize to list
@@ -223,7 +225,7 @@ class Cluster:
         secrets = genesis.get("secrets", {})
         if secrets and "keys" in secrets:
             candidate_keys.update(secrets["keys"])
-        
+
         # Also check for private_key directly in faucet configs
         for f in faucets:
             if "private_key" in f:
@@ -823,6 +825,8 @@ class Cluster:
         stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
         stdout_str = stdout.decode() if stdout else ""
         stderr_str = stderr.decode() if stderr else ""
+        if stdout_str:
+            LOG.info(f"Create stake output: {stdout_str}")
 
         if process.returncode != 0:
             LOG.error(f"Failed to create stake for {node_id}: {stderr_str}")
@@ -935,7 +939,6 @@ class Cluster:
             LOG.error(f"Failed to join validator {node_id}: {stderr_str}")
             raise RuntimeError(f"Failed to join validator {node_id}: {stderr_str}")
         LOG.info(f"Validator {node_id} join command executed successfully")
-        
 
     async def validator_leave(self, node_id: str, timeout: int = 120):
         """
