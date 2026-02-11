@@ -38,7 +38,9 @@ def get_genesis_defaults():
             "unbondingDelayMicros": 604800000000,
             "allowValidatorSetChange": True,
             "votingPowerIncreaseLimitPct": 20,
-            "maxValidatorSetSize": "100"
+            "maxValidatorSetSize": "100",
+            "autoEvictEnabled": False,
+            "autoEvictThreshold": "0"
         },
         "stakingConfig": {
             "minimumStake": "1000000000000000000",
@@ -99,7 +101,9 @@ def build_genesis_config(config, genesis_cfg):
         "unbondingDelayMicros": vc.get("unbonding_delay_micros", defaults["validatorConfig"]["unbondingDelayMicros"]),
         "allowValidatorSetChange": vc.get("allow_validator_set_change", defaults["validatorConfig"]["allowValidatorSetChange"]),
         "votingPowerIncreaseLimitPct": vc.get("voting_power_increase_limit_pct", defaults["validatorConfig"]["votingPowerIncreaseLimitPct"]),
-        "maxValidatorSetSize": vc.get("max_validator_set_size", defaults["validatorConfig"]["maxValidatorSetSize"])
+        "maxValidatorSetSize": vc.get("max_validator_set_size", defaults["validatorConfig"]["maxValidatorSetSize"]),
+        "autoEvictEnabled": vc.get("auto_evict_enabled", defaults["validatorConfig"]["autoEvictEnabled"]),
+        "autoEvictThreshold": str(vc.get("auto_evict_threshold", defaults["validatorConfig"]["autoEvictThreshold"]))
     }
     
     # stakingConfig
