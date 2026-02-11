@@ -51,8 +51,14 @@ configure_node() {
     # Generate reth_config.json from template
     envsubst < "$SCRIPT_DIR/templates/reth_config.json.tpl" > "$config_dir/reth_config.json"
     
-    # Copy relayer_config.json from template
-    cp "$SCRIPT_DIR/templates/relayer_config.json.tpl" "$config_dir/relayer_config.json"
+    # Copy relayer_config.json from template (supports per-test-case override via env var)
+    local relayer_tpl="${RELAYER_CONFIG_TPL:-$SCRIPT_DIR/templates/relayer_config.json.tpl}"
+    if [ -f "$relayer_tpl" ]; then
+        cp "$relayer_tpl" "$config_dir/relayer_config.json"
+        log_info "  Using relayer config: $relayer_tpl"
+    else
+        log_warn "  Relayer config template not found: $relayer_tpl (skipping)"
+    fi
     
     # Generate start script for this node
     cat > "$data_dir/script/start.sh" << 'START_SCRIPT'

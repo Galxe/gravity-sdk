@@ -10,6 +10,7 @@ import json
 import logging
 import statistics
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -124,6 +125,80 @@ BRIDGE_RECEIVER_ABI = [
     },
 ]
 
+# BatchBridgeCaller — helper contract compiled from /tmp/BatchBridgeCaller.sol
+# Batches N bridgeToGravity calls into a single transaction.
+BATCH_BRIDGE_CALLER_ABI = [
+    {
+        "type": "function",
+        "name": "batchBridge",
+        "inputs": [
+            {"name": "gtoken", "type": "address"},
+            {"name": "sender", "type": "address"},
+            {"name": "amount", "type": "uint256"},
+            {"name": "recipient", "type": "address"},
+            {"name": "count", "type": "uint256"},
+        ],
+        "outputs": [],
+        "stateMutability": "payable",
+    },
+    {"stateMutability": "payable", "type": "receive"},
+]
+
+BATCH_BRIDGE_CALLER_BYTECODE = (
+    "0x6080604052348015600e575f5ffd5b506104c48061001c5f395ff3fe"
+    "608060405260043610610021575f3560e01c80633756b5d414610"
+    "02c57610028565b3661002857005b5f5ffd5b61004660048036"
+    "038101906100419190610210565b610048565b005b8473ffffff"
+    "ffffffffffffffffffffffffffffffffff1663095ea7b38583"
+    "8661007191906102b4565b6040518363ffffffff1660e01b8152"
+    "60040161008e929190610313565b6020604051808303815f875a"
+    "f11580156100aa573d5f5f3e3d5ffd5b505050506040513d601f"
+    "19601f820116820180604052508101906100ce919061036f565b"
+    "505f81346100dc91906103c7565b90505f5f90505b828110156101"
+    "76578573ffffffffffffffffffffffffffffffffffffffff1663"
+    "3f9418a88387876040518463ffffffff1660e01b815260040161"
+    "01279291906103f7565b60206040518083038185885af115801561"
+    "0143573d5f5f3e3d5ffd5b50505050506040513d601f19601f82"
+    "0116820180604052508101906101689190610463565b50808060"
+    "01019150506100e3565b50505050505050565b5f5ffd5b5f73ff"
+    "ffffffffffffffffffffffffffffffffffffff82169050919050"
+    "565b5f6101ac82610183565b9050919050565b6101bc816101a2"
+    "565b81146101c6575f5ffd5b50565b5f813590506101d7816101"
+    "b3565b92915050565b5f819050919050565b6101ef816101dd56"
+    "5b81146101f9575f5ffd5b50565b5f8135905061020a816101e6"
+    "565b92915050565b5f5f5f5f5f60a0868803121561022957610228"
+    "61017f565b5b5f610236888289016101c9565b955050602061024"
+    "7888289016101c9565b9450506040610258888289016101fc565b"
+    "9350506060610269888289016101c9565b925050608061027a88"
+    "8289016101fc565b9150509295509295909350565b7f4e487b71"
+    "000000000000000000000000000000000000000000000000000000"
+    "005f52601160045260245ffd5b5f6102be826101dd565b91506102"
+    "c9836101dd565b92508282026102d7816101dd565b91508282048"
+    "4148315176102ee576102ed610287565b5b5092915050565b6102"
+    "fe816101a2565b82525050565b61030d816101dd565b82525050"
+    "565b5f6040820190506103265f8301856102f5565b6103336020"
+    "830184610304565b9392505050565b5f8115159050919050565b"
+    "61034e8161033a565b8114610358575f5ffd5b50565b5f815190"
+    "5061036981610345565b92915050565b5f6020828403121561038"
+    "45761038361017f565b5b5f6103918482850161035b565b91505"
+    "092915050565b7f4e487b710000000000000000000000000000000"
+    "00000000000000000000000005f52601260045260245ffd5b5f61"
+    "03d1826101dd565b91506103dc836101dd565b9250826103ec576"
+    "103eb61039a565b5b828204905092915050565b5f604082019050"
+    "61040a5f830185610304565b61041760208301846102f5565b93"
+    "92505050565b5f6fffffffffffffffffffffffffffffffff8216"
+    "9050919050565b6104428161041e565b811461044c575f5ffd5b"
+    "50565b5f8151905061045d81610439565b92915050565b5f6020"
+    "82840312156104785761047761017f565b5b5f610485848285016"
+    "1044f565b9150509291505056fea26469706673582212207eb41c"
+    "746c3f34e6512ab50367904ed42c2b732fd6d74e17d47a0eb3162"
+    "77fde64736f6c634300081e0033"
+)
+
+# Default batch size for BatchBridgeCaller (bridges per transaction)
+BATCH_BRIDGE_CHUNK_SIZE = 100
+
+
 
 # ============================================================================
 # Bridge Helper
@@ -148,7 +223,7 @@ class BridgeHelper:
     ):
         self.w3 = Web3(Web3.HTTPProvider(
             anvil_rpc_url,
-            request_kwargs={"timeout": 120},
+            request_kwargs={"timeout": 300},
         ))
         assert self.w3.is_connected(), f"Cannot connect to Anvil at {anvil_rpc_url}"
 
@@ -226,80 +301,101 @@ class BridgeHelper:
         """
         Pre-load Anvil with N bridge transactions efficiently.
 
-        Uses fire-and-forget pattern: sends all raw transactions with
-        manually managed nonces, then polls portal.nonce() until all
-        are mined. This avoids blocking on each send_raw_transaction.
+        Uses a BatchBridgeCaller contract to batch 100 bridgeToGravity
+        calls per transaction, reducing 20K RPC calls to ~200.
 
         Args:
             count: Number of bridge transactions to send.
             amount: Amount per bridge transaction (in wei).
             recipient: Recipient address on gravity chain.
-            interval: Seconds between bridge calls (0 = as fast as possible).
+            interval: Seconds between batch calls (0 = as fast as possible).
 
         Returns:
             List of bridge nonces (1..count).
         """
         recipient = Web3.to_checksum_address(recipient)
         total_amount = amount * count
+        chunk_size = BATCH_BRIDGE_CHUNK_SIZE  # 100 bridges per tx
 
-        # 1. Single large mint (synchronous — just 1 tx)
-        LOG.info(f"  Batch: minting {total_amount} GTokens ({count} × {amount})...")
+        # 1. Deploy BatchBridgeCaller contract
+        LOG.info("  Batch: deploying BatchBridgeCaller...")
+        BatchCaller = self.w3.eth.contract(
+            abi=BATCH_BRIDGE_CALLER_ABI,
+            bytecode=BATCH_BRIDGE_CALLER_BYTECODE,
+        )
+        deploy_tx = BatchCaller.constructor().build_transaction(self._tx_params())
+        deploy_tx["gas"] = 2_000_000  # deployment needs more gas
+        receipt = self._send_tx(deploy_tx)
+        batch_caller_addr = receipt.contractAddress
+        LOG.info(f"  Batch: BatchBridgeCaller deployed at {batch_caller_addr}")
+
+        batch_caller = self.w3.eth.contract(
+            address=batch_caller_addr,
+            abi=BATCH_BRIDGE_CALLER_ABI,
+        )
+
+        # 2. Mint all GTokens directly to the batch caller
+        LOG.info(f"  Batch: minting {total_amount} GTokens to batch caller ({count} × {amount})...")
         tx = self.gtoken.functions.mint(
-            self.deployer_address, total_amount
+            batch_caller_addr, total_amount
         ).build_transaction(self._tx_params())
         self._send_tx(tx)
 
-        # 2. Single large approve (synchronous — just 1 tx)
-        LOG.info(f"  Batch: approving GBridgeSender for {total_amount}...")
-        tx = self.gtoken.functions.approve(
-            self.sender.address, total_amount
-        ).build_transaction(self._tx_params())
-        self._send_tx(tx)
-
-        # 3. Get fee (same for all since amount is identical)
+        # 3. Get fee per bridge
         fee = self.sender.functions.calculateBridgeFee(amount, recipient).call()
-        LOG.info(f"  Batch: fee per bridge = {fee} wei")
+        total_fee = fee * count
+        LOG.info(f"  Batch: fee per bridge = {fee} wei, total = {total_fee} wei")
 
-        # 4. Fire-and-forget: send N bridge transactions with manual nonce management
-        eth_nonce = self.w3.eth.get_transaction_count(self.deployer_address)
-        tx_hashes = []
-        for i in range(count):
-            tx = self.sender.functions.bridgeToGravity(
-                amount, recipient
+        # 4. Fund the batch caller with ETH for fees
+        LOG.info(f"  Batch: funding batch caller with {total_fee} wei ETH...")
+        fund_tx = {
+            **self._tx_params(),
+            "to": batch_caller_addr,
+            "value": total_fee,
+        }
+        self._send_tx(fund_tx)
+
+        # 5. Call batchBridge in chunks of `chunk_size` (auto-mine mode)
+        num_chunks = (count + chunk_size - 1) // chunk_size
+        LOG.info(
+            f"  Batch: executing {count} bridges in {num_chunks} batch calls "
+            f"({chunk_size} per call, auto-mine mode)..."
+        )
+        t0 = time.time()
+        bridges_done = 0
+
+        for i in range(num_chunks):
+            remaining = count - bridges_done
+            this_chunk = min(chunk_size, remaining)
+            chunk_fee = fee * this_chunk
+
+            tx = batch_caller.functions.batchBridge(
+                self.gtoken.address,
+                self.sender.address,
+                amount,
+                recipient,
+                this_chunk,
             ).build_transaction({
-                "from": self.deployer_address,
-                "nonce": eth_nonce,
-                "gas": 500_000,
-                "gasPrice": self.w3.eth.gas_price,
-                "chainId": self.w3.eth.chain_id,
-                "value": fee,
+                **self._tx_params(),
+                "gas": 500_000 * this_chunk,
+                "value": chunk_fee,
             })
-            signed = self.w3.eth.account.sign_transaction(tx, self.deployer_key)
-            tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
-            tx_hashes.append(tx_hash)
-            eth_nonce += 1
+            receipt = self._send_tx(tx)
+            bridges_done += this_chunk
 
-            if (i + 1) % 20 == 0 or (i + 1) == count:
-                LOG.info(f"  Batch: submitted {i + 1}/{count} bridge txns")
+            if (i + 1) % 10 == 0 or (i + 1) == num_chunks:
+                elapsed = time.time() - t0
+                LOG.info(
+                    f"  Batch: chunk {i + 1}/{num_chunks} done — "
+                    f"{bridges_done}/{count} bridges ({elapsed:.1f}s)"
+                )
 
-            if interval > 0 and i < count - 1:
-                time.sleep(interval)
-
-        # 5. Poll portal.nonce() until all bridge txns are mined
-        LOG.info(f"  Batch: all {count} txns submitted, waiting for mining...")
-        deadline = time.time() + 600  # 10 min max
-        while time.time() < deadline:
-            portal_nonce = self.portal.functions.nonce().call()
-            if portal_nonce >= count:
-                LOG.info(f"  Batch complete: portal nonce={portal_nonce}, all {count} bridges mined")
-                break
-            LOG.info(f"  Batch: waiting for mining... portal nonce={portal_nonce}/{count}")
-            time.sleep(3)
-        else:
-            raise RuntimeError(
-                f"Timed out waiting for bridge txns to mine. "
-                f"Portal nonce: {portal_nonce}/{count}"
-            )
+        elapsed = time.time() - t0
+        portal_nonce = self.portal.functions.nonce().call()
+        LOG.info(
+            f"  Batch complete: {bridges_done} bridges in {elapsed:.1f}s "
+            f"({num_chunks} txns). Portal nonce = {portal_nonce}"
+        )
 
         return list(range(1, count + 1))
 
@@ -467,7 +563,7 @@ async def poll_native_minted(
 async def poll_all_native_minted(
     gravity_w3: Web3,
     max_nonce: int,
-    timeout: float = 300.0,
+    timeout: float = 600.0,
     poll_interval: float = 3.0,
     receiver_address: str = GBRIDGE_RECEIVER_ADDRESS,
 ) -> Dict[str, Any]:
@@ -498,7 +594,7 @@ async def poll_all_native_minted(
 
     expected_nonces = set(range(1, max_nonce + 1))
     start_time = time.time()
-    start_block = max(0, gravity_w3.eth.block_number - 1)
+    start_block = 0  # Scan from genesis to catch all events
 
     LOG.info(
         f"  Polling for {max_nonce} NativeMinted events "

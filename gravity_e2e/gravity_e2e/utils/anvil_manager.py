@@ -65,13 +65,21 @@ class AnvilManager:
     def is_running(self) -> bool:
         return self._process is not None and self._process.poll() is None
 
-    def start(self, port: int = 8546, block_time: int = None) -> None:
+    def start(
+        self,
+        port: int = 8546,
+        block_time: int = None,
+        gas_limit: int = 30_000_000_000,
+        code_size_limit: int = 250_000,
+    ) -> None:
         """
         Start Anvil local testnet.
 
         Args:
             port: Port to run Anvil on.
             block_time: Block time in seconds. None = auto-mine (instant).
+            gas_limit: Block gas limit (default 30B for high-volume batching).
+            code_size_limit: Max contract code size in bytes (default 250KB).
         """
         if self.is_running:
             LOG.warning("Anvil already running, stopping first...")
@@ -86,12 +94,17 @@ class AnvilManager:
         self._port = port
         self._rpc_url = f"http://localhost:{port}"
 
-        cmd = ["anvil", "--port", str(port)]
+        cmd = [
+            "anvil",
+            "--port", str(port),
+            "--gas-limit", str(gas_limit),
+            "--code-size-limit", str(code_size_limit),
+        ]
         if block_time is not None:
             cmd.extend(["--block-time", str(block_time)])
-            LOG.info(f"Starting Anvil on port {port} (block-time: {block_time}s)...")
+            LOG.info(f"Starting Anvil on port {port} (block-time: {block_time}s, gas-limit: {gas_limit})...")
         else:
-            LOG.info(f"Starting Anvil on port {port} (auto-mine mode)...")
+            LOG.info(f"Starting Anvil on port {port} (auto-mine, gas-limit: {gas_limit})...")
 
         self._process = subprocess.Popen(
             cmd,

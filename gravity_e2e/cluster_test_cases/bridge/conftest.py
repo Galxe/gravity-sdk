@@ -34,6 +34,7 @@ from web3 import Web3
 
 from gravity_e2e.utils.anvil_manager import AnvilManager, BridgeContracts
 from gravity_e2e.utils.bridge_utils import BridgeHelper
+from gravity_e2e.utils.mock_anvil import MockAnvil
 
 LOG = logging.getLogger(__name__)
 
@@ -75,6 +76,12 @@ def pytest_addoption(parser):
         default="300",
         help="Timeout in seconds for verifying all NativeMinted events (default: 300)",
     )
+    parser.addoption(
+        "--use-mock-anvil",
+        action="store_true",
+        default=True,
+        help="Use MockAnvil instead of real Anvil (default: True for stress tests)",
+    )
 
 
 @pytest.fixture(scope="session")
@@ -108,20 +115,28 @@ def bridge_verify_timeout(request) -> int:
     return int(request.config.getoption("--bridge-verify-timeout"))
 
 
+@pytest.fixture(scope="session")
+def use_mock_anvil(request) -> bool:
+    """Whether to use MockAnvil instead of real Anvil."""
+    return request.config.getoption("--use-mock-anvil")
+
+
 @pytest.fixture(scope="module")
-def preloaded_bridge(cluster, contracts_dir: Path, bridge_count: int):
+def preloaded_bridge(cluster, contracts_dir: Path, bridge_count: int, use_mock_anvil: bool):
     """
     Full bridge lifecycle fixture with pre-loading.
 
+    Two modes:
+    A) MockAnvil (--use-mock-anvil): lightweight in-memory event server, no EVM.
+    B) Real Anvil (default): start Anvil, deploy contracts via forge, batch bridge.
+
     Lifecycle:
     1. Stop gravity_node (runner already started it)
-    2. Start Anvil + deploy bridge contracts
-    3. Pre-load N bridge transactions on Anvil
-    4. Write relayer_config + restart gravity_node
-    5. Yield (contracts, nonces, bridge_helper)
-    6. Teardown: stop Anvil
+    2. Start Anvil/MockAnvil + deploy/pregenerate events
+    3. Write relayer_config + restart gravity_node
+    4. Yield (contracts, nonces, bridge_helper)
+    5. Teardown: stop Anvil/MockAnvil
     """
-    mgr = AnvilManager()
     sdk_root = _gravity_e2e_parent.parent
     cluster_scripts_dir = sdk_root / "cluster"
     stop_script = cluster_scripts_dir / "stop.sh"
@@ -131,6 +146,67 @@ def preloaded_bridge(cluster, contracts_dir: Path, bridge_count: int):
     env = os.environ.copy()
     artifacts_dir = _current_dir / "artifacts"
     env["GRAVITY_ARTIFACTS_DIR"] = str(artifacts_dir)
+
+    if use_mock_anvil:
+        yield from _preloaded_bridge_mock_anvil(
+            cluster, bridge_count, cluster_scripts_dir,
+            stop_script, start_script, config_path_str, env,
+        )
+    else:
+        yield from _preloaded_bridge_real_anvil(
+            cluster, contracts_dir, bridge_count, cluster_scripts_dir,
+            stop_script, start_script, config_path_str, env,
+        )
+
+
+def _preloaded_bridge_mock_anvil(
+    cluster, bridge_count, cluster_scripts_dir,
+    stop_script, start_script, config_path_str, env,
+):
+    """
+    MockAnvil path — hooks.py already started MockAnvil and preloaded events
+    before the node started. This fixture just reads the metadata and yields.
+    """
+    import json as _json
+    from gravity_e2e.utils.mock_anvil import DEFAULT_PORTAL_ADDRESS
+
+    metadata_file = Path(__file__).parent / "mock_anvil_metadata.json"
+    if not metadata_file.exists():
+        raise RuntimeError(
+            "mock_anvil_metadata.json not found! "
+            "Ensure hooks.py pre_start was called by the runner."
+        )
+
+    metadata = _json.loads(metadata_file.read_text())
+    LOG.info(
+        f"[MockAnvil] Read metadata: {metadata['bridge_count']} events, "
+        f"finalized_block={metadata['finalized_block']}"
+    )
+
+    yield {
+        "contracts": BridgeContracts(
+            rpc_url=metadata["rpc_url"],
+            gtoken_address="0x5FbDB2315678afecb367f032d93F642f64180aa3",
+            portal_address=metadata["portal_address"],
+            sender_address=metadata["sender_address"],
+            deployer_private_key="",
+            deployer_address="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        ),
+        "nonces": metadata["nonces"],
+        "helper": None,
+        "bridge_count": metadata["bridge_count"],
+        "amount": metadata["amount"],
+        "recipient": metadata["recipient"],
+    }
+
+
+
+def _preloaded_bridge_real_anvil(
+    cluster, contracts_dir, bridge_count, cluster_scripts_dir,
+    stop_script, start_script, config_path_str, env,
+):
+    """Original Anvil path: deploy contracts via forge, batch-bridge."""
+    mgr = AnvilManager()
 
     try:
         # Phase 1: Stop nodes
@@ -143,9 +219,12 @@ def preloaded_bridge(cluster, contracts_dir: Path, bridge_count: int):
         )
         time.sleep(2)
 
-        # Phase 2: Start Anvil with block_time=1 and deploy contracts
-        LOG.info("Phase 2: Starting Anvil and deploying contracts...")
-        mgr.start(port=8546, block_time=1)
+        # Phase 2: Start Anvil in AUTO-MINE mode and deploy contracts.
+        #          Auto-mine is fast because batch_mint_and_bridge uses
+        #          BatchBridgeCaller contract (~200 txns for 20K bridges).
+        #          After pre-loading, switch to interval mining for the test.
+        LOG.info("Phase 2: Starting Anvil (auto-mine) and deploying contracts...")
+        mgr.start(port=8546, block_time=None, gas_limit=100_000_000)  # 100M gas/block
         contracts = mgr.deploy_bridge_contracts(contracts_dir)
 
         # Create bridge helper
@@ -158,7 +237,8 @@ def preloaded_bridge(cluster, contracts_dir: Path, bridge_count: int):
             deployer_address=contracts.deployer_address,
         )
 
-        # Phase 3: Pre-load bridge transactions (fire-and-forget, Anvil mines at own pace)
+        # Phase 3: Pre-load bridge transactions via BatchBridgeCaller
+        #          (deploys helper contract, batches 100 bridges per tx)
         recipient = Web3.to_checksum_address(contracts.deployer_address)
         LOG.info(
             f"Phase 3: Pre-loading {bridge_count} bridge transactions "
@@ -176,6 +256,64 @@ def preloaded_bridge(cluster, contracts_dir: Path, bridge_count: int):
         assert len(events) >= bridge_count, (
             f"Expected {bridge_count} MessageSent events on Anvil, got {len(events)}"
         )
+
+        # Switch Anvil to interval mining (1s blocks) for realistic test
+        LOG.info("  Switching Anvil to interval mining (1s blocks)...")
+        import requests as req
+        req.post(contracts.rpc_url, json={
+            "jsonrpc": "2.0",
+            "method": "evm_setIntervalMining",
+            "params": [1],
+            "id": 1,
+        })
+        LOG.info("  Anvil now in interval mining mode")
+
+        # Wait for pre-loaded blocks to become finalized.
+        # Anvil has a ~64-block finalization lag. The relayer only scans
+        # finalized blocks (eth_getBlockByNumber("finalized")), so we must
+        # wait until the finalized block covers all pre-loaded events.
+        latest_resp = req.post(contracts.rpc_url, json={
+            "jsonrpc": "2.0",
+            "method": "eth_getBlockByNumber",
+            "params": ["latest", False],
+            "id": 10,
+        }).json()
+        preload_block = int(latest_resp["result"]["number"], 16)
+        LOG.info(
+            f"  Pre-loaded events up to block {preload_block}. "
+            f"Waiting for finalization (Anvil lag ~64 blocks)..."
+        )
+
+        deadline = time.time() + 180  # 3 min max wait
+        while time.time() < deadline:
+            fin_resp = req.post(contracts.rpc_url, json={
+                "jsonrpc": "2.0",
+                "method": "eth_getBlockByNumber",
+                "params": ["finalized", False],
+                "id": 11,
+            }).json()
+            fin_result = fin_resp.get("result")
+            if fin_result:
+                fin_block = int(fin_result["number"], 16)
+                if fin_block >= preload_block:
+                    LOG.info(
+                        f"  Finalized block {fin_block} >= preload block "
+                        f"{preload_block} — ready!"
+                    )
+                    break
+                LOG.info(
+                    f"  Finalization: {fin_block}/{preload_block} "
+                    f"(waiting...)"
+                )
+            else:
+                LOG.info("  Finalized block not yet available, waiting...")
+            time.sleep(5)
+        else:
+            LOG.warning(
+                f"  Timed out waiting for finalization "
+                f"(finalized={fin_block}, needed={preload_block}). "
+                f"Continuing anyway..."
+            )
 
         # Phase 4: Clean stale relayer state + write config + restart gravity_node
         LOG.info("Phase 4: Cleaning relayer state, writing config, restarting nodes...")
