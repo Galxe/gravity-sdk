@@ -70,11 +70,11 @@ echo ''
 echo '===== Phase 2: Building Binaries ====='
 
 echo '[Step 4] Building gravity_node (quick-release)...'
-export RUSTFLAGS='--cfg tokio_unstable'
+export RUSTFLAGS='--cfg tokio_unstable -C debug-assertions=yes'
 cargo build --bin gravity_node --profile quick-release 2>&1 | tail -5
 
-echo '[Step 5] Building gravity_cli (release)...'
-cargo build --bin gravity_cli --release 2>&1 | tail -5
+echo '[Step 5] Building gravity_cli (quick-release)...'
+cargo build --bin gravity_cli --profile quick-release 2>&1 | tail -5
 
 echo ''
 echo '===== Phase 3: Running E2E Tests ====='
