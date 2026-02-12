@@ -21,7 +21,7 @@ from gravity_e2e.cluster.manager import Cluster
 
 LOG = logging.getLogger(__name__)
 
-BATCH_SIZE = 5
+BATCH_SIZE = 50
 
 # Timeout for waiting after restart with batch mode enabled.
 BATCH_EXEC_TIMEOUT = 60
