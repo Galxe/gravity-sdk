@@ -618,30 +618,84 @@ impl BlockStore {
                 finality_proof,
                 commit_decision,
             );
+            self.inner.write().update_ordered_root(block_to_commit.id());
+            self.inner.write().insert_ordered_cert(finality_proof_clone.clone());
         } else {
-            info!("send the blocks to execution {:?}", blocks_to_commit);
-            self.execution_client
-                .finalize_order(
-                    &blocks_to_commit,
-                    finality_proof.ledger_info().clone(),
-                    Box::new(
-                        move |committed_blocks: &[Arc<PipelinedBlock>],
-                              commit_decision: LedgerInfoWithSignatures| {
-                            block_tree.write().commit_callback(
-                                storage,
-                                committed_blocks,
-                                finality_proof,
-                                commit_decision,
-                            );
-                        },
-                    ),
-                )
-                .await
-                .expect("Failed to persist commit");
+            let batch_commit_size = std::env::var("BATCH_COMMIT_SIZE")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(0);
+            if batch_commit_size > 0 && blocks_to_commit.len() <= batch_commit_size {
+                info!(
+                    "blocks_to_commit len {} <= BATCH_COMMIT_SIZE {}, skip sending for batch accumulation",
+                    blocks_to_commit.len(),
+                    batch_commit_size
+                );
+                return Ok(());
+            }
+
+            // Send blocks one by one: for each block, find the QC whose commit_info
+            // matches it. The QC that commits block[i] is the QC certifying block[i+1]
+            // (per 2-chain rule: QC(B_{i+1}).commit_info = B_i when rounds are consecutive).
+            // Blocks without a matching QC get batched with the next block that has one
+            // via path_from_ordered_root.
+            for (i, block) in blocks_to_commit.iter().enumerate() {
+                let proof = if block.id() == block_id_to_commit {
+                    // Last block: use the original finality_proof
+                    finality_proof.clone()
+                } else {
+                    // Look up the QC certifying the next block in the chain.
+                    // That QC's commit_info should point to this block (2-chain rule).
+                    let next_qc = (i + 1 < blocks_to_commit.len())
+                        .then(|| self.get_quorum_cert_for_block(blocks_to_commit[i + 1].id()))
+                        .flatten();
+                    match next_qc {
+                        Some(qc) if qc.commit_info().id() == block.id() => {
+                            qc.into_wrapped_ledger_info()
+                        }
+                        _ => {
+                            // No matching QC → this block will be included in the
+                            // next block's path_from_ordered_root batch.
+                            continue;
+                        }
+                    }
+                };
+
+                let path =
+                    self.path_from_ordered_root(block.id()).unwrap_or_default();
+                if path.is_empty() {
+                    continue;
+                }
+
+                let bt = self.inner.clone();
+                let st = self.storage.clone();
+                let proof_for_cb = proof.clone();
+
+                info!("send block to execution one-by-one {:?}", path);
+                self.execution_client
+                    .finalize_order(
+                        &path,
+                        proof.ledger_info().clone(),
+                        Box::new(
+                            move |committed_blocks: &[Arc<PipelinedBlock>],
+                                  commit_decision: LedgerInfoWithSignatures| {
+                                bt.write().commit_callback(
+                                    st,
+                                    committed_blocks,
+                                    proof_for_cb,
+                                    commit_decision,
+                                );
+                            },
+                        ),
+                    )
+                    .await
+                    .expect("Failed to persist commit");
+
+                self.inner.write().update_ordered_root(block.id());
+                self.inner.write().insert_ordered_cert(proof);
+            }
         }
 
-        self.inner.write().update_ordered_root(block_to_commit.id());
-        self.inner.write().insert_ordered_cert(finality_proof_clone.clone());
         update_counters_for_ordered_blocks(&blocks_to_commit);
         Ok(())
     }
@@ -947,7 +1001,7 @@ impl BlockReader for BlockStore {
         }
         let commit_round = self.commit_root().round();
         let ordered_round = self.ordered_root().round();
-        counters::OP_COUNTERS.gauge("back_pressure").set((ordered_round - commit_round) as i64);
+        counters::OP_COUNTERS.gauge("back_pressure").set(ordered_round.saturating_sub(commit_round) as i64);
         ordered_round > self.vote_back_pressure_limit + commit_round
     }
 
