@@ -1,5 +1,5 @@
 # Gravity Cluster Configuration - Long-Running Stability Test
-# 4 genesis validators for failover testing
+# 4 genesis validators + 1 VFN for failover testing
 
 [cluster]
 name = "gravity-devnet-long"
@@ -11,6 +11,8 @@ binary_path = "../target/quick-release/gravity_node"
 [genesis_source]
 genesis_path = "./artifacts/genesis.json"
 waypoint_path = "./artifacts/waypoint.txt"
+
+# ============ Genesis Validator Nodes (node1-node4) ============
 
 [[nodes]]
 id = "node1"
@@ -64,5 +66,20 @@ https_port = 1027
 authrpc_port = 8554
 reth_p2p_port = 12027
 
+# ============ VFN Node (node5) ============
+
+[[nodes]]
+id = "node5"
+role = "vfn"
+host = "127.0.0.1"
+p2p_port = 6184
+vfn_port = 6194
+rpc_port = 8549
+metrics_port = 9005
+inspection_port = 10004
+https_port = 1028
+authrpc_port = 8555
+reth_p2p_port = 12028
+
 [faucet_init]
-num_accounts = 10000
+num_accounts = 0
