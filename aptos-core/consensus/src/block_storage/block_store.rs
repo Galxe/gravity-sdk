@@ -661,8 +661,7 @@ impl BlockStore {
                     }
                 };
 
-                let path =
-                    self.path_from_ordered_root(block.id()).unwrap_or_default();
+                let path = self.path_from_ordered_root(block.id()).unwrap_or_default();
                 if path.is_empty() {
                     continue;
                 }
@@ -1001,7 +1000,9 @@ impl BlockReader for BlockStore {
         }
         let commit_round = self.commit_root().round();
         let ordered_round = self.ordered_root().round();
-        counters::OP_COUNTERS.gauge("back_pressure").set(ordered_round.saturating_sub(commit_round) as i64);
+        counters::OP_COUNTERS
+            .gauge("back_pressure")
+            .set(ordered_round.saturating_sub(commit_round) as i64);
         ordered_round > self.vote_back_pressure_limit + commit_round
     }
 
