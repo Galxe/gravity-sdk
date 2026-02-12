@@ -16,7 +16,7 @@ voting_power = "10000000000000000000"
 
 [genesis]
 chain_id = 1337
-epoch_interval_micros = 30000000 # 30 second
+epoch_interval_micros = 60000000 # 60 second
 major_version = 1
 consensus_config = "0x0301010a00000000000000280000000000000001010000000a000000000000000100010200000000000000000020000000000000"
 execution_config = "0x00"
