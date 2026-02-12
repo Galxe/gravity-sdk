@@ -43,7 +43,7 @@ echo "Building gravity_node..."
 cargo build --bin gravity_node --profile quick-release
 
 echo "Building gravity_cli..."
-cargo build --bin gravity_cli --release
+cargo build --bin gravity_cli --profile quick-release
 
 echo "Build complete!"
 '

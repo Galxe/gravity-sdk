@@ -1,0 +1,64 @@
+name: Dependency Check
+
+on:
+  pull_request:
+    branches: [main, 'gravity-testnet-v**']
+  workflow_dispatch:
+
+jobs:
+  dependency-check:
+    name: Check gravity-reth Dependency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check gravity-reth repo dependency
+        run: |
+          set -e
+
+          CARGO_FILE="bin/gravity_node/Cargo.toml"
+          EXPECTED_REPO="https://github.com/Galxe/gravity-reth"
+
+          echo "===== Dependency Check ====="
+          echo "Target branch: ${{ github.base_ref }}"
+          echo "Expected greth repo: ${EXPECTED_REPO}"
+          echo "============================="
+
+          if [ ! -f "${CARGO_FILE}" ]; then
+            echo "ERROR: ${CARGO_FILE} not found"
+            exit 1
+          fi
+
+          # 检查 greth 依赖是否存在
+          if ! grep -q 'greth = ' "${CARGO_FILE}"; then
+            echo "ERROR: greth dependency not found in ${CARGO_FILE}"
+            exit 1
+          fi
+
+          echo "Current greth dependency line:"
+          grep 'greth = ' "${CARGO_FILE}"
+
+          # 检查 greth 依赖是否使用正确的 repo
+          ACTUAL_REPO=$(grep 'greth = ' "${CARGO_FILE}" | sed -n 's/.*git = "\([^"]*\)".*/\1/p')
+
+          if [ -z "${ACTUAL_REPO}" ]; then
+            echo ""
+            echo "ERROR: greth dependency must use git source"
+            echo "Please update ${CARGO_FILE} to use:"
+            echo "  greth = { git = \"${EXPECTED_REPO}\", branch = \"...\" }"
+            exit 1
+          fi
+
+          if [ "${ACTUAL_REPO}" != "${EXPECTED_REPO}" ]; then
+            echo ""
+            echo "ERROR: greth dependency repo mismatch!"
+            echo "  Expected: ${EXPECTED_REPO}"
+            echo "  Actual:   ${ACTUAL_REPO}"
+            echo ""
+            echo "Please update ${CARGO_FILE} to use the correct repo:"
+            echo "  greth = { git = \"${EXPECTED_REPO}\", branch = \"...\" }"
+            exit 1
+          fi
+
+          echo ""
+          echo "✓ Dependency check PASSED"
+          echo "  Using gravity-reth repo: ${EXPECTED_REPO}"
