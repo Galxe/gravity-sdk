@@ -16,7 +16,7 @@ voting_power = "10000000000000000000"
 
 [genesis]
 chain_id = 1337
-epoch_interval_micros = 7200000000
+epoch_interval_micros = 60000000 # 60 second
 major_version = 1
 consensus_config = "0x0301010a00000000000000280000000000000001010000000a000000000000000100010200000000000000000020000000000000"
 execution_config = "0x00"
@@ -32,6 +32,8 @@ unbonding_delay_micros = 604800000000
 allow_validator_set_change = true
 voting_power_increase_limit_pct = 20
 max_validator_set_size = "100"
+auto_evict_enabled = false
+auto_evict_threshold = "0"
 
 [genesis.staking_config]
 minimum_stake = "1000000000000000000"

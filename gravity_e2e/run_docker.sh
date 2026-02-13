@@ -5,12 +5,13 @@ set -e
 # Gravity E2E Docker Runner (CI/CD)
 #
 # Usage:
-#   ./gravity_e2e/run_docker.sh [suite1] [suite2] ... [pytest_args]
+#   ./gravity_e2e/run_docker.sh [suite1] [suite2] ... [--exclude suite] [pytest_args]
 #
 # Examples:
 #   ./gravity_e2e/run_docker.sh                    # Run all test suites
 #   ./gravity_e2e/run_docker.sh single_node        # Run only single_node suite
 #   ./gravity_e2e/run_docker.sh single_node -k test_transfer
+#   ./gravity_e2e/run_docker.sh --exclude fuzzy_cluster  # Run all except fuzzy_cluster
 #
 # Description:
 #   Runs the complete E2E pipeline inside Docker (no host mount):
@@ -69,11 +70,11 @@ echo ''
 echo '===== Phase 2: Building Binaries ====='
 
 echo '[Step 4] Building gravity_node (quick-release)...'
-export RUSTFLAGS='--cfg tokio_unstable'
+export RUSTFLAGS='--cfg tokio_unstable -C debug-assertions=yes'
 cargo build --bin gravity_node --profile quick-release 2>&1 | tail -5
 
-echo '[Step 5] Building gravity_cli (release)...'
-cargo build --bin gravity_cli --release 2>&1 | tail -5
+echo '[Step 5] Building gravity_cli (quick-release)...'
+cargo build --bin gravity_cli --profile quick-release 2>&1 | tail -5
 
 echo ''
 echo '===== Phase 3: Running E2E Tests ====='

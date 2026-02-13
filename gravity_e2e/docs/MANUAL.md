@@ -51,6 +51,9 @@ The runner smartly forwards arguments to Pytest.
 
 # Combine suite and test filter
 ./gravity_e2e/run_test.sh single_node -k test_connectivity
+
+# Exclude specific suites
+./gravity_e2e/run_test.sh --exclude fuzzy_cluster
 ```
 
 ### 2. Artifact Caching
@@ -75,6 +78,35 @@ You can control the Python logging level by passing standard pytest flags to the
 # Enable CLI logging at DEBUG level to see internal logs
 ./gravity_e2e/run_test.sh --log-cli-level=DEBUG
 ```
+
+### 5. Docker Runner (CI)
+The `run_docker.sh` script runs the full pipeline inside Docker. It accepts the same arguments as `run_test.sh`:
+```bash
+# Run all suites in Docker
+./gravity_e2e/run_docker.sh
+
+# Run specific suite
+./gravity_e2e/run_docker.sh single_node
+
+# Exclude suites
+./gravity_e2e/run_docker.sh --exclude fuzzy_cluster
+```
+
+## CI/CD Workflows
+
+### PR Workflow (`e2e-docker.yml`)
+Triggered on every PR to `main` / `gravity-testnet-v**`. Runs **all suites except `fuzzy_cluster`** to keep PR feedback fast.
+
+Can also be triggered manually via `workflow_dispatch` with an optional `suite` input to run specific suites (including `fuzzy_cluster`).
+
+### Nightly Workflow (`e2e-docker-nightly.yml`)
+Runs **only `fuzzy_cluster`** on a daily schedule (00:00 UTC / 08:00 UTC+8). Also supports manual `workflow_dispatch`.
+
+| Trigger | Suites Run |
+|---|---|
+| PR | All **except** `fuzzy_cluster` |
+| Manual dispatch (e2e-docker) | User-specified (or all) |
+| Nightly schedule | `fuzzy_cluster` only |
 
 ## Writing Tests
 
