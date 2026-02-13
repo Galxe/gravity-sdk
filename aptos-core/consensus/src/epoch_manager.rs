@@ -1941,7 +1941,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         self.await_reconfig_notification().await;
 
         // Update block buffer manager with the correct epoch from epoch_state
-        get_block_buffer_manager().update_epoch(self.epoch()).await;
+        get_block_buffer_manager().init_epoch(self.epoch()).await;
 
         let mut request_sync_info_interval = tokio::time::interval(Duration::from_millis(
             std::env::var("GRAVITY_REQUEST_SYNC_INFO_INTERVAL_MS")
