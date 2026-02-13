@@ -1,6 +1,6 @@
 use clap::Parser;
 use gaptos::{
-    aptos_crypto::{PrivateKey, ValidCryptoMaterial},
+    aptos_crypto::{bls12381::ProofOfPossession, PrivateKey, ValidCryptoMaterial},
     aptos_keygen::KeyGen,
 };
 use std::{fs, path::PathBuf};
@@ -16,6 +16,7 @@ struct ValidatorIndentity {
     consensus_private_key: String,
     network_private_key: String,
     consensus_public_key: String,
+    consensus_pop: String,
     network_public_key: String,
 }
 
@@ -86,6 +87,10 @@ impl Executable for GenerateKey {
             consensus_private_key: hex::encode(consensus_private_key.to_bytes()),
             network_private_key: hex::encode(network_private_key.to_bytes()),
             consensus_public_key: hex::encode(consensus_private_key.public_key().to_bytes()),
+            consensus_pop: {
+                let pop = ProofOfPossession::create(&consensus_private_key);
+                hex::encode(pop.to_bytes())
+            },
             network_public_key: hex::encode(network_private_key.public_key().to_bytes()),
         };
 
