@@ -278,6 +278,9 @@ impl BlockBufferManager {
             );
             *self.latest_epoch_change_block_number.lock().await = latest_commit_block_number;
         }
+        self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
+        // Notify all waiters that buffer is ready
+        self.ready_notifier.notify_waiters();
     }
 
     /// Update the current epoch. Called by EpochManager at start to set the correct epoch
@@ -286,9 +289,6 @@ impl BlockBufferManager {
         info!("init_epoch: updating current_epoch to {}", epoch);
         let mut block_state_machine = self.block_state_machine.lock().await;
         block_state_machine.current_epoch = epoch;
-        self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
-        // Notify all waiters that buffer is ready
-        self.ready_notifier.notify_waiters();
     }
 
     // Helper method to wait for changes
