@@ -10,21 +10,52 @@ env:
   CARGO_INCREMENTAL: "0"
   RUSTFLAGS: "--cfg tokio_unstable"
 
-# Cancel redundant runs on the same PR
+# Queue (don't cancel) redundant runs on the same PR
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  # Rust linting with clippy — runs after PR approval
-  clippy:
-    name: Clippy
+  # ==========================================================================
+  # Gate - skip CI if it already passed or is running for the same commit
+  # ==========================================================================
+  gate:
+    name: CI Gate
     runs-on: ubuntu-latest
     if: >
       github.event_name == 'workflow_dispatch' ||
       (github.event.review.state == 'approved' &&
        (github.event.pull_request.base.ref == 'main' ||
         startsWith(github.event.pull_request.base.ref, 'gravity-testnet-v')))
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+    steps:
+      - name: Check for duplicate CI runs
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          OTHER_RUNS=$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/rust-ci.yml/runs?head_sha=${HEAD_SHA}" \
+            --jq "[.workflow_runs[] | select(.id != ${{ github.run_id }} and (.status == \"in_progress\" or .conclusion == \"success\"))] | length")
+          if [ "$OTHER_RUNS" -gt "0" ]; then
+            echo "CI already running or passed for commit ${HEAD_SHA}. Skipping."
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          else
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          fi
+
+  # Rust linting with clippy — runs after PR approval
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
     steps:
       - name: Check changed files
         if: github.event_name == 'pull_request_review'
@@ -72,11 +103,8 @@ jobs:
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.review.state == 'approved' &&
-       (github.event.pull_request.base.ref == 'main' ||
-        startsWith(github.event.pull_request.base.ref, 'gravity-testnet-v')))
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
     steps:
       - name: Check changed files
         if: github.event_name == 'pull_request_review'
