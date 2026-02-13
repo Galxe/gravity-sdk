@@ -375,7 +375,7 @@ impl BlockBufferManager {
         block: ExternalBlock,
     ) -> Result<(), anyhow::Error> {
         if !self.is_ready() {
-            panic!("Buffer is not ready");
+            self.ready_notifier.notified().await;
         }
         info!(
             "set_ordered_blocks {:?} num {:?} epoch {:?} parent_id {:?}",
@@ -472,7 +472,7 @@ impl BlockBufferManager {
         expected_epoch: u64,
     ) -> Result<Vec<(ExternalBlock, BlockId)>, anyhow::Error> {
         if !self.is_ready() {
-            panic!("Buffer is not ready");
+            self.ready_notifier.notified().await;
         }
 
         if self.is_epoch_change() {
@@ -562,7 +562,7 @@ impl BlockBufferManager {
         epoch: u64,
     ) -> Result<StateComputeResult, anyhow::Error> {
         if !self.is_ready() {
-            panic!("Buffer is not ready");
+            self.ready_notifier.notified().await;
         }
         let start = Instant::now();
         info!("get_executed_res start {:?} num {:?}", block_id, block_num);
@@ -696,7 +696,7 @@ impl BlockBufferManager {
         events: Vec<GravityEvent>,
     ) -> Result<(), anyhow::Error> {
         if !self.is_ready() {
-            panic!("Buffer is not ready");
+            self.ready_notifier.notified().await;
         }
 
         let mut block_state_machine = self.block_state_machine.lock().await;
@@ -747,7 +747,7 @@ impl BlockBufferManager {
         epoch: u64,
     ) -> Result<Vec<Receiver<()>>, anyhow::Error> {
         if !self.is_ready() {
-            panic!("Buffer is not ready");
+            self.ready_notifier.notified().await;
         }
         let mut persist_notifiers = Vec::new();
         let mut block_state_machine = self.block_state_machine.lock().await;
@@ -831,7 +831,7 @@ impl BlockBufferManager {
         epoch: u64,
     ) -> Result<Vec<BlockHashRef>, anyhow::Error> {
         if !self.is_ready() {
-            panic!("Buffer is not ready");
+            self.ready_notifier.notified().await;
         }
         info!("get_committed_blocks start_num: {:?} max_size: {:?}", start_num, max_size);
         let start = Instant::now();
@@ -922,7 +922,7 @@ impl BlockBufferManager {
 
     pub async fn block_number_to_block_id(&self) -> HashMap<u64, BlockId> {
         if !self.is_ready() {
-            panic!("Buffer is not ready when get block_number_to_block_id");
+            self.ready_notifier.notified().await;
         }
         let block_state_machine = self.block_state_machine.lock().await;
         block_state_machine.block_number_to_block_id.clone()
