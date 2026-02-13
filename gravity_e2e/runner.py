@@ -105,6 +105,7 @@ def run_test_suite(
     no_cleanup: bool = False,
     pytest_args: list = None,
     force_init: bool = False,
+    resume: bool = False,
 ):
     """
     Run tests in a specific directory.
@@ -118,94 +119,16 @@ def run_test_suite(
 
     logger.info(f"===== Running Suite: {test_dir.name} =====")
 
-    # Always clean start unless specifically investigating
-    cleanup_cluster()
-
-    # Remove stale cluster data directory.
-    # deploy.sh has an interactive prompt that defaults to N in
-    # non-interactive mode, so we must clean it here.
-    import shutil
-    try:
-        import tomllib
-    except ImportError:
-        import toml as tomllib
-    with open(cluster_config, "rb") as f:
-        toml_data = tomllib.load(f) if hasattr(tomllib, 'load') else {}
-    base_dir = toml_data.get("cluster", {}).get("base_dir", "")
-    if base_dir and os.path.exists(base_dir):
-        logger.info(f"Removing stale cluster data at {base_dir}")
-        shutil.rmtree(base_dir)
-
     # Define artifact paths
-    # We now instruct init.sh/deploy.sh to use this directory directly
     suite_artifacts_dir = test_dir / "artifacts"
     env = os.environ.copy()
     env["GRAVITY_ARTIFACTS_DIR"] = str(suite_artifacts_dir)
-    
+
     # Set genesis config path if it exists
     if genesis_config.exists():
         env["GENESIS_CONFIG_FILE"] = str(genesis_config)
 
-    # 1. Init Cluster (with Caching)
-    should_run_init = True
-
-    # Check if valid artifacts exist
-    if (
-        not force_init
-        and suite_artifacts_dir.exists()
-        and (suite_artifacts_dir / "genesis.json").exists()
-    ):
-        logger.info(f"Found cached artifacts in {suite_artifacts_dir}. Using cache.")
-        should_run_init = False
-
-    if should_run_init:
-        logger.info(
-            f"Initializing cluster (Generating artifacts in {suite_artifacts_dir})..."
-        )
-        
-        # Step 1: init.sh (generate identity keys)
-        init_script = CLUSTER_SCRIPTS_DIR / "init.sh"
-        if genesis_config.exists():
-            run_command(
-                ["bash", str(init_script), str(genesis_config)],
-                cwd=CLUSTER_SCRIPTS_DIR,
-                env=env,
-            )
-        else:
-            # Fallback to cluster.toml for backwards compatibility
-            run_command(
-                ["bash", str(init_script), str(cluster_config)],
-                cwd=CLUSTER_SCRIPTS_DIR,
-                env=env,
-            )
-        
-        # Step 2: genesis.sh (generate genesis.json)
-        genesis_script = CLUSTER_SCRIPTS_DIR / "genesis.sh"
-        if genesis_script.exists() and genesis_config.exists():
-            logger.info("Generating genesis...")
-            run_command(
-                ["bash", str(genesis_script), str(genesis_config)],
-                cwd=CLUSTER_SCRIPTS_DIR,
-                env=env,
-            )
-
-    # 2. Deploy Cluster
-    logger.info("Deploying cluster...")
-    deploy_script = CLUSTER_SCRIPTS_DIR / "deploy.sh"
-
-    # Auto-detect per-test-case relayer config
-    custom_relayer_config = test_dir / "relayer_config.json"
-    if custom_relayer_config.exists():
-        env["RELAYER_CONFIG_TPL"] = str(custom_relayer_config)
-        logger.info(f"Using custom relayer config: {custom_relayer_config}")
-
-    run_command(
-        ["bash", str(deploy_script), str(cluster_config)],
-        cwd=CLUSTER_SCRIPTS_DIR,
-        env=env,
-    )
-
-    # 2.5 Pre-start hook (e.g. start MockAnvil before node)
+    # Load hooks if present (needed for both fresh and reuse modes)
     hooks = None
     hooks_path = test_dir / "hooks.py"
     if hooks_path.exists():
@@ -213,30 +136,115 @@ def run_test_suite(
         spec = importlib.util.spec_from_file_location("hooks", hooks_path)
         hooks = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(hooks)
-        if hasattr(hooks, "pre_start"):
-            logger.info(f"Running pre_start hook from {hooks_path}")
-            hooks.pre_start(test_dir, env, pytest_args or [])
 
-    # 3. Start Nodes
-    start_script = CLUSTER_SCRIPTS_DIR / "start.sh"
-    if start_script.exists():
-        logger.info("Starting cluster nodes...")
-        # start.sh doesn't mostly need artifacts dir (it uses config from deploy),
-        # but passing env doesn't hurt.
+    if resume:
+        # ── Reuse mode: skip cleanup/init/deploy/start, just run pytest ──
+        logger.info("♻️  Reuse-cluster mode: skipping environment setup, only running tests")
+    else:
+        # ── Fresh mode: full cleanup → init → deploy → start ──
+
+        # Always clean start unless specifically investigating
+        cleanup_cluster()
+
+        # Remove stale cluster data directory.
+        # deploy.sh has an interactive prompt that defaults to N in
+        # non-interactive mode, so we must clean it here.
+        import shutil
+        try:
+            import tomllib
+        except ImportError:
+            import toml as tomllib
+        with open(cluster_config, "rb") as f:
+            toml_data = tomllib.load(f) if hasattr(tomllib, 'load') else {}
+        base_dir = toml_data.get("cluster", {}).get("base_dir", "")
+        if base_dir and os.path.exists(base_dir):
+            logger.info(f"Removing stale cluster data at {base_dir}")
+            shutil.rmtree(base_dir)
+
+        # 1. Init Cluster (with Caching)
+        should_run_init = True
+
+        # Check if valid artifacts exist
+        if (
+            not force_init
+            and suite_artifacts_dir.exists()
+            and (suite_artifacts_dir / "genesis.json").exists()
+        ):
+            logger.info(f"Found cached artifacts in {suite_artifacts_dir}. Using cache.")
+            should_run_init = False
+
+        if should_run_init:
+            logger.info(
+                f"Initializing cluster (Generating artifacts in {suite_artifacts_dir})..."
+            )
+
+            # Step 1: init.sh (generate identity keys)
+            init_script = CLUSTER_SCRIPTS_DIR / "init.sh"
+            if genesis_config.exists():
+                run_command(
+                    ["bash", str(init_script), str(genesis_config)],
+                    cwd=CLUSTER_SCRIPTS_DIR,
+                    env=env,
+                )
+            else:
+                # Fallback to cluster.toml for backwards compatibility
+                run_command(
+                    ["bash", str(init_script), str(cluster_config)],
+                    cwd=CLUSTER_SCRIPTS_DIR,
+                    env=env,
+                )
+
+            # Step 2: genesis.sh (generate genesis.json)
+            genesis_script = CLUSTER_SCRIPTS_DIR / "genesis.sh"
+            if genesis_script.exists() and genesis_config.exists():
+                logger.info("Generating genesis...")
+                run_command(
+                    ["bash", str(genesis_script), str(genesis_config)],
+                    cwd=CLUSTER_SCRIPTS_DIR,
+                    env=env,
+                )
+
+        # 2. Deploy Cluster
+        logger.info("Deploying cluster...")
+        deploy_script = CLUSTER_SCRIPTS_DIR / "deploy.sh"
+
+        # Auto-detect per-test-case relayer config
+        custom_relayer_config = test_dir / "relayer_config.json"
+        if custom_relayer_config.exists():
+            env["RELAYER_CONFIG_TPL"] = str(custom_relayer_config)
+            logger.info(f"Using custom relayer config: {custom_relayer_config}")
+
         run_command(
-            ["bash", str(start_script), "--config", str(cluster_config)],
+            ["bash", str(deploy_script), str(cluster_config)],
             cwd=CLUSTER_SCRIPTS_DIR,
             env=env,
         )
 
-        logger.info("Waiting 5s for nodes to warmup...")
-        time.sleep(5)
-    else:
-        logger.error("cluster/start.sh missing, cannot start nodes!")
-        raise RuntimeError("Missing start.sh")
+        # 2.5 Pre-start hook (e.g. start MockAnvil before node)
+        if hooks and hasattr(hooks, "pre_start"):
+            logger.info(f"Running pre_start hook from {hooks_path}")
+            hooks.pre_start(test_dir, env, pytest_args or [])
 
-    # 3.5 Faucet Initialization
-    init_faucet_if_needed(test_dir, cluster_config, env)
+        # 3. Start Nodes
+        start_script = CLUSTER_SCRIPTS_DIR / "start.sh"
+        if start_script.exists():
+            logger.info("Starting cluster nodes...")
+            # start.sh doesn't mostly need artifacts dir (it uses config from deploy),
+            # but passing env doesn't hurt.
+            run_command(
+                ["bash", str(start_script), "--config", str(cluster_config)],
+                cwd=CLUSTER_SCRIPTS_DIR,
+                env=env,
+            )
+
+            logger.info("Waiting 5s for nodes to warmup...")
+            time.sleep(5)
+        else:
+            logger.error("cluster/start.sh missing, cannot start nodes!")
+            raise RuntimeError("Missing start.sh")
+
+        # 3.5 Faucet Initialization
+        init_faucet_if_needed(test_dir, cluster_config, env)
 
     # 4. Run Pytests
     logger.info(f"Running pytst in {test_dir}...")
@@ -261,7 +269,9 @@ def run_test_suite(
         raise
     finally:
         # 5. Teardown
-        if no_cleanup and not success:
+        if resume:
+            logger.info("♻️  Reuse-cluster mode: skipping teardown")
+        elif no_cleanup and not success:
             logger.warning(
                 f"Test failed and --no-cleanup set. Cluster left running using config: {cluster_config}"
             )
@@ -282,7 +292,7 @@ def run_test_suite(
         # MockAnvil runs as a daemon thread in this process — it dies
         # when we exit anyway, but explicit cleanup is cleaner and
         # prevents the relayer from crashing on connection loss.
-        if hooks and hasattr(hooks, "post_stop"):
+        if not resume and hooks and hasattr(hooks, "post_stop"):
             logger.info("Running post_stop hook...")
             try:
                 hooks.post_stop(test_dir, env)
@@ -301,6 +311,12 @@ def main():
         "--force-init",
         action="store_true",
         help="Force regeneration of cluster artifacts (ignore cache)",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume with existing cluster: skip cleanup/init/deploy/start/stop, "
+             "only run pytest. Useful for re-running tests against an already deployed cluster.",
     )
     # Long-running suites excluded from CI by default.
     # Run them explicitly: runner.py long_test
@@ -385,6 +401,7 @@ def main():
                     no_cleanup=args.no_cleanup,
                     pytest_args=pytest_args,
                     force_init=args.force_init,
+                    resume=args.resume,
                 )
             except Exception:
                 failed_suites.append(test_dir.name)
