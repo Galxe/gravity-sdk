@@ -17,38 +17,19 @@ concurrency:
 
 jobs:
   # ==========================================================================
-  # Gate - skip E2E if it already passed or is running for the same commit
+  # Gate – reusable approval + duplicate-run + changed-files check
   # ==========================================================================
   gate:
     name: E2E Gate
-    runs-on: ubuntu-latest
     if: >
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request_review' && github.event.review.state == 'approved' &&
        (github.event.pull_request.base.ref == 'main' ||
         startsWith(github.event.pull_request.base.ref, 'gravity-testnet-v')))
-    outputs:
-      should_run: ${{ steps.check.outputs.should_run }}
-    steps:
-      - name: Check for duplicate E2E runs
-        id: check
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "should_run=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-          OTHER_RUNS=$(gh api \
-            "repos/${{ github.repository }}/actions/workflows/e2e-docker.yml/runs?head_sha=${HEAD_SHA}" \
-            --jq "[.workflow_runs[] | select(.id != ${{ github.run_id }} and (.status == \"in_progress\" or .conclusion == \"success\"))] | length")
-          if [ "$OTHER_RUNS" -gt "0" ]; then
-            echo "E2E already running or passed for commit ${HEAD_SHA}. Skipping."
-            echo "should_run=false" >> $GITHUB_OUTPUT
-          else
-            echo "should_run=true" >> $GITHUB_OUTPUT
-          fi
+    uses: ./.github/workflows/gate.yml
+    with:
+      workflow_file: e2e-docker.yml
+      ignore_patterns: 'book/*|scripts/*|template_config/*|*.md|bin/sentinel/*'
 
   e2e-test:
     name: E2E Test
@@ -58,34 +39,6 @@ jobs:
     timeout-minutes: 120
 
     steps:
-    - name: Check changed files
-      if: github.event_name == 'pull_request_review'
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        CHANGED_FILES=$(gh api \
-          "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" \
-          --paginate --jq '.[].filename')
-
-        HAS_RELEVANT_CHANGES=false
-        while IFS= read -r file; do
-          case "${file}" in
-            book/*|scripts/*|template_config/*|*.md|bin/sentinel/*)
-              echo "  [IGNORED] ${file}"
-              ;;
-            *)
-              echo "  [RELEVANT] ${file}"
-              HAS_RELEVANT_CHANGES=true
-              ;;
-          esac
-        done <<< "${CHANGED_FILES}"
-
-        if [ "${HAS_RELEVANT_CHANGES}" = "false" ]; then
-          echo "All changes are in ignored paths. Skipping E2E test."
-          exit 1
-        fi
-        echo "✓ Found relevant code changes."
-
     - name: Checkout
       uses: actions/checkout@v4
 
