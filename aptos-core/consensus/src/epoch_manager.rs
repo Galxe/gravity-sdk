@@ -1875,7 +1875,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     /// Advance the block sync progress for fullnode.
     fn advance_block_sync(&self, peer_id: Author, sync_info: Box<SyncInfo>) {
         if self.is_current_epoch_validator {
-            return;
+            return
         }
 
         info!("advancing block sync from peer {peer_id}. epoch: {}, highest_ordered_round: {}, highest_commit_round: {}", sync_info.epoch(), sync_info.highest_ordered_round(), sync_info.highest_commit_round());
