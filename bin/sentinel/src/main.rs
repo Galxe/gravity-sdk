@@ -47,6 +47,9 @@ async fn main() -> Result<()> {
     let analyzer = Analyzer::new(&config.monitoring.error_pattern)?;
     let notifier = Notifier::new(config.alerting.clone());
 
+    // Verify webhook connectivity on startup
+    notifier.verify_webhooks().await.context("Webhook verification failed")?;
+
     // Start Probe if configured
     if let Some(probe_config) = config.probe {
         let probe = Probe::new(probe_config, notifier.clone());
