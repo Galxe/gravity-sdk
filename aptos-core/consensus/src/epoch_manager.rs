@@ -89,7 +89,7 @@ use gaptos::{
         pvss::{traits::Transcript, Player},
         weighted_vuf::traits::WeightedVUF,
     },
-    aptos_event_notifications::ReconfigNotificationListener,
+    aptos_event_notifications::{ReconfigNotification, ReconfigNotificationListener},
     aptos_infallible::{duration_since_epoch, Mutex},
     aptos_logger::prelude::*,
     aptos_network::{
@@ -592,7 +592,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .await
             .context(format!("[EpochManager] State sync to new epoch {}", ledger_info))
             .expect("Failed to sync to new epoch");
-        monitor!("reconfig", self.await_reconfig_notification().await);
+        let reconfig_notification = monitor!("reconfig", self.await_reconfig_notification().await);
+        monitor!("reconfig", self.start_new_epoch(reconfig_notification.on_chain_configs).await);
         Ok(())
     }
 
@@ -1923,13 +1924,11 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         }
     }
 
-    async fn await_reconfig_notification(&mut self) {
-        let reconfig_notification = self
-            .reconfig_events
+    async fn await_reconfig_notification(&mut self) -> ReconfigNotification<P> {
+        self.reconfig_events
             .next()
             .await
-            .expect("Reconfig sender dropped, unable to start new epoch");
-        self.start_new_epoch(reconfig_notification.on_chain_configs).await;
+            .expect("Reconfig sender dropped, unable to start new epoch")
     }
 
     pub async fn start(
@@ -1938,10 +1937,10 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         mut network_receivers: NetworkReceivers,
     ) {
         // initial start of the processor
-        self.await_reconfig_notification().await;
-
+        let reconfig_notification = self.await_reconfig_notification().await;
         // Update block buffer manager with the correct epoch from epoch_state
-        get_block_buffer_manager().update_epoch(self.epoch()).await;
+        get_block_buffer_manager().init_epoch(reconfig_notification.on_chain_configs.epoch()).await;
+        self.start_new_epoch(reconfig_notification.on_chain_configs).await;
 
         let mut request_sync_info_interval = tokio::time::interval(Duration::from_millis(
             std::env::var("GRAVITY_REQUEST_SYNC_INFO_INTERVAL_MS")
