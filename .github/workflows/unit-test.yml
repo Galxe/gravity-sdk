@@ -1,0 +1,61 @@
+name: Unit Tests
+
+# TODO: temporarily disabled — re-enable when unit tests are ready
+on:
+  pull_request_review:
+    types: [submitted]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUSTFLAGS: "--cfg tokio_unstable"
+
+# Queue (don't cancel) redundant runs on the same PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  # ==========================================================================
+  # Gate – reusable approval + duplicate-run + changed-files check
+  # ==========================================================================
+  gate:
+    name: UT Gate
+    # ⬇️ Temporarily disabled
+    if: false
+    # if: >
+    #   github.event_name == 'workflow_dispatch' ||
+    #   (github.event.review.state == 'approved' &&
+    #    (github.event.pull_request.base.ref == 'main' ||
+    #     startsWith(github.event.pull_request.base.ref, 'gravity-testnet-v')))
+    uses: ./.github/workflows/gate.yml
+    with:
+      workflow_file: unit-test.yml
+      ignore_patterns: 'book/*|scripts/*|template_config/*|*.md|genesis/*'
+
+  # Run unit tests — runs after PR approval
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache
+          sudo docker image prune --all --force
+          df -h
+      - uses: actions/checkout@v4
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev mold
+      - name: Run cargo cache
+        uses: Swatinem/rust-cache@v2
+      - name: Run tests
+        run: cargo test --workspace --exclude smoke-test
+        env:
+          CARGO_BUILD_JOBS: "2"
+          RUSTFLAGS: "--cfg tokio_unstable -C link-arg=-fuse-ld=mold"

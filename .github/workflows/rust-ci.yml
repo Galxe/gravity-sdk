@@ -32,7 +32,7 @@ jobs:
             "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" \
             --paginate --jq '.[].filename')
 
-          IGNORE_PATTERNS="book/*|scripts/*|template_config/*|*.md|gravity_e2e/*"
+          IGNORE_PATTERNS="book/*|scripts/*|template_config/*|*.md|gravity_e2e/*|genesis/*"
 
           HAS_RELEVANT_CHANGES=false
           while IFS= read -r file; do
