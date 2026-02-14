@@ -324,11 +324,12 @@ def main():
 
     parser.add_argument(
         "--exclude",
-        nargs="+",
-        default=DEFAULT_EXCLUDES,
+        action="append",
+        default=None,
         metavar="SUITE",
         help="Exclude specific test suites by name (e.g. --exclude fuzzy_cluster). "
-             "Default: %(default)s",
+             "Can be specified multiple times. "
+             "Always excludes: %(const)s",
     )
     # We use parse_known_args to let everything else slide through as potential pytest args or suites
     args, unknown = parser.parse_known_args()
@@ -369,12 +370,12 @@ def main():
         # If no specific suites named, run all (with excludes applied)
         if not suites_to_run:
             test_dirs = all_test_dirs
-            # Apply --exclude filter only when auto-discovering suites.
-            # Explicitly named suites are never excluded.
+            # Always include DEFAULT_EXCLUDES, plus any user-specified excludes.
+            all_excludes = set(DEFAULT_EXCLUDES)
             if args.exclude:
-                excluded = set(args.exclude)
-                test_dirs = [d for d in test_dirs if d.name not in excluded]
-                logger.info(f"Excluded suites: {args.exclude}")
+                all_excludes.update(args.exclude)
+            test_dirs = [d for d in test_dirs if d.name not in all_excludes]
+            logger.info(f"Excluded suites: {sorted(all_excludes)}")
         else:
             test_dirs = suites_to_run
 

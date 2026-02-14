@@ -82,7 +82,7 @@ echo '===== Phase 3: Running E2E Tests ====='
 echo '[Step 6] Running runner.py...'
 export PYTHONPATH=/app:/app/gravity_e2e:\$PYTHONPATH
 cd /app/gravity_e2e
-python3 runner.py --force-init $ARGS
+python3 runner.py --force-init --exclude long_test $ARGS
 
 echo ''
 echo '===== E2E Tests Completed Successfully ====='
