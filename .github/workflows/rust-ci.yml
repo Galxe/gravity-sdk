@@ -34,17 +34,32 @@ jobs:
 
           IGNORE_PATTERNS="book/*|scripts/*|template_config/*|*.md|gravity_e2e/*|genesis/*"
 
+          # Split pipe-separated patterns into an array
+          IFS='|' read -ra PATTERNS <<< "$IGNORE_PATTERNS"
+
           HAS_RELEVANT_CHANGES=false
           while IFS= read -r file; do
-            case "${file}" in
-              $IGNORE_PATTERNS)
-                echo "  [IGNORED] ${file}"
-                ;;
-              *)
-                echo "  [RELEVANT] ${file}"
-                HAS_RELEVANT_CHANGES=true
-                ;;
-            esac
+            IGNORED=false
+            for pattern in "${PATTERNS[@]}"; do
+              # If pattern ends with /*, match the directory prefix to handle
+              # nested files (e.g. gravity_e2e/* should match gravity_e2e/scripts/foo.sh)
+              if [[ "$pattern" == *'/*' ]]; then
+                prefix="${pattern%/*}/"
+                if [[ "$file" == "$prefix"* ]]; then
+                  IGNORED=true
+                  break
+                fi
+              elif [[ "$file" == $pattern ]]; then
+                IGNORED=true
+                break
+              fi
+            done
+            if [ "$IGNORED" = "true" ]; then
+              echo "  [IGNORED] ${file}"
+            else
+              echo "  [RELEVANT] ${file}"
+              HAS_RELEVANT_CHANGES=true
+            fi
           done <<< "${CHANGED_FILES}"
 
           if [ "${HAS_RELEVANT_CHANGES}" = "false" ]; then
