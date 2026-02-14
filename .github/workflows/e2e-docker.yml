@@ -10,51 +10,36 @@ on:
         required: false
         default: ''
 
-# Cancel redundant runs on the same PR
+# Queue (don't cancel) redundant runs on the same PR
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  e2e-test:
-    name: E2E Test
-    runs-on: [self-hosted, linux]
-    timeout-minutes: 120
+  # ==========================================================================
+  # Gate – reusable approval + duplicate-run + changed-files check
+  # ==========================================================================
+  gate:
+    name: E2E Gate
     if: >
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request_review' && github.event.review.state == 'approved' &&
+       (github.event.review.author_association == 'OWNER' || github.event.review.author_association == 'MEMBER') &&
        (github.event.pull_request.base.ref == 'main' ||
         startsWith(github.event.pull_request.base.ref, 'gravity-testnet-v')))
+    uses: ./.github/workflows/gate.yml
+    with:
+      workflow_file: e2e-docker.yml
+      ignore_patterns: 'book/*|scripts/*|template_config/*|*.md|bin/sentinel/*'
+
+  e2e-test:
+    name: E2E Test
+    runs-on: [self-hosted, linux]
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
+    timeout-minutes: 120
 
     steps:
-    - name: Check changed files
-      if: github.event_name == 'pull_request_review'
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        CHANGED_FILES=$(gh api \
-          "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" \
-          --paginate --jq '.[].filename')
-
-        HAS_RELEVANT_CHANGES=false
-        while IFS= read -r file; do
-          case "${file}" in
-            book/*|scripts/*|template_config/*|*.md|bin/sentinel/*)
-              echo "  [IGNORED] ${file}"
-              ;;
-            *)
-              echo "  [RELEVANT] ${file}"
-              HAS_RELEVANT_CHANGES=true
-              ;;
-          esac
-        done <<< "${CHANGED_FILES}"
-
-        if [ "${HAS_RELEVANT_CHANGES}" = "false" ]; then
-          echo "All changes are in ignored paths. Skipping E2E test."
-          exit 1
-        fi
-        echo "✓ Found relevant code changes."
-
     - name: Checkout
       uses: actions/checkout@v4
 

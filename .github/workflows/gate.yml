@@ -1,0 +1,105 @@
+name: CI Gate
+
+# Reusable workflow: approval gate + duplicate-run check + changed-files filter
+on:
+  workflow_call:
+    inputs:
+      workflow_file:
+        description: 'Workflow filename for duplicate-run detection (e.g. rust-ci.yml)'
+        required: true
+        type: string
+      ignore_patterns:
+        description: >
+          Pipe-separated glob patterns to ignore when checking changed files.
+          Example: 'book/*|scripts/*|*.md'
+        required: true
+        type: string
+    outputs:
+      should_run:
+        description: 'Whether downstream jobs should run'
+        value: ${{ jobs.gate.outputs.should_run }}
+
+jobs:
+  gate:
+    name: Gate
+    runs-on: ubuntu-latest
+    # The approval / branch filter is applied by the CALLER's top-level `if`
+    # or trigger events, so no extra `if` is needed here.
+    outputs:
+      should_run: ${{ steps.final.outputs.should_run }}
+    steps:
+      # ── 1. Duplicate-run check ──────────────────────────────────────────
+      - name: Check for duplicate runs
+        id: dup
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          OTHER_RUNS=$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/${{ inputs.workflow_file }}/runs?head_sha=${HEAD_SHA}" \
+            --jq "[.workflow_runs[] | select(.id != ${{ github.run_id }} and (.status == \"in_progress\" or .conclusion == \"success\"))] | length")
+          if [ "$OTHER_RUNS" -gt "0" ]; then
+            echo "CI already running or passed for commit ${HEAD_SHA}. Skipping."
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          else
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          fi
+
+      # ── 2. Changed-files relevance check ───────────────────────────────
+      - name: Check changed files
+        id: files
+        if: steps.dup.outputs.should_run == 'true' && github.event_name == 'pull_request_review'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CHANGED_FILES=$(gh api \
+            "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" \
+            --paginate --jq '.[].filename')
+
+          IGNORE_PATTERNS="${{ inputs.ignore_patterns }}"
+
+          HAS_RELEVANT_CHANGES=false
+          while IFS= read -r file; do
+            case "${file}" in
+              $IGNORE_PATTERNS)
+                echo "  [IGNORED] ${file}"
+                ;;
+              *)
+                echo "  [RELEVANT] ${file}"
+                HAS_RELEVANT_CHANGES=true
+                ;;
+            esac
+          done <<< "${CHANGED_FILES}"
+
+          if [ "${HAS_RELEVANT_CHANGES}" = "false" ]; then
+            echo "All changes are in ignored paths. Skipping."
+            echo "has_relevant=false" >> $GITHUB_OUTPUT
+          else
+            echo "✓ Found relevant code changes."
+            echo "has_relevant=true" >> $GITHUB_OUTPUT
+          fi
+
+      # ── 3. Final decision ──────────────────────────────────────────────
+      - name: Determine final result
+        id: final
+        run: |
+          DUP_RESULT="${{ steps.dup.outputs.should_run }}"
+          FILE_RESULT="${{ steps.files.outputs.has_relevant }}"
+
+          # If dup check already said no, skip
+          if [ "$DUP_RESULT" != "true" ]; then
+            echo "should_run=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # If files check ran and said no relevant changes, skip
+          if [ "$FILE_RESULT" = "false" ]; then
+            echo "should_run=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "should_run=true" >> $GITHUB_OUTPUT
