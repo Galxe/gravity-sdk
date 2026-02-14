@@ -32,4 +32,4 @@ echo "============================================="
 export PYTHONPATH="$REPO_ROOT:$PYTHONPATH"
 
 # Execute runner
-python3 "$SCRIPT_DIR/runner.py" "$@"
+python3 "$SCRIPT_DIR/runner.py" --exclude long_test "$@"

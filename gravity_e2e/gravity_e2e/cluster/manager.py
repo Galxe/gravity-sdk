@@ -388,14 +388,18 @@ class Cluster:
             return state
         return None
 
-    async def set_full_live(self, timeout: int = 60) -> bool:
+    async def set_full_live(self, timeout: int = 60, max_retries: int = 3) -> bool:
         """
         Ensure ALL nodes are RUNNING. Blocks until converged or timeout.
         Returns True if all nodes are RUNNING.
+
+        If any node fails to stay alive after max_retries start attempts,
+        returns False immediately (fast-fail on crash loops).
         """
         import time
 
         deadline = time.time() + timeout
+        start_attempts: dict[str, int] = {nid: 0 for nid in self.nodes}
 
         while time.time() < deadline:
             # Check all nodes
@@ -416,21 +420,43 @@ class Cluster:
 
                 if state != NodeState.RUNNING:
                     all_running = False
-                    if state == NodeState.STOPPED:
-                        LOG.info(f"Starting stopped node {node.id}...")
-                        tasks.append(node.start())
-                    elif state == NodeState.STALE:
-                        LOG.info(f"Cleaning up stale node {node.id}...")
-                        # Restart stale node
 
-                        async def restart_node(n):
-                            await n.stop()
-                            await n.start()
+                    if state in (NodeState.STOPPED, NodeState.STALE, NodeState.UNKNOWN):
+                        start_attempts[node.id] += 1
 
-                        tasks.append(restart_node(node))
-                    elif state == NodeState.UNKNOWN:
-                        LOG.info(f"Starting unknown node {node.id}...")
-                        tasks.append(node.start())
+                        if start_attempts[node.id] > max_retries:
+                            LOG.error(
+                                f"❌ Node {node.id} failed to stay alive after "
+                                f"{max_retries} start attempts, aborting."
+                            )
+                            return False
+
+                        if state == NodeState.STOPPED:
+                            LOG.info(
+                                f"Starting stopped node {node.id}... "
+                                f"(attempt {start_attempts[node.id]}/{max_retries})"
+                            )
+                            tasks.append(node.start())
+                        elif state == NodeState.STALE:
+                            LOG.info(
+                                f"Cleaning up stale node {node.id}... "
+                                f"(attempt {start_attempts[node.id]}/{max_retries})"
+                            )
+
+                            async def restart_node(n):
+                                await n.stop()
+                                await n.start()
+
+                            tasks.append(restart_node(node))
+                        elif state == NodeState.UNKNOWN:
+                            LOG.info(
+                                f"Starting unknown node {node.id}... "
+                                f"(attempt {start_attempts[node.id]}/{max_retries})"
+                            )
+                            tasks.append(node.start())
+                else:
+                    # Node is running — reset its retry counter
+                    start_attempts[node.id] = 0
 
             if all_running:
                 LOG.info("All nodes are RUNNING.")

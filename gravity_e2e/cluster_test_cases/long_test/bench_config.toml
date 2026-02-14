@@ -1,0 +1,27 @@
+# Gravity Bench Configuration for Long-Running Failover Test
+# TPS intentionally low (10) to run alongside failover injection
+
+contract_config_path = "deploy.json"
+target_tps = 10
+nodes = [
+    { rpc_url = "http://localhost:8549", chain_id = 1337 },
+]
+num_tokens = 2
+enable_swap_token = false
+address_pool_type = "random"
+
+[faucet]
+private_key = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+faucet_level = 10
+wait_duration_secs = 5
+fauce_eth_balance = "100000000000000000000"
+
+[accounts]
+num_accounts = 1000
+
+[performance]
+num_senders = 10
+max_pool_size = 1000
+# 0 = run indefinitely
+duration_secs = 0
+sampling = 10

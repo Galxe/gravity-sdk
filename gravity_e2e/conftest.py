@@ -134,6 +134,10 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "validator: mark test as validator management test"
     )
+    config.addinivalue_line(
+        "markers",
+        "longrun: mark test as long-running stability test (excluded from CI)",
+    )
 
 
 def pytest_collection_modifyitems(session, config, items):
