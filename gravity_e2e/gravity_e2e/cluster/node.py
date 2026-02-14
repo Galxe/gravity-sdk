@@ -118,6 +118,11 @@ class Node:
         """Shortcut to get consensus public key from identity."""
         return self.identity.consensus_public_key
 
+    @property
+    def consensus_pop(self) -> str:
+        """Shortcut to get consensus proof of possession from identity."""
+        return self.identity.consensus_pop
+
     def _pid_exists(self) -> bool:
         """Check if process from PID file is alive."""
         if not self.pid_file.exists():
