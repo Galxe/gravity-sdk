@@ -10,44 +10,35 @@ env:
   CARGO_INCREMENTAL: "0"
   RUSTFLAGS: "--cfg tokio_unstable"
 
-# Cancel redundant runs on the same PR
+# Queue (don't cancel) redundant runs on the same PR
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
+  # ==========================================================================
+  # Gate – reusable approval + duplicate-run + changed-files check
+  # ==========================================================================
+  gate:
+    name: CI Gate
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.review.state == 'approved' &&
+       (github.event.review.author_association == 'OWNER' || github.event.review.author_association == 'MEMBER') &&
+       (github.event.pull_request.base.ref == 'main' ||
+        startsWith(github.event.pull_request.base.ref, 'gravity-testnet-v')))
+    uses: ./.github/workflows/gate.yml
+    with:
+      workflow_file: rust-ci.yml
+      ignore_patterns: 'book/*|scripts/*|template_config/*|*.md'
+
   # Rust linting with clippy — runs after PR approval
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.review.state == 'approved' &&
-       (github.event.pull_request.base.ref == 'main' ||
-        startsWith(github.event.pull_request.base.ref, 'gravity-testnet-v')))
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
     steps:
-      - name: Check changed files
-        if: github.event_name == 'pull_request_review'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          CHANGED_FILES=$(gh api \
-            "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" \
-            --paginate --jq '.[].filename')
-          HAS_RELEVANT_CHANGES=false
-          while IFS= read -r file; do
-            case "${file}" in
-              book/*|scripts/*|template_config/*|*.md)
-                ;;
-              *)
-                HAS_RELEVANT_CHANGES=true
-                ;;
-            esac
-          done <<< "${CHANGED_FILES}"
-          if [ "${HAS_RELEVANT_CHANGES}" = "false" ]; then
-            echo "All changes are in ignored paths. Skipping."
-            exit 1
-          fi
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet
@@ -72,34 +63,9 @@ jobs:
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.review.state == 'approved' &&
-       (github.event.pull_request.base.ref == 'main' ||
-        startsWith(github.event.pull_request.base.ref, 'gravity-testnet-v')))
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
     steps:
-      - name: Check changed files
-        if: github.event_name == 'pull_request_review'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          CHANGED_FILES=$(gh api \
-            "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" \
-            --paginate --jq '.[].filename')
-          HAS_RELEVANT_CHANGES=false
-          while IFS= read -r file; do
-            case "${file}" in
-              book/*|scripts/*|template_config/*|*.md)
-                ;;
-              *)
-                HAS_RELEVANT_CHANGES=true
-                ;;
-            esac
-          done <<< "${CHANGED_FILES}"
-          if [ "${HAS_RELEVANT_CHANGES}" = "false" ]; then
-            echo "All changes are in ignored paths. Skipping."
-            exit 1
-          fi
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet
