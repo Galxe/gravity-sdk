@@ -38,12 +38,45 @@ jobs:
             echo "should_run=true" >> $GITHUB_OUTPUT
             exit 0
           fi
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-          OTHER_RUNS=$(gh api \
-            "repos/${{ github.repository }}/actions/workflows/${{ inputs.workflow_file }}/runs?head_sha=${HEAD_SHA}" \
-            --jq "[.workflow_runs[] | select(.id != ${{ github.run_id }} and (.status == \"in_progress\" or .conclusion == \"success\"))] | length")
-          if [ "$OTHER_RUNS" -gt "0" ]; then
-            echo "CI already running or passed for commit ${HEAD_SHA}. Skipping."
+
+          # Use PR branch instead of head_sha so that the check is PR-wide,
+          # not commit-specific.  Once CI passes on any commit in the PR,
+          # subsequent approvals (even after new pushes) will be skipped.
+          # The author can always re-run manually if needed.
+          PR_BRANCH="${{ github.event.pull_request.head.ref }}"
+
+          # Check for in-progress runs on this PR (any commit)
+          IN_PROGRESS=$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/${{ inputs.workflow_file }}/runs?branch=${PR_BRANCH}" \
+            --jq "[.workflow_runs[] | select(.id != ${{ github.run_id }} and .status == \"in_progress\")] | length")
+          if [ "$IN_PROGRESS" -gt "0" ]; then
+            echo "CI already in progress for branch ${PR_BRANCH}. Skipping."
+            echo "should_run=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check for successful runs on this PR (any commit) — but only
+          # count runs where real test jobs actually ran (not just gate +
+          # skipped downstream jobs)
+          SUCCESSFUL_RUN_IDS=$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/${{ inputs.workflow_file }}/runs?branch=${PR_BRANCH}" \
+            --jq "[.workflow_runs[] | select(.id != ${{ github.run_id }} and .conclusion == \"success\")] | .[].id")
+
+          HAS_REAL_SUCCESS=false
+          for RUN_ID in $SUCCESSFUL_RUN_IDS; do
+            # Count jobs that actually completed (not skipped), excluding gate jobs
+            REAL_JOBS=$(gh api \
+              "repos/${{ github.repository }}/actions/runs/$RUN_ID/jobs" \
+              --jq '[.jobs[] | select(.conclusion == "success" and (.name | test("(?i)gate") | not))] | length')
+            if [ "$REAL_JOBS" -gt "0" ]; then
+              echo "Found previous run #$RUN_ID with real test execution on branch ${PR_BRANCH}."
+              HAS_REAL_SUCCESS=true
+              break
+            fi
+          done
+
+          if [ "$HAS_REAL_SUCCESS" = "true" ]; then
+            echo "CI already passed for branch ${PR_BRANCH}. Skipping."
             echo "should_run=false" >> $GITHUB_OUTPUT
           else
             echo "should_run=true" >> $GITHUB_OUTPUT
