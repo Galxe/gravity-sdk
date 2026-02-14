@@ -267,7 +267,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
     }
 
     pub async fn start_execution(&self) -> Result<(), String> {
-        let mut start_ordered_block = self.provider.last_block_number().unwrap() + 1;
+        let mut start_ordered_block = self.provider.recover_block_number().unwrap() + 1;
         // Initialize current_epoch from block buffer manager
         let buffer_epoch = get_block_buffer_manager().get_current_epoch().await;
         self.current_epoch.store(buffer_epoch, Ordering::SeqCst);
@@ -369,7 +369,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
     }
 
     pub async fn start_commit(&self) -> Result<(), String> {
-        let mut start_commit_num = self.provider.last_block_number().unwrap() + 1;
+        let mut start_commit_num = self.provider.recover_block_number().unwrap() + 1;
         loop {
             let epoch = self.current_epoch.load(Ordering::SeqCst);
             let mut shutdown = self.shutdown.resubscribe();
@@ -410,7 +410,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                 }
             }
 
-            let last_block_number = self.provider.last_block_number().unwrap();
+            let last_block_number = self.provider.recover_block_number().unwrap();
             get_block_buffer_manager()
                 .set_state(start_commit_num - 1, last_block_number)
                 .await

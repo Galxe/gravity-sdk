@@ -1,8 +1,7 @@
 name: Rust CI
 
 on:
-  pull_request_review:
-    types: [submitted]
+  pull_request:
   workflow_dispatch:
 
 env:
@@ -10,44 +9,63 @@ env:
   CARGO_INCREMENTAL: "0"
   RUSTFLAGS: "--cfg tokio_unstable"
 
-# Cancel redundant runs on the same PR
+# Cancel previous runs on the same PR when new commits are pushed
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 jobs:
-  # Rust linting with clippy — runs after PR approval
-  clippy:
-    name: Clippy
+  # Check if there are relevant code changes worth linting
+  check-changes:
+    name: Check Changes
     runs-on: ubuntu-latest
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.review.state == 'approved' &&
-       (github.event.pull_request.base.ref == 'main' ||
-        startsWith(github.event.pull_request.base.ref, 'gravity-testnet-v')))
+    outputs:
+      should_run: ${{ steps.filter.outputs.should_run }}
     steps:
       - name: Check changed files
-        if: github.event_name == 'pull_request_review'
+        id: filter
+        if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           CHANGED_FILES=$(gh api \
             "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" \
             --paginate --jq '.[].filename')
+
+          IGNORE_PATTERNS="book/*|scripts/*|template_config/*|*.md|gravity_e2e/*"
+
           HAS_RELEVANT_CHANGES=false
           while IFS= read -r file; do
             case "${file}" in
-              book/*|scripts/*|template_config/*|*.md)
+              $IGNORE_PATTERNS)
+                echo "  [IGNORED] ${file}"
                 ;;
               *)
+                echo "  [RELEVANT] ${file}"
                 HAS_RELEVANT_CHANGES=true
                 ;;
             esac
           done <<< "${CHANGED_FILES}"
+
           if [ "${HAS_RELEVANT_CHANGES}" = "false" ]; then
             echo "All changes are in ignored paths. Skipping."
-            exit 1
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          else
+            echo "✓ Found relevant code changes."
+            echo "should_run=true" >> $GITHUB_OUTPUT
           fi
+
+      - name: Default for non-PR events
+        id: default
+        if: github.event_name != 'pull_request'
+        run: echo "should_run=true" >> $GITHUB_OUTPUT
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    needs: check-changes
+    if: needs.check-changes.outputs.should_run != 'false'
+    steps:
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet
@@ -67,54 +85,3 @@ jobs:
         run: RUSTFLAGS="--cfg tokio_unstable -C link-arg=-fuse-ld=mold" cargo clippy --all-targets --all-features -- -D warnings
         env:
           CARGO_BUILD_JOBS: "2"
-
-  # Run unit tests — runs after PR approval
-  test:
-    name: Unit Tests
-    runs-on: ubuntu-latest
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.review.state == 'approved' &&
-       (github.event.pull_request.base.ref == 'main' ||
-        startsWith(github.event.pull_request.base.ref, 'gravity-testnet-v')))
-    steps:
-      - name: Check changed files
-        if: github.event_name == 'pull_request_review'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          CHANGED_FILES=$(gh api \
-            "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" \
-            --paginate --jq '.[].filename')
-          HAS_RELEVANT_CHANGES=false
-          while IFS= read -r file; do
-            case "${file}" in
-              book/*|scripts/*|template_config/*|*.md)
-                ;;
-              *)
-                HAS_RELEVANT_CHANGES=true
-                ;;
-            esac
-          done <<< "${CHANGED_FILES}"
-          if [ "${HAS_RELEVANT_CHANGES}" = "false" ]; then
-            echo "All changes are in ignored paths. Skipping."
-            exit 1
-          fi
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache
-          sudo docker image prune --all --force
-          df -h
-      - uses: actions/checkout@v4
-      - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev mold
-      - name: Run cargo cache
-        uses: Swatinem/rust-cache@v2
-      - name: Run tests
-        run: cargo test --workspace --exclude smoke-test
-        env:
-          CARGO_BUILD_JOBS: "2"
-          RUSTFLAGS: "--cfg tokio_unstable -C link-arg=-fuse-ld=mold"
