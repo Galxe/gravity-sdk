@@ -48,3 +48,14 @@ A passive MITM on the same network segment can collect DKG randomness, QC signat
 4. Return hard error and refuse to start on validation failure
 
 **Files:** `bin/sentinel/src/config.rs`, `bin/sentinel/src/probe.rs`
+
+
+## Review Comments
+
+### GSDK-001 & GSDK-002 & GSDK-003
+
+**Review Comments** reviewer: Lightman; state: Accepted; comments: Moved the gate from individual route definitions in `mod.rs` to the server startup in `consensus_api.rs`. A single `#[cfg(debug_assertions)]` block prevents the entire HTTP/HTTPS API server from starting in release builds. This is cleaner than scattering annotations across 10+ lambdas and routes. The tx submission endpoints (`/tx/submit_tx`, `/tx/get_tx_by_hash`) are also not needed in production since transactions are submitted via the mempool p2p network.
+
+### GSDK-004
+
+**Review Comments** reviewer: Lightman; state: rejected; comments: (1) Loopback and private IP ranges must remain reachable — sentinel commonly probes localhost services (e.g., local node health endpoints), so blocking `127.0.0.0/8` and RFC 1918 ranges would break legitimate use cases. (2) The threat model does not apply — the operator who deploys and configures sentinel is responsible for the probe URLs in their own `sentinel.toml`. If an attacker already has write access to the config file, they have host-level access and URL validation provides no meaningful defense. There is no untrusted user input involved.
