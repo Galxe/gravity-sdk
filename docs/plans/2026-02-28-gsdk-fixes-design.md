@@ -57,6 +57,8 @@ let signer = match txn.recover_signer() {
 
 **Files:** `crates/api/src/https/consensus.rs`, `crates/api/src/https/dkg.rs`
 
+**Review Comments** reviewer: Lightman; state: Accepted;
+
 ## GSDK-010: `GLOBAL_CONFIG_STORAGE` `.unwrap()` Crashes Relayer During Startup Race
 
 **Problem:** `GLOBAL_CONFIG_STORAGE.get().unwrap()` in `get_oracle_source_states()` panics if called before the storage is initialized. This can happen during node startup if the relayer is activated before the config storage is ready.
@@ -84,6 +86,8 @@ let config_storage = match GLOBAL_CONFIG_STORAGE.get() {
 3. `tower::limit::ConcurrencyLimitLayer::new(256)` (max concurrent requests)
 
 **Files:** `crates/api/src/https/mod.rs`
+
+**Review Comments** reviewer: Lightman; state: Accepted;
 
 ## GSDK-012: Sentinel Webhook URLs Not Validated for SSRF
 
@@ -116,6 +120,8 @@ if let Some(slack) = &config.alerting.slack_webhook {
 **Alternative:** If a single port is required, check `ConnectInfo` or a custom `Extension` set by the TLS acceptor to detect whether the connection is encrypted.
 
 **Files:** `crates/api/src/https/mod.rs`
+
+**Review Comments** reviewer: Lightman; state: Accepted;
 
 ## GSDK-014: Address Parse `unwrap()` Can Crash Server on Invalid Bind Address
 
