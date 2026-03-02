@@ -16,6 +16,9 @@ Date: 2026-02-28
 
 **Files:** `bin/gravity_node/src/reth_cli.rs`
 
+**Review Comments** reviewer: Lightman; state: Accepted;
+
+
 ## GSDK-007: Panic in Relayer `get_last_state` on Missing Cached Result
 
 **Problem:** `RelayerWrapper::get_last_state()` panics when `should_block_poll` returns `true` but no cached result exists. The panic message says "No cached result for uri" but the comment above says "fall through to poll". This is a logic bug: the panic should be a fallthrough to `poll_and_update_state()`.
@@ -26,6 +29,8 @@ warn!("No cached result for uri: {uri}, falling through to poll");
 // Fall through to poll below
 ```
 Remove the `return` path and let execution continue to `poll_and_update_state()`.
+
+**Review Comments** reviewer: AlexYue; state: pending; comment: to be resolved
 
 **Files:** `bin/gravity_node/src/relayer.rs`
 
@@ -45,6 +50,9 @@ let signer = match txn.recover_signer() {
 ```
 
 **Files:** `bin/gravity_node/src/mempool.rs`
+
+**Review Comments** reviewer: Lightman; state: Accepted;
+
 
 ## GSDK-009: Verbose Internal Error Messages in HTTP API Responses
 
@@ -75,6 +83,8 @@ let config_storage = match GLOBAL_CONFIG_STORAGE.get() {
 ```
 
 **Files:** `bin/gravity_node/src/relayer.rs`
+
+**Review Comments** reviewer: AlexYue; state: Reject; comment: global variable cannot return empty
 
 ## GSDK-011: No Rate Limiting or Request Size Limits on HTTP/HTTPS Endpoints
 
@@ -109,6 +119,8 @@ if let Some(slack) = &config.alerting.slack_webhook {
 
 **Files:** `bin/sentinel/src/config.rs`
 
+**Review Comments** reviewer: Lightman; state: Reject; comment: sentinel is locally deployed, no changes for now
+
 ## GSDK-013: `ensure_https` Middleware Ineffective for Plain TCP Connections
 
 **Problem:** `ensure_https` checks `req.uri().scheme_str()` but Axum/hyper does not populate the URI scheme for incoming TCP connections. When TLS is not configured (cert/key are `None`), the fallback path serves all routes (including "HTTPS-only" ones) over plain HTTP. The middleware may not reject these requests because `scheme_str()` returns `None` (not `"http"`).
@@ -131,6 +143,8 @@ if let Some(slack) = &config.alerting.slack_webhook {
 
 **Files:** `crates/api/src/https/mod.rs`
 
+**Review Comments** reviewer: Lightman; state: Accepted;
+
 ## GSDK-015: ReDoS Risk via User-Provided Regex in Sentinel Whitelist
 
 **Problem:** Whitelist CSV accepts arbitrary regex patterns. A crafted evil regex can freeze the sentinel via catastrophic backtracking.
@@ -138,6 +152,9 @@ if let Some(slack) = &config.alerting.slack_webhook {
 **Fix:** Use `RegexBuilder::new(pattern_str).size_limit(1 << 20).dfa_size_limit(1 << 20).build()` to limit compiled regex complexity. Log a warning and skip the rule if compilation exceeds the size limit.
 
 **Files:** `bin/sentinel/src/whitelist.rs`
+
+**Review Comments** reviewer: Lightman; state: Reject; comment: sentinel is locally deployed, no changes for now
+
 
 ## GSDK-016: Glob Pattern Injection in Sentinel File Monitoring
 
@@ -149,3 +166,5 @@ if let Some(slack) = &config.alerting.slack_webhook {
 3. Add a maximum depth limit for glob results
 
 **Files:** `bin/sentinel/src/config.rs`, `bin/sentinel/src/watcher.rs`
+
+**Review Comments** reviewer: Lightman; state: Reject; comment: sentinel is locally deployed, no changes for now
