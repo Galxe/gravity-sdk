@@ -3,7 +3,7 @@
 
 [dependencies.genesis_contracts]
 repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
-ref = "main"
+ref = "gravity-testnet-v1.0.0"
 
 # Single genesis validator
 [[genesis_validators]]
