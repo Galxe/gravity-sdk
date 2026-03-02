@@ -933,6 +933,8 @@ class Cluster:
             node.stake_pool,
             "--consensus-public-key",
             node.consensus_public_key,
+            "--consensus-pop",
+            node.consensus_pop,
             "--network-public-key",
             node.identity.network_public_key,
             "--validator-network-address",

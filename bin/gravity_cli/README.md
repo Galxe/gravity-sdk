@@ -120,7 +120,7 @@ gravity_cli validator join \
   --validator-network-address <addr>    # Format: /ip4/{host}/tcp/{port} (required)
   --fullnode-network-address <addr>     # Format: /ip4/{host}/tcp/{port} (required)
   [--moniker <name>]                    # Display name, max 31 bytes (default: "Gravity1")
-  [--consensus-pop <hex>]               # Proof of possession for BLS key (default: "")
+  [--consensus-pop <hex>]               # Proof of possession for BLS key
   [--gas-limit <num>]                   # Gas limit (default: 2000000)
   [--gas-price <wei>]                   # Gas price in wei (default: 20)
 ```

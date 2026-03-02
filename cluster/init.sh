@@ -18,11 +18,13 @@ prepare_node_keys() {
     log_info "  [$node_id] Checking identity..."
     
     if [ -f "$identity_file" ]; then
-        if grep -q "consensus_public_key" "$identity_file"; then
+        if ! grep -q "consensus_public_key" "$identity_file"; then
+             log_warn "  [$node_id] Old key format detected (missing consensus_public_key). Regenerating..."
+        elif ! grep -q "consensus_pop" "$identity_file"; then
+             log_warn "  [$node_id] Old key format detected (missing consensus_pop). Regenerating..."
+        else
              log_info "  [$node_id] Identity key exists."
              return 0
-        else
-             log_warn "  [$node_id] Old key format detected. Regenerating..."
         fi
     fi
     
