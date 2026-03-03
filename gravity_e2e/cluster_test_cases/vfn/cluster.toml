@@ -1,0 +1,42 @@
+# Gravity Cluster Configuration - 1 Validator + 1 VFN
+# Node deployment configuration only
+
+[cluster]
+name = "gravity-devnet-vfn"
+base_dir = "/tmp/gravity-cluster-vfn"
+
+[build]
+binary_path = "../target/quick-release/gravity_node"
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+host = "127.0.0.1"
+p2p_port = 6182
+vfn_port = 6192
+rpc_port = 8545
+metrics_port = 9003
+inspection_port = 10002
+https_port = 1024
+authrpc_port = 8553
+reth_p2p_port = 12026
+
+[[nodes]]
+id = "vfn1"
+role = "vfn"
+host = "127.0.0.1"
+p2p_port = 6183
+vfn_port = 6193
+rpc_port = 8546
+metrics_port = 9004
+inspection_port = 10003
+https_port = 1025
+authrpc_port = 8554
+reth_p2p_port = 12027
+
+[faucet_init]
+num_accounts = 10000
