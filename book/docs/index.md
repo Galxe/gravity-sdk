@@ -11,3 +11,6 @@
 ## Compatibility
 - [3.1 Compatibility with Ethereum Engine API](compatibility.md#Compatibility with Ethereum Engine API)
 - [3.2 Compatibility with Tendermint](compatibility.md#Compatibility with Tendermint)
+
+## Observability
+- [4.1 Grafana & Prometheus Deployment](grafana.md)
