@@ -91,6 +91,9 @@ reth_p2p_port = 12024
 > - **Validator mode**: `role = "validator"` — deploy generates `validator.yaml` config with a `validator_network` section
 > - **VFN mode**: `role = "vfn"` — deploy generates `validator_full_node.yaml` config with `base.role` set to `full_node`
 
+> [!NOTE]
+> When a node is started with **Validator mode** config but has not yet synced to the current epoch, transactions sent to this validator's RPC will **not** be forwarded to the network. Once the node joins the validator set and becomes `ACTIVE`, transactions will automatically be packaged and forwarded via **Quorum Store**.
+
 ## Step 3: Configure Relayer (Validator mode only)
 
 > [!IMPORTANT]
