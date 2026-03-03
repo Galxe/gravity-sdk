@@ -2,7 +2,7 @@
 
 [dependencies.genesis_contracts]
 repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
-ref = "gravity-testnet-v1.0.0"
+ref = "main"
 
 # Genesis validators with stake and voting power
 [[genesis_validators]]
@@ -38,6 +38,7 @@ epoch_interval_micros = 7200000000
 major_version = 1
 consensus_config = "0x0301010a00000000000000280000000000000001010000000a000000000000000100010200000000000000000020000000000000"
 execution_config = "0x00"
+initial_locked_until_micros = 1798848000000000
 
 [genesis.faucet]
 address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"

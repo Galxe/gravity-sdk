@@ -32,6 +32,7 @@ def get_genesis_defaults():
         "majorVersion": 1,
         "consensusConfig": "0x00",
         "executionConfig": "0x00",
+        "initialLockedUntilMicros": 1798848000000000,
         "validatorConfig": {
             "minimumBond": "1000000000000000000",
             "maximumBond": "1000000000000000000000000",
@@ -92,6 +93,7 @@ def build_genesis_config(config, genesis_cfg):
     result["majorVersion"] = genesis_cfg.get("major_version", defaults["majorVersion"])
     result["consensusConfig"] = genesis_cfg.get("consensus_config", defaults["consensusConfig"])
     result["executionConfig"] = genesis_cfg.get("execution_config", defaults["executionConfig"])
+    result["initialLockedUntilMicros"] = genesis_cfg.get("initial_locked_until_micros", defaults["initialLockedUntilMicros"])
     
     # validatorConfig
     vc = genesis_cfg.get("validator_config", {})
