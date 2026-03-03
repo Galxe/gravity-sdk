@@ -21,6 +21,7 @@ cat /home/gravity/gravity-testnet/my-node/config/identity.yaml
 Record the following fields (without the `0x` prefix):
 - `consensus_public_key`
 - `network_public_key`
+- `consensus_pop`
 
 ---
 
@@ -54,6 +55,7 @@ On success, the output will include `Pool address` — record it for the next st
   --stake-pool <STAKE_POOL_ADDRESS> \
   --consensus-public-key "<CONSENSUS_PUBLIC_KEY>" \
   --network-public-key "<NETWORK_PUBLIC_KEY>" \
+  --consensus-pop "CONSENSUS_POP" \
   --validator-network-address "/ip4/<YOUR_IP>/tcp/6180" \
   --fullnode-network-address "/ip4/<YOUR_IP>/tcp/6190" \
   --moniker "<MY_VALIDATOR_NAME>"
@@ -68,6 +70,7 @@ On success, the output will include `Pool address` — record it for the next st
 | `--stake-pool` | StakePool address created via `stake create` |
 | `--consensus-public-key` | From identity.yaml, **without `0x` prefix** |
 | `--network-public-key` | From identity.yaml, 64-char hex (32 bytes) |
+| `--consensus-pop` | From identity.yaml, **without `0x` prefix** |
 | `--validator-network-address` | P2P address, format `/ip4/{IP}/tcp/{port}`, CLI auto-appends noise-ik |
 | `--fullnode-network-address` | VFN address, format `/ip4/{IP}/tcp/{port}`, CLI auto-appends noise-ik |
 | `--moniker` | Validator name (max 31 bytes) |
