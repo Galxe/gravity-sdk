@@ -434,21 +434,15 @@ impl PersistentLivenessStorage for StorageWriteProxy {
 
         // Check if latest_block_number is the last block number of the previous epoch
         let ledger_db_arc = self.db.ledger_db.metadata_db_arc();
-        let is_last_block_of_prev_epoch = match (&*ledger_db_arc).iter::<EpochByBlockNumberSchema>()
-        {
-            Ok(mut iter) => {
-                iter.seek_to_last();
-                if let Some(Ok((last_block_num, _))) = iter.next() {
-                    latest_block_number == last_block_num
-                } else {
-                    false
+        let is_last_block_of_prev_epoch =
+            match (&*ledger_db_arc).get::<EpochByBlockNumberSchema>(&latest_block_number) {
+                Ok(Some(epoch)) => {
+                    info!("block_number {} is last block of epoch {}", latest_block_number, epoch);
+                    true
                 }
-            }
-            Err(_) => {
-                // Table might not exist yet
-                false
-            }
-        };
+                Ok(None) => false,
+                Err(_) => false,
+            };
 
         // Get ledger_info based on the check result
         let latest_ledger_info = if is_last_block_of_prev_epoch {
