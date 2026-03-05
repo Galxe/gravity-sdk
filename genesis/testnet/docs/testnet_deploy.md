@@ -91,13 +91,45 @@ reth_p2p_port = 12024
 > - **Validator mode**: `role = "validator"` — deploy generates `validator.yaml` config with a `validator_network` section
 > - **VFN mode**: `role = "vfn"` — deploy generates `validator_full_node.yaml` config with `base.role` set to `full_node`
 
-## Step 3: Initialize and Deploy
+> [!NOTE]
+> When a node is started with **Validator mode** config, transactions sent to this validator's RPC will **not** be forwarded to the network until the node has synced to the epoch in which it joins the validator set. Once the node reaches that epoch, transactions will automatically be packaged and forwarded via **Quorum Store**.
+
+## Step 3: Configure Relayer (Validator mode only)
+
+> [!IMPORTANT]
+> **Validator nodes** participate in Oracle consensus and must configure the relayer with an RPC provider for each monitored source chain. If you are running in **VFN mode**, skip this step.
+
+The default template at `cluster/templates/relayer_config.json.tpl` is **only an example**. Before deploying, edit this template to use an RPC endpoint geographically close to your node for optimal latency and reliability.
+
+Edit `cluster/templates/relayer_config.json.tpl`:
+
+```json
+{
+  "uri_mappings": {
+    "gravity://0/11155111/events?contract=0x60fD4D8fB846D95CcDB1B0b81c5fed1e8b183375&eventSignature=0x5646e682c7d994bf11f5a2c8addb60d03c83cda3b65025a826346589df43406e&fromBlock=10231540": "<YOUR_SEPOLIA_RPC_ENDPOINT>"
+  }
+}
+```
+
+**Currently monitored chain**: Ethereum Sepolia testnet (chain ID `11155111`).
+
+Replace `<YOUR_SEPOLIA_RPC_ENDPOINT>` with your preferred Sepolia RPC URL, e.g.:
+- `https://sepolia.infura.io/v3/<API_KEY>`
+- `https://eth-sepolia.g.alchemy.com/v2/<API_KEY>`
+- Any other Sepolia-compatible RPC provider
+
+> [!TIP]
+> The Gravity URI in the key must remain **exactly as shown** — only change the RPC endpoint value. Use a provider with stable uptime and low latency to your node, as this directly affects Oracle consensus performance.
+
+## Step 4: Initialize and Deploy
 
 ```bash
 cd gravity-sdk/cluster
 make init      # Generates identity (consensus_public_key + network_public_key)
 make deploy    # Generates runtime config and startup scripts
 ```
+
+`make deploy` will automatically copy the relayer template to each node's config directory as `relayer_config.json`.
 
 Directory structure after deployment:
 
@@ -112,7 +144,7 @@ Directory structure after deployment:
     │   │   (or validator_full_node.yaml)  # VFN mode
     │   ├── identity.yaml
     │   ├── reth_config.json
-    │   ├── relayer_config.json
+    │   ├── relayer_config.json          # ← from your configured template
     │   └── waypoint.txt
     ├── script/
     │   ├── start.sh
@@ -123,14 +155,14 @@ Directory structure after deployment:
     └── consensus_log/
 ```
 
-## Step 4: Start the Node
+## Step 5: Start the Node
 
 ```bash
 cd /home/gravity/gravity-testnet/my-node/script
 ./start.sh
 ```
 
-## Step 5: Verify the Node is Running
+## Step 6: Verify the Node is Running
 
 ```bash
 # Check process

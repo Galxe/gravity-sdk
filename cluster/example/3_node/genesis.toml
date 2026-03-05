@@ -1,4 +1,4 @@
-# Gravity Genesis Configuration - Long-Running Stability Test
+# Gravity Genesis Configuration - 3 Validator
 
 [dependencies.genesis_contracts]
 repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
@@ -32,33 +32,23 @@ vfn_port = 6192
 stake_amount = "2000000000000000000"
 voting_power = "2000000000000000000"
 
-[[genesis_validators]]
-id = "node4"
-address = "0x18c23753385ce7A60B15d171302E48b6AFf0BDC5"
-host = "127.0.0.1"
-p2p_port = 6183
-vfn_port = 6193
-stake_amount = "2000000000000000000"
-voting_power = "2000000000000000000"
-
 [genesis]
 chain_id = 1337
-epoch_interval_micros = 120000000  # 2 min
+epoch_interval_micros = 7200000000
 major_version = 1
 consensus_config = "0x0301010a00000000000000280000000000000001010000000a000000000000000100010200000000000000000020000000000000"
 execution_config = "0x00"
 
 [genesis.faucet]
 address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-private_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
-balance = "1000000000000000000000000000"
+balance = "0x2000000000000000000000000000000000000000000000000000000000000000"
 
 [genesis.validator_config]
 minimum_bond = "1000000000000000000"
 maximum_bond = "1000000000000000000000000"
 unbonding_delay_micros = 604800000000
 allow_validator_set_change = true
-voting_power_increase_limit_pct = 50
+voting_power_increase_limit_pct = 20
 max_validator_set_size = "100"
 auto_evict_enabled = false
 auto_evict_threshold = "0"
@@ -94,7 +84,6 @@ source_id = 11155111
 task_name = "sepolia"
 config = "gravity://0/11155111/events?contract=0x0f761B1B3c1aC9232C9015A7276692560aD6a05F&eventSignature=0x5646e682c7d994bf11f5a2c8addb60d03c83cda3b65025a826346589df43406e&fromBlock=10201260"
 
-# JWK config - Google OIDC provider
 [genesis.jwk_config]
 issuers = ["0x68747470733a2f2f6163636f756e74732e676f6f676c652e636f6d"]
 
