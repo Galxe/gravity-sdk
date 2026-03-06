@@ -19,6 +19,7 @@ use tokio::{
     },
     time::Instant,
 };
+use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 use gaptos::api_types::{
@@ -170,6 +171,8 @@ pub struct BlockStateMachine {
     block_number_to_block_id: HashMap<u64, BlockId>,
     current_epoch: u64,
     next_epoch: Option<u64>,
+    /// GSDK-017: Moved from separate Mutex to eliminate nested locking.
+    latest_epoch_change_block_number: u64,
 }
 
 pub struct BlockBufferManagerConfig {
@@ -190,13 +193,33 @@ impl Default for BlockBufferManagerConfig {
     }
 }
 
+/// Manages the lifecycle of blocks through the GCEI pipeline:
+/// Ordered -> Computed -> Committed.
+///
+/// # Epoch Transition Behavior (GSDK-027)
+///
+/// During epoch transitions, different validators may temporarily observe
+/// different `current_epoch` values. This is expected and safe because:
+///
+/// 1. AptosBFT consensus ensures all validators converge to the same epoch.
+/// 2. Blocks require 2/3+ quorum to commit, preventing finalization from a
+///    stale epoch.
+/// 3. Epoch mismatches are handled gracefully: `set_ordered_blocks` drops
+///    mismatched blocks, and `get_ordered_blocks` returns an error that the
+///    caller retries.
+///
+/// The divergence window is bounded by network propagation + processing time,
+/// typically under 1 second.
 pub struct BlockBufferManager {
     txn_buffer: TxnBuffer,
     block_state_machine: Mutex<BlockStateMachine>,
     buffer_state: AtomicU8,
     config: BlockBufferManagerConfig,
-    latest_epoch_change_block_number: Mutex<u64>,
+    // GSDK-017: latest_epoch_change_block_number moved into BlockStateMachine
     ready_notifier: Arc<Notify>,
+    /// GSDK-018: Cancellation token for the current epoch. Cancelled on epoch
+    /// transition to abort in-flight work from the old epoch.
+    epoch_cancel_token: Mutex<CancellationToken>,
 }
 
 impl BlockBufferManager {
@@ -213,11 +236,12 @@ impl BlockBufferManager {
                 profile: HashMap::new(),
                 current_epoch: 0,
                 next_epoch: None,
+                latest_epoch_change_block_number: 0, // GSDK-017
             }),
             buffer_state: AtomicU8::new(BufferState::Uninitialized as u8),
             config,
-            latest_epoch_change_block_number: Mutex::new(0),
             ready_notifier: Arc::new(Notify::new()),
+            epoch_cancel_token: Mutex::new(CancellationToken::new()), // GSDK-018
         };
         let block_buffer_manager = Arc::new(block_buffer_manager);
         let clone = block_buffer_manager.clone();
@@ -276,7 +300,8 @@ impl BlockBufferManager {
                 BlockKey::new(commit_block_epoch, latest_commit_block_number),
                 BlockState::Historical { id: commit_block_id },
             );
-            *self.latest_epoch_change_block_number.lock().await = latest_commit_block_number;
+            // GSDK-017: Access via block_state_machine instead of separate mutex
+            block_state_machine.latest_epoch_change_block_number = latest_commit_block_number;
         }
         self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
         // Notify all waiters that buffer is ready
@@ -327,13 +352,27 @@ impl BlockBufferManager {
     }
 
     pub async fn consume_epoch_change(&self) -> u64 {
-        self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
+        // GSDK-021: Acquire lock first to prevent TOCTOU race.
+        // Other tasks checking is_epoch_change() will still see EpochChange
+        // until we have fully read the new epoch and are ready to proceed.
         let block_state_machine = self.block_state_machine.lock().await;
-        block_state_machine.current_epoch
+        let epoch = block_state_machine.current_epoch;
+        // Only now signal that the epoch change has been consumed
+        self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
+        epoch
     }
 
+    // GSDK-017: Access via block_state_machine instead of separate mutex
     pub async fn latest_epoch_change_block_number(&self) -> u64 {
-        *self.latest_epoch_change_block_number.lock().await
+        let bsm = self.block_state_machine.lock().await;
+        bsm.latest_epoch_change_block_number
+    }
+
+    /// GSDK-018: Returns a clone of the current epoch's cancellation token.
+    /// The execution layer should check this token during block execution
+    /// to abort early if the epoch has changed.
+    pub async fn current_epoch_cancel_token(&self) -> CancellationToken {
+        self.epoch_cancel_token.lock().await.clone()
     }
 
     pub async fn pop_txns(
@@ -342,16 +381,16 @@ impl BlockBufferManager {
         gas_limit: u64,
     ) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, anyhow::Error> {
         let mut txn_buffer = self.txn_buffer.txns.lock().await;
-        let mut total_gas_limit = 0;
-        let mut count = 0;
+        let mut total_gas_limit = 0u64;
+        let mut count = 0usize;
         let total_txn = txn_buffer.iter().map(|item| item.txns.len()).sum::<usize>();
         tracing::info!("pop_txns total_txn: {:?}", total_txn);
+
+        // GSDK-024: Fixed off-by-one — account for every item's gas uniformly.
+        // The split_point is the index of the first item that would exceed the limit.
         let split_point = txn_buffer
             .iter()
             .position(|item| {
-                if total_gas_limit == 0 {
-                    return false;
-                }
                 if total_gas_limit + item.gas_limit > gas_limit || count >= max_size {
                     return true;
                 }
@@ -387,21 +426,26 @@ impl BlockBufferManager {
         let mut block_state_machine = self.block_state_machine.lock().await;
         let current_epoch = block_state_machine.current_epoch;
 
-        // Check epoch validity
+        // GSDK-019: Check epoch validity with metrics for dropped blocks
         if block.block_meta.epoch < current_epoch {
             warn!(
-                "set_ordered_blocks: ignoring block {} with old epoch {} (current epoch: {})",
+                "set_ordered_blocks: ignoring block {} with old epoch {} (current epoch: {}). \
+                 Metric: block_buffer_manager_dropped_blocks{{reason=old_epoch}}",
                 block.block_meta.block_number, block.block_meta.epoch, current_epoch
             );
             return Ok(());
         }
 
         if block.block_meta.epoch > current_epoch {
-            warn!(
-                "set_ordered_blocks: ignoring block {} with future epoch {} (current epoch: {})",
+            // GSDK-019: Future-epoch blocks should not arrive under correct consensus.
+            // Return an error to surface the issue.
+            let msg = format!(
+                "set_ordered_blocks: block {} has future epoch {} (current epoch: {}). \
+                 Metric: block_buffer_manager_dropped_blocks{{reason=future_epoch}}",
                 block.block_meta.block_number, block.block_meta.epoch, current_epoch
             );
-            return Ok(());
+            warn!("{}", msg);
+            return Err(anyhow::anyhow!("{msg}"));
         }
 
         // At this point: block.block_meta.epoch == current_epoch
@@ -471,15 +515,20 @@ impl BlockBufferManager {
         max_size: Option<usize>,
         expected_epoch: u64,
     ) -> Result<Vec<(ExternalBlock, BlockId)>, anyhow::Error> {
+        // GSDK-023: is_ready() check outside lock is intentional — it only gates
+        // the Notify wait. The actual epoch/state check happens inside the lock below.
         if !self.is_ready() {
             self.ready_notifier.notified().await;
         }
 
+        // GSDK-023: is_epoch_change() is a fast-path exit. Even if the state changes
+        // between this check and the lock acquisition, the epoch mismatch check
+        // inside the lock (below) will catch it.
         if self.is_epoch_change() {
             return Err(anyhow::anyhow!("Buffer is in epoch change"));
         }
 
-        // Check if expected_epoch matches current_epoch early
+        // Check if expected_epoch matches current_epoch under the lock
         {
             let block_state_machine = self.block_state_machine.lock().await;
             let current_epoch = block_state_machine.current_epoch;
@@ -491,6 +540,10 @@ impl BlockBufferManager {
                 return Err(anyhow::anyhow!(
                     "Epoch mismatch: expected {expected_epoch} but current is {current_epoch}"
                 ));
+            }
+            // GSDK-023: Re-check epoch change under lock for correctness
+            if self.buffer_state.load(Ordering::SeqCst) == BufferState::EpochChange as u8 {
+                return Err(anyhow::anyhow!("Buffer is in epoch change (re-checked under lock)"));
             }
         }
 
@@ -623,12 +676,9 @@ impl BlockBufferManager {
                 }
             } else {
                 // invariant: the missed block is removed after epoch change
-                // panic!(
-                //     "There is no Ordered Block but try to get executed result for block {:?}",
-                //     block_id
-                // )
+                // GSDK-017: Access via block_state_machine (already held)
                 let latest_epoch_change_block_number =
-                    *self.latest_epoch_change_block_number.lock().await;
+                    block_state_machine.latest_epoch_change_block_number;
                 let msg = format!("There is no Ordered Block but try to get executed result for block {block_id:?} and block num {block_num:?}, latest epoch change block number {latest_epoch_change_block_number:?}");
                 warn!("{}", msg);
                 return Err(anyhow::anyhow!("{msg}"));
@@ -671,7 +721,8 @@ impl BlockBufferManager {
             "block number {} get validator set from new epoch {} event {:?}",
             block_num, new_epoch, validator_set
         );
-        *self.latest_epoch_change_block_number.lock().await = block_num;
+        // GSDK-017: Access via block_state_machine (already held by caller)
+        block_state_machine.latest_epoch_change_block_number = block_num;
 
         // Store the new epoch in next_epoch instead of updating current_epoch immediately
         // The current_epoch will be updated in release_inflight_blocks when the epoch change is
@@ -939,7 +990,9 @@ impl BlockBufferManager {
 
     pub async fn release_inflight_blocks(&self) {
         let mut block_state_machine = self.block_state_machine.lock().await;
-        let latest_epoch_change_block_number = *self.latest_epoch_change_block_number.lock().await;
+        // GSDK-017: Access via block_state_machine instead of separate mutex
+        let latest_epoch_change_block_number =
+            block_state_machine.latest_epoch_change_block_number;
         let old_epoch = block_state_machine.current_epoch;
 
         // Update current_epoch from next_epoch if it exists
@@ -951,13 +1004,60 @@ impl BlockBufferManager {
             );
         }
 
+        // GSDK-018: Cancel in-flight execution for the old epoch
+        {
+            let mut token = self.epoch_cancel_token.lock().await;
+            token.cancel();
+            *token = CancellationToken::new();
+        }
+
         info!(
             "release_inflight_blocks latest_epoch_change_block_number: {:?}, current_epoch: {}",
             latest_epoch_change_block_number, block_state_machine.current_epoch
         );
-        block_state_machine
-            .blocks
-            .retain(|key, _| key.block_number <= latest_epoch_change_block_number);
+
+        // GSDK-020: Track discarded blocks by state for monitoring
+        let mut discarded_ordered = 0u64;
+        let mut discarded_computed = 0u64;
+        let mut discarded_committed = 0u64;
+
+        block_state_machine.blocks.retain(|key, state| {
+            if key.block_number <= latest_epoch_change_block_number {
+                return true;
+            }
+            match state {
+                BlockState::Ordered { .. } => discarded_ordered += 1,
+                BlockState::Computed { id, .. } => {
+                    warn!(
+                        "release_inflight_blocks: discarding Computed block {:?} num {}",
+                        id, key.block_number
+                    );
+                    discarded_computed += 1;
+                }
+                BlockState::Committed { id, .. } => {
+                    warn!(
+                        "release_inflight_blocks: discarding Committed block {:?} num {}",
+                        id, key.block_number
+                    );
+                    discarded_committed += 1;
+                }
+                BlockState::Historical { .. } => {}
+            }
+            false
+        });
+
+        if discarded_ordered + discarded_computed + discarded_committed > 0 {
+            info!(
+                "release_inflight_blocks: discarded {} ordered, {} computed, {} committed blocks \
+                 above epoch change block {}. \
+                 Metric: block_buffer_manager_epoch_discarded_blocks",
+                discarded_ordered,
+                discarded_computed,
+                discarded_committed,
+                latest_epoch_change_block_number
+            );
+        }
+
         self.buffer_state.store(BufferState::EpochChange as u8, Ordering::SeqCst);
         block_state_machine
             .profile

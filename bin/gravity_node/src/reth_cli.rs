@@ -136,7 +136,16 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
     fn get_coinbase_from_proposer_index(proposer_index: Option<u64>) -> Address {
         let index = match proposer_index {
             Some(idx) => idx,
-            None => return Address::ZERO,
+            None => {
+                // GSDK-026: Log when proposer_index is absent — this means the block
+                // metadata from consensus did not include a proposer.
+                warn!(
+                    "Block has no proposer_index in metadata, using Address::ZERO as coinbase. \
+                     This may indicate a consensus-layer issue. \
+                     Metric: coinbase_zero_address_fallback{{reason=no_proposer_index}}"
+                );
+                return Address::ZERO;
+            }
         };
 
         // Get reth address from global map (built in epoch_manager when epoch starts)
@@ -146,7 +155,8 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                     Address::from_slice(&reth_addr_bytes)
                 } else {
                     warn!(
-                        "Reth address length {} is not 20 bytes for proposer index {}, using ZERO",
+                        "Reth address length {} is not 20 bytes for proposer index {}, using ZERO. \
+                         Metric: coinbase_zero_address_fallback{{reason=invalid_address_length}}",
                         reth_addr_bytes.len(),
                         index
                     );
@@ -154,7 +164,11 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                 }
             }
             None => {
-                warn!("Failed to get reth coinbase for proposer index {}, using ZERO", index);
+                warn!(
+                    "Failed to get reth coinbase for proposer index {}, using ZERO. \
+                     Metric: coinbase_zero_address_fallback{{reason=proposer_not_in_map}}",
+                    index
+                );
                 Address::ZERO
             }
         }
@@ -325,6 +339,10 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
     }
 
     pub async fn start_commit_vote(&self) -> Result<(), String> {
+        // GSDK-022: Track consecutive errors to distinguish transient from fatal failures
+        let mut consecutive_errors = 0u32;
+        const MAX_CONSECUTIVE_ERRORS: u32 = 5;
+
         loop {
             let mut shutdown = self.shutdown.resubscribe();
             let execution_result = tokio::select! {
@@ -336,10 +354,32 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             };
 
             let execution_result = match execution_result {
-                Ok(res) => res,
+                Ok(res) => {
+                    consecutive_errors = 0; // Reset on success
+                    res
+                }
                 Err(e) => {
-                    warn!("recv_compute_res failed: {}. Stopping commit vote loop.", e);
-                    break;
+                    consecutive_errors += 1;
+                    if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
+                        // GSDK-022: Too many consecutive failures — channel is likely
+                        // permanently broken. Trigger shutdown rather than silent stall.
+                        error!(
+                            "recv_compute_res failed {} consecutive times (last: {}). \
+                             Triggering graceful shutdown.",
+                            consecutive_errors, e
+                        );
+                        return Err(format!(
+                            "Commit vote loop terminated after {} consecutive errors: {}",
+                            consecutive_errors, e
+                        ));
+                    }
+                    warn!(
+                        "recv_compute_res failed (attempt {}/{}): {}. Retrying...",
+                        consecutive_errors, MAX_CONSECUTIVE_ERRORS, e
+                    );
+                    // Brief delay before retry to avoid tight error loop
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    continue;
                 }
             };
             let mut block_hash_data = [0u8; 32];

@@ -18,7 +18,9 @@ use axum::{
 use axum_server::tls_rustls::RustlsConfig;
 use dkg::DkgState;
 use gaptos::{aptos_crypto::HashValue, aptos_logger::info};
+#[cfg(debug_assertions)]
 use heap_profiler::control_profiler;
+#[cfg(debug_assertions)]
 use set_failpoints::{set_failpoint, FailpointConf};
 use tx::{get_tx_by_hash, submit_tx, TxRequest};
 
@@ -58,9 +60,11 @@ impl HttpsServer {
         let get_tx_by_hash_lambda =
             |Path(request): Path<HashValue>| async move { get_tx_by_hash(request).await };
 
+        #[cfg(debug_assertions)]
         let set_fail_point_lambda =
             |Json(request): Json<FailpointConf>| async move { set_failpoint(request).await };
 
+        #[cfg(debug_assertions)]
         let control_profiler_lambda = |Json(request): Json<
             heap_profiler::ControlProfileRequest,
         >| async move { control_profiler(request).await };
@@ -98,18 +102,25 @@ impl HttpsServer {
             };
 
         let dkg_state_arc = Arc::new(dkg_state);
+        // GSDK-003: Sensitive consensus/DKG routes moved to https_routes to require TLS.
+        // GSDK-001/002: /set_failpoint and /mem_prof are debug-only (not compiled in release).
         let https_routes = Router::new()
             .route("/tx/submit_tx", post(submit_tx_lambda))
             .route("/tx/get_tx_by_hash/:hash_value", get(get_tx_by_hash_lambda))
-            .layer(middleware::from_fn(ensure_https));
-        let http_routes = Router::new()
-            .route("/dkg/status", get(get_dkg_status_lambda))
+            // Sensitive consensus state: require TLS (GSDK-003)
             .route("/dkg/randomness/:block_number", get(get_randomness_lambda))
             .route("/consensus/latest_ledger_info", get(get_latest_ledger_info_lambda))
             .route("/consensus/ledger_info/:epoch", get(get_ledger_info_by_epoch_lambda))
             .route("/consensus/block/:epoch/:round", get(get_block_lambda))
             .route("/consensus/qc/:epoch/:round", get(get_qc_lambda))
-            .route("/consensus/validator_count/:epoch", get(get_validator_count_lambda))
+            .layer(middleware::from_fn(ensure_https));
+        // Public/low-sensitivity routes remain on HTTP.
+        let http_routes = Router::new()
+            .route("/dkg/status", get(get_dkg_status_lambda))
+            .route("/consensus/validator_count/:epoch", get(get_validator_count_lambda));
+        // Admin endpoints: compiled only in debug builds (GSDK-001/002).
+        #[cfg(debug_assertions)]
+        let http_routes = http_routes
             .route("/set_failpoint", post(set_fail_point_lambda))
             .route("/mem_prof", post(control_profiler_lambda));
         let app = Router::new().merge(https_routes).merge(http_routes).with_state(dkg_state_arc);
