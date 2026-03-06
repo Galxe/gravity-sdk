@@ -148,7 +148,8 @@ def build_genesis_config(config, genesis_cfg):
     if bc:
         result["oracleConfig"]["bridgeConfig"] = {
             "deploy": bc.get("deploy", False),
-            "trustedBridge": bc.get("trusted_bridge", "0x0000000000000000000000000000000000000000")
+            "trustedBridge": bc.get("trusted_bridge", "0x0000000000000000000000000000000000000000"),
+            "trustedSourceId": str(bc.get("trusted_source_id", "0"))
         }
     
     # tasks (optional)
@@ -279,6 +280,13 @@ def main():
         val_net_addr = f"/ip4/{host}/tcp/{p2p_port}/noise-ik/{network_pk}/handshake/0"
         vfn_net_addr = f"/ip4/{host}/tcp/{vfn_port}/noise-ik/{network_pk}/handshake/0"
         
+        # Consensus PoP: use node config value, identity file, or 96-byte dummy
+        # ValidatorManagement.sol requires non-empty consensusPop
+        DUMMY_POP = "0x" + "00" * 96
+        consensus_pop = node.get('consensus_pop') or identity.get('consensus_pop') or DUMMY_POP
+        if not consensus_pop.startswith('0x'):
+            consensus_pop = f"0x{consensus_pop}"
+
         # Create validator entry
         validator = {
             "operator": val_addr,
@@ -286,7 +294,7 @@ def main():
             "stakeAmount": stake_amount,
             "moniker": f"validator-{len(validators) + 1}",
             "consensusPubkey": consensus_pk,
-            "consensusPop": "0x",
+            "consensusPop": consensus_pop,
             "networkAddresses": val_net_addr,
             "fullnodeAddresses": vfn_net_addr,
             "votingPower": voting_power

@@ -52,8 +52,8 @@ authrpc_port = 8553
 reth_p2p_port = 12026
 
 [[nodes]]
-id = "vfn1"
-role = "vfn"
+id = "node4"
+role = "genesis"
 host = "127.0.0.1"
 p2p_port = 6183
 vfn_port = 6193

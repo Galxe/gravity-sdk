@@ -2,7 +2,7 @@
 
 [dependencies.genesis_contracts]
 repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
-ref = "gravity-testnet-v1.0.0"
+ref = "main"
 
 # Genesis validators with stake and voting power
 [[genesis_validators]]
@@ -13,6 +13,7 @@ p2p_port = 6182
 vfn_port = 6192
 stake_amount = "10000000000000000000"
 voting_power = "10000000000000000000"
+consensus_pop = "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
 
 [genesis]
 chain_id = 1337
@@ -60,6 +61,7 @@ callbacks = ["0x00000000000000000000000000000001625F4001"]
 [genesis.oracle_config.bridge_config]
 deploy = true
 trusted_bridge = "0xcbEAF3BDe82155F56486Fb5a1072cb8baAf547cc"
+trusted_source_id = 11155111
 
 [[genesis.oracle_config.tasks]]
 source_type = 0
