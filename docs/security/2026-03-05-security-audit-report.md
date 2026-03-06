@@ -1,4 +1,4 @@
-# Security Audit Report — gravity-sdk (Phase 2)
+# Security Audit Report — gravity-sdk (Phase 3)
 
 **Date:** 2026-03-05
 **Scope:** BlockBufferManager state machine, GCEI protocol, epoch change protocol, RethCli coordinator bridge
@@ -17,8 +17,8 @@
 |----------|----------|--------|
 | HIGH | 2 | Open |
 | MEDIUM | 4 | Open |
-| LOW | 5 | Open |
-| **Total** | **11** | **All open** |
+| LOW | 4 | Open |
+| **Total** | **10** | **All open** |
 
 This report covers findings **not** addressed in the 2026-02-23 or 2026-02-28 audits. The focus is on the `BlockBufferManager` state machine, epoch transition protocol, and `RethCli` coordinator bridge.
 
@@ -101,19 +101,14 @@ Currently safe because `consume_epoch_change` and `get_ordered_blocks` are calle
 **Impact:** Low — actual gas limit enforcement occurs during EVM execution. But batch sizes may be unexpectedly large.
 **Recommendation:** Remove the special case for `total_gas_limit == 0`.
 
-### GSDK-025: Two-Phase Epoch Update Creates Observation Window
-
-**File:** `crates/block-buffer-manager/src/block_buffer_manager.rs:674-676`
-**Issue:** Between `set_compute_res` setting `next_epoch` and `release_inflight_blocks` applying it to `current_epoch`, the system is in a liminal state. `next_epoch` is set but `current_epoch` still reflects the old epoch.
-**Impact:** By design — prevents premature block rejection. The lock on `block_state_machine` makes the update atomic with the block's Computed state.
-
-### GSDK-026: Coinbase Address Hardcoded to Zero
+### GSDK-025: Coinbase Address Hardcoded to Zero [PARTIAL]
 
 **File:** `bin/gravity_node/src/reth_cli.rs:189`
 **Issue:** `coinbase: Address::ZERO` — the block beneficiary is always the zero address. Block rewards (if any) go to the zero address. The code contains `// TODO(gravity_jan): add reth coinbase`.
 **Impact:** Fee distribution is non-functional. Miners/validators receive no block rewards at the execution layer.
+**Review Comment:** PARTIAL — Not always zero. `get_coinbase_from_proposer_index()` attempts to look up the proposer's EVM address from `PROPOSER_RETH_ADDRESS_MAP`. `Address::ZERO` is only returned as fallback when `proposer_index` is `None` or the index is not found in the map. During normal operation with a populated map, the correct proposer address is used.
 
-### GSDK-027: Validators May Temporarily Observe Different Epochs
+### GSDK-026: Validators May Temporarily Observe Different Epochs
 
 **Location:** Cross-repository
 **Issue:** During epoch transitions, validators process the epoch-change block at different wall-clock times. Some may be in `EpochChange` state while others are in `Ready`. This is handled by the AptosBFT consensus protocol which coordinates epoch transitions through its own reset mechanism.
