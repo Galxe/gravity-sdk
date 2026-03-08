@@ -65,7 +65,7 @@ callbacks = ["0x00000000000000000000000000000001625F2018"]
 deploy = true
 # GBridgeSender deterministic address on Anvil (deployer nonce=2)
 trusted_bridge = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
-trusted_source_id = 11155111
+trusted_source_id = 31337
 
 # Oracle task: watch Anvil (chainId 31337) for MessageSent events
 [[genesis.oracle_config.tasks]]
