@@ -88,8 +88,10 @@ Excludes `long_test` suites by default.
 ### Run a specific test suite (e.g., bridge)
 // turbo
 ```bash
-python3 gravity_e2e/runner.py bridge --bridge-count 10
+python3 gravity_e2e/runner.py bridge --force-init --bridge-count 10
 ```
+
+> **Important**: Always use `--force-init` for bridge tests. Cached genesis artifacts may use stale contract bytecode that hides ABI/validation changes from upstream `gravity_chain_core_contracts`.
 
 ### Runner options
 ```bash
@@ -124,6 +126,8 @@ Genesis artifacts are cached in `cluster_test_cases/<suite>/artifacts/`. Use `--
 - `genesis.toml` changed
 - Contract source (`gravity_chain_core_contracts`) updated
 - New contract ref in `dependencies.genesis_contracts.ref`
+
+> **Best Practice**: Always use `--force-init` for bridge E2E tests. The genesis step pulls and compiles the latest `gravity_chain_core_contracts` from `main`. Stale cached bytecode can mask breaking changes such as new validation logic in `GBridgeReceiver` or `NativeOracle`. The extra ~2 min rebuild cost is worth it to catch real integration issues.
 
 ---
 
