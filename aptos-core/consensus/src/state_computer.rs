@@ -294,11 +294,11 @@ impl ExecutionProxy {
                     let aptos_jwk = JWK::try_from(jwk).unwrap();
                     match aptos_jwk {
                         JWK::RSA(rsa_jwk) => JWKStruct {
-                            type_name: "0".to_string(),
+                            type_name: "0x1::jwks::RSA_JWK".to_string(),
                             data: serde_json::to_vec(&rsa_jwk).unwrap(),
                         },
                         JWK::Unsupported(unsupported_jwk) => {
-                            JWKStruct { type_name: "1".to_string(), data: unsupported_jwk.payload }
+                            JWKStruct { type_name: "0x1::jwks::UNSUPPORTED_JWK".to_string(), data: unsupported_jwk.payload }
                         }
                     }
                 })
@@ -371,11 +371,11 @@ pub fn process_jwk_update_util(update: &ProviderJWKs, block: &Block) -> Vec<u8> 
                 let aptos_jwk = JWK::try_from(jwk).unwrap();
                 match aptos_jwk {
                     JWK::RSA(rsa_jwk) => JWKStruct {
-                        type_name: "0".to_string(),
+                        type_name: "0x1::jwks::RSA_JWK".to_string(),
                         data: serde_json::to_vec(&rsa_jwk).unwrap(),
                     },
                     JWK::Unsupported(unsupported_jwk) => {
-                        JWKStruct { type_name: "1".to_string(), data: unsupported_jwk.payload }
+                        JWKStruct { type_name: "0x1::jwks::Unsupported_JWK".to_string(), data: unsupported_jwk.payload }
                     }
                 }
             })

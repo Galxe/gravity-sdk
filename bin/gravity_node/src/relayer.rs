@@ -230,7 +230,7 @@ impl Relayer for RelayerWrapper {
             })?;
 
         // Extract nonce and block_number from oracle state
-        let onchain_nonce = oracle_state.latest_nonce as u128;
+        let onchain_nonce = oracle_state.latest_nonce;
         let onchain_block_number =
             oracle_state.latest_record.as_ref().map(|r| r.block_number).unwrap_or(0);
 
