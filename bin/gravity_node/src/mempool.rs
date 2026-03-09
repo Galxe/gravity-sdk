@@ -185,9 +185,9 @@ impl TxPool for Mempool {
         match txn {
             Ok(txn) => {
                 let signer = match txn.recover_signer() {
-                    Some(s) => s,
-                    None => {
-                        tracing::error!("Failed to recover signer for external transaction");
+                    Ok(s) => s,
+                    Err(e) => {
+                        tracing::error!("Failed to recover signer for external transaction: {e}");
                         return false;
                     }
                 };
