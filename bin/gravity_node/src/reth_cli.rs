@@ -297,8 +297,8 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         let mut start_ordered_block = self
             .provider
             .recover_block_number()
-            .map_err(|e| format!("Failed to recover block number: {e}"))?
-            + 1;
+            .map_err(|e| format!("Failed to recover block number: {e}"))? +
+            1;
         // Initialize current_epoch from block buffer manager
         let buffer_epoch = get_block_buffer_manager().get_current_epoch().await;
         self.current_epoch.store(buffer_epoch, Ordering::SeqCst);
@@ -317,8 +317,8 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             };
             if let Err(e) = exec_blocks {
                 let from = start_ordered_block;
-                if e.to_string().contains("Buffer is in epoch change")
-                    || current_epoch != get_block_buffer_manager().get_current_epoch().await
+                if e.to_string().contains("Buffer is in epoch change") ||
+                    current_epoch != get_block_buffer_manager().get_current_epoch().await
                 {
                     // consume_epoch_change returns the new epoch
                     let new_epoch = get_block_buffer_manager().consume_epoch_change().await;
@@ -404,8 +404,8 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         let mut start_commit_num = self
             .provider
             .recover_block_number()
-            .map_err(|e| format!("Failed to recover block number: {e}"))?
-            + 1;
+            .map_err(|e| format!("Failed to recover block number: {e}"))? +
+            1;
         loop {
             let epoch = self.current_epoch.load(Ordering::SeqCst);
             let mut shutdown = self.shutdown.resubscribe();
