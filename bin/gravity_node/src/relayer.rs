@@ -277,8 +277,9 @@ impl Relayer for RelayerWrapper {
                 );
                 return Ok(cached.clone());
             }
-            // No cached result available, fall through to poll
-            panic!("No cached result for uri: {uri} - polling despite block condition");
+            return Err(ExecError::Other(format!(
+                "No cached result for uri: {uri} - polling despite block condition"
+            )));
         }
 
         self.poll_and_update_state(uri, onchain_nonce, onchain_block_number, &state).await

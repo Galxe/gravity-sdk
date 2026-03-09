@@ -3,7 +3,7 @@
 
 [dependencies.genesis_contracts]
 repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
-ref = "gravity-testnet-v1.0.0"
+ref = "main"
 
 # Single genesis validator
 [[genesis_validators]]
@@ -14,6 +14,7 @@ p2p_port = 6182
 vfn_port = 6192
 stake_amount = "2000000000000000000"
 voting_power = "2000000000000000000"
+consensus_pop = "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
 
 [genesis]
 chain_id = 1337
@@ -21,6 +22,7 @@ epoch_interval_micros = 7200000000  # 2 hours
 major_version = 1
 consensus_config = "0x0301010a00000000000000280000000000000001010000000a000000000000000100010200000000000000000020000000000000"
 execution_config = "0x00"
+initial_locked_until_micros = 1798848000000000
 
 [genesis.faucet]
 address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
@@ -63,6 +65,7 @@ callbacks = ["0x00000000000000000000000000000001625F2018"]
 deploy = true
 # GBridgeSender deterministic address on Anvil (deployer nonce=2)
 trusted_bridge = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
+trusted_source_id = 31337
 
 # Oracle task: watch Anvil (chainId 31337) for MessageSent events
 [[genesis.oracle_config.tasks]]
