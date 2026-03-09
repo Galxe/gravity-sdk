@@ -59,6 +59,10 @@ use gaptos::{
     },
 };
 use std::{boxed::Box, iter::once, sync::Arc, time::Duration};
+
+/// JWK type name constants for consistent usage across SDK ↔ reth boundary
+const JWK_TYPE_RSA: &str = "0x1::jwks::RSA_JWK";
+const JWK_TYPE_UNSUPPORTED: &str = "0x1::jwks::Unsupported_JWK";
 use tokio::sync::Mutex as AsyncMutex;
 
 pub type StateComputeResultFut = BoxFuture<'static, ExecutorResult<PipelineExecutionResult>>;
@@ -294,12 +298,13 @@ impl ExecutionProxy {
                     let aptos_jwk = JWK::try_from(jwk).unwrap();
                     match aptos_jwk {
                         JWK::RSA(rsa_jwk) => JWKStruct {
-                            type_name: "0x1::jwks::RSA_JWK".to_string(),
+                            type_name: JWK_TYPE_RSA.to_string(),
                             data: serde_json::to_vec(&rsa_jwk).unwrap(),
                         },
-                        JWK::Unsupported(unsupported_jwk) => {
-                            JWKStruct { type_name: "0x1::jwks::UNSUPPORTED_JWK".to_string(), data: unsupported_jwk.payload }
-                        }
+                        JWK::Unsupported(unsupported_jwk) => JWKStruct {
+                            type_name: JWK_TYPE_UNSUPPORTED.to_string(),
+                            data: unsupported_jwk.payload,
+                        },
                     }
                 })
                 .collect(),
@@ -371,12 +376,13 @@ pub fn process_jwk_update_util(update: &ProviderJWKs, block: &Block) -> Vec<u8> 
                 let aptos_jwk = JWK::try_from(jwk).unwrap();
                 match aptos_jwk {
                     JWK::RSA(rsa_jwk) => JWKStruct {
-                        type_name: "0x1::jwks::RSA_JWK".to_string(),
+                        type_name: JWK_TYPE_RSA.to_string(),
                         data: serde_json::to_vec(&rsa_jwk).unwrap(),
                     },
-                    JWK::Unsupported(unsupported_jwk) => {
-                        JWKStruct { type_name: "0x1::jwks::Unsupported_JWK".to_string(), data: unsupported_jwk.payload }
-                    }
+                    JWK::Unsupported(unsupported_jwk) => JWKStruct {
+                        type_name: JWK_TYPE_UNSUPPORTED.to_string(),
+                        data: unsupported_jwk.payload,
+                    },
                 }
             })
             .collect(),
