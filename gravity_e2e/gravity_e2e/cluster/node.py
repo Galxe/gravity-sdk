@@ -61,6 +61,7 @@ class Node:
         http_port: int,
         p2p_port: int,
         vfn_port: int,
+        metrics_port: Optional[int] = None,
         stake_pool: Optional[str] = None,
         evm_account: Optional[LocalAccount] = None,
     ):
@@ -73,6 +74,8 @@ class Node:
         self.http_url = f"http://127.0.0.1:{http_port}"
         self.p2p_port = p2p_port
         self.vfn_port = vfn_port
+        self.metrics_port = metrics_port
+        self.metrics_url = f"http://127.0.0.1:{metrics_port}" if metrics_port else None
         self._infra_path = infra_path
         self._cluster_config_path = cluster_config_path
         # StakePool contract address (discovered on-chain via validator_list)

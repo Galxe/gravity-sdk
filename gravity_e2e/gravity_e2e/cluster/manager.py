@@ -269,6 +269,7 @@ class Cluster:
             http_port = node_cfg.get("https_port")
             p2p_port = node_cfg.get("p2p_port")
             vfn_port = node_cfg.get("vfn_port")
+            metrics_port = node_cfg.get("metrics_port")
             if not node_data_dir:
                 infra_path = self.base_dir / node_id
             else:
@@ -283,6 +284,7 @@ class Cluster:
                 http_port=http_port,
                 p2p_port=p2p_port,
                 vfn_port=vfn_port,
+                metrics_port=metrics_port,
             )
         return nodes
 
