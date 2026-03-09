@@ -136,7 +136,16 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
     fn get_coinbase_from_proposer_index(proposer_index: Option<u64>) -> Address {
         let index = match proposer_index {
             Some(idx) => idx,
-            None => return Address::ZERO,
+            None => {
+                // GSDK-026: Log when proposer_index is absent — this means the block
+                // metadata from consensus did not include a proposer.
+                warn!(
+                    "Block has no proposer_index in metadata, using Address::ZERO as coinbase. \
+                     This may indicate a consensus-layer issue. \
+                     Metric: coinbase_zero_address_fallback{{reason=no_proposer_index}}"
+                );
+                return Address::ZERO;
+            }
         };
 
         // Get reth address from global map (built in epoch_manager when epoch starts)
@@ -146,7 +155,8 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                     Address::from_slice(&reth_addr_bytes)
                 } else {
                     warn!(
-                        "Reth address length {} is not 20 bytes for proposer index {}, using ZERO",
+                        "Reth address length {} is not 20 bytes for proposer index {}, using ZERO. \
+                         Metric: coinbase_zero_address_fallback{{reason=invalid_address_length}}",
                         reth_addr_bytes.len(),
                         index
                     );
@@ -154,7 +164,11 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                 }
             }
             None => {
-                warn!("Failed to get reth coinbase for proposer index {}, using ZERO", index);
+                warn!(
+                    "Failed to get reth coinbase for proposer index {}, using ZERO. \
+                     Metric: coinbase_zero_address_fallback{{reason=proposer_not_in_map}}",
+                    index
+                );
                 Address::ZERO
             }
         }
@@ -286,8 +300,8 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             };
             if let Err(e) = exec_blocks {
                 let from = start_ordered_block;
-                if e.to_string().contains("Buffer is in epoch change") ||
-                    current_epoch != get_block_buffer_manager().get_current_epoch().await
+                if e.to_string().contains("Buffer is in epoch change")
+                    || current_epoch != get_block_buffer_manager().get_current_epoch().await
                 {
                     // consume_epoch_change returns the new epoch
                     let new_epoch = get_block_buffer_manager().consume_epoch_change().await;
