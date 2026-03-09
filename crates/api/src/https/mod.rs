@@ -100,7 +100,6 @@ impl HttpsServer {
         let dkg_state_arc = Arc::new(dkg_state);
         let has_tls = self.cert_pem.is_some() && self.key_pem.is_some();
 
-
         let https_routes = Router::new()
             .route("/tx/submit_tx", post(submit_tx_lambda))
             .route("/tx/get_tx_by_hash/:hash_value", get(get_tx_by_hash_lambda))
