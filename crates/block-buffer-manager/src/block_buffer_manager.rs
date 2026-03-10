@@ -370,16 +370,16 @@ impl BlockBufferManager {
         gas_limit: u64,
     ) -> Result<Vec<VerifiedTxnWithAccountSeqNum>, anyhow::Error> {
         let mut txn_buffer = self.txn_buffer.txns.lock().await;
-        let mut total_gas_limit = 0;
-        let mut count = 0;
+        let mut total_gas_limit = 0u64;
+        let mut count = 0usize;
         let total_txn = txn_buffer.iter().map(|item| item.txns.len()).sum::<usize>();
         tracing::info!("pop_txns total_txn: {:?}", total_txn);
+
+        // GSDK-024: Fixed off-by-one — account for every item's gas uniformly.
+        // The split_point is the index of the first item that would exceed the limit.
         let split_point = txn_buffer
             .iter()
             .position(|item| {
-                if total_gas_limit == 0 {
-                    return false;
-                }
                 if total_gas_limit + item.gas_limit > gas_limit || count >= max_size {
                     return true;
                 }

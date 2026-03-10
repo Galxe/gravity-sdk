@@ -184,7 +184,13 @@ impl TxPool for Mempool {
         let txn = TransactionSigned::decode_2718(&mut txn.bytes.as_ref());
         match txn {
             Ok(txn) => {
-                let signer = txn.recover_signer().unwrap();
+                let signer = match txn.recover_signer() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        tracing::error!("Failed to recover signer for external transaction: {e}");
+                        return false;
+                    }
+                };
                 let len = txn.encode_2718_len();
                 let recovered = Recovered::new_unchecked(txn, signer);
                 let pool_txn = EthPooledTransaction::new(recovered, len);
