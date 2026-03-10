@@ -88,10 +88,8 @@ pub fn get_latest_ledger_info(dkg_state: Arc<DkgState>) -> impl IntoResponse {
         }
         Err(e) => {
             error!("Failed to get latest ledger info: {:?}", e);
-            JsonResponse(ErrorResponse {
-                error: format!("Failed to get latest ledger info: {e:?}"),
-            })
-            .into_response()
+            JsonResponse(ErrorResponse { error: "Internal server error".to_string() })
+                .into_response()
         }
     }
 }
@@ -120,10 +118,7 @@ pub fn get_ledger_info_by_epoch(
         Ok(blocks) => blocks,
         Err(e) => {
             error!("Failed to get epoch by block number: {:?}", e);
-            return Err(error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get epoch by block number: {e:?}"),
-            ));
+            return Err(error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"));
         }
     };
 
@@ -170,10 +165,7 @@ pub fn get_ledger_info_by_epoch(
         }
         Err(e) => {
             error!("Failed to get ledger info for block_number={}: {:?}", target_block_number, e);
-            Err(error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get ledger info: {e:?}"),
-            ))
+            Err(error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"))
         }
     }
 }
@@ -272,10 +264,7 @@ pub fn get_validator_count_by_epoch(
         Ok(blocks) => blocks,
         Err(e) => {
             error!("Failed to get epoch by block number: {:?}", e);
-            return Err(error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get epoch by block number: {e:?}"),
-            ));
+            return Err(error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"));
         }
     };
 
@@ -311,7 +300,7 @@ pub fn get_validator_count_by_epoch(
                                 error!("Failed to deserialize ValidatorSet: {:?}", e);
                                 return Err(error_response(
                                     StatusCode::INTERNAL_SERVER_ERROR,
-                                    &format!("Failed to deserialize ValidatorSet: {e:?}"),
+                                    "Internal server error",
                                 ));
                             }
                         }
@@ -320,7 +309,7 @@ pub fn get_validator_count_by_epoch(
                         error!("Failed to convert config bytes: {:?}", e);
                         return Err(error_response(
                             StatusCode::INTERNAL_SERVER_ERROR,
-                            &format!("Failed to convert config bytes: {e:?}"),
+                            "Internal server error",
                         ));
                     }
                 },

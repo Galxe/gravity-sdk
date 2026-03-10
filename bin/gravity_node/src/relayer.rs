@@ -40,7 +40,7 @@ impl RelayerConfig {
 #[derive(Debug, Clone, Default)]
 struct ProviderState {
     /// Last nonce we returned from polling
-    fetched_nonce: Option<u64>,
+    fetched_nonce: Option<u128>,
     /// Whether the last poll returned new data
     last_had_update: bool,
     /// Cached last poll result for re-sending when blocked
@@ -96,7 +96,8 @@ impl RelayerWrapper {
             .unwrap_or_default();
         info!("relayer config: {:?}", config);
 
-        let manager = OracleRelayerManager::new(Some(datadir));
+        // update reth commit and use
+        let manager = OracleRelayerManager::new(datadir);
         Self { manager, tracker: ProviderProgressTracker::new(), config }
     }
 
@@ -168,7 +169,7 @@ impl RelayerWrapper {
     }
 
     /// Block poll if we returned data and on-chain hasn't caught up
-    fn should_block_poll(state: &ProviderState, onchain_nonce: Option<u64>) -> bool {
+    fn should_block_poll(state: &ProviderState, onchain_nonce: Option<u128>) -> bool {
         if let Some(fetched) = state.fetched_nonce {
             if let Some(onchain) = onchain_nonce {
                 // Block if we returned data and on-chain nonce hasn't caught up
@@ -181,7 +182,7 @@ impl RelayerWrapper {
     async fn poll_and_update_state(
         &self,
         uri: &str,
-        onchain_nonce: Option<u64>,
+        onchain_nonce: Option<u128>,
         onchain_block_number: Option<u64>,
         state: &ProviderState,
     ) -> Result<PollResult, ExecError> {
@@ -193,7 +194,7 @@ impl RelayerWrapper {
         // Pass onchain state to poll_uri for reconciliation
         let result = self
             .manager
-            .poll_uri(uri, onchain_nonce.map(|n| n as u128), onchain_block_number)
+            .poll_uri(uri, onchain_nonce, onchain_block_number)
             .await
             .map_err(|e| ExecError::Other(e.to_string()))?;
 
@@ -229,7 +230,7 @@ impl Relayer for RelayerWrapper {
             })?;
 
         // Extract nonce and block_number from oracle state
-        let onchain_nonce = oracle_state.latest_nonce as u128;
+        let onchain_nonce = oracle_state.latest_nonce;
         let onchain_block_number =
             oracle_state.latest_record.as_ref().map(|r| r.block_number).unwrap_or(0);
 
@@ -276,8 +277,9 @@ impl Relayer for RelayerWrapper {
                 );
                 return Ok(cached.clone());
             }
-            // No cached result available, fall through to poll
-            panic!("No cached result for uri: {uri} - polling despite block condition");
+            return Err(ExecError::Other(format!(
+                "No cached result for uri: {uri} - polling despite block condition"
+            )));
         }
 
         self.poll_and_update_state(uri, onchain_nonce, onchain_block_number, &state).await

@@ -125,10 +125,17 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         self.chain_id
     }
 
-    fn txn_to_signed(bytes: &mut [u8], _chain_id: u64) -> (Address, TransactionSigned) {
+    fn txn_to_signed(
+        bytes: &mut [u8],
+        _chain_id: u64,
+    ) -> Result<(Address, TransactionSigned), String> {
         let mut slice = &bytes[..];
-        let txn = TransactionSigned::decode_2718(&mut slice).unwrap();
-        (txn.recover_signer().unwrap(), txn)
+        let txn = TransactionSigned::decode_2718(&mut slice)
+            .map_err(|e| format!("Failed to decode transaction: {e}"))?;
+        let signer = txn
+            .recover_signer()
+            .map_err(|e| format!("Failed to recover signer from transaction: {e}"))?;
+        Ok((signer, txn))
     }
 
     /// Get reth coinbase address from proposer's validator index
@@ -187,19 +194,39 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             .par_iter_mut()
             .enumerate()
             .filter(|(idx, _)| senders[*idx].is_none())
-            .map(|(idx, txn)| {
-                let (sender, transaction) = Self::txn_to_signed(&mut txn.bytes, self.chain_id);
-                (idx, sender, transaction)
+            .map(|(idx, txn)| match Self::txn_to_signed(&mut txn.bytes, self.chain_id) {
+                Ok((sender, transaction)) => Some((idx, sender, transaction)),
+                Err(e) => {
+                    warn!("Skipping malformed transaction at index {}: {}", idx, e);
+                    None
+                }
             })
-            .collect::<Vec<(usize, Address, TransactionSigned)>>()
+            .collect::<Vec<Option<(usize, Address, TransactionSigned)>>>()
             .into_iter()
+            .flatten()
             .for_each(|(idx, sender, transaction)| {
                 senders[idx] = Some(sender);
                 transactions[idx] = Some(transaction);
             });
 
-        let senders: Vec<_> = senders.into_iter().map(|x| x.unwrap()).collect();
-        let transactions: Vec<_> = transactions.into_iter().map(|x| x.unwrap()).collect();
+        // Filter out transactions that failed decoding/signer recovery
+        let mut valid_senders = Vec::with_capacity(senders.len());
+        let mut valid_transactions = Vec::with_capacity(transactions.len());
+        for (idx, (sender, transaction)) in
+            senders.into_iter().zip(transactions.into_iter()).enumerate()
+        {
+            match (sender, transaction) {
+                (Some(s), Some(t)) => {
+                    valid_senders.push(s);
+                    valid_transactions.push(t);
+                }
+                _ => {
+                    warn!("Filtering out transaction at index {} with missing sender or body", idx);
+                }
+            }
+        }
+        let senders = valid_senders;
+        let transactions = valid_transactions;
 
         let (randao, randomness) = match block.block_meta.randomness {
             Some(randao) => {
@@ -267,7 +294,11 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
     }
 
     pub async fn start_execution(&self) -> Result<(), String> {
-        let mut start_ordered_block = self.provider.recover_block_number().unwrap() + 1;
+        let mut start_ordered_block = self
+            .provider
+            .recover_block_number()
+            .map_err(|e| format!("Failed to recover block number: {e}"))? +
+            1;
         // Initialize current_epoch from block buffer manager
         let buffer_epoch = get_block_buffer_manager().get_current_epoch().await;
         self.current_epoch.store(buffer_epoch, Ordering::SeqCst);
@@ -308,7 +339,8 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                 continue;
             }
 
-            start_ordered_block = exec_blocks.last().unwrap().0.block_meta.block_number + 1;
+            start_ordered_block =
+                exec_blocks.last().expect("checked non-empty above").0.block_meta.block_number + 1;
             for (block, parent_id) in exec_blocks {
                 info!(
                     "send reth ordered block num {:?} id {:?} epoch {:?} with parent id {}",
@@ -325,6 +357,10 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
     }
 
     pub async fn start_commit_vote(&self) -> Result<(), String> {
+        // GSDK-022: Track consecutive errors to distinguish transient from fatal failures
+        let mut consecutive_errors = 0u32;
+        const MAX_CONSECUTIVE_ERRORS: u32 = 5;
+
         loop {
             let mut shutdown = self.shutdown.resubscribe();
             let execution_result = tokio::select! {
@@ -336,10 +372,31 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             };
 
             let execution_result = match execution_result {
-                Ok(res) => res,
+                Ok(res) => {
+                    consecutive_errors = 0; // Reset on success
+                    res
+                }
                 Err(e) => {
-                    warn!("recv_compute_res failed: {}. Stopping commit vote loop.", e);
-                    break;
+                    consecutive_errors += 1;
+                    if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
+                        // GSDK-022: Too many consecutive failures — channel is likely
+                        // permanently broken. Trigger shutdown rather than silent stall.
+                        error!(
+                            "recv_compute_res failed {} consecutive times (last: {}). \
+                             Triggering graceful shutdown.",
+                            consecutive_errors, e
+                        );
+                        return Err(format!(
+                            "Commit vote loop terminated after {consecutive_errors} consecutive errors: {e}",
+                        ));
+                    }
+                    warn!(
+                        "recv_compute_res failed (attempt {}/{}): {}. Retrying...",
+                        consecutive_errors, MAX_CONSECUTIVE_ERRORS, e
+                    );
+                    // Brief delay before retry to avoid tight error loop
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    continue;
                 }
             };
             let mut block_hash_data = [0u8; 32];
@@ -363,13 +420,17 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             get_block_buffer_manager()
                 .set_compute_res(block_id, block_hash_data, block_number, epoch, txn_status, events)
                 .await
-                .expect("failed to pop ordered block ids");
+                .map_err(|e| format!("failed to set compute res: {e}"))?;
         }
         Ok(())
     }
 
     pub async fn start_commit(&self) -> Result<(), String> {
-        let mut start_commit_num = self.provider.recover_block_number().unwrap() + 1;
+        let mut start_commit_num = self
+            .provider
+            .recover_block_number()
+            .map_err(|e| format!("Failed to recover block number: {e}"))? +
+            1;
         loop {
             let epoch = self.current_epoch.load(Ordering::SeqCst);
             let mut shutdown = self.shutdown.resubscribe();
@@ -388,15 +449,12 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             if block_ids.is_empty() {
                 continue;
             }
-            let block_id =
-                self.pipe_api.get_block_id(block_ids.last().unwrap().num).unwrap_or_else(|| {
-                    panic!("commit num {} not found block id", start_commit_num);
-                });
-            assert_eq!(
-                ExternalBlockId::from_bytes(block_id.as_slice()),
-                block_ids.last().unwrap().block_id
-            );
-            start_commit_num = block_ids.last().unwrap().num + 1;
+            let last_block = block_ids.last().expect("checked non-empty above");
+            let block_id = self.pipe_api.get_block_id(last_block.num).unwrap_or_else(|| {
+                panic!("commit num {} not found block id", start_commit_num);
+            });
+            assert_eq!(ExternalBlockId::from_bytes(block_id.as_slice()), last_block.block_id);
+            start_commit_num = last_block.num + 1;
             let mut persist_notifiers = Vec::new();
             for block_id_num_hash in block_ids {
                 self.send_committed_block_info(
@@ -404,20 +462,23 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                     block_id_num_hash.hash.map(|x| B256::from_slice(x.as_slice())),
                 )
                 .await
-                .unwrap();
+                .map_err(|e| format!("failed to send committed block info: {e}"))?;
                 if let Some(persist_notifier) = block_id_num_hash.persist_notifier {
                     persist_notifiers.push((block_id_num_hash.num, persist_notifier));
                 }
             }
 
-            let last_block_number = self.provider.recover_block_number().unwrap();
+            let last_block_number = self
+                .provider
+                .recover_block_number()
+                .map_err(|e| format!("Failed to recover block number: {e}"))?;
             get_block_buffer_manager()
                 .set_state(start_commit_num - 1, last_block_number)
                 .await
-                .unwrap();
+                .map_err(|e| format!("failed to set state: {e}"))?;
             for (block_number, persist_notifier) in persist_notifiers {
                 info!("wait_for_block_persistence num {:?} send persist_notifier", block_number);
-                self.wait_for_block_persistence(block_number).await.unwrap();
+                self.wait_for_block_persistence(block_number).await?;
                 let _ = persist_notifier.send(()).await;
             }
         }
