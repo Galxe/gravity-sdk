@@ -11,15 +11,26 @@ error_pattern = "(?i)error|panic|fatal"
 # Path to whitelist CSV file (optional)
 # Format: "Pattern",Threshold
 #   -1 = always ignore
-#   >0 = alert if count > threshold in 5 minutes
+#   >0 = alert if count >threshold in 5 minutes
 whitelist_path = "whitelist.csv"
 
 [alerting]
-# Fill in your webhook URLs
-feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/..."
-slack_webhook = "https://hooks.slack.com/services/..."
-# Minimum interval between alerts (seconds)
+# Default webhooks (fallback for priorities without specific overrides)
+feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/default..."
+slack_webhook = "https://hooks.slack.com/services/default..."
+# Minimum interval between alerts per priority (seconds)
 min_alert_interval = 5
+
+# Per-priority webhook overrides (optional)
+# If a priority has no override, the default webhooks above are used.
+[alerting.priorities.p0]
+feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/critical-group..."
+
+[alerting.priorities.p1]
+feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/ops-group..."
+
+[alerting.priorities.p2]
+feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/general-group..."
 
 [probe]
 # Probe reth node health via JSON-RPC eth_blockNumber

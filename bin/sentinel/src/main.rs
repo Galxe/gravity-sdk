@@ -8,7 +8,7 @@ mod whitelist;
 
 use crate::{
     analyzer::Analyzer,
-    config::Config,
+    config::{Config, Priority},
     notifier::Notifier,
     probe::Probe,
     reader::Reader,
@@ -90,18 +90,18 @@ async fn main() -> Result<()> {
                         // Matched whitelist rule but below threshold, skip
                         continue;
                     }
-                    CheckResult::Alert { count } => {
+                    CheckResult::Alert { count, priority } => {
                         // Matched whitelist rule and above threshold
                         let msg = format!("{line} [Frequency Alert: >{count}/5min]");
                         println!("Frequency Alert in {path:?}: {msg}");
-                        if let Err(e) = notifier.alert(&msg, file_str).await {
+                        if let Err(e) = notifier.alert(&msg, file_str, priority).await {
                             eprintln!("Failed to send alert: {e:?}");
                         }
                     }
-                    CheckResult::Normal => {
-                        // No whitelist rule matched, alert directly
+                    CheckResult::AlwaysAlert => {
+                        // No whitelist rule matched, always alert with P0
                         println!("Alert in {path:?}: {line}");
-                        if let Err(e) = notifier.alert(line, file_str).await {
+                        if let Err(e) = notifier.alert(line, file_str, Priority::P0).await {
                             eprintln!("Failed to send alert: {e:?}");
                         }
                     }

@@ -11,9 +11,10 @@ Sentinel is a daemon that watches log files for error patterns and sends alerts 
 - **Glob Pattern Matching**: Automatically discover log files using glob patterns (e.g., `logs/*.log`)
 - **Event-Driven Tailing**: Uses `linemux` (inotify/kqueue) for real-time log reading
 - **Whitelist & Thresholds**: Supports CSV-based whitelist rules to ignore or rate-limit specific errors
-- **Rate Limiting**: Configurable minimum interval between alerts to prevent spamming
+- **Priority-Based Routing**: Route alerts to different webhooks by priority (P0/P1/P2)
+- **Per-Priority Rate Limiting**: Independent rate limiting per priority level
 - **Multiple Notification Channels**: Supports Feishu and Slack webhooks
-- **Health Probe**: Optional HTTP endpoint monitoring with failure threshold
+- **Health Probe**: Optional HTTP endpoint monitoring with failure threshold (always P0)
 - **Log Rotation Support**: Automatically handles file rotation, truncation, and recreation
 
 ## Architecture
@@ -75,20 +76,29 @@ recent_file_threshold_seconds = 86400
 error_pattern = "(?i)error|panic|fatal"
 
 # Path to whitelist CSV file (optional)
-# Format: "Pattern",Threshold
-#   -1 = always ignore
-#   >0 = alert if count > threshold in 5 minutes
 whitelist_path = "whitelist.csv"
 
+# Default priority for log alerts (p0, p1, p2). Default: p0
+default_priority = "p0"
+
 [alerting]
-# Feishu webhook URL (optional)
-feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/..."
+# Default webhooks (fallback for priorities without specific overrides)
+feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/default..."
+slack_webhook = "https://hooks.slack.com/services/default..."
 
-# Slack webhook URL (optional)
-slack_webhook = "https://hooks.slack.com/services/..."
-
-# Minimum interval between alerts (seconds)
+# Minimum interval between alerts per priority (seconds)
 min_alert_interval = 5
+
+# Per-priority webhook overrides (optional)
+# If a priority has no override, the default webhooks above are used.
+[alerting.priorities.p0]
+feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/critical-group..."
+
+[alerting.priorities.p1]
+feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/ops-group..."
+
+[alerting.priorities.p2]
+feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/general-group..."
 
 [probe]
 # Optional: HTTP health check endpoint
@@ -96,6 +106,16 @@ url = "http://localhost:8545"
 check_interval_seconds = 10
 failure_threshold = 3
 ```
+
+### Priority Levels
+
+| Priority | Description | Default Usage |
+|----------|-------------|---------------|
+| P0 | Highest priority | Probe alerts, default for log alerts |
+| P1 | Medium priority | — |
+| P2 | Lowest priority | — |
+
+**Fallback logic**: When a priority has no webhook override in `[alerting.priorities.<level>]`, the top-level `[alerting]` webhooks are used.
 
 ## Components
 
@@ -170,10 +190,17 @@ file_patterns = [
 recent_file_threshold_seconds = 86400
 error_pattern = "(?i)error|panic|fatal|warn"
 whitelist_path = "consensus_whitelist.csv"
+default_priority = "p0"
 
 [alerting]
-feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/your-webhook-id"
+feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/default..."
 min_alert_interval = 5
+
+[alerting.priorities.p0]
+feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/critical-alerts..."
+
+[alerting.priorities.p1]
+feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/ops-alerts..."
 
 [probe]
 url = "http://localhost:8545"
