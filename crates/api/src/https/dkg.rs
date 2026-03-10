@@ -96,9 +96,7 @@ impl DkgState {
                 error!("Failed to get latest ledger info: {:?}", e);
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    JsonResponse(ErrorResponse {
-                        error: format!("Failed to get latest ledger info: {e:?}"),
-                    }),
+                    JsonResponse(ErrorResponse { error: "Internal server error".to_string() }),
                 )
                     .into_response();
             }
@@ -146,7 +144,7 @@ impl DkgState {
                                 return (
                                     StatusCode::INTERNAL_SERVER_ERROR,
                                     JsonResponse(ErrorResponse {
-                                        error: format!("Failed to deserialize DKG state: {e:?}"),
+                                        error: "Internal server error".to_string(),
                                     }),
                                 )
                                     .into_response();
@@ -158,7 +156,7 @@ impl DkgState {
                         return (
                             StatusCode::INTERNAL_SERVER_ERROR,
                             JsonResponse(ErrorResponse {
-                                error: format!("Failed to convert config bytes: {e:?}"),
+                                error: "Internal server error".to_string(),
                             }),
                         )
                             .into_response();
@@ -234,9 +232,7 @@ impl DkgState {
                 error!("Failed to get randomness for block {}: {:?}", block_number, e);
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    JsonResponse(ErrorResponse {
-                        error: format!("Failed to get randomness for block {block_number}: {e:?}"),
-                    }),
+                    JsonResponse(ErrorResponse { error: "Internal server error".to_string() }),
                 )
                     .into_response()
             }
