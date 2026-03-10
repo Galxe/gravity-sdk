@@ -335,20 +335,25 @@ impl ConsensusEngine {
             consensus_mempool_handler.start().await;
         });
         runtimes.push(runtime);
-        // trigger this to make epoch manager invoke new epoch
-        let https_config = prepare_https_server_config(&node_config, consensus_db.clone());
-        if !https_config.address.is_empty() {
-            let runtime = gaptos::aptos_runtimes::spawn_named_runtime("Http".into(), None);
-            runtime.spawn(async move {
-                https_server(
-                    https_config.address,
-                    https_config.cert_pem,
-                    https_config.key_pem,
-                    https_config.consensus_db,
-                )
-                .await
-            });
-            runtimes.push(runtime);
+        // The HTTP/HTTPS API server exposes consensus/DKG endpoints,
+        // failpoint injection, and heap profiling. None of these are needed in production.
+        // Gate the entire server behind debug_assertions so it is not started in release builds.
+        #[cfg(debug_assertions)]
+        {
+            let https_config = prepare_https_server_config(&node_config, consensus_db.clone());
+            if !https_config.address.is_empty() {
+                let runtime = gaptos::aptos_runtimes::spawn_named_runtime("Http".into(), None);
+                runtime.spawn(async move {
+                    https_server(
+                        https_config.address,
+                        https_config.cert_pem,
+                        https_config.key_pem,
+                        https_config.consensus_db,
+                    )
+                    .await
+                });
+                runtimes.push(runtime);
+            }
         }
         let arc_consensus_engine = Arc::new(Self { runtimes });
         // process new round should be after init retƒh hash

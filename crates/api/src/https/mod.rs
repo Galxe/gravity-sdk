@@ -8,7 +8,7 @@ use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use aptos_consensus::consensusdb::ConsensusDB;
 use axum::{
     body::Body,
-    extract::{Path, State},
+    extract::{DefaultBodyLimit, Path, State},
     http::Request,
     middleware::{self, Next},
     response::Response,
@@ -98,6 +98,8 @@ impl HttpsServer {
             };
 
         let dkg_state_arc = Arc::new(dkg_state);
+        let has_tls = self.cert_pem.is_some() && self.key_pem.is_some();
+
         let https_routes = Router::new()
             .route("/tx/submit_tx", post(submit_tx_lambda))
             .route("/tx/get_tx_by_hash/:hash_value", get(get_tx_by_hash_lambda))
@@ -112,8 +114,22 @@ impl HttpsServer {
             .route("/consensus/validator_count/:epoch", get(get_validator_count_lambda))
             .route("/set_failpoint", post(set_fail_point_lambda))
             .route("/mem_prof", post(control_profiler_lambda));
-        let app = Router::new().merge(https_routes).merge(http_routes).with_state(dkg_state_arc);
-        let addr: SocketAddr = self.address.parse().unwrap();
+
+        // GSDK-013: Only register sensitive https_routes when TLS is configured
+        let app = if has_tls {
+            Router::new().merge(https_routes).merge(http_routes)
+        } else {
+            info!("WARNING: TLS not configured. Consensus/DKG sensitive endpoints are disabled. Only serving public HTTP routes.");
+            Router::new().merge(http_routes)
+        }
+        .layer(DefaultBodyLimit::max(1_048_576)) // GSDK-011: 1 MB max request body
+        .with_state(dkg_state_arc);
+
+        let addr: SocketAddr = self
+            .address
+            .parse()
+            .unwrap_or_else(|e| panic!("Invalid bind address '{}': {e}", self.address)); // GSDK-014
+
         match (self.cert_pem.clone(), self.key_pem.clone()) {
             (Some(cert_path), Some(key_path)) => {
                 // configure certificate and private key used by https
