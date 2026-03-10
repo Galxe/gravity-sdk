@@ -1,4 +1,7 @@
-use crate::{config::ProbeConfig, notifier::Notifier};
+use crate::{
+    config::{Priority, ProbeConfig},
+    notifier::Notifier,
+};
 use reqwest::Client;
 use std::time::Duration;
 use tokio::time;
@@ -61,7 +64,8 @@ impl Probe {
             if failures >= self.config.failure_threshold {
                 let msg = format!("Probe failed {} times for URL: {}", failures, self.config.url);
                 println!("TRIGGERING ALERT: {msg}");
-                if let Err(e) = self.notifier.alert(&msg, "PROBE").await {
+                // Probe alerts are always P0
+                if let Err(e) = self.notifier.alert(&msg, "PROBE", Priority::P0).await {
                     eprintln!("Failed to send probe alert: {e:?}");
                 }
                 // Reset failures to avoid spamming every cycle
