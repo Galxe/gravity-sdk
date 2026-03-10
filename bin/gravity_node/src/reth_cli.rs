@@ -137,7 +137,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         let index = match proposer_index {
             Some(idx) => idx,
             None => {
-                // GSDK-026: Log when proposer_index is absent — this means the block
+                // Log when proposer_index is absent — this means the block
                 // metadata from consensus did not include a proposer.
                 warn!(
                     "Block has no proposer_index in metadata, using Address::ZERO as coinbase. \

@@ -171,7 +171,7 @@ pub struct BlockStateMachine {
     block_number_to_block_id: HashMap<u64, BlockId>,
     current_epoch: u64,
     next_epoch: Option<u64>,
-    /// GSDK-017: Moved from separate Mutex to eliminate nested locking.
+    /// Moved from separate Mutex to eliminate nested locking.
     latest_epoch_change_block_number: u64,
 }
 
@@ -196,7 +196,7 @@ impl Default for BlockBufferManagerConfig {
 /// Manages the lifecycle of blocks through the GCEI pipeline:
 /// Ordered -> Computed -> Committed.
 ///
-/// # Epoch Transition Behavior (GSDK-027)
+/// # Epoch Transition Behavior
 ///
 /// During epoch transitions, different validators may temporarily observe
 /// different `current_epoch` values. This is expected and safe because:
@@ -215,7 +215,7 @@ pub struct BlockBufferManager {
     block_state_machine: Mutex<BlockStateMachine>,
     buffer_state: AtomicU8,
     config: BlockBufferManagerConfig,
-    // GSDK-017: latest_epoch_change_block_number moved into BlockStateMachine
+    // latest_epoch_change_block_number moved into BlockStateMachine
     ready_notifier: Arc<Notify>,
 }
 
@@ -296,7 +296,7 @@ impl BlockBufferManager {
                 BlockKey::new(commit_block_epoch, latest_commit_block_number),
                 BlockState::Historical { id: commit_block_id },
             );
-            // GSDK-017: Access via block_state_machine instead of separate mutex
+            // Access via block_state_machine instead of separate mutex
             block_state_machine.latest_epoch_change_block_number = latest_commit_block_number;
         }
         self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
@@ -348,7 +348,7 @@ impl BlockBufferManager {
     }
 
     pub async fn consume_epoch_change(&self) -> u64 {
-        // GSDK-021: Acquire lock first to prevent TOCTOU race.
+        // Acquire lock first to prevent TOCTOU race.
         // Other tasks checking is_epoch_change() will still see EpochChange
         // until we have fully read the new epoch and are ready to proceed.
         let block_state_machine = self.block_state_machine.lock().await;
@@ -358,7 +358,7 @@ impl BlockBufferManager {
         epoch
     }
 
-    // GSDK-017: Access via block_state_machine instead of separate mutex
+    // Access via block_state_machine instead of separate mutex
     pub async fn latest_epoch_change_block_number(&self) -> u64 {
         let bsm = self.block_state_machine.lock().await;
         bsm.latest_epoch_change_block_number
@@ -415,7 +415,7 @@ impl BlockBufferManager {
         let mut block_state_machine = self.block_state_machine.lock().await;
         let current_epoch = block_state_machine.current_epoch;
 
-        // GSDK-019: Check epoch validity with metrics for dropped blocks
+        // Check epoch validity with metrics for dropped blocks
         if block.block_meta.epoch < current_epoch {
             warn!(
                 "set_ordered_blocks: ignoring block {} with old epoch {} (current epoch: {}). \
@@ -426,7 +426,7 @@ impl BlockBufferManager {
         }
 
         if block.block_meta.epoch > current_epoch {
-            // GSDK-019: Future-epoch blocks should not arrive under correct consensus.
+            // Future-epoch blocks should not arrive under correct consensus.
             // Return an error to surface the issue.
             let msg = format!(
                 "set_ordered_blocks: block {} has future epoch {} (current epoch: {}). \
@@ -641,7 +641,7 @@ impl BlockBufferManager {
                 }
             } else {
                 // invariant: the missed block is removed after epoch change
-                // GSDK-017: Access via block_state_machine (already held)
+                // Access via block_state_machine (already held)
                 let latest_epoch_change_block_number =
                     block_state_machine.latest_epoch_change_block_number;
                 let msg = format!("There is no Ordered Block but try to get executed result for block {block_id:?} and block num {block_num:?}, latest epoch change block number {latest_epoch_change_block_number:?}");
@@ -686,7 +686,7 @@ impl BlockBufferManager {
             "block number {} get validator set from new epoch {} event {:?}",
             block_num, new_epoch, validator_set
         );
-        // GSDK-017: Access via block_state_machine (already held by caller)
+        // Access via block_state_machine (already held by caller)
         block_state_machine.latest_epoch_change_block_number = block_num;
 
         // Store the new epoch in next_epoch instead of updating current_epoch immediately
@@ -955,7 +955,7 @@ impl BlockBufferManager {
 
     pub async fn release_inflight_blocks(&self) {
         let mut block_state_machine = self.block_state_machine.lock().await;
-        // GSDK-017: Access via block_state_machine instead of separate mutex
+        // Access via block_state_machine instead of separate mutex
         let latest_epoch_change_block_number = block_state_machine.latest_epoch_change_block_number;
         let old_epoch = block_state_machine.current_epoch;
 
