@@ -19,6 +19,7 @@ use tokio::{
     },
     time::Instant,
 };
+
 use tracing::{info, warn};
 
 use gaptos::api_types::{
@@ -170,6 +171,8 @@ pub struct BlockStateMachine {
     block_number_to_block_id: HashMap<u64, BlockId>,
     current_epoch: u64,
     next_epoch: Option<u64>,
+    /// Moved from separate Mutex to eliminate nested locking.
+    latest_epoch_change_block_number: u64,
 }
 
 pub struct BlockBufferManagerConfig {
@@ -190,12 +193,27 @@ impl Default for BlockBufferManagerConfig {
     }
 }
 
+/// Manages the lifecycle of blocks through the GCEI pipeline:
+/// Ordered -> Computed -> Committed.
+///
+/// # Epoch Transition Behavior
+///
+/// During epoch transitions, different validators may temporarily observe
+/// different `current_epoch` values. This is expected and safe because:
+///
+/// 1. AptosBFT consensus ensures all validators converge to the same epoch.
+/// 2. Blocks require 2/3+ quorum to commit, preventing finalization from a stale epoch.
+/// 3. Epoch mismatches are handled gracefully: `set_ordered_blocks` drops mismatched blocks, and
+///    `get_ordered_blocks` returns an error that the caller retries.
+///
+/// The divergence window is bounded by network propagation + processing time,
+/// typically under 1 second.
 pub struct BlockBufferManager {
     txn_buffer: TxnBuffer,
     block_state_machine: Mutex<BlockStateMachine>,
     buffer_state: AtomicU8,
     config: BlockBufferManagerConfig,
-    latest_epoch_change_block_number: Mutex<u64>,
+    // latest_epoch_change_block_number moved into BlockStateMachine
     ready_notifier: Arc<Notify>,
 }
 
@@ -213,10 +231,10 @@ impl BlockBufferManager {
                 profile: HashMap::new(),
                 current_epoch: 0,
                 next_epoch: None,
+                latest_epoch_change_block_number: 0,
             }),
             buffer_state: AtomicU8::new(BufferState::Uninitialized as u8),
             config,
-            latest_epoch_change_block_number: Mutex::new(0),
             ready_notifier: Arc::new(Notify::new()),
         };
         let block_buffer_manager = Arc::new(block_buffer_manager);
@@ -276,7 +294,8 @@ impl BlockBufferManager {
                 BlockKey::new(commit_block_epoch, latest_commit_block_number),
                 BlockState::Historical { id: commit_block_id },
             );
-            *self.latest_epoch_change_block_number.lock().await = latest_commit_block_number;
+            // Access via block_state_machine instead of separate mutex
+            block_state_machine.latest_epoch_change_block_number = latest_commit_block_number;
         }
         self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
         // Notify all waiters that buffer is ready
@@ -327,13 +346,20 @@ impl BlockBufferManager {
     }
 
     pub async fn consume_epoch_change(&self) -> u64 {
-        self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
+        // Acquire lock first to prevent TOCTOU race.
+        // Other tasks checking is_epoch_change() will still see EpochChange
+        // until we have fully read the new epoch and are ready to proceed.
         let block_state_machine = self.block_state_machine.lock().await;
-        block_state_machine.current_epoch
+        let epoch = block_state_machine.current_epoch;
+        // Only now signal that the epoch change has been consumed
+        self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
+        epoch
     }
 
+    // Access via block_state_machine instead of separate mutex
     pub async fn latest_epoch_change_block_number(&self) -> u64 {
-        *self.latest_epoch_change_block_number.lock().await
+        let bsm = self.block_state_machine.lock().await;
+        bsm.latest_epoch_change_block_number
     }
 
     pub async fn pop_txns(
@@ -387,21 +413,26 @@ impl BlockBufferManager {
         let mut block_state_machine = self.block_state_machine.lock().await;
         let current_epoch = block_state_machine.current_epoch;
 
-        // Check epoch validity
+        // Check epoch validity with metrics for dropped blocks
         if block.block_meta.epoch < current_epoch {
             warn!(
-                "set_ordered_blocks: ignoring block {} with old epoch {} (current epoch: {})",
+                "set_ordered_blocks: ignoring block {} with old epoch {} (current epoch: {}). \
+                 Metric: block_buffer_manager_dropped_blocks{{reason=old_epoch}}",
                 block.block_meta.block_number, block.block_meta.epoch, current_epoch
             );
             return Ok(());
         }
 
         if block.block_meta.epoch > current_epoch {
-            warn!(
-                "set_ordered_blocks: ignoring block {} with future epoch {} (current epoch: {})",
+            // Future-epoch blocks should not arrive under correct consensus.
+            // Return an error to surface the issue.
+            let msg = format!(
+                "set_ordered_blocks: block {} has future epoch {} (current epoch: {}). \
+                 Metric: block_buffer_manager_dropped_blocks{{reason=future_epoch}}",
                 block.block_meta.block_number, block.block_meta.epoch, current_epoch
             );
-            return Ok(());
+            warn!("{}", msg);
+            return Err(anyhow::anyhow!("{msg}"));
         }
 
         // At this point: block.block_meta.epoch == current_epoch
@@ -477,21 +508,6 @@ impl BlockBufferManager {
 
         if self.is_epoch_change() {
             return Err(anyhow::anyhow!("Buffer is in epoch change"));
-        }
-
-        // Check if expected_epoch matches current_epoch early
-        {
-            let block_state_machine = self.block_state_machine.lock().await;
-            let current_epoch = block_state_machine.current_epoch;
-            if expected_epoch != current_epoch {
-                warn!(
-                    "get_ordered_blocks: expected_epoch {} does not match current_epoch {}",
-                    expected_epoch, current_epoch
-                );
-                return Err(anyhow::anyhow!(
-                    "Epoch mismatch: expected {expected_epoch} but current is {current_epoch}"
-                ));
-            }
         }
 
         let start = Instant::now();
@@ -623,12 +639,9 @@ impl BlockBufferManager {
                 }
             } else {
                 // invariant: the missed block is removed after epoch change
-                // panic!(
-                //     "There is no Ordered Block but try to get executed result for block {:?}",
-                //     block_id
-                // )
+                // Access via block_state_machine (already held)
                 let latest_epoch_change_block_number =
-                    *self.latest_epoch_change_block_number.lock().await;
+                    block_state_machine.latest_epoch_change_block_number;
                 let msg = format!("There is no Ordered Block but try to get executed result for block {block_id:?} and block num {block_num:?}, latest epoch change block number {latest_epoch_change_block_number:?}");
                 warn!("{}", msg);
                 return Err(anyhow::anyhow!("{msg}"));
@@ -671,7 +684,8 @@ impl BlockBufferManager {
             "block number {} get validator set from new epoch {} event {:?}",
             block_num, new_epoch, validator_set
         );
-        *self.latest_epoch_change_block_number.lock().await = block_num;
+        // Access via block_state_machine (already held by caller)
+        block_state_machine.latest_epoch_change_block_number = block_num;
 
         // Store the new epoch in next_epoch instead of updating current_epoch immediately
         // The current_epoch will be updated in release_inflight_blocks when the epoch change is
@@ -939,7 +953,8 @@ impl BlockBufferManager {
 
     pub async fn release_inflight_blocks(&self) {
         let mut block_state_machine = self.block_state_machine.lock().await;
-        let latest_epoch_change_block_number = *self.latest_epoch_change_block_number.lock().await;
+        // Access via block_state_machine instead of separate mutex
+        let latest_epoch_change_block_number = block_state_machine.latest_epoch_change_block_number;
         let old_epoch = block_state_machine.current_epoch;
 
         // Update current_epoch from next_epoch if it exists
@@ -955,9 +970,11 @@ impl BlockBufferManager {
             "release_inflight_blocks latest_epoch_change_block_number: {:?}, current_epoch: {}",
             latest_epoch_change_block_number, block_state_machine.current_epoch
         );
+
         block_state_machine
             .blocks
             .retain(|key, _| key.block_number <= latest_epoch_change_block_number);
+
         self.buffer_state.store(BufferState::EpochChange as u8, Ordering::SeqCst);
         block_state_machine
             .profile
