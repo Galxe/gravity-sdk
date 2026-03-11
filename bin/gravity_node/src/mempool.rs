@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -41,6 +42,9 @@ struct CachedBest {
         Box<dyn BestTransactions<Item = Arc<ValidPoolTransaction<EthPooledTransaction>>> + 'static>,
     >,
     created_at: Instant,
+    /// Track the last yielded nonce per sender to enforce nonce ordering.
+    /// Cleared when the iterator is recreated (on TTL expiry).
+    last_nonces: HashMap<Address, u64>,
 }
 
 impl CachedBest {
@@ -48,6 +52,7 @@ impl CachedBest {
         Self {
             best_txns: None,
             created_at: Instant::now() - cache_ttl() - Duration::from_millis(1), // Start expired
+            last_nonces: HashMap::new(),
         }
     }
 
@@ -123,17 +128,29 @@ impl TxPool for Mempool {
             *best_txns = CachedBest {
                 best_txns: Some(self.pool.best_transactions()),
                 created_at: Instant::now(),
+                last_nonces: HashMap::new(),
             };
         }
         let txn_cache = self.txn_cache.clone();
+        // Take last_nonces out to avoid borrow conflict with best_txns iterator
+        let mut last_nonces = std::mem::take(&mut best_txns.last_nonces);
         let result: Vec<_> = best_txns
             .best_txns
             .as_mut()
             .unwrap()
             .filter_map(|pool_txn| {
-                let sender = convert_account(pool_txn.sender());
+                let sender = pool_txn.sender();
                 let nonce = pool_txn.nonce();
 
+                // Enforce nonce ordering: skip transactions that are not consecutive
+                if let Some(&last) = last_nonces.get(&sender) {
+                    if nonce != last + 1 {
+                        return None;
+                    }
+                }
+                last_nonces.insert(sender, nonce);
+
+                let sender = convert_account(sender);
                 if let Some(ref f) = filter {
                     let hash = TxnHash::from_bytes(pool_txn.hash().as_slice());
                     if !f((sender.clone(), nonce, hash)) {
@@ -148,8 +165,14 @@ impl TxPool for Mempool {
             })
             .take(limit)
             .collect();
+        // Put last_nonces back
+        best_txns.last_nonces = last_nonces;
         if result.is_empty() {
-            *best_txns = CachedBest { best_txns: None, created_at: Instant::now() };
+            *best_txns = CachedBest {
+                best_txns: None,
+                created_at: Instant::now(),
+                last_nonces: HashMap::new(),
+            };
         }
         Box::new(result.into_iter())
     }

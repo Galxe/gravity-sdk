@@ -1,3 +1,4 @@
+use crate::config::Priority;
 use anyhow::Result;
 use csv::ReaderBuilder;
 use regex::Regex;
@@ -9,22 +10,24 @@ const WINDOW_SECONDS: u64 = 300; // 5 minutes
 #[derive(Debug)]
 pub enum CheckResult {
     /// No rule matched, alert normally
-    Normal,
+    AlwaysAlert,
     /// Matched but below threshold, skip alerting
     Skip,
-    /// Matched and above threshold, alert with frequency count
-    Alert { count: u32 },
+    /// Matched and above threshold, alert with frequency count and optional priority override
+    Alert { count: u32, priority: Priority },
 }
 
-/// A whitelist rule with pattern and threshold.
+/// A whitelist rule with pattern, threshold, and optional priority override.
 pub struct WhitelistRule {
     pattern: Regex,
     threshold: i32,
+    /// Priority for alerts from this rule (default: P0).
+    priority: Priority,
     timestamps: VecDeque<Instant>,
 }
 
 impl WhitelistRule {
-    pub fn new(pattern_str: &str, threshold: i32) -> Result<Self> {
+    pub fn new(pattern_str: &str, threshold: i32, priority: Priority) -> Result<Self> {
         // Try to compile as regex first, fallback to literal string if invalid
         let pattern = match Regex::new(pattern_str) {
             Ok(re) => re,
@@ -34,7 +37,7 @@ impl WhitelistRule {
             }
         };
 
-        Ok(Self { pattern, threshold, timestamps: VecDeque::new() })
+        Ok(Self { pattern, threshold, priority, timestamps: VecDeque::new() })
     }
 
     fn matches(&self, line: &str) -> bool {
@@ -51,16 +54,17 @@ pub struct Whitelist {
 impl Whitelist {
     /// Load whitelist rules from a CSV file.
     ///
-    /// Format: Pattern,Threshold
+    /// Format: Pattern,Threshold[,Priority]
     /// - Lines starting with # are comments
     /// - Threshold = -1: always ignore
     /// - Threshold > 0: alert if count > threshold in 5 minutes
+    /// - Priority (optional): p0, p1, p2 — override default alert priority
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
         let file = File::open(path)?;
         let mut reader = ReaderBuilder::new()
             .has_headers(false)
             .comment(Some(b'#'))
-            .flexible(true) // Allow flexible number of fields to handle potential issues gracefully
+            .flexible(true) // Allow flexible number of fields to handle optional priority
             .from_reader(file);
 
         let mut rules = Vec::new();
@@ -68,7 +72,7 @@ impl Whitelist {
         for result in reader.records() {
             let record = result?;
 
-            // Expected format: pattern, threshold
+            // Expected format: pattern, threshold [, priority]
             if record.len() < 2 {
                 continue;
             }
@@ -88,9 +92,21 @@ impl Whitelist {
                 }
             };
 
-            match WhitelistRule::new(pattern, threshold) {
+            // Parse optional priority (third column, default: P0)
+            let priority: Priority = if record.len() >= 3 {
+                let p_str = record[2].trim();
+                match p_str.to_lowercase().as_str() {
+                    "p1" => Priority::P1,
+                    "p2" => Priority::P2,
+                    _ => Priority::P0,
+                }
+            } else {
+                Priority::P0
+            };
+
+            match WhitelistRule::new(pattern, threshold, priority) {
                 Ok(rule) => {
-                    println!("  Loaded rule: pattern='{pattern}', threshold={threshold}");
+                    println!("  Loaded rule: pattern='{pattern}', threshold={threshold}, priority={priority}");
                     rules.push(rule);
                 }
                 Err(e) => {
@@ -130,14 +146,14 @@ impl Whitelist {
 
                 // Check threshold
                 if count > rule.threshold as u32 {
-                    return CheckResult::Alert { count };
+                    return CheckResult::Alert { count, priority: rule.priority };
                 } else {
                     return CheckResult::Skip;
                 }
             }
         }
 
-        // No rule matched, alert normally
-        CheckResult::Normal
+        // No rule matched, always alert
+        CheckResult::AlwaysAlert
     }
 }
