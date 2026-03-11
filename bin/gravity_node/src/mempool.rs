@@ -159,8 +159,8 @@ impl TxPool for Mempool {
                 }
 
                 let verified_txn = to_verified_txn(pool_txn.clone());
-                txn_cache
-                    .insert((verified_txn.sender.clone(), verified_txn.sequence_number), pool_txn);
+                let tx_hash: [u8; 32] = pool_txn.transaction.transaction().inner().hash().0;
+                txn_cache.insert(tx_hash, pool_txn);
                 Some(verified_txn)
             })
             .take(limit)

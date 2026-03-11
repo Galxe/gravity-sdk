@@ -68,8 +68,7 @@ impl<T> RethEthCall for T where
 pub(crate) type RethPipeExecLayerApi<EthApi> =
     PipeExecLayerApi<BlockViewStorage<RethBlockChainProvider>, EthApi>;
 
-pub(crate) type TxnCache =
-    Arc<DashMap<(ExternalAccountAddress, u64), Arc<ValidPoolTransaction<EthPooledTransaction>>>>;
+pub(crate) type TxnCache = Arc<DashMap<[u8; 32], Arc<ValidPoolTransaction<EthPooledTransaction>>>>;
 
 pub struct RethCli<EthApi: RethEthCall> {
     _auth: AuthServerHandle,
@@ -195,7 +194,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
 
         {
             for (idx, txn) in block.txns.iter().enumerate() {
-                let key = (txn.sender.clone(), txn.sequence_number);
+                let key = txn.committed_hash();
                 if let Some((_, cached_txn)) = self.txn_cache.remove(&key) {
                     senders[idx] = Some(cached_txn.sender());
                     transactions[idx] = Some(cached_txn.transaction.transaction().inner().clone());
