@@ -331,8 +331,8 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             };
             if let Err(e) = exec_blocks {
                 let from = start_ordered_block;
-                if e.to_string().contains("Buffer is in epoch change")
-                    || current_epoch != get_block_buffer_manager().get_current_epoch().await
+                if e.to_string().contains("Buffer is in epoch change") ||
+                    current_epoch != get_block_buffer_manager().get_current_epoch().await
                 {
                     // consume_epoch_change returns the new epoch
                     let new_epoch = get_block_buffer_manager().consume_epoch_change().await;

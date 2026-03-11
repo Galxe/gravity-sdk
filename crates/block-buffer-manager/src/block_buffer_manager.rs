@@ -202,11 +202,9 @@ impl Default for BlockBufferManagerConfig {
 /// different `current_epoch` values. This is expected and safe because:
 ///
 /// 1. AptosBFT consensus ensures all validators converge to the same epoch.
-/// 2. Blocks require 2/3+ quorum to commit, preventing finalization from a
-///    stale epoch.
-/// 3. Epoch mismatches are handled gracefully: `set_ordered_blocks` drops
-///    mismatched blocks, and `get_ordered_blocks` returns an error that the
-///    caller retries.
+/// 2. Blocks require 2/3+ quorum to commit, preventing finalization from a stale epoch.
+/// 3. Epoch mismatches are handled gracefully: `set_ordered_blocks` drops mismatched blocks, and
+///    `get_ordered_blocks` returns an error that the caller retries.
 ///
 /// The divergence window is bounded by network propagation + processing time,
 /// typically under 1 second.
@@ -233,7 +231,7 @@ impl BlockBufferManager {
                 profile: HashMap::new(),
                 current_epoch: 0,
                 next_epoch: None,
-                latest_epoch_change_block_number: 0, // GSDK-017
+                latest_epoch_change_block_number: 0,
             }),
             buffer_state: AtomicU8::new(BufferState::Uninitialized as u8),
             config,
