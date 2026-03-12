@@ -5,7 +5,7 @@
 # External dependencies for genesis generation
 [dependencies.genesis_contracts]
 repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
-ref = "main"
+ref = "<40-char trusted commit hash>"  # Must be a full commit hash, not a branch
 
 # Genesis configuration
 [genesis]

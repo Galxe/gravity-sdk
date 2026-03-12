@@ -1,0 +1,92 @@
+curl -s -X POST http://34.83.28.182:8545 \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"eth_getBalance","params":["0xB99AA922Eb5CaE399b79ADC87621E72f66d5A976","latest"],"id":1}' | jq
+
+
+./gravity_cli stake create \
+  --rpc-url http://127.0.0.1:8546 \
+  --private-key 0x047a5466f6f9e08c8bcc56213d6530d517c1ef126eefbbdf85ffe8d893ed0e9f \
+  --stake-amount 2
+
+./gravity_cli stake get \
+  --rpc-url http://127.0.0.1:8546 \
+  --owner 0x18c23753385ce7A60B15d171302E48b6AFf0BDC5
+
+./gravity_cli validator join \
+  --rpc-url http://127.0.0.1:8545 \
+  --private-key 0xb4034281871a4e42d7b99d8cbe61bb0d2fe137fb95871558643235321a8afafc \
+  --stake-pool 0xb071CC30F30bDbcd06C5248553c96146593E05AC \
+  --consensus-public-key "8cc90f15bcda20a9960476195b9cabf49c94e7f097cf64c8d89c4cd8a3e8d5484fd62cd70cb68e489d5095cf5f8b4031" \
+  --network-public-key "e4e46919de86c323a4fb90cfe02811c5130857506a79408046b3b58e96dbc87a" \
+  --consensus-pop "aad3147ab25e221bfd45042ae8ca60c5881d4a6ef0e47068a337240c1fbf8a3e5156397bb6056b6b0b38a13fc1071ec30f4be855861a12a3cfd16468b93ac63f7660192ecc623a7bbab112ad8d74e2edb6a402cb1482d9b591a58a2151f9a130" \
+  --validator-network-address "/ip4/127.0.0.1/tcp/6183" \
+  --fullnode-network-address "/ip4/127.0.0.1/tcp/6193" \
+  --moniker "node4"
+
+./gravity_cli validator list --rpc-url http://127.0.0.1:8545
+
+./gravity_cli validator leave \
+  --rpc-url http://127.0.0.1:8545 \
+  --private-key 0x047a5466f6f9e08c8bcc56213d6530d517c1ef126eefbbdf85ffe8d893ed0e9f \
+  --stake-pool 0xce128222bd84d67672f863424a03d114cd1253c5
+
+我需要从 b4034281871a4e42d7b99d8cbe61bb0d2fe137fb95871558643235321a8afafc 向 0x8Fa80A2f23c98324B7176100dcf66D1Fe37927f0 转帐 1000100
+
+./gravity_cli stake create \
+  --rpc-url http://127.0.0.1:8545 \
+  --private-key b4034281871a4e42d7b99d8cbe61bb0d2fe137fb95871558643235321a8afafc \
+  --stake-amount 2
+
+
+
+./gravity_cli validator list --rpc-url http://34.83.9.159:8545
+./gravity_cli validator list --rpc-url http://127.0.0.1:8545
+
+
+cast balance 0x28a8329681fc06c12d1d6a403f305c7c403c9e00 --rpc-url http://127.0.0.1:8545 --ether
+cast balance 0x77b6c529777422243e7f9a9d625f8694653f845c --rpc-url http://127.0.0.1:8545 --ether
+cast balance 0x1fb3b868d49d73b303aebc8b960248113cd2e1b8 --rpc-url http://127.0.0.1:8545 --ether
+cast balance 0x1fb3b868d49d73b303aebc8b960248113cd2e1b8 --rpc-url http://127.0.0.1:8545 --ether
+
+
+cast balance 0xAEd2a948892475F800A337427B3275D190EA3e94 --rpc-url http://127.0.0.1:8545 --ether
+
+cast send 0x28a8329681fc06c12d1d6a403f305c7c403c9e00 \
+  "withdrawRewards(address)(uint256)" \
+  0xAEd2a948892475F800A337427B3275D190EA3e94 \
+  --rpc-url http://127.0.0.1:8545 \
+  --private-key 0x047a5466f6f9e08c8bcc56213d6530d517c1ef126eefbbdf85ffe8d893ed0e9f
+
+cast balance 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --rpc-url http://127.0.0.1:8545 --ether
+
+cast call 0xce128222bd84d67672f863424a03d114cd1253c5 "getRewardBalance()(uint256)" --rpc-url http://34.83.28.182:8545
+
+cast call 0xce128222bd84d67672f863424a03d114cd1253c5 "getRewardBalance()(uint256)" --rpc-url http://127.0.0.1:8545
+
+cast call 0xce128222bd84d67672f863424a03d114cd1253c5 "stakingFactory()(address)" --rpc-url http://34.83.28.182:8545
+
+cast send 0xce128222bd84d67672f863424a03d114cd1253c5 \
+  "withdrawAvailable(address)" \
+  0xAEd2a948892475F800A337427B3275D190EA3e94 \
+  --rpc-url http://127.0.0.1:8546 \
+  --private-key 0x047a5466f6f9e08c8bcc56213d6530d517c1ef126eefbbdf85ffe8d893ed0e9f
+
+cast send 0x18c23753385ce7A60B15d171302E48b6AFf0BDC5 \
+  --value 3ether \
+  --rpc-url http://127.0.0.1:8546 \
+  --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+
+
+https://github.com/theobhau183919-ux/gravity-sdk/pull/36
+https://github.com/theobhau183919-ux/gravity-sdk/pull/29
+https://github.com/theobhau183919-ux/gravity-sdk/pull/28
+https://github.com/theobhau183919-ux/gravity-sdk/pull/24
+https://github.com/theobhau183919-ux/gravity-sdk/pull/21
+https://github.com/theobhau183919-ux/gravity-sdk/pull/18
+https://github.com/theobhau183919-ux/gravity-sdk/pull/17
+https://github.com/theobhau183919-ux/gravity-sdk/pull/14
+https://github.com/theobhau183919-ux/gravity-sdk/pull/9
+https://github.com/theobhau183919-ux/gravity-sdk/pull/8
+https://github.com/theobhau183919-ux/gravity-sdk/pull/7
+https://github.com/theobhau183919-ux/gravity-sdk/pull/5
+https://github.com/theobhau183919-ux/gravity-sdk/pull/2

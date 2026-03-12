@@ -55,7 +55,7 @@ use gaptos::{
 };
 use once_cell::sync::OnceCell;
 use std::{
-    collections::HashMap,
+    collections::{hash_map::Entry, HashMap},
     f32::consts::E,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -68,6 +68,8 @@ use tokio_retry::strategy::ExponentialBackoff;
 pub const COMMIT_VOTE_BROADCAST_INTERVAL_MS: u64 = 1500;
 pub const COMMIT_VOTE_REBROADCAST_INTERVAL_MS: u64 = 30000;
 pub const LOOP_INTERVAL_MS: u64 = 1500;
+pub const MAX_COMMIT_VOTE_CACHE_BLOCKS: usize = 1024;
+pub const MAX_COMMIT_VOTES_PER_BLOCK_IN_CACHE: usize = 128;
 
 #[derive(Debug, Default)]
 pub struct ResetAck {}
@@ -435,6 +437,7 @@ impl BufferManager {
         self.buffer = Buffer::new();
         self.execution_root = None;
         self.signing_root = None;
+        self.commit_vote_cache.clear();
         self.previous_commit_time = Instant::now();
         self.commit_proof_rb_handle.take();
         // purge the incoming blocks queue
@@ -609,6 +612,44 @@ impl BufferManager {
         }
     }
 
+    fn cache_future_commit_vote(&mut self, vote: CommitVote) {
+        let commit_info = vote.commit_info().clone();
+        let block_id = commit_info.id();
+        let author = HashValue::new(*vote.author());
+        let cache_len = self.commit_vote_cache.len();
+
+        match self.commit_vote_cache.entry(block_id) {
+            Entry::Occupied(mut entry) => {
+                let votes_for_block = entry.get_mut();
+                if votes_for_block.len() >= MAX_COMMIT_VOTES_PER_BLOCK_IN_CACHE
+                    && !votes_for_block.contains_key(&author)
+                {
+                    warn!(
+                        commit_info = ?commit_info,
+                        cache_len = votes_for_block.len(),
+                        "Dropping cached commit vote because per-block cache limit is reached"
+                    );
+                    return;
+                }
+                votes_for_block.insert(author, vote);
+            }
+            Entry::Vacant(entry) => {
+                if cache_len >= MAX_COMMIT_VOTE_CACHE_BLOCKS {
+                    warn!(
+                        commit_info = ?commit_info,
+                        cache_len = cache_len,
+                        "Dropping cached commit vote because global cache limit is reached"
+                    );
+                    return;
+                }
+
+                let mut votes_for_block = HashMap::new();
+                votes_for_block.insert(author, vote);
+                entry.insert(votes_for_block);
+            }
+        }
+    }
+
     /// process the commit vote messages
     /// it scans the whole buffer for a matching blockinfo
     /// if found, try advancing the item to be aggregated
@@ -621,13 +662,7 @@ impl BufferManager {
                 let commit_info = vote.commit_info().clone();
                 info!("Receive commit vote {} from {}", commit_info, author);
                 if commit_info.round() >= self.latest_round {
-                    if !self.commit_vote_cache.contains_key(&commit_info.id()) {
-                        self.commit_vote_cache.insert(commit_info.id(), HashMap::new());
-                    }
-                    self.commit_vote_cache
-                        .get_mut(&commit_info.id())
-                        .unwrap()
-                        .insert(HashValue::new(*author), vote.clone());
+                    self.cache_future_commit_vote(vote.clone());
                 }
                 let target_block_id = vote.commit_info().id();
                 let current_cursor =
@@ -702,8 +737,8 @@ impl BufferManager {
     /// this function retries all the items until the signing root
     /// note that there might be other signed items after the signing root
     async fn rebroadcast_commit_votes_if_needed(&mut self) {
-        if self.previous_commit_time.elapsed() <
-            Duration::from_millis(COMMIT_VOTE_BROADCAST_INTERVAL_MS)
+        if self.previous_commit_time.elapsed()
+            < Duration::from_millis(COMMIT_VOTE_BROADCAST_INTERVAL_MS)
         {
             return;
         }
@@ -723,8 +758,8 @@ impl BufferManager {
                     // even after send ack, We'll try to re-initiate the
                     // broadcast after 30s.
                     Some((start_time, _)) => {
-                        start_time.elapsed() >=
-                            Duration::from_millis(COMMIT_VOTE_REBROADCAST_INTERVAL_MS)
+                        start_time.elapsed()
+                            >= Duration::from_millis(COMMIT_VOTE_REBROADCAST_INTERVAL_MS)
                     }
                 };
                 if re_broadcast {

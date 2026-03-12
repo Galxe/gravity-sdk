@@ -1,0 +1,11 @@
+{
+    "nodes": {
+        "local_node": {
+            "type": "validator",
+            "role": "primary",
+            "host": "127.0.0.1",
+            "rpc_port": 8545,
+            "metrics_port": 9001
+        }
+    }
+}

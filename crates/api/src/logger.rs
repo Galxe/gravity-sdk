@@ -65,13 +65,13 @@ pub fn create_logger(
         LoggerFilterUpdater::new(logger, logger_builder);
 
     // Log the build information and the config
-    log_config_and_build_information(node_config);
+    log_config_and_build_information();
 
     (remote_log_receiver, logger_filter_updater)
 }
 
 /// Logs the node config and build information
-fn log_config_and_build_information(node_config: &NodeConfig) {
+fn log_config_and_build_information() {
     // Log the build information
     info!("Build information:");
     let build_info = build_information!();
@@ -91,18 +91,6 @@ fn log_config_and_build_information(node_config: &NodeConfig) {
                       * "tokio-console" */
     );
 
-    // Log the node config
-    // let mut config = node_config;
-    // let mut masked_config;
-    // if let Some(u) = &node_config.indexer.postgres_uri {
-    //     let mut parsed_url = url::Url::parse(u).expect("Invalid postgres uri");
-    //     if parsed_url.password().is_some() {
-    //         masked_config = node_config.clone();
-    //         parsed_url.set_password(Some("*")).unwrap();
-    //         masked_config.indexer.postgres_uri = Some(parsed_url.to_string());
-    //         config = &masked_config;
-    //     }
-    // }
-
-    info!("Loaded node config: {:?}", node_config);
+    // Do not log the full node config at startup because it may contain
+    // unredacted secrets (e.g., secure backend tokens).
 }

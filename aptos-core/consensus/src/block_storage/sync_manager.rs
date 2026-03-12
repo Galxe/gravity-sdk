@@ -87,15 +87,15 @@ impl BlockStore {
     /// This ensures that the block referred by the ledger info is not in buffer manager.
     pub fn need_sync_for_ledger_info(&self, li: &LedgerInfoWithSignatures) -> bool {
         // TODO move min gap to fallback (30) to config.
-        (self.ordered_root().round() < li.commit_info().round() &&
-            !self.block_exists(li.commit_info().id())) ||
-            self.commit_root().round() + 30.max(2 * self.vote_back_pressure_limit) <
-                li.commit_info().round()
+        (self.ordered_root().round() < li.commit_info().round()
+            && !self.block_exists(li.commit_info().id()))
+            || self.commit_root().round() + 30.max(2 * self.vote_back_pressure_limit)
+                < li.commit_info().round()
     }
 
     pub fn need_sync_to_highest_quorum_cert(&self, hqc: &QuorumCert) -> bool {
-        (self.ordered_root().round() < hqc.certified_block().round() &&
-            !self.block_exists(hqc.certified_block().id()))
+        (self.ordered_root().round() < hqc.certified_block().round()
+            && !self.block_exists(hqc.certified_block().id()))
     }
 
     /// Checks if quorum certificate can be inserted in block store without RPC
@@ -266,14 +266,15 @@ impl BlockStore {
             self.insert_single_quorum_cert(block_qc, false)?;
             self.insert_block(block.clone(), false).await?;
             if let Some(randomness) = randomness {
+                let block_number = block.block_number().ok_or_else(|| {
+                    anyhow!("randomness payload missing block number for block {}", block.id())
+                })?;
                 let pipelined_block = self.get_block(block.id()).unwrap();
                 pipelined_block.set_randomness(Randomness::new(
                     RandMetadata { epoch: block.epoch(), round: block.round() },
                     randomness.clone(),
                 ));
-                self.storage
-                    .consensus_db()
-                    .put_randomness(&vec![(block.block_number().unwrap(), randomness)])?;
+                self.storage.consensus_db().put_randomness(&vec![(block_number, randomness)])?;
             }
         }
         self.insert_single_quorum_cert(qc, false)
@@ -432,9 +433,9 @@ impl BlockStore {
         );
 
         // we fetch the blocks from
-        let num_blocks = highest_quorum_cert.certified_block().round() -
-            highest_commit_cert.ledger_info().ledger_info().round() +
-            1;
+        let num_blocks = highest_quorum_cert.certified_block().round()
+            - highest_commit_cert.ledger_info().ledger_info().round()
+            + 1;
 
         // although unlikely, we might wrap num_blocks around on a 32-bit machine
         assert!(num_blocks < std::usize::MAX as u64);
@@ -533,19 +534,19 @@ impl BlockStore {
         );
 
         // if the block exists between commit root and ordered root
-        if self.commit_root().round() < ledger_info.commit_info().round() &&
-            self.block_exists(ledger_info.commit_info().id()) &&
-            self.ordered_root().round() >= ledger_info.commit_info().round() &&
-            !has_missing_randomness
+        if self.commit_root().round() < ledger_info.commit_info().round()
+            && self.block_exists(ledger_info.commit_info().id())
+            && self.ordered_root().round() >= ledger_info.commit_info().round()
+            && !has_missing_randomness
         {
             info!("sync_to_highest_commit_cert: block exists between commit root and ordered root {:?}, {:?}", self.commit_root().round(), ledger_info.commit_info().round());
             let proof = ledger_info.clone();
             let network = retriever.network.clone();
             tokio::spawn(async move { network.send_commit_proof(proof).await });
             return Ok(());
-        } else if self.ordered_root().round() < ledger_info.commit_info().round() &&
-            !self.block_exists(ledger_info.commit_info().id()) ||
-            has_missing_randomness
+        } else if self.ordered_root().round() < ledger_info.commit_info().round()
+            && !self.block_exists(ledger_info.commit_info().id())
+            || has_missing_randomness
         {
             // Determine sync start point: use the check result if available, otherwise use
             // highest_commit_cert
@@ -739,8 +740,8 @@ impl BlockStore {
                 };
                 // Check if parent is the genesis block (round == 0 indicates genesis or epoch
                 // boundary)
-                parent_is_genesis_block = qc.vote_data().parent().id() != HashValue::zero() &&
-                    qc.vote_data().parent().round() == 0;
+                parent_is_genesis_block = qc.vote_data().parent().id() != HashValue::zero()
+                    && qc.vote_data().parent().round() == 0;
                 quorum_certs.push((*qc).clone());
 
                 // Get randomness if available (for randomness-enabled blocks)
@@ -784,8 +785,8 @@ impl BlockStore {
                         break;
                     }
                 };
-                parent_is_genesis_block = qc.vote_data().parent().id() != HashValue::zero() &&
-                    qc.vote_data().parent().round() == 0;
+                parent_is_genesis_block = qc.vote_data().parent().id() != HashValue::zero()
+                    && qc.vote_data().parent().round() == 0;
                 quorum_certs.push(qc);
 
                 // Get randomness if available

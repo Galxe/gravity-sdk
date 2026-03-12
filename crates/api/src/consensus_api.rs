@@ -18,7 +18,6 @@ use crate::{
 };
 use aptos_consensus::{consensusdb::ConsensusDB, gravity_state_computer::ConsensusAdapterArgs};
 use block_buffer_manager::TxPool;
-use build_info::build_information;
 use futures::channel::mpsc;
 use gaptos::{
     api_types::config_storage::{ConfigStorage, GLOBAL_CONFIG_STORAGE},
@@ -28,7 +27,6 @@ use gaptos::{
     aptos_logger::{info, warn},
     aptos_network_builder::builder::NetworkBuilder,
     aptos_storage_interface::DbReaderWriter,
-    aptos_telemetry::service::start_telemetry_service,
     aptos_types::chain_id::ChainId,
     aptos_validator_transaction_pool::VTxnPoolState,
 };
@@ -117,15 +115,8 @@ impl ConsensusEngine {
         let (remote_log_receiver, logger_filter_update) =
             logger::create_logger(&node_config, Some(node_config.log_file_path.clone()));
         let mut runtimes = vec![];
-        if let Some(runtime) = start_telemetry_service(
-            node_config.clone(),
-            ChainId::new(chain_id),
-            build_information!(),
-            remote_log_receiver,
-            Some(logger_filter_update),
-        ) {
-            runtimes.push(runtime);
-        }
+        drop(remote_log_receiver);
+        drop(logger_filter_update);
         let db: DbReaderWriter = DbReaderWriter::from_arc(consensus_db.clone());
         let mut event_subscription_service =
             gaptos::aptos_event_notifications::EventSubscriptionService::new(Arc::new(

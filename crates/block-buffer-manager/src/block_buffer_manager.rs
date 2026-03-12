@@ -386,7 +386,20 @@ impl BlockBufferManager {
                 false
             })
             .unwrap_or(txn_buffer.len());
-        let valid_item = txn_buffer.drain(0..split_point).collect::<Vec<_>>();
+
+        // GSDK-022: If split_point is 0 but buffer is non-empty and max_size > 0,
+        // the head batch alone exceeds the gas limit. Drain it to avoid permanent stall.
+        let drain_count = if split_point == 0 && !txn_buffer.is_empty() && max_size > 0 {
+            warn!(
+                "pop_txns: head batch gas {} exceeds limit {}, draining 1 oversized batch",
+                txn_buffer[0].gas_limit, gas_limit
+            );
+            1
+        } else {
+            split_point
+        };
+
+        let valid_item = txn_buffer.drain(0..drain_count).collect::<Vec<_>>();
         drop(txn_buffer);
         let mut result = Vec::new();
         for mut item in valid_item {

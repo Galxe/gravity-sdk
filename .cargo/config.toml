@@ -1,0 +1,5 @@
+[http]
+debug = false               # HTTP debugging
+
+[net]
+git-fetch-with-cli = true

@@ -37,7 +37,19 @@ main() {
     log_info "Step 1: Checking external dependencies..."
     
     GENESIS_REPO=$(echo "$config_json" | jq -r '.dependencies.genesis_contracts.repo // "https://github.com/Galxe/gravity_chain_core_contracts.git"')
-    GENESIS_REF=$(echo "$config_json" | jq -r '.dependencies.genesis_contracts.ref // "main"')
+    GENESIS_REF=$(echo "$config_json" | jq -r '.dependencies.genesis_contracts.ref // ""')
+
+    # Validate that GENESIS_REF is a 40-character commit hash (not a branch or tag)
+    if [ -z "$GENESIS_REF" ]; then
+        log_error "GENESIS_REF is empty. You must pin a specific commit hash in genesis.toml."
+        log_error "Set dependencies.genesis_contracts.ref to a 40-character commit hash."
+        exit 1
+    fi
+    if ! echo "$GENESIS_REF" | grep -qE '^[0-9a-f]{40}$'; then
+        log_error "GENESIS_REF must be a 40-character commit hash, got: $GENESIS_REF"
+        log_error "Using branch names or tags is not allowed for supply chain safety."
+        exit 1
+    fi
     
     GENESIS_CONTRACT_DIR="$EXTERNAL_DIR/gravity_chain_core_contracts"
     
@@ -47,17 +59,16 @@ main() {
         git clone "$GENESIS_REPO" "$GENESIS_CONTRACT_DIR"
     fi
 
-    # Checkout specified ref and pull latest (critical for branches to avoid stale bytecode)
-    log_info "Checking out ref: $GENESIS_REF..."
+    # Checkout the pinned commit (detached HEAD) and verify it exists
+    log_info "Checking out pinned commit: $GENESIS_REF..."
     (
         cd "$GENESIS_CONTRACT_DIR"
         git fetch origin
-        git checkout "$GENESIS_REF"
-        # Pull latest if on a branch (no-op for detached HEAD / commit hash)
-        if git symbolic-ref -q HEAD &>/dev/null; then
-            log_info "Pulling latest changes for branch $GENESIS_REF..."
-            git pull origin "$GENESIS_REF"
+        if ! git cat-file -e "$GENESIS_REF^{commit}" 2>/dev/null; then
+            log_error "Commit $GENESIS_REF not found in repository."
+            exit 1
         fi
+        git checkout "$GENESIS_REF"
         cd -
     )
     
