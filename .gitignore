@@ -178,3 +178,4 @@ __pycache__/
 sentinel.toml
 sentinel_state.json
 gravity_e2e/cluster_test_cases/bridge/mock_anvil_metadata.json
+bench_reports/
