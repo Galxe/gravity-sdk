@@ -2,7 +2,12 @@ use crate::config::Priority;
 use anyhow::Result;
 use csv::ReaderBuilder;
 use regex::Regex;
-use std::{collections::VecDeque, fs::File, path::Path, time::Instant};
+use std::{
+    collections::{HashMap, VecDeque},
+    fs::File,
+    path::{Path, PathBuf},
+    time::Instant,
+};
 
 const WINDOW_SECONDS: u64 = 300; // 5 minutes
 
@@ -23,7 +28,8 @@ pub struct WhitelistRule {
     threshold: i32,
     /// Priority for alerts from this rule (default: P0).
     priority: Priority,
-    timestamps: VecDeque<Instant>,
+    /// Per-file-path timestamps for frequency counting within the sliding window.
+    timestamps: HashMap<PathBuf, VecDeque<Instant>>,
 }
 
 impl WhitelistRule {
@@ -37,7 +43,7 @@ impl WhitelistRule {
             }
         };
 
-        Ok(Self { pattern, threshold, priority, timestamps: VecDeque::new() })
+        Ok(Self { pattern, threshold, priority, timestamps: HashMap::new() })
     }
 
     fn matches(&self, line: &str) -> bool {
@@ -120,7 +126,8 @@ impl Whitelist {
     }
 
     /// Check a log line against whitelist rules.
-    pub fn check(&mut self, line: &str) -> CheckResult {
+    /// Frequency thresholds are counted per source file path.
+    pub fn check(&mut self, line: &str, source: &Path) -> CheckResult {
         for rule in &mut self.rules {
             if rule.matches(line) {
                 // Always skip if threshold is -1
@@ -129,20 +136,24 @@ impl Whitelist {
                 }
 
                 let now = Instant::now();
+                let ts = match rule.timestamps.get_mut(source) {
+                    Some(ts) => ts,
+                    None => rule.timestamps.entry(source.to_path_buf()).or_default(),
+                };
 
                 // FIFO cleanup: remove expired timestamps
-                while let Some(front) = rule.timestamps.front() {
+                while let Some(front) = ts.front() {
                     if now.duration_since(*front).as_secs() > WINDOW_SECONDS {
-                        rule.timestamps.pop_front();
+                        ts.pop_front();
                     } else {
                         break;
                     }
                 }
 
                 // Add current timestamp
-                rule.timestamps.push_back(now);
+                ts.push_back(now);
 
-                let count = rule.timestamps.len() as u32;
+                let count = ts.len() as u32;
 
                 // Check threshold
                 if count > rule.threshold as u32 {
