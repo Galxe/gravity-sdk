@@ -34,14 +34,26 @@ pub struct Config {
     pub general: GeneralConfig,
     pub monitoring: MonitoringConfig,
     pub alerting: AlertingConfig,
-    pub probe: Option<ProbeConfig>,
+    /// Multiple probe endpoints, each with its own URL, interval, and threshold.
+    #[serde(default)]
+    pub probes: Vec<ProbeConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ProbeConfig {
     pub url: String,
+    #[serde(default = "default_probe_interval")]
     pub check_interval_seconds: u64,
+    #[serde(default = "default_probe_threshold")]
     pub failure_threshold: u32,
+}
+
+fn default_probe_interval() -> u64 {
+    30
+}
+
+fn default_probe_threshold() -> u32 {
+    3
 }
 
 #[derive(Debug, Deserialize, Clone)]
