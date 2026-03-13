@@ -24,6 +24,10 @@ impl Probe {
         }
     }
 
+    pub fn url(&self) -> &str {
+        &self.config.url
+    }
+
     pub async fn run(self) {
         let mut failures = 0;
         let interval = Duration::from_secs(self.config.check_interval_seconds);
@@ -35,21 +39,11 @@ impl Probe {
         loop {
             timer.tick().await;
             match self.client.get(&self.config.url).send().await {
-                Ok(resp) => {
-                    if resp.status().is_success() {
-                        if failures > 0 {
-                            // Recovered
-                            println!("Probe recovered: {}", self.config.url);
-                            failures = 0;
-                        }
-                    } else {
-                        failures += 1;
-                        println!(
-                            "Probe failed (status {}): {} (count: {})",
-                            resp.status(),
-                            self.config.url,
-                            failures
-                        );
+                Ok(_) => {
+                    // Any HTTP response (even non-200) means the service is reachable
+                    if failures > 0 {
+                        println!("Probe recovered: {}", self.config.url);
+                        failures = 0;
                     }
                 }
                 Err(e) => {

@@ -32,8 +32,15 @@ feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/ops-group..."
 [alerting.priorities.p2]
 feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/general-group..."
 
-[probe]
+# Probe endpoints (optional, can define multiple)
+# Each probe independently tracks failure count for its URL.
+[[probes]]
 # Probe reth node health via JSON-RPC eth_blockNumber
 url = "http://localhost:8545"
 check_interval_seconds = 10
 failure_threshold = 3
+
+[[probes]]
+url = "http://localhost:8546"
+# check_interval_seconds defaults to 30
+# failure_threshold defaults to 3

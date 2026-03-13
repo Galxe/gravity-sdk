@@ -14,7 +14,7 @@ Sentinel is a daemon that watches log files for error patterns and sends alerts 
 - **Priority-Based Routing**: Route alerts to different webhooks by priority (P0/P1/P2)
 - **Per-Priority Rate Limiting**: Independent rate limiting per priority level
 - **Multiple Notification Channels**: Supports Feishu and Slack webhooks
-- **Health Probe**: Optional HTTP endpoint monitoring with failure threshold (always P0)
+- **Health Probes**: Multiple HTTP endpoint monitoring with per-URL failure thresholds (always P0)
 - **Log Rotation Support**: Automatically handles file rotation, truncation, and recreation
 
 ## Architecture
@@ -100,11 +100,17 @@ feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/ops-group..."
 [alerting.priorities.p2]
 feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/general-group..."
 
-[probe]
-# Optional: HTTP health check endpoint
+# Probe endpoints (optional, can define multiple)
+# Each probe independently tracks failure count for its URL.
+[[probes]]
 url = "http://localhost:8545"
 check_interval_seconds = 10
 failure_threshold = 3
+
+[[probes]]
+url = "http://localhost:8546"
+# check_interval_seconds defaults to 30
+# failure_threshold defaults to 3
 ```
 
 ### Priority Levels
@@ -133,9 +139,9 @@ Matches log lines against the configured `error_pattern` regex to identify poten
 
 ### Whitelist
 
-Filters error logs based on checking rules defined in a CSV file.
+Filters error logs based on checking rules defined in a CSV file. Frequency thresholds are counted **per source file path**, so the same pattern in different log files is tracked independently.
 - **Ignore (-1)**: Permanently ignore logs matching the pattern
-- **Threshold (>0)**: Only alert if the pattern appears more than N times within a 5-minute window
+- **Threshold (>0)**: Only alert if the pattern appears more than N times within a 5-minute window (per file)
 
 ### Notifier
 
@@ -151,9 +157,9 @@ Error:
 [Frequency Alert: >10/5min]
 ```
 
-### Probe (Optional)
+### Probes (Optional)
 
-Monitors an HTTP endpoint availability by sending periodic GET requests.
+Monitors endpoint connectivity by sending periodic GET requests. Any HTTP response (even non-200) is treated as success — only network errors (connection refused, timeout) count as failures. Multiple probe URLs can be configured, each with its own check interval and failure threshold.
 
 ## Whitelist CSV Format
 
@@ -202,10 +208,13 @@ feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/critical-alerts..
 [alerting.priorities.p1]
 feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/ops-alerts..."
 
-[probe]
+[[probes]]
 url = "http://localhost:8545"
 check_interval_seconds = 30
 failure_threshold = 3
+
+[[probes]]
+url = "http://localhost:8546"
 ```
 
 ## License

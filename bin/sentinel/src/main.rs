@@ -50,10 +50,10 @@ async fn main() -> Result<()> {
     // Verify webhook connectivity on startup
     notifier.verify_webhooks().await.context("Webhook verification failed")?;
 
-    // Start Probe if configured
-    if let Some(probe_config) = config.probe {
+    // Start Probes
+    for probe_config in config.probes {
         let probe = Probe::new(probe_config, notifier.clone());
-        println!("Starting health probe...");
+        println!("Starting health probe for {}...", probe.url());
         tokio::spawn(async move {
             probe.run().await;
         });
@@ -85,7 +85,7 @@ async fn main() -> Result<()> {
 
                 let file_str = path.to_str().unwrap_or("unknown");
 
-                match whitelist.check(line) {
+                match whitelist.check(line, path) {
                     CheckResult::Skip => {
                         // Matched whitelist rule but below threshold, skip
                         continue;
