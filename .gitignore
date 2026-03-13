@@ -64,7 +64,7 @@ Temporary Items
 .vscode/
 
 # Typescript
-*.env
+# *.env  — moved to .env/ specific rule below
 node_modules
 test_data/data
 test_data/certificate
@@ -140,7 +140,8 @@ venv/
 env/
 ENV/
 .venv/
-.env/
+.env/*.env
+!.env/*.example
 .envrc
 
 # Test outputs
