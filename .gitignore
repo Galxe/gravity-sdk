@@ -64,7 +64,7 @@ Temporary Items
 .vscode/
 
 # Typescript
-*.env
+# *.env  — moved to .env/ specific rule below
 node_modules
 test_data/data
 test_data/certificate
@@ -140,7 +140,8 @@ venv/
 env/
 ENV/
 .venv/
-.env/
+.env/*.env
+!.env/*.example
 .envrc
 
 # Test outputs
@@ -178,3 +179,4 @@ __pycache__/
 sentinel.toml
 sentinel_state.json
 gravity_e2e/cluster_test_cases/bridge/mock_anvil_metadata.json
+bench_reports/
