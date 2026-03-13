@@ -266,6 +266,9 @@ impl BlockStore {
             self.insert_single_quorum_cert(block_qc, false)?;
             self.insert_block(block.clone(), false).await?;
             if let Some(randomness) = randomness {
+                let block_number = block.block_number().ok_or_else(|| {
+                    anyhow!("randomness payload missing block number for block {}", block.id())
+                })?;
                 let pipelined_block = self.get_block(block.id()).unwrap();
                 pipelined_block.set_randomness(Randomness::new(
                     RandMetadata { epoch: block.epoch(), round: block.round() },
@@ -273,7 +276,7 @@ impl BlockStore {
                 ));
                 self.storage
                     .consensus_db()
-                    .put_randomness(&vec![(block.block_number().unwrap(), randomness)])?;
+                    .put_randomness(&vec![(block_number, randomness)])?;
             }
         }
         self.insert_single_quorum_cert(qc, false)
