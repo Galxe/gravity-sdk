@@ -243,7 +243,18 @@ impl PipelinedBlock {
     }
 
     pub fn set_randomness(&self, randomness: Randomness) {
-        assert!(self.randomness.set(randomness.clone()).is_ok());
+        if self.randomness.set(randomness.clone()).is_err() {
+            if let Some(existing) = self.randomness.get() {
+                if *existing != randomness {
+                    warn!(
+                        "set_randomness called again with a different value on block {}: existing={:?}, new={:?}",
+                        self.id(),
+                        existing,
+                        randomness,
+                    );
+                }
+            }
+        }
     }
 
     pub fn set_insertion_time(&self) {

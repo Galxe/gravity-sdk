@@ -110,14 +110,17 @@ fn run_reth(
                         handle.node.pool.pending_transactions_listener();
                     let engine_cli = handle.node.auth_server_handle().clone();
                     let provider = handle.node.provider;
-                    let recover_block_number = provider.recover_block_number().unwrap();
+                    let recover_block_number = provider.recover_block_number()
+                        .expect("Failed to recover block number from DB");
                     info!("The latest_block_number is {}", recover_block_number);
-                    let latest_block_hash =
-                        provider.block_hash(recover_block_number).unwrap().unwrap();
+                    let latest_block_hash = provider
+                        .block_hash(recover_block_number)
+                        .expect("Failed to read block hash from DB")
+                        .unwrap_or_else(|| panic!("Block hash not found for block number {}", recover_block_number));
                     let latest_block = provider
                         .block(BlockHashOrNumber::Number(recover_block_number))
-                        .unwrap()
-                        .unwrap();
+                        .expect("Failed to read block from DB")
+                        .unwrap_or_else(|| panic!("Block not found for block number {}", recover_block_number));
                     let pool = handle.node.pool;
 
                     let storage = BlockViewStorage::new(provider.clone());
