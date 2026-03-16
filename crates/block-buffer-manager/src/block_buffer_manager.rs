@@ -324,7 +324,7 @@ impl BlockBufferManager {
     }
 
     pub async fn recv_unbroadcasted_txn(&self) -> Result<Vec<VerifiedTxn>, anyhow::Error> {
-        unimplemented!()
+        Err(anyhow::anyhow!("recv_unbroadcasted_txn is not yet implemented"))
     }
 
     pub async fn push_txns(&self, txns: &mut Vec<VerifiedTxnWithAccountSeqNum>, gas_limit: u64) {
@@ -552,9 +552,9 @@ impl BlockBufferManager {
                         profile.get_ordered_blocks_time = Some(SystemTime::now());
                     }
                     Some(state) => {
-                        panic!(
+                        return Err(anyhow::anyhow!(
                             "get_ordered_blocks: found block (epoch: {expected_epoch}, num: {current_num}) in non-Ordered state: {state:?}"
-                        );
+                        ));
                     }
                     None => {
                         // No more blocks available
@@ -608,7 +608,11 @@ impl BlockBufferManager {
             if let Some(block) = block_state_machine.blocks.get(&block_key) {
                 match block {
                     BlockState::Computed { id, compute_result } => {
-                        assert_eq!(id, &block_id);
+                        if *id != block_id {
+                            return Err(anyhow::anyhow!(
+                                "get_executed_res: block id mismatch for Computed block: expected {block_id:?}, got {id:?}"
+                            ));
+                        }
 
                         // Record time for get_executed_res
                         let compute_res_clone = compute_result.clone();
@@ -638,7 +642,11 @@ impl BlockBufferManager {
                             "get_executed_res done with id {:?} num {:?} res {:?}",
                             block_id, id, compute_result
                         );
-                        assert_eq!(id, &block_id);
+                        if *id != block_id {
+                            return Err(anyhow::anyhow!(
+                                "get_executed_res: block id mismatch for Committed block: expected {block_id:?}, got {id:?}"
+                            ));
+                        }
                         return Ok(compute_result.clone());
                     }
                     BlockState::Historical { id } => {
@@ -729,7 +737,13 @@ impl BlockBufferManager {
         if let Some(BlockState::Ordered { block, parent_id: _ }) =
             block_state_machine.blocks.get(&block_key)
         {
-            assert_eq!(block.block_meta.block_id, block_id);
+            if block.block_meta.block_id != block_id {
+                return Err(anyhow::anyhow!(
+                    "set_compute_res: block id mismatch: expected {:?}, got {:?}",
+                    block_id,
+                    block.block_meta.block_id
+                ));
+            }
             let txn_len = block.txns.len();
             let events_len = events.len();
             let new_epoch_state = self
@@ -763,7 +777,9 @@ impl BlockBufferManager {
             let _ = block_state_machine.sender.send(());
             return Ok(());
         }
-        panic!("There is no Ordered Block but try to push compute result for block {block_id:?}")
+        Err(anyhow::anyhow!(
+            "There is no Ordered Block but try to push compute result for block {block_id:?}"
+        ))
     }
 
     pub async fn set_commit_blocks(
@@ -810,39 +826,51 @@ impl BlockBufferManager {
                                 .or_insert_with(BlockProfile::default);
                             profile.set_commit_blocks_time = Some(SystemTime::now());
                         } else {
-                            panic!(
+                            return Err(anyhow::anyhow!(
                                 "Computed Block id and number is not equal id: {:?}={:?} num: {:?}",
-                                block_id_num_hash.block_id, *id, block_id_num_hash.num
-                            );
+                                block_id_num_hash.block_id,
+                                *id,
+                                block_id_num_hash.num
+                            ));
                         }
                     }
                     BlockState::Committed { hash, compute_result: _, id, persist_notifier: _ } => {
                         if *id != block_id_num_hash.block_id {
-                            panic!("Commited Block id and number is not equal id: {:?}={:?} hash: {:?}={:?}", block_id_num_hash.block_id, *id, block_id_num_hash.hash, *hash);
+                            return Err(anyhow::anyhow!(
+                                "Committed Block id mismatch: {:?}={:?} hash: {:?}={:?}",
+                                block_id_num_hash.block_id,
+                                *id,
+                                block_id_num_hash.hash,
+                                *hash
+                            ));
                         }
                     }
                     BlockState::Ordered { block: _, parent_id: _ } => {
-                        panic!(
+                        return Err(anyhow::anyhow!(
                             "Set commit block meet ordered block for block id {:?} num {}",
-                            block_id_num_hash.block_id, block_id_num_hash.num
-                        );
+                            block_id_num_hash.block_id,
+                            block_id_num_hash.num
+                        ));
                     }
                     BlockState::Historical { id } => {
                         // Historical blocks are already committed/persisted, just verify the id
                         // matches
                         if *id != block_id_num_hash.block_id {
-                            panic!(
+                            return Err(anyhow::anyhow!(
                                 "Historical Block id mismatch: {:?} != {:?} num: {}",
-                                block_id_num_hash.block_id, *id, block_id_num_hash.num
-                            );
+                                block_id_num_hash.block_id,
+                                *id,
+                                block_id_num_hash.num
+                            ));
                         }
                     }
                 }
             } else {
-                panic!(
+                return Err(anyhow::anyhow!(
                     "There is no Block but try to push commit block for block {:?} num {}",
-                    block_id_num_hash.block_id, block_id_num_hash.num
-                );
+                    block_id_num_hash.block_id,
+                    block_id_num_hash.num
+                ));
             }
         }
         let _ = block_state_machine.sender.send(());
