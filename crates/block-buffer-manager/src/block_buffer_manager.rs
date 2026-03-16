@@ -392,8 +392,7 @@ impl BlockBufferManager {
         let valid_item = if split_point == 0 && !txn_buffer.is_empty() && max_size > 0 {
             warn!(
                 "first txn batch gas {} exceeds limit {}, draining one batch to avoid stalling",
-                txn_buffer[0].gas_limit,
-                gas_limit
+                txn_buffer[0].gas_limit, gas_limit
             );
             txn_buffer.drain(0..1).collect::<Vec<_>>()
         } else {

@@ -617,11 +617,15 @@ impl BufferManager {
         let block_id = commit_info.id();
         let author = HashValue::new(*vote.author());
 
+        // Check global cache limit before calling .entry() to avoid
+        // overlapping mutable/immutable borrows on self.commit_vote_cache.
+        let cache_len = self.commit_vote_cache.len();
+
         match self.commit_vote_cache.entry(block_id) {
             Entry::Occupied(mut entry) => {
                 let votes_for_block = entry.get_mut();
-                if votes_for_block.len() >= MAX_COMMIT_VOTES_PER_BLOCK_IN_CACHE
-                    && !votes_for_block.contains_key(&author)
+                if votes_for_block.len() >= MAX_COMMIT_VOTES_PER_BLOCK_IN_CACHE &&
+                    !votes_for_block.contains_key(&author)
                 {
                     warn!(
                         commit_info = ?commit_info,
@@ -633,10 +637,10 @@ impl BufferManager {
                 votes_for_block.insert(author, vote);
             }
             Entry::Vacant(entry) => {
-                if self.commit_vote_cache.len() >= MAX_COMMIT_VOTE_CACHE_BLOCKS {
+                if cache_len >= MAX_COMMIT_VOTE_CACHE_BLOCKS {
                     warn!(
                         commit_info = ?commit_info,
-                        cache_len = self.commit_vote_cache.len(),
+                        cache_len = cache_len,
                         "Dropping cached commit vote because global cache limit is reached"
                     );
                     return;

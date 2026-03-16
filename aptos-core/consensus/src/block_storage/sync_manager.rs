@@ -274,9 +274,7 @@ impl BlockStore {
                     RandMetadata { epoch: block.epoch(), round: block.round() },
                     randomness.clone(),
                 ));
-                self.storage
-                    .consensus_db()
-                    .put_randomness(&vec![(block_number, randomness)])?;
+                self.storage.consensus_db().put_randomness(&vec![(block_number, randomness)])?;
             }
         }
         self.insert_single_quorum_cert(qc, false)
