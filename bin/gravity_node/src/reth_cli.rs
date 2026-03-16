@@ -317,10 +317,11 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         self.current_epoch.store(buffer_epoch, Ordering::SeqCst);
         info!("start_execution initialized with epoch {}", buffer_epoch);
 
+        // missing signals between iterations
+        let mut shutdown = self.shutdown.resubscribe();
         loop {
             let current_epoch = self.current_epoch.load(Ordering::SeqCst);
             // max executing block number
-            let mut shutdown = self.shutdown.resubscribe();
             let exec_blocks = tokio::select! {
                 res = get_block_buffer_manager().get_ordered_blocks(start_ordered_block, None, current_epoch) => res,
                 _ = shutdown.recv() => {
@@ -374,8 +375,8 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         let mut consecutive_errors = 0u32;
         const MAX_CONSECUTIVE_ERRORS: u32 = 5;
 
+        let mut shutdown = self.shutdown.resubscribe();
         loop {
-            let mut shutdown = self.shutdown.resubscribe();
             let execution_result = tokio::select! {
                 res = self.recv_compute_res() => res,
                 _ = shutdown.recv() => {
@@ -444,9 +445,9 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             .recover_block_number()
             .map_err(|e| format!("Failed to recover block number: {e}"))? +
             1;
+        let mut shutdown = self.shutdown.resubscribe();
         loop {
             let epoch = self.current_epoch.load(Ordering::SeqCst);
-            let mut shutdown = self.shutdown.resubscribe();
             let block_ids = tokio::select! {
                 res = get_block_buffer_manager().get_committed_blocks(start_commit_num, None, epoch) => res,
                 _ = shutdown.recv() => {

@@ -67,16 +67,18 @@ pub struct Mempool {
     cached_best: Arc<std::sync::Mutex<CachedBest>>,
     runtime: tokio::runtime::Runtime,
     enable_broadcast: bool,
+    chain_id: u64,
 }
 
 impl Mempool {
-    pub fn new(pool: RethTransactionPool, enable_broadcast: bool) -> Self {
+    pub fn new(pool: RethTransactionPool, enable_broadcast: bool, chain_id: u64) -> Self {
         Self {
             pool,
             txn_cache: Arc::new(DashMap::new()),
             cached_best: Arc::new(std::sync::Mutex::new(CachedBest::new())),
             runtime: tokio::runtime::Runtime::new().unwrap(),
             enable_broadcast,
+            chain_id,
         }
     }
 
@@ -91,7 +93,10 @@ pub fn convert_account(acc: Address) -> ExternalAccountAddress {
     ExternalAccountAddress::new(bytes)
 }
 
-fn to_verified_txn(pool_txn: Arc<ValidPoolTransaction<EthPooledTransaction>>) -> VerifiedTxn {
+fn to_verified_txn(
+    pool_txn: Arc<ValidPoolTransaction<EthPooledTransaction>>,
+    chain_id: u64,
+) -> VerifiedTxn {
     let sender = pool_txn.sender();
     let nonce = pool_txn.nonce();
     let txn = pool_txn.transaction.transaction().inner();
@@ -99,12 +104,15 @@ fn to_verified_txn(pool_txn: Arc<ValidPoolTransaction<EthPooledTransaction>>) ->
         bytes: txn.encoded_2718(),
         sender: convert_account(sender),
         sequence_number: nonce,
-        chain_id: ExternalChainId::new(0),
+        chain_id: ExternalChainId::new(chain_id),
         committed_hash: TxnHash::from_bytes(txn.hash().as_slice()).into(),
     }
 }
 
-fn to_verified_txn_from_recovered_txn(pool_txn: Recovered<TransactionSigned>) -> VerifiedTxn {
+fn to_verified_txn_from_recovered_txn(
+    pool_txn: Recovered<TransactionSigned>,
+    chain_id: u64,
+) -> VerifiedTxn {
     let sender = pool_txn.signer();
     let nonce = pool_txn.inner().nonce();
     let txn = pool_txn.inner();
@@ -112,7 +120,7 @@ fn to_verified_txn_from_recovered_txn(pool_txn: Recovered<TransactionSigned>) ->
         bytes: txn.encoded_2718(),
         sender: convert_account(sender),
         sequence_number: nonce,
-        chain_id: ExternalChainId::new(0),
+        chain_id: ExternalChainId::new(chain_id),
         committed_hash: TxnHash::from_bytes(txn.hash().as_slice()).into(),
     }
 }
@@ -132,6 +140,7 @@ impl TxPool for Mempool {
             };
         }
         let txn_cache = self.txn_cache.clone();
+        let chain_id = self.chain_id;
         // Take last_nonces out to avoid borrow conflict with best_txns iterator
         let mut last_nonces = std::mem::take(&mut best_txns.last_nonces);
         let result: Vec<_> = best_txns
@@ -148,17 +157,20 @@ impl TxPool for Mempool {
                         return None;
                     }
                 }
-                last_nonces.insert(sender, nonce);
 
-                let sender = convert_account(sender);
+                // transactions from poisoning nonce tracking
+                let sender_addr = convert_account(sender);
                 if let Some(ref f) = filter {
                     let hash = TxnHash::from_bytes(pool_txn.hash().as_slice());
-                    if !f((sender.clone(), nonce, hash)) {
+                    if !f((sender_addr.clone(), nonce, hash)) {
                         return None;
                     }
                 }
 
-                let verified_txn = to_verified_txn(pool_txn.clone());
+                // Only record nonce after filter passes
+                last_nonces.insert(sender, nonce);
+
+                let verified_txn = to_verified_txn(pool_txn.clone(), chain_id);
                 let tx_hash: [u8; 32] = pool_txn.transaction.transaction().inner().hash().0;
                 txn_cache.insert(tx_hash, pool_txn);
                 Some(verified_txn)
@@ -196,7 +208,7 @@ impl TxPool for Mempool {
                         return None;
                     }
                 }
-                let verified_txn = to_verified_txn_from_recovered_txn(txn);
+                let verified_txn = to_verified_txn_from_recovered_txn(txn, self.chain_id);
                 Some(verified_txn)
             })
             .collect::<Vec<_>>();

@@ -11,6 +11,7 @@ use gravity_storage::block_view_storage::BlockViewStorage;
 use greth::{
     gravity_storage,
     reth::{self, chainspec::EthereumChainSpecParser},
+    reth_chainspec::ChainSpecProvider,
     reth_cli::chainspec::ChainSpecParser,
     reth_cli_util, reth_db, reth_node_api, reth_node_builder, reth_node_ethereum,
     reth_pipe_exec_layer_ext_v2::{self, ExecutionArgs},
@@ -31,7 +32,7 @@ use tokio::{
     signal::unix::{signal, SignalKind},
     sync::{broadcast, oneshot},
 };
-use tracing::info;
+use tracing::{info, warn};
 mod cli;
 mod consensus;
 mod mempool;
@@ -253,9 +254,17 @@ fn main() {
     let (consensus_args, latest_block_number, datadir_rx) =
         run_reth(cli, execution_args_rx, shutdown_tx.subscribe());
     let rt = tokio::runtime::Runtime::new().unwrap();
+    let chain_id = {
+        let chain_info = consensus_args.provider.chain_spec().chain;
+        match chain_info.into_kind() {
+            greth::reth_chainspec::ChainKind::Named(n) => n as u64,
+            greth::reth_chainspec::ChainKind::Id(id) => id,
+        }
+    };
     let pool = Box::new(Mempool::new(
         consensus_args.pool.clone(),
         gcei_config.base.role == RoleType::FullNode,
+        chain_id,
     ));
     let txn_cache = pool.tx_cache();
     let shutdown_rx_cli = shutdown_tx.subscribe();
@@ -268,6 +277,7 @@ fn main() {
             Arc::new(RethCoordinator::new(client.clone(), latest_block_number, execution_args_tx));
         let mut _engine = None;
         if std::env::var("MOCK_CONSENSUS").unwrap_or("false".to_string()).parse::<bool>().unwrap() {
+            warn!("MOCK_CONSENSUS is enabled! This disables BFT consensus and should NEVER be used in production.");
             info!("start mock consensus");
             let mock = MockConsensus::new(pool).await;
             tokio::spawn(async move {
