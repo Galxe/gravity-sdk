@@ -20,7 +20,6 @@ impl ConfigStorage for ConfigStorageWrapper {
         config_name: OnChainConfig,
         block_number: BlockNumber,
     ) -> Option<OnChainConfigResType> {
-        println!("fetch_config_bytes: {config_name:?}, block_number: {block_number:?}");
 
         info!("fetch_config_bytes: {:?}, block_number: {:?}", config_name, block_number);
         match config_name {
