@@ -10,14 +10,11 @@ use crate::{
 };
 use anyhow::{bail, ensure, format_err};
 use gaptos::{
-    aptos_bitvec::BitVec,
-    aptos_crypto::{
+    aptos_bitvec::BitVec, aptos_crypto::{
         bls12381,
         hash::{CryptoHash, GENESIS_BLOCK_ID},
         HashValue,
-    },
-    aptos_infallible::duration_since_epoch,
-    aptos_types::{
+    }, aptos_infallible::duration_since_epoch, aptos_logger::warn, aptos_types::{
         account_address::AccountAddress,
         block_info::BlockInfo,
         block_metadata::BlockMetadata,
@@ -29,7 +26,7 @@ use gaptos::{
         validator_signer::ValidatorSigner,
         validator_txn::ValidatorTransaction,
         validator_verifier::ValidatorVerifier,
-    },
+    }
 };
 use mirai_annotations::debug_checked_verify_eq;
 use once_cell::sync::OnceCell;
@@ -477,7 +474,14 @@ impl Block {
     }
 
     pub fn set_block_number(&self, block_number: u64) {
-        assert!(self.block_number.set(block_number).is_ok());
+        if let Err(existing) = self.block_number.set(block_number) {
+            if existing != block_number {
+                warn!(
+                    "set_block_number called with different value: existing={}, new={}",
+                    existing, block_number
+                );
+            }
+        }
     }
 }
 
