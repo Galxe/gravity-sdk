@@ -140,7 +140,7 @@ impl AptosDBBackend {
         }
 
         if result.is_empty() {
-            warn!("No events in the requested window could be found");
+            error!("[leader reputation] No events in the requested window could be found, leader election may degrade");
             (result, HashValue::zero())
         } else {
             let root_hash = self
@@ -170,8 +170,8 @@ impl MetadataBackend for AptosDBBackend {
         // lazy init db_result
         if locked.is_none() {
             if let Err(e) = self.refresh_db_result(&mut locked, latest_db_version) {
-                warn!(
-                    error = ?e, "[leader reputation] Fail to initialize db result",
+                error!(
+                    error = ?e, "[leader reputation] Fail to initialize db result, leader election may degrade",
                 );
                 return (vec![], HashValue::zero());
             }
@@ -195,8 +195,8 @@ impl MetadataBackend for AptosDBBackend {
                 }
                 Err(e) => {
                     // fails if requested events were pruned / or we never backfil them.
-                    warn!(
-                        error = ?e, "[leader reputation] Fail to refresh window",
+                    error!(
+                        error = ?e, "[leader reputation] Fail to refresh window, leader election may degrade",
                     );
                     (vec![], HashValue::zero())
                 }

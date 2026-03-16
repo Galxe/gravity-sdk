@@ -120,7 +120,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                         epoch,
                     )
                     .await
-                    .unwrap_or_else(|e| panic!("Failed to push commit blocks {}", e));
+                    .expect("Failed to set commit blocks in BlockBufferManager");
                 for notifier in persist_notifiers.iter_mut() {
                     let _ = notifier.recv().await;
                 }
@@ -181,7 +181,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                     epoch,
                 )
                 .await
-                .unwrap();
+                .expect("Failed to set commit blocks in BlockBufferManager");
             for notifier in persist_notifiers.iter_mut() {
                 let _ = notifier.recv().await;
             }
