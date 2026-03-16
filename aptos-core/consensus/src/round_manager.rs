@@ -380,8 +380,11 @@ impl RoundManager {
         );
 
         tokio::time::sleep(Duration::from_millis(
-            // try get env
-            std::env::var("APTOS_PROPOSER_SLEEP_MS").map(|s| s.parse().unwrap()).unwrap_or(200),
+            // try get env — use safe parse with fallback to avoid panic on invalid value (#186)
+            std::env::var("APTOS_PROPOSER_SLEEP_MS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(200),
         ))
         .await;
         counters::CURRENT_ROUND.set(new_round_event.round as i64);

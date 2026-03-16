@@ -160,6 +160,7 @@ fn get_txn_added_to_block_committed_histogram() -> &'static Histogram {
 
 // Capacity limits to prevent unbounded memory growth
 const MAX_TXN_INITIAL_ADD_TIME_CAPACITY: usize = 100_000;
+const MAX_TXN_HASH_TO_KEY_CAPACITY: usize = 200_000;
 const MAX_TXN_BATCH_ID_CAPACITY: usize = 10_000;
 const MAX_TXN_BLOCK_ID_CAPACITY: usize = 1_000;
 
@@ -171,6 +172,8 @@ pub struct TxnLifeTime {
     txn_initial_add_time: DashMap<TxnKey, SystemTime>,
     // Reverse mapping: hash -> (address, nonce) for batch/block recording
     txn_hash_to_key: DashMap<HashValue, TxnKey>,
+    // Reverse index: (address, nonce) -> [hashes] for O(1) cleanup in record_committed (#239)
+    txn_key_to_hashes: DashMap<TxnKey, Vec<HashValue>>,
     // Tracks txns in a batch
     txn_batch_id: DashMap<BatchId, HashSet<TxnKey>>,
     // Tracks txns in a block (block_id is HashValue)
@@ -196,6 +199,7 @@ impl TxnLifeTime {
         INSTANCE.get_or_init(|| TxnLifeTime {
             txn_initial_add_time: DashMap::new(),
             txn_hash_to_key: DashMap::new(),
+            txn_key_to_hashes: DashMap::new(),
             txn_batch_id: DashMap::new(),
             txn_block_id: DashMap::new(),
         })
@@ -214,12 +218,16 @@ impl TxnLifeTime {
             self.cleanup_old_entries();
         }
 
-        // Store the mapping from hash to key
-        self.txn_hash_to_key.insert(txn_hash, txn_key);
-
-        // Only insert initial add time if it's not already there.
-        // Useful if record_added might be called multiple times for the same transaction.
+        // race with cleanup_old_entries seeing a hash without a corresponding time entry
         self.txn_initial_add_time.entry(txn_key).or_insert(now);
+
+        if self.txn_hash_to_key.len() >= MAX_TXN_HASH_TO_KEY_CAPACITY {
+            self.cleanup_old_entries();
+        }
+
+        // Store the mapping from hash to key and reverse index
+        self.txn_hash_to_key.insert(txn_hash, txn_key);
+        self.txn_key_to_hashes.entry(txn_key).or_default().push(txn_hash);
     }
 
     pub fn record_batch(&self, batch_id: BatchId, batch: &Vec<SignedTransaction>) {
@@ -232,8 +240,9 @@ impl TxnLifeTime {
             let txn_key = (txn.sender(), txn.sequence_number());
             let txn_hash = txn.committed_hash();
 
-            // Update hash to key mapping
+            // Update hash to key mapping and reverse index
             self.txn_hash_to_key.insert(txn_hash, txn_key);
+            self.txn_key_to_hashes.entry(txn_key).or_default().push(txn_hash);
 
             if let Some(initial_add_time_entry) = self.txn_initial_add_time.get(&txn_key) {
                 if let Ok(duration) = now.duration_since(*initial_add_time_entry.value()) {
@@ -366,6 +375,7 @@ impl TxnLifeTime {
                         let txn_key = (txn.sender(), txn.sequence_number());
                         let txn_hash = txn.committed_hash();
                         self.txn_hash_to_key.insert(txn_hash, txn_key);
+                        self.txn_key_to_hashes.entry(txn_key).or_default().push(txn_hash);
                         self.observe_added_to_block(txn_key, now);
                         current_block_txn_keys.insert(txn_key);
                     }
@@ -394,6 +404,7 @@ impl TxnLifeTime {
                             let txn_key = (txn.sender(), txn.sequence_number());
                             let txn_hash = txn.committed_hash();
                             self.txn_hash_to_key.insert(txn_hash, txn_key);
+                            self.txn_key_to_hashes.entry(txn_key).or_default().push(txn_hash);
                             self.observe_added_to_block(txn_key, now);
                             inline_txn_keys.push(txn_key);
                         }
@@ -472,8 +483,11 @@ impl TxnLifeTime {
         // Remove from primary storage
         self.txn_initial_add_time.remove(&txn_key);
 
-        // Remove from hash mapping (find and remove all hashes for this key)
-        self.txn_hash_to_key.retain(|_hash, key| key != &txn_key);
+        if let Some((_, hashes)) = self.txn_key_to_hashes.remove(&txn_key) {
+            for hash in hashes {
+                self.txn_hash_to_key.remove(&hash);
+            }
+        }
 
         // Remove from batch tracking
         for mut entry in self.txn_batch_id.iter_mut() {
@@ -508,8 +522,11 @@ impl TxnLifeTime {
             // Remove old entries
             for key in old_keys {
                 self.txn_initial_add_time.remove(&key);
-                // Also remove from hash mapping
-                self.txn_hash_to_key.retain(|_hash, k| k != &key);
+                if let Some((_, hashes)) = self.txn_key_to_hashes.remove(&key) {
+                    for hash in hashes {
+                        self.txn_hash_to_key.remove(&hash);
+                    }
+                }
             }
         }
 

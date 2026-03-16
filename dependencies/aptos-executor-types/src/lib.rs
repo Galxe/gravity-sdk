@@ -174,8 +174,14 @@ impl StateComputeResult {
             Some(status) => status.len(),
             None => return input_txns,
         };
-        // TODO(gravity_byteyue): how to unify recover and execution here
-        // assert_eq!(status_len, input_txns.len());
+        if status_len != input_txns.len() {
+            eprintln!(
+                "WARNING: transactions_to_commit: txn_status length ({}) != input_txns length ({}), \
+                 trailing transactions will be silently dropped",
+                status_len,
+                input_txns.len()
+            );
+        }
         let status = txn_status.as_ref().as_ref().unwrap();
         // for the corresponding status, if it is discarded, then remove the txn from the input_txns
         input_txns
