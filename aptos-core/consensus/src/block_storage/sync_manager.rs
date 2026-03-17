@@ -770,7 +770,11 @@ impl BlockStore {
                     }
                     None => None,
                 };
-                blocks.push((executed_block.block().clone(), executed_block.block().block_number(), randomness));
+                blocks.push((
+                    executed_block.block().clone(),
+                    executed_block.block().block_number(),
+                    randomness,
+                ));
                 parent_id = executed_block.parent_id();
             } else if let Ok(Some(executed_block)) =
                 // Block not in memory, try to get from database
