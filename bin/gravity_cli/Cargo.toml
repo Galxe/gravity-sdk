@@ -40,3 +40,4 @@ aptos-consensus = { workspace = true }
 bytes = { workspace = true }
 build-info = { workspace = true }
 blst = { workspace = true }
+rpassword = "5"
