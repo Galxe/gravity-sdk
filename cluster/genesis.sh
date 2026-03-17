@@ -155,6 +155,16 @@ main() {
     if [ -f "$GENESIS_CONTRACT_DIR/genesis.json" ]; then
         cp "$GENESIS_CONTRACT_DIR/genesis.json" "$OUTPUT_DIR/genesis.json"
         
+        # Inject custom hardfork block numbers into genesis.json .config
+        local hardforks
+        hardforks=$(echo "$config_json" | jq -c '.genesis.hardforks // empty')
+        if [ -n "$hardforks" ]; then
+            log_info "Injecting custom hardfork config: $hardforks"
+            local tmp_genesis="$OUTPUT_DIR/genesis.json.tmp"
+            jq --argjson hf "$hardforks" '.config += $hf' "$OUTPUT_DIR/genesis.json" > "$tmp_genesis"
+            mv "$tmp_genesis" "$OUTPUT_DIR/genesis.json"
+        fi
+        
         # Copy debug files
         if [ -f "$GENESIS_CONTRACT_DIR/output/genesis_config_modified.json" ]; then
             cp "$GENESIS_CONTRACT_DIR/output/genesis_config_modified.json" "$GEN_CONFIG_DIR/debug_genesis_config.json"
