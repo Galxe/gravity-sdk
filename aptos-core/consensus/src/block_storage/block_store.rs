@@ -701,10 +701,15 @@ impl BlockStore {
 
     pub async fn append_blocks_for_sync(
         &self,
-        blocks: Vec<(Block, Option<Vec<u8>>)>,
+        blocks: Vec<(Block, Option<u64>, Option<Vec<u8>>)>,
         quorum_certs: Vec<QuorumCert>,
     ) {
-        for (block, _) in blocks {
+        for (block, block_number, _) in blocks {
+            if let Some(num) = block_number {
+                if block.block_number().is_none() {
+                    block.set_block_number(num);
+                }
+            }
             self.insert_block(block, true).await.unwrap_or_else(|e| {
                 panic!("[BlockStore] failed to insert block during append blocks for sync {:?}", e)
             });

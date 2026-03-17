@@ -386,7 +386,18 @@ impl BlockBufferManager {
                 false
             })
             .unwrap_or(txn_buffer.len());
-        let valid_item = txn_buffer.drain(0..split_point).collect::<Vec<_>>();
+
+        // Avoid head-of-line blocking when the first buffered batch is larger than `gas_limit`.
+        // In that case `split_point` is `0`; drain one batch so the queue can keep making progress.
+        let valid_item = if split_point == 0 && !txn_buffer.is_empty() && max_size > 0 {
+            warn!(
+                "first txn batch gas {} exceeds limit {}, draining one batch to avoid stalling",
+                txn_buffer[0].gas_limit, gas_limit
+            );
+            txn_buffer.drain(0..1).collect::<Vec<_>>()
+        } else {
+            txn_buffer.drain(0..split_point).collect::<Vec<_>>()
+        };
         drop(txn_buffer);
         let mut result = Vec::new();
         for mut item in valid_item {

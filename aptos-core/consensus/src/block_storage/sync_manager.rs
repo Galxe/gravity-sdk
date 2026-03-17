@@ -261,19 +261,20 @@ impl BlockStore {
             pending.push(block);
         }
         // insert the qc <- block pair
-        while let Some((block, randomness)) = pending.pop() {
+        while let Some((block, block_number, randomness)) = pending.pop() {
             let block_qc = block.quorum_cert().clone();
             self.insert_single_quorum_cert(block_qc, false)?;
             self.insert_block(block.clone(), false).await?;
             if let Some(randomness) = randomness {
+                let block_number = block_number.ok_or_else(|| {
+                    anyhow!("randomness payload missing block number for block {}", block.id())
+                })?;
                 let pipelined_block = self.get_block(block.id()).unwrap();
                 pipelined_block.set_randomness(Randomness::new(
                     RandMetadata { epoch: block.epoch(), round: block.round() },
                     randomness.clone(),
                 ));
-                self.storage
-                    .consensus_db()
-                    .put_randomness(&vec![(block.block_number().unwrap(), randomness)])?;
+                self.storage.consensus_db().put_randomness(&vec![(block_number, randomness)])?;
             }
         }
         self.insert_single_quorum_cert(qc, false)
@@ -366,7 +367,7 @@ impl BlockStore {
             )
             .await?;
 
-        for (i, (block, _)) in blocks.iter().enumerate() {
+        for (i, (block, _, _)) in blocks.iter().enumerate() {
             assert_eq!(block.id(), quorum_certs[i].certified_block().id());
             if let Some(payload) = block.payload() {
                 payload_manager.prefetch_payload_data(payload, block.timestamp_usecs());
@@ -374,11 +375,11 @@ impl BlockStore {
         }
         let block_numbers = blocks
             .iter()
-            .filter(|(block, _)| block.block_number().is_some())
-            .map(|(block, _)| (block.epoch(), block.block_number().unwrap(), block.id()))
+            .filter(|(_, block_number, _)| block_number.is_some())
+            .map(|(block, block_number, _)| (block.epoch(), block_number.unwrap(), block.id()))
             .collect::<Vec<(u64, u64, HashValue)>>();
         storage.save_tree(
-            blocks.iter().map(|(block, _)| block.clone()).collect(),
+            blocks.iter().map(|(block, _, _)| block.clone()).collect(),
             quorum_certs,
             block_numbers,
         )?;
@@ -397,9 +398,9 @@ impl BlockStore {
         storage.consensus_db().put_randomness(
             &blocks
                 .iter()
-                .filter(|(_, randomness)| randomness.is_some())
-                .map(|(block, randomness)| {
-                    (block.block_number().unwrap(), randomness.as_ref().unwrap().clone())
+                .filter(|(_, _, randomness)| randomness.is_some())
+                .map(|(_, block_number, randomness)| {
+                    (block_number.unwrap(), randomness.as_ref().unwrap().clone())
                 })
                 .collect(),
         )?;
@@ -434,7 +435,7 @@ impl BlockStore {
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
         is_validator: bool,
-    ) -> anyhow::Result<(Vec<(Block, Option<Vec<u8>>)>, Vec<QuorumCert>)> {
+    ) -> anyhow::Result<(Vec<(Block, Option<u64>, Option<Vec<u8>>)>, Vec<QuorumCert>)> {
         info!(
             LogSchema::new(LogEvent::StateSync).remote_peer(retriever.preferred_peer),
             "Start block sync to commit cert: {}, quorum cert: {}",
@@ -475,31 +476,31 @@ impl BlockStore {
 
         let mut quorum_certs = vec![highest_quorum_cert.clone()];
         quorum_certs.extend(
-            blocks.iter().take(blocks.len() - 1).map(|(block, _)| block.quorum_cert().clone()),
+            blocks.iter().take(blocks.len() - 1).map(|(block, _, _)| block.quorum_cert().clone()),
         );
         assert_eq!(blocks.len(), quorum_certs.len());
         info!("[FastForwardSync] Fetched {} blocks. Requested num_blocks {}. Initial block hash {:?}, target block hash {:?}",
             blocks.len(), num_blocks, highest_quorum_cert.certified_block().id(), highest_commit_cert.commit_info().id()
         );
-        for (i, (block, _)) in blocks.iter().enumerate() {
+        for (i, (block, _, _)) in blocks.iter().enumerate() {
             assert_eq!(block.id(), quorum_certs[i].certified_block().id());
         }
         let block_numbers = blocks
             .iter()
-            .filter(|(block, _)| block.block_number().is_some())
-            .map(|(block, _)| (block.epoch(), block.block_number().unwrap(), block.id()))
+            .filter(|(_, block_number, _)| block_number.is_some())
+            .map(|(block, block_number, _)| (block.epoch(), block_number.unwrap(), block.id()))
             .collect::<Vec<(u64, u64, HashValue)>>();
         storage.save_tree(
-            blocks.iter().map(|(block, _)| block.clone()).collect(),
+            blocks.iter().map(|(block, _, _)| block.clone()).collect(),
             quorum_certs.clone(),
             block_numbers,
         )?;
         storage.consensus_db().put_randomness(
             &blocks
                 .iter()
-                .filter(|(_, randomness)| randomness.is_some())
-                .map(|(block, randomness)| {
-                    (block.block_number().unwrap(), randomness.as_ref().unwrap().clone())
+                .filter(|(_, _, randomness)| randomness.is_some())
+                .map(|(_, block_number, randomness)| {
+                    (block_number.unwrap(), randomness.as_ref().unwrap().clone())
                 })
                 .collect(),
         )?;
@@ -700,7 +701,7 @@ impl BlockStore {
 
                 // Add the initial block and QC to the result
                 quorum_certs.push(qc);
-                blocks.push((block, randomness));
+                blocks.push((block.clone(), block.block_number(), randomness));
 
                 // Get the start block_id (consensus_block_id of the last block in this epoch)
                 let start_wrapped_ledger_info = self
@@ -769,7 +770,11 @@ impl BlockStore {
                     }
                     None => None,
                 };
-                blocks.push((executed_block.block().clone(), randomness));
+                blocks.push((
+                    executed_block.block().clone(),
+                    executed_block.block().block_number(),
+                    randomness,
+                ));
                 parent_id = executed_block.parent_id();
             } else if let Ok(Some(executed_block)) =
                 // Block not in memory, try to get from database
@@ -817,7 +822,7 @@ impl BlockStore {
                         None
                     }
                 };
-                blocks.push((executed_block.clone(), randomness));
+                blocks.push((executed_block.clone(), executed_block.block_number(), randomness));
                 parent_id = executed_block.parent_id();
             } else {
                 // Block not found in either memory or database
@@ -842,7 +847,7 @@ impl BlockStore {
         // Calculate the block number range to fetch ledger infos
         let mut lower = 0;
         let mut upper = 0;
-        for (block, _) in &blocks {
+        for (block, _, _) in &blocks {
             if let Some(block_number) = block.block_number() {
                 // Set upper to the first block number + 1 (exclusive range)
                 if upper == 0 {
@@ -1018,7 +1023,7 @@ impl BlockRetriever {
         payload_manager: Arc<dyn TPayloadManager>,
         epoch: Option<u64>,
     ) -> anyhow::Result<(
-        Vec<(Block, Option<Vec<u8>>)>,
+        Vec<(Block, Option<u64>, Option<Vec<u8>>)>,
         Vec<QuorumCert>,
         Vec<LedgerInfoWithSignatures>,
     )> {
@@ -1054,7 +1059,7 @@ impl BlockRetriever {
                 Ok(result) if matches!(result.status(), BlockRetrievalStatus::Succeeded) => {
                     // extend the result blocks
                     let batch = result.blocks().clone();
-                    for (block, _) in batch.iter() {
+                    for (block, _, _) in batch.iter() {
                         if let Some(payload) = block.payload() {
                             payload_manager.prefetch_payload_data(payload, block.timestamp_usecs());
                         }
@@ -1071,7 +1076,7 @@ impl BlockRetriever {
                 {
                     // if we found the target, end the loop
                     let batch = result.blocks().clone();
-                    for (block, _) in batch.iter() {
+                    for (block, _, _) in batch.iter() {
                         if let Some(payload) = block.payload() {
                             payload_manager.prefetch_payload_data(payload, block.timestamp_usecs());
                         }
@@ -1118,7 +1123,7 @@ impl BlockRetriever {
         peers: Vec<AccountAddress>,
         payload_manager: Arc<dyn TPayloadManager>,
     ) -> anyhow::Result<(
-        Vec<(Block, Option<Vec<u8>>)>,
+        Vec<(Block, Option<u64>, Option<Vec<u8>>)>,
         Vec<QuorumCert>,
         Vec<LedgerInfoWithSignatures>,
     )> {
@@ -1137,7 +1142,7 @@ impl BlockRetriever {
         match response {
             Ok(result) if matches!(result.status(), BlockRetrievalStatus::Succeeded) => {
                 let batch = result.blocks().clone();
-                for (block, _) in batch.iter() {
+                for (block, _, _) in batch.iter() {
                     if let Some(payload) = block.payload() {
                         payload_manager.prefetch_payload_data(payload, block.timestamp_usecs());
                     }
@@ -1164,7 +1169,7 @@ impl BlockRetriever {
             Ok(result) if matches!(result.status(), BlockRetrievalStatus::SucceededWithTarget) => {
                 // if we found the target, end the loop
                 let batch = result.blocks().clone();
-                for (block, _) in batch.iter() {
+                for (block, _, _) in batch.iter() {
                     if let Some(payload) = block.payload() {
                         payload_manager.prefetch_payload_data(payload, block.timestamp_usecs());
                     }
@@ -1189,7 +1194,7 @@ impl BlockRetriever {
         peers: Vec<AccountAddress>,
         payload_manager: Arc<dyn TPayloadManager>,
     ) -> anyhow::Result<(
-        Vec<(Block, Option<Vec<u8>>)>,
+        Vec<(Block, Option<u64>, Option<Vec<u8>>)>,
         Vec<QuorumCert>,
         Vec<LedgerInfoWithSignatures>,
     )> {

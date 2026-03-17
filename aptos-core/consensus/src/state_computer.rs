@@ -240,16 +240,14 @@ impl ExecutionProxy {
         validator_txns: Option<&[ValidatorTransaction]>,
         block: &Block,
     ) -> Vec<ExtraDataType> {
-        let mut extra_data = Vec::new();
-
-        if let Some(validator_txns) = validator_txns {
-            extra_data = validator_txns
-                .iter()
-                .map(|txn| self.process_single_validator_transaction(txn, block))
-                .collect();
-        }
-
-        extra_data
+        validator_txns
+            .map(|validator_txns| {
+                validator_txns
+                    .iter()
+                    .filter_map(|txn| self.process_single_validator_transaction(txn, block))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// Process a single validator transaction (DKG or JWK) and return the serialized data
@@ -257,7 +255,7 @@ impl ExecutionProxy {
         &self,
         txn: &ValidatorTransaction,
         block: &Block,
-    ) -> ExtraDataType {
+    ) -> Option<ExtraDataType> {
         match txn {
             ValidatorTransaction::DKGResult(transcript) => {
                 let transcript = gaptos::api_types::on_chain_config::dkg::DKGTranscript {
@@ -269,17 +267,26 @@ impl ExecutionProxy {
                     },
                     transcript_bytes: transcript.transcript_bytes.clone(),
                 };
-                ExtraDataType::DKG(bcs::to_bytes(&transcript).unwrap())
+                bcs::to_bytes(&transcript)
+                    .map(ExtraDataType::DKG)
+                    .map_err(|err| {
+                        warn!(
+                            "failed to serialize DKG validator transaction for block {}: {}",
+                            block.id(),
+                            err
+                        )
+                    })
+                    .ok()
             }
             ValidatorTransaction::ObservedJWKUpdate(jwks::QuorumCertifiedUpdate {
                 update,
                 multi_sig,
-            }) => ExtraDataType::JWK(self.process_jwk_update(&update, block)),
+            }) => self.process_jwk_update(&update, block).map(ExtraDataType::JWK),
         }
     }
 
     /// Process JWK update and convert to gaptos format
-    fn process_jwk_update(&self, update: &ProviderJWKs, block: &Block) -> Vec<u8> {
+    fn process_jwk_update(&self, update: &ProviderJWKs, block: &Block) -> Option<Vec<u8>> {
         use gaptos::api_types::on_chain_config::jwks::{JWKStruct, ProviderJWKs};
         // TODO(Gravity): Check the signature here instead of execution layer
         info!(
@@ -294,23 +301,44 @@ impl ExecutionProxy {
             jwks: update
                 .jwks
                 .iter()
-                .map(|jwk| {
-                    let aptos_jwk = JWK::try_from(jwk).unwrap();
-                    match aptos_jwk {
+                .filter_map(|jwk| {
+                    let aptos_jwk = match JWK::try_from(jwk) {
+                        Ok(jwk) => jwk,
+                        Err(err) => {
+                            warn!("failed to parse JWK update for block {}: {}", block.id(), err);
+                            return None;
+                        }
+                    };
+
+                    Some(match aptos_jwk {
                         JWK::RSA(rsa_jwk) => JWKStruct {
                             type_name: JWK_TYPE_RSA.to_string(),
-                            data: serde_json::to_vec(&rsa_jwk).unwrap(),
+                            data: match serde_json::to_vec(&rsa_jwk) {
+                                Ok(bytes) => bytes,
+                                Err(err) => {
+                                    warn!(
+                                        "failed to serialize RSA JWK for block {}: {}",
+                                        block.id(),
+                                        err
+                                    );
+                                    return None;
+                                }
+                            },
                         },
                         JWK::Unsupported(unsupported_jwk) => JWKStruct {
                             type_name: JWK_TYPE_UNSUPPORTED.to_string(),
                             data: unsupported_jwk.payload,
                         },
-                    }
+                    })
                 })
                 .collect(),
         };
 
-        bcs::to_bytes(&gaptos_provider_jwk).unwrap()
+        bcs::to_bytes(&gaptos_provider_jwk)
+            .map_err(|err| {
+                warn!("failed to serialize provider JWK update for block {}: {}", block.id(), err)
+            })
+            .ok()
     }
 }
 

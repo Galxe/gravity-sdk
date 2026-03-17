@@ -435,6 +435,7 @@ impl BufferManager {
         self.buffer = Buffer::new();
         self.execution_root = None;
         self.signing_root = None;
+        self.commit_vote_cache.clear();
         self.previous_commit_time = Instant::now();
         self.commit_proof_rb_handle.take();
         // purge the incoming blocks queue
