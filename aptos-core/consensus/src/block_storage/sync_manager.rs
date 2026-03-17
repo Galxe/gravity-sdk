@@ -296,9 +296,20 @@ impl BlockStore {
         if !self.need_sync_to_highest_quorum_cert(&highest_quorum_cert) {
             return Ok(());
         }
+        // Use max(remote_hcc, local_hcc) as the lower bound for fast_forward_sync.
+        // The remote peer's HCC may be stale (lower round than local). If we blindly
+        // use it, we would fetch blocks from a range whose parent blocks have already
+        // been pruned locally, causing a "Parent block not found" panic.
+        let local_hcc = self.highest_commit_cert();
+        let effective_commit_cert =
+            if local_hcc.commit_info().round() > highest_commit_cert.commit_info().round() {
+                local_hcc.as_ref().clone()
+            } else {
+                highest_commit_cert.clone()
+            };
         let (blocks, quorum_certs) = Self::fast_forward_sync(
             &highest_quorum_cert,
-            &highest_commit_cert,
+            &effective_commit_cert,
             retriever,
             self.storage.clone(),
             self.payload_manager.clone(),

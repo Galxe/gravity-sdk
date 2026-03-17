@@ -424,6 +424,23 @@ impl BlockTree {
         if next_root_id == self.commit_root_id {
             return VecDeque::new();
         }
+        // Defense-in-depth: next_root must have a higher round than commit_root.
+        // A stale prune request (next_root round <= commit_root round) would BFS
+        // from commit_root and incorrectly prune commit_root itself, since the
+        // stale next_root_id is an ancestor, not a descendant.
+        if let Some(next_root) = self.get_block(&next_root_id) {
+            if next_root.round() <= self.commit_root().round() {
+                warn!(
+                    "Skipping stale find_blocks_to_prune: next_root round {} <= commit_root round {}",
+                    next_root.round(),
+                    self.commit_root().round()
+                );
+                return VecDeque::new();
+            }
+        } else {
+            warn!("Skipping find_blocks_to_prune: next_root {:x} not found in tree", next_root_id);
+            return VecDeque::new();
+        }
         let mut blocks_pruned = VecDeque::new();
         let mut blocks_to_be_pruned = vec![self.linkable_root()];
         while let Some(block_to_remove) = blocks_to_be_pruned.pop() {
@@ -546,17 +563,32 @@ impl BlockTree {
         finality_proof: WrappedLedgerInfo,
         commit_decision: LedgerInfoWithSignatures,
     ) {
+        let block_to_commit = blocks_to_commit.last().expect("pipeline is empty");
+        let current_round = self.commit_root().round();
+        let committed_round = block_to_commit.round();
+        let committed_block_id = block_to_commit.id();
+
+        // Skip stale commit callbacks. After a rebuild + recover_blocks cycle,
+        // old pipeline closures may fire with blocks whose rounds are at or
+        // below the already-advanced commit_root. Processing them would cause
+        // find_blocks_to_prune to BFS from the current commit_root and
+        // incorrectly prune it (since the stale block is an ancestor).
+        if committed_round <= current_round {
+            info!(
+                "Skipping stale commit_callback: committed round {} <= commit_root round {}",
+                committed_round, current_round
+            );
+            return;
+        }
+
         let commit_proof = finality_proof
             .create_merged_with_executed_state(commit_decision)
             .expect("Inconsistent commit proof and evaluation decision, cannot commit block");
-        let block_to_commit = blocks_to_commit.last().expect("pipeline is empty").clone();
         update_counters_for_committed_blocks(blocks_to_commit);
-        let current_round = self.commit_root().round();
-        let committed_round = block_to_commit.round();
         debug!(
             LogSchema::new(LogEvent::CommitViaBlock).round(current_round),
             committed_round = committed_round,
-            block_id = block_to_commit.id(),
+            block_id = committed_block_id,
         );
 
         let prune_block_id = blocks_to_commit.last().expect("pipeline is empty").id();
