@@ -37,6 +37,21 @@ impl RelayerConfig {
     }
 }
 
+/// Sanitize a URL for safe logging: keep only scheme://host[:port], redact path and query.
+/// e.g. "https://mainnet.infura.io/v3/SECRET_KEY" → "https://mainnet.infura.io/***"
+fn sanitize_url(url: &str) -> String {
+    if let Some(scheme_end) = url.find("://") {
+        let scheme = &url[..scheme_end];
+        let rest = &url[scheme_end + 3..];
+        // Host ends at the first '/' or '?' or end of string
+        let host_end = rest.find('/').or_else(|| rest.find('?')).unwrap_or(rest.len());
+        let host_port = &rest[..host_end];
+        format!("{scheme}://{host_port}/***")
+    } else {
+        "***".to_string()
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 struct ProviderState {
     /// Last nonce we returned from polling
@@ -94,7 +109,9 @@ impl RelayerWrapper {
                 }
             })
             .unwrap_or_default();
-        info!("relayer config: {:?}", config);
+        for (uri, url) in &config.uri_mappings {
+            info!("relayer config: URI {} -> {}", uri, sanitize_url(url));
+        }
 
         // update reth commit and use
         let manager = OracleRelayerManager::new(datadir);
@@ -108,7 +125,7 @@ impl RelayerWrapper {
 
         let config_bytes = match GLOBAL_CONFIG_STORAGE
             .get()
-            .unwrap()
+            .expect("GLOBAL_CONFIG_STORAGE not initialized")
             .fetch_config_bytes(OnChainConfig::OracleState, block_number.into())
         {
             Some(bytes) => bytes,
@@ -236,7 +253,10 @@ impl Relayer for RelayerWrapper {
 
         info!(
             "Adding URI: {}, RPC URL: {}, onchain_nonce: {}, onchain_block: {}",
-            uri, actual_url, onchain_nonce, onchain_block_number
+            uri,
+            sanitize_url(actual_url),
+            onchain_nonce,
+            onchain_block_number
         );
 
         // Pass onchain state to manager for warm-start
