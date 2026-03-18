@@ -476,13 +476,9 @@ impl BlockBufferManager {
             } else {
                 None
             };
-            let actual_parent = block_state_machine
-                .blocks
-                .get(&parent_key_current)
-                .or_else(|| {
-                    parent_key_prev_epoch
-                        .and_then(|key| block_state_machine.blocks.get(&key))
-                });
+            let actual_parent = block_state_machine.blocks.get(&parent_key_current).or_else(|| {
+                parent_key_prev_epoch.and_then(|key| block_state_machine.blocks.get(&key))
+            });
             match actual_parent {
                 Some(state) => state.get_block_id(),
                 None => {

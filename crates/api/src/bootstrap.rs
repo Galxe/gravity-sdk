@@ -303,7 +303,8 @@ pub async fn init_block_buffer_manager(consensus_db: &Arc<ConsensusDB>, latest_b
                     }
                 }
             });
-        if block_number_to_block_id.len() >= (latest_block_number - start_block_number + 1) as usize {
+        if block_number_to_block_id.len() >= (latest_block_number - start_block_number + 1) as usize
+        {
             break;
         }
     }

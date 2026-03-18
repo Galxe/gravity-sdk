@@ -70,7 +70,6 @@ fn run_reth(
     let (datadir_tx, datadir_rx) = oneshot::channel::<PathBuf>();
     reth_cli_util::sigsegv_handler::install();
 
-
     let (tx, rx) = std::sync::mpsc::sync_channel(1);
 
     std::thread::spawn(move || {

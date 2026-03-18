@@ -97,7 +97,9 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             let block_num = ledger_info_with_sigs.ledger_info().block_number();
             assert!(block_ids.last().unwrap().as_slice() == block_id.as_slice());
             let len = block_ids.len();
-            if let Err(e) = self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false) {
+            if let Err(e) =
+                self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false)
+            {
                 error!("Failed to save_transactions in commit_blocks: {:?}", e);
             }
             let epoch = ledger_info_with_sigs.ledger_info().epoch();
@@ -190,7 +192,9 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                     warn!("persist_notifier channel closed in commit_ledger: {:?}", e);
                 }
             }
-            if let Err(e) = self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false) {
+            if let Err(e) =
+                self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false)
+            {
                 error!("Failed to save_transactions in commit_ledger: {:?}", e);
             }
         });
