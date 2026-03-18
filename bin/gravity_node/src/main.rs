@@ -118,13 +118,13 @@ fn run_reth(
                         .block_hash(recover_block_number)
                         .expect("Failed to read block hash from DB")
                         .unwrap_or_else(|| {
-                            panic!("Block hash not found for block number {}", recover_block_number)
+                            panic!("Block hash not found for block number {recover_block_number}")
                         });
                     let latest_block = provider
                         .block(BlockHashOrNumber::Number(recover_block_number))
                         .expect("Failed to read block from DB")
                         .unwrap_or_else(|| {
-                            panic!("Block not found for block number {}", recover_block_number)
+                            panic!("Block not found for block number {recover_block_number}")
                         });
                     let pool = handle.node.pool;
 
