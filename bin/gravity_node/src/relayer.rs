@@ -125,7 +125,7 @@ impl RelayerWrapper {
 
         let config_bytes = match GLOBAL_CONFIG_STORAGE
             .get()
-            .unwrap()
+            .expect("GLOBAL_CONFIG_STORAGE not initialized")
             .fetch_config_bytes(OnChainConfig::OracleState, block_number.into())
         {
             Some(bytes) => bytes,
@@ -253,7 +253,10 @@ impl Relayer for RelayerWrapper {
 
         info!(
             "Adding URI: {}, RPC URL: {}, onchain_nonce: {}, onchain_block: {}",
-            uri, sanitize_url(actual_url), onchain_nonce, onchain_block_number
+            uri,
+            sanitize_url(actual_url),
+            onchain_nonce,
+            onchain_block_number
         );
 
         // Pass onchain state to manager for warm-start
