@@ -516,7 +516,8 @@ impl ReputationHeuristic for ProposerAndVoterHeuristic {
                 let cur_failed_proposals = *failed_proposals.get(author).unwrap_or(&0);
 
                 if (cur_failed_proposals as u64) * 100 >
-                    (cur_proposals as u64 + cur_failed_proposals as u64) * self.failure_threshold_percent as u64
+                    (cur_proposals as u64 + cur_failed_proposals as u64) *
+                        self.failure_threshold_percent as u64
                 {
                     self.failed_weight
                 } else if cur_proposals > 0 || cur_votes > 0 {

@@ -1010,7 +1010,6 @@ impl BlockBufferManager {
             latest_epoch_change_block_number, block_state_machine.current_epoch
         );
 
-
         self.buffer_state.store(BufferState::EpochChange as u8, Ordering::SeqCst);
 
         block_state_machine
