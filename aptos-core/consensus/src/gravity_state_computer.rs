@@ -125,8 +125,8 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                     .await
                     .unwrap_or_else(|e| panic!("Failed to push commit blocks {}", e));
                 for notifier in persist_notifiers.iter_mut() {
-                    if let Err(e) = notifier.recv().await {
-                        warn!("persist_notifier channel closed in commit_blocks: {:?}", e);
+                    if notifier.recv().await.is_none() {
+                        warn!("persist_notifier channel closed in commit_blocks");
                     }
                 }
             });
@@ -188,8 +188,8 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                 .await
                 .unwrap();
             for notifier in persist_notifiers.iter_mut() {
-                if let Err(e) = notifier.recv().await {
-                    warn!("persist_notifier channel closed in commit_ledger: {:?}", e);
+                if notifier.recv().await.is_none() {
+                    warn!("persist_notifier channel closed in commit_ledger");
                 }
             }
             if let Err(e) =
