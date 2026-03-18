@@ -72,8 +72,9 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
         // Handle the commit notification
         let committed_transactions = consensus_commit_notification.get_transactions().clone();
 
-        // TODO(gravity_byteyue): ideally the block timestamp should come from ConsensusCommitNotification
-        // rather than the local wall clock. For now, use SystemTime as a compatible workaround.
+        // TODO(gravity_byteyue): ideally the block timestamp should come from
+        // ConsensusCommitNotification rather than the local wall clock. For now, use
+        // SystemTime as a compatible workaround.
         self.mempool_notification_handler
             .notify_mempool_of_committed_transactions(
                 committed_transactions,
