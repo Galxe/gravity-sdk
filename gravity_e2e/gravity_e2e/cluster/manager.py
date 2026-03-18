@@ -833,8 +833,6 @@ class Cluster:
             "create",
             "--rpc-url",
             rpc_url,
-            "--private-key",
-            private_key,
             "--stake-amount",
             stake_amount,
         ]
@@ -844,11 +842,14 @@ class Cluster:
 
         process = await asyncio.create_subprocess_exec(
             *create_cmd,
+            stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
 
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(input=f"{private_key}\n".encode()), timeout=timeout
+        )
         stdout_str = stdout.decode() if stdout else ""
         stderr_str = stderr.decode() if stderr else ""
         if stdout_str:
@@ -927,8 +928,6 @@ class Cluster:
             "join",
             "--rpc-url",
             rpc_url,
-            "--private-key",
-            private_key,
             "--stake-pool",
             node.stake_pool,
             "--consensus-public-key",
@@ -952,12 +951,15 @@ class Cluster:
 
         process = await asyncio.create_subprocess_exec(
             *join_cmd,
+            stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             start_new_session=True,
         )
 
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(input=f"{private_key}\n".encode()), timeout=timeout
+        )
         stdout_str = stdout.decode() if stdout else ""
         stderr_str = stderr.decode() if stderr else ""
         if stdout_str:
@@ -1015,8 +1017,6 @@ class Cluster:
             "leave",
             "--rpc-url",
             rpc_url,
-            "--private-key",
-            private_key,
             "--stake-pool",
             node.stake_pool,
         ]
@@ -1026,12 +1026,15 @@ class Cluster:
 
         process = await asyncio.create_subprocess_exec(
             *leave_cmd,
+            stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             start_new_session=True,
         )
 
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(input=f"{private_key}\n".encode()), timeout=timeout
+        )
         stdout_str = stdout.decode() if stdout else ""
         stderr_str = stderr.decode() if stderr else ""
         if stdout_str:
