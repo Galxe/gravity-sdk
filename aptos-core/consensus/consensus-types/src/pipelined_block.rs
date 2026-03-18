@@ -121,6 +121,12 @@ pub struct PipelinedBlock {
     randomness: OnceCell<Randomness>,
     pipeline_insertion_time: OnceCell<Instant>,
     execution_summary: Arc<OnceCell<ExecutionSummary>>,
+    // NOTE: `aptos_infallible::Mutex` (blocking) is used intentionally here instead of
+    // `tokio::sync::Mutex`. All lock usages (take_pre_commit_fut, abort_pipeline, pipeline_fut,
+    // set_pipeline_fut) are short-lived lock-then-immediately-drop patterns with no `.await`
+    // while holding the guard, so blocking a Tokio worker thread is negligible. For such
+    // micro-critical sections, a blocking mutex is more efficient than an async mutex.
+    // See: https://docs.rs/tokio/latest/tokio/sync/struct.Mutex.html#which-kind-of-mutex-should-you-use
     #[derivative(PartialEq = "ignore")]
     pre_commit_fut: Arc<Mutex<Option<BoxFuture<'static, ExecutorResult<()>>>>>,
     // pipeline related fields
