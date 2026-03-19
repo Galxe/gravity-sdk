@@ -43,7 +43,11 @@ FAILOVER_DURATION = int(os.environ.get("FAILOVER_DURATION", "0"))
 MIN_ALIVE_VALIDATORS = 3
 
 # Block height gap threshold
-MAX_BLOCK_GAP = 200
+MAX_BLOCK_GAP = int(os.environ.get("MAX_BLOCK_GAP", "200"))
+
+# Max block height gap between live validators before allowing a kill
+# Ensures no validator is severely lagging before we take one down
+KILL_READY_MAX_GAP = int(os.environ.get("KILL_READY_MAX_GAP", "10"))
 
 # Time to wait for a restarted node to catch up (seconds)
 CATCHUP_TIMEOUT = 120
@@ -377,6 +381,35 @@ class FailoverTestContext:
                     await self._recover_validators()
                     await asyncio.sleep(5)
                     continue
+
+                # Check that no live validator is severely lagging
+                # before killing — a lagging node is effectively unusable,
+                # so killing another could drop us below BFT threshold
+                live_heights = {}
+                for node in live_validators:
+                    try:
+                        live_heights[node.id] = node.get_block_number()
+                    except Exception:
+                        live_heights[node.id] = -1
+
+                responsive_heights = {
+                    nid: h for nid, h in live_heights.items() if h >= 0
+                }
+                if len(responsive_heights) >= 2:
+                    max_h = max(responsive_heights.values())
+                    min_h = min(responsive_heights.values())
+                    height_gap = max_h - min_h
+                    LOG.info(
+                        f"Live validator heights: {live_heights}, "
+                        f"gap={height_gap} (threshold={KILL_READY_MAX_GAP})"
+                    )
+                    if height_gap > KILL_READY_MAX_GAP:
+                        LOG.warning(
+                            f"⚠️  Live validators have height gap {height_gap} "
+                            f"(>{KILL_READY_MAX_GAP}), waiting for sync before kill..."
+                        )
+                        await asyncio.sleep(5)
+                        continue
 
                 # Pick a random validator to kill
                 victim = random.choice(live_validators)

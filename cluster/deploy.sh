@@ -51,11 +51,11 @@ configure_node() {
     # Generate reth_config.json from template
     envsubst < "$SCRIPT_DIR/templates/reth_config.json.tpl" > "$config_dir/reth_config.json"
     
-    # Copy relayer_config.json from template (supports per-test-case override via env var)
+    # Render relayer_config.json from template (supports per-test-case override via env var)
     local relayer_tpl="${RELAYER_CONFIG_TPL:-$SCRIPT_DIR/templates/relayer_config.json.tpl}"
     if [ -f "$relayer_tpl" ]; then
-        cp "$relayer_tpl" "$config_dir/relayer_config.json"
-        log_info "  Using relayer config: $relayer_tpl"
+        envsubst < "$relayer_tpl" > "$config_dir/relayer_config.json"
+        log_info "  Using relayer config: $relayer_tpl (rpc_url=$RELAYER_RPC_URL)"
     else
         log_warn "  Relayer config template not found: $relayer_tpl (skipping)"
     fi
@@ -167,8 +167,14 @@ configure_vfn() {
     # Generate reth_config.json from template
     envsubst < "$SCRIPT_DIR/templates/reth_config_vfn.json.tpl" > "$config_dir/reth_config.json"
     
-    # Copy relayer_config.json from template
-    cp "$SCRIPT_DIR/templates/relayer_config.json.tpl" "$config_dir/relayer_config.json"
+    # Render relayer_config.json from template
+    local relayer_tpl="${RELAYER_CONFIG_TPL:-$SCRIPT_DIR/templates/relayer_config.json.tpl}"
+    if [ -f "$relayer_tpl" ]; then
+        envsubst < "$relayer_tpl" > "$config_dir/relayer_config.json"
+        log_info "  Using relayer config: $relayer_tpl (rpc_url=$RELAYER_RPC_URL)"
+    else
+        log_warn "  Relayer config template not found: $relayer_tpl (skipping)"
+    fi
     
     # Generate start script for this node
     cat > "$data_dir/script/start.sh" << 'START_SCRIPT'
@@ -319,6 +325,9 @@ main() {
     # Read genesis source paths from config (with defaults)
     genesis_path=$(echo "$config_json" | jq -r '.genesis_source.genesis_path // "./output/genesis.json"')
     waypoint_path=$(echo "$config_json" | jq -r '.genesis_source.waypoint_path // "./output/waypoint.txt"')
+    
+    # Read relayer RPC URL from config (with default)
+    export RELAYER_RPC_URL=$(echo "$config_json" | jq -r '.relayer.relayer_rpc_url // "https://sepolia.drpc.org"')
     
     # Resolve relative paths (relative to CONFIG_FILE location, not SCRIPT_DIR)
     local config_dir="$(dirname "$CONFIG_FILE")"

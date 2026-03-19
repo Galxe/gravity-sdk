@@ -28,7 +28,9 @@
     "cancunTime": 0,
     "terminalTotalDifficultyPassed": false,
     "extraFields": {},
-    "depositContractAddress": null
+    "depositContractAddress": null,
+    "alphaBlock": 8287964,
+    "betaBlock": 8344249
   },
   "alloc": {
     "0x00000000000000000000000000000001625f1005": {

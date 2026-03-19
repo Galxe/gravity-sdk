@@ -7882,6 +7882,7 @@ dependencies = [
  "k256",
  "rand_core 0.6.4",
  "reqwest 0.12.28",
+ "rpassword",
  "serde",
  "serde_json",
  "serde_yaml 0.8.26",
@@ -16360,6 +16361,16 @@ name = "route-recognizer"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "afab94fb28594581f62d981211a9a4d53cc8130bbcbbb89a0440d9b8e81a7746"
+
+[[package]]
+name = "rpassword"
+version = "5.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffc936cf8a7ea60c58f030fd36a612a48f440610214dc54bc36431f9ea0c3efb"
+dependencies = [
+ "libc",
+ "winapi 0.3.9",
+]
 
 [[package]]
 name = "rsa"

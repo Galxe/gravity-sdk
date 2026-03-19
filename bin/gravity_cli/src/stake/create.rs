@@ -18,10 +18,6 @@ pub struct CreateCommand {
     #[clap(long)]
     pub rpc_url: String,
 
-    /// Private key for signing transactions (hex string with or without 0x prefix)
-    #[clap(long)]
-    pub private_key: String,
-
     /// Gas limit for the transaction
     #[clap(long, default_value = "2000000")]
     pub gas_limit: u64,
@@ -53,7 +49,12 @@ impl CreateCommand {
         println!("1. Initializing connection...");
 
         println!("   RPC URL: {}", self.rpc_url);
-        let private_key_str = self.private_key.strip_prefix("0x").unwrap_or(&self.private_key);
+        let private_key_input = rpassword::prompt_password_stdout(
+            "Enter private key (hex, with or without 0x prefix): ",
+        )
+        .map_err(|e| anyhow::anyhow!("Failed to read private key: {e}"))?;
+        let private_key_str =
+            private_key_input.trim().strip_prefix("0x").unwrap_or(private_key_input.trim());
         let private_key_bytes = hex::decode(private_key_str)?;
         let private_key = SigningKey::from_slice(private_key_bytes.as_slice())
             .map_err(|e| anyhow::anyhow!("Invalid private key: {e}"))?;

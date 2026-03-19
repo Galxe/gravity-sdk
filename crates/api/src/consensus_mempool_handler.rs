@@ -72,11 +72,13 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
         // Handle the commit notification
         let committed_transactions = consensus_commit_notification.get_transactions().clone();
 
-        // TODO(gravity_byteyue): the block timestamp usecs should be modified
+        // TODO(gravity_byteyue): ideally the block timestamp should come from
+        // ConsensusCommitNotification rather than the local wall clock. For now, use
+        // SystemTime as a compatible workaround.
         self.mempool_notification_handler
             .notify_mempool_of_committed_transactions(
                 committed_transactions,
-                SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+                SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_micros() as u64,
             )
             .await?;
         let block_number = consensus_commit_notification.get_block_number();
