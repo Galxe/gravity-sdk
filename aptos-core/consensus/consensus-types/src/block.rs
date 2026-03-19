@@ -17,6 +17,7 @@ use gaptos::{
         HashValue,
     },
     aptos_infallible::duration_since_epoch,
+    aptos_logger::warn,
     aptos_types::{
         account_address::AccountAddress,
         block_info::BlockInfo,
@@ -477,7 +478,14 @@ impl Block {
     }
 
     pub fn set_block_number(&self, block_number: u64) {
-        assert!(self.block_number.set(block_number).is_ok());
+        if let Err(existing) = self.block_number.set(block_number) {
+            if existing != block_number {
+                warn!(
+                    "set_block_number called with different value: existing={}, new={}",
+                    existing, block_number
+                );
+            }
+        }
     }
 }
 

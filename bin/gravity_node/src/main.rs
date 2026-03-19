@@ -70,10 +70,6 @@ fn run_reth(
     let (datadir_tx, datadir_rx) = oneshot::channel::<PathBuf>();
     reth_cli_util::sigsegv_handler::install();
 
-    if std::env::var_os("RUST_BACKTRACE").is_none() {
-        std::env::set_var("RUST_BACKTRACE", "1");
-    }
-
     let (tx, rx) = std::sync::mpsc::sync_channel(1);
 
     std::thread::spawn(move || {
@@ -223,6 +219,11 @@ fn setup_pprof_profiler() -> Arc<Mutex<ProfilingState>> {
 }
 
 fn main() {
+    // Set RUST_BACKTRACE before any threads are spawned to avoid UB from std::env::set_var
+    if std::env::var_os("RUST_BACKTRACE").is_none() {
+        std::env::set_var("RUST_BACKTRACE", "1");
+    }
+
     let _profiling_state =
         if std::env::var("ENABLE_PPROF").is_ok() { Some(setup_pprof_profiler()) } else { None };
     let cli = Cli::parse();

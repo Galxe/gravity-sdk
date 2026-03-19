@@ -85,10 +85,10 @@ impl WrappedLedgerInfo {
         // Genesis's QC is implicitly agreed upon, it doesn't have real signatures.
         // If someone sends us a QC on a fake genesis, it'll fail to insert into BlockStore
         // because of the round constraint.
-
-        // TODO: Earlier, we were comparing self.certified_block().round() to 0. Now, we are
-        // comparing self.ledger_info().ledger_info().round() to 0. Is this okay?
-        if self.ledger_info().ledger_info().round() == 0 {
+        //
+        // Use certified_block().round() (from vote_data) to align with QuorumCert::verify,
+        // preventing bypass via crafted ledger_info round.
+        if self.vote_data.proposed().round() == 0 {
             ensure!(
                 self.ledger_info().get_num_voters() == 0,
                 "Genesis QC should not carry signatures"

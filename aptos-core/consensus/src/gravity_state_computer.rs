@@ -13,7 +13,7 @@ use gaptos::{
     api_types::u256_define::BlockId,
     aptos_consensus::counters::{APTOS_COMMIT_BLOCKS, APTOS_EXECUTION_TXNS},
     aptos_crypto::HashValue,
-    aptos_logger::{debug, info},
+    aptos_logger::{debug, error, info, warn},
     aptos_types::{
         block_executor::{config::BlockExecutorConfigFromOnchain, partitioner::ExecutableBlock},
         ledger_info::LedgerInfoWithSignatures,
@@ -97,8 +97,11 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             let block_num = ledger_info_with_sigs.ledger_info().block_number();
             assert!(block_ids.last().unwrap().as_slice() == block_id.as_slice());
             let len = block_ids.len();
-            let _ =
-                self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
+            if let Err(e) =
+                self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false)
+            {
+                error!("Failed to save_transactions in commit_blocks: {:?}", e);
+            }
             let epoch = ledger_info_with_sigs.ledger_info().epoch();
             self.runtime.block_on(async move {
                 let mut persist_notifiers = get_block_buffer_manager()
@@ -122,7 +125,9 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                     .await
                     .unwrap_or_else(|e| panic!("Failed to push commit blocks {}", e));
                 for notifier in persist_notifiers.iter_mut() {
-                    let _ = notifier.recv().await;
+                    if notifier.recv().await.is_none() {
+                        warn!("persist_notifier channel closed in commit_blocks");
+                    }
                 }
             });
         }
@@ -183,10 +188,15 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                 .await
                 .unwrap();
             for notifier in persist_notifiers.iter_mut() {
-                let _ = notifier.recv().await;
+                if notifier.recv().await.is_none() {
+                    warn!("persist_notifier channel closed in commit_ledger");
+                }
             }
-            let _ =
-                self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false);
+            if let Err(e) =
+                self.inner.db.writer.save_transactions(None, Some(&ledger_info_with_sigs), false)
+            {
+                error!("Failed to save_transactions in commit_ledger: {:?}", e);
+            }
         });
         Ok(())
     }
