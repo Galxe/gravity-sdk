@@ -639,8 +639,9 @@ impl PipelineBuilder {
                 epoch_info.block_id, epoch_info.block_number, epoch_info.epoch_start_round, epoch_info.epoch_start_timestamp_usecs,
             );
             block_info.set_epoch_block_info(epoch_info);
-        } else if let Some(epoch_info) =
-            get_block_buffer_manager().get_epoch_change_block_info().await
+        } else if let Some(epoch_info) = get_block_buffer_manager()
+            .get_epoch_change_block_info(block.block_number().unwrap_or(0), block.epoch())
+            .await
         {
             // Suffix block after an epoch change: carry the epoch change block's info
             info!(

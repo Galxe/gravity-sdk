@@ -1066,11 +1066,24 @@ impl BlockBufferManager {
         block_state_machine.current_epoch
     }
 
-    /// Returns the stored EpochBlockInfo from the last epoch change, if any.
-    /// Used by sign_commit_vote to populate EpochBlockInfo on suffix blocks.
-    pub async fn get_epoch_change_block_info(&self) -> Option<EpochBlockInfo> {
+    /// Returns the stored EpochBlockInfo if the given block is a suffix block
+    /// (same epoch as the epoch change, block_number > epoch change block number).
+    /// Returns None for normal blocks or blocks in a different epoch.
+    pub async fn get_epoch_change_block_info(
+        &self,
+        block_num: u64,
+        epoch: u64,
+    ) -> Option<EpochBlockInfo> {
         let block_state_machine = self.block_state_machine.lock().await;
-        block_state_machine.epoch_change_block_info.clone()
+        let epoch_change_bn = block_state_machine.latest_epoch_change_block_number;
+        if epoch_change_bn > 0
+            && block_num > epoch_change_bn
+            && epoch == block_state_machine.current_epoch
+        {
+            block_state_machine.epoch_change_block_info.clone()
+        } else {
+            None
+        }
     }
 
     pub async fn release_inflight_blocks(&self) {
@@ -1096,6 +1109,10 @@ impl BlockBufferManager {
         block_state_machine
             .blocks
             .retain(|key, _| key.block_number <= latest_epoch_change_block_number);
+
+        // Clear epoch change block info — epoch transition is complete,
+        // new epoch blocks should not carry stale epoch info.
+        block_state_machine.epoch_change_block_info = None;
 
         self.buffer_state.store(BufferState::EpochChange as u8, Ordering::SeqCst);
         block_state_machine
