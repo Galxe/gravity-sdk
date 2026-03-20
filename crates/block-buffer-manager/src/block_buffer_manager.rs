@@ -2,7 +2,9 @@ use anyhow::format_err;
 use aptos_executor_types::StateComputeResult;
 use gaptos::{
     api_types::{self, account::ExternalAccountAddress, u256_define::TxnHash},
-    aptos_types::{epoch_state::EpochState, idl::convert_validator_set},
+    aptos_types::{
+        block_info::EpochBlockInfo, epoch_state::EpochState, idl::convert_validator_set,
+    },
 };
 use std::{
     collections::HashMap,
@@ -173,6 +175,8 @@ pub struct BlockStateMachine {
     next_epoch: Option<u64>,
     /// Moved from separate Mutex to eliminate nested locking.
     latest_epoch_change_block_number: u64,
+    /// Stored epoch change block info for suffix blocks to reference.
+    epoch_change_block_info: Option<EpochBlockInfo>,
 }
 
 pub struct BlockBufferManagerConfig {
@@ -232,6 +236,7 @@ impl BlockBufferManager {
                 current_epoch: 0,
                 next_epoch: None,
                 latest_epoch_change_block_number: 0,
+                epoch_change_block_info: None,
             }),
             buffer_state: AtomicU8::new(BufferState::Uninitialized as u8),
             config,
@@ -782,6 +787,15 @@ impl BlockBufferManager {
             // these suffix blocks. Reth will independently detect the stale epoch and silently
             // discard them without sending any ExecutionResult, so there is no conflict.
             if has_epoch_change {
+                // Store the epoch change block's info so suffix blocks and
+                // sign_commit_vote can reference it.
+                block_state_machine.epoch_change_block_info = Some(EpochBlockInfo {
+                    block_id: gaptos::aptos_crypto::HashValue::new(block_id.0),
+                    block_number: block_num,
+                    epoch_start_round: 0, // round is not available here; set in sign_commit_vote
+                    epoch_start_timestamp_usecs: 0, // timestamp not available here; set in sign_commit_vote
+                });
+
                 let suffix_keys: Vec<(BlockKey, BlockId)> = block_state_machine
                     .blocks
                     .iter()
@@ -1050,6 +1064,13 @@ impl BlockBufferManager {
         }
         let block_state_machine = self.block_state_machine.lock().await;
         block_state_machine.current_epoch
+    }
+
+    /// Returns the stored EpochBlockInfo from the last epoch change, if any.
+    /// Used by sign_commit_vote to populate EpochBlockInfo on suffix blocks.
+    pub async fn get_epoch_change_block_info(&self) -> Option<EpochBlockInfo> {
+        let block_state_machine = self.block_state_machine.lock().await;
+        block_state_machine.epoch_change_block_info.clone()
     }
 
     pub async fn release_inflight_blocks(&self) {
