@@ -786,9 +786,9 @@ impl BlockBufferManager {
                     .blocks
                     .iter()
                     .filter_map(|(key, state)| {
-                        if key.epoch == epoch
-                            && key.block_number > block_num
-                            && matches!(state, BlockState::Ordered { .. })
+                        if key.epoch == epoch &&
+                            key.block_number > block_num &&
+                            matches!(state, BlockState::Ordered { .. })
                         {
                             Some((*key, state.get_block_id()))
                         } else {
@@ -801,10 +801,7 @@ impl BlockBufferManager {
                     let dummy_result = StateComputeResult::new_dummy();
                     block_state_machine.blocks.insert(
                         *suffix_key,
-                        BlockState::Computed {
-                            id: *suffix_block_id,
-                            compute_result: dummy_result,
-                        },
+                        BlockState::Computed { id: *suffix_block_id, compute_result: dummy_result },
                     );
                     let profile = block_state_machine
                         .profile
