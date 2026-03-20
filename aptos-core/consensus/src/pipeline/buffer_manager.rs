@@ -439,7 +439,7 @@ impl BufferManager {
         self.previous_commit_time = Instant::now();
         self.commit_proof_rb_handle.take();
         // purge the incoming blocks queue
-        while let Ok(Some(_)) = self.block_rx.try_next() {}
+        while let Ok(_) = self.block_rx.try_recv() {}
         // Wait for ongoing tasks to finish before sending back ack.
         get_block_buffer_manager().release_inflight_blocks().await;
         while self.ongoing_tasks.load(Ordering::SeqCst) > 0 {
