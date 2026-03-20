@@ -41,6 +41,7 @@ use gaptos::{
     aptos_logger::{error, info, warn},
     aptos_types::{
         block_executor::config::BlockExecutorConfigFromOnchain,
+        block_info::EpochBlockInfo,
         block_metadata_ext::BlockMetadataExt,
         ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
         randomness::Randomness,
@@ -622,6 +623,22 @@ impl PipelineBuilder {
                 timestamp
             );
             block_info.change_timestamp(timestamp);
+        }
+        // Populate EpochBlockInfo when this block triggers an epoch change.
+        // This records the epoch-changing block's metadata (id, number, round, timestamp)
+        // so downstream consumers can identify which block caused the epoch transition.
+        if compute_result.has_reconfiguration() {
+            let epoch_info = EpochBlockInfo {
+                block_id: block.id(),
+                block_number: block.block_number().unwrap_or(0),
+                epoch_start_round: block.round(),
+                epoch_start_timestamp_usecs: block_info.timestamp_usecs(),
+            };
+            info!(
+                "[Pipeline] Setting EpochBlockInfo for epoch change block: id={}, number={}, round={}, timestamp={}",
+                epoch_info.block_id, epoch_info.block_number, epoch_info.epoch_start_round, epoch_info.epoch_start_timestamp_usecs,
+            );
+            block_info.set_epoch_block_info(epoch_info);
         }
         let ledger_info = LedgerInfo::new(block_info, HashValue::zero());
         info!("[Pipeline] Signed ledger info {ledger_info}");
