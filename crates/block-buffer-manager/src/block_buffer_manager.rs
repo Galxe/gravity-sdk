@@ -749,6 +749,7 @@ impl BlockBufferManager {
             let new_epoch_state = self
                 .calculate_new_epoch_state(&events, block_num, &mut block_state_machine)
                 .await?;
+            let has_epoch_change = new_epoch_state.is_some();
             let compute_result = StateComputeResult::new(
                 ComputeRes { data: block_hash, txn_num: txn_len as u64, txn_status, events },
                 new_epoch_state,
@@ -774,6 +775,58 @@ impl BlockBufferManager {
                 txn_len,
                 events_len,
             );
+
+            // Non-blocking epoch change: when an epoch change is detected, immediately
+            // set dummy compute results for all subsequent Ordered blocks in the same epoch.
+            // This avoids blocking consensus while waiting for reth to process (and discard)
+            // these suffix blocks. Reth will independently detect the stale epoch and silently
+            // discard them without sending any ExecutionResult, so there is no conflict.
+            if has_epoch_change {
+                let suffix_keys: Vec<(BlockKey, BlockId)> = block_state_machine
+                    .blocks
+                    .iter()
+                    .filter_map(|(key, state)| {
+                        if key.epoch == epoch
+                            && key.block_number > block_num
+                            && matches!(state, BlockState::Ordered { .. })
+                        {
+                            Some((*key, state.get_block_id()))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                for (suffix_key, suffix_block_id) in &suffix_keys {
+                    let dummy_result = StateComputeResult::new_dummy();
+                    block_state_machine.blocks.insert(
+                        *suffix_key,
+                        BlockState::Computed {
+                            id: *suffix_block_id,
+                            compute_result: dummy_result,
+                        },
+                    );
+                    let profile = block_state_machine
+                        .profile
+                        .entry(*suffix_key)
+                        .or_insert_with(BlockProfile::default);
+                    profile.set_compute_res_time = Some(SystemTime::now());
+                    info!(
+                        "set_compute_res [epoch_change_suffix] id {:?} num {:?} epoch {:?} \
+                         (dummy result for suffix block after epoch change at block {})",
+                        suffix_block_id, suffix_key.block_number, suffix_key.epoch, block_num,
+                    );
+                }
+
+                if !suffix_keys.is_empty() {
+                    info!(
+                        "set_compute_res: epoch change at block {}, set {} suffix blocks with dummy results",
+                        block_num,
+                        suffix_keys.len(),
+                    );
+                }
+            }
+
             let _ = block_state_machine.sender.send(());
             return Ok(());
         }
@@ -903,6 +956,18 @@ impl BlockBufferManager {
             let mut result = Vec::new();
             let mut current_num = start_num;
             loop {
+                // Non-blocking epoch change: skip suffix blocks after epoch change.
+                // These blocks have dummy execution results and were never executed by reth,
+                // so they must not enter the reth commit path (which would panic on get_block_id).
+                let epoch_change_bn = block_state_machine.latest_epoch_change_block_number;
+                if epoch_change_bn > 0 && current_num > epoch_change_bn {
+                    info!(
+                        "get_committed_blocks: skipping block {} (after epoch change at block {})",
+                        current_num, epoch_change_bn,
+                    );
+                    break;
+                }
+
                 let block_key = BlockKey::new(epoch, current_num);
                 match block_state_machine.blocks.get_mut(&block_key) {
                     Some(BlockState::Committed {
