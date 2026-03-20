@@ -148,7 +148,7 @@ proptest! {
                     }
                     let mut ordered = vec![];
                     while let Ok(mut ordered_nodes) = receiver.try_recv() {
-                        ordered.append(&mut ordered_nodes); 
+                        ordered.append(&mut ordered_nodes);
                     }
                     all_ordered.lock().push(ordered);
                 });
