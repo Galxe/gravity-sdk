@@ -24,22 +24,11 @@ from web3 import Web3
 LOG = logging.getLogger(__name__)
 
 
-# ── Gamma hardfork system contract addresses ─────────────────────────
-# These are the fixed system contract addresses upgraded by the gamma hardfork.
-# Source: gravity-reth/crates/ethereum/evm/src/hardfork/gamma.rs GAMMA_SYSTEM_UPGRADES
-GAMMA_SYSTEM_CONTRACTS = {
-    "StakingConfig": "0x00000000000000000000000000000001625F1001",
-    "ValidatorConfig": "0x00000000000000000000000000000001625F1002",
-    "GovernanceConfig": "0x00000000000000000000000000000001625F1004",
-    "Staking": "0x00000000000000000000000000000001625F2000",
-    "ValidatorManagement": "0x00000000000000000000000000000001625F2001",
-    "Reconfiguration": "0x00000000000000000000000000000001625F2003",
-    "Blocker": "0x00000000000000000000000000000001625F2004",
-    "PerformanceTracker": "0x00000000000000000000000000000001625F2005",
-    "Governance": "0x00000000000000000000000000000001625F3000",
-    "NativeOracle": "0x00000000000000000000000000000001625F4000",
-    "OracleRequestQueue": "0x00000000000000000000000000000001625F4002",
-}
+# ── DEPRECATED: Use system_contracts.py instead ──────────────────────
+# Kept for backward compatibility. New code should import from system_contracts.
+from system_contracts import HARDFORK_CONTRACTS
+
+GAMMA_SYSTEM_CONTRACTS = HARDFORK_CONTRACTS.get("gamma", {})
 
 
 async def wait_for_block(
@@ -98,11 +87,20 @@ def get_contract_code_hashes(
     return result
 
 
-def snapshot_system_contracts(w3: Web3) -> Dict[str, Optional[str]]:
+def snapshot_system_contracts(
+    w3: Web3, contracts: Optional[Dict[str, str]] = None
+) -> Dict[str, Optional[str]]:
     """
-    Take a snapshot of code hashes for all gamma system contracts.
+    Take a snapshot of code hashes for system contracts.
+
+    Args:
+        w3: Web3 instance.
+        contracts: Contract addresses to snapshot. Defaults to GAMMA_SYSTEM_CONTRACTS
+                   for backward compatibility.
     """
-    return get_contract_code_hashes(w3, GAMMA_SYSTEM_CONTRACTS)
+    if contracts is None:
+        contracts = GAMMA_SYSTEM_CONTRACTS
+    return get_contract_code_hashes(w3, contracts)
 
 
 def compare_snapshots(
