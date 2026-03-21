@@ -40,17 +40,22 @@ impl<EthApi: RethEthCall> RethCoordinator<EthApi> {
     }
 
     pub async fn run(&self) {
-        let reth_cli = self.reth_cli.clone();
+        let reth_cli1 = self.reth_cli.clone();
+        let h1 = tokio::spawn(async move { reth_cli1.start_execution().await });
+
+        let reth_cli2 = self.reth_cli.clone();
+        let h2 = tokio::spawn(async move { reth_cli2.start_commit_vote().await });
+
+        let reth_cli3 = self.reth_cli.clone();
+        let h3 = tokio::spawn(async move { reth_cli3.start_commit().await });
+
         tokio::spawn(async move {
-            reth_cli.start_execution().await.unwrap();
-        });
-        let reth_cli = self.reth_cli.clone();
-        tokio::spawn(async move {
-            reth_cli.start_commit_vote().await.unwrap();
-        });
-        let reth_cli = self.reth_cli.clone();
-        tokio::spawn(async move {
-            reth_cli.start_commit().await.unwrap();
+            tokio::select! {
+                res = h1 => tracing::error!("start_execution task exited unexpectedly: {:?}", res),
+                res = h2 => tracing::error!("start_commit_vote task exited unexpectedly: {:?}", res),
+                res = h3 => tracing::error!("start_commit task exited unexpectedly: {:?}", res),
+            };
+            std::process::exit(1);
         });
     }
 }
