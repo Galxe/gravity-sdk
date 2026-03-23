@@ -76,7 +76,7 @@ impl StatusCommand {
 
         let block_timestamp = latest_block.header.timestamp;
         let block_micros = block_timestamp * 1_000_000;
-        let running_micros = if block_micros > last_time { block_micros - last_time } else { 0 };
+        let running_micros = block_micros.saturating_sub(last_time);
 
         let running_secs = running_micros / 1_000_000;
         let expected_duration_secs = interval / 1_000_000;
@@ -87,16 +87,16 @@ impl StatusCommand {
             let m = (secs % 3600) / 60;
             let s = secs % 60;
             if h > 0 {
-                format!("{}h {}m {}s", h, m, s)
+                format!("{h}h {m}m {s}s")
             } else if m > 0 {
-                format!("{}m {}s", m, s)
+                format!("{m}m {s}s")
             } else {
-                format!("{}s", s)
+                format!("{s}s")
             }
         };
 
         println!("Epoch Status:");
-        println!("  Current Epoch: {}", current_epoch);
+        println!("  Current Epoch: {current_epoch}");
         println!(
             "  Running Time:  {} (out of {} configured interval)",
             format_hms(running_secs),
