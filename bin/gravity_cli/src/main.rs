@@ -1,6 +1,7 @@
 pub mod command;
 pub mod contract;
 pub mod dkg;
+pub mod epoch;
 pub mod genesis;
 pub mod node;
 pub mod stake;
@@ -45,6 +46,10 @@ fn main() {
             dkg::SubCommands::Status(status_cmd) => status_cmd.execute(),
             // Example: gravity-cli dkg randomness --server-url="127.0.0.1:1024" --block-number=100
             dkg::SubCommands::Randomness(randomness_cmd) => randomness_cmd.execute(),
+        },
+        command::SubCommands::Epoch(epoch_cmd) => match epoch_cmd.command {
+            // Example: gravity-cli epoch status --rpc-url="http://127.0.0.1:8545"
+            epoch::SubCommands::Status(status_cmd) => status_cmd.execute(),
         },
     };
 
