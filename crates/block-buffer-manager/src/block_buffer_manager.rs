@@ -350,15 +350,21 @@ impl BlockBufferManager {
         self.buffer_state.load(Ordering::SeqCst) == BufferState::EpochChange as u8
     }
 
-    pub async fn consume_epoch_change(&self) -> u64 {
+    /// Consume the epoch change and return (new_epoch, epoch_change_block_number).
+    /// Also resets `latest_epoch_change_block_number` to 0 so that
+    /// `get_committed_blocks` no longer skips new-epoch blocks.
+    pub async fn consume_epoch_change(&self) -> (u64, u64) {
         // Acquire lock first to prevent TOCTOU race.
         // Other tasks checking is_epoch_change() will still see EpochChange
         // until we have fully read the new epoch and are ready to proceed.
-        let block_state_machine = self.block_state_machine.lock().await;
+        let mut block_state_machine = self.block_state_machine.lock().await;
         let epoch = block_state_machine.current_epoch;
+        let epoch_change_block_number = block_state_machine.latest_epoch_change_block_number;
+        // Reset so get_committed_blocks stops skipping new-epoch blocks.
+        block_state_machine.latest_epoch_change_block_number = 0;
         // Only now signal that the epoch change has been consumed
         self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
-        epoch
+        (epoch, epoch_change_block_number)
     }
 
     // Access via block_state_machine instead of separate mutex
