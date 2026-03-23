@@ -1,6 +1,7 @@
 pub mod command;
 pub mod contract;
 pub mod dkg;
+pub mod epoch;
 pub mod genesis;
 pub mod node;
 pub mod stake;
@@ -49,6 +50,10 @@ fn main() {
         },
         // Example: gravity-cli unwind --consensus-db-path="./data/consensus_db" --target=19700
         command::SubCommands::Unwind(unwind_cmd) => unwind_cmd.execute(),
+        command::SubCommands::Epoch(epoch_cmd) => match epoch_cmd.command {
+            // Example: gravity-cli epoch status --rpc-url="http://127.0.0.1:8545"
+            epoch::SubCommands::Status(status_cmd) => status_cmd.execute(),
+        },
     };
 
     if let Err(e) = result {
