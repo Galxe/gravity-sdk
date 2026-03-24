@@ -112,7 +112,7 @@ SEL_SET_FOR_NEXT_EPOCH = _selector(
 
 
 # ProposalState enum values
-PROPOSAL_STATE_SUCCEEDED = 2  # 0=VOTING, 1=DEFEATED, 2=SUCCEEDED, 3=EXECUTED
+PROPOSAL_STATE_SUCCEEDED = 1  # 0=PENDING, 1=SUCCEEDED, 2=FAILED, 3=EXECUTED, 4=CANCELLED
 
 
 @pytest.fixture(scope="module")
@@ -236,24 +236,68 @@ async def test_delta_governance_lifecycle(cluster, w3):
     assert receipt["status"] == 1, (
         f"createProposal failed: tx={receipt['transactionHash'].hex()}"
     )
+
+    # Extract proposalId from ProposalCreated event
+    # event ProposalCreated(uint64 indexed proposalId, address indexed proposer, address indexed pool, bytes32 executionHash, string metadataUri);
+    # Since proposalId is indexed, it's in topics[1]
+    proposal_id = 1 # default
+    try:
+        EVT_PROPOSAL_CREATED = Web3.keccak(text="ProposalCreated(uint64,address,address,bytes32,string)").hex()
+        LOG.info(f"  [DEBUG] Expected topic0: {EVT_PROPOSAL_CREATED}")
+        for log in receipt["logs"]:
+            topic0 = log["topics"][0].hex()
+            LOG.info(f"  [DEBUG] Log topic0: {topic0}")
+            if topic0 == EVT_PROPOSAL_CREATED:
+                proposal_id = int.from_bytes(log["topics"][1], "big")
+                LOG.info(f"  [DEBUG] Extracted proposal_id = {proposal_id}")
+                break
+    except Exception as e:
+        LOG.error(f"Failed to extract proposalId: {e}")
+
     LOG.info(f"  createProposal tx: {receipt['transactionHash'].hex()}")
-    LOG.info("  ✅ Proposal #1 created")
+    LOG.info(f"  ✅ Proposal #{proposal_id} created")
 
     # ── Phase 3b: Vote ────────────────────────────────────────────────
     LOG.info("\n📌 Phase 3b: Voting on proposal...")
 
-    # vote(pool, 1, type(uint128).max, true)
+    # Debug: check proposal details
+    SEL_GET_PROPOSAL = _selector("getProposal(uint64)")
+    proposal_raw = _call(w3, GOVERNANCE, SEL_GET_PROPOSAL + encode(["uint64"], [proposal_id]))
+    LOG.info(f"  [DEBUG] getProposal({proposal_id}) raw (hex): {proposal_raw.hex()}")
+
+    # Debug: check remaining voting power
+    SEL_REMAINING_VP = _selector("getRemainingVotingPower(address,uint64)")
+    remaining_raw = _call(
+        w3, GOVERNANCE,
+        SEL_REMAINING_VP + encode(["address", "uint64"], [pool_addr, proposal_id])
+    )
+    remaining_vp = int.from_bytes(remaining_raw, "big")
+    LOG.info(f"  [DEBUG] getRemainingVotingPower(pool, {proposal_id}) = {remaining_vp}")
+
+    # vote(pool, proposal_id, type(uint128).max, true)
     MAX_UINT128 = (1 << 128) - 1
     vote_data = SEL_VOTE + encode(
         ["address", "uint64", "uint128", "bool"],
-        [pool_addr, 1, MAX_UINT128, True]
+        [pool_addr, proposal_id, MAX_UINT128, True]
     )
+
+    # Simulate vote via eth_call first to get revert reason
+    try:
+        sim_result = w3.eth.call({
+            "from": FAUCET_ADDR,
+            "to": GOVERNANCE,
+            "data": vote_data,
+        })
+        LOG.info(f"  [DEBUG] vote simulation succeeded: {sim_result.hex()}")
+    except Exception as e:
+        LOG.error(f"  [DEBUG] vote simulation REVERTED: {e}")
+
     receipt = _send_tx(w3, GOVERNANCE, vote_data, FAUCET_KEY)
     assert receipt["status"] == 1, (
         f"vote failed: tx={receipt['transactionHash'].hex()}"
     )
     LOG.info(f"  vote tx: {receipt['transactionHash'].hex()}")
-    LOG.info("  ✅ Voted YES on proposal #1")
+    LOG.info(f"  ✅ Voted YES on proposal #{proposal_id}")
 
     # ── Phase 4: Wait for voting period + resolve ─────────────────────
     LOG.info("\n📌 Phase 4: Waiting for voting period to end...")
@@ -264,8 +308,8 @@ async def test_delta_governance_lifecycle(cluster, w3):
     current_block = w3.eth.block_number
     await wait_for_blocks_after(w3, current_block, 5, timeout=30)
 
-    # resolve(1)
-    resolve_data = SEL_RESOLVE + encode(["uint64"], [1])
+    # resolve(proposal_id)
+    resolve_data = SEL_RESOLVE + encode(["uint64"], [proposal_id])
     receipt = _send_tx(w3, GOVERNANCE, resolve_data, FAUCET_KEY)
     assert receipt["status"] == 1, (
         f"resolve failed: tx={receipt['transactionHash'].hex()}"
@@ -275,29 +319,29 @@ async def test_delta_governance_lifecycle(cluster, w3):
     # Check proposal state == SUCCEEDED
     state_raw = _call(
         w3, GOVERNANCE,
-        SEL_GET_PROPOSAL_STATE + encode(["uint64"], [1])
+        SEL_GET_PROPOSAL_STATE + encode(["uint64"], [proposal_id])
     )
     state_val = int.from_bytes(state_raw[-1:], "big")
     LOG.info(f"  Proposal state: {state_val} (expected {PROPOSAL_STATE_SUCCEEDED}=SUCCEEDED)")
     assert state_val == PROPOSAL_STATE_SUCCEEDED, (
         f"Proposal should be SUCCEEDED, got state={state_val}"
     )
-    LOG.info("  ✅ Proposal #1 resolved as SUCCEEDED")
+    LOG.info(f"  ✅ Proposal #{proposal_id} resolved as SUCCEEDED")
 
     # ── Phase 5: Execute + verify ─────────────────────────────────────
     LOG.info("\n📌 Phase 5: Executing proposal...")
 
-    # execute(1, [GovernanceConfig], [setForNextEpoch(...)])
+    # execute(proposal_id, [GovernanceConfig], [setForNextEpoch(...)])
     exec_data = SEL_EXECUTE + encode(
         ["uint64", "address[]", "bytes[]"],
-        [1, [GOVERNANCE_CONFIG], [set_data]]
+        [proposal_id, [GOVERNANCE_CONFIG], [set_data]]
     )
     receipt = _send_tx(w3, GOVERNANCE, exec_data, FAUCET_KEY)
     assert receipt["status"] == 1, (
         f"execute failed: tx={receipt['transactionHash'].hex()}"
     )
     LOG.info(f"  execute tx: {receipt['transactionHash'].hex()}")
-    LOG.info("  ✅ Proposal #1 executed")
+    LOG.info(f"  ✅ Proposal #{proposal_id} executed")
 
     # Verify hasPendingConfig == true
     pending_raw = _call(w3, GOVERNANCE_CONFIG, SEL_HAS_PENDING_CONFIG)
