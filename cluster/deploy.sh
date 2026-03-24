@@ -99,7 +99,7 @@ done < <(jq -r '.env_vars | to_entries[] | .key, .value' "$reth_config")
 
 export RUST_BACKTRACE=1
 pid=$(
-    env ${env_vars_array[*]} BINARY_PATH node \
+    env ${env_vars_array[*]} ${WORKSPACE}/bin/gravity_node node \
         ${reth_args_array[*]} \
         > "${WORKSPACE}/logs/debug.log" 2>&1 &
     echo $!
@@ -108,8 +108,6 @@ echo $pid > "${WORKSPACE}/script/node.pid"
 echo "Started node with PID $pid"
 START_SCRIPT
 
-    # Replace BINARY_PATH placeholder
-    "${SED_INPLACE[@]}" "s|BINARY_PATH|$binary_path|g" "$data_dir/script/start.sh"
     chmod +x "$data_dir/script/start.sh"
     
     # Generate stop script
@@ -215,7 +213,7 @@ done < <(jq -r '.env_vars | to_entries[] | .key, .value' "$reth_config")
 
 export RUST_BACKTRACE=1
 pid=$(
-    env ${env_vars_array[*]} BINARY_PATH node \
+    env ${env_vars_array[*]} ${WORKSPACE}/bin/gravity_node node \
         ${reth_args_array[*]} \
         > "${WORKSPACE}/logs/debug.log" 2>&1 &
     echo $!
@@ -224,8 +222,6 @@ echo $pid > "${WORKSPACE}/script/node.pid"
 echo "Started VFN node with PID $pid"
 START_SCRIPT
 
-    # Replace BINARY_PATH placeholder
-    "${SED_INPLACE[@]}" "s|BINARY_PATH|$binary_path|g" "$data_dir/script/start.sh"
     chmod +x "$data_dir/script/start.sh"
     
     # Generate stop script
@@ -316,11 +312,7 @@ main() {
         log_error "gravity_cli not found - VFN identity generation may fail and hardlink not created"
         exit 1
     fi
-    
-    # Copy gravity_node binary (self-contained deployment)
-    log_info "Copying gravity_node to $base_dir..."
-    cp "$binary_path" "$base_dir/gravity_node"
-    local_binary_path="$base_dir/gravity_node"
+
     
     # Read genesis source paths from config (with defaults)
     genesis_path=$(echo "$config_json" | jq -r '.genesis_source.genesis_path // "./output/genesis.json"')
@@ -382,7 +374,10 @@ main() {
         fi
         
         # Prepare dirs
-        mkdir -p "$data_dir"/{config,data,logs,execution_logs,consensus_log,script}
+        mkdir -p "$data_dir"/{bin,config,data,logs,execution_logs,consensus_log,script}
+        
+        # Create hardlink for gravity_node binary in each node's bin dir
+        ln -f "$binary_path" "$data_dir/bin/gravity_node"
         
         waypoint_src="$OUTPUT_DIR/waypoint.txt"
         
@@ -399,7 +394,7 @@ main() {
                 "$NODE_ID" \
                 "$data_dir" \
                 "$genesis_path" \
-                "$local_binary_path" \
+                "$data_dir/bin/gravity_node" \
                 "$identity_src" \
                 "$waypoint_src"
         else
@@ -421,7 +416,7 @@ main() {
                 "$NODE_ID" \
                 "$data_dir" \
                 "$genesis_path" \
-                "$local_binary_path" \
+                "$data_dir/bin/gravity_node" \
                 "$identity_src" \
                 "$waypoint_src" \
                 "$role"
