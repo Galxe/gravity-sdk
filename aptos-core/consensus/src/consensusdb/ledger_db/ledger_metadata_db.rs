@@ -146,7 +146,12 @@ impl LedgerMetadataDb {
             info!("put ledger_info when epoch change {:?}", ledger_info_with_sigs);
 
             let block_number = match ledger_info.commit_info().epoch_block_info() {
-                Some(info) => info.block_number,
+                Some(info) => {
+                    if info.block_number != ledger_info.block_number() {
+                        info!("lightman0324 epoch block number {} != ledger info block number {}", info.block_number, ledger_info.block_number());
+                    }
+                    info.block_number
+                }
                 None => ledger_info.block_number(),
             };
             // This is the last version of the current epoch, update the epoch by version index.

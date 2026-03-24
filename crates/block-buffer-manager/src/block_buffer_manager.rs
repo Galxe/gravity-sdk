@@ -300,7 +300,7 @@ impl BlockBufferManager {
                 BlockState::Historical { id: commit_block_id },
             );
             // Access via block_state_machine instead of separate mutex
-            block_state_machine.latest_epoch_change_block_number = latest_commit_block_number;
+            block_state_machine.latest_epoch_change_block_number = 0;
         }
         self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
         // Notify all waiters that buffer is ready

@@ -183,6 +183,7 @@ impl BufferItem {
         validator: &ValidatorVerifier,
         epoch_end_timestamp: Option<u64>,
         order_vote_enabled: bool,
+        epoch_block_info: Option<gaptos::aptos_types::block_info::EpochBlockInfo>,
     ) -> Self {
         match self {
             Self::Ordered(ordered_item) => {
@@ -204,6 +205,9 @@ impl BufferItem {
                         commit_info.change_timestamp(timestamp);
                     }
                     _ => (),
+                }
+                if let Some(info) = epoch_block_info {
+                    commit_info.set_epoch_block_info(info);
                 }
                 if let Some(commit_proof) = commit_proof {
                     // We have already received the commit proof in fast forward sync path,

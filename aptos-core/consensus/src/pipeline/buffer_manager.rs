@@ -544,12 +544,33 @@ impl BufferManager {
             }
         }
 
+        let mut iter_block = executed_blocks.last().expect("execute_blocks should not be empty!");
+        let compute_result = iter_block.compute_result();
+        let epoch_block_info = if compute_result.has_reconfiguration() {
+            let iter_block_info = iter_block.block_info();
+            let mut epoch_info = gaptos::aptos_types::block_info::EpochBlockInfo {
+                block_id: iter_block.id(),
+                block_number: iter_block.block().block_number().unwrap_or(0),
+                epoch_start_round: iter_block.round(),
+                epoch_start_timestamp_usecs: iter_block_info.timestamp_usecs(),
+            };
+            if let Some(timestamp) = self.end_epoch_timestamp.get().cloned() {
+                if iter_block_info.timestamp_usecs() != timestamp && iter_block.is_reconfiguration_suffix() {
+                    epoch_info.epoch_start_timestamp_usecs = timestamp;
+                }
+            }
+            Some(epoch_info)
+        } else {
+            None
+        };
+
         let item = self.buffer.take(&current_cursor);
         let new_item = item.advance_to_executed_or_aggregated(
             executed_blocks,
             &self.epoch_state.verifier,
             self.end_epoch_timestamp.get().cloned(),
             self.order_vote_enabled,
+            epoch_block_info,
         );
         let aggregated = new_item.is_aggregated();
         self.buffer.set(&current_cursor, new_item);
