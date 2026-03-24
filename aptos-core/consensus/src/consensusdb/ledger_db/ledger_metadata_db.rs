@@ -143,11 +143,14 @@ impl LedgerMetadataDb {
     ) -> Result<()> {
         let ledger_info = ledger_info_with_sigs.ledger_info();
         if ledger_info.ends_epoch() {
+            info!("put ledger_info when epoch change {:?}", ledger_info_with_sigs);
+
+            let block_number = match ledger_info.commit_info().epoch_block_info() {
+                Some(info) => info.block_number,
+                None => ledger_info.block_number(),
+            };
             // This is the last version of the current epoch, update the epoch by version index.
-            batch.put::<EpochByBlockNumberSchema>(
-                &ledger_info.block_number(),
-                &ledger_info.epoch(),
-            )?;
+            batch.put::<EpochByBlockNumberSchema>(&block_number, &ledger_info.epoch())?;
         }
         batch.put::<LedgerInfoSchema>(&ledger_info.block_number(), ledger_info_with_sigs)
     }
