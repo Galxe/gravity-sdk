@@ -1,22 +1,22 @@
 """
-Hardfork + Bridge E2E Test
+Delta Hardfork + Bridge E2E Test
 
 Verifies that the cross-chain bridge works correctly both before and after
-the gamma hardfork. All bridge events are pre-loaded by hooks.py.
+the delta hardfork. All bridge events are pre-loaded by hooks.py.
 
 Test Flow:
-  Phase A: Verify batch 1 bridge events (nonces 1-10, pre-loaded)
-  Phase B: Verify hardfork occurred (contracts upgraded)
-  Phase C: Verify batch 2 bridge events (nonces 11-20, also pre-loaded)
+  Phase A: Verify batch 1 bridge events (nonces 1-10, pre-loaded before delta)
+  Phase B: Verify delta hardfork occurred (Governance.owner set)
+  Phase C: Verify batch 2 bridge events (nonces 11-20, post-delta)
 """
 
-import json
 import logging
 import os
 import sys
 from pathlib import Path
 
 import pytest
+from eth_abi import encode
 from web3 import Web3
 
 # Ensure gravity_e2e is importable
@@ -39,16 +39,20 @@ from gravity_e2e.utils.bridge_utils import (
 from hardfork_utils import (
     wait_for_block,
     wait_for_blocks_after,
-    snapshot_system_contracts,
-    compare_snapshots,
 )
 
 LOG = logging.getLogger(__name__)
 
 # ── Configuration ────────────────────────────────────────────────────
-GAMMA_BLOCK = int(os.environ.get("GAMMA_BLOCK", "500"))
+DELTA_BLOCK = int(os.environ.get("DELTA_BLOCK", "50"))
 # Events are split into two halves: batch 1 (pre-hardfork) + batch 2 (post-hardfork)
 BATCH_SIZE = 10  # Each batch has 10 events
+
+# Governance contract address
+GOVERNANCE = Web3.to_checksum_address("0x00000000000000000000000000000001625F3000")
+# Expected owner after delta hardfork (faucet / hardhat #0)
+FAUCET_ADDR = Web3.to_checksum_address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
+SEL_OWNER = Web3.keccak(text="owner()")[:4]
 
 
 @pytest.mark.asyncio
@@ -58,7 +62,7 @@ async def test_hardfork_bridge(
     bridge_verify_timeout: int,
 ):
     """
-    Verify bridge works before and after gamma hardfork.
+    Verify bridge works before and after delta hardfork.
 
     All events are pre-loaded by hooks.py in a single batch.
     We verify them in two phases: batch 1 (nonces 1-10) then batch 2 (nonces 11-20).
@@ -76,8 +80,8 @@ async def test_hardfork_bridge(
     batch2_count = total_count - batch1_count
 
     LOG.info("=" * 70)
-    LOG.info("🌉 Hardfork + Bridge E2E Test")
-    LOG.info(f"   gammaBlock = {GAMMA_BLOCK}")
+    LOG.info("🌉 Delta Hardfork + Bridge E2E Test")
+    LOG.info(f"   deltaBlock = {DELTA_BLOCK}")
     LOG.info(f"   Total pre-loaded events = {total_count}")
     LOG.info(f"   Batch 1 (pre-hardfork verify) = nonces 1-{batch1_count}")
     if batch2_count > 0:
@@ -123,26 +127,25 @@ async def test_hardfork_bridge(
     LOG.info("✅ Phase A PASSED: batch 1 bridge events verified")
 
     # ================================================================
-    # Phase B: Verify hardfork occurred
+    # Phase B: Verify delta hardfork occurred
     # ================================================================
-    LOG.info(f"\n[Phase B] Verify hardfork at block {GAMMA_BLOCK}")
+    LOG.info(f"\n[Phase B] Verify delta hardfork at block {DELTA_BLOCK}")
 
     current = w3.eth.block_number
-    if current < GAMMA_BLOCK:
-        LOG.info(f"  Waiting for gammaBlock={GAMMA_BLOCK} (current={current})...")
-        wait_for_block(w3, GAMMA_BLOCK, timeout=600)
-        wait_for_blocks_after(w3, GAMMA_BLOCK, count=5, timeout=30)
+    if current < DELTA_BLOCK + 2:
+        LOG.info(f"  Waiting for deltaBlock+2={DELTA_BLOCK + 2} (current={current})...")
+        reached = await wait_for_block(w3, DELTA_BLOCK + 2, timeout=300)
+        assert reached, f"Chain did not reach deltaBlock+2 ({DELTA_BLOCK + 2})"
 
-    # Verify contract upgrades happened
-    post_snapshot = snapshot_system_contracts(w3)
-    post_existing = {k: v for k, v in post_snapshot.items() if v is not None}
-    LOG.info(f"  Post-hardfork: {len(post_existing)} contracts with code")
-
-    assert len(post_existing) >= 4, (
-        f"Expected >= 4 system contracts, found {len(post_existing)}"
+    # Verify Governance.owner() was set by delta hardfork
+    owner_raw = w3.eth.call({"to": GOVERNANCE, "data": SEL_OWNER})
+    owner_addr = Web3.to_checksum_address("0x" + owner_raw[-20:].hex())
+    LOG.info(f"  Governance.owner() = {owner_addr}")
+    assert owner_addr == FAUCET_ADDR, (
+        f"Expected Governance.owner={FAUCET_ADDR}, got {owner_addr}"
     )
 
-    LOG.info("✅ Phase B PASSED: hardfork verified")
+    LOG.info("✅ Phase B PASSED: delta hardfork verified (Governance.owner set)")
 
     # ================================================================
     # Phase C: Verify batch 2 bridge events (post-hardfork)
@@ -197,7 +200,7 @@ async def test_hardfork_bridge(
     # Summary
     # ================================================================
     LOG.info("\n" + "=" * 70)
-    LOG.info("🎉 ALL PHASES PASSED — Hardfork + Bridge E2E Test")
+    LOG.info("🎉 ALL PHASES PASSED — Delta Hardfork + Bridge E2E Test")
     LOG.info(f"   Batch 1 (pre-hardfork):  {batch1_count} ✅")
     LOG.info(f"   Batch 2 (post-hardfork): {batch2_count} ✅")
     LOG.info(f"   Total bridges:           {total_count}")
