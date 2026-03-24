@@ -19,7 +19,7 @@ use gaptos::{
     aptos_types::{
         account_address::AccountAddress,
         mempool_status::{MempoolStatus, MempoolStatusCode},
-        transaction::{use_case::UseCaseKey, SignedTransaction, TransactionPayload},
+        transaction::{use_case::UseCaseKey, SignedTransaction},
         vm_status::DiscardedVMStatus,
     },
 };
@@ -132,10 +132,6 @@ impl CoreMempoolTrait for Mempool {
         _ready_time_at_sender: Option<u64>,
         _priority: Option<BroadcastPeerPriority>,
     ) -> MempoolStatus {
-        if !matches!(txn.payload(), TransactionPayload::GTxnBytes(_)) {
-            return MempoolStatus::new(MempoolStatusCode::UnknownStatus);
-        }
-
         self.txn_cache.lock().unwrap().insert(TxnHash::new(*txn.committed_hash()));
         let verfited_txn = crate::core_mempool::transaction::VerifiedTxn::from(txn);
         let res = self.pool.add_external_txn(verfited_txn.into());

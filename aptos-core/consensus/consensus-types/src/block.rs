@@ -516,11 +516,15 @@ impl<'de> Deserialize<'de> for Block {
             block_number: Option<u64>,
         }
 
-        let BlockWithoutId { block_data, signature, block_number: _ } =
+        let BlockWithoutId { block_data, signature, block_number } =
             BlockWithoutId::deserialize(deserializer)?;
 
         let block =
             Block { id: block_data.hash(), block_data, signature, block_number: OnceCell::new() };
+
+        if let Some(block_number) = block_number {
+            block.set_block_number(block_number);
+        }
 
         Ok(block)
     }
