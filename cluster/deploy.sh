@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -eo pipefail
 
 # Cross-platform sed -i
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -15,6 +15,125 @@ OUTPUT_DIR="${GRAVITY_ARTIFACTS_DIR:-$SCRIPT_DIR/output}"
 source "$SCRIPT_DIR/utils/common.sh"
 
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Resolve a binary from a source JSON object.
+# The source object supports three types (like Cargo.toml):
+#   { "bin_path": "/path/to/gravity_node" }         — pre-built binary
+#   { "project_path": "../" }                         — local project, cargo build
+#   { "github": "Owner/Repo", "rev": "v1.0.0" }       — clone + cargo build
+# Args: $1=source_json, $2=cache_dir, $3=label (for logs)
+# Prints the resolved binary path to stdout.
+resolve_source() {
+    # Wrapper: _resolve_source_impl prints log_info to stdout (via echo),
+    # but we only want the binary path on stdout. So we redirect impl's
+    # stdout→stderr and capture the binary path via fd3.
+    local _result
+    _result=$(_resolve_source_impl "$@" 3>&1 1>&2)
+    echo "$_result"
+}
+
+_resolve_source_impl() {
+    local source_json="$1"
+    local cache_dir="$2"
+    local label="${3:-build}"
+
+    local src_bin_path src_project_path src_github src_rev
+    src_bin_path=$(echo "$source_json" | jq -r '.bin_path // empty')
+    src_project_path=$(echo "$source_json" | jq -r '.project_path // empty')
+    src_github=$(echo "$source_json" | jq -r '.github // empty')
+    src_rev=$(echo "$source_json" | jq -r '.rev // empty')
+
+    # Type 1: pre-built binary
+    if [ -n "$src_bin_path" ]; then
+        if [[ "$src_bin_path" != /* ]]; then
+            src_bin_path="$(cd "$SCRIPT_DIR" && realpath "$src_bin_path")"
+        fi
+        if [ ! -f "$src_bin_path" ]; then
+            log_error "[$label] Binary not found: $src_bin_path"
+            exit 1
+        fi
+        log_info "[$label] Using binary: $src_bin_path"
+        echo "$src_bin_path" >&3
+        return
+    fi
+
+    # Type 2: local project — cargo build
+    if [ -n "$src_project_path" ]; then
+        if [[ "$src_project_path" != /* ]]; then
+            src_project_path="$(cd "$SCRIPT_DIR" && realpath "$src_project_path")"
+        fi
+        if [ ! -f "$src_project_path/Cargo.toml" ]; then
+            log_error "[$label] No Cargo.toml found in project_path: $src_project_path"
+            exit 1
+        fi
+        local built_binary="$src_project_path/target/quick-release/gravity_node"
+        if [ ! -f "$built_binary" ]; then
+            log_info "[$label] Building gravity_node from $src_project_path..."
+            RUSTFLAGS="--cfg tokio_unstable" cargo build \
+                --manifest-path "$src_project_path/Cargo.toml" \
+                --bin gravity_node \
+                --profile quick-release 2>&1 | tail -20
+        fi
+        if [ ! -f "$built_binary" ]; then
+            log_error "[$label] Build failed: $built_binary not found"
+            exit 1
+        fi
+        log_info "[$label] Using built binary: $built_binary"
+        echo "$built_binary" >&3
+        return
+    fi
+
+    # Type 3: github clone + build
+    if [ -n "$src_github" ] && [ -n "$src_rev" ]; then
+        local safe_rev
+        safe_rev=$(echo "$src_rev" | tr '/' '_')
+        local repo_cache="$cache_dir/${src_github//\//_}-${safe_rev}"
+        local cached_binary="$repo_cache/target/quick-release/gravity_node"
+
+        if [ -f "$cached_binary" ]; then
+            log_info "[$label] Using cached build: $cached_binary"
+            echo "$cached_binary" >&3
+            return
+        fi
+
+        local clone_url
+        if [ -n "${GITHUB_TOKEN:-}" ]; then
+            clone_url="https://x-access-token:${GITHUB_TOKEN}@github.com/${src_github}.git"
+        else
+            clone_url="https://github.com/${src_github}.git"
+        fi
+
+        log_info "[$label] Cloning ${src_github} @ ${src_rev}..."
+        if [ ! -d "$repo_cache/.git" ]; then
+            mkdir -p "$repo_cache"
+            git clone --depth 1 --branch "$src_rev" \
+                "$clone_url" "$repo_cache" 2>/dev/null || {
+                rm -rf "$repo_cache"
+                mkdir -p "$repo_cache"
+                git clone "$clone_url" "$repo_cache"
+                git -C "$repo_cache" checkout "$src_rev"
+            }
+        fi
+
+        log_info "[$label] Building gravity_node from source (this may take a while)..."
+        RUSTFLAGS="--cfg tokio_unstable" CARGO_TARGET_DIR="$repo_cache/target" cargo build \
+            --manifest-path "$repo_cache/Cargo.toml" \
+            --bin gravity_node \
+            --profile quick-release 2>&1 | tail -20
+
+        if [ ! -f "$cached_binary" ]; then
+            log_error "[$label] Build failed: $cached_binary not found"
+            exit 1
+        fi
+
+        log_info "[$label] Build complete: $cached_binary"
+        echo "$cached_binary" >&3
+        return
+    fi
+
+    log_error "[$label] No valid source configured (need bin_path, project_path, or github+rev)"
+    exit 1
+}
 
 # Configure node function (Rendering logic)
 configure_node() {
@@ -270,25 +389,7 @@ main() {
     config_json=$(parse_toml)
     
     base_dir=$(echo "$config_json" | jq -r '.cluster.base_dir')
-    binary_path=$(echo "$config_json" | jq -r '.build.binary_path')
     
-    # Resolve binary path
-    if [[ "$binary_path" != /* ]]; then
-        binary_path="$(cd "$SCRIPT_DIR" && realpath "$binary_path")"
-    fi
-     
-    # Find/Validate binary checking
-    if [ ! -f "$binary_path" ]; then
-        log_warn "Configured binary not found at: $binary_path"
-        FOUND_BIN=$(find_binary "gravity_node" "$PROJECT_ROOT") || true
-        if [ -n "$FOUND_BIN" ]; then
-            binary_path="$FOUND_BIN"
-            log_info "Found binary at: $binary_path"
-        else
-            log_error "gravity_node binary not found. Build it first."
-            exit 1
-        fi
-    fi
     # Handle existing environment
     if [ -d "$base_dir" ] && [ "$(ls -A "$base_dir" 2>/dev/null)" ]; then
         log_warn "Existing deployment found at $base_dir:"
@@ -305,6 +406,10 @@ main() {
     fi
     mkdir -p "$base_dir"
     
+    # Build artifacts dir for source builds (clone + compile cache)
+    local artifacts_dir="$base_dir/artifacts"
+    mkdir -p "$artifacts_dir"
+    
     # Find gravity_cli and create hardlink (or copy if cross-device)
     gravity_cli_path=$(find_binary "gravity_cli" "$PROJECT_ROOT") || true
     if [ -n "$gravity_cli_path" ]; then
@@ -316,11 +421,6 @@ main() {
         log_error "gravity_cli not found - VFN identity generation may fail and hardlink not created"
         exit 1
     fi
-    
-    # Copy gravity_node binary (self-contained deployment)
-    log_info "Copying gravity_node to $base_dir..."
-    cp "$binary_path" "$base_dir/gravity_node"
-    local_binary_path="$base_dir/gravity_node"
     
     # Read genesis source paths from config (with defaults)
     genesis_path=$(echo "$config_json" | jq -r '.genesis_source.genesis_path // "./output/genesis.json"')
@@ -349,6 +449,35 @@ main() {
     genesis_path="$base_dir/genesis.json"
     
     node_count=$(echo "$config_json" | jq '.nodes | length')
+    log_info "Scanning node sources..."
+    local -A seen_sources  # associative array for dedup
+    for i in $(seq 0 $((node_count - 1))); do
+        local src_github src_rev node_id
+        node_id=$(echo "$config_json" | jq -r ".nodes[$i].id")
+        src_github=$(echo "$config_json" | jq -r ".nodes[$i].source.github // empty")
+        src_rev=$(echo "$config_json" | jq -r ".nodes[$i].source.rev // empty")
+        if [ -n "$src_github" ] && [ -n "$src_rev" ]; then
+            local key="${src_github}@${src_rev}"
+            if [ -z "${seen_sources[$key]+_}" ]; then
+                seen_sources[$key]="$node_id"
+                log_info "  Source: $key (first seen in $node_id)"
+            else
+                seen_sources[$key]="${seen_sources[$key]}, $node_id"
+                log_info "  Source: $key (shared, also used by $node_id)"
+            fi
+        fi
+    done
+
+    # Pre-build unique github sources
+    if [ ${#seen_sources[@]} -gt 0 ]; then
+        log_info "Pre-building ${#seen_sources[@]} unique github source(s)..."
+        for key in "${!seen_sources[@]}"; do
+            local src='{"github":"'"${key%%@*}"'","rev":"'"${key#*@}"'"}'
+            log_info "  Building $key (used by: ${seen_sources[$key]})..."
+            resolve_source "$src" "$artifacts_dir" "$key" > /dev/null
+        done
+        log_info "All github sources pre-built."
+    fi
     
     # Deploy Nodes
     log_info "Deploying $node_count nodes..."
@@ -381,6 +510,15 @@ main() {
             data_dir="$base_dir/$NODE_ID"
         fi
         
+        # Resolve per-node binary from source config (required)
+        local node_source
+        node_source=$(echo "$node" | jq -c '.source // empty')
+        if [ -z "$node_source" ]; then
+            log_error "Node $NODE_ID must specify 'source' (bin_path, project_path, or github+rev)"
+            exit 1
+        fi
+        node_binary=$(resolve_source "$node_source" "$artifacts_dir" "$NODE_ID")
+
         # Prepare dirs
         mkdir -p "$data_dir"/{config,data,logs,execution_logs,consensus_log,script}
         
@@ -399,7 +537,7 @@ main() {
                 "$NODE_ID" \
                 "$data_dir" \
                 "$genesis_path" \
-                "$local_binary_path" \
+                "$node_binary" \
                 "$identity_src" \
                 "$waypoint_src"
         else
@@ -421,7 +559,7 @@ main() {
                 "$NODE_ID" \
                 "$data_dir" \
                 "$genesis_path" \
-                "$local_binary_path" \
+                "$node_binary" \
                 "$identity_src" \
                 "$waypoint_src" \
                 "$role"

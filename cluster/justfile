@@ -1,0 +1,49 @@
+# Gravity Cluster Management
+# Usage: just <recipe> [args]
+#   just deploy                          # use default cluster.toml
+#   just deploy example/3_node/cluster.toml
+#   just genesis genesis.toml
+#   just -l                              # list all recipes
+
+# Config file paths (overridable)
+cluster := "cluster.toml"
+genesis_config := "genesis.toml"
+
+# Generate genesis.json and waypoint.txt (only for new networks)
+genesis config=genesis_config:
+    @bash genesis.sh {{config}}
+
+# Generate node identity keys
+init config=cluster:
+    @bash init.sh {{config}}
+
+# Deploy artifacts to running directory
+deploy config=cluster:
+    @bash deploy.sh {{config}}
+
+# Start the cluster
+start config=cluster:
+    @bash start.sh --config {{config}}
+
+# Stop the cluster
+stop config=cluster:
+    @bash stop.sh --config {{config}}
+
+# Check cluster status
+status config=cluster:
+    @bash status.sh --config {{config}}
+
+# Run faucet initialization
+faucet config=cluster:
+    @bash faucet.sh {{config}}
+
+# Clean generated artifacts
+clean:
+    rm -rf output
+    @echo "Artifacts cleaned."
+
+# Full redeploy cycle (Stop -> Deploy -> Start)
+restart config=cluster: (stop config) (deploy config) (start config)
+
+# Convenience: deploy and start
+deploy_start config=cluster: (deploy config) (start config)
