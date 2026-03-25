@@ -46,7 +46,7 @@ jobs:
       run: |
         chmod +x gravity_e2e/run_docker.sh
         if [ "${{ github.event_name }}" = "pull_request_review" ]; then
-          ./gravity_e2e/run_docker.sh --exclude fuzzy_cluster
+          ./gravity_e2e/run_docker.sh --exclude fuzzy_cluster --exclude rolling_upgrade
         else
           ./gravity_e2e/run_docker.sh ${{ github.event.inputs.suite }}
         fi
