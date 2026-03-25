@@ -6,7 +6,7 @@ name = "gravity-devnet-rolling-upgrade"
 base_dir = "/tmp/gravity-cluster-rolling-upgrade"
 
 [build]
-binary_path = "../target/quick-release/v1.1.1/gravity_node"
+binary_path = "../target/quick-release/v1.0.0/gravity_node"
 
 [genesis_source]
 genesis_path = "./artifacts/genesis.json"
