@@ -5,8 +5,6 @@
 name = "gravity-devnet-one"
 base_dir = "/tmp/gravity-cluster-one"
 
-[build]
-binary_path = "../target/quick-release/gravity_node"
 
 [genesis_source]
 genesis_path = "./output/genesis.json"
@@ -15,6 +13,7 @@ waypoint_path = "./output/waypoint.txt"
 [[nodes]]
 id = "node1"
 role = "genesis"
+source = { github = "Galxe/gravity-sdk", rev = "main" }
 host = "127.0.0.1"
 p2p_port = 6180
 vfn_port = 6190

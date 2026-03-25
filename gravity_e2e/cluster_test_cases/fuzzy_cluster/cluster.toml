@@ -5,8 +5,6 @@
 name = "gravity-devnet-fuzzy"
 base_dir = "/tmp/gravity-cluster-fuzzy"
 
-[build]
-binary_path = "../target/quick-release/gravity_node"
 
 [genesis_source]
 genesis_path = "./artifacts/genesis.json"
@@ -18,6 +16,7 @@ waypoint_path = "./artifacts/waypoint.txt"
 id = "node1"
 host = "127.0.0.1"
 role = "genesis"
+source = { project_path = "../" }
 p2p_port = 6180
 vfn_port = 6190
 rpc_port = 8545
@@ -31,6 +30,7 @@ reth_p2p_port = 12024
 id = "node2"
 host = "127.0.0.1"
 role = "genesis"
+source = { project_path = "../" }
 p2p_port = 6181
 vfn_port = 6191
 rpc_port = 8546
@@ -44,6 +44,7 @@ reth_p2p_port = 12025
 id = "node3"
 host = "127.0.0.1"
 role = "genesis"
+source = { project_path = "../" }
 p2p_port = 6182
 vfn_port = 6192
 rpc_port = 8547
@@ -57,6 +58,7 @@ reth_p2p_port = 12026
 id = "node4"
 host = "127.0.0.1"
 role = "genesis"
+source = { project_path = "../" }
 p2p_port = 6183
 vfn_port = 6193
 rpc_port = 8548
@@ -72,6 +74,7 @@ reth_p2p_port = 12027
 id = "node5"
 host = "127.0.0.1"
 role = "validator"
+source = { project_path = "../" }
 p2p_port = 6184
 vfn_port = 6194
 rpc_port = 8549
@@ -85,6 +88,7 @@ reth_p2p_port = 12028
 id = "node6"
 host = "127.0.0.1"
 role = "validator"
+source = { project_path = "../" }
 p2p_port = 6185
 vfn_port = 6195
 rpc_port = 8550
@@ -98,6 +102,7 @@ reth_p2p_port = 12029
 id = "node7"
 host = "127.0.0.1"
 role = "validator"
+source = { project_path = "../" }
 p2p_port = 6186
 vfn_port = 6196
 rpc_port = 8551
@@ -111,6 +116,7 @@ reth_p2p_port = 12030
 id = "node8"
 host = "127.0.0.1"
 role = "validator"
+source = { project_path = "../" }
 p2p_port = 6187
 vfn_port = 6197
 rpc_port = 8552
@@ -124,6 +130,7 @@ reth_p2p_port = 12031
 id = "node9"
 host = "127.0.0.1"
 role = "validator"
+source = { project_path = "../" }
 p2p_port = 6188
 vfn_port = 6198
 rpc_port = 8553
@@ -137,6 +144,7 @@ reth_p2p_port = 12032
 id = "node10"
 host = "127.0.0.1"
 role = "validator"
+source = { project_path = "../" }
 p2p_port = 6189
 vfn_port = 6199
 rpc_port = 8554

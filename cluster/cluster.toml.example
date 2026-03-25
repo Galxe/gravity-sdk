@@ -6,9 +6,6 @@
 name = "gravity-devnet"
 base_dir = "/tmp/gravity-cluster"
 
-[build]
-binary_path = "../target/quick-release/gravity_node"
-
 # Genesis data source
 # Default paths point to locally generated genesis (from make genesis)
 # Modify these to join an existing network
@@ -26,12 +23,18 @@ ref = "main"
 #   - "genesis": Genesis validator (must match genesis.toml)
 #   - "validator": Validator node not in genesis (can join later via on-chain txn)
 #   - "vfn": Full node, uses onchain discovery to sync
+#
+# Per-node source (required, like Cargo.toml):
+#   source = { project_path = "../" }                                  # local project, cargo build
+#   source = { bin_path = "/opt/gravity/v2.1/gravity_node" }           # pre-built binary
+#   source = { github = "Galxe/gravity-sdk", rev = "v2.0.0" }         # clone + build
 
 # ============ Genesis Nodes (node1-node4) ============
 
 [[nodes]]
 id = "node1"
 role = "genesis"
+source = { project_path = "../" }
 host = "127.0.0.1"
 p2p_port = 6180
 vfn_port = 6190
@@ -45,6 +48,7 @@ reth_p2p_port = 12024
 [[nodes]]
 id = "node2"
 role = "genesis"
+source = { project_path = "../" }
 host = "127.0.0.1"
 p2p_port = 6181
 vfn_port = 6191
@@ -58,6 +62,7 @@ reth_p2p_port = 12025
 [[nodes]]
 id = "node3"
 role = "genesis"
+source = { project_path = "../" }
 host = "127.0.0.1"
 p2p_port = 6182
 vfn_port = 6192
@@ -71,6 +76,7 @@ reth_p2p_port = 12026
 [[nodes]]
 id = "node4"
 role = "genesis"
+source = { project_path = "../" }
 host = "127.0.0.1"
 p2p_port = 6183
 vfn_port = 6193
@@ -87,6 +93,7 @@ reth_p2p_port = 12027
 id = "node5"
 host = "127.0.0.1"
 role = "validator"
+source = { project_path = "../" }
 p2p_port = 6184
 vfn_port = 6194
 rpc_port = 8549
@@ -102,6 +109,7 @@ reth_p2p_port = 12028
 id = "vfn1"
 host = "127.0.0.1"
 role = "vfn"
+source = { project_path = "../" }
 vfn_port = 6195
 rpc_port = 8550
 metrics_port = 9006
