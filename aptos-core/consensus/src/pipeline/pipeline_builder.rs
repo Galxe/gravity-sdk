@@ -634,7 +634,7 @@ impl PipelineBuilder {
         {
             // Suffix block after an epoch change: carry the epoch change block's info
             info!(
-                "[Pipeline] Setting EpochBlockInfo for suffix block (block_number={:?}): epoch_change_block_id={}, epoch_change_block_number={}",
+                "[EpochChange] Setting EpochBlockInfo for suffix block (block_number={:?}): epoch_change_block_id={}, epoch_change_block_number={}",
                 block.block_number(), epoch_info.block_id, epoch_info.block_number,
             );
             block_info.set_epoch_block_info(epoch_info);
@@ -647,7 +647,7 @@ impl PipelineBuilder {
                 epoch_start_timestamp_usecs: block_info.timestamp_usecs(),
             };
             info!(
-                "[Pipeline] Setting EpochBlockInfo for epoch change block: id={}, number={}, round={}, timestamp={}",
+                "[EpochChange] Setting EpochBlockInfo for epoch change block: id={}, number={}, round={}, timestamp={}",
                 epoch_info.block_id, epoch_info.block_number, epoch_info.epoch_start_round, epoch_info.epoch_start_timestamp_usecs,
             );
             block_info.set_epoch_block_info(epoch_info);

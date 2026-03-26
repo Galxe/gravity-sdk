@@ -548,6 +548,83 @@ impl BufferManager {
         info!("Reschedule {} execution requests from {:?}", count, self.execution_root);
     }
 
+    /// Resolves the `EpochBlockInfo` for a batch of executed blocks.
+    ///
+    /// This is needed to populate epoch transition metadata on the committed `LedgerInfo`,
+    /// which downstream consumers (e.g., genesis block construction) rely on for determinism.
+    ///
+    /// Resolution follows three paths:
+    /// 1. **Suffix block (reth cache hit)**: The BlockBufferManager already cached the reconfig
+    ///    block's `EpochBlockInfo` with correct `block_id` and `block_number`, but `epoch_start_round`
+    ///    and `epoch_start_timestamp_usecs` are zero (reth lacks consensus-layer data). We patch
+    ///    these using `end_epoch_timestamp` and the reconfig block's round from the current batch.
+    /// 2. **Epoch change block**: The last block in the batch triggers reconfiguration itself.
+    ///    We construct `EpochBlockInfo` directly from its metadata.
+    /// 3. **Normal block**: No epoch change — returns `None`.
+    async fn resolve_epoch_block_info(
+        &self,
+        executed_blocks: &[PipelinedBlock],
+        last_block: &PipelinedBlock,
+    ) -> Option<gaptos::aptos_types::block_info::EpochBlockInfo> {
+        let block_number = last_block.block().block_number().unwrap_or(0);
+        let epoch = last_block.block().epoch();
+
+        // Path 1: Check if reth-side BlockBufferManager has cached epoch info (suffix block case).
+        if let Some(mut epoch_info) = block_buffer_manager::get_block_buffer_manager()
+            .get_epoch_change_block_info(block_number, epoch)
+            .await
+        {
+            // Reth provides block_id and block_number, but epoch_start_round and
+            // epoch_start_timestamp_usecs are zero — patch with consensus-layer data.
+            if epoch_info.epoch_start_round == 0 || epoch_info.epoch_start_timestamp_usecs == 0 {
+                if let Some(timestamp) = self.end_epoch_timestamp.get().cloned() {
+                    epoch_info.epoch_start_timestamp_usecs = timestamp;
+                }
+                // Find the reconfig block's round from the executed blocks in this batch
+                for eb in executed_blocks.iter().rev() {
+                    if eb.block_info().has_reconfiguration() {
+                        epoch_info.epoch_start_round = eb.round();
+                        if epoch_info.epoch_start_timestamp_usecs == 0 {
+                            epoch_info.epoch_start_timestamp_usecs = eb.timestamp_usecs();
+                        }
+                        break;
+                    }
+                }
+                info!(
+                    "[EpochChange] Patched EpochBlockInfo for suffix block {}: round={}, timestamp={}",
+                    block_number, epoch_info.epoch_start_round, epoch_info.epoch_start_timestamp_usecs,
+                );
+            }
+            return Some(epoch_info);
+        }
+
+        // Path 2: This block itself triggers an epoch change.
+        let compute_result = last_block.compute_result();
+        if compute_result.has_reconfiguration() {
+            let block_info = last_block.block_info();
+            let mut epoch_info = gaptos::aptos_types::block_info::EpochBlockInfo {
+                block_id: last_block.id(),
+                block_number,
+                epoch_start_round: last_block.round(),
+                epoch_start_timestamp_usecs: block_info.timestamp_usecs(),
+            };
+            // For suffix blocks with reconfiguration flag, use the cached epoch end timestamp
+            if let Some(timestamp) = self.end_epoch_timestamp.get().cloned() {
+                if block_info.timestamp_usecs() != timestamp && last_block.is_reconfiguration_suffix() {
+                    epoch_info.epoch_start_timestamp_usecs = timestamp;
+                }
+            }
+            info!(
+                "[EpochChange] Built EpochBlockInfo for reconfig block {}: id={}, round={}, timestamp={}",
+                block_number, epoch_info.block_id, epoch_info.epoch_start_round, epoch_info.epoch_start_timestamp_usecs,
+            );
+            return Some(epoch_info);
+        }
+
+        // Path 3: Normal block — no epoch change.
+        None
+    }
+
     /// If the response is successful, advance the item to Executed, otherwise panic (TODO fix).
     #[allow(clippy::unwrap_used)]
     async fn process_execution_response(&mut self, response: ExecutionResponse) {
@@ -599,47 +676,9 @@ impl BufferManager {
 
         let mut iter_block = executed_blocks.last().expect("execute_blocks should not be empty!");
         let compute_result = iter_block.compute_result();
-        let epoch_block_info = if let Some(mut epoch_info) = block_buffer_manager::get_block_buffer_manager()
-            .get_epoch_change_block_info(iter_block.block().block_number().unwrap_or(0), iter_block.block().epoch())
-            .await
-        {
-            // The reth-side cache has correct block_id and block_number, but
-            // epoch_start_round and epoch_start_timestamp_usecs are set to 0
-            // because reth doesn't have consensus-layer data. Patch them here.
-            if epoch_info.epoch_start_round == 0 || epoch_info.epoch_start_timestamp_usecs == 0 {
-                // Use end_epoch_timestamp (cached when the reconfig block was first seen)
-                if let Some(timestamp) = self.end_epoch_timestamp.get().cloned() {
-                    epoch_info.epoch_start_timestamp_usecs = timestamp;
-                }
-                // Find the reconfig block's round from the executed blocks in this batch
-                for eb in executed_blocks.iter().rev() {
-                    if eb.block_info().has_reconfiguration() {
-                        epoch_info.epoch_start_round = eb.round();
-                        if epoch_info.epoch_start_timestamp_usecs == 0 {
-                            epoch_info.epoch_start_timestamp_usecs = eb.timestamp_usecs();
-                        }
-                        break;
-                    }
-                }
-            }
-            Some(epoch_info)
-        } else if compute_result.has_reconfiguration() {
-            let iter_block_info = iter_block.block_info();
-            let mut epoch_info = gaptos::aptos_types::block_info::EpochBlockInfo {
-                block_id: iter_block.id(),
-                block_number: iter_block.block().block_number().unwrap_or(0),
-                epoch_start_round: iter_block.round(),
-                epoch_start_timestamp_usecs: iter_block_info.timestamp_usecs(),
-            };
-            if let Some(timestamp) = self.end_epoch_timestamp.get().cloned() {
-                if iter_block_info.timestamp_usecs() != timestamp && iter_block.is_reconfiguration_suffix() {
-                    epoch_info.epoch_start_timestamp_usecs = timestamp;
-                }
-            }
-            Some(epoch_info)
-        } else {
-            None
-        };
+        let epoch_block_info = self
+            .resolve_epoch_block_info(&executed_blocks, iter_block)
+            .await;
 
         let item = self.buffer.take(&current_cursor);
         let round = item.commit_info().round();

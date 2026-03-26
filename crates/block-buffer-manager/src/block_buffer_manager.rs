@@ -175,10 +175,30 @@ pub struct BlockStateMachine {
     next_epoch: Option<u64>,
     /// Moved from separate Mutex to eliminate nested locking.
     latest_epoch_change_block_number: u64,
-    /// Stored epoch change block info and state compute result for suffix blocks to reference.
+    /// Cached epoch change metadata for suffix block handling.
+    /// Set when a reconfig block is detected in `set_compute_res`, cleared in `release_inflight_blocks`.
+    /// Note: `epoch_block_info.epoch_start_round` and `epoch_start_timestamp_usecs` are initially 0
+    /// because reth doesn't have consensus-layer data. They are patched downstream by
+    /// `BufferManager::resolve_epoch_block_info`.
     epoch_change_block_info: Option<EpochChangeCache>,
 }
 
+impl BlockStateMachine {
+    /// Returns true if the given block is a suffix block after an epoch change.
+    fn is_suffix_block(&self, block_num: u64) -> bool {
+        self.epoch_change_block_info
+            .as_ref()
+            .map_or(false, |cache| block_num > cache.epoch_block_info.block_number)
+    }
+
+    /// Record a profile measurement for the given block key.
+    fn record_profile(&mut self, key: BlockKey, f: impl FnOnce(&mut BlockProfile)) {
+        f(self.profile.entry(key).or_default());
+    }
+}
+
+/// Caches the epoch change block's metadata and compute result.
+/// Used by suffix blocks to carry consistent epoch transition info.
 #[derive(Clone, Debug)]
 pub struct EpochChangeCache {
     pub epoch_block_info: EpochBlockInfo,
@@ -267,10 +287,6 @@ impl BlockBufferManager {
         }
         let latest_persist_block_num = block_state_machine.latest_finalized_block_number;
         info!("remove_committed_blocks latest_persist_block_num: {:?}", latest_persist_block_num);
-        block_state_machine.latest_finalized_block_number = std::cmp::max(
-            block_state_machine.latest_finalized_block_number,
-            latest_persist_block_num,
-        );
         block_state_machine.blocks.retain(|key, _| key.block_number >= latest_persist_block_num);
         block_state_machine.profile.retain(|key, _| key.block_number >= latest_persist_block_num);
         let _ = block_state_machine.sender.send(());
@@ -591,11 +607,9 @@ impl BlockBufferManager {
                     Some(BlockState::Ordered { block, parent_id }) => {
                         result.push((block.clone(), *parent_id));
                         // Record time for get_ordered_blocks
-                        let profile = block_state_machine
-                            .profile
-                            .entry(block_key)
-                            .or_insert_with(BlockProfile::default);
-                        profile.get_ordered_blocks_time = Some(SystemTime::now());
+                        block_state_machine.record_profile(block_key, |p| {
+                            p.get_ordered_blocks_time = Some(SystemTime::now());
+                        });
                     }
                     Some(_state) => {
                         // Block exists but is not Ordered (e.g., already Computed as a suffix
@@ -665,11 +679,9 @@ impl BlockBufferManager {
 
                         // Record time for get_executed_res
                         let compute_res_clone = compute_result.clone();
-                        let profile = block_state_machine
-                            .profile
-                            .entry(block_key)
-                            .or_insert_with(BlockProfile::default);
-                        profile.get_executed_res_time = Some(SystemTime::now());
+                        block_state_machine.record_profile(block_key, |p| {
+                            p.get_executed_res_time = Some(SystemTime::now());
+                        });
                         info!(
                             "get_executed_res done with id {:?} num {:?} res {:?}",
                             block_id, block_num, compute_res_clone,
@@ -677,28 +689,25 @@ impl BlockBufferManager {
                         return Ok(compute_res_clone);
                     }
                     BlockState::Ordered { .. } => {
-                        // Check if this is a suffix block after an epoch change.
-                        // Reth won't compute these blocks (it detects the stale epoch and
-                        // discards them), so return a dummy result to unblock consensus.
-                        if let Some(ref cache) = block_state_machine.epoch_change_block_info {
-                            if block_num > cache.epoch_block_info.block_number {
-                                let dummy_result = cache.compute_result.clone();
-                                info!(
-                                    "get_executed_res [epoch_change_suffix] id {:?} num {:?} \
-                                     (dummy result for suffix block after epoch change at block {})",
-                                    block_id, block_num, cache.epoch_block_info.block_number,
-                                );
-                                // Transition the block to Computed so downstream can proceed
-                                block_state_machine.blocks.insert(
-                                    block_key,
-                                    BlockState::Computed {
-                                        id: block_id,
-                                        compute_result: dummy_result.clone(),
-                                    },
-                                );
-                                let _ = block_state_machine.sender.send(());
-                                return Ok(dummy_result);
-                            }
+                        // Suffix blocks after epoch change: reth won't compute them,
+                        // so return a dummy result to unblock consensus.
+                        if block_state_machine.is_suffix_block(block_num) {
+                            let dummy_result = block_state_machine
+                                .epoch_change_block_info.as_ref().unwrap()
+                                .compute_result.clone();
+                            info!(
+                                "[EpochChange] get_executed_res: suffix block {:?} num {:?}",
+                                block_id, block_num,
+                            );
+                            block_state_machine.blocks.insert(
+                                block_key,
+                                BlockState::Computed {
+                                    id: block_id,
+                                    compute_result: dummy_result.clone(),
+                                },
+                            );
+                            let _ = block_state_machine.sender.send(());
+                            return Ok(dummy_result);
                         }
 
                         // Release lock before waiting
@@ -731,14 +740,12 @@ impl BlockBufferManager {
                 }
             } else {
                 if epoch < block_state_machine.current_epoch {
-                    let mut dummy_result = StateComputeResult::new_dummy();
-                    if let Some(ref cache) = block_state_machine.epoch_change_block_info {
-                        dummy_result = cache.compute_result.clone();
-                    }
-                    
+                    let dummy_result = block_state_machine
+                        .epoch_change_block_info.as_ref()
+                        .map_or_else(StateComputeResult::new_dummy, |c| c.compute_result.clone());
                     info!(
-                        "get_executed_res [bypassed_old_epoch] id {:?} num {:?} \
-                         (dummy result for block with old epoch {} < current {})",
+                        "[EpochChange] get_executed_res: bypassed old epoch block {:?} num {:?} \
+                         (epoch {} < current {})",
                         block_id, block_num, epoch, block_state_machine.current_epoch
                     );
                     return Ok(dummy_result);
@@ -806,6 +813,68 @@ impl BlockBufferManager {
         Ok(Some(EpochState::new(*new_epoch, (&validator_set).into())))
     }
 
+    /// Called when an epoch change is detected in `set_compute_res`.
+    /// Stores the epoch change cache and sets dummy compute results for all
+    /// already-ordered suffix blocks in the same epoch, unblocking consensus.
+    fn handle_epoch_change_suffix_blocks(
+        block_state_machine: &mut BlockStateMachine,
+        epoch_change_block_num: u64,
+        epoch: u64,
+        block_id: BlockId,
+        compute_result: &StateComputeResult,
+    ) {
+        // Store the epoch change block's info so suffix blocks and
+        // sign_commit_vote can reference it.
+        block_state_machine.epoch_change_block_info = Some(EpochChangeCache {
+            epoch_block_info: EpochBlockInfo {
+                block_id: gaptos::aptos_crypto::HashValue::new(block_id.0),
+                block_number: epoch_change_block_num,
+                epoch_start_round: 0, // not available here; patched by BufferManager::resolve_epoch_block_info
+                epoch_start_timestamp_usecs: 0, // not available here; patched by BufferManager::resolve_epoch_block_info
+            },
+            compute_result: compute_result.clone(),
+        });
+
+        let suffix_keys: Vec<(BlockKey, BlockId)> = block_state_machine
+            .blocks
+            .iter()
+            .filter_map(|(key, state)| {
+                if key.epoch == epoch
+                    && key.block_number > epoch_change_block_num
+                    && matches!(state, BlockState::Ordered { .. })
+                {
+                    Some((*key, state.get_block_id()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for (suffix_key, suffix_block_id) in &suffix_keys {
+            let dummy_result = StateComputeResult::new_dummy();
+            block_state_machine.blocks.insert(
+                *suffix_key,
+                BlockState::Computed { id: *suffix_block_id, compute_result: dummy_result },
+            );
+            block_state_machine.record_profile(*suffix_key, |p| {
+                p.set_compute_res_time = Some(SystemTime::now());
+            });
+            info!(
+                "[EpochChange] set_compute_res: suffix block {:?} num {:?} epoch {:?} \
+                 (dummy result, epoch change at block {})",
+                suffix_block_id, suffix_key.block_number, suffix_key.epoch, epoch_change_block_num,
+            );
+        }
+
+        if !suffix_keys.is_empty() {
+            info!(
+                "[EpochChange] epoch change at block {}, set {} suffix blocks with dummy results",
+                epoch_change_block_num,
+                suffix_keys.len(),
+            );
+        }
+    }
+
     pub async fn set_compute_res(
         &self,
         block_id: BlockId,
@@ -847,18 +916,18 @@ impl BlockBufferManager {
                 .insert(block_key, BlockState::Computed { id: block_id, compute_result: compute_result.clone() });
 
             // Record time for set_compute_res
-            let profile =
-                block_state_machine.profile.entry(block_key).or_insert_with(BlockProfile::default);
-            profile.set_compute_res_time = Some(SystemTime::now());
+            block_state_machine.record_profile(block_key, |p| {
+                p.set_compute_res_time = Some(SystemTime::now());
+            });
+            let profile = block_state_machine.profile.get(&block_key);
             info!(
                 "set_compute_res id {:?} num {:?} hash {:?} and exec time {:?}ms for {:?} txns and {:?} events",
                 block_id,
                 block_num,
                 BlockId::from_bytes(block_hash.as_slice()),
-                profile.set_compute_res_time.unwrap()
-                    .duration_since(profile.get_ordered_blocks_time.unwrap())
-                    .unwrap_or(Duration::ZERO)
-                    .as_millis(),
+                profile.and_then(|p| p.set_compute_res_time)
+                    .and_then(|t| profile.and_then(|p| p.get_ordered_blocks_time).map(|o| t.duration_since(o).unwrap_or(Duration::ZERO)))
+                    .map_or(0, |d| d.as_millis()),
                 txn_len,
                 events_len,
             );
@@ -869,58 +938,13 @@ impl BlockBufferManager {
             // these suffix blocks. Reth will independently detect the stale epoch and silently
             // discard them without sending any ExecutionResult, so there is no conflict.
             if has_epoch_change {
-                // Store the epoch change block's info so suffix blocks and
-                // sign_commit_vote can reference it.
-                block_state_machine.epoch_change_block_info = Some(EpochChangeCache {
-                    epoch_block_info: EpochBlockInfo {
-                        block_id: gaptos::aptos_crypto::HashValue::new(block_id.0),
-                        block_number: block_num,
-                        epoch_start_round: 0, // round is not available here; set in sign_commit_vote
-                        epoch_start_timestamp_usecs: 0, // timestamp not available here; set in sign_commit_vote
-                    },
-                    compute_result: compute_result.clone(),
-                });
-
-                let suffix_keys: Vec<(BlockKey, BlockId)> = block_state_machine
-                    .blocks
-                    .iter()
-                    .filter_map(|(key, state)| {
-                        if key.epoch == epoch &&
-                            key.block_number > block_num &&
-                            matches!(state, BlockState::Ordered { .. })
-                        {
-                            Some((*key, state.get_block_id()))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-
-                for (suffix_key, suffix_block_id) in &suffix_keys {
-                    let dummy_result = StateComputeResult::new_dummy();
-                    block_state_machine.blocks.insert(
-                        *suffix_key,
-                        BlockState::Computed { id: *suffix_block_id, compute_result: dummy_result },
-                    );
-                    let profile = block_state_machine
-                        .profile
-                        .entry(*suffix_key)
-                        .or_insert_with(BlockProfile::default);
-                    profile.set_compute_res_time = Some(SystemTime::now());
-                    info!(
-                        "set_compute_res [epoch_change_suffix] id {:?} num {:?} epoch {:?} \
-                         (dummy result for suffix block after epoch change at block {})",
-                        suffix_block_id, suffix_key.block_number, suffix_key.epoch, block_num,
-                    );
-                }
-
-                if !suffix_keys.is_empty() {
-                    info!(
-                        "set_compute_res: epoch change at block {}, set {} suffix blocks with dummy results",
-                        block_num,
-                        suffix_keys.len(),
-                    );
-                }
+                Self::handle_epoch_change_suffix_blocks(
+                    &mut block_state_machine,
+                    block_num,
+                    epoch,
+                    block_id,
+                    &compute_result,
+                );
             }
 
             let _ = block_state_machine.sender.send(());
@@ -948,12 +972,7 @@ impl BlockBufferManager {
             );
             let block_key = BlockKey::new(epoch, block_id_num_hash.num);
 
-            let mut is_suffix = false;
-            if let Some(ref cache) = block_state_machine.epoch_change_block_info {
-                if block_id_num_hash.num > cache.epoch_block_info.block_number {
-                    is_suffix = true;
-                }
-            }
+            let is_suffix = block_state_machine.is_suffix_block(block_id_num_hash.num);
 
             if let Some(state) = block_state_machine.blocks.get_mut(&block_key) {
                 match state {
@@ -977,11 +996,9 @@ impl BlockBufferManager {
                             };
 
                             // Record time for set_commit_blocks
-                            let profile = block_state_machine
-                                .profile
-                                .entry(block_key)
-                                .or_insert_with(BlockProfile::default);
-                            profile.set_commit_blocks_time = Some(SystemTime::now());
+                            block_state_machine.record_profile(block_key, |p| {
+                                p.set_commit_blocks_time = Some(SystemTime::now());
+                            });
                         } else {
                             return Err(anyhow::anyhow!(
                                 "Computed Block id and number is not equal id: {:?}={:?} num: {:?}",
@@ -1063,15 +1080,12 @@ impl BlockBufferManager {
                 // Non-blocking epoch change: skip suffix blocks after epoch change.
                 // These blocks have dummy execution results and were never executed by reth,
                 // so they must not enter the reth commit path (which would panic on get_block_id).
-                if let Some(ref cache) = block_state_machine.epoch_change_block_info {
-                    let epoch_change_bn = cache.epoch_block_info.block_number;
-                    if current_num > epoch_change_bn {
-                        info!(
-                            "get_committed_blocks: skipping block {} (after epoch change at block {})",
-                            current_num, epoch_change_bn,
-                        );
-                        break;
-                    }
+                if block_state_machine.is_suffix_block(current_num) {
+                    info!(
+                        "[EpochChange] get_committed_blocks: skipping suffix block {}",
+                        current_num,
+                    );
+                    break;
                 }
 
                 let block_key = BlockKey::new(epoch, current_num);
@@ -1090,11 +1104,9 @@ impl BlockBufferManager {
                         });
 
                         // Record time for get_committed_blocks
-                        let profile = block_state_machine
-                            .profile
-                            .entry(block_key)
-                            .or_insert_with(BlockProfile::default);
-                        profile.get_committed_blocks_time = Some(SystemTime::now());
+                        block_state_machine.record_profile(block_key, |p| {
+                            p.get_committed_blocks_time = Some(SystemTime::now());
+                        });
                     }
                     _ => {
                         break;
