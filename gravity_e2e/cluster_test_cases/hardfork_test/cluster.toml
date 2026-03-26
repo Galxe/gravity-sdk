@@ -24,6 +24,8 @@ inspection_port = 10004
 https_port = 1028
 authrpc_port = 8555
 reth_p2p_port = 12028
+source = "bin_path"
+bin_path = "../target/quick-release/gravity_node"
 
 [faucet_init]
 num_accounts = 100
