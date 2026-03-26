@@ -10,10 +10,6 @@ on:
         required: false
         default: ''
 
-# Queue (don't cancel) redundant runs on the same PR
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: false
 
 jobs:
   # ==========================================================================
@@ -38,6 +34,11 @@ jobs:
     needs: gate
     if: needs.gate.outputs.should_run == 'true'
     timeout-minutes: 120
+    # Concurrency at job level so that skipped/unauthorized gate runs
+    # don't enter the group and can't cancel legitimate E2E runs.
+    concurrency:
+      group: e2e-test-${{ github.event.pull_request.number || github.sha }}
+      cancel-in-progress: true
 
     steps:
     - name: Checkout
