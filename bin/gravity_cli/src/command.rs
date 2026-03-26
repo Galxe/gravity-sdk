@@ -1,6 +1,6 @@
 use crate::{
-    dkg::DKGCommand, genesis::GenesisCommand, node::NodeCommand, stake::StakeCommand,
-    validator::ValidatorCommand,
+    dkg::DKGCommand, epoch::EpochCommand, genesis::GenesisCommand, node::NodeCommand,
+    stake::StakeCommand, validator::ValidatorCommand,
 };
 use build_info::{build_information, BUILD_PKG_VERSION};
 use clap::{Parser, Subcommand};
@@ -44,6 +44,7 @@ pub enum SubCommands {
     Stake(StakeCommand),
     Node(NodeCommand),
     Dkg(DKGCommand),
+    Epoch(EpochCommand),
 }
 
 pub trait Executable {
