@@ -186,13 +186,25 @@ impl BlockData {
 
     pub fn new_genesis_from_ledger_info(ledger_info: &LedgerInfo) -> Self {
         assert!(ledger_info.ends_epoch());
+
+        // Use epoch_block_info to get the actual reconfig block's values, ensuring
+        // deterministic genesis construction even when different nodes commit different
+        // suffix blocks after the reconfig. Only use epoch_block_info if
+        // epoch_start_timestamp_usecs is non-zero (meaning it was properly patched
+        // by buffer_manager with consensus-layer data).
+        let (version, timestamp) = match ledger_info.commit_info().epoch_block_info() {
+            Some(info) if info.epoch_start_timestamp_usecs > 0 =>
+                (info.block_number, info.epoch_start_timestamp_usecs),
+            _ => (ledger_info.version(), ledger_info.timestamp_usecs()),
+        };
+
         let ancestor = BlockInfo::new(
             ledger_info.epoch(),
             0,                 /* round */
             HashValue::zero(), /* parent block id */
             ledger_info.transaction_accumulator_hash(),
-            ledger_info.version(),
-            ledger_info.timestamp_usecs(),
+            version,
+            timestamp,
             None,
         );
 
@@ -206,7 +218,7 @@ impl BlockData {
             ),
         );
 
-        BlockData::new_genesis(ledger_info.timestamp_usecs(), genesis_quorum_cert)
+        BlockData::new_genesis(timestamp, genesis_quorum_cert)
     }
 
     #[cfg(any(test, feature = "fuzzing"))]

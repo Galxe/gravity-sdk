@@ -155,10 +155,19 @@ impl BlockExecutorTrait for GravityBlockExecutor {
 
         // Persist randomness data
         if !randomness_data.is_empty() {
-            self.consensus_db
-                .put_randomness(&randomness_data)
-                .map_err(|e| anyhow::anyhow!("Failed to persist randomness: {:?}", e))?;
-            debug!("Persisted randomness data: {:?}", randomness_data);
+            let randomness_to_persist = if let Some(info) = ledger_info_with_sigs.ledger_info().commit_info().epoch_block_info() {
+                let epoch_change_block = info.block_number;
+                randomness_data.into_iter().filter(|(num, _)| *num <= epoch_change_block).collect::<Vec<_>>()
+            } else {
+                randomness_data
+            };
+
+            if !randomness_to_persist.is_empty() {
+                self.consensus_db
+                    .put_randomness(&randomness_to_persist)
+                    .map_err(|e| anyhow::anyhow!("Failed to persist randomness: {:?}", e))?;
+                debug!("Persisted randomness data: {:?}", randomness_to_persist);
+            }
         }
 
         self.runtime.block_on(async move {

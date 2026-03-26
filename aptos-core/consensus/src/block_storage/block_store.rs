@@ -276,8 +276,8 @@ impl BlockStore {
             }
 
             let Some(last_li) = &last_ledger_info else { continue };
-            if last_li.ledger_info().epoch() != qc.commit_info().epoch() ||
-                commit_round > last_li.commit_info().round()
+            if last_li.ledger_info().epoch() != qc.commit_info().epoch()
+                || commit_round > last_li.commit_info().round()
             {
                 continue;
             }
@@ -348,9 +348,9 @@ impl BlockStore {
         ledger_info: &LedgerInfoWithSignatures,
     ) -> (bool, Option<Arc<WrappedLedgerInfo>>) {
         // Fast return: these conditions mean no special handling is needed
-        if !self.enable_randomness ||
-            self.ordered_root().epoch() == 1 ||
-            ledger_info.commit_info().round() == 0
+        if !self.enable_randomness
+            || self.ordered_root().epoch() == 1
+            || ledger_info.commit_info().round() == 0
         {
             return (false, None);
         }
@@ -655,9 +655,6 @@ impl BlockStore {
             );
         } else {
             info!("send the blocks to execution {:?}", blocks_to_commit);
-            if blocks_to_commit.len() > 1 {
-                info!("lightman0324 send the blocks {:?}", blocks_to_commit)
-            }
             self.execution_client
                 .finalize_order(
                     &blocks_to_commit,

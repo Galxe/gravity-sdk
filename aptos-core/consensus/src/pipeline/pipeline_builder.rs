@@ -625,9 +625,21 @@ impl PipelineBuilder {
             block_info.change_timestamp(timestamp);
         }
         // Populate EpochBlockInfo when this block triggers an epoch change.
-        // This records the epoch-changing block's metadata (id, number, round, timestamp)
-        // so downstream consumers can identify which block caused the epoch transition.
-        if compute_result.has_reconfiguration() {
+        // We first check if the block is a suffix block by querying the buffer manager.
+        // This is necessary because both the epoch change block and its suffix blocks
+        // have a StateComputeResult where `has_reconfiguration()` is true.
+        if let Some(epoch_info) = get_block_buffer_manager()
+            .get_epoch_change_block_info(block.block_number().unwrap_or(0), block.epoch())
+            .await
+        {
+            // Suffix block after an epoch change: carry the epoch change block's info
+            info!(
+                "[Pipeline] Setting EpochBlockInfo for suffix block (block_number={:?}): epoch_change_block_id={}, epoch_change_block_number={}",
+                block.block_number(), epoch_info.block_id, epoch_info.block_number,
+            );
+            block_info.set_epoch_block_info(epoch_info);
+        } else if compute_result.has_reconfiguration() {
+            // This is the actual epoch change block
             let epoch_info = EpochBlockInfo {
                 block_id: block.id(),
                 block_number: block.block_number().unwrap_or(0),
@@ -637,16 +649,6 @@ impl PipelineBuilder {
             info!(
                 "[Pipeline] Setting EpochBlockInfo for epoch change block: id={}, number={}, round={}, timestamp={}",
                 epoch_info.block_id, epoch_info.block_number, epoch_info.epoch_start_round, epoch_info.epoch_start_timestamp_usecs,
-            );
-            block_info.set_epoch_block_info(epoch_info);
-        } else if let Some(epoch_info) = get_block_buffer_manager()
-            .get_epoch_change_block_info(block.block_number().unwrap_or(0), block.epoch())
-            .await
-        {
-            // Suffix block after an epoch change: carry the epoch change block's info
-            info!(
-                "[Pipeline] Setting EpochBlockInfo for suffix block (block_number={:?}): epoch_change_block_id={}, epoch_change_block_number={}",
-                block.block_number(), epoch_info.block_id, epoch_info.block_number,
             );
             block_info.set_epoch_block_info(epoch_info);
         }
