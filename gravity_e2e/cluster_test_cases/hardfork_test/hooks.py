@@ -164,8 +164,8 @@ def pre_start(test_dir, env, pytest_args=None):
     LOG.info(f"  Wrote metadata to {metadata_path}")
 
     # ── 2. Inject gammaBlock + deltaBlock ──
-    gamma_block = int(os.environ.get("GAMMA_BLOCK", "500"))
-    delta_block = int(os.environ.get("DELTA_BLOCK", "0"))
+    gamma_block = int(os.environ.get("GAMMA_BLOCK", "0"))
+    delta_block = int(os.environ.get("DELTA_BLOCK", "50"))
     LOG.info(f"🔧 Injecting gravityHardforks (gammaBlock={gamma_block}, deltaBlock={delta_block})")
 
     artifacts_dir = env.get("GRAVITY_ARTIFACTS_DIR", str(test_dir / "artifacts"))
