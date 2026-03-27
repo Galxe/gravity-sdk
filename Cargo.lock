@@ -11,7 +11,7 @@ checksum = "fe438c63458706e03479442743baae6c88256498e6431708f6dfc520a26515d3"
 [[package]]
 name = "abstract-domain-derive"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1072,7 +1072,7 @@ dependencies = [
 [[package]]
 name = "api-types"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1094,7 +1094,7 @@ dependencies = [
 [[package]]
 name = "aptos-abstract-gas-usage"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-gas-algebra",
@@ -1107,7 +1107,7 @@ dependencies = [
 [[package]]
 name = "aptos-accumulator"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -1117,7 +1117,7 @@ dependencies = [
 [[package]]
 name = "aptos-aggregator"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-types",
  "bcs 0.1.4",
@@ -1130,7 +1130,7 @@ dependencies = [
 [[package]]
 name = "aptos-api"
 version = "0.2.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-api-types",
@@ -1171,7 +1171,7 @@ dependencies = [
 [[package]]
 name = "aptos-api-types"
 version = "0.0.1"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-config",
@@ -1201,7 +1201,7 @@ dependencies = [
 [[package]]
 name = "aptos-bcs-utils"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "hex",
@@ -1210,7 +1210,7 @@ dependencies = [
 [[package]]
 name = "aptos-bitvec"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "proptest",
  "serde",
@@ -1220,7 +1220,7 @@ dependencies = [
 [[package]]
 name = "aptos-block-executor"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "ambassador",
  "anyhow",
@@ -1258,7 +1258,7 @@ dependencies = [
 [[package]]
 name = "aptos-block-partitioner"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-crypto",
  "aptos-logger",
@@ -1281,7 +1281,7 @@ dependencies = [
 [[package]]
 name = "aptos-bounded-executor"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "futures",
  "rustversion",
@@ -1291,7 +1291,7 @@ dependencies = [
 [[package]]
 name = "aptos-build-info"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "shadow-rs",
 ]
@@ -1299,7 +1299,7 @@ dependencies = [
 [[package]]
 name = "aptos-cached-packages"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-framework",
@@ -1313,7 +1313,7 @@ dependencies = [
 [[package]]
 name = "aptos-channels"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-infallible",
@@ -1324,12 +1324,12 @@ dependencies = [
 [[package]]
 name = "aptos-collections"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 
 [[package]]
 name = "aptos-compression"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-logger",
  "aptos-metrics-core",
@@ -1341,7 +1341,7 @@ dependencies = [
 [[package]]
 name = "aptos-config"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -1432,7 +1432,7 @@ dependencies = [
 [[package]]
 name = "aptos-consensus"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-bitvec",
@@ -1510,7 +1510,7 @@ dependencies = [
 [[package]]
 name = "aptos-consensus-notifications"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-crypto",
  "aptos-runtimes",
@@ -1548,7 +1548,7 @@ dependencies = [
 [[package]]
 name = "aptos-consensus-types"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-bitvec",
@@ -1576,7 +1576,7 @@ dependencies = [
 [[package]]
 name = "aptos-crash-handler"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-logger",
  "backtrace",
@@ -1588,7 +1588,7 @@ dependencies = [
 [[package]]
 name = "aptos-crypto"
 version = "0.0.3"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -1642,7 +1642,7 @@ dependencies = [
 [[package]]
 name = "aptos-crypto-derive"
 version = "0.0.3"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1652,7 +1652,7 @@ dependencies = [
 [[package]]
 name = "aptos-data-client"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-config",
  "aptos-crypto",
@@ -1683,7 +1683,7 @@ dependencies = [
 [[package]]
 name = "aptos-data-streaming-service"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-channels",
  "aptos-config",
@@ -1709,7 +1709,7 @@ dependencies = [
 [[package]]
 name = "aptos-db"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-accumulator",
@@ -1755,7 +1755,7 @@ dependencies = [
 [[package]]
 name = "aptos-db-indexer"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-config",
@@ -1777,7 +1777,7 @@ dependencies = [
 [[package]]
 name = "aptos-db-indexer-schemas"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -1794,7 +1794,7 @@ dependencies = [
 [[package]]
 name = "aptos-dkg"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -1826,7 +1826,7 @@ dependencies = [
 [[package]]
 name = "aptos-dkg-runtime"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-bounded-executor",
@@ -1865,7 +1865,7 @@ dependencies = [
 [[package]]
 name = "aptos-drop-helper"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-infallible",
  "aptos-metrics-core",
@@ -1876,7 +1876,7 @@ dependencies = [
 [[package]]
 name = "aptos-enum-conversion-derive"
 version = "0.0.3"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "quote",
  "syn 1.0.109",
@@ -1885,7 +1885,7 @@ dependencies = [
 [[package]]
 name = "aptos-event-notifications"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "api-types",
@@ -1915,7 +1915,7 @@ dependencies = [
 [[package]]
 name = "aptos-executor"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-block-executor",
@@ -1946,7 +1946,7 @@ dependencies = [
 [[package]]
 name = "aptos-executor-service"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-block-executor",
  "aptos-block-partitioner",
@@ -1977,7 +1977,7 @@ dependencies = [
 [[package]]
 name = "aptos-executor-test-helpers"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-cached-packages",
@@ -2010,7 +2010,7 @@ dependencies = [
 [[package]]
 name = "aptos-executor-types"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -2035,7 +2035,7 @@ dependencies = [
 [[package]]
 name = "aptos-experimental-layered-map"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "ahash 0.8.12",
  "aptos-crypto",
@@ -2050,7 +2050,7 @@ dependencies = [
 [[package]]
 name = "aptos-experimental-runtimes"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-runtimes",
  "core_affinity",
@@ -2063,7 +2063,7 @@ dependencies = [
 [[package]]
 name = "aptos-fallible"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "thiserror 1.0.69",
 ]
@@ -2071,7 +2071,7 @@ dependencies = [
 [[package]]
 name = "aptos-framework"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-aggregator",
@@ -2142,7 +2142,7 @@ dependencies = [
 [[package]]
 name = "aptos-gas-algebra"
 version = "0.0.1"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "either",
  "move-core-types",
@@ -2151,7 +2151,7 @@ dependencies = [
 [[package]]
 name = "aptos-gas-meter"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-gas-algebra",
  "aptos-gas-schedule",
@@ -2166,7 +2166,7 @@ dependencies = [
 [[package]]
 name = "aptos-gas-profiling"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-gas-algebra",
@@ -2186,7 +2186,7 @@ dependencies = [
 [[package]]
 name = "aptos-gas-schedule"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-gas-algebra",
  "aptos-global-constants",
@@ -2199,17 +2199,17 @@ dependencies = [
 [[package]]
 name = "aptos-global-constants"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 
 [[package]]
 name = "aptos-id-generator"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 
 [[package]]
 name = "aptos-indexer-grpc-fullnode"
 version = "1.0.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-api",
@@ -2245,7 +2245,7 @@ dependencies = [
 [[package]]
 name = "aptos-indexer-grpc-table-info"
 version = "1.0.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-api",
@@ -2277,7 +2277,7 @@ dependencies = [
 [[package]]
 name = "aptos-indexer-grpc-utils"
 version = "1.0.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-metrics-core",
@@ -2313,12 +2313,12 @@ dependencies = [
 [[package]]
 name = "aptos-infallible"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 
 [[package]]
 name = "aptos-inspection-service"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-build-info",
@@ -2344,7 +2344,7 @@ dependencies = [
 [[package]]
 name = "aptos-jellyfish-merkle"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -2372,7 +2372,7 @@ dependencies = [
 [[package]]
 name = "aptos-jwk-consensus"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "api-types",
@@ -2410,7 +2410,7 @@ dependencies = [
 [[package]]
 name = "aptos-jwk-utils"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-types",
@@ -2425,7 +2425,7 @@ dependencies = [
 [[package]]
 name = "aptos-keygen"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-crypto",
  "aptos-types",
@@ -2435,7 +2435,7 @@ dependencies = [
 [[package]]
 name = "aptos-language-e2e-tests"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-abstract-gas-usage",
@@ -2481,7 +2481,7 @@ dependencies = [
 [[package]]
 name = "aptos-ledger"
 version = "0.2.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-crypto",
  "aptos-types",
@@ -2494,7 +2494,7 @@ dependencies = [
 [[package]]
 name = "aptos-log-derive"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2504,7 +2504,7 @@ dependencies = [
 [[package]]
 name = "aptos-logger"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-infallible",
@@ -2530,7 +2530,7 @@ dependencies = [
 [[package]]
 name = "aptos-memory-usage-tracker"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-gas-algebra",
  "aptos-gas-meter",
@@ -2571,7 +2571,7 @@ dependencies = [
 [[package]]
 name = "aptos-mempool"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-bounded-executor",
@@ -2612,7 +2612,7 @@ dependencies = [
 [[package]]
 name = "aptos-mempool-notifications"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-types",
  "async-trait",
@@ -2625,7 +2625,7 @@ dependencies = [
 [[package]]
 name = "aptos-memsocket"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-infallible",
  "bytes",
@@ -2636,7 +2636,7 @@ dependencies = [
 [[package]]
 name = "aptos-metrics-core"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "prometheus",
@@ -2645,7 +2645,7 @@ dependencies = [
 [[package]]
 name = "aptos-move-stdlib"
 version = "0.1.1"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-gas-schedule",
  "aptos-native-interface",
@@ -2670,7 +2670,7 @@ dependencies = [
 [[package]]
 name = "aptos-mvhashmap"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-aggregator",
@@ -2691,7 +2691,7 @@ dependencies = [
 [[package]]
 name = "aptos-native-interface"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-gas-algebra",
  "aptos-gas-schedule",
@@ -2708,7 +2708,7 @@ dependencies = [
 [[package]]
 name = "aptos-netcore"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-memsocket",
  "aptos-proxy",
@@ -2725,7 +2725,7 @@ dependencies = [
 [[package]]
 name = "aptos-network"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-bitvec",
@@ -2774,7 +2774,7 @@ dependencies = [
 [[package]]
 name = "aptos-network-builder"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-channels",
  "aptos-config",
@@ -2797,7 +2797,7 @@ dependencies = [
 [[package]]
 name = "aptos-network-discovery"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-channels",
@@ -2822,7 +2822,7 @@ dependencies = [
 [[package]]
 name = "aptos-node-resource-metrics"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-build-info",
  "aptos-infallible",
@@ -2839,7 +2839,7 @@ dependencies = [
 [[package]]
 name = "aptos-num-variants"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2849,7 +2849,7 @@ dependencies = [
 [[package]]
 name = "aptos-openapi"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "percent-encoding",
  "poem",
@@ -2861,7 +2861,7 @@ dependencies = [
 [[package]]
 name = "aptos-package-builder"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-framework",
@@ -2874,7 +2874,7 @@ dependencies = [
 [[package]]
 name = "aptos-peer-monitoring-service-types"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-config",
  "aptos-types",
@@ -2886,7 +2886,7 @@ dependencies = [
 [[package]]
 name = "aptos-proptest-helpers"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "crossbeam",
  "proptest",
@@ -2896,7 +2896,7 @@ dependencies = [
 [[package]]
 name = "aptos-protos"
 version = "1.3.1"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "pbjson",
  "prost",
@@ -2907,7 +2907,7 @@ dependencies = [
 [[package]]
 name = "aptos-proxy"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "ipnet",
 ]
@@ -2915,7 +2915,7 @@ dependencies = [
 [[package]]
 name = "aptos-push-metrics"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-logger",
  "aptos-metrics-core",
@@ -2927,7 +2927,7 @@ dependencies = [
 [[package]]
 name = "aptos-reliable-broadcast"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-bounded-executor",
@@ -2949,7 +2949,7 @@ dependencies = [
 [[package]]
 name = "aptos-resource-viewer"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-types",
@@ -2964,7 +2964,7 @@ dependencies = [
 [[package]]
 name = "aptos-rest-client"
 version = "0.0.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-api-types",
@@ -2987,7 +2987,7 @@ dependencies = [
 [[package]]
 name = "aptos-rocksdb-options"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-config",
  "rocksdb",
@@ -2996,7 +2996,7 @@ dependencies = [
 [[package]]
 name = "aptos-runtimes"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "rayon",
  "tokio",
@@ -3024,7 +3024,7 @@ dependencies = [
 [[package]]
 name = "aptos-safety-rules"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-config",
  "aptos-consensus-types 0.1.0 (git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info)",
@@ -3048,7 +3048,7 @@ dependencies = [
 [[package]]
 name = "aptos-schemadb"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-drop-helper",
@@ -3065,7 +3065,7 @@ dependencies = [
 [[package]]
 name = "aptos-scratchpad"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-crypto",
  "aptos-drop-helper",
@@ -3085,7 +3085,7 @@ dependencies = [
 [[package]]
 name = "aptos-sdk"
 version = "0.0.3"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-cached-packages",
@@ -3111,7 +3111,7 @@ dependencies = [
 [[package]]
 name = "aptos-sdk-builder"
 version = "0.2.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-types",
@@ -3129,7 +3129,7 @@ dependencies = [
 [[package]]
 name = "aptos-secure-net"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-logger",
  "aptos-metrics-core",
@@ -3147,7 +3147,7 @@ dependencies = [
 [[package]]
 name = "aptos-secure-storage"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-crypto",
  "aptos-infallible",
@@ -3168,7 +3168,7 @@ dependencies = [
 [[package]]
 name = "aptos-short-hex-str"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "mirai-annotations",
  "serde",
@@ -3179,7 +3179,7 @@ dependencies = [
 [[package]]
 name = "aptos-speculative-state-helper"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-infallible",
@@ -3190,7 +3190,7 @@ dependencies = [
 [[package]]
 name = "aptos-state-sync-driver"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-config",
@@ -3223,7 +3223,7 @@ dependencies = [
 [[package]]
 name = "aptos-storage-interface"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -3251,7 +3251,7 @@ dependencies = [
 [[package]]
 name = "aptos-storage-service-client"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-config",
  "aptos-network",
@@ -3262,7 +3262,7 @@ dependencies = [
 [[package]]
 name = "aptos-storage-service-notifications"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-channels",
  "async-trait",
@@ -3274,7 +3274,7 @@ dependencies = [
 [[package]]
 name = "aptos-storage-service-types"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-compression",
  "aptos-config",
@@ -3290,7 +3290,7 @@ dependencies = [
 [[package]]
 name = "aptos-table-natives"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-gas-schedule",
  "aptos-native-interface",
@@ -3308,7 +3308,7 @@ dependencies = [
 [[package]]
 name = "aptos-telemetry"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-api",
@@ -3347,7 +3347,7 @@ dependencies = [
 [[package]]
 name = "aptos-telemetry-service"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-config",
@@ -3387,7 +3387,7 @@ dependencies = [
 [[package]]
 name = "aptos-temppath"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "hex",
  "rand 0.7.3",
@@ -3396,7 +3396,7 @@ dependencies = [
 [[package]]
 name = "aptos-time-service"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-infallible",
  "enum_dispatch",
@@ -3409,7 +3409,7 @@ dependencies = [
 [[package]]
 name = "aptos-transaction-filter"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-protos",
@@ -3427,7 +3427,7 @@ dependencies = [
 [[package]]
 name = "aptos-types"
 version = "0.0.3"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "api-types",
@@ -3491,12 +3491,12 @@ dependencies = [
 [[package]]
 name = "aptos-utils"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 
 [[package]]
 name = "aptos-validator-transaction-pool"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-channels",
  "aptos-crypto",
@@ -3509,7 +3509,7 @@ dependencies = [
 [[package]]
 name = "aptos-vault-client"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-crypto",
  "base64 0.13.1",
@@ -3525,7 +3525,7 @@ dependencies = [
 [[package]]
 name = "aptos-vm"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-aggregator",
@@ -3577,7 +3577,7 @@ dependencies = [
 [[package]]
 name = "aptos-vm-environment"
 version = "0.0.1"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-framework",
  "aptos-gas-algebra",
@@ -3600,7 +3600,7 @@ dependencies = [
 [[package]]
 name = "aptos-vm-genesis"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-cached-packages",
  "aptos-crypto",
@@ -3624,7 +3624,7 @@ dependencies = [
 [[package]]
 name = "aptos-vm-logging"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "aptos-crypto",
  "aptos-logger",
@@ -3639,7 +3639,7 @@ dependencies = [
 [[package]]
 name = "aptos-vm-types"
 version = "0.0.1"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "ambassador",
  "anyhow",
@@ -3662,7 +3662,7 @@ dependencies = [
 [[package]]
 name = "aptos-vm-validator"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "aptos-logger",
@@ -7465,7 +7465,7 @@ dependencies = [
 [[package]]
 name = "gaptos"
 version = "0.0.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "api-types",
  "aptos-bitvec",
@@ -8705,7 +8705,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.62.2",
+ "windows-core 0.57.0",
 ]
 
 [[package]]
@@ -10332,7 +10332,7 @@ checksum = "1fafa6961cabd9c63bcd77a45d7e3b7f3b552b70417831fb0f56db717e72407e"
 [[package]]
 name = "move-abigen"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
@@ -10349,7 +10349,7 @@ dependencies = [
 [[package]]
 name = "move-binary-format"
 version = "0.0.3"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "backtrace",
@@ -10364,12 +10364,12 @@ dependencies = [
 [[package]]
 name = "move-borrow-graph"
 version = "0.0.1"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 
 [[package]]
 name = "move-bytecode-source-map"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
@@ -10384,7 +10384,7 @@ dependencies = [
 [[package]]
 name = "move-bytecode-spec"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "once_cell",
  "quote",
@@ -10394,7 +10394,7 @@ dependencies = [
 [[package]]
 name = "move-bytecode-utils"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "move-binary-format",
@@ -10406,7 +10406,7 @@ dependencies = [
 [[package]]
 name = "move-bytecode-verifier"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "fail",
  "move-binary-format",
@@ -10420,7 +10420,7 @@ dependencies = [
 [[package]]
 name = "move-bytecode-viewer"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "clap 4.6.0",
@@ -10435,7 +10435,7 @@ dependencies = [
 [[package]]
 name = "move-cli"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "clap 4.6.0",
@@ -10465,7 +10465,7 @@ dependencies = [
 [[package]]
 name = "move-command-line-common"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "difference",
@@ -10482,7 +10482,7 @@ dependencies = [
 [[package]]
 name = "move-compiler"
 version = "0.0.1"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
@@ -10505,7 +10505,7 @@ dependencies = [
 [[package]]
 name = "move-compiler-v2"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "abstract-domain-derive",
  "anyhow",
@@ -10539,7 +10539,7 @@ dependencies = [
 [[package]]
 name = "move-core-types"
 version = "0.0.4"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "arbitrary",
@@ -10565,7 +10565,7 @@ dependencies = [
 [[package]]
 name = "move-coverage"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
@@ -10584,7 +10584,7 @@ dependencies = [
 [[package]]
 name = "move-disassembler"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "clap 4.6.0",
@@ -10601,7 +10601,7 @@ dependencies = [
 [[package]]
 name = "move-docgen"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "clap 4.6.0",
@@ -10620,7 +10620,7 @@ dependencies = [
 [[package]]
 name = "move-errmapgen"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "move-command-line-common",
@@ -10632,7 +10632,7 @@ dependencies = [
 [[package]]
 name = "move-ir-compiler"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
@@ -10648,7 +10648,7 @@ dependencies = [
 [[package]]
 name = "move-ir-to-bytecode"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "codespan-reporting",
@@ -10666,7 +10666,7 @@ dependencies = [
 [[package]]
 name = "move-ir-to-bytecode-syntax"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "hex",
@@ -10679,7 +10679,7 @@ dependencies = [
 [[package]]
 name = "move-ir-types"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "hex",
  "move-command-line-common",
@@ -10692,7 +10692,7 @@ dependencies = [
 [[package]]
 name = "move-model"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "codespan",
@@ -10719,7 +10719,7 @@ dependencies = [
 [[package]]
 name = "move-package"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "clap 4.6.0",
@@ -10753,7 +10753,7 @@ dependencies = [
 [[package]]
 name = "move-prover"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "atty",
@@ -10780,7 +10780,7 @@ dependencies = [
 [[package]]
 name = "move-prover-boogie-backend"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -10809,7 +10809,7 @@ dependencies = [
 [[package]]
 name = "move-prover-bytecode-pipeline"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "abstract-domain-derive",
  "anyhow",
@@ -10825,7 +10825,7 @@ dependencies = [
 [[package]]
 name = "move-prover-lab"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "chrono",
@@ -10843,7 +10843,7 @@ dependencies = [
 [[package]]
 name = "move-resource-viewer"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "hex",
@@ -10856,7 +10856,7 @@ dependencies = [
 [[package]]
 name = "move-stackless-bytecode"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "abstract-domain-derive",
  "anyhow",
@@ -10878,7 +10878,7 @@ dependencies = [
 [[package]]
 name = "move-stdlib"
 version = "0.1.1"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "hex",
@@ -10901,7 +10901,7 @@ dependencies = [
 [[package]]
 name = "move-symbol-pool"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "once_cell",
  "serde",
@@ -10910,7 +10910,7 @@ dependencies = [
 [[package]]
 name = "move-table-extension"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "better_any",
  "bytes",
@@ -10925,7 +10925,7 @@ dependencies = [
 [[package]]
 name = "move-unit-test"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "better_any",
@@ -10957,7 +10957,7 @@ dependencies = [
 [[package]]
 name = "move-vm-metrics"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "once_cell",
  "prometheus",
@@ -10966,7 +10966,7 @@ dependencies = [
 [[package]]
 name = "move-vm-runtime"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "ambassador",
  "better_any",
@@ -10991,7 +10991,7 @@ dependencies = [
 [[package]]
 name = "move-vm-test-utils"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "anyhow",
  "bytes",
@@ -11008,7 +11008,7 @@ dependencies = [
 [[package]]
 name = "move-vm-types"
 version = "0.1.0"
-source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#758601339070da82968a466cba66eb1f040699a5"
+source = "git+https://github.com/Galxe/gravity-aptos.git?branch=feat%2Fadd-epoch-block-info#6aaab239f0a59fe63cff5fb03467a0e92833e006"
 dependencies = [
  "ambassador",
  "bcs 0.1.4",
