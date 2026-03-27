@@ -1,0 +1,27 @@
+# Gravity Cluster Configuration - Hardfork Test Suite
+# Single node for hardfork upgrade testing
+
+[cluster]
+name = "gravity-devnet-hardfork"
+base_dir = "/tmp/gravity-cluster-hardfork"
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+p2p_port = 6184
+vfn_port = 6194
+rpc_port = 8549
+metrics_port = 9005
+inspection_port = 10004
+https_port = 1028
+authrpc_port = 8555
+reth_p2p_port = 12028
+
+[faucet_init]
+num_accounts = 100

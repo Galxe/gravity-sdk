@@ -179,6 +179,11 @@ main() {
         exit 1
     fi
     
+    # Restore submodule to clean state (undo faucet injection into genesis_template.json)
+    # Without this, subsequent suites that checkout a different ref will fail with
+    # "Your local changes would be overwritten by checkout"
+    git -C "$GENESIS_CONTRACT_DIR" checkout -- genesis-tool/config/genesis_template.json 2>/dev/null || true
+    
     # Step 4: Generate waypoint
     log_info "Step 4: Generating waypoint..."
     "$GRAVITY_CLI" genesis generate-waypoint \
