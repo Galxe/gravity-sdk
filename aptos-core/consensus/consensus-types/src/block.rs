@@ -187,14 +187,27 @@ impl Block {
     }
 
     /// Construct new genesis block for next epoch deterministically from the end-epoch LedgerInfo
-    /// We carry over most fields except round and block id
+    /// We carry over most fields except round and block id.
+    /// IMPORTANT: We must use epoch_block_info to get the block_number of the actual reconfig
+    /// block, because different nodes may commit different suffix blocks (with different
+    /// block_numbers) after the reconfig, but epoch_block_info always points to the same
+    /// reconfig block, ensuring deterministic genesis construction across all nodes.
     pub fn make_genesis_block_from_ledger_info(ledger_info: &LedgerInfo) -> Self {
         let block_data = BlockData::new_genesis_from_ledger_info(ledger_info);
+        let block_number = match ledger_info.commit_info().epoch_block_info() {
+            Some(info) => info.block_number,
+            None => {
+                // epoch_block_info should always be present for epoch-ending ledger infos.
+                // If missing, fall back to ledger_info.block_number() but this may cause
+                // divergence if different nodes committed different suffix blocks.
+                ledger_info.block_number()
+            }
+        };
         Block {
             id: block_data.hash(),
             block_data,
             signature: None,
-            block_number: OnceCell::with_value(ledger_info.block_number()),
+            block_number: OnceCell::with_value(block_number),
         }
     }
 

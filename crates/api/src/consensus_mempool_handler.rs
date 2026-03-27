@@ -97,12 +97,15 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
                 self.handle_consensus_commit_notification(commit_notification).await
             }
             ConsensusNotification::SyncToTarget(sync_notification) => {
+                let ledger_info = sync_notification.get_target().ledger_info();
+                let block_number = match ledger_info.commit_info().epoch_block_info() {
+                    Some(info) => info.block_number,
+                    None => ledger_info.block_number(),
+                };
                 self.event_subscription_service
                     .lock()
                     .await
-                    .notify_initial_configs(
-                        sync_notification.get_target().ledger_info().block_number(),
-                    )
+                    .notify_initial_configs(block_number)
                     .unwrap();
                 let _ = self
                     .consensus_notification_listener

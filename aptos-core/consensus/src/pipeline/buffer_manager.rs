@@ -55,7 +55,7 @@ use gaptos::{
 };
 use once_cell::sync::OnceCell;
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     f32::consts::E,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -167,6 +167,11 @@ pub struct BufferManager {
     consensus_publisher: Option<Arc<ConsensusPublisher>>,
 
     commit_vote_cache: HashMap<HashValue, HashMap<HashValue, CommitVote>>,
+
+    // Cache for commit proofs that arrive before the block enters the buffer.
+    // When a CommitMessage::Decision arrives but the block is not yet in the buffer,
+    // the proof is cached here and applied when the block finishes execution.
+    pending_commit_proofs: BTreeMap<Round, LedgerInfoWithSignatures>,
 }
 
 impl BufferManager {
@@ -256,7 +261,54 @@ impl BufferManager {
             consensus_observer_config,
             consensus_publisher,
             commit_vote_cache: HashMap::new(),
+            pending_commit_proofs: BTreeMap::new(),
         }
+    }
+
+    fn try_add_pending_commit_proof(&mut self, commit_proof: LedgerInfoWithSignatures) -> bool {
+        const MAX_PENDING_COMMIT_PROOFS: usize = 100;
+
+        let round = commit_proof.commit_info().round();
+        let block_id = commit_proof.commit_info().id();
+        if self.highest_committed_round < round {
+            if self.pending_commit_proofs.len() < MAX_PENDING_COMMIT_PROOFS {
+                self.pending_commit_proofs.insert(round, commit_proof);
+                info!(
+                    round = round,
+                    block_id = block_id,
+                    "Added pending commit proof."
+                );
+                true
+            } else {
+                warn!(
+                    round = round,
+                    block_id = block_id,
+                    "Too many pending commit proofs, ignored."
+                );
+                false
+            }
+        } else {
+            debug!(
+                round = round,
+                highest_committed_round = self.highest_committed_round,
+                block_id = block_id,
+                "Commit proof too old, ignored."
+            );
+            false
+        }
+    }
+
+    fn drain_pending_commit_proof_till(
+        &mut self,
+        round: Round,
+    ) -> Option<LedgerInfoWithSignatures> {
+        // split at `round + 1`, keeping everything after
+        let mut remainder = self.pending_commit_proofs.split_off(&(round + 1));
+        // swap: self now has everything > round, to_remove has everything <= round
+        std::mem::swap(&mut self.pending_commit_proofs, &mut remainder);
+        let to_remove = remainder;
+        // return the last (highest round) proof from the removed set
+        to_remove.into_iter().last().map(|(_, proof)| proof)
     }
 
     fn do_reliable_broadcast(&self, message: CommitMessage) -> Option<DropGuard> {
@@ -436,10 +488,11 @@ impl BufferManager {
         self.execution_root = None;
         self.signing_root = None;
         self.commit_vote_cache.clear();
+        self.pending_commit_proofs.clear();
         self.previous_commit_time = Instant::now();
         self.commit_proof_rb_handle.take();
         // purge the incoming blocks queue
-        while let Ok(Some(_)) = self.block_rx.try_next() {}
+        while let Ok(_) = self.block_rx.try_recv() {}
         // Wait for ongoing tasks to finish before sending back ack.
         get_block_buffer_manager().release_inflight_blocks().await;
         while self.ongoing_tasks.load(Ordering::SeqCst) > 0 {
@@ -495,6 +548,83 @@ impl BufferManager {
         info!("Reschedule {} execution requests from {:?}", count, self.execution_root);
     }
 
+    /// Resolves the `EpochBlockInfo` for a batch of executed blocks.
+    ///
+    /// This is needed to populate epoch transition metadata on the committed `LedgerInfo`,
+    /// which downstream consumers (e.g., genesis block construction) rely on for determinism.
+    ///
+    /// Resolution follows three paths:
+    /// 1. **Suffix block (reth cache hit)**: The BlockBufferManager already cached the reconfig
+    ///    block's `EpochBlockInfo` with correct `block_id` and `block_number`, but `epoch_start_round`
+    ///    and `epoch_start_timestamp_usecs` are zero (reth lacks consensus-layer data). We patch
+    ///    these using `end_epoch_timestamp` and the reconfig block's round from the current batch.
+    /// 2. **Epoch change block**: The last block in the batch triggers reconfiguration itself.
+    ///    We construct `EpochBlockInfo` directly from its metadata.
+    /// 3. **Normal block**: No epoch change — returns `None`.
+    async fn resolve_epoch_block_info(
+        &self,
+        executed_blocks: &[PipelinedBlock],
+        last_block: &PipelinedBlock,
+    ) -> Option<gaptos::aptos_types::block_info::EpochBlockInfo> {
+        let block_number = last_block.block().block_number().unwrap_or(0);
+        let epoch = last_block.block().epoch();
+
+        // Path 1: Check if reth-side BlockBufferManager has cached epoch info (suffix block case).
+        if let Some(mut epoch_info) = block_buffer_manager::get_block_buffer_manager()
+            .get_epoch_change_block_info(block_number, epoch)
+            .await
+        {
+            // Reth provides block_id and block_number, but epoch_start_round and
+            // epoch_start_timestamp_usecs are zero — patch with consensus-layer data.
+            if epoch_info.epoch_start_round == 0 || epoch_info.epoch_start_timestamp_usecs == 0 {
+                if let Some(timestamp) = self.end_epoch_timestamp.get().cloned() {
+                    epoch_info.epoch_start_timestamp_usecs = timestamp;
+                }
+                // Find the reconfig block's round from the executed blocks in this batch
+                for eb in executed_blocks.iter().rev() {
+                    if eb.block_info().has_reconfiguration() {
+                        epoch_info.epoch_start_round = eb.round();
+                        if epoch_info.epoch_start_timestamp_usecs == 0 {
+                            epoch_info.epoch_start_timestamp_usecs = eb.timestamp_usecs();
+                        }
+                        break;
+                    }
+                }
+                info!(
+                    "[EpochChange] Patched EpochBlockInfo for suffix block {}: round={}, timestamp={}",
+                    block_number, epoch_info.epoch_start_round, epoch_info.epoch_start_timestamp_usecs,
+                );
+            }
+            return Some(epoch_info);
+        }
+
+        // Path 2: This block itself triggers an epoch change.
+        let compute_result = last_block.compute_result();
+        if compute_result.has_reconfiguration() {
+            let block_info = last_block.block_info();
+            let mut epoch_info = gaptos::aptos_types::block_info::EpochBlockInfo {
+                block_id: last_block.id(),
+                block_number,
+                epoch_start_round: last_block.round(),
+                epoch_start_timestamp_usecs: block_info.timestamp_usecs(),
+            };
+            // For suffix blocks with reconfiguration flag, use the cached epoch end timestamp
+            if let Some(timestamp) = self.end_epoch_timestamp.get().cloned() {
+                if block_info.timestamp_usecs() != timestamp && last_block.is_reconfiguration_suffix() {
+                    epoch_info.epoch_start_timestamp_usecs = timestamp;
+                }
+            }
+            info!(
+                "[EpochChange] Built EpochBlockInfo for reconfig block {}: id={}, round={}, timestamp={}",
+                block_number, epoch_info.block_id, epoch_info.epoch_start_round, epoch_info.epoch_start_timestamp_usecs,
+            );
+            return Some(epoch_info);
+        }
+
+        // Path 3: Normal block — no epoch change.
+        None
+    }
+
     /// If the response is successful, advance the item to Executed, otherwise panic (TODO fix).
     #[allow(clippy::unwrap_used)]
     async fn process_execution_response(&mut self, response: ExecutionResponse) {
@@ -544,13 +674,30 @@ impl BufferManager {
             }
         }
 
+        let mut iter_block = executed_blocks.last().expect("execute_blocks should not be empty!");
+        let compute_result = iter_block.compute_result();
+        let epoch_block_info = self
+            .resolve_epoch_block_info(&executed_blocks, iter_block)
+            .await;
+
         let item = self.buffer.take(&current_cursor);
-        let new_item = item.advance_to_executed_or_aggregated(
+        let round = item.commit_info().round();
+        let mut new_item = item.advance_to_executed_or_aggregated(
             executed_blocks,
             &self.epoch_state.verifier,
             self.end_epoch_timestamp.get().cloned(),
             self.order_vote_enabled,
+            epoch_block_info,
         );
+        // Check if we have a cached commit proof for this round
+        if let Some(commit_proof) = self.drain_pending_commit_proof_till(round) {
+            if !new_item.is_aggregated()
+                && commit_proof.commit_info().id() == block_id
+            {
+                info!("Applying pending commit proof for round {} block {}", round, block_id);
+                new_item = new_item.try_advance_to_aggregated_with_ledger_info(commit_proof);
+            }
+        }
         let aggregated = new_item.is_aggregated();
         self.buffer.set(&current_cursor, new_item);
         if aggregated {
@@ -684,6 +831,8 @@ impl BufferManager {
                         }
                         return Some(target_block_id);
                     }
+                } else if self.try_add_pending_commit_proof(commit_proof.ledger_info().clone()) {
+                    // Cached for later use when the block arrives
                 }
                 reply_nack(protocol, response_sender); // TODO: send_commit_proof() doesn't care
                                                        // about the response and this should be

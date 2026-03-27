@@ -486,7 +486,7 @@ mod tests {
         {
             rand_store.add_share(share, PathType::Slow).unwrap();
         }
-        assert!(decision_rx.try_next().is_err());
+        assert!(decision_rx.try_recv().is_err());
         for metadata in blocks_1.all_rand_metadata() {
             rand_store.add_rand_metadata(metadata);
         }
@@ -496,7 +496,7 @@ mod tests {
         for metadata in blocks_2.all_rand_metadata() {
             rand_store.add_rand_metadata(metadata);
         }
-        assert!(decision_rx.try_next().is_err());
+        assert!(decision_rx.try_recv().is_err());
 
         for share in ctxt.authors[1..6]
             .iter()
