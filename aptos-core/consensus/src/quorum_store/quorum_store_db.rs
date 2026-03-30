@@ -106,8 +106,11 @@ impl QuorumStoreStorage for QuorumStoreDB {
             iter.map(|res| res.map_err(Into::into)).collect::<Result<HashMap<u64, BatchId>>>()?;
         let mut ret = None;
         for (epoch, batch_id) in epoch_batch_id {
-            assert!(current_epoch >= epoch);
-            if epoch < current_epoch {
+            if epoch != current_epoch {
+                // Delete batch IDs from other epochs
+                if current_epoch < epoch {
+                    warn!("Current epoch({}) is less than epoch({}) in quorum db, maybe cross-epoch unwind", current_epoch, epoch);
+                }
                 self.delete_batch_id(epoch)?;
             } else {
                 ret = Some(batch_id);
