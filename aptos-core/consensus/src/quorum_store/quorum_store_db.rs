@@ -29,6 +29,8 @@ pub trait QuorumStoreStorage: Sync + Send {
 
     fn clean_and_get_batch_id(&self, current_epoch: u64) -> Result<Option<BatchId>, DbError>;
 
+    fn get_all_batch_id_epochs(&self) -> Result<Vec<u64>, DbError>;
+
     fn save_batch_id(&self, epoch: u64, batch_id: BatchId) -> Result<(), DbError>;
 }
 
@@ -40,7 +42,7 @@ pub struct QuorumStoreDB {
 }
 
 impl QuorumStoreDB {
-    pub(crate) fn new<P: AsRef<Path> + Clone>(db_root_path: P) -> Self {
+    pub fn new<P: AsRef<Path> + Clone>(db_root_path: P) -> Self {
         let column_families = vec![BATCH_CF_NAME, BATCH_ID_CF_NAME];
 
         // TODO: this fails twins tests because it assumes a unique path per process
@@ -59,13 +61,13 @@ impl QuorumStoreDB {
 }
 
 impl QuorumStoreStorage for QuorumStoreDB {
-    fn delete_batches(&self, _keys: Vec<BatchKey>) -> Result<(), DbError> {
-        // let mut batch = SchemaBatch::new();
-        // for k in keys.iter() {
-        //     trace!("QS: db delete digest {:?}", k);
-        //     batch.delete::<BatchSchema>(k)?;
-        // }
-        // self.db.write_schemas(batch)?;
+    fn delete_batches(&self, keys: Vec<BatchKey>) -> Result<(), DbError> {
+        let mut batch = SchemaBatch::new();
+        for k in keys.iter() {
+            trace!("QS: db delete digest {:?}", k);
+            batch.delete::<BatchSchema>(k)?;
+        }
+        self.db.write_schemas(batch)?;
         Ok(())
     }
 
@@ -106,17 +108,21 @@ impl QuorumStoreStorage for QuorumStoreDB {
             iter.map(|res| res.map_err(Into::into)).collect::<Result<HashMap<u64, BatchId>>>()?;
         let mut ret = None;
         for (epoch, batch_id) in epoch_batch_id {
-            if epoch != current_epoch {
-                // Delete batch IDs from other epochs
-                if current_epoch < epoch {
-                    warn!("Current epoch({}) is less than epoch({}) in quorum db, maybe cross-epoch unwind", current_epoch, epoch);
-                }
+            assert!(current_epoch >= epoch, "current_epoch {} < epoch {}", current_epoch, epoch);
+            if epoch < current_epoch {
                 self.delete_batch_id(epoch)?;
             } else {
                 ret = Some(batch_id);
             }
         }
         Ok(ret)
+    }
+
+    fn get_all_batch_id_epochs(&self) -> Result<Vec<u64>, DbError> {
+        let mut iter = self.db.iter::<BatchIdSchema>()?;
+        iter.seek_to_first();
+        iter.map(|res| res.map(|(epoch, _)| epoch).map_err(Into::into))
+            .collect()
     }
 
     fn save_batch_id(&self, epoch: u64, batch_id: BatchId) -> Result<(), DbError> {
@@ -167,6 +173,10 @@ pub mod mock {
 
         fn clean_and_get_batch_id(&self, _: u64) -> Result<Option<BatchId>, DbError> {
             Ok(Some(BatchId::new_for_test(0)))
+        }
+
+        fn get_all_batch_id_epochs(&self) -> Result<Vec<u64>, DbError> {
+            Ok(Vec::new())
         }
 
         fn save_batch_id(&self, _: u64, _: BatchId) -> Result<(), DbError> {

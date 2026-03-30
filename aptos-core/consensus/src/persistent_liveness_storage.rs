@@ -227,7 +227,6 @@ impl RecoveryData {
         blocks: &mut Vec<Block>,
         quorum_certs: &mut Vec<QuorumCert>,
         order_vote_enabled: bool,
-        storage_ledger: &LedgerInfoWithSignatures,
     ) -> Result<RootInfo> {
         // sort by (epoch, round) to guarantee the topological order of parent <- child
         blocks.sort_by_key(|b| (b.epoch(), b.round()));
@@ -255,35 +254,16 @@ impl RecoveryData {
                 WrappedLedgerInfo::new(VoteData::dummy(), root_quorum_cert.ledger_info().clone());
             (root_ordered_cert.clone(), root_ordered_cert)
         } else {
-            match quorum_certs
+            let root_ordered_cert = quorum_certs
                 .iter()
                 .find(|qc| qc.commit_info().id() == root_block.id())
-            {
-                Some(qc) => {
-                    let root_ordered_cert = qc.clone().into_wrapped_ledger_info();
-                    let root_commit_cert = root_ordered_cert
-                        .create_merged_with_executed_state(root_ordered_cert.ledger_info().clone())
-                        .expect(
-                            "Inconsistent commit proof and evaluation decision, cannot commit block",
-                        );
-                    (root_ordered_cert, root_commit_cert)
-                }
-                None => {
-                    // After an unwind, the committing QC (which certifies a block 2 rounds ahead)
-                    // may have been deleted. Fall back to using the storage_ledger from
-                    // LedgerInfoSchema, whose commit_info().id() correctly points to root block.
-                    warn!(
-                        "No committing QC found for root block {} (expected after unwind), \
-                         using storage_ledger fallback",
-                        root_block.id()
-                    );
-                    let root_ordered_cert = WrappedLedgerInfo::new(
-                        VoteData::dummy(),
-                        storage_ledger.clone(),
-                    );
-                    (root_ordered_cert.clone(), root_ordered_cert)
-                }
-            }
+                .ok_or_else(|| format_err!("No LI found for root: {}", root_block.id()))?
+                .clone()
+                .into_wrapped_ledger_info();
+            let root_commit_cert = root_ordered_cert
+                .create_merged_with_executed_state(root_ordered_cert.ledger_info().clone())
+                .expect("Inconsistent commit proof and evaluation decision, cannot commit block");
+            (root_ordered_cert, root_commit_cert)
         };
         info!("Consensus root block is {}", root_block);
         Ok(RootInfo(Box::new(root_block), root_quorum_cert, root_ordered_cert, root_commit_cert))
@@ -309,7 +289,6 @@ impl RecoveryData {
                 &mut blocks,
                 &mut quorum_certs,
                 order_vote_enabled,
-                &ledger_recovery_data.storage_ledger,
             )?;
         } else {
             root = ledger_recovery_data.find_root(
