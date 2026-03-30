@@ -226,6 +226,30 @@ fn main() {
     let _profiling_state =
         if std::env::var("ENABLE_PPROF").is_ok() { Some(setup_pprof_profiler()) } else { None };
     let cli = Cli::parse();
+
+    // For utility subcommands (stage, db, init, config, etc.), skip full node initialization
+    // and just run the CLI command directly.
+    if !cli.is_node_command() {
+        reth_cli_util::sigsegv_handler::install();
+        let res = cli.run(
+            |_builder: WithLaunchContext<
+                NodeBuilder<
+                    Arc<DatabaseEnv>,
+                    <EthereumChainSpecParser as ChainSpecParser>::ChainSpec,
+                >,
+            >,
+             _| {
+                async move { unreachable!("launcher should not be called for utility commands") }
+            },
+        );
+        if let Err(err) = res {
+            eprintln!("Error: {err:?}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    // Full node path: requires config, consensus, relayer, etc.
     let relayer_config_path = cli.gravity_node_config.relayer_config_path.clone();
     let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
 

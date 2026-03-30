@@ -4,6 +4,7 @@ pub mod dkg;
 pub mod genesis;
 pub mod node;
 pub mod stake;
+pub mod unwind;
 pub mod util;
 pub mod validator;
 
@@ -46,6 +47,8 @@ fn main() {
             // Example: gravity-cli dkg randomness --server-url="127.0.0.1:1024" --block-number=100
             dkg::SubCommands::Randomness(randomness_cmd) => randomness_cmd.execute(),
         },
+        // Example: gravity-cli unwind --consensus-db-path="./data/consensus_db" --target=19700
+        command::SubCommands::Unwind(unwind_cmd) => unwind_cmd.execute(),
     };
 
     if let Err(e) = result {

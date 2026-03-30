@@ -115,3 +115,91 @@ fn test_dag() {
     let vote = Vote::new(node.metadata().clone(), Signature::dummy_signature());
     test_dag_type::<DagVoteSchema, <DagVoteSchema as Schema>::Key>(node.id(), vote, &db);
 }
+
+#[test]
+fn test_unwind_to_block() {
+    use aptos_consensus_types::{
+        block::block_test_utils::placeholder_certificate_for_block,
+        common::Payload,
+    };
+
+    let tmp_dir = TempPath::new();
+    let db = ConsensusDB::new(&tmp_dir, &PathBuf::new());
+
+    let epoch = 1u64;
+    let genesis = Block::make_genesis_block();
+    let genesis_qc = certificate_for_genesis();
+
+    // Save genesis block and its block_number mapping
+    db.save_blocks_and_quorum_certificates(vec![genesis.clone()], vec![genesis_qc.clone()])
+        .unwrap();
+    db.save_block_numbers(vec![(epoch, 0, genesis.id())]).unwrap();
+
+    // Create 5 blocks (block_number 1..=5) in epoch 1
+    let signer = gaptos::aptos_types::validator_signer::ValidatorSigner::random(None);
+    let mut parent_qc = genesis_qc;
+    let mut blocks = Vec::new();
+    let mut qcs = Vec::new();
+    let mut block_numbers = Vec::new();
+
+    for i in 1..=5u64 {
+        let block = Block::new_proposal(
+            Payload::empty(false, true),
+            i,
+            gaptos::aptos_infallible::duration_since_epoch().as_micros() as u64,
+            parent_qc.clone(),
+            &signer,
+            Vec::new(),
+        )
+        .unwrap();
+        block.set_block_number(i);
+        block_numbers.push((epoch, i, block.id()));
+
+        let qc = placeholder_certificate_for_block(
+            &[signer.clone()],
+            block.id(),
+            i,
+            if i == 1 { genesis.id() } else { blocks.last().map(|b: &Block| b.id()).unwrap() },
+            i - 1,
+        );
+
+        blocks.push(block);
+        qcs.push(qc.clone());
+        parent_qc = qc;
+    }
+
+    db.save_blocks_and_quorum_certificates(blocks.clone(), qcs.clone()).unwrap();
+    db.save_block_numbers(block_numbers).unwrap();
+
+    // Save randomness for blocks 1..=5
+    let randomness: Vec<(u64, Vec<u8>)> = (1..=5).map(|i| (i, vec![i as u8; 32])).collect();
+    db.put_randomness(&randomness).unwrap();
+
+    // Save vote and timeout cert
+    db.save_vote(vec![1, 2, 3]).unwrap();
+    db.save_highest_2chain_timeout_certificate(vec![4, 5, 6]).unwrap();
+
+    // Verify initial state: genesis + 5 = 6 blocks
+    assert_eq!(db.get_all::<BlockSchema>().unwrap().len(), 6);
+    assert_eq!(db.get_all::<QCSchema>().unwrap().len(), 6);
+
+    // === Unwind to block 3 ===
+    db.unwind_to_block(3).unwrap();
+
+    // Blocks: genesis + 1,2,3 = 4 remaining
+    assert_eq!(db.get_all::<BlockSchema>().unwrap().len(), 4);
+    assert_eq!(db.get_all::<QCSchema>().unwrap().len(), 4);
+
+    // BlockNumbers: 0,1,2,3 remaining; 4,5 deleted
+    let bns: Vec<u64> = db.get_all::<BlockNumberSchema>().unwrap().into_iter().map(|(_, v)| v).collect();
+    for i in 0..=3 { assert!(bns.contains(&i), "block_number {} should remain", i); }
+    for i in 4..=5 { assert!(!bns.contains(&i), "block_number {} should be deleted", i); }
+
+    // Randomness: 1,2,3 remain; 4,5 deleted
+    for i in 1..=3 { assert!(db.get_randomness(i).unwrap().is_some()); }
+    for i in 4..=5 { assert!(db.get_randomness(i).unwrap().is_none()); }
+
+    // Vote and timeout cert cleared
+    assert!(db.get_last_vote().unwrap().is_none());
+    assert!(db.get_highest_2chain_timeout_certificate().unwrap().is_none());
+}

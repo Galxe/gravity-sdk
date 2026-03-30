@@ -415,6 +415,97 @@ impl ConsensusDB {
     pub fn get_randomness(&self, block_number: u64) -> Result<Option<Vec<u8>>, DbError> {
         Ok(self.get::<schema::randomness::RandomnessSchema>(&block_number)?)
     }
+
+    /// Unwind the consensus DB to the given target block number.
+    /// All data for blocks with block_number > target_block_number will be deleted.
+    /// This includes: blocks, QCs, block numbers, ledger info, epoch-by-block-number,
+    /// randomness, last vote, and highest 2-chain timeout certificate.
+    pub fn unwind_to_block(&self, target_block_number: u64) -> Result<(), DbError> {
+        info!(
+            "ConsensusDB::unwind_to_block: unwinding to block {}",
+            target_block_number
+        );
+
+        let mut batch = SchemaBatch::new();
+        let mut deleted_blocks = 0u64;
+
+        // Step 1: Delete (epoch, block_id)-keyed CFs (Block, QC, BlockNumber).
+        // Iterate epochs from max_epoch downward. Within each epoch, scan BlockNumberSchema
+        // to find entries with block_number > target. Stop when an entire epoch has
+        // all block_numbers <= target (no more to delete in earlier epochs).
+        let max_epoch = self.get_max_epoch();
+        for epoch in (1..=max_epoch).rev() {
+            let start_key = (epoch, HashValue::zero());
+            let end_key = (epoch, HashValue::new([u8::MAX; HashValue::LENGTH]));
+
+            let entries = self.get_range_with_filter::<BlockNumberSchema, _>(
+                &start_key,
+                &end_key,
+                |(_, block_number)| *block_number > target_block_number,
+            )?;
+
+            if entries.is_empty() {
+                // All blocks in this epoch are <= target, no need to check earlier epochs.
+                break;
+            }
+
+            for ((ep, block_id), _) in &entries {
+                batch.delete::<BlockSchema>(&(*ep, *block_id))?;
+                batch.delete::<QCSchema>(&(*ep, *block_id))?;
+                batch.delete::<BlockNumberSchema>(&(*ep, *block_id))?;
+                deleted_blocks += 1;
+            }
+        }
+
+        // Step 2: Delete block_number-keyed CFs by range query (target+1, u64::MAX).
+        let range_start = target_block_number.saturating_add(1);
+
+        // LedgerInfoSchema
+        let ledger_entries = self.get_range::<LedgerInfoSchema>(&range_start, &u64::MAX)?;
+        for (bn, _) in &ledger_entries {
+            batch.delete::<LedgerInfoSchema>(bn)?;
+        }
+
+        // EpochByBlockNumberSchema
+        let epoch_entries =
+            self.get_range::<EpochByBlockNumberSchema>(&range_start, &u64::MAX)?;
+        for (bn, _) in &epoch_entries {
+            batch.delete::<EpochByBlockNumberSchema>(bn)?;
+        }
+
+        // RandomnessSchema
+        let randomness_entries =
+            self.get_range::<schema::randomness::RandomnessSchema>(&range_start, &u64::MAX)?;
+        for (bn, _) in &randomness_entries {
+            batch.delete::<schema::randomness::RandomnessSchema>(bn)?;
+        }
+
+        // Step 3: Clear stale vote and timeout certificate.
+        batch.delete::<schema::single_entry::SingleEntrySchema>(
+            &schema::single_entry::SingleEntryKey::LastVote,
+        )?;
+        batch.delete::<schema::single_entry::SingleEntrySchema>(
+            &schema::single_entry::SingleEntryKey::Highest2ChainTimeoutCert,
+        )?;
+
+        // Step 4: Commit all deletions atomically.
+        self.commit(batch)?;
+
+        // Step 5: Update the in-memory latest_ledger_info cache.
+        self.ledger_db.metadata_db().update_latest_ledger_info();
+
+        info!(
+            "ConsensusDB::unwind_to_block complete: deleted {} blocks, \
+             {} ledger_infos, {} epoch_entries, {} randomness entries. Target: {}",
+            deleted_blocks,
+            ledger_entries.len(),
+            epoch_entries.len(),
+            randomness_entries.len(),
+            target_block_number
+        );
+
+        Ok(())
+    }
 }
 
 include!("include/reader.rs");
