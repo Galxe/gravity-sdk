@@ -123,7 +123,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                         epoch,
                     )
                     .await
-                    .unwrap_or_else(|e| panic!("Failed to push commit blocks {}", e));
+                    .expect("Failed to set commit blocks in BlockBufferManager");
                 for notifier in persist_notifiers.iter_mut() {
                     if notifier.recv().await.is_none() {
                         warn!("persist_notifier channel closed in commit_blocks");
@@ -186,7 +186,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                     epoch,
                 )
                 .await
-                .unwrap();
+                .expect("Failed to set commit blocks in BlockBufferManager");
             for notifier in persist_notifiers.iter_mut() {
                 if notifier.recv().await.is_none() {
                     warn!("persist_notifier channel closed in commit_ledger");

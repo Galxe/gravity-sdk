@@ -45,7 +45,7 @@ echo "Duration: ${DURATION}s"
 echo "Bench Config: ${BENCH_CONFIG_PATH}"
 echo "============================"
 
-# 构建 clone URL
+# Build clone URL
 if [ -n "${GITHUB_TOKEN}" ]; then
     CLONE_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git"
 else
@@ -58,6 +58,8 @@ docker run --rm -i \
     -p 8545:8545 \
     -e GIT_REF="${GIT_REF}" \
     -e CLONE_URL="${CLONE_URL}" \
+    -e REPO="${REPO}" \
+    -e GITHUB_TOKEN="${GITHUB_TOKEN:-}" \
     -e DURATION="${DURATION}" \
     -v "${BENCH_CONFIG_PATH}:/bench_config.toml:ro" \
     rust:1.88.0-bookworm \
@@ -143,24 +145,42 @@ echo "  - Test contracts compiled."
 cd /app
 
 echo "[2.6/7] Creating cluster configuration..."
-# Use the cluster.toml from gravity_e2e/cluster_test_cases/single_node
-cp /app/gravity_e2e/cluster_test_cases/single_node/cluster.toml /app/single_node.toml
+cat > /app/single_node.toml << CLUSTER_EOF
+[cluster]
+name = "gravity-devnet-single"
+base_dir = "/tmp/gravity-cluster-single"
 
-# Fix binary_path for Docker environment
-sed -i "s|binary_path = \"../target/quick-release/gravity_node\"|binary_path = \"/app/target/quick-release/gravity_node\"|" /app/single_node.toml
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
 
-echo "  - Cluster configuration created."
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { github = "${REPO}", rev = "${GIT_REF}" }
+host = "127.0.0.1"
+p2p_port = 6182
+vfn_port = 6192
+rpc_port = 8545
+metrics_port = 9003
+inspection_port = 10002
+https_port = 1024
+authrpc_port = 8553
+reth_p2p_port = 12026
+
+[faucet_init]
+num_accounts = 10000
+CLUSTER_EOF
+
+echo "  - Cluster configuration created (github: ${REPO} @ ${GIT_REF})"
 
 echo ""
 echo "===== Phase 2 Complete: Preparation Passed ====="
 echo ""
 
-echo "===== Phase 3: Building Binaries (Long) ====="
+echo "===== Phase 3: Building Binaries ====="
 
-echo "[3/7] Building binaries..."
-echo "  Building gravity_node..."
-RUSTFLAGS="--cfg tokio_unstable" cargo build --bin gravity_node --profile quick-release
-echo "  Building gravity_cli..."
+echo "[3/7] Building gravity_cli..."
 RUSTFLAGS="--cfg tokio_unstable" cargo build --bin gravity_cli --profile quick-release
 
 echo "[4/7] Initializing Cluster..."
@@ -179,7 +199,7 @@ echo "Genesis injected with faucet account."
 echo ""
 echo "===== Phase 4: Deployment ====="
 
-echo "[5/7] Deploying Cluster..."
+echo "[5/7] Deploying Cluster (will clone + build gravity_node from GitHub)..."
 bash cluster/deploy.sh /app/single_node.toml
 
 echo "[6/7] Starting Cluster..."
