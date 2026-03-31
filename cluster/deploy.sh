@@ -450,7 +450,8 @@ main() {
     
     node_count=$(echo "$config_json" | jq '.nodes | length')
     log_info "Scanning node sources..."
-    local -A seen_sources  # associative array for dedup
+    local seen_keys=()
+    local seen_vals=()
     for i in $(seq 0 $((node_count - 1))); do
         local src_github src_rev node_id
         node_id=$(echo "$config_json" | jq -r ".nodes[$i].id")
@@ -458,22 +459,31 @@ main() {
         src_rev=$(echo "$config_json" | jq -r ".nodes[$i].source.rev // empty")
         if [ -n "$src_github" ] && [ -n "$src_rev" ]; then
             local key="${src_github}@${src_rev}"
-            if [ -z "${seen_sources[$key]+_}" ]; then
-                seen_sources[$key]="$node_id"
+            local found=0
+            for idx in "${!seen_keys[@]}"; do
+                if [ "${seen_keys[$idx]}" == "$key" ]; then
+                    seen_vals[$idx]="${seen_vals[$idx]}, $node_id"
+                    log_info "  Source: $key (shared, also used by $node_id)"
+                    found=1
+                    break
+                fi
+            done
+            if [ $found -eq 0 ]; then
+                seen_keys+=("$key")
+                seen_vals+=("$node_id")
                 log_info "  Source: $key (first seen in $node_id)"
-            else
-                seen_sources[$key]="${seen_sources[$key]}, $node_id"
-                log_info "  Source: $key (shared, also used by $node_id)"
             fi
         fi
     done
 
     # Pre-build unique github sources
-    if [ ${#seen_sources[@]} -gt 0 ]; then
-        log_info "Pre-building ${#seen_sources[@]} unique github source(s)..."
-        for key in "${!seen_sources[@]}"; do
+    if [ ${#seen_keys[@]} -gt 0 ]; then
+        log_info "Pre-building ${#seen_keys[@]} unique github source(s)..."
+        for idx in "${!seen_keys[@]}"; do
+            local key="${seen_keys[$idx]}"
+            local val="${seen_vals[$idx]}"
             local src='{"github":"'"${key%%@*}"'","rev":"'"${key#*@}"'"}'
-            log_info "  Building $key (used by: ${seen_sources[$key]})..."
+            log_info "  Building $key (used by: $val)..."
             resolve_source "$src" "$artifacts_dir" "$key" > /dev/null
         done
         log_info "All github sources pre-built."

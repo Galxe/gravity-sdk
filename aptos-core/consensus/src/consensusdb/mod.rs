@@ -420,11 +420,11 @@ impl ConsensusDB {
     /// All data for blocks with block_number > target_block_number will be deleted.
     /// This includes: blocks, QCs, block numbers, ledger info, epoch-by-block-number,
     /// randomness, last vote, and highest 2-chain timeout certificate.
-    pub fn unwind_to_block(&self, target_block_number: u64) -> Result<(Vec<crate::quorum_store::types::BatchKey>, Vec<u64>), DbError> {
-        info!(
-            "ConsensusDB::unwind_to_block: unwinding to block {}",
-            target_block_number
-        );
+    pub fn unwind_to_block(
+        &self,
+        target_block_number: u64,
+    ) -> Result<(Vec<crate::quorum_store::types::BatchKey>, Vec<u64>), DbError> {
+        info!("ConsensusDB::unwind_to_block: unwinding to block {}", target_block_number);
 
         let mut batch = SchemaBatch::new();
         let mut deleted_blocks = 0u64;
@@ -460,34 +460,68 @@ impl ConsensusDB {
 
                 if !keep {
                     all_blocks_kept = false;
-                    
+
                     if let Some(payload) = block.payload() {
                         use aptos_consensus_types::common::Payload;
                         match payload {
                             Payload::InQuorumStore(proof_with_data) => {
                                 for proof in &proof_with_data.proofs {
-                                    batches_to_delete.push(crate::quorum_store::types::BatchKey::new(proof.info().epoch(), *proof.info().digest()));
+                                    batches_to_delete.push(
+                                        crate::quorum_store::types::BatchKey::new(
+                                            proof.info().epoch(),
+                                            *proof.info().digest(),
+                                        ),
+                                    );
                                 }
                             }
                             Payload::InQuorumStoreWithLimit(proof_with_limit) => {
                                 for proof in &proof_with_limit.proof_with_data.proofs {
-                                    batches_to_delete.push(crate::quorum_store::types::BatchKey::new(proof.info().epoch(), *proof.info().digest()));
+                                    batches_to_delete.push(
+                                        crate::quorum_store::types::BatchKey::new(
+                                            proof.info().epoch(),
+                                            *proof.info().digest(),
+                                        ),
+                                    );
                                 }
                             }
-                            Payload::QuorumStoreInlineHybrid(inline_batches, proof_with_data, _) => {
+                            Payload::QuorumStoreInlineHybrid(
+                                inline_batches,
+                                proof_with_data,
+                                _,
+                            ) => {
                                 for (batch_info, _) in inline_batches {
-                                    batches_to_delete.push(crate::quorum_store::types::BatchKey::new(batch_info.epoch(), *batch_info.digest()));
+                                    batches_to_delete.push(
+                                        crate::quorum_store::types::BatchKey::new(
+                                            batch_info.epoch(),
+                                            *batch_info.digest(),
+                                        ),
+                                    );
                                 }
                                 for proof in &proof_with_data.proofs {
-                                    batches_to_delete.push(crate::quorum_store::types::BatchKey::new(proof.info().epoch(), *proof.info().digest()));
+                                    batches_to_delete.push(
+                                        crate::quorum_store::types::BatchKey::new(
+                                            proof.info().epoch(),
+                                            *proof.info().digest(),
+                                        ),
+                                    );
                                 }
                             }
                             Payload::OptQuorumStore(opt_qs_payload) => {
                                 for batch_info in &opt_qs_payload.opt_batches().batch_summary {
-                                    batches_to_delete.push(crate::quorum_store::types::BatchKey::new(batch_info.epoch(), *batch_info.digest()));
+                                    batches_to_delete.push(
+                                        crate::quorum_store::types::BatchKey::new(
+                                            batch_info.epoch(),
+                                            *batch_info.digest(),
+                                        ),
+                                    );
                                 }
                                 for proof in &opt_qs_payload.proof_with_data().batch_summary {
-                                    batches_to_delete.push(crate::quorum_store::types::BatchKey::new(proof.info().epoch(), *proof.info().digest()));
+                                    batches_to_delete.push(
+                                        crate::quorum_store::types::BatchKey::new(
+                                            proof.info().epoch(),
+                                            *proof.info().digest(),
+                                        ),
+                                    );
                                 }
                             }
                             Payload::DirectMempool(_) => {}
@@ -517,8 +551,7 @@ impl ConsensusDB {
         }
 
         // EpochByBlockNumberSchema
-        let epoch_entries =
-            self.get_range::<EpochByBlockNumberSchema>(&range_start, &u64::MAX)?;
+        let epoch_entries = self.get_range::<EpochByBlockNumberSchema>(&range_start, &u64::MAX)?;
         for (bn, _) in &epoch_entries {
             batch.delete::<EpochByBlockNumberSchema>(bn)?;
         }

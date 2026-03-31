@@ -22,10 +22,7 @@ pub struct UnwindCommand {
 
 impl super::command::Executable for UnwindCommand {
     fn execute(self) -> Result<(), anyhow::Error> {
-        println!(
-            "Unwinding consensus DB to block {}...",
-            self.target
-        );
+        println!("Unwinding consensus DB to block {}...", self.target);
         println!("Consensus DB path: {:?}", self.consensus_db_path);
 
         if !self.consensus_db_path.exists() {
@@ -38,21 +35,20 @@ impl super::command::Executable for UnwindCommand {
         // Open ConsensusDB. The second argument is the node config path,
         // which is not needed for unwind operations.
         let consensus_db = ConsensusDB::new(&self.consensus_db_path, &PathBuf::new());
-        let quorum_store_db = aptos_consensus::quorum_store::quorum_store_db::QuorumStoreDB::new(&self.consensus_db_path);
+        let quorum_store_db = aptos_consensus::quorum_store::quorum_store_db::QuorumStoreDB::new(
+            &self.consensus_db_path,
+        );
 
         // Perform the unwind
         let (batches_to_delete, cancelled_epochs) = consensus_db
             .unwind_to_block(self.target)
             .map_err(|e| anyhow::anyhow!("Failed to unwind consensus DB: {:?}", e))?;
 
-        println!(
-            "Successfully unwound consensus DB to block {}.",
-            self.target
-        );
+        println!("Successfully unwound consensus DB to block {}.", self.target);
 
         let max_retained_epoch = consensus_db.get_max_epoch();
         let mut all_cancelled_epochs = cancelled_epochs;
-        
+
         use aptos_consensus::quorum_store::quorum_store_db::QuorumStoreStorage;
         if let Ok(qs_epochs) = quorum_store_db.get_all_batch_id_epochs() {
             for ep in qs_epochs {
@@ -63,20 +59,24 @@ impl super::command::Executable for UnwindCommand {
         }
 
         if !batches_to_delete.is_empty() || !all_cancelled_epochs.is_empty() {
-            println!("Deleting {} unused QuorumStore batches and {} cancelled epochs...", batches_to_delete.len(), all_cancelled_epochs.len());
-            
+            println!(
+                "Deleting {} unused QuorumStore batches and {} cancelled epochs...",
+                batches_to_delete.len(),
+                all_cancelled_epochs.len()
+            );
+
             if !batches_to_delete.is_empty() {
-                quorum_store_db
-                    .delete_batches(batches_to_delete)
-                    .map_err(|e| anyhow::anyhow!("Failed to clean up QuorumStore batches: {:?}", e))?;
+                quorum_store_db.delete_batches(batches_to_delete).map_err(|e| {
+                    anyhow::anyhow!("Failed to clean up QuorumStore batches: {:?}", e)
+                })?;
             }
-            
+
             for epoch in all_cancelled_epochs {
-                quorum_store_db
-                    .delete_batch_id(epoch)
-                    .map_err(|e| anyhow::anyhow!("Failed to clean up QuorumStore epoch {}: {:?}", epoch, e))?;
+                quorum_store_db.delete_batch_id(epoch).map_err(|e| {
+                    anyhow::anyhow!("Failed to clean up QuorumStore epoch {}: {:?}", epoch, e)
+                })?;
             }
-            
+
             println!("Successfully cleaned up QuorumStore DB.");
         }
 

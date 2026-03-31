@@ -119,8 +119,7 @@ fn test_dag() {
 #[test]
 fn test_unwind_to_block() {
     use aptos_consensus_types::{
-        block::block_test_utils::placeholder_certificate_for_block,
-        common::Payload,
+        block::block_test_utils::placeholder_certificate_for_block, common::Payload,
     };
 
     let tmp_dir = TempPath::new();
@@ -191,13 +190,22 @@ fn test_unwind_to_block() {
     assert_eq!(db.get_all::<QCSchema>().unwrap().len(), 4);
 
     // BlockNumbers: 0,1,2,3 remaining; 4,5 deleted
-    let bns: Vec<u64> = db.get_all::<BlockNumberSchema>().unwrap().into_iter().map(|(_, v)| v).collect();
-    for i in 0..=3 { assert!(bns.contains(&i), "block_number {} should remain", i); }
-    for i in 4..=5 { assert!(!bns.contains(&i), "block_number {} should be deleted", i); }
+    let bns: Vec<u64> =
+        db.get_all::<BlockNumberSchema>().unwrap().into_iter().map(|(_, v)| v).collect();
+    for i in 0..=3 {
+        assert!(bns.contains(&i), "block_number {} should remain", i);
+    }
+    for i in 4..=5 {
+        assert!(!bns.contains(&i), "block_number {} should be deleted", i);
+    }
 
     // Randomness: 1,2,3 remain; 4,5 deleted
-    for i in 1..=3 { assert!(db.get_randomness(i).unwrap().is_some()); }
-    for i in 4..=5 { assert!(db.get_randomness(i).unwrap().is_none()); }
+    for i in 1..=3 {
+        assert!(db.get_randomness(i).unwrap().is_some());
+    }
+    for i in 4..=5 {
+        assert!(db.get_randomness(i).unwrap().is_none());
+    }
 
     // Vote and timeout cert cleared
     assert!(db.get_last_vote().unwrap().is_none());

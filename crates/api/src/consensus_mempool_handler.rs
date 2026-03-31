@@ -98,12 +98,13 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
             }
             ConsensusNotification::SyncToTarget(sync_notification) => {
                 let target_block = sync_notification.get_target().ledger_info().block_number();
-                match self.event_subscription_service
+                match self
+                    .event_subscription_service
                     .lock()
                     .await
                     .notify_initial_configs(target_block)
                 {
-                    Ok(_) => {},
+                    Ok(_) => {}
                     Err(e) => {
                         warn!(
                             "Failed to notify initial configs for block {}: {:?}. \

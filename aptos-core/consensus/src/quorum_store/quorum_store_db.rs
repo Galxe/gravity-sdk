@@ -121,8 +121,7 @@ impl QuorumStoreStorage for QuorumStoreDB {
     fn get_all_batch_id_epochs(&self) -> Result<Vec<u64>, DbError> {
         let mut iter = self.db.iter::<BatchIdSchema>()?;
         iter.seek_to_first();
-        iter.map(|res| res.map(|(epoch, _)| epoch).map_err(Into::into))
-            .collect()
+        iter.map(|res| res.map(|(epoch, _)| epoch).map_err(Into::into)).collect()
     }
 
     fn save_batch_id(&self, epoch: u64, batch_id: BatchId) -> Result<(), DbError> {
