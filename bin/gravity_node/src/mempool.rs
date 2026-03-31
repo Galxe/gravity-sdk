@@ -208,7 +208,10 @@ impl TxPool for Mempool {
                         return None;
                     }
                 }
-                let verified_txn = to_verified_txn_from_reth_txn(txn.transaction.transaction().clone(), self.chain_id);
+                let verified_txn = to_verified_txn_from_reth_txn(
+                    txn.transaction.transaction().clone(),
+                    self.chain_id,
+                );
                 Some(verified_txn)
             })
             .collect::<Vec<_>>();
