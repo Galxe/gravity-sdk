@@ -42,7 +42,7 @@ impl super::command::Executable for UnwindCommand {
         // Perform the unwind
         let (batches_to_delete, cancelled_epochs) = consensus_db
             .unwind_to_block(self.target)
-            .map_err(|e| anyhow::anyhow!("Failed to unwind consensus DB: {:?}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to unwind consensus DB: {e:?}"))?;
 
         println!("Successfully unwound consensus DB to block {}.", self.target);
 
@@ -67,13 +67,13 @@ impl super::command::Executable for UnwindCommand {
 
             if !batches_to_delete.is_empty() {
                 quorum_store_db.delete_batches(batches_to_delete).map_err(|e| {
-                    anyhow::anyhow!("Failed to clean up QuorumStore batches: {:?}", e)
+                    anyhow::anyhow!("Failed to clean up QuorumStore batches: {e:?}")
                 })?;
             }
 
             for epoch in all_cancelled_epochs {
                 quorum_store_db.delete_batch_id(epoch).map_err(|e| {
-                    anyhow::anyhow!("Failed to clean up QuorumStore epoch {}: {:?}", epoch, e)
+                    anyhow::anyhow!("Failed to clean up QuorumStore epoch {epoch}: {e:?}")
                 })?;
             }
 
@@ -88,13 +88,13 @@ impl super::command::Executable for UnwindCommand {
 
         let secure_json_path = data_dir.join("secure.json");
         if secure_json_path.exists() {
-            println!("Deleting secure.json at {:?}", secure_json_path);
+            println!("Deleting secure.json at {secure_json_path:?}");
             let _ = std::fs::remove_file(secure_json_path);
         }
 
         let rand_db_path = data_dir.join("rand_db");
         if rand_db_path.exists() {
-            println!("Deleting rand_db at {:?}", rand_db_path);
+            println!("Deleting rand_db at {rand_db_path:?}");
             let _ = std::fs::remove_dir_all(rand_db_path);
         }
 
