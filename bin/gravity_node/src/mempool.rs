@@ -196,7 +196,7 @@ impl TxPool for Mempool {
         if !self.enable_broadcast {
             return Box::new(std::iter::empty());
         }
-        let all_txns = self.pool.all_transactions();
+        let all_txns = self.pool.pending_transactions();
         let iter = all_txns
             .all()
             .filter_map(move |txn| {
