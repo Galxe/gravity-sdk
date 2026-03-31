@@ -140,7 +140,7 @@ impl AptosDBBackend {
         }
 
         if result.is_empty() {
-            warn!("No events in the requested window could be found");
+            error!("[leader reputation] No events in the requested window could be found, leader election may degrade");
             (result, HashValue::zero())
         } else {
             let root_hash = self
@@ -170,8 +170,8 @@ impl MetadataBackend for AptosDBBackend {
         // lazy init db_result
         if locked.is_none() {
             if let Err(e) = self.refresh_db_result(&mut locked, latest_db_version) {
-                warn!(
-                    error = ?e, "[leader reputation] Fail to initialize db result",
+                error!(
+                    error = ?e, "[leader reputation] Fail to initialize db result, leader election may degrade",
                 );
                 return (vec![], HashValue::zero());
             }
@@ -195,8 +195,8 @@ impl MetadataBackend for AptosDBBackend {
                 }
                 Err(e) => {
                     // fails if requested events were pruned / or we never backfil them.
-                    warn!(
-                        error = ?e, "[leader reputation] Fail to refresh window",
+                    error!(
+                        error = ?e, "[leader reputation] Fail to refresh window, leader election may degrade",
                     );
                     (vec![], HashValue::zero())
                 }
@@ -353,8 +353,8 @@ impl NewBlockEventAggregation {
                 ) {
                     Ok(voters) => {
                         for &voter in voters {
-                            let count = map.entry(voter).or_insert(0);
-                            *count += 1;
+                            let count = map.entry(voter).or_insert(0u32);
+                            *count = count.saturating_add(1);
                         }
                     }
                     Err(msg) => {
@@ -393,8 +393,8 @@ impl NewBlockEventAggregation {
         Self::history_iter(history, epoch_to_candidates, window_size, from_stale_end).fold(
             HashMap::new(),
             |mut map, meta| {
-                let count = map.entry(meta.proposer()).or_insert(0);
-                *count += 1;
+                let count = map.entry(meta.proposer()).or_insert(0u32);
+                *count = count.saturating_add(1);
                 map
             },
         )
@@ -418,8 +418,8 @@ impl NewBlockEventAggregation {
             ) {
                 Ok(failed_proposers) => {
                     for &failed_proposer in failed_proposers {
-                        let count = map.entry(failed_proposer).or_insert(0);
-                        *count += 1;
+                        let count = map.entry(failed_proposer).or_insert(0u32);
+                        *count = count.saturating_add(1);
                     }
                 }
                 Err(msg) => {
@@ -515,8 +515,9 @@ impl ReputationHeuristic for ProposerAndVoterHeuristic {
                 let cur_proposals = *proposals.get(author).unwrap_or(&0);
                 let cur_failed_proposals = *failed_proposals.get(author).unwrap_or(&0);
 
-                if cur_failed_proposals * 100 >
-                    (cur_proposals + cur_failed_proposals) * self.failure_threshold_percent
+                if (cur_failed_proposals as u64) * 100 >
+                    (cur_proposals as u64 + cur_failed_proposals as u64) *
+                        self.failure_threshold_percent as u64
                 {
                     self.failed_weight
                 } else if cur_proposals > 0 || cur_votes > 0 {
