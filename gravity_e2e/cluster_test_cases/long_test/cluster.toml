@@ -5,8 +5,6 @@
 name = "gravity-devnet-long"
 base_dir = "/tmp/gravity-cluster-long"
 
-[build]
-binary_path = "../target/quick-release/gravity_node"
 
 [genesis_source]
 genesis_path = "./artifacts/genesis.json"
@@ -17,6 +15,7 @@ waypoint_path = "./artifacts/waypoint.txt"
 [[nodes]]
 id = "node1"
 role = "genesis"
+source = { project_path = "../" }
 host = "127.0.0.1"
 p2p_port = 6180
 vfn_port = 6190
@@ -30,6 +29,7 @@ reth_p2p_port = 12024
 [[nodes]]
 id = "node2"
 role = "genesis"
+source = { project_path = "../" }
 host = "127.0.0.1"
 p2p_port = 6181
 vfn_port = 6191
@@ -43,6 +43,7 @@ reth_p2p_port = 12025
 [[nodes]]
 id = "node3"
 role = "genesis"
+source = { project_path = "../" }
 host = "127.0.0.1"
 p2p_port = 6182
 vfn_port = 6192
@@ -56,6 +57,7 @@ reth_p2p_port = 12026
 [[nodes]]
 id = "node4"
 role = "genesis"
+source = { project_path = "../" }
 host = "127.0.0.1"
 p2p_port = 6183
 vfn_port = 6193
@@ -71,6 +73,7 @@ reth_p2p_port = 12027
 [[nodes]]
 id = "node5"
 role = "vfn"
+source = { project_path = "../" }
 host = "127.0.0.1"
 p2p_port = 6184
 vfn_port = 6194
