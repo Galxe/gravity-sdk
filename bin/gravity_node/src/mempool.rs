@@ -109,7 +109,7 @@ fn to_verified_txn(
     }
 }
 
-fn to_verified_txn_from_recovered_txn(
+fn to_verified_txn_from_reth_txn(
     pool_txn: Recovered<TransactionSigned>,
     chain_id: u64,
 ) -> VerifiedTxn {
@@ -198,17 +198,17 @@ impl TxPool for Mempool {
         }
         let all_txns = self.pool.pending_transactions();
         let iter = all_txns
-            .all()
+            .iter()
             .filter_map(move |txn| {
-                let sender = convert_account(txn.signer());
-                let nonce = txn.inner().nonce();
-                let hash = TxnHash::from_bytes(txn.inner().hash().as_slice());
+                let sender = convert_account(txn.sender());
+                let nonce = txn.nonce();
+                let hash = TxnHash::from_bytes(txn.hash().as_slice());
                 if let Some(filter) = &filter {
                     if !filter((sender, nonce, hash)) {
                         return None;
                     }
                 }
-                let verified_txn = to_verified_txn_from_recovered_txn(txn, self.chain_id);
+                let verified_txn = to_verified_txn_from_reth_txn(txn.transaction.transaction().clone(), self.chain_id);
                 Some(verified_txn)
             })
             .collect::<Vec<_>>();
