@@ -78,9 +78,19 @@ impl DbReader for ConsensusDB {
             self.get_range::<EpochByBlockNumberSchema>(&known_version, &u64::MAX)
                 .unwrap()
                 .into_iter()
-                .map(|(block_number, _)| {
+                .filter_map(|(block_number, _)| {
                     info!("get_state_proof block_number: {:?}", block_number);
-                    self.get::<LedgerInfoSchema>(&block_number).unwrap().unwrap()
+                    match self.get::<LedgerInfoSchema>(&block_number) {
+                        Ok(Some(li)) => Some(li),
+                        Ok(None) => {
+                            warn!("LedgerInfo not found for block_number {}, skipping", block_number);
+                            None
+                        }
+                        Err(e) => {
+                            warn!("Failed to get LedgerInfo for block_number {}: {:?}, skipping", block_number, e);
+                            None
+                        }
+                    }
                 }),
         );
         let ledger_info = self.get_latest_ledger_info()?;

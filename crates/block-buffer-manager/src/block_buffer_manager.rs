@@ -468,23 +468,28 @@ impl BlockBufferManager {
         }
         let block_num = block.block_meta.block_number;
         // Try to find parent in current epoch first, then try previous epoch
-        let parent_key_current =
-            BlockKey::new(block.block_meta.epoch, block.block_meta.block_number - 1);
-        let parent_key_prev_epoch = if block.block_meta.epoch > 0 {
-            Some(BlockKey::new(block.block_meta.epoch - 1, block.block_meta.block_number - 1))
-        } else {
-            None
-        };
-        let actual_parent = block_state_machine
-            .blocks
-            .get(&parent_key_current)
-            .or_else(|| parent_key_prev_epoch.and_then(|key| block_state_machine.blocks.get(&key)));
-        let actual_parent_id = match (block_num, actual_parent) {
-            (_, Some(state)) => state.get_block_id(),
-            (block_number, None) => {
-                info!("block number {} with no parent", block_number);
-                parent_id
+        // Guard against underflow when block_number == 0
+        let actual_parent_id = if let Some(parent_block_num) = block_num.checked_sub(1) {
+            let parent_key_current = BlockKey::new(block.block_meta.epoch, parent_block_num);
+            let parent_key_prev_epoch = if block.block_meta.epoch > 0 {
+                Some(BlockKey::new(block.block_meta.epoch - 1, parent_block_num))
+            } else {
+                None
+            };
+            let actual_parent = block_state_machine.blocks.get(&parent_key_current).or_else(|| {
+                parent_key_prev_epoch.and_then(|key| block_state_machine.blocks.get(&key))
+            });
+            match actual_parent {
+                Some(state) => state.get_block_id(),
+                None => {
+                    info!("block number {} with no parent", block_num);
+                    parent_id
+                }
             }
+        } else {
+            // block_number == 0, no parent to look up
+            info!("block number 0, using provided parent_id");
+            parent_id
         };
         let parent_id = if actual_parent_id == parent_id {
             parent_id

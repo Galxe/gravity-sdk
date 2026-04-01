@@ -299,8 +299,12 @@ impl PendingVotes {
                     }
 
                     // not enough votes
-                    Err(VerifyError::TooLittleVotingPower { .. }) => {
-                        panic!("Delayed QC aggregation should not be triggered if we don't have enough votes to form a QC");
+                    Err(VerifyError::TooLittleVotingPower { voting_power, .. }) => {
+                        error!(
+                            "Delayed QC aggregation triggered without enough votes (voting_power={}), likely a stale message",
+                            voting_power
+                        );
+                        VoteReceptionResult::ErrorAddingVote(VerifyError::EmptySignature)
                     }
 
                     // error

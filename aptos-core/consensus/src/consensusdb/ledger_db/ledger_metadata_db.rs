@@ -111,10 +111,7 @@ impl LedgerMetadataDb {
         Arc::clone(&self.db)
     }
     pub(crate) fn write_schemas(&self, batch: SchemaBatch) -> Result<()> {
-        match self.db.write_schemas(batch) {
-            Ok(()) => Ok(()),
-            Err(e) => panic!("{}", e),
-        }
+        self.db.write_schemas(batch)
     }
 }
 /// LedgerInfo APIs.

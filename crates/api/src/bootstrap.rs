@@ -277,8 +277,6 @@ pub async fn init_block_buffer_manager(consensus_db: &Arc<ConsensusDB>, latest_b
 
     let mut block_number_to_block_id = HashMap::new();
     for epoch_i in (1..=max_epoch).rev() {
-        // TODO(graivity_lightman): Fix this
-        // let mut has_large = false;
         let start_key = (epoch_i, HashValue::zero());
         let end_key = (epoch_i, HashValue::new([u8::MAX; HashValue::LENGTH]));
         consensus_db
@@ -292,7 +290,6 @@ pub async fn init_block_buffer_manager(consensus_db: &Arc<ConsensusDB>, latest_b
             .unwrap()
             .into_iter()
             .for_each(|((epoch, block_id), block_number)| {
-                // has_large = true;
                 if !block_number_to_block_id.contains_key(&block_number) {
                     block_number_to_block_id
                         .insert(block_number, (epoch, BlockId::from_bytes(block_id.as_slice())));
@@ -306,9 +303,10 @@ pub async fn init_block_buffer_manager(consensus_db: &Arc<ConsensusDB>, latest_b
                     }
                 }
             });
-        // if !has_large {
-        //     break;
-        // }
+        if block_number_to_block_id.len() >= (latest_block_number - start_block_number + 1) as usize
+        {
+            break;
+        }
     }
     info!("init_block_buffer_manager get_max_epoch {}", max_epoch);
 
