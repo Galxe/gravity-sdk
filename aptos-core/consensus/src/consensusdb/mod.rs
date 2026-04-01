@@ -415,6 +415,188 @@ impl ConsensusDB {
     pub fn get_randomness(&self, block_number: u64) -> Result<Option<Vec<u8>>, DbError> {
         Ok(self.get::<schema::randomness::RandomnessSchema>(&block_number)?)
     }
+
+    /// Unwind the consensus DB to the given target block number.
+    /// All data for blocks with block_number > target_block_number will be deleted.
+    /// This includes: blocks, QCs, block numbers, ledger info, epoch-by-block-number,
+    /// randomness, last vote, and highest 2-chain timeout certificate.
+    pub fn unwind_to_block(
+        &self,
+        target_block_number: u64,
+    ) -> Result<(Vec<crate::quorum_store::types::BatchKey>, Vec<u64>), DbError> {
+        info!("ConsensusDB::unwind_to_block: unwinding to block {}", target_block_number);
+
+        let mut batch = SchemaBatch::new();
+        let mut deleted_blocks = 0u64;
+        let mut batches_to_delete = Vec::new();
+
+        // Step 1: Delete (epoch, block_id)-keyed CFs (Block, QC, BlockNumber).
+        // Iterate epochs from max_epoch downward. Within each epoch, scan BlockNumberSchema
+        // to find entries with block_number > target. Stop when an entire epoch has
+        // all block_numbers <= target (no more to delete in earlier epochs).
+        let max_epoch = self.get_max_epoch();
+        for epoch in (1..=max_epoch).rev() {
+            let start_key = (epoch, HashValue::zero());
+            let end_key = (epoch, HashValue::new([u8::MAX; HashValue::LENGTH]));
+
+            let blocks = self.get_range::<BlockSchema>(&start_key, &end_key)?;
+            if blocks.is_empty() {
+                // Empty epoch, continue to check earlier epochs
+                continue;
+            }
+
+            let mut all_blocks_kept = true;
+
+            for ((ep, block_id), block) in &blocks {
+                let mut bn = block.block_number();
+                if bn.is_none() {
+                    bn = self.get::<BlockNumberSchema>(&(*ep, *block_id))?;
+                }
+
+                let keep = match bn {
+                    Some(num) => num <= target_block_number + 1,
+                    None => false, // blocks without a block number must be deleted
+                };
+
+                if !keep {
+                    all_blocks_kept = false;
+
+                    if let Some(payload) = block.payload() {
+                        use aptos_consensus_types::common::Payload;
+                        match payload {
+                            Payload::InQuorumStore(proof_with_data) => {
+                                for proof in &proof_with_data.proofs {
+                                    batches_to_delete.push(
+                                        crate::quorum_store::types::BatchKey::new(
+                                            proof.info().epoch(),
+                                            *proof.info().digest(),
+                                        ),
+                                    );
+                                }
+                            }
+                            Payload::InQuorumStoreWithLimit(proof_with_limit) => {
+                                for proof in &proof_with_limit.proof_with_data.proofs {
+                                    batches_to_delete.push(
+                                        crate::quorum_store::types::BatchKey::new(
+                                            proof.info().epoch(),
+                                            *proof.info().digest(),
+                                        ),
+                                    );
+                                }
+                            }
+                            Payload::QuorumStoreInlineHybrid(
+                                inline_batches,
+                                proof_with_data,
+                                _,
+                            ) => {
+                                for (batch_info, _) in inline_batches {
+                                    batches_to_delete.push(
+                                        crate::quorum_store::types::BatchKey::new(
+                                            batch_info.epoch(),
+                                            *batch_info.digest(),
+                                        ),
+                                    );
+                                }
+                                for proof in &proof_with_data.proofs {
+                                    batches_to_delete.push(
+                                        crate::quorum_store::types::BatchKey::new(
+                                            proof.info().epoch(),
+                                            *proof.info().digest(),
+                                        ),
+                                    );
+                                }
+                            }
+                            Payload::OptQuorumStore(opt_qs_payload) => {
+                                for batch_info in &opt_qs_payload.opt_batches().batch_summary {
+                                    batches_to_delete.push(
+                                        crate::quorum_store::types::BatchKey::new(
+                                            batch_info.epoch(),
+                                            *batch_info.digest(),
+                                        ),
+                                    );
+                                }
+                                for proof in &opt_qs_payload.proof_with_data().batch_summary {
+                                    batches_to_delete.push(
+                                        crate::quorum_store::types::BatchKey::new(
+                                            proof.info().epoch(),
+                                            *proof.info().digest(),
+                                        ),
+                                    );
+                                }
+                            }
+                            Payload::DirectMempool(_) => {}
+                        }
+                    }
+
+                    batch.delete::<BlockSchema>(&(*ep, *block_id))?;
+                    batch.delete::<QCSchema>(&(*ep, *block_id))?;
+                    batch.delete::<BlockNumberSchema>(&(*ep, *block_id))?;
+                    deleted_blocks += 1;
+                }
+            }
+
+            if all_blocks_kept {
+                // All blocks in this epoch are <= target, no need to check earlier epochs.
+                break;
+            }
+        }
+
+        // Step 2: Delete block_number-keyed CFs by range query (target+1, u64::MAX).
+        let range_start = target_block_number.saturating_add(1);
+
+        // LedgerInfoSchema
+        let ledger_entries = self.get_range::<LedgerInfoSchema>(&range_start, &u64::MAX)?;
+        for (bn, _) in &ledger_entries {
+            batch.delete::<LedgerInfoSchema>(bn)?;
+        }
+
+        // EpochByBlockNumberSchema
+        let epoch_entries = self.get_range::<EpochByBlockNumberSchema>(&range_start, &u64::MAX)?;
+        for (bn, _) in &epoch_entries {
+            batch.delete::<EpochByBlockNumberSchema>(bn)?;
+        }
+
+        // RandomnessSchema
+        let randomness_entries =
+            self.get_range::<schema::randomness::RandomnessSchema>(&range_start, &u64::MAX)?;
+        for (bn, _) in &randomness_entries {
+            batch.delete::<schema::randomness::RandomnessSchema>(bn)?;
+        }
+
+        // Step 3: Clear stale vote and timeout certificate.
+        batch.delete::<schema::single_entry::SingleEntrySchema>(
+            &schema::single_entry::SingleEntryKey::LastVote,
+        )?;
+        batch.delete::<schema::single_entry::SingleEntrySchema>(
+            &schema::single_entry::SingleEntryKey::Highest2ChainTimeoutCert,
+        )?;
+
+        // Step 4: Commit all deletions atomically.
+        self.commit(batch)?;
+
+        let mut cancelled_epochs = Vec::new();
+        let max_retained_epoch = self.get_max_epoch();
+        if max_epoch > max_retained_epoch {
+            for ep in (max_retained_epoch + 1)..=max_epoch {
+                cancelled_epochs.push(ep);
+            }
+        }
+
+        // Step 5: Update the in-memory latest_ledger_info cache.
+        self.ledger_db.metadata_db().update_latest_ledger_info();
+
+        info!(
+            "ConsensusDB::unwind_to_block complete: deleted {} blocks, \
+             {} ledger_infos, {} epoch_entries, {} randomness entries. Target: {}",
+            deleted_blocks,
+            ledger_entries.len(),
+            epoch_entries.len(),
+            randomness_entries.len(),
+            target_block_number
+        );
+
+        Ok((batches_to_delete, cancelled_epochs))
+    }
 }
 
 include!("include/reader.rs");

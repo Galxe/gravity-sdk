@@ -94,6 +94,12 @@ pub(crate) struct Cli<
 }
 
 impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cli<C, Ext> {
+    /// Returns true if the CLI command is the `node` subcommand,
+    /// which requires full node initialization (consensus, relayer, etc.).
+    pub(crate) fn is_node_command(&self) -> bool {
+        matches!(self.command, Commands::Node(_))
+    }
+
     /// Execute the configured cli command.
     ///
     /// This accepts a closure that is used to launch the node via the
@@ -152,8 +158,8 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
         debug!(target: "reth::cli", "Initialized tracing, log directory: {}, log level {:?}", self.logs.log_file_directory, self.logs.verbosity);
 
         let runner = CliRunner::try_default_runtime()?;
-        let _components = |spec: Arc<C::ChainSpec>| {
-            (EthEvmConfig::ethereum(spec.clone()), EthBeaconConsensus::new(spec))
+        let components = |spec: Arc<C::ChainSpec>| {
+            (EthEvmConfig::ethereum(spec.clone()), Arc::new(EthBeaconConsensus::new(spec)))
         };
         match self.command {
             Commands::Node(command) => {
@@ -176,6 +182,12 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
             Commands::P2P(command) => runner.run_until_ctrl_c(command.execute::<EthereumNode>()),
             Commands::Config(command) => runner.run_until_ctrl_c(command.execute()),
             Commands::Prune(command) => runner.run_until_ctrl_c(command.execute::<EthereumNode>()),
+            Commands::Stage(command) => {
+                println!("Running stage command");
+                runner.run_command_until_exit(|ctx| {
+                    command.execute::<EthereumNode, _>(ctx, components)
+                })
+            }
             _ => todo!("not implemented"),
         }
     }
