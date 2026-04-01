@@ -1,6 +1,6 @@
 use crate::{
-    dkg::DKGCommand, genesis::GenesisCommand, node::NodeCommand, stake::StakeCommand,
-    unwind::UnwindCommand, validator::ValidatorCommand,
+    dkg::DKGCommand, epoch::EpochCommand, genesis::GenesisCommand, node::NodeCommand,
+    stake::StakeCommand, unwind::UnwindCommand, validator::ValidatorCommand,
 };
 use build_info::{build_information, BUILD_PKG_VERSION};
 use clap::{Parser, Subcommand};
@@ -46,6 +46,7 @@ pub enum SubCommands {
     Dkg(DKGCommand),
     /// Unwind consensus state to a specific block number
     Unwind(UnwindCommand),
+    Epoch(EpochCommand),
 }
 
 pub trait Executable {

@@ -7,6 +7,12 @@ pub const VALIDATOR_MANAGER_ADDRESS: Address = address!("00000000000000000000000
 /// Staking contract address (from SystemAddresses.STAKING)
 pub const STAKING_ADDRESS: Address = address!("00000000000000000000000000000001625F2000");
 
+/// Reconfiguration contract address (from SystemAddresses.RECONFIGURATION)
+pub const RECONFIGURATION_ADDRESS: Address = address!("00000000000000000000000000000001625F2003");
+
+/// EpochConfig contract address (from SystemAddresses.EPOCH_CONFIG)
+pub const EPOCH_CONFIG_ADDRESS: Address = address!("00000000000000000000000000000001625F1005");
+
 // Define contract interface using alloy_sol_macro
 alloy_sol_macro::sol! {
     // ============================================================================
@@ -154,6 +160,23 @@ alloy_sol_macro::sol! {
             address staker,
             uint256 poolIndex
         );
+    }
+
+    // ============================================================================
+    // RECONFIGURATION CONTRACT
+    // ============================================================================
+
+    contract Reconfiguration {
+        function currentEpoch() external view returns (uint64);
+        function lastReconfigurationTime() external view returns (uint64);
+    }
+
+    // ============================================================================
+    // EPOCH_CONFIG CONTRACT
+    // ============================================================================
+
+    contract EpochConfig {
+        function epochIntervalMicros() external view returns (uint64);
     }
 }
 
