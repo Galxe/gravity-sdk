@@ -15,6 +15,9 @@ error_pattern = "(?i)error|panic|fatal"
 whitelist_path = "whitelist.csv"
 
 [alerting]
+# Priority assigned to errors that do not match any whitelist rules (default: "p0")
+default_priority = "p2"
+
 # Default webhooks (fallback for priorities without specific overrides)
 feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/default..."
 slack_webhook = "https://hooks.slack.com/services/default..."
