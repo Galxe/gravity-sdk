@@ -79,6 +79,12 @@ pub struct PriorityAlertConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AlertingConfig {
+    /// Priority used for errors that don't match any whitelist rules.
+    /// Design Intent: Unrecognized error logs (not explicitly handled in the whitelist)
+    /// are often newly introduced logs after code updates. Assigning them a configurable
+    /// default priority (e.g. P2) prevents P0 alert storms that can overwhelm the ops team.
+    #[serde(default)]
+    pub default_priority: Priority,
     /// Default Feishu webhook (fallback when priority-specific webhook is not set)
     pub feishu_webhook: Option<String>,
     /// Default Slack webhook (fallback when priority-specific webhook is not set)

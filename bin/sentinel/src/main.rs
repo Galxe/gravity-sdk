@@ -8,7 +8,7 @@ mod whitelist;
 
 use crate::{
     analyzer::Analyzer,
-    config::{Config, Priority},
+    config::Config,
     notifier::Notifier,
     probe::Probe,
     reader::Reader,
@@ -99,9 +99,12 @@ async fn main() -> Result<()> {
                         }
                     }
                     CheckResult::AlwaysAlert => {
-                        // No whitelist rule matched, always alert with P0
+                        // Design Intent: Provide a fallback priority (e.g. P2) for unknown
+                        // error patterns to avoid P0 spamming, while still ensuring they are
+                        // reported.
+                        // No whitelist rule matched, always alert with default_priority
                         println!("Alert in {path:?}: {line}");
-                        if let Err(e) = notifier.alert(line, file_str, Priority::P0).await {
+                        if let Err(e) = notifier.alert(line, file_str, config.alerting.default_priority).await {
                             eprintln!("Failed to send alert: {e:?}");
                         }
                     }
