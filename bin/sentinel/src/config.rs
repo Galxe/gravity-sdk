@@ -42,6 +42,7 @@ pub struct Config {
 #[derive(Debug, Deserialize, Clone)]
 pub struct ProbeConfig {
     pub url: String,
+    pub tag: Option<String>,
     #[serde(default = "default_probe_interval")]
     pub check_interval_seconds: u64,
     #[serde(default = "default_probe_threshold")]

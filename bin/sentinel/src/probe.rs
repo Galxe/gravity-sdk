@@ -56,7 +56,11 @@ impl Probe {
             }
 
             if failures >= self.config.failure_threshold {
-                let msg = format!("Probe failed {} times for URL: {}", failures, self.config.url);
+                let context = self.config.tag.as_deref().unwrap_or("No context provided");
+                let msg = format!(
+                    "Probe failed {} times for URL: {} (Context: {})",
+                    failures, self.config.url, context
+                );
                 println!("TRIGGERING ALERT: {msg}");
                 // Probe alerts are always P0
                 if let Err(e) = self.notifier.alert(&msg, "PROBE", Priority::P0).await {
