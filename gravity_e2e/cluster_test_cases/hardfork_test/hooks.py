@@ -2,7 +2,7 @@
 Pre-start / post-stop hooks for hardfork + bridge test suite.
 
 Combines two responsibilities:
-1. Inject gravityHardforks.gammaBlock into genesis.json (both copies)
+1. Inject gravityHardforks (gammaBlock, deltaBlock) into genesis.json (both copies)
 2. Start MockAnvil on port 8546 with pre-loaded bridge events
 
 The relayer_config.json is also written so the node's relayer connects
@@ -34,15 +34,19 @@ _DEFAULT_SENDER = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
 # Relayer config for Anvil bridge
 ANVIL_RELAYER_CONFIG = {
     "uri_mappings": {
-        "gravity://0/31337/events?contract=0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512&eventSignature=0x5646e682c7d994bf11f5a2c8addb60d03c83cda3b65025a826346589df43406e&fromBlock=0": "http://localhost:8546"
+        "gravity://0/31337/events?contract=0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512&eventSignature=0x5646e682c7d994bf11f5a2c8addb60d03c83cda3b65025a826346589df43406e&fromBlock=0": "http://localhost:8547"
     }
 }
 
 
 # ── Genesis injection ────────────────────────────────────────────────
 
-def _inject_gamma_block(genesis_path: Path, gamma_block: int):
-    """Inject gravityHardforks into a single genesis.json file."""
+def _inject_hardfork_blocks(genesis_path: Path, gamma_block: int, delta_block: int):
+    """Inject hardfork block numbers into a single genesis.json file.
+
+    Note: reth's spec.rs reads these from config.extra_fields (serde flatten),
+    so they MUST be top-level keys in config, NOT nested under gravityHardforks.
+    """
     if not genesis_path.exists():
         LOG.warning(f"genesis.json not found at {genesis_path}, skipping")
         return False
@@ -53,16 +57,16 @@ def _inject_gamma_block(genesis_path: Path, gamma_block: int):
     if "config" not in genesis:
         genesis["config"] = {}
 
-    genesis["config"]["gravityHardforks"] = {
-        "alphaBlock": 0,
-        "betaBlock": 0,
-        "gammaBlock": gamma_block,
-    }
+    # Inject at config top-level (reth reads extra_fields, not gravityHardforks)
+    genesis["config"]["alphaBlock"] = 0
+    genesis["config"]["betaBlock"] = 0
+    genesis["config"]["gammaBlock"] = gamma_block
+    genesis["config"]["deltaBlock"] = delta_block
 
     with open(genesis_path, "w") as f:
         json.dump(genesis, f, indent=2)
 
-    LOG.info(f"  ✅ Patched gammaBlock={gamma_block} in {genesis_path}")
+    LOG.info(f"  ✅ Patched gammaBlock={gamma_block}, deltaBlock={delta_block} in {genesis_path}")
     return True
 
 
@@ -126,8 +130,8 @@ def pre_start(test_dir, env, pytest_args=None):
 
     # ── 1. Start MockAnvil ──
     bridge_count = int(os.environ.get("BRIDGE_COUNT", str(_DEFAULT_BRIDGE_COUNT)))
-    LOG.info(f"🌉 Starting MockAnvil on port 8546, preloading {bridge_count} events...")
-    _mock = MockAnvil(port=8546)
+    LOG.info(f"🌉 Starting MockAnvil on port 8547, preloading {bridge_count} events...")
+    _mock = MockAnvil(port=8547)
     _mock.start()
 
     nonces = _mock.preload_events(
@@ -159,18 +163,20 @@ def pre_start(test_dir, env, pytest_args=None):
     metadata_path.write_text(json.dumps(metadata, indent=2))
     LOG.info(f"  Wrote metadata to {metadata_path}")
 
-    # ── 2. Inject gammaBlock ──
-    gamma_block = int(os.environ.get("GAMMA_BLOCK", "500"))
-    LOG.info(f"🔧 Injecting gravityHardforks (gammaBlock={gamma_block})")
+    # ── 2. Inject gammaBlock + deltaBlock ──
+    gamma_block = int(os.environ.get("GAMMA_BLOCK", "0"))
+    delta_block = int(os.environ.get("DELTA_BLOCK", "50"))
+    LOG.info(f"🔧 Injecting gravityHardforks (gammaBlock={gamma_block}, deltaBlock={delta_block})")
 
     artifacts_dir = env.get("GRAVITY_ARTIFACTS_DIR", str(test_dir / "artifacts"))
-    _inject_gamma_block(Path(artifacts_dir) / "genesis.json", gamma_block)
+    _inject_hardfork_blocks(Path(artifacts_dir) / "genesis.json", gamma_block, delta_block)
 
     base_dir = _get_cluster_base_dir(test_dir)
     if base_dir:
-        _inject_gamma_block(Path(base_dir) / "genesis.json", gamma_block)
+        _inject_hardfork_blocks(Path(base_dir) / "genesis.json", gamma_block, delta_block)
 
     os.environ["GAMMA_BLOCK"] = str(gamma_block)
+    os.environ["DELTA_BLOCK"] = str(delta_block)
 
     # ── 3. Write relayer_config ──
     if base_dir:

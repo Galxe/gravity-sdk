@@ -5,9 +5,6 @@
 name = "gravity-devnet-hardfork"
 base_dir = "/tmp/gravity-cluster-hardfork"
 
-[build]
-binary_path = "../target/quick-release/gravity_node"
-
 [genesis_source]
 genesis_path = "./artifacts/genesis.json"
 waypoint_path = "./artifacts/waypoint.txt"
@@ -15,6 +12,7 @@ waypoint_path = "./artifacts/waypoint.txt"
 [[nodes]]
 id = "node1"
 role = "genesis"
+source = { project_path = "../" }
 host = "127.0.0.1"
 p2p_port = 6184
 vfn_port = 6194
