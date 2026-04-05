@@ -1,0 +1,18 @@
+# Rolling Upgrade Test Parameters
+# Edit this file to configure different upgrade scenarios,
+# then run: python render_config.py
+
+[source]
+bin_path = "../target/quick-release/v1.0.0/gravity_node"
+
+[genesis_contracts]
+repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
+ref = "gravity-testnet-v1.0.0"
+
+[hardforks]
+alphaBlock = 100
+betaBlock = 100
+# gammaBlock must activate AFTER all 6 nodes finish rolling upgrade.
+# Upgrade timeline: ~2 min warmup + 6 nodes * (1 min upgrade + 3 min wait) = ~26 min = ~7800 blocks @ 5 blocks/s.
+# 10000 blocks (~33 min) provides ~7 min safety margin.
+gammaBlock = 10000

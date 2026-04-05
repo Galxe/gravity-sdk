@@ -1,11 +1,15 @@
 """
 Rolling Upgrade Test
 
-Verifies that a cluster initialized with gravity-testnet-v1.1.1 (old contracts + old binary)
-can be rolling-upgraded to the current code binary without downtime.
+Verifies that a cluster initialized with an old binary can be rolling-upgraded
+to the current code binary without downtime.
+
+The initial binary, hardfork schedule, and genesis contracts are configured via
+test_params.toml (see test_params.toml.example). Run render_config.py to
+generate cluster.toml and genesis.toml before launching the test.
 
 Test flow:
-1. Bootstrap cluster with old binary (v1.1.1)
+1. Bootstrap cluster with old binary (configured in test_params.toml)
 2. Rolling-upgrade each node (vfn1 first) with continuous tx load (vfn1 → node1 failover during vfn1 upgrade)
 3. Wait for all nodes to pass max hardfork block
 4. Post-upgrade/hardfork health monitoring
