@@ -100,6 +100,77 @@ def cleanup_cluster():
     subprocess.run(["pkill", "-9", "gravity_node"], check=False)
 
 
+def verify_nodes_alive(cluster_config: Path, env: dict):
+    """
+    Verify all nodes are alive after startup by checking PID and RPC.
+    Fails fast if any node process has crashed (e.g. port conflict)
+    instead of letting tests run against dead nodes.
+    """
+    try:
+        import tomllib
+    except ImportError:
+        import toml as tomllib
+
+    with open(cluster_config, "rb") as f:
+        config = tomllib.load(f) if hasattr(tomllib, "load") else {}
+
+    base_dir = config.get("cluster", {}).get("base_dir", "")
+    nodes = config.get("nodes", [])
+    if not nodes:
+        return
+
+    dead_nodes = []
+    for node_cfg in nodes:
+        node_id = node_cfg["id"]
+        rpc_port = node_cfg.get("rpc_port")
+        data_dir = node_cfg.get("data_dir") or os.path.join(base_dir, node_id)
+        pid_file = os.path.join(data_dir, "script", "node.pid")
+
+        # 1. Check if process is alive
+        process_alive = False
+        if os.path.exists(pid_file):
+            try:
+                with open(pid_file) as f:
+                    pid = int(f.read().strip())
+                os.kill(pid, 0)
+                process_alive = True
+            except (ValueError, ProcessLookupError, OSError):
+                pass
+
+        if not process_alive:
+            log_dir = os.path.join(data_dir, "logs")
+            dead_nodes.append((node_id, f"process dead (check logs: {log_dir})"))
+            continue
+
+        # 2. Check if RPC is reachable
+        if rpc_port:
+            import urllib.request
+            import json as _json
+            url = f"http://127.0.0.1:{rpc_port}"
+            payload = _json.dumps(
+                {"jsonrpc": "2.0", "method": "eth_blockNumber", "params": [], "id": 1}
+            ).encode()
+            req = urllib.request.Request(
+                url, data=payload, headers={"Content-Type": "application/json"}
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    body = _json.loads(resp.read())
+                    if "result" not in body:
+                        dead_nodes.append((node_id, f"RPC returned no result: {body}"))
+            except Exception as e:
+                dead_nodes.append((node_id, f"RPC unreachable at {url}: {e}"))
+
+    if dead_nodes:
+        details = "\n".join(f"  - {nid}: {reason}" for nid, reason in dead_nodes)
+        raise RuntimeError(
+            f"Node(s) failed to start:\n{details}\n"
+            f"Cluster cannot proceed. Fix the issue (e.g. port conflict) and retry."
+        )
+
+    logger.info(f"All {len(nodes)} node(s) verified alive and RPC-responsive.")
+
+
 def run_test_suite(
     test_dir: Path,
     no_cleanup: bool = False,
@@ -239,6 +310,11 @@ def run_test_suite(
 
             logger.info("Waiting 5s for nodes to warmup...")
             time.sleep(5)
+
+            # Verify all nodes are actually alive after warmup.
+            # Catches early crashes (e.g. port conflicts) that start.sh's
+            # 1-second PID check cannot detect.
+            verify_nodes_alive(cluster_config, env)
         else:
             logger.error("cluster/start.sh missing, cannot start nodes!")
             raise RuntimeError("Missing start.sh")
@@ -320,7 +396,7 @@ def main():
     )
     # Long-running suites excluded from CI by default.
     # Run them explicitly: runner.py long_test
-    DEFAULT_EXCLUDES = ["long_test"]
+    DEFAULT_EXCLUDES = ["long_test", "rolling_upgrade"]
 
     parser.add_argument(
         "--exclude",

@@ -52,6 +52,8 @@ main() {
     (
         cd "$GENESIS_CONTRACT_DIR"
         git fetch origin
+        # Discard local modifications from previous runs (e.g. genesis_template.json)
+        git checkout -- .
         git checkout "$GENESIS_REF"
         # Pull latest if on a branch (no-op for detached HEAD / commit hash)
         if git symbolic-ref -q HEAD &>/dev/null; then
