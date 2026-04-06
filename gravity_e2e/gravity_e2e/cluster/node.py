@@ -327,11 +327,22 @@ class Node:
         """
         Wait for RPC to become available.
         Polls the get_block_number method until it succeeds or timeout is reached.
+        Also checks if the node process is still alive — if the process has crashed
+        (e.g. port conflict), returns False immediately instead of waiting for timeout.
         """
         import time
 
         start_time = time.time()
         while time.time() - start_time < timeout:
+            # Fast-fail: if the process has died, no point waiting for RPC
+            if not self._pid_exists():
+                LOG.error(
+                    f"Node {self.id} process died during startup "
+                    f"(after {time.time() - start_time:.1f}s). "
+                    f"Check logs at: {self._infra_path / 'logs'}"
+                )
+                return False
+
             try:
                 bn = self.w3.eth.block_number
                 if bn >= 0:
