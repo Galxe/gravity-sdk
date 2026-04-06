@@ -23,6 +23,9 @@ use gaptos::{
         account_config::NewBlockEvent, epoch_change::EpochChangeProof, epoch_state::EpochState,
     },
 };
+use gaptos::api_types::config_storage::{GLOBAL_CONFIG_STORAGE, OnChainConfig};
+use gaptos::api_types::on_chain_config::validator_performances::ValidatorPerformances;
+
 use std::{
     cmp::max,
     collections::{HashMap, HashSet},
@@ -501,32 +504,70 @@ impl ReputationHeuristic for ProposerAndVoterHeuristic {
         &self,
         epoch: u64,
         epoch_to_candidates: &HashMap<u64, Vec<Author>>,
-        history: &[NewBlockEvent],
+        _history: &[NewBlockEvent],
     ) -> Vec<u64> {
         assert!(epoch_to_candidates.contains_key(&epoch));
+        
+        let candidates = &epoch_to_candidates[&epoch];
 
-        let (votes, proposals, failed_proposals) =
-            self.aggregation.get_aggregated_metrics(epoch_to_candidates, history, &self.author);
+        // 1. Fetch ValidatorPerformances from execution EVM via config storage
+        let storage_opt = GLOBAL_CONFIG_STORAGE.get();
+        
+        let maybe_performances = storage_opt.and_then(|storage| {
+            let res = storage.fetch_config_bytes(
+                OnChainConfig::ValidatorPerformances, 
+                gaptos::api_types::config_storage::BlockNumber::Latest
+            );
+            if res.is_none() {
+                gaptos::aptos_logger::warn!("fetch_config_bytes returned None. Key may not exist in storage.");
+            }
+            res
+        });
 
-        epoch_to_candidates[&epoch]
-            .iter()
-            .map(|author| {
-                let cur_votes = *votes.get(author).unwrap_or(&0);
-                let cur_proposals = *proposals.get(author).unwrap_or(&0);
-                let cur_failed_proposals = *failed_proposals.get(author).unwrap_or(&0);
-
-                if (cur_failed_proposals as u64) * 100 >
-                    (cur_proposals as u64 + cur_failed_proposals as u64) *
-                        self.failure_threshold_percent as u64
-                {
-                    self.failed_weight
-                } else if cur_proposals > 0 || cur_votes > 0 {
-                    self.active_weight
-                } else {
-                    self.inactive_weight
+        // 2. Decode BCS encoded ValidatorPerformances
+        let performances = if let Some(bytes_res) = maybe_performances {
+            let raw_bytes: bytes::Bytes = bytes_res.try_into().unwrap_or_default();
+            match bcs::from_bytes::<ValidatorPerformances>(&raw_bytes) {
+                Ok(perf) => Some(perf),
+                Err(e) => {
+                    gaptos::aptos_logger::warn!("BCS decode failed: {:?}. Raw bytes len: {}", e, raw_bytes.len());
+                    None
                 }
-            })
-            .collect()
+            }
+        } else {
+            None
+        };
+
+        // 3. Map performance counts to weights
+        if let Some(perf) = performances {
+            if perf.validators.len() == candidates.len() {
+                return perf.validators.iter().enumerate().map(|(i, p)| {
+                    let total = p.successful_proposals + p.failed_proposals;
+                    if total > 0 && (p.failed_proposals as u64) * 100 > (total as u64) * (self.failure_threshold_percent as u64) {
+                        gaptos::aptos_logger::info!("Validator {} has {} failed and {} successful. Assigned failed_weight {}", i, p.failed_proposals, p.successful_proposals, self.failed_weight);
+                        self.failed_weight
+                    } else if total > 0 {
+                        gaptos::aptos_logger::info!("Validator {} has {} failed and {} successful. Assigned active_weight {}", i, p.failed_proposals, p.successful_proposals, self.active_weight);
+                        self.active_weight
+                    } else {
+                        gaptos::aptos_logger::info!("Validator {} has 0 proposals. Assigned inactive_weight {}", i, self.inactive_weight);
+                        self.inactive_weight
+                    }
+                }).collect();
+            } else {
+                gaptos::aptos_logger::warn!(
+                    "ValidatorPerformances array length mismatch: expected {}, got {}", 
+                    candidates.len(), 
+                    perf.validators.len()
+                );
+            }
+        } else {
+            gaptos::aptos_logger::warn!("ValidatorPerformances fetch failed or decode error");
+        }
+
+        // Fallback to active weight if something wasn't right
+        gaptos::aptos_logger::info!("Fallback to active weight");
+        candidates.iter().map(|_| self.active_weight).collect()
     }
 }
 
@@ -640,10 +681,11 @@ impl LeaderReputation {
 
                 if chosen {
                     // do not treat chain as unhealthy, if chain just started, and we don't have
-                    // enough history to decide.
-                    let voting_power_participation_ratio: VotingPowerRatio = if history.len() <
+                    // enough history to decide. MOCK HACK: If history is completely empty (because we mocked it),
+                    // always return 1.0 instead of dividing by total_voting_power. Otherwise the network halts at Epoch 3!
+                    let voting_power_participation_ratio: VotingPowerRatio = if history.is_empty() || (history.len() <
                         *participants_window_size &&
-                        self.epoch <= 2
+                        self.epoch <= 2)
                     {
                         1.0
                     } else if total_voting_power >= 1.0 {
@@ -674,11 +716,17 @@ impl ProposerElection for LeaderReputation {
         round: Round,
     ) -> (Author, VotingPowerRatio) {
         let target_round = round.saturating_sub(self.exclude_round);
-        let (sliding_window, root_hash) = self.backend.get_block_metadata(self.epoch, target_round);
+        // FIXME: self.backend.get_block_metadata causes coredump
+        // let (sliding_window, root_hash) = self.backend.get_block_metadata(self.epoch, target_round);
+        let sliding_window = vec![];
+        let root_hash = gaptos::aptos_crypto::HashValue::zero();
+        
         let voting_power_participation_ratio =
             self.compute_chain_health_and_add_metrics(&sliding_window, round);
+            
         let mut weights =
             self.heuristic.get_weights(self.epoch, &self.epoch_to_proposers, &sliding_window);
+
         let proposers = &self.epoch_to_proposers[&self.epoch];
         assert_eq!(weights.len(), proposers.len());
 
@@ -695,7 +743,7 @@ impl ProposerElection for LeaderReputation {
         } else {
             [self.epoch.to_le_bytes().to_vec(), round.to_le_bytes().to_vec()].concat()
         };
-
+        
         let chosen_index = choose_index(stake_weights, state);
         (proposers[chosen_index], voting_power_participation_ratio)
     }

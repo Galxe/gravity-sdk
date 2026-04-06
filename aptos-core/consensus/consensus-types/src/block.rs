@@ -459,7 +459,7 @@ impl Block {
         )
     }
 
-    fn failed_authors_to_indices(
+    pub fn failed_authors_to_indices(
         validators: &[AccountAddress],
         failed_authors: &[(Round, Author)],
     ) -> Vec<u32> {
