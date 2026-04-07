@@ -1347,12 +1347,6 @@ impl RoundManager {
                 ORDER_VOTE_ADDED.inc();
                 Ok(())
             }
-            OrderVoteReceptionResult::DuplicateVote => Ok(()),
-            OrderVoteReceptionResult::EquivocateVote(author) => {
-                ORDER_VOTE_OTHER_ERRORS.inc();
-                warn!("Equivocating order vote detected from author {:?}", author);
-                Ok(())
-            }
             e => {
                 ORDER_VOTE_OTHER_ERRORS.inc();
                 Err(anyhow::anyhow!("{:?}", e))
