@@ -56,37 +56,25 @@ impl<S: TShare> ShareAggregator<S> {
         let rand_config = rand_config.clone();
         let self_share = self.get_self_share().expect("Aggregated item should have self share");
         tokio::task::spawn_blocking(move || {
-            const MAX_RETRIES: usize = 3;
-            for attempt in 0..MAX_RETRIES {
-                let maybe_randomness =
-                    S::aggregate(self.shares.values(), &rand_config, rand_metadata.metadata.clone());
-                match maybe_randomness {
-                    Ok(randomness) => {
-                        let _ = decision_tx.unbounded_send(randomness);
-                        return;
-                    }
-                    Err(e) => {
-                        error!(
-                            epoch = rand_metadata.metadata.epoch,
-                            round = rand_metadata.metadata.round,
-                            attempt = attempt + 1,
-                            "Randomness aggregation error (attempt {}/{}): {e}",
-                            attempt + 1,
-                            MAX_RETRIES,
-                        );
-                    }
+            let maybe_randomness =
+                S::aggregate(self.shares.values(), &rand_config, rand_metadata.metadata.clone());
+            match maybe_randomness {
+                Ok(randomness) => {
+                    let _ = decision_tx.unbounded_send(randomness);
+                }
+                Err(e) => {
+                    // NOTE: This failure causes the RandItem to transition to Decided without
+                    // sending randomness on decision_tx, which blocks dequeue_rand_ready_prefix
+                    // for this and all subsequent rounds until the epoch changes and RandStore
+                    // is recreated. The aggregation is deterministic so retrying won't help.
+                    // The epoch change mechanism provides eventual recovery.
+                    error!(
+                        epoch = rand_metadata.metadata.epoch,
+                        round = rand_metadata.metadata.round,
+                        "CRITICAL: Randomness aggregation failed, chain will stall until epoch change: {e}"
+                    );
                 }
             }
-            // All retries exhausted — fatal for this round's randomness.
-            // Crash the node rather than silently hang the entire chain.
-            // A restart will re-sync and recover.
-            error!(
-                epoch = rand_metadata.metadata.epoch,
-                round = rand_metadata.metadata.round,
-                "Randomness aggregation failed after {} retries, aborting to prevent chain deadlock",
-                MAX_RETRIES,
-            );
-            std::process::abort();
         });
         Either::Right(self_share)
     }
