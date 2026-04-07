@@ -471,7 +471,7 @@ impl PipelineBuilder {
                 },
             )
             .await
-            .unwrap_or_else(|e| panic!("Failed to push ordered blocks {}", e));
+            .map_err(|e| anyhow::anyhow!("Failed to push ordered blocks: {}", e))?;
         Ok(())
     }
 

@@ -772,8 +772,8 @@ impl BlockBufferManager {
                 block_id,
                 block_num,
                 BlockId::from_bytes(block_hash.as_slice()),
-                profile.set_compute_res_time.unwrap()
-                    .duration_since(profile.get_ordered_blocks_time.unwrap())
+                profile.set_compute_res_time.unwrap_or(SystemTime::UNIX_EPOCH)
+                    .duration_since(profile.get_ordered_blocks_time.unwrap_or(SystemTime::UNIX_EPOCH))
                     .unwrap_or(Duration::ZERO)
                     .as_millis(),
                 txn_len,

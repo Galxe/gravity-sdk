@@ -155,7 +155,8 @@ impl TPayloadManager for QuorumStorePayloadManager {
             .into_iter()
             .flat_map(|payload| match payload {
                 Payload::DirectMempool(_) => {
-                    unreachable!("InQuorumStore should be used");
+                    error!("Unexpected DirectMempool payload in QuorumStorePayloadManager::notify_commit");
+                    vec![]
                 }
                 Payload::InQuorumStore(proof_with_status) => proof_with_status
                     .proofs
@@ -243,7 +244,7 @@ impl TPayloadManager for QuorumStorePayloadManager {
                 request_txns_and_update_status(proof_with_data, self.batch_reader.clone());
             }
             Payload::DirectMempool(_) => {
-                unreachable!()
+                error!("Unexpected DirectMempool payload in QuorumStorePayloadManager::prefetch_payload_data");
             }
             Payload::OptQuorumStore(opt_qs_payload) => {
                 prefetch_helper(
@@ -269,7 +270,8 @@ impl TPayloadManager for QuorumStorePayloadManager {
 
         match payload {
             Payload::DirectMempool(_) => {
-                unreachable!("QuorumStore doesn't support DirectMempool payload")
+                error!("Unexpected DirectMempool payload in QuorumStorePayloadManager::check_payload_availability");
+                false
             }
             Payload::InQuorumStore(_) => true,
             Payload::InQuorumStoreWithLimit(_) => true,
@@ -384,13 +386,17 @@ impl TPayloadManager for QuorumStorePayloadManager {
                     .concat(),
                 )
             }
-            _ => unreachable!(
-                "Wrong payload {} epoch {}, round {}, id {}",
-                payload,
-                block.block_data().epoch(),
-                block.block_data().round(),
-                block.id()
-            ),
+            _ => {
+                return Err(InternalError {
+                    error: format!(
+                        "Unsupported payload {} epoch {}, round {}, id {}",
+                        payload,
+                        block.block_data().epoch(),
+                        block.block_data().round(),
+                        block.id()
+                    ),
+                });
+            }
         };
 
         if let Some(consensus_publisher) = &self.maybe_consensus_publisher {
@@ -458,7 +464,7 @@ async fn process_payload_helper<T: TDataInfo>(
     ordered_authors: &[PeerId],
 ) -> ExecutorResult<Vec<SignedTransaction>> {
     let status = data_ptr.status.lock().take();
-    match status.expect("Should have been updated before.") {
+    match status.ok_or(InternalError { error: "Payload status not initialized".to_string() })? {
         DataStatus::Cached(data) => {
             counters::QUORUM_BATCH_READY_COUNT.inc();
             data_ptr.status.lock().replace(DataStatus::Cached(data.clone()));
@@ -527,7 +533,7 @@ async fn process_payload(
     ordered_authors: &[PeerId],
 ) -> ExecutorResult<Vec<SignedTransaction>> {
     let status = proof_with_data.status.lock().take();
-    match status.expect("Should have been updated before.") {
+    match status.ok_or(InternalError { error: "Payload status not initialized".to_string() })? {
         DataStatus::Cached(data) => {
             counters::QUORUM_BATCH_READY_COUNT.inc();
             proof_with_data.status.lock().replace(DataStatus::Cached(data.clone()));

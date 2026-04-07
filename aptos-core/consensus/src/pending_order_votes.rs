@@ -23,6 +23,10 @@ pub enum OrderVoteReceptionResult {
     VoteAdded(u128),
     /// This block has just been certified after adding the vote.
     NewLedgerInfoWithSignatures(LedgerInfoWithSignatures),
+    /// The vote is a duplicate (same author, same LedgerInfo digest)
+    DuplicateVote,
+    /// The author has equivocated (voted for a different LedgerInfo digest)
+    EquivocateVote(Author),
     /// There might be some issues adding a vote
     ErrorAddingVote(VerifyError),
     /// Error happens when aggregating signature
@@ -43,12 +47,17 @@ pub struct PendingOrderVotes {
     /// LedgerInfoWithSignatures). Order vote status stores caches the information on whether
     /// the votes are enough to form a QC.
     li_digest_to_votes: HashMap<HashValue /* LedgerInfo digest */, OrderVoteStatus>,
+    /// Maps each author to the LedgerInfo digest they voted for, used for equivocation detection.
+    author_to_vote: HashMap<Author, HashValue>,
 }
 
 impl PendingOrderVotes {
     /// Creates an empty PendingOrderVotes structure
     pub fn new() -> Self {
-        Self { li_digest_to_votes: HashMap::new() }
+        Self {
+            li_digest_to_votes: HashMap::new(),
+            author_to_vote: HashMap::new(),
+        }
     }
 
     /// Add a vote to the pending votes
@@ -60,6 +69,27 @@ impl PendingOrderVotes {
     ) -> OrderVoteReceptionResult {
         // derive data from order vote
         let li_digest = order_vote.ledger_info().hash();
+        let author = order_vote.author();
+
+        // Check for duplicate or equivocating votes from the same author
+        if let Some(previous_li_digest) = self.author_to_vote.get(&author) {
+            if *previous_li_digest == li_digest {
+                // Duplicate vote for the same LedgerInfo — safe to ignore
+                return OrderVoteReceptionResult::DuplicateVote;
+            } else {
+                // Equivocation: same author voted for a different LedgerInfo
+                error!(
+                    "Equivocating order vote from author {}: previous digest {:?}, new digest {:?}",
+                    author,
+                    previous_li_digest,
+                    li_digest,
+                );
+                return OrderVoteReceptionResult::EquivocateVote(author);
+            }
+        }
+
+        // Record this author's vote for equivocation detection
+        self.author_to_vote.insert(author, li_digest);
 
         // obtain the ledger info with signatures associated to the order vote's ledger info
         let status = self.li_digest_to_votes.entry(li_digest).or_insert_with(|| {
@@ -130,6 +160,21 @@ impl PendingOrderVotes {
 
     // Removes votes older than highest_ordered_round
     pub fn garbage_collect(&mut self, highest_ordered_round: u64) {
+        // Collect digests that will be removed
+        let removed_digests: std::collections::HashSet<_> = self
+            .li_digest_to_votes
+            .iter()
+            .filter(|(_, status)| match status {
+                OrderVoteStatus::EnoughVotes(li_with_sig) => {
+                    li_with_sig.ledger_info().round() <= highest_ordered_round
+                }
+                OrderVoteStatus::NotEnoughVotes(li_with_sig) => {
+                    li_with_sig.ledger_info().round() <= highest_ordered_round
+                }
+            })
+            .map(|(digest, _)| *digest)
+            .collect();
+
         self.li_digest_to_votes.retain(|_, status| match status {
             OrderVoteStatus::EnoughVotes(li_with_sig) => {
                 li_with_sig.ledger_info().round() > highest_ordered_round
@@ -138,6 +183,9 @@ impl PendingOrderVotes {
                 li_with_sig.ledger_info().round() > highest_ordered_round
             }
         });
+
+        // Clean up author_to_vote entries for removed digests
+        self.author_to_vote.retain(|_, digest| !removed_digests.contains(digest));
     }
 
     pub fn has_enough_order_votes(&self, ledger_info: &LedgerInfo) -> bool {
@@ -191,13 +239,25 @@ mod tests {
             OrderVoteReceptionResult::VoteAdded(1)
         );
 
-        // same author voting for the same thing -> OrderVoteAdded
+        // same author voting for the same thing -> DuplicateVote
         assert_eq!(
             pending_order_votes.insert_order_vote(&order_vote_1_author_0, &validator),
-            OrderVoteReceptionResult::VoteAdded(1)
+            OrderVoteReceptionResult::DuplicateVote
         );
 
         // same author voting for a different result -> EquivocateVote
+        let li_equivocate = random_ledger_info();
+        let order_vote_equivocate_author_0 = OrderVote::new_with_signature(
+            signers[0].author(),
+            li_equivocate.clone(),
+            signers[0].sign(&li_equivocate).expect("Unable to sign ledger info"),
+        );
+        assert_eq!(
+            pending_order_votes.insert_order_vote(&order_vote_equivocate_author_0, &validator),
+            OrderVoteReceptionResult::EquivocateVote(signers[0].author())
+        );
+
+        // different author voting for a different LI -> VoteAdded
         let li2 = random_ledger_info();
         let order_vote_2_author_1 = OrderVote::new_with_signature(
             signers[1].author(),
