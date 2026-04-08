@@ -197,7 +197,9 @@ impl JoinCommand {
                 ));
             }
 
-            // Validate consensus proof of possession: must be exactly 192 hex characters (96 bytes)
+            // Validate consensus proof of possession: must be exactly 192 hex characters (96
+            // bytes). Cryptographic PoP verification is performed on-chain by
+            // ValidatorManagement; here we only enforce the wire format.
             let consensus_pop =
                 self.consensus_pop.strip_prefix("0x").unwrap_or(&self.consensus_pop);
             if consensus_pop.len() != 192 {
