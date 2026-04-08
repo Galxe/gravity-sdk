@@ -866,7 +866,11 @@ impl BlockStore {
                 .consensus_db()
                 .ledger_db
                 .metadata_db()
-                .get_ledger_infos_by_range((lower, upper));
+                .get_ledger_infos_by_range((lower, upper))
+                .unwrap_or_else(|e| {
+                    error!("Failed to get ledger infos by range ({}, {}): {}", lower, upper, e);
+                    vec![]
+                });
             // Filter ledger infos by retrieval_epoch
             ledger_infos.retain(|ledger_info| ledger_info.ledger_info().epoch() == retrieval_epoch);
             // Reverse to get them in ascending order

@@ -20,7 +20,7 @@ use tokio::{
     time::Instant,
 };
 
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use gaptos::api_types::{
     compute_res::{ComputeRes, TxnStatus},
@@ -288,8 +288,14 @@ impl BlockBufferManager {
         // Initialize current_epoch from the parameter
         block_state_machine.current_epoch = initial_epoch;
         if !block_number_to_block_id_with_epoch.is_empty() {
-            let (commit_block_epoch, commit_block_id) =
-                *block_number_to_block_id_with_epoch.get(&latest_commit_block_number).unwrap();
+            let Some(&(commit_block_epoch, commit_block_id)) =
+                block_number_to_block_id_with_epoch.get(&latest_commit_block_number) else {
+                    error!(
+                        "BlockBufferManager::init: latest_commit_block_number {} not found in block_number_to_block_id_with_epoch map",
+                        latest_commit_block_number
+                    );
+                    return;
+                };
             block_state_machine.blocks.insert(
                 BlockKey::new(commit_block_epoch, latest_commit_block_number),
                 BlockState::Historical { id: commit_block_id },

@@ -531,7 +531,10 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             // We request proof to join higher epoch
             Ordering::Greater => {
                 let epoch = self.epoch();
-                let sender = self.round_manager_tx.as_ref().unwrap();
+                let Some(sender) = self.round_manager_tx.as_ref() else {
+                    warn!("Received epoch change request from {} but Round Manager is not initialized", peer_id);
+                    return Ok(());
+                };
 
                 let event = VerifiedEvent::EpochChange(epoch);
                 if let Err(e) = sender.push((peer_id, discriminant(&event)), (peer_id, event)) {
@@ -1854,14 +1857,20 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         let self_epoch = self.epoch();
         match sync_info.epoch().cmp(&self_epoch) {
             Ordering::Greater => {
-                let sender = self.round_manager_tx.as_ref().unwrap();
+                let Some(sender) = self.round_manager_tx.as_ref() else {
+                    warn!("Received block sync epoch change from {} but Round Manager is not initialized", peer_id);
+                    return;
+                };
                 let event = VerifiedEvent::EpochChange(self_epoch);
                 if let Err(e) = sender.push((peer_id, discriminant(&event)), (peer_id, event)) {
                     error!("Failed to send event to round manager {:?}", e);
                 }
             }
             Ordering::Equal => {
-                let sender = self.round_manager_tx.as_ref().unwrap();
+                let Some(sender) = self.round_manager_tx.as_ref() else {
+                    warn!("Received block sync info from {} but Round Manager is not initialized", peer_id);
+                    return;
+                };
                 let event = VerifiedEvent::UnverifiedSyncInfo(sync_info);
                 if let Err(e) = sender.push((peer_id, discriminant(&event)), (peer_id, event)) {
                     error!("Failed to send event to round manager {:?}", e);
