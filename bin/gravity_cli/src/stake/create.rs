@@ -76,15 +76,24 @@ impl CreateCommand {
         let stake_wei = parse_ether(&self.stake_amount)?;
         println!("   Stake amount: {} ETH", self.stake_amount);
 
-        // Calculate lockup timestamp (current time + lockup duration in microseconds)
+        // Calculate lockup expiration timestamp.
+        //
+        // Unit handling (do not "fix" the `* 1_000_000` without reading this):
+        //   - `block.header.timestamp` is in **seconds** (EVM standard).
+        //   - `self.lockup_duration` is in **seconds** (see the CLI flag doc above).
+        //   - The Staking contract's `lockedUntil` field is in **microseconds**, matching
+        //     `initial_locked_until_micros` in cluster genesis files and the
+        //     `get_current_time_micros()`-based callers in `gravity_e2e/.../staking/`.
+        //
+        // So we add two second-valued quantities and convert the sum to microseconds
+        // exactly once at the end.
         let block = provider
             .get_block_by_number(BlockNumberOrTag::Latest)
             .await?
             .ok_or(anyhow::anyhow!("Failed to get latest block"))?;
         let current_timestamp = block.header.timestamp;
-        println!("   Current timestamp: {current_timestamp}");
+        println!("   Current timestamp: {current_timestamp} (seconds)");
         println!("   Lockup duration: {} seconds", self.lockup_duration);
-        // Convert to microseconds and add lockup duration
         let locked_until = (current_timestamp + self.lockup_duration) * 1_000_000;
 
         let call = Staking::createPoolCall {
