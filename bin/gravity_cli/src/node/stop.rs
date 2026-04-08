@@ -6,13 +6,18 @@ use crate::command::Executable;
 #[derive(Debug, Parser)]
 pub struct StopCommand {
     /// Deployment path containing script/stop.sh
-    #[clap(long)]
-    pub deploy_path: String,
+    #[clap(long, env = "GRAVITY_DEPLOY_PATH")]
+    pub deploy_path: Option<String>,
 }
 
 impl Executable for StopCommand {
     fn execute(self) -> Result<(), anyhow::Error> {
-        let deploy_path = PathBuf::from(&self.deploy_path);
+        let deploy_path_str = self.deploy_path.ok_or_else(|| {
+            anyhow::anyhow!(
+                "--deploy-path is required. Set via CLI flag, GRAVITY_DEPLOY_PATH env var, or ~/.gravity/config.toml"
+            )
+        })?;
+        let deploy_path = PathBuf::from(&deploy_path_str);
         let script_path = deploy_path.join("script").join("stop.sh");
 
         if !script_path.exists() {

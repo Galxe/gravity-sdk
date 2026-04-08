@@ -19,16 +19,16 @@ use crate::{
 #[derive(Debug, Parser)]
 pub struct JoinCommand {
     /// RPC URL for gravity node
-    #[clap(long)]
-    pub rpc_url: String,
+    #[clap(long, env = "GRAVITY_RPC_URL")]
+    pub rpc_url: Option<String>,
 
     /// Gas limit for the transaction
-    #[clap(long, default_value = "2000000")]
-    pub gas_limit: u64,
+    #[clap(long, env = "GRAVITY_GAS_LIMIT")]
+    pub gas_limit: Option<u64>,
 
     /// Gas price in wei
-    #[clap(long, default_value = "20")]
-    pub gas_price: u128,
+    #[clap(long, env = "GRAVITY_GAS_PRICE")]
+    pub gas_price: Option<u128>,
 
     /// StakePool address to use for validator registration
     #[clap(long)]
@@ -71,10 +71,18 @@ impl Executable for JoinCommand {
 
 impl JoinCommand {
     async fn execute_async(self) -> Result<(), anyhow::Error> {
+        let rpc_url = self.rpc_url.ok_or_else(|| {
+            anyhow::anyhow!(
+                "--rpc-url is required. Set via CLI flag, GRAVITY_RPC_URL env var, or ~/.gravity/config.toml"
+            )
+        })?;
+        let gas_limit = self.gas_limit.unwrap_or(2_000_000);
+        let gas_price = self.gas_price.unwrap_or(20);
+
         // 1. Initialize Provider and Wallet
         println!("1. Initializing connection...");
 
-        println!("   RPC URL: {}", self.rpc_url);
+        println!("   RPC URL: {}", rpc_url);
         let private_key_input = rpassword::prompt_password_stdout(
             "Enter private key (hex, with or without 0x prefix): ",
         )
@@ -92,7 +100,7 @@ impl JoinCommand {
         println!("   Staking: {STAKING_ADDRESS:?}");
 
         // Create provider
-        let provider = ProviderBuilder::new().wallet(signer).connect_http(self.rpc_url.parse()?);
+        let provider = ProviderBuilder::new().wallet(signer).connect_http(rpc_url.parse()?);
 
         let chain_id = provider.get_chain_id().await?;
         println!("   Chain ID: {chain_id}");
@@ -270,8 +278,8 @@ impl JoinCommand {
                     from: Some(wallet_address),
                     to: Some(TxKind::Call(VALIDATOR_MANAGER_ADDRESS)),
                     input: TransactionInput::new(input),
-                    gas: Some(self.gas_limit),
-                    gas_price: Some(self.gas_price),
+                    gas: Some(gas_limit),
+                    gas_price: Some(gas_price),
                     ..Default::default()
                 })
                 .await?;
@@ -360,8 +368,8 @@ impl JoinCommand {
                 from: Some(wallet_address),
                 to: Some(TxKind::Call(VALIDATOR_MANAGER_ADDRESS)),
                 input: TransactionInput::new(input),
-                gas: Some(self.gas_limit),
-                gas_price: Some(self.gas_price),
+                gas: Some(gas_limit),
+                gas_price: Some(gas_price),
                 ..Default::default()
             })
             .await?;

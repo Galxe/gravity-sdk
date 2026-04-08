@@ -20,8 +20,8 @@ const POOL_CREATED_EVENT_SIGNATURE: &str =
 #[derive(Debug, Parser)]
 pub struct GetCommand {
     /// RPC URL for gravity node
-    #[clap(long)]
-    pub rpc_url: String,
+    #[clap(long, env = "GRAVITY_RPC_URL")]
+    pub rpc_url: Option<String>,
 
     /// Owner address to query
     #[clap(long)]
@@ -60,7 +60,13 @@ impl GetCommand {
         let owner_topic = format!("0x{:0>64}", hex::encode(owner_addr.as_slice()));
 
         // Create provider
-        let provider = ProviderBuilder::new().connect_http(self.rpc_url.parse()?);
+        let rpc_url = self.rpc_url.ok_or_else(|| {
+            anyhow::anyhow!(
+                "--rpc-url is required. Set via CLI flag, GRAVITY_RPC_URL env var, or ~/.gravity/config.toml"
+            )
+        })?;
+
+        let provider = ProviderBuilder::new().connect_http(rpc_url.parse()?);
 
         // Resolve to_block first (needed for auto from_block calculation)
         let to_block = if self.to_block == "earliest" {

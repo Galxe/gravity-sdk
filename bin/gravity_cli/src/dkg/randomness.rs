@@ -6,8 +6,8 @@ use serde::Deserialize;
 #[derive(Debug, Parser)]
 pub struct RandomnessCommand {
     /// Server address and port (e.g., 127.0.0.1:1024)
-    #[clap(long)]
-    pub server_url: String,
+    #[clap(long, env = "GRAVITY_SERVER_URL")]
+    pub server_url: Option<String>,
 
     /// Block number to query randomness for
     #[clap(long)]
@@ -44,7 +44,13 @@ impl RandomnessCommand {
     }
 
     async fn execute_async(self) -> Result<(), anyhow::Error> {
-        let base_url = Self::normalize_url(&self.server_url);
+        let server_url = self.server_url.ok_or_else(|| {
+            anyhow::anyhow!(
+                "--server-url is required. Set via CLI flag, GRAVITY_SERVER_URL env var, or ~/.gravity/config.toml"
+            )
+        })?;
+
+        let base_url = Self::normalize_url(&server_url);
         let url = format!("{}/dkg/randomness/{}", base_url, self.block_number);
 
         println!("Querying Randomness for block {} from: {}", self.block_number, url);

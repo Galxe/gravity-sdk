@@ -3,17 +3,32 @@ use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types::eth::{BlockNumberOrTag, TransactionInput, TransactionRequest};
 use alloy_sol_types::SolCall;
 use clap::Parser;
+use serde::Serialize;
 
 use crate::{
     command::Executable,
     contract::{EpochConfig, Reconfiguration, EPOCH_CONFIG_ADDRESS, RECONFIGURATION_ADDRESS},
+    output::OutputFormat,
 };
+
+#[derive(Serialize)]
+struct EpochStatusInfo {
+    current_epoch: u64,
+    running_time_secs: u64,
+    interval_secs: u64,
+    remaining_secs: Option<u64>,
+    overdue_secs: Option<u64>,
+}
 
 #[derive(Debug, Parser)]
 pub struct StatusCommand {
     /// RPC URL for gravity node
-    #[clap(long)]
-    pub rpc_url: String,
+    #[clap(long, env = "GRAVITY_RPC_URL")]
+    pub rpc_url: Option<String>,
+
+    /// Output format
+    #[clap(skip)]
+    pub output_format: OutputFormat,
 }
 
 impl Executable for StatusCommand {
@@ -25,8 +40,14 @@ impl Executable for StatusCommand {
 
 impl StatusCommand {
     async fn execute_async(self) -> Result<(), anyhow::Error> {
+        let rpc_url = self.rpc_url.ok_or_else(|| {
+            anyhow::anyhow!(
+                "--rpc-url is required. Set via CLI flag, GRAVITY_RPC_URL env var, or ~/.gravity/config.toml"
+            )
+        })?;
+
         // Initialize Provider
-        let provider = ProviderBuilder::new().connect_http(self.rpc_url.parse()?);
+        let provider = ProviderBuilder::new().connect_http(rpc_url.parse()?);
 
         // Get current epoch
         let call = Reconfiguration::currentEpochCall {};
@@ -95,24 +116,41 @@ impl StatusCommand {
             }
         };
 
-        println!("Epoch Status:");
-        println!("  Current Epoch: {current_epoch}");
-        println!(
-            "  Running Time:  {} (out of {} configured interval)",
-            format_hms(running_secs),
-            format_hms(expected_duration_secs)
-        );
-
-        // Also output remaining time if it's less than expected duration
-        if running_secs < expected_duration_secs {
-            let remaining = expected_duration_secs - running_secs;
-            println!("  Remaining:     {}", format_hms(remaining));
+        let (remaining_secs, overdue_secs) = if running_secs < expected_duration_secs {
+            (Some(expected_duration_secs - running_secs), None)
         } else {
-            let overdue = running_secs - expected_duration_secs;
-            println!(
-                "  Overdue:       {} (epoch transition should occur soon)",
-                format_hms(overdue)
-            );
+            (None, Some(running_secs - expected_duration_secs))
+        };
+
+        match self.output_format {
+            OutputFormat::Json => {
+                let info = EpochStatusInfo {
+                    current_epoch,
+                    running_time_secs: running_secs,
+                    interval_secs: expected_duration_secs,
+                    remaining_secs,
+                    overdue_secs,
+                };
+                println!("{}", serde_json::to_string_pretty(&info)?);
+            }
+            _ => {
+                println!("Epoch Status:");
+                println!("  Current Epoch: {current_epoch}");
+                println!(
+                    "  Running Time:  {} (out of {} configured interval)",
+                    format_hms(running_secs),
+                    format_hms(expected_duration_secs)
+                );
+                if let Some(remaining) = remaining_secs {
+                    println!("  Remaining:     {}", format_hms(remaining));
+                }
+                if let Some(overdue) = overdue_secs {
+                    println!(
+                        "  Overdue:       {} (epoch transition should occur soon)",
+                        format_hms(overdue)
+                    );
+                }
+            }
         }
 
         Ok(())
