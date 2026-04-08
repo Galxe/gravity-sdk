@@ -1,8 +1,6 @@
 use crate::{
     chain_monitor::{
-        abi::balanceOfCall,
-        checkpoint::SharedCheckpoint,
-        config::VaultBalanceConfig,
+        abi::balanceOfCall, checkpoint::SharedCheckpoint, config::VaultBalanceConfig,
         provider::HttpProvider,
     },
     config::Priority,
@@ -95,9 +93,7 @@ impl VaultBalanceMonitor {
 
     async fn poll_once(&self) -> anyhow::Result<()> {
         // Call balanceOf(gbridge_sender) on gtoken contract
-        let call = balanceOfCall {
-            account: self.gbridge_sender,
-        };
+        let call = balanceOfCall { account: self.gbridge_sender };
         let input: Bytes = call.abi_encode().into();
 
         let tx = TransactionRequest {
@@ -107,16 +103,13 @@ impl VaultBalanceMonitor {
         };
 
         let result = self.provider.call(tx).await?;
-        let current_balance =
-            balanceOfCall::abi_decode_returns(&result)
-                .map_err(|e| anyhow::anyhow!("Failed to decode balanceOf: {e}"))?;
+        let current_balance = balanceOfCall::abi_decode_returns(&result)
+            .map_err(|e| anyhow::anyhow!("Failed to decode balanceOf: {e}"))?;
 
         // Get previous balance from checkpoint
         let previous_balance = {
             let ckpt = self.checkpoint.lock().unwrap();
-            ckpt.last_vault_balance
-                .as_ref()
-                .and_then(|s| s.parse::<U256>().ok())
+            ckpt.last_vault_balance.as_ref().and_then(|s| s.parse::<U256>().ok())
         };
 
         // Update checkpoint with current balance
@@ -127,10 +120,7 @@ impl VaultBalanceMonitor {
 
         // First run — no previous balance to compare against
         let Some(prev) = previous_balance else {
-            println!(
-                "Vault balance baseline recorded: {} wei",
-                current_balance
-            );
+            println!("Vault balance baseline recorded: {} wei", current_balance);
             return Ok(());
         };
 
@@ -166,10 +156,8 @@ impl VaultBalanceMonitor {
                 "Vault balance alert!\nPrevious: {} wei\nCurrent: {} wei\nDrop: {} wei ({drop_pct})\nContract: {}",
                 prev, current_balance, drop, self.gbridge_sender
             );
-            if let Err(e) = self
-                .notifier
-                .alert(&msg, "BRIDGE_VAULT_BALANCE", self.config.priority)
-                .await
+            if let Err(e) =
+                self.notifier.alert(&msg, "BRIDGE_VAULT_BALANCE", self.config.priority).await
             {
                 eprintln!("Failed to send vault balance alert: {e:?}");
             }

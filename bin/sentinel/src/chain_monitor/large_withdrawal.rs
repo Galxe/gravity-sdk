@@ -152,10 +152,8 @@ impl LargeWithdrawalMonitor {
                     "CRITICAL: EmergencyWithdraw called on GBridgeSender!\nRecipient: {}\nAmount: {} tokens ({} wei)\nThis drains the vault - investigate immediately!",
                     event.recipient, amount_eth, event.amount
                 );
-                if let Err(e) = self
-                    .notifier
-                    .alert(&msg, "BRIDGE_EMERGENCY_WITHDRAW", Priority::P0)
-                    .await
+                if let Err(e) =
+                    self.notifier.alert(&msg, "BRIDGE_EMERGENCY_WITHDRAW", Priority::P0).await
                 {
                     eprintln!("Failed to send emergency withdraw alert: {e:?}");
                 }

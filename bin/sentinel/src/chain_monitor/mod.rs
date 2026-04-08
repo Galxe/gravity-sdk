@@ -17,8 +17,10 @@ use crate::notifier::Notifier;
 use anyhow::{Context, Result};
 use checkpoint::{Checkpoint, SharedCheckpoint};
 use config::ChainMonitorConfig;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 /// Spawn all enabled chain monitor tasks.
 pub async fn spawn_all(config: ChainMonitorConfig, notifier: Notifier) -> Result<()> {
@@ -35,9 +37,8 @@ pub async fn spawn_all(config: ChainMonitorConfig, notifier: Notifier) -> Result
     let gtoken_address = ChainMonitorConfig::parse_address(&config.gtoken_address)?;
 
     // Load or create checkpoint
-    let checkpoint: SharedCheckpoint = Arc::new(Mutex::new(
-        Checkpoint::load_or_default(config.checkpoint_path.as_deref())?,
-    ));
+    let checkpoint: SharedCheckpoint =
+        Arc::new(Mutex::new(Checkpoint::load_or_default(config.checkpoint_path.as_deref())?));
 
     let poll_interval = Duration::from_secs(config.poll_interval_seconds);
     let confirmation_blocks = config.confirmation_blocks;
@@ -64,7 +65,10 @@ pub async fn spawn_all(config: ChainMonitorConfig, notifier: Notifier) -> Result
             confirmation_blocks,
             max_failures,
         )?;
-        println!("Starting chain monitor: large withdrawal (threshold: {} wei)", config.large_withdrawal.threshold_wei);
+        println!(
+            "Starting chain monitor: large withdrawal (threshold: {} wei)",
+            config.large_withdrawal.threshold_wei
+        );
         tokio::spawn(async move { monitor.run().await });
     }
 

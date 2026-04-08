@@ -164,10 +164,7 @@ pub struct OwnerActivityConfig {
 
 impl Default for OwnerActivityConfig {
     fn default() -> Self {
-        Self {
-            enabled: true,
-            priority: Priority::P0,
-        }
+        Self { enabled: true, priority: Priority::P0 }
     }
 }
 
@@ -184,11 +181,7 @@ pub struct TimelockConfig {
 
 impl Default for TimelockConfig {
     fn default() -> Self {
-        Self {
-            enabled: true,
-            priority: Priority::P0,
-            expected_governance_address: None,
-        }
+        Self { enabled: true, priority: Priority::P0, expected_governance_address: None }
     }
 }
 

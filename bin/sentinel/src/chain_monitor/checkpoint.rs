@@ -41,7 +41,9 @@ impl Checkpoint {
                     Ok(ckpt)
                 }
                 Err(e) => {
-                    eprintln!("Warning: Failed to parse checkpoint file {path}: {e}, starting fresh");
+                    eprintln!(
+                        "Warning: Failed to parse checkpoint file {path}: {e}, starting fresh"
+                    );
                     Ok(Self::default())
                 }
             },

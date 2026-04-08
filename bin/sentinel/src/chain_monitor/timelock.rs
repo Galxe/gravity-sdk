@@ -71,18 +71,13 @@ impl TimelockMonitor {
                 }
                 Err(e) => {
                     consecutive_failures += 1;
-                    eprintln!(
-                        "Timelock monitor error (failures: {consecutive_failures}): {e:?}"
-                    );
+                    eprintln!("Timelock monitor error (failures: {consecutive_failures}): {e:?}");
 
                     if consecutive_failures >= self.max_consecutive_failures {
                         let msg = format!(
                             "Timelock monitor lost RPC connectivity ({consecutive_failures} failures)"
                         );
-                        let _ = self
-                            .notifier
-                            .alert(&msg, "CHAIN_MONITOR", Priority::P0)
-                            .await;
+                        let _ = self.notifier.alert(&msg, "CHAIN_MONITOR", Priority::P0).await;
                         consecutive_failures = 0;
                     }
 
@@ -109,10 +104,8 @@ impl TimelockMonitor {
             return Ok(());
         }
 
-        self.check_ownership_transfer_started(from_block, safe_block)
-            .await?;
-        self.check_ownership_transferred(from_block, safe_block)
-            .await?;
+        self.check_ownership_transfer_started(from_block, safe_block).await?;
+        self.check_ownership_transferred(from_block, safe_block).await?;
         self.check_governance_bypass(from_block, safe_block).await?;
 
         Ok(())
@@ -138,10 +131,7 @@ impl TimelockMonitor {
                         "OWNERSHIP ALERT: Transfer initiated!\nContract: {contract}\nPrevious Owner: {}\nNew Owner: {}\nThis is step 1 of Ownable2Step - pending acceptance.",
                         event.previousOwner, event.newOwner
                     );
-                    let _ = self
-                        .notifier
-                        .alert(&msg, "TIMELOCK", self.config.priority)
-                        .await;
+                    let _ = self.notifier.alert(&msg, "TIMELOCK", self.config.priority).await;
                 }
             }
         }
@@ -168,10 +158,7 @@ impl TimelockMonitor {
                         "CRITICAL OWNERSHIP CHANGE: Transfer completed!\nContract: {contract}\nPrevious Owner: {}\nNew Owner: {}\nOwnership has been transferred - verify this was authorized!",
                         event.previousOwner, event.newOwner
                     );
-                    let _ = self
-                        .notifier
-                        .alert(&msg, "TIMELOCK", Priority::P0)
-                        .await;
+                    let _ = self.notifier.alert(&msg, "TIMELOCK", Priority::P0).await;
                 }
             }
         }
@@ -180,11 +167,7 @@ impl TimelockMonitor {
 
     /// If expected_governance_address is set, check if EmergencyWithdraw was called
     /// by a transaction sender that is NOT the expected governance address.
-    async fn check_governance_bypass(
-        &self,
-        from_block: u64,
-        to_block: u64,
-    ) -> anyhow::Result<()> {
+    async fn check_governance_bypass(&self, from_block: u64, to_block: u64) -> anyhow::Result<()> {
         let Some(expected_gov) = self.expected_governance else {
             return Ok(());
         };
@@ -208,10 +191,8 @@ impl TimelockMonitor {
                                 "GOVERNANCE BYPASS DETECTED!\nEmergencyWithdraw called by {} instead of expected governance address {}\nTransaction: {:#x}\nThis may indicate a compromised owner key!",
                                 sender, expected_gov, tx_hash
                             );
-                            let _ = self
-                                .notifier
-                                .alert(&msg, "GOVERNANCE_BYPASS", Priority::P0)
-                                .await;
+                            let _ =
+                                self.notifier.alert(&msg, "GOVERNANCE_BYPASS", Priority::P0).await;
                         }
                     }
                 }

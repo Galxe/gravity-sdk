@@ -1,8 +1,7 @@
 use crate::{
     chain_monitor::{
         abi::{
-            ERC20Recovered, EmergencyWithdraw, FeeConfigUpdated, FeeRecipientUpdated,
-            FeesWithdrawn,
+            ERC20Recovered, EmergencyWithdraw, FeeConfigUpdated, FeeRecipientUpdated, FeesWithdrawn,
         },
         checkpoint::SharedCheckpoint,
         config::OwnerActivityConfig,
@@ -77,10 +76,7 @@ impl OwnerActivityMonitor {
                         let msg = format!(
                             "Owner activity monitor lost RPC connectivity ({consecutive_failures} failures)"
                         );
-                        let _ = self
-                            .notifier
-                            .alert(&msg, "CHAIN_MONITOR", Priority::P0)
-                            .await;
+                        let _ = self.notifier.alert(&msg, "CHAIN_MONITOR", Priority::P0).await;
                         consecutive_failures = 0;
                     }
 
@@ -119,11 +115,7 @@ impl OwnerActivityMonitor {
         Ok(())
     }
 
-    async fn check_emergency_withdraw(
-        &self,
-        from_block: u64,
-        to_block: u64,
-    ) -> anyhow::Result<()> {
+    async fn check_emergency_withdraw(&self, from_block: u64, to_block: u64) -> anyhow::Result<()> {
         let filter = Filter::new()
             .address(self.gbridge_sender)
             .event_signature(EmergencyWithdraw::SIGNATURE_HASH)
@@ -137,20 +129,13 @@ impl OwnerActivityMonitor {
                     "OWNER ACTIVITY: EmergencyWithdraw called!\nRecipient: {}\nAmount: {} wei\nContract: GBridgeSender ({})",
                     event.recipient, event.amount, self.gbridge_sender
                 );
-                let _ = self
-                    .notifier
-                    .alert(&msg, "OWNER_ACTIVITY", self.config.priority)
-                    .await;
+                let _ = self.notifier.alert(&msg, "OWNER_ACTIVITY", self.config.priority).await;
             }
         }
         Ok(())
     }
 
-    async fn check_erc20_recovered(
-        &self,
-        from_block: u64,
-        to_block: u64,
-    ) -> anyhow::Result<()> {
+    async fn check_erc20_recovered(&self, from_block: u64, to_block: u64) -> anyhow::Result<()> {
         let filter = Filter::new()
             .address(self.gbridge_sender)
             .event_signature(ERC20Recovered::SIGNATURE_HASH)
@@ -164,20 +149,13 @@ impl OwnerActivityMonitor {
                     "OWNER ACTIVITY: ERC20Recovered called!\nToken: {}\nRecipient: {}\nAmount: {} wei\nContract: GBridgeSender ({})",
                     event.token, event.recipient, event.amount, self.gbridge_sender
                 );
-                let _ = self
-                    .notifier
-                    .alert(&msg, "OWNER_ACTIVITY", self.config.priority)
-                    .await;
+                let _ = self.notifier.alert(&msg, "OWNER_ACTIVITY", self.config.priority).await;
             }
         }
         Ok(())
     }
 
-    async fn check_fee_config_updated(
-        &self,
-        from_block: u64,
-        to_block: u64,
-    ) -> anyhow::Result<()> {
+    async fn check_fee_config_updated(&self, from_block: u64, to_block: u64) -> anyhow::Result<()> {
         let filter = Filter::new()
             .address(self.gravity_portal)
             .event_signature(FeeConfigUpdated::SIGNATURE_HASH)
@@ -191,10 +169,7 @@ impl OwnerActivityMonitor {
                     "OWNER ACTIVITY: FeeConfigUpdated!\nBaseFee: {} wei\nFeePerByte: {} wei\nContract: GravityPortal ({})",
                     event.baseFee, event.feePerByte, self.gravity_portal
                 );
-                let _ = self
-                    .notifier
-                    .alert(&msg, "OWNER_ACTIVITY", self.config.priority)
-                    .await;
+                let _ = self.notifier.alert(&msg, "OWNER_ACTIVITY", self.config.priority).await;
             }
         }
         Ok(())
@@ -218,20 +193,13 @@ impl OwnerActivityMonitor {
                     "OWNER ACTIVITY: FeeRecipientUpdated!\nOld: {}\nNew: {}\nContract: GravityPortal ({})",
                     event.oldRecipient, event.newRecipient, self.gravity_portal
                 );
-                let _ = self
-                    .notifier
-                    .alert(&msg, "OWNER_ACTIVITY", self.config.priority)
-                    .await;
+                let _ = self.notifier.alert(&msg, "OWNER_ACTIVITY", self.config.priority).await;
             }
         }
         Ok(())
     }
 
-    async fn check_fees_withdrawn(
-        &self,
-        from_block: u64,
-        to_block: u64,
-    ) -> anyhow::Result<()> {
+    async fn check_fees_withdrawn(&self, from_block: u64, to_block: u64) -> anyhow::Result<()> {
         let filter = Filter::new()
             .address(self.gravity_portal)
             .event_signature(FeesWithdrawn::SIGNATURE_HASH)
@@ -245,10 +213,7 @@ impl OwnerActivityMonitor {
                     "OWNER ACTIVITY: FeesWithdrawn!\nRecipient: {}\nAmount: {} wei\nContract: GravityPortal ({})",
                     event.recipient, event.amount, self.gravity_portal
                 );
-                let _ = self
-                    .notifier
-                    .alert(&msg, "OWNER_ACTIVITY", self.config.priority)
-                    .await;
+                let _ = self.notifier.alert(&msg, "OWNER_ACTIVITY", self.config.priority).await;
             }
         }
         Ok(())

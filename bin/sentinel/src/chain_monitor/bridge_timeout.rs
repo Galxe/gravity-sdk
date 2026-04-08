@@ -111,10 +111,7 @@ impl BridgeTimeoutMonitor {
     }
 
     /// Poll Ethereum for new TokensLocked events and record them as pending.
-    async fn poll_ethereum(
-        &self,
-        block_timestamps: &mut HashMap<u64, u64>,
-    ) -> anyhow::Result<()> {
+    async fn poll_ethereum(&self, block_timestamps: &mut HashMap<u64, u64>) -> anyhow::Result<()> {
         let safe_block =
             provider::get_safe_block_number(&self.eth_provider, self.confirmation_blocks).await?;
         let from_block = {
@@ -147,10 +144,7 @@ impl BridgeTimeoutMonitor {
                     ts
                 } else {
                     let ts = self.get_block_timestamp(block_number).await.unwrap_or_else(|_| {
-                        SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_secs()
+                        SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
                     });
                     block_timestamps.insert(block_number, ts);
                     ts
@@ -221,10 +215,7 @@ impl BridgeTimeoutMonitor {
 
     /// Check for timed-out nonces and alert.
     async fn check_timeouts(&self) {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
 
         let timed_out: Vec<(u128, u64)> = {
             let ckpt = self.checkpoint.lock().unwrap();
@@ -241,10 +232,7 @@ impl BridgeTimeoutMonitor {
                 "Bridge transaction TIMEOUT!\nNonce: {nonce}\nLocked on Ethereum at: {} ({}s ago)\nNot yet confirmed on Gravity after {} seconds threshold\nInvestigate relay pipeline!",
                 *timestamp, elapsed, self.config.timeout_seconds
             );
-            if let Err(e) = self
-                .notifier
-                .alert(&msg, "BRIDGE_TIMEOUT", self.config.priority)
-                .await
+            if let Err(e) = self.notifier.alert(&msg, "BRIDGE_TIMEOUT", self.config.priority).await
             {
                 eprintln!("Failed to send bridge timeout alert: {e:?}");
             }
