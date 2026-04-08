@@ -11,7 +11,7 @@ use crate::{
 use anyhow::ensure;
 use aptos_consensus_types::common::{Author, Round};
 use gaptos::{
-    aptos_logger::warn,
+    aptos_logger::{error, warn},
     aptos_types::randomness::{FullRandMetadata, RandMetadata, Randomness},
 };
 use itertools::Either;
@@ -63,10 +63,15 @@ impl<S: TShare> ShareAggregator<S> {
                     let _ = decision_tx.unbounded_send(randomness);
                 }
                 Err(e) => {
-                    warn!(
+                    // NOTE: This failure causes the RandItem to transition to Decided without
+                    // sending randomness on decision_tx, which blocks dequeue_rand_ready_prefix
+                    // for this and all subsequent rounds until the epoch changes and RandStore
+                    // is recreated. The aggregation is deterministic so retrying won't help.
+                    // The epoch change mechanism provides eventual recovery.
+                    error!(
                         epoch = rand_metadata.metadata.epoch,
                         round = rand_metadata.metadata.round,
-                        "Aggregation error: {e}"
+                        "CRITICAL: Randomness aggregation failed, chain will stall until epoch change: {e}"
                     );
                 }
             }
