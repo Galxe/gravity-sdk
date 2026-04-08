@@ -11,7 +11,7 @@ use crate::{
 use anyhow::ensure;
 use aptos_consensus_types::common::{Author, Round};
 use gaptos::{
-    aptos_logger::warn,
+    aptos_logger::{error, warn},
     aptos_types::randomness::{FullRandMetadata, RandMetadata, Randomness},
 };
 use itertools::Either;
