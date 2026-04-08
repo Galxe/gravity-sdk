@@ -197,7 +197,9 @@ impl JoinCommand {
                 ));
             }
 
-            // Validate consensus proof of possession: must be exactly 192 hex characters (96 bytes)
+            // Validate consensus proof of possession: must be exactly 192 hex characters (96
+            // bytes). Cryptographic PoP verification is performed on-chain by
+            // ValidatorManagement; here we only enforce the wire format.
             let consensus_pop =
                 self.consensus_pop.strip_prefix("0x").unwrap_or(&self.consensus_pop);
             if consensus_pop.len() != 192 {
@@ -234,6 +236,14 @@ impl JoinCommand {
 
             // Construct full addresses:
             // /ip4/{host}/tcp/{port}/noise-ik/{network_public_key}/handshake/0
+            //
+            // The same `network_pk` is intentionally used for both endpoints: in this
+            // deployment model a single validator process serves both `validator_network`
+            // and the `vfn` `full_node_networks` entry, both loading identity from the
+            // same `identity.yaml` (see `cluster/templates/validator.yaml.tpl`). The CLI
+            // only generates one x25519 key per node (`genesis/key.rs`), so registering
+            // it under both addresses matches what the process actually listens with.
+            // This is not key reuse across separable identities — there is only one.
             let validator_full_addr =
                 format!("{}/noise-ik/{}/handshake/0", self.validator_network_address, network_pk);
             let fullnode_full_addr =

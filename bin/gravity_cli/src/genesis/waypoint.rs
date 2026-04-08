@@ -77,8 +77,20 @@ impl GenerateWaypoint {
                 AccountAddress::new(output)
             };
 
-            // Parse voting power as Wei (string like "2000000000000000000")
-            // and convert to Ether by dividing by 10^18 to match gravity-reth's wei_to_ether()
+            // Parse voting power as Wei (string like "2000000000000000000") and convert
+            // to Ether by integer-dividing by 10^18.
+            //
+            // The truncation here is intentional and MUST stay consistent with greth's
+            // `wei_to_ether()` (see `bin/gravity_node/Cargo.toml` greth dep): the runtime
+            // performs the same wei→u64 conversion when constructing the on-chain
+            // ValidatorSet, so any divergence here would make the genesis waypoint
+            // disagree with the chain's own validator set computation. The fractional
+            // ETH that gets dropped (e.g. 32.99 → 32) is by design — `ValidatorInfo`'s
+            // `voting_power` field is `u64` and the consensus layer measures voting
+            // power in whole-ether units, not wei. Operators are expected to size
+            // genesis stakes in whole ether; sub-1-ETH stakes are an operator
+            // misconfiguration that would be caught by inspecting the generated
+            // validator set, not a CLI bug.
             let voting_power_wei: u128 = v.voting_power.parse()?;
             let voting_power: u64 = (voting_power_wei / 1_000_000_000_000_000_000) as u64;
 
