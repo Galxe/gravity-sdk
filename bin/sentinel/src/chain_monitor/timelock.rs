@@ -188,8 +188,7 @@ impl TimelockMonitor {
                         let sender = tx.inner.signer();
                         if sender != expected_gov {
                             let msg = format!(
-                                "GOVERNANCE BYPASS DETECTED!\nEmergencyWithdraw called by {} instead of expected governance address {}\nTransaction: {:#x}\nThis may indicate a compromised owner key!",
-                                sender, expected_gov, tx_hash
+                                "GOVERNANCE BYPASS DETECTED!\nEmergencyWithdraw called by {sender} instead of expected governance address {expected_gov}\nTransaction: {tx_hash:#x}\nThis may indicate a compromised owner key!"
                             );
                             let _ =
                                 self.notifier.alert(&msg, "GOVERNANCE_BYPASS", Priority::P0).await;

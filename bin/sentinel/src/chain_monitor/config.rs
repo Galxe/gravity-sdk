@@ -189,6 +189,6 @@ impl ChainMonitorConfig {
     /// Parse an address string into an alloy Address.
     pub fn parse_address(s: &str) -> Result<alloy_primitives::Address> {
         s.parse::<alloy_primitives::Address>()
-            .map_err(|e| anyhow::anyhow!("Invalid address '{}': {}", s, e))
+            .map_err(|e| anyhow::anyhow!("Invalid address '{s}': {e}"))
     }
 }

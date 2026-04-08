@@ -25,6 +25,7 @@ pub struct VaultBalanceMonitor {
 }
 
 impl VaultBalanceMonitor {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         config: VaultBalanceConfig,
         gtoken_address: Address,
@@ -120,7 +121,7 @@ impl VaultBalanceMonitor {
 
         // First run — no previous balance to compare against
         let Some(prev) = previous_balance else {
-            println!("Vault balance baseline recorded: {} wei", current_balance);
+            println!("Vault balance baseline recorded: {current_balance} wei");
             return Ok(());
         };
 

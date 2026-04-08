@@ -154,8 +154,7 @@ impl BridgeTimeoutMonitor {
                 let mut ckpt = self.checkpoint.lock().unwrap();
                 ckpt.pending_nonces.insert(nonce, timestamp);
                 println!(
-                    "Bridge timeout: Tracking nonce {} (block {}, timestamp {})",
-                    nonce, block_number, timestamp
+                    "Bridge timeout: Tracking nonce {nonce} (block {block_number}, timestamp {timestamp})"
                 );
             }
         }
@@ -199,7 +198,7 @@ impl BridgeTimeoutMonitor {
                 let nonce = event.nonce;
                 let mut ckpt = self.checkpoint.lock().unwrap();
                 if ckpt.pending_nonces.remove(&nonce).is_some() {
-                    println!("Bridge timeout: Nonce {} confirmed on Gravity", nonce);
+                    println!("Bridge timeout: Nonce {nonce} confirmed on Gravity");
                 }
             }
         }

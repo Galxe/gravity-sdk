@@ -26,6 +26,7 @@ pub struct LargeWithdrawalMonitor {
 }
 
 impl LargeWithdrawalMonitor {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         config: LargeWithdrawalConfig,
         gbridge_sender: Address,
@@ -175,5 +176,5 @@ fn format_wei_to_eth(wei: U256) -> String {
     let divisor = U256::from(10u64.pow(18));
     let whole = wei / divisor;
     let remainder = wei % divisor;
-    format!("{}.{:0>18}", whole, remainder).trim_end_matches('0').trim_end_matches('.').to_string()
+    format!("{whole}.{remainder:0>18}").trim_end_matches('0').trim_end_matches('.').to_string()
 }

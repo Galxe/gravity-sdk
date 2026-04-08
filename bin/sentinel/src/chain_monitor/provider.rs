@@ -23,7 +23,7 @@ pub type HttpProvider = alloy_provider::fillers::FillProvider<
 /// Build an alloy HTTP provider for the given RPC URL.
 pub fn build_provider(rpc_url: &str) -> Result<HttpProvider> {
     let url =
-        rpc_url.parse().map_err(|e| anyhow::anyhow!("Invalid RPC URL '{}': {}", rpc_url, e))?;
+        rpc_url.parse().map_err(|e| anyhow::anyhow!("Invalid RPC URL '{rpc_url}': {e}"))?;
     let provider = ProviderBuilder::new().connect_http(url);
     Ok(provider)
 }
