@@ -27,16 +27,11 @@ fn main() {
     let config = match GravityConfig::load() {
         Ok(c) => c,
         Err(e) => {
-            eprintln!(
-                "{} Failed to load config: {e}",
-                "warning:".yellow().bold()
-            );
+            eprintln!("{} Failed to load config: {e}", "warning:".yellow().bold());
             None
         }
     };
-    let profile = config.as_ref().and_then(|c| {
-        c.active_profile(cmd.profile.as_deref()).cloned()
-    });
+    let profile = config.as_ref().and_then(|c| c.active_profile(cmd.profile.as_deref()).cloned());
     let output_format = cmd.output;
 
     // Inject config defaults into subcommands
@@ -105,53 +100,89 @@ fn apply_config_defaults(cmd: &mut Command, profile: &Option<config::ProfileConf
     match &mut cmd.command {
         command::SubCommands::Validator(ref mut v) => match &mut v.command {
             validator::SubCommands::Join(ref mut c) => {
-                if c.rpc_url.is_none() { c.rpc_url.clone_from(&profile.rpc_url); }
-                if c.gas_limit.is_none() { c.gas_limit = profile.gas_limit; }
-                if c.gas_price.is_none() { c.gas_price = profile.gas_price; }
+                if c.rpc_url.is_none() {
+                    c.rpc_url.clone_from(&profile.rpc_url);
+                }
+                if c.gas_limit.is_none() {
+                    c.gas_limit = profile.gas_limit;
+                }
+                if c.gas_price.is_none() {
+                    c.gas_price = profile.gas_price;
+                }
             }
             validator::SubCommands::Leave(ref mut c) => {
-                if c.rpc_url.is_none() { c.rpc_url.clone_from(&profile.rpc_url); }
-                if c.gas_limit.is_none() { c.gas_limit = profile.gas_limit; }
-                if c.gas_price.is_none() { c.gas_price = profile.gas_price; }
+                if c.rpc_url.is_none() {
+                    c.rpc_url.clone_from(&profile.rpc_url);
+                }
+                if c.gas_limit.is_none() {
+                    c.gas_limit = profile.gas_limit;
+                }
+                if c.gas_price.is_none() {
+                    c.gas_price = profile.gas_price;
+                }
             }
             validator::SubCommands::List(ref mut c) => {
-                if c.rpc_url.is_none() { c.rpc_url.clone_from(&profile.rpc_url); }
+                if c.rpc_url.is_none() {
+                    c.rpc_url.clone_from(&profile.rpc_url);
+                }
             }
         },
         command::SubCommands::Stake(ref mut s) => match &mut s.command {
             stake::SubCommands::Create(ref mut c) => {
-                if c.rpc_url.is_none() { c.rpc_url.clone_from(&profile.rpc_url); }
-                if c.gas_limit.is_none() { c.gas_limit = profile.gas_limit; }
-                if c.gas_price.is_none() { c.gas_price = profile.gas_price; }
+                if c.rpc_url.is_none() {
+                    c.rpc_url.clone_from(&profile.rpc_url);
+                }
+                if c.gas_limit.is_none() {
+                    c.gas_limit = profile.gas_limit;
+                }
+                if c.gas_price.is_none() {
+                    c.gas_price = profile.gas_price;
+                }
             }
             stake::SubCommands::Get(ref mut c) => {
-                if c.rpc_url.is_none() { c.rpc_url.clone_from(&profile.rpc_url); }
+                if c.rpc_url.is_none() {
+                    c.rpc_url.clone_from(&profile.rpc_url);
+                }
             }
         },
         command::SubCommands::Node(ref mut n) => match &mut n.command {
             node::SubCommands::Start(ref mut c) => {
-                if c.deploy_path.is_none() { c.deploy_path.clone_from(&profile.deploy_path); }
+                if c.deploy_path.is_none() {
+                    c.deploy_path.clone_from(&profile.deploy_path);
+                }
             }
             node::SubCommands::Stop(ref mut c) => {
-                if c.deploy_path.is_none() { c.deploy_path.clone_from(&profile.deploy_path); }
+                if c.deploy_path.is_none() {
+                    c.deploy_path.clone_from(&profile.deploy_path);
+                }
             }
         },
         command::SubCommands::Dkg(ref mut d) => match &mut d.command {
             dkg::SubCommands::Status(ref mut c) => {
-                if c.server_url.is_none() { c.server_url.clone_from(&profile.server_url); }
+                if c.server_url.is_none() {
+                    c.server_url.clone_from(&profile.server_url);
+                }
             }
             dkg::SubCommands::Randomness(ref mut c) => {
-                if c.server_url.is_none() { c.server_url.clone_from(&profile.server_url); }
+                if c.server_url.is_none() {
+                    c.server_url.clone_from(&profile.server_url);
+                }
             }
         },
         command::SubCommands::Epoch(ref mut ep) => match &mut ep.command {
             epoch::SubCommands::Status(ref mut c) => {
-                if c.rpc_url.is_none() { c.rpc_url.clone_from(&profile.rpc_url); }
+                if c.rpc_url.is_none() {
+                    c.rpc_url.clone_from(&profile.rpc_url);
+                }
             }
         },
         command::SubCommands::Status(ref mut c) => {
-            if c.rpc_url.is_none() { c.rpc_url.clone_from(&profile.rpc_url); }
-            if c.server_url.is_none() { c.server_url.clone_from(&profile.server_url); }
+            if c.rpc_url.is_none() {
+                c.rpc_url.clone_from(&profile.rpc_url);
+            }
+            if c.server_url.is_none() {
+                c.server_url.clone_from(&profile.server_url);
+            }
         }
         // Genesis, Unwind, Completions, Init don't use profile config
         _ => {}

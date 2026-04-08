@@ -61,10 +61,7 @@ impl Executable for InitCommand {
         let mut profiles = HashMap::new();
         profiles.insert(profile_name.clone(), profile);
 
-        let config = GravityConfig {
-            active_profile: profile_name,
-            profiles,
-        };
+        let config = GravityConfig { active_profile: profile_name, profiles };
 
         // Ensure directory exists
         let config_dir = GravityConfig::config_dir();

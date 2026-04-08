@@ -175,7 +175,8 @@ impl ListCommand {
                 println!("{json}");
             }
             _ => {
-                println!("Epoch: {}  |  Active: {}  |  Total Voting Power: {} ETH",
+                println!(
+                    "Epoch: {}  |  Active: {}  |  Total Voting Power: {} ETH",
                     serializable_set.current_epoch,
                     serializable_set.active_count,
                     serializable_set.total_voting_power,
@@ -183,11 +184,16 @@ impl ListCommand {
                 println!();
                 if !serializable_set.active_validators.is_empty() {
                     println!("Active Validators:");
-                    println!("{:<6} {:<44} {:<16} {}", "#", "Validator", "Voting Power", "Moniker/Network");
+                    println!(
+                        "{:<6} {:<44} {:<16} {}",
+                        "#", "Validator", "Voting Power", "Moniker/Network"
+                    );
                     println!("{}", "-".repeat(90));
                     for v in &serializable_set.active_validators {
-                        println!("{:<6} {:<44} {:<16} {}",
-                            v.validator_index, v.validator, v.voting_power, v.network_addresses);
+                        println!(
+                            "{:<6} {:<44} {:<16} {}",
+                            v.validator_index, v.validator, v.voting_power, v.network_addresses
+                        );
                     }
                     println!();
                 }

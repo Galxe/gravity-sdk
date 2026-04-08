@@ -20,17 +20,14 @@ pub fn suggest_fix(err: &anyhow::Error) -> Option<String> {
     }
 
     if msg_lower.contains("not registered as a validator") {
-        return Some(
-            "Register the validator first with `gravity-cli validator join`.".to_string(),
-        );
+        return Some("Register the validator first with `gravity-cli validator join`.".to_string());
     }
 
     if msg_lower.contains("failed to read private key") {
         return Some("Ensure you enter a valid hex-encoded private key.".to_string());
     }
 
-    if msg_lower.contains("start script not found") || msg_lower.contains("stop script not found")
-    {
+    if msg_lower.contains("start script not found") || msg_lower.contains("stop script not found") {
         return Some(
             "Verify --deploy-path points to a valid deployment directory \
              created by deploy.sh."
@@ -39,9 +36,7 @@ pub fn suggest_fix(err: &anyhow::Error) -> Option<String> {
     }
 
     if msg_lower.contains("config.toml") || msg_lower.contains("--rpc-url is required") {
-        return Some(
-            "Run `gravity-cli init` to set up your configuration file.".to_string(),
-        );
+        return Some("Run `gravity-cli init` to set up your configuration file.".to_string());
     }
 
     if msg_lower.contains("--server-url is required") {
@@ -52,7 +47,8 @@ pub fn suggest_fix(err: &anyhow::Error) -> Option<String> {
 
     if msg_lower.contains("--deploy-path is required") {
         return Some(
-            "Set --deploy-path, GRAVITY_DEPLOY_PATH env var, or run `gravity-cli init`.".to_string(),
+            "Set --deploy-path, GRAVITY_DEPLOY_PATH env var, or run `gravity-cli init`."
+                .to_string(),
         );
     }
 

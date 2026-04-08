@@ -143,10 +143,7 @@ impl StatusCommand {
                     );
                 }
                 if let Some(ref v) = combined.validators {
-                    print!(
-                        "Validators: {} active",
-                        v.active_count
-                    );
+                    print!("Validators: {} active", v.active_count);
                     if v.pending_active_count > 0 {
                         print!(", {} pending active", v.pending_active_count);
                     }
@@ -168,10 +165,7 @@ impl StatusCommand {
         Ok(())
     }
 
-    async fn fetch_epoch_info(
-        &self,
-        provider: &impl Provider,
-    ) -> Result<EpochInfo, anyhow::Error> {
+    async fn fetch_epoch_info(&self, provider: &impl Provider) -> Result<EpochInfo, anyhow::Error> {
         // Get current epoch
         let call = Reconfiguration::currentEpochCall {};
         let result = provider
@@ -299,10 +293,7 @@ impl StatusCommand {
         let response = client.get(format!("{base_url}/dkg/status")).send().await?;
 
         if !response.status().is_success() {
-            return Err(anyhow::anyhow!(
-                "DKG status request failed: HTTP {}",
-                response.status()
-            ));
+            return Err(anyhow::anyhow!("DKG status request failed: HTTP {}", response.status()));
         }
 
         let status: DkgInfo = response.json().await?;

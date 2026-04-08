@@ -1,8 +1,7 @@
 use crate::{
-    completions::CompletionsCommand, dkg::DKGCommand, epoch::EpochCommand,
-    genesis::GenesisCommand, init::InitCommand, node::NodeCommand, output::OutputFormat,
-    stake::StakeCommand, status::StatusCommand, unwind::UnwindCommand,
-    validator::ValidatorCommand,
+    completions::CompletionsCommand, dkg::DKGCommand, epoch::EpochCommand, genesis::GenesisCommand,
+    init::InitCommand, node::NodeCommand, output::OutputFormat, stake::StakeCommand,
+    status::StatusCommand, unwind::UnwindCommand, validator::ValidatorCommand,
 };
 use build_info::{build_information, BUILD_PKG_VERSION};
 use clap::{Parser, Subcommand};
