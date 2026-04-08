@@ -56,7 +56,7 @@ impl CreateCommand {
         let gas_limit = self.gas_limit.unwrap_or(2_000_000);
         let gas_price = self.gas_price.unwrap_or(20);
 
-        println!("   RPC URL: {}", rpc_url);
+        println!("   RPC URL: {rpc_url}");
         let private_key_input = rpassword::prompt_password_stdout(
             "Enter private key (hex, with or without 0x prefix): ",
         )

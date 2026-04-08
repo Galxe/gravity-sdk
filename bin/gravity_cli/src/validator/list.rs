@@ -185,8 +185,8 @@ impl ListCommand {
                 if !serializable_set.active_validators.is_empty() {
                     println!("Active Validators:");
                     println!(
-                        "{:<6} {:<44} {:<16} {}",
-                        "#", "Validator", "Voting Power", "Moniker/Network"
+                        "{:<6} {:<44} {:<16} Moniker/Network",
+                        "#", "Validator", "Voting Power"
                     );
                     println!("{}", "-".repeat(90));
                     for v in &serializable_set.active_validators {

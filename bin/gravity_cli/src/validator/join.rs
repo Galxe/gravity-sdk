@@ -82,7 +82,7 @@ impl JoinCommand {
         // 1. Initialize Provider and Wallet
         println!("1. Initializing connection...");
 
-        println!("   RPC URL: {}", rpc_url);
+        println!("   RPC URL: {rpc_url}");
         let private_key_input = rpassword::prompt_password_stdout(
             "Enter private key (hex, with or without 0x prefix): ",
         )
