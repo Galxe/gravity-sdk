@@ -37,6 +37,8 @@ pub struct Config {
     /// Multiple probe endpoints, each with its own URL, interval, and threshold.
     #[serde(default)]
     pub probes: Vec<ProbeConfig>,
+    /// Optional chain monitor configuration for on-chain bridge event monitoring.
+    pub chain_monitor: Option<crate::chain_monitor::config::ChainMonitorConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
