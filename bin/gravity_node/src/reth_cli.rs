@@ -464,9 +464,10 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                 continue;
             }
             let last_block = block_ids.last().expect("checked non-empty above");
-            let block_id = self.pipe_api.get_block_id(last_block.num).unwrap_or_else(|| {
-                panic!("commit num {} not found block id", start_commit_num);
-            });
+            let block_id = self.pipe_api.get_block_id(last_block.num).ok_or_else(|| {
+                error!("commit num {} not found block id", start_commit_num);
+                format!("commit num {start_commit_num} not found block id")
+            })?;
             assert_eq!(ExternalBlockId::from_bytes(block_id.as_slice()), last_block.block_id);
             start_commit_num = last_block.num + 1;
             let mut persist_notifiers = Vec::new();
