@@ -235,6 +235,30 @@ STAKE_POOL_ABI = [
         ],
         "name": "OperatorChanged",
         "type": "event"
+    },
+    {
+        "inputs": [],
+        "name": "getRewardBalance",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [{"internalType": "address", "name": "recipient", "type": "address"}],
+        "name": "withdrawRewards",
+        "outputs": [{"internalType": "uint256", "name": "amount", "type": "uint256"}],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "anonymous": False,
+        "inputs": [
+            {"indexed": True, "internalType": "address", "name": "pool", "type": "address"},
+            {"indexed": False, "internalType": "uint256", "name": "amount", "type": "uint256"},
+            {"indexed": True, "internalType": "address", "name": "recipient", "type": "address"}
+        ],
+        "name": "RewardsWithdrawn",
+        "type": "event"
     }
 ]
 
