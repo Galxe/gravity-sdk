@@ -583,8 +583,9 @@ impl ConsensusDB {
         }
 
         // Step 5: Update the in-memory latest_ledger_info cache.
-        self.ledger_db.metadata_db().update_latest_ledger_info()
-            .map_err(|e| DbError::from(anyhow::anyhow!("Failed to update latest ledger info: {}", e)))?;
+        self.ledger_db.metadata_db().update_latest_ledger_info().map_err(|e| {
+            DbError::from(anyhow::anyhow!("Failed to update latest ledger info: {}", e))
+        })?;
 
         info!(
             "ConsensusDB::unwind_to_block complete: deleted {} blocks, \

@@ -624,8 +624,8 @@ impl BufferManager {
                 if commit_info.round() >= self.latest_round {
                     // Limit the cache size to prevent OOM from unverified future votes
                     const MAX_COMMIT_VOTE_CACHE_ENTRIES: usize = 1000;
-                    if self.commit_vote_cache.len() < MAX_COMMIT_VOTE_CACHE_ENTRIES
-                        || self.commit_vote_cache.contains_key(&commit_info.id())
+                    if self.commit_vote_cache.len() < MAX_COMMIT_VOTE_CACHE_ENTRIES ||
+                        self.commit_vote_cache.contains_key(&commit_info.id())
                     {
                         self.commit_vote_cache
                             .entry(commit_info.id())

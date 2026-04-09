@@ -1868,7 +1868,10 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             }
             Ordering::Equal => {
                 let Some(sender) = self.round_manager_tx.as_ref() else {
-                    warn!("Received block sync info from {} but Round Manager is not initialized", peer_id);
+                    warn!(
+                        "Received block sync info from {} but Round Manager is not initialized",
+                        peer_id
+                    );
                     return;
                 };
                 let event = VerifiedEvent::UnverifiedSyncInfo(sync_info);
