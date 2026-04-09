@@ -582,12 +582,15 @@ impl ReputationHeuristic for ProposerAndVoterHeuristic {
         // Check cache: refresh every PERFORMANCE_CACHE_REFRESH_ROUNDS calls
         let mut cache = self.cached_weights.lock();
         let counter = cache.0;
-        if let Some(ref weights) = cache.1 {
-            if weights.len() == candidates.len() && counter % PERFORMANCE_CACHE_REFRESH_ROUNDS != 0
-            {
-                cache.0 = counter + 1;
-                return weights.clone();
+        let need_refresh = match cache.1 {
+            Some(ref w) => {
+                w.len() != candidates.len() || counter % PERFORMANCE_CACHE_REFRESH_ROUNDS == 0
             }
+            None => true,
+        };
+        if !need_refresh {
+            cache.0 = counter + 1;
+            return cache.1.clone().unwrap();
         }
 
         // Cache miss or refresh needed
