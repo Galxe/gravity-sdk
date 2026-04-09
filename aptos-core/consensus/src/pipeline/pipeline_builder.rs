@@ -461,12 +461,12 @@ impl PipelineBuilder {
             failed_proposer_indices: block.block_data().failed_authors().map_or(
                 vec![],
                 |authors| {
-                    aptos_consensus_types::block::Block::failed_authors_to_indices(
-                        &validator, authors,
-                    )
-                    .into_iter()
-                    .map(|i| i as u64)
-                    .collect()
+                    authors
+                        .iter()
+                        .filter_map(|(_round, author)| {
+                            validator.iter().position(|v| v == author).map(|i| i as u64)
+                        })
+                        .collect()
                 },
             ),
         };

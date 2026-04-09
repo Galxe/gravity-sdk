@@ -1,6 +1,10 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+//! NOTE(gravity): This schema is currently unused in Gravity. Leader reputation uses
+//! ValidatorPerformances from EVM config storage instead of block event history.
+//! Kept for Aptos code compatibility.
+//!
 //! This module defines the storage schema for block events used by leader reputation.
 //!
 //! Block events are stored with a monotonically increasing sequence number as key,

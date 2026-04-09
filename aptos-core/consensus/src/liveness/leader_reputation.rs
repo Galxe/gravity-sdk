@@ -466,6 +466,9 @@ impl NewBlockEventAggregation {
 ///  * and 33% (much less aggressive exclusion, with 1 failure for every 2 successes, should still
 ///    reduce failed rounds by at least 66%, and is enough to avoid byzantine attacks as well as the
 ///    rest of the protocol)
+/// How often (in rounds) to re-fetch ValidatorPerformances from EVM config storage.
+const PERFORMANCE_CACHE_REFRESH_ROUNDS: u64 = 100;
+
 pub struct ProposerAndVoterHeuristic {
     author: Author,
     active_weight: u64,
@@ -473,6 +476,9 @@ pub struct ProposerAndVoterHeuristic {
     failed_weight: u64,
     failure_threshold_percent: u32,
     aggregation: NewBlockEventAggregation,
+    /// Cached weights from ValidatorPerformances, refreshed every
+    /// PERFORMANCE_CACHE_REFRESH_ROUNDS. (call_counter, cached_weights)
+    cached_weights: Mutex<(u64, Option<Vec<u64>>)>,
 }
 
 impl ProposerAndVoterHeuristic {
@@ -497,7 +503,69 @@ impl ProposerAndVoterHeuristic {
                 proposer_window_size,
                 reputation_window_from_stale_end,
             ),
+            cached_weights: Mutex::new((0, None)),
         }
+    }
+}
+
+impl ProposerAndVoterHeuristic {
+    /// Fetch ValidatorPerformances from EVM config storage and compute weights.
+    fn fetch_and_compute_weights(&self, candidates: &[Author]) -> Option<Vec<u64>> {
+        let storage = GLOBAL_CONFIG_STORAGE.get()?;
+        let bytes_res = storage.fetch_config_bytes(
+            OnChainConfig::ValidatorPerformances,
+            gaptos::api_types::config_storage::BlockNumber::Latest,
+        )?;
+
+        let raw_bytes: bytes::Bytes = bytes_res.try_into().unwrap_or_default();
+        let perf = match bcs::from_bytes::<ValidatorPerformances>(&raw_bytes) {
+            Ok(perf) => perf,
+            Err(e) => {
+                warn!("ValidatorPerformances BCS decode failed: {:?}", e);
+                return None;
+            }
+        };
+
+        if perf.validators.len() != candidates.len() {
+            warn!(
+                "ValidatorPerformances length mismatch: expected {}, got {}",
+                candidates.len(),
+                perf.validators.len()
+            );
+            return None;
+        }
+
+        Some(
+            perf.validators
+                .iter()
+                .enumerate()
+                .map(|(i, p)| {
+                    let total = p.successful_proposals + p.failed_proposals;
+                    if total > 0
+                        && (p.failed_proposals as u64) * 100
+                            > (total as u64) * (self.failure_threshold_percent as u64)
+                    {
+                        debug!(
+                            "Validator {} has {} failed and {} successful. Assigned failed_weight {}",
+                            i, p.failed_proposals, p.successful_proposals, self.failed_weight
+                        );
+                        self.failed_weight
+                    } else if total > 0 {
+                        debug!(
+                            "Validator {} has {} failed and {} successful. Assigned active_weight {}",
+                            i, p.failed_proposals, p.successful_proposals, self.active_weight
+                        );
+                        self.active_weight
+                    } else {
+                        debug!(
+                            "Validator {} has 0 proposals. Assigned inactive_weight {}",
+                            i, self.inactive_weight
+                        );
+                        self.inactive_weight
+                    }
+                })
+                .collect(),
+        )
     }
 }
 
@@ -509,67 +577,27 @@ impl ReputationHeuristic for ProposerAndVoterHeuristic {
         _history: &[NewBlockEvent],
     ) -> Vec<u64> {
         assert!(epoch_to_candidates.contains_key(&epoch));
-
         let candidates = &epoch_to_candidates[&epoch];
 
-        // 1. Fetch ValidatorPerformances from execution EVM via config storage
-        let storage_opt = GLOBAL_CONFIG_STORAGE.get();
-
-        let maybe_performances = storage_opt.and_then(|storage| {
-            let res = storage.fetch_config_bytes(
-                OnChainConfig::ValidatorPerformances,
-                gaptos::api_types::config_storage::BlockNumber::Latest,
-            );
-            if res.is_none() {
-                warn!("fetch_config_bytes returned None. Key may not exist in storage.");
+        // Check cache: refresh every PERFORMANCE_CACHE_REFRESH_ROUNDS calls
+        let mut cache = self.cached_weights.lock();
+        let counter = cache.0;
+        if let Some(ref weights) = cache.1 {
+            if weights.len() == candidates.len() && counter % PERFORMANCE_CACHE_REFRESH_ROUNDS != 0
+            {
+                cache.0 = counter + 1;
+                return weights.clone();
             }
-            res
-        });
-
-        // 2. Decode BCS encoded ValidatorPerformances
-        let performances = if let Some(bytes_res) = maybe_performances {
-            let raw_bytes: bytes::Bytes = bytes_res.try_into().unwrap_or_default();
-            match bcs::from_bytes::<ValidatorPerformances>(&raw_bytes) {
-                Ok(perf) => Some(perf),
-                Err(e) => {
-                    warn!("BCS decode failed: {:?}. Raw bytes len: {}", e, raw_bytes.len());
-                    None
-                }
-            }
-        } else {
-            None
-        };
-
-        // 3. Map performance counts to weights
-        if let Some(perf) = performances {
-            if perf.validators.len() == candidates.len() {
-                return perf.validators.iter().enumerate().map(|(i, p)| {
-                    let total = p.successful_proposals + p.failed_proposals;
-                    if total > 0 && (p.failed_proposals as u64) * 100 > (total as u64) * (self.failure_threshold_percent as u64) {
-                        debug!("Validator {} has {} failed and {} successful. Assigned failed_weight {}", i, p.failed_proposals, p.successful_proposals, self.failed_weight);
-                        self.failed_weight
-                    } else if total > 0 {
-                        debug!("Validator {} has {} failed and {} successful. Assigned active_weight {}", i, p.failed_proposals, p.successful_proposals, self.active_weight);
-                        self.active_weight
-                    } else {
-                        debug!("Validator {} has 0 proposals. Assigned inactive_weight {}", i, self.inactive_weight);
-                        self.inactive_weight
-                    }
-                }).collect();
-            } else {
-                warn!(
-                    "ValidatorPerformances array length mismatch: expected {}, got {}",
-                    candidates.len(),
-                    perf.validators.len()
-                );
-            }
-        } else {
-            warn!("ValidatorPerformances fetch failed or decode error");
         }
 
-        // Fallback to active weight if something wasn't right
-        debug!("Fallback to active weight");
-        candidates.iter().map(|_| self.active_weight).collect()
+        // Cache miss or refresh needed
+        let weights = self.fetch_and_compute_weights(candidates).unwrap_or_else(|| {
+            debug!("ValidatorPerformances unavailable, fallback to active_weight");
+            candidates.iter().map(|_| self.active_weight).collect()
+        });
+
+        *cache = (counter + 1, Some(weights.clone()));
+        weights
     }
 }
 
@@ -612,6 +640,10 @@ impl LeaderReputation {
         }
     }
 
+    // NOTE(gravity): In Gravity, history is always empty because get_block_metadata
+    // (Aptos-native) is bypassed. This function always returns 1.0 and metrics report zeros.
+    // Kept for Aptos code compatibility; chain health is not tracked via this path.
+    //
     // Compute chain health metrics, and
     // - return participating voting power percentage for the window_for_chain_health
     // - update metric counters for different windows
@@ -682,10 +714,8 @@ impl LeaderReputation {
                     .set(participants.len() as i64);
 
                 if chosen {
-                    // do not treat chain as unhealthy, if chain just started, and we don't have
-                    // enough history to decide. MOCK HACK: If history is completely empty (because
-                    // we mocked it), always return 1.0 instead of dividing by
-                    // total_voting_power. Otherwise the network halts at Epoch 3!
+                    // In Gravity, get_block_metadata (Aptos-native) is not used, so history
+                    // is always empty. Return 1.0 to avoid treating the chain as unhealthy.
                     let voting_power_participation_ratio: VotingPowerRatio = if history.is_empty() ||
                         (history.len() < *participants_window_size && self.epoch <= 2)
                     {
