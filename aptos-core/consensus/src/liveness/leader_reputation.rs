@@ -519,7 +519,7 @@ impl ReputationHeuristic for ProposerAndVoterHeuristic {
                 gaptos::api_types::config_storage::BlockNumber::Latest
             );
             if res.is_none() {
-                gaptos::aptos_logger::warn!("fetch_config_bytes returned None. Key may not exist in storage.");
+                warn!("fetch_config_bytes returned None. Key may not exist in storage.");
             }
             res
         });
@@ -530,7 +530,7 @@ impl ReputationHeuristic for ProposerAndVoterHeuristic {
             match bcs::from_bytes::<ValidatorPerformances>(&raw_bytes) {
                 Ok(perf) => Some(perf),
                 Err(e) => {
-                    gaptos::aptos_logger::warn!("BCS decode failed: {:?}. Raw bytes len: {}", e, raw_bytes.len());
+                    warn!("BCS decode failed: {:?}. Raw bytes len: {}", e, raw_bytes.len());
                     None
                 }
             }
@@ -544,29 +544,29 @@ impl ReputationHeuristic for ProposerAndVoterHeuristic {
                 return perf.validators.iter().enumerate().map(|(i, p)| {
                     let total = p.successful_proposals + p.failed_proposals;
                     if total > 0 && (p.failed_proposals as u64) * 100 > (total as u64) * (self.failure_threshold_percent as u64) {
-                        gaptos::aptos_logger::info!("Validator {} has {} failed and {} successful. Assigned failed_weight {}", i, p.failed_proposals, p.successful_proposals, self.failed_weight);
+                        debug!("Validator {} has {} failed and {} successful. Assigned failed_weight {}", i, p.failed_proposals, p.successful_proposals, self.failed_weight);
                         self.failed_weight
                     } else if total > 0 {
-                        gaptos::aptos_logger::info!("Validator {} has {} failed and {} successful. Assigned active_weight {}", i, p.failed_proposals, p.successful_proposals, self.active_weight);
+                        debug!("Validator {} has {} failed and {} successful. Assigned active_weight {}", i, p.failed_proposals, p.successful_proposals, self.active_weight);
                         self.active_weight
                     } else {
-                        gaptos::aptos_logger::info!("Validator {} has 0 proposals. Assigned inactive_weight {}", i, self.inactive_weight);
+                        debug!("Validator {} has 0 proposals. Assigned inactive_weight {}", i, self.inactive_weight);
                         self.inactive_weight
                     }
                 }).collect();
             } else {
-                gaptos::aptos_logger::warn!(
+                warn!(
                     "ValidatorPerformances array length mismatch: expected {}, got {}", 
                     candidates.len(), 
                     perf.validators.len()
                 );
             }
         } else {
-            gaptos::aptos_logger::warn!("ValidatorPerformances fetch failed or decode error");
+            warn!("ValidatorPerformances fetch failed or decode error");
         }
 
         // Fallback to active weight if something wasn't right
-        gaptos::aptos_logger::info!("Fallback to active weight");
+        debug!("Fallback to active weight");
         candidates.iter().map(|_| self.active_weight).collect()
     }
 }
@@ -716,7 +716,8 @@ impl ProposerElection for LeaderReputation {
         round: Round,
     ) -> (Author, VotingPowerRatio) {
         let target_round = round.saturating_sub(self.exclude_round);
-        // FIXME: self.backend.get_block_metadata causes coredump
+        // self.backend.get_block_metadata is Aptos-native and not applicable to gsdk/greth,
+        // we use ValidatorPerformances from EVM config storage instead.
         // let (sliding_window, root_hash) = self.backend.get_block_metadata(self.epoch, target_round);
         let sliding_window = vec![];
         let root_hash = gaptos::aptos_crypto::HashValue::zero();
