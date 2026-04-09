@@ -269,6 +269,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             senders,
             epoch: block.block_meta.epoch,
             proposer_index: block.block_meta.proposer_index,
+            failed_proposer_indices: block.block_meta.failed_proposer_indices,
             extra_data: block.extra_data,
             randomness,
         });

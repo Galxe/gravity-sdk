@@ -7,7 +7,7 @@ ref = "main"
 # Genesis validators with stake and voting power
 [[genesis_validators]]
 id = "node1"
-address = "0xAEd2a948892475F800A337427B3275D190EA3e94"
+address = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
 host = "127.0.0.1"
 p2p_port = 6182
 vfn_port = 6192
@@ -35,7 +35,7 @@ allow_validator_set_change = true
 voting_power_increase_limit_pct = 20
 max_validator_set_size = "100"
 auto_evict_enabled = false
-auto_evict_threshold = "0"
+auto_evict_threshold_pct = 0
 
 [genesis.staking_config]
 minimum_stake = "1000000000000000000"
