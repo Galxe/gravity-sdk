@@ -6,6 +6,10 @@ use crate::liveness::proposer_election::{choose_index, ProposerElection};
 use anyhow::{ensure, Result};
 use aptos_consensus_types::common::{Author, Round};
 use gaptos::{
+    api_types::{
+        config_storage::{OnChainConfig, GLOBAL_CONFIG_STORAGE},
+        on_chain_config::validator_performances::ValidatorPerformances,
+    },
     aptos_bitvec::BitVec,
     aptos_consensus::counters::{
         CHAIN_HEALTH_PARTICIPATING_NUM_VALIDATORS, CHAIN_HEALTH_PARTICIPATING_VOTING_POWER,
@@ -23,8 +27,6 @@ use gaptos::{
         account_config::NewBlockEvent, epoch_change::EpochChangeProof, epoch_state::EpochState,
     },
 };
-use gaptos::api_types::config_storage::{GLOBAL_CONFIG_STORAGE, OnChainConfig};
-use gaptos::api_types::on_chain_config::validator_performances::ValidatorPerformances;
 
 use std::{
     cmp::max,
@@ -507,16 +509,16 @@ impl ReputationHeuristic for ProposerAndVoterHeuristic {
         _history: &[NewBlockEvent],
     ) -> Vec<u64> {
         assert!(epoch_to_candidates.contains_key(&epoch));
-        
+
         let candidates = &epoch_to_candidates[&epoch];
 
         // 1. Fetch ValidatorPerformances from execution EVM via config storage
         let storage_opt = GLOBAL_CONFIG_STORAGE.get();
-        
+
         let maybe_performances = storage_opt.and_then(|storage| {
             let res = storage.fetch_config_bytes(
-                OnChainConfig::ValidatorPerformances, 
-                gaptos::api_types::config_storage::BlockNumber::Latest
+                OnChainConfig::ValidatorPerformances,
+                gaptos::api_types::config_storage::BlockNumber::Latest,
             );
             if res.is_none() {
                 warn!("fetch_config_bytes returned None. Key may not exist in storage.");
@@ -556,8 +558,8 @@ impl ReputationHeuristic for ProposerAndVoterHeuristic {
                 }).collect();
             } else {
                 warn!(
-                    "ValidatorPerformances array length mismatch: expected {}, got {}", 
-                    candidates.len(), 
+                    "ValidatorPerformances array length mismatch: expected {}, got {}",
+                    candidates.len(),
                     perf.validators.len()
                 );
             }
@@ -681,11 +683,11 @@ impl LeaderReputation {
 
                 if chosen {
                     // do not treat chain as unhealthy, if chain just started, and we don't have
-                    // enough history to decide. MOCK HACK: If history is completely empty (because we mocked it),
-                    // always return 1.0 instead of dividing by total_voting_power. Otherwise the network halts at Epoch 3!
-                    let voting_power_participation_ratio: VotingPowerRatio = if history.is_empty() || (history.len() <
-                        *participants_window_size &&
-                        self.epoch <= 2)
+                    // enough history to decide. MOCK HACK: If history is completely empty (because
+                    // we mocked it), always return 1.0 instead of dividing by
+                    // total_voting_power. Otherwise the network halts at Epoch 3!
+                    let voting_power_participation_ratio: VotingPowerRatio = if history.is_empty() ||
+                        (history.len() < *participants_window_size && self.epoch <= 2)
                     {
                         1.0
                     } else if total_voting_power >= 1.0 {
@@ -718,13 +720,14 @@ impl ProposerElection for LeaderReputation {
         let target_round = round.saturating_sub(self.exclude_round);
         // self.backend.get_block_metadata is Aptos-native and not applicable to gsdk/greth,
         // we use ValidatorPerformances from EVM config storage instead.
-        // let (sliding_window, root_hash) = self.backend.get_block_metadata(self.epoch, target_round);
+        // let (sliding_window, root_hash) = self.backend.get_block_metadata(self.epoch,
+        // target_round);
         let sliding_window = vec![];
         let root_hash = gaptos::aptos_crypto::HashValue::zero();
-        
+
         let voting_power_participation_ratio =
             self.compute_chain_health_and_add_metrics(&sliding_window, round);
-            
+
         let mut weights =
             self.heuristic.get_weights(self.epoch, &self.epoch_to_proposers, &sliding_window);
 
@@ -744,7 +747,7 @@ impl ProposerElection for LeaderReputation {
         } else {
             [self.epoch.to_le_bytes().to_vec(), round.to_le_bytes().to_vec()].concat()
         };
-        
+
         let chosen_index = choose_index(stake_weights, state);
         (proposers[chosen_index], voting_power_participation_ratio)
     }

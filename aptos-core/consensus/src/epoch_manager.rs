@@ -458,7 +458,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         proposers: Vec<AccountAddress>,
         _needed_rounds: u64,
     ) -> HashMap<u64, Vec<AccountAddress>> {
-        // In Gravity chain, fetching epoch ending ledger infos for past epochs 
+        // In Gravity chain, fetching epoch ending ledger infos for past epochs
         // may hang or remain unimplemented in the storage wrapper.
         // We directly return the current epoch's proposers.
         HashMap::from([(epoch_state.epoch, proposers)])

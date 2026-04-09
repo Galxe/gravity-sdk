@@ -458,12 +458,17 @@ impl PipelineBuilder {
             randomness: maybe_rand.map(|r| Random::from_bytes(r.randomness())),
             block_hash: None,
             proposer_index,
-            failed_proposer_indices: block.block_data().failed_authors().map_or(vec![], |authors| {
-                aptos_consensus_types::block::Block::failed_authors_to_indices(&validator, authors)
+            failed_proposer_indices: block.block_data().failed_authors().map_or(
+                vec![],
+                |authors| {
+                    aptos_consensus_types::block::Block::failed_authors_to_indices(
+                        &validator, authors,
+                    )
                     .into_iter()
                     .map(|i| i as u64)
                     .collect()
-            }),
+                },
+            ),
         };
         // TODO: add extra_data (validator transactions)
         get_block_buffer_manager()
