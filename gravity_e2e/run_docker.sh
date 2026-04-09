@@ -76,18 +76,10 @@ cargo build --bin gravity_node --profile quick-release 2>&1 | tail -5
 echo '[Step 5] Building gravity_cli (quick-release)...'
 cargo build --bin gravity_cli --profile quick-release 2>&1 | tail -5
 
-echo '[Step 6] Building Solidity test contracts...'
-for proj in /app/gravity_e2e/tests/contracts/*/; do
-    if [ -f \"\$proj/foundry.toml\" ]; then
-        echo \"  Building \$(basename \$proj)...\"
-        (cd \"\$proj\" && forge build --silent)
-    fi
-done
-
 echo ''
 echo '===== Phase 3: Running E2E Tests ====='
 
-echo '[Step 7] Running runner.py...'
+echo '[Step 6] Running runner.py...'
 export PYTHONPATH=/app:/app/gravity_e2e:\$PYTHONPATH
 cd /app/gravity_e2e
 python3 runner.py --force-init --exclude long_test $ARGS
