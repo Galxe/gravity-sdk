@@ -27,6 +27,7 @@ impl DkgState {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DKGStateResponse {
     pub last_completed: Option<DKGSessionStateInfo>,
@@ -34,6 +35,7 @@ pub struct DKGStateResponse {
     pub block_number: u64,
 }
 
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DKGSessionStateInfo {
     pub metadata: DKGSessionMetadataInfo,
@@ -42,6 +44,7 @@ pub struct DKGSessionStateInfo {
     pub target_epoch: u64,
 }
 
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DKGSessionMetadataInfo {
     pub dealer_epoch: u64,

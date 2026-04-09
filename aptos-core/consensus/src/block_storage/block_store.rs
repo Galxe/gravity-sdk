@@ -578,6 +578,18 @@ impl BlockStore {
                         randomness,
                         block_hash: maybe_block_hash.clone(),
                         proposer_index,
+                        failed_proposer_indices: p_block
+                            .block()
+                            .block_data()
+                            .failed_authors()
+                            .map_or(vec![], |authors| {
+                                authors
+                                    .iter()
+                                    .filter_map(|(_round, author)| {
+                                        self.validator_indices.get(author).map(|i| *i as u64)
+                                    })
+                                    .collect()
+                            }),
                     },
                     extra_data,
                     enable_randomness: self.enable_randomness,

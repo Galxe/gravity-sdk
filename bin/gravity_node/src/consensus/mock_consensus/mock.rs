@@ -90,6 +90,7 @@ impl MockConsensus {
                 block_hash: None,
                 // Mock consensus uses index 0 (first validator in the mock set)
                 proposer_index: Some(0),
+                failed_proposer_indices: vec![],
             },
             txns,
             extra_data: Vec::new(), // TODO: add validator transaction extra_data (DKG, JWK)

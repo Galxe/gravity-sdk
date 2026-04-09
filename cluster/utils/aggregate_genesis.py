@@ -41,7 +41,7 @@ def get_genesis_defaults():
             "votingPowerIncreaseLimitPct": 20,
             "maxValidatorSetSize": "100",
             "autoEvictEnabled": False,
-            "autoEvictThreshold": "0"
+            "autoEvictThresholdPct": 0
         },
         "stakingConfig": {
             "minimumStake": "1000000000000000000",
@@ -105,7 +105,7 @@ def build_genesis_config(config, genesis_cfg):
         "votingPowerIncreaseLimitPct": vc.get("voting_power_increase_limit_pct", defaults["validatorConfig"]["votingPowerIncreaseLimitPct"]),
         "maxValidatorSetSize": vc.get("max_validator_set_size", defaults["validatorConfig"]["maxValidatorSetSize"]),
         "autoEvictEnabled": vc.get("auto_evict_enabled", defaults["validatorConfig"]["autoEvictEnabled"]),
-        "autoEvictThreshold": str(vc.get("auto_evict_threshold", defaults["validatorConfig"]["autoEvictThreshold"]))
+        "autoEvictThresholdPct": int(vc.get("auto_evict_threshold_pct", defaults["validatorConfig"]["autoEvictThresholdPct"]))
     }
     
     # stakingConfig

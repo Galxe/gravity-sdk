@@ -231,8 +231,8 @@ class TransactionBuilder:
         if options:
             opts = TransactionOptions(
                 gas_limit=options.gas_limit or opts.gas_limit,
-                max_fee_per_gas=options.max_fee_per_gas or opts.max_fee_per_gas,
-                max_priority_fee_per_gas=options.max_priority_fee_per_gas or opts.max_priority_fee_per_gas,
+                max_fee_per_gas=options.max_fee_per_gas if options.max_fee_per_gas is not None else opts.max_fee_per_gas,
+                max_priority_fee_per_gas=options.max_priority_fee_per_gas if options.max_priority_fee_per_gas is not None else opts.max_priority_fee_per_gas,
                 gas_price=options.gas_price or opts.gas_price,
                 nonce=options.nonce or opts.nonce,
                 value=options.value or opts.value,
@@ -267,9 +267,9 @@ class TransactionBuilder:
         # Handle different transaction types
         if opts.tx_type == 2 or (opts.tx_type is None and opts.max_fee_per_gas):
             # EIP-1559 transaction
-            if opts.max_fee_per_gas:
+            if opts.max_fee_per_gas is not None:
                 tx['maxFeePerGas'] = Wei(opts.max_fee_per_gas)
-            if opts.max_priority_fee_per_gas:
+            if opts.max_priority_fee_per_gas is not None:
                 tx['maxPriorityFeePerGas'] = Wei(opts.max_priority_fee_per_gas)
 
             # Estimate gas if not provided
