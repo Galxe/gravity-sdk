@@ -16950,6 +16950,12 @@ checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 name = "sentinel"
 version = "0.1.0"
 dependencies = [
+ "alloy-primitives",
+ "alloy-provider",
+ "alloy-rpc-types",
+ "alloy-sol-macro",
+ "alloy-sol-types",
+ "alloy-transport-http",
  "anyhow",
  "chrono",
  "csv",
@@ -16959,7 +16965,7 @@ dependencies = [
  "linemux",
  "log",
  "regex",
- "reqwest 0.11.27",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "sha2 0.10.9",

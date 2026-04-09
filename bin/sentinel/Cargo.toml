@@ -12,10 +12,18 @@ regex = "1.10"
 glob = "0.3"
 sha2 = "0.10"
 hex = "0.4"
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 linemux = "0.3"
 anyhow = "1.0"
 chrono = "0.4"
 log = "0.4"
 env_logger = "0.10"
 csv.workspace = true
+
+# Chain monitor dependencies (alloy for Ethereum JSON-RPC)
+alloy-primitives = { version = "1.3.1", default-features = false, features = ["map-foldhash"] }
+alloy-provider = { version = "1.0.37", features = ["reqwest"], default-features = false }
+alloy-sol-types = { version = "1.3.1", default-features = false }
+alloy-sol-macro = "1.3.1"
+alloy-transport-http = { version = "1.0.37", features = ["reqwest-rustls-tls"], default-features = false }
+alloy-rpc-types = { version = "1.0.37", features = ["eth"], default-features = false }
