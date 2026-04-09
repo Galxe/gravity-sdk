@@ -3,9 +3,10 @@ use serde::Deserialize;
 use std::{collections::HashMap, fmt, fs, path::Path};
 
 /// Alert priority levels. P0 is the highest (most critical).
-#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Priority {
     #[serde(alias = "p0", alias = "P0")]
+    #[default]
     P0,
     #[serde(alias = "p1", alias = "P1")]
     P1,
@@ -13,11 +14,6 @@ pub enum Priority {
     P2,
 }
 
-impl Default for Priority {
-    fn default() -> Self {
-        Self::P0
-    }
-}
 
 impl fmt::Display for Priority {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
