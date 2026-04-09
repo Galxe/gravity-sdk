@@ -1,63 +1,190 @@
 pub mod command;
+pub mod completions;
+pub mod config;
 pub mod contract;
 pub mod dkg;
 pub mod epoch;
+pub mod errors;
 pub mod genesis;
+pub mod init;
 pub mod node;
+pub mod output;
 pub mod stake;
+pub mod status;
 pub mod unwind;
 pub mod util;
 pub mod validator;
 
 use clap::Parser;
+use colored::Colorize;
 use command::{Command, Executable};
+use config::GravityConfig;
 
 fn main() {
-    let cmd = Command::parse();
+    let mut cmd = Command::parse();
+
+    // Load config and resolve profile
+    let config = match GravityConfig::load() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("{} Failed to load config: {e}", "warning:".yellow().bold());
+            None
+        }
+    };
+    let profile = config.as_ref().and_then(|c| c.active_profile(cmd.profile.as_deref()).cloned());
+    let output_format = cmd.output;
+
+    // Inject config defaults into subcommands
+    apply_config_defaults(&mut cmd, &profile);
+
     let result = match cmd.command {
         command::SubCommands::Genesis(genesis_cmd) => match genesis_cmd.command {
-            // Example: gravity-cli genesis generate-key --output-file="./identity.yaml"
             genesis::SubCommands::GenerateKey(gck) => gck.execute(),
-            // Example: gravity-cli genesis generate-waypoint
-            // --input-file="./validator_genesis.json" --output-file="./waypoint.txt"
             genesis::SubCommands::GenerateWaypoint(gw) => gw.execute(),
-            // Example: gravity-cli genesis generate-account --output-file="./account.yaml"
             genesis::SubCommands::GenerateAccount(generate_account) => generate_account.execute(),
         },
         command::SubCommands::Validator(validator_cmd) => match validator_cmd.command {
-            // Example: gravity-cli validator join --rpc-url="http://127.0.0.1:8545" --contract-address="0x..." --private-key="0x..." --stake-amount="1000" --validator-address="0x..." --consensus-public-key="..." --validator-network-address="/ip4/127.0.0.1/tcp/6180/..." --fullnode-network-address="/ip4/127.0.0.1/tcp/6181/..." --aptos-address="..."
             validator::SubCommands::Join(join_cmd) => join_cmd.execute(),
-            // Example: gravity-cli validator leave --rpc-url="http://127.0.0.1:8545" --contract-address="0x..." --private-key="0x..." --validator-address="0x..."
             validator::SubCommands::Leave(leave_cmd) => leave_cmd.execute(),
-            // Example: gravity-cli validator list --rpc-url="http://127.0.0.1:8545"
-            validator::SubCommands::List(list_cmd) => list_cmd.execute(),
+            validator::SubCommands::List(mut list_cmd) => {
+                list_cmd.output_format = output_format;
+                list_cmd.execute()
+            }
         },
         command::SubCommands::Stake(stake_cmd) => match stake_cmd.command {
             stake::SubCommands::Create(create_cmd) => create_cmd.execute(),
             stake::SubCommands::Get(get_cmd) => get_cmd.execute(),
         },
         command::SubCommands::Node(node_cmd) => match node_cmd.command {
-            // Example: gravity-cli node start --deploy-path="./deploy_utils/node1"
             node::SubCommands::Start(start_cmd) => start_cmd.execute(),
-            // Example: gravity-cli node stop --deploy-path="./deploy_utils/node1"
             node::SubCommands::Stop(stop_cmd) => stop_cmd.execute(),
         },
         command::SubCommands::Dkg(dkg_cmd) => match dkg_cmd.command {
-            // Example: gravity-cli dkg status --server-url="127.0.0.1:1024"
-            dkg::SubCommands::Status(status_cmd) => status_cmd.execute(),
-            // Example: gravity-cli dkg randomness --server-url="127.0.0.1:1024" --block-number=100
+            dkg::SubCommands::Status(mut status_cmd) => {
+                status_cmd.output_format = output_format;
+                status_cmd.execute()
+            }
             dkg::SubCommands::Randomness(randomness_cmd) => randomness_cmd.execute(),
         },
-        // Example: gravity-cli unwind --consensus-db-path="./data/consensus_db" --target=19700
         command::SubCommands::Unwind(unwind_cmd) => unwind_cmd.execute(),
         command::SubCommands::Epoch(epoch_cmd) => match epoch_cmd.command {
-            // Example: gravity-cli epoch status --rpc-url="http://127.0.0.1:8545"
-            epoch::SubCommands::Status(status_cmd) => status_cmd.execute(),
+            epoch::SubCommands::Status(mut status_cmd) => {
+                status_cmd.output_format = output_format;
+                status_cmd.execute()
+            }
         },
+        command::SubCommands::Status(mut status_cmd) => {
+            status_cmd.output_format = output_format;
+            status_cmd.execute()
+        }
+        command::SubCommands::Completions(completions_cmd) => completions_cmd.execute(),
+        command::SubCommands::Init(init_cmd) => init_cmd.execute(),
     };
 
     if let Err(e) = result {
-        eprintln!("Error: {e:?}");
+        eprintln!("{} {e}", "error:".red().bold());
+        for cause in e.chain().skip(1) {
+            eprintln!("  {} {cause}", "caused by:".yellow());
+        }
+        if let Some(hint) = errors::suggest_fix(&e) {
+            eprintln!("\n{} {hint}", "hint:".cyan().bold());
+        }
         std::process::exit(1);
+    }
+}
+
+/// Apply config profile defaults to command fields that are still None after CLI/env parsing.
+fn apply_config_defaults(cmd: &mut Command, profile: &Option<config::ProfileConfig>) {
+    let Some(profile) = profile else { return };
+
+    match &mut cmd.command {
+        command::SubCommands::Validator(ref mut v) => match &mut v.command {
+            validator::SubCommands::Join(ref mut c) => {
+                if c.rpc_url.is_none() {
+                    c.rpc_url.clone_from(&profile.rpc_url);
+                }
+                if c.gas_limit.is_none() {
+                    c.gas_limit = profile.gas_limit;
+                }
+                if c.gas_price.is_none() {
+                    c.gas_price = profile.gas_price;
+                }
+            }
+            validator::SubCommands::Leave(ref mut c) => {
+                if c.rpc_url.is_none() {
+                    c.rpc_url.clone_from(&profile.rpc_url);
+                }
+                if c.gas_limit.is_none() {
+                    c.gas_limit = profile.gas_limit;
+                }
+                if c.gas_price.is_none() {
+                    c.gas_price = profile.gas_price;
+                }
+            }
+            validator::SubCommands::List(ref mut c) => {
+                if c.rpc_url.is_none() {
+                    c.rpc_url.clone_from(&profile.rpc_url);
+                }
+            }
+        },
+        command::SubCommands::Stake(ref mut s) => match &mut s.command {
+            stake::SubCommands::Create(ref mut c) => {
+                if c.rpc_url.is_none() {
+                    c.rpc_url.clone_from(&profile.rpc_url);
+                }
+                if c.gas_limit.is_none() {
+                    c.gas_limit = profile.gas_limit;
+                }
+                if c.gas_price.is_none() {
+                    c.gas_price = profile.gas_price;
+                }
+            }
+            stake::SubCommands::Get(ref mut c) => {
+                if c.rpc_url.is_none() {
+                    c.rpc_url.clone_from(&profile.rpc_url);
+                }
+            }
+        },
+        command::SubCommands::Node(ref mut n) => match &mut n.command {
+            node::SubCommands::Start(ref mut c) => {
+                if c.deploy_path.is_none() {
+                    c.deploy_path.clone_from(&profile.deploy_path);
+                }
+            }
+            node::SubCommands::Stop(ref mut c) => {
+                if c.deploy_path.is_none() {
+                    c.deploy_path.clone_from(&profile.deploy_path);
+                }
+            }
+        },
+        command::SubCommands::Dkg(ref mut d) => match &mut d.command {
+            dkg::SubCommands::Status(ref mut c) => {
+                if c.server_url.is_none() {
+                    c.server_url.clone_from(&profile.server_url);
+                }
+            }
+            dkg::SubCommands::Randomness(ref mut c) => {
+                if c.server_url.is_none() {
+                    c.server_url.clone_from(&profile.server_url);
+                }
+            }
+        },
+        command::SubCommands::Epoch(ref mut ep) => match &mut ep.command {
+            epoch::SubCommands::Status(ref mut c) => {
+                if c.rpc_url.is_none() {
+                    c.rpc_url.clone_from(&profile.rpc_url);
+                }
+            }
+        },
+        command::SubCommands::Status(ref mut c) => {
+            if c.rpc_url.is_none() {
+                c.rpc_url.clone_from(&profile.rpc_url);
+            }
+            if c.server_url.is_none() {
+                c.server_url.clone_from(&profile.server_url);
+            }
+        }
+        // Genesis, Unwind, Completions, Init don't use profile config
+        _ => {}
     }
 }

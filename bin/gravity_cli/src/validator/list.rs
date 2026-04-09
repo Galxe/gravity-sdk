@@ -8,14 +8,19 @@ use serde::Serialize;
 use crate::{
     command::Executable,
     contract::{ValidatorManagement, ValidatorStatus, VALIDATOR_MANAGER_ADDRESS},
+    output::OutputFormat,
     util::format_ether,
 };
 
 #[derive(Debug, Parser)]
 pub struct ListCommand {
     /// RPC URL for gravity node
-    #[clap(long)]
-    pub rpc_url: String,
+    #[clap(long, env = "GRAVITY_RPC_URL")]
+    pub rpc_url: Option<String>,
+
+    /// Output format
+    #[clap(skip)]
+    pub output_format: OutputFormat,
 }
 
 // Serializable versions of the contract types
@@ -49,8 +54,14 @@ impl Executable for ListCommand {
 
 impl ListCommand {
     async fn execute_async(self) -> Result<(), anyhow::Error> {
+        let rpc_url = self.rpc_url.ok_or_else(|| {
+            anyhow::anyhow!(
+                "--rpc-url is required. Set via CLI flag, GRAVITY_RPC_URL env var, or ~/.gravity/config.toml"
+            )
+        })?;
+
         // Initialize Provider
-        let provider = ProviderBuilder::new().connect_http(self.rpc_url.parse()?);
+        let provider = ProviderBuilder::new().connect_http(rpc_url.parse()?);
 
         // Get current epoch
         let call = ValidatorManagement::getCurrentEpochCall {};
@@ -157,9 +168,51 @@ impl ListCommand {
             current_epoch,
         };
 
-        // Output as JSON
-        let json = serde_json::to_string_pretty(&serializable_set)?;
-        println!("{json}");
+        // Output based on format
+        match self.output_format {
+            OutputFormat::Json => {
+                let json = serde_json::to_string_pretty(&serializable_set)?;
+                println!("{json}");
+            }
+            _ => {
+                println!(
+                    "Epoch: {}  |  Active: {}  |  Total Voting Power: {} ETH",
+                    serializable_set.current_epoch,
+                    serializable_set.active_count,
+                    serializable_set.total_voting_power,
+                );
+                println!();
+                if !serializable_set.active_validators.is_empty() {
+                    println!("Active Validators:");
+                    println!(
+                        "{:<6} {:<44} {:<16} Moniker/Network",
+                        "#", "Validator", "Voting Power"
+                    );
+                    println!("{}", "-".repeat(90));
+                    for v in &serializable_set.active_validators {
+                        println!(
+                            "{:<6} {:<44} {:<16} {}",
+                            v.validator_index, v.validator, v.voting_power, v.network_addresses
+                        );
+                    }
+                    println!();
+                }
+                if !serializable_set.pending_active.is_empty() {
+                    println!("Pending Active:");
+                    for v in &serializable_set.pending_active {
+                        println!("  {} (voting power: {})", v.validator, v.voting_power);
+                    }
+                    println!();
+                }
+                if !serializable_set.pending_inactive.is_empty() {
+                    println!("Pending Inactive:");
+                    for v in &serializable_set.pending_inactive {
+                        println!("  {} (voting power: {})", v.validator, v.voting_power);
+                    }
+                    println!();
+                }
+            }
+        }
 
         Ok(())
     }

@@ -7877,6 +7877,8 @@ dependencies = [
  "build-info",
  "bytes",
  "clap 4.5.57",
+ "clap_complete",
+ "colored",
  "gaptos",
  "hex",
  "k256",
@@ -7890,6 +7892,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tiny-keccak",
  "tokio",
+ "toml 0.7.8",
  "tracing",
 ]
 

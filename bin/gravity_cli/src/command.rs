@@ -1,6 +1,7 @@
 use crate::{
-    dkg::DKGCommand, epoch::EpochCommand, genesis::GenesisCommand, node::NodeCommand,
-    stake::StakeCommand, unwind::UnwindCommand, validator::ValidatorCommand,
+    completions::CompletionsCommand, dkg::DKGCommand, epoch::EpochCommand, genesis::GenesisCommand,
+    init::InitCommand, node::NodeCommand, output::OutputFormat, stake::StakeCommand,
+    status::StatusCommand, unwind::UnwindCommand, validator::ValidatorCommand,
 };
 use build_info::{build_information, BUILD_PKG_VERSION};
 use clap::{Parser, Subcommand};
@@ -33,20 +34,40 @@ fn long_version() -> &'static str {
 #[derive(Parser, Debug)]
 #[command(name = "gravity-cli", version = short_version(), long_version = long_version())]
 pub struct Command {
+    /// Config profile to use (overrides active_profile in config.toml)
+    #[clap(long, global = true, env = "GRAVITY_PROFILE")]
+    pub profile: Option<String>,
+
+    /// Output format for query commands
+    #[clap(long, global = true, value_enum, default_value = "plain", env = "GRAVITY_OUTPUT")]
+    pub output: OutputFormat,
+
     #[command(subcommand)]
     pub command: SubCommands,
 }
 
 #[derive(Subcommand, Debug)]
 pub enum SubCommands {
+    /// Genesis setup and key management
     Genesis(GenesisCommand),
+    /// Validator lifecycle management
     Validator(ValidatorCommand),
+    /// Stake pool operations
     Stake(StakeCommand),
+    /// Node lifecycle management
     Node(NodeCommand),
+    /// Distributed key generation queries
     Dkg(DKGCommand),
     /// Unwind consensus state to a specific block number
     Unwind(UnwindCommand),
+    /// Epoch management
     Epoch(EpochCommand),
+    /// Show combined node status (epoch, validators, DKG)
+    Status(StatusCommand),
+    /// Generate shell completions
+    Completions(CompletionsCommand),
+    /// Initialize configuration interactively
+    Init(InitCommand),
 }
 
 pub trait Executable {
