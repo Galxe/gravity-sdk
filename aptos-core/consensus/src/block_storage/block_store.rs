@@ -229,35 +229,70 @@ impl BlockStore {
         LedgerInfoWithSignatures::new(LedgerInfo::dummy(), AggregateSignature::empty())
     }
 
+    /// Replays uncommitted quorum certificates after a node restart.
+    ///
+    /// Retrieves all QCs with commit info from the block tree, sorts them by round,
+    /// and re-sends each one for execution in order. This reproduces the same commit
+    /// batches that were in-flight before the restart.
+    ///
+    /// If the latest ledger info carries `epoch_block_info` (indicating a non-blocking
+    /// epoch change was in progress), recovery stops at the epoch change block's round.
+    /// Suffix blocks beyond that point would never receive execution results from reth,
+    /// so attempting to recover them would cause the pipeline to hang.
     async fn recover_blocks(&self) {
         RECOVERY_GAUGE.set_with(&[], 1);
-        // reproduce the same batches (important for the commit phase)
+
         let mut certs = self.inner.read().get_all_quorum_certs_with_commit_info();
         let last_ledger_info =
             self.storage.consensus_db().ledger_db.metadata_db().get_latest_ledger_info();
-        info!("recover blocks, last_ledger_info: {:?}", last_ledger_info);
+        info!("recover_blocks: last_ledger_info={:?}", last_ledger_info);
+
+        // Determine the upper-bound round for recovery when a non-blocking epoch change
+        // was in progress. Blocks after this round are suffix blocks that reth will discard.
+        let epoch_change_limit_round =
+            last_ledger_info.as_ref().and_then(|li| {
+                let info = li.ledger_info().commit_info().epoch_block_info()?;
+                let block = self.get_block(info.block_id)?;
+                info!(
+                "recover_blocks: epoch change detected at block_id={}, block_number={}, round={}",
+                info.block_id, info.block_number, block.round(),
+            );
+                Some(block.round())
+            });
+
         certs.sort_unstable_by_key(|qc| qc.commit_info().round());
+
         for qc in certs {
-            if qc.commit_info().round() > self.commit_root().round() {
-                if let Some(last_ledger_info) = &last_ledger_info {
-                    if last_ledger_info.ledger_info().epoch() == qc.commit_info().epoch() &&
-                        qc.commit_info().round() <= last_ledger_info.commit_info().round()
-                    {
-                        info!(
-                            "sending qc {} to execution, current commit round {}",
-                            qc.commit_info().round(),
-                            self.commit_root().round()
-                        );
-                        if let Err(e) =
-                            self.send_for_execution(qc.into_wrapped_ledger_info(), true).await
-                        {
-                            error!("Error in try-committing blocks. {}", e.to_string());
-                            break;
-                        }
-                    }
-                }
+            let commit_round = qc.commit_info().round();
+
+            if commit_round <= self.commit_root().round() {
+                continue;
+            }
+
+            // Stop once we pass the epoch change boundary.
+            if epoch_change_limit_round.is_some_and(|ec| commit_round > ec) {
+                info!("recover_blocks: stopping before round {commit_round} (epoch change limit)");
+                break;
+            }
+
+            let Some(last_li) = &last_ledger_info else { continue };
+            if last_li.ledger_info().epoch() != qc.commit_info().epoch() ||
+                commit_round > last_li.commit_info().round()
+            {
+                continue;
+            }
+
+            info!(
+                "recover_blocks: sending round {} to execution (commit_root={})",
+                commit_round,
+                self.commit_root().round(),
+            );
+            if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info(), true).await {
+                error!("recover_blocks: failed to commit blocks: {e}");
+                break;
             }
         }
+
         RECOVERY_GAUGE.set_with(&[], 0);
     }
 
@@ -630,83 +665,30 @@ impl BlockStore {
                 finality_proof,
                 commit_decision,
             );
-            self.inner.write().update_ordered_root(block_to_commit.id());
-            self.inner.write().insert_ordered_cert(finality_proof_clone.clone());
         } else {
-            let batch_commit_size = std::env::var("BATCH_COMMIT_SIZE")
-                .ok()
-                .and_then(|v| v.parse::<usize>().ok())
-                .unwrap_or(0);
-            if batch_commit_size > 0 && blocks_to_commit.len() <= batch_commit_size {
-                info!(
-                    "blocks_to_commit len {} <= BATCH_COMMIT_SIZE {}, skip sending for batch accumulation",
-                    blocks_to_commit.len(),
-                    batch_commit_size
-                );
-                return Ok(());
-            }
-
-            // Send blocks one by one: for each block, find the QC whose commit_info
-            // matches it. The QC that commits block[i] is the QC certifying block[i+1]
-            // (per 2-chain rule: QC(B_{i+1}).commit_info = B_i when rounds are consecutive).
-            // Blocks without a matching QC get batched with the next block that has one
-            // via path_from_ordered_root.
-            for (i, block) in blocks_to_commit.iter().enumerate() {
-                let proof = if block.id() == block_id_to_commit {
-                    // Last block: use the original finality_proof
-                    finality_proof.clone()
-                } else {
-                    // Look up the QC certifying the next block in the chain.
-                    // That QC's commit_info should point to this block (2-chain rule).
-                    let next_qc = (i + 1 < blocks_to_commit.len())
-                        .then(|| self.get_quorum_cert_for_block(blocks_to_commit[i + 1].id()))
-                        .flatten();
-                    match next_qc {
-                        Some(qc) if qc.commit_info().id() == block.id() => {
-                            qc.into_wrapped_ledger_info()
-                        }
-                        _ => {
-                            // No matching QC → this block will be included in the
-                            // next block's path_from_ordered_root batch.
-                            continue;
-                        }
-                    }
-                };
-
-                let path = self.path_from_ordered_root(block.id()).unwrap_or_default();
-                if path.is_empty() {
-                    continue;
-                }
-
-                let bt = self.inner.clone();
-                let st = self.storage.clone();
-                let proof_for_cb = proof.clone();
-
-                info!("send block to execution one-by-one {:?}", path);
-                self.execution_client
-                    .finalize_order(
-                        &path,
-                        proof.ledger_info().clone(),
-                        Box::new(
-                            move |committed_blocks: &[Arc<PipelinedBlock>],
-                                  commit_decision: LedgerInfoWithSignatures| {
-                                bt.write().commit_callback(
-                                    st,
-                                    committed_blocks,
-                                    proof_for_cb,
-                                    commit_decision,
-                                );
-                            },
-                        ),
-                    )
-                    .await
-                    .expect("Failed to persist commit");
-
-                self.inner.write().update_ordered_root(block.id());
-                self.inner.write().insert_ordered_cert(proof);
-            }
+            info!("send the blocks to execution {:?}", blocks_to_commit);
+            self.execution_client
+                .finalize_order(
+                    &blocks_to_commit,
+                    finality_proof.ledger_info().clone(),
+                    Box::new(
+                        move |committed_blocks: &[Arc<PipelinedBlock>],
+                              commit_decision: LedgerInfoWithSignatures| {
+                            block_tree.write().commit_callback(
+                                storage,
+                                committed_blocks,
+                                finality_proof,
+                                commit_decision,
+                            );
+                        },
+                    ),
+                )
+                .await
+                .expect("Failed to persist commit");
         }
 
+        self.inner.write().update_ordered_root(block_to_commit.id());
+        self.inner.write().insert_ordered_cert(finality_proof_clone.clone());
         update_counters_for_ordered_blocks(&blocks_to_commit);
         Ok(())
     }
