@@ -121,10 +121,10 @@ impl LedgerMetadataDb {
         self.latest_ledger_info.store(Arc::new(Some(ledger_info_with_sigs)));
     }
 
-    pub(crate) fn update_latest_ledger_info(&self) {
-        let latest_ledger_info =
-            get_latest_ledger_info_in_db_impl(&self.db).expect("DB read failed.");
+    pub(crate) fn update_latest_ledger_info(&self) -> Result<()> {
+        let latest_ledger_info = get_latest_ledger_info_in_db_impl(&self.db)?;
         self.latest_ledger_info.store(Arc::new(latest_ledger_info));
+        Ok(())
     }
 
     pub(crate) fn get_latest_ledger_info(&self) -> Option<LedgerInfoWithSignatures> {
@@ -149,8 +149,8 @@ impl LedgerMetadataDb {
         batch.put::<LedgerInfoSchema>(&ledger_info.block_number(), ledger_info_with_sigs)
     }
 
-    pub(crate) fn get_latest_ledger_infos(&self) -> Vec<LedgerInfoWithSignatures> {
-        get_latest_ledger_infos_in_db_impl(&self.db).expect("DB read failed.")
+    pub(crate) fn get_latest_ledger_infos(&self) -> Result<Vec<LedgerInfoWithSignatures>> {
+        get_latest_ledger_infos_in_db_impl(&self.db)
     }
 
     pub(crate) fn get_block_hash(&self, block_number: u64) -> Option<HashValue> {
@@ -163,8 +163,8 @@ impl LedgerMetadataDb {
     pub(crate) fn get_ledger_infos_by_range(
         &self,
         range: (u64, u64),
-    ) -> Vec<LedgerInfoWithSignatures> {
-        get_ledger_infos_by_range_in_db_impl(&self.db, range).expect("DB read failed.")
+    ) -> Result<Vec<LedgerInfoWithSignatures>> {
+        get_ledger_infos_by_range_in_db_impl(&self.db, range)
     }
 }
 
@@ -209,7 +209,7 @@ mod tests {
 
         {
             let ledger_metadata_db = LedgerMetadataDb::new(init_db());
-            let res = ledger_metadata_db.get_ledger_infos_by_range((0, 0));
+            let res = ledger_metadata_db.get_ledger_infos_by_range((0, 0)).unwrap();
             println!("res len {} ", res.len());
             for li in res {
                 println!("{}", li);

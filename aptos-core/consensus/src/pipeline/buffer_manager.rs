@@ -622,13 +622,21 @@ impl BufferManager {
                 let commit_info = vote.commit_info().clone();
                 info!("Receive commit vote {} from {}", commit_info, author);
                 if commit_info.round() >= self.latest_round {
-                    if !self.commit_vote_cache.contains_key(&commit_info.id()) {
-                        self.commit_vote_cache.insert(commit_info.id(), HashMap::new());
+                    // Limit the cache size to prevent OOM from unverified future votes
+                    const MAX_COMMIT_VOTE_CACHE_ENTRIES: usize = 1000;
+                    if self.commit_vote_cache.len() < MAX_COMMIT_VOTE_CACHE_ENTRIES ||
+                        self.commit_vote_cache.contains_key(&commit_info.id())
+                    {
+                        self.commit_vote_cache
+                            .entry(commit_info.id())
+                            .or_default()
+                            .insert(HashValue::new(*author), vote.clone());
+                    } else {
+                        warn!(
+                            "Commit vote cache is full ({}), dropping vote from {}",
+                            MAX_COMMIT_VOTE_CACHE_ENTRIES, author
+                        );
                     }
-                    self.commit_vote_cache
-                        .get_mut(&commit_info.id())
-                        .unwrap()
-                        .insert(HashValue::new(*author), vote.clone());
                 }
                 let target_block_id = vote.commit_info().id();
                 let current_cursor =

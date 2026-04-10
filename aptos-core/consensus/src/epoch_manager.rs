@@ -454,42 +454,14 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     fn extract_epoch_proposers(
         &self,
         epoch_state: &EpochState,
-        use_history_from_previous_epoch_max_count: u32,
+        _use_history_from_previous_epoch_max_count: u32,
         proposers: Vec<AccountAddress>,
-        needed_rounds: u64,
+        _needed_rounds: u64,
     ) -> HashMap<u64, Vec<AccountAddress>> {
-        // Genesis is epoch=0
-        // First block (after genesis) is epoch=1, and is the only block in that epoch.
-        // It has no votes, so we skip it unless we are in epoch 1, as otherwise it will
-        // skew leader elections for exclude_round number of rounds.
-        let first_epoch_to_consider = std::cmp::max(
-            if epoch_state.epoch == 1 { 1 } else { 2 },
-            epoch_state.epoch.saturating_sub(use_history_from_previous_epoch_max_count as u64),
-        );
-        // If we are considering beyond the current epoch, we need to fetch validators for those
-        // epochs
-        if epoch_state.epoch > first_epoch_to_consider {
-            self.storage
-                .aptos_db()
-                .get_epoch_ending_ledger_infos(first_epoch_to_consider - 1, epoch_state.epoch)
-                .map_err(Into::into)
-                .and_then(|proof| {
-                    ensure!(
-                        proof.ledger_info_with_sigs.len() as u64 ==
-                            (epoch_state.epoch - (first_epoch_to_consider - 1))
-                    );
-                    extract_epoch_to_proposers(proof, epoch_state.epoch, &proposers, needed_rounds)
-                })
-                .unwrap_or_else(|err| {
-                    error!(
-                        "Couldn't create leader reputation with history across epochs, {:?}",
-                        err
-                    );
-                    HashMap::from([(epoch_state.epoch, proposers)])
-                })
-        } else {
-            HashMap::from([(epoch_state.epoch, proposers)])
-        }
+        // In Gravity chain, fetching epoch ending ledger infos for past epochs
+        // may hang or remain unimplemented in the storage wrapper.
+        // We directly return the current epoch's proposers.
+        HashMap::from([(epoch_state.epoch, proposers)])
     }
 
     fn process_epoch_retrieval(
@@ -559,7 +531,10 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             // We request proof to join higher epoch
             Ordering::Greater => {
                 let epoch = self.epoch();
-                let sender = self.round_manager_tx.as_ref().unwrap();
+                let Some(sender) = self.round_manager_tx.as_ref() else {
+                    warn!("Received epoch change request from {} but Round Manager is not initialized", peer_id);
+                    return Ok(());
+                };
 
                 let event = VerifiedEvent::EpochChange(epoch);
                 if let Err(e) = sender.push((peer_id, discriminant(&event)), (peer_id, event)) {
@@ -1882,14 +1857,23 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         let self_epoch = self.epoch();
         match sync_info.epoch().cmp(&self_epoch) {
             Ordering::Greater => {
-                let sender = self.round_manager_tx.as_ref().unwrap();
+                let Some(sender) = self.round_manager_tx.as_ref() else {
+                    warn!("Received block sync epoch change from {} but Round Manager is not initialized", peer_id);
+                    return;
+                };
                 let event = VerifiedEvent::EpochChange(self_epoch);
                 if let Err(e) = sender.push((peer_id, discriminant(&event)), (peer_id, event)) {
                     error!("Failed to send event to round manager {:?}", e);
                 }
             }
             Ordering::Equal => {
-                let sender = self.round_manager_tx.as_ref().unwrap();
+                let Some(sender) = self.round_manager_tx.as_ref() else {
+                    warn!(
+                        "Received block sync info from {} but Round Manager is not initialized",
+                        peer_id
+                    );
+                    return;
+                };
                 let event = VerifiedEvent::UnverifiedSyncInfo(sync_info);
                 if let Err(e) = sender.push((peer_id, discriminant(&event)), (peer_id, event)) {
                     error!("Failed to send event to round manager {:?}", e);

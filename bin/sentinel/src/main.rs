@@ -1,4 +1,5 @@
 mod analyzer;
+mod chain_monitor;
 mod config;
 mod notifier;
 mod probe;
@@ -57,6 +58,14 @@ async fn main() -> Result<()> {
         tokio::spawn(async move {
             probe.run().await;
         });
+    }
+
+    // Start Chain Monitors (if configured)
+    if let Some(chain_config) = config.chain_monitor {
+        println!("Starting chain monitors...");
+        chain_monitor::spawn_all(chain_config, notifier.clone())
+            .await
+            .context("Failed to start chain monitors")?;
     }
 
     // Initial file discovery

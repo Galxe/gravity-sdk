@@ -451,6 +451,17 @@ impl StateComputer for ExecutionProxy {
             randomness: randomness.map(|r| Random::from_bytes(r.randomness())),
             block_hash: None,
             proposer_index,
+            failed_proposer_indices: block.block_data().failed_authors().map_or(
+                vec![],
+                |authors| {
+                    authors
+                        .iter()
+                        .filter_map(|(_round, author)| {
+                            validators.iter().position(|v| v == author).map(|i| i as u64)
+                        })
+                        .collect()
+                },
+            ),
         };
 
         // We would export the empty block detail to the outside GCEI caller
