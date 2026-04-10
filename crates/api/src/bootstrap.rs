@@ -279,7 +279,7 @@ pub async fn init_block_buffer_manager(consensus_db: &Arc<ConsensusDB>, latest_b
     for epoch_i in (1..=max_epoch).rev() {
         let start_key = (epoch_i, HashValue::zero());
         let end_key = (epoch_i, HashValue::new([u8::MAX; HashValue::LENGTH]));
-        consensus_db
+        let results = consensus_db
             .get_range_with_filter::<BlockNumberSchema, _>(
                 &start_key,
                 &end_key,
@@ -287,22 +287,12 @@ pub async fn init_block_buffer_manager(consensus_db: &Arc<ConsensusDB>, latest_b
                     *block_number >= start_block_number && *block_number <= latest_block_number
                 },
             )
-            .unwrap()
-            .into_iter()
-            .for_each(|((epoch, block_id), block_number)| {
-                if !block_number_to_block_id.contains_key(&block_number) {
-                    block_number_to_block_id
-                        .insert(block_number, (epoch, BlockId::from_bytes(block_id.as_slice())));
-                } else {
-                    let (cur_epoch, _) = block_number_to_block_id.get(&block_number).unwrap();
-                    if *cur_epoch < epoch {
-                        block_number_to_block_id.insert(
-                            block_number,
-                            (epoch, BlockId::from_bytes(block_id.as_slice())),
-                        );
-                    }
-                }
-            });
+            .unwrap();
+        for ((epoch, block_id), block_number) in results {
+            block_number_to_block_id
+                .entry(block_number)
+                .or_insert_with(|| (epoch, BlockId::from_bytes(block_id.as_slice())));
+        }
         if block_number_to_block_id.len() >= (latest_block_number - start_block_number + 1) as usize
         {
             break;
