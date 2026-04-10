@@ -15,6 +15,7 @@ major_version = 1
 consensus_config = "0x0301010a00000000000000280000000000000001010000000a000000000000000100010200000000000000000020000000000000"
 execution_config = "0x00"
 initial_locked_until_micros = 1798848000000000
+# genesis_timestamp_secs = 1750000000  # Genesis block timestamp (Unix seconds). Required for non-dev chains; omit for dev/e2e to use template default.
 
 [genesis.validator_config]
 minimum_bond = "1000000000000000000"
