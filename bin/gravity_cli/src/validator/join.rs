@@ -53,11 +53,11 @@ pub struct JoinCommand {
     #[clap(long)]
     pub network_public_key: String,
 
-    /// Validator network address in /ip4/{host}/tcp/{port} format
+    /// Validator network address in /ip4/{host}/tcp/{port} or /dns/{domain}/tcp/{port} format
     #[clap(long)]
     pub validator_network_address: String,
 
-    /// Fullnode network address in /ip4/{host}/tcp/{port} format
+    /// Fullnode network address in /ip4/{host}/tcp/{port} or /dns/{domain}/tcp/{port} format
     #[clap(long)]
     pub fullnode_network_address: String,
 }
@@ -222,19 +222,19 @@ impl JoinCommand {
                 ));
             }
 
-            // Validate address format: /ip4/{host}/tcp/{port}
+            // Validate address format: /ip4/{host}/tcp/{port} or /dns/{domain}/tcp/{port}
             fn validate_network_address(addr: &str, label: &str) -> Result<(), anyhow::Error> {
                 let parts: Vec<&str> = addr.split('/').collect();
-                // Expected: ["", "ip4", "{host}", "tcp", "{port}"]
+                // Expected: ["", "ip4"|"dns"|"dns4"|"dns6", "{host}", "tcp", "{port}"]
                 if parts.len() != 5 ||
                     !parts[0].is_empty() ||
-                    parts[1] != "ip4" ||
+                    !matches!(parts[1], "ip4" | "dns" | "dns4" | "dns6") ||
                     parts[2].is_empty() ||
                     parts[3] != "tcp" ||
                     parts[4].parse::<u16>().is_err()
                 {
                     return Err(anyhow::anyhow!(
-                        "Invalid {label} address: expected /ip4/{{host}}/tcp/{{port}} format, got '{addr}'"
+                        "Invalid {label} address: expected /ip4/{{host}}/tcp/{{port}} or /dns/{{domain}}/tcp/{{port}} format, got '{addr}'"
                     ));
                 }
                 Ok(())
@@ -243,7 +243,7 @@ impl JoinCommand {
             validate_network_address(&self.fullnode_network_address, "fullnode network")?;
 
             // Construct full addresses:
-            // /ip4/{host}/tcp/{port}/noise-ik/{network_public_key}/handshake/0
+            // /{ip4|dns}/{host}/tcp/{port}/noise-ik/{network_public_key}/handshake/0
             //
             // The same `network_pk` is intentionally used for both endpoints: in this
             // deployment model a single validator process serves both `validator_network`
