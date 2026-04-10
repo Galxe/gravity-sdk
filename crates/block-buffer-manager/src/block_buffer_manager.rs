@@ -178,9 +178,11 @@ pub struct BlockStateMachine {
     latest_epoch_change_block_number: u64,
     /// Cached epoch change metadata for suffix block handling.
     /// Set when a reconfig block is detected in `set_compute_res`, cleared in
-    /// `release_inflight_blocks`. Note: `epoch_block_info.epoch_start_round` and
-    /// `epoch_start_timestamp_usecs` are initially 0 because reth doesn't have consensus-layer
-    /// data. They are patched downstream by `BufferManager::resolve_epoch_block_info`.
+    /// `release_inflight_blocks`. The `epoch_block_info` is fully populated at
+    /// creation — `epoch_start_round` and `epoch_start_timestamp_usecs` are
+    /// passed down from the consensus layer via `set_ordered_blocks`.
+    /// Also serves as the source of truth for `is_suffix_block` and
+    /// `get_epoch_change_block_info`, so the reth and consensus sides stay in sync.
     epoch_change_block_info: Option<EpochChangeCache>,
 }
 
@@ -198,12 +200,11 @@ impl BlockStateMachine {
     }
 }
 
-/// Caches the epoch change block's metadata and compute result.
+/// Caches the epoch change block's metadata.
 /// Used by suffix blocks to carry consistent epoch transition info.
 #[derive(Clone, Debug)]
 pub struct EpochChangeCache {
     pub epoch_block_info: EpochBlockInfo,
-    pub compute_result: StateComputeResult,
 }
 
 pub struct BlockBufferManagerConfig {
@@ -381,8 +382,11 @@ impl BlockBufferManager {
     }
 
     /// Consume the epoch change and return (new_epoch, epoch_change_block_number).
-    /// Also resets `latest_epoch_change_block_number` to 0 so that
-    /// `get_committed_blocks` no longer skips new-epoch blocks.
+    /// Also resets `latest_epoch_change_block_number` to 0: this field doubles as a
+    /// pending-epoch-change flag, and `release_inflight_blocks` uses it to decide
+    /// which blocks to retain (reset-to-0 means "drop everything leftover").
+    /// Suffix-block lookups no longer depend on this field — they use
+    /// `epoch_change_block_info` directly, which lives until `release_inflight_blocks`.
     pub async fn consume_epoch_change(&self) -> (u64, u64) {
         // Acquire lock first to prevent TOCTOU race.
         // Other tasks checking is_epoch_change() will still see EpochChange
@@ -397,12 +401,12 @@ impl BlockBufferManager {
         // DO NOT advance current_epoch here. It MUST only be advanced in `release_inflight_blocks`
         // when the consensus pipeline officially transitions.
 
-        // Reset so get_committed_blocks stops skipping new-epoch blocks.
         block_state_machine.latest_epoch_change_block_number = 0;
 
-        // DO NOT clear epoch_change_block_info here. Suffix handling in get_executed_res relies
-        // on it to return dummy execution results for suffix blocks. It will be cleared in
-        // release_inflight_blocks. Only now signal that the epoch change has been consumed
+        // DO NOT clear epoch_change_block_info here. Suffix handling in get_executed_res and
+        // get_epoch_change_block_info relies on it to identify suffix blocks and return dummy
+        // execution results. It will be cleared in release_inflight_blocks. Only now signal
+        // that the epoch change has been consumed.
         self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
 
         // If epoch_change_block_number is 0, it means this is a redundant call
@@ -702,14 +706,13 @@ impl BlockBufferManager {
                     }
                     BlockState::Ordered { .. } => {
                         // Suffix blocks after epoch change: reth won't compute them,
-                        // so return a dummy result to unblock consensus.
+                        // so return a dummy result to unblock consensus. Must match the
+                        // result written in `handle_epoch_change_suffix_blocks` — cloning
+                        // the epoch change block's real result here would leak
+                        // `has_reconfiguration() == true` to suffix blocks and any downstream
+                        // consumer that forgets to check `is_suffix_block`.
                         if block_state_machine.is_suffix_block(block_num) {
-                            let dummy_result = block_state_machine
-                                .epoch_change_block_info
-                                .as_ref()
-                                .unwrap()
-                                .compute_result
-                                .clone();
+                            let dummy_result = StateComputeResult::new_dummy();
                             info!(
                                 "[EpochChange] get_executed_res: suffix block {:?} num {:?}",
                                 block_id, block_num,
@@ -755,10 +758,10 @@ impl BlockBufferManager {
                 }
             } else {
                 if epoch < block_state_machine.current_epoch {
-                    let dummy_result = block_state_machine
-                        .epoch_change_block_info
-                        .as_ref()
-                        .map_or_else(StateComputeResult::new_dummy, |c| c.compute_result.clone());
+                    // Old-epoch bypass: same reasoning as the suffix block branch above —
+                    // never leak the epoch change block's real compute_result (which carries
+                    // `has_reconfiguration() == true`) to an unrelated block.
+                    let dummy_result = StateComputeResult::new_dummy();
                     info!(
                         "[EpochChange] get_executed_res: bypassed old epoch block {:?} num {:?} \
                          (epoch {} < current {})",
@@ -839,7 +842,6 @@ impl BlockBufferManager {
         block_id: BlockId,
         block_timestamp_usecs: u64,
         block_round: u64,
-        compute_result: &StateComputeResult,
     ) {
         // Store the epoch change block's info so suffix blocks and
         // sign_commit_vote can reference it.
@@ -850,7 +852,6 @@ impl BlockBufferManager {
                 epoch_start_round: block_round,
                 epoch_start_timestamp_usecs: block_timestamp_usecs,
             },
-            compute_result: compute_result.clone(),
         });
 
         let suffix_keys: Vec<(BlockKey, BlockId)> = block_state_machine
@@ -967,7 +968,6 @@ impl BlockBufferManager {
                     block_id,
                     block_timestamp_usecs,
                     block_round,
-                    &compute_result,
                 );
             }
 
@@ -1200,18 +1200,22 @@ impl BlockBufferManager {
     /// Returns the stored EpochBlockInfo if the given block is a suffix block
     /// (same epoch as the epoch change, block_number > epoch change block number).
     /// Returns None for normal blocks or blocks in a different epoch.
+    ///
+    /// Uses `epoch_change_block_info` as the source of truth — the same predicate as
+    /// `is_suffix_block` — so that the reth side and the consensus side always agree
+    /// on whether a block is a suffix block, including in the window between
+    /// `consume_epoch_change` and `release_inflight_blocks`.
     pub async fn get_epoch_change_block_info(
         &self,
         block_num: u64,
         epoch: u64,
     ) -> Option<EpochBlockInfo> {
         let block_state_machine = self.block_state_machine.lock().await;
-        let epoch_change_bn = block_state_machine.latest_epoch_change_block_number;
-        if epoch_change_bn > 0 &&
-            block_num > epoch_change_bn &&
+        let cache = block_state_machine.epoch_change_block_info.as_ref()?;
+        if block_num > cache.epoch_block_info.block_number &&
             epoch == block_state_machine.current_epoch
         {
-            block_state_machine.epoch_change_block_info.as_ref().map(|c| c.epoch_block_info.clone())
+            Some(cache.epoch_block_info.clone())
         } else {
             None
         }

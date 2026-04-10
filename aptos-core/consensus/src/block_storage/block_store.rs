@@ -666,6 +666,25 @@ impl BlockStore {
                 commit_decision,
             );
         } else {
+            // `BATCH_COMMIT_SIZE` env var: when set and the accumulated path is still
+            // small, defer sending so the execution layer can process blocks in larger
+            // batches. Because we return early without touching `ordered_root`, the next
+            // `send_for_execution` call will see the same root and `path_from_ordered_root`
+            // will grow until it exceeds the batch size, at which point we flush.
+            // Used by `gravity_e2e/cluster_test_cases/single_node/test_batch_exec.py`.
+            let batch_commit_size = std::env::var("BATCH_COMMIT_SIZE")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(0);
+            if batch_commit_size > 0 && blocks_to_commit.len() <= batch_commit_size {
+                info!(
+                    "blocks_to_commit len {} <= BATCH_COMMIT_SIZE {}, defer for batch accumulation",
+                    blocks_to_commit.len(),
+                    batch_commit_size
+                );
+                return Ok(());
+            }
+
             info!("send the blocks to execution {:?}", blocks_to_commit);
             self.execution_client
                 .finalize_order(

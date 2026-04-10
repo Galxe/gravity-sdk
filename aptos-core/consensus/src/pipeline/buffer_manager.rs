@@ -271,18 +271,37 @@ impl BufferManager {
         let round = commit_proof.commit_info().round();
         let block_id = commit_proof.commit_info().id();
         if self.highest_committed_round < round {
-            if self.pending_commit_proofs.len() < MAX_PENDING_COMMIT_PROOFS {
-                self.pending_commit_proofs.insert(round, commit_proof);
-                info!(round = round, block_id = block_id, "Added pending commit proof.");
-                true
-            } else {
-                warn!(
-                    round = round,
-                    block_id = block_id,
-                    "Too many pending commit proofs, ignored."
-                );
-                false
+            if self.pending_commit_proofs.len() >= MAX_PENDING_COMMIT_PROOFS {
+                // Cache full. Older pending proofs are more likely to be stale
+                // (the local pipeline may have moved past them), so evict the
+                // smallest round to make room — but only if the incoming proof
+                // is newer than that oldest entry, otherwise we'd drop a newer
+                // proof in favor of an older one.
+                let oldest_round = *self
+                    .pending_commit_proofs
+                    .keys()
+                    .next()
+                    .expect("pending_commit_proofs is full, must be non-empty");
+                if round <= oldest_round {
+                    warn!(
+                        round = round,
+                        block_id = block_id,
+                        oldest_round = oldest_round,
+                        "Pending commit proof cache full and incoming proof not newer than oldest, ignored."
+                    );
+                    return false;
+                }
+                if let Some((evicted_round, _)) = self.pending_commit_proofs.pop_first() {
+                    warn!(
+                        evicted_round = evicted_round,
+                        incoming_round = round,
+                        "Pending commit proof cache full, evicted oldest to make room."
+                    );
+                }
             }
+            self.pending_commit_proofs.insert(round, commit_proof);
+            info!(round = round, block_id = block_id, "Added pending commit proof.");
+            true
         } else {
             debug!(
                 round = round,
