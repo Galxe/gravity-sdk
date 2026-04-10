@@ -488,7 +488,7 @@ impl BufferManager {
         self.previous_commit_time = Instant::now();
         self.commit_proof_rb_handle.take();
         // purge the incoming blocks queue
-        while let Ok(_) = self.block_rx.try_recv() {}
+        while let Ok(Some(_)) = self.block_rx.try_next() {}
         // Wait for ongoing tasks to finish before sending back ack.
         get_block_buffer_manager().release_inflight_blocks().await;
         while self.ongoing_tasks.load(Ordering::SeqCst) > 0 {
@@ -571,27 +571,10 @@ impl BufferManager {
             .get_epoch_change_block_info(block_number, epoch)
             .await
         {
-            // Reth provides block_id and block_number, but epoch_start_round and
-            // epoch_start_timestamp_usecs are zero — patch with consensus-layer data.
-            if epoch_info.epoch_start_round == 0 || epoch_info.epoch_start_timestamp_usecs == 0 {
-                if let Some(timestamp) = self.end_epoch_timestamp.get().cloned() {
-                    epoch_info.epoch_start_timestamp_usecs = timestamp;
-                }
-                // Find the reconfig block's round from the executed blocks in this batch
-                for eb in executed_blocks.iter().rev() {
-                    if eb.block_info().has_reconfiguration() {
-                        epoch_info.epoch_start_round = eb.round();
-                        if epoch_info.epoch_start_timestamp_usecs == 0 {
-                            epoch_info.epoch_start_timestamp_usecs = eb.timestamp_usecs();
-                        }
-                        break;
-                    }
-                }
-                info!(
-                    "[EpochChange] Patched EpochBlockInfo for suffix block {}: round={}, timestamp={}",
-                    block_number, epoch_info.epoch_start_round, epoch_info.epoch_start_timestamp_usecs,
-                );
-            }
+            info!(
+                "[EpochChange] EpochBlockInfo for suffix block {}: round={}, timestamp={}",
+                block_number, epoch_info.epoch_start_round, epoch_info.epoch_start_timestamp_usecs,
+            );
             return Some(epoch_info);
         }
 

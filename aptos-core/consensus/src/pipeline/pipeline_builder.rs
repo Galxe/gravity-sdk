@@ -481,6 +481,7 @@ impl PipelineBuilder {
                     extra_data: vec![],
                     enable_randomness: is_randomness_enabled,
                 },
+                block.round(),
             )
             .await
             .map_err(|e| anyhow::anyhow!("Failed to push ordered blocks: {}", e))?;

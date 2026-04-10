@@ -15,6 +15,7 @@ use crate::dag::{
 };
 use aptos_consensus_types::common::{Author, Round};
 use async_trait::async_trait;
+use futures::StreamExt;
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use gaptos::{
     aptos_infallible::Mutex,
@@ -147,7 +148,7 @@ proptest! {
                         order_rule.process_new_node(flatten_nodes[idx].metadata());
                     }
                     let mut ordered = vec![];
-                    while let Ok(mut ordered_nodes) = receiver.try_recv() {
+                    while let Ok(Some(mut ordered_nodes)) = receiver.try_next() {
                         ordered.append(&mut ordered_nodes);
                     }
                     all_ordered.lock().push(ordered);
@@ -159,7 +160,7 @@ proptest! {
         let (mut order_rule, mut receiver) = create_order_rule(epoch_state.clone(), dag);
         order_rule.process_all();
         let mut ordered = vec![];
-        while let Ok(mut ordered_nodes) = receiver.try_recv() {
+        while let Ok(Some(mut ordered_nodes)) = receiver.try_next() {
             ordered.append(&mut ordered_nodes);
         }
         let display = |node: &Arc<CertifiedNode>| {
@@ -247,7 +248,7 @@ fn test_order_rule_basic() {
         vec![(4, 1), (4, 0), (5, 2)],
     ];
     let mut batch = 0;
-    while let Ok(ordered_nodes) = receiver.try_recv() {
+    while let Ok(Some(ordered_nodes)) = receiver.try_next() {
         assert_eq!(
             ordered_nodes.iter().map(|node| display(node.metadata())).collect::<Vec<_>>(),
             expected_order[batch]

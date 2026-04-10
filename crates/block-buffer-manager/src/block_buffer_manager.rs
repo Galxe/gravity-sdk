@@ -118,6 +118,7 @@ pub enum BlockState {
     Ordered {
         block: ExternalBlock,
         parent_id: BlockId,
+        round: u64,
     },
     Computed {
         id: BlockId,
@@ -188,7 +189,7 @@ impl BlockStateMachine {
     fn is_suffix_block(&self, block_num: u64) -> bool {
         self.epoch_change_block_info
             .as_ref()
-            .map_or(false, |cache| block_num > cache.epoch_block_info.block_number)
+            .is_some_and(|cache| block_num > cache.epoch_block_info.block_number)
     }
 
     /// Record a profile measurement for the given block key.
@@ -471,6 +472,7 @@ impl BlockBufferManager {
         &self,
         parent_id: BlockId,
         block: ExternalBlock,
+        round: u64,
     ) -> Result<(), anyhow::Error> {
         if !self.is_ready() {
             self.ready_notifier.notified().await;
@@ -562,7 +564,7 @@ impl BlockBufferManager {
 
         block_state_machine
             .blocks
-            .insert(block_key, BlockState::Ordered { block: block.clone(), parent_id });
+            .insert(block_key, BlockState::Ordered { block: block.clone(), parent_id, round });
 
         // Record time for set_ordered_blocks
         let profile =
@@ -614,7 +616,7 @@ impl BlockBufferManager {
             loop {
                 let block_key = BlockKey::new(expected_epoch, current_num);
                 match block_state_machine.blocks.get(&block_key) {
-                    Some(BlockState::Ordered { block, parent_id }) => {
+                    Some(BlockState::Ordered { block, parent_id, .. }) => {
                         result.push((block.clone(), *parent_id));
                         // Record time for get_ordered_blocks
                         block_state_machine.record_profile(block_key, |p| {
@@ -835,6 +837,8 @@ impl BlockBufferManager {
         epoch_change_block_num: u64,
         epoch: u64,
         block_id: BlockId,
+        block_timestamp_usecs: u64,
+        block_round: u64,
         compute_result: &StateComputeResult,
     ) {
         // Store the epoch change block's info so suffix blocks and
@@ -843,10 +847,8 @@ impl BlockBufferManager {
             epoch_block_info: EpochBlockInfo {
                 block_id: gaptos::aptos_crypto::HashValue::new(block_id.0),
                 block_number: epoch_change_block_num,
-                epoch_start_round: 0, /* not available here; patched by
-                                       * BufferManager::resolve_epoch_block_info */
-                epoch_start_timestamp_usecs: 0, /* not available here; patched by
-                                                 * BufferManager::resolve_epoch_block_info */
+                epoch_start_round: block_round,
+                epoch_start_timestamp_usecs: block_timestamp_usecs,
             },
             compute_result: compute_result.clone(),
         });
@@ -906,7 +908,7 @@ impl BlockBufferManager {
 
         let mut block_state_machine = self.block_state_machine.lock().await;
         let block_key = BlockKey::new(epoch, block_num);
-        if let Some(BlockState::Ordered { block, parent_id: _ }) =
+        if let Some(BlockState::Ordered { block, round, .. }) =
             block_state_machine.blocks.get(&block_key)
         {
             if block.block_meta.block_id != block_id {
@@ -917,6 +919,8 @@ impl BlockBufferManager {
                 ));
             }
             let txn_len = block.txns.len();
+            let block_timestamp_usecs = block.block_meta.usecs;
+            let block_round = *round;
             let events_len = events.len();
             let new_epoch_state = self
                 .calculate_new_epoch_state(&events, block_num, &mut block_state_machine)
@@ -942,8 +946,8 @@ impl BlockBufferManager {
                 block_id,
                 block_num,
                 BlockId::from_bytes(block_hash.as_slice()),
-                profile.set_compute_res_time.unwrap_or(SystemTime::UNIX_EPOCH)
-                    .duration_since(profile.get_ordered_blocks_time.unwrap_or(SystemTime::UNIX_EPOCH))
+                profile.and_then(|p| p.set_compute_res_time).unwrap_or(SystemTime::UNIX_EPOCH)
+                    .duration_since(profile.and_then(|p| p.get_ordered_blocks_time).unwrap_or(SystemTime::UNIX_EPOCH))
                     .unwrap_or(Duration::ZERO)
                     .as_millis(),
                 txn_len,
@@ -961,6 +965,8 @@ impl BlockBufferManager {
                     block_num,
                     epoch,
                     block_id,
+                    block_timestamp_usecs,
+                    block_round,
                     &compute_result,
                 );
             }
@@ -1037,7 +1043,7 @@ impl BlockBufferManager {
                             ));
                         }
                     }
-                    BlockState::Ordered { block: _, parent_id: _ } => {
+                    BlockState::Ordered { .. } => {
                         return Err(anyhow::anyhow!(
                             "Set commit block meet ordered block for block id {:?} num {}",
                             block_id_num_hash.block_id,

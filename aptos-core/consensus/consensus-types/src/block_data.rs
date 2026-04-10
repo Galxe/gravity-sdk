@@ -189,14 +189,10 @@ impl BlockData {
 
         // Use epoch_block_info to get the actual reconfig block's values, ensuring
         // deterministic genesis construction even when different nodes commit different
-        // suffix blocks after the reconfig. Only use epoch_block_info if
-        // epoch_start_timestamp_usecs is non-zero (meaning it was properly patched
-        // by buffer_manager with consensus-layer data).
+        // suffix blocks after the reconfig.
         let (version, timestamp) = match ledger_info.commit_info().epoch_block_info() {
-            Some(info) if info.epoch_start_timestamp_usecs > 0 => {
-                (info.block_number, info.epoch_start_timestamp_usecs)
-            }
-            _ => (ledger_info.version(), ledger_info.timestamp_usecs()),
+            Some(info) => (info.block_number, info.epoch_start_timestamp_usecs),
+            None => (ledger_info.version(), ledger_info.timestamp_usecs()),
         };
 
         let ancestor = BlockInfo::new(

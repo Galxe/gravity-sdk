@@ -630,7 +630,7 @@ impl BlockStore {
                     enable_randomness: self.enable_randomness,
                 };
                 get_block_buffer_manager()
-                    .set_ordered_blocks(BlockId(*p_block.parent_id()), block)
+                    .set_ordered_blocks(BlockId(*p_block.parent_id()), block, p_block.round())
                     .await
                     .context("Failed to set ordered blocks during recovery")?;
                 let compute_res = get_block_buffer_manager()
