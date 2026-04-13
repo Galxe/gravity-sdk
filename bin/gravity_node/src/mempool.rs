@@ -100,13 +100,12 @@ fn to_verified_txn(
     let sender = pool_txn.sender();
     let nonce = pool_txn.nonce();
     let txn = pool_txn.transaction.transaction().inner();
-    VerifiedTxn {
-        bytes: txn.encoded_2718(),
-        sender: convert_account(sender),
-        sequence_number: nonce,
-        chain_id: ExternalChainId::new(chain_id),
-        committed_hash: TxnHash::from_bytes(txn.hash().as_slice()).into(),
-    }
+    VerifiedTxn::new(
+        txn.encoded_2718(),
+        convert_account(sender),
+        nonce,
+        ExternalChainId::new(chain_id),
+    )
 }
 
 fn to_verified_txn_from_reth_txn(
@@ -116,13 +115,12 @@ fn to_verified_txn_from_reth_txn(
     let sender = pool_txn.signer();
     let nonce = pool_txn.inner().nonce();
     let txn = pool_txn.inner();
-    VerifiedTxn {
-        bytes: txn.encoded_2718(),
-        sender: convert_account(sender),
-        sequence_number: nonce,
-        chain_id: ExternalChainId::new(chain_id),
-        committed_hash: TxnHash::from_bytes(txn.hash().as_slice()).into(),
-    }
+    VerifiedTxn::new(
+        txn.encoded_2718(),
+        convert_account(sender),
+        nonce,
+        ExternalChainId::new(chain_id),
+    )
 }
 
 impl TxPool for Mempool {
@@ -219,7 +217,7 @@ impl TxPool for Mempool {
     }
 
     fn add_external_txn(&self, txn: VerifiedTxn) -> bool {
-        let txn = TransactionSigned::decode_2718(&mut txn.bytes.as_ref());
+        let txn = TransactionSigned::decode_2718(&mut txn.bytes().as_slice());
         match txn {
             Ok(txn) => {
                 let signer = match txn.recover_signer() {
@@ -262,7 +260,7 @@ impl TxPool for Mempool {
 
         let mut eth_txn_hashes = Vec::with_capacity(txns.len());
         for txn in txns {
-            let txn = TransactionSigned::decode_2718(&mut txn.bytes.as_ref());
+            let txn = TransactionSigned::decode_2718(&mut txn.bytes().as_slice());
             match txn {
                 Ok(txn) => {
                     eth_txn_hashes.push(*txn.hash());

@@ -544,18 +544,20 @@ impl BlockStore {
             ledger_info.commit_info().round()
         );
 
-        // if the block exists between commit root and ordered root
+        // Step 1: If the block already exists between commit root and ordered root,
+        // send a commit decision to buffer_manager to unblock the commit pipeline.
         if self.commit_root().round() < ledger_info.commit_info().round() &&
             self.block_exists(ledger_info.commit_info().id()) &&
-            self.ordered_root().round() >= ledger_info.commit_info().round() &&
-            !has_missing_randomness
+            self.ordered_root().round() >= ledger_info.commit_info().round()
         {
             info!("sync_to_highest_commit_cert: block exists between commit root and ordered root {:?}, {:?}", self.commit_root().round(), ledger_info.commit_info().round());
             let proof = ledger_info.clone();
             let network = retriever.network.clone();
             tokio::spawn(async move { network.send_commit_proof(proof).await });
-            return Ok(());
-        } else if self.ordered_root().round() < ledger_info.commit_info().round() &&
+        }
+
+        // Step 2: If blocks are missing, sync them
+        if self.ordered_root().round() < ledger_info.commit_info().round() &&
             !self.block_exists(ledger_info.commit_info().id()) ||
             has_missing_randomness
         {
@@ -563,25 +565,23 @@ impl BlockStore {
             // highest_commit_cert
             let sync_from_cert = sync_from_cert_opt.unwrap_or_else(|| self.highest_commit_cert());
 
-            if sync_from_cert.commit_info().round() >= ledger_info.commit_info().round() {
-                return Ok(());
+            if sync_from_cert.commit_info().round() < ledger_info.commit_info().round() {
+                // if the block doesnt exist after ordered root
+                let highest_commit_cert_qc =
+                    highest_commit_cert.clone().into_quorum_cert(self.order_vote_enabled).unwrap();
+                let (blocks, quorum_certs) = Self::fast_forward_sync(
+                    &highest_commit_cert_qc,
+                    &sync_from_cert,
+                    retriever,
+                    self.storage.clone(),
+                    self.payload_manager.clone(),
+                    self.order_vote_enabled,
+                    self.is_validator,
+                )
+                .await?;
+
+                self.append_blocks_for_sync(blocks, quorum_certs).await;
             }
-
-            // if the block doesnt exist after ordered root
-            let highest_commit_cert =
-                highest_commit_cert.into_quorum_cert(self.order_vote_enabled).unwrap();
-            let (blocks, quorum_certs) = Self::fast_forward_sync(
-                &highest_commit_cert,
-                &sync_from_cert,
-                retriever,
-                self.storage.clone(),
-                self.payload_manager.clone(),
-                self.order_vote_enabled,
-                self.is_validator,
-            )
-            .await?;
-
-            self.append_blocks_for_sync(blocks, quorum_certs).await;
         }
         Ok(())
     }

@@ -41,6 +41,7 @@ use gaptos::{
     aptos_logger::{error, info, warn},
     aptos_types::{
         block_executor::config::BlockExecutorConfigFromOnchain,
+        block_info::{BlockInfo, EpochBlockInfo},
         block_metadata_ext::BlockMetadataExt,
         ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
         randomness::Randomness,
@@ -441,7 +442,6 @@ impl PipelineBuilder {
                     ExternalAccountAddress::new(txn.sender().into_bytes()),
                     txn.sequence_number(),
                     ExternalChainId::new(txn.chain_id().id()),
-                    TxnHash::from_bytes(&txn.get_hash().to_vec()),
                 )
             })
             .collect();
@@ -480,6 +480,7 @@ impl PipelineBuilder {
                     extra_data: vec![],
                     enable_randomness: is_randomness_enabled,
                 },
+                block.round(),
             )
             .await
             .map_err(|e| anyhow::anyhow!("Failed to push ordered blocks: {}", e))?;
@@ -634,6 +635,46 @@ impl PipelineBuilder {
             );
             block_info.change_timestamp(timestamp);
         }
+        // Populate EpochBlockInfo when this block triggers an epoch change.
+        // We first check if the block is a suffix block by querying the buffer manager.
+        // This is necessary because both the epoch change block and its suffix blocks
+        // have a StateComputeResult where `has_reconfiguration()` is true.
+        let epoch_block_info = if let Some(epoch_info) = get_block_buffer_manager()
+            .get_epoch_change_block_info(block.block_number().unwrap_or(0), block.epoch())
+            .await
+        {
+            // Suffix block after an epoch change: carry the epoch change block's info
+            info!(
+                "[EpochChange] Setting EpochBlockInfo for suffix block (block_number={:?}): epoch_change_block_id={}, epoch_change_block_number={}",
+                block.block_number(), epoch_info.block_id, epoch_info.block_number,
+            );
+            Some(epoch_info)
+        } else if compute_result.has_reconfiguration() {
+            // This is the actual epoch change block
+            let epoch_info = EpochBlockInfo {
+                block_id: block.id(),
+                block_number: block.block_number().unwrap_or(0),
+                epoch_start_round: block.round(),
+                epoch_start_timestamp_usecs: block_info.timestamp_usecs(),
+            };
+            info!(
+                "[EpochChange] Setting EpochBlockInfo for epoch change block: id={}, number={}, round={}, timestamp={}",
+                epoch_info.block_id, epoch_info.block_number, epoch_info.epoch_start_round, epoch_info.epoch_start_timestamp_usecs,
+            );
+            Some(epoch_info)
+        } else {
+            None
+        };
+        let block_info = BlockInfo::new_with_epoch_block_info(
+            block_info.epoch(),
+            block_info.round(),
+            block_info.id(),
+            block_info.executed_state_id(),
+            block_info.version(),
+            block_info.timestamp_usecs(),
+            block_info.next_epoch_state().cloned(),
+            epoch_block_info,
+        );
         let ledger_info = LedgerInfo::new(block_info, HashValue::zero());
         info!("[Pipeline] Signed ledger info {ledger_info}");
         let signature = signer.sign(&ledger_info).expect("Signing should succeed");
