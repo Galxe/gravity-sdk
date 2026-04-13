@@ -150,7 +150,15 @@ main() {
     # Generate genesis
     log_info "Generating genesis block..."
     cd "$GENESIS_CONTRACT_DIR"
-    
+
+    # Ensure genesis-tool is a standalone workspace so cargo doesn't pick up
+    # a parent workspace (e.g. when running inside a git worktree)
+    local genesis_tool_cargo="$GENESIS_CONTRACT_DIR/genesis-tool/Cargo.toml"
+    if ! grep -q '^\[workspace\]' "$genesis_tool_cargo" 2>/dev/null; then
+        log_info "Patching genesis-tool Cargo.toml for standalone build..."
+        echo -e '\n[workspace]' >> "$genesis_tool_cargo"
+    fi
+
     ./scripts/generate_genesis.sh --config "$ABS_VAL_GENESIS_PATH"
     
     # Copy artifacts back

@@ -72,7 +72,6 @@ auto_evict_threshold_pct = 0
 minimum_stake = "1000000000000000000"
 lockup_duration_micros = 86400000000
 unbonding_delay_micros = 86400000000
-minimum_proposal_stake = "10000000000000000000"
 
 [genesis.governance_config]
 min_voting_threshold = "1000000000000000000"
