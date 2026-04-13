@@ -99,7 +99,7 @@ async fn drop_config_test() {
 
         // Check that the commit log for n2 is empty
         let node2_commit = match nodes[2].commit_cb_receiver.try_next() {
-            Ok(Some(node_commit)) => Some(node_commit),
+            Ok(node_commit) => node_commit,
             _ => None,
         };
         assert!(node2_commit.is_none());

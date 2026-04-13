@@ -135,6 +135,16 @@ impl StateComputeResult {
         StateComputeResult::with_root_hash(*ACCUMULATOR_PLACEHOLDER_HASH)
     }
 
+    /// Like `new_dummy`, but carries an epoch_state so `has_reconfiguration()` returns true.
+    /// Used for suffix blocks after an epoch change: they have no real execution output,
+    /// but must still be tagged as reconfiguration-suffix for the consensus pipeline to
+    /// treat them as part of the epoch transition.
+    pub fn new_dummy_with_epoch_state(epoch_state: EpochState) -> Self {
+        let mut res = Self::new_dummy();
+        res.epoch_state = Some(epoch_state);
+        res
+    }
+
     /// generate a new dummy state compute result with a given root hash.
     /// this function is used in RandomComputeResultStateComputer to assert that the compute
     /// function is really called.
@@ -193,7 +203,20 @@ impl StateComputeResult {
     }
 
     pub fn events(&self) -> Vec<ContractEvent> {
-        self.execution_output.events.iter().map(|event| event.clone().into()).collect()
+        self.execution_output
+            .events
+            .iter()
+            .filter_map(|event| match ContractEvent::try_from(event) {
+                Ok(contract_event) => Some(contract_event),
+                Err(e) => {
+                    eprintln!(
+                        "WARNING: StateComputeResult::events: skipping malformed event: {}",
+                        e
+                    );
+                    None
+                }
+            })
+            .collect()
     }
 }
 

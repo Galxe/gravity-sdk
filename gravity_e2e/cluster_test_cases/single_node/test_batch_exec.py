@@ -87,8 +87,14 @@ async def test_batch_execution(cluster: Cluster):
         f"(height {height_after_restart} → {final_height})"
     )
 
-    # ── Step 5: Cleanup env var ─────────────────────────────────────
+    # ── Step 5: Cleanup env var and restart in normal mode ──────────
     os.environ.pop("BATCH_COMMIT_SIZE", None)
+    assert await node.stop(), "Failed to stop node for cleanup"
+    await asyncio.sleep(2)
+    assert await node.start(), "Failed to restart node in normal mode"
+    assert await node.wait_for_block_increase(timeout=30, delta=3), (
+        "Node did not resume normal block production after cleanup"
+    )
     LOG.info("Batch execution test PASSED!")
 
 
@@ -167,6 +173,12 @@ async def test_batch_exec_restart(cluster: Cluster):
         f"(height {height_after_second_restart} → {final_height})"
     )
 
-    # ── Step 5: Cleanup env var ─────────────────────────────────────
+    # ── Step 5: Cleanup env var and restart in normal mode ──────────
     os.environ.pop("BATCH_COMMIT_SIZE", None)
+    assert await node.stop(), "Failed to stop node for cleanup"
+    await asyncio.sleep(2)
+    assert await node.start(), "Failed to restart node in normal mode"
+    assert await node.wait_for_block_increase(timeout=30, delta=3), (
+        "Node did not resume normal block production after cleanup"
+    )
     LOG.info("Batch exec restart test PASSED!")

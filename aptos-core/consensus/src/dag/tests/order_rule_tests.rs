@@ -15,6 +15,7 @@ use crate::dag::{
 };
 use aptos_consensus_types::common::{Author, Round};
 use async_trait::async_trait;
+use futures::StreamExt;
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use gaptos::{
     aptos_infallible::Mutex,

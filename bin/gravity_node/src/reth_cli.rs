@@ -124,11 +124,8 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         self.chain_id
     }
 
-    fn txn_to_signed(
-        bytes: &mut [u8],
-        _chain_id: u64,
-    ) -> Result<(Address, TransactionSigned), String> {
-        let mut slice = &bytes[..];
+    fn txn_to_signed(bytes: &[u8], _chain_id: u64) -> Result<(Address, TransactionSigned), String> {
+        let mut slice = bytes;
         let txn = TransactionSigned::decode_2718(&mut slice)
             .map_err(|e| format!("Failed to decode transaction: {e}"))?;
         let signer = txn
@@ -207,7 +204,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             .par_iter_mut()
             .enumerate()
             .filter(|(idx, _)| senders[*idx].is_none())
-            .map(|(idx, txn)| match Self::txn_to_signed(&mut txn.bytes, self.chain_id) {
+            .map(|(idx, txn)| match Self::txn_to_signed(txn.bytes().as_slice(), self.chain_id) {
                 Ok((sender, transaction)) => Some((idx, sender, transaction)),
                 Err(e) => {
                     warn!("Skipping malformed transaction at index {}: {}", idx, e);
@@ -269,6 +266,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             senders,
             epoch: block.block_meta.epoch,
             proposer_index: block.block_meta.proposer_index,
+            failed_proposer_indices: block.block_meta.failed_proposer_indices,
             extra_data: block.extra_data,
             randomness,
         });
@@ -334,11 +332,11 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                 if e.to_string().contains("Buffer is in epoch change") ||
                     current_epoch != get_block_buffer_manager().get_current_epoch().await
                 {
-                    // consume_epoch_change returns the new epoch
-                    let new_epoch = get_block_buffer_manager().consume_epoch_change().await;
-                    let latest_epoch_change_block_number =
-                        get_block_buffer_manager().latest_epoch_change_block_number().await;
-                    start_ordered_block = latest_epoch_change_block_number + 1;
+                    // consume_epoch_change returns (new_epoch, epoch_change_block_number)
+                    // and resets latest_epoch_change_block_number to 0 atomically.
+                    let (new_epoch, epoch_change_block_number) =
+                        get_block_buffer_manager().consume_epoch_change().await;
+                    start_ordered_block = epoch_change_block_number + 1;
                     let old_epoch = self.current_epoch.swap(new_epoch, Ordering::SeqCst);
                     info!("Buffer is in epoch change, reset start_ordered_block from {} to {}, epoch from {} to {}", 
                         from, start_ordered_block, old_epoch, new_epoch);

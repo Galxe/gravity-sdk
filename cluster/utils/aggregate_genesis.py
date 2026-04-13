@@ -41,7 +41,7 @@ def get_genesis_defaults():
             "votingPowerIncreaseLimitPct": 20,
             "maxValidatorSetSize": "100",
             "autoEvictEnabled": False,
-            "autoEvictThreshold": "0"
+            "autoEvictThresholdPct": 0
         },
         "stakingConfig": {
             "minimumStake": "1000000000000000000",
@@ -94,7 +94,11 @@ def build_genesis_config(config, genesis_cfg):
     result["consensusConfig"] = genesis_cfg.get("consensus_config", defaults["consensusConfig"])
     result["executionConfig"] = genesis_cfg.get("execution_config", defaults["executionConfig"])
     result["initialLockedUntilMicros"] = genesis_cfg.get("initial_locked_until_micros", defaults["initialLockedUntilMicros"])
-    
+
+    # Optional: genesis block timestamp (passthrough only if explicitly set)
+    if "genesis_timestamp_secs" in genesis_cfg:
+        result["genesisTimestampSecs"] = genesis_cfg["genesis_timestamp_secs"]
+
     # validatorConfig
     vc = genesis_cfg.get("validator_config", {})
     result["validatorConfig"] = {
@@ -105,7 +109,7 @@ def build_genesis_config(config, genesis_cfg):
         "votingPowerIncreaseLimitPct": vc.get("voting_power_increase_limit_pct", defaults["validatorConfig"]["votingPowerIncreaseLimitPct"]),
         "maxValidatorSetSize": vc.get("max_validator_set_size", defaults["validatorConfig"]["maxValidatorSetSize"]),
         "autoEvictEnabled": vc.get("auto_evict_enabled", defaults["validatorConfig"]["autoEvictEnabled"]),
-        "autoEvictThreshold": str(vc.get("auto_evict_threshold", defaults["validatorConfig"]["autoEvictThreshold"]))
+        "autoEvictThresholdPct": int(vc.get("auto_evict_threshold_pct", defaults["validatorConfig"]["autoEvictThresholdPct"]))
     }
     
     # stakingConfig

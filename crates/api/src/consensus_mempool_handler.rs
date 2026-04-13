@@ -97,12 +97,16 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
                 self.handle_consensus_commit_notification(commit_notification).await
             }
             ConsensusNotification::SyncToTarget(sync_notification) => {
-                let target_block = sync_notification.get_target().ledger_info().block_number();
+                let ledger_info = sync_notification.get_target().ledger_info();
+                let block_number = match ledger_info.commit_info().epoch_block_info() {
+                    Some(info) => info.block_number,
+                    None => ledger_info.block_number(),
+                };
                 match self
                     .event_subscription_service
                     .lock()
                     .await
-                    .notify_initial_configs(target_block)
+                    .notify_initial_configs(block_number)
                 {
                     Ok(_) => {}
                     Err(e) => {
@@ -110,7 +114,7 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
                             "Failed to notify initial configs for block {}: {:?}. \
                              This is expected after a cross-epoch unwind; \
                              the node will re-sync missing blocks via block sync.",
-                            target_block, e
+                            block_number, e
                         );
                     }
                 }

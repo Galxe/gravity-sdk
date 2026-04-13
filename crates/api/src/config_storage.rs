@@ -29,6 +29,7 @@ impl ConfigStorage for ConfigStorageWrapper {
             OnChainConfig::RandomnessConfig |
             OnChainConfig::OracleState |
             OnChainConfig::DKGState |
+            OnChainConfig::ValidatorPerformances |
             OnChainConfig::ConsensusConfig => {
                 self.config_storage.fetch_config_bytes(config_name, block_number)
             }
