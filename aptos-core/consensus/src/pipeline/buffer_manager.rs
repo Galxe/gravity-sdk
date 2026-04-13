@@ -606,6 +606,7 @@ impl BufferManager {
                 block_number,
                 epoch_start_round: last_block.round(),
                 epoch_start_timestamp_usecs: block_info.timestamp_usecs(),
+                block_hash: compute_result.root_hash(),
             };
             // For suffix blocks with reconfiguration flag, use the cached epoch end timestamp
             if let Some(timestamp) = self.end_epoch_timestamp.get().cloned() {

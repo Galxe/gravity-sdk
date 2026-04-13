@@ -89,7 +89,7 @@ impl QuorumCert {
             0,
             genesis_id,
             ledger_info.transaction_accumulator_hash(),
-            ledger_info.version(),
+            ledger_info.waypoint_version(),
             ledger_info.timestamp_usecs(),
             None,
         );
