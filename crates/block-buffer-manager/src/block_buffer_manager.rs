@@ -205,6 +205,13 @@ impl BlockStateMachine {
 #[derive(Clone, Debug)]
 pub struct EpochChangeCache {
     pub epoch_block_info: EpochBlockInfo,
+    /// The new `EpochState` produced by the reconfig block. Suffix blocks reuse this
+    /// when returning their dummy compute result so `has_reconfiguration() == true`,
+    /// keeping the consensus-side `is_reconfiguration_suffix()` invariant intact
+    /// (see `BufferItem::advance_to_executed_or_aggregated`). We intentionally do
+    /// NOT reuse the reconfig block's full `StateComputeResult` — that would leak
+    /// per-block execution output (root hash, txn status, events) to unrelated blocks.
+    pub epoch_state: EpochState,
 }
 
 pub struct BlockBufferManagerConfig {
@@ -706,13 +713,21 @@ impl BlockBufferManager {
                     }
                     BlockState::Ordered { .. } => {
                         // Suffix blocks after epoch change: reth won't compute them,
-                        // so return a dummy result to unblock consensus. Must match the
-                        // result written in `handle_epoch_change_suffix_blocks` — cloning
-                        // the epoch change block's real result here would leak
-                        // `has_reconfiguration() == true` to suffix blocks and any downstream
-                        // consumer that forgets to check `is_suffix_block`.
+                        // so return a dummy result to unblock consensus. We carry only
+                        // the new `epoch_state` through (not the reconfig block's full
+                        // `StateComputeResult`) so suffix blocks satisfy
+                        // `is_reconfiguration_suffix()` without leaking per-block
+                        // execution output (root hash, txn status, events) to unrelated
+                        // blocks — see `BufferItem::advance_to_executed_or_aggregated`.
                         if block_state_machine.is_suffix_block(block_num) {
-                            let dummy_result = StateComputeResult::new_dummy();
+                            let dummy_result = StateComputeResult::new_dummy_with_epoch_state(
+                                block_state_machine
+                                    .epoch_change_block_info
+                                    .as_ref()
+                                    .expect("is_suffix_block implies epoch_change_block_info set")
+                                    .epoch_state
+                                    .clone(),
+                            );
                             info!(
                                 "[EpochChange] get_executed_res: suffix block {:?} num {:?}",
                                 block_id, block_num,
@@ -842,6 +857,7 @@ impl BlockBufferManager {
         block_id: BlockId,
         block_timestamp_usecs: u64,
         block_round: u64,
+        epoch_state: EpochState,
     ) {
         // Store the epoch change block's info so suffix blocks and
         // sign_commit_vote can reference it.
@@ -852,6 +868,7 @@ impl BlockBufferManager {
                 epoch_start_round: block_round,
                 epoch_start_timestamp_usecs: block_timestamp_usecs,
             },
+            epoch_state: epoch_state.clone(),
         });
 
         let suffix_keys: Vec<(BlockKey, BlockId)> = block_state_machine
@@ -870,7 +887,7 @@ impl BlockBufferManager {
             .collect();
 
         for (suffix_key, suffix_block_id) in &suffix_keys {
-            let dummy_result = StateComputeResult::new_dummy();
+            let dummy_result = StateComputeResult::new_dummy_with_epoch_state(epoch_state.clone());
             block_state_machine.blocks.insert(
                 *suffix_key,
                 BlockState::Computed { id: *suffix_block_id, compute_result: dummy_result },
@@ -926,7 +943,7 @@ impl BlockBufferManager {
             let new_epoch_state = self
                 .calculate_new_epoch_state(&events, block_num, &mut block_state_machine)
                 .await?;
-            let has_epoch_change = new_epoch_state.is_some();
+            let epoch_change_state = new_epoch_state.clone();
             let compute_result = StateComputeResult::new(
                 ComputeRes { data: block_hash, txn_num: txn_len as u64, txn_status, events },
                 new_epoch_state,
@@ -960,7 +977,7 @@ impl BlockBufferManager {
             // This avoids blocking consensus while waiting for reth to process (and discard)
             // these suffix blocks. Reth will independently detect the stale epoch and silently
             // discard them without sending any ExecutionResult, so there is no conflict.
-            if has_epoch_change {
+            if let Some(epoch_state) = epoch_change_state {
                 Self::handle_epoch_change_suffix_blocks(
                     &mut block_state_machine,
                     block_num,
@@ -968,6 +985,7 @@ impl BlockBufferManager {
                     block_id,
                     block_timestamp_usecs,
                     block_round,
+                    epoch_state,
                 );
             }
 

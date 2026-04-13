@@ -124,11 +124,8 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         self.chain_id
     }
 
-    fn txn_to_signed(
-        bytes: &mut [u8],
-        _chain_id: u64,
-    ) -> Result<(Address, TransactionSigned), String> {
-        let mut slice = &bytes[..];
+    fn txn_to_signed(bytes: &[u8], _chain_id: u64) -> Result<(Address, TransactionSigned), String> {
+        let mut slice = bytes;
         let txn = TransactionSigned::decode_2718(&mut slice)
             .map_err(|e| format!("Failed to decode transaction: {e}"))?;
         let signer = txn
@@ -207,7 +204,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             .par_iter_mut()
             .enumerate()
             .filter(|(idx, _)| senders[*idx].is_none())
-            .map(|(idx, txn)| match Self::txn_to_signed(&mut txn.bytes, self.chain_id) {
+            .map(|(idx, txn)| match Self::txn_to_signed(txn.bytes().as_slice(), self.chain_id) {
                 Ok((sender, transaction)) => Some((idx, sender, transaction)),
                 Err(e) => {
                     warn!("Skipping malformed transaction at index {}: {}", idx, e);

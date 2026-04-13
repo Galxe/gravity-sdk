@@ -475,7 +475,6 @@ impl StateComputer for ExecutionProxy {
                     ExternalAccountAddress::new(txn.sender().into_bytes()),
                     txn.sequence_number(),
                     ExternalChainId::new(txn.chain_id().id()),
-                    TxnHash::from_bytes(&txn.get_hash().to_vec()),
                 )
             })
             .collect();
