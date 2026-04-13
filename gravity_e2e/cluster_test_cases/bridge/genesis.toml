@@ -42,7 +42,6 @@ auto_evict_threshold_pct = 0
 minimum_stake = "1000000000000000000"
 lockup_duration_micros = 86400000000
 unbonding_delay_micros = 86400000000
-minimum_proposal_stake = "10000000000000000000"
 
 [genesis.governance_config]
 min_voting_threshold = "1000000000000000000"
@@ -58,7 +57,7 @@ fast_path_secrecy_threshold = 12297829382473033728
 # Oracle config: source_types includes Blockchain (0) for bridge
 [genesis.oracle_config]
 source_types = [1]
-callbacks = ["0x00000000000000000000000000000001625F2018"]
+callbacks = ["0x00000000000000000000000000000001625F4001"]
 
 # Bridge config: deploy GBridgeReceiver at genesis
 [genesis.oracle_config.bridge_config]
