@@ -1,7 +1,11 @@
 use anyhow::format_err;
 use aptos_executor_types::StateComputeResult;
 use gaptos::{
-    api_types::{self, account::ExternalAccountAddress, u256_define::TxnHash},
+    api_types::{
+        self, account::ExternalAccountAddress,
+        on_chain_config::consensus_hardfork::{is_consensus_fork_active_at_epoch, ConsensusHardfork},
+        u256_define::TxnHash,
+    },
     aptos_types::{
         block_info::EpochBlockInfo, epoch_state::EpochState, idl::convert_validator_set,
     },
@@ -708,7 +712,7 @@ impl BlockBufferManager {
                         // `is_reconfiguration_suffix()` without leaking per-block
                         // execution output (root hash, txn status, events) to unrelated
                         // blocks — see `BufferItem::advance_to_executed_or_aggregated`.
-                        if block_state_machine.is_suffix_block(block_num) {
+                        if is_consensus_fork_active_at_epoch(ConsensusHardfork::ConsensusAlpha, epoch) && block_state_machine.is_suffix_block(block_num) {
                             let dummy_result = StateComputeResult::new_dummy_with_epoch_state(
                                 block_state_machine
                                     .epoch_change_block_info
@@ -761,7 +765,7 @@ impl BlockBufferManager {
                     }
                 }
             } else {
-                if epoch < block_state_machine.current_epoch {
+                if is_consensus_fork_active_at_epoch(ConsensusHardfork::ConsensusAlpha, epoch) && epoch < block_state_machine.current_epoch {
                     // Old-epoch bypass: same reasoning as the suffix block branch above —
                     // never leak the epoch change block's real compute_result (which carries
                     // `has_reconfiguration() == true`) to an unrelated block.
@@ -846,6 +850,7 @@ impl BlockBufferManager {
         block_id: BlockId,
         block_timestamp_usecs: u64,
         block_round: u64,
+        block_hash: [u8; 32],
         epoch_state: EpochState,
     ) {
         // Store the epoch change block's info so suffix blocks and
@@ -856,6 +861,7 @@ impl BlockBufferManager {
                 block_number: epoch_change_block_num,
                 epoch_start_round: block_round,
                 epoch_start_timestamp_usecs: block_timestamp_usecs,
+                block_hash: gaptos::aptos_crypto::HashValue::new(block_hash),
             },
             epoch_state: epoch_state.clone(),
         });
@@ -966,16 +972,19 @@ impl BlockBufferManager {
             // This avoids blocking consensus while waiting for reth to process (and discard)
             // these suffix blocks. Reth will independently detect the stale epoch and silently
             // discard them without sending any ExecutionResult, so there is no conflict.
-            if let Some(epoch_state) = epoch_change_state {
-                Self::handle_epoch_change_suffix_blocks(
-                    &mut block_state_machine,
-                    block_num,
-                    epoch,
-                    block_id,
-                    block_timestamp_usecs,
-                    block_round,
-                    epoch_state,
-                );
+            if is_consensus_fork_active_at_epoch(ConsensusHardfork::ConsensusAlpha, epoch) {
+                if let Some(epoch_state) = epoch_change_state {
+                    Self::handle_epoch_change_suffix_blocks(
+                        &mut block_state_machine,
+                        block_num,
+                        epoch,
+                        block_id,
+                        block_timestamp_usecs,
+                        block_round,
+                        block_hash,
+                        epoch_state,
+                    );
+                }
             }
 
             let _ = block_state_machine.sender.send(());
@@ -1040,7 +1049,7 @@ impl BlockBufferManager {
                         }
                     }
                     BlockState::Committed { hash, compute_result: _, id, persist_notifier: _ } => {
-                        if *id != block_id_num_hash.block_id {
+                        if !is_suffix && *id != block_id_num_hash.block_id {
                             return Err(anyhow::anyhow!(
                                 "Committed Block id mismatch: {:?}={:?} hash: {:?}={:?}",
                                 block_id_num_hash.block_id,
