@@ -277,10 +277,17 @@ def main():
         host = node['host']
         p2p_port = node['p2p_port']
         vfn_port = node['vfn_port']
-        
-        # Build addresses
-        val_net_addr = f"/ip4/{host}/tcp/{p2p_port}/noise-ik/{network_pk}/handshake/0"
-        vfn_net_addr = f"/ip4/{host}/tcp/{vfn_port}/noise-ik/{network_pk}/handshake/0"
+
+        # Build addresses: use /dns/ for domain names, /ip4/ for IPv4 addresses
+        try:
+            import ipaddress
+            ipaddress.IPv4Address(host)
+            host_proto = "ip4"
+        except ValueError:
+            host_proto = "dns"
+
+        val_net_addr = f"/{host_proto}/{host}/tcp/{p2p_port}/noise-ik/{network_pk}/handshake/0"
+        vfn_net_addr = f"/{host_proto}/{host}/tcp/{vfn_port}/noise-ik/{network_pk}/handshake/0"
         
         # Consensus PoP: use node config value, identity file, or 96-byte dummy
         # ValidatorManagement.sol requires non-empty consensusPop
