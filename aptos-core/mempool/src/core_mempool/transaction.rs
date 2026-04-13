@@ -4,10 +4,7 @@
 
 use crate::network::BroadcastPeerPriority;
 use gaptos::{
-    api_types::{
-        account::{ExternalAccountAddress, ExternalChainId},
-        u256_define::TxnHash,
-    },
+    api_types::account::{ExternalAccountAddress, ExternalChainId},
     aptos_crypto::{HashValue, Uniform},
     aptos_mempool::counters,
     aptos_types::{
