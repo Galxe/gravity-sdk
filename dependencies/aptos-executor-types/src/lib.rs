@@ -94,7 +94,11 @@ pub trait BlockExecutorTrait: Send + Sync {
         for block_id in &block_ids {
             self.pre_commit_block(block_id.clone())?;
         }
-        self.commit_ledger(block_ids.into_iter().map(|id| (id, 0)).collect(), ledger_info_with_sigs, vec![])
+        self.commit_ledger(
+            block_ids.into_iter().map(|id| (id, 0)).collect(),
+            ledger_info_with_sigs,
+            vec![],
+        )
     }
 
     fn pre_commit_block(&self, block_id: HashValue) -> ExecutorResult<()>;
