@@ -1,6 +1,3 @@
-[general]
-check_interval_ms = 2000
-
 # [monitoring] is optional. Omit the entire section to run in probes-only mode.
 [monitoring]
 # Match all .log files in the logs directory
@@ -14,6 +11,9 @@ error_pattern = "(?i)error|panic|fatal"
 #   -1 = always ignore
 #   >0 = alert if count >threshold in 5 minutes
 whitelist_path = "whitelist.csv"
+# Periodic interval (ms) to re-scan file_patterns for new log files.
+# If omitted, only the initial set of files is monitored.
+check_interval_ms = 2000
 
 [alerting]
 # Priority assigned to errors that do not match any whitelist rules (default: "p0")

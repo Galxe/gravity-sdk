@@ -24,7 +24,6 @@ use tokio::time;
 fn spawn_log_monitor(
     monitoring: config::MonitoringConfig,
     alerting: config::AlertingConfig,
-    check_interval: Duration,
     notifier: Notifier,
 ) -> Result<()> {
     let mut whitelist = if let Some(ref path) = monitoring.whitelist_path {
@@ -40,6 +39,8 @@ fn spawn_log_monitor(
     let files = watcher.discover()?;
     println!("Found {} files to monitor", files.len());
 
+    let check_interval_ms = monitoring.check_interval_ms;
+
     tokio::spawn(async move {
         let mut reader = Reader::new().expect("Failed to create reader");
         for file in files {
@@ -49,7 +50,9 @@ fn spawn_log_monitor(
             }
         }
 
-        let mut interval = time::interval(check_interval);
+        // Periodic file discovery only if check_interval_ms is configured
+        let mut discovery_interval =
+            check_interval_ms.map(|ms| time::interval(Duration::from_millis(ms)));
 
         loop {
             tokio::select! {
@@ -80,7 +83,7 @@ fn spawn_log_monitor(
                         }
                     }
                 }
-                _ = interval.tick() => {
+                _ = async { discovery_interval.as_mut().unwrap().tick().await }, if discovery_interval.is_some() => {
                     match watcher.discover() {
                         Ok(new_files) => {
                             for file in new_files {
@@ -140,8 +143,7 @@ async fn main() -> Result<()> {
     // Start Log Monitoring (if configured)
     if let Some(monitoring) = config.monitoring {
         println!("Starting log monitoring...");
-        let check_interval = Duration::from_millis(config.general.check_interval_ms);
-        spawn_log_monitor(monitoring, config.alerting, check_interval, notifier)?;
+        spawn_log_monitor(monitoring, config.alerting, notifier)?;
     }
 
     println!("Sentinel started...");
