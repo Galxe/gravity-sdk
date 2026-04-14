@@ -31,6 +31,9 @@ use futures::FutureExt;
 use gaptos::{
     api_types::{
         account::{ExternalAccountAddress, ExternalChainId},
+        on_chain_config::consensus_hardfork::{
+            is_consensus_fork_active_at_epoch, ConsensusHardfork,
+        },
         u256_define::{BlockId, Random, TxnHash},
         ExternalBlock, ExternalBlockMeta,
     },
@@ -450,6 +453,22 @@ impl PipelineBuilder {
             .author()
             .and_then(|author| validator.iter().position(|&v| v == author).map(|i| i as u64));
 
+        let failed_proposer_indices = if is_consensus_fork_active_at_epoch(
+            ConsensusHardfork::ConsensusAlpha,
+            block.epoch(),
+        ) {
+            block.block_data().failed_authors().map_or(vec![], |authors| {
+                authors
+                    .iter()
+                    .filter_map(|(_round, author)| {
+                        validator.iter().position(|v| v == author).map(|i| i as u64)
+                    })
+                    .collect()
+            })
+        } else {
+            vec![]
+        };
+
         let meta_data = ExternalBlockMeta {
             block_id: BlockId(*block.id()),
             block_number: block.block_number().unwrap_or_else(|| panic!("No block number")),
@@ -458,17 +477,7 @@ impl PipelineBuilder {
             randomness: maybe_rand.map(|r| Random::from_bytes(r.randomness())),
             block_hash: None,
             proposer_index,
-            failed_proposer_indices: block.block_data().failed_authors().map_or(
-                vec![],
-                |authors| {
-                    authors
-                        .iter()
-                        .filter_map(|(_round, author)| {
-                            validator.iter().position(|v| v == author).map(|i| i as u64)
-                        })
-                        .collect()
-                },
-            ),
+            failed_proposer_indices,
         };
         // TODO: add extra_data (validator transactions)
         get_block_buffer_manager()
@@ -656,6 +665,7 @@ impl PipelineBuilder {
                 block_number: block.block_number().unwrap_or(0),
                 epoch_start_round: block.round(),
                 epoch_start_timestamp_usecs: block_info.timestamp_usecs(),
+                block_hash: compute_result.root_hash(),
             };
             info!(
                 "[EpochChange] Setting EpochBlockInfo for epoch change block: id={}, number={}, round={}, timestamp={}",

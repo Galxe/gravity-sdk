@@ -32,6 +32,9 @@ use gaptos::{
     api_types::{
         account::ExternalAccountAddress,
         compute_res::ComputeRes,
+        on_chain_config::consensus_hardfork::{
+            is_consensus_fork_active_at_epoch, ConsensusHardfork,
+        },
         u256_define::{BlockId, Random},
         ExternalBlock, ExternalBlockMeta,
     },
@@ -603,6 +606,22 @@ impl BlockStore {
                     .and_then(|author| self.validator_indices.get(&author).copied())
                     .map(|i| i as u64);
 
+                let failed_proposer_indices = if is_consensus_fork_active_at_epoch(
+                    ConsensusHardfork::ConsensusAlpha,
+                    p_block.block().epoch(),
+                ) {
+                    p_block.block().block_data().failed_authors().map_or(vec![], |authors| {
+                        authors
+                            .iter()
+                            .filter_map(|(_round, author)| {
+                                self.validator_indices.get(author).map(|i| *i as u64)
+                            })
+                            .collect()
+                    })
+                } else {
+                    vec![]
+                };
+
                 let block = ExternalBlock {
                     txns: verified_txns,
                     block_meta: ExternalBlockMeta {
@@ -613,18 +632,7 @@ impl BlockStore {
                         randomness,
                         block_hash: maybe_block_hash.clone(),
                         proposer_index,
-                        failed_proposer_indices: p_block
-                            .block()
-                            .block_data()
-                            .failed_authors()
-                            .map_or(vec![], |authors| {
-                                authors
-                                    .iter()
-                                    .filter_map(|(_round, author)| {
-                                        self.validator_indices.get(author).map(|i| *i as u64)
-                                    })
-                                    .collect()
-                            }),
+                        failed_proposer_indices,
                     },
                     extra_data,
                     enable_randomness: self.enable_randomness,
@@ -754,15 +762,10 @@ impl BlockStore {
 
     pub async fn append_blocks_for_sync(
         &self,
-        blocks: Vec<(Block, Option<u64>, Option<Vec<u8>>)>,
+        blocks: Vec<(Block, Option<Vec<u8>>)>,
         quorum_certs: Vec<QuorumCert>,
     ) {
-        for (block, block_number, _) in blocks {
-            if let Some(num) = block_number {
-                if block.block_number().is_none() {
-                    block.set_block_number(num);
-                }
-            }
+        for (block, _) in blocks {
             self.insert_block(block, true).await.unwrap_or_else(|e| {
                 panic!("[BlockStore] failed to insert block during append blocks for sync {:?}", e)
             });
