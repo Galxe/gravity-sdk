@@ -223,7 +223,7 @@ impl BatchGenerator {
                 // Skip oversized transaction that exceeds sender_max_batch_bytes on its own.
                 // Without this, the loop would spin forever since txns_remaining never decreases.
                 warn!(
-                    "Skipping oversized transaction ({} bytes) that exceeds sender_max_batch_bytes ({})",
+                    "Skipping oversized txn ({} bytes, limit {})",
                     txns.first().map_or(0, |txn| txn.txn_bytes_len()),
                     self.config.sender_max_batch_bytes,
                 );
