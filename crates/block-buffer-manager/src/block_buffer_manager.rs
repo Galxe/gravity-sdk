@@ -1,7 +1,14 @@
 use anyhow::format_err;
 use aptos_executor_types::StateComputeResult;
 use gaptos::{
-    api_types::{self, account::ExternalAccountAddress, u256_define::TxnHash},
+    api_types::{
+        self,
+        account::ExternalAccountAddress,
+        on_chain_config::consensus_hardfork::{
+            is_consensus_fork_active_at_epoch, ConsensusHardfork,
+        },
+        u256_define::TxnHash,
+    },
     aptos_types::{
         block_info::EpochBlockInfo, epoch_state::EpochState, idl::convert_validator_set,
     },
@@ -459,18 +466,7 @@ impl BlockBufferManager {
                 false
             })
             .unwrap_or(txn_buffer.len());
-
-        // Avoid head-of-line blocking when the first buffered batch is larger than `gas_limit`.
-        // In that case `split_point` is `0`; drain one batch so the queue can keep making progress.
-        let valid_item = if split_point == 0 && !txn_buffer.is_empty() && max_size > 0 {
-            warn!(
-                "first txn batch gas {} exceeds limit {}, draining one batch to avoid stalling",
-                txn_buffer[0].gas_limit, gas_limit
-            );
-            txn_buffer.drain(0..1).collect::<Vec<_>>()
-        } else {
-            txn_buffer.drain(0..split_point).collect::<Vec<_>>()
-        };
+        let valid_item = txn_buffer.drain(0..split_point).collect::<Vec<_>>();
         drop(txn_buffer);
         let mut result = Vec::new();
         for mut item in valid_item {
@@ -719,7 +715,11 @@ impl BlockBufferManager {
                         // `is_reconfiguration_suffix()` without leaking per-block
                         // execution output (root hash, txn status, events) to unrelated
                         // blocks — see `BufferItem::advance_to_executed_or_aggregated`.
-                        if block_state_machine.is_suffix_block(block_num) {
+                        if is_consensus_fork_active_at_epoch(
+                            ConsensusHardfork::ConsensusAlpha,
+                            epoch,
+                        ) && block_state_machine.is_suffix_block(block_num)
+                        {
                             let dummy_result = StateComputeResult::new_dummy_with_epoch_state(
                                 block_state_machine
                                     .epoch_change_block_info
@@ -772,7 +772,9 @@ impl BlockBufferManager {
                     }
                 }
             } else {
-                if epoch < block_state_machine.current_epoch {
+                if is_consensus_fork_active_at_epoch(ConsensusHardfork::ConsensusAlpha, epoch) &&
+                    epoch < block_state_machine.current_epoch
+                {
                     // Old-epoch bypass: same reasoning as the suffix block branch above —
                     // never leak the epoch change block's real compute_result (which carries
                     // `has_reconfiguration() == true`) to an unrelated block.
@@ -980,17 +982,19 @@ impl BlockBufferManager {
             // This avoids blocking consensus while waiting for reth to process (and discard)
             // these suffix blocks. Reth will independently detect the stale epoch and silently
             // discard them without sending any ExecutionResult, so there is no conflict.
-            if let Some(epoch_state) = epoch_change_state {
-                Self::handle_epoch_change_suffix_blocks(
-                    &mut block_state_machine,
-                    block_num,
-                    epoch,
-                    block_id,
-                    block_timestamp_usecs,
-                    block_round,
-                    block_hash,
-                    epoch_state,
-                );
+            if is_consensus_fork_active_at_epoch(ConsensusHardfork::ConsensusAlpha, epoch) {
+                if let Some(epoch_state) = epoch_change_state {
+                    Self::handle_epoch_change_suffix_blocks(
+                        &mut block_state_machine,
+                        block_num,
+                        epoch,
+                        block_id,
+                        block_timestamp_usecs,
+                        block_round,
+                        block_hash,
+                        epoch_state,
+                    );
+                }
             }
 
             let _ = block_state_machine.sender.send(());

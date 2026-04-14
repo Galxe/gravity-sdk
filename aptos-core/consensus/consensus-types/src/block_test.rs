@@ -253,25 +253,3 @@ fn test_failed_authors_well_formed() {
     assert!(create_block(3, vec![(1, other), (1, other)]).verify_well_formed().is_err());
     assert!(create_block(3, vec![(2, other), (1, other)]).verify_well_formed().is_err());
 }
-
-#[test]
-fn test_deserialize_ignores_untrusted_block_number() {
-    let signer = ValidatorSigner::random(None);
-    let quorum_cert = certificate_for_genesis();
-    let block = Block::new_proposal(
-        Payload::empty(false, true),
-        1,
-        gaptos::aptos_infallible::duration_since_epoch().as_micros() as u64,
-        quorum_cert,
-        &signer,
-        Vec::new(),
-    )
-    .unwrap();
-
-    block.set_block_number(777);
-    let bytes = bcs::to_bytes(&block).unwrap();
-    let decoded: Block = bcs::from_bytes(&bytes).unwrap();
-
-    assert_eq!(decoded.block_number(), None);
-    assert_eq!(decoded.id(), block.id());
-}

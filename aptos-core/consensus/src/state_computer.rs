@@ -29,6 +29,9 @@ use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 use gaptos::{
     api_types::{
         account::{ExternalAccountAddress, ExternalChainId},
+        on_chain_config::consensus_hardfork::{
+            is_consensus_fork_active_at_epoch, ConsensusHardfork,
+        },
         u256_define::{BlockId, Random, TxnHash},
         ExternalBlock, ExternalBlockMeta, ExtraDataType,
     },
@@ -239,14 +242,16 @@ impl ExecutionProxy {
         validator_txns: Option<&[ValidatorTransaction]>,
         block: &Block,
     ) -> Vec<ExtraDataType> {
-        validator_txns
-            .map(|validator_txns| {
-                validator_txns
-                    .iter()
-                    .filter_map(|txn| self.process_single_validator_transaction(txn, block))
-                    .collect()
-            })
-            .unwrap_or_default()
+        let mut extra_data = Vec::new();
+
+        if let Some(validator_txns) = validator_txns {
+            extra_data = validator_txns
+                .iter()
+                .map(|txn| self.process_single_validator_transaction(txn, block))
+                .collect();
+        }
+
+        extra_data
     }
 
     /// Process a single validator transaction (DKG or JWK) and return the serialized data
@@ -254,7 +259,7 @@ impl ExecutionProxy {
         &self,
         txn: &ValidatorTransaction,
         block: &Block,
-    ) -> Option<ExtraDataType> {
+    ) -> ExtraDataType {
         match txn {
             ValidatorTransaction::DKGResult(transcript) => {
                 let transcript = gaptos::api_types::on_chain_config::dkg::DKGTranscript {
@@ -266,26 +271,17 @@ impl ExecutionProxy {
                     },
                     transcript_bytes: transcript.transcript_bytes.clone(),
                 };
-                bcs::to_bytes(&transcript)
-                    .map(ExtraDataType::DKG)
-                    .map_err(|err| {
-                        warn!(
-                            "failed to serialize DKG validator transaction for block {}: {}",
-                            block.id(),
-                            err
-                        )
-                    })
-                    .ok()
+                ExtraDataType::DKG(bcs::to_bytes(&transcript).unwrap())
             }
             ValidatorTransaction::ObservedJWKUpdate(jwks::QuorumCertifiedUpdate {
                 update,
                 multi_sig,
-            }) => self.process_jwk_update(&update, block).map(ExtraDataType::JWK),
+            }) => ExtraDataType::JWK(self.process_jwk_update(&update, block)),
         }
     }
 
     /// Process JWK update and convert to gaptos format
-    fn process_jwk_update(&self, update: &ProviderJWKs, block: &Block) -> Option<Vec<u8>> {
+    fn process_jwk_update(&self, update: &ProviderJWKs, block: &Block) -> Vec<u8> {
         use gaptos::api_types::on_chain_config::jwks::{JWKStruct, ProviderJWKs};
         // TODO(Gravity): Check the signature here instead of execution layer
         info!(
@@ -329,11 +325,7 @@ impl ExecutionProxy {
                 .collect(),
         };
 
-        bcs::to_bytes(&gaptos_provider_jwk)
-            .map_err(|err| {
-                warn!("failed to serialize provider JWK update for block {}: {}", block.id(), err)
-            })
-            .ok()
+        bcs::to_bytes(&gaptos_provider_jwk).unwrap()
     }
 }
 
@@ -444,6 +436,22 @@ impl StateComputer for ExecutionProxy {
             .author()
             .and_then(|author| validators.iter().position(|&v| v == author).map(|i| i as u64));
 
+        let failed_proposer_indices = if is_consensus_fork_active_at_epoch(
+            ConsensusHardfork::ConsensusAlpha,
+            block.epoch(),
+        ) {
+            block.block_data().failed_authors().map_or(vec![], |authors| {
+                authors
+                    .iter()
+                    .filter_map(|(_round, author)| {
+                        validators.iter().position(|v| v == author).map(|i| i as u64)
+                    })
+                    .collect()
+            })
+        } else {
+            vec![]
+        };
+
         let meta_data = ExternalBlockMeta {
             block_id: BlockId(*block.id()),
             block_number: block.block_number().unwrap_or_else(|| panic!("No block number")),
@@ -452,17 +460,7 @@ impl StateComputer for ExecutionProxy {
             randomness: randomness.map(|r| Random::from_bytes(r.randomness())),
             block_hash: None,
             proposer_index,
-            failed_proposer_indices: block.block_data().failed_authors().map_or(
-                vec![],
-                |authors| {
-                    authors
-                        .iter()
-                        .filter_map(|(_round, author)| {
-                            validators.iter().position(|v| v == author).map(|i| i as u64)
-                        })
-                        .collect()
-                },
-            ),
+            failed_proposer_indices,
         };
 
         // We would export the empty block detail to the outside GCEI caller
