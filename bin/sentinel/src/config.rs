@@ -27,7 +27,7 @@ impl fmt::Display for Priority {
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
     pub general: GeneralConfig,
-    pub monitoring: MonitoringConfig,
+    pub monitoring: Option<MonitoringConfig>,
     pub alerting: AlertingConfig,
     /// Multiple probe endpoints, each with its own URL, interval, and threshold.
     #[serde(default)]
