@@ -774,8 +774,8 @@ impl PipelineBuilder {
         }
 
         let _tracker = Tracker::new("commit_ledger", &block);
-        let mut block_ids = vec![];
-        block_ids.push(block.id());
+        let block_num = block.block_number().unwrap_or(0);
+        let block_ids = vec![(block.id(), block_num)];
         let ledger_info_with_sigs_clone = ledger_info_with_sigs.clone();
         // TODO: Collect randomness data from block
         let randomness_data = vec![];

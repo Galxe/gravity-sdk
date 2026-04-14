@@ -592,7 +592,7 @@ impl StateComputer for ExecutionProxy {
                 subscribable_txn_events.extend(block.subscribable_events());
             }
             // pre_commit_futs.push(block.take_pre_commit_fut());
-            block_ids.push(block.id());
+            block_ids.push((block.id(), this_block_num));
 
             // Collect randomness data for persistence
             if let Some(randomness) = block.randomness() {
@@ -793,7 +793,7 @@ async fn test_commit_sync_race() {
 
         fn commit_ledger(
             &self,
-            block_ids: Vec<HashValue>,
+            block_ids: Vec<(HashValue, u64)>,
             ledger_info_with_sigs: LedgerInfoWithSignatures,
             randomness_data: Vec<(u64, Vec<u8>)>,
         ) -> ExecutorResult<()> {

@@ -73,7 +73,7 @@ pub mod block_executor {
 
         fn commit_ledger(
             &self,
-            block_ids: Vec<HashValue>,
+            block_ids: Vec<(HashValue, u64)>,
             ledger_info_with_sigs: LedgerInfoWithSignatures,
             randomness_data: Vec<(u64, Vec<u8>)>,
         ) -> ExecutorResult<()> {

@@ -143,7 +143,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
     }
     fn commit_ledger(
         &self,
-        block_ids: Vec<HashValue>,
+        block_ids: Vec<(HashValue, u64)>,
         ledger_info_with_sigs: LedgerInfoWithSignatures,
         randomness_data: Vec<(u64, Vec<u8>)>,
     ) -> ExecutorResult<()> {
@@ -153,8 +153,6 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             ledger_info_with_sigs.ledger_info().commit_info().id(),
             ledger_info_with_sigs.ledger_info().block_hash(),
         );
-        let block_num = ledger_info_with_sigs.ledger_info().block_number();
-        let len = block_ids.len();
         assert!(!block_ids.is_empty(), "commit_ledger block_ids is empty");
         let epoch = ledger_info_with_sigs.ledger_info().epoch();
 
@@ -185,13 +183,12 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                 .set_commit_blocks(
                     block_ids
                         .into_iter()
-                        .enumerate()
-                        .map(|(i, x)| {
+                        .map(|(x, num)| {
                             let mut v = [0u8; 32];
                             v.copy_from_slice(block_hash.as_ref());
                             BlockHashRef {
                                 block_id: BlockId::from_bytes(x.as_slice()),
-                                num: block_num - (len - 1 - i) as u64,
+                                num,
                                 hash: if x == block_id { Some(v) } else { None },
                                 persist_notifier: None,
                             }
