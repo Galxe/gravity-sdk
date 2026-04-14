@@ -515,7 +515,7 @@ impl BufferManager {
         while self.ongoing_tasks.load(Ordering::SeqCst) > 0 {
             if Instant::now() >= reset_deadline {
                 error!(
-                    "BufferManager reset timed out after 30s with {} ongoing tasks still pending. Breaking out to avoid deadlock.",
+                    "BufferManager reset timed out with {} tasks pending, breaking out",
                     self.ongoing_tasks.load(Ordering::SeqCst),
                 );
                 break;
@@ -1034,7 +1034,9 @@ impl BufferManager {
                             // TODO: consider triggering a pipeline reset here to recover from
                             // persist failures, since the committed blocks have already been
                             // popped from the buffer and cannot be retried without a reset.
-                            error!("Persisting phase failed: {:?}. Pipeline may stall if not recovered.", e);
+                            error!(
+                                "Persisting phase failed: {:?}. Pipeline may stall.", e
+                            );
                         },
                     }
                 },

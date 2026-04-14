@@ -49,7 +49,9 @@ impl NetworkListener {
                     VerifiedEvent::SignedBatchInfo(signed_batch_infos) => {
                         let cmd = ProofCoordinatorCommand::AppendSignature(*signed_batch_infos);
                         if self.proof_coordinator_tx.send(cmd).await.is_err() {
-                            error!("Failed to send signed_batch_info to proof_coordinator — receiver dropped");
+                            error!(
+                                "Failed to send signed_batch_info to proof_coordinator — receiver dropped"
+                            );
                             break;
                         }
                     }
@@ -71,14 +73,18 @@ impl NetworkListener {
                             .await
                             .is_err()
                         {
-                            error!("Failed to send remote batch to batch_coordinator — receiver dropped");
+                            error!(
+                                "Failed to send remote batch to batch_coordinator — receiver dropped"
+                            );
                             break;
                         }
                     }
                     VerifiedEvent::ProofOfStoreMsg(proofs) => {
                         let cmd = ProofManagerCommand::ReceiveProofs(*proofs);
                         if self.proof_manager_tx.send(cmd).await.is_err() {
-                            error!("Failed to send proof_of_store to proof_manager — receiver dropped");
+                            error!(
+                                "Failed to send proof_of_store to proof_manager — receiver dropped"
+                            );
                             break;
                         }
                     }
