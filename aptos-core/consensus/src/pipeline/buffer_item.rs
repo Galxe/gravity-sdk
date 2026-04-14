@@ -30,16 +30,16 @@ fn generate_commit_ledger_info(
     block_hash: HashValue,
     block_number: u64,
 ) -> LedgerInfo {
-    let mut ledger_info = LedgerInfo::new(
+    let mut ledger_info = LedgerInfo::new_with_block_info(
         commit_info.clone(),
         if order_vote_enabled {
             HashValue::zero()
         } else {
             ordered_proof.ledger_info().consensus_data_hash()
         },
+        block_hash,
+        block_number,
     );
-    ledger_info.set_block_hash(block_hash);
-    ledger_info.set_block_number(block_number);
     ledger_info
 }
 
@@ -183,6 +183,7 @@ impl BufferItem {
         validator: &ValidatorVerifier,
         epoch_end_timestamp: Option<u64>,
         order_vote_enabled: bool,
+        epoch_block_info: Option<gaptos::aptos_types::block_info::EpochBlockInfo>,
     ) -> Self {
         match self {
             Self::Ordered(ordered_item) => {
@@ -205,6 +206,16 @@ impl BufferItem {
                     }
                     _ => (),
                 }
+                let commit_info = BlockInfo::new_with_epoch_block_info(
+                    commit_info.epoch(),
+                    commit_info.round(),
+                    commit_info.id(),
+                    commit_info.executed_state_id(),
+                    commit_info.version(),
+                    commit_info.timestamp_usecs(),
+                    commit_info.next_epoch_state().cloned(),
+                    epoch_block_info.or_else(|| commit_info.epoch_block_info().cloned()),
+                );
                 if let Some(commit_proof) = commit_proof {
                     // We have already received the commit proof in fast forward sync path,
                     // we can just use that proof and proceed to aggregated

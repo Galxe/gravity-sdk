@@ -229,35 +229,70 @@ impl BlockStore {
         LedgerInfoWithSignatures::new(LedgerInfo::dummy(), AggregateSignature::empty())
     }
 
+    /// Replays uncommitted quorum certificates after a node restart.
+    ///
+    /// Retrieves all QCs with commit info from the block tree, sorts them by round,
+    /// and re-sends each one for execution in order. This reproduces the same commit
+    /// batches that were in-flight before the restart.
+    ///
+    /// If the latest ledger info carries `epoch_block_info` (indicating a non-blocking
+    /// epoch change was in progress), recovery stops at the epoch change block's round.
+    /// Suffix blocks beyond that point would never receive execution results from reth,
+    /// so attempting to recover them would cause the pipeline to hang.
     async fn recover_blocks(&self) {
         RECOVERY_GAUGE.set_with(&[], 1);
-        // reproduce the same batches (important for the commit phase)
+
         let mut certs = self.inner.read().get_all_quorum_certs_with_commit_info();
         let last_ledger_info =
             self.storage.consensus_db().ledger_db.metadata_db().get_latest_ledger_info();
-        info!("recover blocks, last_ledger_info: {:?}", last_ledger_info);
+        info!("recover_blocks: last_ledger_info={:?}", last_ledger_info);
+
+        // Determine the upper-bound round for recovery when a non-blocking epoch change
+        // was in progress. Blocks after this round are suffix blocks that reth will discard.
+        let epoch_change_limit_round =
+            last_ledger_info.as_ref().and_then(|li| {
+                let info = li.ledger_info().commit_info().epoch_block_info()?;
+                let block = self.get_block(info.block_id)?;
+                info!(
+                "recover_blocks: epoch change detected at block_id={}, block_number={}, round={}",
+                info.block_id, info.block_number, block.round(),
+            );
+                Some(block.round())
+            });
+
         certs.sort_unstable_by_key(|qc| qc.commit_info().round());
+
         for qc in certs {
-            if qc.commit_info().round() > self.commit_root().round() {
-                if let Some(last_ledger_info) = &last_ledger_info {
-                    if last_ledger_info.ledger_info().epoch() == qc.commit_info().epoch() &&
-                        qc.commit_info().round() <= last_ledger_info.commit_info().round()
-                    {
-                        info!(
-                            "sending qc {} to execution, current commit round {}",
-                            qc.commit_info().round(),
-                            self.commit_root().round()
-                        );
-                        if let Err(e) =
-                            self.send_for_execution(qc.into_wrapped_ledger_info(), true).await
-                        {
-                            error!("Error in try-committing blocks. {}", e.to_string());
-                            break;
-                        }
-                    }
-                }
+            let commit_round = qc.commit_info().round();
+
+            if commit_round <= self.commit_root().round() {
+                continue;
+            }
+
+            // Stop once we pass the epoch change boundary.
+            if epoch_change_limit_round.is_some_and(|ec| commit_round > ec) {
+                info!("recover_blocks: stopping before round {commit_round} (epoch change limit)");
+                break;
+            }
+
+            let Some(last_li) = &last_ledger_info else { continue };
+            if last_li.ledger_info().epoch() != qc.commit_info().epoch() ||
+                commit_round > last_li.commit_info().round()
+            {
+                continue;
+            }
+
+            info!(
+                "recover_blocks: sending round {} to execution (commit_root={})",
+                commit_round,
+                self.commit_root().round(),
+            );
+            if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info(), true).await {
+                error!("recover_blocks: failed to commit blocks: {e}");
+                break;
             }
         }
+
         RECOVERY_GAUGE.set_with(&[], 0);
     }
 
@@ -595,7 +630,7 @@ impl BlockStore {
                     enable_randomness: self.enable_randomness,
                 };
                 get_block_buffer_manager()
-                    .set_ordered_blocks(BlockId(*p_block.parent_id()), block)
+                    .set_ordered_blocks(BlockId(*p_block.parent_id()), block, p_block.round())
                     .await
                     .context("Failed to set ordered blocks during recovery")?;
                 let compute_res = get_block_buffer_manager()
@@ -633,6 +668,12 @@ impl BlockStore {
             self.inner.write().update_ordered_root(block_to_commit.id());
             self.inner.write().insert_ordered_cert(finality_proof_clone.clone());
         } else {
+            // `BATCH_COMMIT_SIZE` env var: when set and the accumulated path is still
+            // small, defer sending so the execution layer can process blocks in larger
+            // batches. Because we return early without touching `ordered_root`, the next
+            // `send_for_execution` call will see the same root and `path_from_ordered_root`
+            // will grow until it exceeds the batch size, at which point we flush.
+            // Used by `gravity_e2e/cluster_test_cases/single_node/test_batch_exec.py`.
             let batch_commit_size = std::env::var("BATCH_COMMIT_SIZE")
                 .ok()
                 .and_then(|v| v.parse::<usize>().ok())

@@ -39,27 +39,26 @@ jobs:
             exit 0
           fi
 
-          # Use PR branch instead of head_sha so that the check is PR-wide,
-          # not commit-specific.  Once CI passes on any commit in the PR,
-          # subsequent approvals (even after new pushes) will be skipped.
-          # The author can always re-run manually if needed.
+          # Use head_sha (commit-specific) so that new pushes invalidate
+          # previous CI results and require a fresh run after re-approval.
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
           PR_BRANCH="${{ github.event.pull_request.head.ref }}"
 
-          # Check for in-progress runs on this PR (any commit)
+          # Check for in-progress runs on the same commit
           IN_PROGRESS=$(gh api \
-            "repos/${{ github.repository }}/actions/workflows/${{ inputs.workflow_file }}/runs?branch=${PR_BRANCH}" \
+            "repos/${{ github.repository }}/actions/workflows/${{ inputs.workflow_file }}/runs?head_sha=${HEAD_SHA}" \
             --jq "[.workflow_runs[] | select(.id != ${{ github.run_id }} and .status == \"in_progress\")] | length")
           if [ "$IN_PROGRESS" -gt "0" ]; then
-            echo "CI already in progress for branch ${PR_BRANCH}. Skipping."
+            echo "CI already in progress for commit ${HEAD_SHA}. Skipping."
             echo "should_run=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          # Check for successful runs on this PR (any commit) — but only
+          # Check for successful runs on the same commit — but only
           # count runs where real test jobs actually ran (not just gate +
           # skipped downstream jobs)
           SUCCESSFUL_RUN_IDS=$(gh api \
-            "repos/${{ github.repository }}/actions/workflows/${{ inputs.workflow_file }}/runs?branch=${PR_BRANCH}" \
+            "repos/${{ github.repository }}/actions/workflows/${{ inputs.workflow_file }}/runs?head_sha=${HEAD_SHA}" \
             --jq "[.workflow_runs[] | select(.id != ${{ github.run_id }} and .conclusion == \"success\")] | .[].id")
 
           HAS_REAL_SUCCESS=false
@@ -69,14 +68,14 @@ jobs:
               "repos/${{ github.repository }}/actions/runs/$RUN_ID/jobs" \
               --jq '[.jobs[] | select(.conclusion == "success" and (.name | test("(?i)gate") | not))] | length')
             if [ "$REAL_JOBS" -gt "0" ]; then
-              echo "Found previous run #$RUN_ID with real test execution on branch ${PR_BRANCH}."
+              echo "Found previous run #$RUN_ID with real test execution for commit ${HEAD_SHA}."
               HAS_REAL_SUCCESS=true
               break
             fi
           done
 
           if [ "$HAS_REAL_SUCCESS" = "true" ]; then
-            echo "CI already passed for branch ${PR_BRANCH}. Skipping."
+            echo "CI already passed for commit ${HEAD_SHA}. Skipping."
             echo "should_run=false" >> $GITHUB_OUTPUT
           else
             echo "should_run=true" >> $GITHUB_OUTPUT

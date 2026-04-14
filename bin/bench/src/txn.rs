@@ -1,7 +1,5 @@
 use gaptos::api_types::{
     account::{ExternalAccountAddress, ExternalChainId},
-    simple_hash,
-    u256_define::TxnHash,
     VerifiedTxn,
 };
 use serde::{Deserialize, Serialize};
@@ -41,14 +39,7 @@ impl RawTxn {
 
     pub fn into_verified(self) -> VerifiedTxn {
         let bytes = self.to_bytes();
-        let hash = simple_hash::hash_to_fixed_array(&bytes);
-        VerifiedTxn::new(
-            bytes,
-            self.account,
-            self.sequence_number,
-            ExternalChainId::new(0),
-            TxnHash::new(hash),
-        )
+        VerifiedTxn::new(bytes, self.account, self.sequence_number, ExternalChainId::new(0))
     }
 
     pub fn account(&self) -> ExternalAccountAddress {

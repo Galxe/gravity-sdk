@@ -167,7 +167,10 @@ impl MockConsensus {
                     .await;
 
                     let head_meta = block.block_meta.clone();
-                    get_block_buffer_manager().set_ordered_blocks(parent_id, block).await.unwrap();
+                    get_block_buffer_manager()
+                        .set_ordered_blocks(parent_id, block, 0)
+                        .await
+                        .unwrap();
                     parent_id = head_meta.block_id;
                     let _ = block_meta_tx.send(head_meta).await;
                     // wait if there's large gap between executed block and ordered block

@@ -4,10 +4,7 @@
 
 use crate::network::BroadcastPeerPriority;
 use gaptos::{
-    api_types::{
-        account::{ExternalAccountAddress, ExternalChainId},
-        u256_define::TxnHash,
-    },
+    api_types::account::{ExternalAccountAddress, ExternalChainId},
     aptos_crypto::{HashValue, Uniform},
     aptos_mempool::counters,
     aptos_types::{
@@ -138,10 +135,10 @@ impl From<gaptos::api_types::VerifiedTxn> for VerifiedTxn {
     fn from(value: gaptos::api_types::VerifiedTxn) -> Self {
         let committed_hash = HashValue::new(value.committed_hash());
         VerifiedTxn {
-            bytes: value.bytes,
-            sender: AccountAddress::new(value.sender.bytes()),
-            sequence_number: value.sequence_number,
-            chain_id: value.chain_id.into_u64().into(),
+            bytes: value.bytes().to_vec(),
+            sender: AccountAddress::new(value.sender().bytes()),
+            sequence_number: value.seq_number(),
+            chain_id: value.chain_id().into_u64().into(),
             committed_hash,
         }
     }
@@ -154,7 +151,6 @@ impl From<VerifiedTxn> for gaptos::api_types::VerifiedTxn {
             ExternalAccountAddress::new(value.sender.into_bytes()),
             value.sequence_number,
             ExternalChainId::new(value.chain_id.into()),
-            TxnHash::new(*value.committed_hash),
         )
     }
 }

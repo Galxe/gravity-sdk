@@ -30,7 +30,7 @@ def get_genesis_defaults():
         "chainId": 1337,  # Default value, can be overridden in genesis.toml
         "epochIntervalMicros": 7200000000,
         "majorVersion": 1,
-        "consensusConfig": "0x00",
+        "consensusConfig": "0x0301010a00000000000000280000000000000001010000000a000000000000000100010200000000000000000020000000000000",
         "executionConfig": "0x00",
         "initialLockedUntilMicros": 1798848000000000,
         "validatorConfig": {
@@ -46,8 +46,7 @@ def get_genesis_defaults():
         "stakingConfig": {
             "minimumStake": "1000000000000000000",
             "lockupDurationMicros": 86400000000,
-            "unbondingDelayMicros": 86400000000,
-            "minimumProposalStake": "10000000000000000000"
+            "unbondingDelayMicros": 86400000000
         },
         "governanceConfig": {
             "minVotingThreshold": "1000000000000000000",
@@ -64,7 +63,7 @@ def get_genesis_defaults():
         },
         "oracleConfig": {
             "sourceTypes": [1],
-            "callbacks": ["0x00000000000000000000000000000001625F2018"],
+            "callbacks": ["0x00000000000000000000000000000001625F4001"],
             "bridgeConfig": None,
             "tasks": []
         },
@@ -117,8 +116,7 @@ def build_genesis_config(config, genesis_cfg):
     result["stakingConfig"] = {
         "minimumStake": sc.get("minimum_stake", defaults["stakingConfig"]["minimumStake"]),
         "lockupDurationMicros": sc.get("lockup_duration_micros", defaults["stakingConfig"]["lockupDurationMicros"]),
-        "unbondingDelayMicros": sc.get("unbonding_delay_micros", defaults["stakingConfig"]["unbondingDelayMicros"]),
-        "minimumProposalStake": sc.get("minimum_proposal_stake", defaults["stakingConfig"]["minimumProposalStake"])
+        "unbondingDelayMicros": sc.get("unbonding_delay_micros", defaults["stakingConfig"]["unbondingDelayMicros"])
     }
     
     # governanceConfig
@@ -279,10 +277,17 @@ def main():
         host = node['host']
         p2p_port = node['p2p_port']
         vfn_port = node['vfn_port']
-        
-        # Build addresses
-        val_net_addr = f"/ip4/{host}/tcp/{p2p_port}/noise-ik/{network_pk}/handshake/0"
-        vfn_net_addr = f"/ip4/{host}/tcp/{vfn_port}/noise-ik/{network_pk}/handshake/0"
+
+        # Build addresses: use /dns/ for domain names, /ip4/ for IPv4 addresses
+        try:
+            import ipaddress
+            ipaddress.IPv4Address(host)
+            host_proto = "ip4"
+        except ValueError:
+            host_proto = "dns"
+
+        val_net_addr = f"/{host_proto}/{host}/tcp/{p2p_port}/noise-ik/{network_pk}/handshake/0"
+        vfn_net_addr = f"/{host_proto}/{host}/tcp/{vfn_port}/noise-ik/{network_pk}/handshake/0"
         
         # Consensus PoP: use node config value, identity file, or 96-byte dummy
         # ValidatorManagement.sol requires non-empty consensusPop

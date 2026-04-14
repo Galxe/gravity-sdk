@@ -475,13 +475,13 @@ impl StateComputer for ExecutionProxy {
                     ExternalAccountAddress::new(txn.sender().into_bytes()),
                     txn.sequence_number(),
                     ExternalChainId::new(txn.chain_id().id()),
-                    TxnHash::from_bytes(&txn.get_hash().to_vec()),
                 )
             })
             .collect();
         APTOS_EXECUTION_TXNS.observe(real_txns.len() as f64);
         let txn_notifier = self.txn_notifier.clone();
         let block_id_hashvalue = block.id();
+        let block_round = block.round();
         let enable_randomness = self.state.read().as_ref().unwrap().is_randomness_enabled;
         Box::pin(async move {
             let block_id = meta_data.block_id;
@@ -497,6 +497,7 @@ impl StateComputer for ExecutionProxy {
                         extra_data,
                         enable_randomness,
                     },
+                    block_round,
                 )
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to push ordered blocks: {}", e))?;
@@ -575,12 +576,21 @@ impl StateComputer for ExecutionProxy {
             }
             committed_block_ids.push(block.id());
 
+            let this_block_num = block.block().block_number().unwrap_or(0);
+            let is_suffix = if let Some(info) = finality_proof.commit_info().epoch_block_info() {
+                this_block_num > info.block_number
+            } else {
+                false
+            };
+
             let commit_transactions =
                 self.transactions_to_commit(block, &validators, is_randomness_enabled);
             if !commit_transactions.is_empty() {
                 txns.extend(commit_transactions);
             }
-            subscribable_txn_events.extend(block.subscribable_events());
+            if !is_suffix {
+                subscribable_txn_events.extend(block.subscribable_events());
+            }
             // pre_commit_futs.push(block.take_pre_commit_fut());
             block_ids.push(block.id());
 
@@ -612,12 +622,16 @@ impl StateComputer for ExecutionProxy {
         .expect("spawn_blocking failed");
 
         let blocks = blocks.to_vec();
-        let block_number = blocks
+        let mut block_number = blocks
             .last()
             .unwrap()
             .block()
             .block_number()
             .unwrap_or_else(|| panic!("No block number"));
+
+        if let Some(info) = finality_proof.commit_info().epoch_block_info() {
+            block_number = info.block_number;
+        }
         let wrapped_callback = move || {
             payload_manager.notify_commit(block_timestamp, payloads);
             callback(&blocks, finality_proof);
