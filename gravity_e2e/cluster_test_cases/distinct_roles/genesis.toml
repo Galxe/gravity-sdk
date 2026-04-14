@@ -7,7 +7,7 @@
 
 [dependencies.genesis_contracts]
 repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
-ref = "feat/genesis-distinct-staker"
+ref = "main"
 
 [[genesis_validators]]
 id = "node1"
