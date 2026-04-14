@@ -2,8 +2,11 @@ use anyhow::format_err;
 use aptos_executor_types::StateComputeResult;
 use gaptos::{
     api_types::{
-        self, account::ExternalAccountAddress,
-        on_chain_config::consensus_hardfork::{is_consensus_fork_active_at_epoch, ConsensusHardfork},
+        self,
+        account::ExternalAccountAddress,
+        on_chain_config::consensus_hardfork::{
+            is_consensus_fork_active_at_epoch, ConsensusHardfork,
+        },
         u256_define::TxnHash,
     },
     aptos_types::{
@@ -712,7 +715,11 @@ impl BlockBufferManager {
                         // `is_reconfiguration_suffix()` without leaking per-block
                         // execution output (root hash, txn status, events) to unrelated
                         // blocks — see `BufferItem::advance_to_executed_or_aggregated`.
-                        if is_consensus_fork_active_at_epoch(ConsensusHardfork::ConsensusAlpha, epoch) && block_state_machine.is_suffix_block(block_num) {
+                        if is_consensus_fork_active_at_epoch(
+                            ConsensusHardfork::ConsensusAlpha,
+                            epoch,
+                        ) && block_state_machine.is_suffix_block(block_num)
+                        {
                             let dummy_result = StateComputeResult::new_dummy_with_epoch_state(
                                 block_state_machine
                                     .epoch_change_block_info
@@ -765,7 +772,9 @@ impl BlockBufferManager {
                     }
                 }
             } else {
-                if is_consensus_fork_active_at_epoch(ConsensusHardfork::ConsensusAlpha, epoch) && epoch < block_state_machine.current_epoch {
+                if is_consensus_fork_active_at_epoch(ConsensusHardfork::ConsensusAlpha, epoch) &&
+                    epoch < block_state_machine.current_epoch
+                {
                     // Old-epoch bypass: same reasoning as the suffix block branch above —
                     // never leak the epoch change block's real compute_result (which carries
                     // `has_reconfiguration() == true`) to an unrelated block.
