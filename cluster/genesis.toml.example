@@ -31,7 +31,6 @@ auto_evict_threshold_pct = 0
 minimum_stake = "1000000000000000000"
 lockup_duration_micros = 86400000000
 unbonding_delay_micros = 86400000000
-minimum_proposal_stake = "10000000000000000000"
 
 [genesis.governance_config]
 min_voting_threshold = "1000000000000000000"
@@ -51,6 +50,7 @@ callbacks = ["0x00000000000000000000000000000001625F4001"]
 [genesis.oracle_config.bridge_config]
 deploy = true
 trusted_bridge = "0xcbEAF3BDe82155F56486Fb5a1072cb8baAf547cc"
+trusted_source_id = 11155111
 
 [[genesis.oracle_config.tasks]]
 source_type = 0
@@ -86,6 +86,7 @@ balance = "1000000000000000000000000"  # 1M ETH
 # Genesis validators
 # Each validator must specify: id, address, stake_amount, voting_power, host, p2p_port, vfn_port
 # NOTE: voting_power must be >= stake_amount
+# NOTE: host can be an IPv4 address (e.g. "1.2.3.4") or a domain name (e.g. "validator1.example.com")
 
 [[genesis_validators]]
 id = "node1"
