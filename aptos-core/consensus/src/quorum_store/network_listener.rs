@@ -41,15 +41,17 @@ impl NetworkListener {
                     // TODO: does the assumption have to be that network listener is shutdown first?
                     VerifiedEvent::Shutdown(ack_tx) => {
                         info!("QS: shutdown network listener received");
-                        ack_tx.send(()).expect("Failed to send shutdown ack to QuorumStore");
+                        if ack_tx.send(()).is_err() {
+                            error!("Failed to send shutdown ack to QuorumStore");
+                        }
                         break;
                     }
                     VerifiedEvent::SignedBatchInfo(signed_batch_infos) => {
                         let cmd = ProofCoordinatorCommand::AppendSignature(*signed_batch_infos);
-                        self.proof_coordinator_tx
-                            .send(cmd)
-                            .await
-                            .expect("Could not send signed_batch_info to proof_coordinator");
+                        if self.proof_coordinator_tx.send(cmd).await.is_err() {
+                            error!("Failed to send signed_batch_info to proof_coordinator — receiver dropped");
+                            break;
+                        }
                     }
                     VerifiedEvent::BatchMsg(batch_msg) => {
                         let author = batch_msg.author();
@@ -64,17 +66,21 @@ impl NetworkListener {
                             self.remote_batch_coordinator_tx.len(),
                             idx
                         );
-                        self.remote_batch_coordinator_tx[idx]
+                        if self.remote_batch_coordinator_tx[idx]
                             .send(BatchCoordinatorCommand::NewBatches(author, batches))
                             .await
-                            .expect("Could not send remote batch");
+                            .is_err()
+                        {
+                            error!("Failed to send remote batch to batch_coordinator — receiver dropped");
+                            break;
+                        }
                     }
                     VerifiedEvent::ProofOfStoreMsg(proofs) => {
                         let cmd = ProofManagerCommand::ReceiveProofs(*proofs);
-                        self.proof_manager_tx
-                            .send(cmd)
-                            .await
-                            .expect("could not push Proof proof_of_store");
+                        if self.proof_manager_tx.send(cmd).await.is_err() {
+                            error!("Failed to send proof_of_store to proof_manager — receiver dropped");
+                            break;
+                        }
                     }
                     _ => {
                         unreachable!()
