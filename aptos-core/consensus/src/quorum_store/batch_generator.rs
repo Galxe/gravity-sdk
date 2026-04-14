@@ -219,6 +219,16 @@ impl BatchGenerator {
                 batches.push(batch);
                 *total_batches_remaining = total_batches_remaining.saturating_sub(1);
                 txns_remaining -= num_batch_txns;
+            } else {
+                // Skip oversized transaction that exceeds sender_max_batch_bytes on its own.
+                // Without this, the loop would spin forever since txns_remaining never decreases.
+                warn!(
+                    "Skipping oversized transaction ({} bytes) that exceeds sender_max_batch_bytes ({})",
+                    txns.first().map_or(0, |txn| txn.txn_bytes_len()),
+                    self.config.sender_max_batch_bytes,
+                );
+                txns.drain(0..1);
+                txns_remaining -= 1;
             }
         }
     }
