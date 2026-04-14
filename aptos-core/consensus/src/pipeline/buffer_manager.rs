@@ -1031,6 +1031,9 @@ impl BufferManager {
                             counters::FINALIZED_EXECUTED_BLOCK_COUNTER.set(self.highest_committed_round as f64);
                         },
                         Err(e) => {
+                            // TODO: consider triggering a pipeline reset here to recover from
+                            // persist failures, since the committed blocks have already been
+                            // popped from the buffer and cannot be retried without a reset.
                             error!("Persisting phase failed: {:?}. Pipeline may stall if not recovered.", e);
                         },
                     }
