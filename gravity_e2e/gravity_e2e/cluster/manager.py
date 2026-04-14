@@ -652,6 +652,8 @@ class Cluster:
             "list",
             "--rpc-url",
             rpc_url,
+            "--output",
+            "json",
         ]
 
         LOG.info(f"Executing validator list command...")

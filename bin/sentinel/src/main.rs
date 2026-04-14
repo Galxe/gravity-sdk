@@ -20,6 +20,86 @@ use anyhow::{Context, Result};
 use std::{env, time::Duration};
 use tokio::time;
 
+/// Spawn log monitoring as an independent task.
+fn spawn_log_monitor(
+    monitoring: config::MonitoringConfig,
+    alerting: config::AlertingConfig,
+    check_interval: Duration,
+    notifier: Notifier,
+) -> Result<()> {
+    let mut whitelist = if let Some(ref path) = monitoring.whitelist_path {
+        println!("Loading whitelist from {path}");
+        Whitelist::load(path).context("Failed to load whitelist")?
+    } else {
+        Whitelist::default()
+    };
+
+    let mut watcher = Watcher::new(monitoring.clone());
+    let analyzer = Analyzer::new(&monitoring.error_pattern)?;
+
+    let files = watcher.discover()?;
+    println!("Found {} files to monitor", files.len());
+
+    tokio::spawn(async move {
+        let mut reader = Reader::new().expect("Failed to create reader");
+        for file in files {
+            println!("Monitoring: {file:?}");
+            if let Err(e) = reader.add_file(&file).await {
+                eprintln!("Failed to add file: {e:?}");
+            }
+        }
+
+        let mut interval = time::interval(check_interval);
+
+        loop {
+            tokio::select! {
+                Some(line_event) = reader.next_line() => {
+                    let line = line_event.line();
+                    let path = line_event.source();
+
+                    if !analyzer.is_error(line) {
+                        continue;
+                    }
+
+                    let file_str = path.to_str().unwrap_or("unknown");
+
+                    match whitelist.check(line, path) {
+                        CheckResult::Skip => continue,
+                        CheckResult::Alert { count, priority } => {
+                            let msg = format!("{line} [Frequency Alert: >{count}/5min]");
+                            println!("Frequency Alert in {path:?}: {msg}");
+                            if let Err(e) = notifier.alert(&msg, file_str, priority).await {
+                                eprintln!("Failed to send alert: {e:?}");
+                            }
+                        }
+                        CheckResult::AlwaysAlert => {
+                            println!("Alert in {path:?}: {line}");
+                            if let Err(e) = notifier.alert(line, file_str, alerting.default_priority).await {
+                                eprintln!("Failed to send alert: {e:?}");
+                            }
+                        }
+                    }
+                }
+                _ = interval.tick() => {
+                    match watcher.discover() {
+                        Ok(new_files) => {
+                            for file in new_files {
+                                println!("New file discovered: {file:?}");
+                                if let Err(e) = reader.add_file(&file).await {
+                                    eprintln!("Failed to add file: {e:?}");
+                                }
+                            }
+                        }
+                        Err(e) => eprintln!("Discovery error: {e:?}"),
+                    }
+                }
+            }
+        }
+    });
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
@@ -35,17 +115,6 @@ async fn main() -> Result<()> {
     println!("Loading config from {config_path}");
     let config = Config::load(config_path).context("Failed to load config")?;
 
-    // Load whitelist if configured
-    let mut whitelist = if let Some(ref path) = config.monitoring.whitelist_path {
-        println!("Loading whitelist from {path}");
-        Whitelist::load(path).context("Failed to load whitelist")?
-    } else {
-        Whitelist::default()
-    };
-
-    let mut watcher = Watcher::new(config.monitoring.clone());
-    let mut reader = Reader::new()?;
-    let analyzer = Analyzer::new(&config.monitoring.error_pattern)?;
     let notifier = Notifier::new(config.alerting.clone());
 
     // Verify webhook connectivity on startup
@@ -68,71 +137,17 @@ async fn main() -> Result<()> {
             .context("Failed to start chain monitors")?;
     }
 
-    // Initial file discovery
-    let files = watcher.discover()?;
-    println!("Found {} files to monitor", files.len());
-    for file in files {
-        println!("Monitoring: {file:?}");
-        reader.add_file(&file).await?;
+    // Start Log Monitoring (if configured)
+    if let Some(monitoring) = config.monitoring {
+        println!("Starting log monitoring...");
+        let check_interval = Duration::from_millis(config.general.check_interval_ms);
+        spawn_log_monitor(monitoring, config.alerting, check_interval, notifier)?;
     }
-
-    let check_interval = Duration::from_millis(config.general.check_interval_ms);
-    let mut interval = time::interval(check_interval);
 
     println!("Sentinel started...");
 
-    loop {
-        tokio::select! {
-            // Event-driven: new log line from linemux
-            Some(line_event) = reader.next_line() => {
-                let line = line_event.line();
-                let path = line_event.source();
+    tokio::signal::ctrl_c().await?;
+    println!("Shutting down...");
 
-                if !analyzer.is_error(line) {
-                    continue;
-                }
-
-                let file_str = path.to_str().unwrap_or("unknown");
-
-                match whitelist.check(line, path) {
-                    CheckResult::Skip => {
-                        // Matched whitelist rule but below threshold, skip
-                        continue;
-                    }
-                    CheckResult::Alert { count, priority } => {
-                        // Matched whitelist rule and above threshold
-                        let msg = format!("{line} [Frequency Alert: >{count}/5min]");
-                        println!("Frequency Alert in {path:?}: {msg}");
-                        if let Err(e) = notifier.alert(&msg, file_str, priority).await {
-                            eprintln!("Failed to send alert: {e:?}");
-                        }
-                    }
-                    CheckResult::AlwaysAlert => {
-                        // Design Intent: Provide a fallback priority (e.g. P2) for unknown
-                        // error patterns to avoid P0 spamming, while still ensuring they are
-                        // reported.
-                        // No whitelist rule matched, always alert with default_priority
-                        println!("Alert in {path:?}: {line}");
-                        if let Err(e) = notifier.alert(line, file_str, config.alerting.default_priority).await {
-                            eprintln!("Failed to send alert: {e:?}");
-                        }
-                    }
-                }
-            }
-            // Periodic: discover new files via glob
-            _ = interval.tick() => {
-                match watcher.discover() {
-                    Ok(new_files) => {
-                        for file in new_files {
-                            println!("New file discovered: {file:?}");
-                            if let Err(e) = reader.add_file(&file).await {
-                                eprintln!("Failed to add file: {e:?}");
-                            }
-                        }
-                    }
-                    Err(e) => eprintln!("Discovery error: {e:?}"),
-                }
-            }
-        }
-    }
+    Ok(())
 }

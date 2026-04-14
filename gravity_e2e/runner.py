@@ -106,13 +106,8 @@ def verify_nodes_alive(cluster_config: Path, env: dict):
     Fails fast if any node process has crashed (e.g. port conflict)
     instead of letting tests run against dead nodes.
     """
-    try:
-        import tomllib
-    except ImportError:
-        import toml as tomllib
-
     with open(cluster_config, "rb") as f:
-        config = tomllib.load(f) if hasattr(tomllib, "load") else {}
+        config = tomli.load(f)
 
     base_dir = config.get("cluster", {}).get("base_dir", "")
     nodes = config.get("nodes", [])
@@ -221,12 +216,8 @@ def run_test_suite(
         # deploy.sh has an interactive prompt that defaults to N in
         # non-interactive mode, so we must clean it here.
         import shutil
-        try:
-            import tomllib
-        except ImportError:
-            import toml as tomllib
         with open(cluster_config, "rb") as f:
-            toml_data = tomllib.load(f) if hasattr(tomllib, 'load') else {}
+            toml_data = tomli.load(f)
         base_dir = toml_data.get("cluster", {}).get("base_dir", "")
         if base_dir and os.path.exists(base_dir):
             logger.info(f"Removing stale cluster data at {base_dir}")
