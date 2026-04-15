@@ -1,0 +1,57 @@
+# Gravity Cluster Configuration — 3 validators, distinct operator/owner/staker,
+# used by the cross-epoch e2e case. Ports are offset from single_node and
+# distinct_roles to allow parallel existence on disk.
+
+[cluster]
+name = "gravity-devnet-distinct-roles-3"
+base_dir = "/tmp/gravity-cluster-distinct-roles-3"
+
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+p2p_port = 6184
+vfn_port = 6194
+rpc_port = 8560
+metrics_port = 9010
+inspection_port = 10010
+https_port = 1040
+authrpc_port = 8571
+reth_p2p_port = 12040
+
+[[nodes]]
+id = "node2"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+p2p_port = 6185
+vfn_port = 6195
+rpc_port = 8561
+metrics_port = 9011
+inspection_port = 10011
+https_port = 1041
+authrpc_port = 8572
+reth_p2p_port = 12041
+
+[[nodes]]
+id = "node3"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+p2p_port = 6186
+vfn_port = 6196
+rpc_port = 8562
+metrics_port = 9012
+inspection_port = 10012
+https_port = 1042
+authrpc_port = 8573
+reth_p2p_port = 12042
+
+[faucet_init]
+num_accounts = 10
