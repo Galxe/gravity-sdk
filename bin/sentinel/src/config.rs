@@ -26,8 +26,7 @@ impl fmt::Display for Priority {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
-    pub general: GeneralConfig,
-    pub monitoring: MonitoringConfig,
+    pub monitoring: Option<MonitoringConfig>,
     pub alerting: AlertingConfig,
     /// Multiple probe endpoints, each with its own URL, interval, and threshold.
     #[serde(default)]
@@ -55,16 +54,14 @@ fn default_probe_threshold() -> u32 {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct GeneralConfig {
-    pub check_interval_ms: u64,
-}
-
-#[derive(Debug, Deserialize, Clone)]
 pub struct MonitoringConfig {
     pub file_patterns: Vec<String>,
     pub recent_file_threshold_seconds: u64,
     pub error_pattern: String,
     pub whitelist_path: Option<String>,
+    /// Periodic interval (ms) to re-scan file_patterns for new log files.
+    /// If omitted, only the initial set of files is monitored (no discovery of new files).
+    pub check_interval_ms: Option<u64>,
 }
 
 /// Per-priority webhook override.

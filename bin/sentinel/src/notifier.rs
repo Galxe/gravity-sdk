@@ -74,10 +74,10 @@ impl Notifier {
             let payload = match *kind {
                 "feishu" => json!({
                     "msg_type": "text",
-                    "content": { "text": "✅ Log Sentinel started and webhook is connected." }
+                    "content": { "text": "✅ Sentinel started and webhook is connected." }
                 }),
                 _ => json!({
-                    "text": "✅ Log Sentinel started and webhook is connected.",
+                    "text": "✅ Sentinel started and webhook is connected.",
                     "channel": "#alerts-devops",
                     "username": "System-Monitor"
                 }),
