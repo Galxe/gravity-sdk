@@ -50,3 +50,11 @@ url = "http://localhost:8546"
 tag = "VFN-0 RPC Node"
 # check_interval_seconds defaults to 30
 # failure_threshold defaults to 3
+
+# TCP probe for external validator P2P port
+[[probes]]
+url = "1.2.3.4:6180"
+mode = "tcp"
+tag = "External Validator-1 P2P"
+check_interval_seconds = 30
+failure_threshold = 3

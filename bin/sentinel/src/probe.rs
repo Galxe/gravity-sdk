@@ -1,10 +1,10 @@
 use crate::{
-    config::{Priority, ProbeConfig},
+    config::{Priority, ProbeConfig, ProbeMode},
     notifier::Notifier,
 };
 use reqwest::Client;
 use std::time::Duration;
-use tokio::time;
+use tokio::{net::TcpStream, time};
 
 pub struct Probe {
     config: ProbeConfig,
@@ -38,27 +38,29 @@ impl Probe {
 
         loop {
             timer.tick().await;
-            match self.client.get(&self.config.url).send().await {
-                Ok(_) => {
-                    // Any HTTP response (even non-200) means the service is reachable
-                    if failures > 0 {
-                        println!("Probe recovered: {}", self.config.url);
-                        failures = 0;
-                    }
+
+            let ok = match self.config.mode {
+                ProbeMode::Http => self.check_http().await,
+                ProbeMode::Tcp => self.check_tcp().await,
+            };
+
+            if ok {
+                if failures > 0 {
+                    println!("Probe recovered: {}", self.config.url);
+                    failures = 0;
                 }
-                Err(e) => {
-                    failures += 1;
-                    println!(
-                        "Probe failed (error): {} - {} (count: {})",
-                        self.config.url, e, failures
-                    );
-                }
+            } else {
+                failures += 1;
             }
 
             if failures >= self.config.failure_threshold {
                 let context = self.config.tag.as_deref().unwrap_or("No context provided");
+                let mode_label = match self.config.mode {
+                    ProbeMode::Http => "HTTP",
+                    ProbeMode::Tcp => "TCP",
+                };
                 let msg = format!(
-                    "Probe failed {} times for URL: {} (Context: {})",
+                    "{mode_label} probe failed {} times for: {} (Context: {})",
                     failures, self.config.url, context
                 );
                 println!("TRIGGERING ALERT: {msg}");
@@ -66,9 +68,42 @@ impl Probe {
                 if let Err(e) = self.notifier.alert(&msg, "PROBE", Priority::P0).await {
                     eprintln!("Failed to send probe alert: {e:?}");
                 }
-                // Reset failures to avoid spamming every cycle
-                // Let's reset to 0 to alert again if it persists for another N cycles.
                 failures = 0;
+            }
+        }
+    }
+
+    async fn check_http(&self) -> bool {
+        match self.client.get(&self.config.url).send().await {
+            Ok(_) => true,
+            Err(e) => {
+                println!(
+                    "Probe failed (HTTP): {} - {} ",
+                    self.config.url, e
+                );
+                false
+            }
+        }
+    }
+
+    async fn check_tcp(&self) -> bool {
+        // url format for TCP: "ip:port" or "host:port"
+        let addr = self.config.url.trim_start_matches("tcp://");
+        match time::timeout(Duration::from_secs(5), TcpStream::connect(addr)).await {
+            Ok(Ok(_)) => true,
+            Ok(Err(e)) => {
+                println!(
+                    "Probe failed (TCP connect): {} - {}",
+                    self.config.url, e
+                );
+                false
+            }
+            Err(_) => {
+                println!(
+                    "Probe failed (TCP timeout): {}",
+                    self.config.url
+                );
+                false
             }
         }
     }

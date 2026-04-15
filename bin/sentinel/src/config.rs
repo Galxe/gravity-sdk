@@ -35,10 +35,22 @@ pub struct Config {
     pub chain_monitor: Option<crate::chain_monitor::config::ChainMonitorConfig>,
 }
 
+#[derive(Debug, Deserialize, Clone, Default, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ProbeMode {
+    /// HTTP GET probe (default) — any HTTP response = success
+    #[default]
+    Http,
+    /// TCP connect probe — successful TCP handshake = success
+    Tcp,
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct ProbeConfig {
     pub url: String,
     pub tag: Option<String>,
+    #[serde(default)]
+    pub mode: ProbeMode,
     #[serde(default = "default_probe_interval")]
     pub check_interval_seconds: u64,
     #[serde(default = "default_probe_threshold")]

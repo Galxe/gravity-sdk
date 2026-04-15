@@ -77,6 +77,8 @@ pub struct ChainMonitorConfig {
     pub owner_activity: OwnerActivityConfig,
     #[serde(default)]
     pub timelock: TimelockConfig,
+    #[serde(default)]
+    pub epoch_timeout: EpochTimeoutConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -182,6 +184,39 @@ pub struct TimelockConfig {
 impl Default for TimelockConfig {
     fn default() -> Self {
         Self { enabled: true, priority: Priority::P0, expected_governance_address: None }
+    }
+}
+
+fn default_epoch_overdue_threshold() -> u64 {
+    120
+}
+
+fn default_epoch_check_interval() -> u64 {
+    30
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct EpochTimeoutConfig {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Alert if epoch change is overdue by more than this many seconds
+    #[serde(default = "default_epoch_overdue_threshold")]
+    pub overdue_threshold_seconds: u64,
+    /// How often to check epoch status (seconds)
+    #[serde(default = "default_epoch_check_interval")]
+    pub check_interval_seconds: u64,
+    #[serde(default)]
+    pub priority: Priority,
+}
+
+impl Default for EpochTimeoutConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            overdue_threshold_seconds: default_epoch_overdue_threshold(),
+            check_interval_seconds: default_epoch_check_interval(),
+            priority: Priority::P0,
+        }
     }
 }
 

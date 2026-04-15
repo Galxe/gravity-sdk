@@ -43,4 +43,12 @@ alloy_sol_macro::sol! {
     // ========================================================================
 
     function balanceOf(address account) external view returns (uint256);
+
+    // ========================================================================
+    // Epoch monitoring (Gravity system contracts)
+    // ========================================================================
+
+    function currentEpoch() external view returns (uint64);
+    function lastReconfigurationTime() external view returns (uint64);
+    function epochIntervalMicros() external view returns (uint64);
 }

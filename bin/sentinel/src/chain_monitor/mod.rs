@@ -7,6 +7,7 @@ pub mod abi;
 pub mod bridge_timeout;
 pub mod checkpoint;
 pub mod config;
+pub mod epoch_timeout;
 pub mod large_withdrawal;
 pub mod owner_activity;
 pub mod provider;
@@ -126,7 +127,26 @@ pub async fn spawn_all(config: ChainMonitorConfig, notifier: Notifier) -> Result
         tokio::spawn(async move { monitor.run().await });
     }
 
-    // Rule 5: Timelock / Ownership
+    // Rule 5: Epoch Timeout
+    if config.epoch_timeout.enabled {
+        let check_interval =
+            Duration::from_secs(config.epoch_timeout.check_interval_seconds);
+        let monitor = epoch_timeout::EpochTimeoutMonitor::new(
+            config.epoch_timeout.clone(),
+            gravity_provider.clone(),
+            notifier.clone(),
+            check_interval,
+            max_failures,
+        );
+        println!(
+            "Starting chain monitor: epoch timeout (overdue threshold: {}s, check interval: {}s)",
+            config.epoch_timeout.overdue_threshold_seconds,
+            config.epoch_timeout.check_interval_seconds,
+        );
+        tokio::spawn(async move { monitor.run().await });
+    }
+
+    // Rule 6: Timelock / Ownership
     if config.timelock.enabled {
         let expected_governance = config
             .timelock
