@@ -243,11 +243,24 @@ def main():
         if not val_addr:
             print(f"Error: Node {node_id} must specify 'address' in genesis.toml")
             sys.exit(1)
-        
-        # Validate ETH address format
-        if not val_addr.startswith('0x') or len(val_addr) != 42:
-            print(f"Error: Node {node_id}: address must be 0x-prefixed 20-byte ETH address")
-            sys.exit(1)
+
+        # Optional role overrides. Default to val_addr so existing configs keep
+        # working (operator == owner == staker). When set to three different
+        # addresses, validators can exercise the three-role separation path.
+        operator_address = node.get('operator_address') or val_addr
+        owner_address    = node.get('owner_address')    or val_addr
+        staker_address   = node.get('staker_address')   or val_addr
+
+        # Validate ETH address format for all four
+        for label, addr in (
+            ('address', val_addr),
+            ('operator_address', operator_address),
+            ('owner_address', owner_address),
+            ('staker_address', staker_address),
+        ):
+            if not addr.startswith('0x') or len(addr) != 42:
+                print(f"Error: Node {node_id}: {label} must be 0x-prefixed 20-byte ETH address")
+                sys.exit(1)
         
         # Get stake_amount and voting_power from config (required)
         stake_amount = node.get('stake_amount')
@@ -298,8 +311,9 @@ def main():
 
         # Create validator entry
         validator = {
-            "operator": val_addr,
-            "owner": val_addr,
+            "operator": operator_address,
+            "owner": owner_address,
+            "staker": staker_address,
             "stakeAmount": stake_amount,
             "moniker": f"validator-{len(validators) + 1}",
             "consensusPubkey": consensus_pk,

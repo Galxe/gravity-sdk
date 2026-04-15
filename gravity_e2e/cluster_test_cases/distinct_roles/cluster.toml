@@ -1,0 +1,27 @@
+# Gravity Cluster Configuration - distinct operator/owner/staker e2e case
+
+[cluster]
+name = "gravity-devnet-distinct-roles"
+base_dir = "/tmp/gravity-cluster-distinct-roles"
+
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+p2p_port = 6183
+vfn_port = 6193
+rpc_port = 8550
+metrics_port = 9004
+inspection_port = 10003
+https_port = 1027
+authrpc_port = 8554
+reth_p2p_port = 12027
+
+[faucet_init]
+num_accounts = 10
