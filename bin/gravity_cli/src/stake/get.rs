@@ -3,11 +3,13 @@ use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types::eth::{BlockNumberOrTag, Filter, TransactionInput, TransactionRequest};
 use alloy_sol_types::{SolCall, SolValue};
 use clap::Parser;
+use serde::Serialize;
 use std::str::FromStr;
 
 use crate::{
     command::Executable,
     contract::{Staking, STAKING_ADDRESS},
+    output::OutputFormat,
     util::format_ether,
 };
 
@@ -39,6 +41,17 @@ pub struct GetCommand {
     /// Query voting power for each pool
     #[clap(long, default_value = "true")]
     pub show_voting_power: bool,
+
+    /// Output format (injected from global flag)
+    #[clap(skip)]
+    pub output_format: OutputFormat,
+}
+
+#[derive(Debug, Serialize)]
+struct PoolInfo {
+    pool_address: String,
+    voting_power: Option<String>,
+    block_number: u64,
 }
 
 /// Reth's default max block range for log queries
@@ -53,7 +66,11 @@ impl Executable for GetCommand {
 
 impl GetCommand {
     async fn execute_async(self) -> Result<(), anyhow::Error> {
-        println!("Querying StakePools for owner: {}\n", self.owner);
+        let is_json = matches!(self.output_format, OutputFormat::Json);
+
+        if !is_json {
+            println!("Querying StakePools for owner: {}\n", self.owner);
+        }
 
         // Parse owner address and pad to 32 bytes for topic filtering
         let owner_addr = Address::from_str(&self.owner)?;
@@ -100,30 +117,27 @@ impl GetCommand {
             .event_signature(POOL_CREATED_EVENT_SIGNATURE.parse::<B256>()?)
             .topic3(owner_topic.parse::<B256>()?);
 
-        println!("Searching for PoolCreated events...");
-        println!("   Contract: {STAKING_ADDRESS:?}");
-        println!("   Owner: {owner_addr:?}");
-        println!("   Block range: {from_block} to {to_block}\n");
+        if !is_json {
+            println!("Searching for PoolCreated events...");
+            println!("   Contract: {STAKING_ADDRESS:?}");
+            println!("   Owner: {owner_addr:?}");
+            println!("   Block range: {from_block} to {to_block}\n");
+        }
 
         let logs = provider.get_logs(&filter).await?;
 
         if logs.is_empty() {
-            println!("No StakePools found for this owner.");
+            if is_json {
+                println!("{}", serde_json::to_string_pretty(&serde_json::json!({"pools": []}))?);
+            } else {
+                println!("No StakePools found for this owner.");
+            }
             return Ok(());
         }
 
-        println!("Found {} StakePool(s):\n", logs.len());
+        let mut pools = Vec::new();
 
-        // Print header
-        if self.show_voting_power {
-            println!("{:<44} {:<16} {:<12}", "Pool Address", "Voting Power", "Block Number");
-            println!("{}", "-".repeat(76));
-        } else {
-            println!("{:<44} {:<12}", "Pool Address", "Block Number");
-            println!("{}", "-".repeat(58));
-        }
-
-        for log in logs {
+        for log in &logs {
             // Extract pool address from topics[2]
             let pool_topic = log.topics().get(2).ok_or(anyhow::anyhow!("Missing pool topic"))?;
             // Pool address is the last 20 bytes of the 32-byte topic
@@ -132,8 +146,7 @@ impl GetCommand {
 
             let block_number = log.block_number.ok_or(anyhow::anyhow!("Missing block number"))?;
 
-            if self.show_voting_power {
-                // Query voting power
+            let voting_power = if self.show_voting_power {
                 let call = Staking::getPoolVotingPowerNowCall { pool: pool_address };
                 let input: Bytes = call.abi_encode().into();
                 let result = provider
@@ -144,27 +157,52 @@ impl GetCommand {
                     })
                     .await;
 
-                let voting_power = match result {
+                match result {
                     Ok(data) => {
                         let power = U256::abi_decode(&data)
                             .map_err(|e| anyhow::anyhow!("Failed to decode voting power: {e}"))?;
-                        format!("{} ETH", format_ether(power))
+                        Some(format!("{} ETH", format_ether(power)))
                     }
-                    Err(_) => "N/A".to_string(),
-                };
-
-                println!(
-                    "{:<44} {:<16} {:<12}",
-                    format!("{pool_address:?}"),
-                    voting_power,
-                    block_number
-                );
+                    Err(_) => Some("N/A".to_string()),
+                }
             } else {
-                println!("{:<44} {:<12}", format!("{pool_address:?}"), block_number);
-            }
+                None
+            };
+
+            pools.push(PoolInfo {
+                pool_address: format!("{pool_address:?}"),
+                voting_power,
+                block_number,
+            });
         }
 
-        println!();
+        if is_json {
+            let result = serde_json::json!({ "pools": pools });
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            println!("Found {} StakePool(s):\n", pools.len());
+
+            if self.show_voting_power {
+                println!("{:<44} {:<16} {:<12}", "Pool Address", "Voting Power", "Block Number");
+                println!("{}", "-".repeat(76));
+                for p in &pools {
+                    println!(
+                        "{:<44} {:<16} {:<12}",
+                        p.pool_address,
+                        p.voting_power.as_deref().unwrap_or(""),
+                        p.block_number
+                    );
+                }
+            } else {
+                println!("{:<44} {:<12}", "Pool Address", "Block Number");
+                println!("{}", "-".repeat(58));
+                for p in &pools {
+                    println!("{:<44} {:<12}", p.pool_address, p.block_number);
+                }
+            }
+            println!();
+        }
+
         Ok(())
     }
 }
