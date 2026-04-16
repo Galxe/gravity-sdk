@@ -30,7 +30,11 @@
     "extraFields": {},
     "depositContractAddress": null,
     "alphaBlock": 8287964,
-    "betaBlock": 8344249
+    "betaBlock": 8344249,
+    "gammaBlock": 12696739,
+    "deltaBlock": 16920000,
+    "epsilonBlock": 18517689,
+    "consensusAlpha": 733
   },
   "alloc": {
     "0x00000000000000000000000000000001625f1005": {
