@@ -1,6 +1,7 @@
 mod analyzer;
 mod chain_monitor;
 mod config;
+mod explorer_monitor;
 mod notifier;
 mod probe;
 mod reader;
@@ -10,6 +11,7 @@ mod whitelist;
 use crate::{
     analyzer::Analyzer,
     config::Config,
+    explorer_monitor::ExplorerMonitor,
     notifier::Notifier,
     probe::Probe,
     reader::Reader,
@@ -138,6 +140,15 @@ async fn main() -> Result<()> {
         chain_monitor::spawn_all(chain_config, notifier.clone())
             .await
             .context("Failed to start chain monitors")?;
+    }
+
+    // Start Explorer Monitor (if configured)
+    if let Some(explorer_cfg) = config.explorer_monitor {
+        let monitor = ExplorerMonitor::new(explorer_cfg, notifier.clone());
+        println!("Starting explorer monitor for {}...", monitor.tag());
+        tokio::spawn(async move {
+            monitor.run().await;
+        });
     }
 
     // Start Log Monitoring (if configured)
