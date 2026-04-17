@@ -50,3 +50,19 @@ url = "http://localhost:8546"
 tag = "VFN-0 RPC Node"
 # check_interval_seconds defaults to 30
 # failure_threshold defaults to 3
+
+# Explorer block-advance monitor (optional).
+# Polls Blockscout v2 /api/v2/stats and alerts when total_blocks does not
+# advance within the poll window (i.e. any block interval > poll_interval_seconds).
+[explorer_monitor]
+api_base = "https://api.explorer-testnet.gravity.xyz"
+tag = "explorer-testnet"
+# Poll cadence in seconds; doubles as the stall threshold.
+# Default: 1
+poll_interval_seconds = 1
+# Priority for stall alerts (API failures always escalate to P0).
+# Default: "p1"
+priority = "p1"
+# Consecutive API failures before emitting a single P0 degraded alert.
+# Default: 5
+api_failure_threshold = 5

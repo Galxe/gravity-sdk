@@ -33,6 +33,8 @@ pub struct Config {
     pub probes: Vec<ProbeConfig>,
     /// Optional chain monitor configuration for on-chain bridge event monitoring.
     pub chain_monitor: Option<crate::chain_monitor::config::ChainMonitorConfig>,
+    /// Optional explorer block-advance monitor (Blockscout v2 API).
+    pub explorer_monitor: Option<ExplorerMonitorConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -51,6 +53,34 @@ fn default_probe_interval() -> u64 {
 
 fn default_probe_threshold() -> u32 {
     3
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ExplorerMonitorConfig {
+    /// Blockscout v2 API base, e.g. "https://api.explorer-testnet.gravity.xyz"
+    pub api_base: String,
+    /// Label shown in alert messages
+    pub tag: Option<String>,
+    #[serde(default = "default_explorer_poll_interval")]
+    pub poll_interval_seconds: u64,
+    #[serde(default = "default_explorer_priority")]
+    pub priority: Priority,
+    /// Consecutive API failures before sending a P0 degraded-API alert.
+    /// Keeps transient network blips from being misreported as chain stalls.
+    #[serde(default = "default_explorer_api_failure_threshold")]
+    pub api_failure_threshold: u32,
+}
+
+fn default_explorer_poll_interval() -> u64 {
+    1
+}
+
+fn default_explorer_priority() -> Priority {
+    Priority::P1
+}
+
+fn default_explorer_api_failure_threshold() -> u32 {
+    5
 }
 
 #[derive(Debug, Deserialize, Clone)]
