@@ -52,8 +52,14 @@ fn main() {
             }
         },
         command::SubCommands::Stake(stake_cmd) => match stake_cmd.command {
-            stake::SubCommands::Create(create_cmd) => create_cmd.execute(),
-            stake::SubCommands::Get(get_cmd) => get_cmd.execute(),
+            stake::SubCommands::Create(mut create_cmd) => {
+                create_cmd.output_format = output_format;
+                create_cmd.execute()
+            }
+            stake::SubCommands::Get(mut get_cmd) => {
+                get_cmd.output_format = output_format;
+                get_cmd.execute()
+            }
         },
         command::SubCommands::Node(node_cmd) => match node_cmd.command {
             node::SubCommands::Start(start_cmd) => start_cmd.execute(),

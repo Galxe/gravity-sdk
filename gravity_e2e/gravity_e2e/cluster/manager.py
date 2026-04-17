@@ -648,6 +648,8 @@ class Cluster:
         rpc_url = self._get_first_rpc_url()
         list_cmd = [
             str(self.gravity_cli_path),
+            "--output",
+            "json",
             "validator",
             "list",
             "--rpc-url",
@@ -743,6 +745,8 @@ class Cluster:
 
         get_cmd = [
             str(self.gravity_cli_path),
+            "--output",
+            "json",
             "stake",
             "get",
             "--rpc-url",
@@ -770,25 +774,10 @@ class Cluster:
             LOG.warning(f"Failed to query stakes for {node_id}: {stderr_str}")
             return None
 
-        # Parse pool addresses from table rows after the header:
-        #   Pool Address                                 Voting Power     Block Number
-        #   --------------------------------------------------------------------------
-        #   0x2f3eaf272bf50acd32fe9c4c4c7c8f3f9cb6bde4   1. ETH           136
-        import re
-
-        pool_address = None
-        in_table = False
-        for line in stdout_str.splitlines():
-            if line.startswith("Pool Address"):
-                in_table = True
-                continue
-            if in_table and line.startswith("---"):
-                continue  # skip separator
-            if in_table:
-                match = re.match(r"^(0x[0-9a-fA-F]{40})\s+", line)
-                if match:
-                    pool_address = match.group(1)
-                    # Don't break — we want the LAST pool address
+        # Parse JSON output: {"pools": [{"pool_address": "0x...", ...}, ...]}
+        stake_data = json.loads(stdout_str)
+        pools = stake_data.get("pools", [])
+        pool_address = pools[-1]["pool_address"] if pools else None
 
         if pool_address:
             node.stake_pool = pool_address
@@ -829,6 +818,8 @@ class Cluster:
 
         create_cmd = [
             str(self.gravity_cli_path),
+            "--output",
+            "json",
             "stake",
             "create",
             "--rpc-url",
@@ -859,18 +850,14 @@ class Cluster:
             LOG.error(f"Failed to create stake for {node_id}: {stderr_str}")
             raise RuntimeError(f"Failed to create stake for {node_id}: {stderr_str}")
 
-        # Parse pool address from output line like:
-        #    Pool address: 0x2F3Eaf272bf50aCd32fe9C4C4c7C8F3f9CB6bde4
-        import re
-
-        match = re.search(r"Pool address:\s*(0x[0-9a-fA-F]{40})", stdout_str)
-        if not match:
-            LOG.error(f"Could not parse pool address from stake create output")
+        # Parse JSON output: {"pool_address": "0x...", ...}
+        create_data = json.loads(stdout_str)
+        pool_address = create_data.get("pool_address")
+        if not pool_address:
+            LOG.error("Could not parse pool address from stake create output")
             raise RuntimeError(
                 f"Failed to parse pool address from stake create output: {stdout_str}"
             )
-
-        pool_address = match.group(1)
         node.stake_pool = pool_address
         LOG.info(f"Created stake pool for node {node_id}: {pool_address}")
         return pool_address

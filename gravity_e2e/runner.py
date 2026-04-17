@@ -481,6 +481,7 @@ def main():
                     resume=args.resume,
                 )
             except Exception:
+                logger.exception(f"Suite {test_dir.name} failed with exception:")
                 failed_suites.append(test_dir.name)
 
         if failed_suites:

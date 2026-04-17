@@ -409,6 +409,7 @@ async def execute_validator_list(
     """
     list_cmd = [
         str(gravity_cli_path),
+        "--output", "json",
         "validator", "list",
         "--rpc-url", rpc_url,
     ]

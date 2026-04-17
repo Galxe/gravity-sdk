@@ -9,6 +9,7 @@ use clap::Parser;
 use crate::{
     command::Executable,
     contract::{Staking, STAKING_ADDRESS},
+    output::OutputFormat,
     util::{format_ether, parse_ether},
 };
 
@@ -33,6 +34,10 @@ pub struct CreateCommand {
     /// Lockup duration in seconds (default 30 days)
     #[clap(long, default_value = "2592000")]
     pub lockup_duration: u64,
+
+    /// Output format (injected from global flag)
+    #[clap(skip)]
+    pub output_format: OutputFormat,
 }
 
 impl Executable for CreateCommand {
@@ -44,9 +49,13 @@ impl Executable for CreateCommand {
 
 impl CreateCommand {
     async fn execute_async(self) -> Result<(), anyhow::Error> {
+        let is_json = matches!(self.output_format, OutputFormat::Json);
+
         // 1. Initialize Provider and Wallet
-        println!("Creating new StakePool...\n");
-        println!("1. Initializing connection...");
+        if !is_json {
+            println!("Creating new StakePool...\n");
+            println!("1. Initializing connection...");
+        }
 
         let rpc_url = self.rpc_url.ok_or_else(|| {
             anyhow::anyhow!(
@@ -56,7 +65,9 @@ impl CreateCommand {
         let gas_limit = self.gas_limit.unwrap_or(2_000_000);
         let gas_price = self.gas_price.unwrap_or(20);
 
-        println!("   RPC URL: {rpc_url}");
+        if !is_json {
+            println!("   RPC URL: {rpc_url}");
+        }
         let private_key_input = rpassword::prompt_password_stdout(
             "Enter private key (hex, with or without 0x prefix): ",
         )
@@ -68,21 +79,31 @@ impl CreateCommand {
             .map_err(|e| anyhow::anyhow!("Invalid private key: {e}"))?;
         let signer = PrivateKeySigner::from(private_key);
         let wallet_address = signer.address();
-        println!("   Wallet address: {wallet_address:?}");
-        println!("   Staking contract: {STAKING_ADDRESS:?}");
+        if !is_json {
+            println!("   Wallet address: {wallet_address:?}");
+            println!("   Staking contract: {STAKING_ADDRESS:?}");
+        }
 
         // Create provider
         let provider = ProviderBuilder::new().wallet(signer).connect_http(rpc_url.parse()?);
 
         let chain_id = provider.get_chain_id().await?;
-        println!("   Chain ID: {chain_id}");
+        if !is_json {
+            println!("   Chain ID: {chain_id}");
+        }
         let balance = provider.get_balance(wallet_address).await?;
-        println!("   Wallet balance: {} ETH\n", format_ether(balance));
+        if !is_json {
+            println!("   Wallet balance: {} ETH\n", format_ether(balance));
+        }
 
         // 2. Create StakePool
-        println!("2. Creating StakePool...");
+        if !is_json {
+            println!("2. Creating StakePool...");
+        }
         let stake_wei = parse_ether(&self.stake_amount)?;
-        println!("   Stake amount: {} ETH", self.stake_amount);
+        if !is_json {
+            println!("   Stake amount: {} ETH", self.stake_amount);
+        }
 
         // Calculate lockup expiration timestamp.
         //
@@ -100,8 +121,10 @@ impl CreateCommand {
             .await?
             .ok_or(anyhow::anyhow!("Failed to get latest block"))?;
         let current_timestamp = block.header.timestamp;
-        println!("   Current timestamp: {current_timestamp} (seconds)");
-        println!("   Lockup duration: {} seconds", self.lockup_duration);
+        if !is_json {
+            println!("   Current timestamp: {current_timestamp} (seconds)");
+            println!("   Lockup duration: {} seconds", self.lockup_duration);
+        }
         let locked_until = (current_timestamp + self.lockup_duration) * 1_000_000;
 
         let call = Staking::createPoolCall {
@@ -124,7 +147,9 @@ impl CreateCommand {
             })
             .await?;
         let tx_hash = *pending_tx.tx_hash();
-        println!("   Transaction hash: {tx_hash}");
+        if !is_json {
+            println!("   Transaction hash: {tx_hash}");
+        }
         let _ = pending_tx
             .with_required_confirmations(2)
             .with_timeout(Some(std::time::Duration::from_secs(60)))
@@ -135,32 +160,48 @@ impl CreateCommand {
             .get_transaction_receipt(tx_hash)
             .await?
             .ok_or(anyhow::anyhow!("Failed to get transaction receipt"))?;
-        println!(
-            "   Transaction confirmed, block number: {}",
-            receipt.block_number.ok_or(anyhow::anyhow!("Failed to get block number"))?
-        );
-        println!("   Gas used: {}", receipt.gas_used);
-        println!(
-            "   Transaction cost: {} ETH",
-            format_ether(U256::from(receipt.effective_gas_price) * U256::from(receipt.gas_used))
-        );
+        let block_number =
+            receipt.block_number.ok_or(anyhow::anyhow!("Failed to get block number"))?;
+        if !is_json {
+            println!("   Transaction confirmed, block number: {block_number}");
+            println!("   Gas used: {}", receipt.gas_used);
+            println!(
+                "   Transaction cost: {} ETH",
+                format_ether(
+                    U256::from(receipt.effective_gas_price) * U256::from(receipt.gas_used)
+                )
+            );
+        }
 
         // Parse PoolCreated event to get the new pool address
         let mut found_pool = None;
         for log in receipt.logs() {
             if let Ok(event) = Staking::PoolCreated::decode_log(&log.inner) {
-                println!("\n✓ StakePool created successfully!");
-                println!("   Pool address: {}", event.pool);
-                println!("   Owner: {}", event.owner);
-                println!("   Pool index: {}", event.poolIndex);
-                found_pool = Some(event.pool);
+                found_pool = Some((event.pool, event.owner, event.poolIndex));
                 break;
             }
         }
-        let stake_pool = found_pool.ok_or(anyhow::anyhow!("Failed to find PoolCreated event"))?;
+        let (stake_pool, owner, pool_index) =
+            found_pool.ok_or(anyhow::anyhow!("Failed to find PoolCreated event"))?;
 
-        println!("\nUse this address with validator join:");
-        println!("  --stake-pool {stake_pool}");
+        if is_json {
+            let result = serde_json::json!({
+                "pool_address": format!("{stake_pool}"),
+                "owner": format!("{owner}"),
+                "pool_index": pool_index,
+                "tx_hash": format!("{tx_hash}"),
+                "block_number": block_number,
+                "gas_used": receipt.gas_used,
+            });
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            println!("\n✓ StakePool created successfully!");
+            println!("   Pool address: {stake_pool}");
+            println!("   Owner: {owner}");
+            println!("   Pool index: {pool_index}");
+            println!("\nUse this address with validator join:");
+            println!("  --stake-pool {stake_pool}");
+        }
 
         Ok(())
     }
