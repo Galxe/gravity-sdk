@@ -96,7 +96,8 @@ impl FaucetCommand {
         // Resolve faucet key. The default is hardcoded to the well-known anvil
         // test account so `gravity-cli localnet faucet --to 0x... --amount 1`
         // just works on a fresh cluster. Env override is intentional per design.
-        let key_hex_owned = self.from_key.clone().unwrap_or_else(|| DEFAULT_ANVIL_FAUCET_KEY.to_string());
+        let key_hex_owned =
+            self.from_key.clone().unwrap_or_else(|| DEFAULT_ANVIL_FAUCET_KEY.to_string());
         let key_hex = key_hex_owned.trim().strip_prefix("0x").unwrap_or(key_hex_owned.trim());
         let key_bytes = hex::decode(key_hex)
             .map_err(|e| anyhow::anyhow!("faucet key is not valid hex: {e}"))?;
@@ -107,7 +108,7 @@ impl FaucetCommand {
 
         let is_json = matches!(self.output_format, OutputFormat::Json);
         if !is_json {
-            println!("{} {}", "[localnet faucet]".cyan(), format!("rpc: {rpc_url}"));
+            println!("{} rpc: {rpc_url}", "[localnet faucet]".cyan());
             println!(
                 "{} sending {} ETH from {from:?} → {to:?}",
                 "[localnet faucet]".cyan(),
@@ -115,9 +116,7 @@ impl FaucetCommand {
             );
         }
 
-        let provider = ProviderBuilder::new()
-            .wallet(signer)
-            .connect_http(rpc_url.parse()?);
+        let provider = ProviderBuilder::new().wallet(signer).connect_http(rpc_url.parse()?);
 
         let balance = provider.get_balance(from).await?;
         if balance < amount_wei {

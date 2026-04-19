@@ -65,9 +65,8 @@ impl Executable for ResetCommand {
 
         if base_dir.exists() {
             println!("{} removing {}", "[localnet reset]".cyan(), base_dir.display());
-            std::fs::remove_dir_all(&base_dir).map_err(|e| {
-                anyhow::anyhow!("failed to remove {}: {e}", base_dir.display())
-            })?;
+            std::fs::remove_dir_all(&base_dir)
+                .map_err(|e| anyhow::anyhow!("failed to remove {}: {e}", base_dir.display()))?;
             println!("{} {}", "[localnet reset]".cyan(), "done".green());
         } else {
             println!(

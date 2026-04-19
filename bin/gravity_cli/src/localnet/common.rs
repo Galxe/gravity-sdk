@@ -20,10 +20,7 @@ pub fn resolve_cluster_dir(explicit: Option<&str>) -> Result<PathBuf, anyhow::Er
     if let Some(dir) = explicit {
         let p = PathBuf::from(dir);
         if !p.join("start.sh").exists() {
-            return Err(anyhow!(
-                "cluster-dir {} does not contain start.sh",
-                p.display()
-            ));
+            return Err(anyhow!("cluster-dir {} does not contain start.sh", p.display()));
         }
         return Ok(p);
     }
@@ -85,8 +82,9 @@ pub fn load_cluster_toml(path: &Path) -> Result<ClusterToml, anyhow::Error> {
 
 /// Derive the default RPC URL for a cluster (first node's host + port).
 pub fn derive_rpc_url(cfg: &ClusterToml) -> Result<String, anyhow::Error> {
-    let first = cfg.nodes.first().ok_or_else(|| {
-        anyhow!("cluster.toml has no [[nodes]] entries — cannot derive RPC URL")
-    })?;
+    let first = cfg
+        .nodes
+        .first()
+        .ok_or_else(|| anyhow!("cluster.toml has no [[nodes]] entries — cannot derive RPC URL"))?;
     Ok(format!("http://{}:{}", first.host, first.rpc_port))
 }

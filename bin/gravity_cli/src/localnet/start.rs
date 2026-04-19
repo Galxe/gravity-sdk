@@ -42,23 +42,21 @@ impl Executable for StartCommand {
         let script = cluster_dir.join("start.sh");
 
         println!(
-            "{} {}",
+            "{} running {} with config {}",
             "[localnet start]".cyan(),
-            format!("running {} with config {}", script.display(), config.display())
+            script.display(),
+            config.display()
         );
 
         let mut cmd = Command::new("bash");
-        cmd.arg(&script)
-            .arg("--config")
-            .arg(&config)
-            .current_dir(&cluster_dir);
+        cmd.arg(&script).arg("--config").arg(&config).current_dir(&cluster_dir);
         if let Some(ref nodes) = self.nodes {
             cmd.arg("--nodes").arg(nodes);
         }
 
-        let status = cmd.status().map_err(|e| {
-            anyhow::anyhow!("failed to execute {}: {e}", script.display())
-        })?;
+        let status = cmd
+            .status()
+            .map_err(|e| anyhow::anyhow!("failed to execute {}: {e}", script.display()))?;
         if !status.success() {
             return Err(anyhow::anyhow!(
                 "start.sh exited with code {}",
@@ -82,28 +80,22 @@ fn wait_for_rpc_ready(rpc_url: &str, timeout: Duration) -> Result<(), anyhow::Er
         let provider = ProviderBuilder::new().connect_http(url);
         let deadline = Instant::now() + timeout;
         println!(
-            "{} {}",
+            "{} waiting for {rpc_url} (timeout {}s)…",
             "[localnet start]".cyan(),
-            format!("waiting for {rpc_url} (timeout {}s)…", timeout.as_secs())
+            timeout.as_secs()
         );
         loop {
             let err: String = match provider.get_block_number().await {
                 Ok(n) if n > 0 => {
-                    println!(
-                        "{} {}",
-                        "[localnet start]".cyan(),
-                        format!("RPC ready — block={n}").green()
-                    );
+                    let ready = format!("RPC ready — block={n}").green();
+                    println!("{} {ready}", "[localnet start]".cyan());
                     return Ok(());
                 }
                 Ok(_) => "block number still 0".into(),
                 Err(e) => e.to_string(),
             };
             if Instant::now() >= deadline {
-                return Err(anyhow::anyhow!(
-                    "RPC not ready after {}s: {err}",
-                    timeout.as_secs()
-                ));
+                return Err(anyhow::anyhow!("RPC not ready after {}s: {err}", timeout.as_secs()));
             }
             tokio::time::sleep(Duration::from_secs(1)).await;
         }

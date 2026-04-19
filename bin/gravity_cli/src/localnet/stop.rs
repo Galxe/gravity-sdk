@@ -29,28 +29,23 @@ impl Executable for StopCommand {
         let script = cluster_dir.join("stop.sh");
 
         println!(
-            "{} {}",
+            "{} running {} with config {}",
             "[localnet stop]".cyan(),
-            format!("running {} with config {}", script.display(), config.display())
+            script.display(),
+            config.display()
         );
 
         let mut cmd = Command::new("bash");
-        cmd.arg(&script)
-            .arg("--config")
-            .arg(&config)
-            .current_dir(&cluster_dir);
+        cmd.arg(&script).arg("--config").arg(&config).current_dir(&cluster_dir);
         if let Some(ref nodes) = self.nodes {
             cmd.arg("--nodes").arg(nodes);
         }
 
-        let status = cmd.status().map_err(|e| {
-            anyhow::anyhow!("failed to execute {}: {e}", script.display())
-        })?;
+        let status = cmd
+            .status()
+            .map_err(|e| anyhow::anyhow!("failed to execute {}: {e}", script.display()))?;
         if !status.success() {
-            return Err(anyhow::anyhow!(
-                "stop.sh exited with code {}",
-                status.code().unwrap_or(-1)
-            ));
+            return Err(anyhow::anyhow!("stop.sh exited with code {}", status.code().unwrap_or(-1)));
         }
         Ok(())
     }
