@@ -76,9 +76,8 @@ impl CpuCommand {
             std::io::stdout().write_all(&bytes)?;
         } else {
             let path = PathBuf::from(&self.output_file);
-            fs::write(&path, &bytes).map_err(|e| {
-                anyhow::anyhow!("failed to write {}: {e}", path.display())
-            })?;
+            fs::write(&path, &bytes)
+                .map_err(|e| anyhow::anyhow!("failed to write {}: {e}", path.display()))?;
             eprintln!(
                 "wrote {} bytes to {} in {:.1}s",
                 bytes.len(),

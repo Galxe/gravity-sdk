@@ -4,8 +4,7 @@ mod stop;
 
 use clap::{Parser, Subcommand};
 
-pub use pprof::PprofCommand;
-pub use pprof::PprofSubCommands;
+pub use pprof::{PprofCommand, PprofSubCommands};
 
 use crate::node::{start::StartCommand, stop::StopCommand};
 

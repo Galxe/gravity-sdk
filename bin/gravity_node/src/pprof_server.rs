@@ -43,18 +43,17 @@ fn default_freq() -> i32 {
 const MAX_SECONDS: u64 = 300;
 
 pub async fn serve(addr: String) -> Result<(), anyhow::Error> {
-    let socket_addr: std::net::SocketAddr = addr.parse().map_err(|e| {
-        anyhow::anyhow!("invalid --pprof_addr {addr}: {e}")
-    })?;
+    let socket_addr: std::net::SocketAddr =
+        addr.parse().map_err(|e| anyhow::anyhow!("invalid --pprof_addr {addr}: {e}"))?;
     let lock: ProfilingLock = Arc::new(Mutex::new(()));
     let app = Router::new()
         .route("/", get(index))
         .route("/debug/pprof/profile", get(profile))
         .with_state(lock);
 
-    let listener = TcpListener::bind(socket_addr).await.map_err(|e| {
-        anyhow::anyhow!("failed to bind pprof server on {socket_addr}: {e}")
-    })?;
+    let listener = TcpListener::bind(socket_addr)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to bind pprof server on {socket_addr}: {e}"))?;
     info!("pprof HTTP server listening on http://{socket_addr}");
     axum::serve(listener, app).await.map_err(|e| anyhow::anyhow!("pprof server error: {e}"))
 }
@@ -150,8 +149,7 @@ mod tests {
 
         // Profile — short, low frequency to keep the test fast
         let url = format!("http://{addr}/debug/pprof/profile?seconds=1&frequency=50");
-        let client =
-            reqwest::Client::builder().timeout(Duration::from_secs(20)).build().unwrap();
+        let client = reqwest::Client::builder().timeout(Duration::from_secs(20)).build().unwrap();
         let resp = client.get(&url).send().await.unwrap();
         let status = resp.status();
         let headers = resp.headers().clone();
