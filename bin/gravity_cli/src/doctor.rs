@@ -57,11 +57,7 @@ impl CheckResult {
     fn ok(name: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             name: name.into(),
-            status_obj: StatusPayload {
-                status: Status::Ok,
-                message: message.into(),
-                hint: None,
-            },
+            status_obj: StatusPayload { status: Status::Ok, message: message.into(), hint: None },
         }
     }
     fn warn(name: impl Into<String>, message: impl Into<String>, hint: impl Into<String>) -> Self {
@@ -87,11 +83,7 @@ impl CheckResult {
     fn skip(name: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             name: name.into(),
-            status_obj: StatusPayload {
-                status: Status::Skip,
-                message: message.into(),
-                hint: None,
-            },
+            status_obj: StatusPayload { status: Status::Skip, message: message.into(), hint: None },
         }
     }
 }
@@ -284,17 +276,17 @@ async fn check_rpc(r: &Resolved) -> CheckResult {
         }
     };
 
-    let block = match tokio::time::timeout(Duration::from_secs(3), provider.get_block_number()).await
-    {
-        Ok(Ok(n)) => n,
-        _ => {
-            return CheckResult::warn(
-                "rpc",
-                format!("{url} reachable (chain_id={chain_id}) but eth_blockNumber failed"),
-                "Node may still be syncing",
-            );
-        }
-    };
+    let block =
+        match tokio::time::timeout(Duration::from_secs(3), provider.get_block_number()).await {
+            Ok(Ok(n)) => n,
+            _ => {
+                return CheckResult::warn(
+                    "rpc",
+                    format!("{url} reachable (chain_id={chain_id}) but eth_blockNumber failed"),
+                    "Node may still be syncing",
+                );
+            }
+        };
 
     if block == 0 {
         CheckResult::warn(
@@ -410,10 +402,9 @@ async fn check_version(r: &Resolved) -> CheckResult {
     };
     let provider = ProviderBuilder::new().connect_http(parsed);
     match tokio::time::timeout(Duration::from_secs(3), provider.get_client_version()).await {
-        Ok(Ok(node_version)) => CheckResult::ok(
-            "version",
-            format!("CLI {cli_version}  |  node {node_version}"),
-        ),
+        Ok(Ok(node_version)) => {
+            CheckResult::ok("version", format!("CLI {cli_version}  |  node {node_version}"))
+        }
         _ => CheckResult::warn(
             "version",
             format!("CLI {cli_version}; could not fetch web3_clientVersion from node"),
@@ -426,16 +417,10 @@ fn check_ports(r: &Resolved) -> Vec<CheckResult> {
     // Probe a few common ports. A port is "ok" if either we can bind (free) or
     // a node is listening on our own configured RPC URL (expected to be taken).
     let expected_rpc_port = r.rpc_url.as_deref().and_then(extract_port);
-    let candidates: &[(u16, &str)] = &[
-        (8545, "RPC (default)"),
-        (8551, "engine authrpc"),
-        (9101, "metrics"),
-    ];
+    let candidates: &[(u16, &str)] =
+        &[(8545, "RPC (default)"), (8551, "engine authrpc"), (9101, "metrics")];
 
-    candidates
-        .iter()
-        .map(|(port, label)| probe_port(*port, label, expected_rpc_port))
-        .collect()
+    candidates.iter().map(|(port, label)| probe_port(*port, label, expected_rpc_port)).collect()
 }
 
 fn probe_port(port: u16, label: &str, expected_rpc_port: Option<u16>) -> CheckResult {
@@ -516,10 +501,8 @@ mod tests {
     #[test]
     fn check_config_fail_when_active_profile_missing() {
         // Build a GravityConfig with an active_profile that isn't in profiles.
-        let mut cfg = GravityConfig {
-            active_profile: "ghost".to_string(),
-            profiles: Default::default(),
-        };
+        let mut cfg =
+            GravityConfig { active_profile: "ghost".to_string(), profiles: Default::default() };
         cfg.profiles.insert("other".to_string(), Default::default());
         let r = Resolved {
             config_loaded: Ok(Some(cfg)),
