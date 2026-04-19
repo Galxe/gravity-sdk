@@ -37,9 +37,7 @@ impl Executable for NextCommand {
 
 impl NextCommand {
     async fn execute_async(self) -> Result<(), anyhow::Error> {
-        let rpc_url = self
-            .rpc_url
-            .ok_or_else(|| anyhow::anyhow!("--rpc-url is required"))?;
+        let rpc_url = self.rpc_url.ok_or_else(|| anyhow::anyhow!("--rpc-url is required"))?;
         let provider = ProviderBuilder::new().connect_http(rpc_url.parse()?);
 
         let (current_epoch, last_time_micros, interval_micros, block_ts) =

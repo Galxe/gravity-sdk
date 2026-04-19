@@ -30,9 +30,7 @@ impl Executable for WatchCommand {
 
 impl WatchCommand {
     async fn execute_async(self) -> Result<(), anyhow::Error> {
-        let rpc_url = self
-            .rpc_url
-            .ok_or_else(|| anyhow::anyhow!("--rpc-url is required"))?;
+        let rpc_url = self.rpc_url.ok_or_else(|| anyhow::anyhow!("--rpc-url is required"))?;
         let provider = ProviderBuilder::new().connect_http(rpc_url.parse()?);
 
         let interval = Duration::from_secs(self.interval_secs.max(1));
@@ -80,10 +78,7 @@ impl WatchCommand {
                     }
                 }
                 Err(e) => {
-                    eprintln!(
-                        "{} rpc error (will retry): {e}",
-                        "[epoch watch]".yellow()
-                    );
+                    eprintln!("{} rpc error (will retry): {e}", "[epoch watch]".yellow());
                 }
             }
             tokio::time::sleep(interval).await;
