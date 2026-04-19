@@ -64,6 +64,18 @@ fn main() {
         command::SubCommands::Node(node_cmd) => match node_cmd.command {
             node::SubCommands::Start(start_cmd) => start_cmd.execute(),
             node::SubCommands::Stop(stop_cmd) => stop_cmd.execute(),
+            node::SubCommands::Peers(mut c) => {
+                c.output_format = output_format;
+                c.execute()
+            }
+            node::SubCommands::Mempool(mut c) => {
+                c.output_format = output_format;
+                c.execute()
+            }
+            node::SubCommands::Metrics(mut c) => {
+                c.output_format = output_format;
+                c.execute()
+            }
         },
         command::SubCommands::Dkg(dkg_cmd) => match dkg_cmd.command {
             dkg::SubCommands::Status(mut status_cmd) => {
@@ -160,6 +172,21 @@ fn apply_config_defaults(cmd: &mut Command, profile: &Option<config::ProfileConf
             node::SubCommands::Stop(ref mut c) => {
                 if c.deploy_path.is_none() {
                     c.deploy_path.clone_from(&profile.deploy_path);
+                }
+            }
+            node::SubCommands::Peers(ref mut c) => {
+                if c.rpc_url.is_none() {
+                    c.rpc_url.clone_from(&profile.rpc_url);
+                }
+            }
+            node::SubCommands::Mempool(ref mut c) => {
+                if c.rpc_url.is_none() {
+                    c.rpc_url.clone_from(&profile.rpc_url);
+                }
+            }
+            node::SubCommands::Metrics(ref mut c) => {
+                if c.rpc_url.is_none() {
+                    c.rpc_url.clone_from(&profile.rpc_url);
                 }
             }
         },
