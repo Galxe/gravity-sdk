@@ -28,16 +28,11 @@ impl Executable for PeersCommand {
 
 impl PeersCommand {
     async fn execute_async(self) -> Result<(), anyhow::Error> {
-        let rpc_url = self
-            .rpc_url
-            .clone()
-            .ok_or_else(|| anyhow::anyhow!("--rpc-url is required"))?;
+        let rpc_url =
+            self.rpc_url.clone().ok_or_else(|| anyhow::anyhow!("--rpc-url is required"))?;
         let provider = ProviderBuilder::new().connect_http(rpc_url.parse()?);
 
-        let peers: Value = provider
-            .client()
-            .request(Cow::Borrowed("admin_peers"), ())
-            .await?;
+        let peers: Value = provider.client().request(Cow::Borrowed("admin_peers"), ()).await?;
 
         match self.output_format {
             OutputFormat::Json => {

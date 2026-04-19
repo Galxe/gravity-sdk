@@ -28,23 +28,13 @@ impl Executable for MempoolCommand {
 
 impl MempoolCommand {
     async fn execute_async(self) -> Result<(), anyhow::Error> {
-        let rpc_url = self
-            .rpc_url
-            .clone()
-            .ok_or_else(|| anyhow::anyhow!("--rpc-url is required"))?;
+        let rpc_url =
+            self.rpc_url.clone().ok_or_else(|| anyhow::anyhow!("--rpc-url is required"))?;
         let provider = ProviderBuilder::new().connect_http(rpc_url.parse()?);
 
-        let status: Value = provider
-            .client()
-            .request(Cow::Borrowed("txpool_status"), ())
-            .await?;
+        let status: Value = provider.client().request(Cow::Borrowed("txpool_status"), ()).await?;
         let content: Option<Value> = if self.content {
-            Some(
-                provider
-                    .client()
-                    .request(Cow::Borrowed("txpool_content"), ())
-                    .await?,
-            )
+            Some(provider.client().request(Cow::Borrowed("txpool_content"), ()).await?)
         } else {
             None
         };
@@ -63,8 +53,7 @@ impl MempoolCommand {
                     if let Some(p) = c.get("pending").and_then(Value::as_object) {
                         println!("\npending by sender:");
                         for (sender, nonces) in p {
-                            let n_txns =
-                                nonces.as_object().map(|o| o.len()).unwrap_or(0);
+                            let n_txns = nonces.as_object().map(|o| o.len()).unwrap_or(0);
                             println!("  {sender}  {n_txns} tx(s)");
                         }
                     }
@@ -76,7 +65,5 @@ impl MempoolCommand {
 }
 
 fn hex_u64(v: Option<&Value>) -> Option<u64> {
-    v.and_then(Value::as_str).and_then(|s| {
-        u64::from_str_radix(s.trim_start_matches("0x"), 16).ok()
-    })
+    v.and_then(Value::as_str).and_then(|s| u64::from_str_radix(s.trim_start_matches("0x"), 16).ok())
 }

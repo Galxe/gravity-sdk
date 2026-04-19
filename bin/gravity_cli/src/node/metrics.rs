@@ -35,24 +35,17 @@ impl Executable for MetricsCommand {
 
 impl MetricsCommand {
     async fn execute_async(self) -> Result<(), anyhow::Error> {
-        let rpc_url = self
-            .rpc_url
-            .clone()
-            .ok_or_else(|| anyhow::anyhow!("--rpc-url is required"))?;
+        let rpc_url =
+            self.rpc_url.clone().ok_or_else(|| anyhow::anyhow!("--rpc-url is required"))?;
         let provider = ProviderBuilder::new().connect_http(rpc_url.parse()?);
 
         // Fire all queries in parallel — each is independent. Any single
         // failure becomes a None field rather than killing the whole command,
         // so `metrics` works even on nodes with partial RPC namespaces.
-        let peer_count_fut = provider
-            .client()
-            .request::<_, String>(Cow::Borrowed("net_peerCount"), ());
-        let txpool_fut = provider
-            .client()
-            .request::<_, Value>(Cow::Borrowed("txpool_status"), ());
-        let syncing_fut = provider
-            .client()
-            .request::<_, Value>(Cow::Borrowed("eth_syncing"), ());
+        let peer_count_fut =
+            provider.client().request::<_, String>(Cow::Borrowed("net_peerCount"), ());
+        let txpool_fut = provider.client().request::<_, Value>(Cow::Borrowed("txpool_status"), ());
+        let syncing_fut = provider.client().request::<_, Value>(Cow::Borrowed("eth_syncing"), ());
 
         let (chain_id, block_number, peer_count_hex, txpool_status, syncing) = tokio::join!(
             with_timeout(provider.get_chain_id()),
@@ -99,17 +92,11 @@ impl MetricsCommand {
                 );
                 show(
                     "txpool_pending",
-                    metrics
-                        .txpool_pending
-                        .map(|v| v.to_string())
-                        .unwrap_or_else(|| "?".into()),
+                    metrics.txpool_pending.map(|v| v.to_string()).unwrap_or_else(|| "?".into()),
                 );
                 show(
                     "txpool_queued",
-                    metrics
-                        .txpool_queued
-                        .map(|v| v.to_string())
-                        .unwrap_or_else(|| "?".into()),
+                    metrics.txpool_queued.map(|v| v.to_string()).unwrap_or_else(|| "?".into()),
                 );
                 let sync = match &metrics.syncing {
                     Some(Value::Bool(false)) => "no".to_string(),
