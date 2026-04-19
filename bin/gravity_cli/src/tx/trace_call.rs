@@ -49,9 +49,8 @@ impl Executable for TraceCallCommand {
 
 impl TraceCallCommand {
     async fn execute_async(self) -> Result<(), anyhow::Error> {
-        let rpc_url = self.rpc_url.clone().ok_or_else(|| {
-            anyhow::anyhow!("--rpc-url is required")
-        })?;
+        let rpc_url =
+            self.rpc_url.clone().ok_or_else(|| anyhow::anyhow!("--rpc-url is required"))?;
         let provider = ProviderBuilder::new().connect_http(rpc_url.parse()?);
 
         let tx_json = build_call_object(&self)?;
@@ -61,10 +60,8 @@ impl TraceCallCommand {
         };
 
         let params = json!([tx_json, self.block, opts]);
-        let trace: Value = provider
-            .client()
-            .request(Cow::Borrowed("debug_traceCall"), params)
-            .await?;
+        let trace: Value =
+            provider.client().request(Cow::Borrowed("debug_traceCall"), params).await?;
 
         render_trace(&trace, self.tracer, self.output_format);
         Ok(())
@@ -81,12 +78,10 @@ fn build_call_object(cmd: &TraceCallCommand) -> Result<Value, anyhow::Error> {
         let _ = Address::from_str(to).map_err(|e| anyhow::anyhow!("invalid --to: {e}"))?;
         obj.insert("to".into(), json!(to));
     }
-    let data = parse_hex_data(&cmd.data)
-        .ok_or_else(|| anyhow::anyhow!("--data is not valid hex"))?;
+    let data =
+        parse_hex_data(&cmd.data).ok_or_else(|| anyhow::anyhow!("--data is not valid hex"))?;
     obj.insert("data".into(), json!(format!("0x{}", hex::encode::<Bytes>(data))));
-    let value =
-        U256::from_str(&cmd.value).map_err(|e| anyhow::anyhow!("invalid --value: {e}"))?;
+    let value = U256::from_str(&cmd.value).map_err(|e| anyhow::anyhow!("invalid --value: {e}"))?;
     obj.insert("value".into(), json!(format!("0x{value:x}")));
     Ok(Value::Object(obj))
 }
-

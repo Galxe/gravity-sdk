@@ -21,11 +21,9 @@ pub fn decode_revert(data: &[u8]) -> String {
         if let Some(msg) = decode_error_string(payload) {
             return format!("Error(\"{msg}\")");
         }
-    } else if selector == PANIC_UINT_SELECTOR {
-        if payload.len() >= 32 {
-            let code = U256::from_be_slice(&payload[0..32]);
-            return format!("Panic(0x{code:x})");
-        }
+    } else if selector == PANIC_UINT_SELECTOR && payload.len() >= 32 {
+        let code = U256::from_be_slice(&payload[0..32]);
+        return format!("Panic(0x{code:x})");
     }
 
     format!("raw: 0x{}", hex::encode(data))

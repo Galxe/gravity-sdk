@@ -1,11 +1,15 @@
-use alloy_primitives::{Address, Bytes, TxKind, U256};
+use alloy_primitives::{Address, TxKind, U256};
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types::eth::{BlockNumberOrTag, TransactionInput, TransactionRequest};
 use clap::Parser;
 use serde::Serialize;
 use std::str::FromStr;
 
-use crate::{command::Executable, output::OutputFormat, tx::common::{decode_revert, parse_hex_data}};
+use crate::{
+    command::Executable,
+    output::OutputFormat,
+    tx::common::{decode_revert, parse_hex_data},
+};
 
 #[derive(Debug, Parser)]
 pub struct SimulateCommand {
@@ -114,14 +118,14 @@ fn build_tx_request(cmd: &SimulateCommand) -> Result<TransactionRequest, anyhow:
         }
         None => TxKind::Create,
     };
-    let data = parse_hex_data(&cmd.data)
-        .ok_or_else(|| anyhow::anyhow!("--data is not valid hex"))?;
+    let data =
+        parse_hex_data(&cmd.data).ok_or_else(|| anyhow::anyhow!("--data is not valid hex"))?;
     let value = U256::from_str(&cmd.value).map_err(|e| anyhow::anyhow!("invalid --value: {e}"))?;
 
     Ok(TransactionRequest {
         from,
         to: Some(to_kind),
-        input: TransactionInput::new(Bytes::from(data)),
+        input: TransactionInput::new(data),
         value: Some(value),
         ..Default::default()
     })
@@ -140,7 +144,7 @@ fn extract_revert_reason<E: std::error::Error + 'static>(err: &E) -> Option<Stri
     // Look for the common `data: 0x…` or `data: "0x…"` pattern that alloy emits.
     if let Some(idx) = msg.find("data: ") {
         let tail = &msg[idx + "data: ".len()..];
-        let end = tail.find(|c: char| c == ',' || c == '}' || c == ')').unwrap_or(tail.len());
+        let end = tail.find([',', '}', ')']).unwrap_or(tail.len());
         let raw = &tail[..end];
         if let Some(bytes) = parse_hex_data(raw) {
             return Some(decode_revert(&bytes));

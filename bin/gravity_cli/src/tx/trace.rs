@@ -62,22 +62,19 @@ impl Executable for TraceCommand {
 
 impl TraceCommand {
     async fn execute_async(self) -> Result<(), anyhow::Error> {
-        let rpc_url = self.rpc_url.clone().ok_or_else(|| {
-            anyhow::anyhow!("--rpc-url is required")
-        })?;
+        let rpc_url =
+            self.rpc_url.clone().ok_or_else(|| anyhow::anyhow!("--rpc-url is required"))?;
         let provider = ProviderBuilder::new().connect_http(rpc_url.parse()?);
-        let tx_hash = B256::from_str(&self.tx_hash)
-            .map_err(|e| anyhow::anyhow!("invalid tx hash: {e}"))?;
+        let tx_hash =
+            B256::from_str(&self.tx_hash).map_err(|e| anyhow::anyhow!("invalid tx hash: {e}"))?;
 
         let opts = match Tracer::geth_name(self.tracer) {
             Some(name) => json!({ "tracer": name }),
             None => json!({}),
         };
         let params = json!([tx_hash, opts]);
-        let trace: Value = provider
-            .client()
-            .request(Cow::Borrowed("debug_traceTransaction"), params)
-            .await?;
+        let trace: Value =
+            provider.client().request(Cow::Borrowed("debug_traceTransaction"), params).await?;
 
         render_trace(&trace, self.tracer, self.output_format);
         Ok(())
