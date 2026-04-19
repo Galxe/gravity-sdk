@@ -36,6 +36,7 @@ use tracing::{info, warn};
 mod cli;
 mod consensus;
 mod mempool;
+mod pprof_server;
 pub mod relayer;
 mod reth_cli;
 mod reth_coordinator;
@@ -246,9 +247,22 @@ fn main() {
         std::env::set_var("RUST_BACKTRACE", "1");
     }
 
-    let _profiling_state =
-        if std::env::var("ENABLE_PPROF").is_ok() { Some(setup_pprof_profiler()) } else { None };
     let cli = Cli::parse();
+
+    // Prefer the on-demand HTTP pprof server when configured. If both are set
+    // we skip the periodic disk-dump mode because they share `ProfilerGuard`
+    // state and overlapping guards produce garbage profiles.
+    let pprof_addr = cli.gravity_node_config.pprof_addr.clone();
+    let _profiling_state = if pprof_addr.is_some() {
+        if std::env::var("ENABLE_PPROF").is_ok() {
+            warn!("ENABLE_PPROF and --pprof_addr both set; only the HTTP server will run");
+        }
+        None
+    } else if std::env::var("ENABLE_PPROF").is_ok() {
+        Some(setup_pprof_profiler())
+    } else {
+        None
+    };
 
     // For utility subcommands (stage, db, init, config, etc.), skip full node initialization
     // and just run the CLI command directly.
@@ -301,6 +315,15 @@ fn main() {
     let (consensus_args, latest_block_number, datadir_rx) =
         run_reth(cli, execution_args_rx, shutdown_tx.subscribe());
     let rt = tokio::runtime::Runtime::new().unwrap();
+
+    if let Some(addr) = pprof_addr {
+        rt.spawn(async move {
+            if let Err(e) = pprof_server::serve(addr).await {
+                warn!("pprof HTTP server exited: {e}");
+            }
+        });
+    }
+
     let chain_id = {
         let chain_info = consensus_args.provider.chain_spec().chain;
         match chain_info.into_kind() {

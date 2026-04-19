@@ -64,6 +64,9 @@ fn main() {
         command::SubCommands::Node(node_cmd) => match node_cmd.command {
             node::SubCommands::Start(start_cmd) => start_cmd.execute(),
             node::SubCommands::Stop(stop_cmd) => stop_cmd.execute(),
+            node::SubCommands::Pprof(pp) => match pp.command {
+                node::PprofSubCommands::Cpu(c) => c.execute(),
+            },
         },
         command::SubCommands::Dkg(dkg_cmd) => match dkg_cmd.command {
             dkg::SubCommands::Status(mut status_cmd) => {
@@ -162,6 +165,8 @@ fn apply_config_defaults(cmd: &mut Command, profile: &Option<config::ProfileConf
                     c.deploy_path.clone_from(&profile.deploy_path);
                 }
             }
+            // Pprof addr comes from its own flag/env; no profile mapping.
+            node::SubCommands::Pprof(_) => {}
         },
         command::SubCommands::Dkg(ref mut d) => match &mut d.command {
             dkg::SubCommands::Status(ref mut c) => {
