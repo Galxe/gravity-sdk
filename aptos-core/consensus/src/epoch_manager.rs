@@ -1154,6 +1154,15 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         self.epoch_state = Some(epoch_state.clone());
 
         let consensus_config = onchain_consensus_config.unwrap_or_default();
+        // Dump the decoded consensus config once per epoch reconfiguration so
+        // operators can verify what the chain actually parsed after a
+        // governance-driven config swap (setForNextEpoch -> applyPendingConfig).
+        // Fires at most once per epoch boundary; Debug format is fine for a
+        // rare, structural log.
+        info!(
+            epoch = epoch_state.epoch,
+            "OnChainConsensusConfig loaded for new epoch: {:#?}", consensus_config,
+        );
         let execution_config = onchain_execution_config
             .unwrap_or_else(|_| OnChainExecutionConfig::default_if_missing());
         let onchain_randomness_config_seq_num = onchain_randomness_config_seq_num
