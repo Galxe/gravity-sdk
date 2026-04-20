@@ -35,7 +35,6 @@ from eth_account import Account
 from web3 import Web3
 
 from gravity_e2e.cluster.manager import Cluster
-from gravity_e2e.core.client.gravity_http_client import GravityHttpClient
 
 LOG = logging.getLogger(__name__)
 
@@ -79,6 +78,8 @@ SEL_GET_PROPOSAL_STATE = _selector("getProposalState(uint64)")
 SEL_SET_FOR_NEXT_EPOCH = _selector("setForNextEpoch(bytes)")
 SEL_GET_CURRENT_CONFIG = _selector("getCurrentConfig()")
 SEL_GET_PENDING_CONFIG = _selector("getPendingConfig()")
+SEL_CURRENT_EPOCH = _selector("currentEpoch()")
+RECONFIGURATION = Web3.to_checksum_address("0x00000000000000000000000000000001625F2003")
 
 # ProposalState: 0=PENDING, 1=SUCCEEDED, 2=FAILED, 3=EXECUTED, 4=CANCELLED
 PROPOSAL_STATE_SUCCEEDED = 1
@@ -131,18 +132,22 @@ def _decode_pending_config(raw: bytes) -> tuple[bool, bytes]:
     return has_pending, data
 
 
-async def _wait_for_epoch_advance(node, start_epoch: int, timeout_s: int) -> int:
-    """Poll the gravity HTTP API until current_epoch > start_epoch or timeout."""
+def _current_epoch(w3: Web3) -> int:
+    raw = _call(w3, RECONFIGURATION, SEL_CURRENT_EPOCH)
+    return int.from_bytes(raw[-8:], "big")
+
+
+async def _wait_for_epoch_advance(w3: Web3, start_epoch: int, timeout_s: int) -> int:
+    """Poll Reconfiguration.currentEpoch() until it advances past start_epoch."""
     deadline = time.monotonic() + timeout_s
-    async with GravityHttpClient(base_url=node.http_url) as http:
-        while time.monotonic() < deadline:
-            try:
-                cur = await http.get_current_epoch()
-                if cur > start_epoch:
-                    return cur
-            except Exception as e:
-                LOG.debug(f"get_current_epoch transient error: {e}")
-            await asyncio.sleep(3)
+    while time.monotonic() < deadline:
+        try:
+            cur = _current_epoch(w3)
+            if cur > start_epoch:
+                return cur
+        except Exception as e:
+            LOG.debug(f"currentEpoch transient error: {e}")
+        await asyncio.sleep(3)
     raise TimeoutError(
         f"chain did not advance past epoch {start_epoch} within {timeout_s}s"
     )
@@ -227,6 +232,11 @@ async def test_gov_consensus_config_lifecycle(cluster: Cluster):
         ["address", "address[]", "bytes[]", "string"],
         [pool_addr, [CONSENSUS_CONFIG], [set_data], "gov-consensus-config-e2e"],
     )
+    # Surface revert reason via eth_call simulation before sending.
+    try:
+        w3.eth.call({"from": FAUCET_ADDR, "to": GOVERNANCE, "data": create_data, "gas": 1_000_000})
+    except Exception as e:
+        pytest.fail(f"createProposal would revert (eth_call): {e!r}")
     receipt = _send_tx(w3, GOVERNANCE, create_data, FAUCET_KEY, gas=1_000_000)
     assert receipt["status"] == 1, f"createProposal failed: {receipt}"
 
@@ -299,12 +309,11 @@ async def test_gov_consensus_config_lifecycle(cluster: Cluster):
     # ── Phase 7: wait past next epoch boundary ───────────────────────
     LOG.info("\n📌 Phase 7: wait past next epoch boundary")
 
-    async with GravityHttpClient(base_url=node1.http_url) as http:
-        ep0 = await http.get_current_epoch()
+    ep0 = _current_epoch(w3)
     LOG.info(f"  epoch before wait: {ep0}")
 
     ep_after = await _wait_for_epoch_advance(
-        node1, ep0, timeout_s=3 * EPOCH_INTERVAL_SECS + 30
+        w3, ep0, timeout_s=3 * EPOCH_INTERVAL_SECS + 30
     )
     LOG.info(f"  epoch after wait:  {ep_after}")
 
