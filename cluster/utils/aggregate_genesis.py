@@ -98,6 +98,18 @@ def build_genesis_config(config, genesis_cfg):
     if "genesis_timestamp_secs" in genesis_cfg:
         result["genesisTimestampSecs"] = genesis_cfg["genesis_timestamp_secs"]
 
+    # Optional: governanceOwner passthrough. Required by contracts branch
+    # fix/governance-initialize-from-genesis (sets Governance.owner at genesis
+    # via Genesis.initialize). When absent, older contract refs (e.g. main)
+    # keep working because genesis-tool ignores unknown JSON keys.
+    if "governance_owner" in genesis_cfg:
+        owner = genesis_cfg["governance_owner"]
+        if not (isinstance(owner, str) and owner.startswith("0x") and len(owner) == 42):
+            raise ValueError(
+                f"genesis.governance_owner must be a 0x-prefixed 20-byte address, got {owner!r}"
+            )
+        result["governanceOwner"] = owner
+
     # validatorConfig
     vc = genesis_cfg.get("validator_config", {})
     result["validatorConfig"] = {
