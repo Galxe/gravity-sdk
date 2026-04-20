@@ -35,6 +35,19 @@ def pre_start(test_dir: Path, env: dict, pytest_args: list = None):
     """Start MockAnvil + preload events before gravity_node starts."""
     global _mock
 
+    args = pytest_args or []
+    # Skip MockAnvil when the test explicitly wants a real Anvil
+    # (the live_bridge_ready / _preloaded_bridge_real_anvil fixtures
+    # start their own Anvil on port 8546, which would otherwise collide).
+    if "--no-mock-anvil" in args or "--use-real-anvil" in args:
+        LOG.info("[hook] pre_start skipped (real-anvil mode requested)")
+        return
+    # Tests selected via `-k test_bridge_live` also drive their own Anvil
+    for i, arg in enumerate(args):
+        if arg == "-k" and i + 1 < len(args) and "test_bridge_live" in args[i + 1]:
+            LOG.info("[hook] pre_start skipped (test_bridge_live selected)")
+            return
+
     # Ensure gravity_e2e is importable
     e2e_root = str(Path(__file__).resolve().parent.parent.parent)
     if e2e_root not in sys.path:

@@ -456,6 +456,109 @@ def _dump_node_logs(node_id: str, infra_path: Path, tail_lines: int = 30, label:
         LOG.warning(f"{prefix} execution_logs dir NOT FOUND at {exec_log_dir}")
 
 
+@pytest.fixture(scope="module")
+def live_bridge_ready(cluster, contracts_dir: Path):
+    """
+    Live-round-trip bridge fixture (no pre-load).
+
+    Unlike `preloaded_bridge`, this fixture starts Anvil and deploys contracts
+    but does NOT pre-send any bridge transactions. The gravity node is
+    restarted with the relayer pointed at Anvil, and the test itself is
+    expected to send its bridge tx live and observe the mint on Gravity.
+
+    Lifecycle:
+      1. Stop gravity_node (runner already started it)
+      2. Start Anvil (auto-mine), deploy contracts
+      3. Pre-mine 70 empty blocks + switch to 1s interval so the relayer
+         has a finalized head when it comes up (avoids startup race)
+      4. Clean relayer_state.json, write relayer_config.json
+      5. Restart gravity_node, warm-up wait
+      6. Yield a BridgeHelper and recipient for the test to use
+      7. Teardown: stop Anvil
+    """
+    import requests as _req
+
+    sdk_root = _gravity_e2e_parent.parent
+    cluster_scripts_dir = sdk_root / "cluster"
+    stop_script = cluster_scripts_dir / "stop.sh"
+    start_script = cluster_scripts_dir / "start.sh"
+    config_path_str = str(cluster.config_path)
+
+    env = os.environ.copy()
+    artifacts_dir = _current_dir / "artifacts"
+    env["GRAVITY_ARTIFACTS_DIR"] = str(artifacts_dir)
+
+    mgr = AnvilManager()
+    try:
+        LOG.info("[live] Phase 1: stopping gravity nodes...")
+        subprocess.run(
+            ["bash", str(stop_script), "--config", config_path_str],
+            cwd=str(cluster_scripts_dir), env=env, check=True,
+        )
+        time.sleep(2)
+
+        LOG.info("[live] Phase 2: starting Anvil (auto-mine) + deploying contracts...")
+        mgr.start(port=8546, block_time=None, gas_limit=100_000_000)
+        contracts = mgr.deploy_bridge_contracts(contracts_dir)
+        helper = BridgeHelper(
+            anvil_rpc_url=contracts.rpc_url,
+            gtoken_address=contracts.gtoken_address,
+            portal_address=contracts.portal_address,
+            sender_address=contracts.sender_address,
+            deployer_private_key=contracts.deployer_private_key,
+            deployer_address=contracts.deployer_address,
+        )
+        recipient = Web3.to_checksum_address(contracts.deployer_address)
+
+        LOG.info("[live] Phase 3: pre-mining 70 blocks so finalized head exists at node start...")
+        _req.post(contracts.rpc_url, json={
+            "jsonrpc": "2.0", "method": "anvil_mine", "params": ["0x46"], "id": 1,
+        }, timeout=10).raise_for_status()
+        _req.post(contracts.rpc_url, json={
+            "jsonrpc": "2.0", "method": "evm_setIntervalMining", "params": [1], "id": 2,
+        }, timeout=10).raise_for_status()
+
+        deadline = time.time() + 60
+        while time.time() < deadline:
+            fin = _req.post(contracts.rpc_url, json={
+                "jsonrpc": "2.0", "method": "eth_getBlockByNumber",
+                "params": ["finalized", False], "id": 3,
+            }, timeout=5).json().get("result")
+            if fin:
+                LOG.info(f"[live]   finalized head = {int(fin['number'], 16)}")
+                break
+            time.sleep(1)
+
+        LOG.info("[live] Phase 4: cleaning relayer state + writing config...")
+        for node_id, node in cluster.nodes.items():
+            relayer_state = node._infra_path / "data" / "reth" / "relayer_state.json"
+            if relayer_state.exists():
+                relayer_state.unlink()
+            relayer_path = node._infra_path / "config" / "relayer_config.json"
+            if relayer_path.parent.exists():
+                with open(relayer_path, "w") as f:
+                    json.dump(ANVIL_RELAYER_CONFIG, f, indent=2)
+            _dump_relayer_diagnostics(node_id, node._infra_path)
+
+        LOG.info("[live] Phase 5: restarting gravity_node...")
+        subprocess.run(
+            ["bash", str(start_script), "--config", config_path_str],
+            cwd=str(cluster_scripts_dir), env=env, check=True,
+        )
+        time.sleep(15)
+        for node_id, node in cluster.nodes.items():
+            _dump_node_logs(node_id, node._infra_path, tail_lines=30, label="live-post-warmup")
+
+        yield {
+            "contracts": contracts,
+            "helper": helper,
+            "recipient": recipient,
+            "amount": BRIDGE_AMOUNT,
+        }
+    finally:
+        mgr.stop()
+
+
 # Markers
 def pytest_configure(config):
     """Configure bridge-specific markers."""
