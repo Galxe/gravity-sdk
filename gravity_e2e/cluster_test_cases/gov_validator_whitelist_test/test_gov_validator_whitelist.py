@@ -102,13 +102,21 @@ SEL_REGISTER_VALIDATOR = _selector(
 )
 SEL_JOIN_VALIDATOR_SET = _selector("joinValidatorSet(address)")
 SEL_GET_VALIDATOR_STATUS = _selector("getValidatorStatus(address)")
+SEL_GET_ACTIVE_VALIDATOR_COUNT = _selector("getActiveValidatorCount()")
 SEL_IS_TRANSITION_IN_PROGRESS = _selector("isTransitionInProgress()")
+SEL_CURRENT_EPOCH = _selector("currentEpoch()")
 
 # Error selector: PoolNotWhitelisted(address) - used to recognize the revert
 ERR_POOL_NOT_WHITELISTED = _selector("PoolNotWhitelisted(address)")
 
 # ValidatorStatus enum: 0=INACTIVE 1=PENDING_ACTIVE 2=ACTIVE 3=PENDING_INACTIVE
 VALIDATOR_STATUS_PENDING_ACTIVE = 1
+VALIDATOR_STATUS_ACTIVE = 2
+
+# EPOCH wait budget: 3 × epoch interval + slack. Must be generous because the
+# chain can skip an epoch boundary if the previous reconfiguration is still
+# finalising when the next tick arrives.
+EPOCH_ADVANCE_TIMEOUT_S = 3 * EPOCH_INTERVAL_SECS + 30
 
 
 # ── Transaction helpers ──────────────────────────────────────────────
@@ -150,6 +158,27 @@ def _decode_address(raw: bytes) -> str:
 
 def _bool_from_return(raw: bytes) -> bool:
     return int.from_bytes(raw[-32:], "big") != 0
+
+
+def _current_epoch(w3: Web3) -> int:
+    raw = _call(w3, RECONFIGURATION, SEL_CURRENT_EPOCH)
+    return int.from_bytes(raw[-8:], "big")
+
+
+async def _wait_for_epoch_advance(w3: Web3, start_epoch: int, timeout_s: int) -> int:
+    """Poll Reconfiguration.currentEpoch() until it advances past start_epoch."""
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        try:
+            cur = _current_epoch(w3)
+            if cur > start_epoch:
+                return cur
+        except Exception as e:
+            LOG.debug(f"currentEpoch transient error: {e}")
+        await asyncio.sleep(3)
+    raise TimeoutError(
+        f"chain did not advance past epoch {start_epoch} within {timeout_s}s"
+    )
 
 
 async def _wait_stable(w3: Web3, timeout_s: int = 60) -> None:
@@ -361,8 +390,14 @@ async def test_whitelist_governance_lifecycle(cluster: Cluster):
     identity = _generate_bls_identity()
     consensus_pubkey = bytes.fromhex(identity["consensus_public_key"])
     consensus_pop = bytes.fromhex(identity["consensus_pop"])
-    network_addr = b"/ip4/127.0.0.1/tcp/6399"
-    fullnode_addr = b"/ip4/127.0.0.1/tcp/6499"
+    # Network addresses must parse at the consensus layer when the validator
+    # set is swapped at the next epoch boundary — the chain tries BCS String
+    # THEN BCS Vec<NetworkAddress> and panics if neither works. An empty
+    # Vec<NetworkAddress> encodes as a single ULEB128 zero byte, which parses
+    # cleanly as "no addresses". That's exactly what we want: the 5th
+    # validator has no running gravity_node, so no peer should try to dial it.
+    network_addr = b"\x00"
+    fullnode_addr = b"\x00"
     moniker = "whitelist-e2e"
     assert len(consensus_pubkey) == 48, f"consensus pubkey should be 48 bytes, got {len(consensus_pubkey)}"
     assert len(consensus_pop) == 96, f"consensus pop should be 96 bytes, got {len(consensus_pop)}"
@@ -531,8 +566,61 @@ async def test_whitelist_governance_lifecycle(cluster: Cluster):
     )
     LOG.info(f"  getValidatorStatus(new_pool) = PENDING_ACTIVE ✓")
 
-    # ── Phase 6: liveness sanity ─────────────────────────────────────
-    LOG.info("\n📌 Phase 6: chain still producing blocks on all 4 nodes")
+    # Pre-transition validator set snapshot.
+    pre_count = int.from_bytes(
+        _call(w3, VALIDATOR_MANAGER, SEL_GET_ACTIVE_VALIDATOR_COUNT), "big"
+    )
+    LOG.info(f"  getActiveValidatorCount() pre-epoch = {pre_count} (genesis set)")
+    assert pre_count == 4, f"expected 4 active validators pre-epoch, got {pre_count}"
+
+    # ── Phase 6: wait for epoch advance, new validator becomes ACTIVE ─
+    LOG.info("\n📌 Phase 6: wait for epoch boundary, PENDING_ACTIVE -> ACTIVE")
+
+    ep0 = _current_epoch(w3)
+    LOG.info(f"  epoch before wait: {ep0}")
+    ep1 = await _wait_for_epoch_advance(w3, ep0, timeout_s=EPOCH_ADVANCE_TIMEOUT_S)
+    LOG.info(f"  epoch after wait:  {ep1}")
+
+    # Whale-node exception: new pool's 2e18 is 25% of the pre-epoch 8e18
+    # staying-total — above the 20% votingPowerIncreaseLimitPct — but the
+    # `addedPower > 0` guard in _computeNextEpochValidatorSet() carves out at
+    # least one activation per epoch, so the lone joiner still lands ACTIVE.
+    new_status = int.from_bytes(
+        _call(w3, VALIDATOR_MANAGER,
+              SEL_GET_VALIDATOR_STATUS + encode(["address"], [new_pool]))[-1:],
+        "big",
+    )
+    assert new_status == VALIDATOR_STATUS_ACTIVE, (
+        f"after epoch advance, expected new validator ACTIVE ({VALIDATOR_STATUS_ACTIVE}), "
+        f"got status={new_status}. Possible causes: voting-power-increase-limit blocked "
+        f"activation, or chain didn't actually process the epoch reconfiguration."
+    )
+
+    active_count = int.from_bytes(
+        _call(w3, VALIDATOR_MANAGER, SEL_GET_ACTIVE_VALIDATOR_COUNT), "big"
+    )
+    assert active_count == 5, (
+        f"expected 5 active validators after join, got {active_count}"
+    )
+
+    # Print the full 5-validator set for visibility.
+    LOG.info(f"  getActiveValidatorCount() = {active_count}")
+    for i, pool in enumerate(genesis_pools):
+        s = int.from_bytes(
+            _call(w3, VALIDATOR_MANAGER,
+                  SEL_GET_VALIDATOR_STATUS + encode(["address"], [pool]))[-1:],
+            "big",
+        )
+        LOG.info(f"    [{i}] {pool}  status={s} (genesis)")
+    LOG.info(f"    [4] {new_pool}  status={new_status} (newly joined) ✓")
+
+    # ── Phase 7: liveness sanity with a dead 5th validator ───────────
+    # All 4 genesis nodes run real gravity_node processes; the 5th is a paper
+    # validator only (no process). Online voting power = 4 × 2e18 = 8e18 of
+    # the 10e18 total, i.e. 80% > 2/3 BFT quorum. The chain should keep
+    # producing blocks despite the silent 5th signer. auto_evict_enabled=false
+    # in genesis.toml so the dead validator won't be pruned mid-test.
+    LOG.info("\n📌 Phase 7: chain still producing blocks with a dead 5th validator")
 
     h = w3.eth.block_number
     deadline = time.monotonic() + 60
@@ -545,4 +633,4 @@ async def test_whitelist_governance_lifecycle(cluster: Cluster):
         bn = node.get_block_number()
         assert bn >= h + 3, f"{node_id} lagging after join: block {bn} vs start {h}"
 
-    LOG.info("\n✅ Validator whitelist lifecycle complete")
+    LOG.info("\n✅ Validator whitelist lifecycle complete — active set now 5 nodes")
