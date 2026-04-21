@@ -1,8 +1,6 @@
 use alloy_primitives::{Bytes, TxKind, U256};
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types::eth::{BlockNumberOrTag, TransactionInput, TransactionRequest};
-use alloy_signer::k256::ecdsa::SigningKey;
-use alloy_signer_local::PrivateKeySigner;
 use alloy_sol_types::{SolCall, SolEvent};
 use clap::Parser;
 
@@ -10,6 +8,7 @@ use crate::{
     command::Executable,
     contract::{Staking, STAKING_ADDRESS},
     output::OutputFormat,
+    signer::SignerArgs,
     util::{format_ether, parse_ether},
 };
 
@@ -38,6 +37,12 @@ pub struct CreateCommand {
     /// Output format (injected from global flag)
     #[clap(skip)]
     pub output_format: OutputFormat,
+
+    /// Signing-key source: defaults to interactive stdin prompt, or pass
+    /// `--kms <resource>` to sign via Cloud KMS, or `--private-key-env <VAR>`
+    /// to read the hex key from an env var.
+    #[clap(flatten)]
+    pub signer: SignerArgs,
 }
 
 impl Executable for CreateCommand {
@@ -68,24 +73,16 @@ impl CreateCommand {
         if !is_json {
             println!("   RPC URL: {rpc_url}");
         }
-        let private_key_input = rpassword::prompt_password_stdout(
-            "Enter private key (hex, with or without 0x prefix): ",
-        )
-        .map_err(|e| anyhow::anyhow!("Failed to read private key: {e}"))?;
-        let private_key_str =
-            private_key_input.trim().strip_prefix("0x").unwrap_or(private_key_input.trim());
-        let private_key_bytes = hex::decode(private_key_str)?;
-        let private_key = SigningKey::from_slice(private_key_bytes.as_slice())
-            .map_err(|e| anyhow::anyhow!("Invalid private key: {e}"))?;
-        let signer = PrivateKeySigner::from(private_key);
-        let wallet_address = signer.address();
+        let resolved = self.signer.resolve().await?;
+        let wallet_address = resolved.address;
         if !is_json {
             println!("   Wallet address: {wallet_address:?}");
             println!("   Staking contract: {STAKING_ADDRESS:?}");
         }
 
         // Create provider
-        let provider = ProviderBuilder::new().wallet(signer).connect_http(rpc_url.parse()?);
+        let provider =
+            ProviderBuilder::new().wallet(resolved.wallet).connect_http(rpc_url.parse()?);
 
         let chain_id = provider.get_chain_id().await?;
         if !is_json {

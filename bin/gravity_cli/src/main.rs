@@ -9,6 +9,7 @@ pub mod genesis;
 pub mod init;
 pub mod node;
 pub mod output;
+pub mod signer;
 pub mod stake;
 pub mod status;
 pub mod unwind;
