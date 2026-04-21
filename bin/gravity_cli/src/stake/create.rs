@@ -38,9 +38,6 @@ pub struct CreateCommand {
     #[clap(skip)]
     pub output_format: OutputFormat,
 
-    /// Signing-key source: defaults to interactive stdin prompt, or pass
-    /// `--kms <resource>` to sign via Cloud KMS, or `--private-key-env <VAR>`
-    /// to read the hex key from an env var.
     #[clap(flatten)]
     pub signer: SignerArgs,
 }

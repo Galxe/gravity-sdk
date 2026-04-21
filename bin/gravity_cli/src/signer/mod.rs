@@ -52,6 +52,12 @@ pub struct SignerArgs {
 
     /// Read the hex private key (with or without `0x` prefix) from this
     /// environment variable instead of prompting on stdin.
+    ///
+    /// Intended for CI / automation where the env var is injected by a
+    /// secrets manager. Prefer `--kms` for interactive / production use:
+    /// a plaintext key in an env var is visible to anyone with access to
+    /// `/proc/<pid>/environ`, and inline invocations (`GRAV_KEY=… cli …`)
+    /// may leak into shell history.
     #[clap(long, value_name = "ENV_VAR")]
     pub private_key_env: Option<String>,
 }
