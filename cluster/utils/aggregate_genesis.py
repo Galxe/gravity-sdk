@@ -142,7 +142,7 @@ def build_genesis_config(config, genesis_cfg):
         "requiredProposerStake": gc.get("required_proposer_stake", defaults["governanceConfig"]["requiredProposerStake"]),
         "votingDurationMicros": gc.get("voting_duration_micros", defaults["governanceConfig"]["votingDurationMicros"])
     }
-    
+
     # randomnessConfig
     rc = genesis_cfg.get("randomness_config", {})
     result["randomnessConfig"] = {

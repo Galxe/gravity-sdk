@@ -199,7 +199,7 @@ impl BlockData {
             ledger_info.epoch(),
             0,                 /* round */
             HashValue::zero(), /* parent block id */
-            ledger_info.transaction_accumulator_hash(),
+            ledger_info.block_hash(),
             version,
             timestamp,
             None,
