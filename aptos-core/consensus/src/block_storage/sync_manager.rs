@@ -19,7 +19,7 @@ use crate::{
     payload_manager::TPayloadManager,
     persistent_liveness_storage::PersistentLivenessStorage,
 };
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow, bail, Context};
 use aptos_consensus_types::{
     block::Block,
     block_retrieval::{
@@ -318,7 +318,9 @@ impl BlockStore {
         )
         .await?;
 
-        self.append_blocks_for_sync(blocks, quorum_certs).await;
+        self.append_blocks_for_sync(blocks, quorum_certs)
+            .await
+            .context("Failed to append blocks for sync")?;
 
         if highest_commit_cert.ledger_info().ledger_info().ends_epoch() {
             retriever
@@ -580,7 +582,9 @@ impl BlockStore {
                 )
                 .await?;
 
-                self.append_blocks_for_sync(blocks, quorum_certs).await;
+                self.append_blocks_for_sync(blocks, quorum_certs)
+            .await
+            .context("Failed to append blocks for sync")?;
             }
         }
         Ok(())

@@ -461,21 +461,21 @@ impl BlockStore {
         };
 
         for block in blocks {
-            block_store.insert_block(block, true).await.unwrap_or_else(|e| {
-                panic!("[BlockStore] failed to insert block during build {:?}", e)
-            });
+            if let Err(e) = block_store.insert_block(block, true).await {
+                error!("[BlockStore] failed to insert block during build: {:?}", e);
+            }
         }
         for qc in quorum_certs {
-            block_store.insert_single_quorum_cert(qc, true).unwrap_or_else(|e| {
-                panic!("[BlockStore] failed to insert quorum during build{:?}", e)
-            });
+            if let Err(e) = block_store.insert_single_quorum_cert(qc, true) {
+                error!("[BlockStore] failed to insert quorum cert during build: {:?}", e);
+            }
         }
 
         counters::LAST_COMMITTED_ROUND.set(block_store.ordered_root().round() as i64);
         block_store
     }
 
-    pub fn init_block_number(&self, ordered_blocks: &Vec<Arc<PipelinedBlock>>) {
+    pub fn init_block_number(&self, ordered_blocks: &Vec<Arc<PipelinedBlock>>) -> anyhow::Result<()> {
         let mut block_numbers = vec![];
         let mut block_number = 0;
         for p_block in ordered_blocks {
@@ -486,10 +486,20 @@ impl BlockStore {
             {
                 block_number = parent_block.block_number().unwrap() + 1;
             } else {
-                panic!("Cannot find the parent_block id {}", p_block.parent_id());
+                bail!(
+                    "Cannot find the parent_block id {} for block {}",
+                    p_block.parent_id(),
+                    p_block.block().id()
+                );
             }
             if let Some(cur_block_number) = p_block.block().block_number() {
-                assert_eq!(cur_block_number, block_number);
+                ensure!(
+                    cur_block_number == block_number,
+                    "Block number mismatch for block {}: expected {}, got {}",
+                    p_block.block().id(),
+                    block_number,
+                    cur_block_number
+                );
                 continue;
             }
             info!("init block {}, block number is {}", p_block.block().id(), block_number);
@@ -503,6 +513,7 @@ impl BlockStore {
         if block_numbers.len() != 0 {
             self.storage.save_tree(vec![], vec![], block_numbers).unwrap();
         }
+        Ok(())
     }
 
     /// Send an ordered block id with the proof for execution, returns () on success or error
@@ -531,7 +542,8 @@ impl BlockStore {
         self.pending_blocks.lock().gc(finality_proof.commit_info().round());
         // This callback is invoked synchronously with and could be used for multiple batches of
         // blocks.
-        self.init_block_number(&blocks_to_commit);
+        self.init_block_number(&blocks_to_commit)
+            .context("Failed to initialize block numbers")?;
         if recovery {
             // Recovery mode: process blocks directly without going through execution pipeline
             for p_block in &blocks_to_commit {
@@ -642,7 +654,16 @@ impl BlockStore {
                     ))?;
                 let compute_res = compute_res.execution_output;
                 if let Some(block_hash) = maybe_block_hash {
-                    assert_eq!(block_hash.data, compute_res.data);
+                    // Execution-layer hash divergence indicates state corruption or fork —
+                    // this is unrecoverable and warrants a panic to prevent propagating bad state.
+                    assert_eq!(
+                        block_hash.data, compute_res.data,
+                        "Execution-layer hash divergence for block {} (number {}): stored={:?}, computed={:?}",
+                        p_block.block().id(),
+                        block_number,
+                        block_hash.data,
+                        compute_res.data
+                    );
                 }
                 let commit_block = BlockHashRef {
                     block_id: BlockId(*p_block.id()),
@@ -756,23 +777,23 @@ impl BlockStore {
         &self,
         blocks: Vec<(Block, Option<u64>, Option<Vec<u8>>)>,
         quorum_certs: Vec<QuorumCert>,
-    ) {
+    ) -> anyhow::Result<()> {
         for (block, block_number, _) in blocks {
             if let Some(num) = block_number {
                 if block.block_number().is_none() {
                     block.set_block_number(num);
                 }
             }
-            self.insert_block(block, true).await.unwrap_or_else(|e| {
-                panic!("[BlockStore] failed to insert block during append blocks for sync {:?}", e)
-            });
+            self.insert_block(block, true)
+                .await
+                .context("Failed to insert block during sync append")?;
         }
         for qc in quorum_certs {
-            self.insert_single_quorum_cert(qc, true).unwrap_or_else(|e| {
-                panic!("[BlockStore] failed to insert quorum during append blocks for sync {:?}", e)
-            });
+            self.insert_single_quorum_cert(qc, true)
+                .context("Failed to insert quorum cert during sync append")?;
         }
         self.recover_blocks().await;
+        Ok(())
     }
 
     pub async fn rebuild(&self, root: RootInfo, blocks: Vec<Block>, quorum_certs: Vec<QuorumCert>) {
@@ -805,9 +826,16 @@ impl BlockStore {
         .await;
 
         // Unwrap the new tree and replace the existing tree.
-        *self.inner.write() = Arc::try_unwrap(inner)
-            .unwrap_or_else(|_| panic!("New block tree is not shared"))
-            .into_inner();
+        // This should always succeed since `inner` was just created locally by `build`.
+        *self.inner.write() = match Arc::try_unwrap(inner) {
+            Ok(lock) => lock.into_inner(),
+            Err(_) => {
+                // This indicates a bug — the newly built tree should have a single owner.
+                // Log the error but do not crash; the old tree remains in place.
+                error!("[BlockStore] rebuild: new block tree has unexpected extra references, keeping old tree");
+                return;
+            },
+        };
         self.recover_blocks().await;
     }
 
