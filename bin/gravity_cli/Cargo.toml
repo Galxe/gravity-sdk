@@ -49,4 +49,4 @@ colored.workspace = true
 
 # GCP KMS signer (used by the optional --kms flag in validator/stake commands).
 async-trait = "0.1"
-google-cloud-kms = "0.7"
+google-cloud-kms = "0.6"
