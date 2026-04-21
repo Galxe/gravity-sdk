@@ -10,7 +10,7 @@
 
 [cluster]
 name = "gravity-devnet-gov-whitelist"
-base_dir = "/tmp/gravity-cluster-gov-whitelist"
+base_dir = "main"
 
 [genesis_source]
 genesis_path = "./artifacts/genesis.json"
