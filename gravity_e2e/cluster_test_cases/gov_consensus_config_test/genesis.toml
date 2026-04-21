@@ -6,7 +6,7 @@
 # contracts PR lands on main.
 [dependencies.genesis_contracts]
 repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
-ref = "fix/governance-initialize-from-genesis"
+ref = "main"
 
 # node1.address == faucet so that pool[0].voter is the faucet, letting the
 # test use only the faucet key to both propose and vote. The other three
