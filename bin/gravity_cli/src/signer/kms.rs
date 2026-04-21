@@ -49,6 +49,11 @@ pub struct GcpKmsSigner {
     key_resource: String,
     address: Address,
     verifying_key: VerifyingKey,
+    /// Informational only — `sign_hash` signs whatever 32-byte digest the
+    /// caller hands us (typically `tx.signature_hash()`, which already folds
+    /// the chain_id in via EIP-155). Kept to satisfy the `Signer` trait
+    /// contract; alloy's wallet machinery may call `set_chain_id` but we
+    /// never consume the stored value in the sign path.
     chain_id: Option<ChainId>,
 }
 
@@ -70,10 +75,13 @@ impl GcpKmsSigner {
     /// `projects/<P>/locations/<L>/keyRings/<R>/cryptoKeys/<K>/cryptoKeyVersions/1`.
     /// (`SignerArgs::resolve` normalizes the path before getting here.)
     pub async fn new(key_resource: String) -> anyhow::Result<Self> {
-        let config = ClientConfig::default()
-            .with_auth()
-            .await
-            .map_err(|e| anyhow::anyhow!("KMS auth setup failed: {e}"))?;
+        let config = ClientConfig::default().with_auth().await.map_err(|e| {
+            anyhow::anyhow!(
+                "KMS auth setup failed: {e} — check Application Default Credentials: on GCE \
+                 the VM's service account must be bound with cloud-platform scope; locally set \
+                 GOOGLE_APPLICATION_CREDENTIALS or run `gcloud auth application-default login`"
+            )
+        })?;
         let client = Client::new(config)
             .await
             .map_err(|e| anyhow::anyhow!("KMS client connect failed: {e}"))?;
@@ -99,6 +107,14 @@ impl GcpKmsSigner {
 #[async_trait]
 impl Signer for GcpKmsSigner {
     async fn sign_hash(&self, hash: &B256) -> SignerResult<Signature> {
+        // `hash` is the caller-supplied 32-byte digest to sign — for Ethereum
+        // it is `keccak256(rlp(tx))`, not a SHA-256 output. We nonetheless
+        // submit it through `DigestVariant::Sha256` because on GCP KMS the
+        // `digest` oneof is a **type tag** matching the key's algorithm
+        // (`EC_SIGN_SECP256K1_SHA256` → SHA-256-sized slot): KMS signs the
+        // 32 bytes as-is and does NOT re-hash. Re-hashing would only happen
+        // if we used the sibling `data` field. This matches how AWS KMS is
+        // driven by alloy-signer-aws for the same Ethereum signing use case.
         let resp = self
             .client
             .asymmetric_sign(
