@@ -1,0 +1,72 @@
+# Gravity Cluster Configuration - Governance Consensus Config E2E Test
+# 4-validator cluster; BFT quorum survives one node failure, enabling us to
+# observe consensus-config hot-swap without halting the chain.
+# Ports intentionally distinct from four_validator so both suites can run
+# concurrently during local debugging.
+
+[cluster]
+name = "gravity-devnet-gov-consensus"
+base_dir = "/tmp/gravity-cluster-gov-consensus"
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+p2p_port = 6280
+vfn_port = 6290
+rpc_port = 8645
+metrics_port = 9101
+inspection_port = 10100
+https_port = 1124
+authrpc_port = 8651
+reth_p2p_port = 12124
+
+[[nodes]]
+id = "node2"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+p2p_port = 6281
+vfn_port = 6291
+rpc_port = 8646
+metrics_port = 9102
+inspection_port = 10101
+https_port = 1125
+authrpc_port = 8652
+reth_p2p_port = 12125
+
+[[nodes]]
+id = "node3"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+p2p_port = 6282
+vfn_port = 6292
+rpc_port = 8647
+metrics_port = 9103
+inspection_port = 10102
+https_port = 1126
+authrpc_port = 8653
+reth_p2p_port = 12126
+
+[[nodes]]
+id = "node4"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+p2p_port = 6283
+vfn_port = 6293
+rpc_port = 8648
+metrics_port = 9104
+inspection_port = 10103
+https_port = 1127
+authrpc_port = 8654
+reth_p2p_port = 12127
+
+[faucet_init]
+num_accounts = 10
