@@ -12,10 +12,10 @@
 //!
 //! 1. KMS `AsymmetricSign` on the 32-byte digest.
 //! 2. Parse the DER `(r, s)` returned by KMS.
-//! 3. Normalize `s` to the EIP-2 low-S half so verifying code that rejects
-//!    high-S signatures (which Ethereum does) accepts the result.
-//! 4. Try `v ∈ {0, 1}` for the recovery id; pick the one that recovers to
-//!    the same public key we cached at construction.
+//! 3. Normalize `s` to the EIP-2 low-S half so verifying code that rejects high-S signatures (which
+//!    Ethereum does) accepts the result.
+//! 4. Try `v ∈ {0, 1}` for the recovery id; pick the one that recovers to the same public key we
+//!    cached at construction.
 //!
 //! ## Authentication
 //!
@@ -25,16 +25,17 @@
 
 use alloy_consensus::SignableTransaction;
 use alloy_network::TxSigner;
-use alloy_primitives::{Address, ChainId, B256, Signature, U256};
-use alloy_signer::k256::{
-    ecdsa::{RecoveryId, Signature as K256Signature, VerifyingKey},
-    elliptic_curve::sec1::ToEncodedPoint,
+use alloy_primitives::{Address, ChainId, Signature, B256, U256};
+use alloy_signer::{
+    k256::ecdsa::{RecoveryId, Signature as K256Signature, VerifyingKey},
+    Result as SignerResult, Signer,
 };
-use alloy_signer::{Result as SignerResult, Signer};
 use async_trait::async_trait;
-use google_cloud_kms::client::{Client, ClientConfig};
-use google_cloud_kms::grpc::kms::v1::{
-    digest::Digest as DigestVariant, AsymmetricSignRequest, Digest, GetPublicKeyRequest,
+use google_cloud_kms::{
+    client::{Client, ClientConfig},
+    grpc::kms::v1::{
+        digest::Digest as DigestVariant, AsymmetricSignRequest, Digest, GetPublicKeyRequest,
+    },
 };
 use sha3::{Digest as _, Keccak256};
 
@@ -78,10 +79,7 @@ impl GcpKmsSigner {
             .map_err(|e| anyhow::anyhow!("KMS client connect failed: {e}"))?;
 
         let resp = client
-            .get_public_key(
-                GetPublicKeyRequest { name: key_resource.clone(), ..Default::default() },
-                None,
-            )
+            .get_public_key(GetPublicKeyRequest { name: key_resource.clone() }, None)
             .await
             .map_err(|e| anyhow::anyhow!("KMS GetPublicKey failed: {e}"))?;
 
@@ -90,6 +88,11 @@ impl GcpKmsSigner {
         let address = address_from_verifying_key(&verifying_key);
 
         Ok(Self { client, key_resource, address, verifying_key, chain_id: None })
+    }
+
+    /// The EVM address derived from the KMS key's public key at construction.
+    pub fn address(&self) -> Address {
+        self.address
     }
 }
 
@@ -160,8 +163,7 @@ impl TxSigner<Signature> for GcpKmsSigner {
 /// a `VerifyingKey`. KMS returns this exact format from `GetPublicKey`.
 fn parse_secp256k1_pem(pem: &str) -> Result<VerifyingKey, anyhow::Error> {
     use alloy_signer::k256::pkcs8::DecodePublicKey;
-    VerifyingKey::from_public_key_pem(pem)
-        .map_err(|e| anyhow::anyhow!("PEM/SPKI decode: {e}"))
+    VerifyingKey::from_public_key_pem(pem).map_err(|e| anyhow::anyhow!("PEM/SPKI decode: {e}"))
 }
 
 /// EVM address: `keccak256(uncompressed_pubkey_without_0x04_prefix)[12..]`.
@@ -182,8 +184,8 @@ fn recover_parity(
     expected: &VerifyingKey,
 ) -> Result<bool, anyhow::Error> {
     for v in 0u8..=1 {
-        let rid = RecoveryId::try_from(v)
-            .map_err(|e| anyhow::anyhow!("invalid recovery id {v}: {e}"))?;
+        let rid =
+            RecoveryId::try_from(v).map_err(|e| anyhow::anyhow!("invalid recovery id {v}: {e}"))?;
         if let Ok(recovered) = VerifyingKey::recover_from_prehash(digest, sig, rid) {
             if recovered == *expected {
                 return Ok(v == 1);
