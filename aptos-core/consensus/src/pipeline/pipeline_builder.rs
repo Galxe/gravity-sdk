@@ -656,6 +656,7 @@ impl PipelineBuilder {
                 block_number: block.block_number().unwrap_or(0),
                 epoch_start_round: block.round(),
                 epoch_start_timestamp_usecs: block_info.timestamp_usecs(),
+                block_hash: compute_result.root_hash(),
             };
             info!(
                 "[EpochChange] Setting EpochBlockInfo for epoch change block: id={}, number={}, round={}, timestamp={}",
