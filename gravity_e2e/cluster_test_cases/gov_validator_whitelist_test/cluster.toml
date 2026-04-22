@@ -1,0 +1,79 @@
+# Gravity Cluster Configuration - Governance Validator-Whitelist E2E Test
+# 4-validator cluster; BFT quorum survives one node failure. A fresh ECDSA
+# key is funded from the faucet and creates a stake pool post-genesis. The
+# pool is gated out by the whitelist until governance adds it via
+# setValidatorPoolAllowed, after which registerValidator + joinValidatorSet
+# succeed.
+# Ports intentionally distinct from gov_consensus_config_test and
+# four_validator so all three suites can run concurrently during local
+# debugging.
+
+[cluster]
+name = "gravity-devnet-gov-whitelist"
+base_dir = "/tmp/gravity-cluster-gov-whitelist"
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+p2p_port = 6380
+vfn_port = 6390
+rpc_port = 8745
+metrics_port = 9201
+inspection_port = 10200
+https_port = 1224
+authrpc_port = 8751
+reth_p2p_port = 12224
+
+[[nodes]]
+id = "node2"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+p2p_port = 6381
+vfn_port = 6391
+rpc_port = 8746
+metrics_port = 9202
+inspection_port = 10201
+https_port = 1225
+authrpc_port = 8752
+reth_p2p_port = 12225
+
+[[nodes]]
+id = "node3"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+p2p_port = 6382
+vfn_port = 6392
+rpc_port = 8747
+metrics_port = 9203
+inspection_port = 10202
+https_port = 1226
+authrpc_port = 8753
+reth_p2p_port = 12226
+
+[[nodes]]
+id = "node4"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+p2p_port = 6383
+vfn_port = 6393
+rpc_port = 8748
+metrics_port = 9204
+inspection_port = 10203
+https_port = 1227
+authrpc_port = 8754
+reth_p2p_port = 12227
+
+# The Anvil default key (0xac09...cbed) is the sole signer this test needs; it
+# is seeded with a huge balance via [genesis.faucet] in genesis.toml, so we
+# don't need cluster/faucet.sh to shell out to the gravity_bench distributor.
+[faucet_init]
+num_accounts = 0

@@ -187,7 +187,7 @@ WORKSPACE="$SCRIPT_DIR/.."
 
 if [ -e "${WORKSPACE}/script/node.pid" ]; then
     pid=$(cat "${WORKSPACE}/script/node.pid")
-    if [ -d "/proc/$pid" ]; then
+    if kill -0 "$pid" 2>/dev/null; then
         echo "Node is already running with PID $pid"
         exit 1
     fi
@@ -237,7 +237,7 @@ WORKSPACE="$SCRIPT_DIR/.."
 
 if [ -e "${WORKSPACE}/script/node.pid" ]; then
     pid=$(cat "${WORKSPACE}/script/node.pid")
-    if [ -d "/proc/$pid" ]; then
+    if kill -0 "$pid" 2>/dev/null; then
         kill "$pid"
         echo "Stopped node (PID: $pid)"
     else
@@ -283,7 +283,17 @@ configure_vfn() {
     
     # Generate reth_config.json from template
     envsubst < "$SCRIPT_DIR/templates/reth_config_vfn.json.tpl" > "$config_dir/reth_config.json"
-    
+
+    # Optionally enable WebSocket RPC (only when ws_port is set in cluster.toml)
+    if [ "$WS_PORT" != "null" ]; then
+        local tmp="$config_dir/reth_config.json.tmp"
+        jq --argjson port "$WS_PORT" \
+           --arg origins "$RPC_WS_ORIGINS" \
+           --arg api "$RPC_WS_API" \
+           '.reth_args += {"ws":"", "ws.port":$port, "ws.addr":"0.0.0.0", "ws.origins":$origins, "ws.api":$api}' \
+           "$config_dir/reth_config.json" > "$tmp" && mv "$tmp" "$config_dir/reth_config.json"
+    fi
+
     # Render relayer_config.json from template
     local relayer_tpl="${RELAYER_CONFIG_TPL:-$SCRIPT_DIR/templates/relayer_config.json.tpl}"
     if [ -f "$relayer_tpl" ]; then
@@ -292,7 +302,7 @@ configure_vfn() {
     else
         log_warn "  Relayer config template not found: $relayer_tpl (skipping)"
     fi
-    
+
     # Generate start script for this node
     cat > "$data_dir/script/start.sh" << 'START_SCRIPT'
 #!/bin/bash
@@ -301,7 +311,7 @@ WORKSPACE="$SCRIPT_DIR/.."
 
 if [ -e "${WORKSPACE}/script/node.pid" ]; then
     pid=$(cat "${WORKSPACE}/script/node.pid")
-    if [ -d "/proc/$pid" ]; then
+    if kill -0 "$pid" 2>/dev/null; then
         echo "Node is already running with PID $pid"
         exit 1
     fi
@@ -351,7 +361,7 @@ WORKSPACE="$SCRIPT_DIR/.."
 
 if [ -e "${WORKSPACE}/script/node.pid" ]; then
     pid=$(cat "${WORKSPACE}/script/node.pid")
-    if [ -d "/proc/$pid" ]; then
+    if kill -0 "$pid" 2>/dev/null; then
         kill "$pid"
         echo "Stopped node (PID: $pid)"
     else
@@ -423,6 +433,12 @@ main() {
     
     # Read relayer RPC URL from config (with default)
     export RELAYER_RPC_URL=$(echo "$config_json" | jq -r '.relayer.relayer_rpc_url // "https://sepolia.drpc.org"')
+
+    # Cluster-level RPC settings (defaults preserve current "open" behavior for dev/e2e)
+    export RPC_HTTP_CORSDOMAIN=$(echo "$config_json" | jq -r '.rpc.http_corsdomain // "*"')
+    export RPC_HTTP_API=$(echo "$config_json" | jq -r '.rpc.http_api // "debug,eth,net,trace,txpool,web3,rpc"')
+    export RPC_WS_ORIGINS=$(echo "$config_json" | jq -r '.rpc.ws_origins // "*"')
+    export RPC_WS_API=$(echo "$config_json" | jq -r '.rpc.ws_api // "debug,eth,net,trace,txpool,web3,rpc"')
     
     # Resolve relative paths (relative to CONFIG_FILE location, not SCRIPT_DIR)
     local config_dir="$(dirname "$CONFIG_FILE")"
@@ -496,6 +512,7 @@ main() {
         export P2P_PORT=$(echo "$node" | jq -r '.p2p_port')
         export VFN_PORT=$(echo "$node" | jq -r '.vfn_port // "null"')
         export RPC_PORT=$(echo "$node" | jq -r '.rpc_port')
+        export WS_PORT=$(echo "$node" | jq -r '.ws_port // "null"')
         export METRICS_PORT=$(echo "$node" | jq -r '.metrics_port')
         export INSPECTION_PORT=$(echo "$node" | jq -r '.inspection_port')
         export HTTPS_PORT=$(echo "$node" | jq -r '.https_port // "null"')
@@ -535,12 +552,12 @@ main() {
         if [ "$role" == "vfn" ]; then
             # VFN node
             identity_src="$OUTPUT_DIR/$NODE_ID/config/identity.yaml"
-            
+
             if [ ! -f "$identity_src" ]; then
                 log_error "Identity not found for $NODE_ID at $identity_src"
                 exit 1
             fi
-            
+
             configure_vfn \
                 "$NODE_ID" \
                 "$data_dir" \

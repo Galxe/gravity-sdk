@@ -69,37 +69,54 @@ async def test_operations_maintenance(cluster: Cluster):
         
         pool_contract = get_pool_contract(w3, pool_address)
         
-        # Step 2: Test setOperator
-        LOG.info("\n[Step 2] Testing setOperator...")
-        
-        set_operator_result = await owner_builder.build_and_send_tx(
+        # Step 2: Test proposeOperator (2-step timelock role change)
+        LOG.info("\n[Step 2] Testing proposeOperator...")
+
+        propose_op_result = await owner_builder.build_and_send_tx(
             to=pool_address,
-            data=pool_contract.encode_abi('setOperator', [new_operator.address]),
-            options=TransactionOptions(gas_limit=100_000)
+            data=pool_contract.encode_abi('proposeOperator', [new_operator.address]),
+            options=TransactionOptions(gas_limit=200_000)
         )
-        
-        assert set_operator_result.success, f"setOperator failed: {set_operator_result.error}"
-        
-        updated_operator = await run_sync(pool_contract.functions.getOperator().call)
-        assert updated_operator.lower() == new_operator.address.lower(), f"Operator not updated: expected {new_operator.address}, got {updated_operator}"
-        
-        LOG.info(f"Operator updated to: {updated_operator}")
-        
-        # Step 3: Test setVoter
-        LOG.info("\n[Step 3] Testing setVoter...")
-        
-        set_voter_result = await owner_builder.build_and_send_tx(
+
+        assert propose_op_result.success, f"proposeOperator failed: {propose_op_result.error}"
+
+        pending_op = await run_sync(pool_contract.functions.pendingOperator().call)
+        assert pending_op.lower() == new_operator.address.lower(), \
+            f"pendingOperator not set: expected {new_operator.address}, got {pending_op}"
+
+        op_change_at = await run_sync(pool_contract.functions.operatorChangeAt().call)
+        assert op_change_at > 0, "operatorChangeAt should be set after propose"
+        LOG.info(f"Operator change proposed: pending={pending_op}, effectiveAt={op_change_at}")
+
+        # Verify premature accept is rejected (timelock not elapsed)
+        await fund_account(w3, faucet_key, new_operator.address, Web3.to_wei(1, "ether"))
+        new_op_builder = TransactionBuilder(w3, new_operator)
+        early_accept = await new_op_builder.build_and_send_tx(
             to=pool_address,
-            data=pool_contract.encode_abi('setVoter', [new_voter.address]),
-            options=TransactionOptions(gas_limit=100_000)
+            data=pool_contract.encode_abi('acceptOperator', []),
+            options=TransactionOptions(gas_limit=200_000)
         )
-        
-        assert set_voter_result.success, f"setVoter failed: {set_voter_result.error}"
-        
-        updated_voter = await run_sync(pool_contract.functions.getVoter().call)
-        assert updated_voter.lower() == new_voter.address.lower(), f"Voter not updated: expected {new_voter.address}, got {updated_voter}"
-        
-        LOG.info(f"Voter updated to: {updated_voter}")
+        assert not early_accept.success, "acceptOperator should revert before timelock expires"
+        LOG.info("acceptOperator correctly rejected before timelock")
+
+        # Step 3: Test proposeVoter (2-step timelock role change)
+        LOG.info("\n[Step 3] Testing proposeVoter...")
+
+        propose_voter_result = await owner_builder.build_and_send_tx(
+            to=pool_address,
+            data=pool_contract.encode_abi('proposeVoter', [new_voter.address]),
+            options=TransactionOptions(gas_limit=200_000)
+        )
+
+        assert propose_voter_result.success, f"proposeVoter failed: {propose_voter_result.error}"
+
+        pending_voter = await run_sync(pool_contract.functions.pendingVoter().call)
+        assert pending_voter.lower() == new_voter.address.lower(), \
+            f"pendingVoter not set: expected {new_voter.address}, got {pending_voter}"
+
+        voter_change_at = await run_sync(pool_contract.functions.voterChangeAt().call)
+        assert voter_change_at > 0, "voterChangeAt should be set after propose"
+        LOG.info(f"Voter change proposed: pending={pending_voter}, effectiveAt={voter_change_at}")
         
         # Step 4: Test renewLockUntil
         LOG.info("\n[Step 4] Testing renewLockUntil...")

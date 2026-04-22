@@ -123,25 +123,110 @@ STAKE_POOL_ABI = [
         "stateMutability": "nonpayable",
         "type": "function"
     },
+    # ── 2-step role changes (propose → timelock → accept) ──
     {
         "inputs": [{"internalType": "address", "name": "newOperator", "type": "address"}],
-        "name": "setOperator",
+        "name": "proposeOperator",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "acceptOperator",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "cancelOperatorChange",
         "outputs": [],
         "stateMutability": "nonpayable",
         "type": "function"
     },
     {
         "inputs": [{"internalType": "address", "name": "newVoter", "type": "address"}],
-        "name": "setVoter",
+        "name": "proposeVoter",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "acceptVoter",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "cancelVoterChange",
         "outputs": [],
         "stateMutability": "nonpayable",
         "type": "function"
     },
     {
         "inputs": [{"internalType": "address", "name": "newStaker", "type": "address"}],
-        "name": "setStaker",
+        "name": "proposeStaker",
         "outputs": [],
         "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "acceptStaker",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "cancelStakerChange",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "pendingOperator",
+        "outputs": [{"internalType": "address", "name": "", "type": "address"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "operatorChangeAt",
+        "outputs": [{"internalType": "uint64", "name": "", "type": "uint64"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "pendingVoter",
+        "outputs": [{"internalType": "address", "name": "", "type": "address"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "voterChangeAt",
+        "outputs": [{"internalType": "uint64", "name": "", "type": "uint64"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "pendingStaker",
+        "outputs": [{"internalType": "address", "name": "", "type": "address"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "stakerChangeAt",
+        "outputs": [{"internalType": "uint64", "name": "", "type": "uint64"}],
+        "stateMutability": "view",
         "type": "function"
     },
     {
