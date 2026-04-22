@@ -10,11 +10,12 @@ import shutil
 from pathlib import Path
 
 try:
-    import tomli
+    import tomllib
 except ImportError:
-    # Fallback to toml if tomli is not available, or just fail if requirements not met
-    # Assuming tomli is installed via requirements.txt
-    import tomli
+    try:
+        import tomli as tomllib  # noqa: F811
+    except ImportError:
+        import toml as tomllib  # noqa: F811
 
 # Configure logging
 logging.basicConfig(
@@ -108,11 +109,12 @@ def verify_nodes_alive(cluster_config: Path, env: dict):
     """
     try:
         import tomllib
+        with open(cluster_config, "rb") as f:
+            config = tomllib.load(f)
     except ImportError:
-        import toml as tomllib
-
-    with open(cluster_config, "rb") as f:
-        config = tomllib.load(f) if hasattr(tomllib, "load") else {}
+        import toml
+        with open(cluster_config, "r") as f:
+            config = toml.load(f)
 
     base_dir = config.get("cluster", {}).get("base_dir", "")
     nodes = config.get("nodes", [])
@@ -223,10 +225,12 @@ def run_test_suite(
         import shutil
         try:
             import tomllib
+            with open(cluster_config, "rb") as f:
+                toml_data = tomllib.load(f)
         except ImportError:
-            import toml as tomllib
-        with open(cluster_config, "rb") as f:
-            toml_data = tomllib.load(f) if hasattr(tomllib, 'load') else {}
+            import toml
+            with open(cluster_config, "r") as f:
+                toml_data = toml.load(f)
         base_dir = toml_data.get("cluster", {}).get("base_dir", "")
         if base_dir and os.path.exists(base_dir):
             logger.info(f"Removing stale cluster data at {base_dir}")

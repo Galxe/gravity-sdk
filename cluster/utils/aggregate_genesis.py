@@ -53,6 +53,10 @@ def get_genesis_defaults():
             "requiredProposerStake": "10000000000000000000",
             "votingDurationMicros": 604800000000
         },
+        # Placeholder owner — genesis-tool rejects a missing field and
+        # Governance.initialize reverts on 0x0. Suites that exercise the
+        # governance lifecycle must override this in genesis.toml.
+        "governanceOwner": "0x0000000000000000000000000000000000000001",
         "randomnessConfig": {
             "variant": 0,
             "configV2": {
@@ -98,6 +102,18 @@ def build_genesis_config(config, genesis_cfg):
     if "genesis_timestamp_secs" in genesis_cfg:
         result["genesisTimestampSecs"] = genesis_cfg["genesis_timestamp_secs"]
 
+    # governanceOwner is now a required field in genesis-tool's GenesisConfig
+    # (contracts main commit 57ae9bc wires Governance.owner at genesis via
+    # Genesis.initialize). If absent upstream, fall back to the placeholder
+    # default so suites that don't exercise governance still boot; suites
+    # that do must set `genesis.governance_owner` in genesis.toml.
+    owner = genesis_cfg.get("governance_owner", defaults["governanceOwner"])
+    if not (isinstance(owner, str) and owner.startswith("0x") and len(owner) == 42):
+        raise ValueError(
+            f"genesis.governance_owner must be a 0x-prefixed 20-byte address, got {owner!r}"
+        )
+    result["governanceOwner"] = owner
+
     # validatorConfig
     vc = genesis_cfg.get("validator_config", {})
     result["validatorConfig"] = {
@@ -126,7 +142,7 @@ def build_genesis_config(config, genesis_cfg):
         "requiredProposerStake": gc.get("required_proposer_stake", defaults["governanceConfig"]["requiredProposerStake"]),
         "votingDurationMicros": gc.get("voting_duration_micros", defaults["governanceConfig"]["votingDurationMicros"])
     }
-    
+
     # randomnessConfig
     rc = genesis_cfg.get("randomness_config", {})
     result["randomnessConfig"] = {

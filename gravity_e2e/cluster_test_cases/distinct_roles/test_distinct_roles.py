@@ -125,7 +125,7 @@ async def test_genesis_validator_has_distinct_roles(cluster: Cluster):
         f"staker mismatch: chain={on_chain_staker} expected={staker.address}"
     )
     # Note: there is no getOwner() on IStakePool; Ownable's owner() would
-    # require its ABI. The setStaker test below implicitly verifies owner
+    # require its ABI. The proposeStaker test below implicitly verifies owner
     # identity by signing with ANVIL_OWNER_KEY and observing success.
 
     assert on_chain_operator.lower() != on_chain_staker.lower(), (
@@ -252,10 +252,11 @@ async def test_only_operator_can_set_fee_recipient(cluster: Cluster):
 
 @pytest.mark.asyncio
 @pytest.mark.validator
-async def test_only_owner_can_rotate_staker(cluster: Cluster):
-    """setStaker is gated by Ownable — only the pool owner can rotate it.
-    This is the closest proxy we have for asserting the owner identity
-    without pulling in the Ownable ABI."""
+async def test_only_owner_can_propose_staker(cluster: Cluster):
+    """proposeStaker is gated by Ownable — only the pool owner can initiate
+    a staker rotation.  Uses 2-step timelock: proposeStaker → (delay) → acceptStaker.
+    We verify propose succeeds and the pending state is correct; the full
+    timelock acceptance is covered by Foundry unit tests."""
     assert await cluster.set_full_live(timeout=60), "Cluster failed to start"
     node = cluster.get_node("node1")
     w3 = node.w3
@@ -271,7 +272,7 @@ async def test_only_owner_can_rotate_staker(cluster: Cluster):
     staking = _staking_index_contract(w3)
     pool_addr = await run_sync(staking.functions.getPool(0).call)
     pool = get_pool_contract(w3, pool_addr)
-    data = pool.encode_abi("setStaker", [new_staker])
+    data = pool.encode_abi("proposeStaker", [new_staker])
 
     # Non-owner callers must revert.
     for label, key in (("operator", ANVIL_OPERATOR_KEY), ("staker", ANVIL_STAKER_KEY)):
@@ -282,20 +283,39 @@ async def test_only_owner_can_rotate_staker(cluster: Cluster):
             options=TransactionOptions(gas_limit=200_000),
         )
         assert not result.success, (
-            f"{label} unexpectedly allowed to setStaker — owner identity wrong"
+            f"{label} unexpectedly allowed to proposeStaker — owner identity wrong"
         )
-        LOG.info(f"{label}.setStaker correctly rejected: {result.error}")
+        LOG.info(f"{label}.proposeStaker correctly rejected: {result.error}")
 
-    # Owner succeeds; confirm the rotation took.
+    # Owner succeeds; confirm pending state is set.
     tb = TransactionBuilder(w3, owner)
     result = await tb.build_and_send_tx(
         to=pool_addr,
         data=data,
         options=TransactionOptions(gas_limit=200_000),
     )
-    assert result.success, f"owner.setStaker failed: {result.error}"
+    assert result.success, f"owner.proposeStaker failed: {result.error}"
 
-    rotated = await run_sync(pool.functions.getStaker().call)
-    assert rotated.lower() == new_staker.lower(), (
-        f"setStaker did not apply: on-chain staker={rotated}, expected={new_staker}"
+    pending = await run_sync(pool.functions.pendingStaker().call)
+    assert pending.lower() == new_staker.lower(), (
+        f"proposeStaker did not set pending: on-chain={pending}, expected={new_staker}"
     )
+    change_at = await run_sync(pool.functions.stakerChangeAt().call)
+    assert change_at > 0, "stakerChangeAt should be non-zero after propose"
+    LOG.info(f"proposeStaker OK: pending={pending}, effectiveAt={change_at}")
+
+    # Premature accept must revert (timelock not elapsed).
+    await _fund(w3, new_staker, Web3.to_wei(1, "ether"))
+    new_staker_acct = Account.from_key(
+        # We don't have the private key for Account.create() — use owner to
+        # verify that even the owner can't accept on behalf of the new staker.
+        ANVIL_OWNER_KEY,
+    )
+    tb_owner = TransactionBuilder(w3, new_staker_acct)
+    early = await tb_owner.build_and_send_tx(
+        to=pool_addr,
+        data=pool.encode_abi("acceptStaker", []),
+        options=TransactionOptions(gas_limit=200_000),
+    )
+    assert not early.success, "acceptStaker should revert (caller is not pendingStaker or timelock not elapsed)"
+    LOG.info("acceptStaker correctly rejected before timelock")

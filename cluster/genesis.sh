@@ -60,6 +60,23 @@ main() {
             log_info "Pulling latest changes for branch $GENESIS_REF..."
             git pull origin "$GENESIS_REF"
         fi
+        # Fix Python 3.9 compatibility: `str | None` → `Optional[str]`
+        python3 -c "
+import re, pathlib
+p = pathlib.Path('scripts/helpers/fix_hex_length.py')
+if p.exists():
+    txt = p.read_text()
+    # Step 1: replace type union syntax
+    txt = txt.replace('str | None', 'Optional[str]')
+    # Step 2: ensure Optional is imported
+    if 'Optional' in txt:
+        m = re.search(r'^from typing import (.+)$', txt, re.MULTILINE)
+        if m and 'Optional' not in m.group(1):
+            txt = txt.replace(m.group(0), m.group(0) + ', Optional')
+        elif not m:
+            txt = txt.replace('import argparse', 'import argparse\nfrom typing import Optional', 1)
+    p.write_text(txt)
+"
         cd -
     )
     
