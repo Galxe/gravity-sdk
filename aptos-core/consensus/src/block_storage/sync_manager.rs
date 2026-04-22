@@ -367,6 +367,20 @@ impl BlockStore {
             )
             .await?;
 
+        // Drop blocks at or below the local commit root. `retrieve_block_by_epoch`
+        // may over-fetch a few blocks past the target (the peer's response batch
+        // can extend into the range already pruned locally), which would later
+        // cause `rebuild → BlockTree::insert_block` to panic with
+        // "Parent block not found". This mirrors the fix pattern in PR #607
+        // (max(local_hcc, remote_hcc) in sync_to_highest_quorum_cert) applied
+        // to the epoch-change twin path.
+        let hcc_round = highest_commit_cert.commit_info().round();
+        let (blocks, quorum_certs): (Vec<_>, Vec<_>) = blocks
+            .into_iter()
+            .zip(quorum_certs.into_iter())
+            .filter(|((block, _, _), _)| block.round() > hcc_round)
+            .unzip();
+
         for (i, (block, _, _)) in blocks.iter().enumerate() {
             assert_eq!(block.id(), quorum_certs[i].certified_block().id());
             if let Some(payload) = block.payload() {
