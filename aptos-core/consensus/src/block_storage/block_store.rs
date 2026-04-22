@@ -516,15 +516,13 @@ impl BlockStore {
         // (e.g. recover_blocks vs. live consensus both advancing ordered_root).
         // Each case means some other path already committed through this block,
         // so returning Ok is correct. Logging is graded by likelihood of a real bug.
-        let Some(block_to_commit) = self.get_block(block_id_to_commit) else {
-            // Block missing from tree: concurrent prune, or caller passed a stale/wrong id.
-            warn!("send_for_execution: block {} not found, skipping", block_id_to_commit);
-            return Ok(());
-        };
-        if block_to_commit.round() <= self.ordered_root().round() {
-            // Common race: another path already advanced ordered_root past this block.
-            return Ok(());
-        }
+        let block_to_commit = self
+            .get_block(block_id_to_commit)
+            .ok_or_else(|| format_err!("Committed block id not found"))?;
+        ensure!(
+            block_to_commit.round() > self.ordered_root().round(),
+            "Committed block round lower than root"
+        );
         let blocks_to_commit = self.path_from_ordered_root(block_id_to_commit).unwrap_or_default();
         if blocks_to_commit.is_empty() {
             // Narrow race: ordered_root advanced between the round check above and here.
