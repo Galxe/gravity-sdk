@@ -1723,7 +1723,9 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     /// Return false if the request is filtered out, true otherwise.
     fn rpc_request_filter(&self, peer_id: &Author, request: &IncomingRpcRequest) -> bool {
         match request {
-            IncomingRpcRequest::BlockRetrieval(_) | IncomingRpcRequest::SyncInfoRequest(_) => true,
+            IncomingRpcRequest::BlockRetrieval(_) |
+            IncomingRpcRequest::SyncInfoRequest(_) |
+            IncomingRpcRequest::BatchRetrieval(_) => true,
             _ => self.is_current_epoch_validator,
         }
     }
