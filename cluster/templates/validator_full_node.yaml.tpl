@@ -43,6 +43,7 @@ full_node_networks:
       path: ${CONFIG_DIR}/identity.yaml
     discovery_method:
       onchain
+${VFN_SEEDS_BLOCK}
 
 storage:
   dir: "${DATA_DIR}/data"

@@ -123,3 +123,25 @@ p2p_port = 6183
 vfn_port = 6193
 stake_amount = "2000000000000000000"
 voting_power = "2000000000000000000"
+
+# ============ Optional: VFN shadow topology ============
+# On-chain fullnode_address points at a separate VFN-alpha instead of the
+# validator's own vfn_port. See _local/drafts/vfn-shadow/design.md §1.2 and
+# e2e.md §3-§6.
+#
+# On the validator entry, set `shadow_fullnode` to the id of a shadow node:
+#
+# [[genesis_validators]]
+# id = "node1"
+# address = "0x..."
+# host = "p2p-a.node1.example.com"    # on-chain validator_address host (public p2p)
+# p2p_port = 6180
+# vfn_port = 6190                     # ignored when shadow_fullnode is set
+# shadow_fullnode = "vfn-alpha"
+# stake_amount = "..."
+# voting_power = "..."
+#
+# [[shadow_nodes]]
+# id = "vfn-alpha"
+# host = "p2p-a.vfn-alpha.example.com" # on-chain fullnode_address host (public p2p)
+# vfn_port = 6193

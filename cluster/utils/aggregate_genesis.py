@@ -1,3 +1,4 @@
+import ipaddress
 import json
 import os
 import sys
@@ -126,6 +127,8 @@ def build_genesis_config(config, genesis_cfg):
         "requiredProposerStake": gc.get("required_proposer_stake", defaults["governanceConfig"]["requiredProposerStake"]),
         "votingDurationMicros": gc.get("voting_duration_micros", defaults["governanceConfig"]["votingDurationMicros"])
     }
+    # governanceOwner (required by genesis-tool as of contracts@862bb36)
+    result["governanceOwner"] = gc.get("owner", "0x0000000000000000000000000000000000000001")
     
     # randomnessConfig
     rc = genesis_cfg.get("randomness_config", {})
@@ -215,7 +218,9 @@ def main():
         # Filter to only genesis nodes
         genesis_nodes = [n for n in nodes if n.get('role') == 'genesis']
         print(f"[Aggregator] Processing {len(genesis_nodes)} genesis nodes for initial validator set (skipping {len(nodes) - len(genesis_nodes)} non-genesis nodes)...")
-    
+
+    shadow_lookup = {sn['id']: sn for sn in config.get('shadow_nodes', [])}
+
     validators = []
 
     for node in genesis_nodes:
@@ -300,7 +305,41 @@ def main():
             host_proto = "dns"
 
         val_net_addr = f"/{host_proto}/{host}/tcp/{p2p_port}/noise-ik/{network_pk}/handshake/0"
-        vfn_net_addr = f"/{host_proto}/{host}/tcp/{vfn_port}/noise-ik/{network_pk}/handshake/0"
+
+        # Optional shadow redirect: on-chain fullnode_address points at a
+        # shadow VFN instead of the validator's own vfn server. See
+        # _local/drafts/vfn-shadow/design.md §1.2 / e2e.md §5-§6.
+        shadow_id = node.get('shadow_fullnode')
+        if shadow_id:
+            if shadow_id not in shadow_lookup:
+                print(f"Error: validator {node_id} references shadow_fullnode='{shadow_id}' "
+                      f"but no matching [[shadow_nodes]] entry found")
+                sys.exit(1)
+            shadow = shadow_lookup[shadow_id]
+            shadow_identity_path = os.path.join(output_dir, shadow_id, 'config', 'identity.yaml')
+            if not os.path.exists(shadow_identity_path):
+                print(f"Error: shadow node '{shadow_id}' identity not found at {shadow_identity_path}. "
+                      f"Run 'make init' first.")
+                sys.exit(1)
+            shadow_identity = parse_simple_yaml(shadow_identity_path)
+            shadow_network_pk = shadow_identity['network_public_key']
+            if shadow_network_pk.startswith('0x'):
+                shadow_network_pk = shadow_network_pk[2:]
+            shadow_host = shadow['host']
+            shadow_vfn_port = shadow['vfn_port']
+            try:
+                ipaddress.IPv4Address(shadow_host)
+                shadow_proto = 'ip4'
+            except ValueError:
+                shadow_proto = 'dns'
+            vfn_net_addr = (
+                f"/{shadow_proto}/{shadow_host}/tcp/{shadow_vfn_port}"
+                f"/noise-ik/{shadow_network_pk}/handshake/0"
+            )
+            print(f"[Aggregator] Validator {node_id}: fullnode_address redirected to "
+                  f"shadow '{shadow_id}' ({shadow_host}:{shadow_vfn_port})")
+        else:
+            vfn_net_addr = f"/{host_proto}/{host}/tcp/{vfn_port}/noise-ik/{network_pk}/handshake/0"
         
         # Consensus PoP: use node config value, identity file, or 96-byte dummy
         # ValidatorManagement.sol requires non-empty consensusPop
