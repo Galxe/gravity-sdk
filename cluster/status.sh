@@ -101,7 +101,7 @@ check_node() {
     
     if [ -f "$pid_file" ]; then
         pid=$(cat "$pid_file")
-        if [ -d "/proc/$pid" ]; then
+        if kill -0 "$pid" 2>/dev/null; then
             status="Running"
             status_color="$GREEN"
             block=$(get_block_number "$host" "$rpc_port")

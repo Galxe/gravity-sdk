@@ -187,7 +187,7 @@ WORKSPACE="$SCRIPT_DIR/.."
 
 if [ -e "${WORKSPACE}/script/node.pid" ]; then
     pid=$(cat "${WORKSPACE}/script/node.pid")
-    if [ -d "/proc/$pid" ]; then
+    if kill -0 "$pid" 2>/dev/null; then
         echo "Node is already running with PID $pid"
         exit 1
     fi
@@ -237,7 +237,7 @@ WORKSPACE="$SCRIPT_DIR/.."
 
 if [ -e "${WORKSPACE}/script/node.pid" ]; then
     pid=$(cat "${WORKSPACE}/script/node.pid")
-    if [ -d "/proc/$pid" ]; then
+    if kill -0 "$pid" 2>/dev/null; then
         kill "$pid"
         echo "Stopped node (PID: $pid)"
     else
@@ -301,7 +301,7 @@ WORKSPACE="$SCRIPT_DIR/.."
 
 if [ -e "${WORKSPACE}/script/node.pid" ]; then
     pid=$(cat "${WORKSPACE}/script/node.pid")
-    if [ -d "/proc/$pid" ]; then
+    if kill -0 "$pid" 2>/dev/null; then
         echo "Node is already running with PID $pid"
         exit 1
     fi
@@ -351,7 +351,7 @@ WORKSPACE="$SCRIPT_DIR/.."
 
 if [ -e "${WORKSPACE}/script/node.pid" ]; then
     pid=$(cat "${WORKSPACE}/script/node.pid")
-    if [ -d "/proc/$pid" ]; then
+    if kill -0 "$pid" 2>/dev/null; then
         kill "$pid"
         echo "Stopped node (PID: $pid)"
     else
