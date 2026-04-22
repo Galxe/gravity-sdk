@@ -2,7 +2,7 @@ BINARY ?= gravity_node
 FEATURE ?=
 MODE ?= release
 
-BIN_DIRS := gravity_node bench kvstore
+BIN_DIRS := gravity_node gravity_cli bench kvstore
 BIN_PATHS := $(addprefix bin/, $(BIN_DIRS))
 
 ifeq ($(MODE),release)
@@ -15,12 +15,21 @@ endif
 
 CARGO_FEATURES := $(if $(FEATURE),--features $(FEATURE),)
 
-.PHONY: all $(BIN_DIRS) clean
+.PHONY: all cluster $(BIN_DIRS) clean
 
 all: $(BINARY)
 
+# Convenience target: build everything the cluster/ scripts need.
+# `make init`, `make genesis`, and `make deploy` all require gravity_cli in
+# addition to gravity_node, so this target is the one-shot build for anyone
+# following the cluster deployment or local-devnet docs.
+cluster: gravity_node gravity_cli
+
 gravity_node:
 	RUSTFLAGS="--cfg tokio_unstable" cargo build -p gravity_node $(CARGO_FLAGS) $(CARGO_FEATURES)
+
+gravity_cli:
+	cargo build -p gravity_cli $(CARGO_FLAGS) $(CARGO_FEATURES)
 
 bench:
 	cargo build -p bench $(CARGO_FLAGS) $(CARGO_FEATURES)
