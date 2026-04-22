@@ -850,6 +850,7 @@ impl BlockBufferManager {
     /// Called when an epoch change is detected in `set_compute_res`.
     /// Stores the epoch change cache and sets dummy compute results for all
     /// already-ordered suffix blocks in the same epoch, unblocking consensus.
+    #[allow(clippy::too_many_arguments)]
     fn handle_epoch_change_suffix_blocks(
         block_state_machine: &mut BlockStateMachine,
         epoch_change_block_num: u64,
@@ -857,6 +858,7 @@ impl BlockBufferManager {
         block_id: BlockId,
         block_timestamp_usecs: u64,
         block_round: u64,
+        block_hash: [u8; 32],
         epoch_state: EpochState,
     ) {
         // Store the epoch change block's info so suffix blocks and
@@ -867,6 +869,7 @@ impl BlockBufferManager {
                 block_number: epoch_change_block_num,
                 epoch_start_round: block_round,
                 epoch_start_timestamp_usecs: block_timestamp_usecs,
+                block_hash: gaptos::aptos_crypto::HashValue::new(block_hash),
             },
             epoch_state: epoch_state.clone(),
         });
@@ -985,6 +988,7 @@ impl BlockBufferManager {
                     block_id,
                     block_timestamp_usecs,
                     block_round,
+                    block_hash,
                     epoch_state,
                 );
             }
@@ -1051,7 +1055,7 @@ impl BlockBufferManager {
                         }
                     }
                     BlockState::Committed { hash, compute_result: _, id, persist_notifier: _ } => {
-                        if *id != block_id_num_hash.block_id {
+                        if !is_suffix && *id != block_id_num_hash.block_id {
                             return Err(anyhow::anyhow!(
                                 "Committed Block id mismatch: {:?}={:?} hash: {:?}={:?}",
                                 block_id_num_hash.block_id,
