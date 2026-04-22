@@ -80,6 +80,7 @@ host = "<YOUR_IP>"                      # Node IP (reachable by other validators
 p2p_port = 6180
 vfn_port = 6190
 rpc_port = 8545
+# ws_port = 8645                        # uncomment on a VFN to enable WebSocket RPC (omit for validators)
 metrics_port = 9001
 inspection_port = 10000
 https_port = 1024
