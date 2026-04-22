@@ -166,10 +166,16 @@ configure_node() {
     
     # Generate validator.yaml from template
     envsubst < "$SCRIPT_DIR/templates/validator.yaml.tpl" > "$config_dir/validator.yaml"
-    
-    # Generate reth_config.json from template
-    envsubst < "$SCRIPT_DIR/templates/reth_config.json.tpl" > "$config_dir/reth_config.json"
-    
+
+    # Generate reth_config.json from template (supports override via env var, e.g. mainnet hardening)
+    local reth_tpl="${RETH_CONFIG_TPL:-$SCRIPT_DIR/templates/reth_config.json.tpl}"
+    if [ ! -f "$reth_tpl" ]; then
+        log_error "reth config template not found: $reth_tpl"
+        exit 1
+    fi
+    envsubst < "$reth_tpl" > "$config_dir/reth_config.json"
+    log_info "  Using reth config: $reth_tpl"
+
     # Render relayer_config.json from template (supports per-test-case override via env var)
     local relayer_tpl="${RELAYER_CONFIG_TPL:-$SCRIPT_DIR/templates/relayer_config.json.tpl}"
     if [ -f "$relayer_tpl" ]; then
@@ -280,10 +286,16 @@ configure_vfn() {
     
     # Generate validator_full_node.yaml from template
     envsubst < "$SCRIPT_DIR/templates/validator_full_node.yaml.tpl" > "$config_dir/validator_full_node.yaml"
-    
-    # Generate reth_config.json from template
-    envsubst < "$SCRIPT_DIR/templates/reth_config_vfn.json.tpl" > "$config_dir/reth_config.json"
-    
+
+    # Generate reth_config.json from template (supports override via env var)
+    local reth_tpl="${RETH_CONFIG_VFN_TPL:-$SCRIPT_DIR/templates/reth_config_vfn.json.tpl}"
+    if [ ! -f "$reth_tpl" ]; then
+        log_error "reth vfn config template not found: $reth_tpl"
+        exit 1
+    fi
+    envsubst < "$reth_tpl" > "$config_dir/reth_config.json"
+    log_info "  Using reth vfn config: $reth_tpl"
+
     # Render relayer_config.json from template
     local relayer_tpl="${RELAYER_CONFIG_TPL:-$SCRIPT_DIR/templates/relayer_config.json.tpl}"
     if [ -f "$relayer_tpl" ]; then
