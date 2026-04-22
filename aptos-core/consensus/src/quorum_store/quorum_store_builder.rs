@@ -79,6 +79,20 @@ impl QuorumStoreBuilder {
             QuorumStoreBuilder::QuorumStore(inner) => Some(inner.start()),
         }
     }
+
+    /// Start only the consumer-side tasks (answer BatchRetrieval).
+    ///
+    /// - `DirectMempool` variant has no concept of BatchRetrieval; returns None.
+    /// - `QuorumStore` variant spawns the `batch_serve` task only, without any producer-side
+    ///   component. Use on non-validator nodes.
+    pub fn start_consumer_only(
+        self,
+    ) -> Option<aptos_channel::Sender<AccountAddress, IncomingBatchRetrievalRequest>> {
+        match self {
+            QuorumStoreBuilder::DirectMempool(_inner) => None,
+            QuorumStoreBuilder::QuorumStore(inner) => Some(inner.start_consumer_only()),
+        }
+    }
 }
 
 pub struct DirectMempoolInnerBuilder {
@@ -371,8 +385,40 @@ impl InnerBuilder {
         );
         spawn_named!("network_listener", net.start());
 
-        let batch_store = self.batch_store.clone().unwrap();
-        let epoch = self.epoch;
+        let batch_retrieval_tx = Self::spawn_batch_serve_task(
+            self.batch_store
+                .take()
+                .expect("batch_store must be created by create_batch_store() before batch_serve"),
+            self.aptos_db,
+            self.epoch,
+        );
+
+        (self.coordinator_tx, batch_retrieval_tx)
+    }
+
+    /// Consumer-side entry point: consume the builder and spawn only
+    /// `batch_serve`. Used by non-validator nodes (e.g. VFN-alpha acting as
+    /// the on-chain `fullnode_address`) so they can answer `BatchRetrieval`
+    /// without starting any producer-side QuorumStore component.
+    fn start_batch_serve(
+        self,
+    ) -> aptos_channel::Sender<AccountAddress, IncomingBatchRetrievalRequest> {
+        Self::spawn_batch_serve_task(
+            self.batch_store
+                .expect("batch_store must be created by create_batch_store() before batch_serve"),
+            self.aptos_db,
+            self.epoch,
+        )
+    }
+
+    /// Low-level: spawn the `batch_serve` task given the pieces it needs.
+    /// Depends only on `BatchStore` + `DbReader` + `epoch` — no producer-side
+    /// channel, safe for non-validator nodes.
+    fn spawn_batch_serve_task(
+        batch_store: Arc<BatchStore>,
+        aptos_db: Arc<dyn DbReader>,
+        epoch: u64,
+    ) -> aptos_channel::Sender<AccountAddress, IncomingBatchRetrievalRequest> {
         let (batch_retrieval_tx, mut batch_retrieval_rx) =
             aptos_channel::new::<AccountAddress, IncomingBatchRetrievalRequest>(
                 QueueStyle::FIFO,
@@ -380,7 +426,6 @@ impl InnerBuilder {
                     .map_or(1000, |s| s.parse::<usize>().unwrap()),
                 Some(&counters::BATCH_RETRIEVAL_TASK_MSGS),
             );
-        let aptos_db_clone = self.aptos_db.clone();
         spawn_named!("batch_serve", async move {
             info!(epoch = epoch, "Batch retrieval task starts");
             while let Some(rpc_request) = batch_retrieval_rx.next().await {
@@ -393,7 +438,7 @@ impl InnerBuilder {
                     let batch: Batch = value.try_into().unwrap();
                     BatchResponse::Batch(batch)
                 } else {
-                    match aptos_db_clone.get_latest_ledger_info() {
+                    match aptos_db.get_latest_ledger_info() {
                         Ok(ledger_info) => BatchResponse::NotFound(ledger_info),
                         Err(e) => {
                             let e = anyhow::Error::from(e);
@@ -408,7 +453,7 @@ impl InnerBuilder {
                 if let Err(e) = rpc_request
                     .response_sender
                     .send(Ok(bytes.into()))
-                    .map_err(|_| anyhow::anyhow!("Failed to send block retrieval response"))
+                    .map_err(|_| anyhow::anyhow!("Failed to send batch retrieval response"))
                 {
                     warn!(epoch = epoch, error = ?e, kind = error_kind(&e));
                 }
@@ -416,7 +461,7 @@ impl InnerBuilder {
             info!(epoch = epoch, "Batch retrieval task stops");
         });
 
-        (self.coordinator_tx, batch_retrieval_tx)
+        batch_retrieval_tx
     }
 
     fn init_payload_manager(
@@ -445,5 +490,11 @@ impl InnerBuilder {
         aptos_channel::Sender<AccountAddress, IncomingBatchRetrievalRequest>,
     ) {
         self.spawn_quorum_store()
+    }
+
+    fn start_consumer_only(
+        self,
+    ) -> aptos_channel::Sender<AccountAddress, IncomingBatchRetrievalRequest> {
+        self.start_batch_serve()
     }
 }
