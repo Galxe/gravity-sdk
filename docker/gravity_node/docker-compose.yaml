@@ -1,20 +1,53 @@
-version: '3.8'
+# Single-validator deployment. One host, one validator.
+# Image is binary-only: genesis, waypoint, identity, validator.yaml and
+# reth_config.json live in ./config/ on the host and are mounted read-only.
+# Chain data and logs live on named volumes so `docker compose pull && up -d`
+# survives upgrades.
+#
+# Usage:
+#   cp .env.example .env && $EDITOR .env
+#   # place genesis.json, waypoint.txt, identity.yaml, validator.yaml,
+#   # reth_config.json, relayer_config.json into ./config/
+#   docker compose up -d
+#
+# Upgrade:
+#   docker load -i gravity_node-<tag>.tar    # or docker compose pull
+#   IMAGE_TAG=<new-tag> docker compose up -d
+
 services:
   gravity_node:
-    build:
-      context: ../..
-      dockerfile: docker/gravity_node/validator.Dockerfile
+    image: ${GRAVITY_IMAGE:-galxe/gravity_node}:${IMAGE_TAG:-latest}
     container_name: gravity_node
+    restart: unless-stopped
+
+    # Host networking: validator P2P and reth P2P need predictable, publicly
+    # reachable ports. Bridge + port mapping makes advertised addresses flaky.
+    # If you must isolate, switch to `ports:` and set advertised addrs explicitly.
+    network_mode: host
+
     volumes:
-      - /tmp/gravity_node/data:/gravity_node/data
-      - /tmp/gravity_node/logs:/gravity_node/logs
-      - /tmp/gravity_node/execution_logs:/gravity_node/execution_logs
-      - /tmp/gravity_node/consensus_log:/gravity_node/consensus_log
-    ports:
-      - "8545:8545"    # reth http.port
-      - "8551:8551"    # reth authrpc.port
-      - "9001:9001"    # reth metrics
-      - "12024:12024"  # reth port
-      - "2024:2024"    # gravity-sdk network.port
-      - "10000:10000"  # gravity-sdk inspection_service.port
-    command: sh -c "/gravity_node/script/start.sh && tail -f /dev/null"
+      - ./config:/gravity/config:ro
+      - gravity-data:/gravity/data
+      - gravity-logs:/gravity/logs
+
+    environment:
+      RUST_BACKTRACE: "1"
+      RUST_LOG: ${RUST_LOG:-info}
+
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+
+    stop_grace_period: 60s
+    stop_signal: SIGTERM
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "10"
+
+volumes:
+  gravity-data:
+  gravity-logs:
