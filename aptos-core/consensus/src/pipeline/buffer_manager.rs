@@ -508,9 +508,18 @@ impl BufferManager {
         self.commit_proof_rb_handle.take();
         // purge the incoming blocks queue
         while let Ok(Some(_)) = self.block_rx.try_next() {}
-        // Wait for ongoing tasks to finish before sending back ack.
+        // Wait for ongoing tasks to finish before sending back ack, with a timeout
+        // to prevent permanent deadlock if a task is leaked.
         get_block_buffer_manager().release_inflight_blocks().await;
+        let reset_deadline = Instant::now() + Duration::from_secs(30);
         while self.ongoing_tasks.load(Ordering::SeqCst) > 0 {
+            if Instant::now() >= reset_deadline {
+                error!(
+                    "BufferManager reset timed out with {} tasks pending, breaking out",
+                    self.ongoing_tasks.load(Ordering::SeqCst),
+                );
+                break;
+            }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     }
@@ -1015,10 +1024,22 @@ impl BufferManager {
                     self.advance_signing_root().await
                     })
                 },
-                Some(Ok(round)) = self.persisting_phase_rx.next() => {
-                    // see where `need_backpressure()` is called.
-                    self.highest_committed_round = round;
-                    counters::FINALIZED_EXECUTED_BLOCK_COUNTER.set(self.highest_committed_round as f64);
+                Some(result) = self.persisting_phase_rx.next() => {
+                    match result {
+                        Ok(round) => {
+                            // see where `need_backpressure()` is called.
+                            self.highest_committed_round = round;
+                            counters::FINALIZED_EXECUTED_BLOCK_COUNTER.set(self.highest_committed_round as f64);
+                        },
+                        Err(e) => {
+                            // TODO: consider triggering a pipeline reset here to recover from
+                            // persist failures, since the committed blocks have already been
+                            // popped from the buffer and cannot be retried without a reset.
+                            error!(
+                                "Persisting phase failed: {:?}. Pipeline may stall.", e
+                            );
+                        },
+                    }
                 },
                 Some(rpc_request) = verified_commit_msg_rx.next() => {
                     monitor!("buffer_manager_process_commit_message",
