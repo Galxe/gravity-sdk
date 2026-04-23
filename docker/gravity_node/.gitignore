@@ -1,0 +1,4 @@
+config/
+.env
+*.tar
+*.tar.gz
