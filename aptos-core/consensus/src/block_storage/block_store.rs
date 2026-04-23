@@ -425,6 +425,8 @@ impl BlockStore {
         validator_indices: HashMap<AccountAddress, usize>,
     ) -> Self {
         let RootInfo(root_block, root_qc, root_ordered_cert, root_commit_cert) = root;
+        let root_round = root_block.round();
+        let root_id = root_block.id();
 
         let result = StateComputeResult::with_root_hash(root_block.id());
 
@@ -460,12 +462,24 @@ impl BlockStore {
             validator_indices,
         };
 
+        // Skip ancestors of the root. They can appear in recovery data when an
+        // earlier sync path (e.g. sync_to_highest_commit_cert → fast_forward_sync
+        // with a lower-round HCC at the time) persisted historical blocks into
+        // ConsensusDB before the commit root advanced. The BlockTree only holds
+        // the root and its descendants — inserting an ancestor would fail with
+        // "Parent block not found" because its parent has already been pruned.
         for block in blocks {
+            if block.round() <= root_round && block.id() != root_id {
+                continue;
+            }
             block_store.insert_block(block, true).await.unwrap_or_else(|e| {
                 panic!("[BlockStore] failed to insert block during build {:?}", e)
             });
         }
         for qc in quorum_certs {
+            if qc.certified_block().round() < root_round {
+                continue;
+            }
             block_store.insert_single_quorum_cert(qc, true).unwrap_or_else(|e| {
                 panic!("[BlockStore] failed to insert quorum during build{:?}", e)
             });
