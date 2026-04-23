@@ -958,6 +958,12 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         }
     }
 
+    fn start_quorum_store_consumer_only(&mut self, quorum_store_builder: QuorumStoreBuilder) {
+        if let Some(batch_retrieval_rx) = quorum_store_builder.start_consumer_only() {
+            self.batch_retrieval_tx = Some(batch_retrieval_rx);
+        }
+    }
+
     fn create_network_sender(&mut self, epoch_state: &EpochState) -> NetworkSender {
         NetworkSender::new(
             self.author,
@@ -1308,6 +1314,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
         if self.is_current_epoch_validator {
             self.start_quorum_store(quorum_store_builder);
+        } else {
+            self.start_quorum_store_consumer_only(quorum_store_builder);
         }
 
         (network_sender, Arc::new(mixed_payload_client), payload_manager)
@@ -1715,7 +1723,9 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     /// Return false if the request is filtered out, true otherwise.
     fn rpc_request_filter(&self, peer_id: &Author, request: &IncomingRpcRequest) -> bool {
         match request {
-            IncomingRpcRequest::BlockRetrieval(_) | IncomingRpcRequest::SyncInfoRequest(_) => true,
+            IncomingRpcRequest::BlockRetrieval(_) |
+            IncomingRpcRequest::SyncInfoRequest(_) |
+            IncomingRpcRequest::BatchRetrieval(_) => true,
             _ => self.is_current_epoch_validator,
         }
     }
