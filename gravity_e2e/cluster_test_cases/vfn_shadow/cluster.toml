@@ -21,6 +21,11 @@ waypoint_path = "./artifacts/waypoint.txt"
 id = "vfn-alpha"
 role = "vfn"
 shadow_of = "node1"             # deploy.sh renders seeds block pointing at node1's vfn server
+# On-chain discovery would produce (peer_id=node1.account_address, addr=vfn-alpha's own endpoint)
+# because node1's fullnode_address is registered with vfn-alpha's identity. The resulting dial
+# aims at 127.0.0.1:vfn_port — vfn-alpha itself — and only gets rejected at the Noise self-dial
+# guard (handshake.rs:346). Skip the pointless round-trip: seeds already cover the upstream.
+discovery_method = "none"
 source = { project_path = "../" }
 host = "127.0.0.1"
 p2p_port = 6183

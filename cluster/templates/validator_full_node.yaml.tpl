@@ -41,9 +41,9 @@ full_node_networks:
     identity:
       type: "from_file"
       path: ${CONFIG_DIR}/identity.yaml
-    discovery_method:
-      onchain
+${DISCOVERY_METHOD_FULLNODE_BLOCK}
 ${VFN_SEEDS_BLOCK}
+${PUBLIC_NETWORK_BLOCK}
 
 storage:
   dir: "${DATA_DIR}/data"

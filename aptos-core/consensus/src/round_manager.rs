@@ -250,6 +250,10 @@ pub struct RoundManager {
     futures: FuturesUnordered<Pin<Box<dyn Future<Output = (anyhow::Result<()>, Block)> + Send>>>,
     wait_change_epoch_flag: bool,
     validator_components: Option<ValidatorComponents>,
+    /// Network used by `create_block_retriever` when this node is not a current-epoch
+    /// validator (sync-path BlockRetrieval). Pre-computed by `EpochManager` from the
+    /// node's static `NodeType`; `RoundManager` stays `NodeType`-agnostic.
+    non_validator_network_id: NetworkId,
 }
 
 pub(crate) struct ValidatorComponents {
@@ -283,6 +287,7 @@ impl RoundManager {
         jwk_consensus_config: OnChainJWKConsensusConfig,
         fast_rand_config: Option<RandConfig>,
         validator_components: Option<ValidatorComponents>,
+        non_validator_network_id: NetworkId,
     ) -> Self {
         // when decoupled execution is false,
         // the counter is still static.
@@ -310,6 +315,7 @@ impl RoundManager {
             futures: FuturesUnordered::new(),
             wait_change_epoch_flag: false,
             validator_components,
+            non_validator_network_id,
         }
     }
 
@@ -329,6 +335,7 @@ impl RoundManager {
                     .collect(),
             )
         } else {
+            let network_id = self.non_validator_network_id;
             let available_peers = self
                 .network
                 .consensus_network_client
@@ -337,7 +344,7 @@ impl RoundManager {
                 .map(|peers| {
                     peers
                         .iter()
-                        .filter(|peer| peer.network_id() == NetworkId::Vfn)
+                        .filter(|peer| peer.network_id() == network_id)
                         .map(|peer| peer.peer_id())
                         .collect::<Vec<_>>()
                 })
@@ -345,7 +352,7 @@ impl RoundManager {
                     error!("Failed to get available peers: {:?}", e);
                     vec![]
                 });
-            (NetworkId::Vfn, available_peers)
+            (network_id, available_peers)
         };
         BlockRetriever::new(
             network_id,

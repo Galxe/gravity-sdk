@@ -35,6 +35,7 @@ class NodeRole(Enum):
     # Validator node but NOT in initial genesis (can join later)
     VALIDATOR = "validator"
     VFN = "vfn"  # Full node, uses onchain discovery
+    PFN = "pfn"  # Public full node, Public-network-only, dials VFN via seeds
 
     @classmethod
     def from_str(cls, value: str) -> "NodeRole":

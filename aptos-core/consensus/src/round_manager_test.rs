@@ -352,6 +352,7 @@ impl NodeSetup {
             onchain_jwk_consensus_config.clone(),
             None,
             Some(validator_components),
+            NetworkId::Vfn,
         );
         block_on(round_manager.init(last_vote_sent));
         Self {

@@ -233,6 +233,7 @@ fn create_node_for_fuzzing() -> RoundManager {
             Arc::new(proposal_generator),
             Arc::new(Mutex::new(MetricsSafetyRules::new(Box::new(safety_rules), storage.clone()))),
         )),
+        NetworkId::Vfn,
     )
 }
 
