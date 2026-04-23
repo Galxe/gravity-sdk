@@ -512,18 +512,27 @@ impl BlockStore {
         recovery: bool,
     ) -> anyhow::Result<()> {
         let block_id_to_commit = finality_proof.commit_info().id();
+        // Idempotent short-circuits for concurrent send_for_execution races
+        // (e.g. recover_blocks vs. live consensus both advancing ordered_root).
+        // Each case means some other path already committed through this block,
+        // so returning Ok is correct. Logging is graded by likelihood of a real bug.
         let block_to_commit = self
             .get_block(block_id_to_commit)
             .ok_or_else(|| format_err!("Committed block id not found"))?;
-
-        // First make sure that this commit is new.
         ensure!(
             block_to_commit.round() > self.ordered_root().round(),
             "Committed block round lower than root"
         );
-
         let blocks_to_commit = self.path_from_ordered_root(block_id_to_commit).unwrap_or_default();
-        assert!(!blocks_to_commit.is_empty());
+        if blocks_to_commit.is_empty() {
+            // Narrow race: ordered_root advanced between the round check above and here.
+            warn!(
+                "send_for_execution: no path from ordered_root to {} (round {}), likely concurrent advance",
+                block_id_to_commit,
+                block_to_commit.round()
+            );
+            return Ok(());
+        }
         counters::SEND_TO_EXECUTION_BLOCK_COUNTER.inc_by(blocks_to_commit.len() as u64);
         let block_tree = self.inner.clone();
         let storage = self.storage.clone();

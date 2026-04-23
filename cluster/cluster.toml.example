@@ -18,11 +18,24 @@ waypoint_path = "./output/waypoint.txt"
 repo = "https://github.com/Galxe/gravity_bench.git"
 ref = "main"
 
+# Cluster-level RPC settings (optional)
+# Defaults preserve current "open" behavior so dev / e2e / longtest stay unchanged.
+# For production-like clusters, narrow the lists:
+#   http_corsdomain = "https://gravity.xyz,https://explorer.gravity.xyz"
+#   http_api        = "eth,net,trace,txpool,web3,rpc"   # drop debug
+# ws_origins / ws_api are consumed only by VFN nodes that opt in via per-node `ws_port`.
+[rpc]
+http_corsdomain = "*"
+http_api        = "debug,eth,net,trace,txpool,web3,rpc"
+ws_origins      = "*"
+ws_api          = "debug,eth,net,trace,txpool,web3,rpc"
+
 # Node definitions
 # Role types:
 #   - "genesis": Genesis validator (must match genesis.toml)
 #   - "validator": Validator node not in genesis (can join later via on-chain txn)
-#   - "vfn": Full node, uses onchain discovery to sync
+#   - "vfn": Full node, uses onchain discovery to sync;
+#            set `ws_port` on a VFN to enable WebSocket RPC (default: WS off)
 #
 # Per-node source (required, like Cargo.toml):
 #   source = { project_path = "../" }                                  # local project, cargo build
@@ -112,6 +125,7 @@ role = "vfn"
 source = { project_path = "../" }
 vfn_port = 6195
 rpc_port = 8550
+# ws_port = 8650   # uncomment to enable WebSocket RPC on this VFN (validators don't expose WS)
 metrics_port = 9006
 inspection_port = 10005
 https_port = 1029
