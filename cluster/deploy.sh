@@ -570,6 +570,47 @@ main() {
                 exit 1
             fi
 
+            # Optional: build VFN_SEEDS_BLOCK if shadow_of is set.
+            # See _local/drafts/vfn-shadow/e2e.md §6.3.
+            shadow_of=$(echo "$node" | jq -r '.shadow_of // empty')
+            if [ -n "$shadow_of" ]; then
+                target_identity="$OUTPUT_DIR/$shadow_of/config/identity.yaml"
+                if [ ! -f "$target_identity" ]; then
+                    log_error "shadow_of=$shadow_of but identity not found at $target_identity"
+                    exit 1
+                fi
+                target_peer_id=$(awk -F': ' '/^account_address:/{gsub(/["\x27]/,"",$2); print $2}' "$target_identity")
+                target_network_pk=$(awk -F': ' '/^network_public_key:/{gsub(/["\x27]/,"",$2); print $2}' "$target_identity")
+                target_peer_id=${target_peer_id#0x}
+                target_network_pk=${target_network_pk#0x}
+                if [ -z "$target_peer_id" ] || [ -z "$target_network_pk" ]; then
+                    log_error "shadow_of=$shadow_of: failed to parse peer_id/network_pk from $target_identity"
+                    exit 1
+                fi
+                # Intra-cluster p2p dial uses internal_host first, falls back to host.
+                target_host=$(echo "$config_json" | jq -r --arg id "$shadow_of" \
+                    '.nodes[] | select(.id == $id) | (.internal_host // .host)')
+                target_vfn_port=$(echo "$config_json" | jq -r --arg id "$shadow_of" \
+                    '.nodes[] | select(.id == $id) | .vfn_port')
+                if [ -z "$target_host" ] || [ "$target_host" = "null" ] || \
+                   [ -z "$target_vfn_port" ] || [ "$target_vfn_port" = "null" ]; then
+                    log_error "shadow_of=$shadow_of: missing host/vfn_port in cluster.toml"
+                    exit 1
+                fi
+                target_proto="dns"
+                if [[ "$target_host" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                    target_proto="ip4"
+                fi
+                export VFN_SEEDS_BLOCK="    seeds:
+      '0x${target_peer_id}':
+        addresses:
+          - '/${target_proto}/${target_host}/tcp/${target_vfn_port}/noise-ik/${target_network_pk}/handshake/0'
+        role: Validator"
+                log_info "  [$NODE_ID] shadow_of=$shadow_of, seeds -> ${target_host}:${target_vfn_port} (proto=${target_proto})"
+            else
+                export VFN_SEEDS_BLOCK=""
+            fi
+
             configure_vfn \
                 "$NODE_ID" \
                 "$data_dir" \
