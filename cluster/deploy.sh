@@ -135,6 +135,57 @@ _resolve_source_impl() {
     exit 1
 }
 
+# Resolve per-node identity source and export template env vars.
+# Reads `identity.source` ("file" | "gcp_secret", default "file") and
+# `identity.secret` (required when source = gcp_secret) from the node's
+# cluster.toml entry. When source = file, materializes identity.yaml under
+# $config_dir; when source = gcp_secret, leaves disk clean and wires the
+# resource path into validator.yaml via SAFETY_RULES_IDENTITY_* and
+# NETWORK_IDENTITY_* envs that the YAML templates expand.
+#
+# Prereq: gravity_node must be built with `--features gcp-secret-manager`
+# when any node uses source = gcp_secret; otherwise the node panics at
+# startup with "GCP Secret Manager support not compiled in".
+setup_identity() {
+    local node_json="$1"
+    local node_id="$2"
+    local config_dir="$3"
+    local identity_src="$4"
+
+    local source secret
+    source=$(echo "$node_json" | jq -r '.identity.source // "file"')
+    secret=$(echo "$node_json" | jq -r '.identity.secret // empty')
+
+    case "$source" in
+        file)
+            cp "$identity_src" "$config_dir/identity.yaml"
+            export SAFETY_RULES_IDENTITY_VARIANT=from_file
+            export SAFETY_RULES_IDENTITY_KEY=identity_blob_path
+            export SAFETY_RULES_IDENTITY_VALUE="$config_dir/identity.yaml"
+            export NETWORK_IDENTITY_TYPE=from_file
+            export NETWORK_IDENTITY_FIELD=path
+            export NETWORK_IDENTITY_VALUE="$config_dir/identity.yaml"
+            ;;
+        gcp_secret)
+            if [ -z "$secret" ]; then
+                log_error "  [$node_id] identity.source = gcp_secret requires identity.secret (projects/<P>/secrets/<S>[/versions/<V>])"
+                exit 1
+            fi
+            log_info "  [$node_id] identity: GCP Secret Manager ($secret) — not writing identity.yaml to disk"
+            export SAFETY_RULES_IDENTITY_VARIANT=from_gcp_secret
+            export SAFETY_RULES_IDENTITY_KEY=identity_blob_secret
+            export SAFETY_RULES_IDENTITY_VALUE="$secret"
+            export NETWORK_IDENTITY_TYPE=from_gcp_secret
+            export NETWORK_IDENTITY_FIELD=resource
+            export NETWORK_IDENTITY_VALUE="$secret"
+            ;;
+        *)
+            log_error "  [$node_id] unknown identity.source '$source' (expected 'file' or 'gcp_secret')"
+            exit 1
+            ;;
+    esac
+}
+
 # Configure node function (Rendering logic)
 configure_node() {
     local node_id="$1"
@@ -144,16 +195,17 @@ configure_node() {
     local identity_src="$5"
     local waypoint_src="$6"
     local role="$7"
-    
+    local node_json="$8"
+
     local config_dir="$data_dir/config"
-    
+
     log_info "  [$node_id] [$role] configuring..."
-    
+
     # Create config dir
     mkdir -p "$config_dir"
-    
-    # Copy identity and waypoint from artifacts
-    cp "$identity_src" "$config_dir/identity.yaml"
+
+    # Resolve identity source (file vs GCP Secret Manager) and waypoint
+    setup_identity "$node_json" "$node_id" "$config_dir" "$identity_src"
     cp "$waypoint_src" "$config_dir/waypoint.txt"
     
     # Export paths validation
@@ -377,16 +429,17 @@ configure_vfn() {
     local binary_path="$4"
     local identity_src="$5"
     local waypoint_src="$6"
-    
+    local node_json="$7"
+
     local config_dir="$data_dir/config"
-    
+
     log_info "  [$node_id] [vfn] configuring..."
-    
+
     # Create config dir
     mkdir -p "$config_dir"
-    
-    # Copy identity and waypoint from artifacts
-    cp "$identity_src" "$config_dir/identity.yaml"
+
+    # Resolve identity source (file vs GCP Secret Manager) and waypoint
+    setup_identity "$node_json" "$node_id" "$config_dir" "$identity_src"
     cp "$waypoint_src" "$config_dir/waypoint.txt"
     
     # Export paths
@@ -693,7 +746,9 @@ main() {
         ln -f "$node_binary" "$data_dir/bin/gravity_node"
         
         waypoint_src="$OUTPUT_DIR/waypoint.txt"
-        
+
+        identity_source=$(echo "$node" | jq -r '.identity.source // "file"')
+
         if [ "$role" == "pfn" ]; then
             # Public Full Node. Listens on Public network at P2P_PORT; dials a
             # VFN/IVFN via a static seed on the Public network (public_seed_of
@@ -702,7 +757,9 @@ main() {
             # which is wrong net for PFN — seeds are the dependable path.
             identity_src="$OUTPUT_DIR/$NODE_ID/config/identity.yaml"
 
-            if [ ! -f "$identity_src" ]; then
+            # Only require a local identity.yaml when the node will actually
+            # consume it from disk. GCP Secret Manager sources pull at startup.
+            if [ "$identity_source" = "file" ] && [ ! -f "$identity_src" ]; then
                 log_error "Identity not found for $NODE_ID at $identity_src"
                 exit 1
             fi
@@ -764,7 +821,9 @@ main() {
             # VFN node
             identity_src="$OUTPUT_DIR/$NODE_ID/config/identity.yaml"
 
-            if [ ! -f "$identity_src" ]; then
+            # Only require a local identity.yaml when the node will actually
+            # consume it from disk. GCP Secret Manager sources pull at startup.
+            if [ "$identity_source" = "file" ] && [ ! -f "$identity_src" ]; then
                 log_error "Identity not found for $NODE_ID at $identity_src"
                 exit 1
             fi
@@ -836,12 +895,15 @@ main() {
                 "$genesis_path" \
                 "$node_binary" \
                 "$identity_src" \
-                "$waypoint_src"
+                "$waypoint_src" \
+                "$node"
         else
             # Validator node (includes both 'genesis' and 'validator' roles)
             identity_src="$OUTPUT_DIR/$NODE_ID/config/identity.yaml"
-            
-            if [ ! -f "$identity_src" ]; then
+
+            # Only require a local identity.yaml when the node will actually
+            # consume it from disk. GCP Secret Manager sources pull at startup.
+            if [ "$identity_source" = "file" ] && [ ! -f "$identity_src" ]; then
                 log_error "Identity not found for $NODE_ID at $identity_src"
                 exit 1
             fi
@@ -859,7 +921,8 @@ main() {
                 "$node_binary" \
                 "$identity_src" \
                 "$waypoint_src" \
-                "$role"
+                "$role" \
+                "$node"
         fi
     done
     
