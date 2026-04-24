@@ -75,7 +75,7 @@ unexpected_cfgs = { level = "allow", check-cfg = ["cfg(mirai)"] }
 aptos-consensus = { path = "./aptos-core/consensus" }
 
 #  from aptos =======================
-gaptos = { git = "https://github.com/Galxe/gravity-aptos.git", rev = "80138aa5013b3368f7e0c98a2b217f7e5659d345" }
+gaptos = { git = "https://github.com/Galxe/gravity-aptos.git", rev = "b643d85af2a27a0fc78838c27d75ec321f5aa20d" }
 aptos-executor-types = { path = "dependencies/aptos-executor-types" }
 aptos-executor = { path = "dependencies/aptos-executor" }
 api = { path = "./crates/api" }

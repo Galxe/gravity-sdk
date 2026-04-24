@@ -13,6 +13,9 @@ rust-version.workspace = true
 [features]
 # Forward feature to gaptos so `-p gravity_node --features randomness_disabled` works
 randomness_disabled = ["gaptos/randomness_disabled"]
+# Forward feature to gaptos/aptos-config so identity blobs can be loaded from
+# GCP Secret Manager at startup. Off by default.
+gcp-secret-manager = ["gaptos/gcp-secret-manager"]
 default = []
 
 [dependencies]
