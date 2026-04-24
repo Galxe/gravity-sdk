@@ -15,7 +15,7 @@ id = "node1"
 role = "genesis"
 source = { github = "Galxe/gravity-sdk", rev = "main" }
 host = "127.0.0.1"
-p2p_port = 6180
+validator_port = 6180
 vfn_port = 6190
 rpc_port = 8545
 metrics_port = 9001
@@ -29,7 +29,7 @@ id = "node2"
 role = "genesis"
 source = { github = "Galxe/gravity-sdk", rev = "main" }
 host = "127.0.0.1"
-p2p_port = 6181
+validator_port = 6181
 vfn_port = 6191
 rpc_port = 8546
 metrics_port = 9002
@@ -43,7 +43,7 @@ id = "node3"
 role = "genesis"
 source = { github = "Galxe/gravity-sdk", rev = "main" }
 host = "127.0.0.1"
-p2p_port = 6182
+validator_port = 6182
 vfn_port = 6192
 rpc_port = 8547
 metrics_port = 9003
@@ -57,7 +57,7 @@ id = "vfn1"
 role = "vfn"
 source = { github = "Galxe/gravity-sdk", rev = "main" }
 host = "127.0.0.1"
-p2p_port = 6183
+validator_port = 6183
 vfn_port = 6193
 rpc_port = 8548
 metrics_port = 9004

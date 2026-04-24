@@ -21,7 +21,7 @@ id = "node1"
 role = "genesis"
 source = { project_path = "../" }
 host = "127.0.0.1"
-p2p_port = 6380
+validator_port = 6380
 vfn_port = 6390
 rpc_port = 8745
 metrics_port = 9201
@@ -35,7 +35,7 @@ id = "node2"
 role = "genesis"
 source = { project_path = "../" }
 host = "127.0.0.1"
-p2p_port = 6381
+validator_port = 6381
 vfn_port = 6391
 rpc_port = 8746
 metrics_port = 9202
@@ -49,7 +49,7 @@ id = "node3"
 role = "genesis"
 source = { project_path = "../" }
 host = "127.0.0.1"
-p2p_port = 6382
+validator_port = 6382
 vfn_port = 6392
 rpc_port = 8747
 metrics_port = 9203
@@ -63,7 +63,7 @@ id = "node4"
 role = "genesis"
 source = { project_path = "../" }
 host = "127.0.0.1"
-p2p_port = 6383
+validator_port = 6383
 vfn_port = 6393
 rpc_port = 8748
 metrics_port = 9204
