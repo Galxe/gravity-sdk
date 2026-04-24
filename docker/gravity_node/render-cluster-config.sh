@@ -24,6 +24,14 @@ export CONFIG_DIR=/gravity/config
 export GENESIS_PATH=/gravity/config/genesis.json
 export RELAYER_RPC_URL="${RELAYER_RPC_URL:-https://sepolia.drpc.org}"
 
+# HARDCODED devnet defaults (open CORS, full API incl. debug namespace).
+# Unlike cluster/deploy.sh, this script does NOT read cluster.toml [rpc];
+# do NOT reuse for mainnet without wiring that through first — otherwise
+# debug_* endpoints are exposed to any origin.
+# TODO: factor into a shared snippet sourced by both scripts.
+export RPC_HTTP_CORSDOMAIN="${RPC_HTTP_CORSDOMAIN:-*}"
+export RPC_HTTP_API="${RPC_HTTP_API:-debug,eth,net,trace,txpool,web3,rpc}"
+
 render_validator() {
     local node_id="$1"
     local dir="$OUT/$node_id"
