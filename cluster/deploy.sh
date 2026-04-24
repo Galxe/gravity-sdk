@@ -257,6 +257,118 @@ STOP_SCRIPT
     chmod +x "$data_dir/script/stop.sh"
 }
 
+# Configure PFN (public-fullnode) function
+configure_pfn() {
+    local node_id="$1"
+    local data_dir="$2"
+    local genesis_path="$3"
+    local binary_path="$4"
+    local identity_src="$5"
+    local waypoint_src="$6"
+
+    local config_dir="$data_dir/config"
+
+    log_info "  [$node_id] [pfn] configuring..."
+
+    mkdir -p "$config_dir"
+    cp "$identity_src" "$config_dir/identity.yaml"
+    cp "$waypoint_src" "$config_dir/waypoint.txt"
+
+    export NODE_ID="$node_id"
+    export DATA_DIR="$data_dir"
+    export CONFIG_DIR="$config_dir"
+    export GENESIS_PATH="$genesis_path"
+    export BINARY_PATH="$binary_path"
+
+    # PFN listens on Public network at P2P_PORT (no Vfn network at all).
+    envsubst < "$SCRIPT_DIR/templates/public_full_node.yaml.tpl" > "$config_dir/public_full_node.yaml"
+
+    local reth_tpl="${RETH_CONFIG_PFN_TPL:-$SCRIPT_DIR/templates/reth_config_pfn.json.tpl}"
+    if [ ! -f "$reth_tpl" ]; then
+        log_error "reth pfn config template not found: $reth_tpl"
+        exit 1
+    fi
+    envsubst < "$reth_tpl" > "$config_dir/reth_config.json"
+    log_info "  Using reth pfn config: $reth_tpl"
+
+    if [ "$WS_PORT" != "null" ]; then
+        local tmp="$config_dir/reth_config.json.tmp"
+        jq --argjson port "$WS_PORT" \
+           --arg origins "$RPC_WS_ORIGINS" \
+           --arg api "$RPC_WS_API" \
+           '.reth_args += {"ws":"", "ws.port":$port, "ws.addr":"0.0.0.0", "ws.origins":$origins, "ws.api":$api}' \
+           "$config_dir/reth_config.json" > "$tmp" && mv "$tmp" "$config_dir/reth_config.json"
+    fi
+
+    cat > "$data_dir/script/start.sh" << 'START_SCRIPT'
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE="$SCRIPT_DIR/.."
+
+if [ -e "${WORKSPACE}/script/node.pid" ]; then
+    pid=$(cat "${WORKSPACE}/script/node.pid")
+    if kill -0 "$pid" 2>/dev/null; then
+        echo "Node is already running with PID $pid"
+        exit 1
+    fi
+fi
+
+reth_config="${WORKSPACE}/config/reth_config.json"
+
+if ! command -v jq &> /dev/null; then
+    echo "Error: 'jq' is required but not installed."
+    exit 1
+fi
+
+reth_args_array=()
+while IFS= read -r key && IFS= read -r value; do
+    if [ -z "$value" ] || [ "$value" == "null" ]; then
+        reth_args_array+=( "--${key}" )
+    else
+        reth_args_array+=( "--${key}=${value}" )
+    fi
+done < <(jq -r '.reth_args | to_entries[] | .key, .value' "$reth_config")
+
+env_vars_array=()
+while IFS= read -r key && IFS= read -r value; do
+    if [ -n "$value" ] && [ "$value" != "null" ]; then
+        env_vars_array+=( "${key}=${value}" )
+    fi
+done < <(jq -r '.env_vars | to_entries[] | .key, .value' "$reth_config")
+
+export RUST_BACKTRACE=1
+pid=$(
+    env ${env_vars_array[*]} ${WORKSPACE}/bin/gravity_node node \
+        ${reth_args_array[*]} \
+        > "${WORKSPACE}/logs/debug.log" 2>&1 &
+    echo $!
+)
+echo $pid > "${WORKSPACE}/script/node.pid"
+echo "Started PFN node with PID $pid"
+START_SCRIPT
+    chmod +x "$data_dir/script/start.sh"
+
+    cat > "$data_dir/script/stop.sh" << 'STOP_SCRIPT'
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE="$SCRIPT_DIR/.."
+
+if [ -e "${WORKSPACE}/script/node.pid" ]; then
+    pid=$(cat "${WORKSPACE}/script/node.pid")
+    if kill -0 "$pid" 2>/dev/null; then
+        kill "$pid"
+        echo "Stopped node (PID: $pid)"
+    else
+        echo "Node not running (stale PID file)"
+    fi
+    rm -f "${WORKSPACE}/script/node.pid"
+else
+    echo "No PID file found"
+fi
+STOP_SCRIPT
+    chmod +x "$data_dir/script/stop.sh"
+}
+
 # Configure VFN node function
 configure_vfn() {
     local node_id="$1"
@@ -532,13 +644,34 @@ main() {
         export P2P_PORT_RETH=$(echo "$node" | jq -r '.reth_p2p_port')
         
         role=$(echo "$node" | jq -r '.role // empty')
-        
+
         # Validate role is specified
         if [ -z "$role" ]; then
-            log_error "Node $NODE_ID must specify 'role' (genesis, validator, or vfn)"
+            log_error "Node $NODE_ID must specify 'role' (genesis, validator, vfn, or pfn)"
             exit 1
         fi
-        
+
+        # Resolve discovery_method. Per-node override wins; otherwise the
+        # default is role-driven — validator/vfn use onchain, pfn emits nothing
+        # (seed-only). Valid values: onchain | none. Omit to take the default.
+        discovery_method=$(echo "$node" | jq -r '.discovery_method // empty')
+        if [ -z "$discovery_method" ]; then
+            case "$role" in
+                genesis|validator|vfn) discovery_method="onchain" ;;
+                pfn)                   discovery_method="" ;;
+                *)                     discovery_method="" ;;
+            esac
+        fi
+        if [ -n "$discovery_method" ]; then
+            export DISCOVERY_METHOD_NETWORK_BLOCK="  discovery_method:
+    ${discovery_method}"
+            export DISCOVERY_METHOD_FULLNODE_BLOCK="    discovery_method:
+      ${discovery_method}"
+        else
+            export DISCOVERY_METHOD_NETWORK_BLOCK=""
+            export DISCOVERY_METHOD_FULLNODE_BLOCK=""
+        fi
+
         data_dir=$(echo "$node" | jq -r '.data_dir // empty')
         if [ -z "$data_dir" ]; then
             data_dir="$base_dir/$NODE_ID"
@@ -561,7 +694,73 @@ main() {
         
         waypoint_src="$OUTPUT_DIR/waypoint.txt"
         
-        if [ "$role" == "vfn" ]; then
+        if [ "$role" == "pfn" ]; then
+            # Public Full Node. Listens on Public network at P2P_PORT; dials a
+            # VFN/IVFN via a static seed on the Public network (public_seed_of
+            # in cluster.toml). On-chain discovery is enabled but typically
+            # points at a Vfn-network address for the validator's fullnode,
+            # which is wrong net for PFN — seeds are the dependable path.
+            identity_src="$OUTPUT_DIR/$NODE_ID/config/identity.yaml"
+
+            if [ ! -f "$identity_src" ]; then
+                log_error "Identity not found for $NODE_ID at $identity_src"
+                exit 1
+            fi
+
+            if [ "$P2P_PORT" == "null" ]; then
+                log_error "PFN $NODE_ID requires p2p_port (Public listener)"
+                exit 1
+            fi
+
+            public_seed_of=$(echo "$node" | jq -r '.public_seed_of // empty')
+            if [ -n "$public_seed_of" ]; then
+                target_identity="$OUTPUT_DIR/$public_seed_of/config/identity.yaml"
+                if [ ! -f "$target_identity" ]; then
+                    log_error "public_seed_of=$public_seed_of but identity not found at $target_identity"
+                    exit 1
+                fi
+                target_peer_id=$(awk -F': ' '/^account_address:/{gsub(/["\x27]/,"",$2); print $2}' "$target_identity")
+                target_network_pk=$(awk -F': ' '/^network_public_key:/{gsub(/["\x27]/,"",$2); print $2}' "$target_identity")
+                target_peer_id=${target_peer_id#0x}
+                target_network_pk=${target_network_pk#0x}
+                if [ -z "$target_peer_id" ] || [ -z "$target_network_pk" ]; then
+                    log_error "public_seed_of=$public_seed_of: failed to parse peer_id/network_pk from $target_identity"
+                    exit 1
+                fi
+                target_host=$(echo "$config_json" | jq -r --arg id "$public_seed_of" \
+                    '.nodes[] | select(.id == $id) | (.internal_host // .host)')
+                target_public_port=$(echo "$config_json" | jq -r --arg id "$public_seed_of" \
+                    '.nodes[] | select(.id == $id) | .public_port')
+                if [ -z "$target_host" ] || [ "$target_host" = "null" ] || \
+                   [ -z "$target_public_port" ] || [ "$target_public_port" = "null" ]; then
+                    log_error "public_seed_of=$public_seed_of: missing host/public_port in cluster.toml"
+                    exit 1
+                fi
+                target_proto="dns"
+                if [[ "$target_host" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                    target_proto="ip4"
+                fi
+                # ValidatorFullNode is the role for the upstream peer that serves
+                # this PFN. It lands in `upstream_roles(Public, FullNode)` —
+                # see gravity-aptos/config/src/network_id.rs:176-180.
+                export PFN_SEEDS_BLOCK="    seeds:
+      '0x${target_peer_id}':
+        addresses:
+          - '/${target_proto}/${target_host}/tcp/${target_public_port}/noise-ik/${target_network_pk}/handshake/0'
+        role: ValidatorFullNode"
+                log_info "  [$NODE_ID] public_seed_of=$public_seed_of, seeds -> ${target_host}:${target_public_port} (proto=${target_proto})"
+            else
+                export PFN_SEEDS_BLOCK=""
+            fi
+
+            configure_pfn \
+                "$NODE_ID" \
+                "$data_dir" \
+                "$genesis_path" \
+                "$node_binary" \
+                "$identity_src" \
+                "$waypoint_src"
+        elif [ "$role" == "vfn" ]; then
             # VFN node
             identity_src="$OUTPUT_DIR/$NODE_ID/config/identity.yaml"
 
@@ -609,6 +808,26 @@ main() {
                 log_info "  [$NODE_ID] shadow_of=$shadow_of, seeds -> ${target_host}:${target_vfn_port} (proto=${target_proto})"
             else
                 export VFN_SEEDS_BLOCK=""
+            fi
+
+            # Optional: second full_node_networks entry on Public so PFN peers
+            # can dial this VFN. Only emitted when cluster.toml sets public_port.
+            public_port=$(echo "$node" | jq -r '.public_port // empty')
+            if [ -n "$public_port" ] && [ "$public_port" != "null" ]; then
+                # Public listener is seed-accept-only: no on-chain discovery
+                # (fullnode_address encodes the Vfn listener, not this Public
+                # port) and no outbound dialing. PFNs reach us via their own
+                # static seeds pointing here.
+                export PUBLIC_NETWORK_BLOCK="  - network_id: public
+    listen_address: \"/ip4/0.0.0.0/tcp/${public_port}\"
+    identity:
+      type: \"from_file\"
+      path: ${data_dir}/config/identity.yaml
+    discovery_method:
+      none"
+                log_info "  [$NODE_ID] Public listener enabled on port ${public_port}"
+            else
+                export PUBLIC_NETWORK_BLOCK=""
             fi
 
             configure_vfn \

@@ -79,7 +79,8 @@ use gaptos::{
     aptos_channels::{aptos_channel, message_queues::QueueStyle},
     aptos_config::{
         config::{
-            ConsensusConfig, DagConsensusConfig, ExecutionConfig, NodeConfig, QcAggregatorType,
+            ConsensusConfig, DagConsensusConfig, ExecutionConfig, NodeConfig, NodeType,
+            QcAggregatorType,
         },
         network_id::{NetworkId, PeerNetworkId},
     },
@@ -179,7 +180,7 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     bounded_executor: BoundedExecutor,
     // recovery_mode is set to true when the recovery manager is spawned
     recovery_mode: bool,
-    is_validator: bool,
+    node_type: NodeType,
     is_current_epoch_validator: bool,
     aptos_time_service: gaptos::aptos_time_service::TimeService,
     dag_rpc_tx: Option<aptos_channel::Sender<AccountAddress, IncomingDAGRequest>>,
@@ -195,6 +196,19 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     sync_info_tx: mpsc::Sender<Option<(Author, Box<SyncInfo>)>>,
     sync_info_rx: mpsc::Receiver<Option<(Author, Box<SyncInfo>)>>,
     inflight_request_sync_info: bool,
+}
+
+/// For non-validator consensus paths (sync-path BlockRetrieval / SyncInfoRequest /
+/// BatchRetrieval), map the node's static identity to the `NetworkId` it uses to
+/// reach upstream peers. VFN talks to its validator via `Vfn`; PFN talks to
+/// VFN/IVFN via `Public`. A mis-configured node that is classified as `Validator`
+/// but has fallen out of the active validator set falls back to `Vfn` — this
+/// preserves the pre-PFN behavior.
+fn fullnode_side_network_id(node_type: NodeType) -> NetworkId {
+    match node_type {
+        NodeType::Validator | NodeType::ValidatorFullnode => NetworkId::Vfn,
+        NodeType::PublicFullnode => NetworkId::Public,
+    }
 }
 
 impl<P: OnChainConfigProvider> EpochManager<P> {
@@ -216,7 +230,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         rand_storage: Arc<dyn RandStorage<AugmentedData>>,
         consensus_publisher: Option<Arc<ConsensusPublisher>>,
     ) -> Self {
-        let is_validator = node_config.base.role.is_validator();
+        let node_type = NodeType::extract_from_config(node_config);
         // Read author from identity_blob_path in safety_rules config
         let author = node_config
             .consensus
@@ -226,7 +240,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .expect("identity_blob must be configured in safety_rules.initial_safety_rules_config")
             .account_address
             .expect("account_address must be set in identity blob");
-        if is_validator {
+        if node_type.is_validator() {
             assert_eq!(
                 node_config
                     .validator_network
@@ -277,7 +291,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             batch_retrieval_tx: None,
             bounded_executor,
             recovery_mode: false,
-            is_validator,
+            node_type,
             is_current_epoch_validator: false,
             dag_rpc_tx: None,
             dag_shutdown_tx: None,
@@ -716,7 +730,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     if self.is_current_epoch_validator {
                         NetworkId::Validator
                     } else {
-                        NetworkId::Vfn
+                        fullnode_side_network_id(self.node_type)
                     },
                     self.author,
                 ),
@@ -932,6 +946,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             onchain_jwk_consensus_config,
             fast_rand_config,
             validator_components,
+            fullnode_side_network_id(self.node_type),
         );
 
         round_manager.init(last_vote).await;
@@ -1122,7 +1137,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         info!("Updated proposer reth address map for epoch {}", payload.epoch());
 
         self.is_current_epoch_validator = false;
-        if self.is_validator {
+        if self.node_type.is_validator() {
             for validator in validator_set.active_validators.iter() {
                 if validator.account_address == self.author {
                     self.is_current_epoch_validator = true;
@@ -1814,25 +1829,26 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             return
         }
 
+        let network_id = fullnode_side_network_id(self.node_type);
         let peers = self
             .network_sender
             .network_client
             .get_available_peers()
             .expect("failed to get available peers");
         // TODO(nekomoto): Check if this peer self is in available peers
-        let vfn_peers = peers
+        let candidate_peers = peers
             .iter()
-            .filter(|peer| peer.network_id() == NetworkId::Vfn)
+            .filter(|peer| peer.network_id() == network_id)
             .map(|peer| peer.peer_id())
             .collect::<Vec<_>>();
-        if vfn_peers.is_empty() {
+        if candidate_peers.is_empty() {
             sample!(
                 SampleRate::Duration(Duration::from_secs(5)),
-                warn!("No vfn peers available");
+                warn!("No {network_id:?} peers available for sync info");
             );
             return;
         }
-        let peer = vfn_peers[thread_rng().gen_range(0, vfn_peers.len())];
+        let peer = candidate_peers[thread_rng().gen_range(0, candidate_peers.len())];
 
         let mut sync_info_tx = self.sync_info_tx.clone();
         let client = self.network_sender.network_client.clone();
@@ -1842,7 +1858,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 .send_to_peer_rpc(
                     ConsensusMsg::SyncInfoRequest,
                     Duration::from_secs(5),
-                    PeerNetworkId::new(NetworkId::Vfn, peer),
+                    PeerNetworkId::new(network_id, peer),
                 )
                 .await;
             match result {
