@@ -33,50 +33,74 @@ jobs:
         id: dup
         env:
           GH_TOKEN: ${{ github.token }}
+          # Pull all expression inputs through env so potentially-untrusted
+          # values (e.g. branch names) can't be interpolated directly into
+          # the inline script. See GH Actions script-injection hardening.
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          WF: ${{ inputs.workflow_file }}
+          THIS_RUN: ${{ github.run_id }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             echo "should_run=true" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          # Use PR branch instead of head_sha so that the check is PR-wide,
-          # not commit-specific.  Once CI passes on any commit in the PR,
-          # subsequent approvals (even after new pushes) will be skipped.
-          # The author can always re-run manually if needed.
-          PR_BRANCH="${{ github.event.pull_request.head.ref }}"
+          # Candidates are workflow runs on the same branch, but "same branch"
+          # alone is not a safe duplicate key: a reused branch name (e.g. a
+          # prior PR's branch that was force-pushed for a new PR) would match
+          # stale runs from a different PR. So for each candidate run we ask
+          # `commits/{head_sha}/pulls` whether the current PR number is
+          # associated with that SHA — only then is it a real duplicate of
+          # this PR.
+          belongs_to_pr() {
+            local sha="$1"
+            local count
+            count=$(gh api "repos/${REPO}/commits/${sha}/pulls" \
+              --jq "[.[]? | select(.number == ${PR_NUMBER})] | length" 2>/dev/null || echo 0)
+            [ "${count:-0}" -gt 0 ]
+          }
 
-          # Check for in-progress runs on this PR (any commit)
-          IN_PROGRESS=$(gh api \
-            "repos/${{ github.repository }}/actions/workflows/${{ inputs.workflow_file }}/runs?branch=${PR_BRANCH}" \
-            --jq "[.workflow_runs[] | select(.id != ${{ github.run_id }} and .status == \"in_progress\")] | length")
-          if [ "$IN_PROGRESS" -gt "0" ]; then
-            echo "CI already in progress for branch ${PR_BRANCH}. Skipping."
-            echo "should_run=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
+          # In-progress runs whose head_sha belongs to this PR
+          IN_PROGRESS_PAIRS=$(gh api \
+            "repos/${REPO}/actions/workflows/${WF}/runs?branch=${PR_BRANCH}" \
+            --jq "[.workflow_runs[] | select(.id != ${THIS_RUN} and .status == \"in_progress\")] | .[] | \"\(.id) \(.head_sha)\"")
 
-          # Check for successful runs on this PR (any commit) — but only
-          # count runs where real test jobs actually ran (not just gate +
-          # skipped downstream jobs)
-          SUCCESSFUL_RUN_IDS=$(gh api \
-            "repos/${{ github.repository }}/actions/workflows/${{ inputs.workflow_file }}/runs?branch=${PR_BRANCH}" \
-            --jq "[.workflow_runs[] | select(.id != ${{ github.run_id }} and .conclusion == \"success\")] | .[].id")
+          while IFS=' ' read -r RUN_ID HEAD_SHA; do
+            [ -z "$RUN_ID" ] && continue
+            if belongs_to_pr "$HEAD_SHA"; then
+              echo "CI already in progress for PR #${PR_NUMBER} (run #${RUN_ID}, sha ${HEAD_SHA}). Skipping."
+              echo "should_run=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          done <<< "$IN_PROGRESS_PAIRS"
+
+          # Successful runs whose head_sha belongs to this PR — and only
+          # count runs where real test jobs actually executed (not just gate
+          # + skipped downstream jobs).
+          SUCCESSFUL_PAIRS=$(gh api \
+            "repos/${REPO}/actions/workflows/${WF}/runs?branch=${PR_BRANCH}" \
+            --jq "[.workflow_runs[] | select(.id != ${THIS_RUN} and .conclusion == \"success\")] | .[] | \"\(.id) \(.head_sha)\"")
 
           HAS_REAL_SUCCESS=false
-          for RUN_ID in $SUCCESSFUL_RUN_IDS; do
-            # Count jobs that actually completed (not skipped), excluding gate jobs
+          while IFS=' ' read -r RUN_ID HEAD_SHA; do
+            [ -z "$RUN_ID" ] && continue
+            belongs_to_pr "$HEAD_SHA" || continue
+
             REAL_JOBS=$(gh api \
-              "repos/${{ github.repository }}/actions/runs/$RUN_ID/jobs" \
+              "repos/${REPO}/actions/runs/${RUN_ID}/jobs" \
               --jq '[.jobs[] | select(.conclusion == "success" and (.name | test("(?i)gate") | not))] | length')
             if [ "$REAL_JOBS" -gt "0" ]; then
-              echo "Found previous run #$RUN_ID with real test execution on branch ${PR_BRANCH}."
+              echo "Found previous run #${RUN_ID} (sha ${HEAD_SHA}) on PR #${PR_NUMBER} with real test execution."
               HAS_REAL_SUCCESS=true
               break
             fi
-          done
+          done <<< "$SUCCESSFUL_PAIRS"
 
           if [ "$HAS_REAL_SUCCESS" = "true" ]; then
-            echo "CI already passed for branch ${PR_BRANCH}. Skipping."
+            echo "CI already passed for PR #${PR_NUMBER}. Skipping."
             echo "should_run=false" >> $GITHUB_OUTPUT
           else
             echo "should_run=true" >> $GITHUB_OUTPUT
@@ -88,12 +112,13 @@ jobs:
         if: steps.dup.outputs.should_run == 'true' && github.event_name == 'pull_request_review'
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          IGNORE_PATTERNS: ${{ inputs.ignore_patterns }}
         run: |
           CHANGED_FILES=$(gh api \
-            "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" \
+            "repos/${REPO}/pulls/${PR_NUMBER}/files?per_page=100" \
             --paginate --jq '.[].filename')
-
-          IGNORE_PATTERNS="${{ inputs.ignore_patterns }}"
 
           # Split pipe-separated patterns into an array
           IFS='|' read -ra PATTERNS <<< "$IGNORE_PATTERNS"
@@ -134,10 +159,10 @@ jobs:
       # ── 3. Final decision ──────────────────────────────────────────────
       - name: Determine final result
         id: final
+        env:
+          DUP_RESULT: ${{ steps.dup.outputs.should_run }}
+          FILE_RESULT: ${{ steps.files.outputs.has_relevant }}
         run: |
-          DUP_RESULT="${{ steps.dup.outputs.should_run }}"
-          FILE_RESULT="${{ steps.files.outputs.has_relevant }}"
-
           # If dup check already said no, skip
           if [ "$DUP_RESULT" != "true" ]; then
             echo "should_run=false" >> $GITHUB_OUTPUT
