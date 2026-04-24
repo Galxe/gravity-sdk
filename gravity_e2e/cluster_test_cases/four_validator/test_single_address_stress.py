@@ -37,7 +37,7 @@ MIN_SUCCESS_RATE = 0.80        # Minimum acceptable confirmation rate (80%)
 STABILIZE_WAIT_SEC = 10        # Seconds to wait for cluster stabilization
 VALUE_PER_TX = 0               # Wei per transaction (0 = gas-only stress)
 GAS_LIMIT = 21000              # Simple transfer gas
-GAS_PRICE_GWEI = 2             # Gas price in gwei
+GAS_PRICE_GWEI = 100           # Gas price in gwei (must be >= Gravity's 50 Gwei base fee floor)
 
 
 # =====================================================================

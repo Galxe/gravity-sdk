@@ -183,13 +183,23 @@ if p.exists():
     # Copy artifacts back
     if [ -f "$GENESIS_CONTRACT_DIR/genesis.json" ]; then
         cp "$GENESIS_CONTRACT_DIR/genesis.json" "$OUTPUT_DIR/genesis.json"
-        
+
+        # Inject gravityMinBaseFee into genesis.json .config (Gravity-reth chainspec marker:
+        # presence => Gravity chain with this floor; absence => no floor).
+        # Default 50 Gwei matches gravity-reth main; override via .genesis.gravity_min_base_fee
+        # in genesis.toml. Injected before .genesis.hardforks merge so hardforks can override.
+        local gravity_min_base_fee
+        gravity_min_base_fee=$(echo "$config_json" | jq '.genesis.gravity_min_base_fee // 50000000000')
+        log_info "Setting config.gravityMinBaseFee = $gravity_min_base_fee"
+        local tmp_genesis="$OUTPUT_DIR/genesis.json.tmp"
+        jq --argjson v "$gravity_min_base_fee" '.config.gravityMinBaseFee = $v' "$OUTPUT_DIR/genesis.json" > "$tmp_genesis"
+        mv "$tmp_genesis" "$OUTPUT_DIR/genesis.json"
+
         # Inject custom hardfork block numbers into genesis.json .config
         local hardforks
         hardforks=$(echo "$config_json" | jq -c '.genesis.hardforks // empty')
         if [ -n "$hardforks" ]; then
             log_info "Injecting custom hardfork config: $hardforks"
-            local tmp_genesis="$OUTPUT_DIR/genesis.json.tmp"
             jq --argjson hf "$hardforks" '.config += $hf' "$OUTPUT_DIR/genesis.json" > "$tmp_genesis"
             mv "$tmp_genesis" "$OUTPUT_DIR/genesis.json"
         fi

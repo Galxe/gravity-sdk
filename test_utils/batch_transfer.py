@@ -79,7 +79,7 @@ def generate_batch_task(w3, accounts):
             'to': to_account.address,
             'value': value,
             'gas': 21000,
-            'gasPrice': w3.to_wei(1, 'gwei'),
+            'gasPrice': w3.to_wei(100, 'gwei'),
             'chainId': args.chain_id,
         }
         pairs.append((tx, private_key))

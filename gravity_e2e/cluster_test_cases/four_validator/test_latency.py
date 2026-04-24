@@ -54,7 +54,7 @@ async def measure_latencies(w3, account, num_txs: int, interval: float, recipien
     """
     latencies = []
     chain_id = w3.eth.chain_id
-    gas_price = w3.to_wei('2', 'gwei')
+    gas_price = w3.to_wei('100', 'gwei')
     
     LOG.info(f"Measuring latency for {num_txs} transactions...")
     start_batch = time.time()

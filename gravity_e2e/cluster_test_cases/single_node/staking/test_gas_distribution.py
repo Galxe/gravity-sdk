@@ -46,7 +46,7 @@ async def _send_tip_txs(w3: Web3, sender, receiver_addr: str, count: int, tip_gw
 
     for i in range(count):
         block = await run_sync(w3.eth.get_block, "latest")
-        base_fee = block.get("baseFeePerGas", 1_000_000_000)
+        base_fee = block.get("baseFeePerGas", 50_000_000_000)
         priority_fee = tip_gwei * 10**9
         max_fee = base_fee + priority_fee + 1_000_000  # buffer
 
@@ -288,7 +288,7 @@ async def test_withdraw_rewards_to_account(cluster: Cluster):
     withdraw_result = await staker_tb.build_and_send_tx(
         to=coinbase,
         data=pool.encode_abi("withdrawRewards", [recipient.address]),
-        options=TransactionOptions(gas_limit=200_000, max_priority_fee_per_gas=0, max_fee_per_gas=10**10),
+        options=TransactionOptions(gas_limit=200_000, max_priority_fee_per_gas=0, max_fee_per_gas=10**11),
     )
     assert withdraw_result.success, f"withdrawRewards failed: {withdraw_result.error}"
 

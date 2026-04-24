@@ -116,7 +116,7 @@ class TxSender:
     async def _send_loop(self):
         """Main send loop running in background."""
         chain_id = await asyncio.to_thread(lambda: self._current_w3.eth.chain_id)
-        gas_price = Web3.to_wei("2", "gwei")
+        gas_price = Web3.to_wei("100", "gwei")
         nonce = await asyncio.to_thread(
             lambda: self._current_w3.eth.get_transaction_count(
                 self.faucet.address, "pending"
