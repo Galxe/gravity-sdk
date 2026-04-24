@@ -5,6 +5,9 @@
 use crate::{vote_data::VoteData, wrapped_ledger_info::WrappedLedgerInfo};
 use anyhow::{ensure, Context};
 use gaptos::{
+    api_types::on_chain_config::consensus_hardfork::{
+        is_consensus_fork_active_at_epoch, ConsensusHardfork,
+    },
     aptos_bitvec::BitVec,
     aptos_crypto::{hash::CryptoHash, HashValue},
     aptos_types::{
@@ -81,6 +84,14 @@ impl QuorumCert {
         ledger_info: &LedgerInfo,
         genesis_id: HashValue,
     ) -> QuorumCert {
+        let executed_state_id = if is_consensus_fork_active_at_epoch(
+            ConsensusHardfork::ConsensusAlpha,
+            ledger_info.epoch(),
+        ) {
+            ledger_info.block_hash()
+        } else {
+            ledger_info.transaction_accumulator_hash()
+        };
         let ancestor = BlockInfo::new(
             ledger_info
                 .epoch()
@@ -88,7 +99,7 @@ impl QuorumCert {
                 .expect("Integer overflow when creating cert for genesis from ledger info"),
             0,
             genesis_id,
-            ledger_info.block_hash(),
+            executed_state_id,
             ledger_info.waypoint_version(),
             ledger_info.timestamp_usecs(),
             None,

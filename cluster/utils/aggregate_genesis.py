@@ -47,7 +47,8 @@ def get_genesis_defaults():
         "stakingConfig": {
             "minimumStake": "1000000000000000000",
             "lockupDurationMicros": 86400000000,
-            "unbondingDelayMicros": 86400000000
+            "unbondingDelayMicros": 86400000000,
+            "minimumProposalStake": "100000000000000000000000"
         },
         "governanceConfig": {
             "minVotingThreshold": "1000000000000000000",
@@ -133,7 +134,8 @@ def build_genesis_config(config, genesis_cfg):
     result["stakingConfig"] = {
         "minimumStake": sc.get("minimum_stake", defaults["stakingConfig"]["minimumStake"]),
         "lockupDurationMicros": sc.get("lockup_duration_micros", defaults["stakingConfig"]["lockupDurationMicros"]),
-        "unbondingDelayMicros": sc.get("unbonding_delay_micros", defaults["stakingConfig"]["unbondingDelayMicros"])
+        "unbondingDelayMicros": sc.get("unbonding_delay_micros", defaults["stakingConfig"]["unbondingDelayMicros"]),
+        "minimumProposalStake": sc.get("minimum_proposal_stake", defaults["stakingConfig"]["minimumProposalStake"])
     }
     
     # governanceConfig

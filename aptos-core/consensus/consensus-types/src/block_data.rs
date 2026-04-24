@@ -9,6 +9,9 @@ use crate::{
     vote_data::VoteData,
 };
 use gaptos::{
+    api_types::on_chain_config::consensus_hardfork::{
+        is_consensus_fork_active_at_epoch, ConsensusHardfork,
+    },
     aptos_bitvec::BitVec,
     aptos_crypto,
     aptos_crypto::hash::HashValue,
@@ -195,11 +198,20 @@ impl BlockData {
             None => (ledger_info.version(), ledger_info.timestamp_usecs()),
         };
 
+        let executed_state_id = if is_consensus_fork_active_at_epoch(
+            ConsensusHardfork::ConsensusAlpha,
+            ledger_info.epoch(),
+        ) {
+            ledger_info.block_hash()
+        } else {
+            ledger_info.transaction_accumulator_hash()
+        };
+
         let ancestor = BlockInfo::new(
             ledger_info.epoch(),
             0,                 /* round */
             HashValue::zero(), /* parent block id */
-            ledger_info.block_hash(),
+            executed_state_id,
             version,
             timestamp,
             None,
