@@ -21,7 +21,9 @@ waypoint_path = "./artifacts/waypoint.txt"
 [[nodes]]
 id = "vfn-alpha"
 role = "vfn"
-shadow_of = "node1"             # Vfn seeds -> node1's Vfn listener (6192)
+seeds = [
+    { from = "node1" },         # Vfn seeds -> node1's Vfn listener (6192)
+]
 public_port = 6195              # extra Public listener so pfn-client can dial
 # Skip on-chain discovery: as node1's registered fullnode_address encodes
 # vfn-alpha's own identity, on-chain discovery would produce a self-dial
@@ -29,7 +31,6 @@ public_port = 6195              # extra Public listener so pfn-client can dial
 discovery_method = "none"
 source = { project_path = "../" }
 host = "127.0.0.1"
-p2p_port = 6183
 vfn_port = 6193
 rpc_port = 18546
 metrics_port = 9004
@@ -41,10 +42,12 @@ reth_p2p_port = 12027
 [[nodes]]
 id = "pfn-client"
 role = "pfn"
-public_seed_of = "vfn-alpha"    # PFN dials vfn-alpha's public_port (6195)
+seeds = [
+    { from = "vfn-alpha" },     # PFN dials vfn-alpha's public_port (6195)
+]
 source = { project_path = "../" }
 host = "127.0.0.1"
-p2p_port = 6196                 # Public listener
+public_port = 6196              # Public listener
 rpc_port = 18547
 metrics_port = 9005
 inspection_port = 10004
@@ -56,7 +59,7 @@ id = "node1"
 role = "genesis"
 source = { project_path = "../" }
 host = "127.0.0.1"
-p2p_port = 6182
+validator_port = 6182
 vfn_port = 6192
 rpc_port = 18545
 metrics_port = 9003

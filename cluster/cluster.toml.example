@@ -36,6 +36,16 @@ ws_api          = "debug,eth,net,trace,txpool,web3,rpc"
 #   - "validator": Validator node not in genesis (can join later via on-chain txn)
 #   - "vfn": Full node, uses onchain discovery to sync;
 #            set `ws_port` on a VFN to enable WebSocket RPC (default: WS off)
+#   - "pfn": Public Full Node, reaches upstream via static `seeds` on Public network
+#
+# Role → port schema (deploy.sh enforces; see _local/drafts/cluster-seeds/usage.md §9):
+#   genesis/validator: validator_port (required, Validator net) + vfn_port (required, Vfn listener).
+#                      Must NOT set public_port.
+#   vfn:               vfn_port (required) + public_port (optional, seed-accept-only listener
+#                      for downstream PFNs). Must NOT set validator_port.
+#   pfn:               public_port (required, Public listener). Must NOT set validator_port or vfn_port.
+#
+# Deprecated alias: `p2p_port` is accepted as a synonym for `validator_port` (warns once on deploy).
 #
 # Per-node source (required, like Cargo.toml):
 #   source = { project_path = "../" }                                  # local project, cargo build
@@ -49,7 +59,7 @@ id = "node1"
 role = "genesis"
 source = { project_path = "../" }
 host = "127.0.0.1"
-p2p_port = 6180
+validator_port = 6180
 vfn_port = 6190
 rpc_port = 8545
 metrics_port = 9001
@@ -63,7 +73,7 @@ id = "node2"
 role = "genesis"
 source = { project_path = "../" }
 host = "127.0.0.1"
-p2p_port = 6181
+validator_port = 6181
 vfn_port = 6191
 rpc_port = 8546
 metrics_port = 9002
@@ -77,7 +87,7 @@ id = "node3"
 role = "genesis"
 source = { project_path = "../" }
 host = "127.0.0.1"
-p2p_port = 6182
+validator_port = 6182
 vfn_port = 6192
 rpc_port = 8547
 metrics_port = 9003
@@ -91,7 +101,7 @@ id = "node4"
 role = "genesis"
 source = { project_path = "../" }
 host = "127.0.0.1"
-p2p_port = 6183
+validator_port = 6183
 vfn_port = 6193
 rpc_port = 8548
 metrics_port = 9004
@@ -107,7 +117,7 @@ id = "node5"
 host = "127.0.0.1"
 role = "validator"
 source = { project_path = "../" }
-p2p_port = 6184
+validator_port = 6184
 vfn_port = 6194
 rpc_port = 8549
 metrics_port = 9005
@@ -143,12 +153,16 @@ eth_balance = "1000000000000000000"
 
 # ============ Optional: VFN shadow topology ============
 # Register an independent VFN as a validator's on-chain `fullnode_address`.
-# See _local/drafts/vfn-shadow/design.md §1.2 and e2e.md §3-§6.
+# The VFN dials its validator via a static seed on the Vfn network (not onchain
+# discovery, which would round-trip back to the VFN itself). See
+# _local/drafts/vfn-shadow/design.md §1.2 and _local/drafts/cluster-seeds/usage.md §6.1.
 #
 # [[nodes]]
 # id = "vfn-alpha"
 # role = "vfn"
-# shadow_of = "node1"                 # deploy.sh injects seeds -> node1's vfn_server
+# seeds = [
+#     { from = "node1" },             # Vfn seeds -> node1's vfn_port; role auto-inferred = Validator
+# ]
 # source = { project_path = "../" }
 # host = "mgmt.vfn-alpha.example.com" # control-plane RPC (status.sh / pytest / faucet.sh)
 # internal_host = "10.0.1.20"         # optional: intra-cluster p2p peer dial; falls back to host
@@ -159,3 +173,33 @@ eth_balance = "1000000000000000000"
 # https_port = 1100
 # authrpc_port = 8600
 # reth_p2p_port = 12100
+
+# ============ Optional: PFN (Public Full Node) ============
+# PFN listens only on the Public network and syncs from upstream VFN/PFN via
+# static seeds. Does not enter genesis, does not participate in consensus,
+# and does not write an on-chain fullnode_address. See
+# _local/drafts/cluster-seeds/usage.md §6.2.
+#
+# [[nodes]]
+# id = "pfn-edge-1"
+# role = "pfn"
+# source = { project_path = "../" }
+# host = "edge1.example.com"
+# public_port = 6284                  # Public listener (upstream-dial + peer-accept)
+# seeds = [
+#     { from = "vfn-alpha" },         # dial vfn-alpha's public_port; role auto-inferred = ValidatorFullNode
+#     # Multiple upstreams are fine:
+#     # { from = "vfn-beta" },
+#     # External seed (cluster-external peer):
+#     # { peer_id    = "0xdeadbeef...",
+#     #   host       = "seed.public.gravity.xyz",
+#     #   port       = 6180,
+#     #   network_pk = "0xabc...",
+#     #   role       = "PreferredUpstream" },
+# ]
+# rpc_port = 18548
+# metrics_port = 9200
+# inspection_port = 10200
+# https_port = 1200
+# authrpc_port = 8700
+# reth_p2p_port = 12200

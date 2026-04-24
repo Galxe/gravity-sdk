@@ -36,7 +36,7 @@ consensus:
 
 validator_network:
   network_id: validator
-  listen_address: "/ip4/0.0.0.0/tcp/${P2P_PORT}"
+  listen_address: "/ip4/0.0.0.0/tcp/${VALIDATOR_PORT}"
 ${DISCOVERY_METHOD_NETWORK_BLOCK}
   mutual_authentication: true
   identity:

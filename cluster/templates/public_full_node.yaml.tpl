@@ -36,7 +36,7 @@ consensus:
 
 full_node_networks:
   - network_id: public
-    listen_address: "/ip4/0.0.0.0/tcp/${P2P_PORT}"
+    listen_address: "/ip4/0.0.0.0/tcp/${PUBLIC_PORT}"
     identity:
       type: "from_file"
       path: ${CONFIG_DIR}/identity.yaml
