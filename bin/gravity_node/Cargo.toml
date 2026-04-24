@@ -13,6 +13,11 @@ rust-version.workspace = true
 [features]
 # Forward feature to gaptos so `-p gravity_node --features randomness_disabled` works
 randomness_disabled = ["gaptos/randomness_disabled"]
+# Forward feature to gaptos/aptos-config so identity blobs can be loaded from
+# GCP Secret Manager at startup. Off by default to keep the HTTP/TLS stack out
+# of the default build graph; enable when cluster.toml configures any node with
+# `identity = { source = "gcp_secret", ... }`.
+gcp-secret-manager = ["gaptos/gcp-secret-manager"]
 default = []
 
 [dependencies]
@@ -32,7 +37,7 @@ serde = "^1.0.226"
 bincode = "1.3"
 time = "0.3.36"
 anyhow = "1.0.87"
-greth = { git = "https://github.com/Galxe/gravity-reth", rev = "5b2211903e2f23152ce002103a2ddecd98a696aa" }
+greth = { git = "https://github.com/Galxe/gravity-reth", rev = "f9b10b4fb850232786c6e44bc923a223b10b1c44" }
 reqwest = "0.12.9"
 alloy-primitives = { version = "=1.3.1", default-features = false, features = ["map-foldhash"] }
 alloy-eips = { version = "^1.0.37", default-features = false }
