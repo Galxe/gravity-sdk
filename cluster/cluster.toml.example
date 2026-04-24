@@ -41,6 +41,20 @@ ws_api          = "debug,eth,net,trace,txpool,web3,rpc"
 #   source = { project_path = "../" }                                  # local project, cargo build
 #   source = { bin_path = "/opt/gravity/v2.1/gravity_node" }           # pre-built binary
 #   source = { github = "Galxe/gravity-sdk", rev = "v2.0.0" }         # clone + build
+#
+# Per-node identity (optional, defaults to local file):
+#   identity = { source = "file" }
+#     Default. `make init` writes identity.yaml under output/<id>/config/,
+#     `make deploy` copies it to <data_dir>/config/identity.yaml.
+#
+#   identity = { source = "gcp_secret", secret = "projects/<P>/secrets/<S>/versions/latest" }
+#     `make deploy` leaves identity.yaml off disk; gravity_node fetches the
+#     YAML blob from Secret Manager at startup. The binary MUST be built with
+#     `--features gcp-secret-manager` (forward via gravity_node/gaptos).
+#     Auth: GCE metadata server (bound SA with roles/secretmanager.secretAccessor),
+#     or GCP_ACCESS_TOKEN env var for non-GCE environments.
+#     Upload step (one-off, after `make init`):
+#       gcloud secrets create <S> --data-file=output/<id>/config/identity.yaml
 
 # ============ Genesis Nodes (node1-node4) ============
 
@@ -123,6 +137,7 @@ id = "vfn1"
 host = "127.0.0.1"
 role = "vfn"
 source = { project_path = "../" }
+# identity = { source = "gcp_secret", secret = "projects/my-proj/secrets/vfn1-identity/versions/latest" }
 vfn_port = 6195
 rpc_port = 8550
 # ws_port = 8650   # uncomment to enable WebSocket RPC on this VFN (validators don't expose WS)
