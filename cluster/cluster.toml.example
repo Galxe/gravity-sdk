@@ -54,7 +54,11 @@ ws_api          = "debug,eth,net,trace,txpool,web3,rpc"
 #     Auth: GCE metadata server (bound SA with roles/secretmanager.secretAccessor),
 #     or GCP_ACCESS_TOKEN env var for non-GCE environments.
 #     Upload step (one-off, after `make init`):
-#       gcloud secrets create <S> --data-file=output/<id>/config/identity.yaml
+#       make inject_gcp_identity                         # all gcp_secret nodes
+#       make inject_gcp_identity ARGS="--update"         # bump existing secrets
+#       make inject_gcp_identity ARGS="--nodes vfn1"     # subset
+#     The script prints the created version; pin it here instead of 'latest'
+#     so secret rotation requires an explicit cluster.toml change.
 
 # ============ Genesis Nodes (node1-node4) ============
 
