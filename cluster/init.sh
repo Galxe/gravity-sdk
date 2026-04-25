@@ -85,10 +85,6 @@ prepare_node_keys() {
                 exit 1
             fi
             log_info "  [$node_id] Generating key → Secret Manager ($identity_secret)..."
-            # Note: stdout is preserved (not redirected to /dev/null) so the
-            # operator sees the public-material summary and the resulting
-            # version path; useful for staking-tx registration and for
-            # pinning cluster.toml away from versions/latest.
             "$GRAVITY_CLI" genesis generate-key \
                 --secret "$identity_secret" \
                 --public-output-file "$public_file"

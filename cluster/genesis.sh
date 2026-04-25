@@ -110,10 +110,11 @@ if p.exists():
         validator=$(echo "$genesis_validators" | jq ".[$i]")
         node_id=$(echo "$validator" | jq -r '.id')
         public_file="$OUTPUT_DIR/$node_id/config/identity.public.yaml"
+        identity_file="$OUTPUT_DIR/$node_id/config/identity.yaml"
 
-        if [ ! -f "$public_file" ]; then
-            log_error "Public sidecar not found: $public_file"
-            log_error "Run 'make init' first to generate node keys + sidecar."
+        if [ ! -f "$public_file" ] && [ ! -f "$identity_file" ]; then
+            log_error "Identity file not found for $node_id (tried identity.public.yaml and identity.yaml)"
+            log_error "Run 'make init' first to generate node keys."
             exit 1
         fi
     done

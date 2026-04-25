@@ -5,6 +5,8 @@
 [cluster]
 name = "gravity-devnet"
 base_dir = "/tmp/gravity-cluster"
+# data_base_dir = "/tmp/gravity-cluster-data"  # optional: data storage root (default: base_dir)
+# log_dir = "/tmp/gravity-cluster-logs"  # optional: log storage root (default: data_base_dir or base_dir)
 
 # Genesis data source
 # Default paths point to locally generated genesis (from make genesis)

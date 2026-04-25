@@ -327,6 +327,11 @@ materialize_identity() {
             log_info "  [$node_id] identity: GCP Secret Manager ($secret) — not writing identity.yaml to disk"
             ;;
     esac
+
+    local public_src="$OUTPUT_DIR/$node_id/config/identity.public.yaml"
+    if [ -f "$public_src" ]; then
+        cp "$public_src" "$config_dir/identity.public.yaml"
+    fi
 }
 
 # Backward-compatible wrapper: most call sites still want both at once.
@@ -361,10 +366,12 @@ configure_node() {
     # (Port variables HOST, VALIDATOR_PORT etc expected to be exported by caller)
     export NODE_ID="$node_id"
     export DATA_DIR="$data_dir"
+    export STORAGE_DIR="${node_storage_dir:-$data_dir/data}"
+    export LOG_DIR="${node_log_dir:-$STORAGE_DIR}"
     export CONFIG_DIR="$config_dir"
     export GENESIS_PATH="$genesis_path"
     export BINARY_PATH="$binary_path"
-    
+
     # Generate validator.yaml from template
     envsubst < "$SCRIPT_DIR/templates/validator.yaml.tpl" > "$config_dir/validator.yaml"
 
@@ -435,7 +442,7 @@ echo "Started node with PID $pid"
 START_SCRIPT
 
     chmod +x "$data_dir/script/start.sh"
-    
+
     # Generate stop script
     cat > "$data_dir/script/stop.sh" << 'STOP_SCRIPT'
 #!/bin/bash
@@ -477,6 +484,8 @@ configure_pfn() {
 
     export NODE_ID="$node_id"
     export DATA_DIR="$data_dir"
+    export STORAGE_DIR="${node_storage_dir:-$data_dir/data}"
+    export LOG_DIR="${node_log_dir:-$STORAGE_DIR}"
     export CONFIG_DIR="$config_dir"
     export GENESIS_PATH="$genesis_path"
     export BINARY_PATH="$binary_path"
@@ -594,10 +603,12 @@ configure_vfn() {
     # Export paths
     export NODE_ID="$node_id"
     export DATA_DIR="$data_dir"
+    export STORAGE_DIR="${node_storage_dir:-$data_dir/data}"
+    export LOG_DIR="${node_log_dir:-$STORAGE_DIR}"
     export CONFIG_DIR="$config_dir"
     export GENESIS_PATH="$genesis_path"
     export BINARY_PATH="$binary_path"
-    
+
     # Generate validator_full_node.yaml from template
     envsubst < "$SCRIPT_DIR/templates/validator_full_node.yaml.tpl" > "$config_dir/validator_full_node.yaml"
 
@@ -721,7 +732,9 @@ main() {
     config_json=$(parse_toml)
     
     base_dir=$(echo "$config_json" | jq -r '.cluster.base_dir')
-    
+    data_base_dir=$(echo "$config_json" | jq -r '.cluster.data_base_dir // empty')
+    log_base_dir=$(echo "$config_json" | jq -r '.cluster.log_dir // empty')
+
     # Handle existing environment
     if [ -d "$base_dir" ] && [ "$(ls -A "$base_dir" 2>/dev/null)" ]; then
         log_warn "Existing deployment found at $base_dir:"
@@ -939,7 +952,19 @@ main() {
         if [ -z "$data_dir" ]; then
             data_dir="$base_dir/$NODE_ID"
         fi
-        
+
+        if [ -n "$data_base_dir" ]; then
+            node_storage_dir="$data_base_dir/$NODE_ID"
+        else
+            node_storage_dir=""
+        fi
+
+        if [ -n "$log_base_dir" ]; then
+            node_log_dir="$log_base_dir/$NODE_ID"
+        else
+            node_log_dir=""
+        fi
+
         # Resolve per-node binary from source config (required)
         local node_source
         node_source=$(echo "$node" | jq -c '.source // empty')
@@ -950,7 +975,11 @@ main() {
         node_binary=$(resolve_source "$node_source" "$artifacts_dir" "$NODE_ID")
 
         # Prepare dirs
-        mkdir -p "$data_dir"/{bin,config,data,logs,execution_logs,consensus_log,script}
+        local storage_dir="${node_storage_dir:-$data_dir/data}"
+        local log_dir="${node_log_dir:-$storage_dir}"
+        mkdir -p "$data_dir"/{bin,config,logs,script}
+        mkdir -p "$storage_dir"
+        mkdir -p "$log_dir"/{execution_logs,consensus_log}
         
         # Create hardlink for gravity_node binary in each node's bin dir
         ln -f "$node_binary" "$data_dir/bin/gravity_node"

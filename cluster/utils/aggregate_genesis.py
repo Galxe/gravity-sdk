@@ -239,29 +239,20 @@ def main():
 
     for node in genesis_nodes:
         node_id = node['id']
-        # Genesis bootstrap reads only the public-key sidecar so it works
-        # uniformly across file-mode and gcp_secret-mode validators —
-        # neither the on-disk identity.yaml nor the Secret Manager payload
-        # is consulted here. `make init` is responsible for producing this
-        # file via `gravity_cli genesis generate-key --public-output-file`.
         data_dir = node.get('data_dir') or os.path.join(output_dir, node_id)
         public_path = os.path.join(data_dir, "config", "identity.public.yaml")
         legacy_path = os.path.join(data_dir, "config", "identity.yaml")
 
-        if not os.path.exists(public_path):
-            if os.path.exists(legacy_path):
-                print(
-                    f"Error: identity.public.yaml not found for node {node_id} at {public_path}\n"
-                    f"  Legacy {legacy_path} exists but is no longer the source of public material.\n"
-                    f"  Re-run 'make init' (or, for an existing key, regenerate the sidecar with\n"
-                    f"  `gravity_cli genesis generate-key --public-output-file ...`)."
-                )
-            else:
-                print(f"Error: Public sidecar not found: {public_path}")
-                print("Run 'make init' first to generate node keys + sidecar.")
+        if os.path.exists(public_path):
+            identity_path = public_path
+        elif os.path.exists(legacy_path):
+            identity_path = legacy_path
+        else:
+            print(f"Error: Identity file not found: tried {public_path} and {legacy_path}")
+            print("Run 'make init' first to generate node keys.")
             sys.exit(1)
 
-        identity = parse_simple_yaml(public_path)
+        identity = parse_simple_yaml(identity_path)
 
         # Validation
         required_keys = ['account_address', 'consensus_public_key', 'network_public_key']
@@ -352,10 +343,15 @@ def main():
                       f"but no matching [[shadow_nodes]] entry found")
                 sys.exit(1)
             shadow = shadow_lookup[shadow_id]
-            shadow_identity_path = os.path.join(output_dir, shadow_id, 'config', 'identity.public.yaml')
-            if not os.path.exists(shadow_identity_path):
-                print(f"Error: shadow node '{shadow_id}' public sidecar not found at {shadow_identity_path}. "
-                      f"Run 'make init' first.")
+            shadow_public_path = os.path.join(output_dir, shadow_id, 'config', 'identity.public.yaml')
+            shadow_full_path = os.path.join(output_dir, shadow_id, 'config', 'identity.yaml')
+            if os.path.exists(shadow_public_path):
+                shadow_identity_path = shadow_public_path
+            elif os.path.exists(shadow_full_path):
+                shadow_identity_path = shadow_full_path
+            else:
+                print(f"Error: shadow node '{shadow_id}' identity not found. "
+                      f"Tried {shadow_public_path} and {shadow_full_path}. Run 'make init' first.")
                 sys.exit(1)
             shadow_identity = parse_simple_yaml(shadow_identity_path)
             shadow_network_pk = shadow_identity['network_public_key']

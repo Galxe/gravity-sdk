@@ -1,6 +1,6 @@
 base:
   role: "validator"
-  data_dir: "${DATA_DIR}/data"
+  data_dir: "${STORAGE_DIR}"
   waypoint:
     from_file: "${CONFIG_DIR}/waypoint.txt"
 
@@ -8,7 +8,7 @@ consensus:
   safety_rules:
     backend:
       type: "on_disk_storage"
-      path: ${DATA_DIR}/data/secure_storage.json
+      path: ${STORAGE_DIR}/secure_storage.json
     initial_safety_rules_config:
       ${SAFETY_RULES_IDENTITY_VARIANT}:
         waypoint:
@@ -54,9 +54,9 @@ ${DISCOVERY_METHOD_FULLNODE_BLOCK}
     mutual_authentication: false
 
 storage:
-  dir: "${DATA_DIR}/data"
+  dir: "${STORAGE_DIR}"
 
-log_file_path: "${DATA_DIR}/consensus_log/validator.log"
+log_file_path: "${LOG_DIR}/consensus_log/validator.log"
 
 inspection_service:
   port: ${INSPECTION_PORT}
