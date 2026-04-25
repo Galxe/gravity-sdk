@@ -57,7 +57,6 @@ id = "vfn1"
 role = "vfn"
 source = { github = "Galxe/gravity-sdk", rev = "main" }
 host = "127.0.0.1"
-validator_port = 6183
 vfn_port = 6193
 rpc_port = 8548
 metrics_port = 9004

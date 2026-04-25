@@ -75,7 +75,6 @@ id = "node5"
 role = "vfn"
 source = { project_path = "../" }
 host = "127.0.0.1"
-validator_port = 6184
 vfn_port = 6194
 rpc_port = 8549
 metrics_port = 9005
