@@ -1,30 +1,27 @@
 """
-Full-lifecycle Hardfork E2E Test
+Full-lifecycle Hardfork E2E Test (Zeta-only walk on a v1.4.0 baseline)
 
-Walks a single gravity cluster through EVERY Gravity hardfork in order:
-    Alpha, Beta → genesis (blocks 0-0)
-    Gamma       → GAMMA_BLOCK (default 30)
-    Delta       → DELTA_BLOCK (default 60)
-    Epsilon     → EPSILON_BLOCK (default 100)
-    Zeta        → ZETA_BLOCK (default 150)
+Genesis is gravity-testnet-v1.4.0, which already ships the post-Epsilon
+bytecode set. Alpha/Beta/Gamma/Delta/Epsilon therefore activate at block 0
+as no-ops — Phase 4's bytecode-diff has nothing to observe at those
+boundaries — so this lifecycle walks only Zeta:
 
-At each fork boundary we:
-  1. snapshot the contract codehashes the fork claims to upgrade
-  2. wait for the fork block
-  3. re-snapshot and assert the codehashes for that fork's contracts changed
-  4. run the fork-specific ABI smoke (via test_epsilon / test_zeta helpers)
-
-After Zeta we:
-  5. run one business flow end-to-end across forks:
-     - pre-Zeta: propose a stake-pool operator change → must revert (no
-       propose* selector)
-     - post-Zeta: proposeOperator → fast-forward on-chain time by
-       MIN_ROLE_CHANGE_DELAY → acceptOperator → verify operator changed
-  6. restart all nodes, wait for replay, reassert post-Zeta codehashes.
+  1. baseline ABI smoke (assert v1.4.0 genesis exposes the post-Epsilon
+     surface; failing here means the genesis itself is wrong, not Zeta)
+  2. pre-Zeta proposeStaker must revert (the v1.4.0 StakePool bytecode
+     does not have the 2-step role API)
+  3. walk Zeta: snapshot → wait for ZETA_BLOCK → re-snapshot → assert at
+     least one of {Governance, StakingConfig, ValidatorManagement,
+     Reconfiguration, JWKManager} changed
+  4. post-Zeta invariant suite: governance init / staking-config setters /
+     whitelist / 2-step role timelock / JWKManager validation
+  5. restart node, wait for replay, reassert post-Zeta codehashes
 
 Env vars:
     GAMMA_BLOCK / DELTA_BLOCK / EPSILON_BLOCK / ZETA_BLOCK: per-fork block
         numbers (passed through to hooks.py -> genesis config injection).
+        On a v1.4.0 baseline only ZETA_BLOCK is meaningful; the others are
+        retained for parity with hooks.py / genesis.json schema.
     FAUCET_KEY: override the faucet private key.
 
 Usage:
@@ -79,21 +76,20 @@ DELTA_BLOCK = int(os.environ.get("DELTA_BLOCK", "60"))
 EPSILON_BLOCK = int(os.environ.get("EPSILON_BLOCK", "100"))
 ZETA_BLOCK = int(os.environ.get("ZETA_BLOCK", "150"))
 
-# Ordered sequence the test walks. "alpha"/"beta" activate at block 0 and
-# have no contract-level observables to assert via this framework, so they
-# are not in the list — their activation is implicit at genesis.
+# Ordered sequence the test walks. The genesis baseline is
+# gravity-testnet-v1.4.0, which already ships the post-Alpha/Beta/Gamma/Delta/
+# Epsilon contract bytecodes — those forks are no-ops on this cluster, so we
+# only walk Zeta (the one this PR actually adds). The framework's Phase 4
+# bytecode-diff is meaningful on Zeta because v1.4.0 → v1.5 replaces
+# Governance/StakingConfig/ValidatorManagement/Reconfiguration/JWKManager.
 HARDFORK_SEQUENCE = [
-    ("gamma", "Gamma Hardfork", GAMMA_BLOCK),
-    ("delta", "Delta Hardfork", DELTA_BLOCK),
-    ("epsilon", "Epsilon Hardfork", EPSILON_BLOCK),
     ("zeta", "Zeta Hardfork", ZETA_BLOCK),
 ]
 
-# Per-fork post-transition smoke callback
+# Per-fork post-transition smoke callback. Epsilon ABI observables are still
+# probed once before the walk (chain is already past EpsilonBlock at that
+# point thanks to the v1.4.0 baseline).
 PER_FORK_SMOKE = {
-    "gamma": None,  # Framework's Phase 4 already covers Gamma (codehash diff)
-    "delta": None,  # Governance owner patch checked more thoroughly in Zeta
-    "epsilon": _verify_epsilon_observables,
     "zeta": None,   # handled explicitly after the sequence (richer flow)
 }
 
@@ -172,13 +168,20 @@ async def _verify_post_zeta_zeta_specific(w3: Web3):
 
 @pytest.mark.asyncio
 async def test_full_lifecycle(cluster: Cluster):
-    """Walk the full Alpha→Zeta hardfork sequence on a single cluster."""
+    """Walk Zeta on a single cluster.
+
+    Genesis baseline is gravity-testnet-v1.4.0, so Alpha/Beta/Gamma/Delta/
+    Epsilon are already active at block 0 — only Zeta is observable. We
+    still run the Epsilon ABI smoke up-front (it asserts the post-Epsilon
+    contract surface is correct in the baseline) and the pre-Zeta
+    proposeStaker-must-revert check, then walk Zeta.
+    """
     LOG.info(
         "\n╔══════════════════════════════════════════════════════════════╗"
-        "\n║        Full Hardfork Lifecycle E2E                          ║"
-        "\n║        gamma=%-5d delta=%-5d epsilon=%-5d zeta=%-5d       ║"
+        "\n║        Full Hardfork Lifecycle E2E (Zeta-only walk)          ║"
+        "\n║        zeta=%-5d                                              ║"
         "\n╚══════════════════════════════════════════════════════════════╝",
-        GAMMA_BLOCK, DELTA_BLOCK, EPSILON_BLOCK, ZETA_BLOCK,
+        ZETA_BLOCK,
     )
 
     # Sanity: the fork blocks must be strictly increasing.
@@ -194,13 +197,24 @@ async def test_full_lifecycle(cluster: Cluster):
     assert node is not None
     w3 = node.w3
 
+    # Baseline epsilon ABI smoke. v1.4.0 already ships post-Epsilon contracts,
+    # so this asserts the genesis bytecode set is what we think it is before
+    # we attempt the Zeta walk. Failing here means the genesis itself is wrong,
+    # not Zeta.
+    LOG.info("🔎 Baseline (v1.4.0 = post-Epsilon) ABI smoke")
+    _verify_epsilon_observables(w3)
+
     # Pre-Zeta sanity: proposeStaker must not be in StakePool's dispatcher.
-    # Wait for Gamma to land first (StakePool bytecode is the Gamma one pre-Zeta).
-    await wait_for_block(w3, GAMMA_BLOCK, timeout=180)
+    # Must run before the chain crosses ZETA_BLOCK.
+    assert node.get_block_number() < ZETA_BLOCK, (
+        f"chain already past zetaBlock={ZETA_BLOCK} at test start "
+        f"(block={node.get_block_number()}); raise ZETA_BLOCK or run this "
+        "test earlier in the suite"
+    )
     LOG.info("🔎 Pre-Zeta check: proposeStaker(address) on StakePool must revert")
     await _verify_pre_zeta_propose_staker_reverts(w3)
 
-    # Walk each fork.
+    # Walk Zeta.
     latest_post_snapshot = None
     for name, display, block in HARDFORK_SEQUENCE:
         latest_post_snapshot = await _walk_hardfork(cluster, name, display, block)

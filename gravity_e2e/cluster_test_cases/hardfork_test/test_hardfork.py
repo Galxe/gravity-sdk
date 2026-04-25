@@ -67,6 +67,12 @@ BLOCK_INCREASE_TIMEOUT = 120
 POST_RESTART_BLOCKS = 20
 
 
+@pytest.mark.skip(
+    reason="Genesis baseline is gravity-testnet-v1.4.0 which already ships the "
+    "post-Gamma bytecode set, so the hardfork is a no-op on this cluster — "
+    "Phase 4's bytecode-diff assertion has nothing to observe. Coverage for the "
+    "Zeta-on-v1.5 transition lives in test_zeta.py + test_full_lifecycle.py."
+)
 @pytest.mark.asyncio
 async def test_gamma_hardfork(cluster: Cluster):
     """
