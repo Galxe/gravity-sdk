@@ -4,7 +4,10 @@
 genesis:
 	@bash genesis.sh
 
-# Generate node identity keys
+# Generate node identity keys (per-node, per cluster.toml's identity.source).
+# - source = file       → writes identity.yaml + identity.public.yaml
+# - source = gcp_secret → pushes identity to Secret Manager (zero disk),
+#                          writes identity.public.yaml only
 init:
 	@bash init.sh
 

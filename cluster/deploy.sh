@@ -149,10 +149,12 @@ render_seed_entry() {
     from=$(echo "$spec" | jq -r '.from // empty')
 
     if [ -n "$from" ]; then
-        # Form A/B: reference a cluster node by id.
-        local target_identity="$OUTPUT_DIR/$from/config/identity.yaml"
+        # Form A/B: reference a cluster node by id. Read the public-only
+        # sidecar so this works for both file- and gcp_secret-source
+        # peers (the latter have no identity.yaml on disk by design).
+        local target_identity="$OUTPUT_DIR/$from/config/identity.public.yaml"
         if [ ! -f "$target_identity" ]; then
-            log_error "[$ctx] seeds: from=$from but identity not found at $target_identity" >&2
+            log_error "[$ctx] seeds: from=$from but public sidecar not found at $target_identity (run 'make init')" >&2
             exit 1
         fi
         peer_id=$(awk -F': ' '/^account_address:/{gsub(/["\x27]/,"",$2); print $2}' "$target_identity")
@@ -253,6 +255,86 @@ build_seeds_block() {
     done
 }
 
+# Compute the SAFETY_RULES_IDENTITY_* / NETWORK_IDENTITY_* envs that the
+# YAML templates expand. Side-effect-free — pull this apart from
+# materialize_identity so that callers building per-node template blocks
+# (e.g. PUBLIC_NETWORK_BLOCK) outside the configure_* functions can
+# resolve the envs first, then materialize/cp the file later.
+#
+# Reads `identity.source` ("file" | "gcp_secret", default "file") and
+# `identity.secret` (required when source = gcp_secret) from the node's
+# cluster.toml entry.
+compute_identity_envs() {
+    local node_json="$1"
+    local node_id="$2"
+    local config_dir="$3"
+
+    local source secret
+    source=$(echo "$node_json" | jq -r '.identity.source // "file"')
+    secret=$(echo "$node_json" | jq -r '.identity.secret // empty')
+
+    case "$source" in
+        file)
+            export SAFETY_RULES_IDENTITY_VARIANT=from_file
+            export SAFETY_RULES_IDENTITY_KEY=identity_blob_path
+            export SAFETY_RULES_IDENTITY_VALUE="$config_dir/identity.yaml"
+            export NETWORK_IDENTITY_TYPE=from_file
+            export NETWORK_IDENTITY_FIELD=path
+            export NETWORK_IDENTITY_VALUE="$config_dir/identity.yaml"
+            ;;
+        gcp_secret)
+            if [ -z "$secret" ]; then
+                log_error "  [$node_id] identity.source = gcp_secret requires identity.secret (projects/<P>/secrets/<S>[/versions/<V>])"
+                exit 1
+            fi
+            export SAFETY_RULES_IDENTITY_VARIANT=from_gcp_secret
+            export SAFETY_RULES_IDENTITY_KEY=identity_blob_secret
+            export SAFETY_RULES_IDENTITY_VALUE="$secret"
+            export NETWORK_IDENTITY_TYPE=from_gcp_secret
+            export NETWORK_IDENTITY_FIELD=resource
+            export NETWORK_IDENTITY_VALUE="$secret"
+            ;;
+        *)
+            log_error "  [$node_id] unknown identity.source '$source' (expected 'file' or 'gcp_secret')"
+            exit 1
+            ;;
+    esac
+}
+
+# Materialize the on-disk artifact for file-source nodes (cp the
+# generated identity.yaml under the runtime config dir). For gcp_secret
+# nodes, just log — the runtime fetches the IdentityBlob from Secret
+# Manager at startup.
+#
+# Prereq: gravity_node must be built with `--features gcp-secret-manager`
+# when any node uses source = gcp_secret; otherwise the node panics at
+# startup with "GCP Secret Manager support not compiled in".
+materialize_identity() {
+    local node_json="$1"
+    local node_id="$2"
+    local config_dir="$3"
+    local identity_src="$4"
+
+    local source secret
+    source=$(echo "$node_json" | jq -r '.identity.source // "file"')
+    secret=$(echo "$node_json" | jq -r '.identity.secret // empty')
+
+    case "$source" in
+        file)
+            cp "$identity_src" "$config_dir/identity.yaml"
+            ;;
+        gcp_secret)
+            log_info "  [$node_id] identity: GCP Secret Manager ($secret) — not writing identity.yaml to disk"
+            ;;
+    esac
+}
+
+# Backward-compatible wrapper: most call sites still want both at once.
+setup_identity() {
+    compute_identity_envs "$1" "$2" "$3"
+    materialize_identity "$1" "$2" "$3" "$4"
+}
+
 # Configure node function (Rendering logic)
 configure_node() {
     local node_id="$1"
@@ -262,16 +344,17 @@ configure_node() {
     local identity_src="$5"
     local waypoint_src="$6"
     local role="$7"
-    
+    local node_json="$8"
+
     local config_dir="$data_dir/config"
-    
+
     log_info "  [$node_id] [$role] configuring..."
-    
+
     # Create config dir
     mkdir -p "$config_dir"
-    
-    # Copy identity and waypoint from artifacts
-    cp "$identity_src" "$config_dir/identity.yaml"
+
+    # Resolve identity source (file vs GCP Secret Manager) and waypoint
+    setup_identity "$node_json" "$node_id" "$config_dir" "$identity_src"
     cp "$waypoint_src" "$config_dir/waypoint.txt"
     
     # Export paths validation
@@ -495,16 +578,17 @@ configure_vfn() {
     local binary_path="$4"
     local identity_src="$5"
     local waypoint_src="$6"
-    
+    local node_json="$7"
+
     local config_dir="$data_dir/config"
-    
+
     log_info "  [$node_id] [vfn] configuring..."
-    
+
     # Create config dir
     mkdir -p "$config_dir"
-    
-    # Copy identity and waypoint from artifacts
-    cp "$identity_src" "$config_dir/identity.yaml"
+
+    # Resolve identity source (file vs GCP Secret Manager) and waypoint
+    setup_identity "$node_json" "$node_id" "$config_dir" "$identity_src"
     cp "$waypoint_src" "$config_dir/waypoint.txt"
     
     # Export paths
@@ -872,7 +956,9 @@ main() {
         ln -f "$node_binary" "$data_dir/bin/gravity_node"
         
         waypoint_src="$OUTPUT_DIR/waypoint.txt"
-        
+
+        identity_source=$(echo "$node" | jq -r '.identity.source // "file"')
+
         if [ "$role" == "pfn" ]; then
             # Public Full Node. Listens on Public network at PUBLIC_PORT;
             # dials upstream VFN(s)/PFN(s) via static seeds (see §2 of
@@ -880,7 +966,9 @@ main() {
             # Public network is typically absent, so seeds are the dependable path.
             identity_src="$OUTPUT_DIR/$NODE_ID/config/identity.yaml"
 
-            if [ ! -f "$identity_src" ]; then
+            # Only require a local identity.yaml when the node will actually
+            # consume it from disk. GCP Secret Manager sources pull at startup.
+            if [ "$identity_source" = "file" ] && [ ! -f "$identity_src" ]; then
                 log_error "Identity not found for $NODE_ID at $identity_src"
                 exit 1
             fi
@@ -905,7 +993,9 @@ main() {
             # is an optional seed-accept-only listener for downstream PFNs.
             identity_src="$OUTPUT_DIR/$NODE_ID/config/identity.yaml"
 
-            if [ ! -f "$identity_src" ]; then
+            # Only require a local identity.yaml when the node will actually
+            # consume it from disk. GCP Secret Manager sources pull at startup.
+            if [ "$identity_source" = "file" ] && [ ! -f "$identity_src" ]; then
                 log_error "Identity not found for $NODE_ID at $identity_src"
                 exit 1
             fi
@@ -924,11 +1014,16 @@ main() {
             # (fullnode_address encodes the Vfn listener, not this Public port)
             # and no outbound dialing. PFNs reach us via their own static seeds.
             if [ "$PUBLIC_PORT" != "null" ]; then
+                # Compute identity envs before building the Public listener
+                # block so it uses the same (file or gcp_secret) values as
+                # the rest of the node's networks. configure_vfn will
+                # materialize/cp the file later.
+                compute_identity_envs "$node" "$NODE_ID" "$data_dir/config"
                 export PUBLIC_NETWORK_BLOCK="  - network_id: public
     listen_address: \"/ip4/0.0.0.0/tcp/${PUBLIC_PORT}\"
     identity:
-      type: \"from_file\"
-      path: ${data_dir}/config/identity.yaml
+      type: \"${NETWORK_IDENTITY_TYPE}\"
+      ${NETWORK_IDENTITY_FIELD}: ${NETWORK_IDENTITY_VALUE}
     discovery_method:
       none"
                 log_info "  [$NODE_ID] Public listener enabled on port ${PUBLIC_PORT}"
@@ -942,13 +1037,16 @@ main() {
                 "$genesis_path" \
                 "$node_binary" \
                 "$identity_src" \
-                "$waypoint_src"
+                "$waypoint_src" \
+                "$node"
         else
             # Validator node (includes both 'genesis' and 'validator' roles).
             # Port validation already handled by the role-specific case above.
             identity_src="$OUTPUT_DIR/$NODE_ID/config/identity.yaml"
 
-            if [ ! -f "$identity_src" ]; then
+            # Only require a local identity.yaml when the node will actually
+            # consume it from disk. GCP Secret Manager sources pull at startup.
+            if [ "$identity_source" = "file" ] && [ ! -f "$identity_src" ]; then
                 log_error "Identity not found for $NODE_ID at $identity_src"
                 exit 1
             fi
@@ -960,7 +1058,8 @@ main() {
                 "$node_binary" \
                 "$identity_src" \
                 "$waypoint_src" \
-                "$role"
+                "$role" \
+                "$node"
         fi
     done
     

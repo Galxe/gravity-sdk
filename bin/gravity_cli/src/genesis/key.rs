@@ -5,7 +5,7 @@ use gaptos::{
 };
 use std::{fs, path::PathBuf};
 
-use crate::command::Executable;
+use crate::{command::Executable, genesis::secret_manager};
 
 use serde::Serialize;
 
@@ -15,6 +15,19 @@ struct ValidatorIndentity {
     account_private_key: String,
     consensus_private_key: String,
     network_private_key: String,
+    consensus_public_key: String,
+    consensus_pop: String,
+    network_public_key: String,
+}
+
+/// Public-only sidecar written when `--public-output-file` is set. Contains
+/// the four fields `aggregate_genesis.py` needs to construct a genesis
+/// validator entry (account_address, consensus_public_key, consensus_pop,
+/// network_public_key) — and nothing else, so genesis bootstrap doesn't
+/// require touching the full IdentityBlob ever.
+#[derive(Debug, Serialize)]
+struct ValidatorPublicMaterial {
+    account_address: String,
     consensus_public_key: String,
     consensus_pop: String,
     network_public_key: String,
@@ -30,9 +43,25 @@ pub struct GenerateKey {
     /// seed.
     #[clap(long)]
     random_seed: Option<String>,
-    /// Output file path
+    /// Output file path. Mutually exclusive with --secret.
+    #[clap(long, value_parser, conflicts_with = "secret")]
+    pub output_file: Option<PathBuf>,
+    /// Push the generated identity directly to GCP Secret Manager,
+    /// bypassing the filesystem entirely. Format:
+    /// `projects/<P>/secrets/<S>[/versions/<V>]` (the version segment, if
+    /// present, is ignored — addVersion always creates a new version).
+    /// If the secret container does not yet exist it will be created with
+    /// automatic replication. Mutually exclusive with --output-file.
+    #[clap(long, conflicts_with = "output_file")]
+    pub secret: Option<String>,
+    /// Optional sidecar containing only public-key material
+    /// (account_address, consensus_public_key, consensus_pop,
+    /// network_public_key). Used by `aggregate_genesis.py` to build the
+    /// genesis validator set without ever needing to touch the file or
+    /// secret that holds the private keys. Stackable with both
+    /// --output-file and --secret.
     #[clap(long, value_parser)]
-    pub output_file: PathBuf,
+    pub public_output_file: Option<PathBuf>,
 }
 
 impl GenerateKey {
@@ -54,6 +83,10 @@ impl GenerateKey {
 // TODO(gravity_lightman): account_private_key is aptos key， not reth
 impl Executable for GenerateKey {
     fn execute(self) -> Result<(), anyhow::Error> {
+        if self.output_file.is_none() && self.secret.is_none() {
+            anyhow::bail!("must specify either --output-file <path> or --secret <resource>");
+        }
+
         println!("--- Generate Key Start ---");
         let mut key_gen = self.key_generator()?;
         let network_private_key = key_gen.generate_x25519_private_key()?;
@@ -81,22 +114,56 @@ impl Executable for GenerateKey {
             "The last 20bit account_address (ETH format) is 0x{}",
             &account_address[24..] // Last 20 bytes = 40 hex chars = offset 24
         );
+        let consensus_pop_hex = {
+            let pop = ProofOfPossession::create(&consensus_private_key);
+            hex::encode(pop.to_bytes())
+        };
+        let consensus_public_key_hex = hex::encode(consensus_private_key.public_key().to_bytes());
+        let network_public_key_hex = hex::encode(network_private_key.public_key().to_bytes());
         let indentity = ValidatorIndentity {
-            account_address,
+            account_address: account_address.clone(),
             account_private_key: hex::encode(account_private_key.to_bytes()),
             consensus_private_key: hex::encode(consensus_private_key.to_bytes()),
             network_private_key: hex::encode(network_private_key.to_bytes()),
-            consensus_public_key: hex::encode(consensus_private_key.public_key().to_bytes()),
-            consensus_pop: {
-                let pop = ProofOfPossession::create(&consensus_private_key);
-                hex::encode(pop.to_bytes())
-            },
-            network_public_key: hex::encode(network_private_key.public_key().to_bytes()),
+            consensus_public_key: consensus_public_key_hex.clone(),
+            consensus_pop: consensus_pop_hex.clone(),
+            network_public_key: network_public_key_hex.clone(),
         };
 
-        println!("--- Write Output File ---");
         let yaml_string = serde_yaml::to_string(&indentity)?;
-        fs::write(self.output_file, yaml_string)?;
+
+        if let Some(path) = self.output_file.as_ref() {
+            println!("--- Write Output File ---");
+            fs::write(path, &yaml_string)?;
+        } else if let Some(resource) = self.secret.as_ref() {
+            println!("--- Push to GCP Secret Manager ---");
+            let version = secret_manager::push_secret(resource, yaml_string.as_bytes())?;
+            // Drop the YAML and private-key fields ASAP. The struct itself
+            // is not zeroized — that would require swapping in a
+            // Zeroizing<String> wrapper — but at least the local copies of
+            // the serialized form go out of scope here.
+            drop(yaml_string);
+            println!("Uploaded as {version}");
+            println!();
+            println!("Public material (safe to share, e.g. for staking registration):");
+            println!("  account_address:      {account_address}");
+            println!("  consensus_public_key: {consensus_public_key_hex}");
+            println!("  consensus_pop:        {consensus_pop_hex}");
+            println!("  network_public_key:   {network_public_key_hex}");
+        }
+
+        if let Some(public_path) = self.public_output_file.as_ref() {
+            let public = ValidatorPublicMaterial {
+                account_address: account_address.clone(),
+                consensus_public_key: consensus_public_key_hex.clone(),
+                consensus_pop: consensus_pop_hex.clone(),
+                network_public_key: network_public_key_hex.clone(),
+            };
+            let public_yaml = serde_yaml::to_string(&public)?;
+            fs::write(public_path, public_yaml)?;
+            println!("Wrote public sidecar: {}", public_path.display());
+        }
+
         println!("--- Generate Key Success ---");
         Ok(())
     }

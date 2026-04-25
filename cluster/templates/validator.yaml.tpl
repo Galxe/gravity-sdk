@@ -10,10 +10,10 @@ consensus:
       type: "on_disk_storage"
       path: ${DATA_DIR}/data/secure_storage.json
     initial_safety_rules_config:
-      from_file:
+      ${SAFETY_RULES_IDENTITY_VARIANT}:
         waypoint:
           from_file: ${CONFIG_DIR}/waypoint.txt
-        identity_blob_path: ${CONFIG_DIR}/identity.yaml
+        ${SAFETY_RULES_IDENTITY_KEY}: ${SAFETY_RULES_IDENTITY_VALUE}
   enable_pipeline: true
   max_sending_block_txns_after_filtering: 5000
   max_sending_block_txns: 5000
@@ -40,16 +40,16 @@ validator_network:
 ${DISCOVERY_METHOD_NETWORK_BLOCK}
   mutual_authentication: true
   identity:
-    type: "from_file"
-    path: ${CONFIG_DIR}/identity.yaml
+    type: "${NETWORK_IDENTITY_TYPE}"
+    ${NETWORK_IDENTITY_FIELD}: ${NETWORK_IDENTITY_VALUE}
 
 full_node_networks:
   - network_id:
       private: "vfn"
     listen_address: "/ip4/0.0.0.0/tcp/${VFN_PORT}"
     identity:
-      type: "from_file"
-      path: ${CONFIG_DIR}/identity.yaml
+      type: "${NETWORK_IDENTITY_TYPE}"
+      ${NETWORK_IDENTITY_FIELD}: ${NETWORK_IDENTITY_VALUE}
 ${DISCOVERY_METHOD_FULLNODE_BLOCK}
     mutual_authentication: false
 
