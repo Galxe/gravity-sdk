@@ -17,7 +17,7 @@ id = "node1"
 host = "127.0.0.1"
 role = "genesis"
 source = { project_path = "../" }
-p2p_port = 6180
+validator_port = 6180
 vfn_port = 6190
 rpc_port = 8545
 metrics_port = 9001
@@ -31,7 +31,7 @@ id = "node2"
 host = "127.0.0.1"
 role = "genesis"
 source = { project_path = "../" }
-p2p_port = 6181
+validator_port = 6181
 vfn_port = 6191
 rpc_port = 8546
 metrics_port = 9002
@@ -45,7 +45,7 @@ id = "node3"
 host = "127.0.0.1"
 role = "genesis"
 source = { project_path = "../" }
-p2p_port = 6182
+validator_port = 6182
 vfn_port = 6192
 rpc_port = 8547
 metrics_port = 9003
@@ -59,7 +59,7 @@ id = "node4"
 host = "127.0.0.1"
 role = "genesis"
 source = { project_path = "../" }
-p2p_port = 6183
+validator_port = 6183
 vfn_port = 6193
 rpc_port = 8548
 metrics_port = 9004
@@ -75,7 +75,7 @@ id = "node5"
 host = "127.0.0.1"
 role = "validator"
 source = { project_path = "../" }
-p2p_port = 6184
+validator_port = 6184
 vfn_port = 6194
 rpc_port = 8549
 metrics_port = 9005
@@ -89,7 +89,7 @@ id = "node6"
 host = "127.0.0.1"
 role = "validator"
 source = { project_path = "../" }
-p2p_port = 6185
+validator_port = 6185
 vfn_port = 6195
 rpc_port = 8550
 metrics_port = 9006
@@ -103,7 +103,7 @@ id = "node7"
 host = "127.0.0.1"
 role = "validator"
 source = { project_path = "../" }
-p2p_port = 6186
+validator_port = 6186
 vfn_port = 6196
 rpc_port = 8551
 metrics_port = 9007
@@ -117,7 +117,7 @@ id = "node8"
 host = "127.0.0.1"
 role = "validator"
 source = { project_path = "../" }
-p2p_port = 6187
+validator_port = 6187
 vfn_port = 6197
 rpc_port = 8552
 metrics_port = 9008
@@ -131,7 +131,7 @@ id = "node9"
 host = "127.0.0.1"
 role = "validator"
 source = { project_path = "../" }
-p2p_port = 6188
+validator_port = 6188
 vfn_port = 6198
 rpc_port = 8553
 metrics_port = 9009
@@ -145,7 +145,7 @@ id = "node10"
 host = "127.0.0.1"
 role = "validator"
 source = { project_path = "../" }
-p2p_port = 6189
+validator_port = 6189
 vfn_port = 6199
 rpc_port = 8554
 metrics_port = 9010

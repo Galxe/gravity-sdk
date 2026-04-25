@@ -307,7 +307,15 @@ def main():
 
         # Network info
         host = node['host']
-        p2p_port = node['p2p_port']
+        # `validator_port` is preferred; `p2p_port` kept as deprecated alias
+        # for unmigrated genesis.toml files.
+        if 'validator_port' in node:
+            validator_port = node['validator_port']
+        elif 'p2p_port' in node:
+            validator_port = node['p2p_port']
+            print(f"Warning: {node_id}: 'p2p_port' is a deprecated alias — rename to 'validator_port'")
+        else:
+            raise KeyError(f"{node_id}: missing validator_port (or deprecated p2p_port)")
         vfn_port = node['vfn_port']
 
         # Build addresses: use /dns/ for domain names, /ip4/ for IPv4 addresses
@@ -318,7 +326,7 @@ def main():
         except ValueError:
             host_proto = "dns"
 
-        val_net_addr = f"/{host_proto}/{host}/tcp/{p2p_port}/noise-ik/{network_pk}/handshake/0"
+        val_net_addr = f"/{host_proto}/{host}/tcp/{validator_port}/noise-ik/{network_pk}/handshake/0"
 
         # Optional shadow redirect: on-chain fullnode_address points at a
         # shadow VFN instead of the validator's own vfn server. See

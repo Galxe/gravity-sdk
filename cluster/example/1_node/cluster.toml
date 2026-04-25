@@ -15,7 +15,7 @@ id = "node1"
 role = "genesis"
 source = { github = "Galxe/gravity-sdk", rev = "main" }
 host = "127.0.0.1"
-p2p_port = 6180
+validator_port = 6180
 vfn_port = 6190
 rpc_port = 8545
 metrics_port = 9001

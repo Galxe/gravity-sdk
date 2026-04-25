@@ -159,7 +159,7 @@ id = "node1"
 role = "genesis"
 source = { github = "${REPO}", rev = "${GIT_REF}" }
 host = "127.0.0.1"
-p2p_port = 6182
+validator_port = 6182
 vfn_port = 6192
 rpc_port = 8545
 metrics_port = 9003

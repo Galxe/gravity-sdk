@@ -135,6 +135,124 @@ _resolve_source_impl() {
     exit 1
 }
 
+# Render one seeds[] entry as a YAML fragment (no leading "seeds:" line).
+# Args: $1=spec_json (jq -c), $2=current_net (vfn|public), $3=node_id (for logs).
+# Reads module vars: $OUTPUT_DIR, $config_json.
+# Output: 4 YAML lines (peer_id / addresses / address / role), trailing newline.
+render_seed_entry() {
+    local spec="$1"
+    local current_net="$2"
+    local ctx="$3"
+
+    local from peer_id network_pk host port role address
+
+    from=$(echo "$spec" | jq -r '.from // empty')
+
+    if [ -n "$from" ]; then
+        # Form A/B: reference a cluster node by id.
+        local target_identity="$OUTPUT_DIR/$from/config/identity.yaml"
+        if [ ! -f "$target_identity" ]; then
+            log_error "[$ctx] seeds: from=$from but identity not found at $target_identity" >&2
+            exit 1
+        fi
+        peer_id=$(awk -F': ' '/^account_address:/{gsub(/["\x27]/,"",$2); print $2}' "$target_identity")
+        network_pk=$(awk -F': ' '/^network_public_key:/{gsub(/["\x27]/,"",$2); print $2}' "$target_identity")
+        peer_id=${peer_id#0x}
+        network_pk=${network_pk#0x}
+        if [ -z "$peer_id" ] || [ -z "$network_pk" ]; then
+            log_error "[$ctx] seeds: from=$from: failed to parse peer_id/network_pk from $target_identity" >&2
+            exit 1
+        fi
+
+        host=$(echo "$config_json" | jq -r --arg id "$from" \
+            '.nodes[] | select(.id == $id) | (.internal_host // .host)')
+
+        case "$current_net" in
+            vfn)    port=$(echo "$config_json" | jq -r --arg id "$from" '.nodes[] | select(.id == $id) | .vfn_port') ;;
+            public) port=$(echo "$config_json" | jq -r --arg id "$from" '.nodes[] | select(.id == $id) | .public_port') ;;
+            *)      log_error "[$ctx] seeds: internal bug: unknown current_net='$current_net'" >&2; exit 1 ;;
+        esac
+
+        if [ -z "$host" ] || [ "$host" = "null" ] || [ -z "$port" ] || [ "$port" = "null" ]; then
+            log_error "[$ctx] seeds: from=$from: missing host or ${current_net}_port in cluster.toml" >&2
+            exit 1
+        fi
+
+        # role: explicit spec.role wins, else infer from target node role.
+        role=$(echo "$spec" | jq -r '.role // empty')
+        if [ -z "$role" ]; then
+            local target_role
+            target_role=$(echo "$config_json" | jq -r --arg id "$from" '.nodes[] | select(.id == $id) | .role')
+            case "$target_role" in
+                genesis|validator) role="Validator" ;;
+                vfn)               role="ValidatorFullNode" ;;
+                pfn)               role="PreferredUpstream" ;;
+                *)
+                    log_error "[$ctx] seeds: from=$from: cannot infer role from target role='$target_role'; add explicit 'role = \"...\"'" >&2
+                    exit 1
+                    ;;
+            esac
+        fi
+    else
+        # Form C: manual. Required: peer_id + role + (address | host+port+network_pk).
+        peer_id=$(echo "$spec" | jq -r '.peer_id // empty')
+        role=$(echo "$spec" | jq -r '.role // empty')
+        if [ -z "$peer_id" ] || [ -z "$role" ]; then
+            log_error "[$ctx] seeds: manual entry requires both 'peer_id' and 'role' (got peer_id='$peer_id' role='$role')" >&2
+            exit 1
+        fi
+        peer_id=${peer_id#0x}
+
+        address=$(echo "$spec" | jq -r '.address // empty')
+        if [ -z "$address" ]; then
+            host=$(echo "$spec" | jq -r '.host // empty')
+            port=$(echo "$spec" | jq -r '.port // empty')
+            network_pk=$(echo "$spec" | jq -r '.network_pk // empty')
+            if [ -z "$host" ] || [ -z "$port" ] || [ -z "$network_pk" ]; then
+                log_error "[$ctx] seeds: manual entry without 'address' requires host + port + network_pk" >&2
+                exit 1
+            fi
+            network_pk=${network_pk#0x}
+        fi
+    fi
+
+    if [ -z "$address" ]; then
+        local proto="dns"
+        if [[ "$host" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            proto="ip4"
+        fi
+        address="/${proto}/${host}/tcp/${port}/noise-ik/${network_pk}/handshake/0"
+    fi
+
+    cat <<SEED_ENTRY
+      '0x${peer_id}':
+        addresses:
+          - '${address}'
+        role: ${role}
+SEED_ENTRY
+}
+
+# Build the "    seeds:" block (or empty string) for a node's seeds array.
+# Args: $1=seeds_json (jq -c array), $2=current_net, $3=node_id (log ctx).
+# Output: multi-line block starting with "    seeds:", or empty string if array is empty/null.
+build_seeds_block() {
+    local seeds_json="$1"
+    local current_net="$2"
+    local ctx="$3"
+
+    if [ -z "$seeds_json" ] || [ "$seeds_json" = "null" ] || [ "$seeds_json" = "[]" ]; then
+        return 0
+    fi
+
+    local n i entry
+    n=$(echo "$seeds_json" | jq 'length')
+    echo "    seeds:"
+    for i in $(seq 0 $((n - 1))); do
+        entry=$(echo "$seeds_json" | jq -c ".[$i]")
+        render_seed_entry "$entry" "$current_net" "$ctx"
+    done
+}
+
 # Configure node function (Rendering logic)
 configure_node() {
     local node_id="$1"
@@ -157,7 +275,7 @@ configure_node() {
     cp "$waypoint_src" "$config_dir/waypoint.txt"
     
     # Export paths validation
-    # (Port variables HOST, P2P_PORT etc expected to be exported by caller)
+    # (Port variables HOST, VALIDATOR_PORT etc expected to be exported by caller)
     export NODE_ID="$node_id"
     export DATA_DIR="$data_dir"
     export CONFIG_DIR="$config_dir"
@@ -280,7 +398,7 @@ configure_pfn() {
     export GENESIS_PATH="$genesis_path"
     export BINARY_PATH="$binary_path"
 
-    # PFN listens on Public network at P2P_PORT (no Vfn network at all).
+    # PFN listens on Public network at PUBLIC_PORT (no Vfn network at all).
     envsubst < "$SCRIPT_DIR/templates/public_full_node.yaml.tpl" > "$config_dir/public_full_node.yaml"
 
     local reth_tpl="${RETH_CONFIG_PFN_TPL:-$SCRIPT_DIR/templates/reth_config_pfn.json.tpl}"
@@ -633,8 +751,15 @@ main() {
         # Extract and Export config
         export NODE_ID=$(echo "$node" | jq -r '.id')
         export HOST=$(echo "$node" | jq -r '.host')
-        export P2P_PORT=$(echo "$node" | jq -r '.p2p_port')
+        # Validator network listener. `validator_port` is preferred; `p2p_port`
+        # kept as a deprecated alias for unmigrated cluster.toml / genesis.toml.
+        export VALIDATOR_PORT=$(echo "$node" | jq -r '.validator_port // .p2p_port // "null"')
+        if [ "$(echo "$node" | jq -r '.validator_port // empty')" = "" ] && \
+           [ "$(echo "$node" | jq -r '.p2p_port // empty')" != "" ]; then
+            log_warn "$(echo "$node" | jq -r '.id'): 'p2p_port' is a deprecated alias — rename to 'validator_port'"
+        fi
         export VFN_PORT=$(echo "$node" | jq -r '.vfn_port // "null"')
+        export PUBLIC_PORT=$(echo "$node" | jq -r '.public_port // "null"')
         export RPC_PORT=$(echo "$node" | jq -r '.rpc_port')
         export WS_PORT=$(echo "$node" | jq -r '.ws_port // "null"')
         export METRICS_PORT=$(echo "$node" | jq -r '.metrics_port')
@@ -642,7 +767,7 @@ main() {
         export HTTPS_PORT=$(echo "$node" | jq -r '.https_port // "null"')
         export AUTHRPC_PORT=$(echo "$node" | jq -r '.authrpc_port')
         export P2P_PORT_RETH=$(echo "$node" | jq -r '.reth_p2p_port')
-        
+
         role=$(echo "$node" | jq -r '.role // empty')
 
         # Validate role is specified
@@ -650,6 +775,60 @@ main() {
             log_error "Node $NODE_ID must specify 'role' (genesis, validator, vfn, or pfn)"
             exit 1
         fi
+
+        # Reject removed alias fields (replaced by unified `seeds = [...]`).
+        if [ "$(echo "$node" | jq -r '.shadow_of // empty')" != "" ]; then
+            log_error "$NODE_ID: 'shadow_of' has been removed — use 'seeds = [{ from = \"X\" }]' instead"
+            exit 1
+        fi
+        if [ "$(echo "$node" | jq -r '.public_seed_of // empty')" != "" ]; then
+            log_error "$NODE_ID: 'public_seed_of' has been removed — use 'seeds = [{ from = \"X\" }]' instead"
+            exit 1
+        fi
+
+        # Role-specific port schema (see _local/drafts/cluster-seeds/usage.md §9).
+        # Enforced even though templates silently ignore extras, so cluster.toml stays clean.
+        case "$role" in
+            genesis|validator)
+                if [ "$VALIDATOR_PORT" = "null" ]; then
+                    log_error "$NODE_ID: role=$role requires validator_port (Validator network listener; p2p_port accepted as deprecated alias)"
+                    exit 1
+                fi
+                if [ "$VFN_PORT" = "null" ]; then
+                    log_error "$NODE_ID: role=$role requires vfn_port (Vfn network listener for downstream VFN)"
+                    exit 1
+                fi
+                if [ "$PUBLIC_PORT" != "null" ]; then
+                    log_error "$NODE_ID: role=$role must not set public_port (validators don't expose Public network)"
+                    exit 1
+                fi
+                ;;
+            vfn)
+                if [ "$VALIDATOR_PORT" != "null" ]; then
+                    log_error "$NODE_ID: role=vfn must not set validator_port (VFN has no Validator network)"
+                    exit 1
+                fi
+                if [ "$VFN_PORT" = "null" ]; then
+                    log_error "$NODE_ID: role=vfn requires vfn_port (Vfn network listener)"
+                    exit 1
+                fi
+                # public_port is optional on VFN (enables downstream PFN listener).
+                ;;
+            pfn)
+                if [ "$VALIDATOR_PORT" != "null" ]; then
+                    log_error "$NODE_ID: role=pfn must not set validator_port (use public_port instead)"
+                    exit 1
+                fi
+                if [ "$VFN_PORT" != "null" ]; then
+                    log_error "$NODE_ID: role=pfn must not set vfn_port (PFN has no Vfn network)"
+                    exit 1
+                fi
+                if [ "$PUBLIC_PORT" = "null" ]; then
+                    log_error "$NODE_ID: role=pfn requires public_port (Public network listener)"
+                    exit 1
+                fi
+                ;;
+        esac
 
         # Resolve discovery_method. Per-node override wins; otherwise the
         # default is role-driven — validator/vfn use onchain, pfn emits nothing
@@ -695,11 +874,10 @@ main() {
         waypoint_src="$OUTPUT_DIR/waypoint.txt"
         
         if [ "$role" == "pfn" ]; then
-            # Public Full Node. Listens on Public network at P2P_PORT; dials a
-            # VFN/IVFN via a static seed on the Public network (public_seed_of
-            # in cluster.toml). On-chain discovery is enabled but typically
-            # points at a Vfn-network address for the validator's fullnode,
-            # which is wrong net for PFN — seeds are the dependable path.
+            # Public Full Node. Listens on Public network at PUBLIC_PORT;
+            # dials upstream VFN(s)/PFN(s) via static seeds (see §2 of
+            # _local/drafts/cluster-seeds/usage.md). On-chain discovery on the
+            # Public network is typically absent, so seeds are the dependable path.
             identity_src="$OUTPUT_DIR/$NODE_ID/config/identity.yaml"
 
             if [ ! -f "$identity_src" ]; then
@@ -707,50 +885,12 @@ main() {
                 exit 1
             fi
 
-            if [ "$P2P_PORT" == "null" ]; then
-                log_error "PFN $NODE_ID requires p2p_port (Public listener)"
-                exit 1
-            fi
-
-            public_seed_of=$(echo "$node" | jq -r '.public_seed_of // empty')
-            if [ -n "$public_seed_of" ]; then
-                target_identity="$OUTPUT_DIR/$public_seed_of/config/identity.yaml"
-                if [ ! -f "$target_identity" ]; then
-                    log_error "public_seed_of=$public_seed_of but identity not found at $target_identity"
-                    exit 1
-                fi
-                target_peer_id=$(awk -F': ' '/^account_address:/{gsub(/["\x27]/,"",$2); print $2}' "$target_identity")
-                target_network_pk=$(awk -F': ' '/^network_public_key:/{gsub(/["\x27]/,"",$2); print $2}' "$target_identity")
-                target_peer_id=${target_peer_id#0x}
-                target_network_pk=${target_network_pk#0x}
-                if [ -z "$target_peer_id" ] || [ -z "$target_network_pk" ]; then
-                    log_error "public_seed_of=$public_seed_of: failed to parse peer_id/network_pk from $target_identity"
-                    exit 1
-                fi
-                target_host=$(echo "$config_json" | jq -r --arg id "$public_seed_of" \
-                    '.nodes[] | select(.id == $id) | (.internal_host // .host)')
-                target_public_port=$(echo "$config_json" | jq -r --arg id "$public_seed_of" \
-                    '.nodes[] | select(.id == $id) | .public_port')
-                if [ -z "$target_host" ] || [ "$target_host" = "null" ] || \
-                   [ -z "$target_public_port" ] || [ "$target_public_port" = "null" ]; then
-                    log_error "public_seed_of=$public_seed_of: missing host/public_port in cluster.toml"
-                    exit 1
-                fi
-                target_proto="dns"
-                if [[ "$target_host" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-                    target_proto="ip4"
-                fi
-                # ValidatorFullNode is the role for the upstream peer that serves
-                # this PFN. It lands in `upstream_roles(Public, FullNode)` —
-                # see gravity-aptos/config/src/network_id.rs:176-180.
-                export PFN_SEEDS_BLOCK="    seeds:
-      '0x${target_peer_id}':
-        addresses:
-          - '/${target_proto}/${target_host}/tcp/${target_public_port}/noise-ik/${target_network_pk}/handshake/0'
-        role: ValidatorFullNode"
-                log_info "  [$NODE_ID] public_seed_of=$public_seed_of, seeds -> ${target_host}:${target_public_port} (proto=${target_proto})"
-            else
-                export PFN_SEEDS_BLOCK=""
+            seeds_json=$(echo "$node" | jq -c '.seeds // []')
+            export PFN_SEEDS_BLOCK="$(build_seeds_block "$seeds_json" "public" "$NODE_ID")"
+            if [ -n "$PFN_SEEDS_BLOCK" ]; then
+                local seed_count
+                seed_count=$(echo "$seeds_json" | jq 'length')
+                log_info "  [$NODE_ID] seeds: $seed_count entr$([ "$seed_count" = 1 ] && echo y || echo ies) on Public network"
             fi
 
             configure_pfn \
@@ -761,7 +901,8 @@ main() {
                 "$identity_src" \
                 "$waypoint_src"
         elif [ "$role" == "vfn" ]; then
-            # VFN node
+            # VFN node. Vfn network is outbound (to validator); Public network
+            # is an optional seed-accept-only listener for downstream PFNs.
             identity_src="$OUTPUT_DIR/$NODE_ID/config/identity.yaml"
 
             if [ ! -f "$identity_src" ]; then
@@ -769,63 +910,28 @@ main() {
                 exit 1
             fi
 
-            # Optional: build VFN_SEEDS_BLOCK if shadow_of is set.
-            # See _local/drafts/vfn-shadow/e2e.md §6.3.
-            shadow_of=$(echo "$node" | jq -r '.shadow_of // empty')
-            if [ -n "$shadow_of" ]; then
-                target_identity="$OUTPUT_DIR/$shadow_of/config/identity.yaml"
-                if [ ! -f "$target_identity" ]; then
-                    log_error "shadow_of=$shadow_of but identity not found at $target_identity"
-                    exit 1
-                fi
-                target_peer_id=$(awk -F': ' '/^account_address:/{gsub(/["\x27]/,"",$2); print $2}' "$target_identity")
-                target_network_pk=$(awk -F': ' '/^network_public_key:/{gsub(/["\x27]/,"",$2); print $2}' "$target_identity")
-                target_peer_id=${target_peer_id#0x}
-                target_network_pk=${target_network_pk#0x}
-                if [ -z "$target_peer_id" ] || [ -z "$target_network_pk" ]; then
-                    log_error "shadow_of=$shadow_of: failed to parse peer_id/network_pk from $target_identity"
-                    exit 1
-                fi
-                # Intra-cluster p2p dial uses internal_host first, falls back to host.
-                target_host=$(echo "$config_json" | jq -r --arg id "$shadow_of" \
-                    '.nodes[] | select(.id == $id) | (.internal_host // .host)')
-                target_vfn_port=$(echo "$config_json" | jq -r --arg id "$shadow_of" \
-                    '.nodes[] | select(.id == $id) | .vfn_port')
-                if [ -z "$target_host" ] || [ "$target_host" = "null" ] || \
-                   [ -z "$target_vfn_port" ] || [ "$target_vfn_port" = "null" ]; then
-                    log_error "shadow_of=$shadow_of: missing host/vfn_port in cluster.toml"
-                    exit 1
-                fi
-                target_proto="dns"
-                if [[ "$target_host" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-                    target_proto="ip4"
-                fi
-                export VFN_SEEDS_BLOCK="    seeds:
-      '0x${target_peer_id}':
-        addresses:
-          - '/${target_proto}/${target_host}/tcp/${target_vfn_port}/noise-ik/${target_network_pk}/handshake/0'
-        role: Validator"
-                log_info "  [$NODE_ID] shadow_of=$shadow_of, seeds -> ${target_host}:${target_vfn_port} (proto=${target_proto})"
-            else
-                export VFN_SEEDS_BLOCK=""
+            seeds_json=$(echo "$node" | jq -c '.seeds // []')
+            export VFN_SEEDS_BLOCK="$(build_seeds_block "$seeds_json" "vfn" "$NODE_ID")"
+            if [ -n "$VFN_SEEDS_BLOCK" ]; then
+                local seed_count
+                seed_count=$(echo "$seeds_json" | jq 'length')
+                log_info "  [$NODE_ID] seeds: $seed_count entr$([ "$seed_count" = 1 ] && echo y || echo ies) on Vfn network"
             fi
 
             # Optional: second full_node_networks entry on Public so PFN peers
-            # can dial this VFN. Only emitted when cluster.toml sets public_port.
-            public_port=$(echo "$node" | jq -r '.public_port // empty')
-            if [ -n "$public_port" ] && [ "$public_port" != "null" ]; then
-                # Public listener is seed-accept-only: no on-chain discovery
-                # (fullnode_address encodes the Vfn listener, not this Public
-                # port) and no outbound dialing. PFNs reach us via their own
-                # static seeds pointing here.
+            # can dial this VFN. Emitted when cluster.toml sets public_port.
+            # Public listener is seed-accept-only: no on-chain discovery
+            # (fullnode_address encodes the Vfn listener, not this Public port)
+            # and no outbound dialing. PFNs reach us via their own static seeds.
+            if [ "$PUBLIC_PORT" != "null" ]; then
                 export PUBLIC_NETWORK_BLOCK="  - network_id: public
-    listen_address: \"/ip4/0.0.0.0/tcp/${public_port}\"
+    listen_address: \"/ip4/0.0.0.0/tcp/${PUBLIC_PORT}\"
     identity:
       type: \"from_file\"
       path: ${data_dir}/config/identity.yaml
     discovery_method:
       none"
-                log_info "  [$NODE_ID] Public listener enabled on port ${public_port}"
+                log_info "  [$NODE_ID] Public listener enabled on port ${PUBLIC_PORT}"
             else
                 export PUBLIC_NETWORK_BLOCK=""
             fi
@@ -838,20 +944,15 @@ main() {
                 "$identity_src" \
                 "$waypoint_src"
         else
-            # Validator node (includes both 'genesis' and 'validator' roles)
+            # Validator node (includes both 'genesis' and 'validator' roles).
+            # Port validation already handled by the role-specific case above.
             identity_src="$OUTPUT_DIR/$NODE_ID/config/identity.yaml"
-            
+
             if [ ! -f "$identity_src" ]; then
                 log_error "Identity not found for $NODE_ID at $identity_src"
                 exit 1
             fi
-            
-            # Validate required ports (simple check)
-            if [ "$P2P_PORT" == "null" ] || [ "$VFN_PORT" == "null" ]; then
-                 log_error "Missing required ports in config for $NODE_ID"
-                 exit 1
-            fi
-            
+
             configure_node \
                 "$NODE_ID" \
                 "$data_dir" \

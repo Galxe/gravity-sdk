@@ -267,7 +267,9 @@ class Cluster:
             # Unless explicitly overridden in config (common pattern in this project)
             node_data_dir = node_cfg.get("data_dir")
             http_port = node_cfg.get("https_port")
-            p2p_port = node_cfg.get("p2p_port")
+            # `validator_port` is the semantic name; `p2p_port` is a deprecated
+            # alias still accepted for unmigrated cluster.toml files.
+            p2p_port = node_cfg.get("validator_port", node_cfg.get("p2p_port"))
             vfn_port = node_cfg.get("vfn_port")
             if not node_data_dir:
                 infra_path = self.base_dir / node_id

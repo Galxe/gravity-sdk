@@ -84,15 +84,16 @@ private_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff8
 balance = "1000000000000000000000000"  # 1M ETH
 
 # Genesis validators
-# Each validator must specify: id, address, stake_amount, voting_power, host, p2p_port, vfn_port
+# Each validator must specify: id, address, stake_amount, voting_power, host, validator_port, vfn_port
 # NOTE: voting_power must be >= stake_amount
 # NOTE: host can be an IPv4 address (e.g. "1.2.3.4") or a domain name (e.g. "validator1.example.com")
+# NOTE: `p2p_port` is accepted as a deprecated alias for `validator_port` (warns once on aggregate_genesis).
 
 [[genesis_validators]]
 id = "node1"
 address = "0xAEd2a948892475F800A337427B3275D190EA3e94"  # Your validator ETH address
 host = "127.0.0.1"
-p2p_port = 6180
+validator_port = 6180
 vfn_port = 6190
 stake_amount = "2000000000000000000"   # 2 ETH
 voting_power = "2000000000000000000"   # Must be >= stake_amount
@@ -101,7 +102,7 @@ voting_power = "2000000000000000000"   # Must be >= stake_amount
 id = "node2"
 address = "0x7b254Bd44F6CE45e00a912b2460D47F3Be56fAD7"
 host = "127.0.0.1"
-p2p_port = 6181
+validator_port = 6181
 vfn_port = 6191
 stake_amount = "2000000000000000000"
 voting_power = "2000000000000000000"
@@ -110,7 +111,7 @@ voting_power = "2000000000000000000"
 id = "node3"
 address = "0x9B2C25E77a97d3e84DC0Cb7F83fb676ddC4F24b9"
 host = "127.0.0.1"
-p2p_port = 6182
+validator_port = 6182
 vfn_port = 6192
 stake_amount = "2000000000000000000"
 voting_power = "2000000000000000000"
@@ -119,7 +120,7 @@ voting_power = "2000000000000000000"
 id = "node4"
 address = "0x18c23753385ce7A60B15d171302E48b6AFf0BDC5"
 host = "127.0.0.1"
-p2p_port = 6183
+validator_port = 6183
 vfn_port = 6193
 stake_amount = "2000000000000000000"
 voting_power = "2000000000000000000"
@@ -135,7 +136,7 @@ voting_power = "2000000000000000000"
 # id = "node1"
 # address = "0x..."
 # host = "p2p-a.node1.example.com"    # on-chain validator_address host (public p2p)
-# p2p_port = 6180
+# validator_port = 6180
 # vfn_port = 6190                     # ignored when shadow_fullnode is set
 # shadow_fullnode = "vfn-alpha"
 # stake_amount = "..."

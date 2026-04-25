@@ -20,7 +20,9 @@ waypoint_path = "./artifacts/waypoint.txt"
 [[nodes]]
 id = "vfn-alpha"
 role = "vfn"
-shadow_of = "node1"             # deploy.sh renders seeds block pointing at node1's vfn server
+seeds = [
+    { from = "node1" },         # deploy.sh renders Vfn seeds pointing at node1's vfn_port
+]
 # On-chain discovery would produce (peer_id=node1.account_address, addr=vfn-alpha's own endpoint)
 # because node1's fullnode_address is registered with vfn-alpha's identity. The resulting dial
 # aims at 127.0.0.1:vfn_port — vfn-alpha itself — and only gets rejected at the Noise self-dial
@@ -28,7 +30,6 @@ shadow_of = "node1"             # deploy.sh renders seeds block pointing at node
 discovery_method = "none"
 source = { project_path = "../" }
 host = "127.0.0.1"
-p2p_port = 6183
 vfn_port = 6193                 # on-chain fullnode_address points at this listener
 rpc_port = 18546
 metrics_port = 9004
@@ -40,10 +41,9 @@ reth_p2p_port = 12027
 [[nodes]]
 id = "vfn-client"
 role = "vfn"
-# no shadow_of — standard VFN, reaches vfn-alpha via on-chain discovery
+# no seeds — standard VFN, reaches vfn-alpha via on-chain discovery
 source = { project_path = "../" }
 host = "127.0.0.1"
-p2p_port = 6184
 vfn_port = 6194
 rpc_port = 18547
 metrics_port = 9005
@@ -58,7 +58,7 @@ role = "genesis"
 source = { project_path = "../" }
 host = "127.0.0.1"
 # internal_host = "10.0.1.10"   # optional: intra-cluster p2p address. Falls back to host when unset.
-p2p_port = 6182
+validator_port = 6182
 vfn_port = 6192                 # still runs a local vfn server (not registered on-chain)
 rpc_port = 18545                # shifted from 8545 to avoid host-wide conflict with another user's anvil
 metrics_port = 9003
