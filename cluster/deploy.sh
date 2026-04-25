@@ -884,7 +884,10 @@ main() {
         fi
 
         # Role-specific port schema (see _local/drafts/cluster-seeds/usage.md §9).
-        # Enforced even though templates silently ignore extras, so cluster.toml stays clean.
+        # Missing required ports are hard errors (templates would render
+        # "/tcp/null" and crash the node). Anti-pattern extras (e.g. role=vfn
+        # with validator_port) are warned only — templates ignore unused vars,
+        # so writing them is harmless; the warn just nudges configs to stay clean.
         case "$role" in
             genesis|validator)
                 if [ "$VALIDATOR_PORT" = "null" ]; then
@@ -896,14 +899,12 @@ main() {
                     exit 1
                 fi
                 if [ "$PUBLIC_PORT" != "null" ]; then
-                    log_error "$NODE_ID: role=$role must not set public_port (validators don't expose Public network)"
-                    exit 1
+                    log_warn "$NODE_ID: role=$role should not set public_port (validators don't expose Public network) — ignored"
                 fi
                 ;;
             vfn)
                 if [ "$VALIDATOR_PORT" != "null" ]; then
-                    log_error "$NODE_ID: role=vfn must not set validator_port (VFN has no Validator network)"
-                    exit 1
+                    log_warn "$NODE_ID: role=vfn should not set validator_port (VFN has no Validator network) — ignored"
                 fi
                 if [ "$VFN_PORT" = "null" ]; then
                     log_error "$NODE_ID: role=vfn requires vfn_port (Vfn network listener)"
@@ -913,12 +914,10 @@ main() {
                 ;;
             pfn)
                 if [ "$VALIDATOR_PORT" != "null" ]; then
-                    log_error "$NODE_ID: role=pfn must not set validator_port (use public_port instead)"
-                    exit 1
+                    log_warn "$NODE_ID: role=pfn should not set validator_port (use public_port instead) — ignored"
                 fi
                 if [ "$VFN_PORT" != "null" ]; then
-                    log_error "$NODE_ID: role=pfn must not set vfn_port (PFN has no Vfn network)"
-                    exit 1
+                    log_warn "$NODE_ID: role=pfn should not set vfn_port (PFN has no Vfn network) — ignored"
                 fi
                 if [ "$PUBLIC_PORT" = "null" ]; then
                     log_error "$NODE_ID: role=pfn requires public_port (Public network listener)"
