@@ -158,21 +158,45 @@ EOF
 
     log_info "Generated bench config at $bench_config_path"
     
-    log_info "Running gravity_bench..."
-    (
-        cd "$GRAVITY_BENCH_DIR"
-        cargo run --release --quiet -- \
-            --config "$bench_config_path" \
-            --faucet-only \
-            --accounts-output "$accounts_csv"
+    # Build first (NOT under timeout: cold-cache compile can legitimately take minutes).
+    log_info "Building gravity_bench (release)..."
+    ( cd "$GRAVITY_BENCH_DIR" && cargo build --release --quiet --bin gravity_bench )
+
+    # Resolve the binary path via cargo metadata; workspace target_directory may
+    # not be $GRAVITY_BENCH_DIR/target.
+    target_dir=$(
+        cd "$GRAVITY_BENCH_DIR" && \
+        cargo metadata --format-version 1 --no-deps \
+        | python3 -c 'import sys, json; print(json.load(sys.stdin)["target_directory"])'
     )
-    
-    if [ $? -eq 0 ]; then
-        log_info "Faucet init complete. Accounts saved to $accounts_csv"
-    else
-        log_error "gravity_bench failed."
+    bin_path="$target_dir/release/gravity_bench"
+
+    # Run under timeout(1) — only the execution phase is bounded.
+    # CWD must be $GRAVITY_BENCH_DIR: the binary resolves "scripts/deploy.py"
+    # and other resources relative to its working directory.
+    timeout_secs="${FAUCET_RUN_TIMEOUT_SECS:-600}"
+    log_info "Running gravity_bench (timeout=${timeout_secs}s)..."
+    set +e
+    (
+        cd "$GRAVITY_BENCH_DIR" && \
+        timeout --signal=TERM --kill-after=10 "${timeout_secs}s" \
+            "$bin_path" \
+                --config "$bench_config_path" \
+                --faucet-only \
+                --accounts-output "$accounts_csv"
+    )
+    rc=$?
+    set -e
+
+    if [ "$rc" -eq 124 ]; then
+        log_error "Faucet run timed out after ${timeout_secs}s"
+        exit 124
+    elif [ "$rc" -ne 0 ]; then
+        log_error "gravity_bench failed (rc=$rc)"
         exit 1
     fi
+
+    log_info "Faucet init complete. Accounts saved to $accounts_csv"
 }
 
 main "$@"
