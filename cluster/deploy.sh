@@ -367,7 +367,7 @@ configure_node() {
     export NODE_ID="$node_id"
     export DATA_DIR="$data_dir"
     export STORAGE_DIR="${node_storage_dir:-$data_dir/data}"
-    export LOG_DIR="${node_log_dir:-$STORAGE_DIR}"
+    export LOG_DIR="${node_log_dir:-$data_dir}"
     export CONFIG_DIR="$config_dir"
     export GENESIS_PATH="$genesis_path"
     export BINARY_PATH="$binary_path"
@@ -485,7 +485,7 @@ configure_pfn() {
     export NODE_ID="$node_id"
     export DATA_DIR="$data_dir"
     export STORAGE_DIR="${node_storage_dir:-$data_dir/data}"
-    export LOG_DIR="${node_log_dir:-$STORAGE_DIR}"
+    export LOG_DIR="${node_log_dir:-$data_dir}"
     export CONFIG_DIR="$config_dir"
     export GENESIS_PATH="$genesis_path"
     export BINARY_PATH="$binary_path"
@@ -604,7 +604,7 @@ configure_vfn() {
     export NODE_ID="$node_id"
     export DATA_DIR="$data_dir"
     export STORAGE_DIR="${node_storage_dir:-$data_dir/data}"
-    export LOG_DIR="${node_log_dir:-$STORAGE_DIR}"
+    export LOG_DIR="${node_log_dir:-$data_dir}"
     export CONFIG_DIR="$config_dir"
     export GENESIS_PATH="$genesis_path"
     export BINARY_PATH="$binary_path"
@@ -976,7 +976,7 @@ main() {
 
         # Prepare dirs
         local storage_dir="${node_storage_dir:-$data_dir/data}"
-        local log_dir="${node_log_dir:-$storage_dir}"
+        local log_dir="${node_log_dir:-$data_dir}"
         mkdir -p "$data_dir"/{bin,config,logs,script}
         mkdir -p "$storage_dir"
         mkdir -p "$log_dir"/{execution_logs,consensus_log}
