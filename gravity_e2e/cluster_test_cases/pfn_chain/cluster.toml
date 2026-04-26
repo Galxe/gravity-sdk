@@ -1,0 +1,131 @@
+# Gravity Cluster Configuration - PFN fan-out + redundant leaf topology
+# 1 validator (node1) + 1 VFN shadow (vfn1) + 2 sibling PFNs (pfn1, pfn2)
+# + 1 leaf PFN (pfn3) with two redundant upstreams.
+#
+# Topology:
+#                       +--- pfn1 <----+
+#                       |              |
+#   node1 <--Vfn--vfn1--+              +--- pfn3
+#                       |              |
+#                       +--- pfn2 <----+
+#
+# Arrow = active dial direction. Once Noise handshake completes every edge
+# is bidirectional at the protocol level.
+#
+# - vfn1 is node1's shadow VFN: genesis registers vfn1's identity as node1's
+#   on-chain `fullnode_address`. vfn1 listens on Vfn (6193, to node1) and
+#   Public (6195, for both PFNs to dial).
+# - pfn1 and pfn2 are siblings: each independently dials vfn1 on Public.
+#   They do NOT know about each other (no seeds entry between them).
+# - pfn3 is the leaf with TWO redundant upstreams: it dials both pfn1 and
+#   pfn2 on Public. If either is down, pfn3 still reaches the chain.
+# - pfn1 and pfn2 each register pfn3 as a Downstream peer — pfn3 lands in
+#   their trusted_peers (so its inbound dial gets the right role tag and
+#   bypasses the unknown-inbound quota), but they don't actively dial it
+#   (Downstream is excluded from upstream_roles for Public; see
+#   network_id.rs:173-188).
+#
+# What this case covers that no other e2e does:
+# 1. PFN-as-upstream-for-PFN sync (pfn3's only upstreams are PFNs).
+# 2. Role auto-inference branch `from = "<pfn>"` -> PreferredUpstream
+#    (deploy.sh:189) — pfn3's seeds exercise this path.
+# 3. Explicit Downstream-role seed entries on pfn1/pfn2 for pfn3.
+# 4. Tx submission via PFN's RPC propagating through pfn3 → (pfn1 or pfn2)
+#    → vfn1 → node1 and being included in a block (broadcast enabled for
+#    any role=FullNode in main.rs:311-315; first e2e to actually verify).
+# 5. Redundant-upstream failover under load (Phase 1 stops one of pfn1/pfn2
+#    mid-flight; pfn3 must keep up via the other).
+
+[cluster]
+name = "gravity-devnet-pfn-chain"
+base_dir = "/tmp/gravity-cluster-pfn-chain"
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 6182
+vfn_port = 6192
+rpc_port = 18545
+metrics_port = 9003
+inspection_port = 10002
+https_port = 1024
+authrpc_port = 8553
+reth_p2p_port = 12026
+
+[[nodes]]
+id = "vfn1"
+role = "vfn"
+seeds = [
+    { from = "node1" },         # Vfn seeds -> node1's Vfn listener (6192)
+]
+public_port = 6195              # extra Public listener so pfn1/pfn2 can dial in
+# Skip on-chain discovery: node1's registered fullnode_address encodes
+# vfn1's own identity, so on-chain discovery would self-dial and Noise
+# would reject. Static seeds already reach the upstream.
+discovery_method = "none"
+source = { project_path = "../" }
+host = "127.0.0.1"
+vfn_port = 6193
+rpc_port = 18546
+metrics_port = 9004
+inspection_port = 10003
+https_port = 1025
+authrpc_port = 8554
+reth_p2p_port = 12027
+
+[[nodes]]
+id = "pfn1"
+role = "pfn"
+seeds = [
+    { from = "vfn1" },                              # upstream — auto-infers ValidatorFullNode
+    { from = "pfn3", role = "Downstream" },         # downstream — accept-only, no dial
+]
+source = { project_path = "../" }
+host = "127.0.0.1"
+public_port = 6196              # Public listener — serves pfn3's inbound + own outbound to vfn1
+rpc_port = 18547
+metrics_port = 9005
+inspection_port = 10004
+authrpc_port = 8555
+reth_p2p_port = 12028
+
+[[nodes]]
+id = "pfn2"
+role = "pfn"
+seeds = [
+    { from = "vfn1" },                              # upstream — sibling of pfn1, independent dial of vfn1
+    { from = "pfn3", role = "Downstream" },         # downstream — accept-only, no dial
+]
+source = { project_path = "../" }
+host = "127.0.0.1"
+public_port = 6197              # Public listener — serves pfn3's inbound + own outbound to vfn1
+rpc_port = 18548
+metrics_port = 9006
+inspection_port = 10005
+authrpc_port = 8556
+reth_p2p_port = 12029
+
+[[nodes]]
+id = "pfn3"
+role = "pfn"
+seeds = [
+    { from = "pfn1" },          # pfn3 dials pfn1's public_port (6196), auto-infers PreferredUpstream (deploy.sh:189)
+    { from = "pfn2" },          # pfn3 dials pfn2's public_port (6197) — redundant upstream
+]
+source = { project_path = "../" }
+host = "127.0.0.1"
+public_port = 6198              # Public listener (inbound only — no one dials pfn3 in this topology)
+rpc_port = 18549
+metrics_port = 9007
+inspection_port = 10006
+authrpc_port = 8557
+reth_p2p_port = 12030
+
+[faucet_init]
+num_accounts = 10000
