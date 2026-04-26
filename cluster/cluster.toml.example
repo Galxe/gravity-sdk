@@ -5,6 +5,8 @@
 [cluster]
 name = "gravity-devnet"
 base_dir = "/tmp/gravity-cluster"
+# data_base_dir = "/tmp/gravity-cluster-data"  # optional: data storage root (default: base_dir)
+# log_dir = "/tmp/gravity-cluster-logs"  # optional: log storage root (default: data_base_dir or base_dir)
 
 # Genesis data source
 # Default paths point to locally generated genesis (from make genesis)
@@ -51,6 +53,30 @@ ws_api          = "debug,eth,net,trace,txpool,web3,rpc"
 #   source = { project_path = "../" }                                  # local project, cargo build
 #   source = { bin_path = "/opt/gravity/v2.1/gravity_node" }           # pre-built binary
 #   source = { github = "Galxe/gravity-sdk", rev = "v2.0.0" }         # clone + build
+#
+# Per-node identity (optional, defaults to local file).
+# `make init` always writes a public-only sidecar (output/<id>/config/
+# identity.public.yaml) for `make genesis` to consume; the private blob
+# is materialized differently per source:
+#
+#   identity = { source = "file" }
+#     Default. `make init` writes identity.yaml under output/<id>/config/;
+#     `make deploy` copies it to <data_dir>/config/identity.yaml.
+#
+#   identity = { source = "gcp_secret", secret = "projects/<P>/secrets/<S>/versions/latest" }
+#     `make init` generates the keypair entirely in memory and pushes it
+#     to Secret Manager via reqwest; identity.yaml is never written to
+#     disk. `make deploy` leaves the runtime config dir without
+#     identity.yaml; gravity_node fetches the IdentityBlob from Secret
+#     Manager at startup. The binary MUST be built with
+#     `--features gcp-secret-manager` (forward via gravity_node/gaptos).
+#     Auth (init-time, on operator workstation):
+#       export GCP_ACCESS_TOKEN=$(gcloud auth print-access-token)
+#     Auth (runtime): GCE metadata server (bound SA with
+#     roles/secretmanager.secretAccessor), or GCP_ACCESS_TOKEN env var.
+#     Pin a specific version (e.g. versions/3) instead of versions/latest
+#     so rotation requires an explicit cluster.toml change rather than a
+#     restart side-effect.
 
 # ============ Genesis Nodes (node1-node4) ============
 
@@ -133,6 +159,7 @@ id = "vfn1"
 host = "127.0.0.1"
 role = "vfn"
 source = { project_path = "../" }
+# identity = { source = "gcp_secret", secret = "projects/my-proj/secrets/vfn1-identity/versions/latest" }
 vfn_port = 6195
 rpc_port = 8550
 # ws_port = 8650   # uncomment to enable WebSocket RPC on this VFN (validators don't expose WS)

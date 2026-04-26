@@ -239,22 +239,27 @@ def main():
 
     for node in genesis_nodes:
         node_id = node['id']
-        # Identity keys are at: output/nodeX/config/identity.yaml
         data_dir = node.get('data_dir') or os.path.join(output_dir, node_id)
-        identity_path = os.path.join(data_dir, "config", "identity.yaml")
-        
-        if not os.path.exists(identity_path):
-            print(f"Error: Identity file not found: {identity_path}")
+        public_path = os.path.join(data_dir, "config", "identity.public.yaml")
+        legacy_path = os.path.join(data_dir, "config", "identity.yaml")
+
+        if os.path.exists(public_path):
+            identity_path = public_path
+        elif os.path.exists(legacy_path):
+            identity_path = legacy_path
+        else:
+            print(f"Error: Identity file not found: tried {public_path} and {legacy_path}")
+            print("Run 'make init' first to generate node keys.")
             sys.exit(1)
-            
+
         identity = parse_simple_yaml(identity_path)
-        
+
         # Validation
         required_keys = ['account_address', 'consensus_public_key', 'network_public_key']
         for k in required_keys:
             if k not in identity:
-                print(f"Error: Missing '{k}' in {identity_path}")
-                print("Make sure gravity_cli is updated to output public keys.")
+                print(f"Error: Missing '{k}' in {public_path}")
+                print("Re-run 'make init' to regenerate the sidecar.")
                 sys.exit(1)
         
         # Get validator address from config (required)
@@ -338,10 +343,15 @@ def main():
                       f"but no matching [[shadow_nodes]] entry found")
                 sys.exit(1)
             shadow = shadow_lookup[shadow_id]
-            shadow_identity_path = os.path.join(output_dir, shadow_id, 'config', 'identity.yaml')
-            if not os.path.exists(shadow_identity_path):
-                print(f"Error: shadow node '{shadow_id}' identity not found at {shadow_identity_path}. "
-                      f"Run 'make init' first.")
+            shadow_public_path = os.path.join(output_dir, shadow_id, 'config', 'identity.public.yaml')
+            shadow_full_path = os.path.join(output_dir, shadow_id, 'config', 'identity.yaml')
+            if os.path.exists(shadow_public_path):
+                shadow_identity_path = shadow_public_path
+            elif os.path.exists(shadow_full_path):
+                shadow_identity_path = shadow_full_path
+            else:
+                print(f"Error: shadow node '{shadow_id}' identity not found. "
+                      f"Tried {shadow_public_path} and {shadow_full_path}. Run 'make init' first.")
                 sys.exit(1)
             shadow_identity = parse_simple_yaml(shadow_identity_path)
             shadow_network_pk = shadow_identity['network_public_key']

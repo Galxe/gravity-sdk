@@ -1,5 +1,6 @@
 mod account;
 mod key;
+mod secret_manager;
 mod waypoint;
 
 use clap::{Parser, Subcommand};
