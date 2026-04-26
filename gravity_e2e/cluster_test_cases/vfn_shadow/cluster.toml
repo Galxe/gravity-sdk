@@ -1,13 +1,6 @@
 # Gravity Cluster Configuration - VFN shadow topology
 # 1 validator (node1) + 1 VFN-alpha (shadow of node1) + 1 VFN-client
 # See _local/drafts/vfn-shadow/e2e.md §2-§4.
-#
-# NOTE on node ordering: start.sh launches nodes in the order they appear here.
-# vfn-alpha is listed *before* node1 on purpose so it boots with an empty
-# BlockStore from genesis; otherwise node1 produces blocks before vfn-alpha
-# comes up, vfn-alpha hot-pulls them through its static seeds, and recover_blocks
-# hits an existing upstream assert_eq on ACCUMULATOR_PLACEHOLDER_HASH (panic in
-# block_store.rs:645). Unrelated to the consumer-only QS change.
 
 [cluster]
 name = "gravity-devnet-vfn-shadow"
@@ -16,6 +9,21 @@ base_dir = "/tmp/gravity-cluster-vfn-shadow"
 [genesis_source]
 genesis_path = "./artifacts/genesis.json"
 waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+# internal_host = "10.0.1.10"   # optional: intra-cluster p2p address. Falls back to host when unset.
+validator_port = 6182
+vfn_port = 6192                 # still runs a local vfn server (not registered on-chain)
+rpc_port = 18545                # shifted from 8545 to avoid host-wide conflict with another user's anvil
+metrics_port = 9003
+inspection_port = 10002
+https_port = 1024
+authrpc_port = 8553
+reth_p2p_port = 12026
 
 [[nodes]]
 id = "vfn-alpha"
@@ -51,21 +59,6 @@ inspection_port = 10004
 https_port = 1026
 authrpc_port = 8555
 reth_p2p_port = 12028
-
-[[nodes]]
-id = "node1"
-role = "genesis"
-source = { project_path = "../" }
-host = "127.0.0.1"
-# internal_host = "10.0.1.10"   # optional: intra-cluster p2p address. Falls back to host when unset.
-validator_port = 6182
-vfn_port = 6192                 # still runs a local vfn server (not registered on-chain)
-rpc_port = 18545                # shifted from 8545 to avoid host-wide conflict with another user's anvil
-metrics_port = 9003
-inspection_port = 10002
-https_port = 1024
-authrpc_port = 8553
-reth_p2p_port = 12026
 
 [faucet_init]
 num_accounts = 10000
