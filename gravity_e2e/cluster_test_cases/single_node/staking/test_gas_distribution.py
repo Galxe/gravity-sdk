@@ -288,7 +288,7 @@ async def test_withdraw_rewards_to_account(cluster: Cluster):
     withdraw_result = await staker_tb.build_and_send_tx(
         to=coinbase,
         data=pool.encode_abi("withdrawRewards", [recipient.address]),
-        options=TransactionOptions(gas_limit=200_000, max_priority_fee_per_gas=0, max_fee_per_gas=10**10),
+        options=TransactionOptions(gas_limit=200_000, max_priority_fee_per_gas=0, max_fee_per_gas=10**11),
     )
     assert withdraw_result.success, f"withdrawRewards failed: {withdraw_result.error}"
 
