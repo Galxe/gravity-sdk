@@ -289,7 +289,7 @@ class TransactionBuilder:
                     tx['gasPrice'] = gas_price
                 except Exception as e:
                     LOG.warning(f"Could not get gas price: {e}")
-                    tx['gasPrice'] = Wei(20000000000)  # 20 gwei fallback
+                    tx['gasPrice'] = Wei(100_000_000_000)  # 100 gwei fallback (>= Gravity 50 Gwei base fee floor)
 
             # Estimate gas if not provided
             if opts.gas_limit:

@@ -69,8 +69,16 @@ alg = "RS256"
 e = "AQAB"
 n = "2K7epoJWl_aBoYGpXmDBBiEnwQ0QdVRU1gsbGXNrEbrZEQdY5KjH5P5gZMq3d3KvT1j5KsD2tF_9jFMDLqV4VWDNJRLgSNJxhJuO_oLO2BXUSL9a7fLHxnZCUfJvT2K-O8AXjT3_ZM8UuL8d4jBn_fZLzdEI4MHrZLVSaHDvvKqL_mExQo6cFD-qyLZ-T6aHv2x8R7L_3X7E1nGMjKVVZMveQ_HMeXvnGxKf5yfEP0hIQlC_kFm4L_1kV1S0UPmMptZL2qI4VnXqmqI6TZJyE-3VXHgNn1Z1O_9QZlPC0fF0spLHf2S3nNqI0v3k2E7q3DkqxVf5xvn7q_X-gPqzVE9Jw"
 
+# Gravity min base fee (optional)
+# Injected as `config.gravityMinBaseFee` in genesis.json. Presence marks the
+# chainspec as Gravity and enforces this floor at consensus and pool admission.
+# Defaults to 50_000_000_000 (50 Gwei) — matches gravity-reth main. Override here
+# only if a test needs a different floor.
+# gravity_min_base_fee = 50000000000
+
 # Hardfork block numbers (optional)
-# Custom hardfork activation blocks injected into genesis.json .config
+# Custom hardfork activation blocks injected into genesis.json .config.
+# Merged after gravity_min_base_fee, so a hardforks entry of the same key wins.
 # Example:
 # [genesis.hardforks]
 # alphaBlock = 8287964
