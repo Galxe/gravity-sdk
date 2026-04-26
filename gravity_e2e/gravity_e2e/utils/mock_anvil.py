@@ -199,13 +199,15 @@ class MockAnvil:
         recipient: str,
         sender_address: str,
         events_per_block: int = 1,
+        start_nonce: Optional[int] = None,
+        start_block: Optional[int] = None,
     ) -> List[int]:
         """
         Pre-generate `count` MessageSent events.
 
-        Events are distributed across blocks, `events_per_block` per block,
-        starting from block 1. After preloading, finalized_block is set to
-        cover all generated blocks (zero lag).
+        Events are distributed across blocks, `events_per_block` per block.
+        After preloading, finalized_block is updated to cover all generated
+        blocks (zero lag).
 
         Args:
             count: Number of bridge events to generate.
@@ -213,21 +215,36 @@ class MockAnvil:
             recipient: Recipient address on gravity chain.
             sender_address: Sender address (bridge sender contract).
             events_per_block: Number of events per block (default 1).
+            start_nonce: Nonce to begin numbering from. Defaults to one
+                past the highest existing nonce, so successive calls append.
+            start_block: MockAnvil block number to begin emitting from.
+                Defaults to one past the highest existing block, again
+                yielding append semantics.
 
         Returns:
-            List of nonces [1, 2, ..., count].
+            List of nonces [start_nonce, ..., start_nonce + count - 1].
         """
+        # Append semantics: continue numbering from the prior call's end
+        # unless the caller explicitly overrides. First call (empty _logs)
+        # gets the legacy [1, blk=1] origin.
+        if start_nonce is None:
+            existing = sum(len(logs) for logs in self._logs.values())
+            start_nonce = existing + 1
+        if start_block is None:
+            start_block = (max(self._logs.keys()) + 1) if self._logs else 1
+
         LOG.info(
             f"MockAnvil: preloading {count} MessageSent events "
-            f"({events_per_block} per block)..."
+            f"({events_per_block} per block) starting nonce={start_nonce} "
+            f"block={start_block}..."
         )
         t0 = time.time()
 
-        nonce = 1
-        block_number = 1
+        nonce = start_nonce
+        block_number = start_block
         log_index_in_block = 0
 
-        while nonce <= count:
+        while nonce < start_nonce + count:
             if block_number not in self._logs:
                 self._logs[block_number] = []
 
@@ -260,7 +277,7 @@ class MockAnvil:
             f"finalized_block={self.current_block}"
         )
 
-        return list(range(1, count + 1))
+        return list(range(start_nonce, start_nonce + count))
 
     # ------------------------------------------------------------------
     # JSON-RPC handlers
@@ -283,6 +300,26 @@ class MockAnvil:
                 result = str(self.chain_id)
             elif method == "eth_blockNumber":
                 result = _to_hex(self.current_block)
+            elif method == "mock_preload_events":
+                # Test-only side door: lets a remote pytest process inject
+                # additional MessageSent events at runtime, used by the
+                # hardfork bridge test to emit batch2 *after* the gravity
+                # chain has crossed zetaBlock. Param shape mirrors
+                # preload_events kwargs exactly.
+                p = params[0] if params else {}
+                nonces = self.preload_events(
+                    count=int(p["count"]),
+                    amount=int(p["amount"]),
+                    recipient=p["recipient"],
+                    sender_address=p["sender_address"],
+                    events_per_block=int(p.get("events_per_block", 1)),
+                    start_nonce=p.get("start_nonce"),
+                    start_block=p.get("start_block"),
+                )
+                result = {
+                    "nonces": nonces,
+                    "finalized_block": self.current_block,
+                }
             else:
                 LOG.debug(f"MockAnvil: unsupported method '{method}', returning null")
                 result = None

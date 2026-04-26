@@ -25,21 +25,45 @@ if _E2E_ROOT not in sys.path:
 _mock = None
 _METADATA_FILE = "mock_anvil_metadata.json"
 
-# Bridge defaults — preload BOTH pre- and post-hardfork batches
-_DEFAULT_BRIDGE_COUNT = 20  # 10 pre-hardfork + 10 post-hardfork
+# Bridge defaults — preload only batch1 (pre-Zeta). batch2 is injected by
+# test_hardfork_bridge.py at runtime (post-Zeta) via MockAnvil's
+# mock_preload_events RPC, so the bridge test exercises a real "oracle pulls
+# new events after Zeta has activated" path rather than a static lookback.
+_DEFAULT_BRIDGE_COUNT = 10  # batch1 only; test_hardfork_bridge appends batch2
 _DEFAULT_BRIDGE_AMOUNT = 1_000_000_000_000_000_000  # 1 ether in wei
 _DEFAULT_RECIPIENT = "0x6954476eAe13Bd072D9f19406A6B9543514f765C"
-_DEFAULT_SENDER = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
 
-# Relayer config for Anvil bridge
+# Sepolia GBridgeSender — baked into Epsilon's GBridgeReceiver bytecode as
+# the immutable `trustedBridge`. The Epsilon hardfork activates at block 0
+# on the v1.4.0 baseline, so GBridgeReceiver expects this exact sender on
+# every MessageSent event from the moment the chain is alive. Mismatch
+# trips `InvalidSender` at the bridge callback. Verified by decoding
+# `gravity-reth/.../bytecodes/epsilon/GBridgeReceiver.bin`.
+_DEFAULT_SENDER = "0x79226649b3a20231e6b468a9e1abbd23d3dfbbc6"
+
+# Sepolia chain id (11155111). The same Epsilon GBridgeReceiver bytecode
+# also bakes in `trustedSourceId = 0xaa36a7`, so MockAnvil must report this
+# chain id and the oracle URI must address it. Production gravity-testnet
+# really does listen on Sepolia — the e2e cluster mirrors that contract.
+SEPOLIA_CHAIN_ID = 11155111
+
+# Relayer config for Anvil bridge — URI's chain id must match the testnet
+# config that Epsilon/Zeta hardcode (Sepolia, 11155111).
 ANVIL_RELAYER_CONFIG = {
     "uri_mappings": {
-        "gravity://0/31337/events?contract=0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512&eventSignature=0x5646e682c7d994bf11f5a2c8addb60d03c83cda3b65025a826346589df43406e&fromBlock=0": "http://localhost:8547"
+        f"gravity://0/{SEPOLIA_CHAIN_ID}/events?contract=0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512&eventSignature=0x5646e682c7d994bf11f5a2c8addb60d03c83cda3b65025a826346589df43406e&fromBlock=0": "http://localhost:8547"
     }
 }
 
 
 # ── Genesis injection ────────────────────────────────────────────────
+
+# Gravity protocol base fee floor (wei). Activated at zetaBlock per
+# gravity-reth PR #337. Without this field gravity_min_base_fee_at_block
+# always returns None and the floor is never enforced — e2e must inject it
+# alongside zetaBlock to exercise the v1.5 chainspec floor.
+GRAVITY_MIN_BASE_FEE_WEI = 50_000_000_000
+
 
 def _inject_hardfork_blocks(
     genesis_path: Path,
@@ -70,16 +94,19 @@ def _inject_hardfork_blocks(
     genesis["config"]["deltaBlock"] = delta_block
     genesis["config"]["epsilonBlock"] = epsilon_block
     genesis["config"]["zetaBlock"] = zeta_block
+    genesis["config"]["gravityMinBaseFee"] = GRAVITY_MIN_BASE_FEE_WEI
 
     with open(genesis_path, "w") as f:
         json.dump(genesis, f, indent=2)
 
     LOG.info(
-        "  ✅ Patched gammaBlock=%s deltaBlock=%s epsilonBlock=%s zetaBlock=%s in %s",
+        "  ✅ Patched gammaBlock=%s deltaBlock=%s epsilonBlock=%s zetaBlock=%s "
+        "gravityMinBaseFee=%s in %s",
         gamma_block,
         delta_block,
         epsilon_block,
         zeta_block,
+        GRAVITY_MIN_BASE_FEE_WEI,
         genesis_path,
     )
     return True
@@ -145,8 +172,14 @@ def pre_start(test_dir, env, pytest_args=None):
 
     # ── 1. Start MockAnvil ──
     bridge_count = int(os.environ.get("BRIDGE_COUNT", str(_DEFAULT_BRIDGE_COUNT)))
-    LOG.info(f"🌉 Starting MockAnvil on port 8547, preloading {bridge_count} events...")
-    _mock = MockAnvil(port=8547)
+    LOG.info(
+        f"🌉 Starting MockAnvil on port 8547 (chainId={SEPOLIA_CHAIN_ID}), "
+        f"preloading {bridge_count} events..."
+    )
+    # Sepolia chain id matches what Epsilon's GBridgeReceiver hardcodes as
+    # `trustedSourceId`; otherwise the bridge callback aborts with
+    # `InvalidSourceChain(actual=31337, expected=11155111)` on every event.
+    _mock = MockAnvil(port=8547, chain_id=SEPOLIA_CHAIN_ID)
     _mock.start()
 
     nonces = _mock.preload_events(

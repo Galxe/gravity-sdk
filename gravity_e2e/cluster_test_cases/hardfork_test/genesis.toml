@@ -104,18 +104,28 @@ source_types = [1]
 callbacks = ["0x00000000000000000000000000000001625F2018"]
 
 # Bridge config: deploy GBridgeReceiver at genesis
+#
+# These values intentionally mirror what gravity-testnet's GBridgeReceiver
+# bytecode hardcodes as immutables (see
+# `gravity-reth/.../bytecodes/epsilon/GBridgeReceiver.bin`). The Epsilon
+# hardfork activates at block 0 on the v1.4.0 baseline, replacing the
+# genesis-deployed receiver bytecode with one that bakes in
+# `trustedBridge=0x79226649…` and `trustedSourceId=11155111` regardless of
+# what was used at deploy time. Aligning genesis to those Sepolia values
+# keeps the pre-Epsilon and post-Epsilon receivers behaviorally identical
+# so the bridge works across the lifecycle, including post-Zeta.
 [genesis.oracle_config.bridge_config]
 deploy = true
-# GBridgeSender deterministic address on Anvil/MockAnvil (deployer nonce=2)
-trusted_bridge = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
-trusted_source_id = 31337
+# Sepolia GBridgeSender — what production gravity-testnet listens to
+trusted_bridge = "0x79226649b3a20231e6b468a9e1abbd23d3dfbbc6"
+trusted_source_id = 11155111
 
-# Oracle task: watch Anvil/MockAnvil (chainId 31337) for MessageSent events
+# Oracle task: watch MockAnvil pretending to be Sepolia (chainId 11155111)
 [[genesis.oracle_config.tasks]]
 source_type = 0
-source_id = 31337
+source_id = 11155111
 task_name = "anvil"
-config = "gravity://0/31337/events?contract=0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512&eventSignature=0x5646e682c7d994bf11f5a2c8addb60d03c83cda3b65025a826346589df43406e&fromBlock=0"
+config = "gravity://0/11155111/events?contract=0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512&eventSignature=0x5646e682c7d994bf11f5a2c8addb60d03c83cda3b65025a826346589df43406e&fromBlock=0"
 
 # JWK config - Google OIDC provider
 [genesis.jwk_config]

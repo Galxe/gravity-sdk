@@ -123,6 +123,109 @@ def compare_snapshots(
     return changed, unchanged, missing
 
 
+# Gravity protocol base fee floor activated at zetaBlock (gravity-reth PR #337).
+# Mirrors the value injected by hooks._inject_hardfork_blocks; kept in sync there.
+GRAVITY_MIN_BASE_FEE_WEI = 50_000_000_000
+
+
+def sample_base_fees(w3: Web3, lo: int, hi: int) -> Dict[int, int]:
+    """Read baseFeePerGas for blocks in [lo, hi] inclusive. Returns {block: fee}.
+
+    Skips blocks that haven't been produced yet or lack the field (pre-EIP-1559).
+    """
+    out: Dict[int, int] = {}
+    head = w3.eth.block_number
+    hi = min(hi, head)
+    for n in range(max(lo, 0), hi + 1):
+        try:
+            blk = w3.eth.get_block(n)
+        except Exception:
+            continue
+        fee = blk.get("baseFeePerGas")
+        if fee is not None:
+            out[n] = int(fee)
+    return out
+
+
+def assert_base_fee_floor_active(w3: Web3, lo: int, hi: int, floor_wei: int = GRAVITY_MIN_BASE_FEE_WEI):
+    """Assert every block in [lo, hi] has baseFeePerGas >= floor_wei.
+
+    Used post-Zeta to confirm the chainspec clamp is in effect.
+    """
+    fees = sample_base_fees(w3, lo, hi)
+    assert fees, f"no baseFeePerGas data in [{lo},{hi}]"
+    violators = {n: f for n, f in fees.items() if f < floor_wei}
+    assert not violators, (
+        f"baseFee floor not enforced post-Zeta: {len(violators)} block(s) "
+        f"below {floor_wei} wei. Examples: "
+        f"{dict(list(violators.items())[:5])}"
+    )
+    LOG.info(
+        "  baseFee floor OK across [%d,%d] (%d blocks, min=%d, max=%d, floor=%d)",
+        lo, hi, len(fees), min(fees.values()), max(fees.values()), floor_wei,
+    )
+
+
+def assert_base_fee_floor_inactive(w3: Web3, lo: int, hi: int, floor_wei: int = GRAVITY_MIN_BASE_FEE_WEI):
+    """Assert at least one block in [lo, hi] has baseFeePerGas < floor_wei.
+
+    Used pre-Zeta to confirm the schedule has NOT activated yet — proves
+    we are observing real upstream EIP-1559 decay, not a hardcoded value.
+    """
+    fees = sample_base_fees(w3, lo, hi)
+    assert fees, f"no baseFeePerGas data in [{lo},{hi}]"
+    sub_floor = [(n, f) for n, f in fees.items() if f < floor_wei]
+    assert sub_floor, (
+        f"pre-Zeta baseFee never dipped below {floor_wei} wei across "
+        f"{len(fees)} sampled blocks — floor may be active before zetaBlock, "
+        f"min observed={min(fees.values())}"
+    )
+    LOG.info(
+        "  pre-Zeta baseFee decays freely: %d/%d blocks < floor (min=%d wei)",
+        len(sub_floor), len(fees), min(fees.values()),
+    )
+
+
+async def send_eip1559_transfer(
+    w3: Web3,
+    sender_account,
+    max_fee_per_gas: int,
+    max_priority_fee_per_gas: int = 1_000_000_000,
+    amount_wei: int = 1000,
+    recipient: Optional[str] = None,
+    wait_for_receipt: bool = True,
+    timeout: int = 30,
+):
+    """Send a typed (EIP-1559) ETH transfer with explicit fee params.
+
+    Returns (tx_hash, receipt_or_None). When wait_for_receipt=False, returns
+    receipt=None immediately after submission. Generates a fresh recipient
+    when one is not supplied.
+    """
+    if recipient is None:
+        recipient = Account.create().address
+    nonce = w3.eth.get_transaction_count(sender_account.address)
+    chain_id = w3.eth.chain_id
+
+    tx = {
+        "type": 2,
+        "to": recipient,
+        "value": amount_wei,
+        "gas": 21000,
+        "maxFeePerGas": max_fee_per_gas,
+        "maxPriorityFeePerGas": min(max_priority_fee_per_gas, max_fee_per_gas),
+        "nonce": nonce,
+        "chainId": chain_id,
+    }
+    signed = sender_account.sign_transaction(tx)
+    tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+
+    if not wait_for_receipt:
+        return tx_hash, None
+    receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=timeout)
+    return tx_hash, receipt
+
+
 async def send_eth_transfers(
     w3: Web3, sender_account, num_txns: int = 10, amount_wei: int = 1000
 ) -> Tuple[int, int]:
