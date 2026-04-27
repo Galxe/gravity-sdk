@@ -12,7 +12,7 @@ waypoint_path = "./output/waypoint.txt"
 [[nodes]]
 id = "node1"
 role = "genesis"
-source = { github = "Galxe/gravity-sdk", rev = "main" }
+source = { project_path = "../" }
 host = "127.0.0.1"
 validator_port = 6180
 vfn_port = 6190
