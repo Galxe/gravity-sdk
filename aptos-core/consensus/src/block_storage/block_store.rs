@@ -396,10 +396,18 @@ impl BlockStore {
 
         // If found a block without randomness
         if let Some(block) = closest_block_without_randomness {
+            let highest_commit_cert = self.highest_commit_cert();
             let cert = self
                 .get_quorum_cert_for_block(block.id())
                 .map(|qc| Arc::new(qc.into_wrapped_ledger_info()))
-                .unwrap_or_else(|| self.highest_commit_cert());
+                .unwrap_or_else(|| highest_commit_cert.clone());
+            // Guard against stale/placeholder commit_info (e.g. epoch 0, round 0) in QCs
+            // that haven't been executed yet. Never sync from before highest_commit_cert.
+            let cert = if cert.commit_info().round() < highest_commit_cert.commit_info().round() {
+                highest_commit_cert
+            } else {
+                cert
+            };
             return (true, Some(cert));
         }
 
@@ -786,14 +794,14 @@ impl BlockStore {
                     block.set_block_number(num);
                 }
             }
-            self.insert_block(block, true).await.unwrap_or_else(|e| {
-                panic!("[BlockStore] failed to insert block during append blocks for sync {:?}", e)
-            });
+            if let Err(e) = self.insert_block(block, true).await {
+                warn!("[BlockStore] skipping block during append blocks for sync: {:?}", e);
+            }
         }
         for qc in quorum_certs {
-            self.insert_single_quorum_cert(qc, true).unwrap_or_else(|e| {
-                panic!("[BlockStore] failed to insert quorum during append blocks for sync {:?}", e)
-            });
+            if let Err(e) = self.insert_single_quorum_cert(qc, true) {
+                warn!("[BlockStore] skipping quorum cert during append blocks for sync: {:?}", e);
+            }
         }
         self.recover_blocks().await;
     }
