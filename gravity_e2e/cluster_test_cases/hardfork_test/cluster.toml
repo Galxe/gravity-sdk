@@ -1,0 +1,84 @@
+# Gravity Cluster Configuration - Hardfork Test Suite
+#
+# 4-validator cluster. A single-validator setup stalled at the first DKG
+# epoch transition (committed_round stuck at 0 while ordered_round advanced),
+# because 1-validator aptos consensus can't cleanly complete DKG + subsequent
+# epoch rotation in dev mode. Bumping to 4 validators (same layout as the
+# four_validator suite) lets DKG rotate and the chain progress past epoch
+# boundaries so the hardfork framework can exercise its 6 phases.
+#
+# Ports: shifted off the default bases to avoid colliding with other suites
+# on shared dev boxes (four_validator uses 8545-48 / 9001-04 / 12024-27 /
+# 6180-83; vfn_shadow uses 8553-55 / 9003-05 / 12026-28 / 18545-47). Our
+# block: rpc 18649-52, authrpc 8655-58, metrics 9405-08, reth p2p 13028-31,
+# aptos p2p 6284-87, vfn 6294-97, inspection 10104-07, https 1128-31.
+
+[cluster]
+name = "gravity-devnet-hardfork"
+base_dir = "/tmp/gravity-cluster-hardfork"
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+# All nodes use the locally-built quick-release binary. The e2e runner builds
+# this via `make MODE=quick-release gravity_node` (RUSTFLAGS --cfg tokio_unstable).
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { bin_path = "../target/quick-release/gravity_node" }
+host = "127.0.0.1"
+p2p_port = 6284
+vfn_port = 6294
+rpc_port = 18649
+metrics_port = 9405
+inspection_port = 10104
+https_port = 1128
+authrpc_port = 8655
+reth_p2p_port = 13028
+
+[[nodes]]
+id = "node2"
+role = "genesis"
+source = { bin_path = "../target/quick-release/gravity_node" }
+host = "127.0.0.1"
+p2p_port = 6285
+vfn_port = 6295
+rpc_port = 18650
+metrics_port = 9406
+inspection_port = 10105
+https_port = 1129
+authrpc_port = 8656
+reth_p2p_port = 13029
+
+[[nodes]]
+id = "node3"
+role = "genesis"
+source = { bin_path = "../target/quick-release/gravity_node" }
+host = "127.0.0.1"
+p2p_port = 6286
+vfn_port = 6296
+rpc_port = 18651
+metrics_port = 9407
+inspection_port = 10106
+https_port = 1130
+authrpc_port = 8657
+reth_p2p_port = 13030
+
+[[nodes]]
+id = "node4"
+role = "genesis"
+source = { bin_path = "../target/quick-release/gravity_node" }
+host = "127.0.0.1"
+p2p_port = 6287
+vfn_port = 6297
+rpc_port = 18652
+metrics_port = 9408
+inspection_port = 10107
+https_port = 1131
+authrpc_port = 8658
+reth_p2p_port = 13031
+
+[faucet_init]
+num_accounts = 100
