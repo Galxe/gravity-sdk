@@ -52,5 +52,14 @@ pub fn suggest_fix(err: &anyhow::Error) -> Option<String> {
         );
     }
 
+    if msg_lower.contains("-32601") || msg_lower.contains("method not found") {
+        return Some(
+            "The node does not expose this RPC method. `admin_*` and `net_*` \
+             namespaces require the node to be started with the right \
+             `--http.api` list (e.g. `eth,net,admin,txpool`)."
+                .to_string(),
+        );
+    }
+
     None
 }
