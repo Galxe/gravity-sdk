@@ -7,6 +7,7 @@ pub mod epoch;
 pub mod errors;
 pub mod genesis;
 pub mod init;
+pub mod localnet;
 pub mod node;
 pub mod output;
 pub mod signer;
@@ -86,6 +87,15 @@ fn main() {
         }
         command::SubCommands::Completions(completions_cmd) => completions_cmd.execute(),
         command::SubCommands::Init(init_cmd) => init_cmd.execute(),
+        command::SubCommands::Localnet(ln_cmd) => match ln_cmd.command {
+            localnet::SubCommands::Start(c) => c.execute(),
+            localnet::SubCommands::Stop(c) => c.execute(),
+            localnet::SubCommands::Faucet(mut c) => {
+                c.output_format = output_format;
+                c.execute()
+            }
+            localnet::SubCommands::Reset(c) => c.execute(),
+        },
     };
 
     if let Err(e) = result {
