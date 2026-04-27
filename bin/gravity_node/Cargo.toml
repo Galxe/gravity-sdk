@@ -59,6 +59,7 @@ tikv-jemallocator.workspace = true
 tikv-jemalloc-ctl.workspace = true
 tikv-jemalloc-sys.workspace = true
 pprof = { version = "0.14", features = ["flamegraph", "protobuf-codec"] }
+axum = "0.7.9"
 once_cell.workspace = true
 bytes.workspace = true
 dashmap.workspace = true
