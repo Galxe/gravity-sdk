@@ -476,10 +476,13 @@ configure_pfn() {
 
     local config_dir="$data_dir/config"
 
+    local node_json="$7"
+
     log_info "  [$node_id] [pfn] configuring..."
 
     mkdir -p "$config_dir"
-    cp "$identity_src" "$config_dir/identity.yaml"
+
+    setup_identity "$node_json" "$node_id" "$config_dir" "$identity_src"
     cp "$waypoint_src" "$config_dir/waypoint.txt"
 
     export NODE_ID="$node_id"
@@ -1015,7 +1018,8 @@ main() {
                 "$genesis_path" \
                 "$node_binary" \
                 "$identity_src" \
-                "$waypoint_src"
+                "$waypoint_src" \
+                "$node"
         elif [ "$role" == "vfn" ]; then
             # VFN node. Vfn network is outbound (to validator); Public network
             # is an optional seed-accept-only listener for downstream PFNs.
