@@ -4605,7 +4605,7 @@ dependencies = [
  "bitflags 2.10.0",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.12.1",
  "proc-macro2",
  "quote",
  "regex",
@@ -7898,7 +7898,7 @@ dependencies = [
 [[package]]
 name = "gravity-primitives"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 
 [[package]]
 name = "gravity-sdk"
@@ -7912,7 +7912,7 @@ dependencies = [
 [[package]]
 name = "gravity-storage"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-primitives",
  "async-trait",
@@ -8031,7 +8031,7 @@ dependencies = [
 [[package]]
 name = "greth"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "async-trait",
  "gravity-primitives",
@@ -11524,7 +11524,7 @@ version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff32365de1b6743cb203b710788263c44a03de03802daf96092f2da4fe6ba4d7"
 dependencies = [
- "proc-macro-crate 3.4.0",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.114",
@@ -12749,7 +12749,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.12.1",
  "proc-macro2",
  "quote",
  "syn 2.0.114",
@@ -13484,7 +13484,7 @@ checksum = "1e061d1b48cb8d38042de4ae0a7a6401009d6143dc80d2e2d6f31f0bdd6470c7"
 [[package]]
 name = "reth"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-rpc-types",
  "aquamarine",
@@ -13530,7 +13530,7 @@ dependencies = [
 [[package]]
 name = "reth-basic-payload-builder"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -13554,7 +13554,7 @@ dependencies = [
 [[package]]
 name = "reth-chain-state"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -13583,7 +13583,7 @@ dependencies = [
 [[package]]
 name = "reth-chainspec"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-chains",
  "alloy-consensus",
@@ -13603,7 +13603,7 @@ dependencies = [
 [[package]]
 name = "reth-cli"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-genesis",
  "clap 4.5.57",
@@ -13617,7 +13617,7 @@ dependencies = [
 [[package]]
 name = "reth-cli-commands"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-chains",
  "alloy-consensus",
@@ -13694,7 +13694,7 @@ dependencies = [
 [[package]]
 name = "reth-cli-runner"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "reth-tasks",
  "tokio",
@@ -13704,7 +13704,7 @@ dependencies = [
 [[package]]
 name = "reth-cli-util"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -13722,7 +13722,7 @@ dependencies = [
 [[package]]
 name = "reth-codecs"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -13740,7 +13740,7 @@ dependencies = [
 [[package]]
 name = "reth-codecs-derive"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "convert_case 0.7.1",
  "proc-macro2",
@@ -13751,7 +13751,7 @@ dependencies = [
 [[package]]
 name = "reth-config"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "eyre",
  "humantime-serde",
@@ -13766,7 +13766,7 @@ dependencies = [
 [[package]]
 name = "reth-consensus"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -13779,7 +13779,7 @@ dependencies = [
 [[package]]
 name = "reth-consensus-common"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -13791,7 +13791,7 @@ dependencies = [
 [[package]]
 name = "reth-consensus-debug-client"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -13817,7 +13817,7 @@ dependencies = [
 [[package]]
 name = "reth-db"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-primitives",
  "derive_more 2.1.1",
@@ -13838,7 +13838,7 @@ dependencies = [
 [[package]]
 name = "reth-db-api"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-genesis",
@@ -13863,7 +13863,7 @@ dependencies = [
 [[package]]
 name = "reth-db-common"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-genesis",
@@ -13894,7 +13894,7 @@ dependencies = [
 [[package]]
 name = "reth-db-models"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -13908,7 +13908,7 @@ dependencies = [
 [[package]]
 name = "reth-discv4"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -13934,7 +13934,7 @@ dependencies = [
 [[package]]
 name = "reth-discv5"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -13958,7 +13958,7 @@ dependencies = [
 [[package]]
 name = "reth-dns-discovery"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-primitives",
  "data-encoding",
@@ -13982,7 +13982,7 @@ dependencies = [
 [[package]]
 name = "reth-downloaders"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14012,7 +14012,7 @@ dependencies = [
 [[package]]
 name = "reth-ecies"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "aes",
  "alloy-primitives",
@@ -14043,7 +14043,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-local"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -14065,7 +14065,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-primitives"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14090,7 +14090,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-service"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "futures",
  "pin-project",
@@ -14113,7 +14113,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-tree"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14165,7 +14165,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-util"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-rpc-types-engine",
@@ -14193,7 +14193,7 @@ dependencies = [
 [[package]]
 name = "reth-era"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14209,7 +14209,7 @@ dependencies = [
 [[package]]
 name = "reth-era-downloader"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-primitives",
  "bytes",
@@ -14224,7 +14224,7 @@ dependencies = [
 [[package]]
 name = "reth-era-utils"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -14246,7 +14246,7 @@ dependencies = [
 [[package]]
 name = "reth-errors"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "reth-consensus",
  "reth-execution-errors",
@@ -14257,7 +14257,7 @@ dependencies = [
 [[package]]
 name = "reth-eth-wire"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-chains",
  "alloy-primitives",
@@ -14285,7 +14285,7 @@ dependencies = [
 [[package]]
 name = "reth-eth-wire-types"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-chains",
  "alloy-consensus",
@@ -14306,7 +14306,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-cli"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "clap 4.5.57",
  "eyre",
@@ -14328,7 +14328,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-consensus"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14344,7 +14344,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-engine-primitives"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -14362,7 +14362,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-forks"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-eip2124",
  "alloy-hardforks",
@@ -14375,7 +14375,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-payload-builder"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14404,7 +14404,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-primitives"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14423,7 +14423,7 @@ dependencies = [
 [[package]]
 name = "reth-etl"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "rayon",
  "reth-db-api",
@@ -14433,7 +14433,7 @@ dependencies = [
 [[package]]
 name = "reth-evm"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14456,7 +14456,7 @@ dependencies = [
 [[package]]
 name = "reth-evm-ethereum"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14478,7 +14478,7 @@ dependencies = [
 [[package]]
 name = "reth-execution-errors"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-evm",
  "alloy-primitives",
@@ -14491,7 +14491,7 @@ dependencies = [
 [[package]]
 name = "reth-execution-types"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14509,7 +14509,7 @@ dependencies = [
 [[package]]
 name = "reth-exex"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14547,7 +14547,7 @@ dependencies = [
 [[package]]
 name = "reth-exex-types"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -14561,7 +14561,7 @@ dependencies = [
 [[package]]
 name = "reth-fs-util"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "serde",
  "serde_json",
@@ -14571,7 +14571,7 @@ dependencies = [
 [[package]]
 name = "reth-invalid-block-hooks"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -14598,7 +14598,7 @@ dependencies = [
 [[package]]
 name = "reth-ipc"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "bytes",
  "futures",
@@ -14618,7 +14618,7 @@ dependencies = [
 [[package]]
 name = "reth-metrics"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "futures",
  "metrics",
@@ -14630,7 +14630,7 @@ dependencies = [
 [[package]]
 name = "reth-net-banlist"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-primitives",
 ]
@@ -14638,7 +14638,7 @@ dependencies = [
 [[package]]
 name = "reth-net-nat"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "futures-util",
  "if-addrs",
@@ -14652,7 +14652,7 @@ dependencies = [
 [[package]]
 name = "reth-network"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14707,7 +14707,7 @@ dependencies = [
 [[package]]
 name = "reth-network-api"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -14732,7 +14732,7 @@ dependencies = [
 [[package]]
 name = "reth-network-p2p"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14754,7 +14754,7 @@ dependencies = [
 [[package]]
 name = "reth-network-peers"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -14769,7 +14769,7 @@ dependencies = [
 [[package]]
 name = "reth-network-types"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-eip2124",
  "humantime-serde",
@@ -14783,7 +14783,7 @@ dependencies = [
 [[package]]
 name = "reth-nippy-jar"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "anyhow",
  "bincode",
@@ -14800,7 +14800,7 @@ dependencies = [
 [[package]]
 name = "reth-node-api"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-rpc-types-engine",
  "eyre",
@@ -14824,7 +14824,7 @@ dependencies = [
 [[package]]
 name = "reth-node-builder"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14893,7 +14893,7 @@ dependencies = [
 [[package]]
 name = "reth-node-core"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -14946,7 +14946,7 @@ dependencies = [
 [[package]]
 name = "reth-node-ethereum"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-eips",
  "alloy-network",
@@ -14984,7 +14984,7 @@ dependencies = [
 [[package]]
 name = "reth-node-ethstats"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -15008,7 +15008,7 @@ dependencies = [
 [[package]]
 name = "reth-node-events"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -15032,7 +15032,7 @@ dependencies = [
 [[package]]
 name = "reth-node-metrics"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "eyre",
  "http 1.4.0",
@@ -15053,7 +15053,7 @@ dependencies = [
 [[package]]
 name = "reth-node-types"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "reth-chainspec",
  "reth-db-api",
@@ -15065,7 +15065,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-builder"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -15086,7 +15086,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-builder-primitives"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "pin-project",
  "reth-payload-primitives",
@@ -15098,7 +15098,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-primitives"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -15118,7 +15118,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-validator"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-rpc-types-engine",
@@ -15128,7 +15128,7 @@ dependencies = [
 [[package]]
 name = "reth-pipe-exec-layer-event-bus"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-primitives",
  "reth-chain-state",
@@ -15141,7 +15141,7 @@ dependencies = [
 [[package]]
 name = "reth-pipe-exec-layer-ext-v2"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -15187,7 +15187,7 @@ dependencies = [
 [[package]]
 name = "reth-pipe-exec-layer-relayer"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-network",
  "alloy-primitives",
@@ -15211,7 +15211,7 @@ dependencies = [
 [[package]]
 name = "reth-primitives"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "once_cell",
@@ -15224,7 +15224,7 @@ dependencies = [
 [[package]]
 name = "reth-primitives-traits"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -15254,7 +15254,7 @@ dependencies = [
 [[package]]
 name = "reth-provider"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -15297,7 +15297,7 @@ dependencies = [
 [[package]]
 name = "reth-prune"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -15325,7 +15325,7 @@ dependencies = [
 [[package]]
 name = "reth-prune-types"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-primitives",
  "derive_more 2.1.1",
@@ -15338,7 +15338,7 @@ dependencies = [
 [[package]]
 name = "reth-ress-protocol"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -15357,7 +15357,7 @@ dependencies = [
 [[package]]
 name = "reth-ress-provider"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -15384,7 +15384,7 @@ dependencies = [
 [[package]]
 name = "reth-revm"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-primitives",
  "reth-primitives-traits",
@@ -15397,7 +15397,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-dyn-abi",
@@ -15476,7 +15476,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-api"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-eips",
  "alloy-genesis",
@@ -15504,7 +15504,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-builder"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-network",
  "alloy-provider",
@@ -15543,7 +15543,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-convert"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-json-rpc",
@@ -15564,7 +15564,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-engine-api"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -15594,7 +15594,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-eth-api"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-dyn-abi",
@@ -15638,7 +15638,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-eth-types"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -15685,7 +15685,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-layer"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-rpc-types-engine",
  "http 1.4.0",
@@ -15699,7 +15699,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-server-types"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -15715,7 +15715,7 @@ dependencies = [
 [[package]]
 name = "reth-stages"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -15759,7 +15759,7 @@ dependencies = [
 [[package]]
 name = "reth-stages-api"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -15786,7 +15786,7 @@ dependencies = [
 [[package]]
 name = "reth-stages-types"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-primitives",
  "bytes",
@@ -15799,7 +15799,7 @@ dependencies = [
 [[package]]
 name = "reth-static-file"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-primitives",
  "parking_lot 0.12.5",
@@ -15819,7 +15819,7 @@ dependencies = [
 [[package]]
 name = "reth-static-file-types"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-primitives",
  "clap 4.5.57",
@@ -15831,7 +15831,7 @@ dependencies = [
 [[package]]
 name = "reth-storage-api"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -15861,7 +15861,7 @@ dependencies = [
 [[package]]
 name = "reth-storage-errors"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -15877,7 +15877,7 @@ dependencies = [
 [[package]]
 name = "reth-tasks"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "auto_impl",
  "dyn-clone",
@@ -15895,7 +15895,7 @@ dependencies = [
 [[package]]
 name = "reth-tokio-util"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "tokio",
  "tokio-stream",
@@ -15905,7 +15905,7 @@ dependencies = [
 [[package]]
 name = "reth-tracing"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "clap 4.5.57",
  "eyre",
@@ -15920,7 +15920,7 @@ dependencies = [
 [[package]]
 name = "reth-transaction-pool"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -15962,7 +15962,7 @@ dependencies = [
 [[package]]
 name = "reth-trie"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -15986,7 +15986,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-common"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -16013,7 +16013,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-db"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -16032,7 +16032,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-parallel"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -16057,7 +16057,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-sparse"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -16076,7 +16076,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-sparse-parallel"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -16094,7 +16094,7 @@ dependencies = [
 [[package]]
 name = "reth-zstd-compressors"
 version = "1.8.3"
-source = "git+https://github.com/Galxe/gravity-reth?rev=fd3b0d6413827a42abe44f2b8b3609635b5abe4f#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
+source = "git+https://github.com/Galxe/gravity-reth?tag=gravity-testnet-v1.5.0#fd3b0d6413827a42abe44f2b8b3609635b5abe4f"
 dependencies = [
  "zstd",
 ]
