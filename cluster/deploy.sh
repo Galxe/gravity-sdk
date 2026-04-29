@@ -937,7 +937,20 @@ main() {
         # Resolve discovery_method. Per-node override wins; otherwise the
         # default is role-driven — validator/vfn use onchain, pfn emits nothing
         # (seed-only). Valid values: onchain | none. Omit to take the default.
+        #
+        # On a validator node the template emits TWO discovery blocks:
+        # validator_network (controlled by `discovery_method`) and the secondary
+        # full_node_networks/vfn block. The latter has its own per-node override
+        # `vfn_discovery_method`, which falls back to `discovery_method` for
+        # backward compat. Setting `vfn_discovery_method = "none"` on a validator
+        # whose genesis registers `shadow_fullnode` is REQUIRED — otherwise the
+        # validator's vfn-network onchain discovery resolves to the shadow VFN's
+        # registered identity, producing a "Onchain pubkey mismatch" self-check
+        # error every cycle. On VFN/PFN role nodes there is only one network
+        # block, so vfn_discovery_method is effectively an alias for
+        # discovery_method (and is treated as such here).
         discovery_method=$(echo "$node" | jq -r '.discovery_method // empty')
+        vfn_discovery_method=$(echo "$node" | jq -r '.vfn_discovery_method // empty')
         if [ -z "$discovery_method" ]; then
             case "$role" in
                 genesis|validator|vfn) discovery_method="onchain" ;;
@@ -945,13 +958,19 @@ main() {
                 *)                     discovery_method="" ;;
             esac
         fi
+        if [ -z "$vfn_discovery_method" ]; then
+            vfn_discovery_method="$discovery_method"
+        fi
         if [ -n "$discovery_method" ]; then
             export DISCOVERY_METHOD_NETWORK_BLOCK="  discovery_method:
     ${discovery_method}"
-            export DISCOVERY_METHOD_FULLNODE_BLOCK="    discovery_method:
-      ${discovery_method}"
         else
             export DISCOVERY_METHOD_NETWORK_BLOCK=""
+        fi
+        if [ -n "$vfn_discovery_method" ]; then
+            export DISCOVERY_METHOD_FULLNODE_BLOCK="    discovery_method:
+      ${vfn_discovery_method}"
+        else
             export DISCOVERY_METHOD_FULLNODE_BLOCK=""
         fi
 
