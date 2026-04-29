@@ -867,6 +867,11 @@ main() {
         export HTTPS_PORT=$(echo "$node" | jq -r '.https_port // "null"')
         export AUTHRPC_PORT=$(echo "$node" | jq -r '.authrpc_port')
         export P2P_PORT_RETH=$(echo "$node" | jq -r '.reth_p2p_port')
+        # reth pool per-sender cap. Default = 16 (matches reth upstream default).
+        # Under Aptos-mempool-driven External-origin ingress this triggers the cap=16 stall
+        # documented in _local/wiki/private-mainnet/handoff.md. Set to a larger value
+        # (e.g. 10000) in cluster.toml to opt into the fix.
+        export TXPOOL_MAX_ACCOUNT_SLOTS=$(echo "$node" | jq -r '.txpool_max_account_slots // 16')
 
         role=$(echo "$node" | jq -r '.role // empty')
 
