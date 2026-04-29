@@ -572,6 +572,12 @@ impl BlockStore {
                     filtered.len(),
                     limit,
                 );
+                if filtered.is_empty() {
+                    info!(
+                        "send_for_execution(recovery): all blocks filtered out by epoch change limit, skipping",
+                    );
+                    return Ok(());
+                }
                 filtered
             } else {
                 blocks_to_commit
