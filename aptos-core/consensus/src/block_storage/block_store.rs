@@ -709,6 +709,7 @@ impl BlockStore {
             );
             self.inner.write().update_ordered_root(block_to_commit.id());
             self.inner.write().insert_ordered_cert(finality_proof_clone.clone());
+            update_counters_for_ordered_blocks(&blocks_to_commit);
         } else {
             // `BATCH_COMMIT_SIZE` env var: when set and the accumulated path is still
             // small, defer sending so the execution layer can process blocks in larger
@@ -788,9 +789,9 @@ impl BlockStore {
                 self.inner.write().update_ordered_root(block.id());
                 self.inner.write().insert_ordered_cert(proof);
             }
+            update_counters_for_ordered_blocks(&blocks_to_commit);
         }
 
-        update_counters_for_ordered_blocks(&blocks_to_commit);
         Ok(())
     }
 
