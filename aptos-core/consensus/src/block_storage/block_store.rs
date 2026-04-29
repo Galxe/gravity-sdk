@@ -247,17 +247,16 @@ impl BlockStore {
             self.storage.consensus_db().ledger_db.metadata_db().get_latest_ledger_info();
         info!("recover_blocks: last_ledger_info={:?}", last_ledger_info);
 
-        // Determine the upper-bound round for recovery when a non-blocking epoch change
-        // was in progress. Blocks after this round are suffix blocks that reth will discard.
-        let epoch_change_limit_round =
+        // When a non-blocking epoch change was in progress, determine the epoch change
+        // block_number so that recovery does not commit suffix blocks past it.
+        let epoch_change_block_number =
             last_ledger_info.as_ref().and_then(|li| {
                 let info = li.ledger_info().commit_info().epoch_block_info()?;
-                let block = self.get_block(info.block_id)?;
                 info!(
-                "recover_blocks: epoch change detected at block_id={}, block_number={}, round={}",
-                info.block_id, info.block_number, block.round(),
-            );
-                Some(block.round())
+                    "recover_blocks: epoch change detected at block_id={}, block_number={}",
+                    info.block_id, info.block_number,
+                );
+                Some(info.block_number)
             });
 
         certs.sort_unstable_by_key(|qc| qc.commit_info().round());
@@ -267,12 +266,6 @@ impl BlockStore {
 
             if commit_round <= self.commit_root().round() {
                 continue;
-            }
-
-            // Stop once we pass the epoch change boundary.
-            if epoch_change_limit_round.is_some_and(|ec| commit_round > ec) {
-                info!("recover_blocks: stopping before round {commit_round} (epoch change limit)");
-                break;
             }
 
             let Some(last_li) = &last_ledger_info else { continue };
@@ -287,7 +280,11 @@ impl BlockStore {
                 commit_round,
                 self.commit_root().round(),
             );
-            if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info(), true).await {
+            if let Err(e) = self.send_for_execution(
+                qc.into_wrapped_ledger_info(),
+                true,
+                epoch_change_block_number,
+            ).await {
                 error!("recover_blocks: failed to commit blocks: {e}");
                 break;
             }
@@ -532,6 +529,7 @@ impl BlockStore {
         &self,
         finality_proof: WrappedLedgerInfo,
         recovery: bool,
+        recover_epoch_change_block_number: Option<u64>,
     ) -> anyhow::Result<()> {
         let block_id_to_commit = finality_proof.commit_info().id();
         // Idempotent short-circuits for concurrent send_for_execution races
@@ -566,6 +564,16 @@ impl BlockStore {
         if recovery {
             // Recovery mode: process blocks directly without going through execution pipeline
             for p_block in &blocks_to_commit {
+                // Stop before committing blocks past the epoch change boundary.
+                if let Some(limit) = recover_epoch_change_block_number {
+                    if p_block.block().block_number().is_some_and(|bn| bn > limit) {
+                        info!(
+                            "send_for_execution(recovery): stopping at block_number={} (epoch change limit={})",
+                            p_block.block().block_number().unwrap_or(0), limit,
+                        );
+                        break;
+                    }
+                }
                 let mut txns = vec![];
                 loop {
                     match self.payload_manager.get_transactions(p_block.block()).await {
@@ -1211,7 +1219,7 @@ impl BlockStore {
     pub async fn insert_block_with_qc(&self, block: Block) -> anyhow::Result<Arc<PipelinedBlock>> {
         self.insert_single_quorum_cert(block.quorum_cert().clone(), false)?;
         if self.ordered_root().round() < block.quorum_cert().commit_info().round() {
-            self.send_for_execution(block.quorum_cert().into_wrapped_ledger_info(), false).await?;
+            self.send_for_execution(block.quorum_cert().into_wrapped_ledger_info(), false, None).await?;
         }
         self.insert_block(block, false).await
     }
