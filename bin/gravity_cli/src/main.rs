@@ -3,6 +3,7 @@ pub mod completions;
 pub mod config;
 pub mod contract;
 pub mod dkg;
+pub mod doctor;
 pub mod epoch;
 pub mod errors;
 pub mod genesis;
@@ -86,6 +87,10 @@ fn main() {
         }
         command::SubCommands::Completions(completions_cmd) => completions_cmd.execute(),
         command::SubCommands::Init(init_cmd) => init_cmd.execute(),
+        command::SubCommands::Doctor(mut doctor_cmd) => {
+            doctor_cmd.output_format = output_format;
+            doctor_cmd.execute()
+        }
     };
 
     if let Err(e) = result {
@@ -189,6 +194,17 @@ fn apply_config_defaults(cmd: &mut Command, profile: &Option<config::ProfileConf
             }
             if c.server_url.is_none() {
                 c.server_url.clone_from(&profile.server_url);
+            }
+        }
+        command::SubCommands::Doctor(ref mut c) => {
+            if c.rpc_url.is_none() {
+                c.rpc_url.clone_from(&profile.rpc_url);
+            }
+            if c.server_url.is_none() {
+                c.server_url.clone_from(&profile.server_url);
+            }
+            if c.deploy_path.is_none() {
+                c.deploy_path.clone_from(&profile.deploy_path);
             }
         }
         // Genesis, Unwind, Completions, Init don't use profile config
