@@ -12,6 +12,7 @@ pub mod output;
 pub mod signer;
 pub mod stake;
 pub mod status;
+pub mod tx;
 pub mod unwind;
 pub mod util;
 pub mod validator;
@@ -86,6 +87,20 @@ fn main() {
         }
         command::SubCommands::Completions(completions_cmd) => completions_cmd.execute(),
         command::SubCommands::Init(init_cmd) => init_cmd.execute(),
+        command::SubCommands::Tx(tx_cmd) => match tx_cmd.command {
+            tx::SubCommands::Simulate(mut c) => {
+                c.output_format = output_format;
+                c.execute()
+            }
+            tx::SubCommands::Trace(mut c) => {
+                c.output_format = output_format;
+                c.execute()
+            }
+            tx::SubCommands::TraceCall(mut c) => {
+                c.output_format = output_format;
+                c.execute()
+            }
+        },
     };
 
     if let Err(e) = result {
