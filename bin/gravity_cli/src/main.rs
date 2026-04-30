@@ -79,6 +79,11 @@ fn main() {
                 status_cmd.output_format = output_format;
                 status_cmd.execute()
             }
+            epoch::SubCommands::Next(mut c) => {
+                c.output_format = output_format;
+                c.execute()
+            }
+            epoch::SubCommands::Watch(c) => c.execute(),
         },
         command::SubCommands::Status(mut status_cmd) => {
             status_cmd.output_format = output_format;
@@ -178,6 +183,16 @@ fn apply_config_defaults(cmd: &mut Command, profile: &Option<config::ProfileConf
         },
         command::SubCommands::Epoch(ref mut ep) => match &mut ep.command {
             epoch::SubCommands::Status(ref mut c) => {
+                if c.rpc_url.is_none() {
+                    c.rpc_url.clone_from(&profile.rpc_url);
+                }
+            }
+            epoch::SubCommands::Next(ref mut c) => {
+                if c.rpc_url.is_none() {
+                    c.rpc_url.clone_from(&profile.rpc_url);
+                }
+            }
+            epoch::SubCommands::Watch(ref mut c) => {
                 if c.rpc_url.is_none() {
                     c.rpc_url.clone_from(&profile.rpc_url);
                 }
