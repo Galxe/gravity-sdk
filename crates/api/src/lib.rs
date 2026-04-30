@@ -22,4 +22,11 @@ pub struct GravityNodeArgs {
     #[arg(long = "relayer_config", value_name = "RELAYER_CONFIG", global = true)]
     /// Path to relayer configuration file (JSON format with URI to RPC URL mappings).
     pub relayer_config_path: Option<PathBuf>,
+
+    #[arg(long = "pprof_addr", value_name = "ADDR", global = true)]
+    /// Optional HTTP address (e.g. 127.0.0.1:6060) for an on-demand pprof
+    /// server. When set, exposes `GET /debug/pprof/profile?seconds=N` which
+    /// returns a protobuf-encoded CPU profile consumable by `go tool pprof`.
+    /// Disables the periodic disk-dump mode activated by `ENABLE_PPROF=1`.
+    pub pprof_addr: Option<String>,
 }
