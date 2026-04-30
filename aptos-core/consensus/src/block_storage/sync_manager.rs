@@ -187,7 +187,7 @@ impl BlockStore {
         }
         if self.ordered_root().round() < qc.commit_info().round() {
             SUCCESSFUL_EXECUTED_WITH_REGULAR_QC.inc();
-            self.send_for_execution(qc.into_wrapped_ledger_info(), false).await?;
+            self.send_for_execution(qc.into_wrapped_ledger_info(), false, None).await?;
             if qc.ends_epoch() {
                 retriever
                     .network
@@ -214,7 +214,7 @@ impl BlockStore {
                     observe_block(ordered_block.block().timestamp_usecs(), BlockStage::OC_ADDED);
                 }
                 SUCCESSFUL_EXECUTED_WITH_ORDER_VOTE_QC.inc();
-                self.send_for_execution(ordered_cert.clone(), false).await?;
+                self.send_for_execution(ordered_cert.clone(), false, None).await?;
             } else {
                 bail!("Ordered block not found in block store when inserting ordered cert");
             }
