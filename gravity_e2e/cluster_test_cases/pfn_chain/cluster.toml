@@ -57,6 +57,11 @@ inspection_port = 10002
 https_port = 1024
 authrpc_port = 8553
 reth_p2p_port = 12026
+# genesis registers shadow_fullnode = "vfn1" (see genesis.toml). validator's
+# own vfn-network onchain discovery would resolve to vfn1's identity → noise
+# pubkey mismatch self-check loop. Force vfn-network discovery off; the
+# validator_network keeps the default onchain.
+vfn_discovery_method = "none"
 
 [[nodes]]
 id = "vfn1"
