@@ -776,8 +776,30 @@ impl BufferManager {
                 let commit_info = vote.commit_info().clone();
                 info!("Receive commit vote {} from {}", commit_info, author);
                 if commit_info.round() >= self.latest_round {
-                    // Limit the cache size to prevent OOM from unverified future votes
-                    const MAX_COMMIT_VOTE_CACHE_ENTRIES: usize = 1000;
+                    // Limit the cache size to prevent OOM from unverified future votes.
+                    //
+                    // The previous limit of 1000 was too tight: with ~3 rounds/sec
+                    // and 7 validators each sending a commit vote per round, this cap
+                    // could be saturated in seconds whenever a node's commit pipeline
+                    // briefly lagged. Once full, every new vote was silently dropped
+                    // until the next reset (epoch transition), and the dropped votes
+                    // were never re-broadcast — so any block whose votes were dropped
+                    // here could not aggregate a quorum locally, leaving the node
+                    // committing far behind for tens of minutes (observed on
+                    // gravity-sdk staging mainnet on 2026-05-04: core-1 lagged by an
+                    // entire epoch for ~18 minutes; in private mainnet ~76,000
+                    // dropped-vote WARNs accumulated across 3 LA validators in a few
+                    // hours, hidden by BFT 5/7 quorum slack).
+                    //
+                    // Bumping to 100k gives ~67 minutes of cache space at 25 votes/s,
+                    // which comfortably exceeds any realistic commit-pipeline lag,
+                    // while keeping the worst-case memory footprint to ~100 MB
+                    // (each entry: 32-byte block_id + up to ~7 vote entries of
+                    // ~130 bytes each). Combined with the existing reset() clear()
+                    // and pending_commit_proofs eviction, this removes the silent
+                    // drop path that has been the root cause of cluster-wide
+                    // commit-lag stalls.
+                    const MAX_COMMIT_VOTE_CACHE_ENTRIES: usize = 100_000;
                     if self.commit_vote_cache.len() < MAX_COMMIT_VOTE_CACHE_ENTRIES ||
                         self.commit_vote_cache.contains_key(&commit_info.id())
                     {
