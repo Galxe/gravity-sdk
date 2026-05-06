@@ -789,8 +789,8 @@ impl BufferManager {
                     // votes are the least likely to still be needed.
                     const MAX_COMMIT_VOTE_CACHE_ROUNDS: usize = 100_000;
                     let round = commit_info.round();
-                    if self.commit_vote_cache.len() >= MAX_COMMIT_VOTE_CACHE_ROUNDS
-                        && !self.commit_vote_cache.contains_key(&round)
+                    if self.commit_vote_cache.len() >= MAX_COMMIT_VOTE_CACHE_ROUNDS &&
+                        !self.commit_vote_cache.contains_key(&round)
                     {
                         self.commit_vote_cache.pop_first();
                     }
@@ -806,7 +806,11 @@ impl BufferManager {
                     self.buffer.find_elem_by_key(*self.buffer.head_cursor(), target_block_id);
                 if current_cursor.is_some() {
                     let mut item = self.buffer.take(&current_cursor);
-                    self.add_signature_if_matched_from_cache(&mut item, &target_block_id, commit_info.round());
+                    self.add_signature_if_matched_from_cache(
+                        &mut item,
+                        &target_block_id,
+                        commit_info.round(),
+                    );
                     let new_item = match item.add_signature_if_matched(vote) {
                         Ok(()) => {
                             let response =
