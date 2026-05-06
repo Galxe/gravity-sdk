@@ -166,7 +166,7 @@ pub struct BufferManager {
     consensus_observer_config: ConsensusObserverConfig,
     consensus_publisher: Option<Arc<ConsensusPublisher>>,
 
-    commit_vote_cache: HashMap<HashValue, HashMap<HashValue, CommitVote>>,
+    commit_vote_cache: BTreeMap<Round, HashMap<HashValue, HashMap<HashValue, CommitVote>>>,
 
     // Cache for commit proofs that arrive before the block enters the buffer.
     // When a CommitMessage::Decision arrives but the block is not yet in the buffer,
@@ -260,7 +260,7 @@ impl BufferManager {
 
             consensus_observer_config,
             consensus_publisher,
-            commit_vote_cache: HashMap::new(),
+            commit_vote_cache: BTreeMap::new(),
             pending_commit_proofs: BTreeMap::new(),
         }
     }
@@ -750,17 +750,25 @@ impl BufferManager {
         &mut self,
         item: &mut BufferItem,
         target_block_id: &HashValue,
+        round: Round,
     ) {
-        if let Some(cache) = self.commit_vote_cache.get(target_block_id) {
-            cache.iter().for_each(|(_, vote)| {
-                match item.add_signature_if_matched(vote.clone()) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        error!(commit_info = ?item.commit_info(), target_block_id = ?target_block_id, vote = ?vote, "Failed to add commit vote from cache");
+        if let Some(round_cache) = self.commit_vote_cache.get(&round) {
+            if let Some(votes) = round_cache.get(target_block_id) {
+                votes.iter().for_each(|(_, vote)| {
+                    match item.add_signature_if_matched(vote.clone()) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(commit_info = ?item.commit_info(), target_block_id = ?target_block_id, vote = ?vote, "Failed to add commit vote from cache");
+                        }
                     }
-                }
-            });
-            self.commit_vote_cache.remove(target_block_id);
+                });
+            }
+        }
+        if let Some(round_cache) = self.commit_vote_cache.get_mut(&round) {
+            round_cache.remove(target_block_id);
+            if round_cache.is_empty() {
+                self.commit_vote_cache.remove(&round);
+            }
         }
     }
 
@@ -776,50 +784,29 @@ impl BufferManager {
                 let commit_info = vote.commit_info().clone();
                 info!("Receive commit vote {} from {}", commit_info, author);
                 if commit_info.round() >= self.latest_round {
-                    // Limit the cache size to prevent OOM from unverified future votes.
-                    //
-                    // The previous limit of 1000 was too tight: with ~3 rounds/sec
-                    // and 7 validators each sending a commit vote per round, this cap
-                    // could be saturated in seconds whenever a node's commit pipeline
-                    // briefly lagged. Once full, every new vote was silently dropped
-                    // until the next reset (epoch transition), and the dropped votes
-                    // were never re-broadcast — so any block whose votes were dropped
-                    // here could not aggregate a quorum locally, leaving the node
-                    // committing far behind for tens of minutes (observed on
-                    // gravity-sdk staging mainnet on 2026-05-04: core-1 lagged by an
-                    // entire epoch for ~18 minutes; in private mainnet ~76,000
-                    // dropped-vote WARNs accumulated across 3 LA validators in a few
-                    // hours, hidden by BFT 5/7 quorum slack).
-                    //
-                    // Bumping to 100k gives ~67 minutes of cache space at 25 votes/s,
-                    // which comfortably exceeds any realistic commit-pipeline lag,
-                    // while keeping the worst-case memory footprint to ~100 MB
-                    // (each entry: 32-byte block_id + up to ~7 vote entries of
-                    // ~130 bytes each). Combined with the existing reset() clear()
-                    // and pending_commit_proofs eviction, this removes the silent
-                    // drop path that has been the root cause of cluster-wide
-                    // commit-lag stalls.
-                    const MAX_COMMIT_VOTE_CACHE_ENTRIES: usize = 100_000;
-                    if self.commit_vote_cache.len() < MAX_COMMIT_VOTE_CACHE_ENTRIES ||
-                        self.commit_vote_cache.contains_key(&commit_info.id())
+                    // Cap the number of cached rounds to prevent OOM from unverified
+                    // future votes. When full, evict the oldest round first — those
+                    // votes are the least likely to still be needed.
+                    const MAX_COMMIT_VOTE_CACHE_ROUNDS: usize = 100_000;
+                    let round = commit_info.round();
+                    if self.commit_vote_cache.len() >= MAX_COMMIT_VOTE_CACHE_ROUNDS
+                        && !self.commit_vote_cache.contains_key(&round)
                     {
-                        self.commit_vote_cache
-                            .entry(commit_info.id())
-                            .or_default()
-                            .insert(HashValue::new(*author), vote.clone());
-                    } else {
-                        warn!(
-                            "Commit vote cache is full ({}), dropping vote from {}",
-                            MAX_COMMIT_VOTE_CACHE_ENTRIES, author
-                        );
+                        self.commit_vote_cache.pop_first();
                     }
+                    self.commit_vote_cache
+                        .entry(round)
+                        .or_default()
+                        .entry(commit_info.id())
+                        .or_default()
+                        .insert(HashValue::new(*author), vote.clone());
                 }
                 let target_block_id = vote.commit_info().id();
                 let current_cursor =
                     self.buffer.find_elem_by_key(*self.buffer.head_cursor(), target_block_id);
                 if current_cursor.is_some() {
                     let mut item = self.buffer.take(&current_cursor);
-                    self.add_signature_if_matched_from_cache(&mut item, &target_block_id);
+                    self.add_signature_if_matched_from_cache(&mut item, &target_block_id, commit_info.round());
                     let new_item = match item.add_signature_if_matched(vote) {
                         Ok(()) => {
                             let response =
