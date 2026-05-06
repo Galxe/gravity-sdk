@@ -565,8 +565,25 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     async fn initiate_new_epoch(&mut self, proof: EpochChangeProof) -> anyhow::Result<()> {
         let ledger_info =
             proof.verify(self.epoch_state()).context("[EpochManager] Invalid EpochChangeProof")?;
+        // The proof's last LedgerInfo carries the new epoch's `next_epoch_state`; that target
+        // epoch is the smallest epoch we can legitimately advance to from this proof.
+        let target_epoch = ledger_info.ledger_info().next_block_epoch();
+        let current_epoch = self.epoch();
+        if target_epoch <= current_epoch {
+            // The proof is at-or-behind us. Skip rather than tearing down the current epoch's
+            // processors and re-running setup with stale state.
+            warn!(
+                current_epoch = current_epoch,
+                target_epoch = target_epoch,
+                "Skipping EpochChangeProof: target epoch is not ahead of current epoch",
+            );
+            counters::EPOCH_MANAGER_ISSUES_DETAILS
+                .with_label_values(&["initiate_new_epoch_target_not_ahead"])
+                .inc();
+            return Ok(());
+        }
         info!(
-            LogSchema::new(LogEvent::NewEpoch).epoch(ledger_info.ledger_info().next_block_epoch()),
+            LogSchema::new(LogEvent::NewEpoch).epoch(target_epoch),
             "Received verified epoch change",
         );
 
@@ -581,9 +598,36 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .await
             .context(format!("[EpochManager] State sync to new epoch {}", ledger_info))
             .expect("Failed to sync to new epoch");
-        let reconfig_notification = monitor!("reconfig", self.await_reconfig_notification().await);
-        monitor!("reconfig", self.start_new_epoch(reconfig_notification.on_chain_configs).await);
-        Ok(())
+
+        // Wait for a reconfig notification that matches the proof's target epoch.
+        //
+        // Why the loop: `reconfig_events` may have stale notifications buffered from earlier
+        // in this process's lifetime (e.g. replayed by the event subscription on bootstrap).
+        // A stale payload with `epoch <= current_epoch` would otherwise re-initialize the
+        // current epoch's state machine -- the failure mode that locked Private Mainnet core-3
+        // at epoch 70 for 19h on 2026-05-05 (PR #701 mitigation context). Discard such
+        // payloads and keep awaiting the genuine notification for the target epoch.
+        loop {
+            let reconfig_notification =
+                monitor!("reconfig", self.await_reconfig_notification().await);
+            let payload_epoch = reconfig_notification.on_chain_configs.epoch();
+            if payload_epoch >= target_epoch {
+                monitor!(
+                    "reconfig",
+                    self.start_new_epoch(reconfig_notification.on_chain_configs).await
+                );
+                return Ok(());
+            }
+            warn!(
+                payload_epoch = payload_epoch,
+                target_epoch = target_epoch,
+                "Discarding stale reconfig notification while initiating new epoch; \
+                 continuing to wait for target_epoch or beyond",
+            );
+            counters::EPOCH_MANAGER_ISSUES_DETAILS
+                .with_label_values(&["stale_reconfig_during_initiate"])
+                .inc();
+        }
     }
 
     fn spawn_block_retrieval_task(
@@ -1127,7 +1171,30 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     }
 
     async fn start_new_epoch(&mut self, payload: OnChainConfigPayload<P>) {
-        info!("start to start new epoch for epoch: {:?}", payload.epoch());
+        let new_epoch = payload.epoch();
+
+        // Monotonic-epoch guard. `start_new_epoch` must only ever advance forward; reaccepting
+        // a payload for the current or an earlier epoch would re-initialize the local state
+        // machine for an epoch that was already left behind, which manifests on a stuck node
+        // as zombie RoundManager re-creation while EPOCH metric never advances.
+        //
+        // The bootstrap path enters here with `epoch_state = None`; let it pass.
+        // Otherwise, drop any payload whose epoch is not strictly greater than the current.
+        if let Some(ref current) = self.epoch_state {
+            if new_epoch <= current.epoch {
+                warn!(
+                    current_epoch = current.epoch,
+                    new_epoch = new_epoch,
+                    "Rejecting stale reconfig payload (new_epoch <= current_epoch)",
+                );
+                counters::EPOCH_MANAGER_ISSUES_DETAILS
+                    .with_label_values(&["start_new_epoch_stale_payload"])
+                    .inc();
+                return;
+            }
+        }
+
+        info!("start to start new epoch for epoch: {:?}", new_epoch);
         let validator_set: ValidatorSet =
             payload.get().expect("failed to get ValidatorSet from payload");
         info!("validator_set read from config storage is : {:?}", validator_set);
