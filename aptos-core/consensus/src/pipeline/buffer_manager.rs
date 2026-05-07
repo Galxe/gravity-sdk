@@ -167,6 +167,7 @@ pub struct BufferManager {
     consensus_publisher: Option<Arc<ConsensusPublisher>>,
 
     commit_vote_cache: BTreeMap<Round, HashMap<HashValue, HashMap<HashValue, CommitVote>>>,
+    max_pending_rounds_in_commit_vote_cache: Round,
 
     // Cache for commit proofs that arrive before the block enters the buffer.
     // When a CommitMessage::Decision arrives but the block is not yet in the buffer,
@@ -201,6 +202,7 @@ impl BufferManager {
         highest_committed_round: Round,
         consensus_observer_config: ConsensusObserverConfig,
         consensus_publisher: Option<Arc<ConsensusPublisher>>,
+        max_pending_rounds_in_commit_vote_cache: Round,
     ) -> Self {
         let buffer = Buffer::<BufferItem>::new();
 
@@ -261,6 +263,7 @@ impl BufferManager {
             consensus_observer_config,
             consensus_publisher,
             commit_vote_cache: BTreeMap::new(),
+            max_pending_rounds_in_commit_vote_cache,
             pending_commit_proofs: BTreeMap::new(),
         }
     }
@@ -360,20 +363,28 @@ impl BufferManager {
 
     fn cache_commit_vote(&mut self, vote: CommitVote) -> bool {
         let commit_info = vote.commit_info().clone();
-        if commit_info.round() < self.latest_round {
+        let round = commit_info.round();
+        let max_pending_rounds = self.max_pending_rounds_in_commit_vote_cache;
+        let highest_committed_round = self.highest_committed_round;
+        let max_cached_round = highest_committed_round.saturating_add(max_pending_rounds);
+
+        // Match Aptos' pending commit vote window: only cache votes for rounds ahead
+        // of the current commit root and within the configured pending-round window.
+        self.commit_vote_cache.retain(|cached_round, _| {
+            *cached_round > highest_committed_round && *cached_round < max_cached_round
+        });
+
+        if round <= highest_committed_round || round >= max_cached_round {
+            debug!(
+                round = round,
+                highest_committed_round = highest_committed_round,
+                max_cached_round = max_cached_round,
+                block_id = commit_info.id(),
+                "Received a commit vote outside the pending round window, ignored.",
+            );
             return false;
         }
 
-        // Cap the number of cached rounds to prevent OOM from unverified
-        // future votes. When full, evict the oldest round first — those
-        // votes are the least likely to still be needed.
-        const MAX_COMMIT_VOTE_CACHE_ROUNDS: usize = 100_000;
-        let round = commit_info.round();
-        if self.commit_vote_cache.len() >= MAX_COMMIT_VOTE_CACHE_ROUNDS
-            && !self.commit_vote_cache.contains_key(&round)
-        {
-            self.commit_vote_cache.pop_first();
-        }
         self.commit_vote_cache
             .entry(round)
             .or_default()
@@ -1080,6 +1091,7 @@ impl BufferManager {
                     match result {
                         Ok(round) => {
                             // see where `need_backpressure()` is called.
+                            self.commit_vote_cache.retain(|rnd, _| *rnd > round);
                             self.highest_committed_round = round;
                             counters::FINALIZED_EXECUTED_BLOCK_COUNTER.set(self.highest_committed_round as f64);
                         },
