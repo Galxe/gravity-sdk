@@ -358,6 +358,50 @@ impl BufferManager {
         });
     }
 
+    fn cache_commit_vote(&mut self, vote: CommitVote) -> bool {
+        let commit_info = vote.commit_info().clone();
+        if commit_info.round() < self.latest_round {
+            return false;
+        }
+
+        // Cap the number of cached rounds to prevent OOM from unverified
+        // future votes. When full, evict the oldest round first — those
+        // votes are the least likely to still be needed.
+        const MAX_COMMIT_VOTE_CACHE_ROUNDS: usize = 100_000;
+        let round = commit_info.round();
+        if self.commit_vote_cache.len() >= MAX_COMMIT_VOTE_CACHE_ROUNDS
+            && !self.commit_vote_cache.contains_key(&round)
+        {
+            self.commit_vote_cache.pop_first();
+        }
+        self.commit_vote_cache
+            .entry(round)
+            .or_default()
+            .entry(commit_info.id())
+            .or_default()
+            .insert(HashValue::new(*vote.author()), vote);
+        true
+    }
+
+    fn drain_cached_commit_votes(&mut self, round: Round, block_id: &HashValue) -> Vec<CommitVote> {
+        let mut remove_round = false;
+        let votes = if let Some(round_cache) = self.commit_vote_cache.get_mut(&round) {
+            let votes = round_cache
+                .remove(block_id)
+                .map(|votes| votes.into_values().collect())
+                .unwrap_or_default();
+            remove_round = round_cache.is_empty();
+            votes
+        } else {
+            vec![]
+        };
+
+        if remove_round {
+            self.commit_vote_cache.remove(&round);
+        }
+        votes
+    }
+
     /// process incoming ordered blocks
     /// push them into the buffer and update the roots if they are none.
     async fn process_ordered_blocks(&mut self, ordered_blocks: OrderedBlocks) {
@@ -385,7 +429,20 @@ impl BufferManager {
             .await
             .expect("Failed to send execution schedule request");
 
-        let item = BufferItem::new_ordered(ordered_blocks, ordered_proof, callback);
+        let mut item = BufferItem::new_ordered(ordered_blocks, ordered_proof, callback);
+        let target_block_id = item.block_id();
+        let round = item.commit_info().round();
+        for vote in self.drain_cached_commit_votes(round, &target_block_id) {
+            if let Err(error) = item.add_signature_if_matched(vote.clone()) {
+                error!(
+                    commit_info = ?item.commit_info(),
+                    target_block_id = ?target_block_id,
+                    vote = ?vote,
+                    error = ?error,
+                    "Failed to add cached commit vote when ordered block entered buffer",
+                );
+            }
+        }
         self.buffer.push_back(item);
     }
 
@@ -619,8 +676,8 @@ impl BufferManager {
             };
             // For suffix blocks with reconfiguration flag, use the cached epoch end timestamp
             if let Some(timestamp) = self.end_epoch_timestamp.get().cloned() {
-                if block_info.timestamp_usecs() != timestamp &&
-                    last_block.is_reconfiguration_suffix()
+                if block_info.timestamp_usecs() != timestamp
+                    && last_block.is_reconfiguration_suffix()
                 {
                     epoch_info.epoch_start_timestamp_usecs = timestamp;
                 }
@@ -752,22 +809,15 @@ impl BufferManager {
         target_block_id: &HashValue,
         round: Round,
     ) {
-        if let Some(round_cache) = self.commit_vote_cache.get(&round) {
-            if let Some(votes) = round_cache.get(target_block_id) {
-                votes.iter().for_each(|(_, vote)| {
-                    match item.add_signature_if_matched(vote.clone()) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            error!(commit_info = ?item.commit_info(), target_block_id = ?target_block_id, vote = ?vote, "Failed to add commit vote from cache");
-                        }
-                    }
-                });
-            }
-        }
-        if let Some(round_cache) = self.commit_vote_cache.get_mut(&round) {
-            round_cache.remove(target_block_id);
-            if round_cache.is_empty() {
-                self.commit_vote_cache.remove(&round);
+        for vote in self.drain_cached_commit_votes(round, target_block_id) {
+            if let Err(error) = item.add_signature_if_matched(vote.clone()) {
+                error!(
+                    commit_info = ?item.commit_info(),
+                    target_block_id = ?target_block_id,
+                    vote = ?vote,
+                    error = ?error,
+                    "Failed to add commit vote from cache",
+                );
             }
         }
     }
@@ -783,24 +833,6 @@ impl BufferManager {
                 let author = vote.author();
                 let commit_info = vote.commit_info().clone();
                 info!("Receive commit vote {} from {}", commit_info, author);
-                if commit_info.round() >= self.latest_round {
-                    // Cap the number of cached rounds to prevent OOM from unverified
-                    // future votes. When full, evict the oldest round first — those
-                    // votes are the least likely to still be needed.
-                    const MAX_COMMIT_VOTE_CACHE_ROUNDS: usize = 100_000;
-                    let round = commit_info.round();
-                    if self.commit_vote_cache.len() >= MAX_COMMIT_VOTE_CACHE_ROUNDS &&
-                        !self.commit_vote_cache.contains_key(&round)
-                    {
-                        self.commit_vote_cache.pop_first();
-                    }
-                    self.commit_vote_cache
-                        .entry(round)
-                        .or_default()
-                        .entry(commit_info.id())
-                        .or_default()
-                        .insert(HashValue::new(*author), vote.clone());
-                }
                 let target_block_id = vote.commit_info().id();
                 let current_cursor =
                     self.buffer.find_elem_by_key(*self.buffer.head_cursor(), target_block_id);
@@ -837,6 +869,13 @@ impl BufferManager {
                     } else {
                         return None;
                     }
+                } else if self.cache_commit_vote(vote) {
+                    let response = ConsensusMsg::CommitMessage(Box::new(CommitMessage::Ack(())));
+                    if let Ok(bytes) = protocol.to_bytes(&response) {
+                        let _ = response_sender.send(Ok(bytes.into()));
+                    }
+                } else {
+                    reply_nack(protocol, response_sender);
                 }
             }
             CommitMessage::Decision(commit_proof) => {
@@ -880,8 +919,8 @@ impl BufferManager {
     /// this function retries all the items until the signing root
     /// note that there might be other signed items after the signing root
     async fn rebroadcast_commit_votes_if_needed(&mut self) {
-        if self.previous_commit_time.elapsed() <
-            Duration::from_millis(COMMIT_VOTE_BROADCAST_INTERVAL_MS)
+        if self.previous_commit_time.elapsed()
+            < Duration::from_millis(COMMIT_VOTE_BROADCAST_INTERVAL_MS)
         {
             return;
         }
@@ -901,8 +940,8 @@ impl BufferManager {
                     // even after send ack, We'll try to re-initiate the
                     // broadcast after 30s.
                     Some((start_time, _)) => {
-                        start_time.elapsed() >=
-                            Duration::from_millis(COMMIT_VOTE_REBROADCAST_INTERVAL_MS)
+                        start_time.elapsed()
+                            >= Duration::from_millis(COMMIT_VOTE_REBROADCAST_INTERVAL_MS)
                     }
                 };
                 if re_broadcast {
