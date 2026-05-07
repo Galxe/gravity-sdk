@@ -74,7 +74,7 @@ fn generate_executed_item_from_ordered(
 ) -> BufferItem {
     debug!("{} advance to executed from ordered", commit_info);
     let block = executed_blocks.last().expect("execute_blocks should not be empty!");
-    let new_commit_info = BlockInfo::new(
+    let new_commit_info = BlockInfo::new_with_epoch_block_info(
         commit_info.epoch(),
         commit_info.round(),
         commit_info.id(),
@@ -82,9 +82,10 @@ fn generate_executed_item_from_ordered(
         block.block().block_number().unwrap(),
         block.timestamp_usecs(),
         commit_info.next_epoch_state().cloned(),
+        commit_info.epoch_block_info().cloned(),
     );
     let commit_ledger_info = generate_commit_ledger_info(
-        &commit_info,
+        &new_commit_info,
         &ordered_proof,
         order_vote_enabled,
         block.compute_result().root_hash(),
