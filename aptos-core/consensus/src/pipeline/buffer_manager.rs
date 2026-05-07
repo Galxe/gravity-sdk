@@ -687,8 +687,8 @@ impl BufferManager {
             };
             // For suffix blocks with reconfiguration flag, use the cached epoch end timestamp
             if let Some(timestamp) = self.end_epoch_timestamp.get().cloned() {
-                if block_info.timestamp_usecs() != timestamp
-                    && last_block.is_reconfiguration_suffix()
+                if block_info.timestamp_usecs() != timestamp &&
+                    last_block.is_reconfiguration_suffix()
                 {
                     epoch_info.epoch_start_timestamp_usecs = timestamp;
                 }
@@ -930,8 +930,8 @@ impl BufferManager {
     /// this function retries all the items until the signing root
     /// note that there might be other signed items after the signing root
     async fn rebroadcast_commit_votes_if_needed(&mut self) {
-        if self.previous_commit_time.elapsed()
-            < Duration::from_millis(COMMIT_VOTE_BROADCAST_INTERVAL_MS)
+        if self.previous_commit_time.elapsed() <
+            Duration::from_millis(COMMIT_VOTE_BROADCAST_INTERVAL_MS)
         {
             return;
         }
@@ -951,8 +951,8 @@ impl BufferManager {
                     // even after send ack, We'll try to re-initiate the
                     // broadcast after 30s.
                     Some((start_time, _)) => {
-                        start_time.elapsed()
-                            >= Duration::from_millis(COMMIT_VOTE_REBROADCAST_INTERVAL_MS)
+                        start_time.elapsed() >=
+                            Duration::from_millis(COMMIT_VOTE_REBROADCAST_INTERVAL_MS)
                     }
                 };
                 if re_broadcast {

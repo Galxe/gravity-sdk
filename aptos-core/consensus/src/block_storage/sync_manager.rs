@@ -318,7 +318,7 @@ impl BlockStore {
         )
         .await?;
 
-        self.append_blocks_for_sync(blocks, quorum_certs).await;
+        self.apply_fast_forward_sync(&effective_commit_cert, blocks, quorum_certs).await?;
 
         if highest_commit_cert.ledger_info().ledger_info().ends_epoch() {
             retriever
@@ -552,6 +552,37 @@ impl BlockStore {
         Ok((blocks, quorum_certs))
     }
 
+    async fn apply_fast_forward_sync(
+        &self,
+        target_commit_cert: &WrappedLedgerInfo,
+        blocks: Vec<(Block, Option<u64>, Option<Vec<u8>>)>,
+        quorum_certs: Vec<QuorumCert>,
+    ) -> anyhow::Result<()> {
+        if !self.is_validator {
+            self.append_blocks_for_sync(blocks, quorum_certs).await;
+            return Ok(());
+        }
+
+        let target = target_commit_cert.ledger_info();
+        info!(
+            "apply_fast_forward_sync: validator reset and rebuild to commit round {}, block {}",
+            target.commit_info().round(),
+            target.commit_info().id(),
+        );
+        self.execution_client.reset(target).await?;
+
+        let (root, blocks, quorum_certs) =
+            match self.storage.start(false, target.ledger_info().epoch()).await {
+                LivenessStorageData::FullRecoveryData(recovery_data) => recovery_data,
+                _ => panic!("Failed to construct recovery data after fast forward sync"),
+            }
+            .take();
+
+        self.storage.consensus_db().ledger_db.metadata_db().update_latest_ledger_info();
+        self.rebuild(root, blocks, quorum_certs).await;
+        Ok(())
+    }
+
     /// Fast forward in the decoupled-execution pipeline if the block exists there
     async fn sync_to_highest_commit_cert(
         &self,
@@ -609,7 +640,7 @@ impl BlockStore {
                 )
                 .await?;
 
-                self.append_blocks_for_sync(blocks, quorum_certs).await;
+                self.apply_fast_forward_sync(&highest_commit_cert, blocks, quorum_certs).await?;
             }
         }
         Ok(())
