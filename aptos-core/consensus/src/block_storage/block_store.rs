@@ -475,17 +475,26 @@ impl BlockStore {
             if block.round() <= root_round && block.id() != root_id {
                 continue;
             }
-            block_store.insert_block(block, true).await.unwrap_or_else(|e| {
-                panic!("[BlockStore] failed to insert block during build {:?}", e)
-            });
+            if let Err(e) = block_store.insert_block(block.clone(), true).await {
+                warn!(
+                    "[BlockStore] skipping block during build: block={}, parent={}, error={:?}",
+                    block.id(),
+                    block.parent_id(),
+                    e
+                );
+            }
         }
         for qc in quorum_certs {
             if qc.certified_block().round() < root_round {
                 continue;
             }
-            block_store.insert_single_quorum_cert(qc, true).unwrap_or_else(|e| {
-                panic!("[BlockStore] failed to insert quorum during build{:?}", e)
-            });
+            if let Err(e) = block_store.insert_single_quorum_cert(qc.clone(), true) {
+                warn!(
+                    "[BlockStore] skipping quorum during build: certified_block={}, error={:?}",
+                    qc.certified_block().id(),
+                    e
+                );
+            }
         }
 
         counters::LAST_COMMITTED_ROUND.set(block_store.ordered_root().round() as i64);
