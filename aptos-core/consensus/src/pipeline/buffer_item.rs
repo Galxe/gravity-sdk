@@ -54,14 +54,44 @@ fn verify_signatures(
     // filters out invalid signature shares much faster when there are only a few of them
     // (e.g., [LM07]: Finding Invalid Signatures in Pairing-Based Batches,
     // by Law, Laurie and Matt, Brian J., in Cryptography and Coding, 2007).
-    PartialSignatures::new(
+    let raw_signature_count = unverified_signatures.signatures().len();
+    let mut failed_authors = vec![];
+    let verified_signatures = PartialSignatures::new(
         unverified_signatures
             .signatures()
             .iter()
-            .filter(|(author, sig)| validator.verify(**author, commit_ledger_info, sig).is_ok())
-            .map(|(author, sig)| (*author, sig.clone()))
+            .filter_map(|(author, sig)| {
+                if validator.verify(*author, commit_ledger_info, sig).is_ok() {
+                    Some((*author, sig.clone()))
+                } else {
+                    failed_authors.push(*author);
+                    None
+                }
+            })
             .collect(),
-    )
+    );
+    let verified_signature_count = verified_signatures.signatures().len();
+    if !failed_authors.is_empty() {
+        warn!(
+            commit_info = ?commit_ledger_info.commit_info(),
+            block_hash = ?commit_ledger_info.block_hash(),
+            block_number = commit_ledger_info.block_number(),
+            raw_signature_count = raw_signature_count,
+            verified_signature_count = verified_signature_count,
+            failed_authors = ?failed_authors,
+            "Commit vote signature verification filtered signatures",
+        );
+    } else {
+        info!(
+            commit_info = ?commit_ledger_info.commit_info(),
+            block_hash = ?commit_ledger_info.block_hash(),
+            block_number = commit_ledger_info.block_number(),
+            raw_signature_count = raw_signature_count,
+            verified_signature_count = verified_signature_count,
+            "Commit vote signature verification completed",
+        );
+    }
+    verified_signatures
 }
 
 fn generate_executed_item_from_ordered(
@@ -237,9 +267,9 @@ impl BufferItem {
                     );
                     let verified_signatures =
                         verify_signatures(unverified_signatures, validator, &commit_ledger_info);
-                    if (validator.check_voting_power(verified_signatures.signatures().keys(), true))
-                        .is_ok()
-                    {
+                    let voting_power_result =
+                        validator.check_voting_power(verified_signatures.signatures().keys(), true);
+                    if voting_power_result.is_ok() {
                         let commit_proof = aggregate_commit_proof(
                             &commit_ledger_info,
                             &verified_signatures,
@@ -252,6 +282,14 @@ impl BufferItem {
                             callback,
                         }))
                     } else {
+                        warn!(
+                            commit_info = ?commit_ledger_info.commit_info(),
+                            block_hash = ?commit_ledger_info.block_hash(),
+                            block_number = commit_ledger_info.block_number(),
+                            verified_signature_count = verified_signatures.signatures().len(),
+                            error = ?voting_power_result.err(),
+                            "Commit vote signatures do not have enough voting power after execution",
+                        );
                         generate_executed_item_from_ordered(
                             commit_info,
                             executed_blocks,
@@ -350,10 +388,9 @@ impl BufferItem {
     pub fn try_advance_to_aggregated(self, validator: &ValidatorVerifier) -> Self {
         match self {
             Self::Signed(signed_item) => {
-                if validator
-                    .check_voting_power(signed_item.partial_commit_proof.signatures().keys(), true)
-                    .is_ok()
-                {
+                let voting_power_result = validator
+                    .check_voting_power(signed_item.partial_commit_proof.signatures().keys(), true);
+                if voting_power_result.is_ok() {
                     let commit_proof = aggregate_commit_proof(
                         signed_item.partial_commit_proof.ledger_info(),
                         signed_item.partial_commit_proof.partial_sigs(),
@@ -366,17 +403,23 @@ impl BufferItem {
                         callback: signed_item.callback,
                     }))
                 } else {
+                    warn!(
+                        commit_info = ?signed_item.partial_commit_proof.commit_info(),
+                        block_hash = ?signed_item.partial_commit_proof.ledger_info().block_hash(),
+                        block_number = signed_item.partial_commit_proof.ledger_info().block_number(),
+                        signature_count = signed_item.partial_commit_proof.signatures().len(),
+                        error = ?voting_power_result.err(),
+                        "Signed buffer item does not have enough commit voting power",
+                    );
                     Self::Signed(signed_item)
                 }
             }
             Self::Executed(executed_item) => {
-                if validator
-                    .check_voting_power(
-                        executed_item.partial_commit_proof.signatures().keys(),
-                        true,
-                    )
-                    .is_ok()
-                {
+                let voting_power_result = validator.check_voting_power(
+                    executed_item.partial_commit_proof.signatures().keys(),
+                    true,
+                );
+                if voting_power_result.is_ok() {
                     Self::Aggregated(Box::new(AggregatedItem {
                         executed_blocks: executed_item.executed_blocks,
                         commit_proof: aggregate_commit_proof(
@@ -387,6 +430,14 @@ impl BufferItem {
                         callback: executed_item.callback,
                     }))
                 } else {
+                    warn!(
+                        commit_info = ?executed_item.partial_commit_proof.commit_info(),
+                        block_hash = ?executed_item.partial_commit_proof.ledger_info().block_hash(),
+                        block_number = executed_item.partial_commit_proof.ledger_info().block_number(),
+                        signature_count = executed_item.partial_commit_proof.signatures().len(),
+                        error = ?voting_power_result.err(),
+                        "Executed buffer item does not have enough commit voting power",
+                    );
                     Self::Executed(executed_item)
                 }
             }
