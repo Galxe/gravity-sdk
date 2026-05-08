@@ -1,7 +1,6 @@
-# Gravity Genesis Configuration - PFN + VFN-shadow topology
-# node1 registers vfn-alpha as its on-chain fullnode_address.
-# Identical to vfn_shadow/genesis.toml — the PFN-specific differences live
-# purely in cluster.toml.
+# Gravity Genesis Configuration - PFN fan-out topology
+# node1 registers vfn1 as its on-chain fullnode_address.
+# PFN nodes (pfn1/pfn2/pfn3) are purely cluster-level — nothing genesis-specific.
 
 [dependencies.genesis_contracts]
 repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
@@ -13,12 +12,12 @@ address = "0xAEd2a948892475F800A337427B3275D190EA3e94"
 host = "127.0.0.1"
 validator_port = 6182
 vfn_port = 6192                         # ignored when shadow_fullnode is set
-shadow_fullnode = "vfn-alpha"           # on-chain fullnode_address -> vfn-alpha:6193
+shadow_fullnode = "vfn1"                # on-chain fullnode_address -> vfn1:6193
 stake_amount = "10000000000000000000"
 voting_power = "10000000000000000000"
 
 [[shadow_nodes]]
-id = "vfn-alpha"
+id = "vfn1"
 host = "127.0.0.1"
 vfn_port = 6193
 

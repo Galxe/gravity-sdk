@@ -65,7 +65,7 @@ impl CreateCommand {
             )
         })?;
         let gas_limit = self.gas_limit.unwrap_or(2_000_000);
-        let gas_price = self.gas_price.unwrap_or(20);
+        let gas_price = self.gas_price.unwrap_or(100_000_000_000);
 
         if !is_json {
             println!("   RPC URL: {rpc_url}");

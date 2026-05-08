@@ -476,10 +476,13 @@ configure_pfn() {
 
     local config_dir="$data_dir/config"
 
+    local node_json="$7"
+
     log_info "  [$node_id] [pfn] configuring..."
 
     mkdir -p "$config_dir"
-    cp "$identity_src" "$config_dir/identity.yaml"
+
+    setup_identity "$node_json" "$node_id" "$config_dir" "$identity_src"
     cp "$waypoint_src" "$config_dir/waypoint.txt"
 
     export NODE_ID="$node_id"
@@ -864,6 +867,11 @@ main() {
         export HTTPS_PORT=$(echo "$node" | jq -r '.https_port // "null"')
         export AUTHRPC_PORT=$(echo "$node" | jq -r '.authrpc_port')
         export P2P_PORT_RETH=$(echo "$node" | jq -r '.reth_p2p_port')
+        # reth pool per-sender cap. Default = 16 (matches reth upstream default).
+        # Under Aptos-mempool-driven External-origin ingress this triggers the cap=16 stall
+        # documented in _local/wiki/private-mainnet/handoff.md. Set to a larger value
+        # (e.g. 10000) in cluster.toml to opt into the fix.
+        export TXPOOL_MAX_ACCOUNT_SLOTS=$(echo "$node" | jq -r '.txpool_max_account_slots // 16')
 
         role=$(echo "$node" | jq -r '.role // empty')
 
@@ -884,7 +892,10 @@ main() {
         fi
 
         # Role-specific port schema (see _local/drafts/cluster-seeds/usage.md §9).
-        # Enforced even though templates silently ignore extras, so cluster.toml stays clean.
+        # Missing required ports are hard errors (templates would render
+        # "/tcp/null" and crash the node). Anti-pattern extras (e.g. role=vfn
+        # with validator_port) are warned only — templates ignore unused vars,
+        # so writing them is harmless; the warn just nudges configs to stay clean.
         case "$role" in
             genesis|validator)
                 if [ "$VALIDATOR_PORT" = "null" ]; then
@@ -896,14 +907,12 @@ main() {
                     exit 1
                 fi
                 if [ "$PUBLIC_PORT" != "null" ]; then
-                    log_error "$NODE_ID: role=$role must not set public_port (validators don't expose Public network)"
-                    exit 1
+                    log_warn "$NODE_ID: role=$role should not set public_port (validators don't expose Public network) — ignored"
                 fi
                 ;;
             vfn)
                 if [ "$VALIDATOR_PORT" != "null" ]; then
-                    log_error "$NODE_ID: role=vfn must not set validator_port (VFN has no Validator network)"
-                    exit 1
+                    log_warn "$NODE_ID: role=vfn should not set validator_port (VFN has no Validator network) — ignored"
                 fi
                 if [ "$VFN_PORT" = "null" ]; then
                     log_error "$NODE_ID: role=vfn requires vfn_port (Vfn network listener)"
@@ -913,12 +922,10 @@ main() {
                 ;;
             pfn)
                 if [ "$VALIDATOR_PORT" != "null" ]; then
-                    log_error "$NODE_ID: role=pfn must not set validator_port (use public_port instead)"
-                    exit 1
+                    log_warn "$NODE_ID: role=pfn should not set validator_port (use public_port instead) — ignored"
                 fi
                 if [ "$VFN_PORT" != "null" ]; then
-                    log_error "$NODE_ID: role=pfn must not set vfn_port (PFN has no Vfn network)"
-                    exit 1
+                    log_warn "$NODE_ID: role=pfn should not set vfn_port (PFN has no Vfn network) — ignored"
                 fi
                 if [ "$PUBLIC_PORT" = "null" ]; then
                     log_error "$NODE_ID: role=pfn requires public_port (Public network listener)"
@@ -930,7 +937,20 @@ main() {
         # Resolve discovery_method. Per-node override wins; otherwise the
         # default is role-driven — validator/vfn use onchain, pfn emits nothing
         # (seed-only). Valid values: onchain | none. Omit to take the default.
+        #
+        # On a validator node the template emits TWO discovery blocks:
+        # validator_network (controlled by `discovery_method`) and the secondary
+        # full_node_networks/vfn block. The latter has its own per-node override
+        # `vfn_discovery_method`, which falls back to `discovery_method` for
+        # backward compat. Setting `vfn_discovery_method = "none"` on a validator
+        # whose genesis registers `shadow_fullnode` is REQUIRED — otherwise the
+        # validator's vfn-network onchain discovery resolves to the shadow VFN's
+        # registered identity, producing a "Onchain pubkey mismatch" self-check
+        # error every cycle. On VFN/PFN role nodes there is only one network
+        # block, so vfn_discovery_method is effectively an alias for
+        # discovery_method (and is treated as such here).
         discovery_method=$(echo "$node" | jq -r '.discovery_method // empty')
+        vfn_discovery_method=$(echo "$node" | jq -r '.vfn_discovery_method // empty')
         if [ -z "$discovery_method" ]; then
             case "$role" in
                 genesis|validator|vfn) discovery_method="onchain" ;;
@@ -938,13 +958,19 @@ main() {
                 *)                     discovery_method="" ;;
             esac
         fi
+        if [ -z "$vfn_discovery_method" ]; then
+            vfn_discovery_method="$discovery_method"
+        fi
         if [ -n "$discovery_method" ]; then
             export DISCOVERY_METHOD_NETWORK_BLOCK="  discovery_method:
     ${discovery_method}"
-            export DISCOVERY_METHOD_FULLNODE_BLOCK="    discovery_method:
-      ${discovery_method}"
         else
             export DISCOVERY_METHOD_NETWORK_BLOCK=""
+        fi
+        if [ -n "$vfn_discovery_method" ]; then
+            export DISCOVERY_METHOD_FULLNODE_BLOCK="    discovery_method:
+      ${vfn_discovery_method}"
+        else
             export DISCOVERY_METHOD_FULLNODE_BLOCK=""
         fi
 
@@ -1016,7 +1042,8 @@ main() {
                 "$genesis_path" \
                 "$node_binary" \
                 "$identity_src" \
-                "$waypoint_src"
+                "$waypoint_src" \
+                "$node"
         elif [ "$role" == "vfn" ]; then
             # VFN node. Vfn network is outbound (to validator); Public network
             # is an optional seed-accept-only listener for downstream PFNs.

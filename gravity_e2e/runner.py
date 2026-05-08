@@ -73,23 +73,20 @@ def init_faucet_if_needed(test_dir: Path, cluster_config_path: Path, env: dict):
     """
     Check if cluster.toml requests faucet init, and run faucet.sh if so.
     """
-    # Simply call the shell script. It handles the parsing and logic itself.
-    # But we want to avoid calling it if not needed?
-    # Actually, the shell script checks for num_accounts > 0 and exits cleanly if not match.
-    # So we can just call it. But to avoid process overhead, we can check basic condition here if needed.
-    # However, for consistency and simplicity, let's just calling it.
-
     faucet_script = CLUSTER_SCRIPTS_DIR / "faucet.sh"
     if not faucet_script.exists():
         logger.warning("cluster/faucet.sh not found.")
         return
 
-    logger.info("Checking/Running faucet init...")
-    # Passing the config file is key
+    with open(cluster_config_path, "rb") as f:
+        cfg = tomllib.load(f)
+    timeout_secs = cfg.get("faucet_init", {}).get("timeout_secs", 600)
+
+    logger.info(f"Checking/Running faucet init (timeout={timeout_secs}s)...")
     run_command(
         ["bash", str(faucet_script), str(cluster_config_path)],
         cwd=CLUSTER_SCRIPTS_DIR,
-        env=env,
+        env={**env, "FAUCET_RUN_TIMEOUT_SECS": str(timeout_secs)},
         check=True,
     )
 

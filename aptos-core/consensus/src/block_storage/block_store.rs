@@ -247,18 +247,16 @@ impl BlockStore {
             self.storage.consensus_db().ledger_db.metadata_db().get_latest_ledger_info();
         info!("recover_blocks: last_ledger_info={:?}", last_ledger_info);
 
-        // Determine the upper-bound round for recovery when a non-blocking epoch change
-        // was in progress. Blocks after this round are suffix blocks that reth will discard.
-        let epoch_change_limit_round =
-            last_ledger_info.as_ref().and_then(|li| {
-                let info = li.ledger_info().commit_info().epoch_block_info()?;
-                let block = self.get_block(info.block_id)?;
-                info!(
-                "recover_blocks: epoch change detected at block_id={}, block_number={}, round={}",
-                info.block_id, info.block_number, block.round(),
+        // When a non-blocking epoch change was in progress, determine the epoch change
+        // block_number so that recovery does not commit suffix blocks past it.
+        let epoch_change_block_number = last_ledger_info.as_ref().and_then(|li| {
+            let info = li.ledger_info().commit_info().epoch_block_info()?;
+            info!(
+                "recover_blocks: epoch change detected at block_id={}, block_number={}",
+                info.block_id, info.block_number,
             );
-                Some(block.round())
-            });
+            Some(info.block_number)
+        });
 
         certs.sort_unstable_by_key(|qc| qc.commit_info().round());
 
@@ -267,12 +265,6 @@ impl BlockStore {
 
             if commit_round <= self.commit_root().round() {
                 continue;
-            }
-
-            // Stop once we pass the epoch change boundary.
-            if epoch_change_limit_round.is_some_and(|ec| commit_round > ec) {
-                info!("recover_blocks: stopping before round {commit_round} (epoch change limit)");
-                break;
             }
 
             let Some(last_li) = &last_ledger_info else { continue };
@@ -287,7 +279,10 @@ impl BlockStore {
                 commit_round,
                 self.commit_root().round(),
             );
-            if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info(), true).await {
+            if let Err(e) = self
+                .send_for_execution(qc.into_wrapped_ledger_info(), true, epoch_change_block_number)
+                .await
+            {
                 error!("recover_blocks: failed to commit blocks: {e}");
                 break;
             }
@@ -396,10 +391,18 @@ impl BlockStore {
 
         // If found a block without randomness
         if let Some(block) = closest_block_without_randomness {
+            let highest_commit_cert = self.highest_commit_cert();
             let cert = self
                 .get_quorum_cert_for_block(block.id())
                 .map(|qc| Arc::new(qc.into_wrapped_ledger_info()))
-                .unwrap_or_else(|| self.highest_commit_cert());
+                .unwrap_or_else(|| highest_commit_cert.clone());
+            // Guard against stale/placeholder commit_info (e.g. epoch 0, round 0) in QCs
+            // that haven't been executed yet. Never sync from before highest_commit_cert.
+            let cert = if cert.commit_info().round() < highest_commit_cert.commit_info().round() {
+                highest_commit_cert
+            } else {
+                cert
+            };
             return (true, Some(cert));
         }
 
@@ -472,17 +475,26 @@ impl BlockStore {
             if block.round() <= root_round && block.id() != root_id {
                 continue;
             }
-            block_store.insert_block(block, true).await.unwrap_or_else(|e| {
-                panic!("[BlockStore] failed to insert block during build {:?}", e)
-            });
+            if let Err(e) = block_store.insert_block(block.clone(), true).await {
+                warn!(
+                    "[BlockStore] skipping block during build: block={}, parent={}, error={:?}",
+                    block.id(),
+                    block.parent_id(),
+                    e
+                );
+            }
         }
         for qc in quorum_certs {
             if qc.certified_block().round() < root_round {
                 continue;
             }
-            block_store.insert_single_quorum_cert(qc, true).unwrap_or_else(|e| {
-                panic!("[BlockStore] failed to insert quorum during build{:?}", e)
-            });
+            if let Err(e) = block_store.insert_single_quorum_cert(qc.clone(), true) {
+                warn!(
+                    "[BlockStore] skipping quorum during build: certified_block={}, error={:?}",
+                    qc.certified_block().id(),
+                    e
+                );
+            }
         }
 
         counters::LAST_COMMITTED_ROUND.set(block_store.ordered_root().round() as i64);
@@ -524,7 +536,12 @@ impl BlockStore {
         &self,
         finality_proof: WrappedLedgerInfo,
         recovery: bool,
+        recover_epoch_change_block_number: Option<u64>,
     ) -> anyhow::Result<()> {
+        if !self.is_validator && !recovery {
+            debug!("send_for_execution: skip live ordered execution for non-validator");
+            return Ok(());
+        }
         let block_id_to_commit = finality_proof.commit_info().id();
         // Idempotent short-circuits for concurrent send_for_execution races
         // (e.g. recover_blocks vs. live consensus both advancing ordered_root).
@@ -533,10 +550,28 @@ impl BlockStore {
         let block_to_commit = self
             .get_block(block_id_to_commit)
             .ok_or_else(|| format_err!("Committed block id not found"))?;
-        ensure!(
-            block_to_commit.round() > self.ordered_root().round(),
-            "Committed block round lower than root"
-        );
+        let ordered_root = self.ordered_root();
+        let commit_root = self.commit_root();
+        if block_to_commit.round() <= ordered_root.round() {
+            warn!(
+                "send_for_execution: committed block round lower than ordered root: \
+                block_to_commit_id={}, block_to_commit_round={}, \
+                ordered_root_id={}, ordered_root_round={}, \
+                commit_root_id={}, commit_root_round={}, recovery={}",
+                block_to_commit.id(),
+                block_to_commit.round(),
+                ordered_root.id(),
+                ordered_root.round(),
+                commit_root.id(),
+                commit_root.round(),
+                recovery,
+            );
+            return Err(format_err!(
+                "Committed block round lower than root: block_to_commit_round={}, ordered_root_round={}",
+                block_to_commit.round(),
+                ordered_root.round(),
+            ));
+        }
         let blocks_to_commit = self.path_from_ordered_root(block_id_to_commit).unwrap_or_default();
         if blocks_to_commit.is_empty() {
             // Narrow race: ordered_root advanced between the round check above and here.
@@ -556,7 +591,28 @@ impl BlockStore {
         // blocks.
         self.init_block_number(&blocks_to_commit);
         if recovery {
-            // Recovery mode: process blocks directly without going through execution pipeline
+            // Recovery mode: process blocks directly without going through execution pipeline.
+            // Filter out suffix blocks past the epoch change boundary before execution.
+            let blocks_to_commit: Vec<_> = if let Some(limit) = recover_epoch_change_block_number {
+                let filtered: Vec<_> = blocks_to_commit
+                    .into_iter()
+                    .filter(|b| !b.block().block_number().is_some_and(|bn| bn > limit))
+                    .collect();
+                info!(
+                    "send_for_execution(recovery): filtered to {} blocks (epoch change limit={})",
+                    filtered.len(),
+                    limit,
+                );
+                if filtered.is_empty() {
+                    info!(
+                        "send_for_execution(recovery): all blocks filtered out by epoch change limit, skipping",
+                    );
+                    return Ok(());
+                }
+                filtered
+            } else {
+                blocks_to_commit
+            };
             for p_block in &blocks_to_commit {
                 let mut txns = vec![];
                 loop {
@@ -609,10 +665,17 @@ impl BlockStore {
                     match p_block.randomness() {
                         Some(r) => Some(Random::from_bytes(r.randomness())),
                         None => {
-                            return Err(anyhow::anyhow!(
-                                "Randomness is required but not found in block {}",
-                                p_block.block().id()
-                            ));
+                            self.try_set_randomness_from_db(&p_block, p_block.block());
+                            match p_block.randomness() {
+                                Some(r) => Some(Random::from_bytes(r.randomness())),
+                                None => {
+                                    return Err(anyhow::anyhow!(
+                                        "Randomness is required but not found in block {}, block_number={}",
+                                        p_block.block().id(),
+                                        block_number,
+                                    ));
+                                }
+                            }
                         }
                     }
                 } else {
@@ -690,6 +753,7 @@ impl BlockStore {
             );
             self.inner.write().update_ordered_root(block_to_commit.id());
             self.inner.write().insert_ordered_cert(finality_proof_clone.clone());
+            update_counters_for_ordered_blocks(&blocks_to_commit);
         } else {
             // `BATCH_COMMIT_SIZE` env var: when set and the accumulated path is still
             // small, defer sending so the execution layer can process blocks in larger
@@ -769,9 +833,9 @@ impl BlockStore {
                 self.inner.write().update_ordered_root(block.id());
                 self.inner.write().insert_ordered_cert(proof);
             }
+            update_counters_for_ordered_blocks(&blocks_to_commit);
         }
 
-        update_counters_for_ordered_blocks(&blocks_to_commit);
         Ok(())
     }
 
@@ -786,14 +850,14 @@ impl BlockStore {
                     block.set_block_number(num);
                 }
             }
-            self.insert_block(block, true).await.unwrap_or_else(|e| {
-                panic!("[BlockStore] failed to insert block during append blocks for sync {:?}", e)
-            });
+            if let Err(e) = self.insert_block(block, true).await {
+                warn!("[BlockStore] skipping block during append blocks for sync: {:?}", e);
+            }
         }
         for qc in quorum_certs {
-            self.insert_single_quorum_cert(qc, true).unwrap_or_else(|e| {
-                panic!("[BlockStore] failed to insert quorum during append blocks for sync {:?}", e)
-            });
+            if let Err(e) = self.insert_single_quorum_cert(qc, true) {
+                warn!("[BlockStore] skipping quorum cert during append blocks for sync: {:?}", e);
+            }
         }
         self.recover_blocks().await;
     }
@@ -1203,7 +1267,8 @@ impl BlockStore {
     pub async fn insert_block_with_qc(&self, block: Block) -> anyhow::Result<Arc<PipelinedBlock>> {
         self.insert_single_quorum_cert(block.quorum_cert().clone(), false)?;
         if self.ordered_root().round() < block.quorum_cert().commit_info().round() {
-            self.send_for_execution(block.quorum_cert().into_wrapped_ledger_info(), false).await?;
+            self.send_for_execution(block.quorum_cert().into_wrapped_ledger_info(), false, None)
+                .await?;
         }
         self.insert_block(block, false).await
     }
