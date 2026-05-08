@@ -22,7 +22,7 @@ use tokio::{
     time::Instant,
 };
 
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use gaptos::api_types::{
     compute_res::{ComputeRes, TxnStatus},
@@ -1248,6 +1248,17 @@ impl BlockBufferManager {
         // Access via block_state_machine instead of separate mutex
         let latest_epoch_change_block_number = block_state_machine.latest_epoch_change_block_number;
         let old_epoch = block_state_machine.current_epoch;
+        let has_pending_epoch_change = latest_epoch_change_block_number != 0 ||
+            block_state_machine.next_epoch.is_some() ||
+            block_state_machine.epoch_change_block_info.is_some();
+
+        if !has_pending_epoch_change {
+            debug!(
+                "release_inflight_blocks: no pending epoch change, skip release. current_epoch: {}",
+                block_state_machine.current_epoch
+            );
+            return;
+        }
 
         // Update current_epoch from next_epoch if it exists
         if let Some(next_epoch) = block_state_machine.next_epoch.take() {
