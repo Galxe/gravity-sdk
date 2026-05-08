@@ -538,6 +538,10 @@ impl BlockStore {
         recovery: bool,
         recover_epoch_change_block_number: Option<u64>,
     ) -> anyhow::Result<()> {
+        if !self.is_validator && !recovery {
+            debug!("send_for_execution: skip live ordered execution for non-validator");
+            return Ok(());
+        }
         let block_id_to_commit = finality_proof.commit_info().id();
         // Idempotent short-circuits for concurrent send_for_execution races
         // (e.g. recover_blocks vs. live consensus both advancing ordered_root).
