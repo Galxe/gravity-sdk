@@ -187,7 +187,7 @@ impl BlockStore {
         }
         if self.ordered_root().round() < qc.commit_info().round() {
             SUCCESSFUL_EXECUTED_WITH_REGULAR_QC.inc();
-            self.send_for_execution(qc.into_wrapped_ledger_info(), false).await?;
+            self.send_for_execution(qc.into_wrapped_ledger_info(), false, None).await?;
             if qc.ends_epoch() {
                 retriever
                     .network
@@ -214,7 +214,7 @@ impl BlockStore {
                     observe_block(ordered_block.block().timestamp_usecs(), BlockStage::OC_ADDED);
                 }
                 SUCCESSFUL_EXECUTED_WITH_ORDER_VOTE_QC.inc();
-                self.send_for_execution(ordered_cert.clone(), false).await?;
+                self.send_for_execution(ordered_cert.clone(), false, None).await?;
             } else {
                 bail!("Ordered block not found in block store when inserting ordered cert");
             }
@@ -381,6 +381,14 @@ impl BlockStore {
             .filter(|((block, _, _), _)| block.round() > hcc_round)
             .unzip();
 
+        if blocks.is_empty() {
+            info!(
+                "[Fast_Forward_sync] all fetched blocks at or below local HCC round {}, nothing to sync",
+                hcc_round
+            );
+            return Ok(());
+        }
+
         for (i, (block, _, _)) in blocks.iter().enumerate() {
             assert_eq!(block.id(), quorum_certs[i].certified_block().id());
             if let Some(payload) = block.payload() {
@@ -397,18 +405,6 @@ impl BlockStore {
             quorum_certs,
             block_numbers,
         )?;
-        if !ledger_infos.is_empty() {
-            ledger_infos.reverse();
-            let mut ledger_info_batch = SchemaBatch::new();
-            for ledger_info in &ledger_infos {
-                storage
-                    .consensus_db()
-                    .ledger_db
-                    .metadata_db()
-                    .put_ledger_info(ledger_info, &mut ledger_info_batch)?;
-            }
-            storage.consensus_db().ledger_db.metadata_db().write_schemas(ledger_info_batch)?;
-        }
         storage.consensus_db().put_randomness(
             &blocks
                 .iter()
@@ -418,6 +414,25 @@ impl BlockStore {
                 })
                 .collect(),
         )?;
+
+        if ledger_infos.is_empty() {
+            info!(
+                "[Fast_Forward_sync] no ledger_infos returned, skipping rebuild (epoch {})",
+                epoch
+            );
+            return Ok(());
+        }
+
+        ledger_infos.reverse();
+        let mut ledger_info_batch = SchemaBatch::new();
+        for ledger_info in &ledger_infos {
+            storage
+                .consensus_db()
+                .ledger_db
+                .metadata_db()
+                .put_ledger_info(ledger_info, &mut ledger_info_batch)?;
+        }
+        storage.consensus_db().ledger_db.metadata_db().write_schemas(ledger_info_batch)?;
 
         let (root, blocks, quorum_certs) =
             match storage.start(false, ledger_infos.last().unwrap().ledger_info().epoch()).await {
@@ -429,7 +444,7 @@ impl BlockStore {
 
         self.rebuild(root, blocks, quorum_certs).await;
 
-        if !ledger_infos.is_empty() && ledger_infos.last().unwrap().ledger_info().ends_epoch() {
+        if ledger_infos.last().unwrap().ledger_info().ends_epoch() {
             retriever
                 .network
                 .send_epoch_change(EpochChangeProof::new(

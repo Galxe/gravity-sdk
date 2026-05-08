@@ -247,18 +247,16 @@ impl BlockStore {
             self.storage.consensus_db().ledger_db.metadata_db().get_latest_ledger_info();
         info!("recover_blocks: last_ledger_info={:?}", last_ledger_info);
 
-        // Determine the upper-bound round for recovery when a non-blocking epoch change
-        // was in progress. Blocks after this round are suffix blocks that reth will discard.
-        let epoch_change_limit_round =
-            last_ledger_info.as_ref().and_then(|li| {
-                let info = li.ledger_info().commit_info().epoch_block_info()?;
-                let block = self.get_block(info.block_id)?;
-                info!(
-                "recover_blocks: epoch change detected at block_id={}, block_number={}, round={}",
-                info.block_id, info.block_number, block.round(),
+        // When a non-blocking epoch change was in progress, determine the epoch change
+        // block_number so that recovery does not commit suffix blocks past it.
+        let epoch_change_block_number = last_ledger_info.as_ref().and_then(|li| {
+            let info = li.ledger_info().commit_info().epoch_block_info()?;
+            info!(
+                "recover_blocks: epoch change detected at block_id={}, block_number={}",
+                info.block_id, info.block_number,
             );
-                Some(block.round())
-            });
+            Some(info.block_number)
+        });
 
         certs.sort_unstable_by_key(|qc| qc.commit_info().round());
 
@@ -267,12 +265,6 @@ impl BlockStore {
 
             if commit_round <= self.commit_root().round() {
                 continue;
-            }
-
-            // Stop once we pass the epoch change boundary.
-            if epoch_change_limit_round.is_some_and(|ec| commit_round > ec) {
-                info!("recover_blocks: stopping before round {commit_round} (epoch change limit)");
-                break;
             }
 
             let Some(last_li) = &last_ledger_info else { continue };
@@ -287,7 +279,10 @@ impl BlockStore {
                 commit_round,
                 self.commit_root().round(),
             );
-            if let Err(e) = self.send_for_execution(qc.into_wrapped_ledger_info(), true).await {
+            if let Err(e) = self
+                .send_for_execution(qc.into_wrapped_ledger_info(), true, epoch_change_block_number)
+                .await
+            {
                 error!("recover_blocks: failed to commit blocks: {e}");
                 break;
             }
@@ -532,6 +527,7 @@ impl BlockStore {
         &self,
         finality_proof: WrappedLedgerInfo,
         recovery: bool,
+        recover_epoch_change_block_number: Option<u64>,
     ) -> anyhow::Result<()> {
         let block_id_to_commit = finality_proof.commit_info().id();
         // Idempotent short-circuits for concurrent send_for_execution races
@@ -564,7 +560,28 @@ impl BlockStore {
         // blocks.
         self.init_block_number(&blocks_to_commit);
         if recovery {
-            // Recovery mode: process blocks directly without going through execution pipeline
+            // Recovery mode: process blocks directly without going through execution pipeline.
+            // Filter out suffix blocks past the epoch change boundary before execution.
+            let blocks_to_commit: Vec<_> = if let Some(limit) = recover_epoch_change_block_number {
+                let filtered: Vec<_> = blocks_to_commit
+                    .into_iter()
+                    .filter(|b| !b.block().block_number().is_some_and(|bn| bn > limit))
+                    .collect();
+                info!(
+                    "send_for_execution(recovery): filtered to {} blocks (epoch change limit={})",
+                    filtered.len(),
+                    limit,
+                );
+                if filtered.is_empty() {
+                    info!(
+                        "send_for_execution(recovery): all blocks filtered out by epoch change limit, skipping",
+                    );
+                    return Ok(());
+                }
+                filtered
+            } else {
+                blocks_to_commit
+            };
             for p_block in &blocks_to_commit {
                 let mut txns = vec![];
                 loop {
@@ -698,6 +715,7 @@ impl BlockStore {
             );
             self.inner.write().update_ordered_root(block_to_commit.id());
             self.inner.write().insert_ordered_cert(finality_proof_clone.clone());
+            update_counters_for_ordered_blocks(&blocks_to_commit);
         } else {
             // `BATCH_COMMIT_SIZE` env var: when set and the accumulated path is still
             // small, defer sending so the execution layer can process blocks in larger
@@ -777,9 +795,9 @@ impl BlockStore {
                 self.inner.write().update_ordered_root(block.id());
                 self.inner.write().insert_ordered_cert(proof);
             }
+            update_counters_for_ordered_blocks(&blocks_to_commit);
         }
 
-        update_counters_for_ordered_blocks(&blocks_to_commit);
         Ok(())
     }
 
@@ -1211,7 +1229,8 @@ impl BlockStore {
     pub async fn insert_block_with_qc(&self, block: Block) -> anyhow::Result<Arc<PipelinedBlock>> {
         self.insert_single_quorum_cert(block.quorum_cert().clone(), false)?;
         if self.ordered_root().round() < block.quorum_cert().commit_info().round() {
-            self.send_for_execution(block.quorum_cert().into_wrapped_ledger_info(), false).await?;
+            self.send_for_execution(block.quorum_cert().into_wrapped_ledger_info(), false, None)
+                .await?;
         }
         self.insert_block(block, false).await
     }
