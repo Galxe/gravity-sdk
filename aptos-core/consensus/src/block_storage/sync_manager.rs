@@ -634,8 +634,7 @@ impl BlockStore {
                 // if the block doesnt exist after ordered root
                 let highest_commit_cert_qc =
                     highest_commit_cert.clone().into_quorum_cert(self.order_vote_enabled).unwrap();
-                self.fast_forward_sync(&highest_commit_cert_qc, &highest_commit_cert, retriever)
-                    .await?;
+                self.fast_forward_sync(&highest_commit_cert_qc, &sync_from_cert, retriever).await?;
             }
         }
         Ok(())
