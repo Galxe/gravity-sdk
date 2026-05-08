@@ -665,10 +665,17 @@ impl BlockStore {
                     match p_block.randomness() {
                         Some(r) => Some(Random::from_bytes(r.randomness())),
                         None => {
-                            return Err(anyhow::anyhow!(
-                                "Randomness is required but not found in block {}",
-                                p_block.block().id()
-                            ));
+                            self.try_set_randomness_from_db(&p_block, p_block.block());
+                            match p_block.randomness() {
+                                Some(r) => Some(Random::from_bytes(r.randomness())),
+                                None => {
+                                    return Err(anyhow::anyhow!(
+                                        "Randomness is required but not found in block {}, block_number={}",
+                                        p_block.block().id(),
+                                        block_number,
+                                    ));
+                                }
+                            }
                         }
                     }
                 } else {
