@@ -166,7 +166,8 @@ pub struct BufferManager {
     consensus_observer_config: ConsensusObserverConfig,
     consensus_publisher: Option<Arc<ConsensusPublisher>>,
 
-    commit_vote_cache: HashMap<HashValue, HashMap<HashValue, CommitVote>>,
+    commit_vote_cache: BTreeMap<Round, HashMap<HashValue, HashMap<HashValue, CommitVote>>>,
+    max_pending_rounds_in_commit_vote_cache: Round,
 
     // Cache for commit proofs that arrive before the block enters the buffer.
     // When a CommitMessage::Decision arrives but the block is not yet in the buffer,
@@ -201,6 +202,7 @@ impl BufferManager {
         highest_committed_round: Round,
         consensus_observer_config: ConsensusObserverConfig,
         consensus_publisher: Option<Arc<ConsensusPublisher>>,
+        max_pending_rounds_in_commit_vote_cache: Round,
     ) -> Self {
         let buffer = Buffer::<BufferItem>::new();
 
@@ -260,7 +262,8 @@ impl BufferManager {
 
             consensus_observer_config,
             consensus_publisher,
-            commit_vote_cache: HashMap::new(),
+            commit_vote_cache: BTreeMap::new(),
+            max_pending_rounds_in_commit_vote_cache,
             pending_commit_proofs: BTreeMap::new(),
         }
     }
@@ -358,6 +361,58 @@ impl BufferManager {
         });
     }
 
+    fn cache_commit_vote(&mut self, vote: CommitVote) -> bool {
+        let commit_info = vote.commit_info().clone();
+        let round = commit_info.round();
+        let max_pending_rounds = self.max_pending_rounds_in_commit_vote_cache;
+        let highest_committed_round = self.highest_committed_round;
+        let max_cached_round = highest_committed_round.saturating_add(max_pending_rounds);
+
+        // Match Aptos' pending commit vote window: only cache votes for rounds ahead
+        // of the current commit root and within the configured pending-round window.
+        self.commit_vote_cache.retain(|cached_round, _| {
+            *cached_round > highest_committed_round && *cached_round < max_cached_round
+        });
+
+        if round <= highest_committed_round || round >= max_cached_round {
+            debug!(
+                round = round,
+                highest_committed_round = highest_committed_round,
+                max_cached_round = max_cached_round,
+                block_id = commit_info.id(),
+                "Received a commit vote outside the pending round window, ignored.",
+            );
+            return false;
+        }
+
+        self.commit_vote_cache
+            .entry(round)
+            .or_default()
+            .entry(commit_info.id())
+            .or_default()
+            .insert(HashValue::new(*vote.author()), vote);
+        true
+    }
+
+    fn drain_cached_commit_votes(&mut self, round: Round, block_id: &HashValue) -> Vec<CommitVote> {
+        let mut remove_round = false;
+        let votes = if let Some(round_cache) = self.commit_vote_cache.get_mut(&round) {
+            let votes = round_cache
+                .remove(block_id)
+                .map(|votes| votes.into_values().collect())
+                .unwrap_or_default();
+            remove_round = round_cache.is_empty();
+            votes
+        } else {
+            vec![]
+        };
+
+        if remove_round {
+            self.commit_vote_cache.remove(&round);
+        }
+        votes
+    }
+
     /// process incoming ordered blocks
     /// push them into the buffer and update the roots if they are none.
     async fn process_ordered_blocks(&mut self, ordered_blocks: OrderedBlocks) {
@@ -385,7 +440,20 @@ impl BufferManager {
             .await
             .expect("Failed to send execution schedule request");
 
-        let item = BufferItem::new_ordered(ordered_blocks, ordered_proof, callback);
+        let mut item = BufferItem::new_ordered(ordered_blocks, ordered_proof, callback);
+        let target_block_id = item.block_id();
+        let round = item.commit_info().round();
+        for vote in self.drain_cached_commit_votes(round, &target_block_id) {
+            if let Err(error) = item.add_signature_if_matched(vote.clone()) {
+                error!(
+                    commit_info = ?item.commit_info(),
+                    target_block_id = ?target_block_id,
+                    vote = ?vote,
+                    error = ?error,
+                    "Failed to add cached commit vote when ordered block entered buffer",
+                );
+            }
+        }
         self.buffer.push_back(item);
     }
 
@@ -750,17 +818,18 @@ impl BufferManager {
         &mut self,
         item: &mut BufferItem,
         target_block_id: &HashValue,
+        round: Round,
     ) {
-        if let Some(cache) = self.commit_vote_cache.get(target_block_id) {
-            cache.iter().for_each(|(_, vote)| {
-                match item.add_signature_if_matched(vote.clone()) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        error!(commit_info = ?item.commit_info(), target_block_id = ?target_block_id, vote = ?vote, "Failed to add commit vote from cache");
-                    }
-                }
-            });
-            self.commit_vote_cache.remove(target_block_id);
+        for vote in self.drain_cached_commit_votes(round, target_block_id) {
+            if let Err(error) = item.add_signature_if_matched(vote.clone()) {
+                error!(
+                    commit_info = ?item.commit_info(),
+                    target_block_id = ?target_block_id,
+                    vote = ?vote,
+                    error = ?error,
+                    "Failed to add commit vote from cache",
+                );
+            }
         }
     }
 
@@ -775,29 +844,16 @@ impl BufferManager {
                 let author = vote.author();
                 let commit_info = vote.commit_info().clone();
                 info!("Receive commit vote {} from {}", commit_info, author);
-                if commit_info.round() >= self.latest_round {
-                    // Limit the cache size to prevent OOM from unverified future votes
-                    const MAX_COMMIT_VOTE_CACHE_ENTRIES: usize = 1000;
-                    if self.commit_vote_cache.len() < MAX_COMMIT_VOTE_CACHE_ENTRIES ||
-                        self.commit_vote_cache.contains_key(&commit_info.id())
-                    {
-                        self.commit_vote_cache
-                            .entry(commit_info.id())
-                            .or_default()
-                            .insert(HashValue::new(*author), vote.clone());
-                    } else {
-                        warn!(
-                            "Commit vote cache is full ({}), dropping vote from {}",
-                            MAX_COMMIT_VOTE_CACHE_ENTRIES, author
-                        );
-                    }
-                }
                 let target_block_id = vote.commit_info().id();
                 let current_cursor =
                     self.buffer.find_elem_by_key(*self.buffer.head_cursor(), target_block_id);
                 if current_cursor.is_some() {
                     let mut item = self.buffer.take(&current_cursor);
-                    self.add_signature_if_matched_from_cache(&mut item, &target_block_id);
+                    self.add_signature_if_matched_from_cache(
+                        &mut item,
+                        &target_block_id,
+                        commit_info.round(),
+                    );
                     let new_item = match item.add_signature_if_matched(vote) {
                         Ok(()) => {
                             let response =
@@ -824,6 +880,13 @@ impl BufferManager {
                     } else {
                         return None;
                     }
+                } else if self.cache_commit_vote(vote) {
+                    let response = ConsensusMsg::CommitMessage(Box::new(CommitMessage::Ack(())));
+                    if let Ok(bytes) = protocol.to_bytes(&response) {
+                        let _ = response_sender.send(Ok(bytes.into()));
+                    }
+                } else {
+                    reply_nack(protocol, response_sender);
                 }
             }
             CommitMessage::Decision(commit_proof) => {
@@ -1028,6 +1091,7 @@ impl BufferManager {
                     match result {
                         Ok(round) => {
                             // see where `need_backpressure()` is called.
+                            self.commit_vote_cache.retain(|rnd, _| *rnd > round);
                             self.highest_committed_round = round;
                             counters::FINALIZED_EXECUTED_BLOCK_COUNTER.set(self.highest_committed_round as f64);
                         },

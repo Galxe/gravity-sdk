@@ -307,28 +307,7 @@ impl BlockStore {
             } else {
                 highest_commit_cert.clone()
             };
-        let (blocks, quorum_certs) = Self::fast_forward_sync(
-            &highest_quorum_cert,
-            &effective_commit_cert,
-            retriever,
-            self.storage.clone(),
-            self.payload_manager.clone(),
-            self.order_vote_enabled,
-            self.is_validator,
-        )
-        .await?;
-
-        self.append_blocks_for_sync(blocks, quorum_certs).await;
-
-        if highest_commit_cert.ledger_info().ledger_info().ends_epoch() {
-            retriever
-                .network
-                .send_epoch_change(EpochChangeProof::new(
-                    vec![highest_quorum_cert.ledger_info().clone()],
-                    /* more = */ false,
-                ))
-                .await;
-        }
+        self.fast_forward_sync(&highest_quorum_cert, &effective_commit_cert, retriever).await?;
         Ok(())
     }
 
@@ -381,6 +360,14 @@ impl BlockStore {
             .filter(|((block, _, _), _)| block.round() > hcc_round)
             .unzip();
 
+        if blocks.is_empty() {
+            info!(
+                "[Fast_Forward_sync] all fetched blocks at or below local HCC round {}, nothing to sync",
+                hcc_round
+            );
+            return Ok(());
+        }
+
         for (i, (block, _, _)) in blocks.iter().enumerate() {
             assert_eq!(block.id(), quorum_certs[i].certified_block().id());
             if let Some(payload) = block.payload() {
@@ -397,18 +384,6 @@ impl BlockStore {
             quorum_certs,
             block_numbers,
         )?;
-        if !ledger_infos.is_empty() {
-            ledger_infos.reverse();
-            let mut ledger_info_batch = SchemaBatch::new();
-            for ledger_info in &ledger_infos {
-                storage
-                    .consensus_db()
-                    .ledger_db
-                    .metadata_db()
-                    .put_ledger_info(ledger_info, &mut ledger_info_batch)?;
-            }
-            storage.consensus_db().ledger_db.metadata_db().write_schemas(ledger_info_batch)?;
-        }
         storage.consensus_db().put_randomness(
             &blocks
                 .iter()
@@ -418,6 +393,25 @@ impl BlockStore {
                 })
                 .collect(),
         )?;
+
+        if ledger_infos.is_empty() {
+            info!(
+                "[Fast_Forward_sync] no ledger_infos returned, skipping rebuild (epoch {})",
+                epoch
+            );
+            return Ok(());
+        }
+
+        ledger_infos.reverse();
+        let mut ledger_info_batch = SchemaBatch::new();
+        for ledger_info in &ledger_infos {
+            storage
+                .consensus_db()
+                .ledger_db
+                .metadata_db()
+                .put_ledger_info(ledger_info, &mut ledger_info_batch)?;
+        }
+        storage.consensus_db().ledger_db.metadata_db().write_schemas(ledger_info_batch)?;
 
         let (root, blocks, quorum_certs) =
             match storage.start(false, ledger_infos.last().unwrap().ledger_info().epoch()).await {
@@ -429,7 +423,7 @@ impl BlockStore {
 
         self.rebuild(root, blocks, quorum_certs).await;
 
-        if !ledger_infos.is_empty() && ledger_infos.last().unwrap().ledger_info().ends_epoch() {
+        if ledger_infos.last().unwrap().ledger_info().ends_epoch() {
             retriever
                 .network
                 .send_epoch_change(EpochChangeProof::new(
@@ -441,15 +435,12 @@ impl BlockStore {
         Ok(())
     }
 
-    pub async fn fast_forward_sync<'a>(
-        highest_quorum_cert: &'a QuorumCert,
-        highest_commit_cert: &'a WrappedLedgerInfo,
-        retriever: &'a mut BlockRetriever,
-        storage: Arc<dyn PersistentLivenessStorage>,
-        payload_manager: Arc<dyn TPayloadManager>,
-        order_vote_enabled: bool,
-        is_validator: bool,
-    ) -> anyhow::Result<(Vec<(Block, Option<u64>, Option<Vec<u8>>)>, Vec<QuorumCert>)> {
+    pub async fn fast_forward_sync(
+        &self,
+        highest_quorum_cert: &QuorumCert,
+        highest_commit_cert: &WrappedLedgerInfo,
+        retriever: &mut BlockRetriever,
+    ) -> anyhow::Result<()> {
         info!(
             LogSchema::new(LogEvent::StateSync).remote_peer(retriever.preferred_peer),
             "Start block sync to commit cert: {}, quorum cert: {}",
@@ -466,17 +457,17 @@ impl BlockStore {
         assert!(num_blocks < std::usize::MAX as u64);
 
         BLOCKS_FETCHED_FROM_NETWORK_WHILE_FAST_FORWARD_SYNC.inc_by(num_blocks);
-        let (mut blocks, _, ledger_infos) = retriever
+        let (mut blocks, _, mut ledger_infos) = retriever
             .retrieve_blocks_in_range(
                 highest_quorum_cert.certified_block().id(),
                 num_blocks,
                 highest_commit_cert.commit_info().id(),
-                if is_validator {
+                if self.is_validator {
                     highest_quorum_cert.ledger_info().get_voters(&retriever.available_peers)
                 } else {
                     retriever.available_peers.clone()
                 },
-                payload_manager.clone(),
+                self.payload_manager.clone(),
             )
             .await?;
 
@@ -504,12 +495,12 @@ impl BlockStore {
             .filter(|(_, block_number, _)| block_number.is_some())
             .map(|(block, block_number, _)| (block.epoch(), block_number.unwrap(), block.id()))
             .collect::<Vec<(u64, u64, HashValue)>>();
-        storage.save_tree(
+        self.storage.save_tree(
             blocks.iter().map(|(block, _, _)| block.clone()).collect(),
             quorum_certs.clone(),
             block_numbers,
         )?;
-        storage.consensus_db().put_randomness(
+        self.storage.consensus_db().put_randomness(
             &blocks
                 .iter()
                 .filter(|(_, _, randomness)| randomness.is_some())
@@ -518,23 +509,83 @@ impl BlockStore {
                 })
                 .collect(),
         )?;
-        if !ledger_infos.is_empty() {
-            let mut ledger_info_batch = SchemaBatch::new();
-            for ledger_info in ledger_infos {
-                storage
-                    .consensus_db()
-                    .ledger_db
-                    .metadata_db()
-                    .put_ledger_info(&ledger_info, &mut ledger_info_batch);
-            }
-            storage.consensus_db().ledger_db.metadata_db().write_schemas(ledger_info_batch);
+        if ledger_infos.is_empty() {
+            info!("[FastForwardSync] no ledger_infos returned, skipping rebuild");
+            return Ok(());
         }
-        storage.consensus_db().ledger_db.metadata_db().update_latest_ledger_info();
+
+        ledger_infos.reverse();
+        let mut ledger_info_batch = SchemaBatch::new();
+        for ledger_info in &ledger_infos {
+            self.storage
+                .consensus_db()
+                .ledger_db
+                .metadata_db()
+                .put_ledger_info(ledger_info, &mut ledger_info_batch)?;
+        }
+        self.storage.consensus_db().ledger_db.metadata_db().write_schemas(ledger_info_batch)?;
+        self.storage.consensus_db().ledger_db.metadata_db().update_latest_ledger_info();
         // we do not need to update block_tree.highest_commit_decision_ledger_info here
         // because the block_tree is going to rebuild itself.
         blocks.reverse();
         quorum_certs.reverse();
-        Ok((blocks, quorum_certs))
+        if !self.is_validator {
+            self.append_blocks_for_sync(blocks, quorum_certs).await;
+        } else {
+            let (root, blocks, quorum_certs) = match self
+                .storage
+                .start(false, ledger_infos.last().unwrap().ledger_info().epoch())
+                .await
+            {
+                LivenessStorageData::FullRecoveryData(recovery_data) => recovery_data,
+                _ => panic!("Failed to construct recovery data after fast forward sync"),
+            }
+            .take();
+            self.storage.consensus_db().ledger_db.metadata_db().update_latest_ledger_info();
+
+            self.rebuild(root, blocks, quorum_certs).await;
+        }
+        if ledger_infos.last().unwrap().ledger_info().ends_epoch() {
+            retriever
+                .network
+                .send_epoch_change(EpochChangeProof::new(
+                    vec![ledger_infos.last().unwrap().clone()],
+                    /* more = */ false,
+                ))
+                .await;
+        }
+        Ok(())
+    }
+
+    async fn apply_fast_forward_sync(
+        &self,
+        target_commit_cert: &WrappedLedgerInfo,
+        blocks: Vec<(Block, Option<u64>, Option<Vec<u8>>)>,
+        quorum_certs: Vec<QuorumCert>,
+    ) -> anyhow::Result<()> {
+        if !self.is_validator {
+            self.append_blocks_for_sync(blocks, quorum_certs).await;
+            return Ok(());
+        }
+
+        let target = target_commit_cert.ledger_info();
+        info!(
+            "apply_fast_forward_sync: validator reset and rebuild to commit round {}, block {}",
+            target.commit_info().round(),
+            target.commit_info().id(),
+        );
+        self.execution_client.reset(target).await?;
+
+        let (root, blocks, quorum_certs) =
+            match self.storage.start(false, target.ledger_info().epoch()).await {
+                LivenessStorageData::FullRecoveryData(recovery_data) => recovery_data,
+                _ => panic!("Failed to construct recovery data after fast forward sync"),
+            }
+            .take();
+
+        self.storage.consensus_db().ledger_db.metadata_db().update_latest_ledger_info();
+        self.rebuild(root, blocks, quorum_certs).await;
+        Ok(())
     }
 
     /// Fast forward in the decoupled-execution pipeline if the block exists there
@@ -583,18 +634,7 @@ impl BlockStore {
                 // if the block doesnt exist after ordered root
                 let highest_commit_cert_qc =
                     highest_commit_cert.clone().into_quorum_cert(self.order_vote_enabled).unwrap();
-                let (blocks, quorum_certs) = Self::fast_forward_sync(
-                    &highest_commit_cert_qc,
-                    &sync_from_cert,
-                    retriever,
-                    self.storage.clone(),
-                    self.payload_manager.clone(),
-                    self.order_vote_enabled,
-                    self.is_validator,
-                )
-                .await?;
-
-                self.append_blocks_for_sync(blocks, quorum_certs).await;
+                self.fast_forward_sync(&highest_commit_cert_qc, &sync_from_cert, retriever).await?;
             }
         }
         Ok(())

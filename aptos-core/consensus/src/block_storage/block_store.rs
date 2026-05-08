@@ -475,17 +475,26 @@ impl BlockStore {
             if block.round() <= root_round && block.id() != root_id {
                 continue;
             }
-            block_store.insert_block(block, true).await.unwrap_or_else(|e| {
-                panic!("[BlockStore] failed to insert block during build {:?}", e)
-            });
+            if let Err(e) = block_store.insert_block(block.clone(), true).await {
+                warn!(
+                    "[BlockStore] skipping block during build: block={}, parent={}, error={:?}",
+                    block.id(),
+                    block.parent_id(),
+                    e
+                );
+            }
         }
         for qc in quorum_certs {
             if qc.certified_block().round() < root_round {
                 continue;
             }
-            block_store.insert_single_quorum_cert(qc, true).unwrap_or_else(|e| {
-                panic!("[BlockStore] failed to insert quorum during build{:?}", e)
-            });
+            if let Err(e) = block_store.insert_single_quorum_cert(qc.clone(), true) {
+                warn!(
+                    "[BlockStore] skipping quorum during build: certified_block={}, error={:?}",
+                    qc.certified_block().id(),
+                    e
+                );
+            }
         }
 
         counters::LAST_COMMITTED_ROUND.set(block_store.ordered_root().round() as i64);
@@ -529,6 +538,10 @@ impl BlockStore {
         recovery: bool,
         recover_epoch_change_block_number: Option<u64>,
     ) -> anyhow::Result<()> {
+        if !self.is_validator && !recovery {
+            debug!("send_for_execution: skip live ordered execution for non-validator");
+            return Ok(());
+        }
         let block_id_to_commit = finality_proof.commit_info().id();
         // Idempotent short-circuits for concurrent send_for_execution races
         // (e.g. recover_blocks vs. live consensus both advancing ordered_root).
@@ -537,10 +550,28 @@ impl BlockStore {
         let block_to_commit = self
             .get_block(block_id_to_commit)
             .ok_or_else(|| format_err!("Committed block id not found"))?;
-        ensure!(
-            block_to_commit.round() > self.ordered_root().round(),
-            "Committed block round lower than root"
-        );
+        let ordered_root = self.ordered_root();
+        let commit_root = self.commit_root();
+        if block_to_commit.round() <= ordered_root.round() {
+            warn!(
+                "send_for_execution: committed block round lower than ordered root: \
+                block_to_commit_id={}, block_to_commit_round={}, \
+                ordered_root_id={}, ordered_root_round={}, \
+                commit_root_id={}, commit_root_round={}, recovery={}",
+                block_to_commit.id(),
+                block_to_commit.round(),
+                ordered_root.id(),
+                ordered_root.round(),
+                commit_root.id(),
+                commit_root.round(),
+                recovery,
+            );
+            return Err(format_err!(
+                "Committed block round lower than root: block_to_commit_round={}, ordered_root_round={}",
+                block_to_commit.round(),
+                ordered_root.round(),
+            ));
+        }
         let blocks_to_commit = self.path_from_ordered_root(block_id_to_commit).unwrap_or_default();
         if blocks_to_commit.is_empty() {
             // Narrow race: ordered_root advanced between the round check above and here.
@@ -634,10 +665,17 @@ impl BlockStore {
                     match p_block.randomness() {
                         Some(r) => Some(Random::from_bytes(r.randomness())),
                         None => {
-                            return Err(anyhow::anyhow!(
-                                "Randomness is required but not found in block {}",
-                                p_block.block().id()
-                            ));
+                            self.try_set_randomness_from_db(&p_block, p_block.block());
+                            match p_block.randomness() {
+                                Some(r) => Some(Random::from_bytes(r.randomness())),
+                                None => {
+                                    return Err(anyhow::anyhow!(
+                                        "Randomness is required but not found in block {}, block_number={}",
+                                        p_block.block().id(),
+                                        block_number,
+                                    ));
+                                }
+                            }
                         }
                     }
                 } else {

@@ -27,6 +27,7 @@
         "txpool.basefee-max-size": 17592186044415,
         "txpool.queued-max-count": 17592186044415,
         "txpool.queued-max-size": 17592186044415,
+        "txpool.max-account-slots": ${TXPOOL_MAX_ACCOUNT_SLOTS},
         "ipcdisable": ""
     },
     "env_vars": {
