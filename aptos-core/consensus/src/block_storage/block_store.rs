@@ -546,10 +546,28 @@ impl BlockStore {
         let block_to_commit = self
             .get_block(block_id_to_commit)
             .ok_or_else(|| format_err!("Committed block id not found"))?;
-        ensure!(
-            block_to_commit.round() > self.ordered_root().round(),
-            "Committed block round lower than root"
-        );
+        let ordered_root = self.ordered_root();
+        let commit_root = self.commit_root();
+        if block_to_commit.round() <= ordered_root.round() {
+            warn!(
+                "send_for_execution: committed block round lower than ordered root: \
+                block_to_commit_id={}, block_to_commit_round={}, \
+                ordered_root_id={}, ordered_root_round={}, \
+                commit_root_id={}, commit_root_round={}, recovery={}",
+                block_to_commit.id(),
+                block_to_commit.round(),
+                ordered_root.id(),
+                ordered_root.round(),
+                commit_root.id(),
+                commit_root.round(),
+                recovery,
+            );
+            return Err(format_err!(
+                "Committed block round lower than root: block_to_commit_round={}, ordered_root_round={}",
+                block_to_commit.round(),
+                ordered_root.round(),
+            ));
+        }
         let blocks_to_commit = self.path_from_ordered_root(block_id_to_commit).unwrap_or_default();
         if blocks_to_commit.is_empty() {
             // Narrow race: ordered_root advanced between the round check above and here.
