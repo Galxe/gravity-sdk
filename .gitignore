@@ -63,6 +63,9 @@ Temporary Items
 # VSCode settings
 .vscode/
 
+# Claude Code harness local state
+.claude/
+
 # Typescript
 # *.env  — moved to .env/ specific rule below
 node_modules
