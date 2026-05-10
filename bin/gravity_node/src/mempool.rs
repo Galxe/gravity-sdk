@@ -18,8 +18,8 @@ use gaptos::api_types::{
 use greth::{
     reth_primitives::{Recovered, TransactionSigned},
     reth_transaction_pool::{
-        BestTransactions, EthPooledTransaction, PoolTransaction, TransactionPool,
-        ValidPoolTransaction,
+        error::PoolErrorKind, BestTransactions, EthPooledTransaction, PoolTransaction,
+        TransactionPool, ValidPoolTransaction,
     },
 };
 
@@ -235,26 +235,40 @@ impl TxPool for Mempool {
                 let to = pool_txn.to();
                 self.runtime.spawn(async move {
                     if let Err(e) = pool.add_external_transaction(pool_txn).await {
-                        // Defer to reth's classification: only promote to ERROR for
-                        // pool errors that warrant peer penalization (per
-                        // PoolError::is_bad_transaction). The "not bad" cases are
-                        // dominated by AlreadyImported, which floods on every
-                        // legitimate client retry and on duplicate P2P mempool
-                        // gossip — they're observable but not actionable.
-                        if e.is_bad_transaction() {
-                            tracing::error!(
-                                "Failed to add transaction: {:?} {:?} {:?}",
-                                address,
-                                to,
-                                e
-                            );
-                        } else {
-                            tracing::info!(
-                                "tx not added (recoverable): {:?} {:?} {:?}",
-                                address,
-                                to,
-                                e
-                            );
+                        // Three-way classification:
+                        //  * PoolErrorKind::Other(_)        — internal failure (DB/IO). Surface at
+                        //    WARN so operators see it.
+                        //  * is_bad_transaction() == true   — sender produced a malformed /
+                        //    protocol-invalid tx. Node correctly rejected; WARN gives visibility +
+                        //    monitoring signal without paging.
+                        //  * everything else                — recoverable noise (AlreadyImported
+                        //    dedup, ReplacementUnderpriced, nonce gap, low fee, local config).
+                        //    INFO.
+                        match &e.kind {
+                            PoolErrorKind::Other(_) => {
+                                tracing::warn!(
+                                    "Failed to add transaction (internal): {:?} {:?} {:?}",
+                                    address,
+                                    to,
+                                    e
+                                );
+                            }
+                            _ if e.is_bad_transaction() => {
+                                tracing::warn!(
+                                    "rejected malformed tx: {:?} {:?} {:?}",
+                                    address,
+                                    to,
+                                    e
+                                );
+                            }
+                            _ => {
+                                tracing::info!(
+                                    "tx not added (recoverable): {:?} {:?} {:?}",
+                                    address,
+                                    to,
+                                    e
+                                );
+                            }
                         }
                     }
                 });
