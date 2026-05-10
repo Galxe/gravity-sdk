@@ -234,14 +234,28 @@ impl TxPool for Mempool {
                 let address = pool_txn.sender();
                 let to = pool_txn.to();
                 self.runtime.spawn(async move {
-                    let res = pool.add_external_transaction(pool_txn).await;
-                    if let Err(e) = res {
-                        tracing::error!(
-                            "Failed to add transaction: {:?} {:?} {:?}",
-                            address,
-                            to,
-                            e
-                        );
+                    if let Err(e) = pool.add_external_transaction(pool_txn).await {
+                        // Defer to reth's classification: only promote to ERROR for
+                        // pool errors that warrant peer penalization (per
+                        // PoolError::is_bad_transaction). The "not bad" cases are
+                        // dominated by AlreadyImported, which floods on every
+                        // legitimate client retry and on duplicate P2P mempool
+                        // gossip — they're observable but not actionable.
+                        if e.is_bad_transaction() {
+                            tracing::error!(
+                                "Failed to add transaction: {:?} {:?} {:?}",
+                                address,
+                                to,
+                                e
+                            );
+                        } else {
+                            tracing::info!(
+                                "tx not added (recoverable): {:?} {:?} {:?}",
+                                address,
+                                to,
+                                e
+                            );
+                        }
                     }
                 });
                 true
