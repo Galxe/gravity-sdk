@@ -7,7 +7,7 @@ use crate::{
 };
 use anyhow::Result;
 use aptos_executor::block_executor::BlockExecutor;
-use aptos_executor_types::{BlockExecutorTrait, ExecutorResult, StateComputeResult};
+use aptos_executor_types::{BlockExecutorTrait, ExecutorError, ExecutorResult, StateComputeResult};
 use block_buffer_manager::{block_buffer_manager::BlockHashRef, get_block_buffer_manager};
 use gaptos::{
     api_types::u256_define::BlockId,
@@ -104,7 +104,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             }
             let epoch = ledger_info_with_sigs.ledger_info().epoch();
             self.runtime.block_on(async move {
-                let persist_notifiers = get_block_buffer_manager()
+                let mut persist_notifiers = get_block_buffer_manager()
                     .set_commit_blocks(
                         block_ids
                             .into_iter()
@@ -122,20 +122,19 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                             .collect(),
                         epoch,
                     )
-                    .await;
-                let mut persist_notifiers = match persist_notifiers {
-                    Ok(persist_notifiers) => persist_notifiers,
-                    Err(e) => {
-                        error!("Failed to set commit blocks in BlockBufferManager: {:?}", e);
-                        return;
-                    }
-                };
+                    .await
+                    .map_err(|e| {
+                        ExecutorError::internal_err(format!(
+                            "Failed to set commit blocks in BlockBufferManager: {e:?}"
+                        ))
+                    })?;
                 for notifier in persist_notifiers.iter_mut() {
                     if notifier.recv().await.is_none() {
                         warn!("persist_notifier channel closed in commit_blocks");
                     }
                 }
-            });
+                Ok::<(), ExecutorError>(())
+            })?;
         }
         Ok(())
     }
@@ -185,7 +184,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         }
 
         self.runtime.block_on(async move {
-            let persist_notifiers = get_block_buffer_manager()
+            let mut persist_notifiers = get_block_buffer_manager()
                 .set_commit_blocks(
                     block_ids
                         .into_iter()
@@ -202,14 +201,12 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                         .collect(),
                     epoch,
                 )
-                .await;
-            let mut persist_notifiers = match persist_notifiers {
-                Ok(persist_notifiers) => persist_notifiers,
-                Err(e) => {
-                    error!("Failed to set commit blocks in BlockBufferManager: {:?}", e);
-                    return;
-                }
-            };
+                .await
+                .map_err(|e| {
+                    ExecutorError::internal_err(format!(
+                        "Failed to set commit blocks in BlockBufferManager: {e:?}"
+                    ))
+                })?;
             for notifier in persist_notifiers.iter_mut() {
                 if notifier.recv().await.is_none() {
                     warn!("persist_notifier channel closed in commit_ledger");
@@ -220,7 +217,8 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             {
                 error!("Failed to save_transactions in commit_ledger: {:?}", e);
             }
-        });
+            Ok::<(), ExecutorError>(())
+        })?;
         Ok(())
     }
 }
