@@ -194,6 +194,15 @@ impl BlockStateMachine {
             .is_some_and(|cache| block_num > cache.epoch_block_info.block_number)
     }
 
+    /// Returns true when a commit notification belongs to an old in-flight block that
+    /// was intentionally dropped during epoch-change cleanup.
+    fn is_stale_commit_after_epoch_change(&self, epoch: u64, block_num: u64) -> bool {
+        epoch < self.current_epoch ||
+            self.epoch_change_block_info.as_ref().is_some_and(|cache| {
+                epoch == self.current_epoch && block_num > cache.epoch_block_info.block_number
+            })
+    }
+
     /// Record a profile measurement for the given block key.
     fn record_profile(&mut self, key: BlockKey, f: impl FnOnce(&mut BlockProfile)) {
         f(self.profile.entry(key).or_default());
@@ -1086,6 +1095,18 @@ impl BlockBufferManager {
                     }
                 }
             } else {
+                if block_state_machine
+                    .is_stale_commit_after_epoch_change(epoch, block_id_num_hash.num)
+                {
+                    warn!(
+                        "Discard stale commit block after epoch change id {:?} num {} commit_epoch {} current_epoch {}",
+                        block_id_num_hash.block_id,
+                        block_id_num_hash.num,
+                        epoch,
+                        block_state_machine.current_epoch,
+                    );
+                    continue;
+                }
                 return Err(anyhow::anyhow!(
                     "There is no Block but try to push commit block for block {:?} num {}",
                     block_id_num_hash.block_id,

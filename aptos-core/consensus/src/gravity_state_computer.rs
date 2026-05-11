@@ -104,7 +104,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             }
             let epoch = ledger_info_with_sigs.ledger_info().epoch();
             self.runtime.block_on(async move {
-                let mut persist_notifiers = get_block_buffer_manager()
+                let persist_notifiers = get_block_buffer_manager()
                     .set_commit_blocks(
                         block_ids
                             .into_iter()
@@ -122,8 +122,14 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                             .collect(),
                         epoch,
                     )
-                    .await
-                    .expect("Failed to set commit blocks in BlockBufferManager");
+                    .await;
+                let mut persist_notifiers = match persist_notifiers {
+                    Ok(persist_notifiers) => persist_notifiers,
+                    Err(e) => {
+                        error!("Failed to set commit blocks in BlockBufferManager: {:?}", e);
+                        return;
+                    }
+                };
                 for notifier in persist_notifiers.iter_mut() {
                     if notifier.recv().await.is_none() {
                         warn!("persist_notifier channel closed in commit_blocks");
@@ -179,7 +185,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         }
 
         self.runtime.block_on(async move {
-            let mut persist_notifiers = get_block_buffer_manager()
+            let persist_notifiers = get_block_buffer_manager()
                 .set_commit_blocks(
                     block_ids
                         .into_iter()
@@ -196,8 +202,14 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                         .collect(),
                     epoch,
                 )
-                .await
-                .expect("Failed to set commit blocks in BlockBufferManager");
+                .await;
+            let mut persist_notifiers = match persist_notifiers {
+                Ok(persist_notifiers) => persist_notifiers,
+                Err(e) => {
+                    error!("Failed to set commit blocks in BlockBufferManager: {:?}", e);
+                    return;
+                }
+            };
             for notifier in persist_notifiers.iter_mut() {
                 if notifier.recv().await.is_none() {
                     warn!("persist_notifier channel closed in commit_ledger");
