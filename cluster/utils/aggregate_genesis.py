@@ -34,6 +34,15 @@ def get_genesis_defaults():
         "consensusConfig": "0x0301010a00000000000000280000000000000001010000000a000000000000000100010200000000000000000020000000000000",
         "executionConfig": "0x00",
         "initialLockedUntilMicros": 1798848000000000,
+        # genesis-tool requires a deterministic EVM block.timestamp during
+        # genesis simulation so that independent operators produce byte-
+        # identical genesis.json (multi-operator ceremony reproducibility
+        # check). The genesis-tool panics if the field is absent; this
+        # default keeps every e2e suite booting without per-TOML edits.
+        # Ceremonies / suites that need a specific value should override
+        # `genesis.genesis_timestamp_secs` in their genesis.toml.
+        # 1778457600 = 2026-05-11 00:00:00 UTC.
+        "genesisTimestampSecs": 1778457600,
         "validatorConfig": {
             "minimumBond": "1000000000000000000",
             "maximumBond": "1000000000000000000000000",
@@ -99,9 +108,12 @@ def build_genesis_config(config, genesis_cfg):
     result["executionConfig"] = genesis_cfg.get("execution_config", defaults["executionConfig"])
     result["initialLockedUntilMicros"] = genesis_cfg.get("initial_locked_until_micros", defaults["initialLockedUntilMicros"])
 
-    # Optional: genesis block timestamp (passthrough only if explicitly set)
-    if "genesis_timestamp_secs" in genesis_cfg:
-        result["genesisTimestampSecs"] = genesis_cfg["genesis_timestamp_secs"]
+    # Genesis EVM block.timestamp — required by genesis-tool for reproducible
+    # genesis.json output. Always emitted; falls back to the deterministic
+    # default constant when not set per-suite in genesis.toml.
+    result["genesisTimestampSecs"] = genesis_cfg.get(
+        "genesis_timestamp_secs", defaults["genesisTimestampSecs"]
+    )
 
     # governanceOwner is now a required field in genesis-tool's GenesisConfig
     # (contracts main commit 57ae9bc wires Governance.owner at genesis via
