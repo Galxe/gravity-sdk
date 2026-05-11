@@ -7,7 +7,7 @@ use crate::{
 };
 use aptos_consensus_types::{common::Round, pipelined_block::PipelinedBlock};
 use gaptos::{
-    aptos_logger::warn,
+    aptos_logger::error,
     aptos_reliable_broadcast::DropGuard,
     aptos_types::randomness::{FullRandMetadata, Randomness},
 };
@@ -106,7 +106,7 @@ impl BlockQueue {
             .highest_dequeued_round
             .is_some_and(|highest_dequeued_round| first_round <= highest_dequeued_round)
         {
-            warn!(
+            error!(
                 "Dropping stale ordered blocks pushed to rand manager: first_round={}, last_round={}, highest_dequeued_round={}",
                 first_round,
                 last_round,
