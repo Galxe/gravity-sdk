@@ -30,7 +30,7 @@ use aptos_consensus_types::{
     common::{Author, Round},
     pipelined_block::PipelinedBlock,
 };
-use aptos_executor_types::ExecutorResult;
+use aptos_executor_types::{ExecutorError, ExecutorResult};
 use fail::fail_point;
 use futures::{
     channel::{mpsc::UnboundedSender, oneshot},
@@ -361,8 +361,10 @@ impl TExecutionClient for ExecutionProxyClient {
         let mut execute_tx = match self.handle.read().execute_tx.clone() {
             Some(tx) => tx,
             None => {
-                debug!("Failed to send to buffer manager, maybe epoch ends");
-                return Ok(());
+                warn!("Failed to send to buffer manager, execute channel is missing");
+                return Err(ExecutorError::internal_err(
+                    "Failed to send to buffer manager, execute channel is missing",
+                ));
             }
         };
 
@@ -382,7 +384,10 @@ impl TExecutionClient for ExecutionProxyClient {
             .await
             .is_err()
         {
-            debug!("Failed to send to buffer manager, maybe epoch ends");
+            warn!("Failed to send to buffer manager, execute channel is closed");
+            return Err(ExecutorError::internal_err(
+                "Failed to send to buffer manager, execute channel is closed",
+            ));
         }
         Ok(())
     }
