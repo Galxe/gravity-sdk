@@ -7,6 +7,7 @@ use crate::{
 };
 use aptos_consensus_types::{common::Round, pipelined_block::PipelinedBlock};
 use gaptos::{
+    aptos_logger::warn,
     aptos_reliable_broadcast::DropGuard,
     aptos_types::randomness::{FullRandMetadata, Randomness},
 };
@@ -43,6 +44,11 @@ impl QueueItem {
     #[allow(clippy::unwrap_used)]
     pub fn first_round(&self) -> u64 {
         self.blocks().first().unwrap().block().round()
+    }
+
+    #[allow(clippy::unwrap_used)]
+    pub fn last_round(&self) -> u64 {
+        self.blocks().last().unwrap().block().round()
     }
 
     pub fn offset(&self, round: Round) -> usize {
@@ -82,10 +88,11 @@ impl QueueItem {
 /// Maintain ordered blocks that have pending randomness
 pub struct BlockQueue {
     queue: BTreeMap<Round, QueueItem>,
+    highest_dequeued_round: Option<Round>,
 }
 impl BlockQueue {
     pub fn new() -> Self {
-        Self { queue: BTreeMap::new() }
+        Self { queue: BTreeMap::new(), highest_dequeued_round: None }
     }
 
     pub fn queue(&self) -> &BTreeMap<Round, QueueItem> {
@@ -93,10 +100,25 @@ impl BlockQueue {
     }
 
     pub fn push_back(&mut self, item: QueueItem) {
+        let first_round = item.first_round();
+        let last_round = item.last_round();
+        if self
+            .highest_dequeued_round
+            .is_some_and(|highest_dequeued_round| first_round <= highest_dequeued_round)
+        {
+            warn!(
+                "Dropping stale ordered blocks pushed to rand manager: first_round={}, last_round={}, highest_dequeued_round={}",
+                first_round,
+                last_round,
+                self.highest_dequeued_round.unwrap_or_default(),
+            );
+            return;
+        }
+
         for block in item.blocks() {
             observe_block(block.timestamp_usecs(), BlockStage::RAND_ENTER);
         }
-        assert!(self.queue.insert(item.first_round(), item).is_none());
+        assert!(self.queue.insert(first_round, item).is_none());
     }
 
     /// Dequeue all ordered blocks prefix that have randomness
@@ -110,6 +132,10 @@ impl BlockQueue {
                 for block in item.blocks() {
                     observe_block(block.timestamp_usecs(), BlockStage::RAND_READY);
                 }
+                self.highest_dequeued_round = Some(
+                    self.highest_dequeued_round
+                        .map_or(item.last_round(), |round| round.max(item.last_round())),
+                );
                 let QueueItem { ordered_blocks, .. } = item;
                 debug_assert!(ordered_blocks
                     .ordered_blocks
@@ -217,5 +243,24 @@ mod tests {
         assert_eq!(queue.dequeue_rand_ready_prefix().len(), 2);
 
         assert_eq!(queue.queue.len(), 1);
+    }
+
+    #[test]
+    fn test_block_queue_drops_stale_dequeued_round() {
+        let mut queue = BlockQueue::new();
+        queue.push_back(QueueItem::new(create_ordered_blocks(vec![1]), None));
+        assert_eq!(queue.queue.len(), 1);
+
+        assert!(queue.set_randomness(1, Randomness::default()));
+        assert_eq!(queue.dequeue_rand_ready_prefix().len(), 1);
+        assert_eq!(queue.queue.len(), 0);
+
+        queue.push_back(QueueItem::new(create_ordered_blocks(vec![1]), None));
+        assert_eq!(queue.queue.len(), 0);
+
+        queue.push_back(QueueItem::new(create_ordered_blocks(vec![2]), None));
+        assert_eq!(queue.queue.len(), 1);
+        assert!(queue.set_randomness(2, Randomness::default()));
+        assert_eq!(queue.dequeue_rand_ready_prefix().len(), 1);
     }
 }
