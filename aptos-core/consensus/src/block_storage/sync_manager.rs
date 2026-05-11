@@ -208,7 +208,23 @@ impl BlockStore {
         if let Some(tc) = sync_info.highest_2chain_timeout_cert() {
             self.insert_2chain_timeout_certificate(Arc::new(tc.clone()))?;
         }
+        self.replay_ordered_path_if_needed().await?;
         BLOCK_SYNC_GAUGE.set_with(&[], 0);
+        Ok(())
+    }
+
+    async fn replay_ordered_path_if_needed(&self) -> anyhow::Result<()> {
+        let ordered_root_round = self.ordered_root().round();
+        let highest_ordered_cert = self.highest_ordered_cert().as_ref().clone();
+        let highest_ordered_round = highest_ordered_cert.commit_info().round();
+        if ordered_root_round < highest_ordered_round {
+            info!(
+                "[BlockStore] replay ordered path after adding certs: ordered_root_round={}, highest_ordered_round={}",
+                ordered_root_round,
+                highest_ordered_round,
+            );
+            self.send_for_execution(highest_ordered_cert, false, None).await?;
+        }
         Ok(())
     }
 
