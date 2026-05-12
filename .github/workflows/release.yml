@@ -31,6 +31,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install build dependencies
+        # Mirrors gravity_e2e/build_docker.sh apt list (the working
+        # in-container build env), minus the python/test bits we don't need.
+        # libclang-dev added explicitly: on bullseye the `clang` package does
+        # not ship the unversioned libclang.so symlink that bindgen searches
+        # for, unlike bookworm where it's pulled in transitively.
+        shell: bash
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y --no-install-recommends \
+            clang llvm libclang-dev \
+            build-essential pkg-config \
+            libssl-dev libudev-dev \
+            procps git jq curl ca-certificates
+
       - name: Assert rustc matches rust-toolchain.toml
         shell: bash
         run: |
