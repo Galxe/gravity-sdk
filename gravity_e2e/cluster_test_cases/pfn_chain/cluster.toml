@@ -62,6 +62,11 @@ reth_p2p_port = 12026
 # pubkey mismatch self-check loop. Force vfn-network discovery off; the
 # validator_network keeps the default onchain.
 vfn_discovery_method = "none"
+# Bench's stress generator (1500 senders × 10K accts) submits many in-flight
+# txs per sender. reth's default 16 caps External-origin per-sender to ~16
+# tx/min after the Aptos shared-mempool broadcast cache cycles. 1024 lets
+# the pool absorb the full burst so chain TPS isn't gated by ingress.
+txpool_max_account_slots = 1024
 
 [[nodes]]
 id = "vfn1"
@@ -83,6 +88,7 @@ inspection_port = 10003
 https_port = 1025
 authrpc_port = 8554
 reth_p2p_port = 12027
+txpool_max_account_slots = 1024
 
 [[nodes]]
 id = "pfn1"
@@ -99,6 +105,7 @@ metrics_port = 9005
 inspection_port = 10004
 authrpc_port = 8555
 reth_p2p_port = 12028
+txpool_max_account_slots = 1024
 
 [[nodes]]
 id = "pfn2"
@@ -115,6 +122,7 @@ metrics_port = 9006
 inspection_port = 10005
 authrpc_port = 8556
 reth_p2p_port = 12029
+txpool_max_account_slots = 1024
 
 [[nodes]]
 id = "pfn3"
@@ -131,6 +139,7 @@ metrics_port = 9007
 inspection_port = 10006
 authrpc_port = 8557
 reth_p2p_port = 12030
+txpool_max_account_slots = 1024
 
 [faucet_init]
 num_accounts = 10000
