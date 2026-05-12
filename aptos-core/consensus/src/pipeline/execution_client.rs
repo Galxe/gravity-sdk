@@ -361,7 +361,7 @@ impl TExecutionClient for ExecutionProxyClient {
         let mut execute_tx = match self.handle.read().execute_tx.clone() {
             Some(tx) => tx,
             None => {
-                debug!("Failed to send to buffer manager, maybe epoch ends");
+                warn!("Failed to send to buffer manager, execute channel is missing");
                 return Ok(());
             }
         };
@@ -382,7 +382,8 @@ impl TExecutionClient for ExecutionProxyClient {
             .await
             .is_err()
         {
-            debug!("Failed to send to buffer manager, maybe epoch ends");
+            warn!("Failed to send to buffer manager, execute channel is closed");
+            return Ok(());
         }
         Ok(())
     }
