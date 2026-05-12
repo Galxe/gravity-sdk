@@ -322,6 +322,29 @@ impl BatchStore {
         }
     }
 
+    pub(crate) fn save_fetched_batch_to_db(
+        &self,
+        persist_request: PersistedValue,
+    ) -> anyhow::Result<()> {
+        let batch_info = persist_request.batch_info().clone();
+        self.db.save_batch(persist_request).map_err(|e| {
+            anyhow::anyhow!(
+                "Could not persist fetched batch to DB: epoch={}, digest={}, expiration={}, error={:?}",
+                batch_info.epoch(),
+                batch_info.digest(),
+                batch_info.expiration(),
+                e,
+            )
+        })?;
+        debug!(
+            "QS: persisted fetched batch to DB: epoch={}, digest={}, expiration={}",
+            batch_info.epoch(),
+            batch_info.digest(),
+            batch_info.expiration(),
+        );
+        Ok(())
+    }
+
     pub fn update_certified_timestamp(&self, certified_time: u64) {
         trace!("QS: batch reader updating time {:?}", certified_time);
         let prev_time = self.last_certified_time.fetch_max(certified_time, Ordering::SeqCst);
@@ -485,6 +508,18 @@ impl<T: QuorumStoreSender + Clone + Send + Sync + 'static> BatchReader for Batch
                 if let Some((batch_info, payload)) =
                     batch_requester.request_batch(key, expiration, signers, tx, subscriber_rx).await
                 {
+                    if let Err(e) = batch_store.save_fetched_batch_to_db(PersistedValue::new(
+                        batch_info.clone(),
+                        Some(payload.clone()),
+                    )) {
+                        error!(
+                            "QS: failed to persist fetched remote batch to DB: epoch={}, digest={}, expiration={}, error={:?}",
+                            batch_info.epoch(),
+                            batch_info.digest(),
+                            batch_info.expiration(),
+                            e,
+                        );
+                    }
                     batch_store.persist(vec![PersistedValue::new(batch_info, Some(payload))]);
                 }
             }
