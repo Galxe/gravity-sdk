@@ -1,0 +1,79 @@
+# Simplified 3-node topology: 1 validator + 1 VFN + 1 PFN.
+# vfn1 dials node1 (Vfn network); pfn1 dials vfn1 (Public network).
+#
+# Compared to the 5-node chain topology, this drops pfn2/pfn3 — eliminating
+# one layer of PFN-to-PFN gossip and 2 containers per cluster. Useful when:
+#   - isolating per-cluster overhead in parallel multi-cluster tests
+#   - measuring single-hop PFN sync without the redundant-upstream pattern
+#
+# Ports are the BASE set (offset=0); setup-instance.sh applies a per-cluster
+# PORT_OFFSET and rewrites base_dir.
+
+[cluster]
+name = "gravity-devnet-pfn-simple"
+base_dir = "/tmp/gravity-cluster-pfn-simple"
+
+[genesis_source]
+genesis_path = "./output/genesis.json"
+waypoint_path = "./output/waypoint.txt"
+
+# ── Validator (only validator, genesis role) ────────────────────────────────
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 6182
+vfn_port = 6192
+rpc_port = 18545
+metrics_port = 9003
+inspection_port = 10002
+https_port = 1024
+authrpc_port = 8553
+reth_p2p_port = 12026
+txpool_max_account_slots = 1024
+
+# ── VFN — node1's shadow fullnode ──────────────────────────────────────────
+
+[[nodes]]
+id = "vfn1"
+role = "vfn"
+seeds = [
+    { from = "node1" },             # Vfn -> node1's Vfn listener
+]
+public_port = 6195                  # extra Public listener so pfn1 can dial in
+discovery_method = "none"
+source = { project_path = "../" }
+host = "127.0.0.1"
+vfn_port = 6193
+rpc_port = 18546
+metrics_port = 9004
+inspection_port = 10003
+https_port = 1025
+authrpc_port = 8554
+reth_p2p_port = 12027
+txpool_max_account_slots = 1024
+
+# ── PFN (single leaf) ──────────────────────────────────────────────────────
+
+[[nodes]]
+id = "pfn1"
+role = "pfn"
+seeds = [
+    { from = "vfn1" },              # upstream — auto-infers ValidatorFullNode
+]
+source = { project_path = "../" }
+host = "127.0.0.1"
+public_port = 6196                  # Public listener (inbound; no one dials in)
+rpc_port = 18547
+metrics_port = 9005
+inspection_port = 10004
+authrpc_port = 8555
+reth_p2p_port = 12028
+txpool_max_account_slots = 1024
+
+[faucet_init]
+num_accounts = 10000
+private_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+eth_balance = "1000000000000000000"
