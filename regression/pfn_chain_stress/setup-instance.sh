@@ -70,12 +70,19 @@ def patch_port(m):
     key, val = m.group(1), int(m.group(2))
     return f"{key} = {val + offset}"
 
-text = re.sub(
+# Use subn so we can verify substitution count — catches silent regex misses
+# that would leave a port key unrewritten and break exactly one node.
+# Baselines: chain template has 34 keys; simple has 22. A floor of 18 catches
+# "totally missed" without false positives across either topology.
+text, port_n = re.subn(
     r'\b(validator_port|vfn_port|rpc_port|metrics_port|inspection_port|https_port|authrpc_port|public_port|reth_p2p_port)\s*=\s*(\d+)',
     patch_port, text,
 )
-text = re.sub(r'base_dir\s*=\s*"[^"]*"', f'base_dir = "{base_dir}"', text)
+assert port_n >= 18, f"port substitution count too low: {port_n} (expected >=18; chain~34, simple~22)"
+text, base_n = re.subn(r'base_dir\s*=\s*"[^"]*"', f'base_dir = "{base_dir}"', text)
+assert base_n >= 1, "base_dir substitution did not match anything"
 open(dst, 'w').write(text)
+print(f"[setup] port substitutions: {port_n}; base_dir substitutions: {base_n}", file=sys.stderr)
 PY
 
 # Sanity: rpc_port should now be (18545 + offset).
@@ -123,8 +130,10 @@ for node in "${NODES[@]}"; do
     find "$src" -maxdepth 1 -type f -exec cp {} "$dst/" \;
     cp -f "$HOST_BASE_DIR/genesis.json" "$dst/genesis.json"
 
-    # Order matters: rewrite longer prefixes first so /data doesn't clobber
-    # /consensus_log / /execution_logs.
+    # Order here is defensive: today /consensus_log and /execution_logs are
+    # siblings of /data so ordering doesn't matter for correctness, but if a
+    # future layout makes /data a prefix (e.g. /data/consensus_log) the
+    # longer-prefix-first ordering keeps the rewrite correct.
     sed -i \
         -e "s|$HOST_BASE_DIR/genesis.json|/gravity/config/genesis.json|g" \
         -e "s|$HOST_BASE_DIR/$node/consensus_log|/gravity/data/consensus_log|g" \

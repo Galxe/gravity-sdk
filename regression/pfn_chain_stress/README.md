@@ -122,8 +122,8 @@ cd regression/pfn_chain_stress
 
 4. **Bench launch** depends on parallelism:
    - Single cluster: `docker compose run --rm bench` in the foreground;
-     chain-level TPS is reported after a 15s settle (if
-     `/tmp/pfn-diag-rootcause/exp17/analyze_chain_tps.sh` is present).
+     chain-level TPS is reported after a 15s settle by
+     `tools/analyze_chain_tps.sh` (override with `ANALYZER=/path/to/script`).
    - Parallel: each bench launched detached as
      `pfn_stress_bench_{a,b,c,...}`; tail their logs via
      `docker logs --tail 5 <container>`.
@@ -188,9 +188,10 @@ chain more than simple — is what matters.)
   removes that on exit. To capture, drop `--rm` or stream with
   `docker compose logs -f bench`. Parallel benches use `docker run -d`
   (not compose), so logs are reachable via `docker logs <container>`.
-- **TPS analyzer optional:** if `/tmp/pfn-diag-rootcause/exp17/analyze_chain_tps.sh`
-  is absent, the chain-level TPS calculation is skipped; the bench's own
-  throughput report still prints.
+- **TPS analyzer optional:** chain-level TPS is computed by
+  `tools/analyze_chain_tps.sh` (bundled). If you set `ANALYZER=` to a path
+  that isn't executable, the calculation is silently skipped; the bench's
+  own throughput report still prints.
 - **Faucet phase is slow:** with `BENCH_NUM_ACCOUNTS=10000` and 2 tokens,
   the multi-level cascade takes ~6-10 min before stress begins. Reduce
   `BENCH_NUM_ACCOUNTS` to speed up iteration.

@@ -18,7 +18,10 @@ PARALLEL=1
 TOPOLOGY="chain"
 for arg in "$@"; do
     case "$arg" in
-        --parallel=*) PARALLEL="${arg#--parallel=}" ;;
+        --parallel=*)
+            PARALLEL="${arg#--parallel=}"
+            [[ "$PARALLEL" =~ ^[1-9][0-9]*$ ]] || { echo "[status] --parallel must be a positive int"; exit 2; }
+            [[ "$PARALLEL" -le 26 ]] || { echo "[status] --parallel must be <=26 (single-letter cluster IDs)"; exit 2; } ;;
         --topology=chain|--topology=simple) TOPOLOGY="${arg#--topology=}" ;;
         -h|--help) sed -n '3,9p' "$0"; exit 0 ;;
         *) echo "[status] unknown arg: $arg" >&2; exit 2 ;;

@@ -49,6 +49,7 @@ unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY no_proxy
 
 # ── Parse args ──────────────────────────────────────────────────────────────
 TARGET="node1"
+TARGET_SET=0
 TOPOLOGY="chain"
 PARALLEL=1
 USE_CPUSET=0
@@ -59,12 +60,15 @@ usage() { sed -n '3,40p' "$0"; }
 
 for arg in "$@"; do
     case "$arg" in
-        node1|vfn1|pfn1|pfn2|pfn3) TARGET="$arg" ;;
+        node1|vfn1|pfn1|pfn2|pfn3)
+            [[ $TARGET_SET -eq 1 ]] && { echo "[run] only one target node allowed (got $TARGET, then $arg)" >&2; exit 2; }
+            TARGET="$arg"; TARGET_SET=1 ;;
         --topology=chain|--topology=simple)
             TOPOLOGY="${arg#--topology=}" ;;
         --parallel=*)
             PARALLEL="${arg#--parallel=}"
-            [[ "$PARALLEL" =~ ^[1-9][0-9]*$ ]] || { echo "[run] --parallel must be a positive int"; exit 2; } ;;
+            [[ "$PARALLEL" =~ ^[1-9][0-9]*$ ]] || { echo "[run] --parallel must be a positive int"; exit 2; }
+            [[ "$PARALLEL" -le 26 ]] || { echo "[run] --parallel must be <=26 (single-letter cluster IDs)"; exit 2; } ;;
         --cpuset) USE_CPUSET=1 ;;
         --no-bench) NO_BENCH=1 ;;
         --clean)    CLEAN=1 ;;
@@ -79,8 +83,18 @@ if [[ "$TOPOLOGY" == "simple" && ( "$TARGET" == "pfn2" || "$TARGET" == "pfn3" ) 
     exit 2
 fi
 
-# Load .env if present (does not override pre-set env).
-[[ -f .env ]] && set -a && source .env && set +a
+# Load .env if present. Provides defaults; pre-set env wins, so
+# `BENCH_TARGET_TPS=12000 ./run.sh` behaves as users expect even with a
+# saved .env. Lines starting with '#' and blank lines are ignored.
+if [[ -f .env ]]; then
+    while IFS='=' read -r k v; do
+        [[ -z "$k" || "$k" =~ ^[[:space:]]*# ]] && continue
+        # Strip surrounding quotes from value if present.
+        v="${v%\"}"; v="${v#\"}"; v="${v%\'}"; v="${v#\'}"
+        # `${!k+x}` is non-empty iff $k is already set (even if empty).
+        [[ -z "${!k+x}" ]] && export "$k=$v"
+    done < .env
+fi
 
 BENCH_DURATION_SECS="${BENCH_DURATION_SECS:-120}"
 BENCH_TARGET_TPS="${BENCH_TARGET_TPS:-8000}"
@@ -318,9 +332,10 @@ if [[ "$PARALLEL" -eq 1 ]]; then
     end_ts=$(date +%s)
     echo "[run] bench finished (exit=$bench_exit, wall=$((end_ts-start_ts))s)"
 
-    # Optional chain-level TPS analysis (script may not be present in the repo).
+    # Optional chain-level TPS analysis. Defaults to the bundled analyzer
+    # under tools/; override with ANALYZER=/path/to/script for a custom one.
     sleep 15
-    ANALYZER="/tmp/pfn-diag-rootcause/exp17/analyze_chain_tps.sh"
+    ANALYZER="${ANALYZER:-$SCRIPT_DIR/tools/analyze_chain_tps.sh}"
     if [[ -x "$ANALYZER" ]]; then
         win_start=$((start_ts + 30))
         win_end=$((end_ts - 10))

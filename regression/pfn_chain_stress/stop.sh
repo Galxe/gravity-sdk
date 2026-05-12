@@ -21,7 +21,8 @@ for arg in "$@"; do
         --clean) CLEAN=1 ;;
         --parallel=*)
             PARALLEL="${arg#--parallel=}"
-            [[ "$PARALLEL" =~ ^[1-9][0-9]*$ ]] || { echo "[stop] --parallel must be a positive int"; exit 2; } ;;
+            [[ "$PARALLEL" =~ ^[1-9][0-9]*$ ]] || { echo "[stop] --parallel must be a positive int"; exit 2; }
+            [[ "$PARALLEL" -le 26 ]] || { echo "[stop] --parallel must be <=26 (single-letter cluster IDs)"; exit 2; } ;;
         -h|--help) sed -n '3,11p' "$0"; exit 0 ;;
         *) echo "[stop] unknown arg: $arg" >&2; exit 2 ;;
     esac
