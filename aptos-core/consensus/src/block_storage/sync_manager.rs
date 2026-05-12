@@ -83,6 +83,44 @@ pub enum NeedFetchResult {
 }
 
 impl BlockStore {
+    fn is_epoch_change_li_boundary_locally_committed(&self, li: &LedgerInfoWithSignatures) -> bool {
+        let commit_root = self.commit_root();
+        // For non-blocking epoch changes, the epoch-change LI may commit a suffix block after the
+        // actual epoch boundary. Recovery intentionally filters out those suffix blocks and only
+        // commits up to `epoch_block_info`, so checking against `li.commit_info()` would prevent us
+        // from sending the epoch-change proof and leave execution waiting for the first suffix
+        // block.
+        let epoch_block_info = li.commit_info().epoch_block_info();
+        let committed = if let Some(epoch_info) = epoch_block_info {
+            match commit_root.block().block_number() {
+                Some(root_number) if root_number > epoch_info.block_number => true,
+                Some(root_number) if root_number == epoch_info.block_number => {
+                    commit_root.id() == epoch_info.block_id
+                }
+                _ => false,
+            }
+        } else {
+            commit_root.id() == li.commit_info().id()
+        };
+
+        if !committed {
+            warn!(
+                "[FastForwardSync] skip epoch change proof because local commit root has not reached \
+                 epoch-change boundary: boundary_block_id={}, boundary_block_number={:?}, \
+                 local_root_id={}, local_root_block_number={:?}, local_root_round={}",
+                epoch_block_info
+                    .map(|info| info.block_id)
+                    .unwrap_or_else(|| li.commit_info().id()),
+                epoch_block_info.map(|info| info.block_number),
+                commit_root.id(),
+                commit_root.block().block_number(),
+                commit_root.round(),
+            );
+        }
+
+        committed
+    }
+
     /// Check if we're far away from this ledger info and need to sync.
     /// This ensures that the block referred by the ledger info is not in buffer manager.
     pub fn need_sync_for_ledger_info(&self, li: &LedgerInfoWithSignatures) -> bool {
@@ -170,7 +208,23 @@ impl BlockStore {
         if let Some(tc) = sync_info.highest_2chain_timeout_cert() {
             self.insert_2chain_timeout_certificate(Arc::new(tc.clone()))?;
         }
+        self.replay_ordered_path_if_needed().await?;
         BLOCK_SYNC_GAUGE.set_with(&[], 0);
+        Ok(())
+    }
+
+    async fn replay_ordered_path_if_needed(&self) -> anyhow::Result<()> {
+        let ordered_root_round = self.ordered_root().round();
+        let highest_ordered_cert = self.highest_ordered_cert().as_ref().clone();
+        let highest_ordered_round = highest_ordered_cert.commit_info().round();
+        if ordered_root_round < highest_ordered_round {
+            info!(
+                "[BlockStore] replay ordered path after adding certs: ordered_root_round={}, highest_ordered_round={}",
+                ordered_root_round,
+                highest_ordered_round,
+            );
+            self.send_for_execution(highest_ordered_cert, false, None).await?;
+        }
         Ok(())
     }
 
@@ -423,11 +477,14 @@ impl BlockStore {
 
         self.rebuild(root, blocks, quorum_certs).await;
 
-        if ledger_infos.last().unwrap().ledger_info().ends_epoch() {
+        let latest_li = ledger_infos.last().unwrap();
+        if latest_li.ledger_info().ends_epoch() &&
+            self.is_epoch_change_li_boundary_locally_committed(latest_li)
+        {
             retriever
                 .network
                 .send_epoch_change(EpochChangeProof::new(
-                    vec![ledger_infos.last().unwrap().clone()],
+                    vec![latest_li.clone()],
                     /* more = */ false,
                 ))
                 .await;
@@ -532,6 +589,14 @@ impl BlockStore {
         if !self.is_validator {
             self.append_blocks_for_sync(blocks, quorum_certs).await;
         } else {
+            let target = highest_commit_cert.ledger_info();
+            info!(
+                "[FastForwardSync] validator reset and rebuild to commit round {}, block {}",
+                target.commit_info().round(),
+                target.commit_info().id(),
+            );
+            self.execution_client.reset(target).await?;
+
             let (root, blocks, quorum_certs) = match self
                 .storage
                 .start(false, ledger_infos.last().unwrap().ledger_info().epoch())
@@ -545,46 +610,18 @@ impl BlockStore {
 
             self.rebuild(root, blocks, quorum_certs).await;
         }
-        if ledger_infos.last().unwrap().ledger_info().ends_epoch() {
+        let latest_li = ledger_infos.last().unwrap();
+        if latest_li.ledger_info().ends_epoch() &&
+            self.is_epoch_change_li_boundary_locally_committed(latest_li)
+        {
             retriever
                 .network
                 .send_epoch_change(EpochChangeProof::new(
-                    vec![ledger_infos.last().unwrap().clone()],
+                    vec![latest_li.clone()],
                     /* more = */ false,
                 ))
                 .await;
         }
-        Ok(())
-    }
-
-    async fn apply_fast_forward_sync(
-        &self,
-        target_commit_cert: &WrappedLedgerInfo,
-        blocks: Vec<(Block, Option<u64>, Option<Vec<u8>>)>,
-        quorum_certs: Vec<QuorumCert>,
-    ) -> anyhow::Result<()> {
-        if !self.is_validator {
-            self.append_blocks_for_sync(blocks, quorum_certs).await;
-            return Ok(());
-        }
-
-        let target = target_commit_cert.ledger_info();
-        info!(
-            "apply_fast_forward_sync: validator reset and rebuild to commit round {}, block {}",
-            target.commit_info().round(),
-            target.commit_info().id(),
-        );
-        self.execution_client.reset(target).await?;
-
-        let (root, blocks, quorum_certs) =
-            match self.storage.start(false, target.ledger_info().epoch()).await {
-                LivenessStorageData::FullRecoveryData(recovery_data) => recovery_data,
-                _ => panic!("Failed to construct recovery data after fast forward sync"),
-            }
-            .take();
-
-        self.storage.consensus_db().ledger_db.metadata_db().update_latest_ledger_info();
-        self.rebuild(root, blocks, quorum_certs).await;
         Ok(())
     }
 
@@ -897,22 +934,22 @@ impl BlockStore {
             id = parent_id;
         }
 
-        // Step 3: Collect ledger infos for the retrieved blocks
-        // Calculate the block number range to fetch ledger infos
-        let mut lower = 0;
-        let mut upper = 0;
-        for (block, _, _) in &blocks {
-            if let Some(block_number) = block.block_number() {
-                // Set upper to the first block number + 1 (exclusive range)
-                if upper == 0 {
-                    upper = block_number + 1;
-                }
-                // Update lower to the smallest block number
-                lower = block_number;
-            }
-        }
+        // Step 3: Collect ledger infos for the range covered by the returned QCs.
+        // Block retrieval walks from a block to its parents and returns each block's own QC.
+        // The first returned block's QC usually commits its parent, not the first block itself,
+        // so returning LIs up to the first block can make the consumer observe an epoch-change
+        // LI before it has enough QCs to recover that epoch-change block.
+        let block_numbers_by_id = blocks
+            .iter()
+            .filter_map(|(block, _, _)| block.block_number().map(|num| (block.id(), num)))
+            .collect::<std::collections::HashMap<_, _>>();
+        let committed_block_numbers = quorum_certs
+            .iter()
+            .filter_map(|qc| block_numbers_by_id.get(&qc.commit_info().id()).copied());
+        let lower = committed_block_numbers.clone().min().unwrap_or(0);
+        let upper = committed_block_numbers.max().map(|num| num + 1).unwrap_or(0);
 
-        // Fetch ledger infos for the block number range
+        // Fetch ledger infos only for blocks that this response's QCs can commit.
         let mut ledger_infos = vec![];
         if upper != 0 {
             ledger_infos = self

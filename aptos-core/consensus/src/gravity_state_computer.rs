@@ -7,7 +7,7 @@ use crate::{
 };
 use anyhow::Result;
 use aptos_executor::block_executor::BlockExecutor;
-use aptos_executor_types::{BlockExecutorTrait, ExecutorResult, StateComputeResult};
+use aptos_executor_types::{BlockExecutorTrait, ExecutorError, ExecutorResult, StateComputeResult};
 use block_buffer_manager::{block_buffer_manager::BlockHashRef, get_block_buffer_manager};
 use gaptos::{
     api_types::u256_define::BlockId,
@@ -123,13 +123,18 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                         epoch,
                     )
                     .await
-                    .expect("Failed to set commit blocks in BlockBufferManager");
+                    .map_err(|e| {
+                        ExecutorError::internal_err(format!(
+                            "Failed to set commit blocks in BlockBufferManager: {e:?}"
+                        ))
+                    })?;
                 for notifier in persist_notifiers.iter_mut() {
                     if notifier.recv().await.is_none() {
                         warn!("persist_notifier channel closed in commit_blocks");
                     }
                 }
-            });
+                Ok::<(), ExecutorError>(())
+            })?;
         }
         Ok(())
     }
@@ -197,7 +202,11 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                     epoch,
                 )
                 .await
-                .expect("Failed to set commit blocks in BlockBufferManager");
+                .map_err(|e| {
+                    ExecutorError::internal_err(format!(
+                        "Failed to set commit blocks in BlockBufferManager: {e:?}"
+                    ))
+                })?;
             for notifier in persist_notifiers.iter_mut() {
                 if notifier.recv().await.is_none() {
                     warn!("persist_notifier channel closed in commit_ledger");
@@ -208,7 +217,8 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             {
                 error!("Failed to save_transactions in commit_ledger: {:?}", e);
             }
-        });
+            Ok::<(), ExecutorError>(())
+        })?;
         Ok(())
     }
 }

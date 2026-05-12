@@ -471,8 +471,15 @@ impl PersistentLivenessStorage for StorageWriteProxy {
                 Err(_) => false,
             };
 
-        // Get ledger_info based on the check result
-        let latest_ledger_info = if is_last_block_of_prev_epoch {
+        // Recovery root must match the execution layer's committed height. If execution has not
+        // committed any block yet, the ledger root must be genesis even if metadata DB has newer
+        // LI.
+        let latest_ledger_info = if latest_block_number == 0 {
+            LedgerInfoWithSignatures::genesis(
+                *ACCUMULATOR_PLACEHOLDER_HASH,
+                self.db.validator_set(),
+            )
+        } else if is_last_block_of_prev_epoch {
             // If it's the last block of previous epoch, get ledger_info from LedgerInfoSchema
             match (&*ledger_db_arc).get::<LedgerInfoSchema>(&latest_block_number) {
                 Ok(Some(ledger_info)) => {
@@ -482,9 +489,18 @@ impl PersistentLivenessStorage for StorageWriteProxy {
                     );
                     ledger_info
                 }
-                Ok(None) | Err(_) => {
-                    // Fallback to original method if not found in schema
-                    warn!("LedgerInfo not found in LedgerInfoSchema for block {}, falling back to aptos_db", latest_block_number);
+                Ok(None) => {
+                    warn!(
+                        "LedgerInfo not found in LedgerInfoSchema for block {}, falling back to aptos_db",
+                        latest_block_number
+                    );
+                    self.aptos_db.get_latest_ledger_info().unwrap()
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to read LedgerInfoSchema for block {}: {:?}, falling back to aptos_db",
+                        latest_block_number, e
+                    );
                     self.aptos_db.get_latest_ledger_info().unwrap()
                 }
             }
