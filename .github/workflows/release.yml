@@ -1,0 +1,130 @@
+name: Release
+
+on:
+  push:
+    tags: ['gravity-mainnet-*']
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+
+concurrency:
+  group: release-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build and release
+    runs-on: [self-hosted, linux]
+    # Image pins glibc + rust toolchain for forward-compatible binaries.
+    # Override per-repo via Settings → Variables → Actions → RELEASE_BUILD_IMAGE.
+    # Default targets Debian 11 (glibc 2.31) to match current staging/mainnet OS.
+    container:
+      image: ${{ vars.RELEASE_BUILD_IMAGE || 'rust:1.93.0-bullseye' }}
+    timeout-minutes: 180
+    env:
+      RUSTFLAGS: "--cfg tokio_unstable"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Assert rustc matches rust-toolchain.toml
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=$(grep -E '^channel[[:space:]]*=' rust-toolchain.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          actual=$(rustc --version | awk '{print $2}')
+          echo "expected: $expected"
+          echo "actual:   $actual"
+          if [ "$expected" != "$actual" ]; then
+            echo "rustc in container image does not match rust-toolchain.toml." >&2
+            echo "bump vars.RELEASE_BUILD_IMAGE to rust:${expected}-<codename>, or update rust-toolchain.toml." >&2
+            exit 1
+          fi
+
+      - name: Install gh CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v gh >/dev/null 2>&1; then
+            gh --version
+            exit 0
+          fi
+          GH_VERSION="2.62.0"
+          curl -fsSL "https://github.com/cli/gh/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.tar.gz" \
+            | tar -xz -C /tmp
+          install -m0755 "/tmp/gh_${GH_VERSION}_linux_amd64/bin/gh" /usr/local/bin/gh
+          gh --version
+
+      - name: Build gravity_node and gravity_cli
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --profile quick-release --bin gravity_node --bin gravity_cli
+
+      - name: Stage release assets and compute sha256
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="${RUNNER_TEMP}/release-assets"
+          rm -rf "$OUT" && mkdir -p "$OUT"
+          for bin in gravity_node gravity_cli; do
+            src="target/quick-release/$bin"
+            if [ ! -x "$src" ]; then
+              echo "$src not built or not executable" >&2
+              exit 1
+            fi
+            cp "$src" "$OUT/$bin"
+            ( cd "$OUT" && sha256sum "$bin" > "$bin.sha256" )
+          done
+          ls -lh "$OUT"
+          echo "--- sha256 ---"
+          cat "$OUT"/*.sha256
+          echo "dir=$OUT" >> "$GITHUB_OUTPUT"
+
+      - name: Upload PR dry-run artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dryrun-${{ github.sha }}
+          path: ${{ steps.stage.outputs.dir }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Resolve tag
+        id: tag
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF##refs/tags/}"
+          case "$TAG" in
+            gravity-mainnet-*) ;;
+            *) echo "tag must start with gravity-mainnet-: $TAG" >&2; exit 1 ;;
+          esac
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Upload assets to GitHub release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          ASSETS_DIR: ${{ steps.stage.outputs.dir }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG does not exist." >&2
+            echo "create it first via GitHub UI (Releases → Draft a new release) with notes, then publish — that will push the tag and re-trigger this workflow." >&2
+            exit 1
+          fi
+          gh release upload "$TAG" \
+            "$ASSETS_DIR/gravity_node" \
+            "$ASSETS_DIR/gravity_node.sha256" \
+            "$ASSETS_DIR/gravity_cli" \
+            "$ASSETS_DIR/gravity_cli.sha256" \
+            --clobber
