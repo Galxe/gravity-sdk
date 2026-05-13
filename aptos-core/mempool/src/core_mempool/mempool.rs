@@ -74,6 +74,14 @@ impl TxnCache {
         self.maybe_clear();
         self.cache.contains(txn_hash)
     }
+
+    /// Snapshot the visited set (after honoring TTL/size) so the per-tick
+    /// dedup filter can run lock-free against the snapshot instead of
+    /// re-locking the Mutex on every pool item.
+    pub fn snapshot(&mut self) -> HashSet<TxnHash> {
+        self.maybe_clear();
+        self.cache.clone()
+    }
 }
 
 pub struct Mempool {
@@ -114,9 +122,15 @@ impl CoreMempoolTrait for Mempool {
         _before: Option<Instant>,
         _priority_of_receiver: BroadcastPeerPriority,
     ) -> (Vec<(SignedTransaction, u64)>, MultiBucketTimelineIndexIds) {
-        let visited = self.txn_cache.clone();
+        // Take the visited snapshot once under a single lock acquire. The
+        // closure below would otherwise lock+release the Mutex per pool item,
+        // which at 100K-item pools × 4 sender buckets × 100Hz = ~40M
+        // acquires/sec on one Mutex — enough to starve the consensus runtime.
+        // Worst case from staleness: one extra broadcast of an in-flight tx
+        // (gossip layer dedupes downstream), which TxnCache already accepts.
+        let visited_snapshot = self.txn_cache.lock().unwrap().snapshot();
         let filter = Box::new(move |txn: (ExternalAccountAddress, u64, TxnHash)| {
-            !visited.lock().unwrap().is_contains(&txn.2)
+            !visited_snapshot.contains(&txn.2)
         });
         let iter = self.pool.get_broadcast_txns(Some(filter));
         let mut broacasted_txns = vec![];
