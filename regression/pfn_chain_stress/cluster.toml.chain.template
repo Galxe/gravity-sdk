@@ -1,0 +1,126 @@
+# 5-node chain topology: 1 validator + 1 VFN + 3 PFNs (pfn1, pfn2 siblings; pfn3 leaf).
+#
+#                  +--- pfn1 <---+
+#                  |             |
+#   node1 <-Vfn--vfn1             +--- pfn3
+#                  |             |
+#                  +--- pfn2 <---+
+#
+# This is the same topology as gravity_e2e/cluster_test_cases/pfn_chain/cluster.toml,
+# trimmed of e2e-specific comments and with `txpool_max_account_slots` raised to 1024
+# on every node (necessary for bench's 1500-sender stress profile; reth's default 16
+# caps per-sender ingress at ~16 tx/min under the Aptos shared-mempool broadcast cycle).
+#
+# Ports below are the BASE set (offset=0); setup-instance.sh applies a per-cluster
+# PORT_OFFSET to every port and rewrites base_dir.
+
+[cluster]
+name = "gravity-devnet-pfn-chain"
+base_dir = "/tmp/gravity-cluster-pfn-chain"
+
+[genesis_source]
+genesis_path = "./output/genesis.json"
+waypoint_path = "./output/waypoint.txt"
+
+# ── Validator (genesis role) ────────────────────────────────────────────────
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 6182
+vfn_port = 6192
+rpc_port = 18545
+metrics_port = 9003
+inspection_port = 10002
+https_port = 1024
+authrpc_port = 8553
+reth_p2p_port = 12026
+# genesis registers shadow_fullnode = "vfn1"; validator's own vfn-network onchain
+# discovery would resolve to vfn1's identity → noise pubkey mismatch self-check loop.
+vfn_discovery_method = "none"
+txpool_max_account_slots = 1024
+
+# ── VFN — node1's shadow fullnode ──────────────────────────────────────────
+
+[[nodes]]
+id = "vfn1"
+role = "vfn"
+seeds = [
+    { from = "node1" },                             # Vfn -> node1's Vfn listener (6192)
+]
+public_port = 6195                                  # extra Public listener so pfn1/pfn2 can dial in
+# node1's registered fullnode_address encodes vfn1's own identity; on-chain
+# discovery would self-dial and Noise would reject. Static seeds reach upstream.
+discovery_method = "none"
+source = { project_path = "../" }
+host = "127.0.0.1"
+vfn_port = 6193
+rpc_port = 18546
+metrics_port = 9004
+inspection_port = 10003
+https_port = 1025
+authrpc_port = 8554
+reth_p2p_port = 12027
+txpool_max_account_slots = 1024
+
+# ── PFN siblings (pfn1, pfn2) ──────────────────────────────────────────────
+
+[[nodes]]
+id = "pfn1"
+role = "pfn"
+seeds = [
+    { from = "vfn1" },                              # upstream — auto-infers ValidatorFullNode
+    { from = "pfn3", role = "Downstream" },         # downstream — accept-only, no dial
+]
+source = { project_path = "../" }
+host = "127.0.0.1"
+public_port = 6196
+rpc_port = 18547
+metrics_port = 9005
+inspection_port = 10004
+authrpc_port = 8555
+reth_p2p_port = 12028
+txpool_max_account_slots = 1024
+
+[[nodes]]
+id = "pfn2"
+role = "pfn"
+seeds = [
+    { from = "vfn1" },                              # upstream — sibling of pfn1
+    { from = "pfn3", role = "Downstream" },         # downstream — accept-only, no dial
+]
+source = { project_path = "../" }
+host = "127.0.0.1"
+public_port = 6197
+rpc_port = 18548
+metrics_port = 9006
+inspection_port = 10005
+authrpc_port = 8556
+reth_p2p_port = 12029
+txpool_max_account_slots = 1024
+
+# ── PFN leaf (pfn3) — two redundant upstreams ──────────────────────────────
+
+[[nodes]]
+id = "pfn3"
+role = "pfn"
+seeds = [
+    { from = "pfn1" },                              # auto-infers PreferredUpstream (deploy.sh:189)
+    { from = "pfn2" },                              # redundant upstream
+]
+source = { project_path = "../" }
+host = "127.0.0.1"
+public_port = 6198
+rpc_port = 18549
+metrics_port = 9007
+inspection_port = 10006
+authrpc_port = 8557
+reth_p2p_port = 12030
+txpool_max_account_slots = 1024
+
+[faucet_init]
+num_accounts = 10000
+private_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+eth_balance = "1000000000000000000"
