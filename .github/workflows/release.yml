@@ -18,11 +18,17 @@ jobs:
   build-and-release:
     name: Build and release
     runs-on: [self-hosted, linux]
-    # Image pins glibc + rust toolchain for forward-compatible binaries.
-    # Override per-repo via Settings → Variables → Actions → RELEASE_BUILD_IMAGE.
-    # Default targets Debian 11 (glibc 2.31) to match current staging/mainnet OS.
-    container:
-      image: ${{ vars.RELEASE_BUILD_IMAGE || 'rust:1.93.0-bullseye' }}
+    # Native build on the runner — no container.
+    # Invariant: runner OS must match production node OS, otherwise the
+    # binary's required glibc may exceed what target nodes provide and
+    # they'll fail to start with `GLIBC_X.YY not found`. Verify before
+    # changing the runner: `cat /etc/os-release && ldd --version`
+    # on both runner and target should agree (or runner glibc ≤ target).
+    # Runner must have these installed once:
+    #   - rust toolchain matching rust-toolchain.toml (rustup default <ver>)
+    #   - gh CLI (`apt install gh` via cli.github.com apt repo)
+    #   - build deps: clang llvm libclang-dev build-essential pkg-config
+    #                 libssl-dev libudev-dev
     timeout-minutes: 180
     env:
       RUSTFLAGS: "--cfg tokio_unstable"
@@ -31,22 +37,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install build dependencies
-        # Mirrors gravity_e2e/build_docker.sh apt list (the working
-        # in-container build env), minus the python/test bits we don't need.
-        # libclang-dev added explicitly: on bullseye the `clang` package does
-        # not ship the unversioned libclang.so symlink that bindgen searches
-        # for, unlike bookworm where it's pulled in transitively.
+      - name: Show build environment
+        # Logs runner OS / glibc / rustc so any future divergence from
+        # production OS is visible in the release run record.
         shell: bash
         run: |
           set -euo pipefail
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update -qq
-          apt-get install -y --no-install-recommends \
-            clang llvm libclang-dev \
-            build-essential pkg-config \
-            libssl-dev libudev-dev \
-            procps git jq curl ca-certificates
+          grep -E '^(NAME|VERSION|VERSION_CODENAME)=' /etc/os-release
+          ldd --version | head -1
+          rustc --version
+          cargo --version
 
       - name: Assert rustc matches rust-toolchain.toml
         shell: bash
@@ -57,24 +57,10 @@ jobs:
           echo "expected: $expected"
           echo "actual:   $actual"
           if [ "$expected" != "$actual" ]; then
-            echo "rustc in container image does not match rust-toolchain.toml." >&2
-            echo "bump vars.RELEASE_BUILD_IMAGE to rust:${expected}-<codename>, or update rust-toolchain.toml." >&2
+            echo "rustc on runner does not match rust-toolchain.toml." >&2
+            echo "update the runner toolchain (rustup install $expected && rustup default $expected) or update rust-toolchain.toml." >&2
             exit 1
           fi
-
-      - name: Install gh CLI
-        shell: bash
-        run: |
-          set -euo pipefail
-          if command -v gh >/dev/null 2>&1; then
-            gh --version
-            exit 0
-          fi
-          GH_VERSION="2.92.0"
-          curl -fsSL --retry 3 "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.tar.gz" \
-            | tar -xz -C /tmp
-          install -m0755 "/tmp/gh_${GH_VERSION}_linux_amd64/bin/gh" /usr/local/bin/gh
-          gh --version
 
       - name: Build gravity_node and gravity_cli
         shell: bash
