@@ -1,0 +1,31 @@
+# Workspace-level cargo config.
+#
+# The aptos-core fork that gravity_node and gravity_cli depend on uses several
+# tokio APIs gated behind `#[cfg(tokio_unstable)]`:
+#
+#   - `tokio::runtime::RuntimeMetrics`     — runtime task / worker metrics
+#   - `tokio_console` integration          — task introspection over tokio-console
+#   - `task::Builder::name(...)`           — named tasks in tracing output
+#
+# Without this cfg flag, dozens of files in the dependency graph fail to
+# compile with `unresolved import: this item is gated behind a
+# cfg(tokio_unstable) flag`.
+#
+# Previously every build entry point (Makefile targets, GitHub Actions
+# workflows, cluster/deploy.sh, .agents/* docs) had to remember to set
+# `RUSTFLAGS="--cfg tokio_unstable"`. Forgetting the flag silently broke
+# the build — see `cluster/deploy.sh`, `Makefile`, `.github/workflows/*.yml`
+# for the per-entry repetition this config replaces.
+#
+# Putting it here means any `cargo build / test / check / clippy` invocation,
+# inside or outside CI, picks the flag up automatically. The duplicate
+# `RUSTFLAGS=...` declarations in the entry points are now redundant but
+# kept for now to avoid touching every workflow file in the same PR — they
+# can be cleaned up incrementally.
+#
+# Note: an explicit `RUSTFLAGS` env var still takes precedence over this
+# config (cargo's documented merge order), so any caller that sets it
+# already continues to work unchanged.
+
+[build]
+rustflags = ["--cfg", "tokio_unstable"]
