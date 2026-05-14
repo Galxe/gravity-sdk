@@ -64,31 +64,11 @@ jobs:
             exit 1
           fi
 
-      - name: Build gravity_node (with gcp-secret-manager)
-        # gravity_node's `gcp-secret-manager` cargo feature must be enabled or
-        # the binary panics on first startup when any node's identity is
-        # configured as `source = "gcp_secret"` (the production case for
-        # Staging Mainnet / future mainnet):
-        #
-        #   panicked at .../config/network_config.rs:281:25:
-        #   load identity blob for peer_id from GCP secret ...: GCP Secret
-        #   Manager support not compiled in. Rebuild aptos-config with
-        #   `--features gcp-secret-manager` ...
-        #
-        # The feature is declared on bin/gravity_node/Cargo.toml (not on the
-        # workspace), so we must scope cargo with `-p gravity_node` to make
-        # `--features` resolve. gravity_cli is built in a separate step
-        # below because it does not declare the same feature.
+      - name: Build gravity_node and gravity_cli
         shell: bash
         run: |
           set -euo pipefail
-          cargo build --profile quick-release -p gravity_node --bin gravity_node --features gcp-secret-manager
-
-      - name: Build gravity_cli
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo build --profile quick-release -p gravity_cli --bin gravity_cli
+          cargo build --profile quick-release --bin gravity_node --bin gravity_cli
 
       - name: Stage release assets and compute sha256
         id: stage
