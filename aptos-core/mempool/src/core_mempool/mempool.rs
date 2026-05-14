@@ -70,6 +70,7 @@ impl TxnCache {
         self.cache.insert(txn_hash);
     }
 
+    #[cfg(test)]
     pub fn is_contains(&mut self, txn_hash: &TxnHash) -> bool {
         self.maybe_clear();
         self.cache.contains(txn_hash)
