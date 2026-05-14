@@ -1,0 +1,135 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'gravity-mainnet-*'
+      - 'gravity-testnet-*'
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+
+concurrency:
+  group: release-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build and release
+    runs-on: [self-hosted, linux]
+    # Native build on the runner — no container.
+    # Invariant: runner OS must match production node OS, otherwise the
+    # binary's required glibc may exceed what target nodes provide and
+    # they'll fail to start with `GLIBC_X.YY not found`. Verify before
+    # changing the runner: `cat /etc/os-release && ldd --version`
+    # on both runner and target should agree (or runner glibc ≤ target).
+    # Runner must have these installed once:
+    #   - rust toolchain matching rust-toolchain.toml (rustup default <ver>)
+    #   - gh CLI (`apt install gh` via cli.github.com apt repo)
+    #   - build deps: clang llvm libclang-dev build-essential pkg-config
+    #                 libssl-dev libudev-dev
+    timeout-minutes: 180
+    env:
+      RUSTFLAGS: "--cfg tokio_unstable"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show build environment
+        # Logs runner OS / glibc / rustc so any future divergence from
+        # production OS is visible in the release run record.
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -E '^(NAME|VERSION|VERSION_CODENAME)=' /etc/os-release
+          ldd --version | head -1
+          rustc --version
+          cargo --version
+
+      - name: Assert rustc matches rust-toolchain.toml
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=$(grep -E '^channel[[:space:]]*=' rust-toolchain.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          actual=$(rustc --version | awk '{print $2}')
+          echo "expected: $expected"
+          echo "actual:   $actual"
+          if [ "$expected" != "$actual" ]; then
+            echo "rustc on runner does not match rust-toolchain.toml." >&2
+            echo "update the runner toolchain (rustup install $expected && rustup default $expected) or update rust-toolchain.toml." >&2
+            exit 1
+          fi
+
+      - name: Build gravity_node and gravity_cli
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --profile quick-release --bin gravity_node --bin gravity_cli
+
+      - name: Stage release assets and compute sha256
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="${RUNNER_TEMP}/release-assets"
+          rm -rf "$OUT" && mkdir -p "$OUT"
+          for bin in gravity_node gravity_cli; do
+            src="target/quick-release/$bin"
+            if [ ! -x "$src" ]; then
+              echo "$src not built or not executable" >&2
+              exit 1
+            fi
+            cp "$src" "$OUT/$bin"
+            ( cd "$OUT" && sha256sum "$bin" > "$bin.sha256" )
+          done
+          ls -lh "$OUT"
+          echo "--- sha256 ---"
+          cat "$OUT"/*.sha256
+          echo "dir=$OUT" >> "$GITHUB_OUTPUT"
+
+      - name: Upload PR dry-run artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dryrun-${{ github.sha }}
+          path: ${{ steps.stage.outputs.dir }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Resolve tag
+        id: tag
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF##refs/tags/}"
+          case "$TAG" in
+            gravity-mainnet-*|gravity-testnet-*) ;;
+            *) echo "tag must start with gravity-mainnet- or gravity-testnet-: $TAG" >&2; exit 1 ;;
+          esac
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Upload assets to GitHub release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          ASSETS_DIR: ${{ steps.stage.outputs.dir }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG does not exist." >&2
+            echo "create it first via GitHub UI (Releases → Draft a new release) with notes, then publish — that will push the tag and re-trigger this workflow." >&2
+            exit 1
+          fi
+          gh release upload "$TAG" \
+            "$ASSETS_DIR/gravity_node" \
+            "$ASSETS_DIR/gravity_node.sha256" \
+            "$ASSETS_DIR/gravity_cli" \
+            "$ASSETS_DIR/gravity_cli.sha256" \
+            --clobber
