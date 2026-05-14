@@ -2,7 +2,7 @@ BINARY ?= gravity_node
 FEATURE ?=
 MODE ?= release
 
-BIN_DIRS := gravity_node bench kvstore
+BIN_DIRS := gravity_node bench kvstore gravity_cli
 BIN_PATHS := $(addprefix bin/, $(BIN_DIRS))
 
 ifeq ($(MODE),release)
@@ -27,6 +27,9 @@ bench:
 
 kvstore:
 	cargo build -p kvstore $(CARGO_FLAGS) $(CARGO_FEATURES)
+
+gravity_cli:
+	RUSTFLAGS="--cfg tokio_unstable" cargo build -p gravity_cli $(CARGO_FLAGS) $(CARGO_FEATURES)
 
 clean:
 	for dir in $(BIN_PATHS); do \
