@@ -28,7 +28,8 @@ x-node-common: &node-common
     # runtime image. run.sh does `cargo build` on the host before invoking
     # this — no in-container Rust compile (in-container builds chronically
     # hit SSL/cargo-git issues; not worth the 30-60 min cost).
-    dockerfile: docker/gravity_node/Dockerfile.host-binary
+    dockerfile: docker/gravity_node/Dockerfile
+    target: runtime-host-binary
   restart: unless-stopped
   network_mode: host
   # cpuset pins all nodes of this cluster to a fixed core range. Empty

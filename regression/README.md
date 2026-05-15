@@ -17,6 +17,6 @@ Drop a new subdirectory with at minimum:
 - `stop.sh` — tear down
 - `README.md` — topology, baselines, caveats
 
-Reuse `docker/gravity_node/Dockerfile.host-binary` for the node image —
-no good reason to in-container-compile for a regression test that needs
-fast iteration.
+Reuse `docker/gravity_node/Dockerfile` with `--target runtime-host-binary`
+for the node image — no good reason to in-container-compile for a regression
+test that needs fast iteration.
