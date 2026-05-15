@@ -22,7 +22,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         jq \
         tini \
-        curl \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 10001 gravity \
     && useradd  --system --uid 10001 --gid gravity --home-dir /gravity --shell /usr/sbin/nologin gravity \
