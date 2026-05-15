@@ -20,9 +20,6 @@ ARG HOST_BINARY=docker/gravity_node/bin/gravity_node
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
-        libssl3 \
-        libudev1 \
-        libzstd1 \
         jq \
         tini \
         curl \

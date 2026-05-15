@@ -12,13 +12,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libclang-dev \
         build-essential \
         pkg-config \
-        libssl-dev \
         libudev-dev \
         libzstd-dev \
         cmake \
         git \
         ca-certificates \
         protobuf-compiler \
+        perl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
@@ -37,9 +37,6 @@ FROM debian:12-slim AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
-        libssl3 \
-        libudev1 \
-        libzstd1 \
         jq \
         tini \
         curl \
