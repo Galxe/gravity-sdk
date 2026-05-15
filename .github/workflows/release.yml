@@ -15,6 +15,7 @@ concurrency:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   build-and-release:
@@ -30,7 +31,13 @@ jobs:
     #   - rust toolchain matching rust-toolchain.toml (rustup default <ver>)
     #   - gh CLI (`apt install gh` via cli.github.com apt repo)
     #   - build deps: clang llvm libclang-dev build-essential pkg-config
-    #                 libssl-dev libudev-dev
+    #                 libudev-dev
+    #     (libssl-dev no longer needed — bin/gravity_node and bin/gravity_cli
+    #     both vendor OpenSSL via `openssl = { features = ["vendored"] }`,
+    #     so openssl-sys self-compiles. Perl is required for the vendored
+    #     OpenSSL Configure script; usually present already on Debian.)
+    #   - docker (BuildKit enabled) — used by the release docker image step
+    #     to wrap the native binary into ghcr.io/galxe/gravity_node:$TAG
     timeout-minutes: 180
     env:
       RUSTFLAGS: "--cfg tokio_unstable"
@@ -100,6 +107,24 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Build gravity_node docker image
+        # Uses the `runtime-host-binary` target of docker/gravity_node/Dockerfile,
+        # which COPYs the binary the previous cargo step just produced. BuildKit
+        # stage pruning skips the `builder` stage entirely — no double compile.
+        # Runs on both PR (build-only, no push) and tag pushes.
+        shell: bash
+        env:
+          IMAGE_REF: gravity_node:build-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          DOCKER_BUILDKIT=1 docker build \
+            --target runtime-host-binary \
+            --build-arg HOST_BINARY=target/quick-release/gravity_node \
+            -t "${IMAGE_REF}" \
+            -f docker/gravity_node/Dockerfile .
+          echo "--- image size ---"
+          docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep "^${IMAGE_REF}"
+
       - name: Resolve tag
         id: tag
         if: github.event_name != 'pull_request'
@@ -133,3 +158,27 @@ jobs:
             "$ASSETS_DIR/gravity_cli" \
             "$ASSETS_DIR/gravity_cli.sha256" \
             --clobber
+
+      - name: Login to ghcr.io
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "${GH_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Tag and push docker image to ghcr.io
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          BUILT_IMAGE: gravity_node:build-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # GHCR namespaces are lowercase; convert the github org name to be safe.
+          OWNER_LC="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          IMAGE="ghcr.io/${OWNER_LC}/gravity_node:${TAG}"
+          docker tag "${BUILT_IMAGE}" "${IMAGE}"
+          docker push "${IMAGE}"
+          echo "pushed: ${IMAGE}"
