@@ -33,7 +33,7 @@ RUN --mount=type=cache,target=/build/target,id=gravity-target \
     && cp "target/${CARGO_PROFILE}/${CARGO_BIN}" /out/gravity_node
 
 # ─── Stage 2: runtime ────────────────────────────────────────────────
-FROM debian:12-slim AS runtime
+FROM ubuntu:24.04 AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \

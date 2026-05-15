@@ -14,7 +14,7 @@
 # $HOST_BINARY. Build the host binary first:
 #   RUSTFLAGS="--cfg tokio_unstable" cargo build --bin gravity_node --profile quick-release
 
-FROM debian:12-slim AS runtime
+FROM ubuntu:24.04 AS runtime
 
 ARG HOST_BINARY=docker/gravity_node/bin/gravity_node
 
