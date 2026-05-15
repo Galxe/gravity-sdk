@@ -112,18 +112,28 @@ jobs:
         # which COPYs the binary the previous cargo step just produced. BuildKit
         # stage pruning skips the `builder` stage entirely — no double compile.
         # Runs on both PR (build-only, no push) and tag pushes.
+        #
+        # Note: the repo's .dockerignore excludes `target/` from the build
+        # context, so we stage the binary into docker/gravity_node/bin/ (a path
+        # that IS in the context) before invoking `docker build`. This matches
+        # the pre-existing pattern used by regression/pfn_chain_stress/run.sh.
         shell: bash
         env:
           IMAGE_REF: gravity_node:build-${{ github.sha }}
         run: |
           set -euo pipefail
+          mkdir -p docker/gravity_node/bin
+          cp -f target/quick-release/gravity_node docker/gravity_node/bin/gravity_node
           DOCKER_BUILDKIT=1 docker build \
             --target runtime-host-binary \
-            --build-arg HOST_BINARY=target/quick-release/gravity_node \
+            --build-arg HOST_BINARY=docker/gravity_node/bin/gravity_node \
             -t "${IMAGE_REF}" \
             -f docker/gravity_node/Dockerfile .
           echo "--- image size ---"
           docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep "^${IMAGE_REF}"
+          # Don't leave the binary in the repo working dir after the build —
+          # the runner reuses the checkout between jobs.
+          rm -f docker/gravity_node/bin/gravity_node
 
       - name: Resolve tag
         id: tag
