@@ -46,6 +46,18 @@ gaptos = { workspace = true, features = ["gcp-secret-manager"] }
 block-buffer-manager.workspace = true
 proposer-reth-map.workspace = true
 build-info.workspace = true
+# Force libssl to be statically linked into the binary so it can ship as a
+# single self-contained artifact across libssl1.1 (Debian 11) and libssl3
+# (Debian 12+) hosts. native-tls (pulled transitively via aptos-vault-client
+# and google-cloud-* under gaptos's gcp-secret-manager feature) is the
+# consumer; with `vendored`, openssl-sys compiles OpenSSL from source and
+# statically links it, removing the runtime libssl.so.* dependency.
+# gravity_cli applies the same trick — keep them in sync. Without this,
+# `cargo build -p gravity_node` (e.g. via `make gravity_node`) scopes the
+# feature resolve to gravity_node only and openssl-sys defaults to dynamic
+# system linkage, producing a binary that fails on hosts whose libssl ABI
+# differs from the build host.
+openssl = { version = "0.10", features = ["vendored"] }
 rayon = "1.7.0"
 tracing-flame = "0.2"
 tracing-timing = "0.6"

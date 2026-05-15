@@ -8010,6 +8010,7 @@ dependencies = [
  "hex",
  "jsonrpsee 0.24.10",
  "once_cell",
+ "openssl",
  "pprof",
  "proposer-reth-map",
  "rayon",
