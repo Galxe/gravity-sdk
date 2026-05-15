@@ -94,9 +94,10 @@ cd regression/pfn_chain_stress
 1. **Build on host, wrap in Docker.** `run.sh` first runs
    `cargo build --bin gravity_node --profile quick-release` on the host
    (incremental — only seconds when sources unchanged), then stages the
-   binary at `docker/gravity_node/bin/gravity_node`. The Docker image
-   (`docker/gravity_node/Dockerfile.host-binary`) `COPY`s that binary
-   into a slim debian runtime — image build is ~12s after first time.
+   binary at `docker/gravity_node/bin/gravity_node`. The Docker image is
+   built with `docker/gravity_node/Dockerfile` using `--target
+   runtime-host-binary`, which `COPY`s that binary into an ubuntu:24.04
+   runtime — image build is ~12s after first time.
 
    In-container builds from source were tried and abandoned: ~65 min
    apt install + cargo git-fetch SSL errors. Not worth it for a stress

@@ -204,7 +204,8 @@ if ! docker image inspect gravity_node:pfn-stress >/dev/null 2>&1; then
     echo "[run] building gravity_node:pfn-stress…"
     DOCKER_BUILDKIT=1 docker build \
         -t gravity_node:pfn-stress \
-        -f "$REPO_ROOT/docker/gravity_node/Dockerfile.host-binary" \
+        -f "$REPO_ROOT/docker/gravity_node/Dockerfile" \
+        --target runtime-host-binary \
         "$REPO_ROOT" \
         || { echo "[run] gravity_node image build failed"; exit 1; }
 fi
