@@ -125,7 +125,7 @@ use std::{
     hash::Hash,
     mem::{discriminant, Discriminant},
     sync::Arc,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 /// Range of rounds (window) that we might be calling proposer election
@@ -569,6 +569,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             LogSchema::new(LogEvent::NewEpoch).epoch(ledger_info.ledger_info().next_block_epoch()),
             "Received verified epoch change",
         );
+        let target_epoch = ledger_info.ledger_info().next_block_epoch();
+        let target_version = ledger_info.ledger_info().version();
 
         // shutdown existing processor first to avoid race condition with state sync.
         self.shutdown_current_processor().await;
@@ -576,12 +578,32 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         // make sure storage is on this ledger_info too, it should be no-op if it's already
         // committed panic if this doesn't succeed since the current processors are already
         // shutdown.
+        let sync_start = Instant::now();
+        info!(
+            "epoch handoff: sync_to begin, target_epoch={}, target_version={}",
+            target_epoch, target_version,
+        );
         self.execution_client
             .sync_to(ledger_info.clone())
             .await
             .context(format!("[EpochManager] State sync to new epoch {}", ledger_info))
             .expect("Failed to sync to new epoch");
+        info!(
+            "epoch handoff: sync_to end, target_epoch={}, target_version={}, elapsed_ms={}",
+            target_epoch,
+            target_version,
+            sync_start.elapsed().as_millis(),
+        );
+        info!(
+            "epoch handoff: waiting reconfiguration notification, target_epoch={}, target_version={}",
+            target_epoch, target_version,
+        );
         let reconfig_notification = monitor!("reconfig", self.await_reconfig_notification().await);
+        info!(
+            "epoch handoff: received reconfiguration notification, epoch={}, version={}",
+            reconfig_notification.on_chain_configs.epoch(),
+            reconfig_notification.version,
+        );
         monitor!("reconfig", self.start_new_epoch(reconfig_notification.on_chain_configs).await);
         Ok(())
     }

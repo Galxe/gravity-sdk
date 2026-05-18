@@ -133,12 +133,15 @@ impl ConsensusEngine {
             ));
         // It seems stupid, refactor when debugging finished
         if let Some(config) = config_storage {
+            info!("sdk consensus init: installing external config storage");
             match GLOBAL_CONFIG_STORAGE.set(config) {
                 Ok(_) => {}
                 Err(_) => {
                     panic!("Failed to set config storage");
                 }
             }
+        } else {
+            info!("sdk consensus init: external config storage not configured");
         }
         let chain_id = ChainId::from(chain_id);
         let network_configs = extract_network_configs(&node_config);

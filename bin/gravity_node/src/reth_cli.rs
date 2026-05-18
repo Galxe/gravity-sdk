@@ -514,6 +514,21 @@ impl<EthApi: RethEthCall> ConfigStorage for RethCliConfigStorage<EthApi> {
         config_name: OnChainConfig,
         block_number: BlockNumber,
     ) -> Option<OnChainConfigResType> {
-        self.reth_cli.pipe_api.fetch_config_bytes(config_name, block_number)
+        let start = Instant::now();
+        let config_debug = format!("{:?}", config_name);
+        let block_debug = format!("{:?}", block_number);
+        debug!(
+            "reth cli config storage fetch enter: {}, block_number: {}",
+            config_debug, block_debug
+        );
+        let result = self.reth_cli.pipe_api.fetch_config_bytes(config_name, block_number);
+        debug!(
+            "reth cli config storage fetch exit: {}, block_number: {}, elapsed_ms: {}, result: {}",
+            config_debug,
+            block_debug,
+            start.elapsed().as_millis(),
+            if result.is_some() { "Some" } else { "None" },
+        );
+        result
     }
 }
