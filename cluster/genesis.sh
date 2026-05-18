@@ -51,14 +51,17 @@ main() {
     log_info "Checking out ref: $GENESIS_REF..."
     (
         cd "$GENESIS_CONTRACT_DIR"
-        git fetch origin
+        # Tolerate transient network failures — local working copy is usually
+        # already at the right ref, and a stale local copy is better than a
+        # hard failure for this stress-test workflow.
+        git fetch origin || log_warn "git fetch origin failed (continuing with local refs)"
         # Discard local modifications from previous runs (e.g. genesis_template.json)
         git checkout -- .
         git checkout "$GENESIS_REF"
         # Pull latest if on a branch (no-op for detached HEAD / commit hash)
         if git symbolic-ref -q HEAD &>/dev/null; then
             log_info "Pulling latest changes for branch $GENESIS_REF..."
-            git pull origin "$GENESIS_REF"
+            git pull origin "$GENESIS_REF" || log_warn "git pull failed (continuing with local refs)"
         fi
         # Fix Python 3.9 compatibility: `str | None` → `Optional[str]`
         python3 -c "

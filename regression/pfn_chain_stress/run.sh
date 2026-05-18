@@ -288,9 +288,12 @@ for id in $(cluster_ids); do
     port="$(rpc_port_for "$id" node1)"
     echo -n "[run] waiting cluster $id node1 (port $port)…"
     while [[ $(date +%s) -lt $deadline ]]; do
-        bn=$(curl -s --noproxy '*' -m 2 -X POST -H 'Content-Type: application/json' \
+        # Tolerate curl exit 7 (connection refused) during startup — without
+        # `|| true` set -e + pipefail would abort the script on the first
+        # missed probe.
+        bn=$( { curl -s --noproxy '*' -m 2 -X POST -H 'Content-Type: application/json' \
             --data '{"jsonrpc":"2.0","method":"eth_blockNumber","id":1}' \
-            "http://127.0.0.1:$port" 2>/dev/null \
+            "http://127.0.0.1:$port" 2>/dev/null || true; } \
             | sed -n 's/.*"result":"\(0x[0-9a-fA-F]*\)".*/\1/p')
         if [[ -n "$bn" && "$bn" != "0x0" ]]; then
             echo " block=$bn"

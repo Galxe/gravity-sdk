@@ -1008,7 +1008,9 @@ main() {
         mkdir -p "$log_dir"/{execution_logs,consensus_log}
         
         # Create hardlink for gravity_node binary in each node's bin dir
-        ln -f "$node_binary" "$data_dir/bin/gravity_node"
+        # Fall back to cp if /tmp and target/ live on different filesystems.
+        ln -f "$node_binary" "$data_dir/bin/gravity_node" 2>/dev/null \
+            || cp -f "$node_binary" "$data_dir/bin/gravity_node"
         
         waypoint_src="$OUTPUT_DIR/waypoint.txt"
 
