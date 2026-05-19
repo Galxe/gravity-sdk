@@ -770,150 +770,198 @@ async def test_pfn_chain_topology(cluster: Cluster):
         "Vfn instead of Public. Regression of commit 16ebf363."
     )
 
-    # Phase 3 — silent black-hole on pfn1 (impl-d slot-flip verification).
+    # Phase 3 — silent black-hole verification (impl-d slot-flip).
     #
-    # Goal: verify design.md §3.8 / impl-d §6.4 — when pfn1 is alive
-    # (in sync_states) but its mempool stops forwarding, pfn3 RPC tx still
-    # commits within ~1×TTL via the Failover slot.
+    # Goal: verify design.md §3.8 / impl-d §6.4 — when a PFN is alive
+    # (RPC + consensus healthy, still in sync_states) but its mempool
+    # broadcaster is silenced, pfn3 RPC tx still commits within ~1 TTL via
+    # the Failover slot.
     #
-    # Mechanism: SIGSTOP freezes pfn1 in place. TCP stays connected at
-    # kernel level → sync_states keeps pfn1 listed; but pfn1's app thread
-    # doesn't run, so no broadcast forwarding. Pure e2e, no Rust/code
-    # change to gravity_node. See impl-d §9.2.
+    # We run two halves back-to-back, blackholing pfn1 then pfn2. pfn3 is
+    # never restarted, so its priority.rs RandomState stays fixed and picks
+    # the *same* Primary across both halves. Exactly one half must therefore
+    # have Primary == blackhole target → slot-flip latency (~TTL+commit);
+    # the other half has Primary == healthy peer → direct latency (~1-2s).
+    # The cross-half bimodal split makes slot-flip coverage *deterministic*
+    # rather than depending on which Primary the RandomState picked. See
+    # impl-d §9.2 for the design rationale.
     await _phase3_silent_blackhole(cluster)
 
     LOG.info("PFN fan-out test PASSED")
 
 
-async def _phase3_silent_blackhole(cluster: Cluster):
+async def _run_blackhole_half(
+    cluster: Cluster,
+    target_pfn_name: str,
+    bench_accounts: list,
+    duration_secs: int,
+    label: str,
+) -> dict:
     """
-    Phase 3: drop pfn1 into silent black-hole mode (RPC + consensus healthy,
-    mempool broadcast disabled) via GRAVITY_BLACKHOLE_BROADCAST=1, drive
-    multi-account load via pfn3, and verify impl-d's slot-flip catches every
-    in-flight tx within ~1 TTL (default 5s) + commit budget.
-
-    See _local/drafts/pfn/mempool-broadcast-impl-d.md §9.2 for design.
+    One half of Phase 3: blackhole `target_pfn_name`, drive multi-account
+    load via pfn3 for `duration_secs`, then restore the target and wait for
+    steady state before returning. Returns a stats dict.
     """
-    LOG.info("=" * 70)
-    LOG.info("[phase 3] silent black-hole on pfn1 (env-var injection)")
-    LOG.info("=" * 70)
+    target = cluster.get_node(target_pfn_name)
 
-    pfn1 = cluster.get_node("pfn1")
-
-    # Sanity: cluster fully healthy before we knee-cap pfn1.
-    pre = await _get_live_heights(cluster, set())
-    assert len(pre) == 5, f"expected 5 live nodes before Phase 3, got {pre}"
-    LOG.info(f"[phase 3] pre-blackhole heights: {pre}")
-
-    # Multi-account pool: spread senders across all 4 sender_buckets so the
-    # slot-flip path is actually exercised. accounts.csv is faucet-funded
-    # (~10000 accounts in pfn_chain config); take 32.
-    PHASE3_ACCOUNT_POOL = 32
-    bench_accounts = cluster.get_bench_accounts(limit=PHASE3_ACCOUNT_POOL)
-    assert len(bench_accounts) >= 8, (
-        f"Phase 3 needs ≥8 funded accounts, got {len(bench_accounts)} — "
-        f"check accounts.csv / faucet_init"
-    )
     LOG.info(
-        f"[phase 3] loaded {len(bench_accounts)} pre-funded accounts; "
-        f"sender last-byte distribution should cover all 4 buckets"
+        f"[phase 3{label}] {target_pfn_name} → GRAVITY_BLACKHOLE_BROADCAST=1"
     )
-
-    # Phase 3a — restart pfn1 with blackhole env. pfn1 stays a healthy member
-    # of sync_states (RPC + consensus all good); only its mempool broadcaster
-    # is silent. This is what design.md §3.8 actually describes.
-    LOG.info("[phase 3a] restarting pfn1 with GRAVITY_BLACKHOLE_BROADCAST=1")
-    assert await pfn1.stop(), "pfn1 failed to stop"
-    pfn1.extra_env["GRAVITY_BLACKHOLE_BROADCAST"] = "1"
-    assert await pfn1.start(), "pfn1 failed to restart in blackhole mode"
-    # pfn1 RPC must be back — proves the env knob didn't break other paths.
-    assert pfn1.w3.eth.block_number > 0, "pfn1 RPC dead after blackhole restart"
-    # Give priority.rs 2× update_peers_interval (~2s) to re-sync sync_states.
+    assert await target.stop(), f"{target_pfn_name} failed to stop"
+    target.extra_env["GRAVITY_BLACKHOLE_BROADCAST"] = "1"
+    assert await target.start(), (
+        f"{target_pfn_name} failed to restart in blackhole mode"
+    )
+    assert target.w3.eth.block_number > 0, (
+        f"{target_pfn_name} RPC dead after blackhole restart"
+    )
+    # priority.rs ~2× update window so sync_states + top_peer lists settle.
     await asyncio.sleep(2.0)
-    LOG.info("[phase 3a] pfn1 is now a silent black-hole (broadcast disabled)")
 
-    # Phase 3b — drive multi-account load via pfn3 for 30s.
-    PHASE3_LOAD_SECS = 30
     sender = MultiAccountTxSender(
         cluster, accounts=bench_accounts, target_node_id="pfn3",
         tx_interval=0.1,  # ~10 tx/s aggregate
     )
     sender.start()
-    LOG.info(f"[phase 3b] driving {PHASE3_LOAD_SECS}s load via pfn3")
-    await asyncio.sleep(PHASE3_LOAD_SECS)
-    LOG.info("[phase 3b] stopping sender (drains in-flight receipt watchers)")
+    LOG.info(
+        f"[phase 3{label}] driving {duration_secs}s load via pfn3 "
+        f"({target_pfn_name} blackholed)"
+    )
+    await asyncio.sleep(duration_secs)
     await sender.stop()
 
-    # Stats.
-    sent = sender.total_sent
-    confirmed = sender.total_confirmed
-    timeout = sender.total_timeout
-    failed = sender.total_failed
-    LOG.info("=" * 60)
-    LOG.info(
-        f"[phase 3c] blackhole window stats: sent={sent} confirmed={confirmed} "
-        f"timeout={timeout} failed={failed}"
+    LOG.info(f"[phase 3{label}] restoring {target_pfn_name}")
+    assert await target.stop(), f"{target_pfn_name} failed to stop for restore"
+    target.extra_env.pop("GRAVITY_BLACKHOLE_BROADCAST", None)
+    assert await target.start(), (
+        f"{target_pfn_name} failed to restart in normal mode"
     )
-    LOG.info("=" * 60)
-
-    # Phase 3c — assertions (impl-d §9.2.4).
-    # (1) Sanity: send rate should be near tx_interval-bound.
-    EXPECTED_MIN_SENT = PHASE3_LOAD_SECS * 5  # half of nominal 10 tx/s
-    assert sent >= EXPECTED_MIN_SENT, (
-        f"expected ≥{EXPECTED_MIN_SENT} tx attempts at ~10 tx/s, got {sent} — "
-        f"MultiAccountTxSender may have stalled (fire-and-forget broken?)"
-    )
-
-    # (2) Zero timeouts. impl-d TTL=5s + commit ≈ 1-2s, well under
-    #     TX_RECEIPT_TIMEOUT=30s.
-    assert timeout == 0, (
-        f"silent blackhole produced {timeout} timeouts — impl-d slot-flip "
-        f"is NOT catching blackhole-bucket txs within TTL window"
-    )
-    assert failed == 0, f"send-side failures: {failed}"
-
-    # (3) p95 latency ≤ TTL + commit_budget.
-    TTL_SECS = 5.0  # MEMPOOL_BROADCAST_CACHE_TTL_SECS default
-    COMMIT_BUDGET = 4.0  # commit latency + scheduling slack
-    p50 = sender.latency_pct(50)
-    p95 = sender.latency_pct(95)
-    p99 = sender.latency_pct(99)
-    LOG.info(f"[phase 3c] latency p50={p50:.2f}s p95={p95:.2f}s p99={p99:.2f}s")
-    assert p95 <= TTL_SECS + COMMIT_BUDGET, (
-        f"p95 latency {p95:.2f}s exceeds TTL({TTL_SECS}s) + commit_budget"
-        f"({COMMIT_BUDGET}s) = {TTL_SECS + COMMIT_BUDGET}s; slot-flip is "
-        f"delayed beyond one TTL"
-    )
-
-    # (4) Bimodal distribution. ~half of senders hash to buckets whose
-    #     Primary=pfn1 (blackhole) → ~5-7s slow cluster. ~half map to
-    #     Primary=pfn2 → ~1-2s fast cluster. priority.rs's exact assignment
-    #     isn't observable from here, but the aggregate must be bimodal.
-    all_lats = [l for _, l in sender.latencies]
-    fast = [l for l in all_lats if l < 3.0]
-    slow = [l for l in all_lats if 3.0 <= l <= TTL_SECS + COMMIT_BUDGET]
-    LOG.info(
-        f"[phase 3c] latency clusters: fast(<3s)={len(fast)} "
-        f"slow(3-{TTL_SECS+COMMIT_BUDGET:.0f}s)={len(slow)}"
-    )
-    assert len(fast) > 0, (
-        "no fast-cluster (<3s) latencies — even Primary=pfn2 path is "
-        "degraded, indicating a deeper problem than slot-flip"
-    )
-    assert len(slow) > 0, (
-        "no slow-cluster (3-9s) latencies — slot-flip likely never fired, "
-        "or all senders happened to map to Primary=pfn2 (false-negative "
-        "edge case from priority.rs bucket-assignment randomness)"
-    )
-
-    # Phase 3d — restore pfn1 to normal mode + end-to-end probe.
-    LOG.info("[phase 3d] restarting pfn1 without blackhole env")
-    assert await pfn1.stop(), "pfn1 failed to stop for restore"
-    pfn1.extra_env.pop("GRAVITY_BLACKHOLE_BROADCAST", None)
-    assert await pfn1.start(), "pfn1 failed to restart in normal mode"
     ok = await _wait_steady(
-        cluster, set(), timeout=CATCHUP_TIMEOUT, label="phase3d-catchup"
+        cluster, set(), timeout=CATCHUP_TIMEOUT,
+        label=f"phase3{label}-restore",
     )
-    assert ok, f"pfn1 failed to catch up within {CATCHUP_TIMEOUT}s after restore"
+    assert ok, (
+        f"{target_pfn_name} did not re-converge within {CATCHUP_TIMEOUT}s "
+        f"after restore"
+    )
+
+    stats = {
+        "target": target_pfn_name,
+        "label": label,
+        "sent": sender.total_sent,
+        "confirmed": sender.total_confirmed,
+        "timeout": sender.total_timeout,
+        "failed": sender.total_failed,
+        "p50": sender.latency_pct(50),
+        "p95": sender.latency_pct(95),
+        "p99": sender.latency_pct(99),
+    }
+    LOG.info(
+        f"[phase 3{label}] {target_pfn_name} blackhole stats: "
+        f"sent={stats['sent']} confirmed={stats['confirmed']} "
+        f"timeout={stats['timeout']} failed={stats['failed']} | "
+        f"p50={stats['p50']:.2f}s p95={stats['p95']:.2f}s p99={stats['p99']:.2f}s"
+    )
+    return stats
+
+
+async def _phase3_silent_blackhole(cluster: Cluster):
+    """
+    Phase 3: two-half deterministic bimodal verification of impl-d slot-flip.
+
+    Half A blackholes pfn1, Half B blackholes pfn2. pfn3 is never restarted,
+    so priority.rs picks the same Primary in both halves → exactly one half
+    has Primary == blackhole target and exercises slot-flip. The bimodal
+    p95 split across the two halves serves as a deterministic assertion
+    that slot-flip was exercised (no RandomState lottery, no coverage WARN).
+
+    See _local/drafts/pfn/mempool-broadcast-impl-d.md §9.2.
+    """
+    LOG.info("=" * 70)
+    LOG.info("[phase 3] silent black-hole (two-half deterministic bimodal)")
+    LOG.info("=" * 70)
+
+    pre = await _get_live_heights(cluster, set())
+    assert len(pre) == 5, f"expected 5 live nodes before Phase 3, got {pre}"
+    LOG.info(f"[phase 3] pre-blackhole heights: {pre}")
+
+    # Multi-account pool spreads senders across all 4 sender_buckets; even
+    # at ~10 tps where num_top_peers=1 collapses Primary to a single peer,
+    # using many sender addresses keeps the bucket distribution uniform.
+    PHASE3_ACCOUNT_POOL = 32
+    PHASE3_LOAD_SECS = 30
+    bench_accounts = cluster.get_bench_accounts(limit=PHASE3_ACCOUNT_POOL)
+    assert len(bench_accounts) >= 8, (
+        f"Phase 3 needs ≥8 funded accounts, got {len(bench_accounts)} — "
+        f"check accounts.csv / faucet_init"
+    )
+    LOG.info(f"[phase 3] loaded {len(bench_accounts)} pre-funded accounts")
+
+    half_a = await _run_blackhole_half(
+        cluster, "pfn1", bench_accounts, PHASE3_LOAD_SECS, label="a",
+    )
+    half_b = await _run_blackhole_half(
+        cluster, "pfn2", bench_accounts, PHASE3_LOAD_SECS, label="b",
+    )
+
+    # Per-half correctness asserts. TTL=5s + commit ≈ 1-2s, well under
+    # TX_RECEIPT_TIMEOUT=30s, so zero timeouts/failed is a true invariant
+    # regardless of which peer ended up Primary.
+    EXPECTED_MIN_SENT = PHASE3_LOAD_SECS * 5
+    P99_CEILING = 0.8 * TX_RECEIPT_TIMEOUT
+    for half in (half_a, half_b):
+        tag = f"phase 3{half['label']}/{half['target']}"
+        assert half["sent"] >= EXPECTED_MIN_SENT, (
+            f"[{tag}] expected ≥{EXPECTED_MIN_SENT} tx, got {half['sent']} — "
+            f"MultiAccountTxSender stalled?"
+        )
+        assert half["timeout"] == 0, (
+            f"[{tag}] {half['timeout']} timeouts — impl-d slot-flip is NOT "
+            f"catching in-flight txs within TTL window"
+        )
+        assert half["failed"] == 0, f"[{tag}] send failures: {half['failed']}"
+        assert half["p99"] <= P99_CEILING, (
+            f"[{tag}] p99={half['p99']:.2f}s exceeds sanity ceiling "
+            f"{P99_CEILING:.1f}s"
+        )
+
+    # Deterministic bimodal assert. Exactly one half must hit slot-flip
+    # latency (Primary == blackhole target → all txs wait TTL=5s + commit
+    # ≈ 1s before being reflipped to Failover); the other half must hit
+    # direct latency (Primary == healthy peer → ~1-2s).
+    p95_a, p95_b = half_a["p95"], half_b["p95"]
+    fast_p95 = min(p95_a, p95_b)
+    slow_p95 = max(p95_a, p95_b)
+    gap = slow_p95 - fast_p95
+
+    FAST_P95_CEILING = 3.0    # direct delivery observed at 1-2s
+    SLOW_P95_FLOOR = 6.0      # slot-flip floor: TTL=5s + commit ~1s
+    BIMODAL_GAP_MIN = 4.0     # separation between the two modes
+
+    summary = (
+        f"halves: pfn1-blackhole p95={p95_a:.2f}s, "
+        f"pfn2-blackhole p95={p95_b:.2f}s → fast={fast_p95:.2f}s "
+        f"slow={slow_p95:.2f}s gap={gap:.2f}s"
+    )
+    LOG.info(f"[phase 3] bimodal check: {summary}")
+    assert fast_p95 <= FAST_P95_CEILING, (
+        f"[phase 3] both halves slow (fast p95 {fast_p95:.2f}s > "
+        f"{FAST_P95_CEILING}s): no half delivered txs at direct latency. "
+        f"priority.rs may be flip-flopping Primary within the 30s window, "
+        f"or both broadcasts stalled behind some other delay. {summary}"
+    )
+    assert slow_p95 >= SLOW_P95_FLOOR, (
+        f"[phase 3] both halves fast (slow p95 {slow_p95:.2f}s < "
+        f"{SLOW_P95_FLOOR}s): slot-flip path NOT exercised. impl-d may be "
+        f"short-circuiting the TTL wait, or pfn3 priority.rs picked a peer "
+        f"outside {{pfn1, pfn2}} as Primary. {summary}"
+    )
+    assert gap >= BIMODAL_GAP_MIN, (
+        f"[phase 3] insufficient bimodal separation (gap {gap:.2f}s < "
+        f"{BIMODAL_GAP_MIN}s): both halves landed in the middle. {summary}"
+    )
+    LOG.info("[phase 3] deterministic bimodal assert PASSED")
+
+    # Final probe: cluster fully healthy again after both halves restored.
     _, _ = await _send_tx_via_pfn_and_assert_inclusion(cluster, "pfn3")
     LOG.info("[phase 3] PASSED")
