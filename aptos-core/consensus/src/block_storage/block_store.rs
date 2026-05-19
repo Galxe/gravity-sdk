@@ -501,7 +501,10 @@ impl BlockStore {
         block_store
     }
 
-    pub fn init_block_number(&self, ordered_blocks: &Vec<Arc<PipelinedBlock>>) {
+    pub fn init_block_number(
+        &self,
+        ordered_blocks: &Vec<Arc<PipelinedBlock>>,
+    ) -> anyhow::Result<()> {
         let mut block_numbers = vec![];
         let mut block_number = 0;
         for p_block in ordered_blocks {
@@ -512,7 +515,17 @@ impl BlockStore {
             {
                 block_number = parent_block.block_number().unwrap() + 1;
             } else {
-                panic!("Cannot find the parent_block id {}", p_block.parent_id());
+                // The parent block is reachable from neither the in-memory tree nor
+                // persistent storage. This can happen when an externally-sourced ordered
+                // block references an unknown ancestor (e.g. malformed sync data on
+                // startup). Surface as a recoverable error so the caller can log/abort
+                // gracefully instead of crashing the node mid-pipeline.
+                anyhow::bail!(
+                    "init_block_number: cannot find parent block id {} (epoch {}, block {})",
+                    p_block.parent_id(),
+                    p_block.epoch(),
+                    p_block.block().id(),
+                );
             }
             if let Some(cur_block_number) = p_block.block().block_number() {
                 assert_eq!(cur_block_number, block_number);
@@ -529,6 +542,7 @@ impl BlockStore {
         if block_numbers.len() != 0 {
             self.storage.save_tree(vec![], vec![], block_numbers).unwrap();
         }
+        Ok(())
     }
 
     /// Send an ordered block id with the proof for execution, returns () on success or error
@@ -589,7 +603,7 @@ impl BlockStore {
         self.pending_blocks.lock().gc(finality_proof.commit_info().round());
         // This callback is invoked synchronously with and could be used for multiple batches of
         // blocks.
-        self.init_block_number(&blocks_to_commit);
+        self.init_block_number(&blocks_to_commit)?;
         if recovery {
             // Recovery mode: process blocks directly without going through execution pipeline.
             // Filter out suffix blocks past the epoch change boundary before execution.
