@@ -104,13 +104,17 @@ fn generate_executed_item_from_ordered(
 ) -> BufferItem {
     debug!("{} advance to executed from ordered", commit_info);
     let block = executed_blocks.last().expect("execute_blocks should not be empty!");
+    // Use commit_info's timestamp, not the block's raw timestamp: at epoch boundaries
+    // commit_info has already been adjusted via change_timestamp() to the epoch_end_timestamp.
+    // Mirroring the block's original timestamp here would cause the later commit_proof
+    // assert (try_advance_to_aggregated_with_ledger_info) to panic on timestamp divergence.
     let new_commit_info = BlockInfo::new_with_epoch_block_info(
         commit_info.epoch(),
         commit_info.round(),
         commit_info.id(),
         commit_info.executed_state_id(),
         block.block().block_number().unwrap(),
-        block.timestamp_usecs(),
+        commit_info.timestamp_usecs(),
         commit_info.next_epoch_state().cloned(),
         commit_info.epoch_block_info().cloned(),
     );
