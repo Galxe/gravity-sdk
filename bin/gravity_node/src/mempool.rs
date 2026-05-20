@@ -72,6 +72,21 @@ pub struct Mempool {
 
 impl Mempool {
     pub fn new(pool: RethTransactionPool, enable_broadcast: bool, chain_id: u64) -> Self {
+        // Debug-only override: GRAVITY_BLACKHOLE_BROADCAST=1 forces this node
+        // to keep RPC / consensus / block-sync paths fully healthy but drop
+        // every outbound mempool broadcast — reproduces design.md §3.8 silent
+        // black-hole semantics for the pfn_chain Phase 3 test. MUST NOT be
+        // set in production deployments.
+        let enable_broadcast = if std::env::var("GRAVITY_BLACKHOLE_BROADCAST").as_deref() == Ok("1")
+        {
+            tracing::warn!(
+                "GRAVITY_BLACKHOLE_BROADCAST=1: mempool broadcast forcibly \
+                 disabled (silent black-hole mode); MUST NOT be set in production"
+            );
+            false
+        } else {
+            enable_broadcast
+        };
         Self {
             pool,
             txn_cache: Arc::new(DashMap::new()),

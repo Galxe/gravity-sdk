@@ -80,6 +80,11 @@ class Node:
         self.stake_pool: Optional[str] = stake_pool
         # EVM account for staking operations (assigned from accounts.csv)
         self.evm_account: Optional[LocalAccount] = evm_account
+        # Extra env vars to inject on the next `await start()`. Used by
+        # pfn_chain Phase 3 to set GRAVITY_BLACKHOLE_BROADCAST=1 on a peer.
+        # Set/clear before calling start(); the child process inherits them
+        # via subprocess env (passes through start.sh -> `env` -> gravity_node).
+        self.extra_env: dict[str, str] = {}
 
         # Paths to control scripts
         self.start_script = self._infra_path / "script" / "start.sh"
@@ -205,6 +210,19 @@ class Node:
 
         LOG.info(f"Starting node {self.id} (config={self._cluster_config_path})...")
 
+        # Merge parent env with per-node extra_env. extra_env wins on conflict.
+        # The per-node start.sh runs `env <node-specific-vars> gravity_node ...`
+        # without `-i`, so the parent's environ is inherited and our injections
+        # propagate to gravity_node. Verified for GRAVITY_BLACKHOLE_BROADCAST.
+        child_env = None
+        if self.extra_env:
+            import os
+
+            child_env = {**os.environ, **self.extra_env}
+            LOG.info(
+                f"Node {self.id}: starting with extra_env keys={list(self.extra_env)}"
+            )
+
         try:
             # We assume the parent structure if start script exists
             # Call start script
@@ -214,6 +232,7 @@ class Node:
                 "--config",
                 str(self._cluster_config_path),
                 cwd=str(self.start_script.parent.parent),
+                env=child_env,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )

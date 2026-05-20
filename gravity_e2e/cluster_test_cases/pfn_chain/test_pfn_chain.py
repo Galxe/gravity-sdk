@@ -88,6 +88,166 @@ class TxSnap:
         )
 
 
+class MultiAccountTxSender:
+    """
+    Continuously fan out txs from a *pool of pre-funded accounts* to a target
+    node, one tx per loop iteration round-robin. Used by Phase 3 to spread
+    senders across all 4 sender_buckets — the impl-d slot-flip path only
+    triggers for buckets whose Primary is the blackhole peer, so we need at
+    least a few txs hitting each bucket so the SLA assertion exercises a
+    mix of direct and slot-flip latencies in one run.
+
+    Note: each account here uses its own nonce sequence, so we don't have to
+    worry about head-of-line stalls from a single faucet's pending queue.
+    """
+
+    def __init__(
+        self,
+        cluster: "Cluster",
+        accounts: list,
+        target_node_id: str,
+        tx_interval: float = 0.2,
+    ):
+        self.cluster = cluster
+        self.accounts = accounts
+        self.target_node_id = target_node_id
+        self.tx_interval = tx_interval
+        self.recipient = Account.create().address
+
+        self._stop_event = asyncio.Event()
+        self._task: asyncio.Task | None = None
+        # Fire-and-forget receipt-waiter tasks; awaited in stop().
+        self._receipt_tasks: list[asyncio.Task] = []
+
+        self.total_sent = 0
+        self.total_confirmed = 0
+        self.total_failed = 0
+        self.total_timeout = 0
+        # Tuples of (sender_addr, latency_secs) so we can group by sender
+        # (≈ by bucket, since bucket = last_byte(sender) % num_buckets).
+        self.latencies: list[tuple[str, float]] = []
+
+    @property
+    def _w3(self) -> Web3:
+        return self.cluster.get_node(self.target_node_id).w3
+
+    def snapshot(self) -> "TxSnap":
+        return TxSnap(
+            sent=self.total_sent,
+            confirmed=self.total_confirmed,
+            timeout=self.total_timeout,
+            failed=self.total_failed,
+        )
+
+    async def _wait_receipt(self, addr: str, tx_hash, send_time: float):
+        """Fire-and-forget: poll receipt for one tx and bookkeep on resolution."""
+        w3 = self._w3
+        while time.monotonic() - send_time < TX_RECEIPT_TIMEOUT:
+            try:
+                receipt = await asyncio.to_thread(
+                    lambda: w3.eth.get_transaction_receipt(tx_hash)
+                )
+                if receipt:
+                    lat = time.monotonic() - send_time
+                    self.latencies.append((addr, lat))
+                    self.total_confirmed += 1
+                    return
+            except Exception:
+                pass
+            await asyncio.sleep(0.1)
+        self.total_timeout += 1
+        try:
+            short = tx_hash.hex() if hasattr(tx_hash, "hex") else str(tx_hash)
+        except Exception:
+            short = str(tx_hash)
+        LOG.warning(f"[multi-tx] TIMEOUT acc={addr[:10]}... hash=0x{short}")
+
+    async def _send_loop(self):
+        w3 = self._w3
+        chain_id = await asyncio.to_thread(lambda: w3.eth.chain_id)
+        gas_price = Web3.to_wei("100", "gwei")
+        # Per-account nonce cache to avoid an RPC roundtrip per tx.
+        nonces: dict[str, int] = {}
+        for acc in self.accounts:
+            nonces[acc.address] = await asyncio.to_thread(
+                lambda a=acc: w3.eth.get_transaction_count(a.address, "pending")
+            )
+        LOG.info(
+            f"MultiAccountTxSender started: target={self.target_node_id}, "
+            f"accounts={len(self.accounts)}"
+        )
+
+        idx = 0
+        while not self._stop_event.is_set():
+            w3 = self._w3
+            acc = self.accounts[idx % len(self.accounts)]
+            idx += 1
+            tx = {
+                "nonce": nonces[acc.address],
+                "to": self.recipient,
+                "value": 0,
+                "gas": 21000,
+                "gasPrice": gas_price,
+                "chainId": chain_id,
+            }
+            try:
+                signed = w3.eth.account.sign_transaction(tx, acc.key)
+                send_time = time.monotonic()
+                tx_hash = await asyncio.to_thread(
+                    lambda: w3.eth.send_raw_transaction(signed.raw_transaction)
+                )
+                self.total_sent += 1
+                nonces[acc.address] += 1
+                # Fire-and-forget receipt watcher: decouples send rate from
+                # per-tx commit latency. Necessary for Phase 3 where blackhole
+                # txs take ~6.5s to flip via Failover slot.
+                self._receipt_tasks.append(
+                    asyncio.create_task(
+                        self._wait_receipt(acc.address, tx_hash, send_time)
+                    )
+                )
+            except Exception as e:
+                self.total_failed += 1
+                LOG.warning(
+                    f"MultiAccountTxSender send failed ({self.target_node_id}): {e}"
+                )
+                await asyncio.sleep(1)
+                # Refresh nonce on failure — chain pending may have advanced.
+                try:
+                    nonces[acc.address] = await asyncio.to_thread(
+                        lambda a=acc: self._w3.eth.get_transaction_count(
+                            a.address, "pending"
+                        )
+                    )
+                except Exception:
+                    pass
+                continue
+            await asyncio.sleep(self.tx_interval)
+
+    def start(self):
+        self._task = asyncio.create_task(self._send_loop())
+
+    async def stop(self):
+        """Stop the send loop AND drain in-flight receipt watchers."""
+        self._stop_event.set()
+        if self._task:
+            await self._task
+        if self._receipt_tasks:
+            LOG.info(
+                f"MultiAccountTxSender: draining {len(self._receipt_tasks)} "
+                f"in-flight receipt watchers (≤{TX_RECEIPT_TIMEOUT}s)"
+            )
+            await asyncio.gather(*self._receipt_tasks, return_exceptions=True)
+
+    def latency_pct(self, p: float) -> float:
+        if not self.latencies:
+            return 0.0
+        sl = sorted(l for _, l in self.latencies)
+        k = (len(sl) - 1) * (p / 100.0)
+        f, c = math.floor(k), math.ceil(k)
+        return sl[int(k)] if f == c else sl[f] + (sl[c] - sl[f]) * (k - f)
+
+
 class TxSender:
     """Continuously send txs to a target node; track submit/confirm stats."""
 
@@ -611,4 +771,183 @@ async def test_pfn_chain_topology(cluster: Cluster):
         "Vfn instead of Public. Regression of commit 16ebf363."
     )
 
+    # Phase 3 — silent black-hole verification (impl-d slot-flip).
+    #
+    # Goal: verify design.md §3.8 / impl-d §6.4 — when a PFN is alive
+    # (RPC + consensus healthy, still in sync_states) but its mempool
+    # broadcaster is silenced, pfn3 RPC tx still commits within ~1 TTL via
+    # the Failover slot.
+    #
+    # We run two halves back-to-back, blackholing pfn1 then pfn2, and assert
+    # per-half SLA: p99 ≤ 3 × TTL + slack regardless of whether priority.rs
+    # put us on the direct path or the slot-flip path. Branch coverage of
+    # the slot-flip code itself is handled by the unit tests
+    # `ttl_expired_alt_slot_dispatches` etc. in
+    # aptos-core/mempool/src/core_mempool/mempool.rs, so e2e does not try
+    # to infer it from latency shape. See impl-d §9.2 for design rationale.
+    await _phase3_silent_blackhole(cluster)
+
     LOG.info("PFN fan-out test PASSED")
+
+
+async def _run_blackhole_half(
+    cluster: Cluster,
+    target_pfn_name: str,
+    bench_accounts: list,
+    duration_secs: int,
+    label: str,
+) -> dict:
+    """
+    One half of Phase 3: blackhole `target_pfn_name`, drive multi-account
+    load via pfn3 for `duration_secs`, then restore the target and wait for
+    steady state before returning. Returns a stats dict.
+    """
+    target = cluster.get_node(target_pfn_name)
+
+    LOG.info(
+        f"[phase 3{label}] {target_pfn_name} → GRAVITY_BLACKHOLE_BROADCAST=1"
+    )
+    assert await target.stop(), f"{target_pfn_name} failed to stop"
+    target.extra_env["GRAVITY_BLACKHOLE_BROADCAST"] = "1"
+    assert await target.start(), (
+        f"{target_pfn_name} failed to restart in blackhole mode"
+    )
+    assert target.w3.eth.block_number > 0, (
+        f"{target_pfn_name} RPC dead after blackhole restart"
+    )
+    # priority.rs ~2× update window so sync_states + top_peer lists settle.
+    await asyncio.sleep(2.0)
+
+    sender = MultiAccountTxSender(
+        cluster, accounts=bench_accounts, target_node_id="pfn3",
+        tx_interval=0.1,  # ~10 tx/s aggregate
+    )
+    sender.start()
+    LOG.info(
+        f"[phase 3{label}] driving {duration_secs}s load via pfn3 "
+        f"({target_pfn_name} blackholed)"
+    )
+    await asyncio.sleep(duration_secs)
+    await sender.stop()
+
+    LOG.info(f"[phase 3{label}] restoring {target_pfn_name}")
+    assert await target.stop(), f"{target_pfn_name} failed to stop for restore"
+    target.extra_env.pop("GRAVITY_BLACKHOLE_BROADCAST", None)
+    assert await target.start(), (
+        f"{target_pfn_name} failed to restart in normal mode"
+    )
+    ok = await _wait_steady(
+        cluster, set(), timeout=CATCHUP_TIMEOUT,
+        label=f"phase3{label}-restore",
+    )
+    assert ok, (
+        f"{target_pfn_name} did not re-converge within {CATCHUP_TIMEOUT}s "
+        f"after restore"
+    )
+
+    stats = {
+        "target": target_pfn_name,
+        "label": label,
+        "sent": sender.total_sent,
+        "confirmed": sender.total_confirmed,
+        "timeout": sender.total_timeout,
+        "failed": sender.total_failed,
+        "p50": sender.latency_pct(50),
+        "p95": sender.latency_pct(95),
+        "p99": sender.latency_pct(99),
+    }
+    LOG.info(
+        f"[phase 3{label}] {target_pfn_name} blackhole stats: "
+        f"sent={stats['sent']} confirmed={stats['confirmed']} "
+        f"timeout={stats['timeout']} failed={stats['failed']} | "
+        f"p50={stats['p50']:.2f}s p95={stats['p95']:.2f}s p99={stats['p99']:.2f}s"
+    )
+    return stats
+
+
+async def _phase3_silent_blackhole(cluster: Cluster):
+    """
+    Phase 3: two-half silent-blackhole SLA verification of impl-d.
+
+    Half A blackholes pfn1, Half B blackholes pfn2. Per half we assert that
+    every tx commits within `3 × TTL + slop` (~18s) regardless of which peer
+    priority.rs picked as Primary. The slot-flip code path itself is covered
+    deterministically by the unit tests in
+    aptos-core/mempool/src/core_mempool/mempool.rs
+    (`ttl_expired_alt_slot_dispatches` and friends), so e2e does not try to
+    infer slot-flip coverage from latency shape.
+
+    See _local/drafts/pfn/mempool-broadcast-impl-d.md §9.2.
+    """
+    LOG.info("=" * 70)
+    LOG.info("[phase 3] silent black-hole (two-half SLA verification)")
+    LOG.info("=" * 70)
+
+    pre = await _get_live_heights(cluster, set())
+    assert len(pre) == 5, f"expected 5 live nodes before Phase 3, got {pre}"
+    LOG.info(f"[phase 3] pre-blackhole heights: {pre}")
+
+    # Multi-account pool spreads senders across all 4 sender_buckets; even
+    # at ~10 tps where num_top_peers=1 collapses Primary to a single peer,
+    # using many sender addresses keeps the bucket distribution uniform.
+    PHASE3_ACCOUNT_POOL = 32
+    PHASE3_LOAD_SECS = 30
+    bench_accounts = cluster.get_bench_accounts(limit=PHASE3_ACCOUNT_POOL)
+    assert len(bench_accounts) >= 8, (
+        f"Phase 3 needs ≥8 funded accounts, got {len(bench_accounts)} — "
+        f"check accounts.csv / faucet_init"
+    )
+    LOG.info(f"[phase 3] loaded {len(bench_accounts)} pre-funded accounts")
+
+    half_a = await _run_blackhole_half(
+        cluster, "pfn1", bench_accounts, PHASE3_LOAD_SECS, label="a",
+    )
+    half_b = await _run_blackhole_half(
+        cluster, "pfn2", bench_accounts, PHASE3_LOAD_SECS, label="b",
+    )
+
+    # Per-half SLA asserts. The mempool broadcast cache TTL governs the
+    # worst-case slot-flip latency. Worst-case path stacks:
+    #   - TTL=5s wait for the cache entry to expire (Primary suppress window)
+    #   - one more TTL window of alt-slot retry queueing when priority.rs put
+    #     the blackhole peer as Primary on (nearly) every active sender
+    #     bucket — every in-flight tx funnels through the single Failover
+    #     slot and back-pressure stretches the next tick by up to a full TTL
+    #   - ~1s commit
+    #   - ~2s slack for snapshot refresh / tick jitter
+    # = 3 × TTL + 3s = 18s. Observed worst case in CI: p99 ≈ 15s when
+    # priority.rs degenerates to all-buckets-share-one-Primary.
+    #
+    # Direct path is ~1-2s, so this ceiling is loose for the
+    # well-distributed case and tight for the degenerate case. Replaces
+    # the prior bimodal split assertion which depended on Primary-stability
+    # across halves (PR #722 review point 1).
+    MEMPOOL_TTL_SECONDS = 5.0   # MEMPOOL_BROADCAST_CACHE_TTL_SECS in mempool.rs
+    EXPECTED_MIN_SENT = PHASE3_LOAD_SECS * 5
+    P99_CEILING = 3.0 * MEMPOOL_TTL_SECONDS + 3.0   # 18.0s
+    for half in (half_a, half_b):
+        tag = f"phase 3{half['label']}/{half['target']}"
+        assert half["sent"] >= EXPECTED_MIN_SENT, (
+            f"[{tag}] expected ≥{EXPECTED_MIN_SENT} tx, got {half['sent']} — "
+            f"MultiAccountTxSender stalled?"
+        )
+        assert half["timeout"] == 0, (
+            f"[{tag}] {half['timeout']} timeouts — impl-d slot-flip is NOT "
+            f"catching in-flight txs within TTL window"
+        )
+        assert half["failed"] == 0, f"[{tag}] send failures: {half['failed']}"
+        assert half["p99"] <= P99_CEILING, (
+            f"[{tag}] p99={half['p99']:.2f}s exceeds SLA ceiling "
+            f"{P99_CEILING:.1f}s (= 3 × TTL + 3s slack)"
+        )
+
+    LOG.info(
+        f"[phase 3] SLA PASSED: halves: pfn1-blackhole "
+        f"p95={half_a['p95']:.2f}s p99={half_a['p99']:.2f}s, "
+        f"pfn2-blackhole p95={half_b['p95']:.2f}s p99={half_b['p99']:.2f}s "
+        f"(ceiling {P99_CEILING:.1f}s)"
+    )
+
+    # Final probe: cluster fully healthy again after both halves restored.
+    _, _ = await _send_tx_via_pfn_and_assert_inclusion(cluster, "pfn3")
+    LOG.info("[phase 3] PASSED")
