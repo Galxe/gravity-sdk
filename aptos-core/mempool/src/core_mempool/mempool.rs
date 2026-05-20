@@ -44,8 +44,15 @@ pub struct TxnCache {
 
 #[derive(Clone, Copy)]
 struct CacheEntry {
+    /// For dispatched entries: when the tx was last handed to a peer.
+    /// For placeholders (`dispatched == false`): the Failover first-sighting
+    /// time — i.e. when the TTL grace clock started ticking.
     last_dispatched_at: Instant,
     last_target: TargetSlot,
+    /// `false` ⇒ placeholder seeded by a Failover first-sighting awaiting
+    /// Primary claim within `cache.ttl`. `true` ⇒ tx has been dispatched
+    /// at least once (the normal in-TTL-suppress / TTL-re-emit regime).
+    dispatched: bool,
 }
 
 /// `(bucket, priority_discriminant)` — a zero-cost proxy for the destination
@@ -197,32 +204,43 @@ impl CoreMempoolTrait for Mempool {
             if out.len() >= count {
                 break;
             }
+            // PR #722 review point 3: the TTL cache is now self-sufficient
+            // for failover semantics. Primary first-sighting dispatches
+            // immediately. Failover first-sighting seeds a placeholder so
+            // the TTL clock starts here. Within the `cache.ttl` grace,
+            // Primary can still claim the placeholder (preserves the
+            // Primary-first invariant). After the grace elapses, Failover
+            // takes over — no dependency on `priority.rs` promotion.
             let dispatch = match cache.entries.get(&entry.hash) {
-                // First sighting of this hash: only Primary may take it.
-                // Holding Failover here keeps the upstream invariant
-                // "Primary gets first shot at every tx, Failover only
-                // catches misses" — without this, the slot whose tick
-                // happens to land first wins, which lets a Failover
-                // ahead of Primary steal first-dispatch.
-                //
-                // If the Primary peer is unhealthy and never queries,
-                // `priority.rs::update_peers_interval` (default 1s)
-                // promotes the surviving peer to Primary; the next
-                // read_timeline from that peer arrives with
-                // `priority_of_receiver = Primary` and dispatches normally.
-                None if matches!(priority_of_receiver, BroadcastPeerPriority::Primary) => true,
-                None => false,
+                None => matches!(priority_of_receiver, BroadcastPeerPriority::Primary),
+                Some(e) if !e.dispatched => match priority_of_receiver {
+                    BroadcastPeerPriority::Primary => true,
+                    BroadcastPeerPriority::Failover => {
+                        now.duration_since(e.last_dispatched_at) >= cache.ttl
+                    }
+                },
                 Some(e) if now.duration_since(e.last_dispatched_at) < cache.ttl => false,
                 Some(e) if e.last_target == target_slot && priority_count >= 2 => false,
                 Some(_) => true,
             };
             if !dispatch {
+                // Failover first-sighting seeds a placeholder so the TTL
+                // clock starts. `or_insert` (not `insert`) preserves the
+                // original first_seen_at across repeated Failover ticks
+                // during the grace window.
+                if matches!(priority_of_receiver, BroadcastPeerPriority::Failover) {
+                    cache.entries.entry(entry.hash).or_insert(CacheEntry {
+                        last_dispatched_at: now,
+                        last_target: target_slot,
+                        dispatched: false,
+                    });
+                }
                 continue;
             }
             out.push((entry.txn, 0));
             cache.entries.insert(
                 entry.hash,
-                CacheEntry { last_dispatched_at: now, last_target: target_slot },
+                CacheEntry { last_dispatched_at: now, last_target: target_slot, dispatched: true },
             );
         }
         let len = out.len();
@@ -543,17 +561,23 @@ mod tests {
     #[test]
     fn failover_cannot_steal_first_dispatch() {
         // A Failover tick that lands before any Primary tick must NOT take the
-        // tx — first sighting is reserved for Primary. The tx stays uncached;
-        // Primary's subsequent tick then dispatches normally.
+        // tx — first sighting is reserved for Primary. PR #722 review point 3:
+        // a placeholder is seeded so the TTL clock starts; Primary's subsequent
+        // tick claims the placeholder and dispatches.
         let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 6)]));
         let m = mempool_with(txns, Duration::from_secs(60), Duration::from_millis(20), 1);
         assert!(
             read(&m, 0, BroadcastPeerPriority::Failover, 16).is_empty(),
             "Failover must not steal first-dispatch from Primary"
         );
-        // Cache must remain empty (no entry inserted for the held tx).
-        assert_eq!(m.txn_cache.lock().unwrap().entries.len(), 0);
-        // Primary then queries — dispatches as if it were the first call.
+        // A placeholder entry must exist (dispatched == false).
+        {
+            let cache = m.txn_cache.lock().unwrap();
+            assert_eq!(cache.entries.len(), 1);
+            let e = cache.entries.values().next().unwrap();
+            assert!(!e.dispatched, "Failover first-sighting must seed a placeholder");
+        }
+        // Primary then queries — claims the placeholder and dispatches.
         assert_eq!(read(&m, 0, BroadcastPeerPriority::Primary, 16).len(), 1);
     }
 
@@ -617,6 +641,55 @@ mod tests {
                 "bucket {k} should see exactly its own txn"
             );
         }
+    }
+
+    #[test]
+    fn failover_first_sighting_creates_placeholder_no_dispatch() {
+        // PR #722 review point 3: Failover first-sighting seeds a placeholder.
+        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 30)]));
+        let m = mempool_with(txns, Duration::from_secs(60), Duration::from_millis(20), 1);
+        assert!(read(&m, 0, BroadcastPeerPriority::Failover, 16).is_empty());
+        let cache = m.txn_cache.lock().unwrap();
+        assert_eq!(cache.entries.len(), 1);
+        let e = cache.entries.values().next().unwrap();
+        assert!(!e.dispatched, "placeholder must have dispatched == false");
+    }
+
+    #[test]
+    fn primary_claims_placeholder_within_grace() {
+        // PR #722 review point 3: within TTL grace, Primary claims the
+        // placeholder Failover left behind.
+        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 31)]));
+        let m = mempool_with(txns, Duration::from_secs(60), Duration::from_millis(20), 1);
+        assert!(read(&m, 0, BroadcastPeerPriority::Failover, 16).is_empty());
+        assert_eq!(read(&m, 0, BroadcastPeerPriority::Primary, 16).len(), 1);
+        let cache = m.txn_cache.lock().unwrap();
+        let e = cache.entries.values().next().unwrap();
+        assert!(e.dispatched, "placeholder must flip to dispatched after Primary claim");
+        assert_eq!(
+            e.last_target,
+            (0, priority_discriminant(&BroadcastPeerPriority::Primary)),
+            "last_target must reflect Primary's slot"
+        );
+    }
+
+    #[test]
+    fn failover_takes_over_after_grace() {
+        // PR #722 review point 3: after TTL grace elapses, Failover takes
+        // over without depending on priority.rs promotion.
+        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 32)]));
+        let m = mempool_with(txns, Duration::from_millis(10), Duration::from_millis(0), 1);
+        assert!(read(&m, 0, BroadcastPeerPriority::Failover, 16).is_empty());
+        std::thread::sleep(Duration::from_millis(20));
+        assert_eq!(read(&m, 0, BroadcastPeerPriority::Failover, 16).len(), 1);
+        let cache = m.txn_cache.lock().unwrap();
+        let e = cache.entries.values().next().unwrap();
+        assert!(e.dispatched, "entry must flip to dispatched after Failover takeover");
+        assert_eq!(
+            e.last_target,
+            (0, priority_discriminant(&BroadcastPeerPriority::Failover)),
+            "last_target must reflect Failover's slot"
+        );
     }
 
     #[test]
