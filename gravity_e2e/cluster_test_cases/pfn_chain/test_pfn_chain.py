@@ -94,7 +94,8 @@ class MultiAccountTxSender:
     node, one tx per loop iteration round-robin. Used by Phase 3 to spread
     senders across all 4 sender_buckets — the impl-d slot-flip path only
     triggers for buckets whose Primary is the blackhole peer, so we need at
-    least a few txs hitting each bucket to get the expected bimodal latency.
+    least a few txs hitting each bucket so the SLA assertion exercises a
+    mix of direct and slot-flip latencies in one run.
 
     Note: each account here uses its own nonce sequence, so we don't have to
     worry about head-of-line stalls from a single faucet's pending queue.
@@ -777,14 +778,13 @@ async def test_pfn_chain_topology(cluster: Cluster):
     # broadcaster is silenced, pfn3 RPC tx still commits within ~1 TTL via
     # the Failover slot.
     #
-    # We run two halves back-to-back, blackholing pfn1 then pfn2. pfn3 is
-    # never restarted, so its priority.rs RandomState stays fixed and picks
-    # the *same* Primary across both halves. Exactly one half must therefore
-    # have Primary == blackhole target → slot-flip latency (~TTL+commit);
-    # the other half has Primary == healthy peer → direct latency (~1-2s).
-    # The cross-half bimodal split makes slot-flip coverage *deterministic*
-    # rather than depending on which Primary the RandomState picked. See
-    # impl-d §9.2 for the design rationale.
+    # We run two halves back-to-back, blackholing pfn1 then pfn2, and assert
+    # per-half SLA: p99 ≤ 2 × TTL + commit slack regardless of whether
+    # priority.rs put us on the direct path or the slot-flip path. Branch
+    # coverage of the slot-flip code itself is handled by the unit tests
+    # `ttl_expired_alt_slot_dispatches` etc. in
+    # aptos-core/mempool/src/core_mempool/mempool.rs, so e2e does not try
+    # to infer it from latency shape. See impl-d §9.2 for design rationale.
     await _phase3_silent_blackhole(cluster)
 
     LOG.info("PFN fan-out test PASSED")
@@ -867,18 +867,20 @@ async def _run_blackhole_half(
 
 async def _phase3_silent_blackhole(cluster: Cluster):
     """
-    Phase 3: two-half deterministic bimodal verification of impl-d slot-flip.
+    Phase 3: two-half silent-blackhole SLA verification of impl-d.
 
-    Half A blackholes pfn1, Half B blackholes pfn2. pfn3 is never restarted,
-    so priority.rs picks the same Primary in both halves → exactly one half
-    has Primary == blackhole target and exercises slot-flip. The bimodal
-    p95 split across the two halves serves as a deterministic assertion
-    that slot-flip was exercised (no RandomState lottery, no coverage WARN).
+    Half A blackholes pfn1, Half B blackholes pfn2. Per half we assert that
+    every tx commits within `2 × TTL + slop` (~12s) regardless of which peer
+    priority.rs picked as Primary. The slot-flip code path itself is covered
+    deterministically by the unit tests in
+    aptos-core/mempool/src/core_mempool/mempool.rs
+    (`ttl_expired_alt_slot_dispatches` and friends), so e2e does not try to
+    infer slot-flip coverage from latency shape.
 
     See _local/drafts/pfn/mempool-broadcast-impl-d.md §9.2.
     """
     LOG.info("=" * 70)
-    LOG.info("[phase 3] silent black-hole (two-half deterministic bimodal)")
+    LOG.info("[phase 3] silent black-hole (two-half SLA verification)")
     LOG.info("=" * 70)
 
     pre = await _get_live_heights(cluster, set())
@@ -904,11 +906,20 @@ async def _phase3_silent_blackhole(cluster: Cluster):
         cluster, "pfn2", bench_accounts, PHASE3_LOAD_SECS, label="b",
     )
 
-    # Per-half correctness asserts. TTL=5s + commit ≈ 1-2s, well under
-    # TX_RECEIPT_TIMEOUT=30s, so zero timeouts/failed is a true invariant
-    # regardless of which peer ended up Primary.
+    # Per-half SLA asserts. The mempool broadcast cache TTL governs the
+    # worst-case slot-flip latency: when priority.rs picked the blackhole
+    # peer as Primary, the tx waits up to TTL for the cache entry to expire
+    # before impl-d reflips it to Failover, then commits in ~1s.
+    #
+    # SLA: any tx commits within 2 × TTL + commit slack regardless of whether
+    # priority.rs put us on the direct or the slot-flip path. Slot-flip path
+    # is `TTL=5s suppress + ~1s commit`; direct path is ~1-2s; ceiling 12s
+    # accommodates both with margin. Replaces the prior bimodal split
+    # assertion which depended on Primary-stability across halves
+    # (PR #722 review point 1).
+    MEMPOOL_TTL_SECONDS = 5.0   # MEMPOOL_BROADCAST_CACHE_TTL_SECS in mempool.rs
     EXPECTED_MIN_SENT = PHASE3_LOAD_SECS * 5
-    P99_CEILING = 0.8 * TX_RECEIPT_TIMEOUT
+    P99_CEILING = 2.0 * MEMPOOL_TTL_SECONDS + 2.0   # 12.0s
     for half in (half_a, half_b):
         tag = f"phase 3{half['label']}/{half['target']}"
         assert half["sent"] >= EXPECTED_MIN_SENT, (
@@ -921,46 +932,16 @@ async def _phase3_silent_blackhole(cluster: Cluster):
         )
         assert half["failed"] == 0, f"[{tag}] send failures: {half['failed']}"
         assert half["p99"] <= P99_CEILING, (
-            f"[{tag}] p99={half['p99']:.2f}s exceeds sanity ceiling "
-            f"{P99_CEILING:.1f}s"
+            f"[{tag}] p99={half['p99']:.2f}s exceeds SLA ceiling "
+            f"{P99_CEILING:.1f}s (= 2 × TTL + 2s slack)"
         )
 
-    # Deterministic bimodal assert. Exactly one half must hit slot-flip
-    # latency (Primary == blackhole target → all txs wait TTL=5s + commit
-    # ≈ 1s before being reflipped to Failover); the other half must hit
-    # direct latency (Primary == healthy peer → ~1-2s).
-    p95_a, p95_b = half_a["p95"], half_b["p95"]
-    fast_p95 = min(p95_a, p95_b)
-    slow_p95 = max(p95_a, p95_b)
-    gap = slow_p95 - fast_p95
-
-    FAST_P95_CEILING = 3.0    # direct delivery observed at 1-2s
-    SLOW_P95_FLOOR = 6.0      # slot-flip floor: TTL=5s + commit ~1s
-    BIMODAL_GAP_MIN = 4.0     # separation between the two modes
-
-    summary = (
-        f"halves: pfn1-blackhole p95={p95_a:.2f}s, "
-        f"pfn2-blackhole p95={p95_b:.2f}s → fast={fast_p95:.2f}s "
-        f"slow={slow_p95:.2f}s gap={gap:.2f}s"
+    LOG.info(
+        f"[phase 3] SLA PASSED: halves: pfn1-blackhole "
+        f"p95={half_a['p95']:.2f}s p99={half_a['p99']:.2f}s, "
+        f"pfn2-blackhole p95={half_b['p95']:.2f}s p99={half_b['p99']:.2f}s "
+        f"(ceiling {P99_CEILING:.1f}s)"
     )
-    LOG.info(f"[phase 3] bimodal check: {summary}")
-    assert fast_p95 <= FAST_P95_CEILING, (
-        f"[phase 3] both halves slow (fast p95 {fast_p95:.2f}s > "
-        f"{FAST_P95_CEILING}s): no half delivered txs at direct latency. "
-        f"priority.rs may be flip-flopping Primary within the 30s window, "
-        f"or both broadcasts stalled behind some other delay. {summary}"
-    )
-    assert slow_p95 >= SLOW_P95_FLOOR, (
-        f"[phase 3] both halves fast (slow p95 {slow_p95:.2f}s < "
-        f"{SLOW_P95_FLOOR}s): slot-flip path NOT exercised. impl-d may be "
-        f"short-circuiting the TTL wait, or pfn3 priority.rs picked a peer "
-        f"outside {{pfn1, pfn2}} as Primary. {summary}"
-    )
-    assert gap >= BIMODAL_GAP_MIN, (
-        f"[phase 3] insufficient bimodal separation (gap {gap:.2f}s < "
-        f"{BIMODAL_GAP_MIN}s): both halves landed in the middle. {summary}"
-    )
-    LOG.info("[phase 3] deterministic bimodal assert PASSED")
 
     # Final probe: cluster fully healthy again after both halves restored.
     _, _ = await _send_tx_via_pfn_and_assert_inclusion(cluster, "pfn3")
