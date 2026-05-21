@@ -266,6 +266,18 @@ class MockAnvil:
     # JSON-RPC handlers
     # ------------------------------------------------------------------
 
+    def set_finalized(self, block: int) -> int:
+        """Manually override the finalized block height.
+
+        Clamped to the highest block that has logs preloaded so we never
+        advertise blocks that don't exist. Returns the new finalized block.
+        """
+        max_block = max(self._logs.keys()) if self._logs else 0
+        clamped = min(max(0, block), max_block)
+        self.current_block = clamped
+        LOG.info(f"MockAnvil: finalized block set to {clamped} (requested {block}, max {max_block})")
+        return clamped
+
     def handle_request(self, body: dict) -> dict:
         """Route a JSON-RPC request to the appropriate handler."""
         method = body.get("method", "")
@@ -283,6 +295,12 @@ class MockAnvil:
                 result = str(self.chain_id)
             elif method == "eth_blockNumber":
                 result = _to_hex(self.current_block)
+            elif method == "mock_setFinalized":
+                # Custom RPC for staged event release in tests.
+                target = params[0] if params else 0
+                if isinstance(target, str):
+                    target = int(target, 16) if target.startswith("0x") else int(target)
+                result = self.set_finalized(int(target))
             else:
                 LOG.debug(f"MockAnvil: unsupported method '{method}', returning null")
                 result = None
