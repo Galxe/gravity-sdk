@@ -501,4 +501,10 @@ merlin = { git = "https://github.com/aptos-labs/merlin" }
 tonic = { git = "https://github.com/aptos-labs/tonic.git", rev = "0da1ba8b1751d6e19eb55be24cccf9ae933c666e" }
 darling = { git = "https://github.com/TedDriggs/darling.git", rev = "v0.20.10"}
 alloy-tx-macros = { git = "https://github.com/alloy-rs/alloy", tag = "v1.0.37" }
+# Galxe fork of linemux 0.3.0 with a fix for the sentinel busy-spin bug
+# (when `watched_files` goes empty upstream returns Ready(Ok(None)) without
+# re-registering the waker, and `MuxedLines::poll_next_line` converts that
+# into a `continue` via `unwrap_or_continue!`, producing a pure-user-space
+# 100% CPU spin). Upstream issue: https://github.com/jmagnuson/linemux/issues/57
+linemux = { git = "https://github.com/Galxe/linemux.git", rev = "0194e0222134c587dcd50039a1ff9c8a14fae550" }
 
