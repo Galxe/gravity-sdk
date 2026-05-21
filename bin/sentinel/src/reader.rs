@@ -17,7 +17,24 @@ impl Reader {
     }
 
     /// Returns next line with source path. Blocks until available.
+    ///
+    /// `Ok(None)` from the patched linemux fork signals that `watched_files`
+    /// went empty — a state the upstream crate would have busy-spun on (see
+    /// <https://github.com/jmagnuson/linemux/issues/57>). The periodic
+    /// `add_file()` re-attach in `spawn_log_monitor` should keep this from
+    /// ever happening; if it does, exit so systemd restarts us rather than
+    /// risk silently losing monitoring.
     pub async fn next_line(&mut self) -> Option<Line> {
-        self.lines.next_line().await.ok().flatten()
+        match self.lines.next_line().await {
+            Ok(Some(line)) => Some(line),
+            Ok(None) => {
+                eprintln!("FATAL: linemux exhausted (watched_files empty) — exiting for restart");
+                std::process::exit(2);
+            }
+            Err(e) => {
+                eprintln!("linemux error: {e:?}");
+                None
+            }
+        }
     }
 }

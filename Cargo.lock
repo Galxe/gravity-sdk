@@ -9924,8 +9924,7 @@ dependencies = [
 [[package]]
 name = "linemux"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "feb035c7806bd7982a317d8d66815021e91f7ab14a5fbedee22b06f608f11b43"
+source = "git+https://github.com/Galxe/linemux.git?rev=0194e0222134c587dcd50039a1ff9c8a14fae550#0194e0222134c587dcd50039a1ff9c8a14fae550"
 dependencies = [
  "futures-util",
  "notify 5.2.0",
