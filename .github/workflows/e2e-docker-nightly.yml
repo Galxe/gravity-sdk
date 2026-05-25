@@ -16,7 +16,6 @@ jobs:
     name: E2E Nightly - fuzzy_cluster
     runs-on: [self-hosted, linux]
     timeout-minutes: 120
-    environment: default
 
     steps:
     - name: Checkout

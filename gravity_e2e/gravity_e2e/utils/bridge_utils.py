@@ -602,6 +602,12 @@ async def poll_all_native_minted(
     )
 
     first_iter = True  # one-time extended diagnostics on first poll
+    # Incremental log scan state — used inside the loop to short-circuit as
+    # soon as all expected nonces are visible, regardless of whether
+    # isProcessed reverts (which it does for unprocessed nonces).
+    incr_scan_from = start_block
+    incr_found_nonces: set = set()
+    incr_events: list = []
 
     while time.time() - start_time < timeout:
         # Current gravity block height (for CI log correlation)
@@ -622,6 +628,47 @@ async def poll_all_native_minted(
                 f"{time.time() - start_time:.1f}s — scanning logs..."
             )
             break
+
+        # Incremental log scan — `isProcessed` reverts for unprocessed nonces
+        # (returning False via the catch), so it's unreliable as a short-
+        # circuit. Scan new blocks each iteration and break once every
+        # expected nonce has been observed.
+        if isinstance(cur_block, int) and cur_block >= incr_scan_from:
+            CHUNK = 5000
+            scan_to_total = cur_block
+            sf = incr_scan_from
+            try:
+                while sf <= scan_to_total:
+                    st = min(sf + CHUNK, scan_to_total)
+                    logs = gravity_w3.eth.get_logs({
+                        "address": Web3.to_checksum_address(receiver_address),
+                        "fromBlock": sf,
+                        "toBlock": st,
+                        "topics": [NATIVE_MINTED_TOPIC0],
+                    })
+                    for log_entry in logs:
+                        event = receiver.events.NativeMinted().process_log(log_entry)
+                        nonce_val = event.args.nonce
+                        if nonce_val in expected_nonces and nonce_val not in incr_found_nonces:
+                            incr_found_nonces.add(nonce_val)
+                            incr_events.append({
+                                "recipient": event.args.recipient,
+                                "amount": event.args.amount,
+                                "nonce": nonce_val,
+                                "block_number": log_entry["blockNumber"],
+                                "tx_hash": log_entry["transactionHash"].hex(),
+                            })
+                    sf = st + 1
+                incr_scan_from = scan_to_total + 1
+            except Exception as e:
+                LOG.warning(f"  incremental log scan error around {sf}-{cur_block}: {e}")
+
+            if expected_nonces.issubset(incr_found_nonces):
+                LOG.info(
+                    f"  All {max_nonce} NativeMinted events seen via log scan "
+                    f"after {time.time() - start_time:.1f}s — short-circuiting."
+                )
+                break
 
         # One-time diagnostic on first iteration
         if first_iter:
@@ -680,15 +727,16 @@ async def poll_all_native_minted(
 
     processing_time = time.time() - start_time
 
-    # Now scan all logs to collect event details
+    # Carry forward whatever the incremental scan already found, then top up
+    # with any blocks added between the last incremental sweep and now.
     current_block = gravity_w3.eth.block_number
-    all_events = []
-    found_nonces = set()
-    gravity_block_numbers = set()  # unique blocks for timestamp lookup
+    all_events = list(incr_events)
+    found_nonces = set(incr_found_nonces)
+    gravity_block_numbers = {e["block_number"] for e in all_events}
 
     # Scan in chunks to avoid huge responses
     CHUNK_SIZE = 5000
-    scan_from = start_block
+    scan_from = incr_scan_from
     while scan_from <= current_block:
         scan_to = min(scan_from + CHUNK_SIZE, current_block)
         try:

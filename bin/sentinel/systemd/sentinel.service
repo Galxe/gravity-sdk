@@ -1,0 +1,21 @@
+# /etc/systemd/system/sentinel.service
+# Template — replace User= / WorkingDirectory= / ExecStart= for your deployment.
+# `Restart=always` is what catches the exit(2) sentinel emits when linemux
+# returns Ok(None) (i.e. watched_files has gone empty); systemd restarts
+# the process and the discovery loop re-attaches inotify watches.
+[Unit]
+Description=Gravity sentinel (log monitor + health probes)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/gravity/sentinel-deploy/sentinel /home/gravity/sentinel-deploy/sentinel.toml
+Restart=always
+RestartSec=5
+User=gravity
+WorkingDirectory=/home/gravity/sentinel-deploy
+StandardOutput=append:/home/gravity/sentinel-deploy/sentinel.log
+StandardError=append:/home/gravity/sentinel-deploy/sentinel.log
+
+[Install]
+WantedBy=multi-user.target
