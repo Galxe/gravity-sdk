@@ -22,7 +22,7 @@ use tokio::{
     time::Instant,
 };
 
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use gaptos::api_types::{
     compute_res::{ComputeRes, TxnStatus},
@@ -316,11 +316,27 @@ impl BlockBufferManager {
         latest_commit_block_number: u64,
         block_number_to_block_id_with_epoch: HashMap<u64, (u64, BlockId)>,
         initial_epoch: u64,
-    ) {
+    ) -> anyhow::Result<()> {
         info!(
             "init block_buffer_manager with latest_commit_block_number: {:?} block_number_to_block_id count: {} initial_epoch: {}",
             latest_commit_block_number, block_number_to_block_id_with_epoch.len(), initial_epoch
         );
+        let commit_block = if block_number_to_block_id_with_epoch.is_empty() {
+            None
+        } else {
+            Some(
+                block_number_to_block_id_with_epoch
+                    .get(&latest_commit_block_number)
+                    .copied()
+                    .ok_or_else(|| {
+                        format_err!(
+                            "BlockBufferManager::init: latest_commit_block_number {} not found in block_number_to_block_id_with_epoch map",
+                            latest_commit_block_number
+                        )
+                    })?,
+            )
+        };
+
         let mut block_state_machine = self.block_state_machine.lock().await;
         // When init, the latest_finalized_block_number is the same as latest_commit_block_number
         block_state_machine.latest_commit_block_number = latest_commit_block_number;
@@ -332,16 +348,7 @@ impl BlockBufferManager {
             .collect();
         // Initialize current_epoch from the parameter
         block_state_machine.current_epoch = initial_epoch;
-        if !block_number_to_block_id_with_epoch.is_empty() {
-            let Some(&(commit_block_epoch, commit_block_id)) =
-                block_number_to_block_id_with_epoch.get(&latest_commit_block_number)
-            else {
-                error!(
-                        "BlockBufferManager::init: latest_commit_block_number {} not found in block_number_to_block_id_with_epoch map",
-                        latest_commit_block_number
-                    );
-                return;
-            };
+        if let Some((commit_block_epoch, commit_block_id)) = commit_block {
             block_state_machine.blocks.insert(
                 BlockKey::new(commit_block_epoch, latest_commit_block_number),
                 BlockState::Historical { id: commit_block_id },
@@ -352,6 +359,7 @@ impl BlockBufferManager {
         self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
         // Notify all waiters that buffer is ready
         self.ready_notifier.notify_waiters();
+        Ok(())
     }
 
     /// Update the current epoch. Called by EpochManager at start to set the correct epoch
@@ -1308,5 +1316,27 @@ impl BlockBufferManager {
             .retain(|key, _| key.block_number <= latest_epoch_change_block_number);
         self.buffer_state.store(BufferState::EpochChange as u8, Ordering::SeqCst);
         let _ = block_state_machine.sender.send(());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn init_returns_error_without_partial_state_when_commit_block_missing() {
+        let manager = BlockBufferManager::new(BlockBufferManagerConfig::default());
+        let mut block_number_to_block_id = HashMap::new();
+        block_number_to_block_id.insert(9, (1, BlockId([9; 32])));
+
+        let error = manager.init(10, block_number_to_block_id, 1).await.unwrap_err();
+
+        assert!(error.to_string().contains("latest_commit_block_number 10 not found"));
+        assert!(!manager.is_ready());
+        let block_state_machine = manager.block_state_machine.lock().await;
+        assert_eq!(block_state_machine.latest_commit_block_number, 0);
+        assert_eq!(block_state_machine.latest_finalized_block_number, 0);
+        assert!(block_state_machine.block_number_to_block_id.is_empty());
+        assert_eq!(block_state_machine.current_epoch, 0);
     }
 }

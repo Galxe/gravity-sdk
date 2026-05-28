@@ -347,7 +347,7 @@ pub fn process_validator_transactions_util(
     if let Some(validator_txns) = validator_txns {
         extra_data = validator_txns
             .iter()
-            .map(|txn| process_single_validator_transaction_util(txn, block))
+            .filter_map(|txn| process_single_validator_transaction_util(txn, block))
             .collect();
     }
 
@@ -358,7 +358,7 @@ pub fn process_validator_transactions_util(
 pub fn process_single_validator_transaction_util(
     txn: &ValidatorTransaction,
     block: &Block,
-) -> ExtraDataType {
+) -> Option<ExtraDataType> {
     match txn {
         ValidatorTransaction::DKGResult(transcript) => {
             let transcript = gaptos::api_types::on_chain_config::dkg::DKGTranscript {
@@ -368,17 +368,26 @@ pub fn process_single_validator_transaction_util(
                 },
                 transcript_bytes: transcript.transcript_bytes.clone(),
             };
-            ExtraDataType::DKG(bcs::to_bytes(&transcript).unwrap())
+            bcs::to_bytes(&transcript)
+                .map(ExtraDataType::DKG)
+                .map_err(|err| {
+                    warn!(
+                        "failed to serialize DKG validator transaction for block {}: {}",
+                        block.id(),
+                        err
+                    )
+                })
+                .ok()
         }
         ValidatorTransaction::ObservedJWKUpdate(jwks::QuorumCertifiedUpdate {
             update,
             multi_sig,
-        }) => ExtraDataType::JWK(process_jwk_update_util(&update, block)),
+        }) => process_jwk_update_util(&update, block).map(ExtraDataType::JWK),
     }
 }
 
 /// Public utility function to process JWK update
-pub fn process_jwk_update_util(update: &ProviderJWKs, block: &Block) -> Vec<u8> {
+pub fn process_jwk_update_util(update: &ProviderJWKs, block: &Block) -> Option<Vec<u8>> {
     use gaptos::api_types::on_chain_config::jwks::{JWKStruct, ProviderJWKs};
     // TODO(Gravity): Check the signature here instead of execution layer
     info!(
@@ -396,7 +405,14 @@ pub fn process_jwk_update_util(update: &ProviderJWKs, block: &Block) -> Vec<u8> 
             .jwks
             .iter()
             .filter_map(|jwk| {
-                let aptos_jwk = JWK::try_from(jwk).unwrap();
+                let aptos_jwk = match JWK::try_from(jwk) {
+                    Ok(jwk) => jwk,
+                    Err(err) => {
+                        warn!("failed to parse JWK update for block {}: {}", block.id(), err);
+                        return None;
+                    }
+                };
+
                 match aptos_jwk {
                     JWK::RSA(rsa_jwk) => {
                         error!(
@@ -417,7 +433,11 @@ pub fn process_jwk_update_util(update: &ProviderJWKs, block: &Block) -> Vec<u8> 
             .collect(),
     };
 
-    bcs::to_bytes(&gaptos_provider_jwk).unwrap()
+    bcs::to_bytes(&gaptos_provider_jwk)
+        .map_err(|err| {
+            warn!("failed to serialize provider JWK update for block {}: {}", block.id(), err)
+        })
+        .ok()
 }
 
 #[async_trait::async_trait]

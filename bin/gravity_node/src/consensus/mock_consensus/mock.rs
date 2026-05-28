@@ -56,7 +56,10 @@ impl MockConsensus {
         // Genesis block is at epoch 0
         block_number_to_block_id.insert(0u64, (0, genesis_block_id));
         // Initialize with epoch 1 to match the mock consensus epoch
-        get_block_buffer_manager().init(0, block_number_to_block_id, 1).await;
+        get_block_buffer_manager()
+            .init(0, block_number_to_block_id, 1)
+            .await
+            .expect("failed to initialize BlockBufferManager in mock consensus");
 
         Self {
             pool: Arc::new(tokio::sync::Mutex::new(Mempool::new(pool))),
