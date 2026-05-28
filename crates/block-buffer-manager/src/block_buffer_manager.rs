@@ -184,6 +184,9 @@ pub struct BlockStateMachine {
     /// Also serves as the source of truth for `is_suffix_block` and
     /// `get_epoch_change_block_info`, so the reth and consensus sides stay in sync.
     epoch_change_block_info: Option<EpochChangeCache>,
+    /// Set after `release_inflight_blocks` has advanced `current_epoch` and pruned suffix blocks.
+    /// This flag is consumed by the reth execution loop through `consume_epoch_change`.
+    epoch_change_ready: bool,
 }
 
 impl BlockStateMachine {
@@ -281,6 +284,7 @@ impl BlockBufferManager {
                 next_epoch: None,
                 latest_epoch_change_block_number: 0,
                 epoch_change_block_info: None,
+                epoch_change_ready: false,
             }),
             buffer_state: AtomicU8::new(BufferState::Uninitialized as u8),
             config,
@@ -411,10 +415,10 @@ impl BlockBufferManager {
     /// which blocks to retain (reset-to-0 means "drop everything leftover").
     /// Suffix-block lookups no longer depend on this field — they use
     /// `epoch_change_block_info` directly, which lives until `release_inflight_blocks`.
+    /// `epoch_change_ready` is set by `release_inflight_blocks` after the mutex-protected
+    /// epoch state has been advanced. Consumers must observe this flag while holding the same
+    /// mutex so the epoch and transition state have a clear happens-before relation.
     pub async fn consume_epoch_change(&self) -> (u64, u64) {
-        // Acquire lock first to prevent TOCTOU race.
-        // Other tasks checking is_epoch_change() will still see EpochChange
-        // until we have fully read the new epoch and are ready to proceed.
         let mut block_state_machine = self.block_state_machine.lock().await;
         let epoch_change_block_number = block_state_machine.latest_epoch_change_block_number;
 
@@ -431,6 +435,7 @@ impl BlockBufferManager {
         // get_epoch_change_block_info relies on it to identify suffix blocks and return dummy
         // execution results. It will be cleared in release_inflight_blocks. Only now signal
         // that the epoch change has been consumed.
+        block_state_machine.epoch_change_ready = false;
         self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
 
         // If epoch_change_block_number is 0, it means this is a redundant call
@@ -514,6 +519,13 @@ impl BlockBufferManager {
         );
         let mut block_state_machine = self.block_state_machine.lock().await;
         let current_epoch = block_state_machine.current_epoch;
+
+        if block_state_machine.epoch_change_ready {
+            return Err(anyhow::anyhow!(
+                "set_ordered_blocks: epoch change is waiting to be consumed at block {}",
+                block_state_machine.latest_epoch_change_block_number
+            ));
+        }
 
         // Check epoch validity with metrics for dropped blocks
         if block.block_meta.epoch < current_epoch {
@@ -613,10 +625,6 @@ impl BlockBufferManager {
             self.ready_notifier.notified().await;
         }
 
-        if self.is_epoch_change() {
-            return Err(anyhow::anyhow!("Buffer is in epoch change"));
-        }
-
         let start = Instant::now();
         info!(
             "call get_ordered_blocks start_num: {:?} max_size: {:?} expected_epoch: {:?}",
@@ -633,8 +641,12 @@ impl BlockBufferManager {
 
             let mut block_state_machine = self.block_state_machine.lock().await;
 
-            // Check if epoch has already advanced (e.g., release_inflight_blocks was called)
-            if self.is_epoch_change() {
+            // Check transition state while holding the same mutex as current_epoch. This avoids
+            // a TOCTOU race where the atomic transition flag changes between the external check
+            // and the block map read.
+            if block_state_machine.epoch_change_ready
+                || block_state_machine.current_epoch != expected_epoch
+            {
                 return Err(anyhow::anyhow!("Buffer is in epoch change"));
             }
 
@@ -1314,6 +1326,7 @@ impl BlockBufferManager {
         block_state_machine
             .profile
             .retain(|key, _| key.block_number <= latest_epoch_change_block_number);
+        block_state_machine.epoch_change_ready = true;
         self.buffer_state.store(BufferState::EpochChange as u8, Ordering::SeqCst);
         let _ = block_state_machine.sender.send(());
     }
