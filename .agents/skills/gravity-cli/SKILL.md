@@ -1,6 +1,6 @@
 ---
 name: gravity-cli
-description: Use when the user asks about `gravity_cli` command usage, validator/stake lifecycle commands, epoch or validator-set checks, DKG status, node start/stop wrappers, or wants safe command examples for Gravity private-mainnet operations.
+description: Use when the user asks about `gravity_cli` command usage, validator/stake lifecycle commands, epoch or validator-set checks, DKG status, node start/stop wrappers, or wants safe command examples for Gravity operations on internal or restricted networks.
 ---
 
 # Gravity CLI
@@ -14,7 +14,19 @@ Use this skill when helping operate or explain `bin/gravity_cli` / `target/*/gra
 - Do not start/stop/deploy clusters unless the user explicitly asks.
 - Do not put plaintext private keys in command lines or env vars. Current CLI signing flow intentionally uses stdin prompt by default, or `--kms`.
 - Prefer `--output json` for scripts and `plain` for operator-facing status.
-- When querying private-mainnet RPC from a restricted local environment, be ready to run with network approval or query from an internal host.
+- When querying RPC from a restricted local environment, be ready to run with network approval or query from an internal host.
+
+## Quick Decision
+
+| Intent | Command flow |
+| --- | --- |
+| Onboard a new validator | `genesis generate-key` -> `stake create` -> `validator join` |
+| Check daily node health | `doctor` -> `status` -> inspect node logs |
+| Exit validator set | `validator leave` -> wait one epoch -> `validator list` |
+| Observe chain state | `status` / `epoch status` / `validator list` |
+| Inspect stake pools | `stake get` |
+| Check DKG service | `dkg status` / `dkg randomness` |
+| Emergency DB rollback | `unwind` (destructive; explicit user request required) |
 
 ## Binary
 
@@ -30,6 +42,8 @@ Build quick-release:
 ```bash
 RUSTFLAGS="--cfg tokio_unstable" cargo build --profile quick-release -p gravity_cli
 ```
+
+`RUSTFLAGS="--cfg tokio_unstable"` is required for this repo build.
 
 The top-level command is named `gravity-cli` in clap metadata, but repo operators often invoke the built binary as `gravity_cli`.
 
@@ -145,35 +159,36 @@ There is no `--private-key` flag in the current signer implementation. For non-i
 ## Command Tree
 
 ```text
-genesis generate-key
-genesis generate-waypoint
-genesis generate-account
+Read-only:
+  status
+  epoch status
+  validator list
+  stake get
+  dkg status
+  dkg randomness
+  doctor
 
-stake create
-stake get
+Write-chain (signs a tx):
+  stake create
+  validator join
+  validator leave
 
-validator join
-validator leave
-validator list
+Local destructive / process control:
+  node start
+  node stop
+  unwind
 
-epoch status
-status
-dkg status
-dkg randomness
-
-node start
-node stop
-
-doctor
-init
-completions
-unwind
+Setup / utility:
+  init
+  genesis generate-key
+  genesis generate-waypoint
+  genesis generate-account
+  completions
 ```
 
 Availability notes:
 
 - `doctor` is wired in current source (`command.rs` / `main.rs`). If `gravity_cli --help` does not show `doctor`, the binary is stale; rebuild `gravity_cli`.
-- `bin/gravity_cli/src/qs_db.rs` contains a `find-batches` implementation draft, but it is not wired into the current top-level clap command in `command.rs/main.rs`. Current `gravity_cli --help` does not expose `qs-db`, and `gravity_cli qs-db --help` fails with `unrecognized subcommand`.
 
 ## Genesis Commands
 
