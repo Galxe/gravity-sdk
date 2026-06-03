@@ -51,7 +51,14 @@ async def _send_setcode_tx(
     gas: int,
     chain_id: int,
 ):
-    """Build, sign and broadcast a SetCode tx. Returns tx_hash hex string."""
+    """Build, sign and broadcast a SetCode tx. Returns tx_hash hex string.
+
+    Inner CALL targets `sender` (EOA self-call, no-op) so the tx exercises
+    only the designator-install path. Targeting `authority` here would
+    invoke the freshly-installed delegate's fallback — Delegate.sol /
+    Counter.sol don't define one, and the revert would mask designator
+    installation behind a tx-level failure.
+    """
     auth_nonce = node.w3.eth.get_transaction_count(authority.address)
     auth = sign_authorization(
         authority, chain_id=chain_id, delegate=delegate_addr, nonce=auth_nonce
@@ -65,7 +72,7 @@ async def _send_setcode_tx(
         sender,
         chain_id=chain_id,
         nonce=sender_nonce,
-        to=authority.address,
+        to=sender.address,
         authorization_list=[auth],
         gas=gas,
         max_fee_per_gas=fee,

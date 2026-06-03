@@ -1,11 +1,18 @@
 """EIP-2935 (HISTORY_STORAGE) e2e acceptance.
 
+Gravity-specific semantics: the system contract returns the queried block's
+Aptos consensus `block_id`, NOT its EVM `block_hash`. The pipe layer
+hijacks the `parent_hash` header field with `ordered_block.parent_id`
+before the SystemCaller pre-execution SSTORE, so the value landing in
+the HISTORY slot is the parent's block_id. The same id is also exposed
+on the RPC side as the next block's `parentBeaconBlockRoot`.
+
 Verifies post-Prague behavior observable via contract execution:
-  P-A1  direct eth_call to HISTORY_STORAGE returns parent block hash
-  P-A2  multi-block lookups return correct hashes
+  P-A1  direct eth_call to HISTORY_STORAGE returns the queried block's block_id
+  P-A2  multi-block lookups return correct block_ids
   P-A3  Solidity contract using staticcall to HISTORY_STORAGE works on-chain
   P-A4  eth_call with n >= block.number reverts
-  P-A5  parent-hash chain remains queryable after an epoch crossing
+  P-A5  block_id chain remains queryable after an epoch crossing
 """
 
 import asyncio
@@ -53,41 +60,48 @@ def _system_contract_call(node, n: int, *, block_identifier="latest") -> bytes:
     )
 
 
+def _block_id(node, n: int) -> bytes:
+    """block n 的 Aptos block_id, retrieved as block (n+1)'s parentBeaconBlockRoot."""
+    return bytes(node.w3.eth.get_block(n + 1)["parentBeaconBlockRoot"])
+
+
 @pytest.mark.asyncio
 async def test_p_a1_parent_hash_via_eth_call(cluster: Cluster):
-    """P-A1: eth_call(HISTORY_STORAGE, abi(N-1)) @ latest == block(N-1).hash."""
+    """P-A1: eth_call(HISTORY_STORAGE, abi(N-1)) @ latest == block(N-1).block_id."""
     assert await cluster.set_full_live(timeout=60), "cluster failed to become live"
     node = cluster.get_node("node1")
 
-    # Need at least block 2 so N-1 is a populated post-Prague block.
+    # Need at least block 2 so N-1 is a populated post-Prague block, and so
+    # block N exists (we read N's parentBeaconBlockRoot to derive (N-1).block_id).
     height = await _wait_for_block(node, 2)
     n = height - 1  # query parent of latest
 
     raw = _system_contract_call(node, n)
-    expected = bytes(node.w3.eth.get_block(n)["hash"])
+    expected = _block_id(node, n)
     LOG.info(f"P-A1 height={height} queried n={n} got={raw.hex()[:16]}… expected={expected.hex()[:16]}…")
-    assert raw == expected, f"history slot mismatch: {raw.hex()} != {expected.hex()}"
+    assert raw == expected, f"block_id mismatch: {raw.hex()} != {expected.hex()}"
 
 
 @pytest.mark.asyncio
 async def test_p_a2_multi_block_history(cluster: Cluster):
-    """P-A2: eight consecutive lookups all return correct hashes."""
+    """P-A2: eight consecutive lookups all return correct block_ids."""
     node = cluster.get_node("node1")
 
-    # Need height ≥ 10 so we can query [N-8, N-1] and they're all post-Prague blocks.
+    # Need height ≥ 10 so we can query [N-8, N-1] and block N exists for
+    # the last lookup's derivation.
     height = await _wait_for_block(node, 10)
 
     for i in range(height - 8, height):
         raw = _system_contract_call(node, i)
-        expected = bytes(node.w3.eth.get_block(i)["hash"])
-        assert raw == expected, f"slot for n={i} mismatch: {raw.hex()} != {expected.hex()}"
+        expected = _block_id(node, i)
+        assert raw == expected, f"block_id for n={i} mismatch: {raw.hex()} != {expected.hex()}"
 
-    LOG.info(f"P-A2 verified 8 consecutive block hashes [{height-8}, {height-1}]")
+    LOG.info(f"P-A2 verified 8 consecutive block_ids [{height-8}, {height-1}]")
 
 
 @pytest.mark.asyncio
 async def test_p_a3_solidity_history_reader(cluster: Cluster):
-    """P-A3: HistoryReader.sol staticcalls HISTORY_STORAGE and returns the block hash.
+    """P-A3: HistoryReader.sol staticcalls HISTORY_STORAGE and returns the block_id.
 
     Proves Solidity contracts can use the EIP-2935 system contract as designed —
     the user-facing capability EIP-2935 unlocks for app developers.
@@ -111,7 +125,7 @@ async def test_p_a3_solidity_history_reader(cluster: Cluster):
     n = height - 5
 
     via_solidity = bytes(contract.functions.getHash(n).call())
-    via_rpc = bytes(node.w3.eth.get_block(n)["hash"])
+    via_rpc = _block_id(node, n)
     assert via_solidity == via_rpc, f"Solidity got {via_solidity.hex()}, RPC got {via_rpc.hex()}"
 
 
@@ -149,5 +163,5 @@ async def test_p_a5_history_after_epoch_crossing(cluster: Cluster):
 
     n = height - 1
     raw = _system_contract_call(node, n)
-    expected = bytes(node.w3.eth.get_block(n)["hash"])
-    assert raw == expected, f"post-epoch history mismatch: {raw.hex()} != {expected.hex()}"
+    expected = _block_id(node, n)
+    assert raw == expected, f"post-epoch block_id mismatch: {raw.hex()} != {expected.hex()}"

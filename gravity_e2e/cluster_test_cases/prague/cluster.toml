@@ -14,7 +14,7 @@ id = "node1"
 role = "genesis"
 source = { project_path = "../" }
 host = "127.0.0.1"
-p2p_port = 6184
+validator_port = 6184
 vfn_port = 6194
 rpc_port = 8547
 metrics_port = 9005
