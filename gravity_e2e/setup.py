@@ -7,7 +7,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         "web3>=6.0.0",
-        "eth-account>=0.8.0",
+        "eth-account>=0.13.6",
         "aiohttp>=3.8.0",
         "pyyaml>=6.0",
         "pytest>=7.0.0",

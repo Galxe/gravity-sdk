@@ -1,0 +1,27 @@
+# Gravity Cluster Configuration - Prague Hardfork (EIP-2935 + EIP-7702) Suite
+# Single-node devnet with Prague activated on block 1.
+
+[cluster]
+name = "gravity-devnet-prague"
+base_dir = "/tmp/gravity-cluster-prague"
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+p2p_port = 6184
+vfn_port = 6194
+rpc_port = 8547
+metrics_port = 9005
+inspection_port = 10004
+https_port = 1026
+authrpc_port = 8555
+reth_p2p_port = 12028
+
+[faucet_init]
+num_accounts = 10000

@@ -1,0 +1,18 @@
+{
+  "abi": [
+    {
+      "inputs": [],
+      "name": "getValue",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "pure",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x6080604052348015600e575f80fd5b50607480601a5f395ff3fe6080604052348015600e575f80fd5b50600436106026575f3560e01c80632096525514602a575b5f80fd5b602a60405190815260200160405180910390f3fea264697066735822122053a48b1376bf2a9c158a11c841119716b9207bc08b1a0f235825115f9a5bd18964736f6c63430008150033"
+}
