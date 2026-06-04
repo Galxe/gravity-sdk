@@ -249,6 +249,7 @@ impl PipelinedBlock {
     }
 
     pub fn set_randomness(&self, randomness: Randomness) {
+        let mut should_notify_pipeline = true;
         if self.randomness.set(randomness.clone()).is_err() {
             if let Some(existing) = self.randomness.get() {
                 if *existing != randomness {
@@ -258,7 +259,14 @@ impl PipelinedBlock {
                         existing,
                         randomness,
                     );
+                    should_notify_pipeline = false;
                 }
+            }
+        }
+
+        if should_notify_pipeline {
+            if let Some(tx) = self.pipeline_tx() {
+                let _ = tx.lock().rand_tx.take().map(|tx| tx.send(self.randomness().cloned()));
             }
         }
     }

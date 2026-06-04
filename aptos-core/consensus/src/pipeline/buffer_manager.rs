@@ -374,7 +374,17 @@ impl BufferManager {
             *cached_round > highest_committed_round && *cached_round < max_cached_round
         });
 
-        if round <= highest_committed_round || round >= max_cached_round {
+        if round <= highest_committed_round {
+            debug!(
+                round = round,
+                highest_committed_round = highest_committed_round,
+                block_id = commit_info.id(),
+                "Received a commit vote for an already committed round, acked.",
+            );
+            return true;
+        }
+
+        if round >= max_cached_round {
             debug!(
                 round = round,
                 highest_committed_round = highest_committed_round,
