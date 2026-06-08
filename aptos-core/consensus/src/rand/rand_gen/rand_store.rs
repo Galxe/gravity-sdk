@@ -223,9 +223,9 @@ impl<S: TShare> RandStore<S> {
     }
 
     pub fn reset_to_round(&mut self, target_round: Round) {
-        self.rand_map.retain(|round, _| *round <= target_round);
+        self.rand_map.retain(|round, _| *round < target_round);
         if let Some(fast_rand_map) = self.fast_rand_map.as_mut() {
-            fast_rand_map.retain(|round, _| *round <= target_round);
+            fast_rand_map.retain(|round, _| *round < target_round);
         }
         self.update_highest_known_round(target_round);
     }
@@ -543,6 +543,42 @@ mod tests {
         assert!(rand_store.get_all_shares_authors(metadata.round()).is_none());
 
         rand_store.reset_to_round(1);
+        rand_store.add_rand_metadata(metadata.clone());
+        assert!(rand_store
+            .get_all_shares_authors(metadata.round())
+            .is_some_and(|authors| authors.is_empty()));
+
+        for share in
+            ctxt.authors[0..5].iter().map(|author| create_share(metadata.metadata.clone(), *author))
+        {
+            rand_store.add_share(share, PathType::Slow).unwrap();
+        }
+        assert!(decision_rx.next().await.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_rand_store_reset_to_same_round_allows_reaggregation() {
+        let ctxt = TestContext::new(vec![100; 7], 0);
+        let (decision_tx, mut decision_rx) = unbounded();
+        let mut rand_store = RandStore::new(
+            ctxt.target_epoch,
+            ctxt.authors[0],
+            ctxt.rand_config.clone(),
+            None,
+            decision_tx,
+        );
+        let metadata = FullRandMetadata::new(ctxt.target_epoch, 2, HashValue::zero(), 1700000000);
+
+        for share in
+            ctxt.authors[0..5].iter().map(|author| create_share(metadata.metadata.clone(), *author))
+        {
+            rand_store.add_share(share, PathType::Slow).unwrap();
+        }
+        rand_store.add_rand_metadata(metadata.clone());
+        assert!(decision_rx.next().await.is_some());
+        assert!(rand_store.get_all_shares_authors(metadata.round()).is_none());
+
+        rand_store.reset_to_round(metadata.round());
         rand_store.add_rand_metadata(metadata.clone());
         assert!(rand_store
             .get_all_shares_authors(metadata.round())
