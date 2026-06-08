@@ -446,3 +446,72 @@ pub struct ExecutionSummary {
     pub execution_time: Duration,
     pub root_hash: HashValue,
 }
+
+#[cfg(test)]
+mod set_randomness_tests {
+    use super::*;
+    use gaptos::aptos_types::randomness::RandMetadata;
+    use tokio::sync::broadcast;
+
+    fn rand(epoch: u64, round: u64, byte: u8) -> Randomness {
+        Randomness::new(RandMetadata { epoch, round }, vec![byte; 32])
+    }
+
+    // A PipelineInputTx whose rand_tx is the given oneshot sender; the other channels are
+    // dummies that satisfy the struct but are never observed by set_randomness.
+    fn pipeline_tx_with(rand_tx: oneshot::Sender<Option<Randomness>>) -> PipelineInputTx {
+        let (order_proof_tx, _order_proof_rx) = broadcast::channel(1);
+        let (commit_proof_tx, _commit_proof_rx) = broadcast::channel(1);
+        PipelineInputTx {
+            rand_tx: Some(rand_tx),
+            order_vote_tx: None,
+            order_proof_tx,
+            commit_proof_tx,
+        }
+    }
+
+    #[test]
+    fn first_set_notifies_pipeline() {
+        let mut block = PipelinedBlock::new_ordered(Block::make_genesis_block());
+        let (tx, mut rx) = oneshot::channel();
+        block.set_pipeline_tx(pipeline_tx_with(tx));
+
+        let r = rand(1, 5, 1);
+        block.set_randomness(r.clone());
+
+        assert_eq!(
+            rx.try_recv(),
+            Ok(Some(r)),
+            "first set_randomness must notify the pipeline with the stored value",
+        );
+    }
+
+    #[test]
+    fn conflicting_set_does_not_notify_but_same_value_does() {
+        let mut block = PipelinedBlock::new_ordered(Block::make_genesis_block());
+        let r1 = rand(1, 5, 1);
+        let r2 = rand(1, 5, 2); // same round, different bytes -> r1 != r2
+
+        // First set fixes the OnceCell to r1 and consumes the original rand_tx.
+        let (tx1, mut rx1) = oneshot::channel();
+        block.set_pipeline_tx(pipeline_tx_with(tx1));
+        block.set_randomness(r1.clone());
+        assert_eq!(rx1.try_recv(), Ok(Some(r1.clone())));
+
+        // Install a fresh rand_tx, then set a *different* randomness: must NOT notify, and the
+        // stored value must remain r1 (conflict is rejected, only warned).
+        let (tx2, mut rx2) = oneshot::channel();
+        block.set_pipeline_tx(pipeline_tx_with(tx2));
+        block.set_randomness(r2);
+        assert!(
+            matches!(rx2.try_recv(), Err(oneshot::error::TryRecvError::Empty)),
+            "a conflicting randomness must not be propagated to the pipeline",
+        );
+        assert_eq!(block.randomness(), Some(&r1), "conflicting set must not overwrite");
+
+        // Setting the *same* randomness again is a benign no-op on the value and still notifies
+        // via the fresh tx (it was never taken).
+        block.set_randomness(r1.clone());
+        assert_eq!(rx2.try_recv(), Ok(Some(r1)));
+    }
+}

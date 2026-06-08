@@ -175,6 +175,36 @@ pub struct BufferManager {
     pending_commit_proofs: BTreeMap<Round, LedgerInfoWithSignatures>,
 }
 
+/// How an incoming commit vote's round relates to the local commit-vote cache window.
+///
+/// Mirrors Aptos' pending commit-vote window semantics. Extracted as a pure function so the
+/// ack/nack/cache decision can be unit-tested without constructing a full `BufferManager`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CommitVoteRoundClass {
+    /// `round <= highest_committed_round`: the round is already committed. Ack the vote
+    /// (return `true`) without caching, so the sender doesn't think we still lack state.
+    AlreadyCommitted,
+    /// `round >= max_cached_round`: the round is beyond the pending window. Ignore the vote
+    /// (return `false`) to bound the cache and reject premature messages.
+    OutsideWindow,
+    /// `highest_committed_round < round < max_cached_round`: cache the vote and ack.
+    InWindow,
+}
+
+fn classify_commit_vote_round(
+    round: Round,
+    highest_committed_round: Round,
+    max_cached_round: Round,
+) -> CommitVoteRoundClass {
+    if round <= highest_committed_round {
+        CommitVoteRoundClass::AlreadyCommitted
+    } else if round >= max_cached_round {
+        CommitVoteRoundClass::OutsideWindow
+    } else {
+        CommitVoteRoundClass::InWindow
+    }
+}
+
 impl BufferManager {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -374,25 +404,27 @@ impl BufferManager {
             *cached_round > highest_committed_round && *cached_round < max_cached_round
         });
 
-        if round <= highest_committed_round {
-            debug!(
-                round = round,
-                highest_committed_round = highest_committed_round,
-                block_id = commit_info.id(),
-                "Received a commit vote for an already committed round, acked.",
-            );
-            return true;
-        }
-
-        if round >= max_cached_round {
-            debug!(
-                round = round,
-                highest_committed_round = highest_committed_round,
-                max_cached_round = max_cached_round,
-                block_id = commit_info.id(),
-                "Received a commit vote outside the pending round window, ignored.",
-            );
-            return false;
+        match classify_commit_vote_round(round, highest_committed_round, max_cached_round) {
+            CommitVoteRoundClass::AlreadyCommitted => {
+                debug!(
+                    round = round,
+                    highest_committed_round = highest_committed_round,
+                    block_id = commit_info.id(),
+                    "Received a commit vote for an already committed round, acked.",
+                );
+                return true;
+            }
+            CommitVoteRoundClass::OutsideWindow => {
+                debug!(
+                    round = round,
+                    highest_committed_round = highest_committed_round,
+                    max_cached_round = max_cached_round,
+                    block_id = commit_info.id(),
+                    "Received a commit vote outside the pending round window, ignored.",
+                );
+                return false;
+            }
+            CommitVoteRoundClass::InWindow => {}
         }
 
         self.commit_vote_cache
@@ -1144,5 +1176,69 @@ fn reply_nack(protocol: ProtocolId, response_sender: oneshot::Sender<Result<Byte
     let response = ConsensusMsg::CommitMessage(Box::new(CommitMessage::Nack));
     if let Ok(bytes) = protocol.to_bytes(&response) {
         let _ = response_sender.send(Ok(bytes.into()));
+    }
+}
+
+#[cfg(test)]
+mod commit_vote_round_class_tests {
+    use super::{classify_commit_vote_round, CommitVoteRoundClass};
+
+    // highest_committed_round = 10, window = 5  ->  max_cached_round = 15.
+    const HCR: u64 = 10;
+    const MAX_CACHED: u64 = 15;
+
+    #[test]
+    fn already_committed_rounds_are_acked() {
+        // Strictly below and exactly at the committed round both count as already committed.
+        assert_eq!(
+            classify_commit_vote_round(0, HCR, MAX_CACHED),
+            CommitVoteRoundClass::AlreadyCommitted
+        );
+        assert_eq!(
+            classify_commit_vote_round(HCR - 1, HCR, MAX_CACHED),
+            CommitVoteRoundClass::AlreadyCommitted
+        );
+        assert_eq!(
+            classify_commit_vote_round(HCR, HCR, MAX_CACHED),
+            CommitVoteRoundClass::AlreadyCommitted,
+            "a vote at exactly highest_committed_round must be acked, not ignored",
+        );
+    }
+
+    #[test]
+    fn in_window_rounds_are_cached() {
+        // Open interval (HCR, MAX_CACHED).
+        assert_eq!(
+            classify_commit_vote_round(HCR + 1, HCR, MAX_CACHED),
+            CommitVoteRoundClass::InWindow
+        );
+        assert_eq!(
+            classify_commit_vote_round(MAX_CACHED - 1, HCR, MAX_CACHED),
+            CommitVoteRoundClass::InWindow
+        );
+    }
+
+    #[test]
+    fn out_of_window_rounds_are_ignored() {
+        // The upper bound is exclusive: a vote exactly at max_cached_round is out of window.
+        assert_eq!(
+            classify_commit_vote_round(MAX_CACHED, HCR, MAX_CACHED),
+            CommitVoteRoundClass::OutsideWindow,
+            "max_cached_round itself is outside the pending window",
+        );
+        assert_eq!(
+            classify_commit_vote_round(MAX_CACHED + 100, HCR, MAX_CACHED),
+            CommitVoteRoundClass::OutsideWindow
+        );
+    }
+
+    #[test]
+    fn already_committed_takes_precedence_over_window() {
+        // Degenerate window (max_cached_round <= highest_committed_round): the already-committed
+        // check must win so a committed-round vote is still acked rather than ignored.
+        assert_eq!(
+            classify_commit_vote_round(HCR, HCR, HCR),
+            CommitVoteRoundClass::AlreadyCommitted
+        );
     }
 }
