@@ -53,7 +53,7 @@ main() {
     # So overhead is approx 1.1 * 0.0021 * num_accounts ~= 0.00231 * num_accounts.
     # We'll use python for big int math.
     
-    fauce_eth_balance=$(python3 -c "
+    faucet_eth_balance=$(python3 -c "
 num = $num_accounts
 per_acc = int('$eth_balance_per_acc')
 # Buffer: 0.01 ETH (10^16) per account for gas
@@ -145,7 +145,9 @@ chain_id = $chain_id
 private_key = "$private_key"
 faucet_level = 10
 wait_duration_secs = 1
-fauce_eth_balance = "$fauce_eth_balance"
+faucet_eth_balance = "$faucet_eth_balance"
+# Keep the historical typo for compatibility with older gravity_bench builds.
+fauce_eth_balance = "$faucet_eth_balance"
 
 [accounts]
 num_accounts = $num_accounts
