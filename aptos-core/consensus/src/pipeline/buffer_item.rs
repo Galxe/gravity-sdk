@@ -23,6 +23,40 @@ use gaptos::{
 use itertools::zip_eq;
 use tokio::time::Instant;
 
+fn log_execution_state_for_mismatch(
+    label: &str,
+    executed_blocks: &[PipelinedBlock],
+    local: &BlockInfo,
+    incoming: &BlockInfo,
+) {
+    error!(
+        label = label,
+        local_commit_info = %local,
+        incoming_commit_info = %incoming,
+        num_executed_blocks = executed_blocks.len(),
+        "commit_info mismatch detected before panic; dumping SDK StateComputeResult summary",
+    );
+
+    for block in executed_blocks {
+        let result = block.compute_result();
+        let txn_status = result.txn_status();
+        error!(
+            label = label,
+            block_id = %block.id(),
+            parent_id = %block.parent_id(),
+            epoch = block.epoch(),
+            round = block.round(),
+            block_number = ?block.block().block_number(),
+            executed_state_id = ?result.root_hash(),
+            has_reconfiguration = result.has_reconfiguration(),
+            next_epoch = result.epoch_state().as_ref().map(|e| e.epoch),
+            txn_status_len = txn_status.as_ref().as_ref().map(|statuses| statuses.len()),
+            event_count = result.execution_output.events.len(),
+            "commit_info mismatch executed block state",
+        );
+    }
+}
+
 fn generate_commit_ledger_info(
     commit_info: &BlockInfo,
     ordered_proof: &LedgerInfoWithSignatures,
@@ -250,6 +284,14 @@ impl BufferItem {
                 if let Some(commit_proof) = commit_proof {
                     // We have already received the commit proof in fast forward sync path,
                     // we can just use that proof and proceed to aggregated
+                    if *commit_proof.commit_info() != commit_info {
+                        log_execution_state_for_mismatch(
+                            "ordered_to_aggregated",
+                            &executed_blocks,
+                            &commit_info,
+                            commit_proof.commit_info(),
+                        );
+                    }
                     assert_eq!(commit_proof.commit_info().clone(), commit_info);
                     debug!("{} advance to aggregated from ordered", commit_proof.commit_info());
                     Self::Aggregated(Box::new(AggregatedItem {
@@ -350,6 +392,14 @@ impl BufferItem {
                     partial_commit_proof: local_commit_proof,
                     ..
                 } = *signed_item;
+                if local_commit_proof.commit_info() != commit_proof.commit_info() {
+                    log_execution_state_for_mismatch(
+                        "signed_to_aggregated",
+                        &executed_blocks,
+                        local_commit_proof.commit_info(),
+                        commit_proof.commit_info(),
+                    );
+                }
                 assert_eq!(local_commit_proof.commit_info(), commit_proof.commit_info(),);
                 debug!("{} advance to aggregated with commit decision", commit_proof.commit_info());
                 Self::Aggregated(Box::new(AggregatedItem {
@@ -360,6 +410,14 @@ impl BufferItem {
             }
             Self::Executed(executed_item) => {
                 let ExecutedItem { executed_blocks, callback, commit_info, .. } = *executed_item;
+                if commit_info != *commit_proof.commit_info() {
+                    log_execution_state_for_mismatch(
+                        "executed_to_aggregated",
+                        &executed_blocks,
+                        &commit_info,
+                        commit_proof.commit_info(),
+                    );
+                }
                 assert_eq!(commit_info, *commit_proof.commit_info());
                 debug!("{} advance to aggregated with commit decision", commit_proof.commit_info());
                 let block = executed_blocks.last().unwrap();
