@@ -6,6 +6,7 @@ Verifies post-Prague behavior observable via contract execution:
   P-B3  revocation (target = 0x0) reverts the authority to plain-EOA behavior
   P-B4  pipe-exec filter discards low-intrinsic-gas SetCode tx
   P-B5  filter admits sufficiently-gassed SetCode tx
+  P-B6  self-sponsored self-delegation (tx.from == authority) does not halt the chain
 """
 
 import asyncio
@@ -50,21 +51,36 @@ async def _send_setcode_tx(
     *,
     gas: int,
     chain_id: int,
+    to_override: str | None = None,
 ):
     """Build, sign and broadcast a SetCode tx. Returns tx_hash hex string.
 
-    Inner CALL targets `sender` (EOA self-call, no-op) so the tx exercises
-    only the designator-install path. Targeting `authority` here would
-    invoke the freshly-installed delegate's fallback — Delegate.sol /
+    Inner CALL targets `sender` by default (EOA self-call, no-op) so the tx
+    exercises only the designator-install path. Targeting `authority` here
+    would invoke the freshly-installed delegate's fallback — Delegate.sol /
     Counter.sol don't define one, and the revert would mask designator
     installation behind a tx-level failure.
+
+    When `sender == authority` (self-sponsored self-delegation), two things
+    differ:
+      - the auth tuple's nonce must be `sender_nonce + 1` because the tx
+        bumps the sender's nonce before the authorization list is processed;
+      - the default `to = sender.address` self-call would invoke the
+        freshly-installed delegate code on the sender itself, hitting the
+        missing fallback. Callers must pass `to_override` to a no-code
+        address (any fresh EOA works) to keep the inner call as a no-op.
+    P-B6 exercises this shape — pre-fix it panicked grevm and halted the
+    chain at testnet block 1400868.
     """
-    auth_nonce = node.w3.eth.get_transaction_count(authority.address)
+    sender_nonce = node.w3.eth.get_transaction_count(sender.address)
+    if sender.address.lower() == authority.address.lower():
+        auth_nonce = sender_nonce + 1
+    else:
+        auth_nonce = node.w3.eth.get_transaction_count(authority.address)
     auth = sign_authorization(
         authority, chain_id=chain_id, delegate=delegate_addr, nonce=auth_nonce
     )
 
-    sender_nonce = node.w3.eth.get_transaction_count(sender.address)
     # Use a healthy fee — single-node devnet base fee is tiny but keep margin.
     fee = max(node.w3.eth.gas_price * 2, 10**9)
 
@@ -72,7 +88,7 @@ async def _send_setcode_tx(
         sender,
         chain_id=chain_id,
         nonce=sender_nonce,
-        to=sender.address,
+        to=to_override if to_override is not None else sender.address,
         authorization_list=[auth],
         gas=gas,
         max_fee_per_gas=fee,
@@ -250,3 +266,64 @@ async def test_p_b5_sufficient_intrinsic_gas_accepted(cluster: Cluster):
 
     authority_view = node.w3.eth.contract(address=authority.address, abi=delegate.abi)
     assert authority_view.functions.getValue().call() == 42
+
+
+@pytest.mark.asyncio
+async def test_p_b6_self_sponsored_self_delegation(cluster: Cluster):
+    """P-B6: self-sponsored self-delegation (tx.from listed as own authority).
+
+    Regression for Galxe/grevm#102 / gravity-reth#345: pre-fix, grevm's
+    StateAsyncCommit asserted on the caller-nonce relation and panicked when
+    a type-4 SetCode tx had `tx.from` in its own authorizationList. This is
+    the exact `simple-bench --transfer-type eip7702` pattern that halted
+    Gravity testnet at block 1400868 on 2026-06-09. The chain-halt oracle
+    here is "receipt arrives" — pre-fix the validator panicked and no
+    further blocks were produced, so the receipt would never come back.
+    """
+    node = cluster.get_node("node1")
+    chain_id = node.w3.eth.chain_id
+    faucet = cluster.faucet
+
+    delegate, delegate_addr = await _deploy(node, faucet, "Delegate")
+
+    self_signer = Account.create()
+    LOG.info(f"P-B6 self_signer={self_signer.address}, delegate={delegate_addr}")
+
+    # Fund the self-signer so it can pay for the SetCode tx itself.
+    # gas=200k * fee≈1 gwei ≈ 2e-4 ETH; 1 ETH is comfortable headroom.
+    tb = TransactionBuilder(node.w3, faucet)
+    fund = await tb.send_ether(to=self_signer.address, amount_wei=10**18)
+    assert fund.success, f"funding self_signer failed: {fund.error}"
+
+    # tx.from == authority — pre-fix this panicked grevm in async_commit.
+    # Inner call target is a no-code address; targeting self_signer itself
+    # would invoke the freshly-installed delegate's missing fallback and
+    # revert, masking whether the auth list applied. The inner call is
+    # *not* what we're testing — the auth-list processing is.
+    inner_target = Account.create().address
+    tx_hash = await _send_setcode_tx(
+        node, self_signer, self_signer, delegate_addr,
+        gas=200_000, chain_id=chain_id, to_override=inner_target,
+    )
+    receipt = await _wait_for_receipt(node, tx_hash, timeout=60.0)
+    assert receipt is not None, (
+        "self-sponsored SetCode tx receipt timeout — chain may have halted "
+        "(regression of grevm self-auth panic)"
+    )
+    assert receipt["status"] == 1, f"self-sponsored SetCode tx failed: {receipt}"
+
+    # Delegation is observable on the self-signer's address.
+    self_signer_view = node.w3.eth.contract(address=self_signer.address, abi=delegate.abi)
+    assert self_signer_view.functions.getValue().call() == 42
+
+    # Chain progression oracle: another block must be produced after the tx.
+    head_after_tx = receipt["blockNumber"]
+    deadline = asyncio.get_event_loop().time() + 30.0
+    while asyncio.get_event_loop().time() < deadline:
+        if node.w3.eth.block_number > head_after_tx:
+            return
+        await asyncio.sleep(0.5)
+    raise AssertionError(
+        f"no new block after self-sponsored SetCode (head stuck at {head_after_tx}) "
+        "— chain may have halted"
+    )
