@@ -1,0 +1,28 @@
+# Gravity Cluster Configuration - Prague EIP-7702 Self-Sponsor Suite
+#
+# Single validator node used to verify the node's handling of a self-sponsored
+# EIP-7702 (type-4) transaction (authority == sender). Requires Prague active —
+# enabled for THIS suite only via hooks.py:pre_start (no shared genesis change).
+# Distinct base_dir + ports from other suites so it never collides.
+
+[cluster]
+name = "gravity-devnet-7702"
+base_dir = "/tmp/gravity-cluster-7702"
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 6482
+vfn_port = 6492
+rpc_port = 8845
+metrics_port = 9303
+inspection_port = 10302
+https_port = 1324
+authrpc_port = 8853
+reth_p2p_port = 12326
