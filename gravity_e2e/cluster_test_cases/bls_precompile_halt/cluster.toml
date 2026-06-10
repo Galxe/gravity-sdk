@@ -1,0 +1,37 @@
+# Gravity Cluster Configuration - BLS Precompile Halt Suite
+#
+# Single validator node (mirrors single_node), used to reproduce issue #678:
+# the BLS PoP precompile at 0x00000000000000000000000000000001625f5001
+# returns a flat gas_used=110_000 with no gas-limit check. A tx that forwards
+# <110_000 gas to it hits an unconditional assert!(record_cost(...)) in
+# alloy-evm and deterministically panics ("Gas underflow is not possible").
+#
+# Distinct base_dir + ports from single_node so the suites never collide.
+
+[cluster]
+name = "gravity-devnet-bls-halt"
+base_dir = "/tmp/gravity-cluster-bls-halt"
+
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 6382
+vfn_port = 6392
+rpc_port = 8745
+metrics_port = 9203
+inspection_port = 10202
+https_port = 1224
+authrpc_port = 8753
+reth_p2p_port = 12226
+
+# No [faucet_init] block: this test only uses cluster.faucet (the genesis-funded
+# devnet account 0xf39F...) and does not need gravity_bench-generated accounts.
+# Omitting it also avoids the unrelated gravity_bench "faucet_eth_balance" config
+# breakage in the optional faucet-init step.
