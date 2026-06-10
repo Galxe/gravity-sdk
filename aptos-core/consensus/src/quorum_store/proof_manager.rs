@@ -175,6 +175,8 @@ impl ProofManager {
             self.batch_queue.add_batches(batches);
         }
         self.proofs_for_consensus.add_batch_summaries(batch_summaries);
+        (self.remaining_total_txn_num, self.remaining_total_proof_num) =
+            self.proofs_for_consensus.remaining_txns_and_proofs();
     }
 
     pub(crate) fn handle_commit_notification(
