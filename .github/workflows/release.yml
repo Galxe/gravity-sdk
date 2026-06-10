@@ -3,14 +3,19 @@ name: Release
 on:
   push:
     tags:
-      - 'gravity-mainnet-*'
-      - 'gravity-testnet-*'
+      - 'v*.*.*'
   pull_request:
     paths:
       - '.github/workflows/release.yml'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to release (must match v*.*.*, e.g. v1.7.0). The tag and its GitHub Release must already exist.'
+        required: true
+        type: string
 
 concurrency:
-  group: release-${{ github.event.pull_request.number || github.ref_name }}
+  group: release-${{ github.event.pull_request.number || inputs.tag || github.ref_name }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -45,6 +50,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # For workflow_dispatch, check out the user-specified tag instead of
+          # the branch where the dispatch was triggered. For push/PR, fall back
+          # to the default ref (the tag or PR head).
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: Show build environment
         # Logs runner OS / glibc / rustc so any future divergence from
@@ -139,13 +149,19 @@ jobs:
         id: tag
         if: github.event_name != 'pull_request'
         shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          TAG="${GITHUB_REF##refs/tags/}"
-          case "$TAG" in
-            gravity-mainnet-*|gravity-testnet-*) ;;
-            *) echo "tag must start with gravity-mainnet- or gravity-testnet-: $TAG" >&2; exit 1 ;;
-          esac
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG="${GITHUB_REF##refs/tags/}"
+          fi
+          if ! echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "tag must match v*.*.* (e.g. v1.7.0, v1.7.0-rc1): $TAG" >&2
+            exit 1
+          fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Upload assets to GitHub release
