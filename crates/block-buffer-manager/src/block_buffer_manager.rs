@@ -644,8 +644,8 @@ impl BlockBufferManager {
             // Check transition state while holding the same mutex as current_epoch. This avoids
             // a TOCTOU race where the atomic transition flag changes between the external check
             // and the block map read.
-            if block_state_machine.epoch_change_ready
-                || block_state_machine.current_epoch != expected_epoch
+            if block_state_machine.epoch_change_ready ||
+                block_state_machine.current_epoch != expected_epoch
             {
                 return Err(anyhow::anyhow!("Buffer is in epoch change"));
             }
