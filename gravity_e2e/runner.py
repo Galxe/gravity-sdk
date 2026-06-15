@@ -286,6 +286,25 @@ def run_test_suite(
             env["RELAYER_CONFIG_TPL"] = str(custom_relayer_config)
             logger.info(f"Using custom relayer config: {custom_relayer_config}")
 
+        # Auto-detect per-test-case reth config templates. Any test case can
+        # override the validator / vfn / pfn reth config (e.g. to enable
+        # pruning, mainnet hardening, …) simply by dropping a template file in
+        # its own directory — no change to the shared cluster/templates needed.
+        # This mirrors the relayer_config.json convention above; deploy.sh
+        # already reads these env vars (RETH_CONFIG_TPL / _VFN_TPL / _PFN_TPL).
+        # An explicitly exported env var still wins, so CI/manual overrides keep
+        # working.
+        reth_tpl_overrides = {
+            "reth_config.json.tpl": "RETH_CONFIG_TPL",          # validator
+            "reth_config_vfn.json.tpl": "RETH_CONFIG_VFN_TPL",  # VFN
+            "reth_config_pfn.json.tpl": "RETH_CONFIG_PFN_TPL",  # PFN
+        }
+        for tpl_name, env_var in reth_tpl_overrides.items():
+            tpl_path = test_dir / tpl_name
+            if tpl_path.exists() and env_var not in os.environ:
+                env[env_var] = str(tpl_path)
+                logger.info(f"Using custom reth config template: {env_var}={tpl_path}")
+
         run_command(
             ["bash", str(deploy_script), str(cluster_config)],
             cwd=CLUSTER_SCRIPTS_DIR,
