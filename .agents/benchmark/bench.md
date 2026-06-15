@@ -121,7 +121,7 @@ nodes = [
 private_key = \"$FAUCET_PRIVATE_KEY\"
 faucet_level = 10
 wait_duration_secs = 2
-fauce_eth_balance = \"100000000000000000000000000000000\"
+faucet_eth_balance = \"1000000000000000\"
 
 [accounts]
 num_accounts = $FAUCET_NUM_ACCOUNTS
