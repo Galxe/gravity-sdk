@@ -173,15 +173,23 @@ EOF
     )
     bin_path="$target_dir/release/gravity_bench"
 
-    # Run under timeout(1) — only the execution phase is bounded.
+    # Run under timeout(1) when available; macOS does not ship GNU timeout.
+    # Only the execution phase is bounded so cold-cache builds can take longer.
     # CWD must be $GRAVITY_BENCH_DIR: the binary resolves "scripts/deploy.py"
     # and other resources relative to its working directory.
     timeout_secs="${FAUCET_RUN_TIMEOUT_SECS:-600}"
-    log_info "Running gravity_bench (timeout=${timeout_secs}s)..."
+    timeout_cmd=()
+    if command -v timeout >/dev/null 2>&1; then
+        timeout_cmd=(timeout --signal=TERM --kill-after=10 "${timeout_secs}s")
+        log_info "Running gravity_bench (timeout=${timeout_secs}s)..."
+    else
+        log_warn "timeout command not found; running gravity_bench without outer timeout"
+        log_info "Running gravity_bench..."
+    fi
     set +e
     (
         cd "$GRAVITY_BENCH_DIR" && \
-        timeout --signal=TERM --kill-after=10 "${timeout_secs}s" \
+        "${timeout_cmd[@]}" \
             "$bin_path" \
                 --config "$bench_config_path" \
                 --faucet-only \
