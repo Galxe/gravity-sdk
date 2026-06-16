@@ -24,7 +24,7 @@ execution_config = "0x00"
 initial_locked_until_micros = 1798848000000000
 
 [genesis.hardforks]
-alphaBlock = 0
+alphaTime = 0
 
 [genesis.faucet]
 address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
