@@ -605,9 +605,11 @@ impl BlockBufferManager {
             self.ready_notifier.notified().await;
         }
 
-        if self.is_epoch_change() {
-            return Err(anyhow::anyhow!("Buffer is in epoch change"));
-        }
+        // Note: the previous early `is_epoch_change()` check here was redundant
+        // with the in-lock recheck below at the start of each loop iteration.
+        // Removing it eliminates a TOCTOU window (buffer_state could flip between
+        // the unlocked check and the mutex acquire) without changing semantics —
+        // the in-lock recheck always observes the same state we'd act on.
 
         let start = Instant::now();
         info!(

@@ -1138,12 +1138,22 @@ impl BufferManager {
                             counters::FINALIZED_EXECUTED_BLOCK_COUNTER.set(self.highest_committed_round as f64);
                         },
                         Err(e) => {
-                            // TODO: consider triggering a pipeline reset here to recover from
-                            // persist failures, since the committed blocks have already been
-                            // popped from the buffer and cannot be retried without a reset.
-                            error!(
-                                "Persisting phase failed: {:?}. Pipeline may stall.", e
-                            );
+                            // Persist failure is unrecoverable in-place: the committed blocks
+                            // have already been popped from the buffer and cannot be retried
+                            // without a full pipeline reset. Abort the process so the supervisor
+                            // restarts the node rather than letting the pipeline silently stall.
+                            //
+                            // We use std::process::abort() (not panic!) because buffer_manager
+                            // is launched via tokio::spawn (see execution_client.rs:295). A
+                            // panic in a spawned task only kills the task — the runtime catches
+                            // it and the process keeps running, which would reproduce the same
+                            // silent-stall behavior we're trying to fix. abort() bypasses
+                            // unwinding and SIGABRTs the process, which the supervisor sees.
+                            //
+                            // TODO: implement in-process pipeline reset as a follow-up so this
+                            // path can recover without crashing.
+                            error!("Persisting phase failed: {:?}. Aborting node.", e);
+                            std::process::abort();
                         },
                     }
                 },
