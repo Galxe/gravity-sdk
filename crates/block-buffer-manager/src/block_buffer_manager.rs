@@ -411,6 +411,20 @@ impl BlockBufferManager {
         self.buffer_state.load(Ordering::SeqCst) != BufferState::Uninitialized as u8
     }
 
+    async fn wait_until_ready(&self) {
+        while !self.is_ready() {
+            let notified = self.ready_notifier.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+
+            if self.is_ready() {
+                break;
+            }
+
+            notified.await;
+        }
+    }
+
     pub fn is_epoch_change(&self) -> bool {
         self.buffer_state.load(Ordering::SeqCst) == BufferState::EpochChange as u8
     }
@@ -513,9 +527,7 @@ impl BlockBufferManager {
         block: ExternalBlock,
         round: u64,
     ) -> Result<(), anyhow::Error> {
-        if !self.is_ready() {
-            self.ready_notifier.notified().await;
-        }
+        self.wait_until_ready().await;
         info!(
             "set_ordered_blocks {:?} num {:?} epoch {:?} parent_id {:?}",
             block.block_meta.block_id,
@@ -627,9 +639,7 @@ impl BlockBufferManager {
         max_size: Option<usize>,
         expected_epoch: u64,
     ) -> Result<Vec<(ExternalBlock, BlockId)>, anyhow::Error> {
-        if !self.is_ready() {
-            self.ready_notifier.notified().await;
-        }
+        self.wait_until_ready().await;
 
         let start = Instant::now();
         info!(
@@ -709,9 +719,7 @@ impl BlockBufferManager {
         block_num: u64,
         epoch: u64,
     ) -> Result<StateComputeResult, anyhow::Error> {
-        if !self.is_ready() {
-            self.ready_notifier.notified().await;
-        }
+        self.wait_until_ready().await;
         let start = Instant::now();
         info!("get_executed_res start {:?} num {:?}", block_id, block_num);
         loop {
@@ -958,9 +966,7 @@ impl BlockBufferManager {
         txn_status: Arc<Option<Vec<TxnStatus>>>,
         events: Vec<GravityEvent>,
     ) -> Result<(), anyhow::Error> {
-        if !self.is_ready() {
-            self.ready_notifier.notified().await;
-        }
+        self.wait_until_ready().await;
 
         let mut block_state_machine = self.block_state_machine.lock().await;
         let block_key = BlockKey::new(epoch, block_num);
@@ -1041,9 +1047,7 @@ impl BlockBufferManager {
         block_ids: Vec<BlockHashRef>,
         epoch: u64,
     ) -> Result<Vec<Receiver<()>>, anyhow::Error> {
-        if !self.is_ready() {
-            self.ready_notifier.notified().await;
-        }
+        self.wait_until_ready().await;
         let mut persist_notifiers = Vec::new();
         let mut block_state_machine = self.block_state_machine.lock().await;
         for block_id_num_hash in block_ids {
@@ -1150,9 +1154,7 @@ impl BlockBufferManager {
         max_size: Option<usize>,
         epoch: u64,
     ) -> Result<Vec<BlockHashRef>, anyhow::Error> {
-        if !self.is_ready() {
-            self.ready_notifier.notified().await;
-        }
+        self.wait_until_ready().await;
         info!("get_committed_blocks start_num: {:?} max_size: {:?}", start_num, max_size);
         let start = Instant::now();
 
@@ -1250,18 +1252,13 @@ impl BlockBufferManager {
     }
 
     pub async fn block_number_to_block_id(&self) -> HashMap<u64, BlockId> {
-        if !self.is_ready() {
-            self.ready_notifier.notified().await;
-        }
+        self.wait_until_ready().await;
         let block_state_machine = self.block_state_machine.lock().await;
         block_state_machine.block_number_to_block_id.clone()
     }
 
     pub async fn get_current_epoch(&self) -> u64 {
-        // Wait for buffer to be ready using Notify
-        if !self.is_ready() {
-            self.ready_notifier.notified().await;
-        }
+        self.wait_until_ready().await;
         let block_state_machine = self.block_state_machine.lock().await;
         block_state_machine.current_epoch
     }
@@ -1341,6 +1338,16 @@ impl BlockBufferManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::time::{sleep, timeout};
+
+    fn test_config() -> BlockBufferManagerConfig {
+        BlockBufferManagerConfig {
+            wait_for_change_timeout: Duration::from_millis(5),
+            max_wait_timeout: Duration::from_millis(100),
+            remove_committed_blocks_interval: Duration::from_secs(60),
+            max_block_size: 256,
+        }
+    }
 
     #[tokio::test]
     async fn init_returns_error_without_partial_state_when_commit_block_missing() {
@@ -1372,5 +1379,39 @@ mod tests {
         assert_eq!(block_state_machine.latest_finalized_block_number, 0);
         assert!(block_state_machine.block_number_to_block_id.is_empty());
         assert_eq!(block_state_machine.current_epoch, 0);
+    }
+
+    #[tokio::test]
+    async fn get_current_epoch_waits_until_init_marks_buffer_ready() {
+        let manager = BlockBufferManager::new(test_config());
+        assert!(!manager.is_ready());
+
+        let waiter = {
+            let manager = manager.clone();
+            tokio::spawn(async move { manager.get_current_epoch().await })
+        };
+
+        sleep(Duration::from_millis(10)).await;
+        assert!(!waiter.is_finished(), "waiter returned before init marked buffer ready");
+
+        manager.init(0, HashMap::new(), 42).await.unwrap();
+
+        let epoch = timeout(Duration::from_secs(1), waiter)
+            .await
+            .expect("waiter timed out after init")
+            .expect("waiter task panicked");
+        assert_eq!(epoch, 42);
+    }
+
+    #[tokio::test]
+    async fn get_current_epoch_returns_immediately_when_buffer_is_already_ready() {
+        let manager = BlockBufferManager::new(test_config());
+        manager.init(0, HashMap::new(), 7).await.unwrap();
+
+        let epoch = timeout(Duration::from_millis(50), manager.get_current_epoch())
+            .await
+            .expect("ready buffer should not wait for another notification");
+
+        assert_eq!(epoch, 7);
     }
 }
