@@ -428,9 +428,15 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                     .collect(),
             ));
             let events = execution_result.gravity_events;
-            let epoch = self.current_epoch.load(Ordering::SeqCst);
             get_block_buffer_manager()
-                .set_compute_res(block_id, block_hash_data, block_number, epoch, txn_status, events)
+                .set_compute_res(
+                    block_id,
+                    block_hash_data,
+                    block_number,
+                    execution_result.epoch,
+                    txn_status,
+                    events,
+                )
                 .await
                 .map_err(|e| format!("failed to set compute res: {e}"))?;
         }
