@@ -305,3 +305,20 @@ impl Relayer for RelayerWrapper {
         self.poll_and_update_state(uri, onchain_nonce, onchain_block_number, &state).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_sports_score_source_uri() {
+        let uri = "gravity://4/2026062301/sports_score?round=1&resolvedAt=3020";
+        assert_eq!(RelayerWrapper::parse_source_from_uri(uri), Some((4, 2026062301)));
+    }
+
+    #[test]
+    fn test_parse_blockchain_source_uri() {
+        let uri = "gravity://0/31337/events?contract=0x0000000000000000000000000000000000000001";
+        assert_eq!(RelayerWrapper::parse_source_from_uri(uri), Some((0, 31337)));
+    }
+}
