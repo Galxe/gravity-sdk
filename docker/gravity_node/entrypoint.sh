@@ -28,8 +28,13 @@ if [[ ! -f "${RETH_CONFIG}" ]]; then
     exit 1
 fi
 
+global_args=()
 reth_args=()
 while IFS= read -r key && IFS= read -r value; do
+    if [[ "${key}" == "gravity_node_config" || "${key}" == "relayer_config" ]]; then
+        global_args+=( "--${key}=${value}" )
+        continue
+    fi
     if [[ -z "${value}" || "${value}" == "null" ]]; then
         reth_args+=( "--${key}" )
     else
@@ -43,4 +48,4 @@ while IFS= read -r key && IFS= read -r value; do
     fi
 done < <(jq -r '.env_vars // {} | to_entries[] | .key, .value' "${RETH_CONFIG}")
 
-exec /usr/local/bin/gravity_node node "${reth_args[@]}"
+exec /usr/local/bin/gravity_node "${global_args[@]}" node "${reth_args[@]}"

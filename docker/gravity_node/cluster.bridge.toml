@@ -1,0 +1,86 @@
+# Docker bridge-network cluster view for chaos/oracle checks.
+# Runtime config is rendered into docker/gravity_node/config-bridge and the
+# bridge genesis advertises validator peers as Docker DNS names node1..node4.
+# The chaos/oracle tools sample RPC through the Docker network, so host and
+# rpc_port below are container-internal DNS names and ports, not macOS-published
+# ports. The compose file still publishes 18545..18550 for manual inspection.
+
+[cluster]
+name = "gravity-devnet-docker-bridge"
+base_dir = "/tmp/gravity-docker-bridge"
+
+[genesis_source]
+genesis_path = "./cluster-output-bridge/genesis.json"
+waypoint_path = "./cluster-output-bridge/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../.." }
+host = "node1"
+validator_port = 6180
+vfn_port = 6190
+rpc_port = 8545
+metrics_port = 9001
+inspection_port = 10000
+https_port = 1024
+authrpc_port = 8551
+reth_p2p_port = 12024
+
+[[nodes]]
+id = "node2"
+role = "genesis"
+source = { project_path = "../.." }
+host = "node2"
+validator_port = 6181
+vfn_port = 6191
+rpc_port = 8546
+metrics_port = 9002
+inspection_port = 10001
+https_port = 1025
+authrpc_port = 8552
+reth_p2p_port = 12025
+
+[[nodes]]
+id = "node3"
+role = "genesis"
+source = { project_path = "../.." }
+host = "node3"
+validator_port = 6182
+vfn_port = 6192
+rpc_port = 8547
+metrics_port = 9003
+inspection_port = 10002
+https_port = 1026
+authrpc_port = 8553
+reth_p2p_port = 12026
+
+[[nodes]]
+id = "node4"
+role = "genesis"
+source = { project_path = "../.." }
+host = "node4"
+validator_port = 6183
+vfn_port = 6193
+rpc_port = 8548
+metrics_port = 9004
+inspection_port = 10003
+https_port = 1027
+authrpc_port = 8554
+reth_p2p_port = 12027
+
+[[nodes]]
+id = "vfn1"
+role = "vfn"
+source = { project_path = "../.." }
+host = "vfn1"
+vfn_port = 6195
+rpc_port = 8550
+metrics_port = 9006
+inspection_port = 10005
+https_port = 1029
+authrpc_port = 8566
+reth_p2p_port = 12029
+
+[relayer]
+relayer_rpc_url = "https://sepolia.drpc.org"

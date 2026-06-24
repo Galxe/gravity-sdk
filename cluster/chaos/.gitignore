@@ -1,0 +1,8 @@
+reports/
+snapshots/
+*.log
+*.jsonl
+__pycache__/
+*.pyc
+!lib/
+!lib/**
