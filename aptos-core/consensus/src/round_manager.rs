@@ -665,7 +665,7 @@ impl RoundManager {
     async fn sync_up(&mut self, sync_info: &SyncInfo, author: Author) -> anyhow::Result<()> {
         let local_sync_info = self.block_store.sync_info();
         if sync_info.has_newer_certificates(&local_sync_info) {
-            info!(
+            debug!(
                 self.new_log(LogEvent::ReceiveNewCertificate).remote_peer(author),
                 "Local state {},\n remote state {}", local_sync_info, sync_info
             );
