@@ -1,0 +1,97 @@
+name: gravity_bridge
+
+# 4 validators + 1 VFN devnet topology on a user-defined bridge network.
+# This topology is intended for network partition tests. Unlike
+# docker-compose.cluster.yaml, it does not use network_mode: host.
+#
+# Usage:
+#   ./render-cluster-bridge-config.sh
+#   GRAVITY_IMAGE=gravity_node IMAGE_TAG=local-chaos-entrypoint \
+#     docker compose -f docker-compose.cluster-bridge.yaml up -d
+#
+# The bridge genesis advertises validator peers as /dns/node1..node4, so
+# Docker DNS must be available. Partitioning works by disconnecting a container
+# from the gravity-chaos network and healing by reconnecting it.
+
+x-node-common: &node-common
+  image: ${GRAVITY_IMAGE:-gravity_node}:${IMAGE_TAG:-local-chaos-entrypoint}
+  restart: unless-stopped
+  networks:
+    - gravity-chaos
+  environment:
+    RUST_BACKTRACE: "1"
+    RUST_LOG: ${RUST_LOG:-info}
+  ulimits:
+    nofile:
+      soft: 1048576
+      hard: 1048576
+  stop_grace_period: 60s
+  stop_signal: SIGTERM
+  logging:
+    driver: json-file
+    options:
+      max-size: "100m"
+      max-file: "5"
+
+services:
+  node1:
+    <<: *node-common
+    container_name: node1
+    hostname: node1
+    volumes:
+      - ./config-bridge/node1:/gravity/config:ro
+      - bridge-node1-data:/gravity/data
+    ports:
+      - "18545:8545"
+
+  node2:
+    <<: *node-common
+    container_name: node2
+    hostname: node2
+    volumes:
+      - ./config-bridge/node2:/gravity/config:ro
+      - bridge-node2-data:/gravity/data
+    ports:
+      - "18546:8546"
+
+  node3:
+    <<: *node-common
+    container_name: node3
+    hostname: node3
+    volumes:
+      - ./config-bridge/node3:/gravity/config:ro
+      - bridge-node3-data:/gravity/data
+    ports:
+      - "18547:8547"
+
+  node4:
+    <<: *node-common
+    container_name: node4
+    hostname: node4
+    volumes:
+      - ./config-bridge/node4:/gravity/config:ro
+      - bridge-node4-data:/gravity/data
+    ports:
+      - "18548:8548"
+
+  vfn1:
+    <<: *node-common
+    container_name: vfn1
+    hostname: vfn1
+    volumes:
+      - ./config-bridge/vfn1:/gravity/config:ro
+      - bridge-vfn1-data:/gravity/data
+    ports:
+      - "18550:8550"
+
+networks:
+  gravity-chaos:
+    name: gravity-chaos
+    driver: bridge
+
+volumes:
+  bridge-node1-data:
+  bridge-node2-data:
+  bridge-node3-data:
+  bridge-node4-data:
+  bridge-vfn1-data:

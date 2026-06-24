@@ -13,7 +13,9 @@ image tag — configuration and chain state persist across restarts.
 | `entrypoint.sh` | Reads `reth_config.json` (same schema as `cluster/templates/reth_config.json.tpl`) and `exec`s `gravity_node node` in the foreground. |
 | `docker-compose.yaml` | Single-node deployment. Intended for one host running one validator. |
 | `docker-compose.cluster.yaml` | 4 validators + 1 VFN on one host. For end-to-end image verification against `cluster/` artifacts. |
+| `docker-compose.cluster-bridge.yaml` | 4 validators + 1 VFN on a Docker bridge network. Intended for network partition tests. |
 | `render-cluster-config.sh` | Renders the 5-node config set from `cluster/output/` + `cluster/templates/`. |
+| `render-cluster-bridge-config.sh` | Generates bridge-network genesis/config without overwriting `cluster/output` or `config/`. |
 | `.env.example` | Operator-tunable knobs (image tag, log level). Copy to `.env`. |
 | `.gitignore` | Prevents `config/` (contains private keys) and `.env` from being committed. |
 
@@ -111,6 +113,63 @@ Default port range used by this topology: `6180–6183`, `6190–6195`,
 `8545–8554`, `8566`, `9001–9006`, `10000–10005`, `12024–12029`, `1024–1029`.
 Ensure nothing else on the host — including `cluster`'s host-mode deployment
 — is holding these ports before starting.
+
+## Devnet network partition topology
+
+Use the bridge topology when you need Docker-level network partitions. It
+generates a separate genesis where validator peer addresses are advertised as
+Docker DNS names (`node1` ... `node4`) instead of `127.0.0.1`.
+
+```bash
+cd docker/gravity_node
+./render-cluster-bridge-config.sh
+GRAVITY_IMAGE=gravity_node IMAGE_TAG=<your-tag> \
+  docker compose -f docker-compose.cluster-bridge.yaml up -d
+```
+
+RPC is published on host ports `18545`, `18546`, `18547`, `18548`, and `18550`
+so it can run next to the host-network topology. The chaos/oracle config
+(`cluster.bridge.toml`) intentionally uses Docker DNS names and container
+internal RPC ports; after Docker network disconnect/connect, Docker Desktop can
+leave some macOS-published ports in a reset state even though RPC is healthy
+inside the bridge network.
+
+Network partition example:
+
+```bash
+cd ../..
+CHAOS_BACKEND=docker ./cluster/chaos/chaos.sh \
+  --config docker/gravity_node/cluster.bridge.toml partition node4
+
+CHAOS_BACKEND=docker ./cluster/chaos/chaos.sh \
+  --config docker/gravity_node/cluster.bridge.toml heal node4
+```
+
+Run the longer partition scenarios:
+
+```bash
+cd ../..
+
+# Randomly isolate one validator per round; defaults are 3 rounds, 180s hold,
+# and 60s recovery. Arguments override those values.
+CHAOS_BACKEND=docker ./cluster/chaos/scenarios.sh \
+  --config docker/gravity_node/cluster.bridge.toml partition-random 3 180 60
+
+# 2-2 validator split. Defaults to node1,node2 vs node3,node4 for 180s.
+CHAOS_BACKEND=docker ./cluster/chaos/scenarios.sh \
+  --config docker/gravity_node/cluster.bridge.toml partition-2-2 180
+
+# Mixed long run. Defaults are 1800s total, 180s hold, 60s recovery.
+CHAOS_BACKEND=docker ./cluster/chaos/scenarios.sh \
+  --config docker/gravity_node/cluster.bridge.toml partition-mixed 1800 180 60
+```
+
+Tear down only this topology:
+
+```bash
+cd docker/gravity_node
+docker compose -f docker-compose.cluster-bridge.yaml down -v
+```
 
 ## Single-node deployment
 

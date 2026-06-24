@@ -1,4 +1,7 @@
 config/
+config-bridge/
+cluster-output-bridge/
+genesis.bridge.toml
 .env
 *.tar
 *.tar.gz

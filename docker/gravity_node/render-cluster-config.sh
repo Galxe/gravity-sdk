@@ -6,9 +6,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-CLUSTER_OUT="$REPO_ROOT/cluster/output"
+CLUSTER_OUT="${CLUSTER_OUT:-$REPO_ROOT/cluster/output}"
 TEMPLATES="$REPO_ROOT/cluster/templates"
-OUT="$SCRIPT_DIR/config"
+OUT="${OUT:-$SCRIPT_DIR/config}"
 
 if [[ ! -f "$CLUSTER_OUT/genesis.json" || ! -f "$CLUSTER_OUT/waypoint.txt" ]]; then
     echo "Missing cluster output. Run 'cd $REPO_ROOT/cluster && make init && make genesis' first." >&2
@@ -22,7 +22,24 @@ mkdir -p "$OUT"
 export DATA_DIR=/gravity/data
 export CONFIG_DIR=/gravity/config
 export GENESIS_PATH=/gravity/config/genesis.json
+export STORAGE_DIR=/gravity/data/data
+export LOG_DIR=/gravity/data
 export RELAYER_RPC_URL="${RELAYER_RPC_URL:-https://sepolia.drpc.org}"
+export TXPOOL_MAX_ACCOUNT_SLOTS="${TXPOOL_MAX_ACCOUNT_SLOTS:-1000000}"
+
+# Docker devnet artifacts always mount the local file identity into /gravity/config.
+export SAFETY_RULES_IDENTITY_VARIANT=from_file
+export SAFETY_RULES_IDENTITY_KEY=identity_blob_path
+export SAFETY_RULES_IDENTITY_VALUE=/gravity/config/identity.yaml
+export NETWORK_IDENTITY_TYPE=from_file
+export NETWORK_IDENTITY_FIELD=path
+export NETWORK_IDENTITY_VALUE=/gravity/config/identity.yaml
+export DISCOVERY_METHOD_NETWORK_BLOCK="  discovery_method:
+    onchain"
+export DISCOVERY_METHOD_FULLNODE_BLOCK="    discovery_method:
+      onchain"
+export VFN_SEEDS_BLOCK=""
+export PUBLIC_NETWORK_BLOCK=""
 
 # HARDCODED devnet defaults (open CORS, full API incl. debug namespace).
 # Unlike cluster/deploy.sh, this script does NOT read cluster.toml [rpc];
@@ -76,6 +93,7 @@ set_ports() {
     export HOST=127.0.0.1
     export NODE_ID="$1"
     export P2P_PORT="$2"
+    export VALIDATOR_PORT="$2"
     export VFN_PORT="$3"
     export RPC_PORT="$4"
     export METRICS_PORT="$5"
