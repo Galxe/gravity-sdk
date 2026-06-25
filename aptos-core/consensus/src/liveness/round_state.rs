@@ -260,7 +260,7 @@ impl RoundState {
         if sync_info.highest_ordered_round() > self.highest_ordered_round {
             self.highest_ordered_round = sync_info.highest_ordered_round();
         }
-        info!(
+        debug!(
             round = self.current_round,
             highest_ordered_round = self.highest_ordered_round,
             "Processing certificates With SyncInfo",

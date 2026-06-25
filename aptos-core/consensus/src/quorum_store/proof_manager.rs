@@ -184,7 +184,7 @@ impl ProofManager {
         block_timestamp: u64,
         batches: Vec<BatchInfo>,
     ) {
-        info!("QS: got clean request from execution at block timestamp {}", block_timestamp);
+        debug!("QS: got clean request from execution at block timestamp {}", block_timestamp);
         trace!("QS: got clean request from execution at block timestamp {}", block_timestamp);
         self.batch_queue.remove_expired_batches();
         for batch in &batches {
