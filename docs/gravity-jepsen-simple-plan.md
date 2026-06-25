@@ -50,6 +50,18 @@ docker/gravity_node/
 - 当前附带的 Docker bridge topology 是 4 validator + 1 VFN 的本地示例；更大集群可提供自己的 compose/config，复用同一套 stake-aware 场景逻辑。
 - Docker 分区测试的 RPC/oracle 默认走容器内网 `gravity-chaos`，不依赖 macOS host port 转发。
 
+### 2.1 当前实现功能概览
+
+当前这一版已经形成了一个轻量 chaos 测试闭环，主要能力如下：
+
+- **健康检查**：`oracle.sh` 检查 RPC、高度差、>2/3 validator stake 推进、共同高度 block hash/state root，以及 panic/fatal/abort/segfault 日志信号。
+- **故障注入**：支持节点重启、flap、majority failure、单 validator 隔离、no-quorum split、majority/minority split、分区叠加负载和长稳 soak。
+- **交易正确性哨兵**：内置 EVM 转账 workload，记录 tx history，并在场景结束后用 receipt checker 验证已确认交易仍在 canonical chain 上。
+- **Docker 网络分区**：提供 4 validator + 1 VFN 的 Docker bridge 拓扑，通过 Docker network disconnect/connect 构造真实网络岛，适合 macOS 本地测试。
+- **长跑与报告**：`loop.sh` 支持按权重随机运行场景、失败冻结现场、自动 snapshot、JSONL 报告和 summary。
+
+当前不做完整 Jepsen history checker、Byzantine/twin validator、DB/WAL 损坏等复杂场景；Docker `partition-asym` / `delay-load-spike` 依赖容器内 `iptables/tc`，基础镜像没有这些工具时默认不进入 Docker loop。
+
 ## 3. 已具备能力
 
 ### 3.1 基础操作
