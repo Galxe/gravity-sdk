@@ -326,6 +326,12 @@ impl BlockBufferManager {
             latest_commit_block_number, block_number_to_block_id_with_epoch.len(), initial_epoch
         );
         let commit_block = if block_number_to_block_id_with_epoch.is_empty() {
+            if latest_commit_block_number > 0 {
+                return Err(format_err!(
+                    "BlockBufferManager::init: latest_commit_block_number {} requires a non-empty block_number_to_block_id_with_epoch map",
+                    latest_commit_block_number
+                ));
+            }
             None
         } else {
             Some(
@@ -1345,6 +1351,21 @@ mod tests {
         let error = manager.init(10, block_number_to_block_id, 1).await.unwrap_err();
 
         assert!(error.to_string().contains("latest_commit_block_number 10 not found"));
+        assert!(!manager.is_ready());
+        let block_state_machine = manager.block_state_machine.lock().await;
+        assert_eq!(block_state_machine.latest_commit_block_number, 0);
+        assert_eq!(block_state_machine.latest_finalized_block_number, 0);
+        assert!(block_state_machine.block_number_to_block_id.is_empty());
+        assert_eq!(block_state_machine.current_epoch, 0);
+    }
+
+    #[tokio::test]
+    async fn init_returns_error_without_partial_state_when_non_genesis_map_is_empty() {
+        let manager = BlockBufferManager::new(BlockBufferManagerConfig::default());
+
+        let error = manager.init(10, HashMap::new(), 1).await.unwrap_err();
+
+        assert!(error.to_string().contains("requires a non-empty"));
         assert!(!manager.is_ready());
         let block_state_machine = manager.block_state_machine.lock().await;
         assert_eq!(block_state_machine.latest_commit_block_number, 0);
