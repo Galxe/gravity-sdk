@@ -16,6 +16,7 @@ use greth::reth_transaction_pool::{EthPooledTransaction, ValidPoolTransaction};
 use proposer_reth_map::get_reth_address_by_index;
 
 use alloy_rpc_types_eth::TransactionRequest;
+use gaptos::aptos_metrics_core::{register_int_counter_vec, IntCounterVec};
 use greth::{
     gravity_storage::block_view_storage::BlockViewStorage,
     reth::rpc::builder::auth::AuthServerHandle,
@@ -27,6 +28,7 @@ use greth::{
     reth_provider::{providers::BlockchainProvider, BlockNumReader, ChainSpecProvider},
     reth_rpc_api::eth::{helpers::EthCall, RpcTypes},
 };
+use once_cell::sync::Lazy;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use std::{
     sync::{
@@ -38,6 +40,31 @@ use std::{
 
 use tokio::sync::{broadcast, Mutex};
 use tracing::*;
+
+const FILTER_REASON_DECODE_FAILED: &str = "decode_failed";
+const FILTER_REASON_RECOVER_SIGNER_FAILED: &str = "recover_signer_failed";
+const FILTER_REASON_MISSING_SENDER_OR_BODY: &str = "missing_sender_or_body";
+const COINBASE_FALLBACK_NO_PROPOSER_INDEX: &str = "no_proposer_index";
+const COINBASE_FALLBACK_PROPOSER_NOT_IN_MAP: &str = "proposer_not_in_map";
+const COINBASE_FALLBACK_INVALID_ADDRESS_LENGTH: &str = "invalid_address_length";
+
+static GCEI_FILTERED_TX_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
+    register_int_counter_vec!(
+        "gcei_filtered_tx_total",
+        "Number of transactions filtered while converting consensus blocks into GCEI ordered blocks",
+        &["reason"]
+    )
+    .unwrap()
+});
+
+static GCEI_COINBASE_FALLBACK_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
+    register_int_counter_vec!(
+        "gcei_coinbase_fallback_total",
+        "Number of times GCEI block coinbase fell back to the zero address",
+        &["reason"]
+    )
+    .unwrap()
+});
 
 pub(crate) type RethBlockChainProvider =
     BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>;
@@ -124,13 +151,20 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         self.chain_id
     }
 
-    fn txn_to_signed(bytes: &[u8], _chain_id: u64) -> Result<(Address, TransactionSigned), String> {
+    fn txn_to_signed(
+        bytes: &[u8],
+        _chain_id: u64,
+    ) -> Result<(Address, TransactionSigned), (&'static str, String)> {
         let mut slice = bytes;
-        let txn = TransactionSigned::decode_2718(&mut slice)
-            .map_err(|e| format!("Failed to decode transaction: {e}"))?;
-        let signer = txn
-            .recover_signer()
-            .map_err(|e| format!("Failed to recover signer from transaction: {e}"))?;
+        let txn = TransactionSigned::decode_2718(&mut slice).map_err(|e| {
+            (FILTER_REASON_DECODE_FAILED, format!("Failed to decode transaction: {e}"))
+        })?;
+        let signer = txn.recover_signer().map_err(|e| {
+            (
+                FILTER_REASON_RECOVER_SIGNER_FAILED,
+                format!("Failed to recover signer from transaction: {e}"),
+            )
+        })?;
         Ok((signer, txn))
     }
 
@@ -140,6 +174,9 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         let index = match proposer_index {
             Some(idx) => idx,
             None => {
+                GCEI_COINBASE_FALLBACK_TOTAL
+                    .with_label_values(&[COINBASE_FALLBACK_NO_PROPOSER_INDEX])
+                    .inc();
                 // Log when proposer_index is absent — this means the block
                 // metadata from consensus did not include a proposer.
                 warn!(
@@ -157,6 +194,9 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                 if reth_addr_bytes.len() == 20 {
                     Address::from_slice(&reth_addr_bytes)
                 } else {
+                    GCEI_COINBASE_FALLBACK_TOTAL
+                        .with_label_values(&[COINBASE_FALLBACK_INVALID_ADDRESS_LENGTH])
+                        .inc();
                     warn!(
                         "Reth address length {} is not 20 bytes for proposer index {}, using ZERO. \
                          Metric: coinbase_zero_address_fallback{{reason=invalid_address_length}}",
@@ -167,6 +207,9 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                 }
             }
             None => {
+                GCEI_COINBASE_FALLBACK_TOTAL
+                    .with_label_values(&[COINBASE_FALLBACK_PROPOSER_NOT_IN_MAP])
+                    .inc();
                 warn!(
                     "Failed to get reth coinbase for proposer index {}, using ZERO. \
                      Metric: coinbase_zero_address_fallback{{reason=proposer_not_in_map}}",
@@ -188,6 +231,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
 
         let mut senders = vec![None; block.txns.len()];
         let mut transactions = vec![None; block.txns.len()];
+        let mut filtered_reasons = vec![None; block.txns.len()];
 
         {
             for (idx, txn) in block.txns.iter().enumerate() {
@@ -204,19 +248,18 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             .par_iter_mut()
             .enumerate()
             .filter(|(idx, _)| senders[*idx].is_none())
-            .map(|(idx, txn)| match Self::txn_to_signed(txn.bytes().as_slice(), self.chain_id) {
-                Ok((sender, transaction)) => Some((idx, sender, transaction)),
-                Err(e) => {
-                    warn!("Skipping malformed transaction at index {}: {}", idx, e);
-                    None
-                }
-            })
-            .collect::<Vec<Option<(usize, Address, TransactionSigned)>>>()
+            .map(|(idx, txn)| (idx, Self::txn_to_signed(txn.bytes().as_slice(), self.chain_id)))
+            .collect::<Vec<(usize, Result<(Address, TransactionSigned), (&'static str, String)>)>>()
             .into_iter()
-            .flatten()
-            .for_each(|(idx, sender, transaction)| {
-                senders[idx] = Some(sender);
-                transactions[idx] = Some(transaction);
+            .for_each(|(idx, result)| match result {
+                Ok((sender, transaction)) => {
+                    senders[idx] = Some(sender);
+                    transactions[idx] = Some(transaction);
+                }
+                Err((reason, e)) => {
+                    warn!("Skipping malformed transaction at index {}: {}", idx, e);
+                    filtered_reasons[idx] = Some(reason);
+                }
             });
 
         // Filter out transactions that failed decoding/signer recovery
@@ -231,6 +274,9 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
                     valid_transactions.push(t);
                 }
                 _ => {
+                    let reason =
+                        filtered_reasons[idx].unwrap_or(FILTER_REASON_MISSING_SENDER_OR_BODY);
+                    GCEI_FILTERED_TX_TOTAL.with_label_values(&[reason]).inc();
                     warn!("Filtering out transaction at index {} with missing sender or body", idx);
                 }
             }

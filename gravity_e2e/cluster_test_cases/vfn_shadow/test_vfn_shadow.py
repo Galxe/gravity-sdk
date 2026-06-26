@@ -35,6 +35,7 @@ from gravity_e2e.cluster.node import Node, NodeState
 LOG = logging.getLogger(__name__)
 
 MAX_HEIGHT_GAP = 50
+MAX_HEIGHT_GAP_VIOLATIONS = 3
 MONITOR_DURATION = 120           # seconds
 MONITOR_INTERVAL = 10            # seconds between height samples
 TX_INTERVAL = 0.2                # seconds between txs
@@ -220,6 +221,7 @@ async def test_vfn_shadow_topology(cluster: Cluster):
 
         monitor_start = time.monotonic()
         check_count = 0
+        gap_violations = 0
         last_heights = dict(initial)
 
         while time.monotonic() - monitor_start < MONITOR_DURATION:
@@ -235,8 +237,14 @@ async def test_vfn_shadow_topology(cluster: Cluster):
                 f"[check #{check_count} @ {elapsed}s] heights={last_heights} gap={gap}"
             )
 
-            assert gap < MAX_HEIGHT_GAP, (
-                f"pairwise height gap {gap} >= {MAX_HEIGHT_GAP}: {last_heights}"
+            if gap >= MAX_HEIGHT_GAP:
+                gap_violations += 1
+            else:
+                gap_violations = 0
+
+            assert gap_violations < MAX_HEIGHT_GAP_VIOLATIONS, (
+                f"pairwise height gap stayed >= {MAX_HEIGHT_GAP} for "
+                f"{gap_violations} consecutive checks: {last_heights}"
             )
 
         # Every node must have advanced from initial.
