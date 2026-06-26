@@ -21,7 +21,7 @@ address_pool_type = "random"
 private_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 faucet_level = 10
 wait_duration_secs = 30
-fauce_eth_balance = "100000000000000000000"
+faucet_eth_balance = "10000000000000"
 
 [accounts]
 num_accounts = ${BENCH_NUM_ACCOUNTS}
