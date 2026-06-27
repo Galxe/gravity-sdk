@@ -14,7 +14,9 @@ from gravity_e2e.utils.mock_polymarket_polygon import DRAW_MARKET_ID
 
 LOG = logging.getLogger(__name__)
 
-NATIVE_ORACLE_ADDRESS = "0x0000000000000000000000000001625F4000"
+NATIVE_ORACLE_ADDRESS = Web3.to_checksum_address(
+    "0x00000000000000000000000000000001625F4000"
+)
 DATA_RECORDED_TOPIC0 = Web3.keccak(
     text="DataRecorded(uint32,uint256,uint128,uint256)"
 ).hex()
@@ -22,6 +24,11 @@ DATA_RECORDED_TOPIC0 = Web3.keccak(
 
 def _topic(value: int) -> str:
     return "0x" + value.to_bytes(32, "big").hex()
+
+
+def _topic_hex(topic) -> str:
+    value = topic.hex()
+    return value if value.startswith("0x") else f"0x{value}"
 
 
 async def _poll_data_recorded(w3: Web3, timeout: int = 120):
@@ -58,8 +65,8 @@ async def test_polymarket_settlement_mirror_mock(cluster: Cluster):
 
     assert logs, "No Polymarket sourceType=6 DataRecorded event observed"
     first = logs[0]
-    assert first["topics"][1].hex() == _topic(6)
-    assert first["topics"][2].hex() == _topic(DRAW_MARKET_ID)
+    assert _topic_hex(first["topics"][1]) == _topic(6)
+    assert _topic_hex(first["topics"][2]) == _topic(DRAW_MARKET_ID)
 
     LOG.info(
         "Observed Polymarket DataRecorded: market=%s condition=%s sourceBlock=%s sourceLogIndex=%s",

@@ -1,8 +1,8 @@
 # Gravity Genesis Configuration - Polymarket mock oracle PoC
 
 [dependencies.genesis_contracts]
-repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
-ref = "main"
+path = "../../../../gravity_chain_core_contracts"
+ref = "codex/sports-score-oracle-poc"
 
 [[genesis_validators]]
 id = "node1"
@@ -55,7 +55,7 @@ fast_path_secrecy_threshold = 12297829382473033728
 [genesis.oracle_config]
 source_types = [1, 6]
 callbacks = [
-  "0x0000000000000000000000000001625F4001",
+  "0x00000000000000000000000000000001625F4001",
   "0x0000000000000000000000000000000000000000",
 ]
 
