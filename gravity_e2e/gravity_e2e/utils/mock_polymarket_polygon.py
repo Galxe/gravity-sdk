@@ -25,12 +25,20 @@ LOG = logging.getLogger(__name__)
 POLYGON_CHAIN_ID = 137
 CTF_ADDRESS = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045"
 UMA_ORACLE = "0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296"
-DRAW_MARKET_ID = 1_897_398
-DRAW_CONDITION_ID = "0x2afe86f96be81a0d89ed776bedbd52d1c75bc47b49e6f0f791ddd009f52faf23"
-DRAW_QUESTION_ID = "0x49a5e94a4b5a400dcd720ca1875fcd49ba55c303e43bf091bc175df72f74f501"
-DRAW_TX_HASH = "0x97828bf9110f78c07f1ad5cff5415875b67b3fe032e19ee6aa2317355861aab2"
-DRAW_BLOCK = 89_222_209
-DRAW_LOG_INDEX = 2_077
+MATCH_MARKET_ID = 1_897_398
+MATCH_CONDITION_ID = "0x2afe86f96be81a0d89ed776bedbd52d1c75bc47b49e6f0f791ddd009f52faf23"
+MATCH_QUESTION_ID = "0x49a5e94a4b5a400dcd720ca1875fcd49ba55c303e43bf091bc175df72f74f501"
+MATCH_TX_HASH = "0x97828bf9110f78c07f1ad5cff5415875b67b3fe032e19ee6aa2317355861aab2"
+MATCH_BLOCK = 89_222_209
+MATCH_LOG_INDEX = 2_077
+
+# Backward-compatible aliases used by the first PoC test.
+DRAW_MARKET_ID = MATCH_MARKET_ID
+DRAW_CONDITION_ID = MATCH_CONDITION_ID
+DRAW_QUESTION_ID = MATCH_QUESTION_ID
+DRAW_TX_HASH = MATCH_TX_HASH
+DRAW_BLOCK = MATCH_BLOCK
+DRAW_LOG_INDEX = MATCH_LOG_INDEX
 
 CONDITION_RESOLUTION_TOPIC0 = "0xb44d84d3289691f71497564b85d4233648d9dbae8cbdbb4329f301c3a0185894"
 
@@ -56,26 +64,26 @@ def _fake_hash(seed: int) -> str:
 
 
 def generate_condition_resolution_log(
-    block_number: int = DRAW_BLOCK,
-    log_index: int = DRAW_LOG_INDEX,
+    block_number: int = MATCH_BLOCK,
+    log_index: int = MATCH_LOG_INDEX,
     payout_numerators: Optional[List[int]] = None,
 ) -> Dict[str, Any]:
-    """Generate a CTF ConditionResolution log with Draw resolved to Yes."""
-    payouts = payout_numerators or [1, 0]
+    """Generate a CTF ConditionResolution log for the configured match market."""
+    payouts = payout_numerators or [0, 1, 0]
     data = _uint256(len(payouts)) + _uint256(64) + _uint256(len(payouts))
     data += b"".join(_uint256(payout) for payout in payouts)
     return {
         "address": CTF_ADDRESS.lower(),
         "topics": [
             CONDITION_RESOLUTION_TOPIC0,
-            DRAW_CONDITION_ID.lower(),
+            MATCH_CONDITION_ID.lower(),
             _address_topic(UMA_ORACLE).lower(),
-            DRAW_QUESTION_ID.lower(),
+            MATCH_QUESTION_ID.lower(),
         ],
         "data": "0x" + data.hex(),
         "blockNumber": _to_hex(block_number),
         "blockHash": _fake_hash(block_number + 0x100),
-        "transactionHash": DRAW_TX_HASH,
+        "transactionHash": MATCH_TX_HASH,
         "transactionIndex": "0x0",
         "logIndex": _to_hex(log_index),
         "removed": False,
@@ -86,7 +94,7 @@ class MockPolymarketPolygon:
     def __init__(self, port: int = 8546, chain_id: int = POLYGON_CHAIN_ID):
         self.port = port
         self.chain_id = chain_id
-        self.current_block = 0
+        self.current_block = MATCH_BLOCK - 1
         self._logs: Dict[int, List[Dict[str, Any]]] = {}
         self._server: Optional[HTTPServer] = None
         self._thread: Optional[threading.Thread] = None
@@ -100,15 +108,49 @@ class MockPolymarketPolygon:
         return self._thread is not None and self._thread.is_alive()
 
     def preload_draw_resolution(self) -> Dict[str, Any]:
-        log = generate_condition_resolution_log()
-        self._logs.setdefault(DRAW_BLOCK, []).append(log)
-        self.current_block = DRAW_BLOCK
+        log = self.preload_match_resolution(1, visible=True)
         LOG.info(
             "MockPolymarketPolygon: preloaded Draw settlement at block=%s logIndex=%s",
-            DRAW_BLOCK,
-            DRAW_LOG_INDEX,
+            MATCH_BLOCK,
+            MATCH_LOG_INDEX,
         )
         return log
+
+    def preload_match_resolution(self, winning_slot: int, visible: bool = False) -> Dict[str, Any]:
+        if winning_slot < 0 or winning_slot > 2:
+            raise ValueError(f"winning_slot must be 0, 1, or 2; got {winning_slot}")
+        payouts = [0, 0, 0]
+        payouts[winning_slot] = 1
+        log = generate_condition_resolution_log(payout_numerators=payouts)
+        self._logs[MATCH_BLOCK] = [log]
+        self.current_block = MATCH_BLOCK if visible else MATCH_BLOCK - 1
+        LOG.info(
+            "MockPolymarketPolygon: prepared winning_slot=%s payout=%s visible=%s",
+            winning_slot,
+            payouts,
+            visible,
+        )
+        return log
+
+    def release_match_resolution(self, winning_slot: int) -> Dict[str, Any]:
+        if winning_slot < 0 or winning_slot > 2:
+            raise ValueError(f"winning_slot must be 0, 1, or 2; got {winning_slot}")
+        payouts = [0, 0, 0]
+        payouts[winning_slot] = 1
+        log = self.preload_match_resolution(winning_slot, visible=True)
+        return {
+            "market_id": MATCH_MARKET_ID,
+            "condition_id": MATCH_CONDITION_ID,
+            "question_id": MATCH_QUESTION_ID,
+            "ctf": CTF_ADDRESS,
+            "oracle": UMA_ORACLE,
+            "tx_hash": MATCH_TX_HASH,
+            "block": MATCH_BLOCK,
+            "log_index": MATCH_LOG_INDEX,
+            "winning_slot": winning_slot,
+            "payout_numerators": payouts,
+            "source_log": log,
+        }
 
     def handle_request(self, body: dict) -> dict:
         method = body.get("method", "")
@@ -126,6 +168,11 @@ class MockPolymarketPolygon:
                 result = str(self.chain_id)
             elif method == "eth_blockNumber":
                 result = _to_hex(self.current_block)
+            elif method == "mock_setWinningSlot":
+                winning_slot = params[0] if params else 1
+                if isinstance(winning_slot, str):
+                    winning_slot = int(winning_slot, 16) if winning_slot.startswith("0x") else int(winning_slot)
+                result = self.release_match_resolution(int(winning_slot))
             else:
                 LOG.debug("MockPolymarketPolygon: unsupported method '%s'", method)
                 result = None

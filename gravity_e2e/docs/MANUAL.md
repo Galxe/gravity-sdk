@@ -79,7 +79,42 @@ You can control the Python logging level by passing standard pytest flags to the
 ./gravity_e2e/run_test.sh --log-cli-level=DEBUG
 ```
 
-### 5. Docker Runner (CI)
+### 5. Polymarket Mock Oracle Suite
+The `polymarket_mock` suite is a local-only PoC for a Polymarket-like settlement
+flow on Gravity. It starts a local Polygon JSON-RPC mock, maps the oracle task
+URI to that mock, waits for the relayer and unsupported-JWK/oracle consensus path
+to publish `sourceType=6` bytes into `NativeOracle`, and then settles a
+match-market contract from the resolver result.
+
+Run it from the repository root after building `gravity_node` and `gravity_cli`:
+```bash
+PATH="$CONDA_PREFIX/bin:$HOME/.foundry/bin:$PWD/target/quick-release:$PATH" \
+  ./gravity_e2e/run_test.sh polymarket_mock --force-init
+```
+
+If you use a virtualenv instead of conda, activate it first and omit
+`$CONDA_PREFIX/bin` from the `PATH` prefix:
+```bash
+source gravity_e2e/.venv/bin/activate
+PATH="$HOME/.foundry/bin:$PWD/target/quick-release:$PATH" \
+  ./gravity_e2e/run_test.sh polymarket_mock --force-init
+```
+
+Expected success logs include:
+```text
+Released mock Polymarket settlement: winning_slot=<slot> payout=<vector>
+Polymarket match market resolved and claimed: marketId=1 winningSlot=<slot> totalPool=600000000000000000000
+PASSED
+Suite polymarket_mock PASSED
+All suites passed!
+```
+
+The suite README at
+`gravity_e2e/cluster_test_cases/polymarket_mock/README.md` describes the local
+topology, what the test proves, and how this can evolve into a production
+Polymarket-like Gravity product.
+
+### 6. Docker Runner (CI)
 The `run_docker.sh` script runs the full pipeline inside Docker. It accepts the same arguments as `run_test.sh`:
 ```bash
 # Run all suites in Docker

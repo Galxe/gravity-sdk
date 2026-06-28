@@ -13,14 +13,15 @@ id = "node1"
 role = "genesis"
 source = { project_path = "../" }
 host = "127.0.0.1"
-validator_port = 6182
-vfn_port = 6192
-rpc_port = 8545
-metrics_port = 9003
-inspection_port = 10002
-https_port = 1024
-authrpc_port = 8575
-reth_p2p_port = 12026
+validator_port = 45282
+vfn_port = 45292
+rpc_port = 48655
+api_port = 48180
+metrics_port = 49103
+inspection_port = 40002
+https_port = 41024
+authrpc_port = 48675
+reth_p2p_port = 52126
 
 [faucet_init]
 num_accounts = 0

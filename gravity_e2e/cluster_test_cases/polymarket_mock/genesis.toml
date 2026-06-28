@@ -6,10 +6,10 @@ ref = "codex/sports-score-oracle-poc"
 
 [[genesis_validators]]
 id = "node1"
-address = "0xb865ebee9d938b657263391fed43998ed726e444"
+address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 host = "127.0.0.1"
-validator_port = 6182
-vfn_port = 6192
+validator_port = 45282
+vfn_port = 45292
 stake_amount = "2000000000000000000"
 voting_power = "2000000000000000000"
 consensus_pop = "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
@@ -21,6 +21,8 @@ major_version = 1
 consensus_config = "0x0301010a00000000000000280000000000000001010000000a000000000000000100010200000000000000000020000000000000"
 execution_config = "0x00"
 initial_locked_until_micros = 1798848000000000
+
+governance_owner = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 
 [genesis.faucet]
 address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
@@ -43,8 +45,8 @@ unbonding_delay_micros = 86400000000
 
 [genesis.governance_config]
 min_voting_threshold = "1000000000000000000"
-required_proposer_stake = "10000000000000000000"
-voting_duration_micros = 604800000000
+required_proposer_stake = "1000000000000000000"
+voting_duration_micros = 5000000
 
 [genesis.randomness_config]
 variant = 1

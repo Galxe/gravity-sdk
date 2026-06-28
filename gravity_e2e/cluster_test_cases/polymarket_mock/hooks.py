@@ -20,31 +20,32 @@ def pre_start(test_dir: Path, env: dict, pytest_args: list = None):
 
     from gravity_e2e.utils.mock_polymarket_polygon import (
         CTF_ADDRESS,
-        DRAW_BLOCK,
-        DRAW_CONDITION_ID,
-        DRAW_LOG_INDEX,
-        DRAW_MARKET_ID,
-        DRAW_QUESTION_ID,
-        DRAW_TX_HASH,
+        MATCH_BLOCK,
+        MATCH_CONDITION_ID,
+        MATCH_LOG_INDEX,
+        MATCH_MARKET_ID,
+        MATCH_QUESTION_ID,
+        MATCH_TX_HASH,
         MockPolymarketPolygon,
     )
 
-    LOG.info("[hook] Starting MockPolymarketPolygon on port 8546")
+    LOG.info("[hook] Starting MockPolymarketPolygon on port 8546 with hidden settlement")
     _mock = MockPolymarketPolygon(port=8546)
-    log = _mock.preload_draw_resolution()
     _mock.start()
 
     metadata = {
         "port": 8546,
         "rpc_url": _mock.rpc_url,
         "ctf": CTF_ADDRESS,
-        "market_id": DRAW_MARKET_ID,
-        "condition_id": DRAW_CONDITION_ID,
-        "question_id": DRAW_QUESTION_ID,
-        "tx_hash": DRAW_TX_HASH,
-        "block": DRAW_BLOCK,
-        "log_index": DRAW_LOG_INDEX,
-        "source_log": log,
+        "market_id": MATCH_MARKET_ID,
+        "condition_id": MATCH_CONDITION_ID,
+        "question_id": MATCH_QUESTION_ID,
+        "tx_hash": MATCH_TX_HASH,
+        "block": MATCH_BLOCK,
+        "log_index": MATCH_LOG_INDEX,
+        "winning_slot": None,
+        "payout_numerators": None,
+        "source_log": None,
     }
     metadata_path = test_dir / _METADATA_FILE
     metadata_path.write_text(json.dumps(metadata, indent=2))
