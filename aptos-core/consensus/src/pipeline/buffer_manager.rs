@@ -512,7 +512,7 @@ impl BufferManager {
             // Schedule retry.
             self.execution_root
         } else {
-            info!("Advance execution root from {:?} to {:?}", cursor, self.execution_root);
+            debug!("Advance execution root from {:?} to {:?}", cursor, self.execution_root);
             // Otherwise do nothing, because the execution wait phase is driven by the response of
             // the execution schedule phase, which is in turn fed as soon as the ordered blocks
             // come in.
@@ -528,7 +528,7 @@ impl BufferManager {
             self.buffer.find_elem_from(cursor.or_else(|| *self.buffer.head_cursor()), |item| {
                 item.is_executed()
             });
-        info!("Advance signing root from {:?} to {:?}", cursor, self.signing_root);
+        debug!("Advance signing root from {:?} to {:?}", cursor, self.signing_root);
         if self.signing_root.is_some() {
             let item = self.buffer.get(&self.signing_root);
             let executed_item = item.unwrap_executed_ref();
@@ -596,7 +596,7 @@ impl BufferManager {
                     }))
                     .await
                     .expect("Failed to send persist request");
-                info!("Advance head to {:?}", self.buffer.head_cursor());
+                debug!("Advance head to {:?}", self.buffer.head_cursor());
                 self.previous_commit_time = Instant::now();
                 return;
             }
@@ -767,7 +767,7 @@ impl BufferManager {
                 return;
             }
         };
-        info!("Receive executed response {}", executed_blocks.last().unwrap().block_info());
+        debug!("Receive executed response {}", executed_blocks.last().unwrap().block_info());
         let current_item = self.buffer.get(&current_cursor);
 
         if current_item.block_id() != block_id {
@@ -833,7 +833,7 @@ impl BufferManager {
                 return;
             }
         };
-        info!("Receive signing response {}", commit_ledger_info.commit_info());
+        debug!("Receive signing response {}", commit_ledger_info.commit_info());
         // find the corresponding item, may not exist if a reset or aggregated happened
         let current_cursor =
             self.buffer.find_elem_by_key(self.signing_root, commit_ledger_info.commit_info().id());
@@ -885,7 +885,7 @@ impl BufferManager {
                 // find the corresponding item
                 let author = vote.author();
                 let commit_info = vote.commit_info().clone();
-                info!("Receive commit vote {} from {}", commit_info, author);
+                debug!("Receive commit vote {} from {}", commit_info, author);
                 let target_block_id = vote.commit_info().id();
                 let current_cursor =
                     self.buffer.find_elem_by_key(*self.buffer.head_cursor(), target_block_id);
@@ -1009,7 +1009,7 @@ impl BufferManager {
             cursor = self.buffer.get_next(&cursor);
         }
         if count > 0 {
-            info!("Start reliable broadcast {} commit votes", count);
+            debug!("Start reliable broadcast {} commit votes", count);
         }
     }
 
