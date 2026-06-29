@@ -7,6 +7,7 @@ import signal
 import logging
 import argparse
 import shutil
+import errno
 from pathlib import Path
 
 try:
@@ -27,6 +28,21 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 E2E_ROOT = PROJECT_ROOT / "gravity_e2e"
 TESTS_ROOT = E2E_ROOT / "cluster_test_cases"
 CLUSTER_SCRIPTS_DIR = PROJECT_ROOT / "cluster"
+LOCAL_NO_PROXY_HOSTS = ("127.0.0.1", "localhost", "::1", "0.0.0.0")
+
+
+def ensure_local_no_proxy(env):
+    """Ensure localhost RPC calls bypass user-configured HTTP proxies."""
+    for key in ("NO_PROXY", "no_proxy"):
+        existing = env.get(key, "")
+        if existing.strip() == "*":
+            continue
+
+        parts = [part.strip() for part in existing.split(",") if part.strip()]
+        for host in LOCAL_NO_PROXY_HOSTS:
+            if host not in parts:
+                parts.append(host)
+        env[key] = ",".join(parts)
 
 
 def run_command(command, cwd=None, env=None, check=True, stream_output=True):
@@ -133,8 +149,13 @@ def verify_nodes_alive(cluster_config: Path, env: dict):
                     pid = int(f.read().strip())
                 os.kill(pid, 0)
                 process_alive = True
-            except (ValueError, ProcessLookupError, OSError):
+            except ValueError:
                 pass
+            except ProcessLookupError:
+                pass
+            except OSError as e:
+                if e.errno == errno.EPERM:
+                    process_alive = True
 
         if not process_alive:
             log_dir = os.path.join(data_dir, "logs")
@@ -153,7 +174,8 @@ def verify_nodes_alive(cluster_config: Path, env: dict):
                 url, data=payload, headers={"Content-Type": "application/json"}
             )
             try:
-                with urllib.request.urlopen(req, timeout=5) as resp:
+                opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+                with opener.open(req, timeout=5) as resp:
                     body = _json.loads(resp.read())
                     if "result" not in body:
                         dead_nodes.append((node_id, f"RPC returned no result: {body}"))
@@ -192,6 +214,7 @@ def run_test_suite(
     # Define artifact paths
     suite_artifacts_dir = test_dir / "artifacts"
     env = os.environ.copy()
+    ensure_local_no_proxy(env)
     env["GRAVITY_ARTIFACTS_DIR"] = str(suite_artifacts_dir)
 
     # Set genesis config path if it exists
