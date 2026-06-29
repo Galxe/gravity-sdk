@@ -22,7 +22,7 @@ use tokio::{
     time::Instant,
 };
 
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use gaptos::api_types::{
     compute_res::{ComputeRes, TxnStatus},
@@ -184,6 +184,9 @@ pub struct BlockStateMachine {
     /// Also serves as the source of truth for `is_suffix_block` and
     /// `get_epoch_change_block_info`, so the reth and consensus sides stay in sync.
     epoch_change_block_info: Option<EpochChangeCache>,
+    /// Set after `release_inflight_blocks` has advanced `current_epoch` and pruned suffix blocks.
+    /// This flag is consumed by the reth execution loop through `consume_epoch_change`.
+    epoch_change_ready: bool,
 }
 
 impl BlockStateMachine {
@@ -281,6 +284,7 @@ impl BlockBufferManager {
                 next_epoch: None,
                 latest_epoch_change_block_number: 0,
                 epoch_change_block_info: None,
+                epoch_change_ready: false,
             }),
             buffer_state: AtomicU8::new(BufferState::Uninitialized as u8),
             config,
@@ -316,11 +320,33 @@ impl BlockBufferManager {
         latest_commit_block_number: u64,
         block_number_to_block_id_with_epoch: HashMap<u64, (u64, BlockId)>,
         initial_epoch: u64,
-    ) {
+    ) -> anyhow::Result<()> {
         info!(
             "init block_buffer_manager with latest_commit_block_number: {:?} block_number_to_block_id count: {} initial_epoch: {}",
             latest_commit_block_number, block_number_to_block_id_with_epoch.len(), initial_epoch
         );
+        let commit_block = if block_number_to_block_id_with_epoch.is_empty() {
+            if latest_commit_block_number > 0 {
+                return Err(format_err!(
+                    "BlockBufferManager::init: latest_commit_block_number {} requires a non-empty block_number_to_block_id_with_epoch map",
+                    latest_commit_block_number
+                ));
+            }
+            None
+        } else {
+            Some(
+                block_number_to_block_id_with_epoch
+                    .get(&latest_commit_block_number)
+                    .copied()
+                    .ok_or_else(|| {
+                        format_err!(
+                            "BlockBufferManager::init: latest_commit_block_number {} not found in block_number_to_block_id_with_epoch map",
+                            latest_commit_block_number
+                        )
+                    })?,
+            )
+        };
+
         let mut block_state_machine = self.block_state_machine.lock().await;
         // When init, the latest_finalized_block_number is the same as latest_commit_block_number
         block_state_machine.latest_commit_block_number = latest_commit_block_number;
@@ -332,16 +358,7 @@ impl BlockBufferManager {
             .collect();
         // Initialize current_epoch from the parameter
         block_state_machine.current_epoch = initial_epoch;
-        if !block_number_to_block_id_with_epoch.is_empty() {
-            let Some(&(commit_block_epoch, commit_block_id)) =
-                block_number_to_block_id_with_epoch.get(&latest_commit_block_number)
-            else {
-                error!(
-                        "BlockBufferManager::init: latest_commit_block_number {} not found in block_number_to_block_id_with_epoch map",
-                        latest_commit_block_number
-                    );
-                return;
-            };
+        if let Some((commit_block_epoch, commit_block_id)) = commit_block {
             block_state_machine.blocks.insert(
                 BlockKey::new(commit_block_epoch, latest_commit_block_number),
                 BlockState::Historical { id: commit_block_id },
@@ -352,6 +369,7 @@ impl BlockBufferManager {
         self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
         // Notify all waiters that buffer is ready
         self.ready_notifier.notify_waiters();
+        Ok(())
     }
 
     /// Update the current epoch. Called by EpochManager at start to set the correct epoch
@@ -403,10 +421,10 @@ impl BlockBufferManager {
     /// which blocks to retain (reset-to-0 means "drop everything leftover").
     /// Suffix-block lookups no longer depend on this field — they use
     /// `epoch_change_block_info` directly, which lives until `release_inflight_blocks`.
+    /// `epoch_change_ready` is set by `release_inflight_blocks` after the mutex-protected
+    /// epoch state has been advanced. Consumers must observe this flag while holding the same
+    /// mutex so the epoch and transition state have a clear happens-before relation.
     pub async fn consume_epoch_change(&self) -> (u64, u64) {
-        // Acquire lock first to prevent TOCTOU race.
-        // Other tasks checking is_epoch_change() will still see EpochChange
-        // until we have fully read the new epoch and are ready to proceed.
         let mut block_state_machine = self.block_state_machine.lock().await;
         let epoch_change_block_number = block_state_machine.latest_epoch_change_block_number;
 
@@ -423,6 +441,7 @@ impl BlockBufferManager {
         // get_epoch_change_block_info relies on it to identify suffix blocks and return dummy
         // execution results. It will be cleared in release_inflight_blocks. Only now signal
         // that the epoch change has been consumed.
+        block_state_machine.epoch_change_ready = false;
         self.buffer_state.store(BufferState::Ready as u8, Ordering::SeqCst);
 
         // If epoch_change_block_number is 0, it means this is a redundant call
@@ -506,6 +525,13 @@ impl BlockBufferManager {
         );
         let mut block_state_machine = self.block_state_machine.lock().await;
         let current_epoch = block_state_machine.current_epoch;
+
+        if block_state_machine.epoch_change_ready {
+            return Err(anyhow::anyhow!(
+                "set_ordered_blocks: epoch change is waiting to be consumed at block {}",
+                block_state_machine.latest_epoch_change_block_number
+            ));
+        }
 
         // Check epoch validity with metrics for dropped blocks
         if block.block_meta.epoch < current_epoch {
@@ -605,10 +631,6 @@ impl BlockBufferManager {
             self.ready_notifier.notified().await;
         }
 
-        if self.is_epoch_change() {
-            return Err(anyhow::anyhow!("Buffer is in epoch change"));
-        }
-
         let start = Instant::now();
         info!(
             "call get_ordered_blocks start_num: {:?} max_size: {:?} expected_epoch: {:?}",
@@ -625,8 +647,12 @@ impl BlockBufferManager {
 
             let mut block_state_machine = self.block_state_machine.lock().await;
 
-            // Check if epoch has already advanced (e.g., release_inflight_blocks was called)
-            if self.is_epoch_change() {
+            // Check transition state while holding the same mutex as current_epoch. This avoids
+            // a TOCTOU race where the atomic transition flag changes between the external check
+            // and the block map read.
+            if block_state_machine.epoch_change_ready ||
+                block_state_machine.current_epoch != expected_epoch
+            {
                 return Err(anyhow::anyhow!("Buffer is in epoch change"));
             }
 
@@ -1306,7 +1332,45 @@ impl BlockBufferManager {
         block_state_machine
             .profile
             .retain(|key, _| key.block_number <= latest_epoch_change_block_number);
+        block_state_machine.epoch_change_ready = true;
         self.buffer_state.store(BufferState::EpochChange as u8, Ordering::SeqCst);
         let _ = block_state_machine.sender.send(());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn init_returns_error_without_partial_state_when_commit_block_missing() {
+        let manager = BlockBufferManager::new(BlockBufferManagerConfig::default());
+        let mut block_number_to_block_id = HashMap::new();
+        block_number_to_block_id.insert(9, (1, BlockId([9; 32])));
+
+        let error = manager.init(10, block_number_to_block_id, 1).await.unwrap_err();
+
+        assert!(error.to_string().contains("latest_commit_block_number 10 not found"));
+        assert!(!manager.is_ready());
+        let block_state_machine = manager.block_state_machine.lock().await;
+        assert_eq!(block_state_machine.latest_commit_block_number, 0);
+        assert_eq!(block_state_machine.latest_finalized_block_number, 0);
+        assert!(block_state_machine.block_number_to_block_id.is_empty());
+        assert_eq!(block_state_machine.current_epoch, 0);
+    }
+
+    #[tokio::test]
+    async fn init_returns_error_without_partial_state_when_non_genesis_map_is_empty() {
+        let manager = BlockBufferManager::new(BlockBufferManagerConfig::default());
+
+        let error = manager.init(10, HashMap::new(), 1).await.unwrap_err();
+
+        assert!(error.to_string().contains("requires a non-empty"));
+        assert!(!manager.is_ready());
+        let block_state_machine = manager.block_state_machine.lock().await;
+        assert_eq!(block_state_machine.latest_commit_block_number, 0);
+        assert_eq!(block_state_machine.latest_finalized_block_number, 0);
+        assert!(block_state_machine.block_number_to_block_id.is_empty());
+        assert_eq!(block_state_machine.current_epoch, 0);
     }
 }

@@ -269,7 +269,10 @@ pub fn init_peers_and_metadata(
     PeersAndMetadata::new(&network_ids)
 }
 
-pub async fn init_block_buffer_manager(consensus_db: &Arc<ConsensusDB>, latest_block_number: u64) {
+pub async fn init_block_buffer_manager(
+    consensus_db: &Arc<ConsensusDB>,
+    latest_block_number: u64,
+) -> anyhow::Result<()> {
     info!("init_block_buffer_manager start");
     let start_block_number = latest_block_number.saturating_sub(RECENT_BLOCKS_RANGE);
 
@@ -305,5 +308,8 @@ pub async fn init_block_buffer_manager(consensus_db: &Arc<ConsensusDB>, latest_b
         block_number_to_block_id
             .insert(0u64, (0, BlockId::from_bytes(GENESIS_BLOCK_ID.as_slice())));
     }
-    get_block_buffer_manager().init(latest_block_number, block_number_to_block_id, max_epoch).await;
+    get_block_buffer_manager()
+        .init(latest_block_number, block_number_to_block_id, max_epoch)
+        .await?;
+    Ok(())
 }

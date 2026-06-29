@@ -306,7 +306,9 @@ impl ConsensusEngine {
             );
             runtimes.push(jwk_consensus_runtime);
         }
-        init_block_buffer_manager(&consensus_db, latest_block_number).await;
+        init_block_buffer_manager(&consensus_db, latest_block_number)
+            .await
+            .expect("failed to initialize BlockBufferManager");
         let mut args = ConsensusAdapterArgs::new(consensus_db.clone());
         let (consensus_runtime, _, _) = start_consensus(
             &node_config,

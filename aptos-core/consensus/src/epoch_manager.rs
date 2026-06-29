@@ -1973,7 +1973,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 // Handles Direct Send/Broadcast messages (e.g. ProposalMsg, VoteMsg, etc).
                 // "Fire and forget" style messages that do not require an immediate response.
                 (peer, msg) = network_receivers.consensus_messages.select_next_some() => {
-                    info!("consensus message peer {:?} msg {:?}", peer, msg);
+                    debug!("consensus message peer {:?} msg {:?}", peer, msg);
                     monitor!("epoch_manager_process_consensus_messages",
                     if let Err(e) = self.process_message(peer, msg).await {
                         error!(epoch = self.epoch(), error = ?e, kind = error_kind(&e));
