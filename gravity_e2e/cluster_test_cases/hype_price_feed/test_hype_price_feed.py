@@ -1,11 +1,14 @@
 """Hype/HIP-3-style price feed oracle e2e test."""
 
 import asyncio
+from contextlib import contextmanager
 import json
 import logging
 import shutil
 import subprocess
+import threading
 import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Optional
 
@@ -46,27 +49,26 @@ GOOGL_FEED_ID = 1002
 ROUND_ID = 1
 RESOLVED_AT = 2010
 DECIMALS = 8
-AGG_WEIGHTED_MEAN = 1
-SOURCE_COUNT = 3
-TOTAL_WEIGHT = 5
+AGG_WEIGHTED_MEDIAN = 2
+SOURCE_COUNT = 1
+TOTAL_WEIGHT = 1
 EXPECTED_NVDA_PRICE = 19_538_000_000
 EXPECTED_GOOGL_PRICE = 35_364_400_000
+MOCK_HYPE_INFO_PORT = 18547
 
 NVDA_URI = (
     "gravity://3/1001/price_feed?"
-    "round=1&resolvedAt=2010&decimals=8&aggregationMode=1&"
-    "minSourceCount=3&minTotalWeight=5&maxStaleness=60&"
-    "observations=hype-info:2000:19538000000:3,"
-    "nasdaq-shadow:2000:19540000000:1,"
-    "index-shadow:2000:19536000000:1"
+    "provider=hype&dex=xyz&coin=NVDA&field=oraclePx&"
+    "round=1&resolvedAt=2010&decimals=8&aggregationMode=2&"
+    "minSourceCount=1&minTotalWeight=1&maxStaleness=60&"
+    "blockNumber=2010&dataSourceLabel=hype-info"
 )
 GOOGL_URI = (
     "gravity://3/1002/price_feed?"
-    "round=1&resolvedAt=2010&decimals=8&aggregationMode=1&"
-    "minSourceCount=3&minTotalWeight=5&maxStaleness=60&"
-    "observations=hype-info:2000:35364000000:3,"
-    "nasdaq-shadow:2000:35370000000:1,"
-    "index-shadow:2000:35360000000:1"
+    "provider=hype&dex=xyz&coin=GOOGL&field=oraclePx&"
+    "round=1&resolvedAt=2010&decimals=8&aggregationMode=2&"
+    "minSourceCount=1&minTotalWeight=1&maxStaleness=60&"
+    "blockNumber=2010&dataSourceLabel=hype-info"
 )
 
 DATA_RECORDED_TOPIC0 = Web3.keccak(
@@ -253,6 +255,66 @@ def _ensure_faucet_executor(w3: Web3):
         )
 
 
+class _MockHypeInfoHandler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def do_POST(self):
+        if self.path != "/info":
+            self.send_error(404)
+            return
+
+        length = int(self.headers.get("content-length", "0"))
+        body = self.rfile.read(length)
+        try:
+            request = json.loads(body.decode() or "{}")
+        except json.JSONDecodeError:
+            self.send_error(400)
+            return
+
+        if request.get("type") != "metaAndAssetCtxs" or request.get("dex") != "xyz":
+            self.send_error(400)
+            return
+
+        response = [
+            {
+                "universe": [
+                    {"name": "xyz:NVDA"},
+                    {"name": "xyz:GOOGL"},
+                ]
+            },
+            [
+                {"oraclePx": "195.38", "markPx": "195.40", "midPx": "195.39"},
+                {"oraclePx": "353.644", "markPx": "353.70", "midPx": "353.672"},
+            ],
+        ]
+        payload = json.dumps(response).encode()
+        self.send_response(200)
+        self.send_header("content-type", "application/json")
+        self.send_header("content-length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def log_message(self, fmt: str, *args):
+        LOG.debug("mock hype info: " + fmt, *args)
+
+
+class _ReusableThreadingHTTPServer(ThreadingHTTPServer):
+    allow_reuse_address = True
+
+
+@contextmanager
+def _mock_hype_info_server():
+    server = _ReusableThreadingHTTPServer(("127.0.0.1", MOCK_HYPE_INFO_PORT), _MockHypeInfoHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{MOCK_HYPE_INFO_PORT}/info"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 async def _execute_governance_proposal(
     w3: Web3,
     pool_addr: str,
@@ -349,7 +411,7 @@ def _assert_price_round(latest, expected_price: int):
     assert latest[1] == ROUND_ID
     assert latest[2] == RESOLVED_AT
     assert latest[3] == DECIMALS
-    assert latest[4] == AGG_WEIGHTED_MEAN
+    assert latest[4] == AGG_WEIGHTED_MEDIAN
     assert latest[5] == SOURCE_COUNT
     assert latest[6] == TOTAL_WEIGHT
     assert latest[7] == expected_price
@@ -380,53 +442,55 @@ async def test_hype_price_feed_resolves_nvda_and_googl(cluster: Cluster):
     task_config = w3.eth.contract(address=ORACLE_TASK_CONFIG_ADDRESS, abi=task_artifact["abi"])
     pool_addr = _pool0_voted_by_faucet(w3)
 
-    setup_datas = [
-        _function_calldata(
-            native_oracle.functions.setDefaultCallback(
-                SOURCE_TYPE_PRICE_FEED,
-                resolver.address,
-            )
-        ),
-        _function_calldata(
-            task_config.functions.setTask(
-                SOURCE_TYPE_PRICE_FEED,
-                NVDA_FEED_ID,
-                TASK_PRICE_FEED,
-                NVDA_URI.encode(),
-            )
-        ),
-        _function_calldata(
-            task_config.functions.setTask(
-                SOURCE_TYPE_PRICE_FEED,
-                GOOGL_FEED_ID,
-                TASK_PRICE_FEED,
-                GOOGL_URI.encode(),
-            )
-        ),
-    ]
-    await _execute_governance_proposal(
-        w3,
-        pool_addr,
-        [NATIVE_ORACLE_ADDRESS, ORACLE_TASK_CONFIG_ADDRESS, ORACLE_TASK_CONFIG_ADDRESS],
-        setup_datas,
-        "hype-price-feed-e2e-setup",
-    )
-
-    for feed_id, expected_price in [
-        (NVDA_FEED_ID, EXPECTED_NVDA_PRICE),
-        (GOOGL_FEED_ID, EXPECTED_GOOGL_PRICE),
-    ]:
-        logs = await _poll_data_recorded(w3, feed_id, timeout=180)
-        assert logs, f"No sourceType=3 DataRecorded event observed for feedId={feed_id}"
-        assert native_oracle.functions.getLatestNonce(SOURCE_TYPE_PRICE_FEED, feed_id).call() == ROUND_ID
-
-        latest = await _wait_for_latest_price(resolver, feed_id, timeout=60)
-        _assert_price_round(latest, expected_price)
-        stored = resolver.functions.priceRounds(feed_id, ROUND_ID).call()
-        _assert_price_round(stored, expected_price)
-        LOG.info(
-            "Hype price feed resolved: feedId=%s roundId=%s price=%s",
-            feed_id,
-            ROUND_ID,
-            expected_price,
+    with _mock_hype_info_server() as hype_info_url:
+        LOG.info("Mock Hype /info server running at %s", hype_info_url)
+        setup_datas = [
+            _function_calldata(
+                native_oracle.functions.setDefaultCallback(
+                    SOURCE_TYPE_PRICE_FEED,
+                    resolver.address,
+                )
+            ),
+            _function_calldata(
+                task_config.functions.setTask(
+                    SOURCE_TYPE_PRICE_FEED,
+                    NVDA_FEED_ID,
+                    TASK_PRICE_FEED,
+                    NVDA_URI.encode(),
+                )
+            ),
+            _function_calldata(
+                task_config.functions.setTask(
+                    SOURCE_TYPE_PRICE_FEED,
+                    GOOGL_FEED_ID,
+                    TASK_PRICE_FEED,
+                    GOOGL_URI.encode(),
+                )
+            ),
+        ]
+        await _execute_governance_proposal(
+            w3,
+            pool_addr,
+            [NATIVE_ORACLE_ADDRESS, ORACLE_TASK_CONFIG_ADDRESS, ORACLE_TASK_CONFIG_ADDRESS],
+            setup_datas,
+            "hype-price-feed-e2e-setup",
         )
+
+        for feed_id, expected_price in [
+            (NVDA_FEED_ID, EXPECTED_NVDA_PRICE),
+            (GOOGL_FEED_ID, EXPECTED_GOOGL_PRICE),
+        ]:
+            logs = await _poll_data_recorded(w3, feed_id, timeout=180)
+            assert logs, f"No sourceType=3 DataRecorded event observed for feedId={feed_id}"
+            assert native_oracle.functions.getLatestNonce(SOURCE_TYPE_PRICE_FEED, feed_id).call() == ROUND_ID
+
+            latest = await _wait_for_latest_price(resolver, feed_id, timeout=60)
+            _assert_price_round(latest, expected_price)
+            stored = resolver.functions.priceRounds(feed_id, ROUND_ID).call()
+            _assert_price_round(stored, expected_price)
+            LOG.info(
+                "Hype price feed resolved: feedId=%s roundId=%s price=%s",
+                feed_id,
+                ROUND_ID,
+                expected_price,
+            )

@@ -5,17 +5,19 @@ This local-only suite proves the Gravity oracle path for stock-like price feeds:
 1. Governance deploys `MultiSourceOracleResolver`.
 2. Governance sets the `NativeOracle` default callback for `sourceType=3`.
 3. Governance registers two `OracleTaskConfig` tasks:
-   - `feedId=1001`: Hype/HIP-3-style NVDA/USD round.
-   - `feedId=1002`: Hype/HIP-3-style GOOGL/USD round.
+   - `feedId=1001`: Hype/HIP-3 `provider=hype&dex=xyz&coin=NVDA` round.
+   - `feedId=1002`: Hype/HIP-3 `provider=hype&dex=xyz&coin=GOOGL` round.
 4. The suite uses a 30-second epoch so `aptos-jwk-consensus` rebuilds its provider list after the governance update.
-5. `gravity-reth` discovers `sourceType=3` as a relayer-backed task, adds the URI from local `relayer_config.json`, and publishes the canonical price bytes through the unsupported-JWK consensus path.
-6. `NativeOracle` records the payloads and calls `MultiSourceOracleResolver`.
-7. The resolver stores `latestPrice(feedId)` and `priceRounds(feedId, roundId)`.
+5. The pytest process runs a local mock Hype `/info` server that returns a
+   deterministic `metaAndAssetCtxs` response for `xyz:NVDA` and `xyz:GOOGL`.
+6. `gravity-reth` discovers `sourceType=3` as a relayer-backed task, adds the URI from local `relayer_config.json`, fetches the mock Hype response through the `provider=hype` adapter, and publishes the canonical price bytes through the unsupported-JWK consensus path.
+7. `NativeOracle` records the payloads and calls `MultiSourceOracleResolver`.
+8. The resolver stores `latestPrice(feedId)` and `priceRounds(feedId, roundId)`.
 
-The suite does not call a live Hyperliquid endpoint. The URI carries deterministic
-multi-source observations so every validator produces byte-identical payloads.
-Live Hype/HIP-3 fetching should be tested separately with a mock `/info` server
-or run manually with validator-local relayer config.
+The suite does not call a live Hyperliquid endpoint. It exercises the same
+HTTP/JSON adapter path against a local deterministic `/info` mock so every
+validator produces byte-identical payloads. Live Hype/HIP-3 fetching should be
+tested separately with validator-local relayer config.
 
 This is intentionally an epoch-config test, not a dynamic request watcher test.
 The current relayer-backed JWK path rebuilds observers from on-chain config at
@@ -52,11 +54,12 @@ Suite hype_price_feed PASSED
 All suites passed!
 ```
 
-The expected price math uses weighted mean aggregation:
+The expected price math uses single-source weighted median aggregation over the
+mock Hype `oraclePx` field:
 
 ```text
-NVDA  = (19538000000 * 3 + 19540000000 + 19536000000) / 5 = 19538000000
-GOOGL = (35364000000 * 3 + 35370000000 + 35360000000) / 5 = 35364400000
+NVDA  = parse_fixed_decimal("195.38", 8)  = 19538000000
+GOOGL = parse_fixed_decimal("353.644", 8) = 35364400000
 ```
 
 All prices use 8 decimals.

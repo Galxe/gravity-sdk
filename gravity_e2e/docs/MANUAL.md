@@ -115,16 +115,18 @@ a production Polymarket-like Gravity product.
 
 ### 6. Hype/HIP-3 Price Feed Suite
 The `hype_price_feed` suite is a local-only PoC for stock-like price feed rounds
-on Gravity. It registers deterministic NVDA/USD and GOOGL/USD `sourceType=3`
-tasks through governance, waits for the next short test epoch so
-`aptos-jwk-consensus` rebuilds relayer-backed observers, then waits for the
-unsupported-JWK/oracle consensus path to publish price bytes into
-`NativeOracle` and checks `MultiSourceOracleResolver.latestPrice(feedId)`.
+on Gravity. It registers deterministic `provider=hype&dex=xyz&coin=NVDA` and
+`provider=hype&dex=xyz&coin=GOOGL` `sourceType=3` tasks through governance,
+starts a local mock Hype `/info` server with `metaAndAssetCtxs` data, waits for
+the next short test epoch so `aptos-jwk-consensus` rebuilds relayer-backed
+observers, then waits for the unsupported-JWK/oracle consensus path to publish
+price bytes into `NativeOracle` and checks
+`MultiSourceOracleResolver.latestPrice(feedId)`.
 
-The suite intentionally does not call live Hype/Hyperliquid endpoints. Static
-multi-source observations keep the agreed bytes deterministic for validator E2E.
-Live `/info` provider fetching can be tested separately with a mock server or a
-manual validator-local relayer config.
+The suite intentionally does not call live Hype/Hyperliquid endpoints. The local
+mock exercises the same Hype HTTP/JSON adapter path while keeping agreed bytes
+deterministic for validator E2E. Live `/info` provider fetching can be tested
+separately with manual validator-local relayer config.
 
 This suite proves the epoch-config path for long-running feeds. It does not
 implement intra-epoch dynamic request discovery; that still needs a deterministic
