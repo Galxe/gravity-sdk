@@ -56,7 +56,7 @@ use greth::{
     reth_chainspec::ChainSpec,
     reth_cli::chainspec::{parse_genesis, ChainSpecParser},
 };
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
 /// Gravity mainnet chain id.
 pub const GRAVITY_MAINNET_CHAIN_ID: u64 = 127_001;
@@ -121,30 +121,97 @@ impl ChainSpecParser for GravityChainSpecParser {
         // Fallthrough: file path or inline JSON. Parse, mutate, then
         // hand the mutated Genesis to `From<Genesis> for ChainSpec`.
         let mut g = parse_genesis(s)?;
-        apply_overrides(&mut g);
+        let events = apply_overrides(&mut g);
+        // `tracing` is not yet initialized — `clap` calls us inside
+        // `Cli::parse()`, before `main()` reaches `cli.run()` which
+        // installs the subscriber. Use `eprintln!` so operators see the
+        // diff in stderr (production `start.sh` redirects stderr into
+        // `${LOG_DIR}/debug.log`). A silent override masks root causes
+        // like a genesis regen that drops a hardfork field.
+        for ev in &events {
+            eprintln!("{ev}");
+        }
         Ok(Arc::new(g.into()))
     }
 }
 
+/// A fork whose effective condition was changed by the override relative
+/// to what the operator supplied in genesis. Emitted to stderr by
+/// [`GravityChainSpecParser::parse`] so a `genesis != binary` mismatch is
+/// visible at startup rather than silently papered over.
+///
+/// The fields are intentionally raw `Option<u64>` (genesis-supplied vs.
+/// binary-forced) so the message can be grepped programmatically.
+#[derive(Debug, PartialEq, Eq)]
+struct OverrideEvent {
+    chain_id: u64,
+    fork: &'static str,
+    genesis: Option<u64>,
+    forced: Option<u64>,
+}
+
+impl fmt::Display for OverrideEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fn opt(v: Option<u64>) -> String {
+            v.map(|t| t.to_string()).unwrap_or_else(|| "<unset>".to_string())
+        }
+        write!(
+            f,
+            "WARN [GravityChainSpecParser] chainId {}: binary forces {} = {}; \
+             genesis says {}. Update genesis to match if this is unexpected.",
+            self.chain_id,
+            self.fork,
+            opt(self.forced),
+            opt(self.genesis),
+        )
+    }
+}
+
 /// Apply the hardcoded schedule for `g.config.chain_id` (if listed) in
-/// place. No-op if the chain id is not in [`HARDCODED`].
-fn apply_overrides(g: &mut Genesis) {
+/// place. Returns a list of forks whose condition was actually changed by
+/// the override (i.e. genesis disagreed with the binary). Caller decides
+/// how to surface these — `parse()` writes them to stderr. No-op (and
+/// empty events vec) if the chain id is not in [`HARDCODED`].
+fn apply_overrides(g: &mut Genesis) -> Vec<OverrideEvent> {
+    let mut events = Vec::new();
     let Some((_, ov)) = HARDCODED.iter().find(|(id, _)| *id == g.config.chain_id) else {
-        return;
+        return events;
     };
+    let chain_id = g.config.chain_id;
+
     // Prague: typed `ChainConfig` field. `Some` overwrites, `None` clears.
-    g.config.prague_time = ov.prague_time;
+    if g.config.prague_time != ov.prague_time {
+        events.push(OverrideEvent {
+            chain_id,
+            fork: "prague_time",
+            genesis: g.config.prague_time,
+            forced: ov.prague_time,
+        });
+        g.config.prague_time = ov.prague_time;
+    }
+
     // Alpha: `extra_fields` map. `OtherFields` derefs to
     // `BTreeMap<String, serde_json::Value>`, so we can `insert` / `remove`
     // directly.
-    match ov.alpha_time {
-        Some(t) => {
-            g.config.extra_fields.insert("alphaTime".to_string(), serde_json::Value::from(t));
-        }
-        None => {
-            g.config.extra_fields.remove("alphaTime");
+    let genesis_alpha = g.config.extra_fields.get("alphaTime").and_then(|v| v.as_u64());
+    if genesis_alpha != ov.alpha_time {
+        events.push(OverrideEvent {
+            chain_id,
+            fork: "alphaTime",
+            genesis: genesis_alpha,
+            forced: ov.alpha_time,
+        });
+        match ov.alpha_time {
+            Some(t) => {
+                g.config.extra_fields.insert("alphaTime".to_string(), serde_json::Value::from(t));
+            }
+            None => {
+                g.config.extra_fields.remove("alphaTime");
+            }
         }
     }
+
+    events
 }
 
 #[cfg(test)]
@@ -327,5 +394,104 @@ mod tests {
     #[test]
     fn gravity_mainnet_prague_timestamp_pinned_to_governance_value() {
         assert_eq!(table_prague_timestamp(), 1_782_709_200);
+    }
+
+    // ---------- Mismatch-warning event emission ----------
+
+    /// Parse the JSON helper directly to a `Genesis` (without running the
+    /// override) so tests can call `apply_overrides` themselves and assert
+    /// on the returned events.
+    fn parse_genesis_only(
+        chain_id: u64,
+        prague_time: Option<u64>,
+        alpha_time: Option<u64>,
+    ) -> Genesis {
+        let s = genesis_json(chain_id, prague_time, alpha_time);
+        serde_json::from_str(&s).expect("valid genesis json")
+    }
+
+    #[test]
+    fn apply_overrides_emits_event_when_genesis_prague_differs() {
+        let mut g = parse_genesis_only(GRAVITY_MAINNET_CHAIN_ID, Some(100), None);
+        let events = apply_overrides(&mut g);
+        // Prague: genesis Some(100) vs forced Some(table_ts) → event.
+        // Alpha:  genesis None      vs forced None           → no event.
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].fork, "prague_time");
+        assert_eq!(events[0].genesis, Some(100));
+        assert_eq!(events[0].forced, Some(table_prague_timestamp()));
+    }
+
+    #[test]
+    fn apply_overrides_emits_event_when_genesis_omits_prague() {
+        let mut g = parse_genesis_only(GRAVITY_MAINNET_CHAIN_ID, None, None);
+        let events = apply_overrides(&mut g);
+        // Prague: genesis None vs forced Some(table_ts) → event.
+        // Alpha:  genesis None vs forced None           → no event.
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].fork, "prague_time");
+        assert_eq!(events[0].genesis, None);
+        assert_eq!(events[0].forced, Some(table_prague_timestamp()));
+    }
+
+    #[test]
+    fn apply_overrides_emits_event_when_genesis_supplies_alpha() {
+        let mut g =
+            parse_genesis_only(GRAVITY_MAINNET_CHAIN_ID, Some(table_prague_timestamp()), Some(100));
+        let events = apply_overrides(&mut g);
+        // Prague: genesis Some(table_ts) vs forced Some(table_ts) → no event.
+        // Alpha:  genesis Some(100)      vs forced None           → event.
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].fork, "alphaTime");
+        assert_eq!(events[0].genesis, Some(100));
+        assert_eq!(events[0].forced, None);
+    }
+
+    /// Both forks disagree → both events fire, in declared table order
+    /// (prague_time first, then alphaTime).
+    #[test]
+    fn apply_overrides_emits_both_events_when_both_disagree() {
+        let mut g = parse_genesis_only(GRAVITY_MAINNET_CHAIN_ID, Some(42), Some(99));
+        let events = apply_overrides(&mut g);
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].fork, "prague_time");
+        assert_eq!(events[1].fork, "alphaTime");
+    }
+
+    /// Genesis already matches the binary on every gated fork → silent.
+    #[test]
+    fn apply_overrides_is_silent_when_genesis_already_matches_table() {
+        let mut g =
+            parse_genesis_only(GRAVITY_MAINNET_CHAIN_ID, Some(table_prague_timestamp()), None);
+        let events = apply_overrides(&mut g);
+        assert!(events.is_empty(), "no events when genesis agrees with the table");
+    }
+
+    /// Chain id not in `HARDCODED` → entirely no-op, no events even if
+    /// genesis sets values that would mismatch the gravity-mainnet table.
+    #[test]
+    fn apply_overrides_is_silent_for_chain_id_not_in_table() {
+        let mut g = parse_genesis_only(7_771_625, Some(100), Some(50));
+        let events = apply_overrides(&mut g);
+        assert!(events.is_empty(), "no events for chain id outside HARDCODED");
+    }
+
+    /// The stderr line is grep-friendly: stable prefix, raw values, and
+    /// `<unset>` token for `None`. Tested so future formatting changes
+    /// have to consciously update operator-facing strings.
+    #[test]
+    fn override_event_display_is_grep_friendly() {
+        let ev = OverrideEvent {
+            chain_id: GRAVITY_MAINNET_CHAIN_ID,
+            fork: "prague_time",
+            genesis: None,
+            forced: Some(1_782_709_200),
+        };
+        let s = format!("{ev}");
+        assert!(s.starts_with("WARN [GravityChainSpecParser]"), "got: {s}");
+        assert!(s.contains("chainId 127001"), "got: {s}");
+        assert!(s.contains("prague_time"), "got: {s}");
+        assert!(s.contains("1782709200"), "got: {s}");
+        assert!(s.contains("<unset>"), "got: {s}");
     }
 }
