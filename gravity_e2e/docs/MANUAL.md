@@ -109,12 +109,49 @@ Suite polymarket_mock PASSED
 All suites passed!
 ```
 
-The suite README at
-`gravity_e2e/cluster_test_cases/polymarket_mock/README.md` describes the local
-topology, what the test proves, and how this can evolve into a production
-Polymarket-like Gravity product.
+The suite README at `gravity_e2e/cluster_test_cases/polymarket_mock/README.md`
+describes the local topology, what the test proves, and how this can evolve into
+a production Polymarket-like Gravity product.
 
-### 6. Docker Runner (CI)
+### 6. Hype/HIP-3 Price Feed Suite
+The `hype_price_feed` suite is a local-only PoC for stock-like price feed rounds
+on Gravity. It registers deterministic NVDA/USD and GOOGL/USD `sourceType=3`
+tasks through governance, waits for the next short test epoch so
+`aptos-jwk-consensus` rebuilds relayer-backed observers, then waits for the
+unsupported-JWK/oracle consensus path to publish price bytes into
+`NativeOracle` and checks `MultiSourceOracleResolver.latestPrice(feedId)`.
+
+The suite intentionally does not call live Hype/Hyperliquid endpoints. Static
+multi-source observations keep the agreed bytes deterministic for validator E2E.
+Live `/info` provider fetching can be tested separately with a mock server or a
+manual validator-local relayer config.
+
+This suite proves the epoch-config path for long-running feeds. It does not
+implement intra-epoch dynamic request discovery; that still needs a deterministic
+request watcher if Gravity wants one-off requests such as a future match score.
+
+Run it from the repository root after building `gravity_node` and `gravity_cli`:
+```bash
+PATH="$CONDA_PREFIX/bin:$HOME/.foundry/bin:$PWD/target/quick-release:$PATH" \
+  ./gravity_e2e/run_test.sh hype_price_feed --force-init
+```
+
+Expected success logs include:
+```text
+Hype price feed resolved: feedId=1001 roundId=1 price=19538000000
+Hype price feed resolved: feedId=1002 roundId=1 price=35364400000
+PASSED
+Suite hype_price_feed PASSED
+All suites passed!
+```
+
+This proves the contract-facing path a Gravity PerpDex or price-index market
+would consume: `sourceType=3` data is recorded by `NativeOracle`, callbacked into
+`MultiSourceOracleResolver`, and exposed as `latestPrice(feedId)`. BBO, mid
+price, TWAP, risk, and market-specific weighting should be decided by the
+downstream product contract or by a separately versioned resolver policy.
+
+### 7. Docker Runner (CI)
 The `run_docker.sh` script runs the full pipeline inside Docker. It accepts the same arguments as `run_test.sh`:
 ```bash
 # Run all suites in Docker

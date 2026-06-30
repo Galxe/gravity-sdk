@@ -1,0 +1,6 @@
+{
+  "uri_mappings": {
+    "gravity://3/1001/price_feed?round=1&resolvedAt=2010&decimals=8&aggregationMode=1&minSourceCount=3&minTotalWeight=5&maxStaleness=60&observations=hype-info:2000:19538000000:3,nasdaq-shadow:2000:19540000000:1,index-shadow:2000:19536000000:1": "http://localhost:8547",
+    "gravity://3/1002/price_feed?round=1&resolvedAt=2010&decimals=8&aggregationMode=1&minSourceCount=3&minTotalWeight=5&maxStaleness=60&observations=hype-info:2000:35364000000:3,nasdaq-shadow:2000:35370000000:1,index-shadow:2000:35360000000:1": "http://localhost:8547"
+  }
+}
