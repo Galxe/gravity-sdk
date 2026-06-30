@@ -104,24 +104,22 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             }
             let epoch = ledger_info_with_sigs.ledger_info().epoch();
             self.runtime.block_on(async move {
+                let commit_blocks = block_ids
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, x)| {
+                        let mut v = [0u8; 32];
+                        v.copy_from_slice(block_hash.as_ref());
+                        BlockHashRef {
+                            block_id: BlockId::from_bytes(x.as_slice()),
+                            num: block_num - (len - 1 - i) as u64,
+                            hash: if x == block_id { Some(v) } else { None },
+                            persist_notifier: None,
+                        }
+                    })
+                    .collect::<Vec<_>>();
                 let mut persist_notifiers = get_block_buffer_manager()
-                    .set_commit_blocks(
-                        block_ids
-                            .into_iter()
-                            .enumerate()
-                            .map(|(i, x)| {
-                                let mut v = [0u8; 32];
-                                v.copy_from_slice(block_hash.as_ref());
-                                BlockHashRef {
-                                    block_id: BlockId::from_bytes(x.as_slice()),
-                                    num: block_num - (len - 1 - i) as u64,
-                                    hash: if x == block_id { Some(v) } else { None },
-                                    persist_notifier: None,
-                                }
-                            })
-                            .collect(),
-                        epoch,
-                    )
+                    .set_commit_blocks(&commit_blocks, epoch)
                     .await
                     .map_err(|e| {
                         ExecutorError::internal_err(format!(
@@ -184,23 +182,21 @@ impl BlockExecutorTrait for GravityBlockExecutor {
         }
 
         self.runtime.block_on(async move {
+            let commit_blocks = block_ids
+                .into_iter()
+                .map(|(x, num)| {
+                    let mut v = [0u8; 32];
+                    v.copy_from_slice(block_hash.as_ref());
+                    BlockHashRef {
+                        block_id: BlockId::from_bytes(x.as_slice()),
+                        num,
+                        hash: if x == block_id { Some(v) } else { None },
+                        persist_notifier: None,
+                    }
+                })
+                .collect::<Vec<_>>();
             let mut persist_notifiers = get_block_buffer_manager()
-                .set_commit_blocks(
-                    block_ids
-                        .into_iter()
-                        .map(|(x, num)| {
-                            let mut v = [0u8; 32];
-                            v.copy_from_slice(block_hash.as_ref());
-                            BlockHashRef {
-                                block_id: BlockId::from_bytes(x.as_slice()),
-                                num,
-                                hash: if x == block_id { Some(v) } else { None },
-                                persist_notifier: None,
-                            }
-                        })
-                        .collect(),
-                    epoch,
-                )
+                .set_commit_blocks(&commit_blocks, epoch)
                 .await
                 .map_err(|e| {
                     ExecutorError::internal_err(format!(

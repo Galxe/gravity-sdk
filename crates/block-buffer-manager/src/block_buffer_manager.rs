@@ -1044,7 +1044,7 @@ impl BlockBufferManager {
 
     pub async fn set_commit_blocks(
         &self,
-        block_ids: Vec<BlockHashRef>,
+        block_ids: &[BlockHashRef],
         epoch: u64,
     ) -> Result<Vec<Receiver<()>>, anyhow::Error> {
         self.wait_until_ready().await;
