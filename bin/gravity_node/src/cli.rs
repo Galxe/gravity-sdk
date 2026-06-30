@@ -1,8 +1,9 @@
+use crate::chainspec::GravityChainSpecParser;
 use api::GravityNodeArgs;
 use build_info::{build_information, BUILD_PKG_VERSION};
 use clap::{value_parser, Parser};
 use greth::{
-    reth::{chainspec::EthereumChainSpecParser, cli::Commands},
+    reth::cli::Commands,
     reth_chainspec::ChainSpec,
     reth_cli::chainspec::ChainSpecParser,
     reth_cli_commands::{launcher::FnLauncher, node::NoArgs},
@@ -50,7 +51,7 @@ fn long_version() -> &'static str {
 #[derive(Debug, Parser)]
 #[command(author, about = "Gravity Node", long_about = None, version=short_version(), long_version=long_version())]
 pub(crate) struct Cli<
-    C: ChainSpecParser = EthereumChainSpecParser,
+    C: ChainSpecParser = GravityChainSpecParser,
     Ext: clap::Args + fmt::Debug = NoArgs,
 > {
     /// The command to run
@@ -165,7 +166,7 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
             Commands::Node(command) => {
                 println!("Running node command, {:?}", command.dev);
                 runner.run_command_until_exit(|ctx| {
-                    command.execute(ctx, FnLauncher::new::<EthereumChainSpecParser, _>(launcher))
+                    command.execute(ctx, FnLauncher::new::<C, _>(launcher))
                 })
             }
             Commands::Init(command) => {
