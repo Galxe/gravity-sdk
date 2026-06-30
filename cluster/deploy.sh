@@ -496,7 +496,14 @@ configure_pfn() {
     # PFN listens on Public network at PUBLIC_PORT (no Vfn network at all).
     envsubst < "$SCRIPT_DIR/templates/public_full_node.yaml.tpl" > "$config_dir/public_full_node.yaml"
 
-    local reth_tpl="${RETH_CONFIG_PFN_TPL:-$SCRIPT_DIR/templates/reth_config_pfn.json.tpl}"
+    local reth_tpl="${RETH_CONFIG_PFN_TPL:-}"
+    if [ -z "$reth_tpl" ]; then
+        if [ "$PRUNE_TRANSACTIONLOOKUP_DISTANCE" != "null" ]; then
+            reth_tpl="$SCRIPT_DIR/templates/reth_config_pfn_prune.json.tpl"
+        else
+            reth_tpl="$SCRIPT_DIR/templates/reth_config_pfn.json.tpl"
+        fi
+    fi
     if [ ! -f "$reth_tpl" ]; then
         log_error "reth pfn config template not found: $reth_tpl"
         exit 1
@@ -872,6 +879,7 @@ main() {
         # documented in _local/wiki/private-mainnet/handoff.md. Set to a larger value
         # (e.g. 10000) in cluster.toml to opt into the fix.
         export TXPOOL_MAX_ACCOUNT_SLOTS=$(echo "$node" | jq -r '.txpool_max_account_slots // 16')
+        export PRUNE_TRANSACTIONLOOKUP_DISTANCE=$(echo "$node" | jq -r '.prune_transactionlookup_distance // "null"')
 
         role=$(echo "$node" | jq -r '.role // empty')
 

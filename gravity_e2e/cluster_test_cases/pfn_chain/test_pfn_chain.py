@@ -30,6 +30,8 @@ including §10's analysis of why we expect confirms to drop during stop
 windows (gravity's mempool override defeats upstream's multi-peer broadcast).
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import math
