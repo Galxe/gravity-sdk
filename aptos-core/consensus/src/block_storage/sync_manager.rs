@@ -52,6 +52,7 @@ use gaptos::{
         epoch_change::EpochChangeProof,
         ledger_info::{self, LedgerInfoWithSignatures},
         randomness::{RandMetadata, Randomness},
+        validator_verifier::ValidatorVerifier,
     },
 };
 use num_traits::ToPrimitive;
@@ -966,6 +967,38 @@ impl BlockStore {
     }
 }
 
+/// Verify a fetched block-retrieval chunk's signatures on a blocking thread, pipelined: the
+/// verify of an earlier chunk runs concurrently with the fetch of later chunks. Bounded by
+/// `depth` to cap in-flight memory/concurrency. Returns an error if a drained verify failed.
+async fn push_and_drain_verify(
+    pending: &mut std::collections::VecDeque<tokio::task::JoinHandle<anyhow::Result<()>>>,
+    response: BlockRetrievalResponse,
+    chunk_start_id: HashValue,
+    num_blocks: u64,
+    target_block_id: HashValue,
+    epoch: Option<u64>,
+    validators: &Arc<ValidatorVerifier>,
+    depth: usize,
+) -> anyhow::Result<()> {
+    // Mirror request_block's guard: a zero start id (epoch-anchored initial chunk) is not verified.
+    if chunk_start_id == HashValue::zero() {
+        return Ok(());
+    }
+    let verify_req = if let Some(e) = epoch {
+        BlockRetrievalRequest::new_with_epoch(chunk_start_id, num_blocks, target_block_id, e)
+    } else {
+        BlockRetrievalRequest::new_with_target_block_id(chunk_start_id, num_blocks, target_block_id)
+    };
+    let verifier = validators.clone();
+    pending.push_back(tokio::task::spawn_blocking(move || response.verify(verify_req, &verifier)));
+    if pending.len() >= depth {
+        if let Some(h) = pending.pop_front() {
+            h.await.map_err(|e| anyhow::anyhow!("verify task panicked: {}", e))??;
+        }
+    }
+    Ok(())
+}
+
 /// BlockRetriever is used internally to retrieve blocks
 pub struct BlockRetriever {
     network_id: NetworkId,
@@ -1002,6 +1035,7 @@ impl BlockRetriever {
         retrieve_batch_size: u64,
         mut peers: Vec<AccountAddress>,
         epoch: Option<u64>,
+        verify: bool,
     ) -> anyhow::Result<BlockRetrievalResponse> {
         let mut failed_attempt = 0_u32;
         let mut cur_retry = 0;
@@ -1062,6 +1096,7 @@ impl BlockRetriever {
                                 request.clone(),
                                 PeerNetworkId::new(self.network_id, peer),
                                 rpc_timeout,
+                                verify,
                             );
                             futures.push(async move { (remote_peer, future.await) }.boxed());
                         }
@@ -1114,6 +1149,14 @@ impl BlockRetriever {
         let mut ledger_infos = vec![];
         let mut quorum_certs = vec![];
         let mut retrieve_batch_size = self.max_blocks_to_request;
+        // Verify pipeline: fetch chunks WITHOUT verifying inline (verify=false below) and verify
+        // each chunk's signatures concurrently on a blocking thread, so chunk N's BLS verify
+        // overlaps chunk N+1's fetch instead of blocking the serial fetch loop.
+        const VERIFY_PIPELINE_DEPTH: usize = 4;
+        let validators = self.network.validator_verifier();
+        let mut pending_verifies: std::collections::VecDeque<
+            tokio::task::JoinHandle<anyhow::Result<()>>,
+        > = std::collections::VecDeque::new();
         if peers.is_empty() {
             bail!("Failed to fetch block {}: no peers available", block_id);
         }
@@ -1126,6 +1169,7 @@ impl BlockRetriever {
                 retrieve_batch_size, last_block_id, block_id
             );
 
+            let chunk_start_id = last_block_id;
             let response = self
                 .retrieve_block_for_id_chunk(
                     last_block_id,
@@ -1133,6 +1177,7 @@ impl BlockRetriever {
                     retrieve_batch_size,
                     peers.clone(),
                     epoch,
+                    false,
                 )
                 .await;
             match response {
@@ -1150,6 +1195,17 @@ impl BlockRetriever {
                     result_blocks.extend(batch);
                     ledger_infos.extend(result.ledger_infos().clone());
                     quorum_certs.extend(result.quorum_certs().clone());
+                    push_and_drain_verify(
+                        &mut pending_verifies,
+                        result,
+                        chunk_start_id,
+                        retrieve_batch_size,
+                        target_block_id,
+                        epoch,
+                        &validators,
+                        VERIFY_PIPELINE_DEPTH,
+                    )
+                    .await?;
                 }
                 Ok(result)
                     if matches!(result.status(), BlockRetrievalStatus::SucceededWithTarget) =>
@@ -1165,6 +1221,17 @@ impl BlockRetriever {
                     result_blocks.extend(batch);
                     ledger_infos.extend(result.ledger_infos().clone());
                     quorum_certs.extend(result.quorum_certs().clone());
+                    push_and_drain_verify(
+                        &mut pending_verifies,
+                        result,
+                        chunk_start_id,
+                        retrieve_batch_size,
+                        target_block_id,
+                        epoch,
+                        &validators,
+                        VERIFY_PIPELINE_DEPTH,
+                    )
+                    .await?;
                     break;
                 }
                 _e => {
@@ -1175,6 +1242,10 @@ impl BlockRetriever {
                     );
                 }
             }
+        }
+        // Drain any chunks still being verified; bail before returning if any failed.
+        while let Some(h) = pending_verifies.pop_front() {
+            h.await.map_err(|e| anyhow::anyhow!("verify task panicked: {}", e))??;
         }
         Ok((result_blocks, quorum_certs, ledger_infos))
     }
@@ -1217,6 +1288,7 @@ impl BlockRetriever {
                 self.max_blocks_to_request,
                 peers.clone(),
                 Some(epoch),
+                true,
             )
             .await;
         match response {

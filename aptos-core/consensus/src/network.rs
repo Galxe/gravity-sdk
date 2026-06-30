@@ -231,13 +231,25 @@ impl NetworkSender {
         }
     }
 
+    /// Returns the validator verifier used to authenticate fetched block-retrieval responses,
+    /// so callers can verify a response off the fetch path (see the verify pipeline in
+    /// `BlockRetriever::retrieve_block_for_id`).
+    pub fn validator_verifier(&self) -> Arc<ValidatorVerifier> {
+        self.validators.clone()
+    }
+
     /// Tries to retrieve num of blocks backwards starting from id from the given peer: the function
     /// returns a future that is fulfilled with BlockRetrievalResponse.
+    ///
+    /// When `verify` is false the response is returned unverified; the caller is then responsible
+    /// for calling `BlockRetrievalResponse::verify` (used by the pipelined fetch path so signature
+    /// verification overlaps the next chunk's fetch instead of blocking the loop).
     pub async fn request_block(
         &self,
         retrieval_request: BlockRetrievalRequest,
         from: PeerNetworkId,
         timeout: Duration,
+        verify: bool,
     ) -> anyhow::Result<BlockRetrievalResponse> {
         fail_point!("consensus::send::any", |_| {
             Err(anyhow::anyhow!("Injected error in request_block"))
@@ -257,7 +269,7 @@ impl NetworkSender {
             ConsensusMsg::BlockRetrievalResponse(resp) => *resp,
             _ => return Err(anyhow!("Invalid response to request")),
         };
-        if retrieval_request.block_id() != HashValue::zero() {
+        if verify && retrieval_request.block_id() != HashValue::zero() {
             response.verify(retrieval_request, &self.validators).map_err(|e| {
                 error!(
                     SecurityEvent::InvalidRetrievedBlock,

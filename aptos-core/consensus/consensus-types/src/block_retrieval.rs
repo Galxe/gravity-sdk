@@ -10,6 +10,7 @@ use gaptos::{
     aptos_short_hex_str::AsShortHexStr,
     aptos_types::{ledger_info::LedgerInfoWithSignatures, validator_verifier::ValidatorVerifier},
 };
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -141,20 +142,27 @@ impl BlockRetrievalResponse {
             retrieval_request.num_blocks(),
             self.blocks.len(),
         );
-        self.blocks
-            .iter()
-            .try_fold(retrieval_request.block_id(), |expected_id, (block, _, _)| {
-                ensure!(
-                    block.id() == expected_id,
-                    "blocks doesn't form a chain: expect {}, get {}",
-                    expected_id,
-                    block.id()
-                );
-                block.validate_signature(sig_verifier)?;
-                block.verify_well_formed()?;
-                Ok(block.parent_id())
-            })
-            .map(|_| ())
+        // Chain linkage must be checked sequentially: each block's parent is the next in the
+        // response. This is cheap (hash comparisons only).
+        let mut expected_id = retrieval_request.block_id();
+        for (block, _, _) in &self.blocks {
+            ensure!(
+                block.id() == expected_id,
+                "blocks doesn't form a chain: expect {}, get {}",
+                expected_id,
+                block.id()
+            );
+            expected_id = block.parent_id();
+        }
+        // Signature/QC verification (BLS aggregate verify per block) is the dominant cost and is
+        // independent per block, so run it in parallel across the batch. This is the hot path for
+        // fast-forward sync, where one response can carry hundreds/thousands of blocks and the
+        // sequential verify was the fetch bottleneck (~1.8ms/block).
+        self.blocks.par_iter().try_for_each(|(block, _, _)| -> anyhow::Result<()> {
+            block.validate_signature(sig_verifier)?;
+            block.verify_well_formed()?;
+            Ok(())
+        })
     }
 }
 

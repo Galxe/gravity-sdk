@@ -95,6 +95,7 @@ pub async fn build_empty_tree() -> Arc<BlockStore> {
         Arc::new(Mutex::new(PendingBlocks::new())),
         false,
         HashMap::new(), // validator_indices: empty for tests
+        1,              // fast_sync_execute_lookahead: serial for tests
     ))
 }
 
