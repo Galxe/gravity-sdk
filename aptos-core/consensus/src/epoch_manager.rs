@@ -883,6 +883,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 self.pending_blocks.clone(),
                 onchain_randomness_config.randomness_enabled(),
                 validator_indices,
+                self.config.fast_sync_execute_lookahead,
             )
             .await,
         );

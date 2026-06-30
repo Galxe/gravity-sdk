@@ -49,14 +49,12 @@ use gaptos::{
 };
 use once_cell::sync::Lazy;
 
-#[cfg(test)]
-use std::collections::VecDeque;
 #[cfg(any(test, feature = "fuzzing"))]
 use std::sync::atomic::AtomicBool;
 #[cfg(any(test, feature = "fuzzing"))]
 use std::sync::atomic::Ordering;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, VecDeque},
     io::Read,
     sync::Arc,
     time::Duration,
@@ -136,6 +134,10 @@ pub struct BlockStore {
     /// Mapping from validator address to their index in the ordered validator set.
     /// Used during recovery to compute proposer_index for blocks.
     validator_indices: HashMap<AccountAddress, usize>,
+    /// Bounded look-ahead depth for the fast-sync (recovery) execute pipeline; `1` is strictly
+    /// serial. Sourced from `ConsensusConfig::fast_sync_execute_lookahead`. See
+    /// [`Self::pipeline_recovery_blocks`].
+    fast_sync_execute_lookahead: usize,
 }
 
 impl BlockStore {
@@ -152,6 +154,7 @@ impl BlockStore {
         pending_blocks: Arc<Mutex<PendingBlocks>>,
         enable_randomness: bool,
         validator_indices: HashMap<AccountAddress, usize>,
+        fast_sync_execute_lookahead: usize,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -172,6 +175,7 @@ impl BlockStore {
             pending_blocks,
             enable_randomness,
             validator_indices,
+            fast_sync_execute_lookahead,
         ));
         block_on(block_store.recover_blocks());
         block_store
@@ -190,6 +194,7 @@ impl BlockStore {
         pending_blocks: Arc<Mutex<PendingBlocks>>,
         enable_randomness: bool,
         validator_indices: HashMap<AccountAddress, usize>,
+        fast_sync_execute_lookahead: usize,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -210,6 +215,7 @@ impl BlockStore {
             pending_blocks,
             enable_randomness,
             validator_indices,
+            fast_sync_execute_lookahead,
         )
         .await;
         block_store.recover_blocks().await;
@@ -263,31 +269,60 @@ impl BlockStore {
 
         certs.sort_unstable_by_key(|qc| qc.commit_info().round());
 
-        for qc in certs {
-            let commit_round = qc.commit_info().round();
-
-            if commit_round <= self.commit_root().round() {
-                continue;
+        let committable = |qc: &QuorumCert| -> bool {
+            let cr = qc.commit_info().round();
+            cr > self.commit_root().round() &&
+                last_ledger_info.as_ref().map_or(false, |li| {
+                    li.ledger_info().epoch() == qc.commit_info().epoch() &&
+                        cr <= li.commit_info().round()
+                })
+        };
+        let lookahead = self.fast_sync_execute_lookahead.max(1);
+        if lookahead > 1 {
+            // Pipelined fast-sync: commit up to the HIGHEST committable QC in a single
+            // send_for_execution call, so its recovery loop can look ahead across the whole path
+            // (instead of recover_blocks feeding execution one block per QC, lockstep).
+            // commit_callback commits/prunes up to blocks_to_commit.last() and overwrites
+            // highest_commit_cert, so one call reaches the same end-state as the per-QC sequence.
+            if let Some(qc) = certs.into_iter().filter(|qc| committable(qc)).last() {
+                info!(
+                    "recover_blocks: pipelined commit up to round {} (lookahead={}, commit_root={})",
+                    qc.commit_info().round(),
+                    lookahead,
+                    self.commit_root().round(),
+                );
+                if let Err(e) = self
+                    .send_for_execution(
+                        qc.into_wrapped_ledger_info(),
+                        true,
+                        epoch_change_block_number,
+                    )
+                    .await
+                {
+                    error!("recover_blocks: pipelined commit failed: {e}");
+                }
             }
-
-            let Some(last_li) = &last_ledger_info else { continue };
-            if last_li.ledger_info().epoch() != qc.commit_info().epoch() ||
-                commit_round > last_li.commit_info().round()
-            {
-                continue;
-            }
-
-            info!(
-                "recover_blocks: sending round {} to execution (commit_root={})",
-                commit_round,
-                self.commit_root().round(),
-            );
-            if let Err(e) = self
-                .send_for_execution(qc.into_wrapped_ledger_info(), true, epoch_change_block_number)
-                .await
-            {
-                error!("recover_blocks: failed to commit blocks: {e}");
-                break;
+        } else {
+            for qc in certs {
+                if !committable(&qc) {
+                    continue;
+                }
+                info!(
+                    "recover_blocks: sending round {} to execution (commit_root={})",
+                    qc.commit_info().round(),
+                    self.commit_root().round(),
+                );
+                if let Err(e) = self
+                    .send_for_execution(
+                        qc.into_wrapped_ledger_info(),
+                        true,
+                        epoch_change_block_number,
+                    )
+                    .await
+                {
+                    error!("recover_blocks: failed to commit blocks: {e}");
+                    break;
+                }
             }
         }
 
@@ -443,6 +478,7 @@ impl BlockStore {
         pending_blocks: Arc<Mutex<PendingBlocks>>,
         enable_randomness: bool,
         validator_indices: HashMap<AccountAddress, usize>,
+        fast_sync_execute_lookahead: usize,
     ) -> Self {
         let RootInfo(root_block, root_qc, root_ordered_cert, root_commit_cert) = root;
         let root_round = root_block.round();
@@ -480,6 +516,7 @@ impl BlockStore {
             pending_blocks,
             enable_randomness,
             validator_indices,
+            fast_sync_execute_lookahead,
         };
 
         // Skip ancestors of the root. They can appear in recovery data when an
@@ -549,6 +586,108 @@ impl BlockStore {
     }
 
     /// Send an ordered block id with the proof for execution, returns () on success or error
+    /// Build the ExternalBlock to feed execution for one recovery block, plus the expected block
+    /// hash (state root) from the ledger DB (None if not yet recorded) and the block number.
+    /// Shared by the strictly-serial and the look-ahead recovery paths so they stay identical.
+    async fn prepare_recovery_block(
+        &self,
+        p_block: &Arc<PipelinedBlock>,
+    ) -> anyhow::Result<(ExternalBlock, Option<ComputeRes>, u64)> {
+        let mut txns = vec![];
+        loop {
+            match self.payload_manager.get_transactions(p_block.block()).await {
+                Ok((mut txns_, _)) => {
+                    txns.append(&mut txns_);
+                    break;
+                }
+                Err(e) => {
+                    warn!("get transaction error {}", e);
+                    if let Some(payload) = p_block.block().payload() {
+                        self.payload_manager
+                            .prefetch_payload_data(payload, p_block.block().timestamp_usecs());
+                    }
+                }
+            }
+        }
+        info!("recover block {}, txn_size: {}", p_block.block(), txns.len());
+        let verified_txns: Vec<VerifiedTxn> = txns.iter().map(|txn| txn.into()).collect();
+        let txn_num = verified_txns.len() as u64;
+        let verified_txns = verified_txns.into_iter().map(|txn| txn.into()).collect();
+        let block_number = p_block.block().block_number().ok_or_else(|| {
+            format_err!("Block number not found for block {}", p_block.block().id())
+        })?;
+        let block_number_i64: i64 = block_number.try_into().map_err(|_| {
+            format_err!("Block number {} is too large to convert to i64", block_number)
+        })?;
+        CUR_RECOVER_BLOCK_NUMBER_GAUGE.with_label_values(&[]).set(block_number_i64);
+        let maybe_block_hash = match self
+            .storage
+            .consensus_db()
+            .ledger_db
+            .metadata_db()
+            .get_block_hash(block_number)
+        {
+            Some(block_hash) => Some(ComputeRes::new(*block_hash, txn_num, vec![], vec![])),
+            None => None,
+        };
+        let validator_txns = p_block.block().validator_txns();
+        let extra_data = crate::state_computer::process_validator_transactions_util(
+            validator_txns.map(|v| &**v),
+            p_block.block(),
+        );
+        let randomness = if self.enable_randomness && p_block.epoch() != 1 {
+            match p_block.randomness() {
+                Some(r) => Some(Random::from_bytes(r.randomness())),
+                None => {
+                    self.try_set_randomness_from_db(p_block, p_block.block());
+                    match p_block.randomness() {
+                        Some(r) => Some(Random::from_bytes(r.randomness())),
+                        None => {
+                            return Err(anyhow::anyhow!(
+                                "Randomness is required but not found in block {}, block_number={}",
+                                p_block.block().id(),
+                                block_number,
+                            ));
+                        }
+                    }
+                }
+            }
+        } else {
+            None
+        };
+        let proposer_index = p_block
+            .block()
+            .author()
+            .and_then(|author| self.validator_indices.get(&author).copied())
+            .map(|i| i as u64);
+        let block = ExternalBlock {
+            txns: verified_txns,
+            block_meta: ExternalBlockMeta {
+                block_id: BlockId(*p_block.block().id()),
+                block_number,
+                usecs: p_block.block().timestamp_usecs(),
+                epoch: p_block.block().epoch(),
+                randomness,
+                block_hash: maybe_block_hash.clone(),
+                proposer_index,
+                failed_proposer_indices: p_block.block().block_data().failed_authors().map_or(
+                    vec![],
+                    |authors| {
+                        authors
+                            .iter()
+                            .filter_map(|(_round, author)| {
+                                self.validator_indices.get(author).map(|i| *i as u64)
+                            })
+                            .collect()
+                    },
+                ),
+            },
+            extra_data,
+            enable_randomness: self.enable_randomness,
+        };
+        Ok((block, maybe_block_hash, block_number))
+    }
+
     pub async fn send_for_execution(
         &self,
         finality_proof: WrappedLedgerInfo,
@@ -600,17 +739,39 @@ impl BlockStore {
             return Ok(());
         }
         counters::SEND_TO_EXECUTION_BLOCK_COUNTER.inc_by(blocks_to_commit.len() as u64);
-        let block_tree = self.inner.clone();
-        let storage = self.storage.clone();
-        let finality_proof_clone = finality_proof.clone();
         self.pending_blocks.lock().gc(finality_proof.commit_info().round());
         // This callback is invoked synchronously with and could be used for multiple batches of
         // blocks.
         self.init_block_number(&blocks_to_commit);
+
         if recovery {
-            // Recovery mode: process blocks directly without going through execution pipeline.
-            // Filter out suffix blocks past the epoch change boundary before execution.
-            let blocks_to_commit: Vec<_> = if let Some(limit) = recover_epoch_change_block_number {
+            self.commit_recovery_path(
+                blocks_to_commit,
+                finality_proof,
+                block_to_commit,
+                recover_epoch_change_block_number,
+            )
+            .await
+        } else {
+            self.commit_live_path(blocks_to_commit, finality_proof, block_id_to_commit).await
+        }
+    }
+
+    /// Recovery / fast-sync commit path. Drops suffix blocks past a pending epoch-change boundary
+    /// (they would never receive an execution result and would hang the pipeline), applies the rest
+    /// through the bounded look-ahead pipeline, then advances the in-memory commit/ordered roots.
+    /// `commit_callback` prunes up to the last block and monotonically raises
+    /// `highest_commit_cert`, so a single call reaches the same end-state as the old per-QC
+    /// `send_for_execution` sequence.
+    async fn commit_recovery_path(
+        &self,
+        blocks_to_commit: Vec<Arc<PipelinedBlock>>,
+        finality_proof: WrappedLedgerInfo,
+        block_to_commit: Arc<PipelinedBlock>,
+        recover_epoch_change_block_number: Option<u64>,
+    ) -> anyhow::Result<()> {
+        let blocks_to_commit = match recover_epoch_change_block_number {
+            Some(limit) => {
                 let filtered: Vec<_> = blocks_to_commit
                     .into_iter()
                     .filter(|b| !b.block().block_number().is_some_and(|bn| bn > limit))
@@ -627,232 +788,200 @@ impl BlockStore {
                     return Ok(());
                 }
                 filtered
-            } else {
-                blocks_to_commit
-            };
-            for p_block in &blocks_to_commit {
-                let mut txns = vec![];
-                loop {
-                    match self.payload_manager.get_transactions(p_block.block()).await {
-                        Ok((mut txns_, _)) => {
-                            txns.append(&mut txns_);
-                            break;
-                        }
-                        Err(e) => {
-                            warn!("get transaction error {}", e);
-                            if let Some(payload) = p_block.block().payload() {
-                                self.payload_manager.prefetch_payload_data(
-                                    payload,
-                                    p_block.block().timestamp_usecs(),
-                                );
-                            }
-                        }
+            }
+            None => blocks_to_commit,
+        };
+
+        self.pipeline_recovery_blocks(&blocks_to_commit).await?;
+
+        let commit_decision = finality_proof.ledger_info().clone();
+        let finality_proof_for_cert = finality_proof.clone();
+        self.inner.write().commit_callback(
+            self.storage.clone(),
+            &blocks_to_commit,
+            finality_proof,
+            commit_decision,
+        );
+        self.inner.write().update_ordered_root(block_to_commit.id());
+        self.inner.write().insert_ordered_cert(finality_proof_for_cert);
+        update_counters_for_ordered_blocks(&blocks_to_commit);
+        Ok(())
+    }
+
+    /// Apply recovery blocks through a bounded look-ahead pipeline: feed up to
+    /// `self.fast_sync_execute_lookahead` blocks to execution (via `set_ordered_blocks`) before
+    /// draining results, so consensus->execution is not lockstep-per-block. Each block is still
+    /// committed one at a time, in order, with its per-block state-root check and per-block persist
+    /// ack preserved (see [`Self::drain_recovery_block`]), so a depth of `1` is byte-for-byte the
+    /// original strictly-serial behavior.
+    async fn pipeline_recovery_blocks(
+        &self,
+        blocks_to_commit: &[Arc<PipelinedBlock>],
+    ) -> anyhow::Result<()> {
+        let lookahead = self.fast_sync_execute_lookahead.max(1);
+        let mut inflight: VecDeque<(Arc<PipelinedBlock>, Option<ComputeRes>, u64)> =
+            VecDeque::new();
+        let mut blocks = blocks_to_commit.iter();
+        let mut feed_done = false;
+        while !feed_done || !inflight.is_empty() {
+            while inflight.len() < lookahead && !feed_done {
+                match blocks.next() {
+                    Some(p_block) => {
+                        let (block, expected_hash, block_number) =
+                            self.prepare_recovery_block(p_block).await?;
+                        get_block_buffer_manager()
+                            .set_ordered_blocks(
+                                BlockId(*p_block.parent_id()),
+                                block,
+                                p_block.round(),
+                            )
+                            .await
+                            .context("Failed to set ordered blocks during recovery")?;
+                        inflight.push_back((p_block.clone(), expected_hash, block_number));
                     }
-                }
-                info!("recover block {}, txn_size: {}", p_block.block(), txns.len());
-                let verified_txns: Vec<VerifiedTxn> = txns.iter().map(|txn| txn.into()).collect();
-                let txn_num = verified_txns.len() as u64;
-                let verified_txns = verified_txns.into_iter().map(|txn| txn.into()).collect();
-                let block_number = p_block.block().block_number().ok_or_else(|| {
-                    format_err!("Block number not found for block {}", p_block.block().id())
-                })?;
-                let block_number_i64: i64 = block_number.try_into().map_err(|_| {
-                    format_err!("Block number {} is too large to convert to i64", block_number)
-                })?;
-                CUR_RECOVER_BLOCK_NUMBER_GAUGE.with_label_values(&[]).set(block_number_i64);
-                let maybe_block_hash = match self
-                    .storage
-                    .consensus_db()
-                    .ledger_db
-                    .metadata_db()
-                    .get_block_hash(block_number)
-                {
-                    Some(block_hash) => Some(ComputeRes::new(*block_hash, txn_num, vec![], vec![])),
-                    None => None,
-                };
-
-                let validator_txns = p_block.block().validator_txns();
-                let extra_data = crate::state_computer::process_validator_transactions_util(
-                    validator_txns.map(|v| &**v),
-                    p_block.block(),
-                );
-
-                // In recovery mode, use existing randomness from the block
-                let randomness = if self.enable_randomness && p_block.epoch() != 1 {
-                    match p_block.randomness() {
-                        Some(r) => Some(Random::from_bytes(r.randomness())),
-                        None => {
-                            self.try_set_randomness_from_db(&p_block, p_block.block());
-                            match p_block.randomness() {
-                                Some(r) => Some(Random::from_bytes(r.randomness())),
-                                None => {
-                                    return Err(anyhow::anyhow!(
-                                        "Randomness is required but not found in block {}, block_number={}",
-                                        p_block.block().id(),
-                                        block_number,
-                                    ));
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    None
-                };
-
-                // Look up the proposer's index in the validator set (None for NIL blocks)
-                let proposer_index = p_block
-                    .block()
-                    .author()
-                    .and_then(|author| self.validator_indices.get(&author).copied())
-                    .map(|i| i as u64);
-
-                let block = ExternalBlock {
-                    txns: verified_txns,
-                    block_meta: ExternalBlockMeta {
-                        block_id: BlockId(*p_block.block().id()),
-                        block_number,
-                        usecs: p_block.block().timestamp_usecs(),
-                        epoch: p_block.block().epoch(),
-                        randomness,
-                        block_hash: maybe_block_hash.clone(),
-                        proposer_index,
-                        failed_proposer_indices: p_block
-                            .block()
-                            .block_data()
-                            .failed_authors()
-                            .map_or(vec![], |authors| {
-                                authors
-                                    .iter()
-                                    .filter_map(|(_round, author)| {
-                                        self.validator_indices.get(author).map(|i| *i as u64)
-                                    })
-                                    .collect()
-                            }),
-                    },
-                    extra_data,
-                    enable_randomness: self.enable_randomness,
-                };
-                get_block_buffer_manager()
-                    .set_ordered_blocks(BlockId(*p_block.parent_id()), block, p_block.round())
-                    .await
-                    .context("Failed to set ordered blocks during recovery")?;
-                let compute_res = get_block_buffer_manager()
-                    .get_executed_res(BlockId(*p_block.id()), block_number, p_block.block().epoch())
-                    .await
-                    .context(format!(
-                        "Failed to get executed result for block {} during recovery",
-                        p_block.block().id()
-                    ))?;
-                let compute_res = compute_res.execution_output;
-                if let Some(block_hash) = maybe_block_hash {
-                    assert_eq!(block_hash.data, compute_res.data);
-                }
-                let commit_block = BlockHashRef {
-                    block_id: BlockId(*p_block.id()),
-                    num: block_number,
-                    hash: Some(compute_res.data),
-                    persist_notifier: None,
-                };
-                let mut persist_notifiers = get_block_buffer_manager()
-                    .set_commit_blocks(vec![commit_block], p_block.block().epoch())
-                    .await
-                    .context("Failed to set commit blocks during recovery")?;
-                for notifier in persist_notifiers.iter_mut() {
-                    let _ = notifier.recv().await;
+                    None => feed_done = true,
                 }
             }
-            let commit_decision = finality_proof.ledger_info().clone();
-            block_tree.write().commit_callback(
-                storage,
-                &blocks_to_commit,
-                finality_proof,
-                commit_decision,
+            if let Some((p_block, expected_hash, block_number)) = inflight.pop_front() {
+                self.drain_recovery_block(&p_block, expected_hash, block_number).await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Wait for one in-flight recovery block's execution result, verify its computed state root
+    /// against the expected hash recorded in the ledger DB, then commit it and wait for
+    /// persistence. This is the correctness gate of the look-ahead pipeline: any execution
+    /// divergence surfaces here as a graceful error rather than silently committing a bad state
+    /// root.
+    async fn drain_recovery_block(
+        &self,
+        p_block: &PipelinedBlock,
+        expected_hash: Option<ComputeRes>,
+        block_number: u64,
+    ) -> anyhow::Result<()> {
+        let compute_res = get_block_buffer_manager()
+            .get_executed_res(BlockId(*p_block.id()), block_number, p_block.block().epoch())
+            .await
+            .context(format!(
+                "Failed to get executed result for block {} during recovery",
+                p_block.block().id()
+            ))?
+            .execution_output;
+        if let Some(block_hash) = expected_hash {
+            ensure!(
+                block_hash.data == compute_res.data,
+                "state root mismatch during recovery at block {} (number {}): expected {:?}, computed {:?}",
+                p_block.block().id(),
+                block_number,
+                block_hash.data,
+                compute_res.data,
             );
-            self.inner.write().update_ordered_root(block_to_commit.id());
-            self.inner.write().insert_ordered_cert(finality_proof_clone.clone());
-            update_counters_for_ordered_blocks(&blocks_to_commit);
-        } else {
-            // `BATCH_COMMIT_SIZE` env var: when set and the accumulated path is still
-            // small, defer sending so the execution layer can process blocks in larger
-            // batches. Because we return early without touching `ordered_root`, the next
-            // `send_for_execution` call will see the same root and `path_from_ordered_root`
-            // will grow until it exceeds the batch size, at which point we flush.
-            // Used by `gravity_e2e/cluster_test_cases/single_node/test_batch_exec.py`.
-            let batch_commit_size = std::env::var("BATCH_COMMIT_SIZE")
-                .ok()
-                .and_then(|v| v.parse::<usize>().ok())
-                .unwrap_or(0);
-            if batch_commit_size > 0 && blocks_to_commit.len() <= batch_commit_size {
-                info!(
-                    "blocks_to_commit len {} <= BATCH_COMMIT_SIZE {}, skip sending for batch accumulation",
-                    blocks_to_commit.len(),
-                    batch_commit_size
-                );
-                return Ok(());
-            }
+        }
+        let commit_block = BlockHashRef {
+            block_id: BlockId(*p_block.id()),
+            num: block_number,
+            hash: Some(compute_res.data),
+            persist_notifier: None,
+        };
+        let mut persist_notifiers = get_block_buffer_manager()
+            .set_commit_blocks(vec![commit_block], p_block.block().epoch())
+            .await
+            .context("Failed to set commit blocks during recovery")?;
+        for notifier in persist_notifiers.iter_mut() {
+            let _ = notifier.recv().await;
+        }
+        Ok(())
+    }
 
-            // Send blocks one by one: for each block, find the QC whose commit_info
-            // matches it. The QC that commits block[i] is the QC certifying block[i+1]
-            // (per 2-chain rule: QC(B_{i+1}).commit_info = B_i when rounds are consecutive).
-            // Blocks without a matching QC get batched with the next block that has one
-            // via path_from_ordered_root.
-            for (i, block) in blocks_to_commit.iter().enumerate() {
-                let proof = if block.id() == block_id_to_commit {
-                    // Last block: use the original finality_proof
-                    finality_proof.clone()
-                } else {
-                    // Look up the QC certifying the next block in the chain.
-                    // That QC's commit_info should point to this block (2-chain rule).
-                    let next_qc = (i + 1 < blocks_to_commit.len())
-                        .then(|| self.get_quorum_cert_for_block(blocks_to_commit[i + 1].id()))
-                        .flatten();
-                    match next_qc {
-                        Some(qc) if qc.commit_info().id() == block.id() => {
-                            qc.into_wrapped_ledger_info()
-                        }
-                        _ => {
-                            // No matching QC → this block will be included in the
-                            // next block's path_from_ordered_root batch.
-                            continue;
-                        }
-                    }
-                };
-
-                let path = self.path_from_ordered_root(block.id()).unwrap_or_default();
-                if path.is_empty() {
-                    continue;
-                }
-
-                let bt = self.inner.clone();
-                let st = self.storage.clone();
-                let proof_for_cb = proof.clone();
-
-                info!("send block to execution one-by-one {:?}", path);
-                self.execution_client
-                    .finalize_order(
-                        &path,
-                        proof.ledger_info().clone(),
-                        Box::new(
-                            move |committed_blocks: &[Arc<PipelinedBlock>],
-                                  commit_decision: LedgerInfoWithSignatures| {
-                                bt.write().commit_callback(
-                                    st,
-                                    committed_blocks,
-                                    proof_for_cb,
-                                    commit_decision,
-                                );
-                            },
-                        ),
-                    )
-                    .await
-                    .expect("Failed to persist commit");
-
-                self.inner.write().update_ordered_root(block.id());
-                self.inner.write().insert_ordered_cert(proof);
-            }
-            update_counters_for_ordered_blocks(&blocks_to_commit);
+    /// Live (non-recovery) commit path: send each block to the execution client one-by-one, pairing
+    /// it with the QC that commits it (2-chain rule). Honors the `BATCH_COMMIT_SIZE` env var used
+    /// by the batch-exec e2e test.
+    async fn commit_live_path(
+        &self,
+        blocks_to_commit: Vec<Arc<PipelinedBlock>>,
+        finality_proof: WrappedLedgerInfo,
+        block_id_to_commit: HashValue,
+    ) -> anyhow::Result<()> {
+        // `BATCH_COMMIT_SIZE` env var: when set and the accumulated path is still
+        // small, defer sending so the execution layer can process blocks in larger
+        // batches. Because we return early without touching `ordered_root`, the next
+        // `send_for_execution` call will see the same root and `path_from_ordered_root`
+        // will grow until it exceeds the batch size, at which point we flush.
+        // Used by `gravity_e2e/cluster_test_cases/single_node/test_batch_exec.py`.
+        let batch_commit_size = std::env::var("BATCH_COMMIT_SIZE")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(0);
+        if batch_commit_size > 0 && blocks_to_commit.len() <= batch_commit_size {
+            info!(
+                "blocks_to_commit len {} <= BATCH_COMMIT_SIZE {}, skip sending for batch accumulation",
+                blocks_to_commit.len(),
+                batch_commit_size
+            );
+            return Ok(());
         }
 
+        // Send blocks one by one: for each block, find the QC whose commit_info
+        // matches it. The QC that commits block[i] is the QC certifying block[i+1]
+        // (per 2-chain rule: QC(B_{i+1}).commit_info = B_i when rounds are consecutive).
+        // Blocks without a matching QC get batched with the next block that has one
+        // via path_from_ordered_root.
+        for (i, block) in blocks_to_commit.iter().enumerate() {
+            let proof = if block.id() == block_id_to_commit {
+                // Last block: use the original finality_proof
+                finality_proof.clone()
+            } else {
+                // Look up the QC certifying the next block in the chain.
+                // That QC's commit_info should point to this block (2-chain rule).
+                let next_qc = (i + 1 < blocks_to_commit.len())
+                    .then(|| self.get_quorum_cert_for_block(blocks_to_commit[i + 1].id()))
+                    .flatten();
+                match next_qc {
+                    Some(qc) if qc.commit_info().id() == block.id() => {
+                        qc.into_wrapped_ledger_info()
+                    }
+                    _ => {
+                        // No matching QC → this block will be included in the
+                        // next block's path_from_ordered_root batch.
+                        continue;
+                    }
+                }
+            };
+
+            let path = self.path_from_ordered_root(block.id()).unwrap_or_default();
+            if path.is_empty() {
+                continue;
+            }
+
+            let bt = self.inner.clone();
+            let st = self.storage.clone();
+            let proof_for_cb = proof.clone();
+
+            info!("send block to execution one-by-one {:?}", path);
+            self.execution_client
+                .finalize_order(
+                    &path,
+                    proof.ledger_info().clone(),
+                    Box::new(
+                        move |committed_blocks: &[Arc<PipelinedBlock>],
+                              commit_decision: LedgerInfoWithSignatures| {
+                            bt.write().commit_callback(
+                                st,
+                                committed_blocks,
+                                proof_for_cb,
+                                commit_decision,
+                            );
+                        },
+                    ),
+                )
+                .await
+                .expect("Failed to persist commit");
+
+            self.inner.write().update_ordered_root(block.id());
+            self.inner.write().insert_ordered_cert(proof);
+        }
+        update_counters_for_ordered_blocks(&blocks_to_commit);
         Ok(())
     }
 
@@ -905,6 +1034,7 @@ impl BlockStore {
             self.pending_blocks.clone(),
             self.enable_randomness,
             self.validator_indices.clone(),
+            self.fast_sync_execute_lookahead,
         )
         .await;
 

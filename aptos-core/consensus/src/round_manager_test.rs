@@ -300,6 +300,7 @@ impl NodeSetup {
             Arc::new(Mutex::new(PendingBlocks::new())),
             false,
             HashMap::new(), // validator_indices: empty for tests
+            1,              // fast_sync_execute_lookahead: serial for tests
         ));
 
         let proposer_election = Self::create_proposer_election(proposers.clone());
