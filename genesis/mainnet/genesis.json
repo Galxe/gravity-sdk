@@ -26,6 +26,7 @@
     "mergeNetsplitBlock": 0,
     "shanghaiTime": 0,
     "cancunTime": 0,
+    "pragueTime": 1782709200,
     "terminalTotalDifficulty": 0,
     "terminalTotalDifficultyPassed": true,
     "extraFields": {},
