@@ -36,6 +36,7 @@ use tracing::{info, warn};
 mod cli;
 mod consensus;
 mod mempool;
+mod node_metrics;
 pub mod relayer;
 mod reth_cli;
 mod reth_coordinator;
@@ -273,6 +274,7 @@ fn main() {
     }
 
     // Full node path: requires config, consensus, relayer, etc.
+    node_metrics::register_binary_info_metrics();
     let relayer_config_path = cli.gravity_node_config.relayer_config_path.clone();
     let gcei_config = check_bootstrap_config(cli.gravity_node_config.node_config_path.clone());
 
