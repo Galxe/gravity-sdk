@@ -112,10 +112,8 @@ impl ChainSpecParser for GravityChainSpecParser {
     const SUPPORTED_CHAINS: &'static [&'static str] = EthereumChainSpecParser::SUPPORTED_CHAINS;
 
     fn parse(s: &str) -> eyre::Result<Arc<Self::ChainSpec>> {
-        // Named-chain fast path: delegate. We use `.iter().any()` rather
-        // than `.contains(&s)` because the slice elements have `'static`
-        // lifetime and `&s` does not.
-        if Self::SUPPORTED_CHAINS.iter().any(|c| *c == s) {
+        // Named-chain fast path: delegate.
+        if Self::SUPPORTED_CHAINS.contains(&s) {
             return EthereumChainSpecParser::parse(s);
         }
         // Fallthrough: file path or inline JSON. Parse, mutate, then
@@ -218,7 +216,7 @@ fn apply_overrides(g: &mut Genesis) -> Vec<OverrideEvent> {
 mod tests {
     use super::*;
     use greth::reth_chainspec::{
-        ChainSpecBuilder, EthereumHardfork, EthereumHardforks, ForkCondition, Hardforks,
+        ChainSpecBuilder, EthereumHardfork, EthereumHardforks, ForkCondition,
     };
 
     fn genesis_json(chain_id: u64, prague_time: Option<u64>, alpha_time: Option<u64>) -> String {
