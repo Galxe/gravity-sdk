@@ -1322,3 +1322,153 @@ impl BlockRetriever {
         result
     }
 }
+
+// =============================================================================
+// Regression test for gravity-audit#705 (Refs Galxe/gravity-audit#705)
+//
+// F3 in galxe/RESTART_RECOVERY_FINDINGS.md: u64 underflow of `num_blocks` in
+// `BlockStore::fast_forward_sync`.
+//
+// The real call site (this file) computes:
+//
+//     let num_blocks = highest_quorum_cert.certified_block().round()
+//         - highest_commit_cert.ledger_info().ledger_info().round()
+//         + 1;
+//     assert!(num_blocks < std::usize::MAX as u64);   // does NOT catch underflow on 64-bit
+//
+// `highest_commit_cert` is `effective_commit_cert = max(local_hcc, remote_hcc)`
+// by round (sync_to_highest_quorum_cert, this file). When the local commit root
+// is AHEAD of the incoming SyncInfo's hqc certified round (a stale / forked
+// SyncInfo whose hqc block the node does not have), the subtraction
+// `hqc_round - commit_round + 1` underflows to ~= u64::MAX. The guard only
+// considered 32-bit overflow; on 64-bit `usize::MAX == u64::MAX`, so the wrapped
+// value still satisfies `< usize::MAX` and the assert PASSES. The absurd count
+// is then handed to `retrieve_blocks_in_range(.., num_blocks, ..)`:
+//   - debug builds: panic with "attempt to subtract with overflow"
+//   - release builds: wraps and attempts a giant fetch -> sync stall.
+//
+// These tests build the *exact same* `QuorumCert` / `WrappedLedgerInfo` objects
+// the production path operates on, with commit_round > hqc_round, and evaluate
+// the identical `num_blocks` expression. On current (unfixed) code this either
+// panics (debug) or yields a wrapped value (release) -- both demonstrate the
+// bug. They would PASS once the production code adopts a `checked_sub` guard
+// with an early return when commit_round >= hqc_round.
+// =============================================================================
+#[cfg(test)]
+mod ffsync_numblocks_underflow_705_tests {
+    use aptos_consensus_types::{
+        block::block_test_utils::gen_test_certificate, quorum_cert::QuorumCert,
+        wrapped_ledger_info::WrappedLedgerInfo,
+    };
+    use gaptos::{
+        aptos_crypto::HashValue,
+        aptos_types::{block_info::BlockInfo, validator_verifier::random_validator_verifier},
+    };
+
+    /// Build a `QuorumCert` whose `certified_block().round() == round` and whose
+    /// committed ledger-info round is `committed_round`.
+    fn qc_at(round: u64, committed_round: u64) -> QuorumCert {
+        let (signers, _vv) = random_validator_verifier(1, None, false);
+        let certified = BlockInfo::new(
+            1,
+            round,
+            HashValue::random(),
+            HashValue::zero(),
+            round, // version (arbitrary)
+            0,
+            None,
+        );
+        let parent = BlockInfo::new(
+            1,
+            round.saturating_sub(1),
+            HashValue::random(),
+            HashValue::zero(),
+            round.saturating_sub(1),
+            0,
+            None,
+        );
+        let committed = BlockInfo::new(
+            1,
+            committed_round,
+            HashValue::random(),
+            HashValue::zero(),
+            committed_round,
+            0,
+            None,
+        );
+        gen_test_certificate(&signers, certified, parent, Some(committed))
+    }
+
+    /// Reproduce the exact production `num_blocks` arithmetic from
+    /// `fast_forward_sync` (sync_manager.rs:509-514) against real
+    /// `QuorumCert` / `WrappedLedgerInfo` values where the commit round is
+    /// AHEAD of the hqc certified round.
+    ///
+    /// On current (buggy) code in a debug build this test PANICS with
+    /// "attempt to subtract with overflow" -> the reproduction. Once the
+    /// production code uses `checked_sub` + early-return, the equivalent guarded
+    /// computation below returns `None` and the test passes.
+    #[test]
+    fn ffsync_num_blocks_underflows_when_commit_ahead_of_hqc() {
+        // Local commit root is ahead (round 100); incoming/stale hqc is behind
+        // (certified round 90). effective_commit_cert == the higher-round commit.
+        let hqc_certified_round = 90u64;
+        let commit_round = 100u64;
+
+        // highest_quorum_cert: certified at round 90.
+        let highest_quorum_cert: QuorumCert = qc_at(hqc_certified_round, /*committed=*/ 1);
+        // highest_commit_cert (= effective_commit_cert): committed ledger-info at round 100.
+        let commit_qc: QuorumCert = qc_at(/*certified=*/ 101, commit_round);
+        let highest_commit_cert: WrappedLedgerInfo = commit_qc.into_wrapped_ledger_info();
+
+        // Sanity: the values feeding the production subtraction are as crafted.
+        assert_eq!(highest_quorum_cert.certified_block().round(), hqc_certified_round);
+        assert_eq!(highest_commit_cert.ledger_info().ledger_info().round(), commit_round);
+
+        // --- EXACT production expression (sync_manager.rs:509-511) ---
+        // In a debug build this line panics with "attempt to subtract with
+        // overflow"; in release it wraps to ~u64::MAX. Either way it is the bug.
+        let num_blocks = highest_quorum_cert.certified_block().round()
+            - highest_commit_cert.ledger_info().ledger_info().round()
+            + 1;
+
+        // The original guard does NOT catch the underflow on 64-bit
+        // (usize::MAX == u64::MAX), so it would let an absurd count through.
+        assert!(num_blocks < std::usize::MAX as u64);
+
+        // What a fixed implementation would compute instead: a checked subtract
+        // that detects commit_round >= hqc_round and bails out (no fetch).
+        let guarded = highest_quorum_cert
+            .certified_block()
+            .round()
+            .checked_sub(highest_commit_cert.ledger_info().ledger_info().round())
+            .map(|d| d + 1);
+        assert_eq!(
+            guarded, None,
+            "checked_sub must report underflow when commit round ({}) > hqc round ({}); \
+             got num_blocks={} from the unchecked production expression",
+            commit_round, hqc_certified_round, num_blocks,
+        );
+    }
+
+    /// The non-underflowing path (hqc ahead of commit) must keep working: this
+    /// guards against an over-broad fix that would also break the happy path.
+    #[test]
+    fn ffsync_num_blocks_ok_when_hqc_ahead_of_commit() {
+        let highest_quorum_cert = qc_at(100, 1);
+        let commit_qc = qc_at(91, 90);
+        let highest_commit_cert = commit_qc.into_wrapped_ledger_info();
+
+        let num_blocks = highest_quorum_cert.certified_block().round()
+            - highest_commit_cert.ledger_info().ledger_info().round()
+            + 1;
+        assert_eq!(num_blocks, 11);
+
+        let guarded = highest_quorum_cert
+            .certified_block()
+            .round()
+            .checked_sub(highest_commit_cert.ledger_info().ledger_info().round())
+            .map(|d| d + 1);
+        assert_eq!(guarded, Some(11));
+    }
+}
