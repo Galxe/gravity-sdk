@@ -92,13 +92,13 @@ fn run_reth(
     cli: Cli<GravityChainSpecParser>,
     execution_args_rx: oneshot::Receiver<ExecutionArgs>,
     mut shutdown: broadcast::Receiver<()>,
-) -> (ConsensusArgs<impl RethEthCall>, u64, oneshot::Receiver<PathBuf>) {
+) -> (ConsensusArgs<impl RethEthCall>, u64, oneshot::Receiver<PathBuf>, thread::JoinHandle<()>) {
     let (datadir_tx, datadir_rx) = oneshot::channel::<PathBuf>();
     reth_cli_util::sigsegv_handler::install();
 
     let (tx, rx) = std::sync::mpsc::sync_channel(1);
 
-    std::thread::spawn(move || {
+    let reth_thread = std::thread::spawn(move || {
         // Trick code to ensure the `rx.recv` won't panic before the error message is printed
         let _tx = tx.clone();
         let res = cli.run(
@@ -197,7 +197,7 @@ fn run_reth(
     });
 
     let (args, block_number) = rx.recv().unwrap();
-    (args, block_number, datadir_rx)
+    (args, block_number, datadir_rx, reth_thread)
 }
 
 struct ProfilingState {
@@ -322,7 +322,7 @@ fn main() {
     });
 
     let (execution_args_tx, execution_args_rx) = oneshot::channel();
-    let (consensus_args, latest_block_number, datadir_rx) =
+    let (consensus_args, latest_block_number, datadir_rx, reth_thread) =
         run_reth(cli, execution_args_rx, shutdown_tx.subscribe());
     let rt = tokio::runtime::Runtime::new().unwrap();
     let chain_id = {
@@ -339,13 +339,17 @@ fn main() {
     ));
     let txn_cache = pool.tx_cache();
     let shutdown_rx_cli = shutdown_tx.subscribe();
-    rt.block_on(async move {
+    let coordinator_result = rt.block_on(async move {
         let datadir = datadir_rx.await.expect("datadir should be sent");
         let client = Arc::new(RethCli::new(consensus_args, txn_cache, shutdown_rx_cli).await);
         let chain_id = client.chain_id();
 
-        let coordinator =
-            Arc::new(RethCoordinator::new(client.clone(), latest_block_number, execution_args_tx));
+        let coordinator = Arc::new(RethCoordinator::new(
+            client.clone(),
+            latest_block_number,
+            execution_args_tx,
+            shutdown_tx.clone(),
+        ));
         let mut _engine = None;
         if std::env::var("MOCK_CONSENSUS").unwrap_or("false".to_string()).parse::<bool>().unwrap() {
             warn!("MOCK_CONSENSUS is enabled! This disables BFT consensus and should NEVER be used in production.");
@@ -378,10 +382,24 @@ fn main() {
             );
         }
         coordinator.send_execution_args().await;
-        coordinator.run().await;
+        let result = coordinator.run().await;
+        if let Err(err) = &result {
+            tracing::error!("Reth coordinator stopped with error: {err}");
+            let _ = shutdown_tx.send(());
+        }
 
-        let mut shutdown_rx = shutdown_tx.subscribe();
-        let _ = shutdown_rx.recv().await;
         info!("Main shutdown complete");
+        result
     });
+    drop(rt);
+
+    if let Err(err) = reth_thread.join() {
+        eprintln!("Reth thread panicked: {err:?}");
+        std::process::exit(1);
+    }
+
+    if let Err(err) = coordinator_result {
+        eprintln!("Reth coordinator stopped with error: {err}");
+        std::process::exit(1);
+    }
 }
