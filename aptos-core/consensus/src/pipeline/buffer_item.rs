@@ -10,6 +10,7 @@ use aptos_consensus_types::{
 use aptos_executor_types::ExecutorResult;
 use futures::future::BoxFuture;
 use gaptos::{
+    api_types::on_chain_config::consensus_hardfork::{is_consensus_fork_active, ConsensusHardfork},
     aptos_crypto::{bls12381, HashValue},
     aptos_logger::prelude::*,
     aptos_reliable_broadcast::DropGuard,
@@ -135,16 +136,22 @@ fn generate_executed_item_from_ordered(
     callback: StateComputerCommitCallBackType,
     ordered_proof: LedgerInfoWithSignatures,
     order_vote_enabled: bool,
+    use_corrected_commit_timestamp: bool,
 ) -> BufferItem {
     debug!("{} advance to executed from ordered", commit_info);
     let block = executed_blocks.last().expect("execute_blocks should not be empty!");
+    let timestamp_usecs = executed_commit_timestamp_usecs(
+        commit_info.timestamp_usecs(),
+        block.timestamp_usecs(),
+        use_corrected_commit_timestamp,
+    );
     let new_commit_info = BlockInfo::new_with_epoch_block_info(
         commit_info.epoch(),
         commit_info.round(),
         commit_info.id(),
         commit_info.executed_state_id(),
         block.block().block_number().unwrap(),
-        block.timestamp_usecs(),
+        timestamp_usecs,
         commit_info.next_epoch_state().cloned(),
         commit_info.epoch_block_info().cloned(),
     );
@@ -164,6 +171,18 @@ fn generate_executed_item_from_ordered(
         commit_info: new_commit_info,
         ordered_proof,
     }))
+}
+
+fn executed_commit_timestamp_usecs(
+    corrected_commit_timestamp_usecs: u64,
+    block_timestamp_usecs: u64,
+    use_corrected_commit_timestamp: bool,
+) -> u64 {
+    if use_corrected_commit_timestamp {
+        corrected_commit_timestamp_usecs
+    } else {
+        block_timestamp_usecs
+    }
 }
 
 fn aggregate_commit_proof(
@@ -324,13 +343,17 @@ impl BufferItem {
                             callback,
                         }))
                     } else {
-                        warn!(
+                        debug!(
                             commit_info = ?commit_ledger_info.commit_info(),
                             block_hash = ?commit_ledger_info.block_hash(),
                             block_number = commit_ledger_info.block_number(),
                             verified_signature_count = verified_signatures.signatures().len(),
                             error = ?voting_power_result.err(),
                             "Commit vote signatures do not have enough voting power after execution",
+                        );
+                        let use_corrected_commit_timestamp = is_consensus_fork_active(
+                            ConsensusHardfork::ConsensusAlpha,
+                            block.timestamp_usecs(),
                         );
                         generate_executed_item_from_ordered(
                             commit_info,
@@ -339,6 +362,7 @@ impl BufferItem {
                             callback,
                             ordered_proof,
                             order_vote_enabled,
+                            use_corrected_commit_timestamp,
                         )
                     }
                 }
@@ -599,5 +623,20 @@ impl BufferItem {
             BufferItem::Aggregated(item) => *item,
             _ => panic!("Not aggregated item"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::executed_commit_timestamp_usecs;
+
+    #[test]
+    fn executed_commit_timestamp_preserves_legacy_block_timestamp_before_alpha() {
+        assert_eq!(executed_commit_timestamp_usecs(1_000, 2_000, false), 2_000);
+    }
+
+    #[test]
+    fn executed_commit_timestamp_uses_corrected_commit_timestamp_after_alpha() {
+        assert_eq!(executed_commit_timestamp_usecs(1_000, 2_000, true), 1_000);
     }
 }

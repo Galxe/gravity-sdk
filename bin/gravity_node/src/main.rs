@@ -6,7 +6,15 @@ use api::{
     consensus_api::{ConsensusEngine, ConsensusEngineArgs},
 };
 use consensus::mock_consensus::mock::MockConsensus;
-use gaptos::{api_types::relayer::GLOBAL_RELAYER, aptos_config::config::RoleType};
+use gaptos::{
+    api_types::{
+        on_chain_config::consensus_hardfork::{
+            init_consensus_hardforks, ConsensusHardfork, ConsensusHardforks, ForkCondition,
+        },
+        relayer::GLOBAL_RELAYER,
+    },
+    aptos_config::config::RoleType,
+};
 use gravity_storage::block_view_storage::BlockViewStorage;
 use greth::{
     gravity_storage, reth,
@@ -64,6 +72,21 @@ struct ConsensusArgs<EthApi: RethEthCall> {
     pub pool: RethTransactionPool,
 }
 
+fn consensus_hardforks_from_genesis_extra_fields(
+    get_extra_field: impl Fn(&str) -> Option<u64>,
+) -> ConsensusHardforks {
+    let mut hardforks = ConsensusHardforks::from_genesis_extra_fields(&get_extra_field);
+
+    if let Some(alpha_time_secs) = get_extra_field("alphaTime") {
+        hardforks.insert(
+            ConsensusHardfork::ConsensusAlpha,
+            ForkCondition::Timestamp(alpha_time_secs.saturating_mul(1_000_000)),
+        );
+    }
+
+    hardforks
+}
+
 fn run_reth(
     cli: Cli<GravityChainSpecParser>,
     execution_args_rx: oneshot::Receiver<ExecutionArgs>,
@@ -106,11 +129,8 @@ fn run_reth(
 
                     // Initialize consensus-layer hardforks from genesis.json extra_fields.
                     {
-                        use gaptos::api_types::on_chain_config::consensus_hardfork::{
-                            init_consensus_hardforks, ConsensusHardforks,
-                        };
                         let extra = &chain_spec.genesis.config.extra_fields;
-                        let hardforks = ConsensusHardforks::from_genesis_extra_fields(|key| {
+                        let hardforks = consensus_hardforks_from_genesis_extra_fields(|key| {
                             extra.get(key).and_then(|v| v.as_u64())
                         });
                         info!("Consensus hardforks:\n{}", hardforks);

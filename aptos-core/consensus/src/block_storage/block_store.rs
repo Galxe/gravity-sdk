@@ -630,6 +630,25 @@ impl BlockStore {
             } else {
                 blocks_to_commit
             };
+            let last_block_number = blocks_to_commit
+                .last()
+                .and_then(|block| block.block().block_number())
+                .ok_or_else(|| format_err!("Block number not found for last recovery block"))?;
+            if self
+                .storage
+                .consensus_db()
+                .ledger_db
+                .metadata_db()
+                .get_block_hash(last_block_number)
+                .is_none()
+            {
+                info!(
+                    "send_for_execution(recovery): defer batch because last block has no ledger hash: block_number={}",
+                    last_block_number,
+                );
+                return Ok(());
+            }
+            let mut commit_blocks = vec![];
             for p_block in &blocks_to_commit {
                 let mut txns = vec![];
                 loop {
@@ -744,21 +763,22 @@ impl BlockStore {
                         p_block.block().id()
                     ))?;
                 let compute_res = compute_res.execution_output;
-                if let Some(block_hash) = maybe_block_hash {
-                    assert_eq!(block_hash.data, compute_res.data);
-                }
-                let commit_block = BlockHashRef {
+                commit_blocks.push(BlockHashRef {
                     block_id: BlockId(*p_block.id()),
                     num: block_number,
                     hash: Some(compute_res.data),
                     persist_notifier: None,
-                };
-                let mut persist_notifiers = get_block_buffer_manager()
-                    .set_commit_blocks(vec![commit_block], p_block.block().epoch())
-                    .await
-                    .context("Failed to set commit blocks during recovery")?;
-                for notifier in persist_notifiers.iter_mut() {
-                    let _ = notifier.recv().await;
+                });
+                if let Some(block_hash) = maybe_block_hash {
+                    assert_eq!(block_hash.data, compute_res.data);
+                    let mut persist_notifiers = get_block_buffer_manager()
+                        .set_commit_blocks(&commit_blocks, p_block.block().epoch())
+                        .await
+                        .context("Failed to set commit blocks during recovery")?;
+                    for notifier in persist_notifiers.iter_mut() {
+                        let _ = notifier.recv().await;
+                    }
+                    commit_blocks.clear();
                 }
             }
             let commit_decision = finality_proof.ledger_info().clone();
