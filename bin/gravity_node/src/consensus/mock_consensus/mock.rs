@@ -242,18 +242,13 @@ impl MockConsensus {
                 cvar.notify_all();
             }
 
-            get_block_buffer_manager()
-                .set_commit_blocks(
-                    vec![BlockHashRef {
-                        block_id,
-                        num: block_number,
-                        hash: Some(res.execution_output.data),
-                        persist_notifier: None,
-                    }],
-                    epoch,
-                )
-                .await
-                .unwrap();
+            let commit_blocks = vec![BlockHashRef {
+                block_id,
+                num: block_number,
+                hash: Some(res.execution_output.data),
+                persist_notifier: None,
+            }];
+            get_block_buffer_manager().set_commit_blocks(&commit_blocks, epoch).await.unwrap();
             self.process_epoch_change(&res.execution_output.events, block_number);
             let committed_txns = res
                 .execution_output
