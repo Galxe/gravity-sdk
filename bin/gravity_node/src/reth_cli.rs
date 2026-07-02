@@ -95,7 +95,12 @@ impl<T> RethEthCall for T where
 pub(crate) type RethPipeExecLayerApi<EthApi> =
     PipeExecLayerApi<BlockViewStorage<RethBlockChainProvider>, EthApi>;
 
-pub(crate) type TxnCache = Arc<DashMap<[u8; 32], Arc<ValidPoolTransaction<EthPooledTransaction>>>>;
+/// txn_cache entry value: `(inserted_at, transaction)`.
+/// Recording the insertion time lets the background sweeper evict entries that stay
+/// uncommitted past the TTL, preventing unbounded growth (see TXN_CACHE_ENTRY_TTL in
+/// mempool.rs).
+pub(crate) type TxnCacheEntry = (Instant, Arc<ValidPoolTransaction<EthPooledTransaction>>);
+pub(crate) type TxnCache = Arc<DashMap<[u8; 32], TxnCacheEntry>>;
 
 pub struct RethCli<EthApi: RethEthCall> {
     _auth: AuthServerHandle,
@@ -236,7 +241,8 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         {
             for (idx, txn) in block.txns.iter().enumerate() {
                 let key = txn.committed_hash();
-                if let Some((_, cached_txn)) = self.txn_cache.remove(&key) {
+                // Commit hit: remove from cache (drop insertion time, keep the tx).
+                if let Some((_, (_, cached_txn))) = self.txn_cache.remove(&key) {
                     senders[idx] = Some(cached_txn.sender());
                     transactions[idx] = Some(cached_txn.transaction.transaction().inner().clone());
                 }

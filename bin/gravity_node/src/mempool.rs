@@ -23,6 +23,20 @@ use greth::{
     },
 };
 
+/// Maximum lifetime (TTL) of a txn_cache entry.
+///
+/// `best_txns()` caches every selected pending transaction into `txn_cache`, and the
+/// only removal path is the committed-hash deletion in `RethCli::push_ordered_block()`
+/// when a transaction is committed. If a transaction is selected and cached but then
+/// replaced / evicted / invalidated and **never committed**, its
+/// `Arc<ValidPoolTransaction>` would linger forever — an attacker can spam free
+/// replacement txs to exhaust memory (OOM). The background sweeper therefore
+/// periodically drops entries older than this TTL as a backstop bound.
+const TXN_CACHE_ENTRY_TTL: Duration = Duration::from_secs(300); // 5 minutes
+
+/// txn_cache background sweep interval: scan and evict expired entries this often.
+const TXN_CACHE_SWEEP_INTERVAL: Duration = Duration::from_secs(30);
+
 /// Cache TTL for best transactions (in milliseconds)
 /// Can be configured via MEMPOOL_CACHE_TTL_MS environment variable
 fn cache_ttl() -> Duration {
@@ -87,11 +101,41 @@ impl Mempool {
         } else {
             enable_broadcast
         };
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let txn_cache: TxnCache = Arc::new(DashMap::new());
+
+        // Start the background sweeper: periodically drop txn_cache entries older than
+        // the TTL, bounding transactions that were selected+cached but never committed,
+        // to prevent unbounded growth and OOM. Reuses Mempool's own multi-thread
+        // runtime, so no separate thread/runtime is needed.
+        {
+            let txn_cache = txn_cache.clone();
+            runtime.spawn(async move {
+                let mut ticker = tokio::time::interval(TXN_CACHE_SWEEP_INTERVAL);
+                loop {
+                    ticker.tick().await;
+                    let now = Instant::now();
+                    let before = txn_cache.len();
+                    txn_cache.retain(|_, (inserted_at, _)| {
+                        now.duration_since(*inserted_at) < TXN_CACHE_ENTRY_TTL
+                    });
+                    let evicted = before.saturating_sub(txn_cache.len());
+                    if evicted > 0 {
+                        tracing::debug!(
+                            "txn_cache sweep: evicted {} expired entries, {} remaining",
+                            evicted,
+                            txn_cache.len()
+                        );
+                    }
+                }
+            });
+        }
+
         Self {
             pool,
-            txn_cache: Arc::new(DashMap::new()),
+            txn_cache,
             cached_best: Arc::new(std::sync::Mutex::new(CachedBest::new())),
-            runtime: tokio::runtime::Runtime::new().unwrap(),
+            runtime,
             enable_broadcast,
             chain_id,
         }
@@ -185,7 +229,9 @@ impl TxPool for Mempool {
 
                 let verified_txn = to_verified_txn(pool_txn.clone(), chain_id);
                 let tx_hash: [u8; 32] = pool_txn.transaction.transaction().inner().hash().0;
-                txn_cache.insert(tx_hash, pool_txn);
+                // Record the insertion time so the background sweeper can evict entries
+                // that stay uncommitted past the TTL.
+                txn_cache.insert(tx_hash, (Instant::now(), pool_txn));
                 Some(verified_txn)
             })
             .take(limit)
