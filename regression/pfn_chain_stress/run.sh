@@ -200,15 +200,19 @@ else
 fi
 
 # Build gravity_node image (shared by all clusters).
-if ! docker image inspect gravity_node:pfn-stress >/dev/null 2>&1; then
-    echo "[run] building gravity_node:pfn-stress…"
-    DOCKER_BUILDKIT=1 docker build \
-        -t gravity_node:pfn-stress \
-        -f "$REPO_ROOT/docker/gravity_node/Dockerfile" \
-        --target runtime-host-binary \
-        "$REPO_ROOT" \
-        || { echo "[run] gravity_node image build failed"; exit 1; }
-fi
+# Always invoke `docker build` — BuildKit's COPY layer is keyed on the binary's
+# hash, so a no-op build is fast (~1s) when the staged binary hasn't changed,
+# and a real rebuild (~10s) happens only when it has. A previous version gated
+# this on `docker image inspect` succeeding, which silently kept the stale
+# image baked from the first-ever run even after `cargo build` produced a new
+# binary — every subsequent cluster ran old code.
+echo "[run] building gravity_node:pfn-stress (cached if binary unchanged)…"
+DOCKER_BUILDKIT=1 docker build \
+    -t gravity_node:pfn-stress \
+    -f "$REPO_ROOT/docker/gravity_node/Dockerfile" \
+    --target runtime-host-binary \
+    "$REPO_ROOT" \
+    || { echo "[run] gravity_node image build failed"; exit 1; }
 
 if [[ "$NO_BENCH" -eq 0 ]]; then
     # Bench image — build only if missing. Don't trigger a from-source rebuild
@@ -289,10 +293,12 @@ for id in $(cluster_ids); do
     port="$(rpc_port_for "$id" node1)"
     echo -n "[run] waiting cluster $id node1 (port $port)…"
     while [[ $(date +%s) -lt $deadline ]]; do
+        # `|| true` swallows curl exit 7 (connection refused) during the
+        # node-is-still-coming-up window; pipefail would otherwise trip set -e.
         bn=$(curl -s --noproxy '*' -m 2 -X POST -H 'Content-Type: application/json' \
             --data '{"jsonrpc":"2.0","method":"eth_blockNumber","id":1}' \
             "http://127.0.0.1:$port" 2>/dev/null \
-            | sed -n 's/.*"result":"\(0x[0-9a-fA-F]*\)".*/\1/p')
+            | sed -n 's/.*"result":"\(0x[0-9a-fA-F]*\)".*/\1/p' || true)
         if [[ -n "$bn" && "$bn" != "0x0" ]]; then
             echo " block=$bn"
             break
