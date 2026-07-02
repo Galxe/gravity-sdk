@@ -8029,6 +8029,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sha2 0.9.9",
  "shadow-rs",
  "tempfile",
  "tikv-jemalloc-ctl",
