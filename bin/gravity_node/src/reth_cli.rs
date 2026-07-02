@@ -350,16 +350,20 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         Ok(())
     }
 
+    async fn init_current_epoch_from_buffer(&self, task_name: &str) -> u64 {
+        let buffer_epoch = get_block_buffer_manager().get_current_epoch().await;
+        self.current_epoch.store(buffer_epoch, Ordering::SeqCst);
+        info!("{task_name} initialized with epoch {buffer_epoch}");
+        buffer_epoch
+    }
+
     pub async fn start_execution(&self) -> Result<(), String> {
         let mut start_ordered_block = self
             .provider
             .recover_block_number()
             .map_err(|e| format!("Failed to recover block number: {e}"))? +
             1;
-        // Initialize current_epoch from block buffer manager
-        let buffer_epoch = get_block_buffer_manager().get_current_epoch().await;
-        self.current_epoch.store(buffer_epoch, Ordering::SeqCst);
-        info!("start_execution initialized with epoch {}", buffer_epoch);
+        self.init_current_epoch_from_buffer("start_execution").await;
 
         // missing signals between iterations
         let mut shutdown = self.shutdown.resubscribe();
@@ -415,6 +419,8 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
     }
 
     pub async fn start_commit_vote(&self) -> Result<(), String> {
+        self.init_current_epoch_from_buffer("start_commit_vote").await;
+
         // GSDK-022: Track consecutive errors to distinguish transient from fatal failures
         let mut consecutive_errors = 0u32;
         const MAX_CONSECUTIVE_ERRORS: u32 = 5;
@@ -489,6 +495,8 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             .recover_block_number()
             .map_err(|e| format!("Failed to recover block number: {e}"))? +
             1;
+        self.init_current_epoch_from_buffer("start_commit").await;
+
         let mut shutdown = self.shutdown.resubscribe();
         loop {
             let epoch = self.current_epoch.load(Ordering::SeqCst);
