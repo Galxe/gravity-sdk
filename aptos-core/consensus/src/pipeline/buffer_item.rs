@@ -343,7 +343,7 @@ impl BufferItem {
                             callback,
                         }))
                     } else {
-                        warn!(
+                        debug!(
                             commit_info = ?commit_ledger_info.commit_info(),
                             block_hash = ?commit_ledger_info.block_hash(),
                             block_number = commit_ledger_info.block_number(),

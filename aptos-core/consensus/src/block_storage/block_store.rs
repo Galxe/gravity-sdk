@@ -630,6 +630,24 @@ impl BlockStore {
             } else {
                 blocks_to_commit
             };
+            let last_block_number = blocks_to_commit
+                .last()
+                .and_then(|block| block.block().block_number())
+                .ok_or_else(|| format_err!("Block number not found for last recovery block"))?;
+            if self
+                .storage
+                .consensus_db()
+                .ledger_db
+                .metadata_db()
+                .get_block_hash(last_block_number)
+                .is_none()
+            {
+                info!(
+                    "send_for_execution(recovery): defer batch because last block has no ledger hash: block_number={}",
+                    last_block_number,
+                );
+                return Ok(());
+            }
             let mut commit_blocks = vec![];
             for p_block in &blocks_to_commit {
                 let mut txns = vec![];
