@@ -17,8 +17,7 @@ use gaptos::{
 };
 use gravity_storage::block_view_storage::BlockViewStorage;
 use greth::{
-    gravity_storage,
-    reth::{self, chainspec::EthereumChainSpecParser},
+    gravity_storage, reth,
     reth_chainspec::ChainSpecProvider,
     reth_cli::chainspec::ChainSpecParser,
     reth_cli_util, reth_db, reth_node_api, reth_node_builder, reth_node_ethereum,
@@ -41,13 +40,16 @@ use tokio::{
     sync::{broadcast, oneshot},
 };
 use tracing::{info, warn};
+mod chainspec;
 mod cli;
 mod consensus;
 mod mempool;
 pub mod relayer;
 mod reth_cli;
 mod reth_coordinator;
-use crate::{cli::Cli, mempool::Mempool, relayer::RelayerWrapper};
+use crate::{
+    chainspec::GravityChainSpecParser, cli::Cli, mempool::Mempool, relayer::RelayerWrapper,
+};
 use std::{
     fs::File,
     path::PathBuf,
@@ -86,7 +88,7 @@ fn consensus_hardforks_from_genesis_extra_fields(
 }
 
 fn run_reth(
-    cli: Cli<EthereumChainSpecParser>,
+    cli: Cli<GravityChainSpecParser>,
     execution_args_rx: oneshot::Receiver<ExecutionArgs>,
     mut shutdown: broadcast::Receiver<()>,
 ) -> (ConsensusArgs<impl RethEthCall>, u64, oneshot::Receiver<PathBuf>) {
@@ -102,7 +104,7 @@ fn run_reth(
             |builder: WithLaunchContext<
                 NodeBuilder<
                     Arc<DatabaseEnv>,
-                    <EthereumChainSpecParser as ChainSpecParser>::ChainSpec,
+                    <GravityChainSpecParser as ChainSpecParser>::ChainSpec,
                 >,
             >,
              _| {
@@ -278,7 +280,7 @@ fn main() {
             |_builder: WithLaunchContext<
                 NodeBuilder<
                     Arc<DatabaseEnv>,
-                    <EthereumChainSpecParser as ChainSpecParser>::ChainSpec,
+                    <GravityChainSpecParser as ChainSpecParser>::ChainSpec,
                 >,
             >,
              _| {
