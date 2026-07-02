@@ -1135,8 +1135,47 @@ impl RoundManager {
                 Err(anyhow::anyhow!("Injected error in process_order_vote_msg"))
             });
 
+            // Defense-in-depth for #43: unlike every other validator message
+            // handler, `process_order_vote_msg` does not run through
+            // `ensure_round_and_sync_up` (OrderVoteMsg carries no SyncInfo,
+            // just one QC + one OrderVote). A Byzantine peer can therefore
+            // submit an OrderVoteMsg whose embedded QC fast-forwards our
+            // local state by many rounds, then have the attached order vote
+            // accepted for a round we never sequentially processed.
+            //
+            // Snapshot `highest_ordered_round` BEFORE we apply the embedded
+            // QC, then bound how far past that snapshot the order vote round
+            // is allowed to be. The order vote signature itself is already
+            // verified inside `UnverifiedEvent::verify` (round_manager.rs
+            // line ~130 -> `verify_order_vote`), so no re-verification here.
+            //
+            // `MAX_ORDER_VOTE_ROUND_JUMP` is set to 3 to leave room for
+            // legitimate back-pressure / pipelined ordering scenarios where
+            // a node can legitimately lag a couple of rounds behind. Tighten
+            // further if telemetry shows real-world deltas are smaller.
+            const MAX_ORDER_VOTE_ROUND_JUMP: u64 = 3;
+            let pre_highest_ordered_round =
+                self.block_store.sync_info().highest_ordered_round();
+            let pre_current_round = self.round_state.current_round();
+
             let order_vote = order_vote_msg.order_vote();
             self.new_qc_from_order_vote_msg(&order_vote_msg).await?;
+
+            let vote_round = order_vote_msg.order_vote().ledger_info().round();
+            if vote_round > pre_highest_ordered_round + MAX_ORDER_VOTE_ROUND_JUMP {
+                // The embedded QC fast-forwarded us; the order vote itself
+                // is for a round we never sequentially processed. Reject as
+                // a defense-in-depth measure.
+                error!(
+                    SecurityEvent::ConsensusInvalidMessage,
+                    remote_peer = order_vote_msg.order_vote().author(),
+                    pre_current_round = pre_current_round,
+                    pre_highest_ordered_round = pre_highest_ordered_round,
+                    vote_round = vote_round,
+                    "OrderVoteMsg jumped highest_ordered_round by more than MAX_ORDER_VOTE_ROUND_JUMP",
+                );
+                return Ok(());
+            }
 
             debug!(
                 self.new_log(LogEvent::ReceiveOrderVote).remote_peer(order_vote.author()),
@@ -1354,6 +1393,12 @@ impl RoundManager {
                 ORDER_VOTE_ADDED.inc();
                 Ok(())
             }
+            // Equivocating order vote: the SecurityEvent has already been logged
+            // inside `PendingOrderVotes::insert_order_vote`. Drop the vote
+            // non-fatally so a single Byzantine validator can't poison the
+            // message handler, mirroring `VoteReceptionResult::EquivocateVote`
+            // handling in `process_vote_reception_result`.
+            OrderVoteReceptionResult::EquivocateVote => Ok(()),
             e => {
                 ORDER_VOTE_OTHER_ERRORS.inc();
                 Err(anyhow::anyhow!("{:?}", e))

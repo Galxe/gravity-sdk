@@ -21,6 +21,8 @@ pub enum OrderVoteReceptionResult {
     /// The vote has been added but QC has not been formed yet. Return the amount of voting power
     /// QC currently has.
     VoteAdded(u128),
+    /// The very same author has already voted for another LedgerInfo digest (equivocation).
+    EquivocateVote,
     /// This block has just been certified after adding the vote.
     NewLedgerInfoWithSignatures(LedgerInfoWithSignatures),
     /// There might be some issues adding a vote
@@ -43,12 +45,20 @@ pub struct PendingOrderVotes {
     /// LedgerInfoWithSignatures). Order vote status stores caches the information on whether
     /// the votes are enough to form a QC.
     li_digest_to_votes: HashMap<HashValue /* LedgerInfo digest */, OrderVoteStatus>,
+    /// Maps Author to the LedgerInfo digest they have already voted for, used to
+    /// detect equivocation. Mirrors `PendingVotes::author_to_vote` so a Byzantine
+    /// validator cannot split its voting power across conflicting ordering
+    /// candidates within the same retention window.
+    author_to_li_digest: HashMap<Author, HashValue>,
 }
 
 impl PendingOrderVotes {
     /// Creates an empty PendingOrderVotes structure
     pub fn new() -> Self {
-        Self { li_digest_to_votes: HashMap::new() }
+        Self {
+            li_digest_to_votes: HashMap::new(),
+            author_to_li_digest: HashMap::new(),
+        }
     }
 
     /// Add a vote to the pending votes
@@ -60,6 +70,23 @@ impl PendingOrderVotes {
     ) -> OrderVoteReceptionResult {
         // derive data from order vote
         let li_digest = order_vote.ledger_info().hash();
+
+        // Equivocation check: if this author has previously voted for a different
+        // LedgerInfo digest, reject the new vote and surface a SecurityEvent. We
+        // intentionally do NOT short-circuit when the digest matches the previously
+        // seen one; the existing `add_signature` path is idempotent on duplicate
+        // signatures and we want to keep that behaviour observable via VoteAdded.
+        if let Some(previous_li_digest) = self.author_to_li_digest.get(&order_vote.author()) {
+            if previous_li_digest != &li_digest {
+                error!(
+                    SecurityEvent::ConsensusEquivocatingVote,
+                    remote_peer = order_vote.author(),
+                    order_vote = order_vote,
+                    previous_li_digest = previous_li_digest,
+                );
+                return OrderVoteReceptionResult::EquivocateVote;
+            }
+        }
 
         // obtain the ledger info with signatures associated to the order vote's ledger info
         let status = self.li_digest_to_votes.entry(li_digest).or_insert_with(|| {
@@ -89,6 +116,10 @@ impl PendingOrderVotes {
                 if validator_voting_power == 0 {
                     warn!("Received vote with no voting power, from {}", order_vote.author());
                 }
+                // Record the author -> digest mapping now that we know the author is
+                // a known validator. Used for equivocation detection on subsequent
+                // votes from the same author.
+                self.author_to_li_digest.insert(order_vote.author(), li_digest);
                 li_with_sig.add_signature(order_vote.author(), order_vote.signature().clone());
                 // check if we have enough signatures to create a QC
                 match validator_verifier.check_voting_power(li_with_sig.signatures().keys(), true) {
@@ -130,14 +161,29 @@ impl PendingOrderVotes {
 
     // Removes votes older than highest_ordered_round
     pub fn garbage_collect(&mut self, highest_ordered_round: u64) {
-        self.li_digest_to_votes.retain(|_, status| match status {
-            OrderVoteStatus::EnoughVotes(li_with_sig) => {
-                li_with_sig.ledger_info().round() > highest_ordered_round
+        // Collect the digests that are about to be evicted so we can drop the
+        // matching entries from `author_to_li_digest`. Without this, equivocation
+        // tracking would leak memory and (worse) keep stale digests around that
+        // could falsely flag legitimate future votes.
+        let mut evicted_digests: Vec<HashValue> = Vec::new();
+        self.li_digest_to_votes.retain(|digest, status| {
+            let keep = match status {
+                OrderVoteStatus::EnoughVotes(li_with_sig) => {
+                    li_with_sig.ledger_info().round() > highest_ordered_round
+                }
+                OrderVoteStatus::NotEnoughVotes(li_with_sig) => {
+                    li_with_sig.ledger_info().round() > highest_ordered_round
+                }
+            };
+            if !keep {
+                evicted_digests.push(*digest);
             }
-            OrderVoteStatus::NotEnoughVotes(li_with_sig) => {
-                li_with_sig.ledger_info().round() > highest_ordered_round
-            }
+            keep
         });
+        if !evicted_digests.is_empty() {
+            self.author_to_li_digest
+                .retain(|_, digest| !evicted_digests.contains(digest));
+        }
     }
 
     pub fn has_enough_order_votes(&self, ledger_info: &LedgerInfo) -> bool {

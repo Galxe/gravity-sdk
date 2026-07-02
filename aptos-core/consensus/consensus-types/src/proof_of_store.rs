@@ -274,6 +274,7 @@ pub enum SignedBatchInfoError {
     NotFound,
     AlreadyCommitted,
     NoTimeStamps,
+    UnableToAggregate,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]

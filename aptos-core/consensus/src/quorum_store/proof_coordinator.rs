@@ -117,17 +117,25 @@ impl IncrementalProofState {
         }
     }
 
-    fn take(&mut self, validator_verifier: &ValidatorVerifier) -> ProofOfStore {
+    fn take(
+        &mut self,
+        validator_verifier: &ValidatorVerifier,
+    ) -> Result<ProofOfStore, SignedBatchInfoError> {
         if self.completed {
             panic!("Cannot call take twice, unexpected issue occurred");
         }
-        self.completed = true;
 
         match validator_verifier.aggregate_signatures(
             PartialSignatures::new(self.aggregated_signature.clone()).signatures_iter(),
         ) {
-            Ok(sig) => ProofOfStore::new(self.info.clone(), sig),
-            Err(e) => unreachable!("Cannot aggregate signatures on digest err = {:?}", e),
+            Ok(sig) => {
+                self.completed = true;
+                Ok(ProofOfStore::new(self.info.clone(), sig))
+            }
+            Err(e) => {
+                error!("Cannot aggregate signatures on digest err = {:?}", e);
+                Err(SignedBatchInfoError::UnableToAggregate)
+            }
         }
     }
 
@@ -216,7 +224,7 @@ impl ProofCoordinator {
         if let Some(value) = self.batch_info_to_proof.get_mut(signed_batch_info.batch_info()) {
             value.add_signature(&signed_batch_info, validator_verifier)?;
             if !value.completed && value.ready(validator_verifier) {
-                let proof = value.take(validator_verifier);
+                let proof = value.take(validator_verifier)?;
                 txn_metrics::TxnLifeTime::get_txn_life_time().record_proof(proof.info().batch_id());
                 // proof validated locally, so adding to cache
                 self.proof_cache.insert(proof.info().clone(), proof.multi_signature().clone());
