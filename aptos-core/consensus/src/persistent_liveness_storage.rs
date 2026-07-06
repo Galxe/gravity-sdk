@@ -113,15 +113,15 @@ impl LedgerRecoveryData {
     }
 
     fn is_epoch_start_timestamp_only_mismatch(ordered: &BlockInfo, executed: &BlockInfo) -> bool {
-        ordered.epoch() == executed.epoch()
-            && ordered.round() == GENESIS_ROUND
-            && executed.round() == GENESIS_ROUND
-            && ordered.id() == executed.id()
-            && ordered.executed_state_id() == executed.executed_state_id()
-            && ordered.version() == executed.version()
-            && ordered.next_epoch_state() == executed.next_epoch_state()
-            && ordered.epoch_block_info() == executed.epoch_block_info()
-            && ordered.timestamp_usecs() != executed.timestamp_usecs()
+        ordered.epoch() == executed.epoch() &&
+            ordered.round() == GENESIS_ROUND &&
+            executed.round() == GENESIS_ROUND &&
+            ordered.id() == executed.id() &&
+            ordered.executed_state_id() == executed.executed_state_id() &&
+            ordered.version() == executed.version() &&
+            ordered.next_epoch_state() == executed.next_epoch_state() &&
+            ordered.epoch_block_info() == executed.epoch_block_info() &&
+            ordered.timestamp_usecs() != executed.timestamp_usecs()
     }
 
     /// Finds the root (last committed block) and returns the root block, the QC to the root block
