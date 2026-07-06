@@ -26,7 +26,7 @@ use gaptos::{
     aptos_storage_interface::DbReader,
     aptos_types::{
         aggregate_signature::AggregateSignature,
-        block_info::{BlockInfo, Round},
+        block_info::{BlockInfo, Round, GENESIS_ROUND},
         epoch_change::EpochChangeProof,
         ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
         on_chain_config::ValidatorSet,
@@ -112,6 +112,18 @@ impl LedgerRecoveryData {
         self.storage_ledger.commit_info().round()
     }
 
+    fn is_epoch_start_timestamp_only_mismatch(ordered: &BlockInfo, executed: &BlockInfo) -> bool {
+        ordered.epoch() == executed.epoch()
+            && ordered.round() == GENESIS_ROUND
+            && executed.round() == GENESIS_ROUND
+            && ordered.id() == executed.id()
+            && ordered.executed_state_id() == executed.executed_state_id()
+            && ordered.version() == executed.version()
+            && ordered.next_epoch_state() == executed.next_epoch_state()
+            && ordered.epoch_block_info() == executed.epoch_block_info()
+            && ordered.timestamp_usecs() != executed.timestamp_usecs()
+    }
+
     /// Finds the root (last committed block) and returns the root block, the QC to the root block
     /// and the ledger info for the root block, return an error if it can not be found.
     ///
@@ -165,15 +177,39 @@ impl LedgerRecoveryData {
                 WrappedLedgerInfo::new(VoteData::dummy(), latest_ledger_info_sig.clone());
             (root_ordered_cert.clone(), root_ordered_cert)
         } else {
-            let root_ordered_cert = quorum_certs
+            let root_commit_qc = quorum_certs
                 .iter()
                 .find(|qc| qc.commit_info().id() == root_block.id())
                 .ok_or_else(|| format_err!("No LI found for root: {}", root_id))?
-                .clone()
-                .into_wrapped_ledger_info();
-            let root_commit_cert = root_ordered_cert
-                .create_merged_with_executed_state(latest_ledger_info_sig)
-                .expect("Inconsistent commit proof and evaluation decision, cannot commit block");
+                .clone();
+            let root_ordered_cert = root_commit_qc.clone().into_wrapped_ledger_info();
+            let root_commit_cert = match root_ordered_cert
+                .create_merged_with_executed_state(latest_ledger_info_sig.clone())
+            {
+                Ok(root_commit_cert) => root_commit_cert,
+                Err(error)
+                    if Self::is_epoch_start_timestamp_only_mismatch(
+                        root_ordered_cert.commit_info(),
+                        latest_ledger_info_sig.ledger_info().commit_info(),
+                    ) =>
+                {
+                    warn!(
+                        error = ?error,
+                        ordered_commit_info = ?root_ordered_cert.commit_info(),
+                        executed_commit_info = ?latest_ledger_info_sig.ledger_info().commit_info(),
+                        "Tolerating epoch-start root timestamp mismatch during recovery"
+                    );
+                    WrappedLedgerInfo::new(
+                        root_commit_qc.vote_data().clone(),
+                        latest_ledger_info_sig,
+                    )
+                }
+                Err(error) => {
+                    panic!(
+                        "Inconsistent commit proof and evaluation decision, cannot commit block: {error:?}"
+                    );
+                }
+            };
             (root_ordered_cert, root_commit_cert)
         };
         info!("Consensus root block is {}", root_block);
