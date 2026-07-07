@@ -1221,10 +1221,6 @@ impl BlockBufferManager {
                     Err(_) => continue, // Timeout on the wait, retry
                 }
             } else {
-                block_state_machine.latest_finalized_block_number = std::cmp::max(
-                    block_state_machine.latest_finalized_block_number,
-                    result.last().unwrap().num,
-                );
                 return Ok(result);
             }
         }
@@ -1413,5 +1409,44 @@ mod tests {
             .expect("ready buffer should not wait for another notification");
 
         assert_eq!(epoch, 7);
+    }
+
+    #[tokio::test]
+    async fn get_committed_blocks_does_not_advance_finalized_watermark_before_persist_ack() {
+        let manager = BlockBufferManager::new(test_config());
+        manager.init(0, HashMap::new(), 1).await.unwrap();
+
+        let block_id = BlockId([1; 32]);
+        let block_key = BlockKey::new(1, 1);
+        {
+            let mut block_state_machine = manager.block_state_machine.lock().await;
+            block_state_machine.blocks.insert(
+                block_key,
+                BlockState::Committed {
+                    hash: Some([2; 32]),
+                    compute_result: StateComputeResult::with_root_hash(
+                        gaptos::aptos_crypto::HashValue::new([3; 32]),
+                    ),
+                    id: block_id,
+                    persist_notifier: None,
+                },
+            );
+        }
+
+        let committed_blocks = manager.get_committed_blocks(1, Some(1), 1).await.unwrap();
+        assert_eq!(committed_blocks.len(), 1);
+        assert_eq!(committed_blocks[0].block_id, block_id);
+
+        {
+            let block_state_machine = manager.block_state_machine.lock().await;
+            assert_eq!(block_state_machine.latest_commit_block_number, 0);
+            assert_eq!(block_state_machine.latest_finalized_block_number, 0);
+        }
+
+        manager.set_state(1, 1).await.unwrap();
+
+        let block_state_machine = manager.block_state_machine.lock().await;
+        assert_eq!(block_state_machine.latest_commit_block_number, 1);
+        assert_eq!(block_state_machine.latest_finalized_block_number, 1);
     }
 }

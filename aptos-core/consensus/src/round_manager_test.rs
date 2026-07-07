@@ -299,6 +299,7 @@ impl NodeSetup {
             true,
             Arc::new(Mutex::new(PendingBlocks::new())),
             false,
+            false,
             HashMap::new(), // validator_indices: empty for tests
         ));
 

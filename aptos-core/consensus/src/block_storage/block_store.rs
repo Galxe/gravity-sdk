@@ -133,6 +133,7 @@ pub struct BlockStore {
     is_validator: bool,
     pending_blocks: Arc<Mutex<PendingBlocks>>,
     enable_randomness: bool,
+    require_block_randomness: bool,
     /// Mapping from validator address to their index in the ordered validator set.
     /// Used during recovery to compute proposer_index for blocks.
     validator_indices: HashMap<AccountAddress, usize>,
@@ -151,6 +152,7 @@ impl BlockStore {
         is_validator: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
         enable_randomness: bool,
+        require_block_randomness: bool,
         validator_indices: HashMap<AccountAddress, usize>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
@@ -171,6 +173,7 @@ impl BlockStore {
             is_validator,
             pending_blocks,
             enable_randomness,
+            require_block_randomness,
             validator_indices,
         ));
         block_on(block_store.recover_blocks());
@@ -189,6 +192,7 @@ impl BlockStore {
         is_validator: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
         enable_randomness: bool,
+        require_block_randomness: bool,
         validator_indices: HashMap<AccountAddress, usize>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
@@ -209,6 +213,7 @@ impl BlockStore {
             is_validator,
             pending_blocks,
             enable_randomness,
+            require_block_randomness,
             validator_indices,
         )
         .await;
@@ -308,41 +313,6 @@ impl BlockStore {
         Ok(())
     }
 
-    /// Returns the WrappedLedgerInfo for fast_forward_sync.
-    /// If a block with randomness is found on the path from ordered_root back to commit_root,
-    /// returns the highest_ordered_cert. Otherwise, returns the highest_commit_cert (or genesis).
-    pub fn has_randomness_on_path_from_ordered_to_commit(&self) -> Arc<WrappedLedgerInfo> {
-        if !self.enable_randomness {
-            return self.highest_commit_cert();
-        }
-        let ordered_root = self.ordered_root();
-        let commit_root = self.commit_root();
-        let commit_round = commit_root.round();
-        let mut cursor = ordered_root.clone();
-
-        loop {
-            if cursor.round() <= commit_round {
-                break;
-            }
-
-            if cursor.randomness().is_some() {
-                // Found randomness, get the quorum cert for this block
-                let qc = self.get_quorum_cert_for_block(cursor.id()).unwrap();
-                return Arc::new(qc.into_wrapped_ledger_info());
-            }
-
-            match self.get_block(cursor.parent_id()) {
-                Some(parent) => {
-                    cursor = parent;
-                }
-                None => break,
-            }
-        }
-
-        // No randomness found on the path, return highest_commit_cert
-        self.highest_commit_cert()
-    }
-
     /// Check if there are blocks without randomness on the path from highest_ordered_cert to
     /// highest_commit_cert
     ///
@@ -352,7 +322,7 @@ impl BlockStore {
     /// - (false, Some(cert)): All blocks on path have randomness, use highest_commit_cert
     ///
     /// Fast return conditions:
-    /// - randomness is not enabled
+    /// - block randomness is not required
     /// - in epoch 1
     /// - ledger_info round is 0
     pub fn find_missing_randomness_block_on_path(
@@ -360,7 +330,7 @@ impl BlockStore {
         ledger_info: &LedgerInfoWithSignatures,
     ) -> (bool, Option<Arc<WrappedLedgerInfo>>) {
         // Fast return: these conditions mean no special handling is needed
-        if !self.enable_randomness ||
+        if !self.require_block_randomness ||
             self.ordered_root().epoch() == 1 ||
             ledger_info.commit_info().round() == 0
         {
@@ -442,6 +412,7 @@ impl BlockStore {
         is_validator: bool,
         pending_blocks: Arc<Mutex<PendingBlocks>>,
         enable_randomness: bool,
+        require_block_randomness: bool,
         validator_indices: HashMap<AccountAddress, usize>,
     ) -> Self {
         let RootInfo(root_block, root_qc, root_ordered_cert, root_commit_cert) = root;
@@ -479,6 +450,7 @@ impl BlockStore {
             is_validator,
             pending_blocks,
             enable_randomness,
+            require_block_randomness,
             validator_indices,
         };
 
@@ -697,7 +669,7 @@ impl BlockStore {
                 );
 
                 // In recovery mode, use existing randomness from the block
-                let randomness = if self.enable_randomness && p_block.epoch() != 1 {
+                let randomness = if self.require_block_randomness && p_block.epoch() != 1 {
                     match p_block.randomness() {
                         Some(r) => Some(Random::from_bytes(r.randomness())),
                         None => {
@@ -924,6 +896,7 @@ impl BlockStore {
             self.is_validator,
             self.pending_blocks.clone(),
             self.enable_randomness,
+            self.require_block_randomness,
             self.validator_indices.clone(),
         )
         .await;

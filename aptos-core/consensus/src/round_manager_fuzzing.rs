@@ -99,9 +99,10 @@ fn build_empty_store(
         10,
         Arc::from(DirectMempoolPayloadManager::new()),
         false,
-        false, // enable_randomness
+        false,
         Arc::new(Mutex::new(PendingBlocks::new())),
-        false,          // check_ordered_only
+        false,
+        false,
         HashMap::new(), // validator_indices: empty for fuzzing
     ))
 }
