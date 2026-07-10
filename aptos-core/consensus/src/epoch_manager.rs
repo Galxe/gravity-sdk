@@ -799,6 +799,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         payload_manager: Arc<dyn TPayloadManager>,
         rand_config: Option<RandConfig>,
         fast_rand_config: Option<RandConfig>,
+        require_block_randomness: bool,
         rand_msg_rx: aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
     ) {
         let epoch = epoch_state.epoch;
@@ -882,6 +883,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 self.is_current_epoch_validator,
                 self.pending_blocks.clone(),
                 onchain_randomness_config.randomness_enabled(),
+                require_block_randomness,
                 validator_indices,
             )
             .await,
@@ -1126,6 +1128,24 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         Ok((rand_config, None))
     }
 
+    fn should_require_block_randomness(
+        consensus_config: &OnChainConsensusConfig,
+        randomness_config: &OnChainRandomnessConfig,
+        dkg_state: &anyhow::Result<DKGState>,
+        epoch: u64,
+    ) -> bool {
+        if !consensus_config.is_vtxn_enabled() || !randomness_config.randomness_enabled() {
+            return false;
+        }
+
+        dkg_state
+            .as_ref()
+            .ok()
+            .and_then(|state| state.last_completed.as_ref())
+            .and_then(|session| session.metadata.dealer_epoch.checked_add(1))
+            .is_some_and(|target_epoch| target_epoch == epoch)
+    }
+
     async fn start_new_epoch(&mut self, payload: OnChainConfigPayload<P>) {
         info!("start to start new epoch for epoch: {:?}", payload.epoch());
         let validator_set: ValidatorSet =
@@ -1217,6 +1237,13 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             }
         };
 
+        let require_block_randomness = Self::should_require_block_randomness(
+            &consensus_config,
+            &onchain_randomness_config,
+            &dkg_state,
+            epoch_state.epoch,
+        );
+
         let rand_configs = self.try_get_rand_config_for_new_epoch(
             loaded_consensus_key.clone(),
             &epoch_state,
@@ -1296,6 +1323,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 payload_manager,
                 rand_config,
                 fast_rand_config,
+                require_block_randomness,
                 rand_msg_rx,
             )
             .await
@@ -1349,6 +1377,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         payload_manager: Arc<dyn TPayloadManager>,
         rand_config: Option<RandConfig>,
         fast_rand_config: Option<RandConfig>,
+        require_block_randomness: bool,
         rand_msg_rx: aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
     ) {
         match self.storage.start(consensus_config.order_vote_enabled(), epoch_state.epoch).await {
@@ -1368,6 +1397,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     payload_manager,
                     rand_config,
                     fast_rand_config,
+                    require_block_randomness,
                     rand_msg_rx,
                 )
                 .await
