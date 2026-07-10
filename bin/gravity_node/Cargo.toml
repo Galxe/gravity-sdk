@@ -33,7 +33,7 @@ sha2.workspace = true
 bincode = "1.3"
 time = "0.3.36"
 anyhow = "1.0.87"
-greth = { git = "https://github.com/Galxe/gravity-reth", rev = "a379a86daa2db6bb109083ac9106e5de35f818dd" }
+greth = { git = "https://github.com/Galxe/gravity-reth", rev = "c7c5807433a20f1fe4009c8cf5a9adc3b2a5d5bb" }
 reqwest = "0.12.9"
 alloy-primitives = { version = "=1.3.1", default-features = false, features = ["map-foldhash"] }
 alloy-eips = { version = "^1.0.37", default-features = false }
