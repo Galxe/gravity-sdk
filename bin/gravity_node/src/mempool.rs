@@ -79,9 +79,20 @@ pub struct Mempool {
     pool: RethTransactionPool,
     txn_cache: TxnCache,
     cached_best: Arc<std::sync::Mutex<CachedBest>>,
-    runtime: tokio::runtime::Runtime,
+    // Option so Drop can take it and call `shutdown_background()`: Mempool is
+    // Arc'd into the consensus stack and can be dropped from an async context,
+    // where a plain Runtime drop panics.
+    runtime: Option<tokio::runtime::Runtime>,
     enable_broadcast: bool,
     chain_id: u64,
+}
+
+impl Drop for Mempool {
+    fn drop(&mut self) {
+        if let Some(runtime) = self.runtime.take() {
+            runtime.shutdown_background();
+        }
+    }
 }
 
 impl Mempool {
@@ -135,7 +146,7 @@ impl Mempool {
             pool,
             txn_cache,
             cached_best: Arc::new(std::sync::Mutex::new(CachedBest::new())),
-            runtime,
+            runtime: Some(runtime),
             enable_broadcast,
             chain_id,
         }
@@ -294,45 +305,47 @@ impl TxPool for Mempool {
                 let pool = self.pool.clone();
                 let address = pool_txn.sender();
                 let to = pool_txn.to();
-                self.runtime.spawn(async move {
-                    if let Err(e) = pool.add_external_transaction(pool_txn).await {
-                        // Three-way classification:
-                        //  * PoolErrorKind::Other(_)        — internal failure (DB/IO). Surface at
-                        //    WARN so operators see it.
-                        //  * is_bad_transaction() == true   — sender produced a malformed /
-                        //    protocol-invalid tx. Node correctly rejected; WARN gives visibility +
-                        //    monitoring signal without paging.
-                        //  * everything else                — recoverable noise (AlreadyImported
-                        //    dedup, ReplacementUnderpriced, nonce gap, low fee, local config).
-                        //    INFO.
-                        match &e.kind {
-                            PoolErrorKind::Other(_) => {
-                                tracing::warn!(
-                                    "Failed to add transaction (internal): {:?} {:?} {:?}",
-                                    address,
-                                    to,
-                                    e
-                                );
-                            }
-                            _ if e.is_bad_transaction() => {
-                                tracing::warn!(
-                                    "rejected malformed tx: {:?} {:?} {:?}",
-                                    address,
-                                    to,
-                                    e
-                                );
-                            }
-                            _ => {
-                                tracing::info!(
-                                    "tx not added (recoverable): {:?} {:?} {:?}",
-                                    address,
-                                    to,
-                                    e
-                                );
+                self.runtime.as_ref().expect("mempool runtime is only taken on drop").spawn(
+                    async move {
+                        if let Err(e) = pool.add_external_transaction(pool_txn).await {
+                            // Three-way classification:
+                            //  * PoolErrorKind::Other(_)        — internal failure (DB/IO). Surface
+                            //    at WARN so operators see it.
+                            //  * is_bad_transaction() == true   — sender produced a malformed /
+                            //    protocol-invalid tx. Node correctly rejected; WARN gives
+                            //    visibility + monitoring signal without paging.
+                            //  * everything else                — recoverable noise
+                            //    (AlreadyImported dedup, ReplacementUnderpriced, nonce gap, low
+                            //    fee, local config). INFO.
+                            match &e.kind {
+                                PoolErrorKind::Other(_) => {
+                                    tracing::warn!(
+                                        "Failed to add transaction (internal): {:?} {:?} {:?}",
+                                        address,
+                                        to,
+                                        e
+                                    );
+                                }
+                                _ if e.is_bad_transaction() => {
+                                    tracing::warn!(
+                                        "rejected malformed tx: {:?} {:?} {:?}",
+                                        address,
+                                        to,
+                                        e
+                                    );
+                                }
+                                _ => {
+                                    tracing::info!(
+                                        "tx not added (recoverable): {:?} {:?} {:?}",
+                                        address,
+                                        to,
+                                        e
+                                    );
+                                }
                             }
                         }
-                    }
-                });
+                    },
+                );
                 true
             }
             Err(e) => {
