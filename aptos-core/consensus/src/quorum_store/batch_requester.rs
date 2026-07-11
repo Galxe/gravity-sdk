@@ -197,6 +197,14 @@ impl<T: QuorumStoreSender + Sync + 'static> BatchRequester<T> {
                                     request_state.serve_request(key.digest, None);
                                     return None;
                                 }
+                                if ledger_info.commit_info().epoch() != epoch {
+                                    warn!(
+                                        "QS: batch NotFound with epoch mismatch, will retry: requested epoch:{}, responder epoch:{}, digest:{}",
+                                        epoch,
+                                        ledger_info.commit_info().epoch(),
+                                        key.digest,
+                                    );
+                                }
                             }
                             Err(e) => {
                                 counters::RECEIVED_BATCH_RESPONSE_ERROR_COUNT.inc();
