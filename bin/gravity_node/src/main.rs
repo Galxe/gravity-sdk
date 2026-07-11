@@ -339,7 +339,10 @@ fn main() {
     ));
     let txn_cache = pool.tx_cache();
     let shutdown_rx_cli = shutdown_tx.subscribe();
-    let coordinator_result = rt.block_on(async move {
+    // `_engine` owns tokio Runtimes; it must be returned out of `block_on` so it
+    // drops in this sync context — dropping a Runtime inside an async context
+    // panics in tokio's blocking-pool shutdown.
+    let (coordinator_result, _engine) = rt.block_on(async move {
         let datadir = datadir_rx.await.expect("datadir should be sent");
         let client = Arc::new(RethCli::new(consensus_args, txn_cache, shutdown_rx_cli).await);
         let chain_id = client.chain_id();
@@ -389,9 +392,10 @@ fn main() {
         }
 
         info!("Main shutdown complete");
-        result
+        (result, _engine)
     });
     drop(rt);
+    drop(_engine);
 
     if let Err(err) = reth_thread.join() {
         eprintln!("Reth thread panicked: {err:?}");
