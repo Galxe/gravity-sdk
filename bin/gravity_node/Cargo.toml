@@ -32,7 +32,7 @@ serde = "^1.0.226"
 bincode = "1.3"
 time = "0.3.36"
 anyhow = "1.0.87"
-greth = { git = "https://github.com/Galxe/gravity-reth", rev = "416f551640ed2e9dec91f770f83a1b009e331589" }
+greth = { git = "https://github.com/Galxe/gravity-reth", rev = "546a41b17160c76d7d8a806772bd8a0c2c1d8176" }
 reqwest = "0.12.9"
 alloy-primitives = { version = "=1.3.1", default-features = false, features = ["map-foldhash"] }
 alloy-eips = { version = "^1.0.37", default-features = false }
