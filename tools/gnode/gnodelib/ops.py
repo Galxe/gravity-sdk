@@ -1,0 +1,460 @@
+"""集群生命周期 + 链上交互操作。
+
+up/down/status/logs 包装 cluster/ 下的 shell 脚本（不重造编排）；
+state/deploy/send 用 web3 直连本地 RPC。
+"""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+from typing import Optional
+
+from eth_account import Account
+from web3 import Web3
+
+from .env import (
+    CLUSTER_DIR,
+    NODE_BIN,
+    CLI_BIN,
+    GSDK_ROOT,
+    ClusterPaths,
+    faucet_account,
+    make_web3,
+    resolve_cluster,
+    suggest_fees,
+)
+from .verdict import probe_liveness
+
+
+def log(msg: str) -> None:
+    print(f"[gnode] {msg}", file=sys.stderr, flush=True)
+
+
+# ----------------------------------------------------------------------------
+# 底层：跑 cluster 脚本 / 进程存活 / RPC 等待
+# ----------------------------------------------------------------------------
+
+def _run_script(script: str, args: list[str], *, env: Optional[dict] = None, check: bool = True) -> int:
+    """在 CLUSTER_DIR 下跑一个 bash 脚本，实时透传输出。"""
+    cmd = ["bash", script, *args]
+    log(f"运行: {script} {' '.join(str(a) for a in args)} (cwd={CLUSTER_DIR})")
+    proc = subprocess.run(cmd, cwd=str(CLUSTER_DIR), env=env or os.environ.copy(), stdin=subprocess.DEVNULL)
+    if check and proc.returncode != 0:
+        raise RuntimeError(f"脚本失败 ({proc.returncode}): {script} {args}")
+    return proc.returncode
+
+
+def _script_env(cp: ClusterPaths) -> dict:
+    """cluster 脚本需要的环境：把 genesis 产物重定向到 preset 自己的 artifacts/。"""
+    env = os.environ.copy()
+    env["GRAVITY_ARTIFACTS_DIR"] = str(cp.artifacts_dir)
+    env["GENESIS_CONFIG_FILE"] = str(cp.genesis_toml)
+    return env
+
+
+def _pid_alive(pid_file: Path) -> bool:
+    try:
+        pid = int(pid_file.read_text().strip())
+    except Exception:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def _rpc_up(w3: Web3) -> bool:
+    try:
+        _ = w3.eth.block_number
+        return True
+    except Exception:
+        return False
+
+
+def _require_rpc(cp: ClusterPaths, w3: Web3) -> Optional[int]:
+    """RPC 不可达时打印一致的友好提示并返回退出码 2；可达返回 None。
+    与 state/attack 的下机处理保持一致（deploy/send 也走这条，不再甩 urllib3 内部错误）。"""
+    if _rpc_up(w3):
+        return None
+    proc_up = _pid_alive(cp.pid_file(cp.node_ids()[0]))
+    print(json.dumps({
+        "reachable": False,
+        "node_process": "up" if proc_up else "down",
+        "detail": (f"进程在但 RPC 无响应（疑似 halt），先 `gnode up --preset {cp.name} --fresh`"
+                   if proc_up else f"节点未运行，先 `gnode up --preset {cp.name}`"),
+    }, indent=2, ensure_ascii=False))
+    return 2
+
+
+def _wait_rpc(w3: Web3, timeout: int = 60) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if _rpc_up(w3):
+            return True
+        time.sleep(1.0)
+    return False
+
+
+def _ensure_binaries() -> None:
+    if NODE_BIN.exists() and CLI_BIN.exists():
+        return
+    log("gravity_node / gravity_cli 未构建，开始 cargo build（首次很慢，会拉 reth/aptos 依赖）...")
+    env = os.environ.copy()
+    env["RUSTFLAGS"] = "--cfg tokio_unstable"
+    for binname in ("gravity_node", "gravity_cli"):
+        cmd = [
+            "cargo", "build", "--manifest-path", str(GSDK_ROOT / "Cargo.toml"),
+            "--bin", binname, "--profile", "quick-release",
+        ]
+        log(f"运行: {' '.join(cmd)}")
+        if subprocess.run(cmd, env=env).returncode != 0:
+            raise RuntimeError(f"构建 {binname} 失败")
+
+
+# ----------------------------------------------------------------------------
+# 命令实现
+# ----------------------------------------------------------------------------
+
+def cmd_up(preset, *, fresh: bool = False) -> int:
+    cp = resolve_cluster(preset)
+    w3 = make_web3(cp.rpc_url())
+    env = _script_env(cp)
+    cfg = str(cp.cluster_toml)
+    gen = str(cp.genesis_toml)
+
+    node_ids = cp.node_ids()
+    already = all(_pid_alive(cp.pid_file(nid)) for nid in node_ids) and _rpc_up(w3)
+    if already and not fresh:
+        log(f"集群已在运行（{cp.name}, base_dir={cp.base_dir}），RPC={cp.rpc_url()} block={w3.eth.block_number}")
+        return 0
+
+    _ensure_binaries()
+
+    genesis_json = cp.artifacts_dir / "genesis.json"
+    identity = cp.artifacts_dir / node_ids[0] / "config" / "identity.yaml"
+
+    if fresh:
+        log("--fresh：停止并清理 artifacts/ 与 base_dir，重新 genesis")
+        _run_script("stop.sh", ["--config", cfg], env=env, check=False)
+        subprocess.run(["rm", "-rf", str(cp.artifacts_dir), str(cp.base_dir)])
+    else:
+        # base_dir 可能残留旧部署（deploy.sh 会交互式询问是否清理，无 stdin 时默认 N）；
+        # gnode 独占该 base_dir，直接清理以保证干净部署。
+        subprocess.run(["rm", "-rf", str(cp.base_dir)])
+
+    if not identity.exists():
+        _run_script("init.sh", [cfg], env=env)
+    if not genesis_json.exists():
+        _run_script("genesis.sh", [gen], env=env)
+    _run_script("deploy.sh", [cfg], env=env)
+    _run_script("start.sh", ["--config", cfg], env=env)
+
+    log(f"等待 RPC 就绪 {cp.rpc_url()} ...")
+    if not _wait_rpc(w3, timeout=90):
+        log(f"RPC 未在 90s 内就绪，请检查日志: gnode logs --preset {cp.name} --which reth")
+        return 1
+    log(f"集群已就绪：{cp.name} RPC={cp.rpc_url()} chainId={w3.eth.chain_id} block={w3.eth.block_number} prague={cp.prague}")
+    return 0
+
+
+def cmd_down(preset) -> int:
+    cp = resolve_cluster(preset)
+    _run_script("stop.sh", ["--config", str(cp.cluster_toml)], env=_script_env(cp), check=False)
+    log("已发送停止命令")
+    return 0
+
+
+def cmd_status(preset, *, show_all: bool = False) -> int:
+    from .env import PRESETS
+    names = list(PRESETS) if show_all else [preset]
+    for name in names:
+        cp = resolve_cluster(name)
+        print(f"# cluster {cp.name}  base_dir={cp.base_dir}  chainId={cp.chain_id}  prague={cp.prague}")
+        print(f"{'node':<8} {'rpc':<28} {'proc':<6} {'block':<10}")
+        for nid in cp.node_ids():
+            url = cp.rpc_url(nid)
+            w3 = make_web3(url, timeout=3)
+            alive = _pid_alive(cp.pid_file(nid))
+            block = "-"
+            try:
+                block = str(int(w3.eth.block_number))
+            except Exception:
+                pass
+            print(f"{nid:<8} {url:<28} {('up' if alive else 'down'):<6} {block:<10}")
+        if show_all and name != names[-1]:
+            print()
+    return 0
+
+
+def cmd_logs(preset, which: str, follow: bool, lines: int) -> int:
+    cp = resolve_cluster(preset)
+    # 默认第一个节点
+    nid = cp.node_ids()[0]
+    files = cp.log_files(nid)
+    targets = list(files.values()) if which == "all" else [files[which]]
+    targets = [t for t in targets if t.exists()]
+    if not targets:
+        log(f"无日志文件（which={which}）：{[str(files[k]) for k in files]}")
+        return 1
+    cmd = ["tail", f"-n{lines}"]
+    if follow:
+        cmd.append("-F")
+    cmd += [str(t) for t in targets]
+    return subprocess.run(cmd).returncode
+
+
+def cmd_state(preset, addr: str) -> int:
+    cp = resolve_cluster(preset)
+    w3 = make_web3(cp.rpc_url())
+    try:
+        addr = Web3.to_checksum_address(addr)
+    except Exception:
+        raise ValueError(f"地址不合法: {addr!r}（需为 0x 开头的 40 位十六进制地址）")
+    node_id = cp.node_ids()[0]
+
+    # 先判可达性：RPC 连不上就直接报明确状态（down/unreachable），不跑 halt 探测、不误报 panic
+    if not _rpc_up(w3):
+        proc_up = _pid_alive(cp.pid_file(node_id))
+        out = {
+            "address": addr,
+            "reachable": False,
+            "node_process": "up" if proc_up else "down",
+            "detail": (f"进程在但 RPC 无响应（疑似 halt），先 `gnode up --preset {cp.name} --fresh`"
+                       if proc_up else f"节点未运行，先 `gnode up --preset {cp.name}`"),
+        }
+        print(json.dumps(out, indent=2, ensure_ascii=False))
+        return 2
+
+    out = {"address": addr, "reachable": True}
+    out["balance_wei"] = int(w3.eth.get_balance(addr))
+    out["balance_eth"] = float(w3.from_wei(out["balance_wei"], "ether"))
+    out["nonce"] = int(w3.eth.get_transaction_count(addr))
+    code = w3.eth.get_code(addr)
+    out["code_size"] = len(code)
+    out["code"] = code.to_0x_hex() if code else "0x"
+    # 附带一次快速 halt 探测（此时 RPC 已知可达）
+    probe = probe_liveness(w3, window_s=6.0, pid_alive=lambda: _pid_alive(cp.pid_file(node_id)))
+    out["liveness"] = probe.as_dict()
+    print(json.dumps(out, indent=2, ensure_ascii=False))
+    return 0
+
+
+def _load_artifact(path: Path) -> tuple[Optional[list], str]:
+    """支持 {abi,bytecode} JSON 或纯 bytecode（.hex/.txt/.bin）。返回 (abi, bytecode_hex)。"""
+    raw = path.read_text().strip()
+    if raw.startswith("{"):
+        obj = json.loads(raw)
+        bytecode = obj.get("bytecode") or obj.get("bin") or obj.get("object")
+        if isinstance(bytecode, dict):  # solc 标准输出 {object: ...}
+            bytecode = bytecode.get("object")
+        abi = obj.get("abi")
+        if not bytecode:
+            raise ValueError(f"artifact 缺少 bytecode: {path}")
+        return abi, bytecode if bytecode.startswith("0x") else "0x" + bytecode
+    # 纯 bytecode
+    return None, raw if raw.startswith("0x") else "0x" + raw
+
+
+def send_raw_deploy(w3: Web3, acct, bytecode: str, *, gas: Optional[int] = None) -> dict:
+    """用原始 bytecode 部署（不依赖 ABI）。返回 {tx_hash, contract, status, block, gas_used}。"""
+    fees = suggest_fees(w3)
+    tx = {
+        "from": acct.address,
+        "nonce": w3.eth.get_transaction_count(acct.address),
+        "data": bytecode,
+        "value": 0,
+        "chainId": w3.eth.chain_id,
+        **fees,
+    }
+    tx["gas"] = gas or int(w3.eth.estimate_gas(tx) * 12 // 10)
+    signed = acct.sign_transaction(tx)
+    h = w3.eth.send_raw_transaction(signed.raw_transaction)
+    rcpt = w3.eth.wait_for_transaction_receipt(h, timeout=120)
+    return {
+        "tx_hash": h.to_0x_hex(),
+        "contract": rcpt.get("contractAddress"),
+        "status": int(rcpt["status"]),
+        "block": int(rcpt["blockNumber"]),
+        "gas_used": int(rcpt["gasUsed"]),
+    }
+
+
+def _checksum_addrs(v):
+    """递归把「恰好 20 字节的 0x 十六进制串」规范成 EIP-55 checksum 地址，
+    其余原样（bytes4 之类短 hex 不动）。让 deploy --args 像 send 一样容忍小写地址。"""
+    if isinstance(v, str) and len(v) == 42 and v.startswith("0x"):
+        try:
+            int(v, 16)
+            return Web3.to_checksum_address(v)
+        except ValueError:
+            return v
+    if isinstance(v, list):
+        return [_checksum_addrs(x) for x in v]
+    return v
+
+
+def cmd_deploy(preset, artifact_path: str, *, args_json: Optional[str] = None) -> int:
+    cp = resolve_cluster(preset)
+    w3 = make_web3(cp.rpc_url())
+    rc = _require_rpc(cp, w3)
+    if rc is not None:
+        return rc
+    abi, bytecode = _load_artifact(Path(artifact_path))
+    acct = faucet_account()
+
+    if args_json:
+        ctor_args = json.loads(args_json)
+        if not isinstance(ctor_args, list):
+            raise ValueError("--args 需为 JSON 数组，如 '[42,\"0xabc\"]'")
+        if not abi:
+            raise ValueError("传了 --args 但 artifact 无 abi，无法编码构造函数参数（请用带 abi 的 artifact）")
+        # 用 abi 把构造参数编码进 initcode（data_in_transaction 已是 0x 十六进制串）；
+        # 先把地址型参数规范成 checksum，容忍小写地址（与 send 的 to 处理一致）
+        contract = w3.eth.contract(abi=abi, bytecode=bytecode)
+        bytecode = contract.constructor(*_checksum_addrs(ctor_args)).data_in_transaction
+        log(f"从 {acct.address} 部署 {artifact_path}（构造参数 {ctor_args}）...")
+    else:
+        log(f"从 {acct.address} 部署 {artifact_path} ...")
+
+    res = send_raw_deploy(w3, acct, bytecode)
+    print(json.dumps(res, indent=2, ensure_ascii=False))
+    return 0 if res["status"] == 1 else 2
+
+
+def cmd_send(preset, tx_path: str, *, no_wait: bool = False) -> int:
+    """tx.json 规格见 `gnode send --help`。支持 type(2/1/4)、accessList、authorizationList、
+    raw(已签名原始交易) 与 --no-wait（不等回执，用于同块/连发）。缺省用 faucet 签名。"""
+    cp = resolve_cluster(preset)
+    w3 = make_web3(cp.rpc_url())
+    rc = _require_rpc(cp, w3)
+    if rc is not None:
+        return rc
+    spec = json.loads(Path(tx_path).read_text())
+
+    # 拒绝未知/拼错的字段，避免像把 "value" 写成 "valeu" 这种被静默忽略
+    known = {"to", "value", "data", "nonce", "gas", "gasPrice", "type", "accessList",
+             "authorizationList", "raw", "privkey"}
+    unknown = set(spec) - known
+    if unknown:
+        raise ValueError(f"tx.json 含未知字段 {sorted(unknown)}；合法字段: {sorted(known)}")
+
+    # 已签名原始交易：直接广播，忽略其他字段
+    if spec.get("raw"):
+        raw = spec["raw"]
+        h = w3.eth.send_raw_transaction(raw if raw.startswith("0x") else "0x" + raw)
+        return _report_sent(w3, h, no_wait, sender=None, to=None)
+
+    acct = Account.from_key(spec["privkey"]) if spec.get("privkey") else faucet_account()
+    # value 友好校验：接受十进制或 0x 十六进制，必须非负
+    raw_val = spec.get("value", 0)
+    try:
+        value = int(raw_val, 0) if isinstance(raw_val, str) else int(raw_val)
+    except (ValueError, TypeError):
+        raise ValueError(f"value={raw_val!r} 需为非负整数（十进制或 0x 十六进制）")
+    if value < 0:
+        raise ValueError(f"value={value} 非法：需为非负整数")
+    if value >= 2 ** 256:
+        raise ValueError(f"value 超出 uint256 上限（{value} ≥ 2^256）")
+    tx: dict = {
+        "from": acct.address,
+        "chainId": w3.eth.chain_id,
+        "nonce": spec.get("nonce", w3.eth.get_transaction_count(acct.address)),
+        "value": value,
+    }
+    if spec.get("to"):
+        try:
+            tx["to"] = Web3.to_checksum_address(spec["to"])
+        except Exception:
+            raise ValueError(f"to={spec['to']!r} 不是合法地址")
+    if spec.get("data"):
+        tx["data"] = spec["data"]
+    req_type = int(spec["type"]) if spec.get("type") is not None else None
+    # 0(legacy) 不能带 type 字段（eth_account 不认 type=0）；1/2/4 显式设置
+    if req_type not in (None, 0):
+        tx["type"] = req_type
+    if req_type == 1:
+        tx.setdefault("accessList", [])  # type-1(EIP-2930) 需带 accessList 字段
+    if spec.get("accessList") is not None:
+        tx["accessList"] = spec["accessList"]
+    if spec.get("authorizationList") is not None:
+        # type-4 SetCode：已签名的授权(带 r/s/yParity)直接用；未签名的(给 delegate+signerKey)自动签，
+        # 免去手写 eth_account 的 auth 签名。self-sponsored(签名者即发送者)时 auth.nonce 默认 = tx.nonce+1。
+        tx["authorizationList"] = _prepare_auth_list(w3, spec["authorizationList"], tx, acct)
+        tx["type"] = req_type = 4
+        # 7702 SetCode 交易必须有 to（不允许合约创建）且需带 accessList 字段；缺省补上
+        tx.setdefault("to", acct.address)
+        tx.setdefault("accessList", [])
+    # gas 费按交易类型区分：type 0/1(legacy/access-list)用 gasPrice；type 2(默认)/4 用 EIP-1559 三件套
+    fees = suggest_fees(w3)
+    if req_type in (0, 1):
+        gp = spec.get("gasPrice")
+        tx["gasPrice"] = (int(gp, 0) if isinstance(gp, str) else int(gp)) if gp is not None else fees["maxFeePerGas"]
+    else:
+        tx.update(fees)
+    try:
+        tx["gas"] = spec.get("gas") or int(w3.eth.estimate_gas(tx) * 12 // 10)
+    except Exception:
+        # 部分 type-4/自定义交易 estimate 会失败，给个保守默认，允许 spec 覆盖
+        tx["gas"] = spec.get("gas") or 500000
+
+    signed = acct.sign_transaction(tx)
+    h = w3.eth.send_raw_transaction(signed.raw_transaction)
+    return _report_sent(w3, h, no_wait, sender=acct.address, to=tx.get("to"))
+
+
+def _prepare_auth_list(w3: Web3, entries: list, tx: dict, tx_signer) -> list:
+    """把 authorizationList 里未签名的条目自动签好（reuse gravity_e2e.utils.eip7702）。
+
+    条目二选一：
+      已签名: {chainId,address,nonce,yParity,r,s} —— 原样返回。
+      待签名: {delegate|address, signerKey, nonce?} —— 用 signerKey 签 delegate；
+              nonce 缺省：签名者==发送者(self-sponsored)时取 tx.nonce+1，否则取签名者当前 nonce。
+    """
+    from gravity_e2e.utils.eip7702 import sign_authorization
+
+    chain_id = tx["chainId"]
+    out = []
+    for e in entries:
+        if "r" in e and "s" in e:  # 已签名，原样用
+            out.append(e)
+            continue
+        signer_key = e.get("signerKey") or e.get("privkey")
+        if not signer_key:
+            raise ValueError("authorizationList 条目未签名且缺 signerKey，无法自动签名")
+        signer = Account.from_key(signer_key)
+        delegate = Web3.to_checksum_address(e.get("delegate") or e["address"])
+        if "nonce" in e:
+            nonce = int(e["nonce"])
+        elif signer.address.lower() == tx_signer.address.lower():
+            nonce = int(tx["nonce"]) + 1  # self-sponsored：发送者 nonce 先自增，auth 要 +1
+        else:
+            nonce = w3.eth.get_transaction_count(signer.address)
+        out.append(sign_authorization(signer, chain_id=chain_id, delegate=delegate, nonce=nonce))
+    return out
+
+
+def _report_sent(w3: Web3, h, no_wait: bool, *, sender, to) -> int:
+    tx_hash = h.to_0x_hex()
+    if no_wait:
+        log(f"已发送 tx {tx_hash}（--no-wait，不等回执）")
+        print(json.dumps({"tx_hash": tx_hash, "waited": False, "from": sender, "to": to},
+                         indent=2, ensure_ascii=False))
+        return 0
+    log(f"已发送 tx {tx_hash}，等待回执 ...")
+    rcpt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+    out = {
+        "tx_hash": tx_hash,
+        "status": int(rcpt["status"]),
+        "block": int(rcpt["blockNumber"]),
+        "gas_used": int(rcpt["gasUsed"]),
+        # raw 交易我们不知道 from/to，从回执补回（普通路径 sender/to 已知则优先用）
+        "from": sender or rcpt.get("from"),
+        "to": to if to is not None else rcpt.get("to"),
+    }
+    print(json.dumps(out, indent=2, ensure_ascii=False))
+    return 0 if out["status"] == 1 else 2
