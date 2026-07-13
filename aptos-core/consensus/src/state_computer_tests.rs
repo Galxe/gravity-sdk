@@ -5,9 +5,9 @@
 use crate::{
     error::MempoolError, payload_manager::TPayloadManager,
     pipeline::pipeline_phase::CountedRequest, state_computer::ExecutionProxy,
-    state_replication::StateComputer, transaction_deduper::NoOpDeduper,
-    transaction_filter::TransactionFilter, transaction_shuffler::NoOpShuffler,
-    txn_notifier::TxnNotifier,
+    state_replication::StateComputer, test_utils::create_unsupported_signed_transaction,
+    transaction_deduper::NoOpDeduper, transaction_filter::TransactionFilter,
+    transaction_shuffler::NoOpShuffler, txn_notifier::TxnNotifier,
 };
 
 use aptos_consensus_types::{
@@ -86,25 +86,31 @@ struct DummyBlockExecutor {
     blocks_received: Mutex<Vec<ExecutableBlock>>,
 }
 
-struct FailingPayloadManager {
-    missing_digest: HashValue,
+enum TestPayloadResult {
+    Transactions(Vec<SignedTransaction>),
+    Missing(HashValue),
 }
 
+struct TestPayloadManager(TestPayloadResult);
+
 #[async_trait::async_trait]
-impl TPayloadManager for FailingPayloadManager {
+impl TPayloadManager for TestPayloadManager {
     fn notify_commit(&self, _block_timestamp: u64, _payloads: Vec<Payload>) {}
 
     fn prefetch_payload_data(&self, _payload: &Payload, _timestamp: u64) {}
 
     fn check_payload_availability(&self, _block: &Block) -> bool {
-        false
+        matches!(&self.0, TestPayloadResult::Transactions(_))
     }
 
     async fn get_transactions(
         &self,
         _block: &Block,
     ) -> ExecutorResult<(Vec<SignedTransaction>, Option<u64>)> {
-        Err(ExecutorError::DataNotFound(self.missing_digest))
+        match &self.0 {
+            TestPayloadResult::Transactions(transactions) => Ok((transactions.clone(), None)),
+            TestPayloadResult::Missing(digest) => Err(ExecutorError::DataNotFound(*digest)),
+        }
     }
 }
 
@@ -112,6 +118,39 @@ impl DummyBlockExecutor {
     fn new() -> Self {
         Self { blocks_received: Mutex::new(vec![]) }
     }
+}
+
+fn execution_proxy_with_payload_manager(
+    executor: Arc<DummyBlockExecutor>,
+    payload_manager: Arc<dyn TPayloadManager>,
+) -> ExecutionProxy {
+    let execution_proxy = ExecutionProxy::new(
+        executor,
+        Arc::new(DummyTxnNotifier {}),
+        Arc::new(DummyStateSyncNotifier::new()),
+        &Handle::current(),
+        TransactionFilter::new(Filter::empty()),
+        true,
+    );
+    execution_proxy.new_epoch(
+        &EpochState::empty(),
+        payload_manager,
+        Arc::new(NoOpShuffler {}),
+        BlockExecutorConfigFromOnchain::new_no_block_limit(),
+        Arc::new(NoOpDeduper {}),
+        false,
+    );
+    execution_proxy
+}
+
+fn block_for_schedule_compute() -> Block {
+    let block = Block::new_for_testing(
+        HashValue::zero(),
+        BlockData::dummy_with_validator_txns(vec![]),
+        None,
+    );
+    block.set_block_number(1);
+    block
 }
 
 impl BlockExecutorTrait for DummyBlockExecutor {
@@ -222,30 +261,12 @@ async fn schedule_compute_should_discover_validator_txns() {
 #[tokio::test]
 async fn schedule_compute_should_propagate_payload_fetch_errors() {
     let executor = Arc::new(DummyBlockExecutor::new());
-    let execution_policy = ExecutionProxy::new(
-        executor.clone(),
-        Arc::new(DummyTxnNotifier {}),
-        Arc::new(DummyStateSyncNotifier::new()),
-        &Handle::current(),
-        TransactionFilter::new(Filter::empty()),
-        true,
-    );
-    let block = Block::new_for_testing(
-        HashValue::zero(),
-        BlockData::dummy_with_validator_txns(vec![]),
-        None,
-    );
-    block.set_block_number(1);
     let missing_digest = HashValue::random();
-
-    execution_policy.new_epoch(
-        &EpochState::empty(),
-        Arc::new(FailingPayloadManager { missing_digest }),
-        Arc::new(NoOpShuffler {}),
-        BlockExecutorConfigFromOnchain::new_no_block_limit(),
-        Arc::new(NoOpDeduper {}),
-        false,
+    let execution_policy = execution_proxy_with_payload_manager(
+        executor.clone(),
+        Arc::new(TestPayloadManager(TestPayloadResult::Missing(missing_digest))),
     );
+    let block = block_for_schedule_compute();
 
     let result = execution_policy
         .schedule_compute(&block, HashValue::zero(), None, dummy_guard())
@@ -255,6 +276,29 @@ async fn schedule_compute_should_propagate_payload_fetch_errors() {
     assert!(matches!(
         result,
         Err(ExecutorError::DataNotFound(digest)) if digest == missing_digest
+    ));
+    assert!(executor.blocks_received.lock().is_empty());
+}
+
+#[tokio::test]
+async fn schedule_compute_should_reject_unsupported_transaction_payloads() {
+    let executor = Arc::new(DummyBlockExecutor::new());
+    let execution_policy = execution_proxy_with_payload_manager(
+        executor.clone(),
+        Arc::new(TestPayloadManager(TestPayloadResult::Transactions(vec![
+            create_unsupported_signed_transaction(1),
+        ]))),
+    );
+
+    let result = execution_policy
+        .schedule_compute(&block_for_schedule_compute(), HashValue::zero(), None, dummy_guard())
+        .await
+        .await;
+
+    assert!(matches!(
+        result,
+        Err(ExecutorError::InternalError { error })
+            if error.contains("Unsupported transaction payload type Script")
     ));
     assert!(executor.blocks_received.lock().is_empty());
 }

@@ -20,11 +20,11 @@ use crate::{
 use anyhow::Result;
 use aptos_consensus_types::{
     block::Block,
-    common::{RejectedTransactionSummary, Round},
+    common::{ensure_supported_transaction_payloads, RejectedTransactionSummary, Round},
     pipeline_execution_result::PipelineExecutionResult,
     pipelined_block::PipelinedBlock,
 };
-use aptos_executor_types::{BlockExecutorTrait, ExecutorResult, StateComputeResult};
+use aptos_executor_types::{BlockExecutorTrait, ExecutorError, ExecutorResult, StateComputeResult};
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 use gaptos::{
     api_types::{
@@ -118,6 +118,8 @@ impl ExecutionProxy {
             .payload_manager
             .clone();
         let (transactions, _) = payload_manager.get_transactions(block).await?;
+        ensure_supported_transaction_payloads(&transactions)
+            .map_err(ExecutorError::internal_err)?;
         Ok(transactions)
     }
     pub fn new(

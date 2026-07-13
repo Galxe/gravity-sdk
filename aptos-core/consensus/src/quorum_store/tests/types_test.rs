@@ -3,7 +3,7 @@
 
 use crate::{
     quorum_store::types::{Batch, BatchRequest},
-    test_utils::create_vec_signed_transactions,
+    test_utils::{create_unsupported_signed_transaction, create_vec_signed_transactions},
 };
 use aptos_consensus_types::{common::BatchPayload, proof_of_store::BatchId};
 use claims::{assert_err, assert_ok};
@@ -34,4 +34,20 @@ fn test_batch() {
     assert_err!(batch.verify_with_digest(HashValue::random()));
 
     assert_eq!(batch.into_transactions(), signed_txns);
+}
+
+#[test]
+fn test_batch_rejects_unsupported_transaction_payload() {
+    let source = AccountAddress::random();
+    let batch = Batch::new(
+        BatchId::new_for_test(1),
+        vec![create_unsupported_signed_transaction(1)],
+        0,
+        1,
+        source,
+        0,
+    );
+
+    let error = batch.verify().unwrap_err();
+    assert!(error.to_string().contains("Unsupported transaction payload type Script"));
 }

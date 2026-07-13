@@ -3,7 +3,7 @@
 
 use anyhow::ensure;
 use aptos_consensus_types::{
-    common::{BatchPayload, TxnSummaryWithExpiration},
+    common::{ensure_supported_transaction_payloads, BatchPayload, TxnSummaryWithExpiration},
     proof_of_store::{BatchId, BatchInfo},
 };
 use gaptos::{
@@ -180,6 +180,7 @@ impl Batch {
             self.payload.num_bytes() as u64 == self.num_bytes(),
             "Payload num bytes doesn't match batch info"
         );
+        ensure_supported_transaction_payloads(self.payload.txns())?;
         for txn in self.payload.txns() {
             ensure!(
                 txn.gas_unit_price() >= self.gas_bucket_start(),
