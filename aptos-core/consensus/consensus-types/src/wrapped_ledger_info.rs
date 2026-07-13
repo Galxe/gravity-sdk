@@ -86,9 +86,9 @@ impl WrappedLedgerInfo {
         // If someone sends us a QC on a fake genesis, it'll fail to insert into BlockStore
         // because of the round constraint.
         //
-        // Use certified_block().round() (from vote_data) to align with QuorumCert::verify,
-        // preventing bypass via crafted ledger_info round.
-        if self.vote_data.proposed().round() == 0 {
+        // VoteData is a placeholder when order votes are enabled, so it cannot determine whether
+        // the signed ledger info is the unsigned genesis certificate.
+        if self.ledger_info().ledger_info().round() == 0 {
             ensure!(
                 self.ledger_info().get_num_voters() == 0,
                 "Genesis QC should not carry signatures"
@@ -123,5 +123,35 @@ impl WrappedLedgerInfo {
         );
         self.verify_consensus_data_hash()?;
         Ok(QuorumCert::new(self.vote_data.clone(), self.signed_ledger_info.clone()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gaptos::{
+        aptos_crypto::HashValue,
+        aptos_types::{
+            aggregate_signature::AggregateSignature, ledger_info::LedgerInfo,
+            validator_verifier::random_validator_verifier,
+        },
+    };
+
+    #[test]
+    fn dummy_vote_data_cannot_bypass_non_genesis_signature_verification() {
+        let (_, verifier) = random_validator_verifier(1, None, false);
+        let ledger_info = LedgerInfo::new(BlockInfo::random_with_epoch(1, 1), HashValue::zero());
+        let wrapped = WrappedLedgerInfo::new(
+            VoteData::dummy(),
+            LedgerInfoWithSignatures::new(ledger_info, AggregateSignature::empty()),
+        );
+
+        assert!(wrapped.verify(&verifier).is_err());
+    }
+
+    #[test]
+    fn unsigned_genesis_is_still_accepted() {
+        let (_, verifier) = random_validator_verifier(1, None, false);
+        assert!(WrappedLedgerInfo::dummy().verify(&verifier).is_ok());
     }
 }
