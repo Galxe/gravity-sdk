@@ -3,16 +3,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    error::MempoolError, pipeline::pipeline_phase::CountedRequest, state_computer::ExecutionProxy,
+    error::MempoolError, payload_manager::TPayloadManager,
+    pipeline::pipeline_phase::CountedRequest, state_computer::ExecutionProxy,
     state_replication::StateComputer, transaction_deduper::NoOpDeduper,
     transaction_filter::TransactionFilter, transaction_shuffler::NoOpShuffler,
     txn_notifier::TxnNotifier,
 };
 
 use aptos_consensus_types::{
-    block::Block, block_data::BlockData, common::RejectedTransactionSummary,
+    block::Block,
+    block_data::BlockData,
+    common::{Payload, RejectedTransactionSummary},
 };
-use aptos_executor_types::{BlockExecutorTrait, ExecutorResult, StateComputeResult};
+use aptos_executor_types::{BlockExecutorTrait, ExecutorError, ExecutorResult, StateComputeResult};
 use gaptos::{
     aptos_config::config::transaction_filter_type::Filter,
     aptos_consensus_notifications::{ConsensusNotificationSender, Error},
@@ -81,6 +84,28 @@ impl TxnNotifier for DummyTxnNotifier {
 
 struct DummyBlockExecutor {
     blocks_received: Mutex<Vec<ExecutableBlock>>,
+}
+
+struct FailingPayloadManager {
+    missing_digest: HashValue,
+}
+
+#[async_trait::async_trait]
+impl TPayloadManager for FailingPayloadManager {
+    fn notify_commit(&self, _block_timestamp: u64, _payloads: Vec<Payload>) {}
+
+    fn prefetch_payload_data(&self, _payload: &Payload, _timestamp: u64) {}
+
+    fn check_payload_availability(&self, _block: &Block) -> bool {
+        false
+    }
+
+    async fn get_transactions(
+        &self,
+        _block: &Block,
+    ) -> ExecutorResult<(Vec<SignedTransaction>, Option<u64>)> {
+        Err(ExecutorError::DataNotFound(self.missing_digest))
+    }
 }
 
 impl DummyBlockExecutor {
@@ -192,6 +217,46 @@ async fn schedule_compute_should_discover_validator_txns() {
     let supposed_validator_txn_1 = txns[2].expect_valid().try_as_validator_txn().unwrap();
     assert_eq!(&validator_txn_0, supposed_validator_txn_0);
     assert_eq!(&validator_txn_1, supposed_validator_txn_1);
+}
+
+#[tokio::test]
+async fn schedule_compute_should_propagate_payload_fetch_errors() {
+    let executor = Arc::new(DummyBlockExecutor::new());
+    let execution_policy = ExecutionProxy::new(
+        executor.clone(),
+        Arc::new(DummyTxnNotifier {}),
+        Arc::new(DummyStateSyncNotifier::new()),
+        &Handle::current(),
+        TransactionFilter::new(Filter::empty()),
+        true,
+    );
+    let block = Block::new_for_testing(
+        HashValue::zero(),
+        BlockData::dummy_with_validator_txns(vec![]),
+        None,
+    );
+    block.set_block_number(1);
+    let missing_digest = HashValue::random();
+
+    execution_policy.new_epoch(
+        &EpochState::empty(),
+        Arc::new(FailingPayloadManager { missing_digest }),
+        Arc::new(NoOpShuffler {}),
+        BlockExecutorConfigFromOnchain::new_no_block_limit(),
+        Arc::new(NoOpDeduper {}),
+        false,
+    );
+
+    let result = execution_policy
+        .schedule_compute(&block, HashValue::zero(), None, dummy_guard())
+        .await
+        .await;
+
+    assert!(matches!(
+        result,
+        Err(ExecutorError::DataNotFound(digest)) if digest == missing_digest
+    ));
+    assert!(executor.blocks_received.lock().is_empty());
 }
 
 #[tokio::test]
