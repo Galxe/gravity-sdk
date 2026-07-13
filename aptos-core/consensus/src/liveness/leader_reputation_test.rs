@@ -5,15 +5,25 @@
 use super::leader_reputation::{
     extract_epoch_to_proposers_impl, AptosDBBackend, ProposerAndVoterHeuristic,
 };
-use crate::liveness::{
-    leader_reputation::{
-        LeaderReputation, MetadataBackend, NewBlockEventAggregation, ReputationHeuristic,
+use crate::{
+    consensusdb::CommittedBlockAnchor,
+    liveness::{
+        leader_reputation::{
+            LeaderReputation, MetadataBackend, NewBlockEventAggregation, ReputationAnchorBackend,
+            ReputationHeuristic,
+        },
+        proposer_election::{choose_index, ProposerElection},
     },
-    proposer_election::{choose_index, ProposerElection},
 };
 use aptos_consensus_types::common::{Author, Round};
 use claims::assert_err;
 use gaptos::{
+    api_types::{
+        config_storage::{
+            BlockNumber, ConfigStorage, OnChainConfig, OnChainConfigResType, GLOBAL_CONFIG_STORAGE,
+        },
+        on_chain_config::validator_performances::{ValidatorPerformance, ValidatorPerformances},
+    },
     aptos_bitvec::BitVec,
     aptos_crypto::{bls12381, HashValue},
     aptos_infallible::Mutex,
@@ -253,6 +263,131 @@ fn test_proposer_and_voter_heuristic() {
     );
 }
 
+struct MockPerformanceStorage {
+    values: Mutex<HashMap<u64, bytes::Bytes>>,
+    reads: Mutex<Vec<u64>>,
+}
+
+impl MockPerformanceStorage {
+    fn new() -> Self {
+        Self { values: Mutex::new(HashMap::new()), reads: Mutex::new(vec![]) }
+    }
+
+    fn insert(&self, block_number: u64, performances: ValidatorPerformances) {
+        self.values.lock().insert(block_number, bcs::to_bytes(&performances).unwrap().into());
+    }
+}
+
+impl ConfigStorage for MockPerformanceStorage {
+    fn fetch_config_bytes(
+        &self,
+        _config_name: OnChainConfig,
+        block_number: BlockNumber,
+    ) -> Option<OnChainConfigResType> {
+        let BlockNumber::Number(block_number) = block_number else {
+            return None;
+        };
+        self.reads.lock().push(block_number);
+        self.values.lock().get(&block_number).cloned().map(Into::into)
+    }
+}
+
+struct EmptyMetadataBackend;
+
+impl MetadataBackend for EmptyMetadataBackend {
+    fn get_block_metadata(
+        &self,
+        _target_epoch: u64,
+        _target_round: Round,
+    ) -> (Vec<NewBlockEvent>, HashValue) {
+        (vec![], HashValue::zero())
+    }
+}
+
+struct FixedReputationAnchorBackend(CommittedBlockAnchor);
+
+impl ReputationAnchorBackend for FixedReputationAnchorBackend {
+    fn get_anchor(
+        &self,
+        _target_epoch: u64,
+        _target_round: Round,
+    ) -> anyhow::Result<Option<CommittedBlockAnchor>> {
+        Ok(Some(self.0))
+    }
+}
+
+#[test]
+fn test_anchored_performance_cache_is_keyed_by_block_number() {
+    let storage = Arc::new(MockPerformanceStorage::new());
+    assert!(GLOBAL_CONFIG_STORAGE.set(storage.clone()).is_ok());
+    let validators = vec![Author::random(), Author::random()];
+    let epoch_to_validators = HashMap::from([(7, validators.clone())]);
+    let heuristic = ProposerAndVoterHeuristic::new(validators[0], 100, 10, 1, 10, 2, 5, false);
+
+    storage.insert(
+        10,
+        ValidatorPerformances {
+            validators: vec![
+                ValidatorPerformance { successful_proposals: 10, failed_proposals: 0 },
+                ValidatorPerformance { successful_proposals: 0, failed_proposals: 0 },
+            ],
+        },
+    );
+    assert_eq!(heuristic.get_weights_at_block(7, &epoch_to_validators, 10).unwrap(), vec![100, 10]);
+
+    // Mutating the provider at the same block cannot change the cached consensus input.
+    storage.insert(
+        10,
+        ValidatorPerformances {
+            validators: vec![
+                ValidatorPerformance { successful_proposals: 0, failed_proposals: 1 },
+                ValidatorPerformance { successful_proposals: 10, failed_proposals: 0 },
+            ],
+        },
+    );
+    assert_eq!(heuristic.get_weights_at_block(7, &epoch_to_validators, 10).unwrap(), vec![100, 10]);
+
+    storage.insert(
+        20,
+        ValidatorPerformances {
+            validators: vec![
+                ValidatorPerformance { successful_proposals: 0, failed_proposals: 1 },
+                ValidatorPerformance { successful_proposals: 10, failed_proposals: 0 },
+            ],
+        },
+    );
+    assert_eq!(heuristic.get_weights_at_block(7, &epoch_to_validators, 20).unwrap(), vec![1, 100]);
+    assert_eq!(*storage.reads.lock(), vec![10, 20]);
+
+    storage.reads.lock().clear();
+
+    let anchor = CommittedBlockAnchor {
+        block_number: 20,
+        timestamp_usecs: 2_000,
+        block_hash: HashValue::random(),
+    };
+    let leader_reputation = LeaderReputation::new(
+        7,
+        epoch_to_validators,
+        vec![1, 1],
+        Arc::new(EmptyMetadataBackend),
+        Box::new(ProposerAndVoterHeuristic::new(validators[0], 100, 10, 1, 10, 2, 5, false)),
+        0,
+        true,
+        100,
+    )
+    .with_reputation_anchor_backend(Arc::new(FixedReputationAnchorBackend(anchor)))
+    .with_consensus_alpha_for_test(true);
+    let round: Round = 1;
+    let expected_index = choose_index(
+        vec![1, 100],
+        [anchor.block_hash.to_vec(), 7u64.to_le_bytes().to_vec(), round.to_le_bytes().to_vec()]
+            .concat(),
+    );
+    assert_eq!(leader_reputation.get_valid_proposer(round), validators[expected_index]);
+    assert_eq!(*storage.reads.lock(), vec![20]);
+}
+
 /// #### LeaderReputation test ####
 
 #[test]
@@ -312,7 +447,8 @@ fn test_api(use_root_hash: bool) {
             4,
             use_root_hash,
             30,
-        );
+        )
+        .with_consensus_alpha_for_test(true);
         let round = 42u64;
 
         let state = if use_root_hash {

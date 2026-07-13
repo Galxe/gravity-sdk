@@ -10,8 +10,15 @@ use aptos_consensus_types::{
     common::{Author, Payload},
 };
 use gaptos::{
-    aptos_crypto::bls12381::Signature, aptos_temppath::TempPath,
-    aptos_types::aggregate_signature::AggregateSignature,
+    aptos_crypto::bls12381::Signature,
+    aptos_temppath::TempPath,
+    aptos_types::{
+        aggregate_signature::AggregateSignature,
+        block_info::{BlockInfo, EpochBlockInfo},
+        epoch_state::EpochState,
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+        validator_verifier::ValidatorVerifier,
+    },
 };
 use std::{collections::HashMap, hash::Hash};
 
@@ -210,4 +217,98 @@ fn test_unwind_to_block() {
     // Vote and timeout cert cleared
     assert!(db.get_last_vote().unwrap().is_none());
     assert!(db.get_highest_2chain_timeout_certificate().unwrap().is_none());
+}
+
+#[test]
+fn test_reputation_anchor_uses_lagged_commit_and_epoch_boundary() {
+    let tmp_dir = TempPath::new();
+    let db = ConsensusDB::new(&tmp_dir, &PathBuf::new());
+    let old_hash = HashValue::random();
+    let boundary_hash = HashValue::random();
+    let round_10_hash = HashValue::random();
+    let round_30_hash = HashValue::random();
+
+    let old_info = BlockInfo::new(1, 40, HashValue::random(), HashValue::random(), 0, 900, None);
+    let old_li = LedgerInfoWithSignatures::new(
+        LedgerInfo::new_with_block_info(old_info, HashValue::zero(), old_hash, 90),
+        AggregateSignature::empty(),
+    );
+    db.put::<LedgerInfoSchema>(&90, &old_li).unwrap();
+
+    let boundary_info = EpochBlockInfo {
+        block_id: HashValue::random(),
+        block_number: 100,
+        epoch_start_round: 50,
+        epoch_start_timestamp_usecs: 1_000,
+        block_hash: boundary_hash,
+    };
+    let epoch_end_info = BlockInfo::new_with_epoch_block_info(
+        1,
+        50,
+        HashValue::random(),
+        HashValue::random(),
+        0,
+        1_100,
+        Some(EpochState::new(2, ValidatorVerifier::new(vec![]))),
+        Some(boundary_info),
+    );
+    let epoch_end_li = LedgerInfoWithSignatures::new(
+        LedgerInfo::new_with_block_info(
+            epoch_end_info,
+            HashValue::zero(),
+            HashValue::random(),
+            105,
+        ),
+        AggregateSignature::empty(),
+    );
+    db.put::<LedgerInfoSchema>(&100, &epoch_end_li).unwrap();
+
+    for (block_number, round, timestamp, block_hash) in
+        [(110, 10, 1_100, round_10_hash), (120, 30, 1_300, round_30_hash)]
+    {
+        let info =
+            BlockInfo::new(2, round, HashValue::random(), HashValue::random(), 0, timestamp, None);
+        let li = LedgerInfoWithSignatures::new(
+            LedgerInfo::new_with_block_info(info, HashValue::zero(), block_hash, block_number),
+            AggregateSignature::empty(),
+        );
+        db.put::<LedgerInfoSchema>(&block_number, &li).unwrap();
+    }
+
+    // Legacy epoch-ending ledger infos did not carry EpochBlockInfo. Their post-state already
+    // belongs to the next epoch and must not be selected for the epoch they end.
+    let legacy_epoch_end_info = BlockInfo::new(
+        2,
+        50,
+        HashValue::random(),
+        HashValue::random(),
+        0,
+        1_500,
+        Some(EpochState::new(3, ValidatorVerifier::new(vec![]))),
+    );
+    let legacy_epoch_end_li = LedgerInfoWithSignatures::new(
+        LedgerInfo::new_with_block_info(
+            legacy_epoch_end_info,
+            HashValue::zero(),
+            HashValue::random(),
+            130,
+        ),
+        AggregateSignature::empty(),
+    );
+    db.put::<LedgerInfoSchema>(&130, &legacy_epoch_end_li).unwrap();
+
+    assert_eq!(
+        db.get_reputation_anchor(2, 5).unwrap(),
+        Some(CommittedBlockAnchor {
+            block_number: 100,
+            timestamp_usecs: 1_000,
+            block_hash: boundary_hash,
+        })
+    );
+    assert_eq!(db.get_reputation_anchor(2, 20).unwrap().unwrap().block_number, 110);
+    assert_eq!(db.get_reputation_anchor(2, 40).unwrap().unwrap().block_number, 120);
+    assert_eq!(
+        db.get_reputation_anchor(1, 60).unwrap(),
+        Some(CommittedBlockAnchor { block_number: 90, timestamp_usecs: 900, block_hash: old_hash })
+    );
 }

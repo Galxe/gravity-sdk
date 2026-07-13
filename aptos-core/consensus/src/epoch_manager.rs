@@ -14,8 +14,8 @@ use crate::{
     liveness::{
         cached_proposer_election::CachedProposerElection,
         leader_reputation::{
-            extract_epoch_to_proposers, AptosDBBackend, LeaderReputation,
-            ProposerAndVoterHeuristic, ReputationHeuristic,
+            extract_epoch_to_proposers, AptosDBBackend, ConsensusDBReputationAnchorBackend,
+            LeaderReputation, ProposerAndVoterHeuristic, ReputationHeuristic,
         },
         proposal_generator::{
             ChainHealthBackoffConfig, PipelineBackpressureConfig, ProposalGenerator,
@@ -430,16 +430,21 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                         .collect::<Vec<_>>()
                 );
 
-                let proposer_election = Box::new(LeaderReputation::new(
-                    epoch_state.epoch,
-                    epoch_to_proposers,
-                    voting_powers,
-                    backend,
-                    heuristic,
-                    onchain_config.leader_reputation_exclude_round(),
-                    leader_reputation_type.use_root_hash_for_seed(),
-                    self.config.window_for_chain_health,
-                ));
+                let proposer_election = Box::new(
+                    LeaderReputation::new(
+                        epoch_state.epoch,
+                        epoch_to_proposers,
+                        voting_powers,
+                        backend,
+                        heuristic,
+                        onchain_config.leader_reputation_exclude_round(),
+                        leader_reputation_type.use_root_hash_for_seed(),
+                        self.config.window_for_chain_health,
+                    )
+                    .with_reputation_anchor_backend(Arc::new(
+                        ConsensusDBReputationAnchorBackend::new(self.storage.consensus_db()),
+                    )),
+                );
                 // LeaderReputation is not cheap, so we can cache the amount of rounds round_manager
                 // needs.
                 Arc::new(CachedProposerElection::new(
