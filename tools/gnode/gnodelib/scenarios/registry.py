@@ -28,7 +28,7 @@ def list_scenarios() -> list[tuple[str, str]]:
     return [(name, desc) for name, (desc, _fn) in _SCENARIOS.items()]
 
 
-def run(name: str, *, preset, params: dict) -> dict:
+def run(name: str, *, preset, instance: int = 0, params: dict) -> dict:
     if name not in _SCENARIOS:
         avail = ", ".join(_SCENARIOS)
         return {"scenario": name, "verdict": "error", "detail": f"未知场景 '{name}'。可用: {avail}"}
@@ -54,7 +54,7 @@ def run(name: str, *, preset, params: dict) -> dict:
     # 兜底：场景内部任何异常（如注入到一半节点被打挂、RPC 断开）都转成结构化结果，
     # 而不是抛 traceback，保证 --json 契约永远成立。
     try:
-        return fn(preset=preset, params=params)
+        return fn(preset=preset, instance=instance, params=params)
     except Exception as e:  # noqa: BLE001 —— 面向 agent 的工具，任何异常都要给结构化输出
         import traceback
         return {

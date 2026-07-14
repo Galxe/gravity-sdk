@@ -118,8 +118,8 @@ def _inject_race(w3: Web3, faucet, A, chain_id: int) -> dict:
     return {"N": N, "head_before": head_before, "tx0_faucet_to_A": tx0_hash, "tx1_from_A_stale": tx1_hash}
 
 
-def run(*, preset, params: dict) -> dict:
-    cp = resolve_cluster(preset)
+def run(*, preset, instance: int = 0, params: dict) -> dict:
+    cp = resolve_cluster(preset, int(instance))
     w3 = make_web3(cp.rpc_url())
     faucet = faucet_account()
     node_id = cp.node_ids()[0]
