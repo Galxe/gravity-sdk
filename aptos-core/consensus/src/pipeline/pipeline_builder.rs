@@ -731,7 +731,9 @@ impl PipelineBuilder {
         let _timer = counters::OP_COUNTERS.timer("pre_commit_notify");
 
         // let txns = compute_result.transactions_to_commit().to_vec();
-        let (txns, _) = payload_manager.get_transactions(&block).await.unwrap_or_default();
+        let (txns, _) = payload_manager.get_transactions(&block).await.map_err(|e| {
+            anyhow::anyhow!("failed to get transactions for committed block {}: {}", block.id(), e)
+        })?;
         let txns = txns.into_iter().map(|t| Transaction::UserTransaction(t)).collect_vec();
         let commit_txns = compute_result.transactions_to_commit(txns);
         // let subscribable_events = compute_result.subscribable_events().to_vec();
