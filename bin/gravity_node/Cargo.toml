@@ -33,7 +33,8 @@ sha2.workspace = true
 bincode = "1.3"
 time = "0.3.36"
 anyhow = "1.0.87"
-greth = { git = "https://github.com/Galxe/gravity-reth", rev = "b49b4864aeaa3c35c6871a77d7133bb9486edbf1" }
+# Oracle integration branch; Cargo.lock pins the exact gravity-reth revision used by tests.
+greth = { git = "https://github.com/Galxe/gravity-reth", branch = "codex/sports-score-oracle-poc" }
 reqwest = "0.12.9"
 alloy-primitives = { version = "=1.3.1", default-features = false, features = ["map-foldhash"] }
 alloy-eips = { version = "^1.0.37", default-features = false }

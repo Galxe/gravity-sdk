@@ -9,7 +9,7 @@ use gaptos::api_types::{
     relayer::{PollResult, Relayer},
     ExecError,
 };
-use greth::reth_pipe_exec_layer_relayer::OracleRelayerManager;
+use greth::reth_pipe_exec_layer_relayer::{parse_oracle_uri, OracleRelayerManager};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tracing::{info, warn};
@@ -37,19 +37,17 @@ impl RelayerConfig {
     }
 }
 
-/// Sanitize a URL for safe logging: keep only scheme://host[:port], redact path and query.
-/// e.g. "https://mainnet.infura.io/v3/SECRET_KEY" → "https://mainnet.infura.io/***"
+/// Keep only scheme and host for logging; redact userinfo, path, query, and fragment.
 fn sanitize_url(url: &str) -> String {
-    if let Some(scheme_end) = url.find("://") {
-        let scheme = &url[..scheme_end];
-        let rest = &url[scheme_end + 3..];
-        // Host ends at the first '/' or '?' or end of string
-        let host_end = rest.find('/').or_else(|| rest.find('?')).unwrap_or(rest.len());
-        let host_port = &rest[..host_end];
-        format!("{scheme}://{host_port}/***")
-    } else {
-        "***".to_string()
-    }
+    let Ok(parsed) = reqwest::Url::parse(url) else {
+        return "***".to_string();
+    };
+    let Some(host) = parsed.host_str() else {
+        return "***".to_string();
+    };
+    let host = if host.contains(':') { format!("[{host}]") } else { host.to_string() };
+    let port = parsed.port().map(|value| format!(":{value}")).unwrap_or_default();
+    format!("{}://{}{} /***", parsed.scheme(), host, port)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -100,7 +98,10 @@ impl RelayerWrapper {
         let config = config_path
             .and_then(|path| match RelayerConfig::from_file(&path) {
                 Ok(cfg) => {
-                    info!("Loaded relayer config from {:?}", path);
+                    info!(
+                        file = %path.file_name().and_then(|name| name.to_str()).unwrap_or("<config>"),
+                        "Loaded relayer config"
+                    );
                     Some(cfg)
                 }
                 Err(e) => {
@@ -155,25 +156,14 @@ impl RelayerWrapper {
         }
     }
 
-    /// Parse URI to extract source_type and source_id
-    /// URI format: gravity://<source_type>/<source_id>/<task_type>?<params>
+    /// Parse only the source identity used to reconcile on-chain state.
+    ///
+    /// The reth relayer validates the task type and provider-specific parameters when the URI is
+    /// added. Keeping this helper limited to `(source_type, source_id)` avoids duplicating those
+    /// rules in the SDK wrapper.
     fn parse_source_from_uri(uri: &str) -> Option<(u32, u64)> {
-        if !uri.starts_with("gravity://") {
-            return None;
-        }
-
-        let rest = &uri[10..]; // len("gravity://") = 10
-        let parts: Vec<&str> = rest.split('/').collect();
-        if parts.len() < 2 {
-            return None;
-        }
-
-        let source_type: u32 = parts[0].parse().ok()?;
-        // Remove query string from source_id if present
-        let source_id_str = parts[1].split('?').next()?;
-        let source_id: u64 = source_id_str.parse().ok()?;
-
-        Some((source_type, source_id))
+        let task = parse_oracle_uri(uri).ok()?;
+        Some((task.source_type, task.source_id))
     }
 
     /// Find oracle state for a URI by matching source_type and source_id
@@ -271,11 +261,14 @@ impl Relayer for RelayerWrapper {
 
         // Get onchain state for this URI using source_type/source_id from URI
         let oracle_states = Self::get_oracle_source_states().await;
-        info!("Oracle states: {:?}", oracle_states);
-        let oracle_state =
-            Self::find_oracle_state_for_uri(uri, &oracle_states).ok_or_else(|| {
+        let oracle_state = Self::find_oracle_state_for_uri(uri, &oracle_states).ok_or_else(|| {
+            let available_sources = oracle_states
+                .iter()
+                .map(|state| format!("{}:{}", state.source_type, state.source_id))
+                .collect::<Vec<_>>()
+                .join(", ");
                 ExecError::Other(format!(
-                    "Oracle state not found for URI: {uri}. Available states: {oracle_states:?}"
+                    "Oracle state not found for URI: {uri}. Available source identities: [{available_sources}]"
                 ))
             })?;
 
@@ -394,5 +387,37 @@ mod tests {
             Some(7),
         );
         assert!(fresh.updated, "a genuinely-new observation (8 > 7) must NOT be suppressed");
+    }
+
+    #[test]
+    fn test_parse_price_feed_source_uri() {
+        let uri = "gravity://3/1001/price_feed?provider=binance_index_kline_v1";
+        assert_eq!(RelayerWrapper::parse_source_from_uri(uri), Some((3, 1001)));
+    }
+
+    #[test]
+    fn test_parse_blockchain_source_uri() {
+        let uri = "gravity://0/31337/events?contract=0x0000000000000000000000000000000000000001";
+        assert_eq!(RelayerWrapper::parse_source_from_uri(uri), Some((0, 31337)));
+    }
+
+    #[test]
+    fn test_parse_source_accepts_identity_only_uri() {
+        assert_eq!(RelayerWrapper::parse_source_from_uri("gravity://3/1001"), Some((3, 1001)));
+    }
+
+    #[test]
+    fn test_parse_source_rejects_unroutable_uri() {
+        assert_eq!(RelayerWrapper::parse_source_from_uri("gravity://price/1001"), None);
+        assert_eq!(RelayerWrapper::parse_source_from_uri("https://oracle.example/3/1001"), None);
+    }
+
+    #[test]
+    fn test_sanitize_url_removes_credentials_and_path() {
+        let sanitized = sanitize_url("https://user:secret@polygon.example:8443/v1/key?token=abc");
+        assert_eq!(sanitized, "https://polygon.example:8443 /***");
+        assert!(!sanitized.contains("user"));
+        assert!(!sanitized.contains("secret"));
+        assert!(!sanitized.contains("token"));
     }
 }

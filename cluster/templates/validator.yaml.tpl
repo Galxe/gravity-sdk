@@ -56,6 +56,9 @@ ${DISCOVERY_METHOD_FULLNODE_BLOCK}
 storage:
   dir: "${STORAGE_DIR}"
 
+api:
+  address: 127.0.0.1:${API_PORT}
+
 log_file_path: "${LOG_DIR}/consensus_log/validator.log"
 
 inspection_service:
