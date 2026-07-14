@@ -9,7 +9,6 @@ silent data corruption after a storage migration.
 import json
 
 import pytest
-from hexbytes import HexBytes
 from web3 import Web3
 from web3.exceptions import TransactionNotFound
 
@@ -34,36 +33,44 @@ TAMPERED_HASH = "0x" + "ef" * 32
 ALL_KINDS = {"balance", "storage", "transaction", "receipt", "logs", "block_hash"}
 
 
+def hx(hexstr: str) -> bytes:
+    """Raw bytes from 0x-hex. Stands in for the HexBytes values a real w3
+    returns: HexBytes subclasses bytes, so the same normalization branch is
+    exercised without a direct dependency on the hexbytes package (which is
+    not in requirements.txt)."""
+    return bytes.fromhex(hexstr[2:] if hexstr.startswith("0x") else hexstr)
+
+
 def make_chain():
     """Fresh fake chain state; each test gets its own copy to tamper with."""
     log_a = {
         "address": CONTRACT,
-        "topics": [HexBytes(TOPIC0)],
-        "data": HexBytes("0x" + "00" * 31 + "2a"),
+        "topics": [hx(TOPIC0)],
+        "data": hx("0x" + "00" * 31 + "2a"),
         "blockNumber": 5,
         "logIndex": 0,
-        "transactionHash": HexBytes(TX1),
+        "transactionHash": hx(TX1),
     }
     log_b = {
         "address": OTHER_CONTRACT,
-        "topics": [HexBytes(TOPIC0), HexBytes(TX2)],
-        "data": HexBytes("0x"),
+        "topics": [hx(TOPIC0), hx(TX2)],
+        "data": hx("0x"),
         "blockNumber": 6,
         "logIndex": 1,
-        "transactionHash": HexBytes(TX2),
+        "transactionHash": hx(TX2),
     }
     return {
         "balances": {(ADDR, 5): 10**18, (ADDR, 7): 2 * 10**18},
         "storage": {
-            (CONTRACT, 0, 5): HexBytes("0x" + "00" * 31 + "01"),
+            (CONTRACT, 0, 5): hx("0x" + "00" * 31 + "01"),
             (CONTRACT, 1, 5): "0x2a",  # short hexstr on purpose
         },
-        "txs": {TX1: {"blockHash": HexBytes(BLOCK5_HASH), "blockNumber": 5}},
+        "txs": {TX1: {"blockHash": hx(BLOCK5_HASH), "blockNumber": 5}},
         "receipts": {
             TX1: {
                 "status": 1,
                 "gasUsed": 21000,
-                "blockHash": HexBytes(BLOCK5_HASH),
+                "blockHash": hx(BLOCK5_HASH),
                 "blockNumber": 5,
                 "logs": [dict(log_a)],
             }
@@ -73,8 +80,8 @@ def make_chain():
         "blocks": {
             5: {
                 "number": 5,
-                "hash": HexBytes(BLOCK5_HASH),
-                "parentHash": HexBytes(BLOCK5_PARENT),
+                "hash": hx(BLOCK5_HASH),
+                "parentHash": hx(BLOCK5_PARENT),
             }
         },
     }
@@ -242,7 +249,7 @@ class TestReplay:
             (
                 "storage",
                 lambda c: c["storage"].__setitem__(
-                    (CONTRACT, 0, 5), HexBytes("0x" + "00" * 31 + "02")
+                    (CONTRACT, 0, 5), hx("0x" + "00" * 31 + "02")
                 ),
             ),
             ("transaction", lambda c: c["txs"].pop(TX1)),
@@ -251,7 +258,7 @@ class TestReplay:
             ("logs", lambda c: c.__setitem__("logs", c["logs"][1:])),
             (
                 "block_hash",
-                lambda c: c["blocks"][5].__setitem__("hash", HexBytes(TAMPERED_HASH)),
+                lambda c: c["blocks"][5].__setitem__("hash", hx(TAMPERED_HASH)),
             ),
         ],
     )
@@ -280,7 +287,7 @@ class TestReplay:
         chain = make_chain()
         chain["balances"][(ADDR, 5)] = 1
         chain["receipts"][TX1]["gasUsed"] = 22000
-        chain["blocks"][5]["hash"] = HexBytes(TAMPERED_HASH)
+        chain["blocks"][5]["hash"] = hx(TAMPERED_HASH)
         report = replay_anchors(FakeW3(chain), anchor_set)
         assert not report.ok
         assert len(report.mismatches) == 3
@@ -371,12 +378,12 @@ class TestHexNormalization:
         variant = make_chain()
         # balance as hex string instead of int
         variant["balances"][(ADDR, 5)] = hex(10**18)
-        # storage as short / uppercase strings instead of HexBytes
+        # storage as short / uppercase strings instead of raw bytes
         variant["storage"][(CONTRACT, 0, 5)] = "0x1"
         variant["storage"][(CONTRACT, 1, 5)] = "0X2A"
-        # tx fields as raw bytes / hex block number
+        # tx hash field as uppercase hex string (collected from raw bytes)
         variant["txs"][TX1] = {
-            "blockHash": bytes.fromhex(BLOCK5_HASH[2:]),
+            "blockHash": BLOCK5_HASH.upper().replace("0X", "0x"),
             "blockNumber": "0x5",
         }
         # receipt quantities as hex strings, log payloads as uppercase strings
@@ -393,11 +400,11 @@ class TestHexNormalization:
                 }
             ],
         }
-        # block hash uppercase
+        # block hashes as uppercase hex strings (collected from raw bytes)
         variant["blocks"][5] = {
             "number": "0x5",
             "hash": BLOCK5_HASH.upper().replace("0X", "0x"),
-            "parentHash": bytes.fromhex(BLOCK5_PARENT[2:]),
+            "parentHash": BLOCK5_PARENT.upper().replace("0X", "0x"),
         }
 
         report = replay_anchors(FakeW3(variant), anchor_set)
