@@ -18,6 +18,17 @@ gnode 自持配置在 `presets/<name>/`，base_dir / 端口独立，避免与他
 | `1node` | 8645    | `/tmp/gnode-1node`  | 否       |
 | `prague`| 8647    | `/tmp/gnode-prague` | 是（7702-halt 必需）|
 
+### 多实例并发隔离（instance）
+并发审计时,多个 agent 各自起集群会抢同一个 base_dir/端口。用 `--instance N`(或环境变量
+`GNODE_INSTANCE`)隔离:instance N 的所有端口 = 基准 + N*100、base_dir 带 `-N` 后缀。**所有 instance
+共享同一份 genesis+identity**(单验证者节点不校验对端口,实测可行),所以只有 instance 首次不存在时
+才 deploy+start,genesis 只生成一次 → 每个 instance 都很快。
+
+- `gnode up --preset prague`(不带 --instance 且未设 GNODE_INSTANCE)→ **自动分配**空闲实例,打印 `inst=N`。
+- 之后对该实例的所有命令带 `--instance N`(或让 Coacker 给每个 agent 预设 `GNODE_INSTANCE`)。
+- `gnode status`(不带参数)列出所有 preset 下**已存在 base_dir 的实例**及其存活/区块。
+- 攻击某个 instance 只打停它自己,不影响其它 instance(已验证)。
+
 ## 命令
 ```bash
 gnode up   --preset 1node|prague [--fresh]   # 拉起集群（--fresh 重新 genesis）

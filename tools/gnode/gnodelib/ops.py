@@ -120,35 +120,40 @@ def _ensure_binaries() -> None:
 # 命令实现
 # ----------------------------------------------------------------------------
 
-def cmd_up(preset, *, fresh: bool = False) -> int:
-    cp = resolve_cluster(preset)
+def cmd_up(preset, *, instance: int = 0, fresh: bool = False) -> int:
+    from .env import alloc_instance
+    if instance == "auto" or instance is None:
+        instance = alloc_instance(preset)
+        log(f"自动分配 instance={instance}")
+    cp = resolve_cluster(preset, int(instance))
     w3 = make_web3(cp.rpc_url())
     env = _script_env(cp)
-    cfg = str(cp.cluster_toml)
+    cfg = str(cp.cluster_toml)                    # 本 instance（偏移端口/独立 base_dir）
+    tmpl_cfg = str(cp.preset_dir / "cluster.toml")  # 模板（genesis.toml 同目录）供 init/genesis
     gen = str(cp.genesis_toml)
 
     node_ids = cp.node_ids()
     already = all(_pid_alive(cp.pid_file(nid)) for nid in node_ids) and _rpc_up(w3)
     if already and not fresh:
-        log(f"集群已在运行（{cp.name}, base_dir={cp.base_dir}），RPC={cp.rpc_url()} block={w3.eth.block_number}")
+        log(f"集群已在运行（{cp.name} inst={cp.instance}, base_dir={cp.base_dir}），RPC={cp.rpc_url()} block={w3.eth.block_number}")
         return 0
 
     _ensure_binaries()
-
     genesis_json = cp.artifacts_dir / "genesis.json"
     identity = cp.artifacts_dir / node_ids[0] / "config" / "identity.yaml"
 
-    if fresh:
-        log("--fresh：停止并清理 artifacts/ 与 base_dir，重新 genesis")
-        _run_script("stop.sh", ["--config", cfg], env=env, check=False)
-        subprocess.run(["rm", "-rf", str(cp.artifacts_dir), str(cp.base_dir)])
-    else:
-        # base_dir 可能残留旧部署（deploy.sh 会交互式询问是否清理，无 stdin 时默认 N）；
-        # gnode 独占该 base_dir，直接清理以保证干净部署。
-        subprocess.run(["rm", "-rf", str(cp.base_dir)])
+    _run_script("stop.sh", ["--config", cfg], env=env, check=False)  # 停本 instance 旧进程
+    subprocess.run(["rm", "-rf", str(cp.base_dir)])                   # 只清本 instance base_dir
+    if fresh and cp.instance == 0:
+        # 共享 genesis 由 instance 0 “拥有”，--fresh 才重建；instance>0 的 --fresh 不动共享 genesis
+        log("--fresh (instance 0)：清理共享 artifacts，重新 genesis")
+        subprocess.run(["rm", "-rf", str(cp.artifacts_dir)])
+    elif fresh:
+        log(f"--fresh (instance {cp.instance})：只重置本实例 base_dir，共享 genesis 保留")
 
+    # 共享 genesis/identity 只生成一次（用模板配置，端口无关）；多 instance 复用
     if not identity.exists():
-        _run_script("init.sh", [cfg], env=env)
+        _run_script("init.sh", [tmpl_cfg], env=env)
     if not genesis_json.exists():
         _run_script("genesis.sh", [gen], env=env)
     _run_script("deploy.sh", [cfg], env=env)
@@ -156,43 +161,45 @@ def cmd_up(preset, *, fresh: bool = False) -> int:
 
     log(f"等待 RPC 就绪 {cp.rpc_url()} ...")
     if not _wait_rpc(w3, timeout=90):
-        log(f"RPC 未在 90s 内就绪，请检查日志: gnode logs --preset {cp.name} --which reth")
+        log(f"RPC 未在 90s 内就绪，请检查日志: gnode logs --preset {cp.name} --instance {cp.instance} --which reth")
         return 1
-    log(f"集群已就绪：{cp.name} RPC={cp.rpc_url()} chainId={w3.eth.chain_id} block={w3.eth.block_number} prague={cp.prague}")
+    log(f"集群已就绪：{cp.name} inst={cp.instance} RPC={cp.rpc_url()} chainId={w3.eth.chain_id} block={w3.eth.block_number} prague={cp.prague}")
     return 0
 
 
-def cmd_down(preset) -> int:
-    cp = resolve_cluster(preset)
+def cmd_down(preset, *, instance: int = 0) -> int:
+    cp = resolve_cluster(preset, int(instance))
     _run_script("stop.sh", ["--config", str(cp.cluster_toml)], env=_script_env(cp), check=False)
-    log("已发送停止命令")
+    log(f"已发送停止命令（{cp.name} inst={cp.instance}）")
     return 0
 
 
-def cmd_status(preset, *, show_all: bool = False) -> int:
-    from .env import PRESETS
+def cmd_status(preset, *, instance: int = 0, show_all: bool = False) -> int:
+    from .env import PRESETS, MAX_INSTANCES
     names = list(PRESETS) if show_all else [preset]
     for name in names:
-        cp = resolve_cluster(name)
-        print(f"# cluster {cp.name}  base_dir={cp.base_dir}  chainId={cp.chain_id}  prague={cp.prague}")
-        print(f"{'node':<8} {'rpc':<28} {'proc':<6} {'block':<10}")
-        for nid in cp.node_ids():
-            url = cp.rpc_url(nid)
-            w3 = make_web3(url, timeout=3)
-            alive = _pid_alive(cp.pid_file(nid))
-            block = "-"
-            try:
-                block = str(int(w3.eth.block_number))
-            except Exception:
-                pass
-            print(f"{nid:<8} {url:<28} {('up' if alive else 'down'):<6} {block:<10}")
-        if show_all and name != names[-1]:
-            print()
+        # 指定 --instance 时只看那一个；否则（含 show_all）列出所有 base_dir 存在的 instance（0 号始终列）
+        if not show_all and instance:
+            insts = [int(instance)]
+        else:
+            insts = [i for i in range(MAX_INSTANCES)
+                     if i == 0 or Path(f"/tmp/gnode-{resolve_cluster(name).name}{'' if i == 0 else f'-{i}'}").exists()]
+        for inst in insts:
+            cp = resolve_cluster(name, inst)
+            for nid in cp.node_ids():
+                w3 = make_web3(cp.rpc_url(nid), timeout=3)
+                alive = _pid_alive(cp.pid_file(nid))
+                block = "-"
+                try:
+                    block = str(int(w3.eth.block_number))
+                except Exception:
+                    pass
+                print(f"{cp.name:<8} inst={inst:<3} {cp.rpc_url(nid):<28} {('up' if alive else 'down'):<6} block={block}")
     return 0
 
 
-def cmd_logs(preset, which: str, follow: bool, lines: int) -> int:
-    cp = resolve_cluster(preset)
+def cmd_logs(preset, which: str, follow: bool, lines: int, *, instance: int = 0) -> int:
+    cp = resolve_cluster(preset, int(instance))
     # 默认第一个节点
     nid = cp.node_ids()[0]
     files = cp.log_files(nid)
@@ -208,8 +215,8 @@ def cmd_logs(preset, which: str, follow: bool, lines: int) -> int:
     return subprocess.run(cmd).returncode
 
 
-def cmd_state(preset, addr: str) -> int:
-    cp = resolve_cluster(preset)
+def cmd_state(preset, addr: str, *, instance: int = 0) -> int:
+    cp = resolve_cluster(preset, int(instance))
     w3 = make_web3(cp.rpc_url())
     try:
         addr = Web3.to_checksum_address(addr)
@@ -298,8 +305,8 @@ def _checksum_addrs(v):
     return v
 
 
-def cmd_deploy(preset, artifact_path: str, *, args_json: Optional[str] = None) -> int:
-    cp = resolve_cluster(preset)
+def cmd_deploy(preset, artifact_path: str, *, args_json: Optional[str] = None, instance: int = 0) -> int:
+    cp = resolve_cluster(preset, int(instance))
     w3 = make_web3(cp.rpc_url())
     rc = _require_rpc(cp, w3)
     if rc is not None:
@@ -326,10 +333,10 @@ def cmd_deploy(preset, artifact_path: str, *, args_json: Optional[str] = None) -
     return 0 if res["status"] == 1 else 2
 
 
-def cmd_send(preset, tx_path: str, *, no_wait: bool = False) -> int:
+def cmd_send(preset, tx_path: str, *, no_wait: bool = False, instance: int = 0) -> int:
     """tx.json 规格见 `gnode send --help`。支持 type(2/1/4)、accessList、authorizationList、
     raw(已签名原始交易) 与 --no-wait（不等回执，用于同块/连发）。缺省用 faucet 签名。"""
-    cp = resolve_cluster(preset)
+    cp = resolve_cluster(preset, int(instance))
     w3 = make_web3(cp.rpc_url())
     rc = _require_rpc(cp, w3)
     if rc is not None:

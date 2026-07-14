@@ -26,8 +26,8 @@ REVERT_INITCODE = "0x6005600c60003960056000f360006000fd"
 PARAMS = {"window": float}  # 观察窗口秒数
 
 
-def run(*, preset, params: dict) -> dict:
-    cp = resolve_cluster(preset)
+def run(*, preset, instance: int = 0, params: dict) -> dict:
+    cp = resolve_cluster(preset, int(instance))
     w3 = make_web3(cp.rpc_url())
     node_id = cp.node_ids()[0]
     pid_alive = lambda: _pid_alive(cp.pid_file(node_id))

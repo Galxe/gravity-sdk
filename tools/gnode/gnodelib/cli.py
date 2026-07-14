@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
+import os
 import sys
 
 from . import ops
@@ -16,6 +16,18 @@ def _add_preset(p: argparse.ArgumentParser, default: str = "1node") -> None:
         help="集群档位（1node|prague，或数字 1=1node；默认 %(default)s。prague 启用 EIP-7702。"
              "status 不带该参数时列出所有档位）",
     )
+    p.add_argument(
+        "--instance", dest="instance", default=os.environ.get("GNODE_INSTANCE"),
+        help="实例号（并发隔离：端口+N*100、base_dir 带 -N；缺省读 GNODE_INSTANCE，"
+             "未设时 up 自动分配空闲号、其它命令用 0）。所有 instance 共享同一份 genesis。",
+    )
+
+
+def _inst(args, default=0):
+    v = getattr(args, "instance", None)
+    if v is None:
+        return default
+    return "auto" if str(v) == "auto" else int(v)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -117,20 +129,22 @@ def main(argv: list[str]) -> int:
 
 def _dispatch(args, argv: list[str]) -> int:
     if args.cmd == "up":
-        return ops.cmd_up(args.preset, fresh=args.fresh)
+        # 未指定 instance 且未设 GNODE_INSTANCE → 自动分配空闲实例
+        return ops.cmd_up(args.preset, instance=_inst(args, "auto"), fresh=args.fresh)
     if args.cmd == "down":
-        return ops.cmd_down(args.preset)
+        return ops.cmd_down(args.preset, instance=_inst(args))
     if args.cmd == "status":
-        # 没显式指定档位时，列出所有 preset 的状态（避免默认 1node 让人误以为集群没起）
-        return ops.cmd_status(args.preset, show_all=("--preset" not in argv and "--nodes" not in argv))
+        # 没显式指定档位时，列出所有 preset/instance 的状态（避免默认档让人误以为集群没起）
+        return ops.cmd_status(args.preset, instance=_inst(args),
+                              show_all=("--preset" not in argv and "--nodes" not in argv))
     if args.cmd == "logs":
-        return ops.cmd_logs(args.preset, args.which, args.follow, args.lines)
+        return ops.cmd_logs(args.preset, args.which, args.follow, args.lines, instance=_inst(args))
     if args.cmd == "state":
-        return ops.cmd_state(args.preset, args.addr)
+        return ops.cmd_state(args.preset, args.addr, instance=_inst(args))
     if args.cmd == "deploy":
-        return ops.cmd_deploy(args.preset, args.artifact, args_json=args.args)
+        return ops.cmd_deploy(args.preset, args.artifact, args_json=args.args, instance=_inst(args))
     if args.cmd == "send":
-        return ops.cmd_send(args.preset, args.tx, no_wait=args.no_wait)
+        return ops.cmd_send(args.preset, args.tx, no_wait=args.no_wait, instance=_inst(args))
     if args.cmd == "scenarios":
         for name, desc in registry.list_scenarios():
             print(f"{name:<16} {desc}")
@@ -150,7 +164,7 @@ def _dispatch(args, argv: list[str]) -> int:
         for kv in args.param:
             k, _, v = kv.partition("=")
             params[k.strip()] = v.strip()
-        result = registry.run(args.scenario, preset=args.preset, params=params)
+        result = registry.run(args.scenario, preset=args.preset, instance=_inst(args), params=params)
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
         else:
