@@ -1583,7 +1583,40 @@ async def phase_14_sf_full_verification(ctx: UpgradeContext) -> None:
     # evidence that legacy data survived the layout flip bit-identically.
     await replay_all_anchor_sets(ctx, stage="sf")
 
-    # 14b. Fresh post-migration history: blocks whose changesets are
+    # 14b. Sustained load on the SF layout: >= POST_MIGRATION_LOAD_S with
+    # the chain healthy throughout.
+    LOG.info(
+        "[Phase 14] SF-layout load window: %ds under sustained tx load...",
+        POST_MIGRATION_LOAD_S,
+    )
+    window_start = time.monotonic()
+    checks = 0
+    while time.monotonic() - window_start < POST_MIGRATION_LOAD_S:
+        await asyncio.sleep(10)
+        checks += 1
+        heights = await get_block_heights(list(ctx.cluster.nodes.values()))
+        gap = max(heights.values()) - min(heights.values())
+        assert gap < MAX_HEIGHT_GAP, (
+            f"height gap {gap} >= {MAX_HEIGHT_GAP} during the SF load window"
+        )
+    LOG.info("[Phase 14] SF load window done (%d checks, all healthy)", checks)
+
+    # 14c. Load floors for the migration + SF window; the sender stops
+    # HERE so the fresh-history txs below cannot race it on the faucet
+    # nonce (same account).
+    await ctx.tx_sender.stop()
+    ctx.tx_sender.log_stats()
+    assert ctx.tx_sender.total_confirmed >= MIN_TX_CONFIRMED, (
+        f"only {ctx.tx_sender.total_confirmed} txs confirmed across the "
+        f"migration + SF window (need >= {MIN_TX_CONFIRMED})"
+    )
+    assert ctx.tx_sender.success_rate >= MIN_TX_SUCCESS_RATE, (
+        f"tx success rate {ctx.tx_sender.success_rate:.1%} below floor "
+        f"{MIN_TX_SUCCESS_RATE:.0%} "
+        f"({ctx.tx_sender.total_confirmed}/{ctx.tx_sender.total_sent})"
+    )
+
+    # 14d. Fresh post-migration history: blocks whose changesets are
     # SF-native from birth must anchor and replay too.
     node = ctx.cluster.get_node("node1")
     tb = TransactionBuilder(node.w3, ctx.cluster.faucet)
@@ -1634,36 +1667,7 @@ async def phase_14_sf_full_verification(ctx: UpgradeContext) -> None:
         ctx.cluster, post_anchors, stage="sf/post-migration-fresh"
     )
 
-    # 14c. Sustained load on the SF layout: >= POST_MIGRATION_LOAD_S with
-    # the chain healthy throughout.
-    LOG.info(
-        "[Phase 14] SF-layout load window: %ds under sustained tx load...",
-        POST_MIGRATION_LOAD_S,
-    )
-    window_start = time.monotonic()
-    checks = 0
-    while time.monotonic() - window_start < POST_MIGRATION_LOAD_S:
-        await asyncio.sleep(10)
-        checks += 1
-        heights = await get_block_heights(list(ctx.cluster.nodes.values()))
-        gap = max(heights.values()) - min(heights.values())
-        assert gap < MAX_HEIGHT_GAP, (
-            f"height gap {gap} >= {MAX_HEIGHT_GAP} during the SF load window"
-        )
-    LOG.info("[Phase 14] SF load window done (%d checks, all healthy)", checks)
-
-    # 14d. Load floors + log scan for the migration + SF window.
-    await ctx.tx_sender.stop()
-    ctx.tx_sender.log_stats()
-    assert ctx.tx_sender.total_confirmed >= MIN_TX_CONFIRMED, (
-        f"only {ctx.tx_sender.total_confirmed} txs confirmed across the "
-        f"migration + SF window (need >= {MIN_TX_CONFIRMED})"
-    )
-    assert ctx.tx_sender.success_rate >= MIN_TX_SUCCESS_RATE, (
-        f"tx success rate {ctx.tx_sender.success_rate:.1%} below floor "
-        f"{MIN_TX_SUCCESS_RATE:.0%} "
-        f"({ctx.tx_sender.total_confirmed}/{ctx.tx_sender.total_sent})"
-    )
+    # 14e. Log scan for the migration + SF window.
     scan_all_node_logs(ctx.cluster, stage="post-migration")
 
 
