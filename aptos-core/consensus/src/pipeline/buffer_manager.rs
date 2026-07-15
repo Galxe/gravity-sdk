@@ -68,6 +68,7 @@ use tokio_retry::strategy::ExponentialBackoff;
 pub const COMMIT_VOTE_BROADCAST_INTERVAL_MS: u64 = 1500;
 pub const COMMIT_VOTE_REBROADCAST_INTERVAL_MS: u64 = 30000;
 pub const LOOP_INTERVAL_MS: u64 = 1500;
+const MAX_CACHED_BLOCK_IDS_PER_AUTHOR_PER_COMMIT_VOTE_ROUND: usize = 2;
 
 #[derive(Debug, Default)]
 pub struct ResetAck {}
@@ -203,6 +204,21 @@ fn classify_commit_vote_round(
     } else {
         CommitVoteRoundClass::InWindow
     }
+}
+
+fn can_cache_commit_vote_for_block<V>(
+    round_cache: &HashMap<HashValue, HashMap<HashValue, V>>,
+    block_id: &HashValue,
+    author: &HashValue,
+) -> bool {
+    if round_cache.contains_key(block_id) {
+        return true;
+    }
+
+    let cached_block_ids_for_author =
+        round_cache.values().filter(|votes_by_author| votes_by_author.contains_key(author)).count();
+
+    cached_block_ids_for_author < MAX_CACHED_BLOCK_IDS_PER_AUTHOR_PER_COMMIT_VOTE_ROUND
 }
 
 impl BufferManager {
@@ -427,12 +443,21 @@ impl BufferManager {
             CommitVoteRoundClass::InWindow => {}
         }
 
-        self.commit_vote_cache
-            .entry(round)
-            .or_default()
-            .entry(commit_info.id())
-            .or_default()
-            .insert(HashValue::new(*vote.author()), vote);
+        let block_id = commit_info.id();
+        let author = HashValue::new(*vote.author());
+        let round_cache = self.commit_vote_cache.entry(round).or_default();
+        if !can_cache_commit_vote_for_block(round_cache, &block_id, &author) {
+            warn!(
+                round = round,
+                block_id = block_id,
+                author = vote.author(),
+                max_cached_block_ids = MAX_CACHED_BLOCK_IDS_PER_AUTHOR_PER_COMMIT_VOTE_ROUND,
+                "Received too many cached commit-vote block ids from one author in a round.",
+            );
+            return false;
+        }
+
+        round_cache.entry(block_id).or_default().insert(author, vote);
         true
     }
 
@@ -1181,7 +1206,11 @@ fn reply_nack(protocol: ProtocolId, response_sender: oneshot::Sender<Result<Byte
 
 #[cfg(test)]
 mod commit_vote_round_class_tests {
-    use super::{classify_commit_vote_round, CommitVoteRoundClass};
+    use super::{
+        can_cache_commit_vote_for_block, classify_commit_vote_round, CommitVoteRoundClass,
+    };
+    use gaptos::aptos_crypto::HashValue;
+    use std::collections::HashMap;
 
     // highest_committed_round = 10, window = 5  ->  max_cached_round = 15.
     const HCR: u64 = 10;
@@ -1240,5 +1269,24 @@ mod commit_vote_round_class_tests {
             classify_commit_vote_round(HCR, HCR, HCR),
             CommitVoteRoundClass::AlreadyCommitted
         );
+    }
+
+    #[test]
+    fn commit_vote_cache_limits_new_block_ids_per_author() {
+        let author = HashValue::from_u64(1);
+        let other_author = HashValue::from_u64(2);
+        let existing_block = HashValue::from_u64(10);
+        let mut round_cache: HashMap<HashValue, HashMap<HashValue, ()>> = HashMap::new();
+        round_cache.insert(existing_block, HashMap::from([(author, ())]));
+        round_cache.insert(HashValue::from_u64(11), HashMap::from([(author, ())]));
+        round_cache.insert(HashValue::from_u64(12), HashMap::from([(other_author, ())]));
+
+        assert!(can_cache_commit_vote_for_block(&round_cache, &existing_block, &author));
+        assert!(!can_cache_commit_vote_for_block(&round_cache, &HashValue::from_u64(13), &author));
+        assert!(can_cache_commit_vote_for_block(
+            &round_cache,
+            &HashValue::from_u64(13),
+            &other_author
+        ));
     }
 }
