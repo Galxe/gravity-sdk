@@ -16,6 +16,8 @@ gravity_e2e.helpers.offline_db).
 import time
 from pathlib import Path
 
+import pytest
+
 from gravity_e2e.helpers.offline_db import (
     ACCOUNT_CHANGESETS_TABLE,
     STORAGE_CHANGESETS_TABLE,
@@ -23,6 +25,7 @@ from gravity_e2e.helpers.offline_db import (
     SettingsState,
     count_table_entries,
     db_stats,
+    decode_scale_bytes,
     inspect_changeset_static_files,
     migrate_changesets,
     parse_db_stats,
@@ -126,15 +129,39 @@ LOG_NOISE = (
 
 # `db get mdbx Metadata gravity_storage_settings --raw` hit: a single
 # hex::encode_prefixed line of the raw value bytes
-# (crates/cli/commands/src/db/get.rs:227-233). The value bytes are the
-# serde_json encoding of GravityStorageSettings
+# (crates/cli/commands/src/db/get.rs:227-233). The raw value is the
+# SCALE-compressed Vec<u8> (compact length prefix + bytes, `impl
+# ScaleValue for Vec<u8>` in crates/storage/db-api/src/scale.rs:48-49);
+# the inner bytes are the serde_json encoding of GravityStorageSettings
 # (crates/storage/db-api/src/models/metadata.rs:39-41).
 SETTINGS_FALSE_JSON = '{"changesets_in_static_files":false}'
 SETTINGS_TRUE_JSON = '{"changesets_in_static_files":true}'
 
+# Exact raw line captured live (TC1, 2026-07-15) from greth v2.3.0
+# `db get mdbx Metadata gravity_storage_settings --raw` on a freshly
+# initialized datadir: 0x90 == SCALE compact length 36 (36 << 2), then the
+# 36 serde_json bytes of {"changesets_in_static_files":false}.
+LIVE_SETTINGS_FALSE_RAW = (
+    "0x907b226368616e6765736574735f696e5f7374617469635f66696c6573223a66616c73657d"
+)
+
+
+def scale_compact_len(length: int) -> bytes:
+    """SCALE compact-length prefix (independent re-implementation so the
+    fixtures do not mirror the helper under test)."""
+    if length < 64:
+        return bytes([length << 2])
+    if length < 2**14:
+        return ((length << 2) | 0b01).to_bytes(2, "little")
+    if length < 2**30:
+        return ((length << 2) | 0b10).to_bytes(4, "little")
+    raise NotImplementedError("big-integer mode not needed for fixtures")
+
 
 def raw_hex_line(payload: str) -> str:
-    return "0x" + payload.encode().hex()
+    """One --raw output line: SCALE(Vec<u8>) of the JSON payload, hex."""
+    data = payload.encode()
+    return "0x" + (scale_compact_len(len(data)) + data).hex()
 
 
 # `db get` miss: tracing error! line, exit code still 0
@@ -311,6 +338,48 @@ class TestMigrateChangesets:
 
 
 # ---------------------------------------------------------------------------
+# SCALE Vec<u8> decoding (raw Metadata values)
+# ---------------------------------------------------------------------------
+
+
+class TestDecodeScaleBytes:
+    def test_single_byte_mode_live_payload(self):
+        payload = bytes.fromhex(LIVE_SETTINGS_FALSE_RAW[2:])
+        assert decode_scale_bytes(payload) == SETTINGS_FALSE_JSON.encode()
+
+    def test_single_byte_mode_empty_vec(self):
+        assert decode_scale_bytes(b"\x00") == b""
+
+    def test_two_byte_mode(self):
+        data = b"a" * 100
+        assert decode_scale_bytes(scale_compact_len(100) + data) == data
+
+    def test_four_byte_mode(self):
+        data = b"b" * 20000
+        assert decode_scale_bytes(scale_compact_len(20000) + data) == data
+
+    def test_length_mismatch_raises(self):
+        with pytest.raises(ValueError):
+            decode_scale_bytes(b"\x90" + b"short")
+
+    def test_trailing_garbage_raises(self):
+        payload = bytes.fromhex(LIVE_SETTINGS_FALSE_RAW[2:]) + b"junk"
+        with pytest.raises(ValueError):
+            decode_scale_bytes(payload)
+
+    def test_empty_payload_raises(self):
+        with pytest.raises(ValueError):
+            decode_scale_bytes(b"")
+
+    def test_big_integer_mode_mismatch_raises(self):
+        # 0b11 mode: first byte says 4 length bytes follow; declared length
+        # (2**30) can never match a real settings payload.
+        prefix = bytes([0b11]) + (2**30).to_bytes(4, "little")
+        with pytest.raises(ValueError):
+            decode_scale_bytes(prefix + b"tiny")
+
+
+# ---------------------------------------------------------------------------
 # gravity_storage_settings three-state probe
 # ---------------------------------------------------------------------------
 
@@ -380,6 +449,57 @@ class TestReadStorageSettings:
         probe = read_storage_settings(env)
 
         assert probe.state is SettingsState.MISSING
+
+    def test_live_captured_payload_parses_legacy(self, tmp_path):
+        # Golden fixture: the exact bytes greth v2.3.0 printed live (TC1).
+        stub = make_stub(tmp_path, stdout=LOG_NOISE + LIVE_SETTINGS_FALSE_RAW + "\n")
+        env = make_env(tmp_path, stub)
+
+        probe = read_storage_settings(env)
+
+        assert probe.state is SettingsState.PRESENT_LEGACY
+        assert probe.settings == {"changesets_in_static_files": False}
+        assert probe.error is None
+
+    def test_scale_two_byte_length_mode(self, tmp_path):
+        # A future settings JSON > 63 bytes flips SCALE compact into the
+        # two-byte length mode; the probe must still decode it.
+        long_json = (
+            '{"changesets_in_static_files":true,"future_field":"'
+            + "x" * 40
+            + '"}'
+        )
+        assert len(long_json.encode()) >= 64
+        stub = make_stub(tmp_path, stdout=raw_hex_line(long_json) + "\n")
+        env = make_env(tmp_path, stub)
+
+        probe = read_storage_settings(env)
+
+        assert probe.state is SettingsState.PRESENT_STATIC_FILES
+
+    def test_scale_length_mismatch_is_error(self, tmp_path):
+        # Prefix says 36 bytes but the payload is truncated: report an
+        # error, never a state.
+        truncated = "0x90" + SETTINGS_FALSE_JSON.encode()[:10].hex()
+        stub = make_stub(tmp_path, stdout=truncated + "\n")
+        env = make_env(tmp_path, stub)
+
+        probe = read_storage_settings(env)
+
+        assert probe.state is None
+        assert probe.error is not None
+
+    def test_unprefixed_json_payload_is_error_not_a_state(self, tmp_path):
+        # A bare (non-SCALE) JSON payload is not what greth writes; it must
+        # surface as an error instead of being guessed at.
+        bare = "0x" + SETTINGS_FALSE_JSON.encode().hex()
+        stub = make_stub(tmp_path, stdout=bare + "\n")
+        env = make_env(tmp_path, stub)
+
+        probe = read_storage_settings(env)
+
+        assert probe.state is None
+        assert probe.error is not None
 
     def test_undecodable_payload_is_error_not_a_state(self, tmp_path):
         stub = make_stub(tmp_path, stdout=raw_hex_line("not json") + "\n")

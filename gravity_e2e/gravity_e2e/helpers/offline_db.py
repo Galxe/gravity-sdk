@@ -320,6 +320,52 @@ def migrate_changesets(
 # ---------------------------------------------------------------------------
 
 
+def decode_scale_bytes(payload: bytes) -> bytes:
+    """Decode a SCALE-compressed ``Vec<u8>`` table value.
+
+    Metadata table values are ``Vec<u8>`` compressed with
+    parity-scale-codec (``impl ScaleValue for Vec<u8>``, greth
+    db-api/src/scale.rs:48-49; the Compress impl encodes via
+    ``parity_scale_codec::Encode``, scale.rs:14-27), so ``db get --raw``
+    prints a SCALE compact length prefix followed by the inner bytes —
+    verified live in TC1: a fresh v2.3.0 datadir returned ``0x90`` (36 <<
+    2, single-byte mode) + 36 bytes of settings JSON.
+
+    Implements all four SCALE compact-length modes (low two bits of the
+    first byte): 0b00 single byte, 0b01 two bytes LE, 0b10 four bytes LE,
+    0b11 big-integer. Raises ValueError when the payload is empty, the
+    prefix is truncated, or the declared length does not exactly match
+    the remaining bytes (trailing garbage would mean we are misreading —
+    better an error than a wrong probe result).
+    """
+    if not payload:
+        raise ValueError("empty SCALE payload")
+    mode = payload[0] & 0b11
+    if mode == 0b00:
+        length, offset = payload[0] >> 2, 1
+    elif mode == 0b01:
+        if len(payload) < 2:
+            raise ValueError("truncated SCALE two-byte length prefix")
+        length, offset = int.from_bytes(payload[:2], "little") >> 2, 2
+    elif mode == 0b10:
+        if len(payload) < 4:
+            raise ValueError("truncated SCALE four-byte length prefix")
+        length, offset = int.from_bytes(payload[:4], "little") >> 2, 4
+    else:
+        num_bytes = (payload[0] >> 2) + 4
+        if len(payload) < 1 + num_bytes:
+            raise ValueError("truncated SCALE big-integer length prefix")
+        length = int.from_bytes(payload[1 : 1 + num_bytes], "little")
+        offset = 1 + num_bytes
+    data = payload[offset:]
+    if len(data) != length:
+        raise ValueError(
+            f"SCALE length mismatch: prefix declares {length} bytes, "
+            f"payload carries {len(data)}"
+        )
+    return data
+
+
 class SettingsState(Enum):
     """Three-state result of probing the gravity_storage_settings entry."""
 
@@ -359,11 +405,12 @@ def read_storage_settings(
       non-JSON input (get.rs:287-293) and the Metadata key type is String
       (tables/mod.rs:541-545).
     - ``--raw`` prints the raw value bytes as a single 0x-hex line
-      (get.rs:227-238); for Metadata the value is the serde_json encoding
-      of GravityStorageSettings (models/metadata.rs:39-41), so the hex
-      decodes straight to a JSON object. A missing field defaults to
-      false, unknown fields are ignored (models/metadata.rs:17-22) —
-      mirrored here via ``dict.get``.
+      (get.rs:227-238). The raw value is the SCALE-compressed ``Vec<u8>``
+      (compact length prefix + bytes, see :func:`decode_scale_bytes`);
+      the inner bytes are the serde_json encoding of
+      GravityStorageSettings (models/metadata.rs:39-41). A missing field
+      defaults to false, unknown fields are ignored
+      (models/metadata.rs:17-22) — mirrored here via ``dict.get``.
     - A missing entry prints "No content for the given table key." and
       still exits 0 (get.rs:236-241) -> :attr:`SettingsState.MISSING`.
 
@@ -394,8 +441,10 @@ def read_storage_settings(
     if hex_lines:
         payload = bytes.fromhex(hex_lines[-1][2:])
         try:
-            settings = json.loads(payload)
-        except (UnicodeDecodeError, json.JSONDecodeError):
+            settings = json.loads(decode_scale_bytes(payload))
+        except (ValueError, UnicodeDecodeError):
+            # ValueError covers both a bad SCALE envelope and
+            # json.JSONDecodeError (its subclass) on the inner bytes.
             return StorageSettingsProbe(
                 command=command,
                 error=f"undecodable settings payload: {hex_lines[-1]}",
