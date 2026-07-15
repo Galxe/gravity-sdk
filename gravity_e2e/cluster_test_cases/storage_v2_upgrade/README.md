@@ -111,7 +111,9 @@ post-alpha reassertions skip).
      boundary / boundary+1 (consistent crossing, no per-node fork);
    - the **semantic flip, wei-level**: pre-boundary blocks debit
      SYSTEM_CALLER exactly `gas_used × base_fee` each (reconciled on
-     empty blocks), post-boundary the balance is frozen (the transition
+     blocks with no *user* txs — v2.3.0 lists the per-block system txs
+     in the RPC block body, so "empty" means no sender other than
+     SYSTEM_CALLER), post-boundary the balance is frozen (the transition
      block's one-shot balance-zero migration is logged, not asserted);
    - **history is not rewritten**: the pre-upgrade anchor set replays
      clean on every node post-activation;
@@ -188,10 +190,14 @@ export GRAVITY_NEW_BINARY=/path/to/v2.3.0/gravity_node
 python gravity_e2e/runner.py storage_v2_upgrade --force-init
 ```
 
-Expected duration: **~65–75 min** (dominated by 6 × 120 s inter-node
-waits, the `gammaBlock=6000` hardfork wait, 5 min health monitoring, the
-wait to `alphaTime` ≈ render + 50 min, and the post-alpha TC3 restart
-cycle).
+Expected duration: **~55–70 min** wall from render (measured live:
+52 min — pytest 48:40 plus ~3 min init with warm build caches; a cold
+`--force-init` contracts/genesis-tool rebuild adds up to ~10 min, which
+the schedule's margin absorbs). The clock is dominated by the wait to
+`alphaTime` = render + 50 min: phase 3 is ~10 min of inter-node waits,
+phase 5 ~19 min (gamma wait + stabilize + monitor), and whatever remains
+until activation is idled away inside phase 8 (measured phase durations:
+p3 620 s, p5 1142 s, p8 1037 s, TC3 tail + final ~90 s).
 
 ### gravity_cli versions
 
