@@ -492,15 +492,6 @@ async def stop_node_and_wait_exit(node: Node) -> None:
     await wait_for_process_exit(pid, STOP_TIMEOUT_S)
 
 
-def _is_upgrade_target(binary: Path, new_binary: Path) -> bool:
-    """True when ``binary`` is the upgrade target: same inode (hardlink) or
-    an identical-size copy (the cross-device fallback in swap_node_binary
-    preserves size and mtime via copy2)."""
-    return os.path.samefile(binary, new_binary) or (
-        Path(binary).stat().st_size == new_binary.stat().st_size
-    )
-
-
 def swap_node_binary(node: Node, new_binary: Path) -> None:
     """Replace the node's hardlinked binary with the upgrade target."""
     bin_path = node._infra_path / "bin" / "gravity_node"
@@ -512,7 +503,7 @@ def swap_node_binary(node: Node, new_binary: Path) -> None:
     except OSError:
         # Cross-device (e.g. tmpfs base_dir): fall back to a copy.
         shutil.copy2(str(new_binary), str(bin_path))
-    assert _is_upgrade_target(bin_path, new_binary), (
+    assert upgrade_lib.is_upgrade_target(bin_path, new_binary), (
         f"{node.id}: binary swap did not take effect at {bin_path}"
     )
 
@@ -715,12 +706,16 @@ async def phase_1_bootstrap_old_chain(ctx: UpgradeContext) -> None:
         f"GRAVITY_NEW_BINARY."
     )
     # Guard: the deployed (old) binaries must NOT already be the upgrade
-    # target — otherwise the case would silently prove nothing.
+    # target — otherwise the case would silently prove nothing. deploy.sh
+    # COPIES the [source] binary into each node dir, so this must use the
+    # size-fallback predicate: samefile alone never fires on a copy, and a
+    # [source] misconfigured to the v2.3.0 binary would sail through as a
+    # same-version no-op.
     for node in ctx.cluster.nodes.values():
         deployed = node._infra_path / "bin" / "gravity_node"
         assert deployed.exists(), f"{node.id}: deployed binary missing: {deployed}"
-        assert not os.path.samefile(deployed, NEW_BINARY_PATH), (
-            f"{node.id}: deployed binary IS the upgrade target "
+        assert not upgrade_lib.is_upgrade_target(deployed, NEW_BINARY_PATH), (
+            f"{node.id}: deployed binary IS (a copy of) the upgrade target "
             f"({NEW_BINARY_PATH}) — check test_params.toml [source]"
         )
 
@@ -954,7 +949,7 @@ async def offline_layout_probe(ctx: UpgradeContext, node_id: str, stage: str) ->
     assert Path(env.chain).is_file(), f"chain spec missing: {env.chain}"
     # The offline commands run the node's own (post-swap) binary — i.e. the
     # NEW binary probing the upgraded datadir.
-    assert _is_upgrade_target(Path(env.binary), NEW_BINARY_PATH)
+    assert upgrade_lib.is_upgrade_target(Path(env.binary), NEW_BINARY_PATH)
 
     # (a) THE upgraded-datadir criterion: gravity_storage_settings must be
     # MISSING. v1.7.5 predates the settings entry and only a fresh v2.3.0

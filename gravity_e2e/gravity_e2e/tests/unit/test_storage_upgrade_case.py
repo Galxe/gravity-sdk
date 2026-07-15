@@ -17,6 +17,8 @@ the gravity_e2e package), so they are loaded by file path here. Covered:
 """
 
 import importlib.util
+import os
+import shutil
 import sys
 import tomllib
 from pathlib import Path
@@ -132,6 +134,41 @@ def test_scan_summary_mentions_counts_and_offenders():
     summary = result.summary()
     assert "1 storage/decode errors" in summary
     assert "Corruption" in summary
+
+
+# ---------------------------------------------------------------------------
+# is_upgrade_target (the phase-1 same-binary guard predicate)
+# ---------------------------------------------------------------------------
+
+
+def test_upgrade_target_detects_hardlink(tmp_path):
+    target = tmp_path / "gravity_node.new"
+    target.write_bytes(b"NEW-BINARY-CONTENT")
+    deployed = tmp_path / "deployed"
+    os.link(target, deployed)
+    assert upgrade_lib.is_upgrade_target(deployed, target)
+
+
+def test_upgrade_target_detects_same_content_copy(tmp_path):
+    # THE phase-1 guard scenario: deploy.sh COPIES the [source] binary
+    # into each node dir, so a [source] misconfigured to the upgrade
+    # target produces a same-content copy — samefile is False, but the
+    # guard must still reject it or the whole case silently degrades to
+    # a same-version no-op.
+    target = tmp_path / "gravity_node.new"
+    target.write_bytes(b"NEW-BINARY-CONTENT")
+    deployed = tmp_path / "deployed"
+    shutil.copy2(target, deployed)
+    assert not os.path.samefile(deployed, target)  # the old guard's blind spot
+    assert upgrade_lib.is_upgrade_target(deployed, target)
+
+
+def test_upgrade_target_accepts_genuinely_old_binary(tmp_path):
+    target = tmp_path / "gravity_node.new"
+    target.write_bytes(b"NEW-BINARY-CONTENT")
+    deployed = tmp_path / "deployed"
+    deployed.write_bytes(b"OLD-v1.7.5-BINARY-with-different-size")
+    assert not upgrade_lib.is_upgrade_target(deployed, target)
 
 
 # ---------------------------------------------------------------------------

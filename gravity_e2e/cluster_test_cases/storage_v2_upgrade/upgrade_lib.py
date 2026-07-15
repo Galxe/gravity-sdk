@@ -16,6 +16,10 @@ assertions; this module keeps the derivable facts:
   bounded unwinding can be legitimate crash recovery (TC3 kill -9), but an
   unbounded stream of unwind lines means the post-restart consistency
   check is looping — the case asserts a ceiling instead of zero.
+- is_upgrade_target: hardlink-or-identical-size predicate shared by the
+  binary swap assertion, the offline-probe binary check, and the phase-1
+  "deployed binary must NOT already be the upgrade target" guard (deploy
+  copies binaries, so samefile alone never fires there).
 - alpha_preflight_error / upgrade_completion_error / alpha_tail_wait_s:
   the Gravity Alpha hardfork timeline discipline. Mainnet activates NO
   gravity forks; greth v2.3.0 gates behavior changes (system-tx gas
@@ -39,9 +43,11 @@ assertions; this module keeps the derivable facts:
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
-from typing import Iterable, List, Mapping, Optional, Sequence
+from pathlib import Path
+from typing import Iterable, List, Mapping, Optional, Sequence, Union
 
 # Storage-corruption-class patterns. Case-insensitive where wording varies.
 # Every pattern is tied to a concrete failure family:
@@ -114,6 +120,23 @@ def scan_log_lines(lines: Iterable[str]) -> LogScanResult:
             if len(result.unwind_lines) < MAX_RECORDED_LINES:
                 result.unwind_lines.append(line)
     return result
+
+
+def is_upgrade_target(binary: Union[str, Path], new_binary: Union[str, Path]) -> bool:
+    """True when the deployed ``binary`` is (a copy of) the upgrade target:
+    same inode (hardlink) or an identical-size file.
+
+    The size fallback matters twice: swap_node_binary's cross-device copy
+    fallback (copy2 preserves size+mtime) must still count as swapped, and
+    — the phase-1 guard — deploy.sh COPIES the ``[source]`` binary into
+    each node dir, so a misconfigured [source] pointing at the upgrade
+    target itself produces a same-content copy that ``samefile`` alone
+    would never flag (and the whole case would silently degrade into a
+    same-version no-op).
+    """
+    return os.path.samefile(binary, new_binary) or (
+        Path(binary).stat().st_size == Path(new_binary).stat().st_size
+    )
 
 
 def alpha_preflight_error(
