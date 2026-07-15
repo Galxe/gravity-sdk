@@ -322,6 +322,53 @@ class Node:
             LOG.error(f"Exception stopping node {self.id}: {e}")
             return False
 
+    async def force_kill(self) -> bool:
+        """
+        Crash the node: SIGKILL straight to the PID from the PID file, then
+        remove the PID file (SIGKILL gives the process no chance to clean it
+        up itself, and a stale file would make get_state() report STALE).
+
+        Unlike stop() this never runs stop.sh — the point is an unclean
+        shutdown, e.g. to exercise crash-recovery paths on the next start()
+        (storage_v2_upgrade TC3; long_test/test_failover has a case-local
+        precursor of this).
+
+        Returns True when the process is verified gone (or was already
+        dead), False when the PID file is missing/unreadable or the process
+        survived.
+        """
+        if not self.pid_file.exists():
+            LOG.warning(f"Node {self.id}: no PID file, cannot force kill")
+            return False
+        try:
+            pid = int(self.pid_file.read_text().strip())
+        except ValueError:
+            LOG.error(f"Node {self.id}: unreadable PID file, cannot force kill")
+            return False
+
+        import os
+        import signal
+
+        try:
+            LOG.warning(f"Node {self.id}: sending SIGKILL to PID {pid}")
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            LOG.info(f"Node {self.id}: PID {pid} already gone")
+            self.pid_file.unlink(missing_ok=True)
+            return True
+
+        # SIGKILL cannot be caught; only wait for the kernel to reap.
+        for _ in range(20):
+            await asyncio.sleep(0.25)
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                self.pid_file.unlink(missing_ok=True)
+                LOG.info(f"Node {self.id}: PID {pid} killed and verified gone")
+                return True
+        LOG.error(f"Node {self.id}: PID {pid} still alive after SIGKILL")
+        return False
+
     async def restart(self) -> bool:
         """Bounce the node."""
         if not await self.stop():
