@@ -1,12 +1,15 @@
 # storage_v2_upgrade (storage-v2 TC2 + TC3)
 
 Rolling upgrade of a 6-node cluster from **gravity-sdk v1.7.5** to the
-**greth v2.3.0 integration binary**, verifying merge-level disk
-compatibility: history written by v1.7.5 must be read back bit-identically
-by the new binary (anchor replay on every node), service must stay
-continuous throughout (sustained tx load, height-gap ceilings, hardfork
-timeline), and the upgraded cluster must survive graceful and crash
-restarts (TC3 tail on the same cluster).
+**greth v2.3.0 integration binary**, then **forward activation of the
+Gravity Alpha hardfork** on the fully upgraded fleet — the production
+sequence "upgrade everything, then the scheduled fork opens". Verified:
+merge-level disk compatibility (history written by v1.7.5 read back
+bit-identically by the new binary — anchor replay on every node, before
+and after activation), service continuity throughout (sustained tx load,
+height-gap ceilings, hardfork timeline), the Alpha semantic flip
+(SYSTEM_CALLER debit stops at the boundary, wei-level), and graceful +
+crash restarts of the post-alpha cluster (TC3 tail on the same cluster).
 
 Orchestration skeleton: `rolling_upgrade/` (vfn-first order, height-gap
 prechecks, tx failover, `[source]` old-binary pinning, hardfork wait).
@@ -36,15 +39,37 @@ panicked at aptos-core/consensus/src/block_storage/block_store.rs:773:
 assertion `left == right` failed    (two 32-byte block hashes)
 ```
 
-The case enforces the rule twice: phase 1 rejects any `alphaTime` less
-than 25 min away, and phase 3 refuses to start another node's upgrade
-within 5 min of activation. `test_params.toml` schedules `alphaTime` as a
-render-relative offset (`"+45m"`), which both keeps the upgrade window
-safe and lets phase 11 exercise the production sequence "upgrade the
-fleet, then Alpha activates". Beta (`betaBlock = 100`, active while
-v1.7.5 still runs) is safe because neither binary attaches semantics to
-it; `gammaBlock` follows rolling_upgrade's rule of activating only after
-the whole fleet is upgraded.
+The schedule is fixed at **render time** — rolling_upgrade's mechanism
+(compute the fork points once before the run, never touch config
+mid-test): `test_params.toml` schedules
+
+```
+alphaTime = render_time + upgrade_budget + stability_window + margin
+```
+
+with each component an individually tunable `"+NN[smh]"` offset
+(`[hardforks.alphaTime]`). The chain is **born carrying its future
+activation**, like a production activation announcement; v1.7.5 tolerates
+the (to it) unknown `alphaTime` field in `genesis.json` — proven
+empirically in run 1, where the v1.7.5 fleet bootstrapped and produced
+blocks with `alphaTime = 0` present. The rule is machine-enforced at
+three points, all failing loudly rather than continuing:
+
+1. **phase 1** rejects any `alphaTime` closer than 25 min (upgrade
+   safety) or further than 2 h (a scheduled activation is mandatory
+   coverage — an unreachable schedule is a config error, not a skip);
+2. **phase 3** refuses to start another node's upgrade within 5 min of
+   activation;
+3. **phase 3 (end)** asserts the whole fleet finished upgrading strictly
+   *before* `alphaTime` — if the run overshot the schedule, it fails
+   immediately with instructions to widen the components.
+
+Beta (`betaBlock = 100`, active while v1.7.5 still runs) is safe because
+neither binary attaches semantics to it; `gammaBlock` follows
+rolling_upgrade's rule of activating only after the whole fleet is
+upgraded. Drop the `[hardforks.alphaTime]` table entirely for the pure
+mainnet posture (no gravity fork ever activates; the activation phase and
+post-alpha reassertions skip).
 
 ## Test flow
 
@@ -63,9 +88,10 @@ the whole fleet is upgraded.
 4. Anchor replay against **every** node — the core "old data read by the
    new binary" assertion. A mismatch here is a product-bug finding, not a
    case tolerance.
-5. Wait until all nodes pass the max hardfork block (`gammaBlock`
-   activates only after the whole cluster is upgraded — rolling_upgrade's
-   timeline rule), then stabilize + monitor height gaps.
+5. Stability window: wait until all nodes pass the max hardfork block
+   (`gammaBlock` activates only after the whole cluster is upgraded —
+   rolling_upgrade's timeline rule), then stabilize + monitor height gaps
+   under the sustained load.
 6. Tx stats floors (≥ 100 confirmed, ≥ 50 % success) and a log scan of
    every node's execution logs (see below).
 7. H2 offline on the stopped vfn1 (upgraded datadir):
@@ -77,24 +103,32 @@ the whole fleet is upgraded.
    - `AccountChangeSets` / `StorageChangeSets` non-empty
      (`db list <TABLE> --count`);
    then restart vfn1 and let it catch up.
-8. TC3a: graceful stop → start for every node (rejoin + catch-up + gap
-   ceiling each time).
-9. TC3b: `kill -9` node3 (via the shared `Node.force_kill()`), restart —
-   crash recovery / pipe consistency checks must do real work and the
-   node must rejoin.
-10. Anchor replay on every node again, log scan (including an unwind-loop
-    ceiling), gap check.
+8. **Alpha activation** on the fully upgraded fleet (skipped only when no
+   `alphaTime` is scheduled): wait for the chain to cross `alphaTime`,
+   binary-search the exact boundary block, then assert
+   - cross-boundary liveness (blocks keep coming, gaps stay closed) and
+     that **all nodes agree on the block hashes** at boundary−1 /
+     boundary / boundary+1 (consistent crossing, no per-node fork);
+   - the **semantic flip, wei-level**: pre-boundary blocks debit
+     SYSTEM_CALLER exactly `gas_used × base_fee` each (reconciled on
+     empty blocks), post-boundary the balance is frozen (the transition
+     block's one-shot balance-zero migration is logged, not asserted);
+   - **history is not rewritten**: the pre-upgrade anchor set replays
+     clean on every node post-activation;
+   - fresh post-activation history anchors collect + replay clean
+     (`anchors_post_alpha.json`).
+9. TC3a (post-alpha): graceful stop → start for every node (rejoin +
+   catch-up + gap ceiling each time).
+10. TC3b (post-alpha): `kill -9` node3 (via the shared
+    `Node.force_kill()`), restart — crash recovery / pipe consistency
+    checks must do real work, now across the Alpha transition, and the
+    node must rejoin.
+11. Final verification: second H2 offline probe on vfn1 (settings still
+    **MISSING**, layout unflipped — activation must not touch the storage
+    layout), replay of BOTH anchor rounds on every node, log scan
+    (including an unwind-loop ceiling), gap check.
     *TC4 extension point:* `db migrate-changesets` + static-file layout
     assertions slot in here as an additional phase.
-11. **Alpha activation tail** (conditional — runs when `alphaTime` is
-    scheduled within ~25 min at phase start; skipped for absent or
-    far-future schedules): wait for the fully upgraded chain to cross
-    `alphaTime`, then assert continued block production and closed height
-    gaps, assert the gas-exempt semantic took effect (SYSTEM_CALLER
-    balance constant across post-activation blocks — pre-Alpha it
-    decreases every block), replay the pre-upgrade anchors once more, and
-    collect + replay a fresh round of post-activation anchors
-    (`anchors_post_alpha.json`).
 
 All timeouts are case-internal; the case does not use pytest-timeout.
 
@@ -141,18 +175,23 @@ render them, `runner.py` skips this suite (including full runs).
 cd gravity_e2e/cluster_test_cases/storage_v2_upgrade
 cp test_params.toml.example test_params.toml
 # edit test_params.toml if your v1.7.5 binary lives elsewhere
-python render_config.py    # re-render right before running: the relative
-                           # alphaTime ("+45m") is anchored to render time
+python render_config.py    # re-render RIGHT BEFORE running: the
+                           # [hardforks.alphaTime] component schedule is
+                           # anchored to render time
 
 # from the repo root; the upgrade target defaults to
-# target/quick-release/gravity_node — override with GRAVITY_NEW_BINARY:
+# target/quick-release/gravity_node — override with GRAVITY_NEW_BINARY.
+# --force-init is REQUIRED: the runner's artifact cache would otherwise
+# reuse a genesis.json carrying a previous run's (stale, likely already
+# passed) alphaTime — the phase-1 guard would rightly fail the run.
 export GRAVITY_NEW_BINARY=/path/to/v2.3.0/gravity_node
-python gravity_e2e/runner.py storage_v2_upgrade
+python gravity_e2e/runner.py storage_v2_upgrade --force-init
 ```
 
-Expected duration: **~50–65 min** (dominated by 6 × 120 s inter-node
-waits, the `gammaBlock=8000` hardfork wait, 5 min health monitoring, the
-TC3 restart cycle, and the Alpha activation tail).
+Expected duration: **~65–75 min** (dominated by 6 × 120 s inter-node
+waits, the `gammaBlock=6000` hardfork wait, 5 min health monitoring, the
+wait to `alphaTime` ≈ render + 50 min, and the post-alpha TC3 restart
+cycle).
 
 ### gravity_cli versions
 
@@ -189,11 +228,14 @@ is looping.
   and `{{HARDFORKS}}` / contracts-pin placeholders (consistency with the
   cluster template is enforced by a unit test).
 - `render_config.py` — renders both files; supports render-relative
-  timestamp forks (`"+45m"`); pure logic unit-tested.
+  timestamp forks (`"+45m"`) and component schedules
+  (`[hardforks.alphaTime]` tables summed at render time); pure logic
+  unit-tested.
 - `upgrade_lib.py` — pure helpers (upgrade order, log scan, Alpha
-  timeline guards); unit-tested in
+  schedule guards, SYSTEM_CALLER trajectory checks); unit-tested in
   `gravity_e2e/tests/unit/test_storage_upgrade_case.py`.
 - `test_params.toml.example` — old-binary pin, contracts ref (`main`,
   what a v1.7.5-born chain initializes with), and the fork timeline
-  (mainnet posture, Alpha-after-fleet-upgrade rule, gamma timeline math).
+  (Alpha-after-fleet-upgrade rule with the component schedule, gamma
+  timeline math).
 - `contracts/` — `AnchorTarget.sol` + artifact (same as TC1; solc 0.8.21).

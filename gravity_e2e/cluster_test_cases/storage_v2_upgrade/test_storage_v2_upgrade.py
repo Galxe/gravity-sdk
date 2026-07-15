@@ -26,31 +26,45 @@ re-execute those blocks under exempt semantics and diverge. Symptom
 fingerprint (observed live 2026-07-15 with a stale ``alphaTime = 0``
 config): gravity_node aborts ~2 s after start with ``panicked at
 aptos-core/consensus/src/block_storage/block_store.rs:773 / assertion
-`left == right` failed`` on two 32-byte block hashes. Phase 1 and phase 3
-guard the timeline; test_params schedules alphaTime as a render-relative
-"+NNm" offset comfortably after the worst-case upgrade completion.
-Block-number forks (beta early, gamma late) carry no attached semantics
-in either binary today — gamma still follows rolling_upgrade's rule of
-activating only after the whole fleet is upgraded.
+`left == right` failed`` on two 32-byte block hashes.
+
+The schedule is fixed at RENDER time (rolling_upgrade's mechanism —
+compute the fork points once before the run, never touch config
+mid-test): test_params schedules ``alphaTime = render_time +
+upgrade_budget + stability_window + margin`` (components individually
+tunable), so the chain is BORN carrying its future activation, exactly
+like a production activation announcement. v1.7.5's tolerance of the
+foreign alphaTime field in genesis.json is empirically proven (run 1: the
+chain bootstrapped and produced blocks with ``alphaTime = 0`` present).
+Guards enforce the rule at three points: phase 1 rejects schedules closer
+than the minimum lead (or beyond the case budget — scheduled means
+mandatory coverage), phase 3 refuses to start a node's upgrade near
+activation, and after the last node phase 3 asserts the fleet finished
+strictly BEFORE alphaTime — a blown schedule fails loudly, never
+continues silently. Block-number forks (beta early, gamma late) carry no
+attached semantics in either binary today — gamma still follows
+rolling_upgrade's rule of activating only after the whole fleet is
+upgraded.
 
 Phases (one test; every phase depends on the previous state — structured
 as functions over a shared context so TC4's "migrate-changesets + static
-file layout" step can slot in after phase 10 without restructuring):
+file layout" step can slot in after phase 11 without restructuring):
 
  1. bootstrap the 6-node cluster on the OLD binary (guards: deployed node
-    binaries differ from the upgrade target; Alpha timeline safe), verify
+    binaries differ from the upgrade target; Alpha schedule sane), verify
     block production;
  2. build history on v1.7.5 (transfers + AnchorTarget deploy + set()
     calls) and H1-collect anchors covering all six kinds, persist JSON;
  3. rolling upgrade under sustained tx load: vfn1 first (tx failover to
     node1), height-gap + Alpha-margin precheck before every node,
-    stop -> wait real process exit -> swap binary -> start;
+    stop -> wait real process exit -> swap binary -> start; then THE
+    guard: fleet upgrade completed strictly before alphaTime;
  4. replay the anchor set against EVERY node — the core "old data read by
     new binary" assertion (a mismatch here is a product bug, never a case
     tolerance);
- 5. wait for all nodes to pass the max hardfork block (gamma activates
-    only after the whole cluster is on v2.3.0), then stabilize + monitor
-    height gaps;
+ 5. stability window: wait for all nodes to pass the max hardfork block
+    (gamma activates only after the whole cluster is on v2.3.0), then
+    stabilize + monitor height gaps under sustained load;
  6. stop the tx sender, assert tx success floor, scan every node's
     execution logs for storage/decode-class errors;
  7. H2 offline on the stopped vfn1 (upgraded-datadir layout facts):
@@ -58,20 +72,27 @@ file layout" step can slot in after phase 10 without restructuring):
     write it — only fresh init_genesis does, cf. TC1's PRESENT_LEGACY on
     a fresh v2.3.0 datadir), no changeset static-file segments/.csoff,
     changeset tables non-empty; restart vfn1;
- 8. TC3a: graceful stop -> start cycle for every node, rejoin + catch up;
- 9. TC3b: kill -9 node3 -> start (crash recovery / pipe consistency
-    checks do real work), rejoin + catch up;
-10. full anchor replay on every node again, log scan (panics, storage
-    errors, unwind-loop ceiling), height-gap check
-    (TC4 extension point: migrate-changesets slots in here);
-11. Alpha activation tail (conditional — runs when alphaTime is scheduled
-    within reach): wait for the chain to cross alphaTime on the fully
-    upgraded fleet — the real production sequence "upgrade fleet, then
-    open the Alpha gate" — then assert continued block production, the
-    gas-exempt semantic (SYSTEM_CALLER balance constant post-activation;
-    pre-Alpha it is debited gas_used x basefee every block), replay the
-    pre-upgrade anchors once more, and collect + replay a fresh round of
-    post-activation anchors.
+ 8. ALPHA ACTIVATION on the fully upgraded fleet — the production
+    sequence "upgrade the fleet, then the scheduled fork opens" (skipped
+    only in the pure mainnet posture, i.e. no alphaTime at all): wait for
+    the chain to cross alphaTime, locate the boundary block, assert
+    cross-boundary liveness and that all nodes agree on the block hashes
+    around the boundary, prove the semantic flip directly (pre-Alpha:
+    SYSTEM_CALLER debited exactly gas_used x base_fee every block,
+    wei-level reconciliation on empty blocks; post-Alpha: balance
+    frozen), replay the pre-upgrade anchors post-activation (history must
+    not be rewritten), and collect + replay a fresh post-alpha anchor
+    round;
+ 9. TC3a (post-alpha): graceful stop -> start cycle for every node,
+    rejoin + catch up;
+10. TC3b (post-alpha): kill -9 node3 -> start (crash recovery / pipe
+    consistency checks do real work — now across the Alpha transition),
+    rejoin + catch up;
+11. final verification: replay BOTH anchor rounds on every node, log scan
+    (panics, storage errors, unwind-loop ceiling), height-gap check, and
+    a second H2 offline probe — settings still MISSING, layout unflipped
+    (activation must not touch the storage layout)
+    (TC4 extension point: migrate-changesets slots in here).
 
 All timeouts are case-internal (no pytest-timeout, repo convention).
 """
@@ -189,18 +210,26 @@ UNWIND_LINES_MAX = 100
 SYSTEM_CALLER_ADDRESS = "0x00000000000000000000000000000001625f0000"
 # Phase-1 guard: a configured alphaTime must be at least this far in the
 # future at test start (upgrades typically finish in ~20 min; anything
-# tighter risks Alpha activating while v1.7.5 nodes still run).
+# tighter risks Alpha activating while v1.7.5 nodes still run) ...
 ALPHA_MIN_LEAD_S = 25 * 60
+# ... and no further than this: a scheduled activation is mandatory
+# coverage — an unreachable schedule is a config error, not a skip.
+ALPHA_MAX_LEAD_S = 2 * 3600
 # Phase-3 guard: refuse to start the next node's upgrade when Alpha would
 # activate within this margin.
 ALPHA_UPGRADE_MARGIN_S = 5 * 60
-# Phase-11: skip the activation tail when alphaTime is further away than
-# this at phase start (far-future / production-like schedules).
-ALPHA_TAIL_MAX_WAIT_S = 25 * 60
-# Phase-11: how many post-activation blocks must show a constant
+# Phase-8: extra wall-clock slack past alphaTime for the first block with
+# timestamp >= alphaTime to appear (block cadence, clock skew).
+ALPHA_ACTIVATION_BUFFER_S = 300
+# Phase-8: how many pre-boundary blocks to sample for the per-block
+# SYSTEM_CALLER debit reconciliation, and how many of those must be
+# empty-block wei-exact matches.
+ALPHA_PRE_SAMPLE_BLOCKS = 6
+ALPHA_MIN_EXACT_DEBITS = 2
+# Phase-8: how many post-activation blocks must show a constant
 # SYSTEM_CALLER balance (pre-Alpha it decreases every block).
-ALPHA_TAIL_CONFIRM_BLOCKS = 3
-# Phase-11: fresh post-activation history parameters.
+ALPHA_POST_CONFIRM_BLOCKS = 4
+# Phase-8: fresh post-activation history parameters.
 TAIL_TRANSFER_ETH = 3
 TAIL_SET_VALUE = 3
 
@@ -672,6 +701,10 @@ class UpgradeContext:
     tx_sender: Optional[TxSender] = None
     upgrade_order: List[str] = field(default_factory=list)
     alpha_time: Optional[int] = None
+    upgrade_completed_at: Optional[float] = None
+    alpha_boundary_block: Optional[int] = None
+    tail_anchors_path: Optional[Path] = None
+    changeset_counts: Dict[str, Dict[str, int]] = field(default_factory=dict)
     phase_durations: Dict[str, float] = field(default_factory=dict)
 
 
@@ -691,11 +724,12 @@ async def phase_1_bootstrap_old_chain(ctx: UpgradeContext) -> None:
             f"({NEW_BINARY_PATH}) — check test_params.toml [source]"
         )
 
-    # Guard: Alpha timeline. Alpha gates v2.3.0 behavior changes; it must
-    # not activate before the fleet finishes upgrading (module docstring).
+    # Guard: Alpha schedule. Alpha gates v2.3.0 behavior changes; it must
+    # not activate before the fleet finishes upgrading, and a scheduled
+    # activation must be reachable in this run (module docstring).
     ctx.alpha_time = read_alpha_time()
     alpha_error = upgrade_lib.alpha_preflight_error(
-        ctx.alpha_time, time.time(), ALPHA_MIN_LEAD_S
+        ctx.alpha_time, time.time(), ALPHA_MIN_LEAD_S, max_lead_s=ALPHA_MAX_LEAD_S
     )
     assert alpha_error is None, f"[Phase 1] {alpha_error}"
     LOG.info(
@@ -790,7 +824,8 @@ async def phase_3_rolling_upgrade(ctx: UpgradeContext) -> None:
             assert remaining > ALPHA_UPGRADE_MARGIN_S, (
                 f"alphaTime activates in {remaining:.0f}s (< margin "
                 f"{ALPHA_UPGRADE_MARGIN_S}s) but {node_id} is not upgraded "
-                f"yet — schedule alphaTime later (test_params '+NNm')"
+                f"yet — widen the [hardforks.alphaTime] component schedule "
+                f"in test_params and re-render"
             )
 
         if node_id == ctx.tx_sender.primary_node_id:
@@ -803,7 +838,23 @@ async def phase_3_rolling_upgrade(ctx: UpgradeContext) -> None:
             LOG.info("[Phase 3] Waiting %ds before next upgrade...", INTER_NODE_WAIT)
             await asyncio.sleep(INTER_NODE_WAIT)
 
-    LOG.info("[Phase 3] All nodes upgraded")
+    # THE operational rule, machine-enforced: the fleet must be fully on
+    # the new binary strictly before Alpha activates. A run that overshot
+    # the render-time schedule fails HERE, loudly — never continues.
+    ctx.upgrade_completed_at = time.time()
+    completion_error = upgrade_lib.upgrade_completion_error(
+        ctx.alpha_time, ctx.upgrade_completed_at
+    )
+    assert completion_error is None, f"[Phase 3] {completion_error}"
+    if ctx.alpha_time is not None:
+        LOG.info(
+            "[Phase 3] All nodes upgraded with %.0fs to spare before "
+            "alphaTime=%d",
+            ctx.alpha_time - ctx.upgrade_completed_at,
+            ctx.alpha_time,
+        )
+    else:
+        LOG.info("[Phase 3] All nodes upgraded (no Alpha scheduled)")
 
 
 async def phase_4_replay_anchors_post_upgrade(ctx: UpgradeContext) -> None:
@@ -885,9 +936,16 @@ async def phase_6_tx_stats_and_log_scan(ctx: UpgradeContext) -> None:
     scan_all_node_logs(ctx.cluster, stage="post-upgrade")
 
 
-async def phase_7_offline_db_assertions(ctx: UpgradeContext) -> None:
-    LOG.info("[Phase 7] H2 offline assertions on %s ...", OFFLINE_PROBE_NODE)
-    node = ctx.cluster.get_node(OFFLINE_PROBE_NODE)
+async def offline_layout_probe(ctx: UpgradeContext, node_id: str, stage: str) -> None:
+    """Stop ``node_id``, run the H2 offline layout assertions on its
+    datadir, then restart it and require catch-up.
+
+    Runs twice: in the stability window (post-upgrade, pre-Alpha) and in
+    the final verification (post-Alpha, post-TC3) — Alpha activation must
+    not flip the storage layout.
+    """
+    LOG.info("[%s] H2 offline assertions on %s ...", stage, node_id)
+    node = ctx.cluster.get_node(node_id)
     await stop_node_and_wait_exit(node)
 
     env = lib.derive_offline_env(ctx.cluster.base_dir, node.id)
@@ -898,78 +956,54 @@ async def phase_7_offline_db_assertions(ctx: UpgradeContext) -> None:
     # NEW binary probing the upgraded datadir.
     assert _is_upgrade_target(Path(env.binary), NEW_BINARY_PATH)
 
-    # 7a. THE upgraded-datadir criterion: gravity_storage_settings must be
+    # (a) THE upgraded-datadir criterion: gravity_storage_settings must be
     # MISSING. v1.7.5 predates the settings entry and only a fresh v2.3.0
-    # init_genesis writes it (TC1 asserts PRESENT_LEGACY there); the
-    # upgrade path must not have written one behind our back. PRESENT_*
-    # here means the upgrade mutated storage metadata — a product bug.
+    # init_genesis writes it (TC1 asserts PRESENT_LEGACY there); neither
+    # the upgrade path nor Alpha activation may write one behind our back.
+    # PRESENT_* here means storage metadata was mutated — a product bug.
     probe = read_storage_settings(env)
-    assert probe.error is None, probe.summary()
+    assert probe.error is None, f"[{stage}] {probe.summary()}"
     assert probe.state is SettingsState.MISSING, (
-        "upgraded datadir has a gravity_storage_settings entry "
-        f"(state={probe.state}) — the upgrade path must not write settings; "
-        "only fresh init_genesis does. Product bug unless proven otherwise.\n"
-        + probe.summary()
+        f"[{stage}] upgraded datadir has a gravity_storage_settings entry "
+        f"(state={probe.state}) — the upgrade path / Alpha activation must "
+        "not write settings; only fresh init_genesis does. Product bug "
+        "unless proven otherwise.\n" + probe.summary()
     )
-    LOG.info("[Phase 7] storage settings: MISSING (as required)")
+    LOG.info("[%s] storage settings: MISSING (as required)", stage)
 
-    # 7b. Legacy layout on disk: no changeset segment files, no .csoff
+    # (b) Legacy layout on disk: no changeset segment files, no .csoff
     # sidecars under the node's static-files dir.
     layout = inspect_changeset_static_files(env.datadir, env.static_files_dir)
     assert layout.exists, f"static-files dir missing: {layout.static_files_dir}"
     assert not layout.has_segment_files, (
-        f"upgraded legacy node has changeset segment files: "
+        f"[{stage}] upgraded legacy node has changeset segment files: "
         f"{layout.account_segments + layout.storage_segments}"
     )
     assert not layout.has_sidecar_files, (
-        f"upgraded legacy node has .csoff sidecars: "
+        f"[{stage}] upgraded legacy node has .csoff sidecars: "
         f"{layout.account_sidecars + layout.storage_sidecars}"
     )
 
-    # 7c. Positive control: the v1.7.5-written history + upgrade-window
+    # (c) Positive control: the v1.7.5-written history + upgrade-window
     # traffic really live in the changeset tables.
+    counts: Dict[str, int] = {}
     for table in (ACCOUNT_CHANGESETS_TABLE, STORAGE_CHANGESETS_TABLE):
         count = count_table_entries(env, table)
-        assert count.error is None, count.summary()
+        assert count.error is None, f"[{stage}] {count.summary()}"
         assert count.count > 0, (
-            f"{table} is empty on an upgraded legacy-layout node:\n"
+            f"[{stage}] {table} is empty on an upgraded legacy-layout node:\n"
             + count.summary()
         )
-        LOG.info("[Phase 7] %s entries: %d", table, count.count)
+        counts[table] = count.count
+        LOG.info("[%s] %s entries: %d", stage, table, count.count)
+    ctx.changeset_counts[stage] = counts
 
-    LOG.info("[Phase 7] Restarting %s ...", node.id)
+    LOG.info("[%s] Restarting %s ...", stage, node.id)
     await restart_node_and_catch_up(ctx.cluster, node)
 
 
-async def phase_8_graceful_restart_cycle(ctx: UpgradeContext) -> None:
-    LOG.info("[Phase 8] TC3a: graceful stop -> start cycle for every node...")
-    for node_id in ctx.upgrade_order:
-        node = ctx.cluster.get_node(node_id)
-        LOG.info("[Phase 8] Restarting %s ...", node_id)
-        await stop_node_and_wait_exit(node)
-        await restart_node_and_catch_up(ctx.cluster, node)
-    LOG.info("[Phase 8] All nodes survived a graceful restart")
-
-
-async def phase_9_crash_restart(ctx: UpgradeContext) -> None:
-    LOG.info("[Phase 9] TC3b: crash-restarting %s (kill -9)...", CRASH_NODE)
-    node = ctx.cluster.get_node(CRASH_NODE)
-    assert await node.force_kill(), f"failed to force-kill {CRASH_NODE}"
-    # Unclean shutdown on purpose: the next start must run recovery (pipe
-    # consistency checks) and still rejoin.
-    await restart_node_and_catch_up(ctx.cluster, node)
-    LOG.info("[Phase 9] %s recovered from SIGKILL", CRASH_NODE)
-
-
-async def phase_10_final_verification(ctx: UpgradeContext) -> None:
-    LOG.info("[Phase 10] Final verification...")
-    reloaded = AnchorSet.load(ctx.anchors_path)
-    await replay_anchors_on_all_nodes(ctx.cluster, reloaded, stage="post-restart")
-    scan_all_node_logs(ctx.cluster, stage="post-restart")
-    assert await check_height_gap_ok(ctx.cluster), "final height gap check failed"
-    # TC4 extension point: run `db migrate-changesets` on a stopped node
-    # here and assert the static-file layout flip (settings ->
-    # PRESENT_STATIC_FILES, tables emptied, segments + .csoff present).
+async def phase_7_offline_db_assertions(ctx: UpgradeContext) -> None:
+    await offline_layout_probe(ctx, OFFLINE_PROBE_NODE, stage="Phase 7/pre-alpha")
 
 
 async def _system_caller_balance(node: Node, block_number: int) -> int:
@@ -980,29 +1014,70 @@ async def _system_caller_balance(node: Node, block_number: int) -> int:
     )
 
 
-async def phase_11_alpha_activation_tail(ctx: UpgradeContext) -> None:
-    """Conditional: exercise the production sequence "upgrade the whole
-    fleet first, then let Alpha activate" (mainnet has Alpha unscheduled;
-    v2.3.0 gates system-tx gas exemption on it — see module docstring)."""
-    wait_s = upgrade_lib.alpha_tail_wait_s(
-        ctx.alpha_time, time.time(), ALPHA_TAIL_MAX_WAIT_S
+async def _get_block(node: Node, number: int) -> dict:
+    return await asyncio.to_thread(lambda: node.w3.eth.get_block(number))
+
+
+async def _block_sample(node: Node, number: int) -> upgrade_lib.BlockSample:
+    """Per-block facts for the SYSTEM_CALLER debit reconciliation."""
+    block = await _get_block(node, number)
+    return upgrade_lib.BlockSample(
+        number=number,
+        gas_used=int(block["gasUsed"]),
+        base_fee=int(block.get("baseFeePerGas") or 0),
+        tx_count=len(block["transactions"]),
+        balance=await _system_caller_balance(node, number),
     )
+
+
+async def _find_alpha_boundary(node: Node, alpha_time: int, head: int) -> int:
+    """First block whose timestamp >= alpha_time (binary search over
+    [1, head]; the caller guarantees the head block already crossed)."""
+    lo, hi = 1, head
+    while lo < hi:
+        mid = (lo + hi) // 2
+        block = await _get_block(node, mid)
+        if block["timestamp"] >= alpha_time:
+            hi = mid
+        else:
+            lo = mid + 1
+    return lo
+
+
+async def phase_8_alpha_activation(ctx: UpgradeContext) -> None:
+    """The production sequence "upgrade the whole fleet first, THEN the
+    scheduled Alpha fork opens" (mainnet has Alpha unscheduled; v2.3.0
+    gates system-tx gas exemption on it — see module docstring). Skipped
+    only in the pure mainnet posture (no alphaTime at all)."""
+    wait_s = upgrade_lib.alpha_tail_wait_s(ctx.alpha_time, time.time())
     if wait_s is None:
         LOG.info(
-            "[Phase 11] Alpha activation tail skipped (alphaTime=%s)",
-            ctx.alpha_time,
+            "[Phase 8] no alphaTime scheduled (mainnet posture) — "
+            "activation coverage skipped"
         )
         return
 
     node = ctx.cluster.get_node("node1")
-    LOG.info(
-        "[Phase 11] Waiting for the chain to cross alphaTime=%d (~%.0fs away)...",
-        ctx.alpha_time,
-        wait_s,
-    )
+    if wait_s == 0:
+        # Phases 4-7 outran the schedule margin; activation already
+        # happened on the fully upgraded fleet (the phase-3 guard proved
+        # the fleet was done first) and is verified retroactively below.
+        LOG.warning(
+            "[Phase 8] alphaTime=%d already passed — crossing happened "
+            "during the stability window; verifying retroactively",
+            ctx.alpha_time,
+        )
+    else:
+        LOG.info(
+            "[Phase 8] Waiting for the chain to cross alphaTime=%d "
+            "(~%.0fs away)...",
+            ctx.alpha_time,
+            wait_s,
+        )
+
     # Activation = first block whose timestamp >= alphaTime. Poll the head;
-    # generous buffer past the wall-clock ETA for block cadence.
-    deadline = time.monotonic() + wait_s + 300
+    # buffer past the wall-clock ETA for block cadence / clock skew.
+    deadline = time.monotonic() + wait_s + ALPHA_ACTIVATION_BUFFER_S
     activation_head = None
     while time.monotonic() < deadline:
         head = await asyncio.to_thread(lambda: node.w3.eth.get_block("latest"))
@@ -1012,11 +1087,32 @@ async def phase_11_alpha_activation_tail(ctx: UpgradeContext) -> None:
         await asyncio.sleep(2)
     assert activation_head is not None, (
         f"chain never produced a block with timestamp >= alphaTime="
-        f"{ctx.alpha_time} (head timestamp lagging?)"
+        f"{ctx.alpha_time} within {wait_s + ALPHA_ACTIVATION_BUFFER_S:.0f}s "
+        f"— block production stalled around activation?"
     )
-    LOG.info("[Phase 11] Alpha active as of block <= %d", activation_head)
 
-    # Liveness across the activation boundary.
+    # Locate the exact boundary block and sanity-check it.
+    boundary = await _find_alpha_boundary(node, ctx.alpha_time, activation_head)
+    ctx.alpha_boundary_block = boundary
+    boundary_block = await _get_block(node, boundary)
+    before_block = await _get_block(node, boundary - 1)
+    assert (
+        before_block["timestamp"] < ctx.alpha_time <= boundary_block["timestamp"]
+    ), (
+        f"boundary search inconsistency: ts(block {boundary - 1})="
+        f"{before_block['timestamp']}, ts(block {boundary})="
+        f"{boundary_block['timestamp']}, alphaTime={ctx.alpha_time}"
+    )
+    LOG.info(
+        "[Phase 8] Alpha activated at block %d (ts=%d, alphaTime=%d; "
+        "previous block ts=%d)",
+        boundary,
+        boundary_block["timestamp"],
+        ctx.alpha_time,
+        before_block["timestamp"],
+    )
+
+    # Cross-boundary liveness: production continues, gaps stay closed.
     assert await ctx.cluster.check_block_increasing(
         timeout=BLOCK_PROGRESS_TIMEOUT_S, delta=2
     ), "block production stalled after Alpha activation"
@@ -1024,31 +1120,82 @@ async def phase_11_alpha_activation_tail(ctx: UpgradeContext) -> None:
         "height gap did not stay closed after Alpha activation"
     )
 
-    # Gas-exempt semantic: pre-Alpha every block debits SYSTEM_CALLER by
-    # gas_used * basefee (verified live on v1.7.5); post-activation the
-    # balance must stop moving. (v2.3.0 additionally zeroes it via the
-    # one-shot Alpha migration — logged, not asserted, to avoid coupling
-    # the case to that implementation detail.)
-    confirm_from = activation_head + 1
+    # Semantic-flip direct proof. Pre-Alpha: every block debits
+    # SYSTEM_CALLER, wei-exact gas_used*base_fee on empty blocks (the
+    # v1.7.5 semantic, still in force on v2.3.0 until activation).
     await _wait_until_height(
-        node, confirm_from + ALPHA_TAIL_CONFIRM_BLOCKS, BLOCK_PROGRESS_TIMEOUT_S * 2
+        node, boundary + ALPHA_POST_CONFIRM_BLOCKS, BLOCK_PROGRESS_TIMEOUT_S * 2
     )
-    balances = {
-        n: await _system_caller_balance(node, n)
-        for n in range(confirm_from, confirm_from + ALPHA_TAIL_CONFIRM_BLOCKS + 1)
-    }
-    LOG.info("[Phase 11] SYSTEM_CALLER balances post-activation: %s", balances)
-    assert len(set(balances.values())) == 1, (
-        f"SYSTEM_CALLER balance still moving after Alpha activation "
-        f"(gas exemption not in effect?): {balances}"
+    pre_lo = max(1, boundary - ALPHA_PRE_SAMPLE_BLOCKS)
+    pre_samples = [
+        await _block_sample(node, n) for n in range(pre_lo, boundary)
+    ]
+    debit_error = upgrade_lib.pre_alpha_debit_error(
+        pre_samples, min_exact=ALPHA_MIN_EXACT_DEBITS
+    )
+    assert debit_error is None, (
+        f"[Phase 8] pre-Alpha SYSTEM_CALLER debit trajectory broken: "
+        f"{debit_error}\nsamples: {pre_samples}"
+    )
+    LOG.info(
+        "[Phase 8] pre-Alpha debit verified on blocks %d..%d "
+        "(balance %d -> %d wei)",
+        pre_lo,
+        boundary - 1,
+        pre_samples[0].balance,
+        pre_samples[-1].balance,
     )
 
-    # Pre-upgrade history must still read identically post-Alpha.
+    # Post-Alpha: the balance freezes (system txs gas-exempt). The
+    # transition block itself runs the one-shot balance-zero migration —
+    # logged, not asserted, to avoid coupling to that implementation
+    # detail.
+    boundary_balance = await _system_caller_balance(node, boundary)
+    LOG.info(
+        "[Phase 8] SYSTEM_CALLER at the transition block %d: %d wei "
+        "(one-shot migration zeroes it in v2.3.0)",
+        boundary,
+        boundary_balance,
+    )
+    post_balances = {
+        n: await _system_caller_balance(node, n)
+        for n in range(boundary + 1, boundary + 1 + ALPHA_POST_CONFIRM_BLOCKS)
+    }
+    constancy_error = upgrade_lib.post_alpha_constancy_error(post_balances)
+    assert constancy_error is None, f"[Phase 8] {constancy_error}"
+    LOG.info(
+        "[Phase 8] SYSTEM_CALLER frozen across post-activation blocks: %s",
+        post_balances,
+    )
+
+    # All nodes must agree on the chain around the boundary (consistent
+    # crossing — no per-node fork at activation).
+    for other in ctx.cluster.nodes.values():
+        await _wait_until_height(other, boundary + 1, CATCHUP_TIMEOUT_S)
+    for check_number in (boundary - 1, boundary, boundary + 1):
+        hashes = {}
+        for other in ctx.cluster.nodes.values():
+            block = await _get_block(other, check_number)
+            hashes[other.id] = block["hash"].hex()
+        assert len(set(hashes.values())) == 1, (
+            f"nodes disagree on block {check_number} across the Alpha "
+            f"boundary: {hashes}"
+        )
+    LOG.info(
+        "[Phase 8] all %d nodes agree on blocks %d..%d around the boundary",
+        len(ctx.cluster.nodes),
+        boundary - 1,
+        boundary + 1,
+    )
+
+    # Pre-upgrade history must still read identically post-Alpha
+    # (activation must not rewrite history).
     reloaded = AnchorSet.load(ctx.anchors_path)
     await replay_anchors_on_all_nodes(ctx.cluster, reloaded, stage="post-alpha")
 
     # Fresh post-activation history: one transfer + one set() on the
-    # existing contract, anchored and replayed on every node.
+    # existing contract, anchored and replayed on every node (and again in
+    # phase 11 after the TC3 restarts).
     faucet = ctx.cluster.faucet
     tb = TransactionBuilder(node.w3, faucet)
     tail_recipient = Account.create()
@@ -1083,11 +1230,62 @@ async def phase_11_alpha_activation_tail(ctx: UpgradeContext) -> None:
         tail_spec,
         meta={"case": "storage_v2_upgrade", "stage": "post-alpha", "node": node.id},
     )
-    tail_anchors.save(ctx.output_dir / "storage_v2_upgrade" / "anchors_post_alpha.json")
+    ctx.tail_anchors_path = (
+        ctx.output_dir / "storage_v2_upgrade" / "anchors_post_alpha.json"
+    )
+    tail_anchors.save(ctx.tail_anchors_path)
     await replay_anchors_on_all_nodes(
         ctx.cluster, tail_anchors, stage="post-alpha-fresh"
     )
-    LOG.info("[Phase 11] Alpha activation tail complete")
+    LOG.info("[Phase 8] Alpha activation coverage complete")
+
+
+async def phase_9_graceful_restart_cycle(ctx: UpgradeContext) -> None:
+    LOG.info(
+        "[Phase 9] TC3a (post-alpha): graceful stop -> start cycle for "
+        "every node..."
+    )
+    for node_id in ctx.upgrade_order:
+        node = ctx.cluster.get_node(node_id)
+        LOG.info("[Phase 9] Restarting %s ...", node_id)
+        await stop_node_and_wait_exit(node)
+        await restart_node_and_catch_up(ctx.cluster, node)
+    LOG.info("[Phase 9] All nodes survived a graceful restart")
+
+
+async def phase_10_crash_restart(ctx: UpgradeContext) -> None:
+    LOG.info(
+        "[Phase 10] TC3b (post-alpha): crash-restarting %s (kill -9)...",
+        CRASH_NODE,
+    )
+    node = ctx.cluster.get_node(CRASH_NODE)
+    assert await node.force_kill(), f"failed to force-kill {CRASH_NODE}"
+    # Unclean shutdown on purpose: the next start must run recovery (pipe
+    # consistency checks — post-alpha, so recovery may re-execute blocks
+    # across the Alpha transition) and still rejoin.
+    await restart_node_and_catch_up(ctx.cluster, node)
+    LOG.info("[Phase 10] %s recovered from SIGKILL", CRASH_NODE)
+
+
+async def phase_11_final_verification(ctx: UpgradeContext) -> None:
+    LOG.info("[Phase 11] Final verification...")
+    # Alpha activation (and the TC3 restarts) must not have flipped the
+    # storage layout: settings still MISSING, no SF segments, changeset
+    # tables still populated.
+    await offline_layout_probe(ctx, OFFLINE_PROBE_NODE, stage="Phase 11/final")
+
+    reloaded = AnchorSet.load(ctx.anchors_path)
+    await replay_anchors_on_all_nodes(ctx.cluster, reloaded, stage="final")
+    if ctx.tail_anchors_path is not None:
+        tail = AnchorSet.load(ctx.tail_anchors_path)
+        await replay_anchors_on_all_nodes(
+            ctx.cluster, tail, stage="final-post-alpha"
+        )
+    scan_all_node_logs(ctx.cluster, stage="post-restart")
+    assert await check_height_gap_ok(ctx.cluster), "final height gap check failed"
+    # TC4 extension point: run `db migrate-changesets` on a stopped node
+    # here and assert the static-file layout flip (settings ->
+    # PRESENT_STATIC_FILES, tables emptied, segments + .csoff present).
 
 
 # ---------------------------------------------------------------------------
@@ -1124,10 +1322,10 @@ async def test_storage_v2_upgrade(cluster: Cluster, output_dir: Path):
         await _run_phase(ctx, phase_5_hardfork_and_health)
         await _run_phase(ctx, phase_6_tx_stats_and_log_scan)
         await _run_phase(ctx, phase_7_offline_db_assertions)
-        await _run_phase(ctx, phase_8_graceful_restart_cycle)
-        await _run_phase(ctx, phase_9_crash_restart)
-        await _run_phase(ctx, phase_10_final_verification)
-        await _run_phase(ctx, phase_11_alpha_activation_tail)
+        await _run_phase(ctx, phase_8_alpha_activation)
+        await _run_phase(ctx, phase_9_graceful_restart_cycle)
+        await _run_phase(ctx, phase_10_crash_restart)
+        await _run_phase(ctx, phase_11_final_verification)
     finally:
         # Idempotent: already stopped in phase 6 on the happy path.
         if ctx.tx_sender:
