@@ -14,20 +14,23 @@ orchestration and assertions; this module keeps the derivable facts:
   what the node ran with.
 - encode_set_call: calldata for AnchorTarget.set(uint256) without going
   through web3 contract ABI codecs (stable across web3 v6/v7).
+- assert_history_is_anchorable: positive controls on freshly collected
+  anchors — the history must have produced real, distinguishable facts,
+  otherwise a later replay would "pass" on trivially empty anchors.
 
-History: extracted verbatim from storage_v2_baseline's case-local
-storage_baseline_lib.py when storage_v2_upgrade needed the same logic;
-``BaselineHistory`` kept as an alias for the recorded name.
+History: extracted from storage_v2_baseline's case-local
+storage_baseline_lib.py when storage_v2_upgrade needed the same logic
+(BaselineHistory renamed to OnChainHistory).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Union
+from typing import List, Sequence, Union
 
 from gravity_e2e.helpers.offline_db import OfflineDbEnv
-from gravity_e2e.helpers.storage_anchors import AnchorSpec
+from gravity_e2e.helpers.storage_anchors import AnchorSet, AnchorSpec
 
 # keccak256("set(uint256)")[:4]; also visible in the tracked
 # prague/contracts/Counter.json bytecode (same signature).
@@ -66,10 +69,6 @@ class OnChainHistory:
     transfers: List[TxPoint]
     deploy: TxPoint
     sets: List[TxPoint]
-
-
-# Name under which storage_v2_baseline originally recorded this dataclass.
-BaselineHistory = OnChainHistory
 
 
 def encode_set_call(value: int) -> str:
@@ -123,6 +122,64 @@ def build_anchor_spec(history: OnChainHistory) -> AnchorSpec:
         tx_hashes=tx_hashes,
         block_numbers=block_numbers,
         log_ranges=log_ranges,
+    )
+
+
+def assert_history_is_anchorable(
+    anchors: AnchorSet,
+    history: OnChainHistory,
+    transfer_amounts_wei: Sequence[int],
+    set_values: Sequence[int],
+) -> None:
+    """Positive controls on freshly collected anchors.
+
+    The history must have produced real, distinguishable facts — all six
+    anchor kinds present, slot 0 holding each set() value at its block,
+    the recipient balance accruing transfer by transfer, one event log per
+    set() — otherwise a later replay would "pass" on trivially empty
+    anchors. ``transfer_amounts_wei`` / ``set_values`` are the values the
+    case actually sent, in history order.
+    """
+    by_kind = {}
+    for anchor in anchors.anchors:
+        by_kind.setdefault(anchor.kind, []).append(anchor)
+
+    for kind in ("balance", "storage", "transaction", "receipt", "logs", "block_hash"):
+        assert by_kind.get(kind), f"no {kind} anchors collected"
+
+    # Storage history: slot 0 at each set() block holds that set's value.
+    for point, value in zip(history.sets, set_values):
+        anchor = next(
+            a
+            for a in by_kind["storage"]
+            if a.params["block_number"] == point.block_number
+        )
+        got = int(anchor.expected, 16)
+        assert got == value, (
+            f"slot 0 at block {point.block_number}: expected {value}, "
+            f"collected {got}"
+        )
+
+    # Balance history: recipient accrues the transfers cumulatively.
+    cumulative = 0
+    for point, amount_wei in zip(history.transfers, transfer_amounts_wei):
+        cumulative += amount_wei
+        anchor = next(
+            a
+            for a in by_kind["balance"]
+            if a.params["address"] == history.recipient.lower()
+            and a.params["block_number"] == point.block_number
+        )
+        assert anchor.expected == cumulative, (
+            f"recipient balance at block {point.block_number}: expected "
+            f"{cumulative}, collected {anchor.expected}"
+        )
+
+    # Log history: one ValueSet event per set() call inside the range.
+    (logs_anchor,) = by_kind["logs"]
+    assert len(logs_anchor.expected) == len(history.sets), (
+        f"expected {len(history.sets)} ValueSet logs in "
+        f"{logs_anchor.anchor_id}, collected {len(logs_anchor.expected)}"
     )
 
 

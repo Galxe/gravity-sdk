@@ -132,53 +132,6 @@ async def _build_history(node, faucet) -> lib.OnChainHistory:
     )
 
 
-def _assert_history_is_anchorable(anchors: AnchorSet, history: lib.OnChainHistory):
-    """Positive controls on the collected expected values: the history must
-    have produced real, distinguishable facts — otherwise the replay in
-    step 7 would 'pass' on trivially empty anchors."""
-    by_kind = {}
-    for anchor in anchors.anchors:
-        by_kind.setdefault(anchor.kind, []).append(anchor)
-
-    for kind in ("balance", "storage", "transaction", "receipt", "logs", "block_hash"):
-        assert by_kind.get(kind), f"no {kind} anchors collected"
-
-    # Storage history: slot 0 at each set() block holds that set's value.
-    for point, value in zip(history.sets, SET_VALUES):
-        anchor = next(
-            a
-            for a in by_kind["storage"]
-            if a.params["block_number"] == point.block_number
-        )
-        got = int(anchor.expected, 16)
-        assert got == value, (
-            f"slot 0 at block {point.block_number}: expected {value}, "
-            f"collected {got}"
-        )
-
-    # Balance history: recipient accrues the transfers cumulatively.
-    cumulative = 0
-    for point, amount_eth in zip(history.transfers, TRANSFER_AMOUNTS_ETH):
-        cumulative += Web3.to_wei(amount_eth, "ether")
-        anchor = next(
-            a
-            for a in by_kind["balance"]
-            if a.params["address"] == history.recipient.lower()
-            and a.params["block_number"] == point.block_number
-        )
-        assert anchor.expected == cumulative, (
-            f"recipient balance at block {point.block_number}: expected "
-            f"{cumulative}, collected {anchor.expected}"
-        )
-
-    # Log history: one ValueSet event per set() call inside the range.
-    (logs_anchor,) = by_kind["logs"]
-    assert len(logs_anchor.expected) == len(history.sets), (
-        f"expected {len(history.sets)} ValueSet logs in "
-        f"{logs_anchor.anchor_id}, collected {len(logs_anchor.expected)}"
-    )
-
-
 async def _wait_until_height(node, target: int, timeout: float) -> int:
     """Wait until the node serves a head >= target; returns the head."""
     deadline = time.monotonic() + timeout
@@ -239,7 +192,14 @@ async def test_storage_v2_baseline(cluster: Cluster, output_dir: Path):
             "max_history_block": max_history_block,
         },
     )
-    _assert_history_is_anchorable(anchors, history)
+    lib.assert_history_is_anchorable(
+        anchors,
+        history,
+        transfer_amounts_wei=[
+            Web3.to_wei(amount, "ether") for amount in TRANSFER_AMOUNTS_ETH
+        ],
+        set_values=SET_VALUES,
+    )
     anchors_path = output_dir / "storage_v2_baseline" / "anchors.json"
     anchors.save(anchors_path)
     LOG.info("[Step 3] %d anchors saved to %s", len(anchors), anchors_path)
