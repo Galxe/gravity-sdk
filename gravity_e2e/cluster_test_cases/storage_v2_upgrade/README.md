@@ -8,8 +8,11 @@ merge-level disk compatibility (history written by v1.7.5 read back
 bit-identically by the new binary — anchor replay on every node, before
 and after activation), service continuity throughout (sustained tx load,
 height-gap ceilings, hardfork timeline), the Alpha semantic flip
-(SYSTEM_CALLER debit stops at the boundary, wei-level), and graceful +
-crash restarts of the post-alpha cluster (TC3 tail on the same cluster).
+(SYSTEM_CALLER debit stops at the boundary, wei-level), graceful +
+crash restarts of the post-alpha cluster (TC3 tail), and finally **TC4**:
+`db migrate-changesets` flips that same stock datadir to the static-file
+changeset layout, node by node under load, with every historical query
+re-proven on the SF path plus idempotency and SF restart persistence.
 
 Orchestration skeleton: `rolling_upgrade/` (vfn-first order, height-gap
 prechecks, tx failover, `[source]` old-binary pinning, hardfork wait).
@@ -129,10 +132,63 @@ post-alpha reassertions skip).
     **MISSING**, layout unflipped — activation must not touch the storage
     layout), replay of BOTH anchor rounds on every node, log scan
     (including an unwind-loop ceiling), gap check.
-    *TC4 extension point:* `db migrate-changesets` + static-file layout
-    assertions slot in here as an additional phase.
+12. **TC4 — pre-migration anchors**: a third anchor round of historical
+    storage slots + balances (the changesets' direct query surface),
+    sampled across all three data eras — v1.7.5-written history,
+    post-upgrade pre-Alpha, post-Alpha — positive-controlled against the
+    per-block SYSTEM_CALLER debit and baselined on the legacy layout
+    (`anchors_pre_migration.json`).
+13. **TC4 — rolling `db migrate-changesets`** under sustained tx load
+    (fleet stays live; vfn1 first, height-gap precheck per node). Per
+    node: graceful stop → real-exit wait → pre-state asserted (settings
+    MISSING, both tables populated) → migrate (exit 0) → SF layout
+    asserted: settings **PRESENT_STATIC_FILES** (the ratchet), both
+    changeset kinds present as static-file segments **with `.csoff`
+    sidecars**, both tables **`db list --count` == 0** → prompt restart
+    + catch-up (see the backfill note below).
+14. **TC4 — SF full verification**: every anchor round replayed on every
+    node — the pre-upgrade set's historical queries are now served by
+    the static-file path, the direct "stock data survives the flip"
+    evidence — plus fresh post-migration history (SF-native changesets,
+    `anchors_post_migration.json`), a ≥ 10 min sustained-load window
+    with height gaps monitored, tx floors, and a log scan.
+15. **TC4 — idempotency**: rerun migrate-changesets on a migrated node —
+    it must take the already-flipped → sweep-remainders path and exit 0,
+    leaving the layout untouched and every anchor round clean.
+16. **TC4 — restart persistence on SF**: graceful stop→start for every
+    node + one `kill -9` crash-restart, ratchet still set (offline
+    probe), final full anchor replay, log scan (unwind ceiling), gap
+    check.
+
+TC4 runs unconditionally after phase 11 (no opt-out knob): the datadir is
+ephemeral per run, the phases only extend the tail, and a knob would add
+config surface without a CI need — any CI tier that runs this suite wants
+the whole storyline. The Alpha schedule needs **no widening** for TC4:
+phases 12-16 run entirely after activation, outside the schedule's
+responsibility (which ends at the crossing).
 
 All timeouts are case-internal; the case does not use pytest-timeout.
+
+## migrate-changesets — operational notes this case encodes
+
+- **The flip is a ratchet (irreversible).** `gravity_storage_settings`
+  flips to `changesets_in_static_files = true` and the tables are swept;
+  there is no reverse migration. Rolling back to the table layout means
+  restoring a pre-migration datadir backup. (Same one-way flavor as the
+  v2.3.0 Metadata-CF note above — plan downgrades before touching disk.)
+- **Rerunning is safe** (phase 15): an already-migrated node takes the
+  already-flipped → sweep path and exits 0.
+- **Prune nodes are out of scope for migrate-changesets**: the command
+  migrates the archive changeset history; a prune node does not retain
+  it, so there is nothing to migrate there — do not add it to prune-node
+  runbooks.
+- **Restart promptly after migrating.** Under the SF layout the pipeline
+  backfill's hashing/index stages are a known boundary (plan G8/TC8) not
+  exercised here; keeping the node's downtime to the migration itself
+  (seconds at e2e scale) keeps recovery on the normal consensus
+  catch-up path. If a run does trip it (Merkle mismatch / missing index
+  after a deep backfill), treat it as the product-bug protocol with the
+  note that it confirms the known boundary.
 
 ## Getting the v1.7.5 binary
 
@@ -190,14 +246,15 @@ export GRAVITY_NEW_BINARY=/path/to/v2.3.0/gravity_node
 python gravity_e2e/runner.py storage_v2_upgrade --force-init
 ```
 
-Expected duration: **~55–70 min** wall from render (measured live:
-52 min — pytest 48:40 plus ~3 min init with warm build caches; a cold
-`--force-init` contracts/genesis-tool rebuild adds up to ~10 min, which
-the schedule's margin absorbs). The clock is dominated by the wait to
-`alphaTime` = render + 50 min: phase 3 is ~10 min of inter-node waits,
-phase 5 ~19 min (gamma wait + stabilize + monitor), and whatever remains
-until activation is idled away inside phase 8 (measured phase durations:
-p3 620 s, p5 1142 s, p8 1037 s, TC3 tail + final ~90 s).
+Expected duration: **~75–95 min** wall from render. Measured live for
+phases 1-11: 52 min (pytest 48:40 + ~3 min init with warm build caches; a
+cold `--force-init` contracts/genesis-tool rebuild adds up to ~10 min,
+which the schedule's margin absorbs) — the clock there is dominated by
+the wait to `alphaTime` = render + 50 min (measured phase durations: p3
+620 s, p5 1142 s, p8 1037 s, TC3 tail + final ~90 s). TC4 (phases 12-16)
+adds the rolling migration (~10 s/node at e2e table sizes plus
+stop/probe/restart cycles), the fixed ≥ 600 s SF load window, the
+idempotency recheck, and the SF restart cycle.
 
 ### gravity_cli versions
 
@@ -238,7 +295,8 @@ is looping.
   (`[hardforks.alphaTime]` tables summed at render time); pure logic
   unit-tested.
 - `upgrade_lib.py` — pure helpers (upgrade order, log scan, Alpha
-  schedule guards, SYSTEM_CALLER trajectory checks); unit-tested in
+  schedule guards, SYSTEM_CALLER trajectory checks, the TC4 three-era
+  block sampler); unit-tested in
   `gravity_e2e/tests/unit/test_storage_upgrade_case.py`.
 - `test_params.toml.example` — old-binary pin, contracts ref (`main`,
   what a v1.7.5-born chain initializes with), and the fork timeline

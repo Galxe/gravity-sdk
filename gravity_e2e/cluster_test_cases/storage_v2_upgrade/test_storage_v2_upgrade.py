@@ -91,8 +91,34 @@ file layout" step can slot in after phase 11 without restructuring):
 11. final verification: replay BOTH anchor rounds on every node, log scan
     (panics, storage errors, unwind-loop ceiling), height-gap check, and
     a second H2 offline probe — settings still MISSING, layout unflipped
-    (activation must not touch the storage layout)
-    (TC4 extension point: migrate-changesets slots in here).
+    (activation must not touch the storage layout);
+12. TC4 — pre-migration anchor reinforcement: historical storage slots +
+    balances (the changesets' direct query surface) sampled across all
+    three data eras (v1.7.5 / pre-alpha / post-alpha), positive-
+    controlled against the per-block SYSTEM_CALLER debit, baselined on
+    the legacy layout;
+13. TC4 — rolling migrate-changesets under sustained tx load: per node
+    stop -> real-exit wait -> offline pre-state check (settings MISSING,
+    tables populated) -> `db migrate-changesets` (exit 0) -> SF layout
+    asserted (settings PRESENT_STATIC_FILES ratchet, both changeset
+    kinds as segments + .csoff sidecars, both tables `db list --count`
+    == 0) -> PROMPT restart + catch-up. The prompt restart keeps nodes
+    off the pipeline-backfill path: under the SF layout backfill's
+    hashing/index stages are a KNOWN boundary (plan G8/TC8) this case
+    does not deliberately poke — hitting it by accident is handled under
+    the product-bug protocol and reported as confirmation of the known
+    boundary;
+14. TC4 — SF full verification: every anchor round replayed on every
+    node (legacy history now served by the SF path — the direct "stock
+    data survives the flip" evidence), fresh post-migration history
+    anchored (SF-native changesets), >= 10 min sustained load with the
+    chain healthy, tx floors, log scan;
+15. TC4 — idempotency: rerun migrate-changesets on a migrated node
+    (already-flipped -> sweep path, exit 0), layout unchanged, all
+    anchors still clean;
+16. TC4 — restart persistence on SF: graceful cycle for every node +
+    kill -9 crash-restart, ratchet still set, final full anchor replay,
+    log scan, gap check.
 
 All timeouts are case-internal (no pytest-timeout, repo convention).
 """
@@ -129,6 +155,7 @@ from gravity_e2e.helpers.offline_db import (
     SettingsState,
     count_table_entries,
     inspect_changeset_static_files,
+    migrate_changesets,
     read_storage_settings,
 )
 from gravity_e2e.helpers.storage_anchors import (
@@ -232,6 +259,23 @@ ALPHA_POST_CONFIRM_BLOCKS = 4
 # Phase-8: fresh post-activation history parameters.
 TAIL_TRANSFER_ETH = 3
 TAIL_SET_VALUE = 3
+
+# ── TC4: migrate-changesets -> static-file layout (phases 12-16) ──
+# Historical blocks sampled per data era for the pre-migration anchor
+# round (v1.7.5 / pre-alpha / post-alpha; see
+# upgrade_lib.sample_segment_blocks).
+ANCHOR_SAMPLES_PER_SEGMENT = 4
+# migrate-changesets budget per node. The tables carry only tens of
+# thousands of entries here (~16k/29k live), so the real runs are
+# seconds; the ceiling is the helper's conservative default.
+MIGRATE_TIMEOUT_S = 900
+# Post-migration sustained-load window (brief: >= 10 min under the SF
+# layout with the chain healthy).
+POST_MIGRATION_LOAD_S = 600
+# Phase-14: fresh post-migration history parameters (new blocks whose
+# changesets are SF-native from birth).
+POST_MIGRATION_TRANSFER_ETH = 5
+POST_MIGRATION_SET_VALUE = 4
 
 
 # ---------------------------------------------------------------------------
@@ -697,6 +741,11 @@ class UpgradeContext:
     tail_anchors_path: Optional[Path] = None
     changeset_counts: Dict[str, Dict[str, int]] = field(default_factory=dict)
     phase_durations: Dict[str, float] = field(default_factory=dict)
+    # TC4 (phases 12-16)
+    migration_anchors_path: Optional[Path] = None
+    post_migration_anchors_path: Optional[Path] = None
+    migrate_durations: Dict[str, float] = field(default_factory=dict)
+    pre_migration_counts: Dict[str, Dict[str, int]] = field(default_factory=dict)
 
 
 async def phase_1_bootstrap_old_chain(ctx: UpgradeContext) -> None:
@@ -1292,9 +1341,374 @@ async def phase_11_final_verification(ctx: UpgradeContext) -> None:
         )
     scan_all_node_logs(ctx.cluster, stage="post-restart")
     assert await check_height_gap_ok(ctx.cluster), "final height gap check failed"
-    # TC4 extension point: run `db migrate-changesets` on a stopped node
-    # here and assert the static-file layout flip (settings ->
-    # PRESENT_STATIC_FILES, tables emptied, segments + .csoff present).
+    # TC4 (phases 12-16) follows: migrate-changesets flips this exact
+    # completed state to the static-file layout.
+
+
+# ---------------------------------------------------------------------------
+# TC4: migrate-changesets -> static-file layout (phases 12-16)
+# ---------------------------------------------------------------------------
+
+
+def _offline_env(ctx: UpgradeContext, node: Node):
+    """Offline-db environment for a STOPPED node, with the file guards."""
+    env = lib.derive_offline_env(ctx.cluster.base_dir, node.id)
+    assert Path(env.binary).is_file(), f"node binary missing: {env.binary}"
+    assert Path(env.datadir).is_dir(), f"reth datadir missing: {env.datadir}"
+    assert Path(env.chain).is_file(), f"chain spec missing: {env.chain}"
+    assert upgrade_lib.is_upgrade_target(Path(env.binary), NEW_BINARY_PATH)
+    return env
+
+
+def assert_sf_layout(ctx: UpgradeContext, env, stage: str) -> None:
+    """The static-file layout facts after migrate-changesets: settings
+    ratchet flipped, both changeset kinds present as SF segments with
+    .csoff sidecars, both DB tables empty (db list --count, exact)."""
+    probe = read_storage_settings(env)
+    assert probe.error is None, f"[{stage}] {probe.summary()}"
+    assert probe.state is SettingsState.PRESENT_STATIC_FILES, (
+        f"[{stage}] settings did not flip to PRESENT_STATIC_FILES "
+        f"(state={probe.state}) — the migration ratchet must be set.\n"
+        + probe.summary()
+    )
+
+    layout = inspect_changeset_static_files(env.datadir, env.static_files_dir)
+    assert layout.exists, f"static-files dir missing: {layout.static_files_dir}"
+    assert layout.account_segments, (
+        f"[{stage}] no account-change-sets static-file segments after migration"
+    )
+    assert layout.storage_segments, (
+        f"[{stage}] no storage-change-sets static-file segments after migration"
+    )
+    assert layout.account_sidecars, (
+        f"[{stage}] no account-change-sets .csoff sidecars after migration"
+    )
+    assert layout.storage_sidecars, (
+        f"[{stage}] no storage-change-sets .csoff sidecars after migration"
+    )
+    LOG.info(
+        "[%s] SF layout: %d account segs, %d storage segs, %d+%d .csoff",
+        stage,
+        len(layout.account_segments),
+        len(layout.storage_segments),
+        len(layout.account_sidecars),
+        len(layout.storage_sidecars),
+    )
+
+    counts: Dict[str, int] = {}
+    for table in (ACCOUNT_CHANGESETS_TABLE, STORAGE_CHANGESETS_TABLE):
+        count = count_table_entries(env, table)
+        assert count.error is None, f"[{stage}] {count.summary()}"
+        assert count.count == 0, (
+            f"[{stage}] {table} still has {count.count} entries after "
+            f"migrate-changesets — the tables must be swept empty.\n"
+            + count.summary()
+        )
+        counts[table] = count.count
+    ctx.changeset_counts[stage] = counts
+    LOG.info("[%s] both changeset tables empty (db list --count == 0)", stage)
+
+
+async def migrate_node(
+    ctx: UpgradeContext, node_id: str, stage: str, first_migration: bool
+) -> None:
+    """Stop ``node_id``, run migrate-changesets offline, assert the SF
+    layout, restart promptly and require catch-up (a lagging node risks
+    the pipeline-backfill boundary — see module docstring)."""
+    node = ctx.cluster.get_node(node_id)
+    await stop_node_and_wait_exit(node)
+    env = _offline_env(ctx, node)
+
+    if first_migration:
+        # Pre-state: settings must still be legacy-MISSING on every node
+        # (the ratchet flips exactly here) and the tables populated.
+        probe = read_storage_settings(env)
+        assert probe.error is None, f"[{stage}] {probe.summary()}"
+        assert probe.state is SettingsState.MISSING, (
+            f"[{stage}] expected pre-migration settings MISSING on "
+            f"{node_id}, got {probe.state}\n" + probe.summary()
+        )
+        before: Dict[str, int] = {}
+        for table in (ACCOUNT_CHANGESETS_TABLE, STORAGE_CHANGESETS_TABLE):
+            count = count_table_entries(env, table)
+            assert count.error is None, f"[{stage}] {count.summary()}"
+            assert count.count > 0, (
+                f"[{stage}] {table} empty BEFORE migration on {node_id} — "
+                f"nothing to migrate would make the case vacuous.\n"
+                + count.summary()
+            )
+            before[table] = count.count
+        ctx.pre_migration_counts[node_id] = before
+        LOG.info("[%s] %s pre-migration counts: %s", stage, node_id, before)
+
+    result = migrate_changesets(env, timeout=MIGRATE_TIMEOUT_S)
+    assert result.ok, (
+        f"[{stage}] migrate-changesets failed on {node_id}:\n{result.summary()}"
+    )
+    ctx.migrate_durations.setdefault(node_id, result.duration_s)
+    LOG.info(
+        "[%s] migrate-changesets on %s: exit 0 in %.1fs",
+        stage,
+        node_id,
+        result.duration_s,
+    )
+    assert_sf_layout(ctx, env, f"{stage}/{node_id}")
+
+    # Prompt restart: keep the node close to the head so recovery is the
+    # normal consensus catch-up, not a deep pipeline backfill.
+    await restart_node_and_catch_up(ctx.cluster, node)
+
+
+async def replay_all_anchor_sets(ctx: UpgradeContext, stage: str) -> None:
+    """Replay every anchor round collected so far on every node."""
+    for path, label in (
+        (ctx.anchors_path, "pre-upgrade"),
+        (ctx.tail_anchors_path, "post-alpha"),
+        (ctx.migration_anchors_path, "pre-migration"),
+        (ctx.post_migration_anchors_path, "post-migration"),
+    ):
+        if path is not None:
+            await replay_anchors_on_all_nodes(
+                ctx.cluster, AnchorSet.load(path), stage=f"{stage}/{label}"
+            )
+
+
+async def phase_12_pre_migration_anchors(ctx: UpgradeContext) -> None:
+    """TC4: reinforce the anchor coverage before flipping the layout —
+    historical storage slots and balances (the changesets' direct query
+    surface) sampled across all three data eras: v1.7.5-written history,
+    post-upgrade pre-Alpha, and post-Alpha."""
+    LOG.info("[Phase 12] TC4: pre-migration anchor reinforcement...")
+    node = ctx.cluster.get_node("node1")
+    head = await asyncio.to_thread(lambda: node.w3.eth.block_number)
+    blocks = upgrade_lib.sample_segment_blocks(
+        ctx.max_history_block,
+        ctx.alpha_boundary_block,
+        head,
+        per_segment=ANCHOR_SAMPLES_PER_SEGMENT,
+    )
+    LOG.info(
+        "[Phase 12] sampled blocks (history_max=%d, boundary=%s, head=%d): %s",
+        ctx.max_history_block,
+        ctx.alpha_boundary_block,
+        head,
+        blocks,
+    )
+    faucet_address = ctx.cluster.faucet.address
+    spec = AnchorSpec(
+        balances=[(faucet_address, b) for b in blocks]
+        + [(SYSTEM_CALLER_ADDRESS, b) for b in blocks],
+        storage_slots=[(ctx.history.contract, lib.VALUE_SLOT, b) for b in blocks],
+        block_numbers=blocks,
+    )
+    anchors = collect_anchors(
+        node.w3,
+        spec,
+        meta={
+            "case": "storage_v2_upgrade",
+            "stage": "pre-migration",
+            "node": node.id,
+            "blocks": blocks,
+        },
+    )
+
+    # Positive control: pre-boundary SYSTEM_CALLER balances vary per block
+    # (the per-block debit), so these anchors really capture the
+    # per-block state the changesets encode — the sharpest probe a
+    # migration bug could corrupt.
+    if ctx.alpha_boundary_block is not None:
+        pre_blocks = [b for b in blocks if b < ctx.alpha_boundary_block]
+        values = [await _system_caller_balance(node, b) for b in pre_blocks]
+        assert values == sorted(values, reverse=True) and len(set(values)) == len(
+            values
+        ), (
+            f"[Phase 12] positive control failed: pre-boundary SYSTEM_CALLER "
+            f"balances must be strictly decreasing over blocks {pre_blocks}: "
+            f"{values}"
+        )
+
+    ctx.migration_anchors_path = (
+        ctx.output_dir / "storage_v2_upgrade" / "anchors_pre_migration.json"
+    )
+    anchors.save(ctx.migration_anchors_path)
+    LOG.info(
+        "[Phase 12] %d pre-migration anchors collected, saved to %s",
+        len(anchors),
+        ctx.migration_anchors_path,
+    )
+    # Baseline on the legacy layout: a post-migration mismatch is then
+    # unambiguously migration-caused.
+    await replay_anchors_on_all_nodes(ctx.cluster, anchors, stage="pre-migration")
+
+
+async def phase_13_rolling_migration(ctx: UpgradeContext) -> None:
+    LOG.info(
+        "[Phase 13] TC4: rolling migrate-changesets (legacy tables -> "
+        "static files), fleet stays live throughout..."
+    )
+    # Sustained load across the migration window + the phase-14 SF window
+    # (same primary/fallback arrangement as the rolling upgrade).
+    ctx.tx_sender = TxSender(
+        ctx.cluster, ctx.cluster.faucet, primary_node_id="vfn1", fallback_node_id="node1"
+    )
+    ctx.tx_sender.start()
+    LOG.info("[Phase 13] background tx sender restarted (target: vfn1)")
+
+    for i, node_id in enumerate(ctx.upgrade_order):
+        LOG.info(
+            "[Phase 13] Migrating node %d/%d: %s",
+            i + 1,
+            len(ctx.upgrade_order),
+            node_id,
+        )
+        assert await wait_for_height_gap_ok(ctx.cluster), (
+            f"height gap too large before migrating {node_id}"
+        )
+        if node_id == ctx.tx_sender.primary_node_id:
+            ctx.tx_sender.set_fallback(True)
+        await migrate_node(ctx, node_id, stage="Phase 13", first_migration=True)
+        if node_id == ctx.tx_sender.primary_node_id:
+            ctx.tx_sender.set_fallback(False)
+
+    LOG.info(
+        "[Phase 13] All nodes migrated; per-node migrate seconds: %s",
+        {k: f"{v:.1f}" for k, v in ctx.migrate_durations.items()},
+    )
+
+
+async def phase_14_sf_full_verification(ctx: UpgradeContext) -> None:
+    LOG.info("[Phase 14] TC4: full verification on the static-file layout...")
+    # 14a. Every anchor round on every node — the pre-upgrade set's
+    # historical queries are now served by the SF path: THE direct
+    # evidence that legacy data survived the layout flip bit-identically.
+    await replay_all_anchor_sets(ctx, stage="sf")
+
+    # 14b. Fresh post-migration history: blocks whose changesets are
+    # SF-native from birth must anchor and replay too.
+    node = ctx.cluster.get_node("node1")
+    tb = TransactionBuilder(node.w3, ctx.cluster.faucet)
+    recipient = Account.create()
+    transfer = await _confirmed_tx_point(
+        node,
+        await tb.send_ether(
+            recipient.address, Web3.to_wei(POST_MIGRATION_TRANSFER_ETH, "ether")
+        ),
+        f"post-migration transfer {POST_MIGRATION_TRANSFER_ETH} ETH",
+    )
+    set_point = await _confirmed_tx_point(
+        node,
+        await tb.build_and_send_tx(
+            to=ctx.history.contract,
+            data=lib.encode_set_call(POST_MIGRATION_SET_VALUE),
+        ),
+        f"post-migration set({POST_MIGRATION_SET_VALUE})",
+    )
+    await _wait_until_height(
+        node, set_point.block_number + 1, BLOCK_PROGRESS_TIMEOUT_S
+    )
+    spec = AnchorSpec(
+        balances=[(recipient.address, transfer.block_number)],
+        storage_slots=[
+            (ctx.history.contract, lib.VALUE_SLOT, set_point.block_number)
+        ],
+        tx_hashes=[transfer.tx_hash, set_point.tx_hash],
+        block_numbers=sorted({transfer.block_number, set_point.block_number}),
+        log_ranges=[
+            (set_point.block_number, set_point.block_number, ctx.history.contract)
+        ],
+    )
+    post_anchors = collect_anchors(
+        node.w3,
+        spec,
+        meta={
+            "case": "storage_v2_upgrade",
+            "stage": "post-migration",
+            "node": node.id,
+        },
+    )
+    ctx.post_migration_anchors_path = (
+        ctx.output_dir / "storage_v2_upgrade" / "anchors_post_migration.json"
+    )
+    post_anchors.save(ctx.post_migration_anchors_path)
+    await replay_anchors_on_all_nodes(
+        ctx.cluster, post_anchors, stage="sf/post-migration-fresh"
+    )
+
+    # 14c. Sustained load on the SF layout: >= POST_MIGRATION_LOAD_S with
+    # the chain healthy throughout.
+    LOG.info(
+        "[Phase 14] SF-layout load window: %ds under sustained tx load...",
+        POST_MIGRATION_LOAD_S,
+    )
+    window_start = time.monotonic()
+    checks = 0
+    while time.monotonic() - window_start < POST_MIGRATION_LOAD_S:
+        await asyncio.sleep(10)
+        checks += 1
+        heights = await get_block_heights(list(ctx.cluster.nodes.values()))
+        gap = max(heights.values()) - min(heights.values())
+        assert gap < MAX_HEIGHT_GAP, (
+            f"height gap {gap} >= {MAX_HEIGHT_GAP} during the SF load window"
+        )
+    LOG.info("[Phase 14] SF load window done (%d checks, all healthy)", checks)
+
+    # 14d. Load floors + log scan for the migration + SF window.
+    await ctx.tx_sender.stop()
+    ctx.tx_sender.log_stats()
+    assert ctx.tx_sender.total_confirmed >= MIN_TX_CONFIRMED, (
+        f"only {ctx.tx_sender.total_confirmed} txs confirmed across the "
+        f"migration + SF window (need >= {MIN_TX_CONFIRMED})"
+    )
+    assert ctx.tx_sender.success_rate >= MIN_TX_SUCCESS_RATE, (
+        f"tx success rate {ctx.tx_sender.success_rate:.1%} below floor "
+        f"{MIN_TX_SUCCESS_RATE:.0%} "
+        f"({ctx.tx_sender.total_confirmed}/{ctx.tx_sender.total_sent})"
+    )
+    scan_all_node_logs(ctx.cluster, stage="post-migration")
+
+
+async def phase_15_migration_idempotency(ctx: UpgradeContext) -> None:
+    """TC4: rerunning migrate-changesets on an already-migrated node must
+    take the already-flipped -> sweep-remainders path and exit 0, leaving
+    the layout untouched and every anchor still replaying clean."""
+    node_id = OFFLINE_PROBE_NODE
+    LOG.info("[Phase 15] TC4: idempotency spot check on %s ...", node_id)
+    await migrate_node(ctx, node_id, stage="Phase 15", first_migration=False)
+    await replay_all_anchor_sets(ctx, stage="idempotent")
+    LOG.info("[Phase 15] migrate-changesets rerun is idempotent")
+
+
+async def phase_16_sf_restart_persistence(ctx: UpgradeContext) -> None:
+    LOG.info(
+        "[Phase 16] TC4: restart persistence under the static-file layout..."
+    )
+    for node_id in ctx.upgrade_order:
+        node = ctx.cluster.get_node(node_id)
+        LOG.info("[Phase 16] Restarting %s ...", node_id)
+        await stop_node_and_wait_exit(node)
+        await restart_node_and_catch_up(ctx.cluster, node)
+    LOG.info("[Phase 16] All nodes survived a graceful restart on SF")
+
+    LOG.info("[Phase 16] crash-restarting %s (kill -9)...", CRASH_NODE)
+    node = ctx.cluster.get_node(CRASH_NODE)
+    assert await node.force_kill(), f"failed to force-kill {CRASH_NODE}"
+    await restart_node_and_catch_up(ctx.cluster, node)
+    LOG.info("[Phase 16] %s recovered from SIGKILL on SF", CRASH_NODE)
+
+    # Final state: ratchet still set, every anchor round still clean,
+    # logs free of storage errors and unwind loops, gaps closed.
+    stopped = ctx.cluster.get_node(OFFLINE_PROBE_NODE)
+    await stop_node_and_wait_exit(stopped)
+    env = _offline_env(ctx, stopped)
+    assert_sf_layout(ctx, env, "Phase 16/final")
+    await restart_node_and_catch_up(ctx.cluster, stopped)
+
+    await replay_all_anchor_sets(ctx, stage="sf-final")
+    scan_all_node_logs(ctx.cluster, stage="sf-final")
+    assert await check_height_gap_ok(ctx.cluster), (
+        "final height gap check failed on the SF layout"
+    )
+    LOG.info("[Phase 16] TC4 complete")
 
 
 # ---------------------------------------------------------------------------
@@ -1335,6 +1749,13 @@ async def test_storage_v2_upgrade(cluster: Cluster, output_dir: Path):
         await _run_phase(ctx, phase_9_graceful_restart_cycle)
         await _run_phase(ctx, phase_10_crash_restart)
         await _run_phase(ctx, phase_11_final_verification)
+        # TC4: migrate-changesets to the static-file layout, on the exact
+        # completed TC2+TC3 state (three data eras on disk).
+        await _run_phase(ctx, phase_12_pre_migration_anchors)
+        await _run_phase(ctx, phase_13_rolling_migration)
+        await _run_phase(ctx, phase_14_sf_full_verification)
+        await _run_phase(ctx, phase_15_migration_idempotency)
+        await _run_phase(ctx, phase_16_sf_restart_persistence)
     finally:
         # Idempotent: already stopped in phase 6 on the happy path.
         if ctx.tx_sender:

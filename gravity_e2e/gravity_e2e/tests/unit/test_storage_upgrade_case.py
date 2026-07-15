@@ -137,6 +137,60 @@ def test_scan_summary_mentions_counts_and_offenders():
 
 
 # ---------------------------------------------------------------------------
+# sample_segment_blocks (TC4 pre-migration anchor sampling)
+# ---------------------------------------------------------------------------
+
+
+def test_segment_sampling_covers_all_three_eras_and_boundary():
+    # history written by v1.7.5 up to 60, Alpha boundary at 12000,
+    # head at 12500.
+    blocks = upgrade_lib.sample_segment_blocks(
+        history_max=60, boundary=12_000, head=12_500, per_segment=4
+    )
+    assert blocks == sorted(set(blocks)), "must be sorted and unique"
+    assert all(1 <= b <= 12_500 for b in blocks)
+    era_a = [b for b in blocks if b <= 60]
+    era_b = [b for b in blocks if 60 < b < 12_000]
+    era_c = [b for b in blocks if b > 12_000]
+    assert len(era_a) >= 4 and era_a[0] == 1 and era_a[-1] == 60
+    # The pre-alpha era must include the last pre-boundary block — the
+    # one block guaranteed to be v2.3.0-written and pre-alpha.
+    assert len(era_b) >= 4 and era_b[-1] == 12_000 - 1
+    assert len(era_c) >= 2 and era_c[-1] == 12_500
+    assert 12_000 in blocks, "the transition block itself must be sampled"
+
+
+def test_segment_sampling_without_boundary_is_mainnet_posture():
+    blocks = upgrade_lib.sample_segment_blocks(
+        history_max=60, boundary=None, head=5_000, per_segment=3
+    )
+    assert blocks == sorted(set(blocks))
+    assert [b for b in blocks if b <= 60][0] == 1
+    assert blocks[-1] == 5_000
+
+
+def test_segment_sampling_clamps_tiny_ranges():
+    # head barely past the boundary; history shorter than per_segment.
+    blocks = upgrade_lib.sample_segment_blocks(
+        history_max=2, boundary=10, head=11, per_segment=4
+    )
+    assert blocks == sorted(set(blocks))
+    assert 1 in blocks and 2 in blocks  # whole tiny era A
+    assert 9 in blocks and 10 in blocks and 11 in blocks
+
+
+def test_segment_sampling_rejects_garbage():
+    for kwargs in (
+        dict(history_max=0, boundary=None, head=100),
+        dict(history_max=10, boundary=None, head=0),
+        dict(history_max=10, boundary=5, head=100, per_segment=0),
+        dict(history_max=10, boundary=200, head=100),  # boundary past head
+    ):
+        with pytest.raises(ValueError):
+            upgrade_lib.sample_segment_blocks(**kwargs)
+
+
+# ---------------------------------------------------------------------------
 # is_upgrade_target (the phase-1 same-binary guard predicate)
 # ---------------------------------------------------------------------------
 

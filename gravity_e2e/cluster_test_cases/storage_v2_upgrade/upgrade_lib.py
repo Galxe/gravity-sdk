@@ -122,6 +122,57 @@ def scan_log_lines(lines: Iterable[str]) -> LogScanResult:
     return result
 
 
+def _spread(lo: int, hi: int, n: int) -> List[int]:
+    """n integers evenly spread over [lo, hi], deduplicated, endpoints
+    included (fewer than n when the range is shorter than n)."""
+    if hi < lo:
+        return []
+    if n == 1 or hi == lo:
+        return [hi]
+    span = hi - lo
+    return sorted({lo + round(span * i / (n - 1)) for i in range(n)})
+
+
+def sample_segment_blocks(
+    history_max: int,
+    boundary: Optional[int],
+    head: int,
+    per_segment: int = 4,
+) -> List[int]:
+    """Historical block numbers for the TC4 pre-migration anchor round,
+    covering the three data eras of the upgraded chain:
+
+    - era A, v1.7.5-written history: [1, history_max];
+    - era B, post-upgrade pre-Alpha: (history_max, boundary) — always
+      includes boundary-1, the one block guaranteed both v2.3.0-written
+      and pre-Alpha (the middle spans the mixed-fleet window, which is
+      extra coverage, not a substitute);
+    - the Alpha transition block itself;
+    - era C, post-Alpha: (boundary, head].
+
+    Without a boundary (mainnet posture, Alpha never scheduled) eras B/C
+    collapse into one post-history segment ending at head. Sorted and
+    unique; every block in [1, head].
+    """
+    if history_max < 1:
+        raise ValueError(f"history_max must be >= 1, got {history_max}")
+    if head < 1:
+        raise ValueError(f"head must be >= 1, got {head}")
+    if per_segment < 1:
+        raise ValueError(f"per_segment must be >= 1, got {per_segment}")
+    if boundary is not None and boundary > head:
+        raise ValueError(f"boundary {boundary} is past head {head}")
+
+    blocks = set(_spread(1, min(history_max, head), per_segment))
+    if boundary is not None:
+        blocks.update(_spread(history_max + 1, boundary - 1, per_segment))
+        blocks.add(boundary)
+        blocks.update(_spread(boundary + 1, head, per_segment))
+    else:
+        blocks.update(_spread(history_max + 1, head, per_segment))
+    return sorted(b for b in blocks if 1 <= b <= head)
+
+
 def is_upgrade_target(binary: Union[str, Path], new_binary: Union[str, Path]) -> bool:
     """True when the deployed ``binary`` is (a copy of) the upgrade target:
     same inode (hardlink) or an identical-size file.
