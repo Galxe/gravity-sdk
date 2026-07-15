@@ -468,7 +468,7 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             let block_id = ExternalBlockId::from_bytes(execution_result.block_id.as_slice());
             let block_number = execution_result.block_number;
             let tx_infos = execution_result.txs_info;
-            let epoch = execution_result.epoch;
+            let epoch = self.current_epoch.load(Ordering::SeqCst);
             let txn_status = Arc::new(Some(
                 tx_infos
                     .iter()
