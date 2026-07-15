@@ -30,8 +30,10 @@ All timeouts are case-internal (no pytest-timeout, repo convention).
 import asyncio
 import json
 import logging
+import os
 import time
 from pathlib import Path
+from typing import Optional
 
 import pytest
 from eth_account import Account
@@ -178,6 +180,39 @@ def _assert_history_is_anchorable(anchors: AnchorSet, history: lib.BaselineHisto
     )
 
 
+def _read_node_pid(node) -> Optional[int]:
+    """Read the node's PID file (must be called BEFORE stop.sh deletes it)."""
+    try:
+        return int(node.pid_file.read_text().strip())
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+async def _wait_for_process_exit(pid: int, timeout: float) -> None:
+    """Wait until the process is really gone.
+
+    NodeState.STOPPED only means the PID file is gone — the node's stop.sh
+    deletes it right after sending SIGTERM, while gravity_node is still
+    flushing and closing RocksDB. Running an offline db command in that
+    window fails on the still-held RocksDB LOCK file (observed live:
+    "While lock file: .../db/state/LOCK: Resource temporarily
+    unavailable"). The kernel releases the lock at process exit, so real
+    exit is the correct gate.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            LOG.info("gravity_node pid %d fully exited", pid)
+            return
+        await asyncio.sleep(0.5)
+    raise AssertionError(
+        f"gravity_node pid {pid} still alive {timeout}s after stop; "
+        f"offline db commands would race its RocksDB lock"
+    )
+
+
 async def _wait_until_height(node, target: int, timeout: float) -> int:
     """Wait until the node serves a head >= target; returns the head."""
     deadline = time.monotonic() + timeout
@@ -245,9 +280,14 @@ async def test_storage_v2_baseline(cluster: Cluster, output_dir: Path):
 
     # ── Step 4: graceful stop ──
     LOG.info("[Step 4] Stopping node gracefully...")
+    node_pid = _read_node_pid(node)
+    assert node_pid, f"cannot read node PID from {node.pid_file} before stop"
     assert await cluster.set_node(
         node.id, NodeState.STOPPED, timeout=STOP_TIMEOUT_S
     ), "node did not stop gracefully"
+    # STOPPED is PID-file based; wait for the actual process exit so the
+    # offline db commands below never race the node's RocksDB lock.
+    await _wait_for_process_exit(node_pid, STOP_TIMEOUT_S)
 
     # ── Step 5: H2 offline assertions ──
     LOG.info("[Step 5] Running offline db assertions...")
