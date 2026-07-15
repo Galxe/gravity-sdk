@@ -30,17 +30,16 @@ All timeouts are case-internal (no pytest-timeout, repo convention).
 import asyncio
 import json
 import logging
-import os
 import time
 from pathlib import Path
-from typing import Optional
 
 import pytest
 from eth_account import Account
 from web3 import Web3
 
-import storage_baseline_lib as lib
 from gravity_e2e.cluster.manager import Cluster, NodeState
+from gravity_e2e.helpers import storage_case_lib as lib
+from gravity_e2e.helpers.node_process import read_node_pid, wait_for_process_exit
 from gravity_e2e.helpers.offline_db import (
     ACCOUNT_CHANGESETS_TABLE,
     STORAGE_CHANGESETS_TABLE,
@@ -94,7 +93,7 @@ async def _confirmed_tx_point(node, result, label: str) -> lib.TxPoint:
     return point
 
 
-async def _build_history(node, faucet) -> lib.BaselineHistory:
+async def _build_history(node, faucet) -> lib.OnChainHistory:
     """Step 2: transfers + contract deploy + storage writes with events."""
     tb = TransactionBuilder(node.w3, faucet)
     recipient = Account.create()
@@ -123,7 +122,7 @@ async def _build_history(node, faucet) -> lib.BaselineHistory:
         )
         sets.append(await _confirmed_tx_point(node, result, f"set({value})"))
 
-    return lib.BaselineHistory(
+    return lib.OnChainHistory(
         faucet=faucet.address,
         recipient=recipient.address,
         contract=contract_addr,
@@ -133,7 +132,7 @@ async def _build_history(node, faucet) -> lib.BaselineHistory:
     )
 
 
-def _assert_history_is_anchorable(anchors: AnchorSet, history: lib.BaselineHistory):
+def _assert_history_is_anchorable(anchors: AnchorSet, history: lib.OnChainHistory):
     """Positive controls on the collected expected values: the history must
     have produced real, distinguishable facts — otherwise the replay in
     step 7 would 'pass' on trivially empty anchors."""
@@ -177,39 +176,6 @@ def _assert_history_is_anchorable(anchors: AnchorSet, history: lib.BaselineHisto
     assert len(logs_anchor.expected) == len(history.sets), (
         f"expected {len(history.sets)} ValueSet logs in "
         f"{logs_anchor.anchor_id}, collected {len(logs_anchor.expected)}"
-    )
-
-
-def _read_node_pid(node) -> Optional[int]:
-    """Read the node's PID file (must be called BEFORE stop.sh deletes it)."""
-    try:
-        return int(node.pid_file.read_text().strip())
-    except (FileNotFoundError, ValueError):
-        return None
-
-
-async def _wait_for_process_exit(pid: int, timeout: float) -> None:
-    """Wait until the process is really gone.
-
-    NodeState.STOPPED only means the PID file is gone — the node's stop.sh
-    deletes it right after sending SIGTERM, while gravity_node is still
-    flushing and closing RocksDB. Running an offline db command in that
-    window fails on the still-held RocksDB LOCK file (observed live:
-    "While lock file: .../db/state/LOCK: Resource temporarily
-    unavailable"). The kernel releases the lock at process exit, so real
-    exit is the correct gate.
-    """
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            LOG.info("gravity_node pid %d fully exited", pid)
-            return
-        await asyncio.sleep(0.5)
-    raise AssertionError(
-        f"gravity_node pid {pid} still alive {timeout}s after stop; "
-        f"offline db commands would race its RocksDB lock"
     )
 
 
@@ -280,14 +246,15 @@ async def test_storage_v2_baseline(cluster: Cluster, output_dir: Path):
 
     # ── Step 4: graceful stop ──
     LOG.info("[Step 4] Stopping node gracefully...")
-    node_pid = _read_node_pid(node)
+    node_pid = read_node_pid(node)
     assert node_pid, f"cannot read node PID from {node.pid_file} before stop"
     assert await cluster.set_node(
         node.id, NodeState.STOPPED, timeout=STOP_TIMEOUT_S
     ), "node did not stop gracefully"
     # STOPPED is PID-file based; wait for the actual process exit so the
-    # offline db commands below never race the node's RocksDB lock.
-    await _wait_for_process_exit(node_pid, STOP_TIMEOUT_S)
+    # offline db commands below never race the node's RocksDB lock (see
+    # gravity_e2e.helpers.node_process for the RocksDB LOCK evidence).
+    await wait_for_process_exit(node_pid, STOP_TIMEOUT_S)
 
     # ── Step 5: H2 offline assertions ──
     LOG.info("[Step 5] Running offline db assertions...")

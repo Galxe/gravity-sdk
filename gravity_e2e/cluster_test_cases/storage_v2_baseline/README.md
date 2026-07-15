@@ -110,9 +110,12 @@ ln -sf /home/neko/gravity/gravity-sdk-greth-v2.3.0/target/quick-release/gravity_
 - `genesis.toml` — tracked copy of `single_node/genesis.toml` with only
   the validator ports adjusted (consistency with the template is
   enforced by a unit test).
-- `render_config.py` — renders `cluster.toml`; pure logic unit-tested.
-- `storage_baseline_lib.py` — pure helpers (anchor-spec construction,
-  offline-env path derivation, `set(uint256)` calldata); unit-tested in
+- `render_config.py` — renders `cluster.toml`; pure logic unit-tested in
   `gravity_e2e/tests/unit/test_storage_baseline_case.py`.
+- Pure helpers (anchor-spec construction, offline-env path derivation,
+  `set(uint256)` calldata) live in the shared
+  `gravity_e2e/helpers/storage_case_lib.py` (also used by
+  `storage_v2_upgrade`); unit-tested in
+  `gravity_e2e/tests/unit/test_storage_case_lib.py`.
 - `contracts/` — `AnchorTarget.sol` + compiled artifact (solc 0.8.21,
   `--optimize --combined-json abi,bin`).
