@@ -1019,13 +1019,27 @@ async def _get_block(node: Node, number: int) -> dict:
 
 
 async def _block_sample(node: Node, number: int) -> upgrade_lib.BlockSample:
-    """Per-block facts for the SYSTEM_CALLER debit reconciliation."""
-    block = await _get_block(node, number)
+    """Per-block facts for the SYSTEM_CALLER debit reconciliation.
+
+    tx_count counts USER transactions only: v2.3.0 lists the per-block
+    system txs in the RPC block body (observed live: every quiet block
+    carries exactly one tx sent by SYSTEM_CALLER), so emptiness is
+    "no tx from a sender other than SYSTEM_CALLER" — on such blocks the
+    header gas is purely system gas and the debit reconciles wei-exact.
+    """
+    block = await asyncio.to_thread(
+        lambda: node.w3.eth.get_block(number, full_transactions=True)
+    )
+    user_tx_count = sum(
+        1
+        for tx in block["transactions"]
+        if str(tx.get("from", "")).lower() != SYSTEM_CALLER_ADDRESS.lower()
+    )
     return upgrade_lib.BlockSample(
         number=number,
         gas_used=int(block["gasUsed"]),
         base_fee=int(block.get("baseFeePerGas") or 0),
-        tx_count=len(block["transactions"]),
+        tx_count=user_tx_count,
         balance=await _system_caller_balance(node, number),
     )
 

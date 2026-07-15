@@ -205,7 +205,11 @@ class BlockSample:
     number: int
     gas_used: int
     base_fee: int
-    tx_count: int  # user txs in the block body (system txs never appear)
+    # USER txs in the block. v2.3.0's RPC lists the per-block system txs
+    # in the body too (sender == SYSTEM_CALLER; observed live run 2) —
+    # the sampler filters them out, so tx_count == 0 means the header
+    # gas is purely system gas and the debit must reconcile wei-exact.
+    tx_count: int
     balance: int  # SYSTEM_CALLER balance at this block (post-state), wei
 
 
