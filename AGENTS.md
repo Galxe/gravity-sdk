@@ -10,3 +10,4 @@
 - For docs-only changes, verify commands, paths, release tags, package links, network names, and source-of-truth URLs.
 - Avoid reporting a finding only because code looks unusual. Check whether the behavior is intentional, already covered by tests, or constrained by an upstream/downstream invariant.
 - When reporting a finding, include the concrete call path, affected files, severity rationale, and a minimal reproduction or validation path when possible.
+
