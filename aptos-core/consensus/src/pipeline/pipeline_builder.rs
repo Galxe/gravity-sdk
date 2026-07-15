@@ -511,7 +511,7 @@ impl PipelineBuilder {
                 epoch,
             )
             .await
-            .unwrap_or_else(|e| panic!("Failed to get executed result {}", e));
+            .map_err(|e| anyhow::anyhow!("Failed to get executed result {}", e))?;
         let hash = hash.execution_output;
         update_counters_for_compute_res(&hash);
         let result = StateComputeResult::new(hash, None, None);

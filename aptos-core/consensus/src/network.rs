@@ -257,6 +257,14 @@ impl NetworkSender {
             ConsensusMsg::BlockRetrievalResponse(resp) => *resp,
             _ => return Err(anyhow!("Invalid response to request")),
         };
+        response.verify_ledger_infos(&retrieval_request, &self.validators).map_err(|e| {
+            error!(
+                SecurityEvent::InvalidRetrievedBlock,
+                request_block_response = response,
+                error = ?e,
+            );
+            e
+        })?;
         if retrieval_request.block_id() != HashValue::zero() {
             response.verify(retrieval_request, &self.validators).map_err(|e| {
                 error!(
