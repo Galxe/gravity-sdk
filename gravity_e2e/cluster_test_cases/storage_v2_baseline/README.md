@@ -10,14 +10,14 @@ restart. Control group for the later migration cases (TC2+); first
 real-binary exercise of `helpers/storage_anchors.py` and
 `helpers/offline_db.py`.
 
-> **STATUS: live e2e NOT yet executed.** This case has been verified by
-> `pytest --collect-only` plus unit tests of its pure helpers only. Every
-> on-chain / on-disk assertion (steps 1-7 below) only counts once the case
-> has been run against a real cluster. In particular, the offline
-> `gravity_node db get/stats/list --count` argument surface is validated
-> against the real binary **for the first time** by this case — if greth
-> renamed a flag, it surfaces here (known limitation documented in
-> `helpers/offline_db.py`).
+> **STATUS: live-verified.** First live run passed on 2026-07-15 against
+> the greth v2.3.0 pre-built binary (`1 passed in 23.37s`; settings
+> PRESENT_LEGACY, AccountChangeSets=99 / StorageChangeSets=440, no
+> changeset segments/sidecars, anchor replay 21/21 matched). That run
+> also validated the offline `gravity_node db get/stats/list --count`
+> argument surface for the first time and exposed one helper fix along
+> the way: raw Metadata values are SCALE-compressed `Vec<u8>`, now
+> handled by `helpers/offline_db.py::decode_scale_bytes`.
 
 ## Test flow
 
