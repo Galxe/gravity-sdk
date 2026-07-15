@@ -32,22 +32,43 @@ ref = "main"
 # on two 32-byte block hashes (observed live 2026-07-15 with the legacy
 # alphaTime = 0; never copy that value from older suites into this case).
 #
-# alphaTime: "+NN[smh]" resolves at RENDER time (render right before
-#   running). "+45m" lands after the worst-case upgrade completion
-#   (~20 min) and inside the case's activation-tail window, so phase 11
-#   exercises the production sequence "upgrade fleet -> Alpha activates".
-#   Drop the key entirely for the pure mainnet posture (phase 11 then
-#   skips), or use a far-future value ("+720h"); the case's phase-1/3
-#   guards reject anything scheduled too early.
+# The whole timeline is fixed at RENDER time (rolling_upgrade's mechanism:
+# compute the fork points once before the run, never touch config
+# mid-test) — re-render right before each run so the relative offsets stay
+# anchored to reality.
+#
 # betaBlock = 100: activates early, while the cluster still runs v1.7.5 —
 #   safe because Beta carries no attached semantics in either binary
 #   (schedule-only fork); it exercises a fork already active pre-upgrade.
 # gammaBlock: rolling_upgrade's timeline rule — must activate only after
 #   all 6 nodes finished upgrading. At the observed 2.6-3.7 blocks/s the
-#   upgrades complete around block 3500-4900 (~22 min); 8000 keeps margin
-#   above the fast end (5 blocks/s -> upgrades done by ~6600) while
-#   staying reachable on the slow end (~50 min).
+#   upgrades complete by block ~3900-5500 even when phase 3 stretches to
+#   ~25 min; 6000 stays above that while being crossed at ~27-38 min, i.e.
+#   comfortably before the Alpha schedule below.
 [hardforks]
-alphaTime = "+45m"
 betaBlock = 100
-gammaBlock = 8000
+gammaBlock = 6000
+
+# alphaTime = render_time + upgrade_budget + stability_window + margin.
+# Each component is a "+NN[smh]" offset, individually tunable:
+#   upgrade_budget:   worst-case render -> fleet fully upgraded (runner
+#                     init/genesis/deploy ~3-5 min, bootstrap + history
+#                     ~2 min, 6 upgrades with 5x120 s inter-node waits
+#                     ~16-20 min). The case FAILS (phase 3 completion
+#                     guard) if the fleet is not done before alphaTime.
+#   stability_window: post-upgrade stable operation before activation —
+#                     gamma tail, 60 s stabilize + 300 s health monitor
+#                     under sustained load, tx floors, H2 offline probe.
+#   margin:           schedule slack. If phases 4-7 outrun it, activation
+#                     is simply crossed a little before the dedicated
+#                     phase observes it (verified retroactively — logged,
+#                     not a failure); if they run fast, phase 8 idles
+#                     until activation.
+# Drop this whole table for the pure mainnet posture (Alpha never
+# activates; phases 8's crossing and the post-alpha reassertions skip).
+# The phase-1 guard rejects schedules closer than 25 min (upgrade safety)
+# or beyond 2 h (scheduled = mandatory coverage, must be reachable).
+[hardforks.alphaTime]
+upgrade_budget = "+27m"
+stability_window = "+13m"
+margin = "+10m"

@@ -16,23 +16,32 @@ assertions; this module keeps the derivable facts:
   bounded unwinding can be legitimate crash recovery (TC3 kill -9), but an
   unbounded stream of unwind lines means the post-restart consistency
   check is looping — the case asserts a ceiling instead of zero.
-- alpha_preflight_error / alpha_tail_wait_s: the Gravity Alpha hardfork
-  timeline discipline. Mainnet activates NO gravity forks; greth v2.3.0
-  gates behavior changes (system-tx gas exemption, SYSTEM_CALLER balance
-  migration) on Alpha, so Alpha MUST NOT activate before every node runs
-  the new binary. An alphaTime that predates existing v1.7.5 history makes
-  the new binary re-execute those blocks under exempt semantics and
-  diverge — symptom fingerprint: gravity_node aborts ~2 s after start with
-  ``panicked at ...block_store.rs:773 / assertion `left == right` failed``
-  on two 32-byte block hashes (observed live 2026-07-15 with the legacy
-  ``alphaTime = 0`` config this case initially inherited).
+- alpha_preflight_error / upgrade_completion_error / alpha_tail_wait_s:
+  the Gravity Alpha hardfork timeline discipline. Mainnet activates NO
+  gravity forks; greth v2.3.0 gates behavior changes (system-tx gas
+  exemption, SYSTEM_CALLER balance migration) on Alpha, so Alpha MUST NOT
+  activate before every node runs the new binary. An alphaTime that
+  predates existing v1.7.5 history makes the new binary re-execute those
+  blocks under exempt semantics and diverge — symptom fingerprint:
+  gravity_node aborts ~2 s after start with ``panicked at
+  ...block_store.rs:773 / assertion `left == right` failed`` on two
+  32-byte block hashes (observed live 2026-07-15 with the legacy
+  ``alphaTime = 0`` config this case initially inherited). The schedule
+  itself is fixed at render time (rolling_upgrade's mechanism: compute the
+  fork point once before the run, never touch config mid-test); these
+  guards make a blown schedule fail loudly instead of activating early.
+- BlockSample / pre_alpha_debit_error / post_alpha_constancy_error: the
+  wei-level SYSTEM_CALLER trajectory checks that prove the Alpha semantic
+  flip directly — pre-activation every block debits the caller exactly
+  ``gas_used * base_fee`` (empty blocks reconcile to the wei), post-
+  activation the balance freezes.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Iterable, List, Optional, Sequence
+from typing import Iterable, List, Mapping, Optional, Sequence
 
 # Storage-corruption-class patterns. Case-insensitive where wording varies.
 # Every pattern is tied to a concrete failure family:
@@ -108,47 +117,159 @@ def scan_log_lines(lines: Iterable[str]) -> LogScanResult:
 
 
 def alpha_preflight_error(
-    alpha_time: Optional[int], now: float, min_lead_s: float
+    alpha_time: Optional[int],
+    now: float,
+    min_lead_s: float,
+    max_lead_s: Optional[float] = None,
 ) -> Optional[str]:
-    """Validate the Alpha timeline before the upgrade starts.
+    """Validate the render-time Alpha schedule before the upgrade starts.
 
     Returns None when safe: alphaTime absent (mainnet posture — Alpha never
-    activates) or at least ``min_lead_s`` in the future. Returns an
-    operator-facing error string when Alpha is already active or would
-    activate before the fleet can plausibly finish upgrading (this is the
-    guard against the ``alphaTime = 0`` legacy-config artifact).
+    activates) or between ``min_lead_s`` and ``max_lead_s`` in the future.
+    Returns an operator-facing error string when Alpha is already active or
+    would activate before the fleet can plausibly finish upgrading (the
+    guard against the ``alphaTime = 0`` legacy-config artifact), or when it
+    is scheduled beyond the case budget — a scheduled activation is
+    mandatory coverage, never silently skipped.
     """
     if alpha_time is None:
         return None
     lead = alpha_time - now
-    if lead >= min_lead_s:
+    if lead < min_lead_s:
+        return (
+            f"alphaTime={alpha_time} activates in {lead:.0f}s (< required lead "
+            f"{min_lead_s:.0f}s). Alpha gates v2.3.0 behavior changes (system-tx "
+            f"gas exemption); it must NOT be active before every node runs the "
+            f"new binary, or the new binary re-executes v1.7.5 history under "
+            f"exempt semantics and aborts (block_store.rs:773 hash assert). "
+            f"Re-render with the component schedule from "
+            f"test_params.toml.example (or drop alphaTime entirely)."
+        )
+    if max_lead_s is not None and lead > max_lead_s:
+        return (
+            f"alphaTime={alpha_time} is {lead:.0f}s away (> case budget "
+            f"{max_lead_s:.0f}s) — the activation crossing is mandatory "
+            f"coverage when alphaTime is scheduled and cannot be reached in "
+            f"this run. Use the component schedule from "
+            f"test_params.toml.example, or drop alphaTime entirely for the "
+            f"pure mainnet posture (no gravity fork ever activates)."
+        )
+    return None
+
+
+def upgrade_completion_error(
+    alpha_time: Optional[int], completion_time: float
+) -> Optional[str]:
+    """THE operational rule, machine-enforced: every node must finish
+    upgrading strictly before Alpha activates.
+
+    Returns None when alphaTime is absent or the fleet completed in time;
+    otherwise an error string — the run must fail immediately (an early
+    activation means some blocks may have been produced/validated by
+    binaries with diverging semantics), never continue silently.
+    """
+    if alpha_time is None or completion_time < alpha_time:
         return None
     return (
-        f"alphaTime={alpha_time} activates in {lead:.0f}s (< required lead "
-        f"{min_lead_s:.0f}s). Alpha gates v2.3.0 behavior changes (system-tx "
-        f"gas exemption); it must NOT be active before every node runs the "
-        f"new binary, or the new binary re-executes v1.7.5 history under "
-        f"exempt semantics and aborts (block_store.rs:773 hash assert). "
-        f"Set [hardforks] alphaTime to a later '+NNm' offset (or drop it) "
-        f"and re-render."
+        f"rolling upgrade completed at {completion_time:.0f} but "
+        f"alphaTime={alpha_time} had already passed "
+        f"({completion_time - alpha_time:.0f}s late): Alpha must activate "
+        f"only AFTER every node runs the new binary. The run overshot the "
+        f"render-time schedule — increase upgrade_budget/margin under "
+        f"[hardforks.alphaTime] in test_params.toml and re-render."
     )
 
 
-def alpha_tail_wait_s(
-    alpha_time: Optional[int], now: float, max_wait_s: float
-) -> Optional[float]:
-    """Seconds to wait for the Alpha activation tail phase, or None to skip.
+def alpha_tail_wait_s(alpha_time: Optional[int], now: float) -> Optional[float]:
+    """Seconds until the scheduled Alpha activation, or None to skip.
 
-    None when alphaTime is absent (never activates) or still more than
-    ``max_wait_s`` away (far-future config: the scheduled activation is not
-    reachable within this run's budget). 0 when already activated.
+    None only when alphaTime is absent (mainnet posture — never activates);
+    0 when the chain wall-clock already passed activation (the crossing is
+    then verified retroactively). Unreachable schedules were already
+    rejected by alpha_preflight_error, so a scheduled fork always waits.
     """
     if alpha_time is None:
         return None
-    remaining = alpha_time - now
-    if remaining > max_wait_s:
+    return max(alpha_time - now, 0.0)
+
+
+# ---------------------------------------------------------------------------
+# SYSTEM_CALLER balance trajectory (Alpha semantic-flip direct proof)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class BlockSample:
+    """Per-block facts needed to reconcile the SYSTEM_CALLER debit."""
+
+    number: int
+    gas_used: int
+    base_fee: int
+    tx_count: int  # user txs in the block body (system txs never appear)
+    balance: int  # SYSTEM_CALLER balance at this block (post-state), wei
+
+
+def pre_alpha_debit_error(
+    samples: Sequence[BlockSample], min_exact: int = 2
+) -> Optional[str]:
+    """Verify the PRE-Alpha semantic on consecutive block samples: every
+    block debits SYSTEM_CALLER, and on empty blocks (no user txs — header
+    gas is purely the system txs') the debit reconciles to the wei as
+    ``gas_used * base_fee``.
+
+    Returns None when the trajectory matches; an error string otherwise.
+    Requires at least ``min_exact`` empty-block exact reconciliations so a
+    run cannot pass on strict-decrease alone.
+    """
+    if len(samples) < 2:
+        return f"need at least 2 consecutive block samples, got {len(samples)}"
+    exact = 0
+    for prev, cur in zip(samples, samples[1:]):
+        if cur.number != prev.number + 1:
+            return (
+                f"samples must be consecutive blocks: {prev.number} then "
+                f"{cur.number}"
+            )
+        delta = prev.balance - cur.balance
+        if delta <= 0:
+            return (
+                f"SYSTEM_CALLER balance did not decrease over block "
+                f"{cur.number} (delta={delta} wei): pre-Alpha every block "
+                f"debits the system-tx base-fee bill — a frozen balance here "
+                f"means exempt semantics were already active"
+            )
+        if cur.tx_count == 0:
+            expected = cur.gas_used * cur.base_fee
+            if delta != expected:
+                return (
+                    f"block {cur.number} (no user txs) debited {delta} wei, "
+                    f"expected gas_used*base_fee = {cur.gas_used}*"
+                    f"{cur.base_fee} = {expected} wei"
+                )
+            exact += 1
+    if exact < min_exact:
+        return (
+            f"only {exact} empty-block exact debit reconciliations "
+            f"(need >= {min_exact}); sample a quieter window"
+        )
+    return None
+
+
+def post_alpha_constancy_error(balances: Mapping[int, int]) -> Optional[str]:
+    """Verify the POST-Alpha semantic: SYSTEM_CALLER balance frozen across
+    the given blocks (system txs are gas-exempt from activation on).
+
+    ``balances`` maps block number -> balance. Returns None when constant;
+    an error string otherwise.
+    """
+    if len(balances) < 2:
+        return f"need at least 2 post-activation blocks, got {len(balances)}"
+    if len(set(balances.values())) == 1:
         return None
-    return max(remaining, 0.0)
+    return (
+        "SYSTEM_CALLER balance still moving after Alpha activation (gas "
+        f"exemption not in effect?): {dict(sorted(balances.items()))}"
+    )
 
 
 def build_upgrade_order(node_ids: Sequence[str], first: str) -> List[str]:

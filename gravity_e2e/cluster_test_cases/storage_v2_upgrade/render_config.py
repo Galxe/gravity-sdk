@@ -41,24 +41,49 @@ REF_PLACEHOLDER = "{{GENESIS_CONTRACTS_REF}}"
 
 # Relative timestamp-fork offsets: "+45m", "+3600s", "+2h" (anchored to
 # render time). Lets test_params schedule a timestamp fork (e.g. alphaTime)
-# a fixed distance into the future without hand-computing unix epochs.
-# Re-render shortly before each run so the anchor stays fresh.
+# a fixed distance into the future without hand-computing unix epochs —
+# rolling_upgrade's mechanism (fork point computed once before the run,
+# config never touched mid-test), parameterized. Re-render shortly before
+# each run so the anchor stays fresh.
 _RELATIVE_TIME_RE = re.compile(r"^\+(\d+)([smh])$")
 _UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600}
 
 
+def _relative_offset_s(value):
+    """Seconds encoded by a "+NN[smh]" string, or None when not that form."""
+    if not isinstance(value, str):
+        return None
+    match = _RELATIVE_TIME_RE.match(value.strip())
+    if not match:
+        return None
+    return int(match.group(1)) * _UNIT_SECONDS[match.group(2)]
+
+
 def resolve_hardfork_value(value, now=None):
     """Resolve one [hardforks] value: ints pass through, "+NN[smh]" strings
-    become ``now + offset`` (unix seconds). Anything else raises."""
+    become ``now + offset``, and a table of named "+NN[smh]" components
+    becomes ``now + sum(components)`` (unix seconds) — the schedule formula
+    ``alphaTime = render_time + upgrade_budget + stability_window + margin``
+    with each component tunable in test_params. Anything else raises."""
     if isinstance(value, int):
         return value
-    if isinstance(value, str):
-        match = _RELATIVE_TIME_RE.match(value.strip())
-        if match:
-            offset = int(match.group(1)) * _UNIT_SECONDS[match.group(2)]
-            return int(now if now is not None else time.time()) + offset
+    offset = _relative_offset_s(value)
+    if offset is not None:
+        return int(now if now is not None else time.time()) + offset
+    if isinstance(value, dict) and value:
+        total = 0
+        for name, part in value.items():
+            part_offset = _relative_offset_s(part)
+            if part_offset is None:
+                raise ValueError(
+                    f"unsupported schedule component {name} = {part!r} — "
+                    f"each component must be a '+NN[smh]' string"
+                )
+            total += part_offset
+        return int(now if now is not None else time.time()) + total
     raise ValueError(
-        f"unsupported hardfork value {value!r} — use an int or '+NN[smh]'"
+        f"unsupported hardfork value {value!r} — use an int, '+NN[smh]', or "
+        f"a table of '+NN[smh]' components"
     )
 
 
