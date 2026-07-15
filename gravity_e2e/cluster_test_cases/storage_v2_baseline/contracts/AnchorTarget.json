@@ -1,0 +1,56 @@
+{
+  "abi": [
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "setter",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "oldValue",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "newValue",
+          "type": "uint256"
+        }
+      ],
+      "name": "ValueSet",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "x",
+          "type": "uint256"
+        }
+      ],
+      "name": "set",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "value",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x608060405234801561000f575f80fd5b5060eb8061001c5f395ff3fe6080604052348015600e575f80fd5b50600436106030575f3560e01c80633fa4f24514603457806360fe47b114604d575b5f80fd5b603b5f5481565b60405190815260200160405180910390f35b605c6058366004609f565b605e565b005b5f54604080519182526020820183905233917fc0e9036d619701c94569e1462d8120ef4a6d2b15a70d27cc942fd29ae2cc0e59910160405180910390a25f55565b5f6020828403121560ae575f80fd5b503591905056fea264697066735822122053f4be05b6642e0a92d497b29a1495703953bc1f21eb5855df9efca8f8b1504d64736f6c63430008150033"
+}

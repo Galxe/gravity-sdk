@@ -1,0 +1,17 @@
+# storage_v2_baseline test parameters
+#
+# Copy to test_params.toml (untracked), edit [source], then render:
+#     cp test_params.toml.example test_params.toml
+#     python render_config.py
+#
+# [source] takes exactly the forms cluster/deploy.sh resolve_source
+# accepts — pick ONE:
+#   bin_path     = absolute (or cluster/-relative) path to a pre-built
+#                  gravity_node — the storage-v2 way to pin an external
+#                  binary, e.g. a greth v2.3.0 integration build:
+#                  bin_path = "/home/neko/gravity/gravity-sdk-greth-v2.3.0/target/quick-release/gravity_node"
+#   project_path = local checkout to cargo-build (what other suites use)
+#   github + rev = clone and build a specific revision
+
+[source]
+bin_path = "../target/quick-release/gravity_node"
