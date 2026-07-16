@@ -114,7 +114,7 @@ impl ExecutionProxy {
             .state
             .read()
             .as_ref()
-            .expect("must be set within an epoch")
+            .ok_or_else(|| ExecutorError::internal_err("must be set within an epoch"))?
             .payload_manager
             .clone();
         let (transactions, _) = payload_manager.get_transactions(block).await?;
