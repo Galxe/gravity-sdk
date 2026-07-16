@@ -442,11 +442,21 @@ impl Mempool {
             !exclude_transactions.contains_key(&summary)
         });
         let mut transactions = vec![];
+        let mut total_bytes: u64 = 0;
         let best_txns = self.pool.best_txns(Some(filter), max_txns as usize);
         for txn in best_txns {
-            let signed_txn = VerifiedTxn::from(txn).into();
+            let signed_txn: SignedTransaction = VerifiedTxn::from(txn).into();
+            let txn_bytes = signed_txn.raw_txn_bytes_len() as u64;
+            // Enforce the byte budget so proposers don't build payloads that exceed
+            // max_receiving_block_bytes, which receivers reject in process_proposal.
+            // Always include at least one transaction to avoid stalling on a single
+            // large txn (single-txn size is already bounded at mempool admission).
+            if !transactions.is_empty() && total_bytes + txn_bytes > max_bytes {
+                break;
+            }
+            total_bytes += txn_bytes;
             transactions.push(signed_txn);
-            if transactions.len() >= max_txns as usize || transactions.len() >= max_bytes as usize {
+            if transactions.len() >= max_txns as usize {
                 break;
             }
         }
@@ -713,5 +723,70 @@ mod tests {
             0,
             "lazy GC should drop entries whose hashes are no longer in the pool"
         );
+    }
+
+    // A TxPool that hands back a fixed set of txns, honoring the `limit` argument
+    // (like the real reth pool) so get_batch_inner's own capping can be exercised.
+    fn batch_mempool(txns: Vec<ApiVerifiedTxn>) -> Mempool {
+        install_hasher();
+        struct BatchPool(Vec<ApiVerifiedTxn>);
+        impl TxPool for BatchPool {
+            fn best_txns(
+                &self,
+                _f: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>,
+                l: usize,
+            ) -> Box<dyn Iterator<Item = ApiVerifiedTxn>> {
+                Box::new(self.0.clone().into_iter().take(l))
+            }
+            fn get_broadcast_txns(
+                &self,
+                _f: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>,
+            ) -> Box<dyn Iterator<Item = ApiVerifiedTxn>> {
+                Box::new(std::iter::empty())
+            }
+            fn add_external_txn(&self, _t: ApiVerifiedTxn) -> bool {
+                false
+            }
+            fn remove_txns(&self, _t: Vec<ApiVerifiedTxn>) {}
+        }
+        Mempool {
+            pool: Box::new(BatchPool(txns)),
+            txn_cache: Arc::new(Mutex::new(TxnCache::new(100_000, Duration::from_secs(60)))),
+            snapshot: Arc::new(Mutex::new(Snapshot {
+                shards: HashMap::new(),
+                taken_at: Instant::now(),
+                max_age: Duration::from_millis(20),
+                initialized: false,
+            })),
+            topology: Arc::new(Mutex::new(ObservedTopology::new(Duration::from_secs(10)))),
+            num_sender_buckets: 1,
+        }
+    }
+
+    #[test]
+    fn get_batch_enforces_byte_budget() {
+        let txns: Vec<_> = (0..10u8).map(|i| mk_txn(0, i as u64, i + 40)).collect();
+        let m = batch_mempool(txns);
+
+        // Baseline: with generous limits all txns come back; every txn here has an
+        // identical serialized size, so per_txn is a clean unit for the budget math.
+        let all = m.get_batch_inner(100, u64::MAX, true, BTreeMap::new());
+        assert_eq!(all.len(), 10);
+        let per_txn = all[0].raw_txn_bytes_len() as u64;
+        assert!(per_txn > 0);
+
+        // A byte budget sized for exactly 3 txns must cap the batch at 3 — this is
+        // the behavior that was dead code before (max_bytes compared to txn count).
+        let batch = m.get_batch_inner(100, per_txn * 3, true, BTreeMap::new());
+        assert_eq!(batch.len(), 3, "byte budget must cap the batch");
+
+        // max_txns still caps independently of the byte budget.
+        let capped = m.get_batch_inner(2, u64::MAX, true, BTreeMap::new());
+        assert_eq!(capped.len(), 2, "max_txns must still cap the batch");
+
+        // At least one txn is always returned, even when it alone exceeds the budget,
+        // so a single large txn can never stall block production.
+        let tiny = m.get_batch_inner(100, 1, true, BTreeMap::new());
+        assert_eq!(tiny.len(), 1, "at least one txn must be returned");
     }
 }
