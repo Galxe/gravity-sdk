@@ -157,21 +157,18 @@ impl ConsensusDB {
                 .next_epoch_state()
                 .is_some_and(|next_epoch_state| next_epoch_state.epoch == target_epoch)
             {
-                let (block_number, timestamp_usecs, block_hash) =
-                    if let Some(epoch_block_info) = commit_info.epoch_block_info() {
-                        (
-                            epoch_block_info.block_number,
-                            epoch_block_info.epoch_start_timestamp_usecs,
-                            epoch_block_info.block_hash,
-                        )
-                    } else {
-                        (
-                            ledger_info.block_number(),
-                            ledger_info.timestamp_usecs(),
-                            ledger_info.block_hash(),
-                        )
-                    };
-                return Ok(Some(CommittedBlockAnchor { block_number, timestamp_usecs, block_hash }));
+                if let Some(epoch_block_info) = commit_info.epoch_block_info() {
+                    return Ok(Some(CommittedBlockAnchor {
+                        block_number: epoch_block_info.block_number,
+                        timestamp_usecs: epoch_block_info.epoch_start_timestamp_usecs,
+                        block_hash: epoch_block_info.block_hash,
+                    }));
+                }
+
+                // A boundary LI without EpochBlockInfo cannot distinguish the actual epoch-change
+                // block from a locally persisted suffix LI. Do not use local LI fields as
+                // leader-reputation consensus inputs.
+                continue;
             }
 
             // An epoch-ending block's post-state already belongs to the next epoch, so it must

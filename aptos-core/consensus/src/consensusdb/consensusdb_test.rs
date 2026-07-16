@@ -312,3 +312,50 @@ fn test_reputation_anchor_uses_lagged_commit_and_epoch_boundary() {
         Some(CommittedBlockAnchor { block_number: 90, timestamp_usecs: 900, block_hash: old_hash })
     );
 }
+
+#[test]
+fn test_reputation_anchor_skips_epoch_boundary_without_epoch_block_info() {
+    let tmp_dir = TempPath::new();
+    let db = ConsensusDB::new(&tmp_dir, &PathBuf::new());
+    let boundary_li_hash = HashValue::random();
+    let committed_hash = HashValue::random();
+
+    let legacy_boundary_info = BlockInfo::new(
+        1,
+        50,
+        HashValue::random(),
+        HashValue::random(),
+        0,
+        1_100,
+        Some(EpochState::new(2, ValidatorVerifier::new(vec![]))),
+    );
+    let legacy_boundary_li = LedgerInfoWithSignatures::new(
+        LedgerInfo::new_with_block_info(
+            legacy_boundary_info,
+            HashValue::zero(),
+            boundary_li_hash,
+            105,
+        ),
+        AggregateSignature::empty(),
+    );
+    db.put::<LedgerInfoSchema>(&105, &legacy_boundary_li).unwrap();
+
+    assert_eq!(db.get_reputation_anchor(2, 5).unwrap(), None);
+
+    let committed_info =
+        BlockInfo::new(2, 10, HashValue::random(), HashValue::random(), 0, 1_200, None);
+    let committed_li = LedgerInfoWithSignatures::new(
+        LedgerInfo::new_with_block_info(committed_info, HashValue::zero(), committed_hash, 110),
+        AggregateSignature::empty(),
+    );
+    db.put::<LedgerInfoSchema>(&110, &committed_li).unwrap();
+
+    assert_eq!(
+        db.get_reputation_anchor(2, 20).unwrap(),
+        Some(CommittedBlockAnchor {
+            block_number: 110,
+            timestamp_usecs: 1_200,
+            block_hash: committed_hash,
+        })
+    );
+}
