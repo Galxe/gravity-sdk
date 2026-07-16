@@ -224,6 +224,64 @@ async fn test_batch_creation_filters_unsupported_transaction_payloads() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_batch_creation_excludes_filtered_unsupported_transaction_payloads() {
+    let (quorum_store_to_mempool_tx, mut quorum_store_to_mempool_rx) = channel(1_024);
+
+    let config = QuorumStoreConfig { sender_max_total_bytes: 10_000, ..Default::default() };
+    let author = AccountAddress::random();
+    let mut batch_generator = BatchGenerator::new(
+        0,
+        author,
+        config,
+        Arc::new(MockQuorumStoreDB::new()),
+        Arc::new(MockBatchWriter::new()),
+        quorum_store_to_mempool_tx,
+        1000,
+    );
+
+    let unsupported_txn = create_unsupported_signed_transaction(10);
+    let unsupported_summary = TransactionSummary::new(
+        unsupported_txn.sender(),
+        unsupported_txn.sequence_number(),
+        unsupported_txn.committed_hash(),
+    );
+    let supported_txn = create_signed_transaction(1);
+    let expected_txn = supported_txn.clone();
+    let response_handle = tokio::spawn(async move {
+        if let QuorumStoreRequest::GetBatchRequest(_, _, _, exclude_txns, callback) =
+            timeout(Duration::from_millis(1_000), quorum_store_to_mempool_rx.select_next_some())
+                .await
+                .unwrap()
+        {
+            assert!(!exclude_txns.contains_key(&unsupported_summary));
+            callback
+                .send(Ok(QuorumStoreResponse::GetBatchResponse(vec![unsupported_txn])))
+                .unwrap();
+        } else {
+            panic!("Unexpected variant")
+        }
+
+        if let QuorumStoreRequest::GetBatchRequest(_, _, _, exclude_txns, callback) =
+            timeout(Duration::from_millis(1_000), quorum_store_to_mempool_rx.select_next_some())
+                .await
+                .unwrap()
+        {
+            assert!(exclude_txns.contains_key(&unsupported_summary));
+            callback.send(Ok(QuorumStoreResponse::GetBatchResponse(vec![supported_txn]))).unwrap();
+        } else {
+            panic!("Unexpected variant")
+        }
+    });
+
+    assert!(batch_generator.handle_scheduled_pull(1).await.is_empty());
+    let batches = batch_generator.handle_scheduled_pull(1).await;
+    response_handle.await.unwrap();
+
+    assert_eq!(batches.len(), 1);
+    assert_eq!(batches[0].clone().into_transactions(), vec![expected_txn]);
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_bucketed_batch_creation() {
     let (quorum_store_to_mempool_tx, mut quorum_store_to_mempool_rx) = channel(1_024);
     let (batch_coordinator_cmd_tx, mut batch_coordinator_cmd_rx) = TokioChannel(100);

@@ -67,6 +67,7 @@ pub struct BatchGenerator {
     mempool_proxy: MempoolProxy,
     batches_in_progress: HashMap<(PeerId, BatchId), BatchInProgress>,
     commited_txns_buffer: Vec<(TransactionSummary, TransactionInProgress)>,
+    unsupported_txns_buffer: BTreeMap<TransactionSummary, TransactionInProgress>,
     txns_in_progress_sorted: BTreeMap<TransactionSummary, TransactionInProgress>,
     batch_expirations: TimeExpirations<(PeerId, BatchId)>,
     latest_block_timestamp: u64,
@@ -109,6 +110,7 @@ impl BatchGenerator {
             config,
             mempool_proxy: MempoolProxy::new(mempool_tx, mempool_txn_pull_timeout_ms),
             batches_in_progress: HashMap::new(),
+            unsupported_txns_buffer: BTreeMap::new(),
             txns_in_progress_sorted: BTreeMap::new(),
             batch_expirations: TimeExpirations::new(),
             latest_block_timestamp: 0,
@@ -322,6 +324,9 @@ impl BatchGenerator {
         for (txn_summary, txn_in_progress) in self.commited_txns_buffer.iter() {
             exclude_transactions.insert(txn_summary.clone(), txn_in_progress.clone());
         }
+        for (txn_summary, txn_in_progress) in self.unsupported_txns_buffer.iter() {
+            exclude_transactions.insert(txn_summary.clone(), txn_in_progress.clone());
+        }
         let mut pulled_txns = self
             .mempool_proxy
             .pull_internal(
@@ -331,6 +336,7 @@ impl BatchGenerator {
             )
             .await
             .unwrap_or_default();
+        let mut unsupported_txns = Vec::new();
         pulled_txns.retain(|txn| {
             if let Err(error) = ensure_supported_transaction_payloads(std::slice::from_ref(txn)) {
                 warn!(
@@ -339,10 +345,21 @@ impl BatchGenerator {
                     error = ?error,
                     "Dropping unsupported transaction payload before local batch creation",
                 );
+                unsupported_txns.push((
+                    TransactionSummary::new(
+                        txn.sender(),
+                        txn.sequence_number(),
+                        txn.committed_hash(),
+                    ),
+                    TransactionInProgress::new(txn.gas_unit_price()),
+                ));
                 return false;
             }
             true
         });
+        for (txn_summary, txn_in_progress) in unsupported_txns {
+            self.unsupported_txns_buffer.insert(txn_summary, txn_in_progress);
+        }
 
         trace!("QS: pulled_txns len: {:?}", pulled_txns.len());
 
@@ -426,6 +443,7 @@ impl BatchGenerator {
 
                             // keep the last commited txn for each sender to avoid duplicate txn
                             self.commited_txns_buffer.clear();
+                            self.unsupported_txns_buffer.clear();
                             for (author, batch_id) in batches.iter().map(|b| (b.author(), b.batch_id())) {
                                 if let Some(batch_in_progress) = self.batches_in_progress.get(&(author, batch_id)) {
                                     for txn_summary in &batch_in_progress.txns {
