@@ -277,6 +277,15 @@ pub trait ReputationHeuristic: Send + Sync {
     ) -> Result<Vec<u64>> {
         Err(anyhow!("anchored validator performance is not supported"))
     }
+
+    /// Deterministic fallback when consensus-agreed performance inputs are unavailable.
+    fn get_fallback_weights(
+        &self,
+        epoch: u64,
+        epoch_to_candidates: &HashMap<u64, Vec<Author>>,
+    ) -> Vec<u64> {
+        self.get_weights(epoch, epoch_to_candidates, &[])
+    }
 }
 
 pub struct NewBlockEventAggregation {
@@ -714,6 +723,17 @@ impl ReputationHeuristic for ProposerAndVoterHeuristic {
         *cache = Some((block_number, weights.clone()));
         Ok(weights)
     }
+
+    fn get_fallback_weights(
+        &self,
+        epoch: u64,
+        epoch_to_candidates: &HashMap<u64, Vec<Author>>,
+    ) -> Vec<u64> {
+        epoch_to_candidates
+            .get(&epoch)
+            .map(|candidates| candidates.iter().map(|_| self.active_weight).collect())
+            .unwrap_or_default()
+    }
 }
 
 /// Committed history based proposer election implementation that could help bias towards
@@ -903,12 +923,19 @@ impl ProposerElection for LeaderReputation {
             return Some(ProposerElectionCacheKey::new(round));
         };
         let target_round = round.saturating_sub(self.exclude_round);
-        let anchor = backend.get_anchor(self.epoch, target_round).unwrap_or_else(|error| {
-            panic!(
-                "failed to resolve reputation anchor for epoch {}, round {}: {:?}",
-                self.epoch, target_round, error
-            )
-        })?;
+        let anchor = match backend.get_anchor(self.epoch, target_round) {
+            Ok(Some(anchor)) => anchor,
+            Ok(None) => return None,
+            Err(error) => {
+                error!(
+                    error = ?error,
+                    epoch = self.epoch,
+                    target_round = target_round,
+                    "Failed to resolve reputation anchor; disabling proposer-election cache"
+                );
+                return None;
+            }
+        };
 
         let mut version = Vec::with_capacity(48);
         version.extend_from_slice(&anchor.block_number.to_le_bytes());
@@ -923,27 +950,43 @@ impl ProposerElection for LeaderReputation {
     ) -> (Author, VotingPowerRatio) {
         let target_round = round.saturating_sub(self.exclude_round);
         let anchor = self.reputation_anchor_backend.as_ref().and_then(|backend| {
-            backend.get_anchor(self.epoch, target_round).unwrap_or_else(|error| {
-                panic!(
-                    "failed to resolve reputation anchor for epoch {}, round {}: {:?}",
-                    self.epoch, target_round, error
-                )
-            })
+            match backend.get_anchor(self.epoch, target_round) {
+                Ok(anchor) => anchor,
+                Err(error) => {
+                    error!(
+                        error = ?error,
+                        epoch = self.epoch,
+                        round = round,
+                        target_round = target_round,
+                        "Failed to resolve reputation anchor; falling back to active weights"
+                    );
+                    None
+                }
+            }
         });
         let alpha_active = self.is_consensus_alpha_active(anchor);
 
         let proposers = &self.epoch_to_proposers[&self.epoch];
         let (sliding_window, root_hash, mut weights) = if alpha_active {
             if let Some(anchor) = anchor {
-                let weights = self
-                    .heuristic
-                    .get_weights_at_block(self.epoch, &self.epoch_to_proposers, anchor.block_number)
-                    .unwrap_or_else(|error| {
-                        panic!(
-                            "failed to read ValidatorPerformances at committed block {}: {:?}",
-                            anchor.block_number, error
-                        )
-                    });
+                let weights = match self.heuristic.get_weights_at_block(
+                    self.epoch,
+                    &self.epoch_to_proposers,
+                    anchor.block_number,
+                ) {
+                    Ok(weights) => weights,
+                    Err(error) => {
+                        error!(
+                            error = ?error,
+                            epoch = self.epoch,
+                            round = round,
+                            target_round = target_round,
+                            block_number = anchor.block_number,
+                            "Failed to read anchored ValidatorPerformances; falling back to active weights"
+                        );
+                        self.heuristic.get_fallback_weights(self.epoch, &self.epoch_to_proposers)
+                    }
+                };
                 debug!(
                     "Using consensus-anchored validator performance: epoch={}, round={}, target_round={}, block_number={}",
                     self.epoch, round, target_round, anchor.block_number
@@ -956,7 +999,7 @@ impl ProposerElection for LeaderReputation {
                 );
                 let history = vec![];
                 let weights =
-                    self.heuristic.get_weights(self.epoch, &self.epoch_to_proposers, &history);
+                    self.heuristic.get_fallback_weights(self.epoch, &self.epoch_to_proposers);
                 (history, HashValue::zero(), weights)
             } else {
                 let (history, root_hash) =

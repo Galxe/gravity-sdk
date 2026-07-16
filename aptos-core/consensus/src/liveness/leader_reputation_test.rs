@@ -316,6 +316,18 @@ impl ReputationAnchorBackend for FixedReputationAnchorBackend {
     }
 }
 
+struct ErrorReputationAnchorBackend;
+
+impl ReputationAnchorBackend for ErrorReputationAnchorBackend {
+    fn get_anchor(
+        &self,
+        _target_epoch: u64,
+        _target_round: Round,
+    ) -> anyhow::Result<Option<CommittedBlockAnchor>> {
+        Err(anyhow::anyhow!("anchor unavailable"))
+    }
+}
+
 #[test]
 fn test_anchored_performance_cache_is_keyed_by_block_number() {
     let storage = Arc::new(MockPerformanceStorage::new());
@@ -386,6 +398,56 @@ fn test_anchored_performance_cache_is_keyed_by_block_number() {
     );
     assert_eq!(leader_reputation.get_valid_proposer(round), validators[expected_index]);
     assert_eq!(*storage.reads.lock(), vec![20]);
+
+    storage.reads.lock().clear();
+    let missing_anchor = CommittedBlockAnchor {
+        block_number: 30,
+        timestamp_usecs: 3_000,
+        block_hash: HashValue::random(),
+    };
+    let leader_reputation = LeaderReputation::new(
+        7,
+        HashMap::from([(7, validators.clone())]),
+        vec![1, 1],
+        Arc::new(EmptyMetadataBackend),
+        Box::new(ProposerAndVoterHeuristic::new(validators[0], 100, 10, 1, 10, 2, 5, false)),
+        0,
+        true,
+        100,
+    )
+    .with_reputation_anchor_backend(Arc::new(FixedReputationAnchorBackend(missing_anchor)))
+    .with_consensus_alpha_for_test(true);
+    let expected_index = choose_index(
+        vec![100, 100],
+        [
+            missing_anchor.block_hash.to_vec(),
+            7u64.to_le_bytes().to_vec(),
+            round.to_le_bytes().to_vec(),
+        ]
+        .concat(),
+    );
+    assert_eq!(leader_reputation.get_valid_proposer(round), validators[expected_index]);
+    assert_eq!(*storage.reads.lock(), vec![30]);
+
+    let leader_reputation = LeaderReputation::new(
+        7,
+        HashMap::from([(7, validators.clone())]),
+        vec![1, 1],
+        Arc::new(EmptyMetadataBackend),
+        Box::new(ProposerAndVoterHeuristic::new(validators[0], 100, 10, 1, 10, 2, 5, false)),
+        0,
+        true,
+        100,
+    )
+    .with_reputation_anchor_backend(Arc::new(ErrorReputationAnchorBackend))
+    .with_consensus_alpha_for_test(true);
+    let expected_index = choose_index(
+        vec![100, 100],
+        [HashValue::zero().to_vec(), 7u64.to_le_bytes().to_vec(), round.to_le_bytes().to_vec()]
+            .concat(),
+    );
+    assert_eq!(leader_reputation.get_valid_proposer(round), validators[expected_index]);
+    assert!(leader_reputation.cache_key(round).is_none());
 }
 
 /// #### LeaderReputation test ####
