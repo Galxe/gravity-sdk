@@ -230,10 +230,26 @@ where
 
 // Creates a single test transaction for a random account
 pub(crate) fn create_signed_transaction(gas_unit_price: u64) -> SignedTransaction {
+    create_signed_transaction_with_payload(
+        gas_unit_price,
+        TransactionPayload::GTxnBytes(vec![0; 2]),
+    )
+}
+
+pub(crate) fn create_unsupported_signed_transaction(gas_unit_price: u64) -> SignedTransaction {
+    create_signed_transaction_with_payload(
+        gas_unit_price,
+        TransactionPayload::Script(Script::new(vec![], vec![], vec![])),
+    )
+}
+
+fn create_signed_transaction_with_payload(
+    gas_unit_price: u64,
+    transaction_payload: TransactionPayload,
+) -> SignedTransaction {
     let private_key = Ed25519PrivateKey::generate_for_testing();
     let public_key = private_key.public_key();
 
-    let transaction_payload = TransactionPayload::Script(Script::new(vec![], vec![], vec![]));
     let raw_transaction = RawTransaction::new(
         AccountAddress::random(),
         0,

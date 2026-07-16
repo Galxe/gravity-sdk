@@ -2167,7 +2167,7 @@ async fn no_vote_on_proposal_ext_when_receiving_limit_exceeded() {
 
     let block_too_large = Block::new_proposal_ext(
         vec![ValidatorTransaction::dummy(vec![0xFF; 200]); 1], // total_bytes >= 200 * 1 = 200
-        Payload::DirectMempool(create_vec_signed_transactions(9)), // = total_bytes >= 69 * 9 = 621
+        Payload::DirectMempool(create_vec_signed_transactions(9)), // = total_bytes >= 76 * 9 = 684
         1,
         1,
         genesis_qc.clone(),
@@ -2189,7 +2189,7 @@ async fn no_vote_on_proposal_ext_when_receiving_limit_exceeded() {
 
     let valid_block = Block::new_proposal_ext(
         vec![ValidatorTransaction::dummy(vec![0xFF; 20]); 5], // total_bytes >= 60 * 5 = 300
-        Payload::DirectMempool(create_vec_signed_transactions(5)), // total_bytes >= 69 * 5 = 345
+        Payload::DirectMempool(create_vec_signed_transactions(5)), // total_bytes >= 76 * 5 = 380
         1,
         1,
         genesis_qc.clone(),
