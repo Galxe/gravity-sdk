@@ -100,7 +100,7 @@ seeds = [
 source = { project_path = "../" }
 host = "127.0.0.1"
 public_port = 6196              # Public listener — serves pfn3's inbound + own outbound to vfn1
-rpc_port = 18547
+rpc_port = 18647
 metrics_port = 9005
 inspection_port = 10004
 authrpc_port = 8555

@@ -58,7 +58,7 @@ role = "vfn"
 source = { project_path = "../" }
 host = "127.0.0.1"
 vfn_port = 6194
-rpc_port = 18547
+rpc_port = 18647
 metrics_port = 9005
 inspection_port = 10004
 https_port = 1026
