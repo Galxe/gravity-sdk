@@ -89,6 +89,12 @@ impl WrappedLedgerInfo {
         // VoteData is a placeholder when order votes are enabled, so it cannot determine whether
         // the signed ledger info is the unsigned genesis certificate.
         if self.ledger_info().ledger_info().round() == 0 {
+            let commit_info = self.ledger_info().ledger_info().commit_info();
+            ensure!(
+                self.ledger_info().ledger_info().consensus_data_hash() ==
+                    VoteData::new(commit_info.clone(), commit_info.clone()).hash(),
+                "Genesis QC has inconsistent commit block"
+            );
             ensure!(
                 self.ledger_info().get_num_voters() == 0,
                 "Genesis QC should not carry signatures"
@@ -129,6 +135,7 @@ impl WrappedLedgerInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::block::block_test_utils::certificate_for_genesis;
     use gaptos::{
         aptos_crypto::HashValue,
         aptos_types::{
@@ -152,6 +159,18 @@ mod tests {
     #[test]
     fn unsigned_genesis_is_still_accepted() {
         let (_, verifier) = random_validator_verifier(1, None, false);
-        assert!(WrappedLedgerInfo::dummy().verify(&verifier).is_ok());
+        assert!(certificate_for_genesis().into_wrapped_ledger_info().verify(&verifier).is_ok());
+    }
+
+    #[test]
+    fn unsigned_round_zero_non_genesis_is_rejected() {
+        let (_, verifier) = random_validator_verifier(1, None, false);
+        let ledger_info = LedgerInfo::new(BlockInfo::random_with_epoch(1, 0), HashValue::zero());
+        let wrapped = WrappedLedgerInfo::new(
+            VoteData::dummy(),
+            LedgerInfoWithSignatures::new(ledger_info, AggregateSignature::empty()),
+        );
+
+        assert!(wrapped.verify(&verifier).is_err());
     }
 }
