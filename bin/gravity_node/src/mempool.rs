@@ -187,6 +187,7 @@ impl TxPool for Mempool {
         &self,
         filter: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>,
         limit: usize,
+        max_bytes: u64,
     ) -> Box<dyn Iterator<Item = VerifiedTxn>> {
         let mut best_txns = self.cached_best.lock().unwrap();
         if best_txns.is_expired() || best_txns.best_txns.is_none() {
@@ -200,6 +201,7 @@ impl TxPool for Mempool {
         let chain_id = self.chain_id;
         // Take last_nonces out to avoid borrow conflict with best_txns iterator
         let mut last_nonces = std::mem::take(&mut best_txns.last_nonces);
+        let mut total_bytes: u64 = 0;
         let result: Vec<_> = best_txns
             .best_txns
             .as_mut()
@@ -235,6 +237,18 @@ impl TxPool for Mempool {
                 Some(verified_txn)
             })
             .take(limit)
+            .take_while(|verified_txn| {
+                // Prefetch hint: stop draining the cached iterator once the
+                // cumulative payload size reaches max_bytes, so a byte-bounded
+                // batch doesn't consume (and drop until TTL) thousands of
+                // over-fetched txns. The authoritative byte cap is applied by
+                // the caller on the fully-serialized txn; payload bytes
+                // under-count that size, so this keeps the crossing txn and
+                // errs toward extra candidates rather than starving the block.
+                let within = total_bytes < max_bytes;
+                total_bytes += verified_txn.bytes().len() as u64;
+                within
+            })
             .collect();
         // Put last_nonces back
         best_txns.last_nonces = last_nonces;

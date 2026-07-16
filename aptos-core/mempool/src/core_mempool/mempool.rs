@@ -443,15 +443,18 @@ impl Mempool {
         });
         let mut transactions = vec![];
         let mut total_bytes: u64 = 0;
-        let best_txns = self.pool.best_txns(Some(filter), max_txns as usize);
+        let best_txns = self.pool.best_txns(Some(filter), max_txns as usize, max_bytes);
         for txn in best_txns {
             let signed_txn: SignedTransaction = VerifiedTxn::from(txn).into();
             let txn_bytes = signed_txn.raw_txn_bytes_len() as u64;
-            // Enforce the byte budget so proposers don't build payloads that exceed
-            // max_receiving_block_bytes, which receivers reject in process_proposal.
-            // Always include at least one transaction to avoid stalling on a single
-            // large txn (single-txn size is already bounded at mempool admission).
-            if !transactions.is_empty() && total_bytes + txn_bytes > max_bytes {
+            // Authoritatively enforce the byte budget so proposers never build a
+            // payload that exceeds max_receiving_block_bytes, which receivers reject
+            // in round_manager::process_proposal. max_bytes may already have been
+            // reduced by validator transactions (MixedPayloadClient), so it can be
+            // smaller than a single txn; in that case we return fewer (possibly zero)
+            // user txns this round rather than overflow the block — the remainder is
+            // pulled in a later round.
+            if total_bytes + txn_bytes > max_bytes {
                 break;
             }
             total_bytes += txn_bytes;
@@ -513,6 +516,7 @@ mod tests {
                 &self,
                 _f: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>,
                 _l: usize,
+                _max_bytes: u64,
             ) -> Box<dyn Iterator<Item = ApiVerifiedTxn>> {
                 Box::new(std::iter::empty())
             }
@@ -735,7 +739,10 @@ mod tests {
                 &self,
                 _f: Option<Box<dyn Fn((ExternalAccountAddress, u64, TxnHash)) -> bool>>,
                 l: usize,
+                _max_bytes: u64,
             ) -> Box<dyn Iterator<Item = ApiVerifiedTxn>> {
+                // Ignore max_bytes here (it's a prefetch hint); return all
+                // candidates so get_batch_inner's authoritative cap is exercised.
                 Box::new(self.0.clone().into_iter().take(l))
             }
             fn get_broadcast_txns(
@@ -784,9 +791,10 @@ mod tests {
         let capped = m.get_batch_inner(2, u64::MAX, true, BTreeMap::new());
         assert_eq!(capped.len(), 2, "max_txns must still cap the batch");
 
-        // At least one txn is always returned, even when it alone exceeds the budget,
-        // so a single large txn can never stall block production.
+        // When the remaining budget is too small for even one txn (e.g. validator
+        // txns already consumed most of the block via MixedPayloadClient), no user
+        // txn is admitted — the batch must never overflow the byte budget.
         let tiny = m.get_batch_inner(100, 1, true, BTreeMap::new());
-        assert_eq!(tiny.len(), 1, "at least one txn must be returned");
+        assert!(tiny.is_empty(), "a txn exceeding the budget must not be admitted");
     }
 }
