@@ -4,7 +4,7 @@
 
 use crate::{
     consensusdb::{CommittedBlockAnchor, ConsensusDB},
-    liveness::proposer_election::{choose_index, ProposerElection},
+    liveness::proposer_election::{choose_index, ProposerElection, ProposerElectionCacheKey},
 };
 use anyhow::{anyhow, ensure, Context, Result};
 use aptos_consensus_types::common::{Author, Round};
@@ -898,6 +898,25 @@ impl LeaderReputation {
 }
 
 impl ProposerElection for LeaderReputation {
+    fn cache_key(&self, round: Round) -> Option<ProposerElectionCacheKey> {
+        let Some(backend) = self.reputation_anchor_backend.as_ref() else {
+            return Some(ProposerElectionCacheKey::new(round));
+        };
+        let target_round = round.saturating_sub(self.exclude_round);
+        let anchor = backend.get_anchor(self.epoch, target_round).unwrap_or_else(|error| {
+            panic!(
+                "failed to resolve reputation anchor for epoch {}, round {}: {:?}",
+                self.epoch, target_round, error
+            )
+        })?;
+
+        let mut version = Vec::with_capacity(48);
+        version.extend_from_slice(&anchor.block_number.to_le_bytes());
+        version.extend_from_slice(&anchor.timestamp_usecs.to_le_bytes());
+        version.extend_from_slice(anchor.block_hash.as_ref());
+        Some(ProposerElectionCacheKey::with_version(round, version))
+    }
+
     fn get_valid_proposer_and_voting_power_participation_ratio(
         &self,
         round: Round,

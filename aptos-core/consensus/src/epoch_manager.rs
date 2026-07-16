@@ -12,6 +12,7 @@ use crate::{
     dag::{DagBootstrapper, DagCommitSigner, StorageAdapter},
     error::{error_kind, DbError},
     liveness::{
+        cached_proposer_election::CachedProposerElection,
         leader_reputation::{
             extract_epoch_to_proposers, AptosDBBackend, ConsensusDBReputationAnchorBackend,
             LeaderReputation, ProposerAndVoterHeuristic, ReputationHeuristic,
@@ -127,6 +128,9 @@ use std::{
     time::Duration,
 };
 
+/// Range of rounds (window) that we might be calling proposer election
+/// functions with at any given time, in addition to the proposer history length.
+const PROPOSER_ELECTION_CACHING_WINDOW_ADDITION: usize = 3;
 /// Number of rounds we expect storage to be ahead of the proposer round,
 /// used for fetching data from DB.
 const PROPOSER_ROUND_BEHIND_STORAGE_BUFFER: usize = 10;
@@ -426,9 +430,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                         .collect::<Vec<_>>()
                 );
 
-                // ConsensusAlpha leader reputation depends on the latest committed anchor in
-                // ConsensusDB, so round results must be recomputed when the anchor advances.
-                Arc::new(
+                let proposer_election = Box::new(
                     LeaderReputation::new(
                         epoch_state.epoch,
                         epoch_to_proposers,
@@ -442,7 +444,15 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     .with_reputation_anchor_backend(Arc::new(
                         ConsensusDBReputationAnchorBackend::new(self.storage.consensus_db()),
                     )),
-                )
+                );
+                // CachedProposerElection uses LeaderReputation's anchor-aware cache key, so cached
+                // rounds are invalidated when the committed reputation anchor advances.
+                Arc::new(CachedProposerElection::new(
+                    epoch_state.epoch,
+                    proposer_election,
+                    onchain_config.max_failed_authors_to_store() +
+                        PROPOSER_ELECTION_CACHING_WINDOW_ADDITION,
+                ))
             }
             ProposerElectionType::RoundProposer(round_proposers) => {
                 // Hardcoded to the first proposer
