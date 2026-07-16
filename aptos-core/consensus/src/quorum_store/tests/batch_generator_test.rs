@@ -7,8 +7,8 @@ use crate::{
         batch_store::BatchWriter, quorum_store_db::MockQuorumStoreDB, types::PersistedValue,
     },
     test_utils::{
-        create_signed_transaction, create_vec_signed_transactions,
-        create_vec_signed_transactions_with_gas,
+        create_signed_transaction, create_unsupported_signed_transaction,
+        create_vec_signed_transactions, create_vec_signed_transactions_with_gas,
     },
 };
 use aptos_consensus_types::{
@@ -186,6 +186,41 @@ async fn test_batch_creation() {
             .unwrap();
     }
     timeout(Duration::from_millis(10_000), join_handle).await.unwrap().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_batch_creation_filters_unsupported_transaction_payloads() {
+    let (quorum_store_to_mempool_tx, mut quorum_store_to_mempool_rx) = channel(1_024);
+
+    let config = QuorumStoreConfig { sender_max_total_bytes: 10_000, ..Default::default() };
+    let author = AccountAddress::random();
+    let mut batch_generator = BatchGenerator::new(
+        0,
+        author,
+        config,
+        Arc::new(MockQuorumStoreDB::new()),
+        Arc::new(MockBatchWriter::new()),
+        quorum_store_to_mempool_tx,
+        1000,
+    );
+
+    let supported_txn = create_signed_transaction(1);
+    let expected_txn = supported_txn.clone();
+    let unsupported_txn = create_unsupported_signed_transaction(1);
+    let response_handle = tokio::spawn(async move {
+        queue_mempool_batch_response(
+            vec![unsupported_txn, supported_txn],
+            10_000,
+            &mut quorum_store_to_mempool_rx,
+        )
+        .await;
+    });
+
+    let batches = batch_generator.handle_scheduled_pull(10).await;
+    response_handle.await.unwrap();
+
+    assert_eq!(batches.len(), 1);
+    assert_eq!(batches[0].clone().into_transactions(), vec![expected_txn]);
 }
 
 #[tokio::test(flavor = "multi_thread")]

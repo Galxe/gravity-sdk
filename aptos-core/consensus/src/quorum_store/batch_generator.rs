@@ -11,7 +11,7 @@ use crate::{
     },
 };
 use aptos_consensus_types::{
-    common::{TransactionInProgress, TransactionSummary},
+    common::{ensure_supported_transaction_payloads, TransactionInProgress, TransactionSummary},
     proof_of_store::{BatchId, BatchInfo},
 };
 use aptos_mempool::QuorumStoreRequest;
@@ -331,6 +331,18 @@ impl BatchGenerator {
             )
             .await
             .unwrap_or_default();
+        pulled_txns.retain(|txn| {
+            if let Err(error) = ensure_supported_transaction_payloads(std::slice::from_ref(txn)) {
+                warn!(
+                    sender = %txn.sender(),
+                    sequence_number = txn.sequence_number(),
+                    error = ?error,
+                    "Dropping unsupported transaction payload before local batch creation",
+                );
+                return false;
+            }
+            true
+        });
 
         trace!("QS: pulled_txns len: {:?}", pulled_txns.len());
 
