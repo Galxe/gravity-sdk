@@ -201,55 +201,53 @@ impl TxPool for Mempool {
         let chain_id = self.chain_id;
         // Take last_nonces out to avoid borrow conflict with best_txns iterator
         let mut last_nonces = std::mem::take(&mut best_txns.last_nonces);
+        // Drive the cached iterator by hand so the byte budget is checked *before*
+        // pulling the next item. An adapter like `take_while` would consume (and
+        // record the nonce of) one extra txn past the budget, dropping it until the
+        // cache TTL and letting a later pull propose its successor nonce without it.
+        let iter = best_txns.best_txns.as_mut().unwrap();
+        let mut result: Vec<VerifiedTxn> = Vec::new();
         let mut total_bytes: u64 = 0;
-        let result: Vec<_> = best_txns
-            .best_txns
-            .as_mut()
-            .unwrap()
-            .filter_map(|pool_txn| {
-                let sender = pool_txn.sender();
-                let nonce = pool_txn.nonce();
+        while result.len() < limit && total_bytes < max_bytes {
+            let pool_txn = match iter.next() {
+                Some(txn) => txn,
+                None => break,
+            };
+            let sender = pool_txn.sender();
+            let nonce = pool_txn.nonce();
 
-                // Enforce nonce ordering: skip transactions that are not consecutive
-                if let Some(&last) = last_nonces.get(&sender) {
-                    if nonce != last + 1 {
-                        return None;
-                    }
+            // Enforce nonce ordering: skip transactions that are not consecutive
+            if let Some(&last) = last_nonces.get(&sender) {
+                if nonce != last + 1 {
+                    continue;
                 }
+            }
 
-                // transactions from poisoning nonce tracking
-                let sender_addr = convert_account(sender);
-                if let Some(ref f) = filter {
-                    let hash = TxnHash::from_bytes(pool_txn.hash().as_slice());
-                    if !f((sender_addr.clone(), nonce, hash)) {
-                        return None;
-                    }
+            // transactions from poisoning nonce tracking
+            let sender_addr = convert_account(sender);
+            if let Some(ref f) = filter {
+                let hash = TxnHash::from_bytes(pool_txn.hash().as_slice());
+                if !f((sender_addr.clone(), nonce, hash)) {
+                    continue;
                 }
+            }
 
-                // Only record nonce after filter passes
-                last_nonces.insert(sender, nonce);
+            // Only record nonce after filter passes
+            last_nonces.insert(sender, nonce);
 
-                let verified_txn = to_verified_txn(pool_txn.clone(), chain_id);
-                let tx_hash: [u8; 32] = pool_txn.transaction.transaction().inner().hash().0;
-                // Record the insertion time so the background sweeper can evict entries
-                // that stay uncommitted past the TTL.
-                txn_cache.insert(tx_hash, (Instant::now(), pool_txn));
-                Some(verified_txn)
-            })
-            .take(limit)
-            .take_while(|verified_txn| {
-                // Prefetch hint: stop draining the cached iterator once the
-                // cumulative payload size reaches max_bytes, so a byte-bounded
-                // batch doesn't consume (and drop until TTL) thousands of
-                // over-fetched txns. The authoritative byte cap is applied by
-                // the caller on the fully-serialized txn; payload bytes
-                // under-count that size, so this keeps the crossing txn and
-                // errs toward extra candidates rather than starving the block.
-                let within = total_bytes < max_bytes;
-                total_bytes += verified_txn.bytes().len() as u64;
-                within
-            })
-            .collect();
+            let verified_txn = to_verified_txn(pool_txn.clone(), chain_id);
+            let tx_hash: [u8; 32] = pool_txn.transaction.transaction().inner().hash().0;
+            // max_bytes is a prefetch hint: it caps how far we drain the cached
+            // iterator. It measures payload bytes, which under-count the fully
+            // serialized size the caller (get_batch_inner) enforces authoritatively,
+            // so we keep the txn that crosses the budget and err toward extra
+            // candidates rather than starving the block.
+            total_bytes += verified_txn.bytes().len() as u64;
+            // Record the insertion time so the background sweeper can evict entries
+            // that stay uncommitted past the TTL.
+            txn_cache.insert(tx_hash, (Instant::now(), pool_txn));
+            result.push(verified_txn);
+        }
         // Put last_nonces back
         best_txns.last_nonces = last_nonces;
         if result.is_empty() {
