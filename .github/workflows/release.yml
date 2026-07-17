@@ -119,12 +119,12 @@ jobs:
 
       - name: Build gravity_node docker image
         # Uses the `runtime-host-binary` target of docker/gravity_node/Dockerfile,
-        # which COPYs the binary the previous cargo step just produced. BuildKit
+        # which COPYs the binaries the previous cargo step just produced. BuildKit
         # stage pruning skips the `builder` stage entirely — no double compile.
         # Runs on both PR (build-only, no push) and tag pushes.
         #
         # Note: the repo's .dockerignore excludes `target/` from the build
-        # context, so we stage the binary into docker/gravity_node/bin/ (a path
+        # context, so we stage the binaries into docker/gravity_node/bin/ (a path
         # that IS in the context) before invoking `docker build`. This matches
         # the pre-existing pattern used by regression/pfn_chain_stress/run.sh.
         shell: bash
@@ -134,16 +134,19 @@ jobs:
           set -euo pipefail
           mkdir -p docker/gravity_node/bin
           cp -f target/quick-release/gravity_node docker/gravity_node/bin/gravity_node
+          cp -f target/quick-release/gravity_cli docker/gravity_node/bin/gravity_cli
           DOCKER_BUILDKIT=1 docker build \
             --target runtime-host-binary \
             --build-arg HOST_BINARY=docker/gravity_node/bin/gravity_node \
+            --build-arg HOST_CLI_BINARY=docker/gravity_node/bin/gravity_cli \
             -t "${IMAGE_REF}" \
             -f docker/gravity_node/Dockerfile .
+          docker run --rm --entrypoint /usr/local/bin/gravity_cli "${IMAGE_REF}" --version
           echo "--- image size ---"
           docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep "^${IMAGE_REF}"
-          # Don't leave the binary in the repo working dir after the build —
+          # Don't leave the binaries in the repo working dir after the build —
           # the runner reuses the checkout between jobs.
-          rm -f docker/gravity_node/bin/gravity_node
+          rm -f docker/gravity_node/bin/gravity_node docker/gravity_node/bin/gravity_cli
 
       - name: Resolve tag
         id: tag

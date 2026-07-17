@@ -20,11 +20,11 @@ use crate::{
 use anyhow::Result;
 use aptos_consensus_types::{
     block::Block,
-    common::{RejectedTransactionSummary, Round},
+    common::{ensure_supported_transaction_payloads, RejectedTransactionSummary, Round},
     pipeline_execution_result::PipelineExecutionResult,
     pipelined_block::PipelinedBlock,
 };
-use aptos_executor_types::{BlockExecutorTrait, ExecutorResult, StateComputeResult};
+use aptos_executor_types::{BlockExecutorTrait, ExecutorError, ExecutorResult, StateComputeResult};
 use aptos_mempool::core_mempool::transaction::VerifiedTxn;
 use gaptos::{
     api_types::{
@@ -109,25 +109,18 @@ pub struct ExecutionProxy {
 }
 
 impl ExecutionProxy {
-    async fn get_block_txns(&self, block: &Block) -> Vec<SignedTransaction> {
-        let MutableState {
-            validators,
-            payload_manager,
-            transaction_shuffler,
-            block_executor_onchain_config,
-            transaction_deduper,
-            is_randomness_enabled,
-        } = self.state.read().as_ref().cloned().expect("must be set within an epoch");
-        let mut txns = vec![];
-        match payload_manager.get_transactions(block).await {
-            Ok((transactions, _)) => {
-                txns.extend(transactions);
-            }
-            Err(e) => {
-                warn!("failed to get transactions from block {:?}, error {:?}", block, e);
-            }
-        }
-        txns
+    async fn get_block_txns(&self, block: &Block) -> ExecutorResult<Vec<SignedTransaction>> {
+        let payload_manager = self
+            .state
+            .read()
+            .as_ref()
+            .ok_or_else(|| ExecutorError::internal_err("must be set within an epoch"))?
+            .payload_manager
+            .clone();
+        let (transactions, _) = payload_manager.get_transactions(block).await?;
+        ensure_supported_transaction_payloads(&transactions)
+            .map_err(ExecutorError::internal_err)?;
+        Ok(transactions)
     }
     pub fn new(
         executor: Arc<dyn BlockExecutorTrait>,
@@ -452,7 +445,10 @@ impl StateComputer for ExecutionProxy {
         lifetime_guard: CountedRequest<()>,
     ) -> StateComputeResultFut {
         assert!(block.block_number().is_some());
-        let txns = self.get_block_txns(block).await;
+        let txns = match self.get_block_txns(block).await {
+            Ok(txns) => txns,
+            Err(error) => return Box::pin(async move { Err(error) }),
+        };
         let validator_txns = block.validator_txns();
         let extra_data = process_validator_transactions_util(validator_txns.map(|v| &**v), block);
 
