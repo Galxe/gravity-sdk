@@ -18,8 +18,11 @@ use gaptos::{
     aptos_infallible::Mutex,
     aptos_logger::prelude::*,
     aptos_types::{
-        account_address::AccountAddress, transaction::SignedTransaction,
-        validator_verifier::ValidatorVerifier, vm_status::DiscardedVMStatus, PeerId,
+        account_address::AccountAddress,
+        transaction::{SignedTransaction, TransactionPayload},
+        validator_verifier::ValidatorVerifier,
+        vm_status::DiscardedVMStatus,
+        PeerId,
     },
 };
 use once_cell::sync::OnceCell;
@@ -75,6 +78,27 @@ pub struct RejectedTransactionSummary {
     pub sequence_number: u64,
     pub hash: HashValue,
     pub reason: DiscardedVMStatus,
+}
+
+pub fn ensure_supported_transaction_payloads(
+    transactions: &[SignedTransaction],
+) -> anyhow::Result<()> {
+    for transaction in transactions {
+        let payload_type = match transaction.payload() {
+            TransactionPayload::GTxnBytes(_) => continue,
+            TransactionPayload::Script(_) => "Script",
+            TransactionPayload::ModuleBundle(_) => "ModuleBundle",
+            TransactionPayload::EntryFunction(_) => "EntryFunction",
+            TransactionPayload::Multisig(_) => "Multisig",
+        };
+        bail!(
+            "Unsupported transaction payload type {} for Gravity execution: sender {}, sequence number {}",
+            payload_type,
+            transaction.sender(),
+            transaction.sequence_number(),
+        );
+    }
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -402,7 +426,9 @@ impl Payload {
         quorum_store_enabled: bool,
     ) -> anyhow::Result<()> {
         match (quorum_store_enabled, self) {
-            (false, Payload::DirectMempool(_)) => Ok(()),
+            (false, Payload::DirectMempool(transactions)) => {
+                ensure_supported_transaction_payloads(transactions)
+            }
             (true, Payload::InQuorumStore(proof_with_status)) => {
                 Self::verify_with_cache(&proof_with_status.proofs, validator, proof_cache)
             }
@@ -421,6 +447,7 @@ impl Payload {
                             "Hash of the received inline batch doesn't match the digest value",
                         ));
                     }
+                    ensure_supported_transaction_payloads(payload)?;
                 }
                 Ok(())
             }
@@ -609,5 +636,67 @@ impl fmt::Display for PayloadFilter {
                 write!(f, "Empty filter")
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::proof_of_store::BatchId;
+    use gaptos::{
+        aptos_crypto::{
+            ed25519::{Ed25519PrivateKey, Ed25519Signature},
+            PrivateKey, Uniform,
+        },
+        aptos_types::{
+            chain_id::ChainId,
+            transaction::{RawTransaction, Script},
+            validator_verifier::random_validator_verifier,
+        },
+    };
+
+    fn signed_transaction(payload: TransactionPayload) -> SignedTransaction {
+        let private_key = Ed25519PrivateKey::generate_for_testing();
+        SignedTransaction::new(
+            RawTransaction::new(AccountAddress::random(), 0, payload, 0, 0, 0, ChainId::new(10)),
+            private_key.public_key(),
+            Ed25519Signature::dummy_signature(),
+        )
+    }
+
+    #[test]
+    fn payload_verify_rejects_unsupported_transaction_payloads() {
+        let (_, verifier) = random_validator_verifier(1, None, false);
+        let proof_cache = ProofCache::new(1);
+        let supported = signed_transaction(TransactionPayload::GTxnBytes(vec![1]));
+        let unsupported =
+            signed_transaction(TransactionPayload::Script(Script::new(vec![], vec![], vec![])));
+
+        assert!(Payload::DirectMempool(vec![supported])
+            .verify(&verifier, &proof_cache, false)
+            .is_ok());
+        assert!(Payload::DirectMempool(vec![unsupported.clone()])
+            .verify(&verifier, &proof_cache, false)
+            .is_err());
+
+        let author = AccountAddress::random();
+        let batch_payload = BatchPayload::new(author, vec![unsupported.clone()]);
+        let batch_info = BatchInfo::new(
+            author,
+            BatchId::new_for_test(1),
+            1,
+            1,
+            batch_payload.hash(),
+            batch_payload.num_txns() as u64,
+            batch_payload.num_bytes() as u64,
+            0,
+        );
+        let inline_payload = Payload::QuorumStoreInlineHybrid(
+            vec![(batch_info, vec![unsupported])],
+            ProofWithData::empty(),
+            None,
+        );
+
+        assert!(inline_payload.verify(&verifier, &proof_cache, true).is_err());
     }
 }
