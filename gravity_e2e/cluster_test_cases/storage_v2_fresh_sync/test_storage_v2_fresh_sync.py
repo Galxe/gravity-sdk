@@ -102,6 +102,7 @@ from gravity_e2e.cluster.manager import Cluster
 from gravity_e2e.cluster.node import Node, NodeState
 from gravity_e2e.helpers import storage_case_lib as lib
 from gravity_e2e.helpers import upgrade_lib
+from gravity_e2e.helpers.catchup import wait_for_catchup
 from gravity_e2e.helpers.governance import enable_permissionless_join
 from gravity_e2e.helpers.node_process import (
     stop_node_and_wait_exit as _stop_and_wait,
@@ -161,9 +162,13 @@ BLOCK_PROGRESS_TIMEOUT_S = 60
 TX_BLOCK_GAP_TIMEOUT_S = 30
 STOP_TIMEOUT_S = 90
 CATCHUP_TIMEOUT_S = 300
-# From-0 sync budget per SF node (the chain is ~30-60 min old by phase 4).
-FRESH_SYNC_TIMEOUT_S = 900
 RPC_UP_TIMEOUT_S = 120
+# NOTE: there is deliberately NO fixed from-0 sync deadline. Deep sync
+# advances in ~130s epoch staircase steps at a net convergence of only
+# ~1.4-1.9 blk/s (replay 5.5-7.6 vs production ~3.8 — attempt5
+# investigation, tc9-catchup-freeze-investigation.md); every catch-up
+# point uses helpers.catchup.wait_for_catchup (progress-based stall
+# detection + a gap-derived hard backstop) instead.
 
 # ── Storage/history parameters (TC1/TC2 lineage) ──
 TRANSFER_AMOUNTS_ETH = (1, 2)
@@ -183,9 +188,19 @@ VOTING_DURATION_S = 5
 JOIN_ACTIVE_TIMEOUT_S = 3 * EPOCH_INTERVAL_S + 120
 
 # ── Alpha timeline guards (upgrade_lib) ──
-ALPHA_MIN_LEAD_S = 18 * 60
+# Sized for THIS case's measured critical path (attempt5: the whole
+# 4-node rolling upgrade took ~7 min), not TC2's 6-node legacy numbers:
+# phase 1 (~1 min) + phase 2 (~4.5 min incl. the epoch crossing) +
+# phase 3 upgrades (~7 min) ≈ 12.5 min from the phase-1 guard to fleet
+# completion. The example schedule (+12m/+5m/+5m = 22 min from render,
+# ~17 min left at the guard after runner init) clears the floor with
+# ~4 min of slack.
+ALPHA_MIN_LEAD_S = 14 * 60
 ALPHA_MAX_LEAD_S = 2 * 3600
-ALPHA_UPGRADE_MARGIN_S = 5 * 60
+# Margin before STARTING a node's upgrade: one swap window is ~30-60s,
+# so 120s is 2-4 swaps of headroom (TC2's 5 min assumed slower nodes
+# and would spuriously trip on this compressed schedule).
+ALPHA_UPGRADE_MARGIN_S = 120
 ALPHA_ACTIVATION_BUFFER_S = 300
 
 # ── L3 necessity probe ──
@@ -264,13 +279,18 @@ def swap_node_binary(node: Node, new_binary: Path) -> None:
 
 
 async def restart_node_and_catch_up(cluster: Cluster, node: Node) -> None:
+    """Start a stopped node and require rejoin. The gap closes via the
+    progress-based waiter: even a short probe window leaves a few hundred
+    blocks behind at the chain's ~3.8 blk/s production, and the epoch
+    staircase makes fixed retry budgets misread that as a wedge."""
     assert await node.start(), f"failed to start {node.id}"
     assert await node.wait_for_block_increase(
         timeout=CATCHUP_TIMEOUT_S, delta=2
     ), f"{node.id}: no block progress after restart"
-    assert await wait_for_height_gap_ok(
-        cluster
-    ), f"{node.id}: cluster height gap did not close after restart"
+    reference = cluster.get_node("node1")
+    if node.id == reference.id:
+        reference = cluster.get_node("node2")
+    await wait_for_catchup(node, reference, max_gap=MAX_HEIGHT_GAP)
 
 
 async def _wait_until_height(node: Node, target: int, timeout: float) -> int:
@@ -540,16 +560,12 @@ async def start_fresh_sf_node(ctx, node_id: str) -> None:
 
 
 async def sync_to_tip(ctx, node_id: str) -> None:
-    """From-0 catch-up: reach the reference head sampled NOW, then close
-    the cluster height gap (gap-convergence, upgrade-case paradigm)."""
+    """From-0 catch-up against the LIVE tip, progress-based (see the
+    timeout-constants note): stall detection tolerant of the epoch
+    staircase + a hard budget derived from the actual gap."""
     node = ctx.cluster.get_node(node_id)
     reference = ctx.cluster.get_node("node1")
-    target = await asyncio.to_thread(lambda: reference.w3.eth.block_number)
-    LOG.info("[%s] syncing from 0 to tip (target >= %d)...", node_id, target)
-    head = await _wait_until_height(node, target, FRESH_SYNC_TIMEOUT_S)
-    assert await wait_for_height_gap_ok(ctx.cluster), (
-        f"{node_id}: height gap did not close after from-0 sync"
-    )
+    head = await wait_for_catchup(node, reference, max_gap=MAX_HEIGHT_GAP)
     LOG.info("[%s] caught up (head=%d)", node_id, head)
 
 
@@ -866,15 +882,24 @@ async def phase_3_rolling_upgrade(ctx: FreshSyncContext) -> None:
 
 
 async def phase_4_sf_first_batch(ctx: FreshSyncContext) -> None:
-    LOG.info("[Phase 4] SF fullnodes, first batch: %s then sf_pfn1 ...",
-             sf_lib.SF_FIRST_BATCH)
-    for node_id in sf_lib.SF_FIRST_BATCH:
+    LOG.info("[Phase 4] SF fullnodes, first batch (parallel): %s, then "
+             "sf_pfn1 ...", sf_lib.SF_FIRST_BATCH)
+
+    async def _enable_and_sync(node_id: str) -> None:
         await start_fresh_sf_node(ctx, node_id)
         await sync_to_tip(ctx, node_id)
+
+    # sf_vfn1 (<- node2) and sf_pfn2 (<- vfn1) have independent upstreams
+    # and datadirs — sync them in parallel; from-0 catch-up is the case's
+    # dominant cost (net convergence ~1.4-1.9 blk/s against a producing
+    # chain), so serializing them would nearly double the phase.
+    await asyncio.gather(
+        *(_enable_and_sync(node_id) for node_id in sf_lib.SF_FIRST_BATCH)
+    )
     # SF <- SF chain: sf_pfn1 syncs FROM sf_vfn1 (its only upstream), so
-    # an SF node is exercised as a sync SERVER here, not just a client.
-    await start_fresh_sf_node(ctx, "sf_pfn1")
-    await sync_to_tip(ctx, "sf_pfn1")
+    # an SF node is exercised as a sync SERVER here, not just a client —
+    # which is why it must stay serial after sf_vfn1's convergence.
+    await _enable_and_sync("sf_pfn1")
 
 
 async def offline_sf_probe_and_restart(ctx: FreshSyncContext, node_id: str,

@@ -476,3 +476,36 @@ def test_deploy_start_scripts_rewrite_the_pid_file():
         f"expected the validator/pfn/vfn start.sh heredocs to each write "
         f"the pid file, found {writes} write sites"
     )
+
+
+# ---------------------------------------------------------------------------
+# Compressed Alpha schedule vs the case guards (attempt5 chain-age lesson)
+# ---------------------------------------------------------------------------
+
+
+def test_example_alpha_schedule_clears_the_case_guards():
+    """The example schedule is compressed (+12m/+5m/+5m — every extra
+    minute of schedule is extra chain age the SF nodes replay from 0 at
+    ~1.4-1.9 blk/s net). It must still clear the phase-1 lead floor with
+    slack for the runner's init/deploy window (~4-5 min between render
+    and the guard)."""
+    example = tomllib.loads(
+        (CASE_DIR / "test_params.toml.example").read_text()
+    )
+    components = example["hardforks"]["alphaTime"]
+    total_s = 0
+    for name, value in components.items():
+        assert value.startswith("+") and value.endswith("m"), (
+            f"component {name}={value!r} must be a '+NNm' offset"
+        )
+        total_s += int(value[1:-1]) * 60
+    assert total_s == 22 * 60, "schedule drifted from the documented tier"
+
+    case = _load_main_case_module()
+    runner_init_budget_s = 5 * 60
+    assert total_s - runner_init_budget_s >= case.ALPHA_MIN_LEAD_S, (
+        "schedule leaves less than the phase-1 lead floor after a "
+        "worst-case runner init window"
+    )
+    assert case.ALPHA_MIN_LEAD_S < total_s
+    assert case.ALPHA_UPGRADE_MARGIN_S < case.ALPHA_MIN_LEAD_S

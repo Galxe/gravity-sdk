@@ -72,6 +72,24 @@ cd ../.. && python3 gravity_e2e/runner.py --force-init storage_v2_fresh_sync
 
 Old binary: v1.7.5 (see storage_v2_upgrade/README for the release-asset
 channel and the source-build fallback). New binary: `[sf_source]` and
-`GRAVITY_NEW_BINARY` must point at the same merge v2.3.0 build. Expected
-duration ~50-70 min. Without a rendered cluster.toml the runner skips
-the suite (binary opt-in, CI-neutral).
+`GRAVITY_NEW_BINARY` must point at the same merge v2.3.0 build. Without
+a rendered cluster.toml the runner skips the suite (binary opt-in,
+CI-neutral).
+
+## Duration & the from-0 sync budget
+
+Deep sync replays the chain one epoch per fast-forward round (~130 s per
+full-load epoch) at a **net convergence of only ~1.4-1.9 blk/s** against
+the chain's ~3.8 blk/s production
+(`tc9-catchup-freeze-investigation.md`, attempt5). All catch-up waits
+are therefore progress-based (`helpers/catchup.py`: stall window ~3x the
+staircase period + a gap-derived hard backstop), never fixed deadlines,
+and the Alpha schedule is compressed to keep the chain young at phase 4.
+Expect **~2 h end to end**; the late phases (sf_pfn1 / sf_val1 /
+sf_vfn2 each chase an ever-older chain) dominate and can stretch further
+under sustained load.
+
+Optional compression lever (NOT enabled — live realism first; recorded
+for the run-tier/Q5 decision): pausing the TxSender during catch-up
+windows shrinks the loaded epochs and raises net convergence; flip it
+only if the run tier demands a shorter wall clock.

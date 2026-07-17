@@ -38,20 +38,30 @@ ref = "main"
 # fixed at render time. Re-render shortly before each run.
 #
 # betaBlock = 100: activates on v1.7.5, schedule-only fork.
-# gammaBlock = 4500: crossed only after the 4-node fleet is upgraded
-#   (~12-16 min of upgrades at 2.6-3.7 blocks/s).
+# gammaBlock = 4500: crossed at ~20 min of chain time (~3.8 blocks/s
+#   measured) — after the fleet completes upgrading (~render+19 min on
+#   the compressed schedule below).
 [hardforks]
 betaBlock = 100
 gammaBlock = 4500
 
 # alphaTime = render_time + upgrade_budget + stability_window + margin.
-#   upgrade_budget:   runner init/deploy (~4 min) + bootstrap & SF-node
-#                     wipe (~2 min) + A-batch history & epoch crossing
-#                     (~4 min) + 4 upgrades with 120 s inter-node waits
-#                     (~12 min).
-#   stability_window: post-upgrade health under load before activation.
-#   margin:           schedule slack (phase 3's tail waits it out).
+# Sized from MEASURED attempt5 timings, not TC2's 6-node legacy tier
+# (+27m/+13m/+10m): the whole 4-node rolling upgrade took ~7 min live,
+# and every extra minute of schedule is a minute of extra chain age the
+# five SF nodes must replay from 0 at a net convergence of only
+# ~1.4-1.9 blk/s (tc9-catchup-freeze-investigation.md) — halving the
+# chain age roughly halves the from-0 catch-up cost.
+#   upgrade_budget +12m: runner init/deploy ~4-5 min + phase 1 (~1 min)
+#                        + phase 2 history/funding/epoch-cross
+#                        (~4.5 min) + the ~7 min upgrade train overlaps
+#                        into the next two components;
+#   stability_window +5m / margin +5m: upgrade tail + slack.
+# Total 22 min from render ≈ 17 min at the phase-1 guard — clears the
+# case's ALPHA_MIN_LEAD_S floor (14 min, sized to the ~12.5 min
+# phase-1→fleet-complete critical path) with ~4 min of slack. Do NOT
+# stretch this back to the TC2 tier: it directly inflates phases 4-8.
 [hardforks.alphaTime]
-upgrade_budget = "+22m"
-stability_window = "+8m"
-margin = "+10m"
+upgrade_budget = "+12m"
+stability_window = "+5m"
+margin = "+5m"
