@@ -11,7 +11,7 @@ use gaptos::{
     aptos_types::{ledger_info::LedgerInfoWithSignatures, validator_verifier::ValidatorVerifier},
 };
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::{collections::HashMap, fmt};
 
 pub const NUM_RETRIES: usize = 5;
 pub const NUM_PEERS_PER_RETRY: usize = 1;
@@ -127,6 +127,48 @@ impl BlockRetrievalResponse {
 
     pub fn quorum_certs(&self) -> &Vec<QuorumCert> {
         &self.quorum_certs
+    }
+
+    pub fn verify_ledger_infos(
+        &self,
+        retrieval_request: &BlockRetrievalRequest,
+        sig_verifier: &ValidatorVerifier,
+    ) -> anyhow::Result<()> {
+        let block_numbers_by_id = self
+            .blocks
+            .iter()
+            .filter_map(|(block, block_number, _)| block_number.map(|num| (block.id(), num)))
+            .collect::<HashMap<_, _>>();
+
+        for ledger_info_with_sigs in &self.ledger_infos {
+            ledger_info_with_sigs.verify_signatures(sig_verifier)?;
+
+            let ledger_info = ledger_info_with_sigs.ledger_info();
+            if let Some(expected_epoch) = retrieval_request.epoch() {
+                ensure!(
+                    ledger_info.epoch() == expected_epoch,
+                    "ledger info epoch mismatch: expected {}, got {}",
+                    expected_epoch,
+                    ledger_info.epoch(),
+                );
+            }
+
+            let commit_block_id = ledger_info.consensus_block_id();
+            let block_number = block_numbers_by_id.get(&commit_block_id).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "ledger info commits block {} that is missing from retrieval response",
+                    commit_block_id
+                )
+            })?;
+            ensure!(
+                *block_number == ledger_info.block_number(),
+                "ledger info block number mismatch for block {}: expected {}, got {}",
+                commit_block_id,
+                block_number,
+                ledger_info.block_number(),
+            );
+        }
+        Ok(())
     }
 
     pub fn verify(

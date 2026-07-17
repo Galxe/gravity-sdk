@@ -41,10 +41,19 @@ pub struct TxnItem {
 }
 
 pub trait TxPool: Send + Sync + 'static {
+    /// Return the best transactions to include in a block.
+    ///
+    /// `limit` bounds the number of transactions; `max_bytes` bounds their
+    /// cumulative payload size. `max_bytes` is a prefetch hint used to avoid
+    /// eagerly draining a cached iterator far past the byte budget — the
+    /// consensus-facing byte limit is enforced authoritatively by the caller
+    /// (`Mempool::get_batch_inner`), which measures the fully-serialized
+    /// transaction rather than just the payload bytes.
     fn best_txns(
         &self,
         filter: Option<TxFilterFn>,
         limit: usize,
+        max_bytes: u64,
     ) -> Box<dyn Iterator<Item = VerifiedTxn>>;
 
     fn get_broadcast_txns(
@@ -71,6 +80,7 @@ impl TxPool for EmptyTxPool {
         &self,
         _filter: Option<TxFilterFn>,
         _limit: usize,
+        _max_bytes: u64,
     ) -> Box<dyn Iterator<Item = VerifiedTxn>> {
         Box::new(vec![].into_iter())
     }

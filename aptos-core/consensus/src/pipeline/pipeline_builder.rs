@@ -511,7 +511,7 @@ impl PipelineBuilder {
                 epoch,
             )
             .await
-            .unwrap_or_else(|e| panic!("Failed to get executed result {}", e));
+            .map_err(|e| anyhow::anyhow!("Failed to get executed result {}", e))?;
         let hash = hash.execution_output;
         update_counters_for_compute_res(&hash);
         let result = StateComputeResult::new(hash, None, None);
@@ -731,7 +731,19 @@ impl PipelineBuilder {
         let _timer = counters::OP_COUNTERS.timer("pre_commit_notify");
 
         // let txns = compute_result.transactions_to_commit().to_vec();
-        let (txns, _) = payload_manager.get_transactions(&block).await.unwrap_or_default();
+        let payload_vec: Vec<_> = payload.into_iter().collect();
+        let (txns, _) = match payload_manager.get_transactions(&block).await {
+            Ok(txns) => txns,
+            Err(error) => {
+                payload_manager.notify_commit(timestamp, payload_vec);
+                return Err(anyhow::anyhow!(
+                    "failed to get transactions for committed block {}: {}",
+                    block.id(),
+                    error
+                )
+                .into());
+            }
+        };
         let txns = txns.into_iter().map(|t| Transaction::UserTransaction(t)).collect_vec();
         let commit_txns = compute_result.transactions_to_commit(txns);
         // let subscribable_events = compute_result.subscribable_events().to_vec();
@@ -749,7 +761,6 @@ impl PipelineBuilder {
             error!(error = ?e, "Failed to notify state synchronizer");
         }
 
-        let payload_vec = payload.into_iter().collect();
         payload_manager.notify_commit(timestamp, payload_vec);
         Ok(())
     }

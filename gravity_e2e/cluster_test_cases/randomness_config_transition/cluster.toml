@@ -1,0 +1,87 @@
+# Gravity Cluster Configuration - Randomness Config Transition E2E
+# 4 validators + 1 shadow VFN.
+
+[cluster]
+name = "gravity-devnet-randomness-transition"
+base_dir = "/tmp/gravity-cluster-randomness-transition"
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 6380
+vfn_port = 6390
+rpc_port = 8745
+metrics_port = 9201
+inspection_port = 10200
+https_port = 1224
+authrpc_port = 8751
+reth_p2p_port = 12224
+# Genesis points node1's on-chain fullnode address at vfn1. Avoid resolving
+# that address from node1's own VFN network and failing the identity self-check.
+vfn_discovery_method = "none"
+
+[[nodes]]
+id = "node2"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 6381
+vfn_port = 6391
+rpc_port = 8746
+metrics_port = 9202
+inspection_port = 10201
+https_port = 1225
+authrpc_port = 8752
+reth_p2p_port = 12225
+
+[[nodes]]
+id = "node3"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 6382
+vfn_port = 6392
+rpc_port = 8747
+metrics_port = 9203
+inspection_port = 10202
+https_port = 1226
+authrpc_port = 8753
+reth_p2p_port = 12226
+
+[[nodes]]
+id = "node4"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 6383
+vfn_port = 6393
+rpc_port = 8748
+metrics_port = 9204
+inspection_port = 10203
+https_port = 1227
+authrpc_port = 8754
+reth_p2p_port = 12227
+
+[[nodes]]
+id = "vfn1"
+role = "vfn"
+seeds = [{ from = "node1" }]
+discovery_method = "none"
+source = { project_path = "../" }
+host = "127.0.0.1"
+vfn_port = 6394
+rpc_port = 8749
+metrics_port = 9205
+inspection_port = 10204
+https_port = 1228
+authrpc_port = 8755
+reth_p2p_port = 12228
+
+[faucet_init]
+num_accounts = 10

@@ -51,6 +51,13 @@ use std::{
 pub const CONSENSUS_DB_NAME: &str = "consensus_db";
 const RECENT_BLOCKS_RANGE: u64 = 256;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CommittedBlockAnchor {
+    pub block_number: u64,
+    pub timestamp_usecs: u64,
+    pub block_hash: HashValue,
+}
+
 /// Creates new physical DB checkpoint in directory specified by `checkpoint_path`.
 pub fn create_checkpoint<P: AsRef<Path> + Clone>(db_path: P, checkpoint_path: P) -> Result<()> {
     let start = Instant::now();
@@ -129,6 +136,60 @@ impl ConsensusDB {
         let ledger_db = LedgerDb::new(db.clone());
 
         Self { db, node_config_set, ledger_db }
+    }
+
+    /// Returns the newest committed execution block whose consensus round is no newer than
+    /// `target_round`. At the beginning of an epoch, the previous epoch's reconfiguration block
+    /// is used because its post-state contains the new validator set and reset performance data.
+    pub fn get_reputation_anchor(
+        &self,
+        target_epoch: u64,
+        target_round: u64,
+    ) -> Result<Option<CommittedBlockAnchor>> {
+        let mut iter = self.db.rev_iter::<LedgerInfoSchema>()?;
+        iter.seek_to_last();
+
+        while let Some((_block_number, ledger_info_with_sigs)) = iter.next().transpose()? {
+            let ledger_info = ledger_info_with_sigs.ledger_info();
+            let commit_info = ledger_info.commit_info();
+
+            if commit_info
+                .next_epoch_state()
+                .is_some_and(|next_epoch_state| next_epoch_state.epoch == target_epoch)
+            {
+                if let Some(epoch_block_info) = commit_info.epoch_block_info() {
+                    return Ok(Some(CommittedBlockAnchor {
+                        block_number: epoch_block_info.block_number,
+                        timestamp_usecs: epoch_block_info.epoch_start_timestamp_usecs,
+                        block_hash: epoch_block_info.block_hash,
+                    }));
+                }
+
+                // A boundary LI without EpochBlockInfo cannot distinguish the actual epoch-change
+                // block from a locally persisted suffix LI. Do not use local LI fields as
+                // leader-reputation consensus inputs.
+                continue;
+            }
+
+            // An epoch-ending block's post-state already belongs to the next epoch, so it must
+            // never be used as a performance snapshot for the epoch it ends.
+            if commit_info.next_epoch_state().is_none() &&
+                commit_info.epoch() == target_epoch &&
+                commit_info.round() <= target_round
+            {
+                return Ok(Some(CommittedBlockAnchor {
+                    block_number: ledger_info.block_number(),
+                    timestamp_usecs: ledger_info.timestamp_usecs(),
+                    block_hash: ledger_info.block_hash(),
+                }));
+            }
+
+            if commit_info.epoch().saturating_add(1) < target_epoch {
+                break;
+            }
+        }
+
+        Ok(None)
     }
 
     pub fn get_data(

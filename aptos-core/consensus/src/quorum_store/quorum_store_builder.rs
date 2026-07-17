@@ -430,11 +430,36 @@ impl InnerBuilder {
             info!(epoch = epoch, "Batch retrieval task starts");
             while let Some(rpc_request) = batch_retrieval_rx.next().await {
                 counters::RECEIVED_BATCH_REQUEST_COUNT.inc();
-                let response = if let Ok(value) =
-                    batch_store.get_batch_from_local(&quorum_store::types::BatchKey::new(
-                        rpc_request.req.epoch(),
-                        rpc_request.req.digest(),
-                    )) {
+                let req_epoch = rpc_request.req.epoch();
+                let req_digest = rpc_request.req.digest();
+                let mut batch_result = batch_store.get_batch_from_local(
+                    &quorum_store::types::BatchKey::new(req_epoch, req_digest),
+                );
+                if batch_result.is_err() {
+                    // At an epoch boundary the same transactions can be repackaged into a
+                    // batch with the same digest under the adjacent epoch, so the local
+                    // copy may be stored under a neighboring epoch key. Serving it is
+                    // safe: the requester verifies the response against the digest.
+                    for adjacent_epoch in [req_epoch + 1, req_epoch.saturating_sub(1)] {
+                        if adjacent_epoch == req_epoch {
+                            continue;
+                        }
+                        batch_result = batch_store.get_batch_from_local(
+                            &quorum_store::types::BatchKey::new(adjacent_epoch, req_digest),
+                        );
+                        if batch_result.is_ok() {
+                            warn!(
+                                epoch = epoch,
+                                "QS: serving batch {} from adjacent epoch {} (requested epoch {})",
+                                req_digest,
+                                adjacent_epoch,
+                                req_epoch,
+                            );
+                            break;
+                        }
+                    }
+                }
+                let response = if let Ok(value) = batch_result {
                     let batch: Batch = value.try_into().unwrap();
                     BatchResponse::Batch(batch)
                 } else {

@@ -90,7 +90,7 @@ async fn test_batch_creation() {
     let (quorum_store_to_mempool_tx, mut quorum_store_to_mempool_rx) = channel(1_024);
     let (batch_coordinator_cmd_tx, mut batch_coordinator_cmd_rx) = TokioChannel(100);
 
-    let txn_size = 168;
+    let txn_size = 175;
     let max_size = 9 * txn_size;
 
     let config = QuorumStoreConfig { sender_max_total_bytes: max_size, ..Default::default() };
@@ -193,7 +193,7 @@ async fn test_bucketed_batch_creation() {
     let (quorum_store_to_mempool_tx, mut quorum_store_to_mempool_rx) = channel(1_024);
     let (batch_coordinator_cmd_tx, mut batch_coordinator_cmd_rx) = TokioChannel(100);
 
-    let txn_size = 168;
+    let txn_size = 175;
     let max_size = 9 * txn_size;
 
     let config = QuorumStoreConfig { sender_max_total_bytes: max_size, ..Default::default() };
@@ -371,7 +371,7 @@ async fn test_max_batch_bytes() {
     let (quorum_store_to_mempool_tx, mut quorum_store_to_mempool_rx) = channel(1_024);
     let (batch_coordinator_cmd_tx, mut batch_coordinator_cmd_rx) = TokioChannel(100);
 
-    let txn_bytes_len = 168;
+    let txn_bytes_len = 175;
     assert_eq!(create_vec_signed_transactions(1)[0].txn_bytes_len(), txn_bytes_len);
     let config =
         QuorumStoreConfig { sender_max_batch_bytes: txn_bytes_len * 10, ..Default::default() };
