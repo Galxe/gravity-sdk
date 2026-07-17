@@ -104,8 +104,21 @@ def _to_int(value: Union[bytes, str, int]) -> int:
 
 
 def _slot_to_hex(slot: Union[int, str, bytes]) -> str:
-    """Canonical minimal hex for a storage slot key (e.g. 0, "0x00" -> "0x0")."""
-    return hex(_to_int(slot if not isinstance(slot, str) else int(slot, 16)))
+    """Canonical minimal hex for a storage slot key (e.g. 0, "0x00" -> "0x0").
+
+    String slots MUST be 0x-prefixed hex: a bare "10" is ambiguous (ten or
+    sixteen?) and used to be silently parsed as hex — a case author writing
+    decimal would anchor the wrong slot and every later replay would
+    "match" the wrong data. Pass an int for decimal slots.
+    """
+    if isinstance(slot, str):
+        if not slot.lower().startswith("0x"):
+            raise ValueError(
+                f"string storage slot must be 0x-prefixed hex, got {slot!r} "
+                f"(pass an int for decimal slots)"
+            )
+        return hex(int(slot, 16))
+    return hex(_to_int(slot))
 
 
 def _canon_receipt_log(log: Any) -> Dict[str, Any]:

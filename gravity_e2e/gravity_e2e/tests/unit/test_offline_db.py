@@ -32,6 +32,7 @@ from gravity_e2e.helpers.offline_db import (
     parse_entry_count,
     read_storage_settings,
     run_db_command,
+    segment_block_range,
 )
 
 # ---------------------------------------------------------------------------
@@ -792,3 +793,40 @@ class TestInspectChangesetStaticFiles:
             ACC_SEG + ".csoff",
             second + ".csoff",
         ]
+
+    def test_segments_sorted_numerically_not_lexicographically(self, tmp_path):
+        # Regression: lexicographic sort puts "1000000" before "500000", so
+        # segments[-1] (what cases treat as "the highest-block segment")
+        # silently pointed at the wrong file once ranges crossed a digit
+        # boundary.
+        datadir = tmp_path / "datadir"
+        first = "static_file_account-change-sets_0_499999"
+        middle = "static_file_account-change-sets_500000_999999"
+        last = "static_file_account-change-sets_1000000_1499999"
+        build_static_files(
+            datadir / "static_files",
+            [last, first, middle]
+            + [name + ".csoff" for name in (last, first, middle)],
+        )
+
+        layout = inspect_changeset_static_files(datadir)
+
+        assert [p.name for p in layout.account_segments] == [first, middle, last]
+        assert layout.account_segments[-1].name == last
+        assert [p.name for p in layout.account_sidecars] == [
+            name + ".csoff" for name in (first, middle, last)
+        ]
+
+
+class TestSegmentBlockRange:
+    def test_parses_data_and_sidecar_names(self):
+        assert segment_block_range(
+            "static_file_storage-change-sets_500000_999999"
+        ) == (500000, 999999)
+        assert segment_block_range(
+            Path("/x/static_file_account-change-sets_0_499999.csoff")
+        ) == (0, 499999)
+
+    def test_rejects_foreign_names(self):
+        with pytest.raises(ValueError, match="not a changeset segment"):
+            segment_block_range("static_file_headers_0_499999")

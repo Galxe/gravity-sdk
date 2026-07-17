@@ -409,3 +409,30 @@ class TestHexNormalization:
 
         report = replay_anchors(FakeW3(variant), anchor_set)
         assert report.ok, report.summary()
+
+
+class TestSlotToHex:
+    """_slot_to_hex is the storage-anchor slot canonicalizer; a silent
+    decimal-as-hex misparse anchors the WRONG slot and every later replay
+    "matches" wrong data — so bare decimal strings must be rejected."""
+
+    def test_int_and_bytes_slots(self):
+        from gravity_e2e.helpers.storage_anchors import _slot_to_hex
+
+        assert _slot_to_hex(0) == "0x0"
+        assert _slot_to_hex(16) == "0x10"
+        assert _slot_to_hex(b"\x00\x10") == "0x10"
+
+    def test_hex_string_slots(self):
+        from gravity_e2e.helpers.storage_anchors import _slot_to_hex
+
+        assert _slot_to_hex("0x00") == "0x0"
+        assert _slot_to_hex("0x10") == "0x10"
+        assert _slot_to_hex("0X10") == "0x10"
+
+    def test_bare_decimal_string_rejected(self):
+        # Regression: "10" used to be parsed as hex 0x10 (sixteen).
+        from gravity_e2e.helpers.storage_anchors import _slot_to_hex
+
+        with pytest.raises(ValueError, match="0x-prefixed"):
+            _slot_to_hex("10")

@@ -82,7 +82,7 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Union
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 LOG = logging.getLogger(__name__)
 
@@ -648,6 +648,12 @@ class ChangesetStaticFiles:
     (segment.rs:129-133,78-79); sidecars are the same name + ``.csoff``
     (nippy-jar lib.rs:63,246-248). The ``.idx``/``.off``/``.conf``
     satellites (nippy-jar lib.rs:57-61) and other segments are ignored.
+
+    All four lists are ordered by the segment's numeric (start, end) block
+    range parsed from the file name — NOT lexicographically — so
+    ``segments[-1]`` really is the highest-block segment. Lexicographic
+    order breaks as soon as block numbers change digit count:
+    "…_0_499999" < "…_1000000_1499999" < "…_500000_999999".
     """
 
     static_files_dir: Path
@@ -666,6 +672,21 @@ class ChangesetStaticFiles:
     def has_sidecar_files(self) -> bool:
         """Any ``.csoff`` sidecar present (TC4 asserts present)."""
         return bool(self.account_sidecars or self.storage_sidecars)
+
+
+def segment_block_range(path: Union[str, Path]) -> Tuple[int, int]:
+    """The numeric (start, end) block range encoded in a changeset segment
+    or ``.csoff`` sidecar file name.
+
+    Raises ValueError for names that are not changeset segment files —
+    callers sort lists that were already regex-filtered, so a failure here
+    means the caller mixed in foreign paths.
+    """
+    name = Path(path).name
+    match = _CHANGESET_DATA_RE.match(name) or _CHANGESET_SIDECAR_RE.match(name)
+    if match is None:
+        raise ValueError(f"not a changeset segment/sidecar file name: {name!r}")
+    return int(match.group(2)), int(match.group(3))
 
 
 def inspect_changeset_static_files(
@@ -689,7 +710,7 @@ def inspect_changeset_static_files(
         LOG.info("static_files dir does not exist: %s", sf_dir)
         return result
 
-    for path in sorted(sf_dir.iterdir()):
+    for path in sf_dir.iterdir():
         data_match = _CHANGESET_DATA_RE.match(path.name)
         if data_match:
             if data_match.group(1) == "account-change-sets":
@@ -703,6 +724,17 @@ def inspect_changeset_static_files(
                 result.account_sidecars.append(path)
             else:
                 result.storage_sidecars.append(path)
+
+    # Numeric (start, end) order — cases consume segments[-1] as "the
+    # highest-block segment"; lexicographic order silently breaks that
+    # once block numbers change digit count.
+    for file_list in (
+        result.account_segments,
+        result.storage_segments,
+        result.account_sidecars,
+        result.storage_sidecars,
+    ):
+        file_list.sort(key=segment_block_range)
 
     LOG.info(
         "Changeset static files in %s: %d account / %d storage segments, "
