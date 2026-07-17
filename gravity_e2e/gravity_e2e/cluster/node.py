@@ -237,18 +237,22 @@ class Node:
                 stderr=asyncio.subprocess.PIPE,
             )
 
-            async def log_stream(stream, level):
+            stdout_lines: list = []
+
+            async def log_stream(stream, level, sink=None):
                 while True:
                     line = await stream.readline()
                     if not line:
                         break
                     decoded = line.decode().strip()
                     if decoded:
+                        if sink is not None:
+                            sink.append(decoded)
                         LOG.log(level, f"[{self.id}] {decoded}")
 
             # Non-blocking stream logging
             await asyncio.gather(
-                log_stream(proc.stdout, logging.INFO),
+                log_stream(proc.stdout, logging.INFO, stdout_lines),
                 log_stream(proc.stderr, logging.WARNING),
             )
 
@@ -257,6 +261,32 @@ class Node:
             if returncode != 0:
                 LOG.error(f"Node {self.id} start script failed with code {returncode}")
                 return False
+
+            # The per-node start.sh's last act is `echo $pid >
+            # script/node.pid` — a start without a consistent, LIVE pid
+            # file is broken bookkeeping that later makes stop.sh lie
+            # ("No PID file found", exit 0) while the node keeps running
+            # (observed live: storage_v2_fresh_sync attempts 4/8). Fail
+            # here, attributably, instead.
+            import re
+
+            from gravity_e2e.helpers.node_process import wait_for_pid_file
+
+            script_pid = None
+            for line in stdout_lines:
+                match = re.search(r"with PID (\d+)", line)
+                if match:
+                    script_pid = int(match.group(1))
+            try:
+                recorded = await wait_for_pid_file(
+                    self.pid_file, expected_pid=script_pid, timeout=10
+                )
+            except AssertionError as exc:
+                LOG.error(
+                    f"Node {self.id} start left broken pid bookkeeping: {exc}"
+                )
+                return False
+            LOG.debug(f"Node {self.id} pid file verified (pid {recorded})")
 
             # Wait for RPC to come up
             if await self.wait_for_rpc(timeout=30):

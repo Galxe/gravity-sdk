@@ -127,6 +127,33 @@ CATCHUP_STALL_WINDOW_S = max(
 # example file.
 GAMMA_BLOCK = 1200
 
+# First-stop safety for the D-form SF enable (attempt8): a ~12s-old
+# gravity_node IGNORED a direct SIGTERM for 109s (early-init
+# graceful-shutdown windows are a suspected product defect, under a
+# separate investigation), while the earlier 1s-age "successful" first
+# stops most likely predated signal-handler installation entirely
+# (default disposition = instant death) — i.e. they never exercised
+# graceful shutdown at all. TC1/TC2/TC3 prove minute-age nodes stop
+# gracefully and reliably, so the D-form first stop waits for a
+# demonstrably stable runtime: a hard minimum uptime, then "synced
+# enough OR waited long enough" — whichever comes first.
+FIRST_STOP_MIN_UPTIME_S = 30
+FIRST_STOP_READY_HEIGHT = 50
+FIRST_STOP_MAX_WAIT_S = 60
+
+
+def first_stop_ready(uptime_s: float, height: int) -> bool:
+    """Whether an SF node's first (pre-migration) stop is safe to issue:
+    never before FIRST_STOP_MIN_UPTIME_S; after that, having synced
+    FIRST_STOP_READY_HEIGHT blocks proves a live runtime, and
+    FIRST_STOP_MAX_WAIT_S caps the wait when sync is slow to start."""
+    if uptime_s < FIRST_STOP_MIN_UPTIME_S:
+        return False
+    return (
+        height >= FIRST_STOP_READY_HEIGHT or uptime_s >= FIRST_STOP_MAX_WAIT_S
+    )
+
+
 SF_MODES: Tuple[str, ...] = ("migrate", "flag")
 # Modes the case can execute today. "flag" (form B) needs greth's
 # --storage.v2 -> init_genesis wiring plus per-node start-arg injection.

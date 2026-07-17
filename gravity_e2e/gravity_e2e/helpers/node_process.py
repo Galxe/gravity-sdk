@@ -65,8 +65,50 @@ async def wait_for_process_exit(pid: int, timeout: float) -> None:
     )
 
 
+async def wait_for_pid_file(
+    pid_file, expected_pid: Optional[int] = None, timeout: float = 10.0
+) -> int:
+    """Wait until ``pid_file`` exists, parses, (optionally) matches
+    ``expected_pid``, and points at a LIVE process; returns the pid.
+
+    Root fix for the stop.sh false-success family (attempts 4/8): every
+    generated per-node start.sh writes ``script/node.pid`` after
+    spawning gravity_node, so a start that "succeeded" without a
+    consistent pid file is a broken start — catching it HERE turns the
+    later "No PID file found; exit 0" lie into an immediate, attributable
+    failure. Raises AssertionError on timeout.
+    """
+    from pathlib import Path
+
+    pid_file = Path(pid_file)
+    deadline = time.monotonic() + timeout
+    last_seen = None
+    while time.monotonic() < deadline:
+        try:
+            pid = int(pid_file.read_text().strip())
+            last_seen = pid
+            if expected_pid is None or pid == expected_pid:
+                try:
+                    os.kill(pid, 0)
+                    return pid
+                except ProcessLookupError:
+                    pass  # written but already dead — keep waiting/diagnose
+        except (FileNotFoundError, ValueError):
+            pass
+        await asyncio.sleep(0.2)
+    raise AssertionError(
+        f"pid file {pid_file} not consistent within {timeout}s "
+        f"(expected pid {expected_pid}, last seen {last_seen}) — the "
+        f"start script did not record a live pid"
+    )
+
+
 async def stop_node_and_wait_exit(
-    node, timeout: float = 90.0, grace: float = 10.0
+    node,
+    timeout: float = 90.0,
+    grace: float = 10.0,
+    allow_sigkill: bool = False,
+    sigkill_grace: float = 30.0,
 ) -> None:
     """Graceful stop gated on the REAL process, not the pid-file
     bookkeeping.
@@ -85,6 +127,16 @@ async def stop_node_and_wait_exit(
     SIGTERM to an already-stopping process is harmless) before waiting
     out the real exit. It also clears a leftover pid file after a direct
     kill so the next start.sh sees consistent bookkeeping.
+
+    ``allow_sigkill``: opt-in LAST-RESORT escalation for callers whose
+    node data has zero value (e.g. a fresh-init datadir about to be
+    migrated/wiped). attempt8 live: a ~12s-old gravity_node IGNORED the
+    direct SIGTERM for 109s (early-init graceful-shutdown windows are a
+    suspected product defect under separate investigation) — with the
+    flag set, a SIGTERM ignored for ``sigkill_grace`` seconds is logged
+    as a WARNING (product-defect evidence, never silent) and followed by
+    SIGKILL. Probe/long-lived stop paths must keep the default False:
+    auto-SIGKILL there would mask real shutdown regressions.
     """
     pid = read_node_pid(node)
     assert pid, f"cannot read {node.id} PID from {node.pid_file} before stop"
@@ -96,6 +148,7 @@ async def stop_node_and_wait_exit(
             node.id,
             pid,
         )
+    direct_signal = False
     try:
         await wait_for_process_exit(pid, grace)
         return
@@ -110,15 +163,41 @@ async def stop_node_and_wait_exit(
         )
     try:
         os.kill(pid, 15)  # signal.SIGTERM
+        direct_signal = True
     except ProcessLookupError:
         LOG.info("%s: pid %d exited right before the direct SIGTERM", node.id, pid)
         return
-    await wait_for_process_exit(pid, timeout)
-    # The stop path never saw this process, so its pid file may survive
-    # pointing at a dead pid; drop it for clean bookkeeping.
     try:
-        if int(node.pid_file.read_text().strip()) == pid:
-            node.pid_file.unlink()
-            LOG.info("%s: removed stale pid file after direct SIGTERM", node.id)
-    except (FileNotFoundError, ValueError):
-        pass
+        await wait_for_process_exit(
+            pid, sigkill_grace if allow_sigkill else timeout
+        )
+    except AssertionError:
+        if not allow_sigkill:
+            raise
+        # PRODUCT-DEFECT EVIDENCE, deliberately loud: a graceful signal
+        # was ignored well past any flush window (attempt8: 109s).
+        LOG.warning(
+            "%s: pid %d IGNORED the direct SIGTERM for %.0fs "
+            "(early-init graceful-shutdown defect evidence — separate "
+            "investigation); escalating to SIGKILL as the caller marked "
+            "this node's data as valueless",
+            node.id,
+            pid,
+            sigkill_grace,
+        )
+        try:
+            os.kill(pid, 9)  # signal.SIGKILL
+        except ProcessLookupError:
+            pass
+        await wait_for_process_exit(pid, timeout)
+    if direct_signal:
+        # The stop path never saw this process, so its pid file may
+        # survive pointing at a dead pid; drop it for clean bookkeeping.
+        try:
+            if int(node.pid_file.read_text().strip()) == pid:
+                node.pid_file.unlink()
+                LOG.info(
+                    "%s: removed stale pid file after direct signal", node.id
+                )
+        except (FileNotFoundError, ValueError):
+            pass

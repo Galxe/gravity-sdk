@@ -265,13 +265,23 @@ async def wait_for_height_gap_ok(
     return False
 
 
-async def stop_node_and_wait_exit(node: Node) -> None:
+async def stop_node_and_wait_exit(
+    node: Node, allow_sigkill: bool = False
+) -> None:
     """Helper-layer defensive stop (node_process.stop_node_and_wait_exit):
     gated on the REAL recorded pid, with a direct-SIGTERM fallback when
     the stop path's pid-file bookkeeping breaks — live attempt4 had
     Node.stop() report "stopped and verified" while the process never
-    received a signal, and the offline SF flip then raced a running node."""
-    await _stop_and_wait(node, timeout=STOP_TIMEOUT_S)
+    received a signal, and the offline SF flip then raced a running node.
+
+    ``allow_sigkill`` is reserved for fresh-boot SF nodes whose data is
+    about to be wiped or migrated (zero value): attempt8 saw an
+    early-init node ignore SIGTERM for 109s. Probe/long-lived stops keep
+    the strict default — a masked shutdown regression is worse than a
+    failed run."""
+    await _stop_and_wait(
+        node, timeout=STOP_TIMEOUT_S, allow_sigkill=allow_sigkill
+    )
 
 
 def swap_node_binary(node: Node, new_binary: Path) -> None:
@@ -566,11 +576,40 @@ async def start_fresh_sf_node(ctx, node_id: str) -> None:
     assert ctx.sf_mode == "migrate", f"unsupported sf mode {ctx.sf_mode}"
 
     LOG.info("[sf-enable/%s] first start (fresh init)...", node_id)
+    started_at = time.monotonic()
     assert await node.start(), f"failed to start {node_id}"
     await _wait_rpc_up(node)
 
+    # attempt8: never stop an early-init node — a ~12s-old gravity_node
+    # ignored a direct SIGTERM for 109s (suspected early-init
+    # graceful-shutdown product defect, separate investigation), while
+    # 1s-age stops only "worked" via pre-handler default disposition.
+    # Wait for a demonstrably stable runtime (sf_lib.first_stop_ready:
+    # >=30s uptime, then >=50 synced blocks or >=60s, first to arrive) —
+    # TC1/TC2/TC3 prove minute-age graceful stops are reliable. Costs
+    # up to ~1 min per SF node, buys determinism.
+    while True:
+        uptime_s = time.monotonic() - started_at
+        try:
+            height = await asyncio.to_thread(lambda: node.w3.eth.block_number)
+        except Exception:
+            height = -1
+        if sf_lib.first_stop_ready(uptime_s, height):
+            LOG.info(
+                "[sf-enable/%s] stable for the first stop "
+                "(uptime=%.0fs, height=%d)",
+                node_id,
+                uptime_s,
+                height,
+            )
+            break
+        await asyncio.sleep(2)
+
     LOG.info("[sf-enable/%s] stopping for the offline SF flip...", node_id)
-    await stop_node_and_wait_exit(node)
+    # Fresh-init datadir about to be migrated — zero data value, so the
+    # SIGKILL last resort is safe here (and loudly logged as
+    # product-defect evidence if it ever fires).
+    await stop_node_and_wait_exit(node, allow_sigkill=True)
     env = _offline_env(ctx, node)
     assert upgrade_lib.is_upgrade_target(Path(env.binary), NEW_BINARY_PATH), (
         f"{node_id}: SF node must run the new binary (check [sf_source])"
@@ -731,7 +770,10 @@ async def phase_1_bootstrap_legacy_core(ctx: FreshSyncContext) -> None:
         node = ctx.cluster.get_node(node_id)
         state, _ = await node.get_state()
         if state == NodeState.RUNNING:
-            await stop_node_and_wait_exit(node)
+            # Pre-wipe stop: the datadir is erased on the next line, so
+            # the SIGKILL last resort is safe if the early-init
+            # graceful-shutdown defect bites here too.
+            await stop_node_and_wait_exit(node, allow_sigkill=True)
         wipe_node_to_fresh(node)
 
     for node_id in sf_lib.LEGACY_NODE_IDS:

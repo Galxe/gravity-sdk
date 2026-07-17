@@ -665,3 +665,56 @@ def test_sync_to_tip_chases_the_live_tip():
         "the catch-up reference is the live tip (node1)"
     )
     assert "FROZEN" not in src and "FREEZE" not in src
+
+
+# ---------------------------------------------------------------------------
+# D-form first-stop safety (attempt8: early-init SIGTERM ignored 109s)
+# ---------------------------------------------------------------------------
+
+
+def test_first_stop_ready_criteria():
+    ready = sf_lib.first_stop_ready
+    min_up = sf_lib.FIRST_STOP_MIN_UPTIME_S
+    h = sf_lib.FIRST_STOP_READY_HEIGHT
+    max_wait = sf_lib.FIRST_STOP_MAX_WAIT_S
+
+    # Hard uptime floor: never ready before it, whatever the height.
+    assert not ready(min_up - 1, h * 100)
+    assert not ready(1, 10**9)
+    # Past the floor: synced-enough qualifies immediately...
+    assert ready(min_up, h)
+    assert not ready(min_up, h - 1)
+    # ...and the wall-clock cap qualifies regardless of height (RPC
+    # flaps report -1).
+    assert ready(max_wait, -1)
+    assert not ready(max_wait - 1, h - 1)
+    # The loop always terminates: by max_wait it is ready for ANY height.
+    assert ready(max_wait, 0)
+    # Sane ordering of the constants themselves.
+    assert 0 < min_up <= max_wait
+
+
+def test_first_stop_wiring_and_sigkill_scoping():
+    """start_fresh_sf_node must gate its first stop on first_stop_ready
+    and may use the SIGKILL last resort (fresh data, zero value); the
+    probe paths must never pass allow_sigkill."""
+    enable = _func_source("start_fresh_sf_node")
+    assert "first_stop_ready(" in enable, (
+        "the D-form first stop must wait for a stable runtime (attempt8)"
+    )
+    assert "allow_sigkill=True" in enable
+
+    phase1 = _func_source("phase_1_bootstrap_legacy_core")
+    assert "allow_sigkill=True" in phase1, (
+        "the pre-wipe stops may escalate (data is erased next line)"
+    )
+
+    for func in (
+        "offline_sf_probe_and_restart",
+        "phase_5_layout_probes",
+        "phase_9_l3_necessity_probe",
+    ):
+        assert "allow_sigkill" not in _func_source(func), (
+            f"{func}: probe/long-lived stops must stay strict — "
+            f"auto-SIGKILL would mask real shutdown regressions"
+        )

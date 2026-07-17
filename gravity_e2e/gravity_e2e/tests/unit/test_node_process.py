@@ -154,3 +154,105 @@ async def test_defensive_stop_requires_a_readable_pid(tmp_path):
     )
     with pytest.raises(AssertionError, match="cannot read"):
         await stop_node_and_wait_exit(node, timeout=5, grace=1)
+
+
+# ---------------------------------------------------------------------------
+# wait_for_pid_file — the start-side root fix for the stop.sh lie
+# ---------------------------------------------------------------------------
+
+from gravity_e2e.helpers.node_process import wait_for_pid_file  # noqa: E402
+
+
+@pytest.mark.asyncio
+async def test_wait_for_pid_file_tolerates_late_write(tmp_path):
+    proc = _spawn_reaped_sleeper(60)
+    pid_file = tmp_path / "node.pid"
+
+    def _write_later():
+        import time as _time
+
+        _time.sleep(0.3)
+        pid_file.write_text(str(proc.pid))
+
+    threading.Thread(target=_write_later, daemon=True).start()
+    try:
+        assert await wait_for_pid_file(pid_file, timeout=5) == proc.pid
+    finally:
+        proc.terminate()
+
+
+@pytest.mark.asyncio
+async def test_wait_for_pid_file_rejects_mismatch_and_dead_pids(tmp_path):
+    proc = _spawn_reaped_sleeper(60)
+    pid_file = tmp_path / "node.pid"
+    pid_file.write_text(str(proc.pid))
+    try:
+        with pytest.raises(AssertionError, match="not consistent"):
+            await wait_for_pid_file(
+                pid_file, expected_pid=proc.pid + 1, timeout=0.5
+            )
+    finally:
+        proc.terminate()
+
+    dead = subprocess.Popen([sys.executable, "-c", "pass"])
+    dead.wait()  # reaped: pid gone
+    pid_file.write_text(str(dead.pid))
+    with pytest.raises(AssertionError, match="not consistent"):
+        await wait_for_pid_file(pid_file, timeout=0.5)
+
+
+# ---------------------------------------------------------------------------
+# SIGKILL last resort (attempt8: early-init node ignored SIGTERM for 109s)
+# ---------------------------------------------------------------------------
+
+
+def _spawn_sigterm_ignoring_sleeper(seconds: float) -> subprocess.Popen:
+    """A child that installs SIG_IGN for SIGTERM — the attempt8 shape."""
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import signal, time; "
+                "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+                f"time.sleep({seconds})"
+            ),
+        ]
+    )
+    threading.Thread(target=proc.wait, daemon=True).start()
+    import time as _time
+
+    _time.sleep(0.3)  # let the handler install before the test signals
+    return proc
+
+
+@pytest.mark.asyncio
+async def test_sigkill_last_resort_when_sigterm_is_ignored(tmp_path):
+    proc = _spawn_sigterm_ignoring_sleeper(60)
+
+    async def lying_stop():
+        return True
+
+    node = _stoppable_node(tmp_path, proc, lying_stop)
+    await stop_node_and_wait_exit(
+        node, timeout=15, grace=0.5, allow_sigkill=True, sigkill_grace=1.0
+    )
+    assert proc.poll() is not None, "SIGKILL escalation never fired"
+
+
+@pytest.mark.asyncio
+async def test_no_sigkill_by_default_when_sigterm_is_ignored(tmp_path):
+    """Probe/long-lived paths must NOT auto-escalate — an ignored
+    SIGTERM there is a real shutdown regression and must fail loudly."""
+    proc = _spawn_sigterm_ignoring_sleeper(60)
+
+    async def lying_stop():
+        return True
+
+    node = _stoppable_node(tmp_path, proc, lying_stop)
+    try:
+        with pytest.raises(AssertionError, match="still alive"):
+            await stop_node_and_wait_exit(node, timeout=1.5, grace=0.5)
+        assert proc.poll() is None, "default path must never SIGKILL"
+    finally:
+        proc.kill()
