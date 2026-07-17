@@ -84,6 +84,7 @@ import logging
 import os
 import shutil
 import time
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -881,6 +882,28 @@ async def phase_3_rolling_upgrade(ctx: FreshSyncContext) -> None:
     LOG.info("[Phase 3] upgrade tail complete; anchor batches A+B on disk")
 
 
+@asynccontextmanager
+async def quiet_chain(ctx: FreshSyncContext, reason: str):
+    """Pause the background load for a from-0 catch-up window.
+
+    attempt6 measured the under-load parallel net convergence at only
+    ~0.54 blk/s (two syncing nodes sharing the host's replay throughput
+    against loaded ~500-block epochs) — physically hopeless budgets. On
+    a quiet chain the resurrection experiment converged at minutes
+    scale, so every from-0 window trades load realism for feasibility;
+    the deliberate concession is documented in the README (under-load
+    catch-up realism is TC8 / follow-up scope). Probe-style restarts
+    (short gaps) do NOT use this — they stay under load.
+    """
+    ctx.tx_sender.pause()
+    LOG.info("[quiet-chain] background load paused: %s", reason)
+    try:
+        yield
+    finally:
+        ctx.tx_sender.resume()
+        LOG.info("[quiet-chain] background load resumed: %s", reason)
+
+
 async def phase_4_sf_first_batch(ctx: FreshSyncContext) -> None:
     LOG.info("[Phase 4] SF fullnodes, first batch (parallel): %s, then "
              "sf_pfn1 ...", sf_lib.SF_FIRST_BATCH)
@@ -890,16 +913,16 @@ async def phase_4_sf_first_batch(ctx: FreshSyncContext) -> None:
         await sync_to_tip(ctx, node_id)
 
     # sf_vfn1 (<- node2) and sf_pfn2 (<- vfn1) have independent upstreams
-    # and datadirs — sync them in parallel; from-0 catch-up is the case's
-    # dominant cost (net convergence ~1.4-1.9 blk/s against a producing
-    # chain), so serializing them would nearly double the phase.
-    await asyncio.gather(
-        *(_enable_and_sync(node_id) for node_id in sf_lib.SF_FIRST_BATCH)
-    )
-    # SF <- SF chain: sf_pfn1 syncs FROM sf_vfn1 (its only upstream), so
-    # an SF node is exercised as a sync SERVER here, not just a client —
-    # which is why it must stay serial after sf_vfn1's convergence.
-    await _enable_and_sync("sf_pfn1")
+    # and datadirs — sync them in parallel on the quiet chain; from-0
+    # catch-up is the case's dominant cost.
+    async with quiet_chain(ctx, "phase 4 from-0 syncs"):
+        await asyncio.gather(
+            *(_enable_and_sync(node_id) for node_id in sf_lib.SF_FIRST_BATCH)
+        )
+        # SF <- SF chain: sf_pfn1 syncs FROM sf_vfn1 (its only upstream),
+        # so an SF node is exercised as a sync SERVER here, not just a
+        # client — which is why it stays serial after sf_vfn1 converges.
+        await _enable_and_sync("sf_pfn1")
 
 
 async def offline_sf_probe_and_restart(ctx: FreshSyncContext, node_id: str,
@@ -945,8 +968,9 @@ async def phase_6_anchor_replays(ctx: FreshSyncContext) -> None:
 
 async def phase_7_sf_val1_join(ctx: FreshSyncContext) -> None:
     LOG.info("[Phase 7] sf_val1: from-0 sync + governance join (equal power)...")
-    await start_fresh_sf_node(ctx, "sf_val1")
-    await sync_to_tip(ctx, "sf_val1")
+    async with quiet_chain(ctx, "sf_val1 from-0 sync"):
+        await start_fresh_sf_node(ctx, "sf_val1")
+        await sync_to_tip(ctx, "sf_val1")
 
     entry = ctx.cluster.get_node(sf_lib.TX_ENTRY_NODE)
     faucet = ctx.cluster.faucet
@@ -998,8 +1022,9 @@ async def phase_7_sf_val1_join(ctx: FreshSyncContext) -> None:
 
 async def phase_8_sf_vfn2_matrix_close(ctx: FreshSyncContext) -> None:
     LOG.info("[Phase 8] sf_vfn2 (SF vfn <- SF validator): the last matrix cell...")
-    await start_fresh_sf_node(ctx, "sf_vfn2")
-    await sync_to_tip(ctx, "sf_vfn2")
+    async with quiet_chain(ctx, "sf_vfn2 from-0 sync"):
+        await start_fresh_sf_node(ctx, "sf_vfn2")
+        await sync_to_tip(ctx, "sf_vfn2")
     await offline_sf_probe_and_restart(ctx, "sf_vfn2", "Phase 8")
     await replay_all_batches(ctx, ctx.cluster.get_node("sf_vfn2"), "sf-from-sf")
 

@@ -79,17 +79,24 @@ CI-neutral).
 ## Duration & the from-0 sync budget
 
 Deep sync replays the chain one epoch per fast-forward round (~130 s per
-full-load epoch) at a **net convergence of only ~1.4-1.9 blk/s** against
-the chain's ~3.8 blk/s production
-(`tc9-catchup-freeze-investigation.md`, attempt5). All catch-up waits
-are therefore progress-based (`helpers/catchup.py`: stall window ~3x the
-staircase period + a gap-derived hard backstop), never fixed deadlines,
-and the Alpha schedule is compressed to keep the chain young at phase 4.
-Expect **~2 h end to end**; the late phases (sf_pfn1 / sf_val1 /
-sf_vfn2 each chase an ever-older chain) dominate and can stretch further
-under sustained load.
+full-load epoch); attempt5 measured single-node under-load net
+convergence at ~1.4-1.9 blk/s and attempt6 measured the PARALLEL
+under-load rate at only **~0.54 blk/s** — physically hopeless budgets
+(`tc9-catchup-freeze-investigation.md`). Two consequences:
 
-Optional compression lever (NOT enabled — live realism first; recorded
-for the run-tier/Q5 decision): pausing the TxSender during catch-up
-windows shrinks the loaded epochs and raises net convergence; flip it
-only if the run tier demands a shorter wall clock.
+- all catch-up waits are progress-based (`helpers/catchup.py`: stall
+  window ~3x the staircase period + a gap-derived hard backstop, rate
+  floor calibrated for a QUIET chain and pending live re-calibration
+  from the per-minute net_rate diagnostics), never fixed deadlines;
+- **every from-0 catch-up window pauses the TxSender** (`quiet_chain`):
+  the no-load resurrection experiment converged at minutes scale, so
+  the case trades load realism for feasibility. ⚠ KNOWN CONCESSION:
+  from-0 sync here happens against a QUIET chain; "catching up while
+  the chain is under sustained load" is real mainnet behavior this case
+  deliberately does NOT cover — that realism belongs to TC8 / a
+  dedicated follow-up, not silently to this case. Probe-style restarts
+  (short gaps) stay under load.
+
+The Alpha schedule is compressed to keep the chain young at phase 4.
+Expected end-to-end: **~60-90 min** (quiet-chain from-0 syncs converge
+at replay speed, ~5.5-7.6 blk/s observed no-load).

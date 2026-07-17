@@ -137,3 +137,13 @@ class TestWaitForCatchup:
                 safety=1.0,
                 min_budget_s=0.1,
             )
+
+
+class TestQuietChainCalibration:
+    def test_floor_is_the_quiet_chain_value(self):
+        # 2.0 blk/s is the deliberate no-load conservative guess (the
+        # under-load floors are invalid: attempt6 measured parallel
+        # under-load net convergence at ~0.54 blk/s, and TC9 now pauses
+        # the load across every from-0 window). Re-calibrate from the
+        # per-minute net_rate diagnostics before changing this.
+        assert NET_CATCHUP_RATE_FLOOR_BPS == 2.0

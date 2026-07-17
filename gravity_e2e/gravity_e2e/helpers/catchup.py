@@ -38,10 +38,16 @@ LOG = logging.getLogger(__name__)
 FULL_LOAD_EPOCH_ROUND_S = 137
 # ~3x the staircase period: two consecutive silent rounds plus slack.
 DEFAULT_STALL_WINDOW_S = 3 * FULL_LOAD_EPOCH_ROUND_S  # 411s
-# Conservative floor of the measured net convergence (~1.4-1.9 blocks/s
-# under load; resurrection experiment corroborated 5.5-7.6 replay vs
-# ~3.8 production). Slightly under the observed minimum on purpose.
-NET_CATCHUP_RATE_FLOOR_BPS = 1.2
+# Conservative floor of the net convergence on a QUIET chain — TC9's
+# from-0 catch-up windows pause the background load before syncing:
+# attempt6 measured parallel UNDER-LOAD convergence at only ~0.54 blk/s
+# (two nodes sharing one host's replay throughput), invalidating any
+# under-load floor, while the no-load resurrection experiment converged
+# at minutes scale (replay 5.5-7.6 blk/s vs ~3.8 idle production) but
+# only had an 8-minute observation window. This value is therefore a
+# deliberate conservative guess — PENDING LIVE CALIBRATION from the
+# per-minute (height, tip, net_rate) diagnostics wait_for_catchup logs.
+NET_CATCHUP_RATE_FLOOR_BPS = 2.0
 # Safety factor on the budget derived from the live gap.
 BUDGET_SAFETY_FACTOR = 1.5
 # Budgets never shrink below this even for tiny gaps (staircase rounds
@@ -160,10 +166,15 @@ async def wait_for_catchup(
             if ref is not None and ref - height <= max_gap:
                 elapsed = now - start_t
                 rate = (height - h0) / elapsed if elapsed > 0 else 0.0
+                net = (
+                    (initial_gap - (ref - height)) / elapsed
+                    if elapsed > 0
+                    else 0.0
+                )
                 LOG.info(
                     "[catchup/%s] converged: height=%d, tip=%d, gap=%d "
-                    "in %.0fs (avg %.1f blk/s)",
-                    node.id, height, ref, ref - height, elapsed, rate,
+                    "in %.0fs (replay avg %.1f blk/s, net %.2f blk/s)",
+                    node.id, height, ref, ref - height, elapsed, rate, net,
                 )
                 return height
 
@@ -176,13 +187,23 @@ async def wait_for_catchup(
             )
 
         if now - last_log_t >= log_every_s and height is not None:
+            # Per-minute calibration diagnostics: net_rate is the gap
+            # shrink rate — the number NET_CATCHUP_RATE_FLOOR_BPS is
+            # waiting to be calibrated from on future live runs.
             elapsed = now - start_t
             rate = (height - h0) / elapsed if elapsed > 0 else 0.0
+            net = (
+                (initial_gap - (ref - height)) / elapsed
+                if (ref is not None and elapsed > 0)
+                else None
+            )
             LOG.info(
                 "[catchup/%s] height=%d tip=%s gap=%s elapsed=%.0fs "
-                "avg=%.1f blk/s (budget %.0fs)",
+                "replay=%.1f blk/s net_rate=%s (budget %.0fs)",
                 node.id, height, ref,
                 (ref - height) if ref is not None else "?",
-                elapsed, rate, budget_s,
+                elapsed, rate,
+                f"{net:.2f} blk/s" if net is not None else "?",
+                budget_s,
             )
             last_log_t = now

@@ -509,3 +509,44 @@ def test_example_alpha_schedule_clears_the_case_guards():
     )
     assert case.ALPHA_MIN_LEAD_S < total_s
     assert case.ALPHA_UPGRADE_MARGIN_S < case.ALPHA_MIN_LEAD_S
+
+
+# ---------------------------------------------------------------------------
+# Quiet-chain wiring: from-0 windows pause the load, probe restarts don't
+# ---------------------------------------------------------------------------
+
+
+def _func_source(name: str) -> str:
+    """The body of one top-level (async) function in the case source."""
+    import re
+
+    match = re.search(
+        rf"^(?:async )?def {name}\(.*?(?=^(?:async )?def |\Z)",
+        CASE_SOURCE,
+        re.DOTALL | re.MULTILINE,
+    )
+    assert match, f"function {name} not found in the case source"
+    return match.group(0)
+
+
+def test_all_from0_windows_pause_the_load():
+    """attempt6: two parallel from-0 syncs under load converged at only
+    ~0.54 blk/s — every from-0 window must run on the quiet chain."""
+    for phase in (
+        "phase_4_sf_first_batch",
+        "phase_7_sf_val1_join",
+        "phase_8_sf_vfn2_matrix_close",
+    ):
+        assert "quiet_chain(" in _func_source(phase), (
+            f"{phase}: from-0 sync must run inside quiet_chain()"
+        )
+
+
+def test_probe_restarts_stay_under_load():
+    """Short-gap probe restarts keep the load on (live realism where it
+    is still feasible)."""
+    for func in ("restart_node_and_catch_up", "offline_sf_probe_and_restart"):
+        src = _func_source(func)
+        assert "quiet_chain" not in src and ".pause(" not in src, (
+            f"{func}: probe-style catch-up must not pause the load"
+        )
