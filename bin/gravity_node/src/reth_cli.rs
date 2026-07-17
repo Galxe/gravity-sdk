@@ -74,6 +74,7 @@ pub(crate) type RethTransactionPool = greth::reth_transaction_pool::Pool<
         greth::reth_transaction_pool::EthTransactionValidator<
             RethBlockChainProvider,
             greth::reth_transaction_pool::EthPooledTransaction,
+            greth::reth_node_ethereum::EthEvmConfig,
         >,
     >,
     greth::reth_transaction_pool::CoinbaseTipOrdering<

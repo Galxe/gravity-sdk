@@ -508,3 +508,10 @@ alloy-tx-macros = { git = "https://github.com/alloy-rs/alloy", tag = "v1.0.37" }
 # 100% CPU spin). Upstream issue: https://github.com/jmagnuson/linemux/issues/57
 linemux = { git = "https://github.com/Galxe/linemux.git", rev = "0194e0222134c587dcd50039a1ff9c8a14fae550" }
 
+
+# greth's own `[patch.crates-io]` is IGNORED once greth is consumed as a git
+# dependency (only the top-level workspace's patches apply), so replicate its
+# single active redirect here: collapse the transitive crates.io
+# `reth-primitives-traits` onto greth's in-tree crate so the whole graph
+# unifies on one `reth-primitives-traits`.
+reth-primitives-traits = { git = "https://github.com/Galxe/gravity-reth", rev = "d84d47066af75b7878c89de15925324db7c1bfec" }
