@@ -93,3 +93,64 @@ async def test_wait_for_process_exit_immediate_for_dead_pid():
     start = asyncio.get_event_loop().time()
     await wait_for_process_exit(proc.pid, timeout=10)
     assert asyncio.get_event_loop().time() - start < 5
+
+
+# ---------------------------------------------------------------------------
+# stop_node_and_wait_exit — the defensive stop (live attempt4 regression)
+# ---------------------------------------------------------------------------
+
+from gravity_e2e.helpers.node_process import stop_node_and_wait_exit  # noqa: E402
+
+
+def _stoppable_node(tmp_path: Path, proc: subprocess.Popen, stop_behavior):
+    """A Node-shaped stub whose pid file points at a real child process.
+
+    ``stop_behavior`` is an async callable standing in for Node.stop();
+    the broken-bookkeeping case returns True WITHOUT touching the process
+    (what live attempt4's per-node stop.sh did after the pid file went
+    missing: "No PID file found", exit 0, node keeps running).
+    """
+    pid_file = tmp_path / "node.pid"
+    pid_file.write_text(str(proc.pid))
+    return SimpleNamespace(id="stub", pid_file=pid_file, stop=stop_behavior)
+
+
+@pytest.mark.asyncio
+async def test_defensive_stop_happy_path(tmp_path):
+    proc = _spawn_reaped_sleeper(60)
+
+    async def killing_stop():
+        proc.terminate()
+        return True
+
+    node = _stoppable_node(tmp_path, proc, killing_stop)
+    await stop_node_and_wait_exit(node, timeout=10, grace=5)
+    assert proc.poll() is not None
+
+
+@pytest.mark.asyncio
+async def test_defensive_stop_escalates_when_stop_path_is_a_noop(tmp_path):
+    """The regression: Node.stop() 'succeeds' (pid-file bookkeeping says
+    stopped) but never signals the process. The helper must SIGTERM the
+    RECORDED pid itself and clear the stale pid file."""
+    proc = _spawn_reaped_sleeper(60)
+
+    async def lying_stop():
+        return True  # touches nothing — the attempt4 failure mode
+
+    node = _stoppable_node(tmp_path, proc, lying_stop)
+    await stop_node_and_wait_exit(node, timeout=15, grace=1)
+    assert proc.poll() is not None, "helper never killed the survivor"
+    assert not node.pid_file.exists(), "stale pid file must be dropped"
+
+
+@pytest.mark.asyncio
+async def test_defensive_stop_requires_a_readable_pid(tmp_path):
+    async def lying_stop():
+        return True
+
+    node = SimpleNamespace(
+        id="stub", pid_file=tmp_path / "node.pid", stop=lying_stop
+    )
+    with pytest.raises(AssertionError, match="cannot read"):
+        await stop_node_and_wait_exit(node, timeout=5, grace=1)

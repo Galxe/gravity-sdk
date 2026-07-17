@@ -395,3 +395,84 @@ def test_faucet_never_sends_value_transactions():
             f"TransactionBuilder fed the faucet account: "
             f"TransactionBuilder({args}) — use the bank (constraint (4))"
         )
+
+
+# ---------------------------------------------------------------------------
+# Wipe discipline: fresh chain data, intact deployment skeleton
+# ---------------------------------------------------------------------------
+
+from types import SimpleNamespace  # noqa: E402
+
+
+def _load_main_case_module():
+    sys.path.insert(0, str(CASE_DIR))
+    try:
+        return _load_case_module(
+            "test_storage_v2_fresh_sync.py", "storage_fresh_sync_case_main"
+        )
+    finally:
+        sys.path.remove(str(CASE_DIR))
+
+
+def test_wipe_clears_chain_data_but_preserves_skeleton(tmp_path):
+    """Live-attempt4 lesson: the per-node script/ pair IS the node's pid
+    bookkeeping (start.sh rewrites node.pid on every start). The wipe
+    must reduce a runner-started node to fresh-init semantics — empty
+    chain data — while the deployment skeleton survives untouched."""
+    case = _load_main_case_module()
+
+    node_dir = tmp_path / "sf_vfn1"
+    (node_dir / "data" / "reth" / "db").mkdir(parents=True)
+    (node_dir / "data" / "reth" / "db" / "mdbx.dat").write_text("x")
+    (node_dir / "data" / "consensus_db").mkdir()
+    (node_dir / "data" / "consensus_db" / "000001.log").write_text("x")
+    (node_dir / "data" / "secure_storage.json").write_text("{}")
+    (node_dir / "script").mkdir()
+    (node_dir / "script" / "start.sh").write_text("#!/bin/bash")
+    (node_dir / "script" / "stop.sh").write_text("#!/bin/bash")
+    (node_dir / "script" / "node.pid").write_text("12345")
+    (node_dir / "bin").mkdir()
+    (node_dir / "bin" / "gravity_node").write_text("ELF")
+    (node_dir / "config").mkdir()
+    (node_dir / "config" / "identity.yaml").write_text("id")
+    (node_dir / "logs").mkdir()
+    (node_dir / "logs" / "debug.log").write_text("boot noise")
+    (node_dir / "execution_logs").mkdir()
+    (node_dir / "execution_logs" / "node.log").write_text("boot noise")
+
+    node = SimpleNamespace(
+        id="sf_vfn1",
+        _infra_path=node_dir,
+        pid_file=node_dir / "script" / "node.pid",
+        start_script=node_dir / "script" / "start.sh",
+        stop_script=node_dir / "script" / "stop.sh",
+    )
+    case.wipe_node_to_fresh(node)
+
+    data_dir = node_dir / "data"
+    assert data_dir.is_dir() and not any(data_dir.iterdir()), (
+        "chain data must be gone, the data dir itself must remain"
+    )
+    assert (node_dir / "script" / "start.sh").exists()
+    assert (node_dir / "script" / "stop.sh").exists()
+    assert not (node_dir / "script" / "node.pid").exists(), (
+        "stale pid bookkeeping must be dropped"
+    )
+    assert (node_dir / "bin" / "gravity_node").exists()
+    assert (node_dir / "config" / "identity.yaml").exists()
+    assert not (node_dir / "logs" / "debug.log").exists()
+    assert not any((node_dir / "execution_logs").iterdir())
+
+
+def test_deploy_start_scripts_rewrite_the_pid_file():
+    """The self-healing restart cycles (storage_v2_upgrade's phases 9/16,
+    this case's D-form hook) depend on every per-node start.sh REWRITING
+    script/node.pid after spawning gravity_node — validator, pfn and vfn
+    heredocs alike. If deploy.sh loses that line, stops silently become
+    no-ops ("No PID file found", exit 0)."""
+    deploy_sh = (CASES_DIR.parent.parent / "cluster" / "deploy.sh").read_text()
+    writes = deploy_sh.count('echo $pid > "${WORKSPACE}/script/node.pid"')
+    assert writes >= 3, (
+        f"expected the validator/pfn/vfn start.sh heredocs to each write "
+        f"the pid file, found {writes} write sites"
+    )

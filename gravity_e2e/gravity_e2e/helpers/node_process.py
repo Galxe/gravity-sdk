@@ -63,3 +63,62 @@ async def wait_for_process_exit(pid: int, timeout: float) -> None:
         f"gravity_node pid {pid} still alive {timeout}s after stop; "
         f"offline db commands would race its RocksDB lock"
     )
+
+
+async def stop_node_and_wait_exit(
+    node, timeout: float = 90.0, grace: float = 10.0
+) -> None:
+    """Graceful stop gated on the REAL process, not the pid-file
+    bookkeeping.
+
+    The per-node stop.sh stops whatever ``script/node.pid`` points at and
+    exits 0 even when that file is missing ("No PID file found") — so
+    ``Node.stop()`` can report "stopped and verified" (state == STOPPED
+    just means the pid file is gone) while the actual gravity_node keeps
+    running. Observed live (storage_v2_fresh_sync attempt4): the recorded
+    pid survived a "successful" stop untouched and the offline-db step
+    then raced a running node.
+
+    This helper reads the pid BEFORE stopping, gives the stop path
+    ``grace`` seconds to take effect, and — when the process is still
+    alive — sends SIGTERM to the recorded pid directly (a duplicate
+    SIGTERM to an already-stopping process is harmless) before waiting
+    out the real exit. It also clears a leftover pid file after a direct
+    kill so the next start.sh sees consistent bookkeeping.
+    """
+    pid = read_node_pid(node)
+    assert pid, f"cannot read {node.id} PID from {node.pid_file} before stop"
+    stopped = await node.stop()
+    if not stopped:
+        LOG.warning(
+            "%s: Node.stop() reported failure; falling through to the "
+            "direct-signal path for pid %d",
+            node.id,
+            pid,
+        )
+    try:
+        await wait_for_process_exit(pid, grace)
+        return
+    except AssertionError:
+        LOG.warning(
+            "%s: pid %d still alive %.0fs after the stop path claimed "
+            "success (pid-file bookkeeping broke?); sending SIGTERM "
+            "directly",
+            node.id,
+            pid,
+            grace,
+        )
+    try:
+        os.kill(pid, 15)  # signal.SIGTERM
+    except ProcessLookupError:
+        LOG.info("%s: pid %d exited right before the direct SIGTERM", node.id, pid)
+        return
+    await wait_for_process_exit(pid, timeout)
+    # The stop path never saw this process, so its pid file may survive
+    # pointing at a dead pid; drop it for clean bookkeeping.
+    try:
+        if int(node.pid_file.read_text().strip()) == pid:
+            node.pid_file.unlink()
+            LOG.info("%s: removed stale pid file after direct SIGTERM", node.id)
+    except (FileNotFoundError, ValueError):
+        pass

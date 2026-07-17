@@ -103,7 +103,9 @@ from gravity_e2e.cluster.node import Node, NodeState
 from gravity_e2e.helpers import storage_case_lib as lib
 from gravity_e2e.helpers import upgrade_lib
 from gravity_e2e.helpers.governance import enable_permissionless_join
-from gravity_e2e.helpers.node_process import read_node_pid, wait_for_process_exit
+from gravity_e2e.helpers.node_process import (
+    stop_node_and_wait_exit as _stop_and_wait,
+)
 from gravity_e2e.helpers.offline_db import (
     SettingsState,
     migrate_changesets,
@@ -239,10 +241,12 @@ async def wait_for_height_gap_ok(
 
 
 async def stop_node_and_wait_exit(node: Node) -> None:
-    pid = read_node_pid(node)
-    assert pid, f"cannot read {node.id} PID from {node.pid_file} before stop"
-    assert await node.stop(), f"failed to stop {node.id}"
-    await wait_for_process_exit(pid, STOP_TIMEOUT_S)
+    """Helper-layer defensive stop (node_process.stop_node_and_wait_exit):
+    gated on the REAL recorded pid, with a direct-SIGTERM fallback when
+    the stop path's pid-file bookkeeping breaks — live attempt4 had
+    Node.stop() report "stopped and verified" while the process never
+    received a signal, and the offline SF flip then raced a running node."""
+    await _stop_and_wait(node, timeout=STOP_TIMEOUT_S)
 
 
 def swap_node_binary(node: Node, new_binary: Path) -> None:
@@ -447,12 +451,26 @@ def wipe_node_to_fresh(node: Node) -> None:
     """Restore never-started semantics for a runner-started node: the
     runner's start.sh brings up ALL nodes before pytest (constraint (1)),
     but the SF nodes must fresh-init at the case-controlled first start.
-    Wipes <node>/data (reth datadir + consensus/quorumstore DBs) and the
-    boot's log files; identity/config/binary live elsewhere and survive."""
+
+    "Fresh init" means CHAIN DATA only: everything under <node>/data
+    (the deploy layout's STORAGE_DIR — data/reth datadir + static files,
+    consensus_db, quorumstoreDB, rand_db, secure_storage.json; cf.
+    storage_case_lib.derive_offline_env) plus the boot's log files. The
+    deployment skeleton MUST survive: script/ is the node's pid
+    bookkeeping (script/start.sh rewrites script/node.pid on every
+    start — deploy.sh:440/567/698 — and script/stop.sh kills by that
+    file), and bin/ + config/ carry the binary and identity. A stale
+    script/node.pid is dropped explicitly so the next start begins with
+    clean bookkeeping.
+    """
     data_dir = node._infra_path / "data"
     assert data_dir.is_dir(), f"{node.id}: data dir missing at {data_dir}"
-    shutil.rmtree(data_dir)
-    data_dir.mkdir()
+    for child in data_dir.iterdir():
+        if child.is_dir() and not child.is_symlink():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
+    node.pid_file.unlink(missing_ok=True)
     debug_log = node._infra_path / "logs" / "debug.log"
     if debug_log.exists():
         debug_log.unlink()
@@ -464,7 +482,17 @@ def wipe_node_to_fresh(node: Node) -> None:
             for p in candidate_dir.iterdir():
                 if p.is_file():
                     p.unlink()
-    LOG.info("[%s] data dir wiped back to fresh", node.id)
+    for required in (
+        node.start_script,
+        node.stop_script,
+        node._infra_path / "bin" / "gravity_node",
+        node._infra_path / "config",
+    ):
+        assert required.exists(), (
+            f"{node.id}: wipe must preserve the deployment skeleton, "
+            f"but {required} is gone"
+        )
+    LOG.info("[%s] chain data wiped back to fresh (skeleton preserved)", node.id)
 
 
 async def start_fresh_sf_node(ctx, node_id: str) -> None:
