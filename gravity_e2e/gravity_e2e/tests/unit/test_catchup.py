@@ -147,3 +147,25 @@ class TestQuietChainCalibration:
         # the load across every from-0 window). Re-calibrate from the
         # per-minute net_rate diagnostics before changing this.
         assert NET_CATCHUP_RATE_FLOOR_BPS == 2.0
+
+
+class TestFrozenTipCalibration:
+    def test_frozen_floor_sits_under_the_measured_replay_band(self):
+        # attempt7: per-block recovery ceremony locks replay at 4.3-4.5
+        # blk/s on this host; the frozen-tip floor must sit just under
+        # that band (net convergence == replay when the tip is static).
+        from gravity_e2e.helpers.catchup import FROZEN_TIP_REPLAY_FLOOR_BPS
+
+        assert FROZEN_TIP_REPLAY_FLOOR_BPS == 4.0
+        assert FROZEN_TIP_REPLAY_FLOOR_BPS < 4.3
+
+    def test_frozen_budget_for_the_phase4_gap(self):
+        from gravity_e2e.helpers.catchup import FROZEN_TIP_REPLAY_FLOOR_BPS
+
+        # The expected phase-4 gap (~4600 blocks at ~20 min chain age):
+        # 4600 / 4.0 * 1.5 = 1725s — a ~29 min backstop for a ~19 min
+        # expected replay.
+        budget = catchup_budget_s(
+            4600, net_rate_bps=FROZEN_TIP_REPLAY_FLOOR_BPS
+        )
+        assert budget == pytest.approx(1725.0)

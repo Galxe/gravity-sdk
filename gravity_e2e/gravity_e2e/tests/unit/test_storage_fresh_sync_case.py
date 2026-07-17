@@ -529,24 +529,80 @@ def _func_source(name: str) -> str:
     return match.group(0)
 
 
-def test_all_from0_windows_pause_the_load():
-    """attempt6: two parallel from-0 syncs under load converged at only
-    ~0.54 blk/s — every from-0 window must run on the quiet chain."""
+def test_all_from0_windows_freeze_the_tip():
+    """attempt6/7: chasing a moving tip is physically infeasible on this
+    host class (replay ceremony-locked at 4.3-4.5 blk/s vs ~3.9 blk/s
+    production even with the load paused, net 0.4-0.6) — every from-0
+    window must run inside frozen_tip()."""
     for phase in (
         "phase_4_sf_first_batch",
         "phase_7_sf_val1_join",
         "phase_8_sf_vfn2_matrix_close",
     ):
-        assert "quiet_chain(" in _func_source(phase), (
-            f"{phase}: from-0 sync must run inside quiet_chain()"
+        assert "frozen_tip(" in _func_source(phase), (
+            f"{phase}: from-0 sync must run inside frozen_tip()"
         )
 
 
-def test_probe_restarts_stay_under_load():
-    """Short-gap probe restarts keep the load on (live realism where it
-    is still feasible)."""
+def test_frozen_tip_orchestration_is_paired():
+    """frozen_tip must pause the sender (nested quiet_chain), halt
+    exactly sf_lib.HALT_NODE_ID via the defensive stop, and gate the
+    thaw on actual chain resumption with the wide post-freeze bound."""
+    src = _func_source("frozen_tip")
+    assert "quiet_chain(" in src, "sender pause must stay nested inside"
+    assert "HALT_NODE_ID" in src, "the halt target must come from sf_lib"
+    assert "stop_node_and_wait_exit(" in src, (
+        "the halt must use the defensive stop"
+    )
+    assert "HALT_RESUME_TIMEOUT_S" in src and "check_block_increasing" in src, (
+        "the thaw must wait for the chain to actually resume"
+    )
+
+
+def test_probe_restarts_stay_on_the_live_chain():
+    """Short-gap probe restarts keep the chain running and the load on
+    (live realism where it is still feasible)."""
     for func in ("restart_node_and_catch_up", "offline_sf_probe_and_restart"):
         src = _func_source(func)
-        assert "quiet_chain" not in src and ".pause(" not in src, (
-            f"{func}: probe-style catch-up must not pause the load"
-        )
+        assert (
+            "quiet_chain" not in src
+            and "frozen_tip" not in src
+            and ".pause(" not in src
+        ), f"{func}: probe-style catch-up must not pause or freeze"
+
+
+def test_halt_node_edge_analysis():
+    """The halt target must be node1: halting node2 would sever
+    sf_vfn1's ONLY pinned sync source, while node1 is no SF node's
+    direct upstream (vfn1<-node1 is the one severed edge, and vfn1
+    serves its downstreams from its own store)."""
+    assert sf_lib.HALT_NODE_ID == "node1"
+    sf_upstreams = {
+        sf_lib.PINNED_UPSTREAMS[n]
+        for n in sf_lib.SF_NODE_IDS
+        if n in sf_lib.PINNED_UPSTREAMS
+    }
+    assert sf_lib.HALT_NODE_ID not in sf_upstreams, (
+        "halting a direct SF upstream would strand its downstream"
+    )
+    # The reason node2 is untouchable, locked explicitly:
+    assert sf_lib.PINNED_UPSTREAMS["sf_vfn1"] == "node2"
+    assert sf_lib.FREEZE_REFERENCE_NODE_ID == "node2"
+    assert sf_lib.FREEZE_REFERENCE_NODE_ID != sf_lib.HALT_NODE_ID
+
+
+def test_sync_to_tip_uses_the_freeze_reference_and_floor():
+    src = _func_source("sync_to_tip")
+    assert "FREEZE_REFERENCE_NODE_ID" in src, (
+        "the reference must be node2 — node1 is down inside the window"
+    )
+    assert "FROZEN_TIP_REPLAY_FLOOR_BPS" in src, (
+        "the budget must use the frozen-tip replay floor"
+    )
+
+
+def test_halt_resume_timeout_is_wide_enough():
+    """After a 10-20 min freeze the BFT round timeout has backed off far
+    beyond the L3 probe's ~1 min case; the coordinator floor is 600s."""
+    case = _load_main_case_module()
+    assert case.HALT_RESUME_TIMEOUT_S >= 600

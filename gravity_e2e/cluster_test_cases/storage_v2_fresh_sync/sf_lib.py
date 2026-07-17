@@ -69,6 +69,25 @@ JOIN_BENCH_INDEX = 0
 BANK_BENCH_INDEX = 1
 FAUCET_INIT_NUM_ACCOUNTS = 2
 
+# Frozen-tip catch-up (attempt7): chasing a MOVING tip is physically
+# infeasible on this host class — replay is ceremony-locked at 4.3-4.5
+# blk/s while consensus produces empty blocks at ~3.9 blk/s even with
+# the tx load paused (net 0.4-0.6) — so every from-0 window freezes the
+# chain by stopping ONE validator (f=0 with 2 genesis validators; still
+# all-votes quorum after sf_val1 joins).
+#
+# The halt target MUST be node1 and never node2: node2 is sf_vfn1's ONLY
+# pinned sync source, while halting node1 keeps every sync edge alive —
+# sf_vfn1<-node2, sf_pfn2<-vfn1 (vfn1 serves downstream from its own
+# store even with its own upstream halted), sf_pfn1<-sf_vfn1,
+# sf_val1<-validator network (node2), sf_vfn2<-sf_val1. vfn1<-node1 is
+# the one severed edge and vfn1 is already at tip. Unit-test enforced
+# against PINNED_UPSTREAMS.
+HALT_NODE_ID = "node1"
+# The reference tip during a freeze window: node1 is down, node2 serves
+# the frozen head.
+FREEZE_REFERENCE_NODE_ID = "node2"
+
 SF_MODES: Tuple[str, ...] = ("migrate", "flag")
 # Modes the case can execute today. "flag" (form B) needs greth's
 # --storage.v2 -> init_genesis wiring plus per-node start-arg injection.

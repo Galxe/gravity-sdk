@@ -103,7 +103,10 @@ from gravity_e2e.cluster.manager import Cluster
 from gravity_e2e.cluster.node import Node, NodeState
 from gravity_e2e.helpers import storage_case_lib as lib
 from gravity_e2e.helpers import upgrade_lib
-from gravity_e2e.helpers.catchup import wait_for_catchup
+from gravity_e2e.helpers.catchup import (
+    FROZEN_TIP_REPLAY_FLOOR_BPS,
+    wait_for_catchup,
+)
 from gravity_e2e.helpers.governance import enable_permissionless_join
 from gravity_e2e.helpers.node_process import (
     stop_node_and_wait_exit as _stop_and_wait,
@@ -208,6 +211,12 @@ ALPHA_ACTIVATION_BUFFER_S = 300
 FREEZE_SETTLE_S = 10       # let in-flight commits drain after the stop
 FREEZE_OBSERVE_S = 30      # window during which heights must not move
 RESUME_TIMEOUT_S = 240     # BFT round-timeout backoff makes resume slow
+
+# ── Frozen-tip catch-up windows (attempt7) ──
+# A from-0 window freezes consensus for 10-20+ minutes — the BFT round
+# timeout backs off far beyond the L3 probe's ~1 min freeze, so recovery
+# after node1 returns needs a much wider bound (coordinator: >= 600s).
+HALT_RESUME_TIMEOUT_S = 900
 
 
 # ---------------------------------------------------------------------------
@@ -561,12 +570,20 @@ async def start_fresh_sf_node(ctx, node_id: str) -> None:
 
 
 async def sync_to_tip(ctx, node_id: str) -> None:
-    """From-0 catch-up against the LIVE tip, progress-based (see the
-    timeout-constants note): stall detection tolerant of the epoch
-    staircase + a hard budget derived from the actual gap."""
+    """From-0 catch-up against the FROZEN tip (the surrounding
+    frozen_tip() window halted consensus by stopping node1): stall
+    detection tolerant of the epoch staircase + a hard budget at the
+    frozen-tip replay floor (net convergence == replay when the tip is
+    static). The reference must be node2 — node1 is down inside the
+    window."""
     node = ctx.cluster.get_node(node_id)
-    reference = ctx.cluster.get_node("node1")
-    head = await wait_for_catchup(node, reference, max_gap=MAX_HEIGHT_GAP)
+    reference = ctx.cluster.get_node(sf_lib.FREEZE_REFERENCE_NODE_ID)
+    head = await wait_for_catchup(
+        node,
+        reference,
+        max_gap=MAX_HEIGHT_GAP,
+        net_rate_bps=FROZEN_TIP_REPLAY_FLOOR_BPS,
+    )
     LOG.info("[%s] caught up (head=%d)", node_id, head)
 
 
@@ -904,6 +921,56 @@ async def quiet_chain(ctx: FreshSyncContext, reason: str):
         LOG.info("[quiet-chain] background load resumed: %s", reason)
 
 
+@asynccontextmanager
+async def frozen_tip(ctx: FreshSyncContext, reason: str):
+    """FREEZE the chain for a from-0 catch-up window (attempt7 verdict:
+    chasing a moving tip is physically infeasible on this host class —
+    replay is ceremony-locked at 4.3-4.5 blk/s while consensus produces
+    empty blocks at ~3.9 blk/s even with the load paused, net 0.4-0.6).
+
+    Exploits the case's own quorum math: stopping ONE validator halts
+    the chain (2 genesis validators = f=0; after sf_val1 joins it is 3
+    equal-power = all-votes quorum, phase 8's window included). The halt
+    target is sf_lib.HALT_NODE_ID (node1) — NEVER node2, which is
+    sf_vfn1's only pinned sync source; with node1 down every SF sync
+    edge stays alive and the syncing nodes replay a STATIC tip at full
+    speed. quiet_chain stays nested inside: the sender could not land
+    txs on a frozen chain anyway, and pausing avoids piling up timeout
+    noise in its stats.
+
+    Resume path: restart node1 → chain must produce again within
+    HALT_RESUME_TIMEOUT_S (round-timeout backoff after a multi-minute
+    freeze is far larger than after the L3 probe's ~1 min one).
+    """
+    halt_node = ctx.cluster.get_node(sf_lib.HALT_NODE_ID)
+    async with quiet_chain(ctx, reason):
+        await stop_node_and_wait_exit(halt_node)
+        LOG.info("[frozen-tip] %s stopped — chain frozen for: %s",
+                 halt_node.id, reason)
+        window_ok = False
+        try:
+            yield
+            window_ok = True
+        finally:
+            started = await halt_node.start()
+            if window_ok:
+                assert started, f"failed to restart {halt_node.id}"
+                await _wait_rpc_up(halt_node)
+                assert await ctx.cluster.check_block_increasing(
+                    timeout=HALT_RESUME_TIMEOUT_S, delta=2
+                ), (
+                    f"chain did not resume within {HALT_RESUME_TIMEOUT_S}s "
+                    f"of {halt_node.id} returning (post-freeze BFT "
+                    f"recovery failed)"
+                )
+                LOG.info("[frozen-tip] chain resumed after: %s", reason)
+            elif not started:
+                # The window already failed; don't mask its error, but
+                # leave a loud trace that the cluster is also down.
+                LOG.error("[frozen-tip] %s failed to restart during "
+                          "failure cleanup", halt_node.id)
+
+
 async def phase_4_sf_first_batch(ctx: FreshSyncContext) -> None:
     LOG.info("[Phase 4] SF fullnodes, first batch (parallel): %s, then "
              "sf_pfn1 ...", sf_lib.SF_FIRST_BATCH)
@@ -913,9 +980,9 @@ async def phase_4_sf_first_batch(ctx: FreshSyncContext) -> None:
         await sync_to_tip(ctx, node_id)
 
     # sf_vfn1 (<- node2) and sf_pfn2 (<- vfn1) have independent upstreams
-    # and datadirs — sync them in parallel on the quiet chain; from-0
+    # and datadirs — sync them in parallel against the frozen tip; from-0
     # catch-up is the case's dominant cost.
-    async with quiet_chain(ctx, "phase 4 from-0 syncs"):
+    async with frozen_tip(ctx, "phase 4 from-0 syncs"):
         await asyncio.gather(
             *(_enable_and_sync(node_id) for node_id in sf_lib.SF_FIRST_BATCH)
         )
@@ -968,7 +1035,7 @@ async def phase_6_anchor_replays(ctx: FreshSyncContext) -> None:
 
 async def phase_7_sf_val1_join(ctx: FreshSyncContext) -> None:
     LOG.info("[Phase 7] sf_val1: from-0 sync + governance join (equal power)...")
-    async with quiet_chain(ctx, "sf_val1 from-0 sync"):
+    async with frozen_tip(ctx, "sf_val1 from-0 sync"):
         await start_fresh_sf_node(ctx, "sf_val1")
         await sync_to_tip(ctx, "sf_val1")
 
@@ -1022,7 +1089,7 @@ async def phase_7_sf_val1_join(ctx: FreshSyncContext) -> None:
 
 async def phase_8_sf_vfn2_matrix_close(ctx: FreshSyncContext) -> None:
     LOG.info("[Phase 8] sf_vfn2 (SF vfn <- SF validator): the last matrix cell...")
-    async with quiet_chain(ctx, "sf_vfn2 from-0 sync"):
+    async with frozen_tip(ctx, "sf_vfn2 from-0 sync"):
         await start_fresh_sf_node(ctx, "sf_vfn2")
         await sync_to_tip(ctx, "sf_vfn2")
     await offline_sf_probe_and_restart(ctx, "sf_vfn2", "Phase 8")

@@ -78,25 +78,35 @@ CI-neutral).
 
 ## Duration & the from-0 sync budget
 
-Deep sync replays the chain one epoch per fast-forward round (~130 s per
-full-load epoch); attempt5 measured single-node under-load net
-convergence at ~1.4-1.9 blk/s and attempt6 measured the PARALLEL
-under-load rate at only **~0.54 blk/s** — physically hopeless budgets
-(`tc9-catchup-freeze-investigation.md`). Two consequences:
+Deep sync replays the chain one epoch per fast-forward round with a
+per-block recovery ceremony that locks replay at **4.3-4.5 blk/s** on
+this host class, while consensus keeps producing (empty) blocks at
+**~3.9 blk/s even with the tx load paused** — attempt6/7 calibration
+measured net convergence against a moving tip at only **0.4-0.6 blk/s**
+(`tc9-catchup-freeze-investigation.md` + live-run6/7). Chasing a moving
+tip is physically infeasible here. Consequences:
 
 - all catch-up waits are progress-based (`helpers/catchup.py`: stall
-  window ~3x the staircase period + a gap-derived hard backstop, rate
-  floor calibrated for a QUIET chain and pending live re-calibration
-  from the per-minute net_rate diagnostics), never fixed deadlines;
-- **every from-0 catch-up window pauses the TxSender** (`quiet_chain`):
-  the no-load resurrection experiment converged at minutes scale, so
-  the case trades load realism for feasibility. ⚠ KNOWN CONCESSION:
-  from-0 sync here happens against a QUIET chain; "catching up while
-  the chain is under sustained load" is real mainnet behavior this case
-  deliberately does NOT cover — that realism belongs to TC8 / a
-  dedicated follow-up, not silently to this case. Probe-style restarts
-  (short gaps) stay under load.
+  window ~3x the staircase period + a gap-derived hard backstop at the
+  frozen-tip replay floor, 4.0 blk/s), never fixed deadlines;
+- **every from-0 window FREEZES the chain** (`frozen_tip`): TxSender
+  pauses, then **node1 stops** — with 2 genesis validators (f=0;
+  all-votes quorum after sf_val1 joins) the chain halts and the SF
+  nodes replay a static tip at full speed; node1 then returns and the
+  chain must resume within `HALT_RESUME_TIMEOUT_S`. The halt target
+  must be node1, never node2 (sf_vfn1's only pinned sync source — see
+  sf_lib.HALT_NODE_ID's edge analysis). ⚠ KNOWN CONCESSION: from-0
+  sync here happens against a FROZEN chain; "catching up while the
+  chain runs (let alone under load)" is real mainnet behavior this case
+  deliberately does NOT cover on this host class — dedicated hardware /
+  a TC8-class follow-up owns that realism. Probe-style restarts (short
+  gaps) stay on the live, loaded chain.
+- The per-block recovery ceremony (replay ≈ 1.1x production at best) is
+  a PRODUCT capacity observation worth filing to greth — fresh-node
+  sync time grows ~linearly with chain age; attempt5-7 logs carry the
+  data.
 
 The Alpha schedule is compressed to keep the chain young at phase 4.
-Expected end-to-end: **~60-90 min** (quiet-chain from-0 syncs converge
-at replay speed, ~5.5-7.6 blk/s observed no-load).
+Expected end-to-end: **~75-100 min** (freeze windows dominate: phase 4
+≈ 20 min + sf_pfn1's, phases 7/8 ≈ 10-15 min each, plus BFT recovery
+after each thaw).

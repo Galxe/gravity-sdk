@@ -48,6 +48,11 @@ DEFAULT_STALL_WINDOW_S = 3 * FULL_LOAD_EPOCH_ROUND_S  # 411s
 # deliberate conservative guess — PENDING LIVE CALIBRATION from the
 # per-minute (height, tip, net_rate) diagnostics wait_for_catchup logs.
 NET_CATCHUP_RATE_FLOOR_BPS = 2.0
+# Conservative REPLAY-rate floor against a FROZEN tip (chain halted, so
+# net convergence == replay throughput): attempt7 measured the per-block
+# recovery ceremony locking replay at 4.3-4.5 blk/s on this host even
+# with the tx load paused; 4.0 sits just under that band.
+FROZEN_TIP_REPLAY_FLOOR_BPS = 4.0
 # Safety factor on the budget derived from the live gap.
 BUDGET_SAFETY_FACTOR = 1.5
 # Budgets never shrink below this even for tiny gaps (staircase rounds
