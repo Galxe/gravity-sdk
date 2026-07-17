@@ -223,6 +223,15 @@ impl TxPool for Mempool {
                 }
             }
 
+            // Anchor the per-sender nonce for EVERY consecutive tx, BEFORE the
+            // caller's filter runs — including one the filter drops as already
+            // in-flight (its lower nonce was already proposed in an uncommitted
+            // batch and is excluded here via exclude_transactions). Recording only
+            // after the filter would drop this anchor: the next tx from the same
+            // sender would find no last_nonces entry, be treated as first-per-sender,
+            // and bypass the consecutiveness check — letting a future-nonce tx in.
+            last_nonces.insert(sender, nonce);
+
             // transactions from poisoning nonce tracking
             let sender_addr = convert_account(sender);
             if let Some(ref f) = filter {
@@ -231,9 +240,6 @@ impl TxPool for Mempool {
                     continue;
                 }
             }
-
-            // Only record nonce after filter passes
-            last_nonces.insert(sender, nonce);
 
             let verified_txn = to_verified_txn(pool_txn.clone(), chain_id);
             let tx_hash: [u8; 32] = pool_txn.transaction.transaction().inner().hash().0;
