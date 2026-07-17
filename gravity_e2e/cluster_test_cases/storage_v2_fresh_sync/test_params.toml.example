@@ -1,0 +1,57 @@
+# storage_v2_fresh_sync (TC9) test parameters
+#
+# Copy to test_params.toml (untracked), edit, then render:
+#     cp test_params.toml.example test_params.toml
+#     python render_config.py
+#
+# ── [source]: the OLD binary for the legacy core, i.e. v1.7.5 ────────────
+# Same channel as storage_v2_upgrade: the v1.7.5 GitHub release asset
+# (glibc >= 2.38) or the source-build fallback; see that case's README.
+[source]
+bin_path = "../target/quick-release/v1.7.5/gravity_node"
+
+# ── [sf_source]: the NEW binary for the five SF nodes ────────────────────
+# The same merge v2.3.0 binary the legacy core is upgraded TO (the case
+# asserts both facts at phase 1). Until greth wires a fresh-init SF
+# switch, this build must carry the #391 preflight fix — form D enables
+# SF via `db migrate-changesets` on the freshly initialized datadir.
+[sf_source]
+bin_path = "../target/quick-release/gravity_node"
+
+# ── [sf]: how fresh nodes get the SF layout ──────────────────────────────
+# "migrate" (form D, default): first start -> stop -> db migrate-changesets
+#           -> restart. Works with any binary carrying the #391 fix.
+# "flag"    (form B, reserved): start SF nodes with --storage.v2 wired to
+#           init_genesis. Accepted by the renderer so this file survives
+#           the greth wiring, but the case refuses it until Node.start()
+#           can inject per-node args.
+[sf]
+mode = "migrate"
+
+[genesis_contracts]
+repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
+ref = "main"
+
+# ── [hardforks]: same operational rule as storage_v2_upgrade ─────────────
+# Alpha must NOT activate before the whole legacy core runs the new
+# binary (v1.7.5 cannot execute post-Alpha semantics); the schedule is
+# fixed at render time. Re-render shortly before each run.
+#
+# betaBlock = 100: activates on v1.7.5, schedule-only fork.
+# gammaBlock = 4500: crossed only after the 4-node fleet is upgraded
+#   (~12-16 min of upgrades at 2.6-3.7 blocks/s).
+[hardforks]
+betaBlock = 100
+gammaBlock = 4500
+
+# alphaTime = render_time + upgrade_budget + stability_window + margin.
+#   upgrade_budget:   runner init/deploy (~4 min) + bootstrap & SF-node
+#                     wipe (~2 min) + A-batch history & epoch crossing
+#                     (~4 min) + 4 upgrades with 120 s inter-node waits
+#                     (~12 min).
+#   stability_window: post-upgrade health under load before activation.
+#   margin:           schedule slack (phase 3's tail waits it out).
+[hardforks.alphaTime]
+upgrade_budget = "+22m"
+stability_window = "+8m"
+margin = "+10m"
