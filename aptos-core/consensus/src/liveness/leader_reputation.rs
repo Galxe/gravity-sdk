@@ -2,13 +2,21 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::liveness::proposer_election::{choose_index, ProposerElection};
-use anyhow::{ensure, Result};
+use crate::{
+    consensusdb::{CommittedBlockAnchor, ConsensusDB},
+    liveness::proposer_election::{choose_index, ProposerElection, ProposerElectionCacheKey},
+};
+use anyhow::{anyhow, ensure, Context, Result};
 use aptos_consensus_types::common::{Author, Round};
 use gaptos::{
     api_types::{
-        config_storage::{OnChainConfig, GLOBAL_CONFIG_STORAGE},
-        on_chain_config::validator_performances::ValidatorPerformances,
+        config_storage::{BlockNumber, OnChainConfig, GLOBAL_CONFIG_STORAGE},
+        on_chain_config::{
+            consensus_hardfork::{
+                is_consensus_fork_active, is_consensus_fork_active_at_epoch, ConsensusHardfork,
+            },
+            validator_performances::ValidatorPerformances,
+        },
     },
     aptos_bitvec::BitVec,
     aptos_consensus::counters::{
@@ -46,6 +54,34 @@ pub trait MetadataBackend: Send + Sync {
         target_epoch: u64,
         target_round: Round,
     ) -> (Vec<NewBlockEvent>, HashValue);
+}
+
+pub trait ReputationAnchorBackend: Send + Sync {
+    fn get_anchor(
+        &self,
+        target_epoch: u64,
+        target_round: Round,
+    ) -> Result<Option<CommittedBlockAnchor>>;
+}
+
+pub struct ConsensusDBReputationAnchorBackend {
+    consensus_db: Arc<ConsensusDB>,
+}
+
+impl ConsensusDBReputationAnchorBackend {
+    pub fn new(consensus_db: Arc<ConsensusDB>) -> Self {
+        Self { consensus_db }
+    }
+}
+
+impl ReputationAnchorBackend for ConsensusDBReputationAnchorBackend {
+    fn get_anchor(
+        &self,
+        target_epoch: u64,
+        target_round: Round,
+    ) -> Result<Option<CommittedBlockAnchor>> {
+        self.consensus_db.get_reputation_anchor(target_epoch, target_round)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -221,6 +257,35 @@ pub trait ReputationHeuristic: Send + Sync {
         epoch_to_candidates: &HashMap<u64, Vec<Author>>,
         history: &[NewBlockEvent],
     ) -> Vec<u64>;
+
+    /// Legacy Gravity behavior used before ConsensusAlpha.
+    fn get_legacy_weights(
+        &self,
+        epoch: u64,
+        epoch_to_candidates: &HashMap<u64, Vec<Author>>,
+        history: &[NewBlockEvent],
+    ) -> Vec<u64> {
+        self.get_weights(epoch, epoch_to_candidates, history)
+    }
+
+    /// Compute weights from the EVM state at a consensus-agreed block height.
+    fn get_weights_at_block(
+        &self,
+        _epoch: u64,
+        _epoch_to_candidates: &HashMap<u64, Vec<Author>>,
+        _block_number: u64,
+    ) -> Result<Vec<u64>> {
+        Err(anyhow!("anchored validator performance is not supported"))
+    }
+
+    /// Deterministic fallback when consensus-agreed performance inputs are unavailable.
+    fn get_fallback_weights(
+        &self,
+        epoch: u64,
+        epoch_to_candidates: &HashMap<u64, Vec<Author>>,
+    ) -> Vec<u64> {
+        self.get_weights(epoch, epoch_to_candidates, &[])
+    }
 }
 
 pub struct NewBlockEventAggregation {
@@ -466,8 +531,8 @@ impl NewBlockEventAggregation {
 ///  * and 33% (much less aggressive exclusion, with 1 failure for every 2 successes, should still
 ///    reduce failed rounds by at least 66%, and is enough to avoid byzantine attacks as well as the
 ///    rest of the protocol)
-/// How often (in rounds) to re-fetch ValidatorPerformances from EVM config storage.
-const PERFORMANCE_CACHE_REFRESH_ROUNDS: u64 = 100;
+/// How often the pre-Alpha path re-fetches ValidatorPerformances from local latest EVM state.
+const LEGACY_PERFORMANCE_CACHE_REFRESH_CALLS: u64 = 100;
 
 pub struct ProposerAndVoterHeuristic {
     author: Author,
@@ -476,9 +541,10 @@ pub struct ProposerAndVoterHeuristic {
     failed_weight: u64,
     failure_threshold_percent: u32,
     aggregation: NewBlockEventAggregation,
-    /// Cached weights from ValidatorPerformances, refreshed every
-    /// PERFORMANCE_CACHE_REFRESH_ROUNDS. (call_counter, cached_weights)
-    cached_weights: Mutex<(u64, Option<Vec<u64>>)>,
+    /// Pre-Alpha call-count cache retained for compatibility with the running network.
+    legacy_cached_weights: Mutex<(u64, Option<Vec<u64>>)>,
+    /// Post-Alpha cache keyed by the consensus-agreed execution block number.
+    anchored_cached_weights: Mutex<Option<(u64, Vec<u64>)>>,
 }
 
 impl ProposerAndVoterHeuristic {
@@ -503,69 +569,67 @@ impl ProposerAndVoterHeuristic {
                 proposer_window_size,
                 reputation_window_from_stale_end,
             ),
-            cached_weights: Mutex::new((0, None)),
+            legacy_cached_weights: Mutex::new((0, None)),
+            anchored_cached_weights: Mutex::new(None),
         }
     }
-}
 
-impl ProposerAndVoterHeuristic {
     /// Fetch ValidatorPerformances from EVM config storage and compute weights.
-    fn fetch_and_compute_weights(&self, candidates: &[Author]) -> Option<Vec<u64>> {
-        let storage = GLOBAL_CONFIG_STORAGE.get()?;
-        let bytes_res = storage.fetch_config_bytes(
-            OnChainConfig::ValidatorPerformances,
-            gaptos::api_types::config_storage::BlockNumber::Latest,
-        )?;
+    fn fetch_and_compute_weights(
+        &self,
+        candidates: &[Author],
+        block_number: BlockNumber,
+    ) -> Result<Vec<u64>> {
+        let storage = GLOBAL_CONFIG_STORAGE
+            .get()
+            .ok_or_else(|| anyhow!("global config storage is not initialized"))?;
+        let bytes_res = storage
+            .fetch_config_bytes(OnChainConfig::ValidatorPerformances, block_number)
+            .ok_or_else(|| {
+                anyhow!("ValidatorPerformances unavailable at block {:?}", block_number)
+            })?;
 
         let raw_bytes: bytes::Bytes = bytes_res.try_into().unwrap_or_default();
-        let perf = match bcs::from_bytes::<ValidatorPerformances>(&raw_bytes) {
-            Ok(perf) => perf,
-            Err(e) => {
-                warn!("ValidatorPerformances BCS decode failed: {:?}", e);
-                return None;
-            }
-        };
+        let perf = bcs::from_bytes::<ValidatorPerformances>(&raw_bytes)
+            .context("ValidatorPerformances BCS decode failed")?;
 
-        if perf.validators.len() != candidates.len() {
-            warn!(
-                "ValidatorPerformances length mismatch: expected {}, got {}",
-                candidates.len(),
-                perf.validators.len()
-            );
-            return None;
-        }
+        ensure!(
+            perf.validators.len() == candidates.len(),
+            "ValidatorPerformances length mismatch: expected {}, got {}",
+            candidates.len(),
+            perf.validators.len()
+        );
 
-        Some(
-            perf.validators
-                .iter()
-                .enumerate()
-                .map(|(i, p)| {
-                    let total = p.successful_proposals + p.failed_proposals;
-                    if total > 0
-                        && (p.failed_proposals as u64) * 100
-                            > (total as u64) * (self.failure_threshold_percent as u64)
-                    {
-                        debug!(
-                            "Validator {} has {} failed and {} successful. Assigned failed_weight {}",
-                            i, p.failed_proposals, p.successful_proposals, self.failed_weight
-                        );
-                        self.failed_weight
-                    } else if total > 0 {
-                        debug!(
-                            "Validator {} has {} failed and {} successful. Assigned active_weight {}",
-                            i, p.failed_proposals, p.successful_proposals, self.active_weight
-                        );
-                        self.active_weight
-                    } else {
-                        debug!(
-                            "Validator {} has 0 proposals. Assigned inactive_weight {}",
-                            i, self.inactive_weight
-                        );
-                        self.inactive_weight
-                    }
-                })
-                .collect(),
-        )
+        Ok(perf
+            .validators
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                let total = p.successful_proposals + p.failed_proposals;
+                if total > 0 &&
+                    (p.failed_proposals as u64) * 100 >
+                        (total as u64) * (self.failure_threshold_percent as u64)
+                {
+                    debug!(
+                        "Validator {} has {} failed and {} successful. Assigned failed_weight {}",
+                        i, p.failed_proposals, p.successful_proposals, self.failed_weight
+                    );
+                    self.failed_weight
+                } else if total > 0 {
+                    debug!(
+                        "Validator {} has {} failed and {} successful. Assigned active_weight {}",
+                        i, p.failed_proposals, p.successful_proposals, self.active_weight
+                    );
+                    self.active_weight
+                } else {
+                    debug!(
+                        "Validator {} has 0 proposals. Assigned inactive_weight {}",
+                        i, self.inactive_weight
+                    );
+                    self.inactive_weight
+                }
+            })
+            .collect())
     }
 }
 
@@ -574,17 +638,47 @@ impl ReputationHeuristic for ProposerAndVoterHeuristic {
         &self,
         epoch: u64,
         epoch_to_candidates: &HashMap<u64, Vec<Author>>,
+        history: &[NewBlockEvent],
+    ) -> Vec<u64> {
+        assert!(epoch_to_candidates.contains_key(&epoch));
+
+        let (votes, proposals, failed_proposals) =
+            self.aggregation.get_aggregated_metrics(epoch_to_candidates, history, &self.author);
+
+        epoch_to_candidates[&epoch]
+            .iter()
+            .map(|author| {
+                let cur_votes = *votes.get(author).unwrap_or(&0);
+                let cur_proposals = *proposals.get(author).unwrap_or(&0);
+                let cur_failed_proposals = *failed_proposals.get(author).unwrap_or(&0);
+
+                if cur_failed_proposals * 100 >
+                    (cur_proposals + cur_failed_proposals) * self.failure_threshold_percent
+                {
+                    self.failed_weight
+                } else if cur_proposals > 0 || cur_votes > 0 {
+                    self.active_weight
+                } else {
+                    self.inactive_weight
+                }
+            })
+            .collect()
+    }
+
+    fn get_legacy_weights(
+        &self,
+        epoch: u64,
+        epoch_to_candidates: &HashMap<u64, Vec<Author>>,
         _history: &[NewBlockEvent],
     ) -> Vec<u64> {
         assert!(epoch_to_candidates.contains_key(&epoch));
         let candidates = &epoch_to_candidates[&epoch];
 
-        // Check cache: refresh every PERFORMANCE_CACHE_REFRESH_ROUNDS calls
-        let mut cache = self.cached_weights.lock();
+        let mut cache = self.legacy_cached_weights.lock();
         let counter = cache.0;
         let need_refresh = match cache.1 {
             Some(ref w) => {
-                w.len() != candidates.len() || counter % PERFORMANCE_CACHE_REFRESH_ROUNDS == 0
+                w.len() != candidates.len() || counter % LEGACY_PERFORMANCE_CACHE_REFRESH_CALLS == 0
             }
             None => true,
         };
@@ -593,14 +687,52 @@ impl ReputationHeuristic for ProposerAndVoterHeuristic {
             return cache.1.clone().unwrap();
         }
 
-        // Cache miss or refresh needed
-        let weights = self.fetch_and_compute_weights(candidates).unwrap_or_else(|| {
-            debug!("ValidatorPerformances unavailable, fallback to active_weight");
-            candidates.iter().map(|_| self.active_weight).collect()
-        });
+        let weights = self
+            .fetch_and_compute_weights(candidates, BlockNumber::Latest)
+            .unwrap_or_else(|error| {
+                debug!(
+                    error = ?error,
+                    "ValidatorPerformances unavailable, fallback to active_weight"
+                );
+                candidates.iter().map(|_| self.active_weight).collect()
+            });
 
         *cache = (counter + 1, Some(weights.clone()));
         weights
+    }
+
+    fn get_weights_at_block(
+        &self,
+        epoch: u64,
+        epoch_to_candidates: &HashMap<u64, Vec<Author>>,
+        block_number: u64,
+    ) -> Result<Vec<u64>> {
+        let candidates = epoch_to_candidates
+            .get(&epoch)
+            .ok_or_else(|| anyhow!("missing proposer candidates for epoch {}", epoch))?;
+
+        let mut cache = self.anchored_cached_weights.lock();
+        if let Some((cached_block_number, cached_weights)) = cache.as_ref() {
+            if *cached_block_number == block_number && cached_weights.len() == candidates.len() {
+                return Ok(cached_weights.clone());
+            }
+        }
+
+        let weights =
+            self.fetch_and_compute_weights(candidates, BlockNumber::Number(block_number))?;
+        *cache = Some((block_number, weights.clone()));
+        Ok(weights)
+    }
+
+    fn get_fallback_weights(
+        &self,
+        epoch: u64,
+        epoch_to_candidates: &HashMap<u64, Vec<Author>>,
+    ) -> Vec<u64> {
+        epoch_to_candidates
+            .get(&epoch)
+            .map(|candidates| candidates.iter().map(|_| self.active_weight).collect())
+            .unwrap_or_default()
     }
 }
 
@@ -611,10 +743,13 @@ pub struct LeaderReputation {
     epoch_to_proposers: HashMap<u64, Vec<Author>>,
     voting_powers: Vec<u64>,
     backend: Arc<dyn MetadataBackend>,
+    reputation_anchor_backend: Option<Arc<dyn ReputationAnchorBackend>>,
     heuristic: Box<dyn ReputationHeuristic>,
     exclude_round: u64,
     use_root_hash: bool,
     window_for_chain_health: usize,
+    #[cfg(test)]
+    consensus_alpha_override: Option<bool>,
 }
 
 impl LeaderReputation {
@@ -636,10 +771,47 @@ impl LeaderReputation {
             epoch_to_proposers,
             voting_powers,
             backend,
+            reputation_anchor_backend: None,
             heuristic,
             exclude_round,
             use_root_hash,
             window_for_chain_health,
+            #[cfg(test)]
+            consensus_alpha_override: None,
+        }
+    }
+
+    pub fn with_reputation_anchor_backend(
+        mut self,
+        backend: Arc<dyn ReputationAnchorBackend>,
+    ) -> Self {
+        self.reputation_anchor_backend = Some(backend);
+        self
+    }
+
+    #[cfg(test)]
+    pub fn with_consensus_alpha_for_test(mut self, active: bool) -> Self {
+        self.consensus_alpha_override = Some(active);
+        self
+    }
+
+    fn is_consensus_alpha_active(&self, anchor: Option<CommittedBlockAnchor>) -> bool {
+        let active =
+            is_consensus_fork_active_at_epoch(ConsensusHardfork::ConsensusAlpha, self.epoch) ||
+                anchor.is_some_and(|anchor| {
+                    is_consensus_fork_active(
+                        ConsensusHardfork::ConsensusAlpha,
+                        anchor.timestamp_usecs,
+                    )
+                });
+
+        #[cfg(test)]
+        {
+            self.consensus_alpha_override.unwrap_or(active)
+        }
+        #[cfg(not(test))]
+        {
+            active
         }
     }
 
@@ -746,25 +918,105 @@ impl LeaderReputation {
 }
 
 impl ProposerElection for LeaderReputation {
+    fn cache_key(&self, round: Round) -> Option<ProposerElectionCacheKey> {
+        let Some(backend) = self.reputation_anchor_backend.as_ref() else {
+            return Some(ProposerElectionCacheKey::new(round));
+        };
+        let target_round = round.saturating_sub(self.exclude_round);
+        let anchor = match backend.get_anchor(self.epoch, target_round) {
+            Ok(Some(anchor)) => anchor,
+            Ok(None) => return None,
+            Err(error) => {
+                error!(
+                    error = ?error,
+                    epoch = self.epoch,
+                    target_round = target_round,
+                    "Failed to resolve reputation anchor; disabling proposer-election cache"
+                );
+                return None;
+            }
+        };
+
+        let mut version = Vec::with_capacity(48);
+        version.extend_from_slice(&anchor.block_number.to_le_bytes());
+        version.extend_from_slice(&anchor.timestamp_usecs.to_le_bytes());
+        version.extend_from_slice(anchor.block_hash.as_ref());
+        Some(ProposerElectionCacheKey::with_version(round, version))
+    }
+
     fn get_valid_proposer_and_voting_power_participation_ratio(
         &self,
         round: Round,
     ) -> (Author, VotingPowerRatio) {
         let target_round = round.saturating_sub(self.exclude_round);
-        // self.backend.get_block_metadata is Aptos-native and not applicable to gsdk/greth,
-        // we use ValidatorPerformances from EVM config storage instead.
-        // let (sliding_window, root_hash) = self.backend.get_block_metadata(self.epoch,
-        // target_round);
-        let sliding_window = vec![];
-        let root_hash = gaptos::aptos_crypto::HashValue::zero();
+        let anchor = self.reputation_anchor_backend.as_ref().and_then(|backend| {
+            match backend.get_anchor(self.epoch, target_round) {
+                Ok(anchor) => anchor,
+                Err(error) => {
+                    error!(
+                        error = ?error,
+                        epoch = self.epoch,
+                        round = round,
+                        target_round = target_round,
+                        "Failed to resolve reputation anchor; falling back to active weights"
+                    );
+                    None
+                }
+            }
+        });
+        let alpha_active = self.is_consensus_alpha_active(anchor);
+
+        let proposers = &self.epoch_to_proposers[&self.epoch];
+        let (sliding_window, root_hash, mut weights) = if alpha_active {
+            if let Some(anchor) = anchor {
+                let weights = match self.heuristic.get_weights_at_block(
+                    self.epoch,
+                    &self.epoch_to_proposers,
+                    anchor.block_number,
+                ) {
+                    Ok(weights) => weights,
+                    Err(error) => {
+                        error!(
+                            error = ?error,
+                            epoch = self.epoch,
+                            round = round,
+                            target_round = target_round,
+                            block_number = anchor.block_number,
+                            "Failed to read anchored ValidatorPerformances; falling back to active weights"
+                        );
+                        self.heuristic.get_fallback_weights(self.epoch, &self.epoch_to_proposers)
+                    }
+                };
+                debug!(
+                    "Using consensus-anchored validator performance: epoch={}, round={}, target_round={}, block_number={}",
+                    self.epoch, round, target_round, anchor.block_number
+                );
+                (vec![], anchor.block_hash, weights)
+            } else if self.reputation_anchor_backend.is_some() {
+                warn!(
+                    "No committed reputation anchor; using empty committed history: epoch={}, round={}, target_round={}",
+                    self.epoch, round, target_round
+                );
+                let history = vec![];
+                let weights =
+                    self.heuristic.get_fallback_weights(self.epoch, &self.epoch_to_proposers);
+                (history, HashValue::zero(), weights)
+            } else {
+                let (history, root_hash) =
+                    self.backend.get_block_metadata(self.epoch, target_round);
+                let weights =
+                    self.heuristic.get_weights(self.epoch, &self.epoch_to_proposers, &history);
+                (history, root_hash, weights)
+            }
+        } else {
+            let history = vec![];
+            let weights =
+                self.heuristic.get_legacy_weights(self.epoch, &self.epoch_to_proposers, &history);
+            (history, HashValue::zero(), weights)
+        };
 
         let voting_power_participation_ratio =
             self.compute_chain_health_and_add_metrics(&sliding_window, round);
-
-        let mut weights =
-            self.heuristic.get_weights(self.epoch, &self.epoch_to_proposers, &sliding_window);
-
-        let proposers = &self.epoch_to_proposers[&self.epoch];
         assert_eq!(weights.len(), proposers.len());
 
         // Multiply weights by voting power:

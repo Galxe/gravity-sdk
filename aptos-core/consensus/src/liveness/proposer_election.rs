@@ -7,6 +7,22 @@ use gaptos::aptos_fallible::copy_from_slice::copy_slice_to_vec;
 use num_traits::CheckedAdd;
 use std::cmp::Ordering;
 
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) struct ProposerElectionCacheKey {
+    pub(crate) round: Round,
+    version: Option<Vec<u8>>,
+}
+
+impl ProposerElectionCacheKey {
+    pub(crate) fn new(round: Round) -> Self {
+        Self { round, version: None }
+    }
+
+    pub(crate) fn with_version(round: Round, version: Vec<u8>) -> Self {
+        Self { round, version: Some(version) }
+    }
+}
+
 /// ProposerElection incorporates the logic of choosing a leader among multiple candidates.
 pub trait ProposerElection {
     /// If a given author is a valid candidate for being a proposer, generate the info,
@@ -30,6 +46,10 @@ pub trait ProposerElection {
         round: Round,
     ) -> (Author, f64) {
         (self.get_valid_proposer(round), self.get_voting_power_participation_ratio(round))
+    }
+
+    fn cache_key(&self, round: Round) -> Option<ProposerElectionCacheKey> {
+        Some(ProposerElectionCacheKey::new(round))
     }
 }
 

@@ -196,6 +196,39 @@ impl RelayerWrapper {
         false
     }
 
+    /// Submission-side dedup guard (gravity-audit subtask 2). Returns true when the observed
+    /// oracle nonce is already committed on-chain (`observed <= onchain`), so surfacing it as an
+    /// update would inject a `recordBatch` system-tx that re-submits an already-recorded nonce
+    /// (provided <= currentNonce) and NECESSARILY reverts (NonceNotSequential). The revert is
+    /// benign (logged, block proceeds) but wastes a full propose/certify/execute round
+    /// (~2.5x/day on mainnet). A legitimately-needed observation always carries `observed >
+    /// onchain`, so suppressing this never stalls a real update. Missing data is never suppressed.
+    fn is_already_committed(observed_nonce: Option<u128>, onchain_nonce: Option<u128>) -> bool {
+        matches!(
+            (observed_nonce, onchain_nonce),
+            (Some(observed), Some(onchain)) if observed <= onchain
+        )
+    }
+
+    /// Apply the subtask-2 submission-side guard to a freshly polled result: if the observation's
+    /// nonce is already committed on-chain, mark it not-updated so `JWKObserver` drops it and the
+    /// doomed `recordBatch` vtxn is never proposed. A genuinely-new observation (nonce > onchain)
+    /// passes through untouched.
+    fn guard_already_committed(
+        uri: &str,
+        mut result: PollResult,
+        onchain_nonce: Option<u128>,
+    ) -> PollResult {
+        if result.updated && Self::is_already_committed(result.nonce, onchain_nonce) {
+            info!(
+                "Suppressing already-committed oracle observation for uri {}: observed nonce {:?} <= onchain {:?}",
+                uri, result.nonce, onchain_nonce
+            );
+            result.updated = false;
+        }
+        result
+    }
+
     async fn poll_and_update_state(
         &self,
         uri: &str,
@@ -302,6 +335,64 @@ impl Relayer for RelayerWrapper {
             )));
         }
 
-        self.poll_and_update_state(uri, onchain_nonce, onchain_block_number, &state).await
+        let result =
+            self.poll_and_update_state(uri, onchain_nonce, onchain_block_number, &state).await?;
+
+        // Subtask 2: never surface an observation whose nonce is already committed on-chain — it
+        // would inject a guaranteed-revert oracle `recordBatch`. See `guard_already_committed`.
+        Ok(Self::guard_already_committed(uri, result, onchain_nonce))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_already_committed_suppresses_committed_nonce() {
+        // provided == currentNonce — the observed steady-state "provided = currentNonce" revert
+        assert!(RelayerWrapper::is_already_committed(Some(5), Some(5)));
+        // provided < currentNonce
+        assert!(RelayerWrapper::is_already_committed(Some(4), Some(5)));
+        // the next real observation (nonce == onchain + 1) must still flow
+        assert!(!RelayerWrapper::is_already_committed(Some(6), Some(5)));
+        // a later observation must flow
+        assert!(!RelayerWrapper::is_already_committed(Some(100), Some(5)));
+        // unknown data is never suppressed (fail-open on missing, never suppress a real update)
+        assert!(!RelayerWrapper::is_already_committed(None, Some(5)));
+        assert!(!RelayerWrapper::is_already_committed(Some(5), None));
+        assert!(!RelayerWrapper::is_already_committed(None, None));
+    }
+
+    fn poll_result(nonce: u128, updated: bool) -> PollResult {
+        PollResult { jwk_structs: vec![], max_block_number: 100, nonce: Some(nonce), updated }
+    }
+
+    #[test]
+    fn guard_suppresses_an_already_committed_duplicate() {
+        // Artificial duplicate: an observation whose nonce (7) is already committed on-chain (7).
+        // Re-submitting it would revert NonceNotSequential — the guard must drop it.
+        let dup = RelayerWrapper::guard_already_committed(
+            "gravity://0/1/events",
+            poll_result(7, true),
+            Some(7),
+        );
+        assert!(!dup.updated, "already-committed observation (7 <= 7) must be suppressed");
+
+        // A stale replay below the committed nonce is likewise suppressed.
+        let stale = RelayerWrapper::guard_already_committed(
+            "gravity://0/1/events",
+            poll_result(6, true),
+            Some(7),
+        );
+        assert!(!stale.updated, "stale observation (6 <= 7) must be suppressed");
+
+        // The next genuine observation (nonce 8 > onchain 7) must pass through untouched.
+        let fresh = RelayerWrapper::guard_already_committed(
+            "gravity://0/1/events",
+            poll_result(8, true),
+            Some(7),
+        );
+        assert!(fresh.updated, "a genuinely-new observation (8 > 7) must NOT be suppressed");
     }
 }
