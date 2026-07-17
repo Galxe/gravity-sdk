@@ -14,10 +14,11 @@ supplies
                          merge v2.3.0 binary — the same binary the legacy
                          nodes are upgraded TO),
 - [sf] mode           -> how the case turns the SF layout on for fresh
-                         nodes ("migrate" = form D, init -> stop ->
-                         db migrate-changesets -> restart; "flag" =
-                         form B, reserved until greth wires
-                         --storage.v2 into init_genesis),
+                         nodes ("flag" = form B, primary: --storage.v2
+                         in the SF nodes' deploy config, fresh init born
+                         on SF; "migrate" = form D, compatibility:
+                         init -> stop -> db migrate-changesets ->
+                         restart),
 - [hardforks]         -> {{HARDFORKS}},
 - [genesis_contracts] -> {{GENESIS_CONTRACTS_REPO}} / {{GENESIS_CONTRACTS_REF}},
 
@@ -102,9 +103,10 @@ def hardforks_to_toml(hardforks: dict, now=None) -> str:
 
 
 def validate_sf_mode(sf: dict) -> str:
-    """The [sf] mode knob; defaults to "migrate" (form D). "flag" (form B)
-    is accepted here so the params file survives the greth wiring, but the
-    case itself refuses it until Node.start() can inject the flag."""
+    """The [sf] mode knob; defaults to "migrate" (form D). Both forms are
+    executable: "flag" (form B) rides greth's feat/sf-fresh-init
+    --storage.v2 wiring, "migrate" (form D) stays as the
+    migration-path twin."""
     mode = sf.get("mode", "migrate")
     if mode not in SF_MODES:
         raise ValueError(

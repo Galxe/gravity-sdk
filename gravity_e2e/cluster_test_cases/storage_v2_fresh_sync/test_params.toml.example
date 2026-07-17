@@ -12,21 +12,25 @@ bin_path = "../target/quick-release/v1.7.5/gravity_node"
 
 # ── [sf_source]: the NEW binary for the five SF nodes ────────────────────
 # The same merge v2.3.0 binary the legacy core is upgraded TO (the case
-# asserts both facts at phase 1). Until greth wires a fresh-init SF
-# switch, this build must carry the #391 preflight fix — form D enables
-# SF via `db migrate-changesets` on the freshly initialized datadir.
+# asserts both facts at phase 1). For [sf] mode = "flag" it must carry
+# greth's feat/sf-fresh-init wiring (--storage.v2 -> genesis init); for
+# mode = "migrate" it must carry the #391 preflight fix.
 [sf_source]
 bin_path = "../target/quick-release/gravity_node"
 
 # ── [sf]: how fresh nodes get the SF layout ──────────────────────────────
-# "migrate" (form D, default): first start -> stop -> db migrate-changesets
-#           -> restart. Works with any binary carrying the #391 fix.
-# "flag"    (form B, reserved): start SF nodes with --storage.v2 wired to
-#           init_genesis. Accepted by the renderer so this file survives
-#           the greth wiring, but the case refuses it until Node.start()
-#           can inject per-node args.
+# "flag"    (form B, default): the SF nodes' deploy config carries the
+#           bare --storage.v2 (default false; bare flag == true), so
+#           fresh init writes SF settings and the genesis alloc as
+#           entity rows in the changeset segments (greth
+#           feat/sf-fresh-init, b709e71df8 + 09097fbab3). No
+#           stop/migrate/restart machinery runs.
+# "migrate" (form D, compatibility): first start -> stable-runtime wait
+#           -> stop -> db migrate-changesets -> restart. Works with any
+#           binary carrying the #391 fix; kept as the migration-path
+#           twin of the same on-disk product.
 [sf]
-mode = "migrate"
+mode = "flag"
 
 [genesis_contracts]
 repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"

@@ -113,17 +113,65 @@ def test_resolve_sf_mode_rejects_unknown():
         sf_lib.resolve_sf_mode({"sf": {"mode": "bogus"}}, {})
 
 
-def test_resolve_sf_mode_refuses_unwired_flag_mode():
-    with pytest.raises(NotImplementedError, match="form B"):
-        sf_lib.resolve_sf_mode({"sf": {"mode": "flag"}}, {})
+def test_resolve_sf_mode_accepts_both_wired_forms():
+    # Form B landed with greth's feat/sf-fresh-init; both forms execute.
+    assert sf_lib.resolve_sf_mode({"sf": {"mode": "flag"}}, {}) == "flag"
+    assert sf_lib.resolve_sf_mode({"sf": {"mode": "migrate"}}, {}) == "migrate"
 
 
 def test_sf_start_extra_args():
     assert tuple(sf_lib.sf_start_extra_args("migrate")) == ()
-    with pytest.raises(NotImplementedError):
-        sf_lib.sf_start_extra_args("flag")
+    # Bare flag == true: clap's `num_args = 0..=1,
+    # default_missing_value = "true"` on feat/sf-fresh-init storage.rs.
+    assert tuple(sf_lib.sf_start_extra_args("flag")) == ("--storage.v2",)
     with pytest.raises(ValueError):
         sf_lib.sf_start_extra_args("bogus")
+
+
+def test_inject_sf_v2_flag_reth_args_is_pure_and_preserving():
+    original = {
+        "reth_args": {"datadir": "/x", "dev": ""},
+        "env_vars": {"BATCH_INSERT_TIME": 20},
+    }
+    injected = sf_lib.inject_sf_v2_flag_reth_args(original)
+    # Empty value -> the generated start.sh emits the bare --storage.v2.
+    assert injected["reth_args"][sf_lib.SF_FLAG_RETH_ARG] == ""
+    assert injected["reth_args"]["datadir"] == "/x"
+    assert injected["env_vars"] == {"BATCH_INSERT_TIME": 20}
+    # Pure: the input dict is untouched.
+    assert sf_lib.SF_FLAG_RETH_ARG not in original["reth_args"]
+    # reth_args absent/null — created.
+    assert (
+        sf_lib.inject_sf_v2_flag_reth_args({})["reth_args"][
+            sf_lib.SF_FLAG_RETH_ARG
+        ]
+        == ""
+    )
+
+
+def test_deploy_start_scripts_emit_bare_flags_for_empty_values():
+    """The injection channel's contract: deploy.sh's generated start.sh
+    turns an empty-valued reth_args entry into a bare `--key` — exactly
+    how `--storage.v2` must reach clap (bare == true)."""
+    deploy_sh = (CASES_DIR.parent.parent / "cluster" / "deploy.sh").read_text()
+    assert 'reth_args_array+=( "--${key}" )' in deploy_sh
+
+
+def test_flag_matches_greth_clap_definition():
+    """Static consistency with the greth clap definition when the
+    feat/sf-fresh-init worktree is present (skips elsewhere); the
+    contract is also comment-anchored at sf_lib.SF_FLAG_RETH_ARG."""
+    storage_rs = Path(
+        "/home/neko/gravity/gravity-reth-sf-fresh/crates/node/core/src/args/storage.rs"
+    )
+    if not storage_rs.exists():
+        pytest.skip("greth feat/sf-fresh-init worktree not present")
+    src = storage_rs.read_text()
+    assert f'long = "{sf_lib.SF_FLAG_RETH_ARG}"' in src
+    assert 'default_missing_value = "true"' in src, (
+        "bare-flag == true assumption broken — update sf_start_extra_args"
+    )
+    assert "num_args = 0..=1" in src
 
 
 # ---------------------------------------------------------------------------
@@ -718,3 +766,41 @@ def test_first_stop_wiring_and_sigkill_scoping():
             f"{func}: probe/long-lived stops must stay strict — "
             f"auto-SIGKILL would mask real shutdown regressions"
         )
+
+
+# ---------------------------------------------------------------------------
+# Form B ("flag") wiring: mode differential + SF-only injection
+# ---------------------------------------------------------------------------
+
+
+def test_flag_mode_bypasses_the_d_form_machinery():
+    """Mode differential: in flag mode the SF node is BORN on SF — the
+    enable path must return before the stable-runtime wait / offline
+    migration / restart machinery; migrate mode keeps all of it."""
+    enable = _func_source("start_fresh_sf_node")
+    flag_idx = enable.index('if ctx.sf_mode == "flag"')
+    d_form_idx = enable.index("first_stop_ready(")
+    assert flag_idx < d_form_idx, "the flag branch must come first"
+    assert "return" in enable[flag_idx:d_form_idx], (
+        "flag mode must return before the D-form machinery"
+    )
+    # The D-form machinery itself must remain intact (compatibility).
+    assert "migrate_changesets(" in enable
+    assert "allow_sigkill=True" in enable
+
+
+def test_flag_injection_is_sf_only_and_mode_gated():
+    """The --storage.v2 deploy-config patch runs only in flag mode, only
+    inside the phase-1 SF loop, and the injector hard-refuses legacy
+    nodes (they must fresh-init legacy if ever re-inited)."""
+    phase1 = _func_source("phase_1_bootstrap_legacy_core")
+    patch_idx = phase1.index("inject_sf_v2_flag(")
+    gate_idx = phase1.index('if ctx.sf_mode == "flag"')
+    assert gate_idx < patch_idx, "the patch must be flag-mode gated"
+
+    injector = _func_source("inject_sf_v2_flag")
+    assert "SF_NODE_IDS" in injector, (
+        "the injector must guard against legacy nodes"
+    )
+    # Exactly one call site (the phase-1 SF loop) plus the definition.
+    assert CASE_SOURCE.count("inject_sf_v2_flag(") == 2

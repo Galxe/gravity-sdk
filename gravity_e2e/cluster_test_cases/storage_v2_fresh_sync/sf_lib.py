@@ -154,43 +154,65 @@ def first_stop_ready(uptime_s: float, height: int) -> bool:
     )
 
 
+# Both SF-enable forms are live:
+# - "flag" (form B, PRIMARY): greth feat/sf-fresh-init
+#   (b709e71df8 + 09097fbab3) wires --storage.v2 into genesis init —
+#   default false; when passed, a FRESH datadir is born with SF settings
+#   and the genesis alloc written as ENTITY rows in the changeset
+#   segments (the design-doc Q6 landmine fixed; the product is
+#   isomorphic with a migrate-changesets result). Initialized datadirs
+#   ignore the flag entirely (persisted settings win), so carrying it
+#   across restarts is harmless.
+# - "migrate" (form D, compatibility): fresh init -> stable-runtime wait
+#   -> stop -> db migrate-changesets (#391 fix) -> restart.
 SF_MODES: Tuple[str, ...] = ("migrate", "flag")
-# Modes the case can execute today. "flag" (form B) needs greth's
-# --storage.v2 -> init_genesis wiring plus per-node start-arg injection.
-EXECUTABLE_SF_MODES: Tuple[str, ...] = ("migrate",)
+EXECUTABLE_SF_MODES: Tuple[str, ...] = ("migrate", "flag")
+
+# The reth_args entry the flag mode injects into an SF node's
+# config/reth_config.json: an EMPTY value makes the generated
+# script/start.sh emit the bare `--storage.v2` (deploy.sh's start-script
+# heredocs: `[ -z "$value" ] -> reth_args_array+=( "--${key}" )`), and
+# clap parses the bare flag as true (storage.rs StorageArgs:
+# `num_args = 0..=1, default_missing_value = "true"` on the
+# feat/sf-fresh-init branch).
+SF_FLAG_RETH_ARG = "storage.v2"
 
 
 def resolve_sf_mode(params: Mapping, environ: Mapping[str, str]) -> str:
     """The effective SF-enable mode: GRAVITY_SF_MODE overrides the params
-    [sf].mode; default "migrate". Raises on unknown modes and on modes the
-    case cannot execute yet (so a premature "flag" run fails at phase 0
-    with a pointer instead of mid-run)."""
+    [sf].mode; default "migrate". Raises on unknown modes."""
     mode = environ.get("GRAVITY_SF_MODE") or params.get("sf", {}).get(
         "mode", "migrate"
     )
     if mode not in SF_MODES:
         raise ValueError(f"[sf] mode must be one of {SF_MODES}, got {mode!r}")
     if mode not in EXECUTABLE_SF_MODES:
-        raise NotImplementedError(
-            f"[sf] mode {mode!r} is reserved: form B needs greth to wire "
-            f"--storage.v2 into init_genesis (design doc Q1) and "
-            f"Node.start() to inject per-node args; run mode 'migrate' "
-            f"(form D) until then"
-        )
+        raise NotImplementedError(f"[sf] mode {mode!r} is not executable")
     return mode
 
 
 def sf_start_extra_args(mode: str) -> Sequence[str]:
     """Extra gravity_node args for an SF node's FIRST start under the
     given mode. Form D needs none (the flip happens offline via
-    migrate-changesets); form B is the reserved wiring point."""
+    migrate-changesets); form B passes the bare opt-in flag (== true per
+    the clap definition anchored at SF_FLAG_RETH_ARG)."""
     if mode == "migrate":
         return ()
     if mode == "flag":
-        # TODO(Q1/form B): return ("--storage.v2",) once greth wires the
-        # flag into init_genesis; also needs Node.start() arg injection.
-        raise NotImplementedError("form B is not wired yet (design doc Q1)")
+        return (f"--{SF_FLAG_RETH_ARG}",)
     raise ValueError(f"unknown sf mode {mode!r}")
+
+
+def inject_sf_v2_flag_reth_args(reth_config: Mapping) -> dict:
+    """A copy of a node's reth_config.json dict with the --storage.v2
+    opt-in injected into .reth_args (empty value -> the generated
+    start.sh emits the bare flag; see SF_FLAG_RETH_ARG). Other entries
+    preserved; pure — the case owns the file I/O."""
+    config = dict(reth_config)
+    reth_args = dict(config.get("reth_args") or {})
+    reth_args[SF_FLAG_RETH_ARG] = ""
+    config["reth_args"] = reth_args
+    return config
 
 
 def wipe_targets(node_data_dir: str, node_logs: Optional[Sequence[str]] = None):

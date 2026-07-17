@@ -24,14 +24,17 @@ every QC necessarily carries sf_val1's signature — and the L3 necessity
 probe makes it observable: stopping sf_val1 must FREEZE the chain,
 restarting it must resume it.
 
-SF enablement (design §2, Q1): the tested HEAD has no fresh-init SF
-switch, so the case enables SF via form D — first start (fresh
-init_genesis, legacy settings + block-0 genesis reverts) -> stop ->
-`db migrate-changesets` (needs the #391 preflight fix: accepts the
-block-0 first entry and migrates the reverts into the SF segment as
-entity data) -> restart. The hook is mode-switched ([sf] mode /
-GRAVITY_SF_MODE); form B ("flag") slots in once greth wires
---storage.v2 into init_genesis.
+SF enablement (design §2, Q1), mode-switched via [sf] mode /
+GRAVITY_SF_MODE:
+- form B "flag" (primary): greth's feat/sf-fresh-init wires
+  --storage.v2 into genesis init (default false; bare flag == true) —
+  the SF nodes carry it in their deploy config (phase 1) and are BORN
+  on the SF layout, genesis alloc as entity rows (Q6 fixed, isomorphic
+  with a migrate product). No stop/migrate/restart machinery runs.
+- form D "migrate" (compatibility): first start (fresh init_genesis,
+  legacy settings + block-0 genesis reverts) -> stable-runtime wait ->
+  stop -> `db migrate-changesets` (the #391 preflight fix) -> restart.
+Both forms yield the same on-disk shape and share every assertion.
 
 Known constraints (design §3):
 (1) the runner starts ALL nodes before pytest, so phase 1 stops the five
@@ -560,25 +563,62 @@ def assert_proposer_pacing_configured(node: Node) -> None:
     )
 
 
-async def start_fresh_sf_node(ctx, node_id: str) -> None:
-    """First start of an SF node + the SF-enable hook.
+def inject_sf_v2_flag(node: Node) -> None:
+    """Give an SF node the ``--storage.v2`` opt-in via its deploy config
+    (flag mode only): sf_lib.inject_sf_v2_flag_reth_args adds the empty
+    reth_args entry that the generated script/start.sh turns into the
+    bare flag. Per-node and restart-stable; harmless after init (greth:
+    persisted settings always win on an initialized datadir). SF nodes
+    only — the legacy four must never carry it."""
+    assert node.id in sf_lib.SF_NODE_IDS, (
+        f"{node.id}: --storage.v2 injection is for SF nodes only"
+    )
+    config_path = node._infra_path / "config" / "reth_config.json"
+    assert config_path.is_file(), f"{node.id}: missing {config_path}"
+    config = sf_lib.inject_sf_v2_flag_reth_args(
+        json.loads(config_path.read_text())
+    )
+    config_path.write_text(json.dumps(config, indent=2) + "\n")
+    LOG.info("[%s] injected --%s into %s", node.id,
+             sf_lib.SF_FLAG_RETH_ARG, config_path)
 
-    Form D ("migrate"): start (fresh init_genesis writes legacy settings
-    + block-0 genesis reverts; the node may sync a handful of blocks —
-    they migrate along) -> stop -> `db migrate-changesets` (the #391-fix
-    path: accepts the block-0 first entry, migrates the reverts into the
-    SF segments as entity rows, flips the ratchet) -> restart -> sync to
-    tip. Form B would instead inject sf_lib.sf_start_extra_args() at this
-    first start — refused until greth wires it (sf_lib.resolve_sf_mode).
+
+async def start_fresh_sf_node(ctx, node_id: str) -> None:
+    """First start of an SF node + the SF-enable hook, mode-switched.
+
+    Form B ("flag", primary): the node's reth_config.json already
+    carries the bare ``--storage.v2`` (phase 1,
+    sf_lib.SF_FLAG_RETH_ARG) — greth's feat/sf-fresh-init wiring
+    (common.rs: fresh init writes SF settings and the genesis alloc as
+    ENTITY rows in the changeset segments, isomorphic with a
+    migrate-changesets product; Q6 fixed) makes the very first start
+    fresh-init straight into SF. No stop, no migration, no restart —
+    the first-stop safety wait and the SIGKILL last resort never come
+    into play.
+
+    Form D ("migrate", compatibility): start (fresh init_genesis writes
+    legacy settings + block-0 genesis reverts) -> stable-runtime wait
+    (attempt8) -> stop -> `db migrate-changesets` (the #391-fix path) ->
+    restart. Both forms converge on the same on-disk shape; phase 5's
+    offline probes assert it identically.
     """
     node = ctx.cluster.get_node(node_id)
     assert node_id in sf_lib.SF_NODE_IDS, f"{node_id} is not an SF node"
-    assert ctx.sf_mode == "migrate", f"unsupported sf mode {ctx.sf_mode}"
+    assert ctx.sf_mode in ("migrate", "flag"), (
+        f"unsupported sf mode {ctx.sf_mode}"
+    )
 
-    LOG.info("[sf-enable/%s] first start (fresh init)...", node_id)
+    LOG.info("[sf-enable/%s] first start (fresh init, mode=%s)...",
+             node_id, ctx.sf_mode)
     started_at = time.monotonic()
     assert await node.start(), f"failed to start {node_id}"
     await _wait_rpc_up(node)
+
+    if ctx.sf_mode == "flag":
+        # Born on SF — nothing else to do; the offline probes (phase 5)
+        # verify PRESENT_STATIC_FILES + entity-genesis segments later.
+        LOG.info("[sf-enable/%s] fresh-init on SF via --storage.v2", node_id)
+        return
 
     # attempt8: never stop an early-init node — a ~12s-old gravity_node
     # ignored a direct SIGTERM for 109s (suspected early-init
@@ -775,6 +815,11 @@ async def phase_1_bootstrap_legacy_core(ctx: FreshSyncContext) -> None:
             # graceful-shutdown defect bites here too.
             await stop_node_and_wait_exit(node, allow_sigkill=True)
         wipe_node_to_fresh(node)
+        if ctx.sf_mode == "flag":
+            # Form B: bake the --storage.v2 opt-in into the node's deploy
+            # config now, so the case-controlled FIRST start fresh-inits
+            # straight into the SF layout (legacy nodes never get it).
+            inject_sf_v2_flag(node)
 
     for node_id in sf_lib.LEGACY_NODE_IDS:
         node = ctx.cluster.get_node(node_id)
@@ -1225,7 +1270,8 @@ async def test_storage_v2_fresh_sync(cluster: Cluster, output_dir: Path):
             name: f"{seconds:.0f}s"
             for name, seconds in ctx.phase_durations.items()
         })
-        LOG.info("SF enable (migrate) seconds: %s", {
+        # flag mode never runs migrations — an empty dict is expected.
+        LOG.info("SF enable mode=%s, migrate seconds: %s", ctx.sf_mode, {
             k: f"{v:.1f}" for k, v in ctx.sf_enable_durations.items()
         })
 
