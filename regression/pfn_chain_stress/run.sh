@@ -181,14 +181,16 @@ else
     NODE_SERVICES=(node1 vfn1 pfn1)
 fi
 
-# ── 1. Build host binary + stage into Docker ctx ───────────────────────────
+# ── 1. Build host binaries + stage into Docker ctx ─────────────────────────
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 HOST_BINARY="$REPO_ROOT/target/quick-release/gravity_node"
+HOST_CLI_BINARY="$REPO_ROOT/target/quick-release/gravity_cli"
 STAGED_BINARY="$REPO_ROOT/docker/gravity_node/bin/gravity_node"
+STAGED_CLI_BINARY="$REPO_ROOT/docker/gravity_node/bin/gravity_cli"
 
-echo "[run] cargo build gravity_node (host, profile=quick-release)…"
+echo "[run] cargo build gravity_node and gravity_cli (host, profile=quick-release)…"
 (cd "$REPO_ROOT" && RUSTFLAGS="--cfg tokio_unstable" \
-    cargo build --bin gravity_node --profile quick-release) \
+    cargo build --bin gravity_node --bin gravity_cli --profile quick-release) \
     || { echo "[run] cargo build failed"; exit 1; }
 
 mkdir -p "$REPO_ROOT/docker/gravity_node/bin"
@@ -197,6 +199,12 @@ if ! cmp -s "$HOST_BINARY" "$STAGED_BINARY" 2>/dev/null; then
     echo "[run] staged binary -> $STAGED_BINARY ($(stat -c %s "$STAGED_BINARY") bytes)"
 else
     echo "[run] staged binary already up-to-date"
+fi
+if ! cmp -s "$HOST_CLI_BINARY" "$STAGED_CLI_BINARY" 2>/dev/null; then
+    cp -f "$HOST_CLI_BINARY" "$STAGED_CLI_BINARY"
+    echo "[run] staged binary -> $STAGED_CLI_BINARY ($(stat -c %s "$STAGED_CLI_BINARY") bytes)"
+else
+    echo "[run] staged CLI binary already up-to-date"
 fi
 
 # Build gravity_node image (shared by all clusters).
