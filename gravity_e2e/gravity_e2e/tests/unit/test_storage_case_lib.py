@@ -267,3 +267,121 @@ def test_assert_history_is_anchorable_rejects_missing_logs():
             anchor.expected = []
     with pytest.raises(AssertionError, match="ValueSet logs"):
         lib.assert_history_is_anchorable(anchor_set, h, TRANSFERS_WEI, SET_VALUES)
+
+
+# ---------------------------------------------------------------------------
+# assert_sf_layout / assert_upgraded_legacy_layout (injected probes)
+# ---------------------------------------------------------------------------
+
+from gravity_e2e.helpers.offline_db import (  # noqa: E402
+    ACCOUNT_CHANGESETS_TABLE,
+    STORAGE_CHANGESETS_TABLE,
+    OfflineDbEnv,
+    SettingsState,
+)
+
+ENV = OfflineDbEnv(
+    binary="/x/bin/gravity_node",
+    datadir="/x/data/reth",
+    chain="/x/genesis.json",
+    static_files_dir="/x/data/reth",
+)
+
+
+class StubProbe:
+    def __init__(self, state, error=None):
+        self.state = state
+        self.error = error
+
+    def summary(self):
+        return f"stub settings probe: {self.state}"
+
+
+class StubLayout:
+    def __init__(self, populated: bool):
+        names = [Path("static_file_x_0_1")] if populated else []
+        self.static_files_dir = Path("/x/data/reth")
+        self.exists = True
+        self.account_segments = list(names)
+        self.storage_segments = list(names)
+        self.account_sidecars = list(names)
+        self.storage_sidecars = list(names)
+
+    @property
+    def has_segment_files(self):
+        return bool(self.account_segments or self.storage_segments)
+
+    @property
+    def has_sidecar_files(self):
+        return bool(self.account_sidecars or self.storage_sidecars)
+
+
+class StubCount:
+    def __init__(self, count, error=None):
+        self.count = count
+        self.error = error
+
+    def summary(self):
+        return f"stub count: {self.count}"
+
+
+def _probes(state, populated_sf, count):
+    return dict(
+        read_settings=lambda env: StubProbe(state),
+        inspect_sf=lambda datadir, sf_dir: StubLayout(populated_sf),
+        count_entries=lambda env, table: StubCount(count),
+    )
+
+
+def test_assert_sf_layout_happy_path_returns_zero_counts():
+    counts = lib.assert_sf_layout(
+        ENV, "t", **_probes(SettingsState.PRESENT_STATIC_FILES, True, 0)
+    )
+    assert counts == {ACCOUNT_CHANGESETS_TABLE: 0, STORAGE_CHANGESETS_TABLE: 0}
+
+
+def test_assert_sf_layout_rejects_unflipped_settings():
+    with pytest.raises(AssertionError, match="PRESENT_STATIC_FILES"):
+        lib.assert_sf_layout(ENV, "t", **_probes(SettingsState.MISSING, True, 0))
+
+
+def test_assert_sf_layout_rejects_missing_segments():
+    with pytest.raises(AssertionError, match="segments"):
+        lib.assert_sf_layout(
+            ENV, "t", **_probes(SettingsState.PRESENT_STATIC_FILES, False, 0)
+        )
+
+
+def test_assert_sf_layout_rejects_populated_tables():
+    with pytest.raises(AssertionError, match="still has"):
+        lib.assert_sf_layout(
+            ENV, "t", **_probes(SettingsState.PRESENT_STATIC_FILES, True, 7)
+        )
+
+
+def test_assert_upgraded_legacy_layout_happy_path_returns_counts():
+    counts = lib.assert_upgraded_legacy_layout(
+        ENV, "t", **_probes(SettingsState.MISSING, False, 12)
+    )
+    assert counts == {ACCOUNT_CHANGESETS_TABLE: 12, STORAGE_CHANGESETS_TABLE: 12}
+
+
+def test_assert_upgraded_legacy_layout_rejects_present_settings():
+    with pytest.raises(AssertionError, match="gravity_storage_settings entry"):
+        lib.assert_upgraded_legacy_layout(
+            ENV, "t", **_probes(SettingsState.PRESENT_LEGACY, False, 12)
+        )
+
+
+def test_assert_upgraded_legacy_layout_rejects_sf_files():
+    with pytest.raises(AssertionError, match="segment files"):
+        lib.assert_upgraded_legacy_layout(
+            ENV, "t", **_probes(SettingsState.MISSING, True, 12)
+        )
+
+
+def test_assert_upgraded_legacy_layout_rejects_empty_tables():
+    with pytest.raises(AssertionError, match="is empty"):
+        lib.assert_upgraded_legacy_layout(
+            ENV, "t", **_probes(SettingsState.MISSING, False, 0)
+        )

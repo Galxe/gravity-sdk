@@ -25,12 +25,23 @@ storage_baseline_lib.py when storage_v2_upgrade needed the same logic
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Sequence, Union
+from typing import Dict, List, Sequence, Union
 
-from gravity_e2e.helpers.offline_db import OfflineDbEnv
+from gravity_e2e.helpers.offline_db import (
+    ACCOUNT_CHANGESETS_TABLE,
+    STORAGE_CHANGESETS_TABLE,
+    OfflineDbEnv,
+    SettingsState,
+    count_table_entries,
+    inspect_changeset_static_files,
+    read_storage_settings,
+)
 from gravity_e2e.helpers.storage_anchors import AnchorSet, AnchorSpec
+
+LOG = logging.getLogger(__name__)
 
 # keccak256("set(uint256)")[:4]; also visible in the tracked
 # prague/contracts/Counter.json bytecode (same signature).
@@ -181,6 +192,115 @@ def assert_history_is_anchorable(
         f"expected {len(history.sets)} ValueSet logs in "
         f"{logs_anchor.anchor_id}, collected {len(logs_anchor.expected)}"
     )
+
+
+def assert_sf_layout(
+    env: OfflineDbEnv,
+    stage: str,
+    *,
+    read_settings=read_storage_settings,
+    inspect_sf=inspect_changeset_static_files,
+    count_entries=count_table_entries,
+) -> Dict[str, int]:
+    """The static-file layout facts on a STOPPED node's datadir: settings
+    ratchet flipped to PRESENT_STATIC_FILES, both changeset kinds present
+    as SF segments with .csoff sidecars, both DB tables empty
+    (db list --count, exact). Returns the table counts (all zero).
+
+    Shared by storage_v2_upgrade (post-migrate-changesets) and
+    storage_v2_fresh_sync (SF-enabled fresh nodes). The probe callables
+    are injectable for unit tests only.
+    """
+    probe = read_settings(env)
+    assert probe.error is None, f"[{stage}] {probe.summary()}"
+    assert probe.state is SettingsState.PRESENT_STATIC_FILES, (
+        f"[{stage}] settings are not PRESENT_STATIC_FILES "
+        f"(state={probe.state}) — the SF ratchet must be set.\n"
+        + probe.summary()
+    )
+
+    layout = inspect_sf(env.datadir, env.static_files_dir)
+    assert layout.exists, f"static-files dir missing: {layout.static_files_dir}"
+    assert layout.account_segments, (
+        f"[{stage}] no account-change-sets static-file segments"
+    )
+    assert layout.storage_segments, (
+        f"[{stage}] no storage-change-sets static-file segments"
+    )
+    assert layout.account_sidecars, (
+        f"[{stage}] no account-change-sets .csoff sidecars"
+    )
+    assert layout.storage_sidecars, (
+        f"[{stage}] no storage-change-sets .csoff sidecars"
+    )
+    LOG.info(
+        "[%s] SF layout: %d account segs, %d storage segs, %d+%d .csoff",
+        stage,
+        len(layout.account_segments),
+        len(layout.storage_segments),
+        len(layout.account_sidecars),
+        len(layout.storage_sidecars),
+    )
+
+    counts: Dict[str, int] = {}
+    for table in (ACCOUNT_CHANGESETS_TABLE, STORAGE_CHANGESETS_TABLE):
+        count = count_entries(env, table)
+        assert count.error is None, f"[{stage}] {count.summary()}"
+        assert count.count == 0, (
+            f"[{stage}] {table} still has {count.count} entries under the "
+            f"SF layout — the tables must be empty.\n" + count.summary()
+        )
+        counts[table] = count.count
+    LOG.info("[%s] both changeset tables empty (db list --count == 0)", stage)
+    return counts
+
+
+def assert_upgraded_legacy_layout(
+    env: OfflineDbEnv,
+    stage: str,
+    *,
+    read_settings=read_storage_settings,
+    inspect_sf=inspect_changeset_static_files,
+    count_entries=count_table_entries,
+) -> Dict[str, int]:
+    """The upgraded-legacy layout facts on a STOPPED node's datadir
+    (a v1.7.5-born datadir now run by v2.3.0): settings MISSING (only a
+    fresh v2.3.0 init_genesis writes one — TC2's criterion), no changeset
+    segments/sidecars, both changeset tables populated (positive control).
+    Returns the table counts (all positive).
+    """
+    probe = read_settings(env)
+    assert probe.error is None, f"[{stage}] {probe.summary()}"
+    assert probe.state is SettingsState.MISSING, (
+        f"[{stage}] upgraded datadir has a gravity_storage_settings entry "
+        f"(state={probe.state}) — the upgrade path must not write settings; "
+        "only fresh init_genesis does. Product bug unless proven "
+        "otherwise.\n" + probe.summary()
+    )
+    LOG.info("[%s] storage settings: MISSING (as required)", stage)
+
+    layout = inspect_sf(env.datadir, env.static_files_dir)
+    assert layout.exists, f"static-files dir missing: {layout.static_files_dir}"
+    assert not layout.has_segment_files, (
+        f"[{stage}] upgraded legacy node has changeset segment files: "
+        f"{layout.account_segments + layout.storage_segments}"
+    )
+    assert not layout.has_sidecar_files, (
+        f"[{stage}] upgraded legacy node has .csoff sidecars: "
+        f"{layout.account_sidecars + layout.storage_sidecars}"
+    )
+
+    counts: Dict[str, int] = {}
+    for table in (ACCOUNT_CHANGESETS_TABLE, STORAGE_CHANGESETS_TABLE):
+        count = count_entries(env, table)
+        assert count.error is None, f"[{stage}] {count.summary()}"
+        assert count.count > 0, (
+            f"[{stage}] {table} is empty on an upgraded legacy-layout node:\n"
+            + count.summary()
+        )
+        counts[table] = count.count
+        LOG.info("[%s] %s entries: %d", stage, table, count.count)
+    return counts
 
 
 def derive_offline_env(

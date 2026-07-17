@@ -126,10 +126,8 @@ All timeouts are case-internal (no pytest-timeout, repo convention).
 import asyncio
 import json
 import logging
-import math
 import os
 import shutil
-import statistics
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -154,7 +152,6 @@ from gravity_e2e.helpers.offline_db import (
     STORAGE_CHANGESETS_TABLE,
     SettingsState,
     count_table_entries,
-    inspect_changeset_static_files,
     migrate_changesets,
     read_storage_settings,
 )
@@ -164,6 +161,7 @@ from gravity_e2e.helpers.storage_anchors import (
     collect_anchors,
     replay_anchors,
 )
+from gravity_e2e.helpers.tx_sender import TxSender
 from gravity_e2e.utils.transaction_builder import TransactionBuilder
 
 LOG = logging.getLogger(__name__)
@@ -276,167 +274,6 @@ POST_MIGRATION_LOAD_S = 600
 # changesets are SF-native from birth).
 POST_MIGRATION_TRANSFER_ETH = 5
 POST_MIGRATION_SET_VALUE = 4
-
-
-# ---------------------------------------------------------------------------
-# Background tx sender (adapted from rolling_upgrade's TxSender)
-# ---------------------------------------------------------------------------
-
-
-class TxSender:
-    """Continuously sends txs to a target node, with a fallback target for
-    the window where the primary (vfn1) is itself being upgraded."""
-
-    def __init__(
-        self, cluster: Cluster, faucet, primary_node_id: str, fallback_node_id: str
-    ):
-        self.cluster = cluster
-        self.faucet = faucet
-        self.primary_node_id = primary_node_id
-        self.fallback_node_id = fallback_node_id
-        self.recipient = Account.create().address
-
-        self._use_fallback = False
-        self._stop_event = asyncio.Event()
-        self._task: Optional[asyncio.Task] = None
-
-        self.total_sent = 0
-        self.total_confirmed = 0
-        self.total_failed = 0
-        self.total_timeout = 0
-        self.latencies: List[float] = []
-
-    @property
-    def _current_node_id(self) -> str:
-        return self.fallback_node_id if self._use_fallback else self.primary_node_id
-
-    @property
-    def _current_w3(self) -> Web3:
-        return self.cluster.get_node(self._current_node_id).w3
-
-    def set_fallback(self, use_fallback: bool):
-        old = self._current_node_id
-        self._use_fallback = use_fallback
-        LOG.info("TxSender target: %s -> %s", old, self._current_node_id)
-
-    async def _send_loop(self):
-        chain_id = await asyncio.to_thread(lambda: self._current_w3.eth.chain_id)
-        gas_price = Web3.to_wei("100", "gwei")
-        nonce = await asyncio.to_thread(
-            lambda: self._current_w3.eth.get_transaction_count(
-                self.faucet.address, "pending"
-            )
-        )
-        LOG.info(
-            "TxSender started: target=%s nonce=%d recipient=%s",
-            self._current_node_id,
-            nonce,
-            self.recipient,
-        )
-
-        while not self._stop_event.is_set():
-            w3 = self._current_w3
-            tx = {
-                "nonce": nonce,
-                "to": self.recipient,
-                "value": 0,
-                "gas": 21000,
-                "gasPrice": gas_price,
-                "chainId": chain_id,
-            }
-            try:
-                signed = w3.eth.account.sign_transaction(tx, self.faucet.key)
-                send_time = time.monotonic()
-                tx_hash = await asyncio.to_thread(
-                    lambda: w3.eth.send_raw_transaction(signed.raw_transaction)
-                )
-                self.total_sent += 1
-                nonce += 1
-
-                confirmed = False
-                while time.monotonic() - send_time < TX_RECEIPT_TIMEOUT:
-                    try:
-                        receipt = await asyncio.to_thread(
-                            lambda: w3.eth.get_transaction_receipt(tx_hash)
-                        )
-                        if receipt:
-                            self.latencies.append(time.monotonic() - send_time)
-                            self.total_confirmed += 1
-                            confirmed = True
-                            break
-                    except Exception:
-                        pass
-                    await asyncio.sleep(0.1)
-
-                if not confirmed:
-                    self.total_timeout += 1
-                    LOG.warning("TxSender: tx %s... timed out", tx_hash.hex()[:10])
-                    try:
-                        nonce = await asyncio.to_thread(
-                            lambda: self._current_w3.eth.get_transaction_count(
-                                self.faucet.address, "pending"
-                            )
-                        )
-                        LOG.info("TxSender: nonce re-synced to %d", nonce)
-                    except Exception:
-                        pass
-
-            except Exception as e:
-                self.total_failed += 1
-                LOG.warning(
-                    "TxSender: send failed (%s): %s", self._current_node_id, e
-                )
-                await asyncio.sleep(1)
-                try:
-                    nonce = await asyncio.to_thread(
-                        lambda: self._current_w3.eth.get_transaction_count(
-                            self.faucet.address, "pending"
-                        )
-                    )
-                except Exception:
-                    pass
-                continue
-
-            await asyncio.sleep(TX_INTERVAL)
-
-    def start(self):
-        self._task = asyncio.create_task(self._send_loop())
-
-    async def stop(self):
-        self._stop_event.set()
-        if self._task:
-            await self._task
-            self._task = None
-
-    @property
-    def success_rate(self) -> float:
-        return self.total_confirmed / self.total_sent if self.total_sent else 0.0
-
-    def log_stats(self):
-        LOG.info("=" * 60)
-        LOG.info("TRANSACTION STATISTICS")
-        LOG.info("=" * 60)
-        LOG.info("Total Sent:      %d", self.total_sent)
-        LOG.info("Confirmed:       %d", self.total_confirmed)
-        LOG.info("Failed (send):   %d", self.total_failed)
-        LOG.info("Timed Out:       %d", self.total_timeout)
-        if self.total_sent:
-            LOG.info("Success Rate:    %.1f%%", self.success_rate * 100)
-        if self.latencies:
-            sorted_lat = sorted(self.latencies)
-
-            def percentile(p: float) -> float:
-                k = (len(sorted_lat) - 1) * (p / 100.0)
-                f, c = math.floor(k), math.ceil(k)
-                if f == c:
-                    return sorted_lat[int(k)]
-                return sorted_lat[f] + (sorted_lat[c] - sorted_lat[f]) * (k - f)
-
-            LOG.info("Min/Avg/Max:     %.4fs / %.4fs / %.4fs",
-                     sorted_lat[0], statistics.mean(sorted_lat), sorted_lat[-1])
-            LOG.info("P50/P90/P99:     %.4fs / %.4fs / %.4fs",
-                     percentile(50), percentile(90), percentile(99))
-        LOG.info("=" * 60)
 
 
 # ---------------------------------------------------------------------------
@@ -1000,47 +837,10 @@ async def offline_layout_probe(ctx: UpgradeContext, node_id: str, stage: str) ->
     # NEW binary probing the upgraded datadir.
     assert upgrade_lib.is_upgrade_target(Path(env.binary), NEW_BINARY_PATH)
 
-    # (a) THE upgraded-datadir criterion: gravity_storage_settings must be
-    # MISSING. v1.7.5 predates the settings entry and only a fresh v2.3.0
-    # init_genesis writes it (TC1 asserts PRESENT_LEGACY there); neither
-    # the upgrade path nor Alpha activation may write one behind our back.
-    # PRESENT_* here means storage metadata was mutated — a product bug.
-    probe = read_storage_settings(env)
-    assert probe.error is None, f"[{stage}] {probe.summary()}"
-    assert probe.state is SettingsState.MISSING, (
-        f"[{stage}] upgraded datadir has a gravity_storage_settings entry "
-        f"(state={probe.state}) — the upgrade path / Alpha activation must "
-        "not write settings; only fresh init_genesis does. Product bug "
-        "unless proven otherwise.\n" + probe.summary()
-    )
-    LOG.info("[%s] storage settings: MISSING (as required)", stage)
-
-    # (b) Legacy layout on disk: no changeset segment files, no .csoff
-    # sidecars under the node's static-files dir.
-    layout = inspect_changeset_static_files(env.datadir, env.static_files_dir)
-    assert layout.exists, f"static-files dir missing: {layout.static_files_dir}"
-    assert not layout.has_segment_files, (
-        f"[{stage}] upgraded legacy node has changeset segment files: "
-        f"{layout.account_segments + layout.storage_segments}"
-    )
-    assert not layout.has_sidecar_files, (
-        f"[{stage}] upgraded legacy node has .csoff sidecars: "
-        f"{layout.account_sidecars + layout.storage_sidecars}"
-    )
-
-    # (c) Positive control: the v1.7.5-written history + upgrade-window
-    # traffic really live in the changeset tables.
-    counts: Dict[str, int] = {}
-    for table in (ACCOUNT_CHANGESETS_TABLE, STORAGE_CHANGESETS_TABLE):
-        count = count_table_entries(env, table)
-        assert count.error is None, f"[{stage}] {count.summary()}"
-        assert count.count > 0, (
-            f"[{stage}] {table} is empty on an upgraded legacy-layout node:\n"
-            + count.summary()
-        )
-        counts[table] = count.count
-        LOG.info("[%s] %s entries: %d", stage, table, count.count)
-    ctx.changeset_counts[stage] = counts
+    # The upgraded-datadir criteria (settings MISSING, no SF files,
+    # populated changeset tables) — shared with storage_v2_fresh_sync's
+    # legacy control probes.
+    ctx.changeset_counts[stage] = lib.assert_upgraded_legacy_layout(env, stage)
 
     LOG.info("[%s] Restarting %s ...", stage, node.id)
     await restart_node_and_catch_up(ctx.cluster, node)
@@ -1361,52 +1161,10 @@ def _offline_env(ctx: UpgradeContext, node: Node):
 
 
 def assert_sf_layout(ctx: UpgradeContext, env, stage: str) -> None:
-    """The static-file layout facts after migrate-changesets: settings
-    ratchet flipped, both changeset kinds present as SF segments with
-    .csoff sidecars, both DB tables empty (db list --count, exact)."""
-    probe = read_storage_settings(env)
-    assert probe.error is None, f"[{stage}] {probe.summary()}"
-    assert probe.state is SettingsState.PRESENT_STATIC_FILES, (
-        f"[{stage}] settings did not flip to PRESENT_STATIC_FILES "
-        f"(state={probe.state}) — the migration ratchet must be set.\n"
-        + probe.summary()
-    )
-
-    layout = inspect_changeset_static_files(env.datadir, env.static_files_dir)
-    assert layout.exists, f"static-files dir missing: {layout.static_files_dir}"
-    assert layout.account_segments, (
-        f"[{stage}] no account-change-sets static-file segments after migration"
-    )
-    assert layout.storage_segments, (
-        f"[{stage}] no storage-change-sets static-file segments after migration"
-    )
-    assert layout.account_sidecars, (
-        f"[{stage}] no account-change-sets .csoff sidecars after migration"
-    )
-    assert layout.storage_sidecars, (
-        f"[{stage}] no storage-change-sets .csoff sidecars after migration"
-    )
-    LOG.info(
-        "[%s] SF layout: %d account segs, %d storage segs, %d+%d .csoff",
-        stage,
-        len(layout.account_segments),
-        len(layout.storage_segments),
-        len(layout.account_sidecars),
-        len(layout.storage_sidecars),
-    )
-
-    counts: Dict[str, int] = {}
-    for table in (ACCOUNT_CHANGESETS_TABLE, STORAGE_CHANGESETS_TABLE):
-        count = count_table_entries(env, table)
-        assert count.error is None, f"[{stage}] {count.summary()}"
-        assert count.count == 0, (
-            f"[{stage}] {table} still has {count.count} entries after "
-            f"migrate-changesets — the tables must be swept empty.\n"
-            + count.summary()
-        )
-        counts[table] = count.count
-    ctx.changeset_counts[stage] = counts
-    LOG.info("[%s] both changeset tables empty (db list --count == 0)", stage)
+    """The static-file layout facts after migrate-changesets — shared
+    implementation in storage_case_lib (also used by
+    storage_v2_fresh_sync); this wrapper only records the counts."""
+    ctx.changeset_counts[stage] = lib.assert_sf_layout(env, stage)
 
 
 async def migrate_node(
@@ -1549,7 +1307,12 @@ async def phase_13_rolling_migration(ctx: UpgradeContext) -> None:
     # Sustained load across the migration window + the phase-14 SF window
     # (same primary/fallback arrangement as the rolling upgrade).
     ctx.tx_sender = TxSender(
-        ctx.cluster, ctx.cluster.faucet, primary_node_id="vfn1", fallback_node_id="node1"
+        ctx.cluster,
+        ctx.cluster.faucet,
+        primary_node_id="vfn1",
+        fallback_node_id="node1",
+        tx_interval=TX_INTERVAL,
+        receipt_timeout=TX_RECEIPT_TIMEOUT,
     )
     ctx.tx_sender.start()
     LOG.info("[Phase 13] background tx sender restarted (target: vfn1)")
@@ -1739,7 +1502,12 @@ async def test_storage_v2_upgrade(cluster: Cluster, output_dir: Path):
         await _run_phase(ctx, phase_2_history_and_anchors)
 
         ctx.tx_sender = TxSender(
-            cluster, cluster.faucet, primary_node_id="vfn1", fallback_node_id="node1"
+            cluster,
+            cluster.faucet,
+            primary_node_id="vfn1",
+            fallback_node_id="node1",
+            tx_interval=TX_INTERVAL,
+            receipt_timeout=TX_RECEIPT_TIMEOUT,
         )
         ctx.tx_sender.start()
         LOG.info("Background transaction sender started (target: vfn1)")
