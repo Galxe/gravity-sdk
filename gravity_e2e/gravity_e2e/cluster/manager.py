@@ -45,17 +45,21 @@ class ValidatorSet:
     pending_active: List[Node] = field(default_factory=list)
 
 
-# gravity_cli error signatures for staking txs reverted by the
-# ReconfigurationInProgress guard (epoch transition window). These are safe to
-# retry: the reverted tx had no effect and the CLI flows are idempotent.
-RECONFIG_BLOCKED_ERRORS = (
+# gravity_cli reports EVERY reverted staking tx with one of these catch-all
+# messages (it does not decode revert data), so matching them cannot tell a
+# transient ReconfigurationInProgress revert (epoch transition window) from a
+# deterministic one (e.g. out-of-gas). Retrying is still safe — the missing
+# event means the tx reverted with no effect and these CLI flows are
+# idempotent — but a deterministic failure will burn the whole retry budget
+# before surfacing.
+RETRYABLE_STAKING_ERRORS = (
     "Failed to find PoolCreated event",
     "Failed to find ValidatorRegistered event",
     "Failed to find ValidatorJoinRequested event",
     "Failed to find ValidatorLeaveRequested event",
 )
-RECONFIG_RETRY_INTERVAL_SECS = 5
-RECONFIG_RETRY_BUDGET_SECS = 60
+STAKING_RETRY_INTERVAL_SECS = 5
+STAKING_RETRY_BUDGET_SECS = 60
 
 
 # Standard devnet keys (Anvil/Hardhat defaults)
@@ -653,7 +657,7 @@ class Cluster:
         first_node = next(iter(self.nodes.values()))
         return first_node.url
 
-    async def _run_cli_with_reconfig_retry(
+    async def _run_cli_with_staking_retry(
         self,
         cmd: List[str],
         stdin_input: Optional[bytes] = None,
@@ -661,13 +665,19 @@ class Cluster:
         start_new_session: bool = False,
     ) -> Tuple[int, str, str]:
         """
-        Run a gravity_cli command, retrying while an in-progress epoch
-        reconfiguration blocks staking transactions.
+        Run a gravity_cli command, retrying failures that match the CLI's
+        catch-all staking revert signatures (RETRYABLE_STAKING_ERRORS).
+
+        The retry targets the transient ReconfigurationInProgress guard
+        (epoch transition window), but the CLI reports every revert with the
+        same message, so a deterministic revert also matches and only fails
+        after the budget is exhausted — check the logged stderr in that case.
+        `timeout` applies per attempt, not to the whole retry loop.
 
         Returns:
             (returncode, stdout, stderr) of the last attempt.
         """
-        deadline = time.monotonic() + RECONFIG_RETRY_BUDGET_SECS
+        deadline = time.monotonic() + STAKING_RETRY_BUDGET_SECS
         while True:
             process = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -685,21 +695,22 @@ class Cluster:
                 return process.returncode, stdout_str, stderr_str
 
             matched = next(
-                (sig for sig in RECONFIG_BLOCKED_ERRORS if sig in stderr_str), None
+                (sig for sig in RETRYABLE_STAKING_ERRORS if sig in stderr_str), None
             )
             if matched is None:
                 return process.returncode, stdout_str, stderr_str
-            if time.monotonic() + RECONFIG_RETRY_INTERVAL_SECS > deadline:
+            if time.monotonic() + STAKING_RETRY_INTERVAL_SECS > deadline:
                 LOG.error(
-                    f"Retry budget ({RECONFIG_RETRY_BUDGET_SECS}s) exhausted, "
+                    f"Retry budget ({STAKING_RETRY_BUDGET_SECS}s) exhausted, "
                     f"giving up on: {matched}"
                 )
                 return process.returncode, stdout_str, stderr_str
             LOG.info(
-                f"'{matched}': retrying due to reconfiguration in progress "
-                f"({RECONFIG_RETRY_INTERVAL_SECS}s backoff)..."
+                f"'{matched}': staking tx reverted, possibly by the "
+                f"ReconfigurationInProgress guard; retrying "
+                f"({STAKING_RETRY_INTERVAL_SECS}s backoff)..."
             )
-            await asyncio.sleep(RECONFIG_RETRY_INTERVAL_SECS)
+            await asyncio.sleep(STAKING_RETRY_INTERVAL_SECS)
 
     async def validator_list(self, timeout: int = 60) -> ValidatorSet:
         """
@@ -899,7 +910,7 @@ class Cluster:
         LOG.info(f"Creating StakePool for node {node_id} with {stake_amount} ETH...")
         LOG.debug(f"Command: {' '.join(create_cmd)}")
 
-        returncode, stdout_str, stderr_str = await self._run_cli_with_reconfig_retry(
+        returncode, stdout_str, stderr_str = await self._run_cli_with_staking_retry(
             create_cmd,
             stdin_input=f"{private_key}\n".encode(),
             timeout=timeout,
@@ -999,7 +1010,7 @@ class Cluster:
         LOG.info(f"Executing validator join for {node_id}...")
         LOG.debug(f"Command: {' '.join(join_cmd)}")
 
-        returncode, stdout_str, stderr_str = await self._run_cli_with_reconfig_retry(
+        returncode, stdout_str, stderr_str = await self._run_cli_with_staking_retry(
             join_cmd,
             stdin_input=f"{private_key}\n".encode(),
             timeout=timeout,
@@ -1067,7 +1078,7 @@ class Cluster:
         LOG.info(f"Executing validator leave for {node_id}...")
         LOG.debug(f"Command: {' '.join(leave_cmd)}")
 
-        returncode, stdout_str, stderr_str = await self._run_cli_with_reconfig_retry(
+        returncode, stdout_str, stderr_str = await self._run_cli_with_staking_retry(
             leave_cmd,
             stdin_input=f"{private_key}\n".encode(),
             timeout=timeout,
