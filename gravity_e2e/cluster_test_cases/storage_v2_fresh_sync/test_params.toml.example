@@ -37,13 +37,19 @@ ref = "main"
 # binary (v1.7.5 cannot execute post-Alpha semantics); the schedule is
 # fixed at render time. Re-render shortly before each run.
 #
-# betaBlock = 100: activates on v1.7.5, schedule-only fork.
-# gammaBlock = 4500: crossed at ~20 min of chain time (~3.8 blocks/s
-#   measured) — after the fleet completes upgrading (~render+19 min on
-#   the compressed schedule below).
+# betaBlock = 100: activates on v1.7.5, schedule-only fork (crossed at
+#   ~106 s of chain time at the slowed rate — still well before any
+#   upgrade starts).
+# gammaBlock = 1200 (sf_lib.GAMMA_BLOCK, unit-locked): the chain is
+#   paced to ~0.94 blk/s by the case reth_config.json.tpl's
+#   APTOS_PROPOSER_SLEEP_MS=1000, so the fleet finishes upgrading at
+#   ~790 blocks (~render+19 min minus ~5 min pre-chain runner work);
+#   1200 is crossed at ~21 min of chain time (~render+26 min) — after
+#   completion, comfortably inside the run. The old 4500 was staked on
+#   the default ~3.8 blk/s rate and would never be reached.
 [hardforks]
 betaBlock = 100
-gammaBlock = 4500
+gammaBlock = 1200
 
 # alphaTime = render_time + upgrade_budget + stability_window + margin.
 # Sized from MEASURED attempt5 timings, not TC2's 6-node legacy tier

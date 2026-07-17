@@ -65,13 +65,15 @@ class TestStallDetector:
 
 class TestCatchupBudget:
     def test_scales_with_gap(self):
-        # The expected phase-4 gap (~4600 blocks at ~20 min chain age):
-        # at the tick-injected 5.0 blk/s floor x1.5 the backstop is
-        # 1380s — a ~23 min ceiling over the ~4-6 min expected sync
-        # (~16-20 blk/s net measured band).
-        budget = catchup_budget_s(4600)
-        assert budget == 4600 / NET_CATCHUP_RATE_FLOOR_BPS * BUDGET_SAFETY_FACTOR
-        assert budget == pytest.approx(1380.0)
+        budget = catchup_budget_s(9000)
+        assert budget == 9000 / NET_CATCHUP_RATE_FLOOR_BPS * BUDGET_SAFETY_FACTOR
+        assert budget == pytest.approx(4500.0)
+
+    def test_expected_tc9_gap_lands_on_the_floor(self):
+        # On the slowed ~1 blk/s chain the phase-4 gap is only ~1400
+        # blocks: 1400 / 3.0 * 1.5 = 700s < MIN_BUDGET_S — the floor is
+        # the operative backstop for TC9's windows.
+        assert catchup_budget_s(1400) == MIN_BUDGET_S
 
     def test_floor_applies_to_small_gaps(self):
         assert catchup_budget_s(10) == MIN_BUDGET_S
@@ -141,15 +143,11 @@ class TestWaitForCatchup:
             )
 
 
-class TestTickInjectedCalibration:
-    def test_floor_is_the_tick_injected_value(self):
-        # 5.0 blk/s is the deliberate deep floor for tick-injected
-        # syncing nodes (GRAVITY_REQUEST_SYNC_INFO_INTERVAL_MS=20): the
-        # tick experiment measured ~23.6 blk/s against a frozen tip vs
-        # 4.4 at the 200 ms default, projecting ~16-20 blk/s net against
-        # the live loaded chain. Re-calibrate from the per-minute
-        # net_rate diagnostics before changing this.
-        assert NET_CATCHUP_RATE_FLOOR_BPS == 5.0
-        # Sanity: the floor must beat the DEFAULT-tick ceiling (~4.4) —
-        # if it did not, the injection would be pointless.
-        assert NET_CATCHUP_RATE_FLOOR_BPS > 4.4
+class TestDefaultFloorCalibration:
+    def test_default_floor_matches_the_slowed_chain_profile(self):
+        # 3.0 blk/s: the sync driver's observed ~4.4 blk/s ceiling minus
+        # a ~1 blk/s slowed chain, floored conservatively. Cases pass
+        # their own derived floor (TC9: sf_lib.NET_CATCHUP_FLOOR_BPS);
+        # re-calibrate from the per-minute net_rate diagnostics before
+        # changing this default.
+        assert NET_CATCHUP_RATE_FLOOR_BPS == 3.0

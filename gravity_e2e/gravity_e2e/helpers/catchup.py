@@ -38,15 +38,14 @@ LOG = logging.getLogger(__name__)
 FULL_LOAD_EPOCH_ROUND_S = 137
 # ~3x the staircase period: two consecutive silent rounds plus slack.
 DEFAULT_STALL_WINDOW_S = 3 * FULL_LOAD_EPOCH_ROUND_S  # 411s
-# Conservative net-convergence floor for a syncing node with the
-# sync-driver tick injected (GRAVITY_REQUEST_SYNC_INFO_INTERVAL_MS=20 —
-# see the TC9 case): the tick investigation measured ~23.6 blk/s against
-# a frozen tip vs 4.4 blk/s at the default 200 ms tick (the tick, not
-# execution, was the limiter — burst replay runs at ~4 ms/block), which
-# projects to ~16-20 blk/s net against a live loaded chain. 5.0 is a
-# deliberately deep floor — PENDING LIVE CALIBRATION from the per-minute
-# (height, tip, net_rate) diagnostics wait_for_catchup logs.
-NET_CATCHUP_RATE_FLOOR_BPS = 5.0
+# Default net-convergence floor. Cases should pass their own derived
+# floor (TC9 derives sync-floor-minus-chain-rate from its central
+# chain-rate assumptions in sf_lib); this default matches the
+# slowed-chain profile (~1 blk/s production vs the >= 4 blk/s
+# sync-driver ceiling measured across attempts 5-7) — PENDING LIVE
+# CALIBRATION from the per-minute (height, tip, net_rate) diagnostics
+# wait_for_catchup logs.
+NET_CATCHUP_RATE_FLOOR_BPS = 3.0
 # Safety factor on the budget derived from the live gap.
 BUDGET_SAFETY_FACTOR = 1.5
 # Budgets never shrink below this even for tiny gaps (staircase rounds

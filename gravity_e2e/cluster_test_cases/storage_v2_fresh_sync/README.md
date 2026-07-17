@@ -78,37 +78,49 @@ CI-neutral).
 
 ## Duration & the from-0 sync budget
 
-From-0 sync runs against the **live, loaded chain** — the original
-design semantics. What makes that feasible: deep sync is limited by the
-fullnode sync driver's fixed **200 ms poll tick** (~1 block net per
-tick ⇒ ~4.4 blk/s), NOT by replay/persistence capacity (burst replay
-runs at ~4 ms/block). The five SF nodes therefore run with
-`GRAVITY_REQUEST_SYNC_INFO_INTERVAL_MS=20` injected at the
-deploy-config level (`sf_lib.SYNC_TICK_ENV` → config/reth_config.json
-.env_vars → the generated start.sh's `env` prefix): the decisive
-experiment measured **~23.6 blk/s** at the 20 ms tick (5.4x throughput
-from a 10x tick), closing a 2912-block gap in 120 s. The legacy four
-keep the default tick as the behavior control. Side effect: injected
-nodes poll sync_info at ~50 req/s at steady state — request noise,
-acceptable in e2e.
+From-0 sync runs against the **live, loaded chain** with the SF nodes'
+sync path **completely untouched** — the original design semantics.
+What makes that feasible: the case slows the CHAIN, an environment
+parameter e2e rightfully owns. The chain's pace comes from the
+proposer's unconditional per-round sleep (`round_manager.rs:389-396`,
+`APTOS_PROPOSER_SLEEP_MS`, default 200 ms + ~60 ms round overhead = the
+measured ~260 ms/block); the case-local `reth_config.json.tpl`
+(validator-role template, auto-picked by the runner) bakes
+`APTOS_PROPOSER_SLEEP_MS=1000` into every validator's env — node1,
+node2 and sf_val1 alike — pacing production to **~0.94 blk/s under any
+load** (the sleep precedes the payload pull each round; load makes
+blocks bigger, never faster). Against that, even the sync driver's
+observed ~4.4 blk/s ceiling converges at ≥3 blk/s net. Note:
+`quorum_store_poll_time_ms` is NOT a usable knob in this fork —
+`quorum_store_client.rs:124` hardcodes `done = true`, making the config
+dead code.
 
-Catch-up waits stay progress-based (`helpers/catchup.py`: stall window
-~3x the epoch staircase period + a gap-derived hard backstop at a
-5.0 blk/s net floor, pending live calibration via the per-minute
-net_rate diagnostics), never fixed deadlines.
+All rate-derived constants (gammaBlock, stall window, budget floor,
+expected gaps) flow from the central chain-rate block in `sf_lib.py`;
+re-pacing the chain is a one-line change plus unit-locked derivations.
+Catch-up waits stay progress-based (`helpers/catchup.py`), never fixed
+deadlines.
 
-Historical note: attempts 6-7 briefly carried a `quiet_chain` /
-`frozen_tip` machinery (pause the load / halt node1 to freeze the tip),
-built on the belief that ~0.4-1.9 blk/s net convergence was a physical
-capacity ceiling. The tick investigation (second round of
-`tc9-catchup-freeze-investigation.md`) refuted that and the machinery
-was retired — it survives only in git history and the investigation
-archive; the realism concessions recorded then are all withdrawn.
-Product suggestion for greth carried by that report: make the sync
-driver's tick adaptive (tighten when far behind, or drive continuous
-pulls off responses) — 4.4 → 23.6 blk/s from a 10x tick is the data.
+### Open question for greth (from the attempt5-7 investigations)
+
+**Why does fast sync net only ~1 block per sync round?** The fullnode
+sync driver polls on a 200 ms tick and each round advances ~1 block
+(≈5 blk/s hard ceiling), while burst replay demonstrably executes at
+~4 ms/block — and a 10x tick experiment scaled throughput 5.4x
+(4.4 → 23.6 blk/s), proving the driver, not execution, is the limiter.
+A fast-forward sync should advance in BATCHES and outrun production by
+orders of magnitude; is the per-round net progress capped by chunk
+size/windowing, or is this a driver logic defect? Data:
+`tc9-catchup-freeze-investigation.md` + live-run5/6/7 logs.
+
+Historical note: attempts 6-7 briefly carried `quiet_chain`/`frozen_tip`
+machinery (pause the load / halt node1 to freeze the tip) and a brief
+sync-tick injection — all retired: the first two were built on refuted
+capacity readings, the last modified the nodes under test. Git history
+and the investigation archive keep them; every realism concession
+recorded then is withdrawn.
 
 The Alpha schedule stays compressed to keep the chain young at phase 4.
-Expected end-to-end: **~50-70 min** (from-0 syncs at ~16-20 blk/s net
-shrink to minutes; the rolling-upgrade front section and the L3 probe
-dominate again).
+Expected end-to-end: **~55-75 min** (at ~1 blk/s the phase-4 gap is only
+~1400 blocks ⇒ minutes of syncing; the rolling-upgrade front section,
+epoch waits and the L3 probe dominate).

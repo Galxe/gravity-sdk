@@ -209,12 +209,14 @@ FREEZE_OBSERVE_S = 30      # window during which heights must not move
 RESUME_TIMEOUT_S = 240     # BFT round-timeout backoff makes resume slow
 
 # NOTE: the freeze/quiet catch-up machinery (frozen_tip / quiet_chain,
-# attempts 6-7) is retired: the tick investigation proved deep sync was
-# limited by the fullnode sync driver's 200 ms poll tick, not by
-# replay/persistence capacity. The SF nodes get the tick injected at the
-# deploy-config level instead (sf_lib.SYNC_TICK_ENV, phase 1) and from-0
-# sync runs against the LIVE, LOADED chain — the original design
-# semantics.
+# attempts 6-7) is retired, and so is the short-lived sync-tick
+# injection (it modified the nodes under test): deep sync is
+# tick-limited on the SYNC side while the chain's pace comes from the
+# proposer's per-round sleep — so the case slows the CHAIN instead
+# (APTOS_PROPOSER_SLEEP_MS=1000 via the case-local reth_config.json.tpl,
+# an environment parameter). From-0 sync runs against the LIVE, LOADED
+# — just slow — chain with the sync path untouched. All rate-derived
+# constants flow from sf_lib's chain-rate block.
 
 
 # ---------------------------------------------------------------------------
@@ -287,10 +289,9 @@ def swap_node_binary(node: Node, new_binary: Path) -> None:
 
 
 async def restart_node_and_catch_up(cluster: Cluster, node: Node) -> None:
-    """Start a stopped node and require rejoin. The gap closes via the
-    progress-based waiter: even a short probe window leaves a few hundred
-    blocks behind at the chain's ~3.8 blk/s production, and the epoch
-    staircase makes fixed retry budgets misread that as a wedge."""
+    """Start a stopped node and require rejoin via the progress-based
+    waiter, with the stall window and net-floor budget derived from the
+    central chain-rate assumptions (sf_lib)."""
     assert await node.start(), f"failed to start {node.id}"
     assert await node.wait_for_block_increase(
         timeout=CATCHUP_TIMEOUT_S, delta=2
@@ -298,7 +299,13 @@ async def restart_node_and_catch_up(cluster: Cluster, node: Node) -> None:
     reference = cluster.get_node("node1")
     if node.id == reference.id:
         reference = cluster.get_node("node2")
-    await wait_for_catchup(node, reference, max_gap=MAX_HEIGHT_GAP)
+    await wait_for_catchup(
+        node,
+        reference,
+        max_gap=MAX_HEIGHT_GAP,
+        stall_window_s=sf_lib.CATCHUP_STALL_WINDOW_S,
+        net_rate_bps=sf_lib.NET_CATCHUP_FLOOR_BPS,
+    )
 
 
 async def _wait_until_height(node: Node, target: int, timeout: float) -> int:
@@ -523,31 +530,23 @@ def wipe_node_to_fresh(node: Node) -> None:
     LOG.info("[%s] chain data wiped back to fresh (skeleton preserved)", node.id)
 
 
-def inject_sf_sync_tick(node: Node) -> None:
-    """Inject the sync-driver tick into an SF node's deploy config.
-
-    Mechanism (validated by the tick experiment): the node's
-    config/reth_config.json ``.env_vars`` are read by the generated
-    script/start.sh, which launches gravity_node under ``env <vars>`` —
-    so the injected GRAVITY_REQUEST_SYNC_INFO_INTERVAL_MS survives every
-    subsequent Node.start(). SF nodes only; the legacy four keep the
-    200 ms default as the behavior control (sf_lib.SYNC_TICK_ENV has the
-    full rationale and the measured 4.4 -> ~23.6 blk/s data).
-    """
-    assert node.id in sf_lib.SF_NODE_IDS, (
-        f"{node.id}: sync-tick injection is for SF nodes only — the "
-        f"legacy nodes are the default-tick behavior control"
-    )
+def assert_proposer_pacing_configured(node: Node) -> None:
+    """Verify the slowed chain pace reached this validator's deploy
+    config: the case-local reth_config.json.tpl bakes
+    APTOS_PROPOSER_SLEEP_MS into .env_vars (runner.py's RETH_CONFIG_TPL
+    override renders it for every validator-role node), and the
+    generated script/start.sh launches gravity_node under
+    ``env <env_vars>``. A missing knob means the template override did
+    not take and every rate-derived constant in this case is wrong —
+    fail phase 1 loudly instead of timing out an hour later."""
     config_path = node._infra_path / "config" / "reth_config.json"
     assert config_path.is_file(), f"{node.id}: missing {config_path}"
-    config = sf_lib.inject_sync_tick_env(json.loads(config_path.read_text()))
-    config_path.write_text(json.dumps(config, indent=2) + "\n")
-    LOG.info(
-        "[%s] injected %s=%s into %s",
-        node.id,
-        sf_lib.SYNC_TICK_ENV,
-        sf_lib.SF_SYNC_TICK_INTERVAL_MS,
-        config_path,
+    env_vars = json.loads(config_path.read_text()).get("env_vars") or {}
+    got = str(env_vars.get("APTOS_PROPOSER_SLEEP_MS"))
+    assert got == str(sf_lib.PROPOSER_SLEEP_MS), (
+        f"{node.id}: APTOS_PROPOSER_SLEEP_MS={got!r} in {config_path}, "
+        f"expected {sf_lib.PROPOSER_SLEEP_MS} — did the case-local "
+        f"reth_config.json.tpl override get picked up by the runner?"
     )
 
 
@@ -596,15 +595,20 @@ async def start_fresh_sf_node(ctx, node_id: str) -> None:
 
 
 async def sync_to_tip(ctx, node_id: str) -> None:
-    """From-0 catch-up against the LIVE tip, under load — the original
-    design semantics, feasible because the SF nodes run with the
-    sync-driver tick injected (sf_lib.SYNC_TICK_ENV: ~23.6 blk/s
-    measured vs 4.4 at the 200 ms default). Progress-based: stall
-    detection tolerant of the epoch staircase + a hard budget at the
-    tick-injected net-convergence floor."""
+    """From-0 catch-up against the LIVE, LOADED tip — the original
+    design semantics, feasible because the CHAIN is paced down to ~1
+    blk/s (sf_lib chain-rate block) while the untouched sync driver
+    replays at >= 4 blk/s. Progress-based: stall window and net-floor
+    budget both derived from the central rate assumptions."""
     node = ctx.cluster.get_node(node_id)
     reference = ctx.cluster.get_node("node1")
-    head = await wait_for_catchup(node, reference, max_gap=MAX_HEIGHT_GAP)
+    head = await wait_for_catchup(
+        node,
+        reference,
+        max_gap=MAX_HEIGHT_GAP,
+        stall_window_s=sf_lib.CATCHUP_STALL_WINDOW_S,
+        net_rate_bps=sf_lib.NET_CATCHUP_FLOOR_BPS,
+    )
     LOG.info("[%s] caught up (head=%d)", node_id, head)
 
 
@@ -710,19 +714,25 @@ async def phase_1_bootstrap_legacy_core(ctx: FreshSyncContext) -> None:
         bank_balance,
     )
 
+    # The slowed chain pace (sf_lib chain-rate block) must actually be
+    # deployed: every validator-role node — the legacy genesis pair AND
+    # sf_val1 — carries APTOS_PROPOSER_SLEEP_MS from the case-local
+    # reth_config.json.tpl. Chain speed is a network property; fullnodes
+    # never propose and stay on default templates.
+    for node_id in ("node1", "node2", "sf_val1"):
+        assert_proposer_pacing_configured(ctx.cluster.get_node(node_id))
+
     # Constraint (1): the runner started everything; SF nodes go back to
     # never-started (their minute on the new binary is erased with the
     # wipe, so the case-controlled fresh init below is the real one).
-    # Each SF node also gets the sync-driver tick injected — deep sync is
-    # tick-limited, not capacity-limited (see sf_lib.SYNC_TICK_ENV); the
-    # legacy four keep the 200 ms default as the behavior control.
+    # Their sync path is deliberately UNTOUCHED — they are the objects
+    # under test; the feasibility lever is the chain's pace above.
     for node_id in sf_lib.SF_NODE_IDS:
         node = ctx.cluster.get_node(node_id)
         state, _ = await node.get_state()
         if state == NodeState.RUNNING:
             await stop_node_and_wait_exit(node)
         wipe_node_to_fresh(node)
-        inject_sf_sync_tick(node)
 
     for node_id in sf_lib.LEGACY_NODE_IDS:
         node = ctx.cluster.get_node(node_id)

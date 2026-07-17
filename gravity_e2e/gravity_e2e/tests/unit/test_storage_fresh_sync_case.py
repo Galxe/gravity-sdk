@@ -548,54 +548,104 @@ def test_freeze_and_quiet_machinery_is_retired():
         )
 
 
-def test_sync_tick_constants():
-    assert sf_lib.SYNC_TICK_ENV == "GRAVITY_REQUEST_SYNC_INFO_INTERVAL_MS"
-    # 20 ms is the experimentally validated value (~23.6 blk/s vs 4.4 at
-    # the 200 ms default); changing it needs fresh measurement.
-    assert sf_lib.SF_SYNC_TICK_INTERVAL_MS == 20
+def test_sync_side_is_untouched():
+    """The nodes under test keep their sync path stock: no sync-driver
+    env injection anywhere in the case (the feasibility lever is the
+    CHAIN's pace, not the DUT)."""
+    assert "GRAVITY_REQUEST_SYNC_INFO_INTERVAL_MS" not in CASE_SOURCE
+    sf_lib_source = (CASE_DIR / "sf_lib.py").read_text()
+    assert "GRAVITY_REQUEST_SYNC_INFO_INTERVAL_MS" not in sf_lib_source
 
 
-def test_inject_sync_tick_env_is_pure_and_preserving():
-    original = {
-        "reth_args": {"datadir": "/x"},
-        "env_vars": {"EXISTING": "1"},
-    }
-    injected = sf_lib.inject_sync_tick_env(original)
-    assert injected["env_vars"][sf_lib.SYNC_TICK_ENV] == "20"
-    assert injected["env_vars"]["EXISTING"] == "1"
-    assert injected["reth_args"] == {"datadir": "/x"}
-    # Pure: the input dict is untouched.
-    assert sf_lib.SYNC_TICK_ENV not in original["env_vars"]
+# ---------------------------------------------------------------------------
+# Chain-rate assumptions: central constants + derivations + deploy wiring
+# ---------------------------------------------------------------------------
 
-    # env_vars absent (or null, as some templates render) — created.
-    assert (
-        sf_lib.inject_sync_tick_env({"env_vars": None})["env_vars"][
-            sf_lib.SYNC_TICK_ENV
-        ]
-        == "20"
+
+def test_chain_rate_derivations():
+    """Every rate-coupled constant flows from the central block; a
+    future re-pacing is PROPOSER_SLEEP_MS + these locks."""
+    assert sf_lib.PROPOSER_SLEEP_MS == 1000
+    assert sf_lib.CHAIN_BLOCK_RATE_BPS == pytest.approx(
+        1000.0 / (sf_lib.PROPOSER_SLEEP_MS + sf_lib.ROUND_OVERHEAD_MS)
     )
-    assert (
-        sf_lib.inject_sync_tick_env({})["env_vars"][sf_lib.SYNC_TICK_ENV]
-        == "20"
+    # ~1 blk/s target band.
+    assert 0.8 <= sf_lib.CHAIN_BLOCK_RATE_BPS <= 1.1
+    # The sync driver must decisively outrun the slowed chain.
+    assert sf_lib.SYNC_RATE_FLOOR_BPS >= 4 * sf_lib.CHAIN_BLOCK_RATE_BPS
+    assert sf_lib.NET_CATCHUP_FLOOR_BPS == pytest.approx(
+        sf_lib.SYNC_RATE_FLOOR_BPS - sf_lib.CHAIN_BLOCK_RATE_BPS
     )
+    assert sf_lib.NET_CATCHUP_FLOOR_BPS >= 2.5
+    assert sf_lib.BLOCKS_PER_EPOCH == int(
+        sf_lib.EPOCH_INTERVAL_S * sf_lib.CHAIN_BLOCK_RATE_BPS
+    )
+    assert sf_lib.CATCHUP_STALL_WINDOW_S == max(
+        2 * sf_lib.EPOCH_INTERVAL_S,
+        3 * sf_lib.BLOCKS_PER_EPOCH / sf_lib.SYNC_RATE_FLOOR_BPS,
+    )
+    # Epoch-boundary flats (DKG etc.) must never read as stalls.
+    assert sf_lib.CATCHUP_STALL_WINDOW_S >= 2 * sf_lib.EPOCH_INTERVAL_S
 
 
-def test_tick_injection_wiring_sf_only():
-    """phase 1 must inject the tick for every SF node (inside the
-    wipe loop over SF_NODE_IDS) and nowhere else; the injector itself
-    hard-refuses legacy nodes so the control group keeps the 200 ms
-    default."""
+def test_gamma_block_sits_after_fleet_completion():
+    """gammaBlock derivation: fleet completion ≈ 14 min of chain time
+    (~render+19 min minus ~5 min pre-chain runner work) ≈ 790 blocks at
+    the slowed rate; gamma must land after that with margin, yet be
+    crossed within ~25 min of chain time."""
+    completion_blocks = 14 * 60 * sf_lib.CHAIN_BLOCK_RATE_BPS
+    assert sf_lib.GAMMA_BLOCK > completion_blocks * 1.2
+    assert sf_lib.GAMMA_BLOCK <= 25 * 60 * sf_lib.CHAIN_BLOCK_RATE_BPS
+
+    example = tomllib.loads(
+        (CASE_DIR / "test_params.toml.example").read_text()
+    )
+    assert example["hardforks"]["gammaBlock"] == sf_lib.GAMMA_BLOCK
+
+
+def test_proposer_pacing_template():
+    """The case-local validator reth_config.json.tpl (runner auto-picks
+    it as RETH_CONFIG_TPL) must bake APTOS_PROPOSER_SLEEP_MS into
+    env_vars — round_manager.rs:389-396's unconditional per-round
+    proposer sleep is the pacing knob (quorum_store_poll_time_ms is dead
+    code in this fork: quorum_store_client.rs:124 `done = true`). Only
+    the validator template is overridden — fullnodes never propose and
+    stay on the stock templates."""
+    import re
+
+    tpl = (CASE_DIR / "reth_config.json.tpl").read_text()
+    match = re.search(r'"APTOS_PROPOSER_SLEEP_MS":\s*(\d+)', tpl)
+    assert match, "the template must carry the proposer-sleep env var"
+    assert int(match.group(1)) == sf_lib.PROPOSER_SLEEP_MS
+    assert '"env_vars"' in tpl
+    # The stock template entries must survive the override.
+    assert '"BATCH_INSERT_TIME"' in tpl
+    assert not (CASE_DIR / "reth_config_vfn.json.tpl").exists()
+    assert not (CASE_DIR / "reth_config_pfn.json.tpl").exists()
+
+
+def test_pacing_verification_wiring():
+    """phase 1 must verify the pacing reached every validator-role
+    node's deployed config (node1, node2, sf_val1) — fail fast instead
+    of timing out on wrong-rate budgets an hour later."""
     phase1 = _func_source("phase_1_bootstrap_legacy_core")
-    assert "inject_sf_sync_tick(" in phase1, (
-        "phase 1 must inject the sync tick for the SF nodes"
-    )
-    injector = _func_source("inject_sf_sync_tick")
-    assert "SF_NODE_IDS" in injector, (
-        "the injector must guard against legacy nodes (behavior control)"
-    )
-    # Exactly one call site (the phase-1 SF loop): the definition plus
-    # one call in the whole case source.
-    assert CASE_SOURCE.count("inject_sf_sync_tick(") == 2
+    assert "assert_proposer_pacing_configured(" in phase1
+    for validator in ('"node1"', '"node2"', '"sf_val1"'):
+        assert validator in phase1
+    checker = _func_source("assert_proposer_pacing_configured")
+    assert "APTOS_PROPOSER_SLEEP_MS" in checker
+    assert "PROPOSER_SLEEP_MS" in checker
+
+
+def test_catchup_calls_use_the_derived_constants():
+    for func in ("sync_to_tip", "restart_node_and_catch_up"):
+        src = _func_source(func)
+        assert "CATCHUP_STALL_WINDOW_S" in src, (
+            f"{func}: stall window must come from the central rate block"
+        )
+        assert "NET_CATCHUP_FLOOR_BPS" in src, (
+            f"{func}: budget floor must come from the central rate block"
+        )
 
 
 def test_probe_restarts_stay_under_load():

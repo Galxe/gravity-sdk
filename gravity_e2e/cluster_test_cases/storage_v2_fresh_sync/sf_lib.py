@@ -69,36 +69,63 @@ JOIN_BENCH_INDEX = 0
 BANK_BENCH_INDEX = 1
 FAUCET_INIT_NUM_ACCOUNTS = 2
 
-# Sync-driver tick injection (tick investigation, second round of
-# tc9-catchup-freeze-investigation.md): a syncing fullnode's driver
-# polls its upstream on a fixed 200 ms tick (epoch_manager.rs:1994-1999,
-# env-tunable via GRAVITY_REQUEST_SYNC_INFO_INTERVAL_MS) and each tick
-# nets ~1 block, capping deep sync at ~4.4 blk/s while burst replay runs
-# at ~4 ms/block — the tick, not execution, is the limiter. The decisive
-# experiment injected 20 ms and measured ~23.6 blk/s (5.4x throughput
-# from a 10x tick), closing a 2912-block gap in 120 s.
+# ── Chain-rate assumptions: the SINGLE source of truth ──────────────────
 #
-# The five SF nodes get the 20 ms tick via the deployment-layer env
-# mechanism that experiment validated (config/reth_config.json
-# .env_vars — the generated script/start.sh launches gravity_node under
-# `env <those vars>`). The legacy four keep the 200 ms default as the
-# behavior control. Known side effect: at steady state the injected
-# nodes poll sync_info at ~50 req/s — pure request noise, acceptable
-# in e2e.
-SYNC_TICK_ENV = "GRAVITY_REQUEST_SYNC_INFO_INTERVAL_MS"
-SF_SYNC_TICK_INTERVAL_MS = 20
-
-
-def inject_sync_tick_env(reth_config: Mapping) -> dict:
-    """A copy of a node's reth_config.json dict with the SF sync-tick
-    env var injected into .env_vars (created if absent; other entries
-    preserved). Pure — the case owns the file I/O."""
-    config = dict(reth_config)
-    env_vars = dict(config.get("env_vars") or {})
-    env_vars[SYNC_TICK_ENV] = str(SF_SYNC_TICK_INTERVAL_MS)
-    config["env_vars"] = env_vars
-    return config
-
+# TC9 slows the CHAIN's block production instead of touching the nodes
+# under test: deep sync is tick-limited on the sync side (~1 block per
+# 200 ms sync round ⇒ ~4.4 blk/s ceiling — possibly a driver defect, see
+# the README's greth question) while the chain produces at ~3.8-3.9
+# blk/s, leaving near-zero net convergence. Slowing production to ~1
+# blk/s is an ENVIRONMENT parameter (e2e owns the chain's pace) and
+# gives even the untouched sync driver an overwhelming advantage.
+#
+# The pacing knob, verified in source:
+# - round_manager.rs:389-396 `process_new_round_event`: the proposer
+#   sleeps APTOS_PROPOSER_SLEEP_MS (env, safe-parsed, default 200 ms)
+#   UNCONDITIONALLY at the top of every new round — before the payload
+#   pull — so it floors the per-block interval regardless of load (load
+#   only makes blocks bigger, never faster). Measured: 200 ms default +
+#   ~60 ms round overhead = the observed ~260 ms/block (~3.8-3.9 blk/s).
+# - quorum_store_poll_time_ms is NOT a pacing knob in this fork:
+#   quorum_store_client.rs:124 hardcodes `let done = true;`, so the poll
+#   loop returns after a single pull and the `!done` wait branch (:138)
+#   is unreachable — the config value is dead code.
+#
+# Injection: the case-local reth_config.json.tpl (validator-role
+# template, auto-picked by runner.py's RETH_CONFIG_TPL override) bakes
+# APTOS_PROPOSER_SLEEP_MS into .env_vars, so ALL validator-role nodes —
+# node1, node2 AND sf_val1 — carry it from first boot (chain speed is a
+# network property, and every validator rotates as proposer).
+# vfn/pfn templates stay default (fullnodes never propose).
+#
+# ALL rate-derived constants below flow from these; a future re-pacing
+# is a one-line change plus the unit-locked derivations.
+PROPOSER_SLEEP_MS = 1000
+ROUND_OVERHEAD_MS = 60  # measured: 260 ms observed at the 200 ms default
+CHAIN_BLOCK_RATE_BPS = 1000.0 / (PROPOSER_SLEEP_MS + ROUND_OVERHEAD_MS)  # ~0.94
+# The sync driver's own ceiling (~1 block per 200 ms sync round;
+# measured 4.3-4.5 blk/s across attempts 5-7), floored conservatively.
+SYNC_RATE_FLOOR_BPS = 4.0
+# Net convergence floor for the catch-up budget: sync floor minus chain
+# production (~3.06 blk/s — pending live calibration via the per-minute
+# net_rate diagnostics).
+NET_CATCHUP_FLOOR_BPS = SYNC_RATE_FLOOR_BPS - CHAIN_BLOCK_RATE_BPS
+# Epoch geometry at the slowed rate (epoch_interval 120 s x ~0.94 blk/s).
+BLOCKS_PER_EPOCH = int(EPOCH_INTERVAL_S * CHAIN_BLOCK_RATE_BPS)  # ~113
+# Stall window for the progress-based waiter: one epoch-staircase step
+# now takes <= BLOCKS_PER_EPOCH / SYNC_RATE_FLOOR_BPS (~28 s); 3x that
+# for jitter, but never below two full epochs — epoch transitions (DKG
+# etc.) can legitimately flatten progress around boundaries.
+CATCHUP_STALL_WINDOW_S = max(
+    2 * EPOCH_INTERVAL_S, 3 * BLOCKS_PER_EPOCH / SYNC_RATE_FLOOR_BPS
+)
+# gammaBlock for test_params.toml.example: must activate only after the
+# fleet finishes upgrading (~render+19 min; the chain starts at
+# ~render+5 min, so ~14 min of chain time ≈ 790 blocks at the slowed
+# rate) yet be crossed comfortably within the run — 1200 is crossed at
+# ~21 min of chain time (~render+26 min). Unit-locked against the
+# example file.
+GAMMA_BLOCK = 1200
 
 SF_MODES: Tuple[str, ...] = ("migrate", "flag")
 # Modes the case can execute today. "flag" (form B) needs greth's
