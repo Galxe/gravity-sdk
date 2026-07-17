@@ -312,3 +312,62 @@ def test_seeds_encode_the_pinned_upstreams():
             assert nodes[downstream].get("discovery_method") == "none", (
                 f"{downstream}: vfn with static seeds must pin discovery off"
             )
+
+
+# ---------------------------------------------------------------------------
+# Account discipline (constraint (4)): background sender vs faucet
+# ---------------------------------------------------------------------------
+
+CASE_SOURCE = (CASE_DIR / "test_storage_v2_fresh_sync.py").read_text()
+
+
+def test_background_sender_never_uses_the_faucet_account():
+    """Regression lock for the live-attempt2 nonce race ("nonce too low"
+    -> "replacement transaction underpriced"): the TxSender runs across
+    phases 3-10 concurrently with explicit faucet transactions, so it
+    must be constructed with the dedicated phase-2 account — never with
+    cluster.faucet."""
+    marker = "ctx.tx_sender = TxSender("
+    assert marker in CASE_SOURCE, "TxSender wiring moved — update this lock"
+    for start in range(0, len(CASE_SOURCE)):
+        idx = CASE_SOURCE.find(marker, start)
+        if idx == -1:
+            break
+        window = CASE_SOURCE[idx : idx + 400]
+        assert "cluster.faucet" not in window.split(")")[0], (
+            "TxSender is fed the faucet account — that races every "
+            "foreground faucet tx (B-batch history, governance)"
+        )
+        assert "bg_sender_account" in window, (
+            "TxSender must run on the dedicated phase-2 account"
+        )
+        start = idx + 1
+
+
+def test_bg_sender_account_is_funded_before_the_sender_starts():
+    funding = CASE_SOURCE.find("background-sender funding")
+    sender_start = CASE_SOURCE.find("ctx.tx_sender = TxSender(")
+    assert funding != -1, "phase 2 must fund the dedicated sender account"
+    assert sender_start != -1
+    # Phase 2 (funding) is defined before the test body (sender start) in
+    # source order AND executed before it; the source-order check catches
+    # someone moving the funding after the sender wiring.
+    assert funding < sender_start
+
+
+def test_faucet_init_covers_validator_role_nodes():
+    """sf_val1's join draws its EVM account from accounts.csv
+    ([faucet_init]); without it, phase 7 dies with 'Not enough accounts
+    in accounts.csv'."""
+    cluster = _rendered_cluster()
+    validator_role_nodes = [
+        n for n in cluster["nodes"] if n["role"] == "validator"
+    ]
+    faucet_init = cluster.get("faucet_init")
+    assert faucet_init, "cluster.toml.tpl must carry [faucet_init] (join needs it)"
+    assert faucet_init["num_accounts"] >= len(validator_role_nodes), (
+        f"[faucet_init] num_accounts={faucet_init['num_accounts']} < "
+        f"{len(validator_role_nodes)} VALIDATOR-role nodes"
+    )
+    # The staked amount must be coverable by the init balance.
+    assert int(faucet_init["eth_balance"]) >= sf_lib.GENESIS_STAKE_WEI

@@ -42,7 +42,20 @@ Known constraints (design §3):
     around those windows; rolling LIVENESS is TC2's 4-validator coverage,
     not repeated here;
 (3) upgrade-window depth (wei-level Alpha reconciliation etc.) is TC2's
-    coverage; phase 3 keeps only light health assertions.
+    coverage; phase 3 keeps only light health assertions;
+(4) ACCOUNT DISCIPLINE: the background TxSender owns a dedicated account
+    (funded from the faucet in phase 2, strictly before the sender
+    starts); the faucet belongs to FOREGROUND transactions only —
+    explicit history txs and the governance recipe (which is faucet-bound:
+    governance owner and pool[0] voter) — and sf_val1's staking CLI uses
+    its accounts.csv bench account ([faucet_init], funded at suite init).
+    Rationale: storage_v2_upgrade separates the sender and explicit
+    faucet txs in TIME (its sender is stopped around every explicit
+    section); this case's sender runs across phases 3-10, and sharing
+    the faucet raced its nonce (live attempt2: "nonce too low" then
+    "replacement transaction underpriced" on the phase-3 B-batch txs).
+    Separating by ACCOUNT removes the race for every foreground sender
+    at once.
 
 Q6 landmine coverage: the A/B anchor sets sample alloc-funded accounts at
 early blocks; form D avoids the SF-fresh empty-anchor + block-0 history
@@ -118,6 +131,10 @@ TX_RECEIPT_TIMEOUT = 30.0
 # deliberately paused across every swap window and the L3 freeze.
 MIN_TX_CONFIRMED = 100
 MIN_TX_SUCCESS_RATE = 0.5
+# The background sender's dedicated account funding (constraint (4)),
+# transferred once in phase 2 before the sender starts. Worst case ~18k
+# txs at 21k gas * 100 gwei ≈ 38 ETH; 100 keeps a wide margin.
+BG_SENDER_FUND_ETH = 100
 
 # ── Case timeouts (seconds) ──
 BLOCK_PROGRESS_TIMEOUT_S = 60
@@ -503,6 +520,9 @@ class FreshSyncContext:
     anchors_a_path: Optional[Path] = None
     anchors_b_path: Optional[Path] = None
     tx_sender: Optional[TxSender] = None
+    # Constraint (4): the background sender's dedicated account — funded
+    # in phase 2, disjoint from the faucet by construction.
+    bg_sender_account: Optional[object] = None
     alpha_time: Optional[int] = None
     upgrade_order: List[str] = field(default_factory=list)
     sf_enable_durations: Dict[str, float] = field(default_factory=dict)
@@ -607,6 +627,24 @@ async def phase_2_history_and_anchors_a(ctx: FreshSyncContext) -> None:
     anchors.save(ctx.anchors_a_path)
     LOG.info("[Phase 2] %d A-batch anchors saved to %s", len(anchors),
              ctx.anchors_a_path)
+
+    # Constraint (4): fund the background sender's dedicated account NOW,
+    # while no concurrent sender exists — after this, the faucet nonce is
+    # foreground-only property and the two lanes can never race.
+    ctx.bg_sender_account = Account.create()
+    tb = TransactionBuilder(entry.w3, faucet)
+    await _confirmed_tx_point(
+        entry,
+        await tb.send_ether(
+            ctx.bg_sender_account.address,
+            Web3.to_wei(BG_SENDER_FUND_ETH, "ether"),
+        ),
+        f"background-sender funding {BG_SENDER_FUND_ETH} ETH",
+    )
+    LOG.info(
+        "[Phase 2] background sender account funded: %s",
+        ctx.bg_sender_account.address,
+    )
 
     # Cross >= 1 epoch on v1.7.5 so the from-0 sync replays an epoch
     # boundary out of v1.7.5-era history (PR #779 regression surface).
@@ -942,16 +980,21 @@ async def test_storage_v2_fresh_sync(cluster: Cluster, output_dir: Path):
         await _run_phase(ctx, phase_1_bootstrap_legacy_core)
         await _run_phase(ctx, phase_2_history_and_anchors_a)
 
+        # Constraint (4): the sender runs on its DEDICATED account, never
+        # the faucet — the faucet nonce belongs to foreground txs (B-batch
+        # history, the faucet-bound governance recipe).
+        assert ctx.bg_sender_account is not None, "phase 2 must fund the sender"
+        assert ctx.bg_sender_account.address != cluster.faucet.address
         ctx.tx_sender = TxSender(
             cluster,
-            cluster.faucet,
+            ctx.bg_sender_account,
             primary_node_id=sf_lib.TX_ENTRY_NODE,
             tx_interval=TX_INTERVAL,
             receipt_timeout=TX_RECEIPT_TIMEOUT,
         )
         ctx.tx_sender.start()
-        LOG.info("Background tx sender started (all load via %s)",
-                 sf_lib.TX_ENTRY_NODE)
+        LOG.info("Background tx sender started (all load via %s, account %s)",
+                 sf_lib.TX_ENTRY_NODE, ctx.bg_sender_account.address)
 
         await _run_phase(ctx, phase_3_rolling_upgrade)
         await _run_phase(ctx, phase_4_sf_first_batch)

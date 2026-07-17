@@ -184,5 +184,15 @@ inspection_port = 10518
 authrpc_port = 8959
 reth_p2p_port = 12538
 
-# No [faucet_init]: the case only needs the genesis faucet account for
-# history-building, governance and the background tx load.
+# [faucet_init] is REQUIRED here (unlike storage_v2_upgrade): sf_val1's
+# validator_join draws its EVM account from the accounts.csv this
+# generates (manager._ensure_evm_account -> get_bench_accounts), and the
+# 2 ETH equal-power stake is paid from that account's init balance. One
+# account: sf_val1 is the only VALIDATOR-role node. The funding happens
+# at suite init — before pytest, before the background sender exists —
+# so it cannot race anything (account-discipline constraint (4) in the
+# test module).
+[faucet_init]
+num_accounts = 1
+private_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+eth_balance = "10000000000000000000000"
