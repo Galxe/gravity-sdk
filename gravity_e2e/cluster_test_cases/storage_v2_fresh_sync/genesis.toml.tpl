@@ -64,10 +64,14 @@ minimum_bond = "1000000000000000000"
 maximum_bond = "1000000000000000000000000"
 unbonding_delay_micros = 604800000000
 allow_validator_set_change = true
-# sf_val1 joins with 2 ETH on a 4 ETH total = +50%; the default limit of
-# 50 sits exactly on the boundary, so give explicit headroom — the L3
-# necessity probe REQUIRES the equal-power join to land.
-voting_power_increase_limit_pct = 100
+# sf_val1 joins with 2 ETH on a 4 ETH total = +50%. The contract caps this
+# knob at MAX_VOTING_POWER_INCREASE_LIMIT = 50 (ValidatorConfig.sol:20,293 —
+# genesis reverts on anything larger, live-run1 hit exactly that). 50 is
+# still safe for the L3 equal-power join: the deferral check requires
+# `addedPower > 0` (ValidatorManagement.sol:1124 whale clause), so the FIRST
+# activation of an epoch — sf_val1 is the only joiner — bypasses the limit
+# entirely.
+voting_power_increase_limit_pct = 50
 max_validator_set_size = "100"
 auto_evict_enabled = false
 auto_evict_threshold_pct = 0

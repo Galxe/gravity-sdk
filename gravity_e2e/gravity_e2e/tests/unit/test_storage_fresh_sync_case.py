@@ -234,12 +234,14 @@ def test_epoch_interval_matches_genesis():
     )
 
 
-def test_voting_power_increase_limit_has_headroom():
-    # 2e18 joining a 4e18 total is +50%; the limit must clear it strictly.
+def test_voting_power_increase_limit_within_contract_cap():
+    # The contract hard-caps this knob at MAX_VOTING_POWER_INCREASE_LIMIT = 50
+    # (genesis reverts above it). The +50% equal-power join still lands because
+    # the first activation per epoch bypasses the limit (whale clause,
+    # ValidatorManagement.sol `addedPower > 0`).
     genesis = _rendered_genesis()
-    assert genesis["genesis"]["validator_config"][
-        "voting_power_increase_limit_pct"
-    ] > 50
+    pct = genesis["genesis"]["validator_config"]["voting_power_increase_limit_pct"]
+    assert 0 < pct <= 50
 
 
 def test_role_specific_ports():
