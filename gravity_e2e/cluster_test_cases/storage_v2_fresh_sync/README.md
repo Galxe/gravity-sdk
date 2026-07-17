@@ -78,35 +78,37 @@ CI-neutral).
 
 ## Duration & the from-0 sync budget
 
-Deep sync replays the chain one epoch per fast-forward round with a
-per-block recovery ceremony that locks replay at **4.3-4.5 blk/s** on
-this host class, while consensus keeps producing (empty) blocks at
-**~3.9 blk/s even with the tx load paused** — attempt6/7 calibration
-measured net convergence against a moving tip at only **0.4-0.6 blk/s**
-(`tc9-catchup-freeze-investigation.md` + live-run6/7). Chasing a moving
-tip is physically infeasible here. Consequences:
+From-0 sync runs against the **live, loaded chain** — the original
+design semantics. What makes that feasible: deep sync is limited by the
+fullnode sync driver's fixed **200 ms poll tick** (~1 block net per
+tick ⇒ ~4.4 blk/s), NOT by replay/persistence capacity (burst replay
+runs at ~4 ms/block). The five SF nodes therefore run with
+`GRAVITY_REQUEST_SYNC_INFO_INTERVAL_MS=20` injected at the
+deploy-config level (`sf_lib.SYNC_TICK_ENV` → config/reth_config.json
+.env_vars → the generated start.sh's `env` prefix): the decisive
+experiment measured **~23.6 blk/s** at the 20 ms tick (5.4x throughput
+from a 10x tick), closing a 2912-block gap in 120 s. The legacy four
+keep the default tick as the behavior control. Side effect: injected
+nodes poll sync_info at ~50 req/s at steady state — request noise,
+acceptable in e2e.
 
-- all catch-up waits are progress-based (`helpers/catchup.py`: stall
-  window ~3x the staircase period + a gap-derived hard backstop at the
-  frozen-tip replay floor, 4.0 blk/s), never fixed deadlines;
-- **every from-0 window FREEZES the chain** (`frozen_tip`): TxSender
-  pauses, then **node1 stops** — with 2 genesis validators (f=0;
-  all-votes quorum after sf_val1 joins) the chain halts and the SF
-  nodes replay a static tip at full speed; node1 then returns and the
-  chain must resume within `HALT_RESUME_TIMEOUT_S`. The halt target
-  must be node1, never node2 (sf_vfn1's only pinned sync source — see
-  sf_lib.HALT_NODE_ID's edge analysis). ⚠ KNOWN CONCESSION: from-0
-  sync here happens against a FROZEN chain; "catching up while the
-  chain runs (let alone under load)" is real mainnet behavior this case
-  deliberately does NOT cover on this host class — dedicated hardware /
-  a TC8-class follow-up owns that realism. Probe-style restarts (short
-  gaps) stay on the live, loaded chain.
-- The per-block recovery ceremony (replay ≈ 1.1x production at best) is
-  a PRODUCT capacity observation worth filing to greth — fresh-node
-  sync time grows ~linearly with chain age; attempt5-7 logs carry the
-  data.
+Catch-up waits stay progress-based (`helpers/catchup.py`: stall window
+~3x the epoch staircase period + a gap-derived hard backstop at a
+5.0 blk/s net floor, pending live calibration via the per-minute
+net_rate diagnostics), never fixed deadlines.
 
-The Alpha schedule is compressed to keep the chain young at phase 4.
-Expected end-to-end: **~75-100 min** (freeze windows dominate: phase 4
-≈ 20 min + sf_pfn1's, phases 7/8 ≈ 10-15 min each, plus BFT recovery
-after each thaw).
+Historical note: attempts 6-7 briefly carried a `quiet_chain` /
+`frozen_tip` machinery (pause the load / halt node1 to freeze the tip),
+built on the belief that ~0.4-1.9 blk/s net convergence was a physical
+capacity ceiling. The tick investigation (second round of
+`tc9-catchup-freeze-investigation.md`) refuted that and the machinery
+was retired — it survives only in git history and the investigation
+archive; the realism concessions recorded then are all withdrawn.
+Product suggestion for greth carried by that report: make the sync
+driver's tick adaptive (tighten when far behind, or drive continuous
+pulls off responses) — 4.4 → 23.6 blk/s from a 10x tick is the data.
+
+The Alpha schedule stays compressed to keep the chain young at phase 4.
+Expected end-to-end: **~50-70 min** (from-0 syncs at ~16-20 blk/s net
+shrink to minutes; the rolling-upgrade front section and the L3 probe
+dominate again).

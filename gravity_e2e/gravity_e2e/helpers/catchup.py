@@ -38,21 +38,15 @@ LOG = logging.getLogger(__name__)
 FULL_LOAD_EPOCH_ROUND_S = 137
 # ~3x the staircase period: two consecutive silent rounds plus slack.
 DEFAULT_STALL_WINDOW_S = 3 * FULL_LOAD_EPOCH_ROUND_S  # 411s
-# Conservative floor of the net convergence on a QUIET chain — TC9's
-# from-0 catch-up windows pause the background load before syncing:
-# attempt6 measured parallel UNDER-LOAD convergence at only ~0.54 blk/s
-# (two nodes sharing one host's replay throughput), invalidating any
-# under-load floor, while the no-load resurrection experiment converged
-# at minutes scale (replay 5.5-7.6 blk/s vs ~3.8 idle production) but
-# only had an 8-minute observation window. This value is therefore a
-# deliberate conservative guess — PENDING LIVE CALIBRATION from the
-# per-minute (height, tip, net_rate) diagnostics wait_for_catchup logs.
-NET_CATCHUP_RATE_FLOOR_BPS = 2.0
-# Conservative REPLAY-rate floor against a FROZEN tip (chain halted, so
-# net convergence == replay throughput): attempt7 measured the per-block
-# recovery ceremony locking replay at 4.3-4.5 blk/s on this host even
-# with the tx load paused; 4.0 sits just under that band.
-FROZEN_TIP_REPLAY_FLOOR_BPS = 4.0
+# Conservative net-convergence floor for a syncing node with the
+# sync-driver tick injected (GRAVITY_REQUEST_SYNC_INFO_INTERVAL_MS=20 —
+# see the TC9 case): the tick investigation measured ~23.6 blk/s against
+# a frozen tip vs 4.4 blk/s at the default 200 ms tick (the tick, not
+# execution, was the limiter — burst replay runs at ~4 ms/block), which
+# projects to ~16-20 blk/s net against a live loaded chain. 5.0 is a
+# deliberately deep floor — PENDING LIVE CALIBRATION from the per-minute
+# (height, tip, net_rate) diagnostics wait_for_catchup logs.
+NET_CATCHUP_RATE_FLOOR_BPS = 5.0
 # Safety factor on the budget derived from the live gap.
 BUDGET_SAFETY_FACTOR = 1.5
 # Budgets never shrink below this even for tiny gaps (staircase rounds

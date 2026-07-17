@@ -69,24 +69,36 @@ JOIN_BENCH_INDEX = 0
 BANK_BENCH_INDEX = 1
 FAUCET_INIT_NUM_ACCOUNTS = 2
 
-# Frozen-tip catch-up (attempt7): chasing a MOVING tip is physically
-# infeasible on this host class — replay is ceremony-locked at 4.3-4.5
-# blk/s while consensus produces empty blocks at ~3.9 blk/s even with
-# the tx load paused (net 0.4-0.6) — so every from-0 window freezes the
-# chain by stopping ONE validator (f=0 with 2 genesis validators; still
-# all-votes quorum after sf_val1 joins).
+# Sync-driver tick injection (tick investigation, second round of
+# tc9-catchup-freeze-investigation.md): a syncing fullnode's driver
+# polls its upstream on a fixed 200 ms tick (epoch_manager.rs:1994-1999,
+# env-tunable via GRAVITY_REQUEST_SYNC_INFO_INTERVAL_MS) and each tick
+# nets ~1 block, capping deep sync at ~4.4 blk/s while burst replay runs
+# at ~4 ms/block — the tick, not execution, is the limiter. The decisive
+# experiment injected 20 ms and measured ~23.6 blk/s (5.4x throughput
+# from a 10x tick), closing a 2912-block gap in 120 s.
 #
-# The halt target MUST be node1 and never node2: node2 is sf_vfn1's ONLY
-# pinned sync source, while halting node1 keeps every sync edge alive —
-# sf_vfn1<-node2, sf_pfn2<-vfn1 (vfn1 serves downstream from its own
-# store even with its own upstream halted), sf_pfn1<-sf_vfn1,
-# sf_val1<-validator network (node2), sf_vfn2<-sf_val1. vfn1<-node1 is
-# the one severed edge and vfn1 is already at tip. Unit-test enforced
-# against PINNED_UPSTREAMS.
-HALT_NODE_ID = "node1"
-# The reference tip during a freeze window: node1 is down, node2 serves
-# the frozen head.
-FREEZE_REFERENCE_NODE_ID = "node2"
+# The five SF nodes get the 20 ms tick via the deployment-layer env
+# mechanism that experiment validated (config/reth_config.json
+# .env_vars — the generated script/start.sh launches gravity_node under
+# `env <those vars>`). The legacy four keep the 200 ms default as the
+# behavior control. Known side effect: at steady state the injected
+# nodes poll sync_info at ~50 req/s — pure request noise, acceptable
+# in e2e.
+SYNC_TICK_ENV = "GRAVITY_REQUEST_SYNC_INFO_INTERVAL_MS"
+SF_SYNC_TICK_INTERVAL_MS = 20
+
+
+def inject_sync_tick_env(reth_config: Mapping) -> dict:
+    """A copy of a node's reth_config.json dict with the SF sync-tick
+    env var injected into .env_vars (created if absent; other entries
+    preserved). Pure — the case owns the file I/O."""
+    config = dict(reth_config)
+    env_vars = dict(config.get("env_vars") or {})
+    env_vars[SYNC_TICK_ENV] = str(SF_SYNC_TICK_INTERVAL_MS)
+    config["env_vars"] = env_vars
+    return config
+
 
 SF_MODES: Tuple[str, ...] = ("migrate", "flag")
 # Modes the case can execute today. "flag" (form B) needs greth's

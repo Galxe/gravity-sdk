@@ -84,7 +84,6 @@ import logging
 import os
 import shutil
 import time
-from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -103,10 +102,7 @@ from gravity_e2e.cluster.manager import Cluster
 from gravity_e2e.cluster.node import Node, NodeState
 from gravity_e2e.helpers import storage_case_lib as lib
 from gravity_e2e.helpers import upgrade_lib
-from gravity_e2e.helpers.catchup import (
-    FROZEN_TIP_REPLAY_FLOOR_BPS,
-    wait_for_catchup,
-)
+from gravity_e2e.helpers.catchup import wait_for_catchup
 from gravity_e2e.helpers.governance import enable_permissionless_join
 from gravity_e2e.helpers.node_process import (
     stop_node_and_wait_exit as _stop_and_wait,
@@ -212,11 +208,13 @@ FREEZE_SETTLE_S = 10       # let in-flight commits drain after the stop
 FREEZE_OBSERVE_S = 30      # window during which heights must not move
 RESUME_TIMEOUT_S = 240     # BFT round-timeout backoff makes resume slow
 
-# ── Frozen-tip catch-up windows (attempt7) ──
-# A from-0 window freezes consensus for 10-20+ minutes — the BFT round
-# timeout backs off far beyond the L3 probe's ~1 min freeze, so recovery
-# after node1 returns needs a much wider bound (coordinator: >= 600s).
-HALT_RESUME_TIMEOUT_S = 900
+# NOTE: the freeze/quiet catch-up machinery (frozen_tip / quiet_chain,
+# attempts 6-7) is retired: the tick investigation proved deep sync was
+# limited by the fullnode sync driver's 200 ms poll tick, not by
+# replay/persistence capacity. The SF nodes get the tick injected at the
+# deploy-config level instead (sf_lib.SYNC_TICK_ENV, phase 1) and from-0
+# sync runs against the LIVE, LOADED chain — the original design
+# semantics.
 
 
 # ---------------------------------------------------------------------------
@@ -525,6 +523,34 @@ def wipe_node_to_fresh(node: Node) -> None:
     LOG.info("[%s] chain data wiped back to fresh (skeleton preserved)", node.id)
 
 
+def inject_sf_sync_tick(node: Node) -> None:
+    """Inject the sync-driver tick into an SF node's deploy config.
+
+    Mechanism (validated by the tick experiment): the node's
+    config/reth_config.json ``.env_vars`` are read by the generated
+    script/start.sh, which launches gravity_node under ``env <vars>`` —
+    so the injected GRAVITY_REQUEST_SYNC_INFO_INTERVAL_MS survives every
+    subsequent Node.start(). SF nodes only; the legacy four keep the
+    200 ms default as the behavior control (sf_lib.SYNC_TICK_ENV has the
+    full rationale and the measured 4.4 -> ~23.6 blk/s data).
+    """
+    assert node.id in sf_lib.SF_NODE_IDS, (
+        f"{node.id}: sync-tick injection is for SF nodes only — the "
+        f"legacy nodes are the default-tick behavior control"
+    )
+    config_path = node._infra_path / "config" / "reth_config.json"
+    assert config_path.is_file(), f"{node.id}: missing {config_path}"
+    config = sf_lib.inject_sync_tick_env(json.loads(config_path.read_text()))
+    config_path.write_text(json.dumps(config, indent=2) + "\n")
+    LOG.info(
+        "[%s] injected %s=%s into %s",
+        node.id,
+        sf_lib.SYNC_TICK_ENV,
+        sf_lib.SF_SYNC_TICK_INTERVAL_MS,
+        config_path,
+    )
+
+
 async def start_fresh_sf_node(ctx, node_id: str) -> None:
     """First start of an SF node + the SF-enable hook.
 
@@ -570,20 +596,15 @@ async def start_fresh_sf_node(ctx, node_id: str) -> None:
 
 
 async def sync_to_tip(ctx, node_id: str) -> None:
-    """From-0 catch-up against the FROZEN tip (the surrounding
-    frozen_tip() window halted consensus by stopping node1): stall
+    """From-0 catch-up against the LIVE tip, under load — the original
+    design semantics, feasible because the SF nodes run with the
+    sync-driver tick injected (sf_lib.SYNC_TICK_ENV: ~23.6 blk/s
+    measured vs 4.4 at the 200 ms default). Progress-based: stall
     detection tolerant of the epoch staircase + a hard budget at the
-    frozen-tip replay floor (net convergence == replay when the tip is
-    static). The reference must be node2 — node1 is down inside the
-    window."""
+    tick-injected net-convergence floor."""
     node = ctx.cluster.get_node(node_id)
-    reference = ctx.cluster.get_node(sf_lib.FREEZE_REFERENCE_NODE_ID)
-    head = await wait_for_catchup(
-        node,
-        reference,
-        max_gap=MAX_HEIGHT_GAP,
-        net_rate_bps=FROZEN_TIP_REPLAY_FLOOR_BPS,
-    )
+    reference = ctx.cluster.get_node("node1")
+    head = await wait_for_catchup(node, reference, max_gap=MAX_HEIGHT_GAP)
     LOG.info("[%s] caught up (head=%d)", node_id, head)
 
 
@@ -692,12 +713,16 @@ async def phase_1_bootstrap_legacy_core(ctx: FreshSyncContext) -> None:
     # Constraint (1): the runner started everything; SF nodes go back to
     # never-started (their minute on the new binary is erased with the
     # wipe, so the case-controlled fresh init below is the real one).
+    # Each SF node also gets the sync-driver tick injected — deep sync is
+    # tick-limited, not capacity-limited (see sf_lib.SYNC_TICK_ENV); the
+    # legacy four keep the 200 ms default as the behavior control.
     for node_id in sf_lib.SF_NODE_IDS:
         node = ctx.cluster.get_node(node_id)
         state, _ = await node.get_state()
         if state == NodeState.RUNNING:
             await stop_node_and_wait_exit(node)
         wipe_node_to_fresh(node)
+        inject_sf_sync_tick(node)
 
     for node_id in sf_lib.LEGACY_NODE_IDS:
         node = ctx.cluster.get_node(node_id)
@@ -899,78 +924,6 @@ async def phase_3_rolling_upgrade(ctx: FreshSyncContext) -> None:
     LOG.info("[Phase 3] upgrade tail complete; anchor batches A+B on disk")
 
 
-@asynccontextmanager
-async def quiet_chain(ctx: FreshSyncContext, reason: str):
-    """Pause the background load for a from-0 catch-up window.
-
-    attempt6 measured the under-load parallel net convergence at only
-    ~0.54 blk/s (two syncing nodes sharing the host's replay throughput
-    against loaded ~500-block epochs) — physically hopeless budgets. On
-    a quiet chain the resurrection experiment converged at minutes
-    scale, so every from-0 window trades load realism for feasibility;
-    the deliberate concession is documented in the README (under-load
-    catch-up realism is TC8 / follow-up scope). Probe-style restarts
-    (short gaps) do NOT use this — they stay under load.
-    """
-    ctx.tx_sender.pause()
-    LOG.info("[quiet-chain] background load paused: %s", reason)
-    try:
-        yield
-    finally:
-        ctx.tx_sender.resume()
-        LOG.info("[quiet-chain] background load resumed: %s", reason)
-
-
-@asynccontextmanager
-async def frozen_tip(ctx: FreshSyncContext, reason: str):
-    """FREEZE the chain for a from-0 catch-up window (attempt7 verdict:
-    chasing a moving tip is physically infeasible on this host class —
-    replay is ceremony-locked at 4.3-4.5 blk/s while consensus produces
-    empty blocks at ~3.9 blk/s even with the load paused, net 0.4-0.6).
-
-    Exploits the case's own quorum math: stopping ONE validator halts
-    the chain (2 genesis validators = f=0; after sf_val1 joins it is 3
-    equal-power = all-votes quorum, phase 8's window included). The halt
-    target is sf_lib.HALT_NODE_ID (node1) — NEVER node2, which is
-    sf_vfn1's only pinned sync source; with node1 down every SF sync
-    edge stays alive and the syncing nodes replay a STATIC tip at full
-    speed. quiet_chain stays nested inside: the sender could not land
-    txs on a frozen chain anyway, and pausing avoids piling up timeout
-    noise in its stats.
-
-    Resume path: restart node1 → chain must produce again within
-    HALT_RESUME_TIMEOUT_S (round-timeout backoff after a multi-minute
-    freeze is far larger than after the L3 probe's ~1 min one).
-    """
-    halt_node = ctx.cluster.get_node(sf_lib.HALT_NODE_ID)
-    async with quiet_chain(ctx, reason):
-        await stop_node_and_wait_exit(halt_node)
-        LOG.info("[frozen-tip] %s stopped — chain frozen for: %s",
-                 halt_node.id, reason)
-        window_ok = False
-        try:
-            yield
-            window_ok = True
-        finally:
-            started = await halt_node.start()
-            if window_ok:
-                assert started, f"failed to restart {halt_node.id}"
-                await _wait_rpc_up(halt_node)
-                assert await ctx.cluster.check_block_increasing(
-                    timeout=HALT_RESUME_TIMEOUT_S, delta=2
-                ), (
-                    f"chain did not resume within {HALT_RESUME_TIMEOUT_S}s "
-                    f"of {halt_node.id} returning (post-freeze BFT "
-                    f"recovery failed)"
-                )
-                LOG.info("[frozen-tip] chain resumed after: %s", reason)
-            elif not started:
-                # The window already failed; don't mask its error, but
-                # leave a loud trace that the cluster is also down.
-                LOG.error("[frozen-tip] %s failed to restart during "
-                          "failure cleanup", halt_node.id)
-
-
 async def phase_4_sf_first_batch(ctx: FreshSyncContext) -> None:
     LOG.info("[Phase 4] SF fullnodes, first batch (parallel): %s, then "
              "sf_pfn1 ...", sf_lib.SF_FIRST_BATCH)
@@ -980,16 +933,15 @@ async def phase_4_sf_first_batch(ctx: FreshSyncContext) -> None:
         await sync_to_tip(ctx, node_id)
 
     # sf_vfn1 (<- node2) and sf_pfn2 (<- vfn1) have independent upstreams
-    # and datadirs — sync them in parallel against the frozen tip; from-0
-    # catch-up is the case's dominant cost.
-    async with frozen_tip(ctx, "phase 4 from-0 syncs"):
-        await asyncio.gather(
-            *(_enable_and_sync(node_id) for node_id in sf_lib.SF_FIRST_BATCH)
-        )
-        # SF <- SF chain: sf_pfn1 syncs FROM sf_vfn1 (its only upstream),
-        # so an SF node is exercised as a sync SERVER here, not just a
-        # client — which is why it stays serial after sf_vfn1 converges.
-        await _enable_and_sync("sf_pfn1")
+    # and datadirs — sync them in parallel against the live, loaded chain
+    # (feasible thanks to the injected sync tick; see phase 1).
+    await asyncio.gather(
+        *(_enable_and_sync(node_id) for node_id in sf_lib.SF_FIRST_BATCH)
+    )
+    # SF <- SF chain: sf_pfn1 syncs FROM sf_vfn1 (its only upstream), so
+    # an SF node is exercised as a sync SERVER here, not just a client —
+    # which is why it stays serial after sf_vfn1 converges.
+    await _enable_and_sync("sf_pfn1")
 
 
 async def offline_sf_probe_and_restart(ctx: FreshSyncContext, node_id: str,
@@ -1035,9 +987,8 @@ async def phase_6_anchor_replays(ctx: FreshSyncContext) -> None:
 
 async def phase_7_sf_val1_join(ctx: FreshSyncContext) -> None:
     LOG.info("[Phase 7] sf_val1: from-0 sync + governance join (equal power)...")
-    async with frozen_tip(ctx, "sf_val1 from-0 sync"):
-        await start_fresh_sf_node(ctx, "sf_val1")
-        await sync_to_tip(ctx, "sf_val1")
+    await start_fresh_sf_node(ctx, "sf_val1")
+    await sync_to_tip(ctx, "sf_val1")
 
     entry = ctx.cluster.get_node(sf_lib.TX_ENTRY_NODE)
     faucet = ctx.cluster.faucet
@@ -1089,9 +1040,8 @@ async def phase_7_sf_val1_join(ctx: FreshSyncContext) -> None:
 
 async def phase_8_sf_vfn2_matrix_close(ctx: FreshSyncContext) -> None:
     LOG.info("[Phase 8] sf_vfn2 (SF vfn <- SF validator): the last matrix cell...")
-    async with frozen_tip(ctx, "sf_vfn2 from-0 sync"):
-        await start_fresh_sf_node(ctx, "sf_vfn2")
-        await sync_to_tip(ctx, "sf_vfn2")
+    await start_fresh_sf_node(ctx, "sf_vfn2")
+    await sync_to_tip(ctx, "sf_vfn2")
     await offline_sf_probe_and_restart(ctx, "sf_vfn2", "Phase 8")
     await replay_all_batches(ctx, ctx.cluster.get_node("sf_vfn2"), "sf-from-sf")
 

@@ -65,11 +65,13 @@ class TestStallDetector:
 
 class TestCatchupBudget:
     def test_scales_with_gap(self):
-        # attempt5 numbers: a ~37-min-old chain ≈ 8400-block gap needed
-        # 40-70 real minutes; the backstop must sit safely above that.
-        budget = catchup_budget_s(8400)
-        assert budget == 8400 / NET_CATCHUP_RATE_FLOOR_BPS * BUDGET_SAFETY_FACTOR
-        assert budget > 70 * 60
+        # The expected phase-4 gap (~4600 blocks at ~20 min chain age):
+        # at the tick-injected 5.0 blk/s floor x1.5 the backstop is
+        # 1380s — a ~23 min ceiling over the ~4-6 min expected sync
+        # (~16-20 blk/s net measured band).
+        budget = catchup_budget_s(4600)
+        assert budget == 4600 / NET_CATCHUP_RATE_FLOOR_BPS * BUDGET_SAFETY_FACTOR
+        assert budget == pytest.approx(1380.0)
 
     def test_floor_applies_to_small_gaps(self):
         assert catchup_budget_s(10) == MIN_BUDGET_S
@@ -139,33 +141,15 @@ class TestWaitForCatchup:
             )
 
 
-class TestQuietChainCalibration:
-    def test_floor_is_the_quiet_chain_value(self):
-        # 2.0 blk/s is the deliberate no-load conservative guess (the
-        # under-load floors are invalid: attempt6 measured parallel
-        # under-load net convergence at ~0.54 blk/s, and TC9 now pauses
-        # the load across every from-0 window). Re-calibrate from the
-        # per-minute net_rate diagnostics before changing this.
-        assert NET_CATCHUP_RATE_FLOOR_BPS == 2.0
-
-
-class TestFrozenTipCalibration:
-    def test_frozen_floor_sits_under_the_measured_replay_band(self):
-        # attempt7: per-block recovery ceremony locks replay at 4.3-4.5
-        # blk/s on this host; the frozen-tip floor must sit just under
-        # that band (net convergence == replay when the tip is static).
-        from gravity_e2e.helpers.catchup import FROZEN_TIP_REPLAY_FLOOR_BPS
-
-        assert FROZEN_TIP_REPLAY_FLOOR_BPS == 4.0
-        assert FROZEN_TIP_REPLAY_FLOOR_BPS < 4.3
-
-    def test_frozen_budget_for_the_phase4_gap(self):
-        from gravity_e2e.helpers.catchup import FROZEN_TIP_REPLAY_FLOOR_BPS
-
-        # The expected phase-4 gap (~4600 blocks at ~20 min chain age):
-        # 4600 / 4.0 * 1.5 = 1725s — a ~29 min backstop for a ~19 min
-        # expected replay.
-        budget = catchup_budget_s(
-            4600, net_rate_bps=FROZEN_TIP_REPLAY_FLOOR_BPS
-        )
-        assert budget == pytest.approx(1725.0)
+class TestTickInjectedCalibration:
+    def test_floor_is_the_tick_injected_value(self):
+        # 5.0 blk/s is the deliberate deep floor for tick-injected
+        # syncing nodes (GRAVITY_REQUEST_SYNC_INFO_INTERVAL_MS=20): the
+        # tick experiment measured ~23.6 blk/s against a frozen tip vs
+        # 4.4 at the 200 ms default, projecting ~16-20 blk/s net against
+        # the live loaded chain. Re-calibrate from the per-minute
+        # net_rate diagnostics before changing this.
+        assert NET_CATCHUP_RATE_FLOOR_BPS == 5.0
+        # Sanity: the floor must beat the DEFAULT-tick ceiling (~4.4) —
+        # if it did not, the injection would be pointless.
+        assert NET_CATCHUP_RATE_FLOOR_BPS > 4.4
