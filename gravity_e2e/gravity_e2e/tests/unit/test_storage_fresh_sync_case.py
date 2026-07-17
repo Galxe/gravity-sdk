@@ -355,19 +355,43 @@ def test_bg_sender_account_is_funded_before_the_sender_starts():
     assert funding < sender_start
 
 
-def test_faucet_init_covers_validator_role_nodes():
-    """sf_val1's join draws its EVM account from accounts.csv
-    ([faucet_init]); without it, phase 7 dies with 'Not enough accounts
-    in accounts.csv'."""
+def test_faucet_init_matches_the_fund_flow_model():
+    """The three-account model: bench[0] = sf_val1's join signer (one
+    VALIDATOR-role node), bench[1] = the bank. [faucet_init] must produce
+    exactly sf_lib.FAUCET_INIT_NUM_ACCOUNTS accounts — fewer starves the
+    join or the bank, more silently dilutes the swept-faucet split."""
     cluster = _rendered_cluster()
     validator_role_nodes = [
         n for n in cluster["nodes"] if n["role"] == "validator"
     ]
     faucet_init = cluster.get("faucet_init")
     assert faucet_init, "cluster.toml.tpl must carry [faucet_init] (join needs it)"
-    assert faucet_init["num_accounts"] >= len(validator_role_nodes), (
-        f"[faucet_init] num_accounts={faucet_init['num_accounts']} < "
-        f"{len(validator_role_nodes)} VALIDATOR-role nodes"
+    assert faucet_init["num_accounts"] == sf_lib.FAUCET_INIT_NUM_ACCOUNTS
+    assert len(validator_role_nodes) == sf_lib.BANK_BENCH_INDEX, (
+        "bench rows before the bank must all be VALIDATOR-role join "
+        "signers (manager assigns accounts.csv rows to VALIDATOR nodes "
+        "in order)"
     )
-    # The staked amount must be coverable by the init balance.
-    assert int(faucet_init["eth_balance"]) >= sf_lib.GENESIS_STAKE_WEI
+
+
+def test_bench_partition_is_disjoint():
+    assert sf_lib.JOIN_BENCH_INDEX != sf_lib.BANK_BENCH_INDEX
+    assert 0 <= sf_lib.JOIN_BENCH_INDEX < sf_lib.FAUCET_INIT_NUM_ACCOUNTS
+    assert 0 <= sf_lib.BANK_BENCH_INDEX < sf_lib.FAUCET_INIT_NUM_ACCOUNTS
+
+
+def test_faucet_never_sends_value_transactions():
+    """Post-sweep, the faucet holds ~0.5 ETH of gas budget only
+    (gravity_bench main.rs:384-411 sweeps its balance at suite init —
+    live attempt3 died funding 1 ETH from a 0.488 ETH faucet). Every
+    TransactionBuilder (the value-transfer path) must be constructed
+    with the bank or another funded account, never the faucet; the
+    faucet's only legitimate use is the governance recipe's gas."""
+    import re
+
+    for match in re.finditer(r"TransactionBuilder\(([^)]*)\)", CASE_SOURCE):
+        args = match.group(1)
+        assert "faucet" not in args, (
+            f"TransactionBuilder fed the faucet account: "
+            f"TransactionBuilder({args}) — use the bank (constraint (4))"
+        )

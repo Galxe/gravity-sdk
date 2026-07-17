@@ -43,19 +43,31 @@ Known constraints (design §3):
     not repeated here;
 (3) upgrade-window depth (wei-level Alpha reconciliation etc.) is TC2's
     coverage; phase 3 keeps only light health assertions;
-(4) ACCOUNT DISCIPLINE: the background TxSender owns a dedicated account
-    (funded from the faucet in phase 2, strictly before the sender
-    starts); the faucet belongs to FOREGROUND transactions only —
-    explicit history txs and the governance recipe (which is faucet-bound:
-    governance owner and pool[0] voter) — and sf_val1's staking CLI uses
-    its accounts.csv bench account ([faucet_init], funded at suite init).
-    Rationale: storage_v2_upgrade separates the sender and explicit
-    faucet txs in TIME (its sender is stopped around every explicit
-    section); this case's sender runs across phases 3-10, and sharing
-    the faucet raced its nonce (live attempt2: "nonce too low" then
-    "replacement transaction underpriced" on the phase-3 B-batch txs).
-    Separating by ACCOUNT removes the race for every foreground sender
-    at once.
+(4) ACCOUNT DISCIPLINE — the three-account fund-flow model:
+    - faucet: GAS-ONLY governance wallet. The [faucet_init] cascade
+      SWEEPS the faucet's on-chain balance at suite init regardless of
+      the configured eth_balance (gravity_bench main.rs:384-411 scales
+      the cascade UP to on-chain − 1% "so a well-funded faucet isn't
+      under-used", then FaucetTreePlanBuilder divides it all among the
+      bench accounts, faucet.rs:64-104) — observed leftover ~0.5 ETH
+      (live attempt3: 0.488 ETH, "insufficient funds" on a 1 ETH
+      transfer). The faucet therefore must NEVER send value after init;
+      it only pays gas for the governance recipe, which is faucet-bound
+      (governance owner + pool[0] voter). Phase 1 fail-fasts if its gas
+      balance dropped below the floor.
+    - bench[0] (accounts.csv): sf_val1's join/staking signer
+      (manager._ensure_evm_account assigns it to the only VALIDATOR-role
+      node); pays the 2 ETH equal-power stake from its init balance.
+    - bench[1] (accounts.csv): the BANK — every foreground value
+      transfer (A-batch history, B-batch history, the background
+      sender's one-time funding) draws from it.
+    The background TxSender still owns its own dedicated account (funded
+    by the bank in phase 2, strictly before the sender starts):
+    storage_v2_upgrade separates the sender and explicit txs in TIME
+    (its sender stops around every explicit section); this case's sender
+    runs across phases 3-10, and account separation removes the nonce
+    race (live attempt2: "nonce too low" then "replacement transaction
+    underpriced") for every foreground sender at once.
 
 Q6 landmine coverage: the A/B anchor sets sample alloc-funded accounts at
 early blocks; form D avoids the SF-fresh empty-anchor + block-0 history
@@ -132,9 +144,15 @@ TX_RECEIPT_TIMEOUT = 30.0
 MIN_TX_CONFIRMED = 100
 MIN_TX_SUCCESS_RATE = 0.5
 # The background sender's dedicated account funding (constraint (4)),
-# transferred once in phase 2 before the sender starts. Worst case ~18k
-# txs at 21k gas * 100 gwei ≈ 38 ETH; 100 keeps a wide margin.
+# transferred once in phase 2 — by the BANK, before the sender starts.
+# Worst case ~18k txs at 21k gas * 100 gwei ≈ 38 ETH; 100 keeps a wide
+# margin.
 BG_SENDER_FUND_ETH = 100
+# Post-sweep faucet floor for the governance recipe's gas (~5 contract
+# calls; the [faucet_init] cascade leaves ~0.5 ETH behind).
+FAUCET_MIN_GAS_WEI = Web3.to_wei("0.3", "ether")
+# The bank must cover the sender funding + both history batches + gas.
+BANK_MIN_BALANCE_WEI = Web3.to_wei(BG_SENDER_FUND_ETH + 20, "ether")
 
 # ── Case timeouts (seconds) ──
 BLOCK_PROGRESS_TIMEOUT_S = 60
@@ -320,11 +338,13 @@ async def _confirmed_tx_point(node: Node, result, label: str) -> lib.TxPoint:
     return point
 
 
-async def build_history(node: Node, faucet) -> lib.OnChainHistory:
+async def build_history(node: Node, sender) -> lib.OnChainHistory:
     """Transfers + AnchorTarget deploy + set() calls, submitted through
     the tx-entry pfn — the production ingress path (pfn -> vfn ->
-    validator mempool) is itself under test."""
-    tb = TransactionBuilder(node.w3, faucet)
+    validator mempool) is itself under test. ``sender`` is the BANK
+    account (constraint (4)); OnChainHistory's ``faucet`` field just
+    means "the funding sender" in the shared lib."""
+    tb = TransactionBuilder(node.w3, sender)
     recipient = Account.create()
     LOG.info("History recipient: %s", recipient.address)
 
@@ -349,7 +369,7 @@ async def build_history(node: Node, faucet) -> lib.OnChainHistory:
         sets.append(await _confirmed_tx_point(node, result, f"set({value})"))
 
     return lib.OnChainHistory(
-        faucet=faucet.address,
+        faucet=sender.address,
         recipient=recipient.address,
         contract=contract_addr,
         transfers=transfers,
@@ -520,8 +540,13 @@ class FreshSyncContext:
     anchors_a_path: Optional[Path] = None
     anchors_b_path: Optional[Path] = None
     tx_sender: Optional[TxSender] = None
+    # Constraint (4): bench[1], the source of every foreground value
+    # transfer (the faucet is swept at suite init and pays only
+    # governance gas). Resolved in phase 1.
+    bank_account: Optional[object] = None
     # Constraint (4): the background sender's dedicated account — funded
-    # in phase 2, disjoint from the faucet by construction.
+    # by the bank in phase 2, disjoint from faucet and bank by
+    # construction.
     bg_sender_account: Optional[object] = None
     alpha_time: Optional[int] = None
     upgrade_order: List[str] = field(default_factory=list)
@@ -564,6 +589,44 @@ async def phase_1_bootstrap_legacy_core(ctx: FreshSyncContext) -> None:
     )
     assert alpha_error is None, f"[Phase 1] {alpha_error}"
 
+    # Fund-flow prechecks (constraint (4)). The [faucet_init] cascade
+    # swept the faucet at suite init; what's left is the governance gas
+    # budget — fail fast if even that is gone.
+    node1 = ctx.cluster.get_node("node1")
+    faucet_balance = await asyncio.to_thread(
+        lambda: node1.w3.eth.get_balance(ctx.cluster.faucet.address)
+    )
+    assert faucet_balance >= FAUCET_MIN_GAS_WEI, (
+        f"[Phase 1] faucet gas budget too low: {faucet_balance} wei < "
+        f"{FAUCET_MIN_GAS_WEI} wei. The [faucet_init] cascade sweeps the "
+        f"faucet regardless of eth_balance (gravity_bench main.rs:384-411 "
+        f"scales up to on-chain − 1%); the governance recipe needs the "
+        f"post-sweep leftover. A previous run on this datadir probably "
+        f"drained it — re-init the suite."
+    )
+    bench = ctx.cluster.get_bench_accounts(limit=sf_lib.FAUCET_INIT_NUM_ACCOUNTS)
+    assert len(bench) >= sf_lib.FAUCET_INIT_NUM_ACCOUNTS, (
+        f"[Phase 1] accounts.csv has {len(bench)} accounts, need "
+        f"{sf_lib.FAUCET_INIT_NUM_ACCOUNTS} ([faucet_init] num_accounts): "
+        f"bench[{sf_lib.JOIN_BENCH_INDEX}]=join signer, "
+        f"bench[{sf_lib.BANK_BENCH_INDEX}]=bank"
+    )
+    ctx.bank_account = bench[sf_lib.BANK_BENCH_INDEX]
+    bank_balance = await asyncio.to_thread(
+        lambda: node1.w3.eth.get_balance(ctx.bank_account.address)
+    )
+    assert bank_balance >= BANK_MIN_BALANCE_WEI, (
+        f"[Phase 1] bank (bench[{sf_lib.BANK_BENCH_INDEX}]) balance "
+        f"{bank_balance} wei < {BANK_MIN_BALANCE_WEI} wei — did the "
+        f"[faucet_init] distribution run?"
+    )
+    LOG.info(
+        "[Phase 1] fund flow: faucet gas=%s wei, bank=%s (%s wei)",
+        faucet_balance,
+        ctx.bank_account.address,
+        bank_balance,
+    )
+
     # Constraint (1): the runner started everything; SF nodes go back to
     # never-started (their minute on the new binary is erased with the
     # wipe, so the case-controlled fresh init below is the real one).
@@ -593,10 +656,12 @@ async def phase_2_history_and_anchors_a(ctx: FreshSyncContext) -> None:
     LOG.info("[Phase 2] v1.7.5-era history + anchor batch A (via %s)...",
              sf_lib.TX_ENTRY_NODE)
     entry = ctx.cluster.get_node(sf_lib.TX_ENTRY_NODE)
-    faucet = ctx.cluster.faucet
-    assert faucet, "faucet account not configured (genesis.faucet)"
+    bank = ctx.bank_account
+    assert bank is not None, "phase 1 must resolve the bank account"
 
-    ctx.history = await build_history(entry, faucet)
+    # All value transfers come from the BANK (constraint (4)): the faucet
+    # was swept by the [faucet_init] cascade and only pays governance gas.
+    ctx.history = await build_history(entry, bank)
     ctx.max_history_block = max(
         p.block_number
         for p in (*ctx.history.transfers, ctx.history.deploy, *ctx.history.sets)
@@ -629,10 +694,10 @@ async def phase_2_history_and_anchors_a(ctx: FreshSyncContext) -> None:
              ctx.anchors_a_path)
 
     # Constraint (4): fund the background sender's dedicated account NOW,
-    # while no concurrent sender exists — after this, the faucet nonce is
-    # foreground-only property and the two lanes can never race.
+    # from the BANK, while no concurrent sender exists — after this the
+    # bank nonce is foreground-only property and the two lanes never race.
     ctx.bg_sender_account = Account.create()
-    tb = TransactionBuilder(entry.w3, faucet)
+    tb = TransactionBuilder(entry.w3, bank)
     await _confirmed_tx_point(
         entry,
         await tb.send_ether(
@@ -725,9 +790,10 @@ async def phase_3_rolling_upgrade(ctx: FreshSyncContext) -> None:
         ctx.cluster.get_node("vfn1"), ctx.anchors_a_path, "post-upgrade"
     )
 
-    # Anchor batch B: fresh post-upgrade/post-Alpha history via pfn1.
+    # Anchor batch B: fresh post-upgrade/post-Alpha history via pfn1,
+    # paid by the BANK (constraint (4): the faucet never sends value).
     entry = ctx.cluster.get_node(sf_lib.TX_ENTRY_NODE)
-    tb = TransactionBuilder(entry.w3, ctx.cluster.faucet)
+    tb = TransactionBuilder(entry.w3, ctx.bank_account)
     tail_recipient = Account.create()
     transfer = await _confirmed_tx_point(
         entry,
@@ -981,10 +1047,11 @@ async def test_storage_v2_fresh_sync(cluster: Cluster, output_dir: Path):
         await _run_phase(ctx, phase_2_history_and_anchors_a)
 
         # Constraint (4): the sender runs on its DEDICATED account, never
-        # the faucet — the faucet nonce belongs to foreground txs (B-batch
-        # history, the faucet-bound governance recipe).
+        # the faucet (gas-only governance wallet) nor the bank (foreground
+        # value transfers).
         assert ctx.bg_sender_account is not None, "phase 2 must fund the sender"
         assert ctx.bg_sender_account.address != cluster.faucet.address
+        assert ctx.bg_sender_account.address != ctx.bank_account.address
         ctx.tx_sender = TxSender(
             cluster,
             ctx.bg_sender_account,

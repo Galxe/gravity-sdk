@@ -58,6 +58,17 @@ EPOCH_INTERVAL_S = 120
 GENESIS_STAKE_WEI = 2 * 10**18
 JOIN_STAKE_ETH = "2.0"
 
+# The three-account fund-flow model (test module constraint (4)): the
+# [faucet_init] cascade sweeps the faucet's on-chain balance at suite
+# init, so the faucet is a gas-only governance wallet afterwards;
+# bench[0] signs sf_val1's join/staking (manager._ensure_evm_account
+# assigns accounts.csv rows to VALIDATOR-role nodes in order); bench[1]
+# is the bank for every foreground value transfer. Must match
+# [faucet_init] num_accounts (unit-test enforced).
+JOIN_BENCH_INDEX = 0
+BANK_BENCH_INDEX = 1
+FAUCET_INIT_NUM_ACCOUNTS = 2
+
 SF_MODES: Tuple[str, ...] = ("migrate", "flag")
 # Modes the case can execute today. "flag" (form B) needs greth's
 # --storage.v2 -> init_genesis wiring plus per-node start-arg injection.

@@ -49,6 +49,19 @@ preflight fix** (block-0 genesis reverts must be accepted and migrated
 as entity rows). `mode = "flag"` (form B, `--storage.v2`) is reserved
 until greth wires the flag into init_genesis.
 
+## Fund flow (three accounts — do not "just use the faucet")
+
+| account | role | why |
+|---|---|---|
+| genesis faucet | **gas-only** governance wallet (owner + pool[0] voter) | `[faucet_init]` **sweeps** its on-chain balance at suite init: `cluster/faucet.sh:44-56` writes `eth_balance` into the bench config, but gravity_bench overrides it — `main.rs:384-411` scales the cascade up to (on-chain − 1%) and `src/txn_plan/constructor/faucet.rs:64-104` splits it all among the bench accounts. Leftover ≈ 0.5 ETH (live attempt3 died funding 1 ETH from 0.488). |
+| bench[0] (accounts.csv) | sf_val1's join/staking signer | `manager._ensure_evm_account` assigns csv rows to VALIDATOR-role nodes in order; the 2 ETH equal-power stake comes from its init balance. |
+| bench[1] (accounts.csv) | the **bank**: all foreground value transfers (A/B history, bg-sender funding) | disjoint from the background TxSender's dedicated account (funded once by the bank in phase 2 — nonce-race lock from live attempt2). |
+
+Phase 1 fail-fasts when the post-sweep faucet gas budget or the bank
+balance is missing. Unit locks: `TxSender` may never be fed
+`cluster.faucet`; `TransactionBuilder` may never be fed the faucet;
+`[faucet_init] num_accounts` must equal the bench partition.
+
 ## Run
 
 ```

@@ -184,15 +184,28 @@ inspection_port = 10518
 authrpc_port = 8959
 reth_p2p_port = 12538
 
-# [faucet_init] is REQUIRED here (unlike storage_v2_upgrade): sf_val1's
-# validator_join draws its EVM account from the accounts.csv this
-# generates (manager._ensure_evm_account -> get_bench_accounts), and the
-# 2 ETH equal-power stake is paid from that account's init balance. One
-# account: sf_val1 is the only VALIDATOR-role node. The funding happens
-# at suite init — before pytest, before the background sender exists —
-# so it cannot race anything (account-discipline constraint (4) in the
-# test module).
+# [faucet_init] is REQUIRED here (unlike storage_v2_upgrade), and it
+# defines the case's fund-flow model (test-module constraint (4)):
+# - bench[0]: sf_val1's join/staking signer
+#   (manager._ensure_evm_account -> get_bench_accounts); the 2 ETH
+#   equal-power stake comes from its init balance;
+# - bench[1]: the BANK — every foreground value transfer (history
+#   batches, the background sender's funding) draws from it.
+#
+# ⚠ eth_balance is EFFECTIVELY IGNORED when the on-chain faucet balance
+# is larger: cluster/faucet.sh:44-56 does write it into the bench
+# config, but gravity_bench (external/gravity_bench) overrides it —
+# main.rs:384-411 scales the cascade UP to (on-chain balance − 1%) "so a
+# well-funded faucet isn't under-used", and FaucetTreePlanBuilder
+# (src/txn_plan/constructor/faucet.rs:64-104) divides that whole amount
+# among num_accounts. Net effect: the faucet is SWEPT at suite init
+# (observed leftover ~0.5 ETH), so after init it is a gas-only wallet
+# for the governance recipe — it must never send value again. The value
+# below is kept as documentation of intent, not behavior.
+#
+# The distribution happens at suite init — before pytest, before the
+# background sender exists — so it cannot race anything.
 [faucet_init]
-num_accounts = 1
+num_accounts = 2
 private_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 eth_balance = "10000000000000000000000"
