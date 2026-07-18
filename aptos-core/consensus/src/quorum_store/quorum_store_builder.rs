@@ -440,10 +440,10 @@ impl InnerBuilder {
                     // batch with the same digest under the adjacent epoch, so the local
                     // copy may be stored under a neighboring epoch key. Serving it is
                     // safe: the requester verifies the response against the digest.
-                    for adjacent_epoch in [req_epoch + 1, req_epoch.saturating_sub(1)] {
-                        if adjacent_epoch == req_epoch {
-                            continue;
-                        }
+                    // checked_{add,sub} keeps this network-facing path panic-free on
+                    // malformed u64::MAX / 0 requests in overflow-check builds.
+                    let adjacent_candidates = [req_epoch.checked_add(1), req_epoch.checked_sub(1)];
+                    for adjacent_epoch in adjacent_candidates.into_iter().flatten() {
                         batch_result = batch_store.get_batch_from_local(
                             &quorum_store::types::BatchKey::new(adjacent_epoch, req_digest),
                         );
