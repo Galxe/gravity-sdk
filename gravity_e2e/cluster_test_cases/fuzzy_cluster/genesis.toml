@@ -5,9 +5,11 @@ repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
 ref = "main"
 
 # Genesis validators with stake and voting power
+# node1.address == faucet so pool[0].voter is the faucet, letting the test
+# drive the one-time governance proposal that enables permissionless join.
 [[genesis_validators]]
 id = "node1"
-address = "0xAEd2a948892475F800A337427B3275D190EA3e94"
+address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 host = "127.0.0.1"
 validator_port = 6180
 vfn_port = 6190
@@ -53,6 +55,10 @@ consensus_config = "0x0301010a00000000000000280000000000000001010000000a00000000
 execution_config = "0x00"
 initial_locked_until_micros = 1798848000000000
 
+# Governance owner: faucet. Needed for addExecutor() in the permissionless-join
+# setup phase of test_epoch_switch.py.
+governance_owner = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+
 [genesis.faucet]
 address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 balance = "0x2000000000000000000000000000000000000000000000000000000000000000"
@@ -72,10 +78,11 @@ minimum_stake = "1000000000000000000"
 lockup_duration_micros = 86400000000
 unbonding_delay_micros = 86400000000
 
+# Short voting window; pool[0]'s 2e18 VP clears both thresholds in one vote.
 [genesis.governance_config]
 min_voting_threshold = "1000000000000000000"
-required_proposer_stake = "10000000000000000000"
-voting_duration_micros = 604800000000
+required_proposer_stake = "1000000000000000000"
+voting_duration_micros = 5000000
 
 [genesis.randomness_config]
 variant = 1

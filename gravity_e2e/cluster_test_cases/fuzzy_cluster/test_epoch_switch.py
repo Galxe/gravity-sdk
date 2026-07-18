@@ -14,6 +14,8 @@ from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import Set
 
+from eth_abi import encode
+from eth_account import Account
 from web3 import Web3
 from gravity_e2e.tests.test_registry import register_test
 from gravity_e2e.cluster.manager import Cluster
@@ -26,6 +28,119 @@ LOG = logging.getLogger(__name__)
 # Default: 1800s (30 minutes).
 # Set to 0 to run indefinitely until signal is received.
 FUZZY_TEST_DURATION = 1800
+
+# ── Permissionless-join governance setup ────────────────────────────
+# registerValidator/joinValidatorSet are gated on a governance-managed pool
+# whitelist unless permissionless join is enabled (defaults to off at
+# genesis). The fuzz creates pools dynamically, so flip the flag once via
+# the full proposal lifecycle. Genesis pool[0]'s voter is the faucet (see
+# genesis.toml) and provides the proposer stake / voting power.
+GOVERNANCE = Web3.to_checksum_address("0x00000000000000000000000000000001625F3000")
+STAKING = Web3.to_checksum_address("0x00000000000000000000000000000001625F2000")
+VALIDATOR_MANAGER = Web3.to_checksum_address("0x00000000000000000000000000000001625F2001")
+
+FAUCET_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+FAUCET_ADDR = Web3.to_checksum_address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
+
+MAX_UINT128 = (1 << 128) - 1
+VOTING_DURATION_SECS = 5  # matches genesis.toml voting_duration_micros (5e6)
+PROPOSAL_STATE_SUCCEEDED = 1
+
+
+def _selector(sig: str) -> bytes:
+    return Web3.keccak(text=sig)[:4]
+
+
+SEL_ADD_EXECUTOR = _selector("addExecutor(address)")
+SEL_CREATE_PROPOSAL = _selector("createProposal(address,address[],bytes[],string)")
+SEL_VOTE = _selector("vote(address,uint64,uint128,bool)")
+SEL_RESOLVE = _selector("resolve(uint64)")
+SEL_EXECUTE = _selector("execute(uint64,address[],bytes[])")
+SEL_GET_PROPOSAL_STATE = _selector("getProposalState(uint64)")
+SEL_GET_POOL = _selector("getPool(uint256)")
+SEL_SET_PERMISSIONLESS = _selector("setPermissionlessJoinEnabled(bool)")
+SEL_IS_PERMISSIONLESS = _selector("isPermissionlessJoinEnabled()")
+
+
+def _send_tx(w3: Web3, to: str, data: bytes, sender_key: str, gas: int = 1_000_000) -> dict:
+    sender = Account.from_key(sender_key)
+    tx = {
+        "to": to,
+        "data": data,
+        "gas": gas,
+        "gasPrice": w3.eth.gas_price,
+        "nonce": w3.eth.get_transaction_count(sender.address),
+        "chainId": w3.eth.chain_id,
+        "value": 0,
+    }
+    signed = sender.sign_transaction(tx)
+    tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+    return w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
+
+
+async def enable_permissionless_join(w3: Web3):
+    raw = w3.eth.call({"to": VALIDATOR_MANAGER, "data": SEL_IS_PERMISSIONLESS})
+    if int.from_bytes(raw[-32:], "big"):
+        LOG.info("Permissionless join already enabled")
+        return
+
+    pool0_raw = w3.eth.call(
+        {"to": STAKING, "data": SEL_GET_POOL + encode(["uint256"], [0])}
+    )
+    pool0 = Web3.to_checksum_address("0x" + pool0_raw[-20:].hex())
+
+    receipt = _send_tx(
+        w3, GOVERNANCE, SEL_ADD_EXECUTOR + encode(["address"], [FAUCET_ADDR]), FAUCET_KEY
+    )
+    assert receipt["status"] == 1, f"addExecutor failed: {receipt}"
+
+    enable_call = SEL_SET_PERMISSIONLESS + encode(["bool"], [True])
+    create_data = SEL_CREATE_PROPOSAL + encode(
+        ["address", "address[]", "bytes[]", "string"],
+        [pool0, [VALIDATOR_MANAGER], [enable_call], "fuzzy-permissionless-join"],
+    )
+    receipt = _send_tx(w3, GOVERNANCE, create_data, FAUCET_KEY)
+    assert receipt["status"] == 1, f"createProposal failed: {receipt}"
+
+    proposal_created_topic = Web3.keccak(
+        text="ProposalCreated(uint64,address,address,bytes32,string)"
+    )
+    proposal_id = None
+    for log in receipt["logs"]:
+        if log["topics"] and bytes(log["topics"][0]) == bytes(proposal_created_topic):
+            proposal_id = int.from_bytes(log["topics"][1], "big")
+            break
+    assert proposal_id is not None, "ProposalCreated event not found"
+    LOG.info(f"Created governance proposal {proposal_id} to enable permissionless join")
+
+    vote_data = SEL_VOTE + encode(
+        ["address", "uint64", "uint128", "bool"], [pool0, proposal_id, MAX_UINT128, True]
+    )
+    receipt = _send_tx(w3, GOVERNANCE, vote_data, FAUCET_KEY)
+    assert receipt["status"] == 1, f"vote failed: {receipt}"
+
+    await asyncio.sleep(VOTING_DURATION_SECS + 2)
+
+    receipt = _send_tx(
+        w3, GOVERNANCE, SEL_RESOLVE + encode(["uint64"], [proposal_id]), FAUCET_KEY
+    )
+    assert receipt["status"] == 1, f"resolve failed: {receipt}"
+    state_raw = w3.eth.call(
+        {"to": GOVERNANCE, "data": SEL_GET_PROPOSAL_STATE + encode(["uint64"], [proposal_id])}
+    )
+    state = int.from_bytes(state_raw[-1:], "big")
+    assert state == PROPOSAL_STATE_SUCCEEDED, f"proposal not SUCCEEDED: state={state}"
+
+    exec_data = SEL_EXECUTE + encode(
+        ["uint64", "address[]", "bytes[]"],
+        [proposal_id, [VALIDATOR_MANAGER], [enable_call]],
+    )
+    receipt = _send_tx(w3, GOVERNANCE, exec_data, FAUCET_KEY)
+    assert receipt["status"] == 1, f"execute failed: {receipt}"
+
+    raw = w3.eth.call({"to": VALIDATOR_MANAGER, "data": SEL_IS_PERMISSIONLESS})
+    assert int.from_bytes(raw[-32:], "big"), "permissionless join not enabled after execute"
+    LOG.info("Permissionless validator join enabled via governance")
 
 
 class EpochSwitchTestContext:
@@ -334,6 +449,11 @@ async def test_epoch_switch(cluster: Cluster):
             node = cluster.get_node(node_name)
             LOG.info(f"  {node_name}: role={node.role.value}")
         LOG.info(f"✅ {len(test_context.candidate_node_names)} candidate nodes ready")
+
+        # Step 2.5: Enable permissionless join so dynamically created pools
+        # can register without a per-pool governance whitelist entry
+        LOG.info("\n[Step 2.5] Enabling permissionless validator join...")
+        await enable_permissionless_join(test_context.web3)
 
         tasks = []
         # Step 3: Fuzzy validator candidate nodes join and leave
