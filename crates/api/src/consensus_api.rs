@@ -43,6 +43,16 @@ pub struct ConsensusEngine {
     runtimes: Vec<Runtime>,
 }
 
+impl Drop for ConsensusEngine {
+    fn drop(&mut self) {
+        // The engine may be dropped from an async context, where a plain
+        // Runtime drop panics; shutdown_background is non-blocking.
+        for runtime in self.runtimes.drain(..) {
+            runtime.shutdown_background();
+        }
+    }
+}
+
 fn fail_point_check(node_config: &NodeConfig) {
     // Ensure failpoints are configured correctly
     if fail::has_failpoints() {

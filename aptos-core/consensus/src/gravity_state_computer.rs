@@ -44,7 +44,9 @@ impl ConsensusAdapterArgs {
 pub struct GravityBlockExecutor {
     inner: BlockExecutor,
     consensus_db: Arc<ConsensusDB>,
-    runtime: Runtime,
+    // Option so Drop can take it and call `shutdown_background()`: the executor
+    // is dropped from async consensus tasks, where a plain Runtime drop panics.
+    runtime: Option<Runtime>,
 }
 
 impl GravityBlockExecutor {
@@ -52,7 +54,19 @@ impl GravityBlockExecutor {
         Self {
             inner,
             consensus_db,
-            runtime: gaptos::aptos_runtimes::spawn_named_runtime("tmp".into(), None),
+            runtime: Some(gaptos::aptos_runtimes::spawn_named_runtime("tmp".into(), None)),
+        }
+    }
+
+    fn runtime(&self) -> &Runtime {
+        self.runtime.as_ref().expect("runtime is only taken on drop")
+    }
+}
+
+impl Drop for GravityBlockExecutor {
+    fn drop(&mut self) {
+        if let Some(runtime) = self.runtime.take() {
+            runtime.shutdown_background();
         }
     }
 }
@@ -103,7 +117,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
                 error!("Failed to save_transactions in commit_blocks: {:?}", e);
             }
             let epoch = ledger_info_with_sigs.ledger_info().epoch();
-            self.runtime.block_on(async move {
+            self.runtime().block_on(async move {
                 let commit_blocks = block_ids
                     .into_iter()
                     .enumerate()
@@ -181,7 +195,7 @@ impl BlockExecutorTrait for GravityBlockExecutor {
             }
         }
 
-        self.runtime.block_on(async move {
+        self.runtime().block_on(async move {
             let commit_blocks = block_ids
                 .into_iter()
                 .map(|(x, num)| {
