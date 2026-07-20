@@ -142,6 +142,7 @@ jobs:
             -t "${IMAGE_REF}" \
             -f docker/gravity_node/Dockerfile .
           docker run --rm --entrypoint /usr/local/bin/gravity_cli "${IMAGE_REF}" --version
+          docker run --rm --entrypoint /usr/bin/curl "${IMAGE_REF}" --version
           echo "--- image size ---"
           docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep "^${IMAGE_REF}"
           # Don't leave the binaries in the repo working dir after the build —

@@ -1,7 +1,8 @@
 # gravity_node Docker Deployment
 
-Container images containing `gravity_node` and `gravity_cli` for running a
-validator or VFN and managing node identity during container startup.
+Container images containing `gravity_node`, `gravity_cli`, and `curl` for
+running a validator or VFN, managing node identity during container startup,
+and executing container health checks.
 Build the image once, ship it everywhere, mount configuration and chain data
 from the host. Upgrades are a single `docker compose up -d` against a new
 image tag — configuration and chain state persist across restarts.
@@ -10,7 +11,7 @@ image tag — configuration and chain state persist across restarts.
 
 | File | Purpose |
 |---|---|
-| `Dockerfile` | Multi-stage build (`rust:1.93-slim` → `ubuntu:24.04`). Includes `gravity_node` and `gravity_cli`. Non-root (uid `10001`). `tini` as PID 1. |
+| `Dockerfile` | Multi-stage build (`rust:1.93-slim` → `ubuntu:24.04`). Includes `gravity_node`, `gravity_cli`, and `curl`. Non-root (uid `10001`). `tini` as PID 1. |
 | `entrypoint.sh` | Reads `reth_config.json` (same schema as `cluster/templates/reth_config.json.tpl`) and `exec`s `gravity_node node` in the foreground. |
 | `docker-compose.yaml` | Single-node deployment. Intended for one host running one validator. |
 | `docker-compose.cluster.yaml` | 4 validators + 1 VFN on one host. For end-to-end image verification against `cluster/` artifacts. |
@@ -42,7 +43,7 @@ Build arguments:
 - `CARGO_PROFILE` — `release` (default) or `performance` (LTO, slower build, faster runtime).
 
 The image always builds and installs both `gravity_node` and `gravity_cli` in
-`/usr/local/bin`.
+`/usr/local/bin`. It also includes `curl` for container health checks.
 
 The `.dockerignore` at the repository root keeps `target/`, `.git/`, and other
 large directories out of the build context.

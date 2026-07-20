@@ -59,6 +59,7 @@ FROM ubuntu:24.04 AS runtime-base
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
+        curl \
         jq \
         tini \
     && rm -rf /var/lib/apt/lists/* \
