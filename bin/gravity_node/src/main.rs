@@ -73,10 +73,13 @@ struct ConsensusArgs<EthApi: RethEthCall> {
     pub pool: RethTransactionPool,
 }
 
+// ConsensusAlpha is activated by the genesis `alphaTime` field (seconds,
+// registered as a microsecond Timestamp). It is the only genesis field the
+// CL reads for Alpha (Galxe/gravity-audit#925).
 fn consensus_hardforks_from_genesis_extra_fields(
     get_extra_field: impl Fn(&str) -> Option<u64>,
 ) -> ConsensusHardforks {
-    let mut hardforks = ConsensusHardforks::from_genesis_extra_fields(&get_extra_field);
+    let mut hardforks = ConsensusHardforks::new();
 
     if let Some(alpha_time_secs) = get_extra_field("alphaTime") {
         hardforks.insert(
@@ -405,5 +408,42 @@ fn main() {
     if let Err(err) = coordinator_result {
         eprintln!("Reth coordinator stopped with error: {err}");
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Guards the audit fix (Galxe/gravity-audit#925): the CL builds Alpha's
+    /// activation solely from `alphaTime`. The closure below supplies a value
+    /// for every field EXCEPT `alphaTime`, so if the CL ever read any other
+    /// genesis field, Alpha would register a condition and this test would go
+    /// red.
+    #[test]
+    fn only_alpha_time_activates_consensus_alpha() {
+        let hardforks =
+            consensus_hardforks_from_genesis_extra_fields(|key| (key != "alphaTime").then_some(0));
+
+        assert_eq!(
+            hardforks.condition(ConsensusHardfork::ConsensusAlpha),
+            ForkCondition::Never,
+            "no genesis field other than alphaTime may activate Alpha",
+        );
+        assert!(!hardforks.is_active_at_epoch(ConsensusHardfork::ConsensusAlpha, 0));
+    }
+
+    /// `alphaTime` (seconds) is read as a microsecond timestamp condition.
+    #[test]
+    fn alpha_time_registers_timestamp_condition() {
+        let hardforks = consensus_hardforks_from_genesis_extra_fields(|key| match key {
+            "alphaTime" => Some(1_782_709_200),
+            _ => None,
+        });
+
+        assert_eq!(
+            hardforks.condition(ConsensusHardfork::ConsensusAlpha),
+            ForkCondition::Timestamp(1_782_709_200_000_000),
+        );
     }
 }
