@@ -462,7 +462,7 @@ def price_feed_uri(feed_id: int, pair: str, bucket_start_ms: int) -> str:
     return (
         f"gravity://3/{feed_id}/price_feed?"
         f"provider=binance_index_kline_v1&pair={pair}&interval=1m&"
-        f"bucketStartMs={bucket_start_ms}&continuous=true&decimals=8&aggregationMode=2&"
+        f"bucketStartMs={bucket_start_ms}&decimals=8&aggregationMode=2&"
         f"minSourceCount=1&minTotalWeight=1&maxStaleness={max_staleness_ms()}&"
         f"graceMs={binance_grace_ms()}"
     )

@@ -116,7 +116,7 @@ a production Polymarket-like Gravity product.
 ### 6. Binance Index-Kline Price Feed Suite
 The `binance_price_feed` suite is a local-only integration test for continuous stock-like
 price feed rounds on Gravity. It registers deterministic
-`provider=binance_index_kline_v1&continuous=true` `sourceType=3` tasks for
+`provider=binance_index_kline_v1` `sourceType=3` tasks for
 `NVDAUSDT` and `TSLAUSDT` through governance, starts a local mock Binance
 `/fapi/v1/indexPriceKlines` server, waits for the next short test epoch so
 `aptos-jwk-consensus` rebuilds relayer-backed observers, then waits for the
@@ -131,6 +131,9 @@ fetching is covered separately by the ignored `gravity-reth` relayer smoke test.
 This suite proves the epoch-config path for long-running feeds. It does not
 implement intra-epoch dynamic request discovery; that still needs a deterministic
 request watcher if Gravity wants one-off requests such as a future match score.
+The Binance provider itself is always continuous and rejects the legacy
+`continuous` URI parameter. Keep `bucketStartMs` and `interval` immutable for
+each `feedId`; introduce a new `feedId` when either changes.
 
 Run it from the repository root after building `gravity_node` and `gravity_cli`:
 ```bash

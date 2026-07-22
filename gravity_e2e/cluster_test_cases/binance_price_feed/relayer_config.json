@@ -1,6 +1,6 @@
 {
   "uri_mappings": {
-    "gravity://3/1001/price_feed?provider=binance_index_kline_v1&pair=NVDAUSDT&interval=1m&bucketStartMs=1783252500000&continuous=true&decimals=8&aggregationMode=2&minSourceCount=1&minTotalWeight=1&maxStaleness=180000&graceMs=120000": "http://127.0.0.1:18547",
-    "gravity://3/1002/price_feed?provider=binance_index_kline_v1&pair=TSLAUSDT&interval=1m&bucketStartMs=1783252500000&continuous=true&decimals=8&aggregationMode=2&minSourceCount=1&minTotalWeight=1&maxStaleness=180000&graceMs=120000": "http://127.0.0.1:18547"
+    "gravity://3/1001/price_feed?provider=binance_index_kline_v1&pair=NVDAUSDT&interval=1m&bucketStartMs=1783252500000&decimals=8&aggregationMode=2&minSourceCount=1&minTotalWeight=1&maxStaleness=180000&graceMs=120000": "http://127.0.0.1:18547",
+    "gravity://3/1002/price_feed?provider=binance_index_kline_v1&pair=TSLAUSDT&interval=1m&bucketStartMs=1783252500000&decimals=8&aggregationMode=2&minSourceCount=1&minTotalWeight=1&maxStaleness=180000&graceMs=120000": "http://127.0.0.1:18547"
   }
 }

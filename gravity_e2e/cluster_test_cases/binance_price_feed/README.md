@@ -10,7 +10,8 @@ Binance USD-M `indexPriceKlines` semantics:
    - `feedId=1002`: `provider=binance_index_kline_v1&pair=TSLAUSDT`.
 4. Each task is a continuous 1-minute feed anchored at the same first bucket:
    - `bucketStartMs=1783252500000` (`2026-07-05T11:55:00Z`).
-   - `continuous=true`, so delivery nonce `1` maps to that bucket.
+   - The `binance_index_kline_v1` provider is continuous by definition, so
+     delivery nonce `1` maps to that bucket.
    - Delivery nonce `3` maps to `roundId=29720877` and
      `resolvedAt=1783252679999`.
 5. The suite uses a 30-second epoch so `aptos-jwk-consensus` rebuilds its
@@ -174,6 +175,11 @@ Note that `NativeOracle` delivery nonces are sequential (`1`, `2`, `3`, ...),
 while resolver payload `roundId` values are time-derived Binance bucket IDs.
 The relayer keeps those two concepts separate so long-running feeds can satisfy
 `NativeOracle.latestNonce + 1` while still storing price rounds by market time.
+
+The bucket origin and interval are immutable for a `feedId`. Changing either
+requires a new `feedId`; the relayer rejects history that does not match the
+configured nonce-to-bucket sequence. The legacy `continuous` URI parameter is
+rejected because one-shot Binance price tasks are not part of this product.
 
 ## Extending Toward a Polymarket-Like Gravity Product
 
