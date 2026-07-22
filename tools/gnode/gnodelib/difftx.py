@@ -85,10 +85,14 @@ def cmd_difftx(kind: str) -> int:
         return 1
 
     rc = proc.returncode
-    # 命中（gap/背离）→ 指一手复现工件位置；退出码原样透传（3=gap，0=clean）。
-    if rc != 0:
+    # 退出码原样透传。仅 rc==3 才是「发现 gap/背离」；其它非零（如 cargo 编译失败 101、
+    # 运行错误 1）不是 gap 判定，别误报——否则 agent 会把编译失败当成停链缺口。
+    if rc == 3:
         repro = reth / "difftx-repro"
-        print(f"\n[gnode] difftx 退出码 {rc} —— 发现停链缺口/执行背离(gap/divergence)。"
+        print(f"\n[gnode] difftx 退出码 3 —— 发现停链缺口/执行背离(gap/divergence)。"
               f"\n[gnode] 复现工件（gnode send 兼容）见: {repro}/*.json",
               file=sys.stderr)
+    elif rc not in (0, 3):
+        print(f"\n[gnode] difftx 退出码 {rc} —— 非 gap 判定（cargo 编译/运行错误等）；"
+              f"请检查上面的构建/运行输出。", file=sys.stderr)
     return rc

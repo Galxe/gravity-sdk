@@ -158,6 +158,14 @@ def run(*, preset, instance: int = 0, params: dict) -> dict:
                        "detail": f"delegate_chain={delegate_chain!r} 非法，取值 {list(_DELEGATE_CHAINS)}"})
         return result
     nonce_offset = int(params.get("nonce_offset", 0))
+    # nonce_offset 只对 self_sponsored 注入器生效（_inject_race 不吃该参数）。cross_sender 下
+    # 若设了非零 nonce_offset,过去会被静默忽略、却仍记进 params_used——误导调用方以为生效了。
+    # 这里显式拒绝该组合(usage_error),而不是假装接受。
+    if action == "cross_sender" and nonce_offset != 0:
+        result.update({"verdict": Verdict.ERROR.value, "usage_error": True,
+                       "detail": "nonce_offset 仅对 cross_sender_action=self_sponsored 生效；"
+                                 "cross_sender 模式下不支持,请改用 self_sponsored 或去掉 nonce_offset。"})
+        return result
     auth_count = int(params.get("auth_count", 1))
     if auth_count < 1:
         result.update({"verdict": Verdict.ERROR.value, "usage_error": True,
