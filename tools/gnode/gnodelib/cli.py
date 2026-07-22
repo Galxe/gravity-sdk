@@ -90,6 +90,21 @@ def build_parser() -> argparse.ArgumentParser:
     sd.add_argument("tx", help="交易规格 JSON 文件")
     sd.add_argument("--no-wait", action="store_true", help="不等回执，发出即返回（用于同块/连发场景）")
 
+    sb = sub.add_parser(
+        "send-batch",
+        help="按顺序连发一批交易，尽力同块同序（同块有序批量原语，用于 nonce 竞争）",
+        epilog=(
+            "batch.json = tx 规格数组，每个元素字段同 `gnode send`。\n"
+            "先全部签好再背靠背广播(不等回执)，最后报告各笔落块/块内下标。\n"
+            "顺序保证：同发送者连续 nonce = 块内序确定；跨发送者 = 靠 maxPriorityFeePerGas\n"
+            "小费定序(best-effort，非 100%)。示例:\n"
+            '  [{"to":"0x..A","nonce":5},{"to":"0x..B","nonce":6}]'
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_preset(sb)
+    sb.add_argument("batch", help="批量交易规格 JSON 文件（tx 规格数组）")
+
     at = sub.add_parser("attack", help="运行内置攻击场景")
     _add_preset(at, default="prague")
     at.add_argument("scenario", help="场景名（见 gnode scenarios）")
@@ -98,6 +113,21 @@ def build_parser() -> argparse.ArgumentParser:
     at.add_argument("--param", action="append", default=[], metavar="K=V", help="场景参数，可重复（如 attempts=5）")
 
     sub.add_parser("scenarios", help="列出内置攻击场景")
+
+    # —— 差分预言机（D1，Rust bin 封装）：纯静态，无需集群 ——
+    sub.add_parser(
+        "difftx",
+        help="跑 Rust 差分预言机 tx_filter⊇revm 矩阵（无需集群；退出码 3=发现停链缺口）",
+        epilog="需要兄弟 gravity-reth worktree（默认 /mnt/data2/kenji/galxe/gravity-reth-difftx，"
+               "可用环境变量 GRAVITY_RETH_DIR 覆盖）。透传 cargo bin 的 stdout 与退出码。",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    sub.add_parser(
+        "difftx-exec",
+        help="跑 Rust serial⟷grevm 执行差分预言机（无需集群；退出码 3=发现执行背离）",
+        epilog="同 difftx，但走 --features difftx_exec --bin difftx_exec；GRAVITY_RETH_DIR 同上。",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
 
     return p
 
@@ -145,10 +175,16 @@ def _dispatch(args, argv: list[str]) -> int:
         return ops.cmd_deploy(args.preset, args.artifact, args_json=args.args, instance=_inst(args))
     if args.cmd == "send":
         return ops.cmd_send(args.preset, args.tx, no_wait=args.no_wait, instance=_inst(args))
+    if args.cmd == "send-batch":
+        return ops.cmd_send_batch(args.preset, args.batch, instance=_inst(args))
     if args.cmd == "scenarios":
         for name, desc in registry.list_scenarios():
             print(f"{name:<16} {desc}")
         return 0
+    if args.cmd in ("difftx", "difftx-exec"):
+        # 差分预言机无需集群：不解析 --preset，直接 shell out 到 Rust bin，透传退出码。
+        from . import difftx
+        return difftx.cmd_difftx(args.cmd)
     if args.cmd == "attack":
         # 未知场景属于用法错误 → 退出码 2（与坏 --preset 一致），输出保持 scenario 字段
         known = {n for n, _ in registry.list_scenarios()}

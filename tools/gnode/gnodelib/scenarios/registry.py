@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Callable
 
 from . import halt_7702
+from . import halt_7702_param
 from . import revert_probe
 from . import accesslist_probe
 
@@ -12,6 +13,11 @@ _SCENARIOS: dict[str, tuple[str, Callable]] = {
     "7702-halt": (
         "EIP-7702 委托到含 CREATE 的合约，同块 nonce 竞争触发 revm NonceTooLow → 链停",
         halt_7702.run,
+    ),
+    "7702-race": (
+        "7702 nonce 竞争的参数化模板（旋钮: cross_sender_action/nonce_offset/auth_count/"
+        "chain_id/delegate_chain/attempts/window）—— 供搜索停链变体",
+        halt_7702_param.run,
     ),
     "revert-probe": (
         "部署永远 revert 的合约并调用，验证普通 EVM revert 被优雅处理（链不停）",

@@ -342,7 +342,17 @@ def cmd_send(preset, tx_path: str, *, no_wait: bool = False, instance: int = 0) 
     if rc is not None:
         return rc
     spec = json.loads(Path(tx_path).read_text())
+    raw, sender, to = _build_signed_from_spec(w3, spec)
+    h = w3.eth.send_raw_transaction(raw)
+    return _report_sent(w3, h, no_wait, sender=sender, to=to)
 
+
+def _build_signed_from_spec(w3: Web3, spec: dict):
+    """把一条 tx.json 规格构造并签名成 (raw, sender, to)，供 send / send-batch 复用。
+
+    raw 是可直接喂给 eth_sendRawTransaction 的原始交易；sender/to 用于回执补全
+    （raw 直广播路径下未知，返回 None）。规格字段/校验与 `gnode send --help` 一致。
+    """
     # 拒绝未知/拼错的字段，避免像把 "value" 写成 "valeu" 这种被静默忽略
     known = {"to", "value", "data", "nonce", "gas", "gasPrice", "type", "accessList",
              "authorizationList", "raw", "privkey"}
@@ -353,8 +363,7 @@ def cmd_send(preset, tx_path: str, *, no_wait: bool = False, instance: int = 0) 
     # 已签名原始交易：直接广播，忽略其他字段
     if spec.get("raw"):
         raw = spec["raw"]
-        h = w3.eth.send_raw_transaction(raw if raw.startswith("0x") else "0x" + raw)
-        return _report_sent(w3, h, no_wait, sender=None, to=None)
+        return (raw if raw.startswith("0x") else "0x" + raw), None, None
 
     acct = Account.from_key(spec["privkey"]) if spec.get("privkey") else faucet_account()
     # value 友好校验：接受十进制或 0x 十六进制，必须非负
@@ -410,8 +419,84 @@ def cmd_send(preset, tx_path: str, *, no_wait: bool = False, instance: int = 0) 
         tx["gas"] = spec.get("gas") or 500000
 
     signed = acct.sign_transaction(tx)
-    h = w3.eth.send_raw_transaction(signed.raw_transaction)
-    return _report_sent(w3, h, no_wait, sender=acct.address, to=tx.get("to"))
+    return signed.raw_transaction, acct.address, tx.get("to")
+
+
+def cmd_send_batch(preset, batch_path: str, *, instance: int = 0) -> int:
+    """按数组顺序连发一批交易，尽力打进同一个块并保持块内顺序（同块有序批量原语）。
+
+    batch.json = 一个 tx 规格数组，每个元素字段同 `gnode send`（to/value/data/nonce/type/
+    authorizationList/raw/privkey/...）。先对全部规格逐条构造并签名，再**不等回执**地按
+    数组顺序背靠背广播（避免签名耗时打散提交），最后拉回执报告各笔落在哪个块/块内下标。
+
+    ⚠️ 顺序保证的诚实边界：本地 RPC 不提供比「同发送者按 nonce 排序 / 跨发送者按小费排序」
+    更强的块内定序原语。
+      · 同一发送者的连续 nonce：块内顺序确定（nonce 递增），是 nonce 竞争最可靠的复现姿势；
+      · 跨发送者：块内先后由 fee-priority 决定，请自行在各笔 spec 里用 maxPriorityFeePerGas
+        把想排前的交易设更高小费（best-effort，非 100% 保证同块/同序）。
+    """
+    cp = resolve_cluster(preset, int(instance))
+    w3 = make_web3(cp.rpc_url())
+    rc = _require_rpc(cp, w3)
+    if rc is not None:
+        return rc
+    specs = json.loads(Path(batch_path).read_text())
+    if not isinstance(specs, list) or not specs:
+        raise ValueError("batch.json 需为非空的 tx 规格数组，如 '[{...},{...}]'")
+
+    # 阶段一：先把所有交易签好（签名/estimate 可能较慢，提前做完，广播阶段才能紧凑连发）。
+    prepared = []
+    for i, spec in enumerate(specs):
+        if not isinstance(spec, dict):
+            raise ValueError(f"batch[{i}] 需为对象(tx 规格)，得到 {type(spec).__name__}")
+        raw, sender, to = _build_signed_from_spec(w3, spec)
+        prepared.append((raw, sender, to))
+
+    # 阶段二：按数组顺序背靠背广播，不等回执（--no-wait 语义），尽量同块同序。
+    sent = []
+    for i, (raw, sender, to) in enumerate(prepared):
+        try:
+            h = w3.eth.send_raw_transaction(raw)
+            sent.append({"index": i, "tx_hash": h.to_0x_hex(), "from": sender, "to": to, "error": None})
+        except Exception as e:  # noqa: BLE001 —— 单笔失败不应中断整批，记录后继续
+            sent.append({"index": i, "tx_hash": None, "from": sender, "to": to,
+                         "error": f"{type(e).__name__}: {e}"})
+    log(f"已按顺序广播 {sum(1 for s in sent if s['tx_hash'])}/{len(prepared)} 笔，拉回执确认落块 ...")
+
+    # 阶段三：拉回执，报告各笔落在哪个块 / 块内下标，便于判断是否同块按序。
+    for s in sent:
+        if not s["tx_hash"]:
+            continue
+        try:
+            r = w3.eth.wait_for_transaction_receipt(s["tx_hash"], timeout=120)
+            s["block"] = int(r["blockNumber"])
+            s["tx_index"] = int(r["transactionIndex"])
+            s["status"] = int(r["status"])
+        except Exception as e:  # noqa: BLE001
+            s["block"] = s["tx_index"] = s["status"] = None
+            s["error"] = f"receipt: {type(e).__name__}: {e}"
+
+    landed = [s for s in sent if s.get("block") is not None]
+    blocks = {s["block"] for s in landed}
+    same_block = len(blocks) == 1 and len(landed) == len(sent)
+    # 块内是否严格按数组顺序（index 升序 ⇔ tx_index 升序）
+    ordered = same_block and all(
+        landed[k]["tx_index"] < landed[k + 1]["tx_index"] for k in range(len(landed) - 1)
+    )
+    out = {
+        "count": len(sent),
+        "same_block": same_block,
+        "ordered_in_block": ordered,
+        "blocks": sorted(blocks),
+        "txs": sent,
+        "note": ("全部同块且按数组顺序落块" if ordered else
+                 "未全部同块/未严格按序 —— 跨发送者定序靠 fee-priority，best-effort；"
+                 "同发送者连续 nonce 才有确定性块内序"),
+    }
+    print(json.dumps(out, indent=2, ensure_ascii=False))
+    # 退出码：全部成功落块=0；有交易失败/未落块=2（inconclusive/部分失败），与 send 的非 1-status 归 2 一致
+    all_ok = len(landed) == len(sent) and all(s.get("status") == 1 for s in landed)
+    return 0 if all_ok else 2
 
 
 def _prepare_auth_list(w3: Web3, entries: list, tx: dict, tx_signer) -> list:
