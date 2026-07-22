@@ -7,8 +7,9 @@
 //! - The constructed [`ChainSpec`] (and its derived `genesis_header`, `fork_id`, `fork_filter`)
 //!   reflects the binary's authoritative values from the moment the `Arc<ChainSpec>` is built — no
 //!   post-construction mutation, no `Arc::get_mut`, no `OnceLock` timing pain.
-//! - The CL side (gaptos `ConsensusHardforks::from_genesis_extra_fields`) reads from the **same**
-//!   mutated `extra_fields`, so EL and CL see one consistent view from a single source of truth.
+//! - The CL side (main.rs `consensus_hardforks_from_genesis_extra_fields`) reads `alphaTime` from
+//!   the **same** mutated `extra_fields`, so EL and CL see one consistent view from a single source
+//!   of truth.
 //!
 //! For named chains (`mainnet` / `sepolia` / `holesky` / `hoodi` / `dev`)
 //! we delegate to upstream [`EthereumChainSpecParser`] unchanged — those
@@ -71,8 +72,8 @@ struct GravityForkOverrides {
     /// Maps to `genesis.config.prague_time` (typed field on `ChainConfig`).
     prague_time: Option<u64>,
     /// Maps to `genesis.config.extra_fields["alphaTime"]`. EL reads this in
-    /// `From<Genesis>`; the CL side reads the same key in
-    /// `ConsensusHardforks::from_genesis_extra_fields`.
+    /// `From<Genesis>`; the CL side reads the same key in main.rs's
+    /// `consensus_hardforks_from_genesis_extra_fields`.
     alpha_time: Option<u64>,
 }
 
@@ -310,8 +311,8 @@ mod tests {
     fn mainnet_forces_alpha_removed_when_genesis_supplies_alpha_time() {
         // After the parser runs, alphaTime must be removed from the
         // preserved Genesis. Both EL `From<Genesis>` and CL
-        // `from_genesis_extra_fields` read from this same `extra_fields`
-        // map, so a single removal forward-defends both layers.
+        // `consensus_hardforks_from_genesis_extra_fields` read from this same
+        // `extra_fields` map, so a single removal forward-defends both layers.
         let cs = build_via_parser(GRAVITY_MAINNET_CHAIN_ID, None, Some(100));
         assert!(
             cs.genesis().config.extra_fields.get("alphaTime").is_none(),
