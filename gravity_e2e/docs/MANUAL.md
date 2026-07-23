@@ -79,7 +79,153 @@ You can control the Python logging level by passing standard pytest flags to the
 ./gravity_e2e/run_test.sh --log-cli-level=DEBUG
 ```
 
-### 5. Docker Runner (CI)
+### 5. Polymarket Mock Oracle Suite
+The `polymarket_mock` suite is a local-only integration test for a Polymarket-like settlement
+flow on Gravity. It starts a local Polygon JSON-RPC mock, maps the oracle task
+URI to that mock, waits for the relayer and unsupported-JWK/oracle consensus path
+to publish `sourceType=6` bytes into `NativeOracle`, and then settles a
+match-market contract from the resolver result.
+
+Run it from the repository root after building `gravity_node` and `gravity_cli`:
+```bash
+PATH="$CONDA_PREFIX/bin:$HOME/.foundry/bin:$PWD/target/quick-release:$PATH" \
+  ./gravity_e2e/run_test.sh polymarket_mock --force-init
+```
+
+If you use a virtualenv instead of conda, activate it first and omit
+`$CONDA_PREFIX/bin` from the `PATH` prefix:
+```bash
+source gravity_e2e/.venv/bin/activate
+PATH="$HOME/.foundry/bin:$PWD/target/quick-release:$PATH" \
+  ./gravity_e2e/run_test.sh polymarket_mock --force-init
+```
+
+Expected success logs include:
+```text
+Released mock Polymarket settlement: winning_slot=<slot> payout=<vector>
+Polymarket match market resolved and claimed: marketId=1 winningSlot=<slot> totalPool=600000000000000000000
+PASSED
+Suite polymarket_mock PASSED
+All suites passed!
+```
+
+The suite README at `gravity_e2e/cluster_test_cases/polymarket_mock/README.md`
+describes the local topology, what the test proves, and how this can evolve into
+a production Polymarket-like Gravity product.
+
+### 6. Binance Index-Kline Price Feed Suite
+The `binance_price_feed` suite is a local-only integration test for continuous stock-like
+price feed rounds on Gravity. It registers deterministic
+`provider=binance_index_kline_v1` `sourceType=3` tasks for
+`NVDAUSDT` and `TSLAUSDT` through governance, starts a local mock Binance
+`/fapi/v1/indexPriceKlines` server, waits for the next short test epoch so
+`aptos-jwk-consensus` rebuilds relayer-backed observers, then waits for the
+unsupported-JWK/oracle consensus path to publish at least three price rounds
+into `NativeOracle` and checks `PriceFeedResolver.priceRounds`.
+
+The suite intentionally does not call live Binance. The local mock validates the
+same closed-bucket request shape that the real Binance adapter uses:
+`pair`, `interval`, `startTime`, `endTime`, and `limit=1`. Live Binance testnet
+fetching is covered separately by the ignored `gravity-reth` relayer smoke test.
+
+This suite proves the epoch-config path for long-running feeds. It does not
+implement intra-epoch dynamic request discovery; that still needs a deterministic
+request watcher if Gravity wants one-off requests such as a future match score.
+The Binance provider itself is always continuous and rejects the legacy
+`continuous` URI parameter. Keep `bucketStartMs` and `interval` immutable for
+each `feedId`; introduce a new `feedId` when either changes.
+
+Run it from the repository root after building `gravity_node` and `gravity_cli`:
+```bash
+PATH="$CONDA_PREFIX/bin:$HOME/.foundry/bin:$PWD/target/quick-release:$PATH" \
+  ./gravity_e2e/run_test.sh binance_price_feed --force-init
+```
+
+To keep the price-feed backend alive for the web demo, run:
+```bash
+PATH="$HOME/.foundry/bin:$PWD/target/quick-release:$PATH" \
+  ./gravity_e2e/run_test.sh binance_price_feed \
+    --force-init \
+    --keep-running \
+    --demo-config-out ../gravity_price_feed_demo_web/public/demo-config.json \
+    --log-cli-level=INFO
+```
+
+The keep-running mode leaves the Gravity node and the local Binance kline mock
+running after the suite passes. The web app reads the generated
+`public/demo-config.json` to discover the local RPC URL, resolver address, feed
+IDs, expected nonce, and expected round.
+
+For a live Binance demo, set `BINANCE_PRICE_FEED_MODE=live`. This mode is for
+manual demos and sends outbound requests to Binance public market-data APIs. It
+does not use `BINANCE_API_KEY` or `BINANCE_SECRET_KEY`.
+
+```bash
+BINANCE_PRICE_FEED_MODE=live \
+BINANCE_PRICE_FEED_LAG_MINUTES=3 \
+PATH="$HOME/.foundry/bin:$PWD/target/quick-release:$PATH" \
+  ./gravity_e2e/run_test.sh binance_price_feed \
+    --force-init \
+    --keep-running \
+    --demo-config-out ../gravity_price_feed_demo_web/public/demo-config.json \
+    --log-cli-level=INFO
+```
+
+Live mode computes a 1-minute bucket that is at least two minutes past close,
+generates a run-local relayer config, registers matching
+`provider=binance_index_kline_v1` tasks, and then keeps the local chain running
+so the frontend can display ongoing resolver updates.
+
+Expected success logs include:
+```text
+Binance price feed resolved: feedId=1001 deliveryNonce=3 roundId=29720877 price=19612645000
+Binance price feed resolved: feedId=1002 deliveryNonce=3 roundId=29720877 price=40117545000
+PASSED
+Suite binance_price_feed PASSED
+All suites passed!
+```
+
+This proves the contract-facing path a Gravity PerpDex or price-index market
+would consume: `sourceType=3` data is recorded by `NativeOracle`, callbacked into
+`PriceFeedResolver`, and exposed as `latestPrice(feedId)`. BBO, mid
+price, TWAP, and risk policy should be decided by the downstream product
+contract or by a separately versioned resolver policy.
+
+### 7. Combined Binance + Polymarket Suite
+
+The `oracle_demo` suite is the review and dashboard gate for both current
+oracle products. One local Gravity cluster receives continuous Binance
+index-kline rounds and a finalized Polymarket-style CTF settlement through the
+same unsupported-JWK consensus path.
+
+Run it without public network traffic:
+
+```bash
+PATH="$HOME/.foundry/bin:$PWD/target/quick-release:$PATH" \
+  ./gravity_e2e/run_test.sh oracle_demo --force-init
+```
+
+Keep the backend alive and write frontend discovery metadata:
+
+```bash
+PATH="$HOME/.foundry/bin:$PWD/target/quick-release:$PATH" \
+  ./gravity_e2e/run_test.sh oracle_demo \
+    --force-init \
+    --keep-running \
+    --demo-config-out ../gravity_price_feed_demo_web/public/demo-config.json \
+    --log-cli-level=INFO
+```
+
+The suite directly deploys `PriceFeedResolver`,
+`PolymarketSettlementResolver`, and `PolymarketBinaryMarket`. Shared deployment,
+governance, polling, and deterministic provider helpers live under
+`gravity_e2e/gravity_e2e/utils/`; product tests should reuse them instead of
+importing another pytest module.
+
+Expected terminal evidence includes two resolved price feeds, one released CTF
+payout vector, one settled Gravity market, and `Suite oracle_demo PASSED`.
+
+### 8. Docker Runner (CI)
 The `run_docker.sh` script runs the full pipeline inside Docker. It accepts the same arguments as `run_test.sh`:
 ```bash
 # Run all suites in Docker

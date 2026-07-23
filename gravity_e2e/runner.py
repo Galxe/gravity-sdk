@@ -195,9 +195,11 @@ def verify_nodes_alive(cluster_config: Path, env: dict):
 def run_test_suite(
     test_dir: Path,
     no_cleanup: bool = False,
+    keep_running: bool = False,
     pytest_args: list = None,
     force_init: bool = False,
     resume: bool = False,
+    demo_config_out: Path | None = None,
 ):
     """
     Run tests in a specific directory.
@@ -216,6 +218,10 @@ def run_test_suite(
     env = os.environ.copy()
     ensure_local_no_proxy(env)
     env["GRAVITY_ARTIFACTS_DIR"] = str(suite_artifacts_dir)
+    if keep_running:
+        env["GRAVITY_DEMO_KEEP_RUNNING"] = "1"
+    if demo_config_out is not None:
+        env["GRAVITY_DEMO_CONFIG_OUT"] = str(demo_config_out.resolve())
 
     # Set genesis config path if it exists
     if genesis_config.exists():
@@ -328,6 +334,10 @@ def run_test_suite(
                 env[env_var] = str(tpl_path)
                 logger.info(f"Using custom reth config template: {env_var}={tpl_path}")
 
+        if hooks and hasattr(hooks, "pre_deploy"):
+            logger.info(f"Running pre_deploy hook from {hooks_path}")
+            hooks.pre_deploy(test_dir, env, pytest_args or [])
+
         run_command(
             ["bash", str(deploy_script), str(cluster_config)],
             cwd=CLUSTER_SCRIPTS_DIR,
@@ -390,6 +400,13 @@ def run_test_suite(
         # 5. Teardown
         if resume:
             logger.info("♻️  Reuse-cluster mode: skipping teardown")
+        elif keep_running and success:
+            logger.warning("Demo keep-running mode enabled; cluster left running.")
+            logger.warning(f"Cluster config: {cluster_config}")
+            logger.warning(
+                "Stop it with: "
+                f"bash {CLUSTER_SCRIPTS_DIR / 'stop.sh'} --config {cluster_config}"
+            )
         elif no_cleanup and not success:
             logger.warning(
                 f"Test failed and --no-cleanup set. Cluster left running using config: {cluster_config}"
@@ -411,7 +428,13 @@ def run_test_suite(
         # MockAnvil runs as a daemon thread in this process — it dies
         # when we exit anyway, but explicit cleanup is cleaner and
         # prevents the relayer from crashing on connection loss.
-        if not resume and hooks and hasattr(hooks, "post_stop"):
+        should_run_post_stop = (
+            not resume
+            and not (keep_running and success)
+            and hooks
+            and hasattr(hooks, "post_stop")
+        )
+        if should_run_post_stop:
             logger.info("Running post_stop hook...")
             try:
                 hooks.post_stop(test_dir, env)
@@ -427,6 +450,17 @@ def main():
         help="Leave cluster running if tests fail (for debugging)",
     )
     parser.add_argument(
+        "--keep-running",
+        action="store_true",
+        help="Leave the cluster and demo helper processes running after a successful suite.",
+    )
+    parser.add_argument(
+        "--demo-config-out",
+        type=Path,
+        default=None,
+        help="Path where a suite may write frontend-readable demo runtime config.",
+    )
+    parser.add_argument(
         "--force-init",
         action="store_true",
         help="Force regeneration of cluster artifacts (ignore cache)",
@@ -437,9 +471,13 @@ def main():
         help="Resume with existing cluster: skip cleanup/init/deploy/start/stop, "
              "only run pytest. Useful for re-running tests against an already deployed cluster.",
     )
-    # Long-running suites excluded from CI by default.
-    # Run them explicitly: runner.py long_test
-    DEFAULT_EXCLUDES = ["long_test", "rolling_upgrade"]
+    # Long-running or public-network suites excluded from CI by default.
+    # Run them explicitly by suite name.
+    DEFAULT_EXCLUDES = [
+        "long_test",
+        "rolling_upgrade",
+        "binance_price_feed_multivalidator",
+    ]
 
     parser.add_argument(
         "--exclude",
@@ -519,9 +557,11 @@ def main():
                 run_test_suite(
                     test_dir,
                     no_cleanup=args.no_cleanup,
+                    keep_running=args.keep_running,
                     pytest_args=pytest_args,
                     force_init=args.force_init,
                     resume=args.resume,
+                    demo_config_out=args.demo_config_out,
                 )
             except Exception:
                 logger.exception(f"Suite {test_dir.name} failed with exception:")

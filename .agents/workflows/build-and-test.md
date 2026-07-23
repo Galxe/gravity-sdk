@@ -131,7 +131,61 @@ Genesis artifacts are cached in `cluster_test_cases/<suite>/artifacts/`. Use `--
 
 ---
 
-## 4. Bridge E2E Test Details
+## 4. Polymarket Mock Oracle E2E
+
+Suite directory: `gravity_e2e/cluster_test_cases/polymarket_mock/`
+
+This suite is the SDK-side integration proof for a Polymarket-like Gravity
+market. It does not hit Polygon. Instead, `hooks.py` starts
+`MockPolymarketPolygon` on localhost, `relayer_config.json` maps the configured
+Gravity oracle URI to that mock, and the test waits for the existing relayer plus
+unsupported-JWK/oracle consensus path to write a `sourceType=6` payload into
+`NativeOracle`.
+
+Run from the repository root:
+
+// turbo
+```bash
+PATH="$CONDA_PREFIX/bin:$HOME/.foundry/bin:$PWD/target/quick-release:$PATH" \
+  ./gravity_e2e/run_test.sh polymarket_mock --force-init
+```
+
+If the shell already activated `gravity_e2e/.venv`, use:
+
+// turbo
+```bash
+PATH="$HOME/.foundry/bin:$PWD/target/quick-release:$PATH" \
+  ./gravity_e2e/run_test.sh polymarket_mock --force-init
+```
+
+Expected successful output includes:
+
+```text
+Released mock Polymarket settlement: winning_slot=<slot> payout=<vector>
+Polymarket match market resolved and claimed: marketId=1 winningSlot=<slot> totalPool=600000000000000000000
+PASSED
+Suite polymarket_mock PASSED
+All suites passed!
+```
+
+Product mapping:
+
+1. Gravity market creation stores the Polygon CTF reference.
+2. The relayer reads the CTF `ConditionResolution` log from the configured URI.
+3. Validators agree on canonical settlement bytes through the existing oracle
+   consensus path.
+4. `NativeOracle` records the agreed payload.
+5. Contract-side resolver logic validates the CTF metadata and stores the payout
+   vector.
+6. The market contract settles and pays the winner.
+
+This is intentionally a settlement-rail PoC. Dynamic request discovery can be
+layered on later with finalized request events, watermarks, deadlines, and typed
+pending/unknown/expired states.
+
+---
+
+## 5. Bridge E2E Test Details
 
 Suite directory: `gravity_e2e/cluster_test_cases/bridge/`
 
@@ -162,7 +216,7 @@ Suite directory: `gravity_e2e/cluster_test_cases/bridge/`
 
 ---
 
-## 5. Running Contract Unit Tests
+## 6. Running Contract Unit Tests
 
 Working directory: `gravity_chain_core_contracts`
 

@@ -75,7 +75,7 @@ unexpected_cfgs = { level = "allow", check-cfg = ["cfg(mirai)"] }
 aptos-consensus = { path = "./aptos-core/consensus" }
 
 #  from aptos =======================
-gaptos = { git = "https://github.com/Galxe/gravity-aptos.git", rev = "b1f68dc85781ef0d28a568d9d64604b153be9d9e" }
+gaptos = { git = "https://github.com/Galxe/gravity-aptos.git", rev = "10c4553b16aead745e1701db7885a39313607b26" }
 aptos-executor-types = { path = "dependencies/aptos-executor-types" }
 aptos-executor = { path = "dependencies/aptos-executor" }
 api = { path = "./crates/api" }
@@ -507,4 +507,3 @@ alloy-tx-macros = { git = "https://github.com/alloy-rs/alloy", tag = "v1.0.37" }
 # into a `continue` via `unwrap_or_continue!`, producing a pure-user-space
 # 100% CPU spin). Upstream issue: https://github.com/jmagnuson/linemux/issues/57
 linemux = { git = "https://github.com/Galxe/linemux.git", rev = "0194e0222134c587dcd50039a1ff9c8a14fae550" }
-

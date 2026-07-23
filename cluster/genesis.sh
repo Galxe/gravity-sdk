@@ -36,15 +36,39 @@ main() {
     # Step 1: Clone/update external dependencies
     log_info "Step 1: Checking external dependencies..."
     
+    GENESIS_PATH=$(echo "$config_json" | jq -r '.dependencies.genesis_contracts.path // empty')
     GENESIS_REPO=$(echo "$config_json" | jq -r '.dependencies.genesis_contracts.repo // "https://github.com/Galxe/gravity_chain_core_contracts.git"')
     GENESIS_REF=$(echo "$config_json" | jq -r '.dependencies.genesis_contracts.ref // "main"')
-    
-    GENESIS_CONTRACT_DIR="$EXTERNAL_DIR/gravity_chain_core_contracts"
+
+    GENESIS_CONTRACT_SOURCE_DIR=""
+    if [ -n "$GENESIS_PATH" ]; then
+        if [[ "$GENESIS_PATH" == /* ]]; then
+            GENESIS_CONTRACT_SOURCE_DIR="$GENESIS_PATH"
+        else
+            GENESIS_CONTRACT_SOURCE_DIR="$(cd "$(dirname "$GENESIS_CONFIG_FILE")" && realpath "$GENESIS_PATH")"
+        fi
+        if ! git -C "$GENESIS_CONTRACT_SOURCE_DIR" rev-parse --is-inside-work-tree &>/dev/null; then
+            log_error "Local genesis_contracts.path is not a git checkout: $GENESIS_CONTRACT_SOURCE_DIR"
+            exit 1
+        fi
+        GENESIS_REPO="$GENESIS_CONTRACT_SOURCE_DIR"
+        GENESIS_CONTRACT_DIR="$EXTERNAL_DIR/gravity_chain_core_contracts_local"
+        log_info "Using local genesis contracts source: $GENESIS_CONTRACT_SOURCE_DIR"
+    else
+        GENESIS_CONTRACT_DIR="$EXTERNAL_DIR/gravity_chain_core_contracts"
+    fi
     
     if [ ! -d "$GENESIS_CONTRACT_DIR" ]; then
         log_warn "gravity_chain_core_contracts not found. Cloning from $GENESIS_REPO..."
         mkdir -p "$EXTERNAL_DIR"
         git clone "$GENESIS_REPO" "$GENESIS_CONTRACT_DIR"
+    fi
+
+    if [ -n "$GENESIS_CONTRACT_SOURCE_DIR" ]; then
+        (
+            cd "$GENESIS_CONTRACT_DIR"
+            git remote set-url origin "$GENESIS_REPO"
+        )
     fi
 
     # Checkout specified ref and pull latest (critical for branches to avoid stale bytecode)
@@ -79,6 +103,13 @@ if p.exists():
 "
         cd -
     )
+
+    if [ -n "$GENESIS_CONTRACT_SOURCE_DIR" ] \
+        && [ ! -d "$GENESIS_CONTRACT_DIR/node_modules" ] \
+        && [ -d "$GENESIS_CONTRACT_SOURCE_DIR/node_modules" ]; then
+        log_info "Reusing node_modules from local genesis contracts source..."
+        cp -a "$GENESIS_CONTRACT_SOURCE_DIR/node_modules" "$GENESIS_CONTRACT_DIR/node_modules"
+    fi
     
     # Install dependencies if missing
     if [ ! -d "$GENESIS_CONTRACT_DIR/node_modules" ]; then

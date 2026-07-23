@@ -112,6 +112,7 @@ lib/
 
 # Hardhat (if ever used)
 artifacts/
+mock_polymarket_metadata.json
 cache/
 typechain-types/
 

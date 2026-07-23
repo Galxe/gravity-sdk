@@ -1,0 +1,27 @@
+# Gravity Cluster Configuration - Binance index-kline price feed integration test
+
+[cluster]
+name = "gravity-devnet-binance-price-feed"
+base_dir = "/tmp/gravity-cluster-binance-price-feed"
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 45382
+vfn_port = 45392
+rpc_port = 48755
+api_port = 48280
+metrics_port = 49203
+inspection_port = 40102
+https_port = 41124
+authrpc_port = 48775
+reth_p2p_port = 52226
+
+[faucet_init]
+num_accounts = 0
