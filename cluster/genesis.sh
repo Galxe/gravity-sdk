@@ -47,7 +47,7 @@ main() {
         else
             GENESIS_CONTRACT_SOURCE_DIR="$(cd "$(dirname "$GENESIS_CONFIG_FILE")" && realpath "$GENESIS_PATH")"
         fi
-        if [ ! -d "$GENESIS_CONTRACT_SOURCE_DIR/.git" ]; then
+        if ! git -C "$GENESIS_CONTRACT_SOURCE_DIR" rev-parse --is-inside-work-tree &>/dev/null; then
             log_error "Local genesis_contracts.path is not a git checkout: $GENESIS_CONTRACT_SOURCE_DIR"
             exit 1
         fi

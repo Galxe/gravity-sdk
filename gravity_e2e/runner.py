@@ -471,9 +471,13 @@ def main():
         help="Resume with existing cluster: skip cleanup/init/deploy/start/stop, "
              "only run pytest. Useful for re-running tests against an already deployed cluster.",
     )
-    # Long-running suites excluded from CI by default.
-    # Run them explicitly: runner.py long_test
-    DEFAULT_EXCLUDES = ["long_test", "rolling_upgrade"]
+    # Long-running or public-network suites excluded from CI by default.
+    # Run them explicitly by suite name.
+    DEFAULT_EXCLUDES = [
+        "long_test",
+        "rolling_upgrade",
+        "binance_price_feed_multivalidator",
+    ]
 
     parser.add_argument(
         "--exclude",
