@@ -61,11 +61,17 @@ use std::{fmt, sync::Arc};
 /// Gravity mainnet chain id.
 pub const GRAVITY_MAINNET_CHAIN_ID: u64 = 127_001;
 
+/// Gravity mainnet Alpha activation timestamp in Unix seconds.
+///
+/// 2026-07-27 13:00:00 Beijing (UTC+08:00), which is
+/// 2026-07-27 05:00:00 UTC.
+pub(crate) const GRAVITY_MAINNET_ALPHA_TIME: u64 = 1_785_128_400;
+
 /// Per-chain hardcoded override. Each field gates one fork.
 ///
 /// `alpha_time` is written into `genesis.config.extra_fields["alphaTime"]`,
 /// which is the same key the CL side reads. So a single
-/// `alpha_time: Some(ts)` entry pins **both** EL and (future) CL Alpha to
+/// `alpha_time: Some(ts)` entry pins **both** EL and CL Alpha to
 /// the same authoritative timestamp.
 struct GravityForkOverrides {
     /// Maps to `genesis.config.prague_time` (typed field on `ChainConfig`).
@@ -89,10 +95,9 @@ const HARDCODED: &[(u64, GravityForkOverrides)] = &[
         GravityForkOverrides {
             // Pinned to deployed mainnet genesis (config.pragueTime).
             prague_time: Some(1_782_709_200),
-            // Forward-defended: no timestamp has been chosen onchain yet.
-            // When governance picks one, change to Some(ts) in the release
-            // that ships the activation.
-            alpha_time: None,
+            // Mainnet Alpha activation coordinated for 2026-07-27 13:00:00
+            // Beijing (UTC+08:00), equivalent to 2026-07-27 05:00:00 UTC.
+            alpha_time: Some(GRAVITY_MAINNET_ALPHA_TIME),
         },
     ),
 ];
@@ -216,7 +221,7 @@ fn apply_overrides(g: &mut Genesis) -> Vec<OverrideEvent> {
 mod tests {
     use super::*;
     use greth::reth_chainspec::{
-        ChainSpecBuilder, EthereumHardfork, EthereumHardforks, ForkCondition,
+        ChainSpecBuilder, EthereumHardfork, EthereumHardforks, ForkCondition, GravityHardfork,
     };
 
     fn genesis_json(chain_id: u64, prague_time: Option<u64>, alpha_time: Option<u64>) -> String {
@@ -248,6 +253,14 @@ mod tests {
             .find(|(id, _)| *id == GRAVITY_MAINNET_CHAIN_ID)
             .and_then(|(_, ov)| ov.prague_time)
             .expect("mainnet must have a Some(ts) Prague entry")
+    }
+
+    fn table_alpha_timestamp() -> u64 {
+        HARDCODED
+            .iter()
+            .find(|(id, _)| *id == GRAVITY_MAINNET_CHAIN_ID)
+            .and_then(|(_, ov)| ov.alpha_time)
+            .expect("mainnet must have a Some(ts) Alpha entry")
     }
 
     // ---------- Trait wiring ----------
@@ -304,25 +317,40 @@ mod tests {
         assert!(cs.is_cancun_active_at_timestamp(0));
     }
 
-    // ---------- Gravity-side (extra_fields): Alpha forward-defence ----------
+    // ---------- Gravity-side (extra_fields): Alpha override ----------
 
     #[test]
-    fn mainnet_forces_alpha_removed_when_genesis_supplies_alpha_time() {
-        // After the parser runs, alphaTime must be removed from the
-        // preserved Genesis. Both EL `From<Genesis>` and CL
-        // `from_genesis_extra_fields` read from this same `extra_fields`
-        // map, so a single removal forward-defends both layers.
+    fn mainnet_overrides_alpha_when_genesis_supplies_a_different_value() {
+        let table_ts = table_alpha_timestamp();
         let cs = build_via_parser(GRAVITY_MAINNET_CHAIN_ID, None, Some(100));
-        assert!(
-            cs.genesis().config.extra_fields.get("alphaTime").is_none(),
-            "alphaTime must be removed by override",
+        assert_eq!(
+            cs.genesis().config.extra_fields.get("alphaTime").and_then(|v| v.as_u64()),
+            Some(table_ts),
+            "binary value must win over genesis",
         );
+        assert_eq!(
+            cs.gravity_hardforks.fork(GravityHardfork::Alpha),
+            ForkCondition::Timestamp(table_ts),
+        );
+        assert!(!cs.gravity_hardforks.is_fork_active_at_timestamp(GravityHardfork::Alpha, 100));
+        assert!(!cs
+            .gravity_hardforks
+            .is_fork_active_at_timestamp(GravityHardfork::Alpha, table_ts - 1));
+        assert!(cs.gravity_hardforks.is_fork_active_at_timestamp(GravityHardfork::Alpha, table_ts));
     }
 
     #[test]
-    fn mainnet_alpha_remains_removed_when_genesis_omits_it() {
+    fn mainnet_overrides_alpha_when_genesis_omits_it() {
+        let table_ts = table_alpha_timestamp();
         let cs = build_via_parser(GRAVITY_MAINNET_CHAIN_ID, None, None);
-        assert!(cs.genesis().config.extra_fields.get("alphaTime").is_none());
+        assert_eq!(
+            cs.genesis().config.extra_fields.get("alphaTime").and_then(|v| v.as_u64()),
+            Some(table_ts),
+        );
+        assert_eq!(
+            cs.gravity_hardforks.fork(GravityHardfork::Alpha),
+            ForkCondition::Timestamp(table_ts),
+        );
     }
 
     #[test]
@@ -333,6 +361,10 @@ mod tests {
         assert_eq!(
             cs.genesis().config.extra_fields.get("alphaTime").and_then(|v| v.as_u64()),
             Some(100),
+        );
+        assert_eq!(
+            cs.gravity_hardforks.fork(GravityHardfork::Alpha),
+            ForkCondition::Timestamp(100),
         );
     }
 
@@ -350,13 +382,18 @@ mod tests {
             Some(table_prague_timestamp()),
             "preserved Genesis must reflect the table (Prague)",
         );
-        assert!(
-            cs.genesis().config.extra_fields.get("alphaTime").is_none(),
-            "preserved Genesis must reflect the table (alphaTime removed)",
+        assert_eq!(
+            cs.genesis().config.extra_fields.get("alphaTime").and_then(|v| v.as_u64()),
+            Some(table_alpha_timestamp()),
+            "preserved Genesis must reflect the table (alphaTime)",
         );
         assert_eq!(
             cs.hardforks.fork(EthereumHardfork::Prague),
             ForkCondition::Timestamp(table_prague_timestamp()),
+        );
+        assert_eq!(
+            cs.gravity_hardforks.fork(GravityHardfork::Alpha),
+            ForkCondition::Timestamp(table_alpha_timestamp()),
         );
     }
 
@@ -394,6 +431,14 @@ mod tests {
         assert_eq!(table_prague_timestamp(), 1_782_709_200);
     }
 
+    /// Consensus-affecting pin: 2026-07-27 13:00:00 Beijing (UTC+08:00),
+    /// equivalent to 2026-07-27 05:00:00 UTC. Changing this value requires
+    /// network-wide coordination.
+    #[test]
+    fn gravity_mainnet_alpha_timestamp_pinned_to_coordinated_value() {
+        assert_eq!(table_alpha_timestamp(), 1_785_128_400);
+    }
+
     // ---------- Mismatch-warning event emission ----------
 
     /// Parse the JSON helper directly to a `Genesis` (without running the
@@ -410,10 +455,11 @@ mod tests {
 
     #[test]
     fn apply_overrides_emits_event_when_genesis_prague_differs() {
-        let mut g = parse_genesis_only(GRAVITY_MAINNET_CHAIN_ID, Some(100), None);
+        let mut g =
+            parse_genesis_only(GRAVITY_MAINNET_CHAIN_ID, Some(100), Some(table_alpha_timestamp()));
         let events = apply_overrides(&mut g);
         // Prague: genesis Some(100) vs forced Some(table_ts) → event.
-        // Alpha:  genesis None      vs forced None           → no event.
+        // Alpha:  genesis Some(table_ts) vs forced Some(table_ts) → no event.
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].fork, "prague_time");
         assert_eq!(events[0].genesis, Some(100));
@@ -422,10 +468,11 @@ mod tests {
 
     #[test]
     fn apply_overrides_emits_event_when_genesis_omits_prague() {
-        let mut g = parse_genesis_only(GRAVITY_MAINNET_CHAIN_ID, None, None);
+        let mut g =
+            parse_genesis_only(GRAVITY_MAINNET_CHAIN_ID, None, Some(table_alpha_timestamp()));
         let events = apply_overrides(&mut g);
         // Prague: genesis None vs forced Some(table_ts) → event.
-        // Alpha:  genesis None vs forced None           → no event.
+        // Alpha:  genesis Some(table_ts) vs forced Some(table_ts) → no event.
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].fork, "prague_time");
         assert_eq!(events[0].genesis, None);
@@ -438,11 +485,24 @@ mod tests {
             parse_genesis_only(GRAVITY_MAINNET_CHAIN_ID, Some(table_prague_timestamp()), Some(100));
         let events = apply_overrides(&mut g);
         // Prague: genesis Some(table_ts) vs forced Some(table_ts) → no event.
-        // Alpha:  genesis Some(100)      vs forced None           → event.
+        // Alpha:  genesis Some(100) vs forced Some(table_ts) → event.
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].fork, "alphaTime");
         assert_eq!(events[0].genesis, Some(100));
-        assert_eq!(events[0].forced, None);
+        assert_eq!(events[0].forced, Some(table_alpha_timestamp()));
+    }
+
+    #[test]
+    fn apply_overrides_emits_event_when_genesis_omits_alpha() {
+        let mut g =
+            parse_genesis_only(GRAVITY_MAINNET_CHAIN_ID, Some(table_prague_timestamp()), None);
+        let events = apply_overrides(&mut g);
+        // Prague already matches. A deployed genesis without alphaTime must
+        // visibly report the timestamp forced by this binary.
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].fork, "alphaTime");
+        assert_eq!(events[0].genesis, None);
+        assert_eq!(events[0].forced, Some(table_alpha_timestamp()));
     }
 
     /// Both forks disagree → both events fire, in declared table order
@@ -459,8 +519,11 @@ mod tests {
     /// Genesis already matches the binary on every gated fork → silent.
     #[test]
     fn apply_overrides_is_silent_when_genesis_already_matches_table() {
-        let mut g =
-            parse_genesis_only(GRAVITY_MAINNET_CHAIN_ID, Some(table_prague_timestamp()), None);
+        let mut g = parse_genesis_only(
+            GRAVITY_MAINNET_CHAIN_ID,
+            Some(table_prague_timestamp()),
+            Some(table_alpha_timestamp()),
+        );
         let events = apply_overrides(&mut g);
         assert!(events.is_empty(), "no events when genesis agrees with the table");
     }
