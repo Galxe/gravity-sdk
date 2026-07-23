@@ -437,13 +437,13 @@ mod tests {
     #[test]
     fn alpha_time_registers_timestamp_condition() {
         let hardforks = consensus_hardforks_from_genesis_extra_fields(|key| match key {
-            "alphaTime" => Some(1_782_709_200),
+            "alphaTime" => Some(crate::chainspec::GRAVITY_MAINNET_ALPHA_TIME),
             _ => None,
         });
 
         assert_eq!(
             hardforks.condition(ConsensusHardfork::ConsensusAlpha),
-            ForkCondition::Timestamp(1_782_709_200_000_000),
+            ForkCondition::Timestamp(1_785_128_400_000_000),
         );
     }
 }
