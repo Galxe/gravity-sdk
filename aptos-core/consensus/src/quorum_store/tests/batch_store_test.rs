@@ -1,14 +1,22 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::quorum_store::{
-    batch_store::{BatchStore, BatchWriter, QuotaManager},
-    quorum_store_db::QuorumStoreDB,
-    types::{BatchKey, PersistedValue, StorageMode},
+use crate::{
+    network::QuorumStoreSender,
+    quorum_store::{
+        batch_requester::BatchRequester,
+        batch_store::{BatchReader, BatchReaderImpl, BatchStore, BatchWriter, QuotaManager},
+        quorum_store_db::QuorumStoreDB,
+        types::{Batch, BatchKey, BatchRequest, BatchResponse, PersistedValue, StorageMode},
+    },
 };
-use aptos_consensus_types::proof_of_store::{BatchId, BatchInfo};
+use aptos_consensus_types::{
+    common::Author,
+    proof_of_store::{BatchId, BatchInfo, ProofOfStore, SignedBatchInfo},
+};
 use claims::{assert_err, assert_ok, assert_ok_eq};
 use gaptos::{
+    aptos_config::network_id::{NetworkId, PeerNetworkId},
     aptos_crypto::HashValue,
     aptos_temppath::TempPath,
     aptos_types::{
@@ -17,9 +25,12 @@ use gaptos::{
     },
 };
 use once_cell::sync::Lazy;
-use std::sync::{
-    atomic::{AtomicBool, AtomicUsize, Ordering},
-    Arc,
+use std::{
+    sync::{
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
 };
 use tokio::task::spawn_blocking;
 
@@ -273,4 +284,173 @@ fn test_get_local_batch() {
     assert_err!(store.get_batch_from_local(&BatchKey::new(10, digest_1)));
     assert_err!(store.get_batch_from_local(&BatchKey::new(10, digest_2)));
     assert_err!(store.get_batch_from_local(&BatchKey::new(10, digest_3)));
+}
+
+// ---------------------------------------------------------------------------
+// Regression for Galxe/gravity-audit#707 (F5):
+// BatchStore::persist's reject branch (batch expired vs last_certified_time)
+// skips notify_subscribers, so a concurrent in-flight batch fetcher that
+// subscribed via subscribe() is never woken and falls through to a
+// request_batch timeout -- even when the batch is, in fact, locally available.
+// ---------------------------------------------------------------------------
+
+/// Mock network sender whose `request_batch` future never resolves. This forces
+/// the only viable delivery path inside `BatchRequester::request_batch` to be the
+/// subscription channel (`subscriber_rx`), which is fired by
+/// `BatchStore::notify_subscribers`. If `persist` skips notification, the fetcher
+/// never completes.
+#[derive(Clone)]
+struct NeverRespondingSender;
+
+#[async_trait::async_trait]
+impl QuorumStoreSender for NeverRespondingSender {
+    async fn request_batch(
+        &self,
+        _request: BatchRequest,
+        _recipient: PeerNetworkId,
+        _timeout: Duration,
+    ) -> anyhow::Result<BatchResponse> {
+        // Never resolve: the in-flight fetcher can only be served via the
+        // persist-subscription notification, never via the network.
+        std::future::pending::<()>().await;
+        unreachable!()
+    }
+
+    async fn send_signed_batch_info_msg(
+        &self,
+        _signed_batch_infos: Vec<SignedBatchInfo>,
+        _recipients: Vec<Author>,
+    ) {
+        unimplemented!()
+    }
+
+    async fn broadcast_batch_msg(&mut self, _batches: Vec<Batch>) {
+        unimplemented!()
+    }
+
+    async fn broadcast_proof_of_store_msg(&mut self, _proof_of_stores: Vec<ProofOfStore>) {
+        unimplemented!()
+    }
+
+    async fn send_proof_of_store_msg_to_self(&mut self, _proof_of_stores: Vec<ProofOfStore>) {
+        unimplemented!()
+    }
+
+    fn get_available_peers(&self) -> anyhow::Result<Vec<PeerNetworkId>> {
+        unimplemented!()
+    }
+}
+
+/// Builds a `BatchStore` for test with an explicit `last_certified_time`, plus the
+/// matching `ValidatorSigner` set (so we can install a `BatchRequester` and a
+/// `BatchReaderImpl` on top of it).
+fn batch_store_with_last_certified_time(
+    last_certified_time: u64,
+) -> (Arc<BatchStore>, Vec<gaptos::aptos_types::validator_signer::ValidatorSigner>) {
+    let tmp_dir = TempPath::new();
+    let db = Arc::new(QuorumStoreDB::new(&tmp_dir));
+    let (signers, _verifier) = random_validator_verifier(4, None, false);
+    let store = Arc::new(BatchStore::new(
+        10, // epoch
+        last_certified_time,
+        db,
+        2001, // memory quota
+        2001, // db quota
+        2001, // batch quota
+        signers[0].clone(),
+    ));
+    (store, signers)
+}
+
+/// F5 reproduction. A batch that is *already locally available* (persisted to the
+/// quorum-store DB, exactly as the recovery fetch path does via
+/// `save_fetched_batch_to_db`) is then re-`persist`ed with an expiration that is
+/// `<= last_certified_time`. `save()` rejects it, `persist_inner` returns `None`,
+/// and `persist` filters it out -- so `notify_subscribers` is never called. The
+/// concurrent fetcher that subscribed first is therefore never woken.
+///
+/// Correct behavior (what this test asserts): the fetcher IS served, because the
+/// batch is locally retrievable. On the current code the fetcher hangs and this
+/// test fails by timing out on `rx`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_persist_reject_branch_notifies_subscriber_707() {
+    // last_certified_time is far ahead, so any batch whose expiration <= 1000 is
+    // rejected by save().
+    let last_certified_time = 1000u64;
+    let (batch_store, signers) = batch_store_with_last_certified_time(last_certified_time);
+
+    // A real (validator) batch reader on top of the store. my_peer_id is a
+    // validator that is NOT one of the signers, so the request goes "to peers".
+    let my_peer_id = PeerNetworkId::new(NetworkId::Validator, AccountAddress::random());
+    let (_unused_signers, verifier) = random_validator_verifier(1, None, false);
+    let batch_requester = BatchRequester::new(
+        10, // epoch
+        my_peer_id,
+        1,      // request_num_peers
+        100,    // retry_limit (large; we never want a network-driven timeout here)
+        10_000, // retry_interval_ms (large; first retry is far in the future)
+        10_000, // rpc_timeout_ms
+        NeverRespondingSender,
+        Arc::new(verifier),
+    );
+    let reader = BatchReaderImpl::new(batch_store.clone(), batch_requester);
+
+    // The batch the (replayed) ordered block needs. Expiration is in the PAST
+    // relative to last_certified_time, so the redundant persist() will be rejected.
+    let digest = HashValue::random();
+    let batch_author = signers[1].author();
+    let payload: Vec<SignedTransaction> = vec![];
+    let info = BatchInfo::new(
+        batch_author,
+        BatchId::new_for_test(1),
+        10,  // epoch
+        500, // expiration <= last_certified_time(1000) => save() rejects
+        digest,
+        0,
+        0,
+        0,
+    );
+    let key = BatchKey::new(10, digest);
+
+    // Start the in-flight fetcher first (it subscribes internally because the
+    // batch is not yet in the in-memory cache). The signer list points at a real
+    // peer so request_batch enters the wait loop (network never responds).
+    let signers_for_request = vec![batch_author];
+    let mut rx = reader.get_batch(key.clone(), 500, signers_for_request);
+
+    // Give the spawned fetcher a moment to register its subscription before the
+    // batch becomes available + the (rejecting) persist runs.
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // The batch IS locally available: persist it directly to the DB, exactly as
+    // the recovery fetch path does via save_fetched_batch_to_db.
+    batch_store
+        .save_fetched_batch_to_db(PersistedValue::new(info.clone(), Some(payload.clone())))
+        .expect("save_fetched_batch_to_db should succeed");
+
+    // Now the redundant persist() that the fetch path also performs. save() rejects
+    // it (expiration 500 <= last_certified_time 1000), so on the buggy code
+    // notify_subscribers is skipped and the subscriber is never woken.
+    let signed = batch_store.persist(vec![PersistedValue::new(info.clone(), Some(payload))]);
+    assert!(signed.is_empty(), "save() must reject the expired-vs-last_certified_time batch");
+
+    // The fetcher must be served, because the batch is locally retrievable.
+    let result = tokio::time::timeout(Duration::from_secs(3), &mut rx).await;
+
+    match result {
+        Ok(Ok(Ok(_txns))) => {
+            // Correct behavior: subscriber notified for a locally-available batch.
+        }
+        Ok(Ok(Err(e))) => panic!(
+            "F5 repro: fetcher got an error instead of the locally-available batch: {:?}",
+            e
+        ),
+        Ok(Err(e)) => panic!("F5 repro: fetcher channel dropped: {:?}", e),
+        Err(_) => panic!(
+            "F5 repro (Galxe/gravity-audit#707): in-flight fetcher was NEVER notified after \
+             persist() rejected the expired-vs-last_certified_time batch (notify_subscribers \
+             skipped on the reject branch), even though the batch is locally available -- the \
+             fetcher hung and timed out"
+        ),
+    }
 }
