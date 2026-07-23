@@ -51,9 +51,6 @@ TASK_PRICE_FEED = Web3.keccak(text="price_feed")
 NVDA_FEED_ID = 1001
 TSLA_FEED_ID = 1002
 TARGET_DELIVERY_NONCE = 3
-AGG_WEIGHTED_MEDIAN = 2
-SOURCE_COUNT = 1
-TOTAL_WEIGHT = 1
 EXPECTED_NVDA_PRICE = 19_612_645_000
 EXPECTED_TSLA_PRICE = 40_117_545_000
 DEFAULT_LIVE_BINANCE_BASE_URL = "https://fapi.binance.com"
@@ -417,10 +414,7 @@ def assert_price_round(latest, expected_price: int, round_id: int, resolved_at: 
     assert latest[1] == round_id
     assert latest[2] == resolved_at
     assert latest[3] == DECIMALS
-    assert latest[4] == AGG_WEIGHTED_MEDIAN
-    assert latest[5] == SOURCE_COUNT
-    assert latest[6] == TOTAL_WEIGHT
-    assert latest[7] == expected_price
+    assert latest[4] == expected_price
 
 
 def price_feed_mode() -> str:

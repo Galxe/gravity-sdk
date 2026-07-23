@@ -140,7 +140,7 @@ def _write_demo_config(
 
     def feed_config(feed_id: int, pair: str, label: str):
         observed = observed_rounds[feed_id]
-        observed_price = int(observed[7])
+        observed_price = int(observed[4])
         return {
             "feedId": feed_id,
             "label": label,
@@ -400,7 +400,7 @@ async def test_combined_oracle_demo_resolves_price_and_polymarket(cluster: Clust
         stored = await support.wait_for_price_round(price_resolver, feed_id, target_round_id, timeout=120)
         support.assert_price_round(stored, expected_price, target_round_id, target_resolved_at)
         observed_rounds[feed_id] = stored
-        LOG.info("Price feed resolved: feedId=%s roundId=%s price=%s", feed_id, target_round_id, int(stored[7]))
+        LOG.info("Price feed resolved: feedId=%s roundId=%s price=%s", feed_id, target_round_id, int(stored[4]))
 
     await support.wait_for_chain_time(w3, closes_at)
     _send_contract_tx(w3, binary_market, binary_market.functions.lockMarket(market_id), FAUCET_KEY)

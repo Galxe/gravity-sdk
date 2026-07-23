@@ -28,10 +28,7 @@ def _assert_live_round_shape(round_data, round_id: int, resolved_at: int):
     assert round_data[1] == round_id
     assert round_data[2] == resolved_at
     assert round_data[3] == support.DECIMALS
-    assert round_data[4] == support.AGG_WEIGHTED_MEDIAN
-    assert round_data[5] == support.SOURCE_COUNT
-    assert round_data[6] == support.TOTAL_WEIGHT
-    assert round_data[7] > 0
+    assert round_data[4] > 0
 
 
 def _write_demo_config(
@@ -62,7 +59,7 @@ def _write_demo_config(
     }
 
     def feed_config(feed_id: int, pair: str):
-        observed_price = int(observed_rounds[feed_id][7])
+        observed_price = int(observed_rounds[feed_id][4])
         return {
             "feedId": feed_id,
             "label": f"{pair[:-4]} {'Binance' if live else 'mock'} index",
