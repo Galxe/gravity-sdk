@@ -47,25 +47,21 @@ def _price_feed_uri(
     pair: str,
     bucket_start_ms: int,
     *,
-    max_staleness_ms: int,
     grace_ms: int,
 ) -> str:
     return (
         f"gravity://3/{feed_id}/price_feed?"
         f"provider=binance_index_kline_v1&pair={pair}&interval=1m&"
-        f"bucketStartMs={bucket_start_ms}&decimals=8&aggregationMode=2&"
-        f"minSourceCount=1&minTotalWeight=1&maxStaleness={max_staleness_ms}&graceMs={grace_ms}"
+        f"bucketStartMs={bucket_start_ms}&decimals=8&graceMs={grace_ms}"
     )
 
 
 def _write_live_relayer_config(test_dir: Path, env: dict):
     base_url = env.get("BINANCE_PRICE_FEED_BASE_URL", DEFAULT_LIVE_BINANCE_BASE_URL)
     bucket_start_ms = _live_bucket_start_ms(env)
-    max_staleness_ms = int(env.get("BINANCE_PRICE_FEED_MAX_STALENESS_MS", "3600000"))
     grace_ms = int(env.get("BINANCE_PRICE_FEED_GRACE_MS", str(DEFAULT_BINANCE_GRACE_MS)))
     env["BINANCE_PRICE_FEED_BUCKET_START_MS"] = str(bucket_start_ms)
     env["BINANCE_PRICE_FEED_BASE_URL"] = base_url
-    env["BINANCE_PRICE_FEED_MAX_STALENESS_MS"] = str(max_staleness_ms)
     env["BINANCE_PRICE_FEED_GRACE_MS"] = str(grace_ms)
 
     uris = [
@@ -73,14 +69,12 @@ def _write_live_relayer_config(test_dir: Path, env: dict):
             NVDA_FEED_ID,
             "NVDAUSDT",
             bucket_start_ms,
-            max_staleness_ms=max_staleness_ms,
             grace_ms=grace_ms,
         ),
         _price_feed_uri(
             TSLA_FEED_ID,
             "TSLAUSDT",
             bucket_start_ms,
-            max_staleness_ms=max_staleness_ms,
             grace_ms=grace_ms,
         ),
     ]

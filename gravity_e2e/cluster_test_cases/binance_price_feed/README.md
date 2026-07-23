@@ -161,8 +161,7 @@ Suite binance_price_feed PASSED
 All suites passed!
 ```
 
-The expected price math uses single-source weighted median aggregation over the
-mock Binance kline close field:
+The expected price is the mock Binance kline close field scaled to 8 decimals:
 
 ```text
 NVDAUSDT nonce 3 = parse_fixed_decimal("196.12645000", 8) = 19612645000
@@ -196,9 +195,9 @@ For price-index markets or perps, use this suite as the base:
   `PriceFeedResolver`.
 - The downstream market or PerpDex contract decides how to use
   `latestPrice(feedId)`.
-- The relayer adapter should only fetch and canonicalize source observations.
-  Product-level BBO, mid-price, TWAP, risk, and weighting policy should live in
-  the consuming contract or in a separately versioned resolver policy.
+- The relayer adapter fetches and canonicalizes one Binance close. Product-level
+  BBO, mid-price, TWAP, and risk policy should live in the consuming contract or
+  in a separately versioned resolver policy.
 
 The production version should replace the local mock with a deterministic
 provider policy: local provider allowlist, closed-bucket request schedule,

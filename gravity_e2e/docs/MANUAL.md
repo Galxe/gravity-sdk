@@ -188,8 +188,8 @@ All suites passed!
 This proves the contract-facing path a Gravity PerpDex or price-index market
 would consume: `sourceType=3` data is recorded by `NativeOracle`, callbacked into
 `PriceFeedResolver`, and exposed as `latestPrice(feedId)`. BBO, mid
-price, TWAP, risk, and market-specific weighting should be decided by the
-downstream product contract or by a separately versioned resolver policy.
+price, TWAP, and risk policy should be decided by the downstream product
+contract or by a separately versioned resolver policy.
 
 ### 7. Combined Binance + Polymarket Suite
 

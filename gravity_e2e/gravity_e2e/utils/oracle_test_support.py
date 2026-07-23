@@ -437,11 +437,6 @@ def binance_base_url() -> str:
     return f"http://127.0.0.1:{MOCK_BINANCE_PORT}"
 
 
-def max_staleness_ms() -> int:
-    default = "3600000" if is_live_mode() else "180000"
-    return int(os.environ.get("BINANCE_PRICE_FEED_MAX_STALENESS_MS", default))
-
-
 def binance_grace_ms() -> int:
     return int(os.environ.get("BINANCE_PRICE_FEED_GRACE_MS", str(DEFAULT_BINANCE_GRACE_MS)))
 
@@ -462,9 +457,7 @@ def price_feed_uri(feed_id: int, pair: str, bucket_start_ms: int) -> str:
     return (
         f"gravity://3/{feed_id}/price_feed?"
         f"provider=binance_index_kline_v1&pair={pair}&interval=1m&"
-        f"bucketStartMs={bucket_start_ms}&decimals=8&aggregationMode=2&"
-        f"minSourceCount=1&minTotalWeight=1&maxStaleness={max_staleness_ms()}&"
-        f"graceMs={binance_grace_ms()}"
+        f"bucketStartMs={bucket_start_ms}&decimals=8&graceMs={binance_grace_ms()}"
     )
 
 
