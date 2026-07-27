@@ -4,6 +4,10 @@ The deterministic review gate for Binance price rounds and a binary
 Polymarket settlement in one local Gravity cluster. It also writes the
 combined frontend runtime config when `--demo-config-out` is supplied.
 
+The binary market has no Gravity-local oracle deadline. After the reviewed
+Polygon CTF payout reaches the resolver, anyone may call `finalizeMarket`;
+missing, pending, or invalid observations leave the market locked.
+
 Run:
 
 ```bash

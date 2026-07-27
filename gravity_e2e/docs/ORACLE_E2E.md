@@ -53,8 +53,10 @@ export PATH="$HOME/.foundry/bin:$PWD/target/quick-release:$PATH"
 
 `oracle_demo` sends no public network traffic. It starts local Binance and
 Polygon fixtures, records `sourceType=3` and `sourceType=6` through the same
-Oracle consensus path, verifies two exact price rounds, and settles one binary
-Gravity market.
+Oracle consensus path, verifies two exact price rounds, and permissionlessly
+finalizes one binary Gravity market from the canonical Polymarket resolver
+classification. The binary market has no Gravity-local settlement deadline or
+governance timeout path.
 
 ```bash
 PATH="$HOME/.foundry/bin:$PWD/target/quick-release:$PATH" \
@@ -149,13 +151,16 @@ The bucket must already be closed and older than `graceMs`.
 
 | Repository | Revision |
 | --- | --- |
-| `gravity_chain_core_contracts` | `f5bd9a80794c318ea1ccdbd0fb7f15e1e83dbdad` |
+| `gravity_chain_core_contracts` (`oracle_demo`) | `0f769b892387989ae3dad84bf5c8db381d1865f0` |
+| `gravity_chain_core_contracts` (other Oracle suites) | `f5bd9a80794c318ea1ccdbd0fb7f15e1e83dbdad` |
 | `gravity-reth` | `20af4ae4a2125f6232d6b2c5e7cc3f40140f2501` |
 | `gravity-aptos` | `10c4553b16aead745e1701db7885a39313607b26` |
 | `gravity-sdk` base | `10c491bc7fe69838398971281270ce438c72e17a` |
 
-Both deterministic genesis files pin the contracts commit above. `Cargo.lock`
-pins the reth and Aptos revisions.
+Each suite's genesis file pins the contracts revision it requires.
+`oracle_demo` uses the strict binary Polymarket finality ABI; the focused
+three-outcome and Binance suites remain on their existing compatible contract
+revision. `Cargo.lock` pins the reth and Aptos revisions.
 
 ## Last Live Verification
 
@@ -182,7 +187,9 @@ arbitrary Polymarket UI markets.
 Production Polymarket mirrors need a reviewed manifest containing the rules,
 condition and question IDs, CTF address, outcome labels, slot mapping, source
 block range, and metadata hashes. Dynamic discovery additionally needs
-finality gates, watermarks, deadlines, and typed pending or expired states.
+finality gates, watermarks, request-expiry policies, and typed pending or
+expired states. Request expiry is a watcher lifecycle concern; it must not
+create a Gravity-local fallback result for a strict Polymarket mirror.
 
 Use `--force-init` after changing genesis configuration or a pinned contracts
 revision. Otherwise cached artifacts may be reused.

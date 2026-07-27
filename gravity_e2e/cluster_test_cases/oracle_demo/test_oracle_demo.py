@@ -41,6 +41,10 @@ NO_STAKE = 100 * STAKE_UNIT
 YES_STAKE = 200 * STAKE_UNIT
 TOTAL_BINARY_POOL = NO_STAKE + YES_STAKE
 SPEC_HASH = Web3.keccak(text="Fed July binary Polymarket mirror demo")
+RESOLVED_WINNER_STATUS = 2
+BINARY_MARKET_STATUS_INDEX = 4
+BINARY_MARKET_WINNING_OUTCOME_INDEX = 5
+BINARY_MARKET_TOTAL_POOL_INDEX = 6
 
 NATIVE_ORACLE_ADDRESS = support.NATIVE_ORACLE_ADDRESS
 ORACLE_TASK_CONFIG_ADDRESS = support.ORACLE_TASK_CONFIG_ADDRESS
@@ -198,12 +202,14 @@ def _write_demo_config(
             "slotLabels": ["YES", "NO"],
             "slotToOutcome": [1, 0],
             "winningSlot": release["winning_slot"],
-            "winningOutcome": int(market_state[6]),
+            "winningOutcome": int(
+                market_state[BINARY_MARKET_WINNING_OUTCOME_INDEX]
+            ),
             "payoutNumerators": release["payout_numerators"],
             "settlementTxHash": FED_BINARY_TX_HASH,
             "settlementBlock": FED_BINARY_BLOCK,
             "settlementLogIndex": FED_BINARY_LOG_INDEX,
-            "totalPool": str(market_state[7]),
+            "totalPool": str(market_state[BINARY_MARKET_TOTAL_POOL_INDEX]),
             "yesAccount": {
                 "address": release["yesAccount"],
                 "claimable": str(claimable_yes),
@@ -276,7 +282,6 @@ async def test_combined_oracle_demo_resolves_price_and_polymarket(cluster: Clust
 
     now_ts = w3.eth.get_block("latest")["timestamp"]
     closes_at = now_ts + 20
-    oracle_deadline = now_ts + 180
     settlement_ref = (
         SOURCE_TYPE_POLYMARKET_SETTLEMENT,
         FED_BINARY_MARKET_ID,
@@ -292,7 +297,6 @@ async def test_combined_oracle_demo_resolves_price_and_polymarket(cluster: Clust
         SPEC_HASH,
         now_ts,
         closes_at,
-        oracle_deadline,
         token.address,
         settlement_ref,
     )
@@ -379,7 +383,12 @@ async def test_combined_oracle_demo_resolves_price_and_polymarket(cluster: Clust
         yes_account.key,
         gas=1_500_000,
     )
-    assert binary_market.functions.getMarket(market_id).call()[7] == TOTAL_BINARY_POOL
+    assert (
+        binary_market.functions.getMarket(market_id).call()[
+            BINARY_MARKET_TOTAL_POOL_INDEX
+        ]
+        == TOTAL_BINARY_POOL
+    )
 
     observed_rounds = {}
     target_round_id = support.round_id(support.BUCKET_START_MS, support.TARGET_DELIVERY_NONCE)
@@ -421,10 +430,28 @@ async def test_combined_oracle_demo_resolves_price_and_polymarket(cluster: Clust
     assert settlement[9] == SETTLEMENT_KIND_CTF_CONDITION_RESOLUTION
     assert poly_resolver.functions.getPayoutNumerators(FED_BINARY_MARKET_ID, condition_id).call() == [1, 0]
 
-    _send_contract_tx(w3, binary_market, binary_market.functions.settleMarket(market_id), FAUCET_KEY, gas=2_000_000)
+    observation = poly_resolver.functions.getSettlementObservation(
+        FED_BINARY_MARKET_ID, condition_id
+    ).call()
+    assert observation[0] == RESOLVED_WINNER_STATUS
+    assert observation[1] == 0
+    assert observation[2] > 0
+    assert observation[3] > 0
+    assert Web3.to_hex(observation[4]).lower() == FED_BINARY_TX_HASH.lower()
+    assert observation[5] == FED_BINARY_LOG_INDEX
+
+    _send_contract_tx(
+        w3,
+        binary_market,
+        binary_market.functions.finalizeMarket(market_id),
+        FAUCET_KEY,
+        gas=2_000_000,
+    )
     market_state = binary_market.functions.getMarket(market_id).call()
-    assert market_state[5] == 2, f"binary market did not settle: status={market_state[5]}"
-    assert market_state[6] == 1, f"winning outcome should be YES, got {market_state[6]}"
+    market_status = market_state[BINARY_MARKET_STATUS_INDEX]
+    winning_outcome = market_state[BINARY_MARKET_WINNING_OUTCOME_INDEX]
+    assert market_status == 2, f"binary market did not settle: status={market_status}"
+    assert winning_outcome == 1, f"winning outcome should be YES, got {winning_outcome}"
     claimable_yes = binary_market.functions.claimable(market_id, yes_account.address).call()
     assert claimable_yes == TOTAL_BINARY_POOL
 
