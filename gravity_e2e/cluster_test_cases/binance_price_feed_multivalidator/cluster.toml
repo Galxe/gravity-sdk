@@ -1,4 +1,5 @@
 # Four-validator live Binance price-feed integration test.
+# Keep fixed listeners below Linux's default ephemeral source-port range.
 
 [cluster]
 name = "gravity-devnet-binance-price-feed-multivalidator"
@@ -13,60 +14,60 @@ id = "node1"
 role = "genesis"
 source = { project_path = "../" }
 host = "127.0.0.1"
-validator_port = 46380
-vfn_port = 46390
-rpc_port = 49755
-api_port = 49280
-metrics_port = 50203
-inspection_port = 41102
-https_port = 42124
-authrpc_port = 49775
-reth_p2p_port = 53226
+validator_port = 26080
+vfn_port = 26090
+rpc_port = 26100
+api_port = 26110
+metrics_port = 26120
+inspection_port = 26130
+https_port = 26140
+authrpc_port = 26150
+reth_p2p_port = 26160
 
 [[nodes]]
 id = "node2"
 role = "genesis"
 source = { project_path = "../" }
 host = "127.0.0.1"
-validator_port = 46381
-vfn_port = 46391
-rpc_port = 49756
-api_port = 49281
-metrics_port = 50204
-inspection_port = 41103
-https_port = 42125
-authrpc_port = 49776
-reth_p2p_port = 53227
+validator_port = 26081
+vfn_port = 26091
+rpc_port = 26101
+api_port = 26111
+metrics_port = 26121
+inspection_port = 26131
+https_port = 26141
+authrpc_port = 26151
+reth_p2p_port = 26161
 
 [[nodes]]
 id = "node3"
 role = "genesis"
 source = { project_path = "../" }
 host = "127.0.0.1"
-validator_port = 46382
-vfn_port = 46392
-rpc_port = 49757
-api_port = 49282
-metrics_port = 50205
-inspection_port = 41104
-https_port = 42126
-authrpc_port = 49777
-reth_p2p_port = 53228
+validator_port = 26082
+vfn_port = 26092
+rpc_port = 26102
+api_port = 26112
+metrics_port = 26122
+inspection_port = 26132
+https_port = 26142
+authrpc_port = 26152
+reth_p2p_port = 26162
 
 [[nodes]]
 id = "node4"
 role = "genesis"
 source = { project_path = "../" }
 host = "127.0.0.1"
-validator_port = 46383
-vfn_port = 46393
-rpc_port = 49758
-api_port = 49283
-metrics_port = 50206
-inspection_port = 41105
-https_port = 42127
-authrpc_port = 49778
-reth_p2p_port = 53229
+validator_port = 26083
+vfn_port = 26093
+rpc_port = 26103
+api_port = 26113
+metrics_port = 26123
+inspection_port = 26133
+https_port = 26143
+authrpc_port = 26153
+reth_p2p_port = 26163
 
 [faucet_init]
 num_accounts = 0
