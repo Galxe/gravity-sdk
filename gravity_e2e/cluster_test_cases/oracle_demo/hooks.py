@@ -12,7 +12,6 @@ from pathlib import Path
 
 LOG = logging.getLogger(__name__)
 
-BINANCE_SUITE = Path(__file__).resolve().parent.parent / "binance_price_feed"
 E2E_ROOT = Path(__file__).resolve().parents[2]
 
 if str(E2E_ROOT) not in sys.path:
@@ -79,24 +78,36 @@ def _start_binance_mock(test_dir: Path, env: dict):
 
     log_path = _log_file(test_dir)
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    mock_env = env.copy()
+    python_path = mock_env.get("PYTHONPATH")
+    mock_env["PYTHONPATH"] = (
+        f"{E2E_ROOT}{os.pathsep}{python_path}" if python_path else str(E2E_ROOT)
+    )
     with open(log_path, "ab") as log:
-        subprocess.Popen(
+        process = subprocess.Popen(
             [
                 sys.executable,
-                str(BINANCE_SUITE / "mock_binance.py"),
+                "-m",
+                "gravity_e2e.utils.mock_binance_index",
                 "--port",
                 str(MOCK_BINANCE_PORT),
                 "--pid-file",
                 str(pid_path),
             ],
-            cwd=test_dir,
-            env=env,
+            cwd=E2E_ROOT,
+            env=mock_env,
             stdout=log,
             stderr=subprocess.STDOUT,
             start_new_session=True,
         )
     env["BINANCE_PRICE_FEED_EXTERNAL_MOCK"] = "1"
     _wait_for_binance_ready()
+    pid = _read_pid(pid_path)
+    if process.poll() is not None or pid != process.pid:
+        raise RuntimeError(
+            "mock Binance readiness was satisfied by another process; "
+            f"expected pid {process.pid}, found {pid}"
+        )
 
 
 def _stop_binance_mock(test_dir: Path):

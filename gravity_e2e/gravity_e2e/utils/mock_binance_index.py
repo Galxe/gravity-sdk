@@ -1,5 +1,6 @@
 """Deterministic local Binance index-kline fixture shared by oracle E2E suites."""
 
+import argparse
 from contextlib import contextmanager
 import json
 import logging
@@ -116,3 +117,20 @@ def serve_forever(port: int, pid_file: Path | None = None):
         server.server_close()
         if pid_file is not None:
             pid_file.unlink(missing_ok=True)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--port", type=int, default=MOCK_BINANCE_PORT)
+    parser.add_argument("--pid-file", type=Path)
+    args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+    )
+    serve_forever(args.port, args.pid_file)
+
+
+if __name__ == "__main__":
+    main()

@@ -2,7 +2,7 @@
 
 [dependencies.genesis_contracts]
 path = "../../../../gravity_chain_core_contracts"
-ref = "codex/sports-score-oracle-poc"
+ref = "f5bd9a80794c318ea1ccdbd0fb7f15e1e83dbdad"
 
 [[genesis_validators]]
 id = "node1"

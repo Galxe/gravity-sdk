@@ -69,6 +69,74 @@ def _fetch_live_price(base_url: str, pair: str, bucket_start_ms: int) -> int:
     return int(scaled)
 
 
+def _write_demo_config(
+    cluster: Cluster,
+    resolver_address: str,
+    chain_id: int,
+    base_url: str,
+    rounds: dict[int, tuple],
+    bucket_start_ms: int,
+    round_id: int,
+    resolved_at: int,
+):
+    output = os.environ.get("GRAVITY_DEMO_CONFIG_OUT")
+    if not output:
+        return
+
+    def feed(feed_id: int, pair: str):
+        price = int(rounds[feed_id][4])
+        return {
+            "feedId": feed_id,
+            "label": f"{pair.removesuffix('USDT')} Binance index",
+            "pair": pair,
+            "sourceType": support.SOURCE_TYPE_PRICE_FEED,
+            "decimals": support.DECIMALS,
+            "expectedDeliveryNonce": TARGET_NONCE,
+            "expectedRoundId": round_id,
+            "expectedResolvedAt": resolved_at,
+            "expectedPrice": str(price),
+            "expectedDisplayPrice": support.format_price(price),
+        }
+
+    config = {
+        "version": 1,
+        "mode": "live-binance-index-kline",
+        "network": {
+            "chainId": chain_id,
+            "rpcUrl": cluster.get_node("node1").url,
+            "rpcProxyPath": "/rpc",
+        },
+        "contracts": {
+            "priceFeedResolver": resolver_address,
+            "multiSourceOracleResolver": resolver_address,
+            "nativeOracle": support.NATIVE_ORACLE_ADDRESS,
+            "oracleTaskConfig": support.ORACLE_TASK_CONFIG_ADDRESS,
+        },
+        "provider": {
+            "kind": "live-binance",
+            "name": "Binance USD-M indexPriceKlines",
+            "baseUrl": base_url,
+            "endpoint": "/fapi/v1/indexPriceKlines",
+            "interval": "1m",
+            "live": True,
+        },
+        "feeds": [feed(feed_id, pair) for feed_id, pair in FEEDS.items()],
+        "demo": {
+            "providerMode": "live",
+            "bucketStartMs": bucket_start_ms,
+            "intervalMs": support.INTERVAL_MS,
+            "targetDeliveryNonce": TARGET_NONCE,
+            "targetRoundId": round_id,
+            "targetResolvedAt": resolved_at,
+        },
+    }
+
+    output_path = Path(output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(config, indent=2) + "\n")
+    LOG.info("Wrote live price feed demo config to %s", output_path)
+
+
 def _consensus_log(cluster: Cluster, node_id: str) -> Path:
     return cluster.base_dir / node_id / "consensus_log" / "validator.log"
 
@@ -290,6 +358,17 @@ async def test_four_validators_certify_live_binance_prices(cluster: Cluster):
                 timeout=60,
             )
             assert tuple(stored) == expected_round
+
+    _write_demo_config(
+        cluster,
+        resolver.address,
+        w3.eth.chain_id,
+        base_url,
+        node1_rounds,
+        bucket_start_ms,
+        target_round_id,
+        target_resolved_at,
+    )
 
     LOG.info(
         "Four-validator live Binance QC stored roundId=%s prices=%s",
