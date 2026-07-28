@@ -1,8 +1,10 @@
 # Four-Validator Live Binance E2E
 
-The public-network gate for four independent Binance fetchers, JWK
-voting-power quorum, onchain execution, and four-RPC replication. It never
-accepts the local Binance mock and is excluded from the default suite run.
+The public-network gate for four Binance observers, at least three equal-power
+certifiers per feed, JWK voting-power quorum, onchain execution, and four-RPC
+replication. A slower validator may fast-forward from the committed nonce. It
+never accepts the local Binance mock and is excluded from the default suite
+run.
 
 Run:
 

@@ -477,6 +477,7 @@ def main():
         "long_test",
         "rolling_upgrade",
         "binance_price_feed_multivalidator",
+        "polymarket_live_dynamic_mirror",
     ]
 
     parser.add_argument(

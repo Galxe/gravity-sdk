@@ -28,6 +28,7 @@ FEEDS = {
     support.TSLA_FEED_ID: "TSLAUSDT",
 }
 TARGET_NONCE = 1
+QUORUM_VALIDATORS = 3
 
 
 def _bucket_start_ms() -> int:
@@ -157,11 +158,12 @@ async def _wait_for_consensus_evidence(
     feed_ids: list[int],
     timeout: int = 180,
 ):
-    missing_observations = {
+    missing_observers = {
         (node_id, feed_id)
         for node_id in cluster.nodes
         for feed_id in feed_ids
     }
+    certifiers = {feed_id: set() for feed_id in feed_ids}
     missing_quorums = set(feed_ids)
     deadline = time.monotonic() + timeout
 
@@ -171,13 +173,22 @@ async def _wait_for_consensus_evidence(
             path = _consensus_log(cluster, node_id)
             logs[node_id] = path.read_text(errors="replace") if path.exists() else ""
 
-        for node_id, feed_id in list(missing_observations):
+        for node_id, feed_id in list(missing_observers):
             if _line_matches(
                 logs[node_id],
-                "Start certifying update.",
+                "JWKObserver spawned.",
                 f"gravity://3/{feed_id}",
             ):
-                missing_observations.remove((node_id, feed_id))
+                missing_observers.remove((node_id, feed_id))
+
+        for feed_id in feed_ids:
+            for node_id, content in logs.items():
+                if _line_matches(
+                    content,
+                    "Start certifying update.",
+                    f"gravity://3/{feed_id}",
+                ):
+                    certifiers[feed_id].add(node_id)
 
         for feed_id in list(missing_quorums):
             issuer = f"gravity://3/{feed_id}"
@@ -195,13 +206,24 @@ async def _wait_for_consensus_evidence(
             ):
                 missing_quorums.remove(feed_id)
 
-        if not missing_observations and not missing_quorums:
+        if (
+            not missing_observers
+            and all(
+                len(certifiers[feed_id]) >= QUORUM_VALIDATORS
+                for feed_id in feed_ids
+            )
+            and not missing_quorums
+        ):
             return
         await asyncio.sleep(2)
 
+    certifier_summary = {
+        feed_id: sorted(nodes) for feed_id, nodes in certifiers.items()
+    }
     raise AssertionError(
         "missing validator oracle evidence: "
-        f"observations={sorted(missing_observations)}, "
+        f"observers={sorted(missing_observers)}, "
+        f"certifiers={certifier_summary}, "
         f"quorums={sorted(missing_quorums)}"
     )
 
