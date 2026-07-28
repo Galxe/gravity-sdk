@@ -39,6 +39,19 @@ FED_BINARY_TX_HASH = "0xfed28bf9110f78c07f1ad5cff5415875b67b3fe032e19ee6aa231735
 FED_BINARY_BLOCK = 89_222_209
 FED_BINARY_LOG_INDEX = 2_078
 
+DYNAMIC_BINARY_MARKET_ID = 7_202_627
+DYNAMIC_BINARY_CONDITION_ID = (
+    "0xd1a086f96be81a0d89ed776bedbd52d1c75bc47b49e6f0f791ddd009f52faf23"
+)
+DYNAMIC_BINARY_QUESTION_ID = (
+    "0xd1a5e94a4b5a400dcd720ca1875fcd49ba55c303e43bf091bc175df72f74f501"
+)
+DYNAMIC_BINARY_TX_HASH = (
+    "0xd1a28bf9110f78c07f1ad5cff5415875b67b3fe032e19ee6aa2317355861aab2"
+)
+DYNAMIC_BINARY_BLOCK = 89_222_215
+DYNAMIC_BINARY_LOG_INDEX = 2_079
+
 # Backward-compatible aliases used by the original match-market test.
 DRAW_MARKET_ID = MATCH_MARKET_ID
 DRAW_CONDITION_ID = MATCH_CONDITION_ID
@@ -104,10 +117,22 @@ class MockPolymarketPolygon:
     def __init__(self, port: int = 8546, chain_id: int = POLYGON_CHAIN_ID):
         self.port = port
         self.chain_id = chain_id
-        self.current_block = MATCH_BLOCK - 1
+        self.latest_block = MATCH_BLOCK - 1
+        self.finalized_block = MATCH_BLOCK - 1
         self._logs: Dict[int, List[Dict[str, Any]]] = {}
+        self._requests: List[Dict[str, Any]] = []
+        self._lock = threading.RLock()
         self._server: Optional[HTTPServer] = None
         self._thread: Optional[threading.Thread] = None
+
+    @property
+    def current_block(self) -> int:
+        """Backward-compatible alias for mocks that expose one chain head."""
+        return self.latest_block
+
+    @current_block.setter
+    def current_block(self, block_number: int) -> None:
+        self.set_heads(block_number, block_number)
 
     @property
     def rpc_url(self) -> str:
@@ -116,6 +141,81 @@ class MockPolymarketPolygon:
     @property
     def is_running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
+
+    @property
+    def requests(self) -> List[Dict[str, Any]]:
+        with self._lock:
+            return list(self._requests)
+
+    def clear_requests(self) -> None:
+        with self._lock:
+            self._requests.clear()
+
+    def set_heads(self, latest_block: int, finalized_block: Optional[int] = None) -> dict:
+        finalized = latest_block if finalized_block is None else finalized_block
+        if finalized > latest_block:
+            raise ValueError(
+                f"finalized block {finalized} cannot exceed latest block {latest_block}"
+            )
+        with self._lock:
+            self.latest_block = latest_block
+            self.finalized_block = finalized
+        return {
+            "latestBlock": latest_block,
+            "finalizedBlock": finalized,
+        }
+
+    def add_condition(
+        self,
+        *,
+        condition_id: str,
+        question_id: str,
+        block_number: int,
+        log_index: int,
+        payout_numerators: List[int],
+        tx_hash: Optional[str] = None,
+        removed: bool = False,
+        replace_existing: bool = False,
+    ) -> Dict[str, Any]:
+        if not payout_numerators:
+            raise ValueError("payout_numerators must not be empty")
+        if tx_hash is None:
+            tx_hash = _fake_hash(block_number * 1_000_000 + log_index)
+
+        log = generate_condition_resolution_log(
+            block_number=block_number,
+            log_index=log_index,
+            payout_numerators=payout_numerators,
+            condition_id=condition_id,
+            question_id=question_id,
+            tx_hash=tx_hash,
+        )
+        log["removed"] = removed
+
+        with self._lock:
+            block_logs = self._logs.setdefault(block_number, [])
+            if replace_existing:
+                block_logs[:] = [
+                    existing
+                    for existing in block_logs
+                    if not (
+                        existing["topics"][1].lower() == condition_id.lower()
+                        and existing["logIndex"] == _to_hex(log_index)
+                    )
+                ]
+            block_logs.append(log)
+
+        return {
+            "condition_id": condition_id,
+            "question_id": question_id,
+            "ctf": CTF_ADDRESS,
+            "oracle": UMA_ORACLE,
+            "tx_hash": tx_hash,
+            "block": block_number,
+            "log_index": log_index,
+            "payout_numerators": payout_numerators,
+            "source_log": log,
+        }
 
     def preload_draw_resolution(self) -> Dict[str, Any]:
         log = self.preload_match_resolution(1, visible=True)
@@ -131,16 +231,24 @@ class MockPolymarketPolygon:
             raise ValueError(f"winning_slot must be 0, 1, or 2; got {winning_slot}")
         payouts = [0, 0, 0]
         payouts[winning_slot] = 1
-        log = generate_condition_resolution_log(payout_numerators=payouts)
-        self._logs[MATCH_BLOCK] = [log]
-        self.current_block = MATCH_BLOCK if visible else MATCH_BLOCK - 1
+        result = self.add_condition(
+            condition_id=MATCH_CONDITION_ID,
+            question_id=MATCH_QUESTION_ID,
+            block_number=MATCH_BLOCK,
+            log_index=MATCH_LOG_INDEX,
+            payout_numerators=payouts,
+            tx_hash=MATCH_TX_HASH,
+            replace_existing=True,
+        )
+        head = MATCH_BLOCK if visible else MATCH_BLOCK - 1
+        self.set_heads(head, head)
         LOG.info(
             "MockPolymarketPolygon: prepared winning_slot=%s payout=%s visible=%s",
             winning_slot,
             payouts,
             visible,
         )
-        return log
+        return result["source_log"]
 
     def release_match_resolution(self, winning_slot: int) -> Dict[str, Any]:
         if winning_slot < 0 or winning_slot > 2:
@@ -167,23 +275,24 @@ class MockPolymarketPolygon:
             raise ValueError(f"winning_slot must be 0 or 1; got {winning_slot}")
         payouts = [0, 0]
         payouts[winning_slot] = 1
-        log = generate_condition_resolution_log(
-            block_number=FED_BINARY_BLOCK,
-            log_index=FED_BINARY_LOG_INDEX,
-            payout_numerators=payouts,
+        result = self.add_condition(
             condition_id=FED_BINARY_CONDITION_ID,
             question_id=FED_BINARY_QUESTION_ID,
+            block_number=FED_BINARY_BLOCK,
+            log_index=FED_BINARY_LOG_INDEX,
             tx_hash=FED_BINARY_TX_HASH,
+            payout_numerators=payouts,
+            replace_existing=True,
         )
-        self._logs[FED_BINARY_BLOCK] = [log]
-        self.current_block = FED_BINARY_BLOCK if visible else FED_BINARY_BLOCK - 1
+        head = FED_BINARY_BLOCK if visible else FED_BINARY_BLOCK - 1
+        self.set_heads(head, head)
         LOG.info(
             "MockPolymarketPolygon: prepared binary winning_slot=%s payout=%s visible=%s",
             winning_slot,
             payouts,
             visible,
         )
-        return log
+        return result["source_log"]
 
     def release_binary_resolution(self, winning_slot: int) -> Dict[str, Any]:
         if winning_slot < 0 or winning_slot > 1:
@@ -211,6 +320,10 @@ class MockPolymarketPolygon:
         req_id = body.get("id", 1)
 
         try:
+            if method not in ("mock_getRequests", "mock_clearRequests"):
+                with self._lock:
+                    self._requests.append({"method": method, "params": params})
+
             if method == "eth_getBlockByNumber":
                 result = self._handle_get_block_by_number(params)
             elif method == "eth_getLogs":
@@ -220,7 +333,28 @@ class MockPolymarketPolygon:
             elif method == "net_version":
                 result = str(self.chain_id)
             elif method == "eth_blockNumber":
-                result = _to_hex(self.current_block)
+                result = _to_hex(self.latest_block)
+            elif method == "mock_addCondition":
+                config = params[0] if params else {}
+                result = self.add_condition(
+                    condition_id=config["conditionId"],
+                    question_id=config["questionId"],
+                    block_number=self._parse_block_tag(config["blockNumber"]),
+                    log_index=self._parse_block_tag(config["logIndex"]),
+                    payout_numerators=[int(value) for value in config["payoutNumerators"]],
+                    tx_hash=config.get("txHash"),
+                    removed=bool(config.get("removed", False)),
+                    replace_existing=bool(config.get("replaceExisting", False)),
+                )
+            elif method == "mock_setHeads":
+                latest = self._parse_block_tag(params[0])
+                finalized = self._parse_block_tag(params[1]) if len(params) > 1 else latest
+                result = self.set_heads(latest, finalized)
+            elif method == "mock_getRequests":
+                result = self.requests
+            elif method == "mock_clearRequests":
+                self.clear_requests()
+                result = True
             elif method == "mock_setWinningSlot":
                 winning_slot = params[0] if params else 1
                 if isinstance(winning_slot, str):
@@ -248,8 +382,10 @@ class MockPolymarketPolygon:
             return None
 
         block_tag = params[0]
-        if block_tag in ("finalized", "latest", "safe", "pending"):
-            block_num = self.current_block
+        if block_tag == "finalized":
+            block_num = self.finalized_block
+        elif block_tag in ("latest", "safe", "pending"):
+            block_num = self.latest_block
         elif block_tag == "earliest":
             block_num = 0
         elif isinstance(block_tag, str) and block_tag.startswith("0x"):
@@ -257,7 +393,7 @@ class MockPolymarketPolygon:
         else:
             block_num = int(block_tag)
 
-        if block_num > self.current_block:
+        if block_num > self.latest_block:
             return None
 
         return {
@@ -289,25 +425,31 @@ class MockPolymarketPolygon:
             return []
         filter_obj = params[0]
         from_block = self._parse_block_tag(filter_obj.get("fromBlock", "0x0"))
-        to_block = self._parse_block_tag(filter_obj.get("toBlock", _to_hex(self.current_block)))
+        to_block = min(
+            self._parse_block_tag(filter_obj.get("toBlock", _to_hex(self.latest_block))),
+            self.latest_block,
+        )
         filter_address = filter_obj.get("address", "").lower()
         filter_topics = filter_obj.get("topics", [])
 
         results = []
-        for block_num in range(from_block, to_block + 1):
-            for log in self._logs.get(block_num, []):
-                if filter_address and log["address"] != filter_address:
-                    continue
-                if not self._topics_match(log["topics"], filter_topics):
-                    continue
-                results.append(log)
+        with self._lock:
+            for block_num in range(from_block, to_block + 1):
+                for log in self._logs.get(block_num, []):
+                    if filter_address and log["address"] != filter_address:
+                        continue
+                    if not self._topics_match(log["topics"], filter_topics):
+                        continue
+                    results.append(log)
         return results
 
     def _parse_block_tag(self, tag) -> int:
         if isinstance(tag, int):
             return tag
-        if tag in ("latest", "finalized", "safe", "pending"):
-            return self.current_block
+        if tag == "finalized":
+            return self.finalized_block
+        if tag in ("latest", "safe", "pending"):
+            return self.latest_block
         if tag == "earliest":
             return 0
         if isinstance(tag, str) and tag.startswith("0x"):
