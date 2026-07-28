@@ -38,7 +38,7 @@ sha2.workspace = true
 bincode = "1.3"
 time = "0.3.36"
 anyhow = "1.0.87"
-greth = { git = "https://github.com/Galxe/gravity-reth", rev = "615cb5b8047d91715c9a0e8b55ca6d09de1e6248" }
+greth = { git = "https://github.com/Galxe/gravity-reth", rev = "4b6aa739e22b899fca6de4be852f0f3edf1eec00" }
 reqwest = "0.12.9"
 # Aligned with gravity-reth v2.3.0 (alloy-primitives 1.6.0, alloy-* 2.0.5) so
 # gravity_node's own alloy types unify with the ones re-exported through greth.
