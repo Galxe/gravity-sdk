@@ -19,6 +19,13 @@ PATH="$HOME/.foundry/bin:$PWD/target/quick-release:$PATH" \
     --log-cli-level=INFO
 ```
 
+Use `https://fapi.binance.com` for production index prices. Binance may return
+HTTP 451 when the process egress is not eligible for the production service;
+that is an egress-policy failure, not an `indexPriceKlines` or symbol failure.
+Use an approved eligible egress or the futures testnet. When wrapping the
+suite in a process-level proxy, bypass loopback and private networks so
+validator consensus and local RPC traffic remain local.
+
 The suite supports `--keep-running --demo-config-out <path>` for the live
 frontend. See [`../../docs/ORACLE_E2E.md`](../../docs/ORACLE_E2E.md) for
 approval requirements, assertions, replay parameters, revisions, and the last

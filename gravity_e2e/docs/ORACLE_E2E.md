@@ -101,12 +101,13 @@ debug run. Without it, the test chooses a random valid slot.
 This suite is excluded from the default all-suite run because it sends public
 requests. Run it only after outbound access has been approved.
 
-Each of four equal-power validators independently requests the same closed
-one-minute `indexPriceKlines` bucket. The test requires:
+Four equal-power validators observe the same closed one-minute
+`indexPriceKlines` bucket. The test requires:
 
 - all four validators active and advancing;
-- every validator to certify both feed issuers and persist independent state;
-- at least three matching equal-power votes to cross the JWK threshold;
+- all four observers to start and persist independent relayer state;
+- at least three validators to certify each feed and cross the JWK threshold;
+- a slower validator to safely fast-forward from the committed nonce;
 - onchain prices to equal Binance close values at 8 decimals;
 - all four RPC endpoints to return identical resolver rounds.
 
@@ -139,6 +140,13 @@ The public `indexPriceKlines` method does not require `BINANCE_API_KEY` or
 `BINANCE_SECRET_KEY`. Testnet uses the production response shape but returns
 test-market prices. The suite does not silently switch endpoints.
 
+Set `BINANCE_PRICE_FEED_BASE_URL=https://fapi.binance.com` for production
+index prices. An HTTP 451 response means the process egress is not eligible
+for Binance production under its regional policy; it does not mean that the
+endpoint or pair is missing. Use an approved eligible egress or the futures
+testnet. A process-level proxy must bypass loopback and private networks so
+validator consensus and local RPC traffic remain local.
+
 For an immutable replay, set:
 
 ```bash
@@ -151,20 +159,21 @@ The bucket must already be closed and older than `graceMs`.
 
 | Repository | Revision |
 | --- | --- |
-| `gravity_chain_core_contracts` (`oracle_demo`) | `0f769b892387989ae3dad84bf5c8db381d1865f0` |
-| `gravity_chain_core_contracts` (other Oracle suites) | `f5bd9a80794c318ea1ccdbd0fb7f15e1e83dbdad` |
+| `gravity_chain_core_contracts` (dynamic Polymarket and four-validator Binance) | `0f769b892387989ae3dad84bf5c8db381d1865f0` |
+| `gravity_chain_core_contracts` (remaining Oracle suites) | `f5bd9a80794c318ea1ccdbd0fb7f15e1e83dbdad` |
 | `gravity-reth` | `20af4ae4a2125f6232d6b2c5e7cc3f40140f2501` |
 | `gravity-aptos` | `10c4553b16aead745e1701db7885a39313607b26` |
-| `gravity-sdk` base | `10c491bc7fe69838398971281270ce438c72e17a` |
+| `gravity-sdk` test branch | `a02cd39a081ddde2a5424692b8973039352afa70` |
 
 Each suite's genesis file pins the contracts revision it requires.
-`oracle_demo` uses the strict binary Polymarket finality ABI; the focused
-three-outcome and Binance suites remain on their existing compatible contract
-revision. `Cargo.lock` pins the reth and Aptos revisions.
+Dynamic Polymarket and four-validator Binance use the strict oracle contracts
+revision. Focused suites that do not need those changes remain on their
+existing compatible revision. `Cargo.lock` pins the reth and Aptos revisions.
 
 ## Last Live Verification
 
-The four-validator suite passed against Binance Futures testnet on 2026-07-23:
+The four-validator suite passed against both Binance Futures testnet and
+production on 2026-07-28. Production used an approved region-eligible egress:
 
 | Evidence | Value |
 | --- | --- |
@@ -172,11 +181,12 @@ The four-validator suite passed against Binance Futures testnet on 2026-07-23:
 | Total voting power | `8000000000000000000` |
 | JWK quorum power | `5333333333333333334` |
 | Log threshold | 3 votes (`new_total_power=6`, `threshold=6`) |
-| Closed bucket | `1784802120000` (`2026-07-23T10:22:00Z`) |
-| Stored round | `29746702` |
-| NVDAUSDT, 8 decimals | `21078572713` |
-| TSLAUSDT, 8 decimals | `35237693549` |
-| Pytest | `1 passed in 47.97s` |
+| Testnet stored round | `29753731` |
+| Testnet NVDAUSDT / TSLAUSDT | `19654500000` / `30910000000` |
+| Testnet pytest | `1 passed in 39.89s` |
+| Production stored round | `29753765` |
+| Production NVDAUSDT / TSLAUSDT | `19430273456` / `30513157396` |
+| Production pytest | `1 passed in 39.65s` |
 
 ## Scope
 
