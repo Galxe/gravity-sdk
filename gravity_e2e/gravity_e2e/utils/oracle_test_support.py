@@ -147,6 +147,15 @@ def artifact_file(out_dir: Path, source_name: str, contract_name: str) -> Path:
 def contracts_repo_from_genesis(suite_dir: Path) -> Path | None:
     data = tomllib.loads((suite_dir / "genesis.toml").read_text())
     rel = data.get("dependencies", {}).get("genesis_contracts", {}).get("path")
+    sdk_root = suite_dir.parents[2]
+    checkout_name = (
+        "gravity_chain_core_contracts_local"
+        if rel
+        else "gravity_chain_core_contracts"
+    )
+    generated_checkout = sdk_root / "external" / checkout_name
+    if generated_checkout.is_dir():
+        return generated_checkout
     return (suite_dir / rel).resolve() if rel else None
 
 
