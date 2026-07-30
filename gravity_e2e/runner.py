@@ -109,6 +109,12 @@ def init_faucet_if_needed(test_dir: Path, cluster_config_path: Path, env: dict):
 
 def cleanup_cluster():
     """Kill any running gravity_node processes."""
+    if os.environ.get("GRAVITY_E2E_SKIP_GLOBAL_PKILL") == "1":
+        logger.warning(
+            "Skipping global gravity_node cleanup because "
+            "GRAVITY_E2E_SKIP_GLOBAL_PKILL=1"
+        )
+        return
     logger.info("Cleaning up running nodes...")
     # This is a bit aggressive but necessary for clean slate in docker
     subprocess.run(["pkill", "-9", "gravity_node"], check=False)

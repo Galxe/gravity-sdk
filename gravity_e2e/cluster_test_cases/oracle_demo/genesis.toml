@@ -2,7 +2,7 @@
 
 [dependencies.genesis_contracts]
 path = "../../../../gravity_chain_core_contracts"
-ref = "0f769b892387989ae3dad84bf5c8db381d1865f0"
+ref = "631b3bde8e2d6a98377e62a9b9e54ccdf0896e9d"
 
 [[genesis_validators]]
 id = "node1"

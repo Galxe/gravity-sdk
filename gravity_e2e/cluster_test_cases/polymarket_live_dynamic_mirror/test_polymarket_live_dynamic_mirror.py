@@ -92,7 +92,7 @@ async def _wait_for_proposal_window(cluster: Cluster) -> int:
     raise TimeoutError("no epoch window was long enough for governance proposal")
 
 
-def _data_recorded_logs(
+def _oracle_delivered_logs(
     w3: Web3, mirror_id: int, from_block: int
 ) -> list:
     return w3.eth.get_logs(
@@ -101,7 +101,7 @@ def _data_recorded_logs(
             "toBlock": "latest",
             "address": support.NATIVE_ORACLE_ADDRESS,
             "topics": [
-                support.DATA_RECORDED_TOPIC0,
+                support.ORACLE_DELIVERED_TOPIC0,
                 support.topic(SOURCE_TYPE_POLYMARKET_SETTLEMENT),
                 support.topic(mirror_id),
             ],
@@ -109,18 +109,18 @@ def _data_recorded_logs(
     )
 
 
-async def _wait_for_data_recorded(
+async def _wait_for_oracle_delivered(
     w3: Web3, mirror_id: int, from_block: int
 ) -> list:
     deadline = time.monotonic() + POLL_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
         logs = await asyncio.to_thread(
-            _data_recorded_logs, w3, mirror_id, from_block
+            _oracle_delivered_logs, w3, mirror_id, from_block
         )
         if logs:
             return logs
         await asyncio.sleep(2)
-    raise TimeoutError(f"no DataRecorded event for mirror {mirror_id}")
+    raise TimeoutError(f"no OracleDelivered event for mirror {mirror_id}")
 
 
 async def _wait_for_settlement(
@@ -368,16 +368,18 @@ async def test_four_validators_mirror_live_polymarket_settlement(
 
     activation_epoch = await _wait_for_epoch_advance(cluster, setup_epoch)
     assert activation_epoch == setup_epoch + 1
-    logs = await _wait_for_data_recorded(
+    logs = await _wait_for_oracle_delivered(
         w3, mirror_id, receipt["blockNumber"]
     )
     assert len(logs) == 1
-    assert (
-        native_oracle.functions.getLatestNonce(
-            SOURCE_TYPE_POLYMARKET_SETTLEMENT, mirror_id
-        ).call()
-        == 1
+    progress = await support.wait_for_source_progress(
+        native_oracle,
+        SOURCE_TYPE_POLYMARKET_SETTLEMENT,
+        mirror_id,
+        1,
+        timeout=POLL_TIMEOUT_SECONDS,
     )
+    assert progress == (1, int(metadata["blockNumber"]))
 
     settlement = await _wait_for_settlement(
         resolver, mirror_id, condition_id

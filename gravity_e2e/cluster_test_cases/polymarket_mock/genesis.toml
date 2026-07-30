@@ -2,7 +2,7 @@
 
 [dependencies.genesis_contracts]
 path = "../../../../gravity_chain_core_contracts"
-ref = "f5bd9a80794c318ea1ccdbd0fb7f15e1e83dbdad"
+ref = "631b3bde8e2d6a98377e62a9b9e54ccdf0896e9d"
 
 [[genesis_validators]]
 id = "node1"
@@ -63,9 +63,9 @@ callbacks = [
 
 [[genesis.oracle_config.tasks]]
 source_type = 6
-source_id = 1897398
+source_id = 7202626
 task_name = "polymarket_settlement"
-config = "gravity://6/1897398/polymarket_settlement?ctf=0x4D97DCd97eC945f40cF65F87097ACe5EA0476045&fromBlock=89222200&condition=0x2afe86f96be81a0d89ed776bedbd52d1c75bc47b49e6f0f791ddd009f52faf23&maxBlocksPerPoll=20"
+config = "gravity://6/7202626/polymarket_settlement?ctf=0x4D97DCd97eC945f40cF65F87097ACe5EA0476045&fromBlock=89222200&condition=0xfed086f96be81a0d89ed776bedbd52d1c75bc47b49e6f0f791ddd009f52faf23&maxBlocksPerPoll=20"
 
 [genesis.jwk_config]
 issuers = ["0x68747470733a2f2f6163636f756e74732e676f6f676c652e636f6d"]

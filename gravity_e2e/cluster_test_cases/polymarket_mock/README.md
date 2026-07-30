@@ -1,8 +1,10 @@
-# Polymarket Match Oracle E2E
+# Polymarket Binary Oracle E2E
 
-The focused local test for a three-outcome sports market. It retains coverage
-that the binary combined demo does not provide: random winner mapping, winner
-claim, and loser zero-claim checks.
+The focused local test for a binary market. Unlike the combined demo's fixed
+outcome, this suite randomizes the winning slot and checks winner claimability,
+loser zero-claimability, and exact source progress.
+
+Set `POLYMARKET_MOCK_WINNING_SLOT` to `0` or `1` for a reproducible run.
 
 Run:
 

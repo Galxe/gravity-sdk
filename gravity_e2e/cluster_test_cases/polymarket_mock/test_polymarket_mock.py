@@ -1,4 +1,4 @@
-"""Polymarket three-way match mirror E2E test."""
+"""Polymarket binary market mirror E2E test."""
 
 import asyncio
 import json
@@ -15,17 +15,17 @@ from web3 import Web3
 
 from gravity_e2e.cluster.manager import Cluster
 from gravity_e2e.utils import oracle_test_support as support
-from gravity_e2e.utils.mock_polymarket_polygon import MATCH_MARKET_ID
+from gravity_e2e.utils.mock_polymarket_polygon import FED_BINARY_MARKET_ID
 
 LOG = logging.getLogger(__name__)
 SUITE_DIR = Path(__file__).resolve().parent
 
 SOURCE_TYPE_POLYMARKET_SETTLEMENT = 6
 POLYGON_CHAIN_ID = 137
-MATCH_OUTCOME_COUNT = 3
+BINARY_OUTCOME_COUNT = 2
 SETTLEMENT_KIND_CTF_CONDITION_RESOLUTION = 1
 USER_STARTING_BALANCE = 1_000 * support.STAKE_UNIT
-BET_AMOUNTS = [100 * support.STAKE_UNIT, 200 * support.STAKE_UNIT, 300 * support.STAKE_UNIT]
+BET_AMOUNTS = [100 * support.STAKE_UNIT, 300 * support.STAKE_UNIT]
 TOTAL_POOL = sum(BET_AMOUNTS)
 
 
@@ -33,7 +33,7 @@ def _mock_set_winning_slot(rpc_url: str, winning_slot: int) -> dict:
     payload = json.dumps(
         {
             "jsonrpc": "2.0",
-            "method": "mock_setWinningSlot",
+            "method": "mock_setBinaryWinningSlot",
             "params": [winning_slot],
             "id": 1,
         }
@@ -44,28 +44,8 @@ def _mock_set_winning_slot(rpc_url: str, winning_slot: int) -> dict:
     with urllib.request.urlopen(request, timeout=5) as response:
         body = json.loads(response.read())
     if "error" in body:
-        raise RuntimeError(f"mock_setWinningSlot failed: {body['error']}")
+        raise RuntimeError(f"mock_setBinaryWinningSlot failed: {body['error']}")
     return body["result"]
-
-
-async def _poll_data_recorded(w3: Web3, timeout: int = 120):
-    deadline = time.monotonic() + timeout
-    params = {
-        "fromBlock": 0,
-        "toBlock": "latest",
-        "address": support.NATIVE_ORACLE_ADDRESS,
-        "topics": [
-            support.DATA_RECORDED_TOPIC0,
-            support.topic(SOURCE_TYPE_POLYMARKET_SETTLEMENT),
-            support.topic(MATCH_MARKET_ID),
-        ],
-    }
-    while time.monotonic() < deadline:
-        logs = await asyncio.to_thread(w3.eth.get_logs, params)
-        if logs:
-            return logs
-        await asyncio.sleep(2)
-    return []
 
 
 async def _wait_for_resolver_settlement(
@@ -81,7 +61,7 @@ async def _wait_for_resolver_settlement(
 
 
 @pytest.mark.asyncio
-async def test_polymarket_match_market_mock_resolves_random_score(cluster: Cluster):
+async def test_polymarket_binary_market_mock_resolves_random_outcome(cluster: Cluster):
     metadata_path = SUITE_DIR / "mock_polymarket_metadata.json"
     metadata = json.loads(metadata_path.read_text())
 
@@ -95,7 +75,7 @@ async def test_polymarket_match_market_mock_resolves_random_score(cluster: Clust
 
     required = [
         ("PolymarketSettlementResolver.sol", "PolymarketSettlementResolver"),
-        ("PolymarketMatchMarket.sol", "PolymarketMatchMarket"),
+        ("PolymarketBinaryMarket.sol", "PolymarketBinaryMarket"),
         ("MockGToken.sol", "MockGToken"),
         ("NativeOracle.sol", "NativeOracle"),
     ]
@@ -104,7 +84,7 @@ async def test_polymarket_match_market_mock_resolves_random_score(cluster: Clust
         contracts_out, "PolymarketSettlementResolver.sol", "PolymarketSettlementResolver"
     )
     market_artifact = support.load_artifact(
-        contracts_out, "PolymarketMatchMarket.sol", "PolymarketMatchMarket"
+        contracts_out, "PolymarketBinaryMarket.sol", "PolymarketBinaryMarket"
     )
     token_artifact = support.load_artifact(contracts_out, "MockGToken.sol", "MockGToken")
     native_artifact = support.load_artifact(contracts_out, "NativeOracle.sol", "NativeOracle")
@@ -121,23 +101,22 @@ async def test_polymarket_match_market_mock_resolves_random_score(cluster: Clust
     pool_addr = support.pool0_voted_by_faucet(w3)
 
     now_ts = w3.eth.get_block("latest")["timestamp"]
-    closes_at = now_ts + 120
+    closes_at = now_ts + 20
     settlement_ref = (
         SOURCE_TYPE_POLYMARKET_SETTLEMENT,
-        MATCH_MARKET_ID,
+        FED_BINARY_MARKET_ID,
         condition_id,
         resolver.address,
         ctf,
         POLYGON_CHAIN_ID,
-        MATCH_OUTCOME_COUNT,
-        [0, 1, 2],
+        BINARY_OUTCOME_COUNT,
+        [1, 0],
         0,
     )
     create_params = (
-        Web3.keccak(text="Portugal vs Colombia random e2e match market"),
+        Web3.keccak(text="Fed binary random e2e market"),
         now_ts,
         closes_at,
-        now_ts + 300,
         token.address,
         settlement_ref,
     )
@@ -145,16 +124,18 @@ async def test_polymarket_match_market_mock_resolves_random_score(cluster: Clust
     setup_data = [
         support.function_calldata(
             native_oracle.functions.setCallback(
-                SOURCE_TYPE_POLYMARKET_SETTLEMENT, MATCH_MARKET_ID, resolver.address
+                SOURCE_TYPE_POLYMARKET_SETTLEMENT,
+                FED_BINARY_MARKET_ID,
+                resolver.address,
             )
         ),
         support.function_calldata(
             resolver.functions.registerMirror(
-                MATCH_MARKET_ID,
+                FED_BINARY_MARKET_ID,
                 POLYGON_CHAIN_ID,
                 ctf,
                 condition_id,
-                MATCH_OUTCOME_COUNT,
+                BINARY_OUTCOME_COUNT,
             )
         ),
         support.function_calldata(market.functions.createMarket(create_params)),
@@ -164,11 +145,11 @@ async def test_polymarket_match_market_mock_resolves_random_score(cluster: Clust
         pool_addr,
         [support.NATIVE_ORACLE_ADDRESS, resolver.address, market.address],
         setup_data,
-        "polymarket-match-market-e2e-setup",
+        "polymarket-binary-market-e2e-setup",
     )
     market_id = support.market_id_from_receipt(receipt)
 
-    bettors = [Account.create(f"polymarket-bettor-{i}") for i in range(MATCH_OUTCOME_COUNT)]
+    bettors = [Account.create(f"polymarket-bettor-{i}") for i in range(BINARY_OUTCOME_COUNT)]
     for account in bettors:
         support.send_tx(
             w3, account.address, b"", support.FAUCET_KEY, gas=21_000, value=support.STAKE_UNIT
@@ -194,7 +175,7 @@ async def test_polymarket_match_market_mock_resolves_random_score(cluster: Clust
             account.key,
             gas=1_500_000,
         )
-    assert market.functions.getMarket(market_id).call()[8] == TOTAL_POOL
+    assert market.functions.getMarket(market_id).call()[6] == TOTAL_POOL
 
     await support.wait_for_chain_time(w3, closes_at)
     support.send_contract_tx(
@@ -202,39 +183,59 @@ async def test_polymarket_match_market_mock_resolves_random_score(cluster: Clust
     )
 
     forced_slot = os.environ.get("POLYMARKET_MOCK_WINNING_SLOT")
-    winning_slot = int(forced_slot) if forced_slot is not None else secrets.randbelow(MATCH_OUTCOME_COUNT)
-    assert 0 <= winning_slot < MATCH_OUTCOME_COUNT
+    winning_slot = (
+        int(forced_slot) if forced_slot is not None else secrets.randbelow(BINARY_OUTCOME_COUNT)
+    )
+    assert 0 <= winning_slot < BINARY_OUTCOME_COUNT
     release = _mock_set_winning_slot(metadata["rpc_url"], winning_slot)
     metadata.update(release)
     metadata_path.write_text(json.dumps(metadata, indent=2))
 
-    logs = await _poll_data_recorded(w3, timeout=180)
-    assert logs, "No Polymarket sourceType=6 DataRecorded event observed"
+    logs = await support.poll_oracle_delivered(
+        w3,
+        SOURCE_TYPE_POLYMARKET_SETTLEMENT,
+        FED_BINARY_MARKET_ID,
+        timeout=180,
+    )
+    assert logs, "No Polymarket sourceType=6 OracleDelivered event observed"
     assert support.topic_hex(logs[0]["topics"][1]) == support.topic(
         SOURCE_TYPE_POLYMARKET_SETTLEMENT
     )
-    assert support.topic_hex(logs[0]["topics"][2]) == support.topic(MATCH_MARKET_ID)
+    assert support.topic_hex(logs[0]["topics"][2]) == support.topic(FED_BINARY_MARKET_ID)
+    progress = await support.wait_for_source_progress(
+        native_oracle,
+        SOURCE_TYPE_POLYMARKET_SETTLEMENT,
+        FED_BINARY_MARKET_ID,
+        1,
+        timeout=60,
+    )
+    assert progress == (1, int(metadata["block"]))
 
     settlement = await _wait_for_resolver_settlement(
-        resolver, MATCH_MARKET_ID, condition_id, timeout=60
+        resolver, FED_BINARY_MARKET_ID, condition_id, timeout=60
     )
     assert settlement[0] is True
     assert settlement[2] == POLYGON_CHAIN_ID
     assert Web3.to_checksum_address(settlement[3]) == ctf
-    assert settlement[6] == MATCH_OUTCOME_COUNT
+    assert settlement[6] == BINARY_OUTCOME_COUNT
     assert settlement[9] == SETTLEMENT_KIND_CTF_CONDITION_RESOLUTION
-    assert resolver.functions.getPayoutNumerators(MATCH_MARKET_ID, condition_id).call() == release[
-        "payout_numerators"
-    ]
+    assert resolver.functions.getPayoutNumerators(
+        FED_BINARY_MARKET_ID, condition_id
+    ).call() == release["payout_numerators"]
 
     support.send_contract_tx(
-        w3, market, market.functions.settleMarket(market_id), support.FAUCET_KEY, gas=2_000_000
+        w3,
+        market,
+        market.functions.finalizeMarket(market_id),
+        support.FAUCET_KEY,
+        gas=2_000_000,
     )
     final_market = market.functions.getMarket(market_id).call()
-    assert final_market[5] == 2
-    assert final_market[7] == winning_slot
+    winning_outcome = 1 - winning_slot
+    assert final_market[4] == 2
+    assert final_market[5] == winning_outcome
 
-    winner = bettors[winning_slot]
+    winner = bettors[winning_outcome]
     assert market.functions.claimable(market_id, winner.address).call() == TOTAL_POOL
     balance_before = token.functions.balanceOf(winner.address).call()
     support.send_contract_tx(
@@ -244,12 +245,13 @@ async def test_polymarket_match_market_mock_resolves_random_score(cluster: Clust
     assert market.functions.claimable(market_id, winner.address).call() == 0
 
     for outcome, account in enumerate(bettors):
-        if outcome != winning_slot:
+        if outcome != winning_outcome:
             assert market.functions.claimable(market_id, account.address).call() == 0
 
     LOG.info(
-        "Polymarket match market resolved: marketId=%s winningSlot=%s totalPool=%s",
+        "Polymarket binary market resolved: marketId=%s winningSlot=%s winningOutcome=%s totalPool=%s",
         market_id,
         winning_slot,
+        winning_outcome,
         TOTAL_POOL,
     )

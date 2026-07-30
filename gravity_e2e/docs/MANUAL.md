@@ -81,15 +81,18 @@ You can control the Python logging level by passing standard pytest flags to the
 
 ### 5. Oracle E2E Suites
 
-Oracle testing is intentionally limited to three non-overlapping suites:
+Oracle testing is split into deterministic, dynamic, and public-network gates:
 
 | Suite | Coverage |
 | --- | --- |
 | `oracle_demo` | Deterministic Binance plus binary Polymarket integration |
-| `polymarket_mock` | Three-outcome match settlement and payout claims |
+| `polymarket_mock` | Randomized binary settlement and payout claims |
+| `polymarket_dynamic_mirror` | Successive governance-created mirrors and replay protection |
 | `binance_price_feed_multivalidator` | Approved live Binance and four-validator quorum |
+| `polymarket_live_dynamic_mirror` | Real finalized Polygon settlement and four-validator quorum |
 
-The canonical commands, frontend mode, revisions, and scope are documented in
+The canonical commands, latest-only storage checks, frontend mode, revisions,
+and scope are documented in
 [`ORACLE_E2E.md`](ORACLE_E2E.md). The live suite is excluded from default runs
 because it sends public network requests.
 

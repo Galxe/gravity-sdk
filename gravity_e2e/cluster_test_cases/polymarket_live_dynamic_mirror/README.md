@@ -31,5 +31,5 @@ PATH="$HOME/.foundry/bin:$PWD/target/quick-release:$PATH" \
     --log-cli-level=INFO
 ```
 
-The shared runner currently performs a global `pkill -9 gravity_node`. Run it
-only when no unrelated local Gravity node must remain alive.
+Set `GRAVITY_E2E_SKIP_GLOBAL_PKILL=1` when an unrelated local Gravity node
+must remain alive. The runner will still stop this suite's four-node cluster.

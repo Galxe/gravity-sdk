@@ -58,8 +58,8 @@ DEFAULT_BINANCE_GRACE_MS = 120_000
 MODE_MOCK = "mock"
 MODE_LIVE = "live"
 
-DATA_RECORDED_TOPIC0 = Web3.keccak(
-    text="DataRecorded(uint32,uint256,uint128,uint256)"
+ORACLE_DELIVERED_TOPIC0 = Web3.keccak(
+    text="OracleDelivered(uint32,uint256,uint128,uint128,bytes32)"
 ).hex()
 MARKET_CREATED_TOPIC0 = Web3.keccak(text="MarketCreated(uint256,bytes32,uint256)")
 PROPOSAL_CREATED_TOPIC0 = Web3.keccak(
@@ -382,13 +382,18 @@ async def wait_for_chain_time(w3: Web3, target_ts: int, timeout: Optional[int] =
     raise TimeoutError(f"chain timestamp did not reach {target_ts}")
 
 
-async def poll_price_recorded(w3: Web3, feed_id: int, timeout: int = 180):
+async def poll_oracle_delivered(
+    w3: Web3,
+    source_type: int,
+    source_id: int,
+    timeout: int = 180,
+):
     deadline = time.monotonic() + timeout
     filter_params = {
         "fromBlock": 0,
         "toBlock": "latest",
         "address": NATIVE_ORACLE_ADDRESS,
-        "topics": [DATA_RECORDED_TOPIC0, topic(SOURCE_TYPE_PRICE_FEED), topic(feed_id)],
+        "topics": [ORACLE_DELIVERED_TOPIC0, topic(source_type), topic(source_id)],
     }
     while time.monotonic() < deadline:
         logs = await asyncio.to_thread(w3.eth.get_logs, filter_params)
@@ -398,24 +403,51 @@ async def poll_price_recorded(w3: Web3, feed_id: int, timeout: int = 180):
     return []
 
 
-async def wait_for_latest_nonce(native_oracle, feed_id: int, target_nonce: int, timeout: int = 240):
+async def wait_for_source_progress(
+    native_oracle,
+    source_type: int,
+    source_id: int,
+    target_nonce: int,
+    timeout: int = 240,
+):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        nonce = native_oracle.functions.getLatestNonce(SOURCE_TYPE_PRICE_FEED, feed_id).call()
-        if nonce >= target_nonce:
-            return nonce
+        progress = tuple(
+            native_oracle.functions.getSourceProgress(source_type, source_id).call()
+        )
+        if progress[0] >= target_nonce:
+            return progress
         await asyncio.sleep(2)
-    raise TimeoutError(f"latest nonce for feedId={feed_id} did not reach {target_nonce}")
+    raise TimeoutError(
+        f"source progress for {source_type}:{source_id} did not reach nonce {target_nonce}"
+    )
 
 
-async def wait_for_price_round(resolver, feed_id: int, round_id: int, timeout: int = 120):
+async def wait_for_latest_price(
+    native_oracle,
+    resolver,
+    feed_id: int,
+    target_nonce: int,
+    timeout: int = 240,
+):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        stored = resolver.functions.priceRounds(feed_id, round_id).call()
-        if stored[0]:
-            return stored
+        progress = tuple(
+            native_oracle.functions.getSourceProgress(
+                SOURCE_TYPE_PRICE_FEED, feed_id
+            ).call()
+        )
+        latest = tuple(resolver.functions.latestPrice(feed_id).call())
+        if (
+            progress[0] >= target_nonce
+            and latest[0]
+            and latest[2] == progress[1]
+        ):
+            return progress, latest
         await asyncio.sleep(2)
-    raise TimeoutError(f"priceRounds({feed_id}, {round_id}) was not stored")
+    raise TimeoutError(
+        f"latestPrice({feed_id}) did not match source progress at nonce {target_nonce}"
+    )
 
 
 def assert_price_round(latest, expected_price: int, round_id: int, resolved_at: int):

@@ -136,14 +136,14 @@ async def _wait_for_mock_scan(rpc_url: str, condition_id: str) -> list[dict]:
     raise TimeoutError(f"observer never scanned condition {condition_id}")
 
 
-def _data_recorded_logs(w3: Web3, mirror_id: int, from_block: int) -> list:
+def _oracle_delivered_logs(w3: Web3, mirror_id: int, from_block: int) -> list:
     return w3.eth.get_logs(
         {
             "fromBlock": from_block,
             "toBlock": "latest",
             "address": support.NATIVE_ORACLE_ADDRESS,
             "topics": [
-                support.DATA_RECORDED_TOPIC0,
+                support.ORACLE_DELIVERED_TOPIC0,
                 support.topic(SOURCE_TYPE_POLYMARKET_SETTLEMENT),
                 support.topic(mirror_id),
             ],
@@ -151,18 +151,18 @@ def _data_recorded_logs(w3: Web3, mirror_id: int, from_block: int) -> list:
     )
 
 
-async def _wait_for_data_recorded(
+async def _wait_for_oracle_delivered(
     w3: Web3, mirror_id: int, from_block: int
 ) -> list:
     deadline = time.monotonic() + POLL_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
         logs = await asyncio.to_thread(
-            _data_recorded_logs, w3, mirror_id, from_block
+            _oracle_delivered_logs, w3, mirror_id, from_block
         )
         if logs:
             return logs
         await asyncio.sleep(1)
-    raise TimeoutError(f"no DataRecorded event for mirror {mirror_id}")
+    raise TimeoutError(f"no OracleDelivered event for mirror {mirror_id}")
 
 
 async def _wait_for_settlement(
@@ -490,10 +490,18 @@ async def test_polymarket_mirrors_activate_on_successive_epochs(cluster: Cluster
         "mock_setHeads",
         [hex(FED_BINARY_BLOCK), hex(FED_BINARY_BLOCK)],
     )
-    first_logs = await _wait_for_data_recorded(
+    first_logs = await _wait_for_oracle_delivered(
         w3, FED_BINARY_MARKET_ID, first_receipt["blockNumber"]
     )
     assert len(first_logs) == 1
+    first_progress = await support.wait_for_source_progress(
+        native_oracle,
+        SOURCE_TYPE_POLYMARKET_SETTLEMENT,
+        FED_BINARY_MARKET_ID,
+        1,
+        timeout=POLL_TIMEOUT_SECONDS,
+    )
+    assert first_progress == (1, FED_BINARY_BLOCK)
     first_settlement = await _wait_for_settlement(
         resolver, FED_BINARY_MARKET_ID, first_condition
     )
@@ -522,7 +530,7 @@ async def test_polymarket_mirrors_activate_on_successive_epochs(cluster: Cluster
         == 1
     )
     assert len(
-        _data_recorded_logs(
+        _oracle_delivered_logs(
             w3, FED_BINARY_MARKET_ID, first_receipt["blockNumber"]
         )
     ) == 1
@@ -613,10 +621,18 @@ async def test_polymarket_mirrors_activate_on_successive_epochs(cluster: Cluster
         "mock_setHeads",
         [hex(DYNAMIC_BINARY_BLOCK), hex(DYNAMIC_BINARY_BLOCK)],
     )
-    second_logs = await _wait_for_data_recorded(
+    second_logs = await _wait_for_oracle_delivered(
         w3, DYNAMIC_BINARY_MARKET_ID, second_receipt["blockNumber"]
     )
     assert len(second_logs) == 1
+    second_progress = await support.wait_for_source_progress(
+        native_oracle,
+        SOURCE_TYPE_POLYMARKET_SETTLEMENT,
+        DYNAMIC_BINARY_MARKET_ID,
+        1,
+        timeout=POLL_TIMEOUT_SECONDS,
+    )
+    assert second_progress == (1, DYNAMIC_BINARY_BLOCK)
     second_settlement = await _wait_for_settlement(
         resolver, DYNAMIC_BINARY_MARKET_ID, second_condition
     )

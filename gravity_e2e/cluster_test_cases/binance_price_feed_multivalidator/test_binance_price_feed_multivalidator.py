@@ -153,6 +153,15 @@ def _line_matches(content: str, marker: str, issuer_prefix: str) -> bool:
     )
 
 
+async def _wait_for_block(w3, block_number: int, timeout: int = 60):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if w3.eth.block_number >= block_number:
+            return
+        await asyncio.sleep(1)
+    raise TimeoutError(f"RPC did not reach Gravity block {block_number}")
+
+
 async def _wait_for_consensus_evidence(
     cluster: Cluster,
     feed_ids: list[int],
@@ -294,15 +303,6 @@ async def test_four_validators_certify_live_binance_prices(cluster: Cluster):
 
     bucket_start_ms = _bucket_start_ms()
     base_url = support.binance_base_url().rstrip("/")
-    expected_prices = {
-        feed_id: await asyncio.to_thread(
-            _fetch_live_price,
-            base_url,
-            pair,
-            bucket_start_ms,
-        )
-        for feed_id, pair in FEEDS.items()
-    }
     uris = {
         feed_id: support.price_feed_uri(feed_id, pair, bucket_start_ms)
         for feed_id, pair in FEEDS.items()
@@ -338,49 +338,84 @@ async def test_four_validators_certify_live_binance_prices(cluster: Cluster):
         "live-binance-four-validator-e2e",
     )
 
-    target_round_id = support.round_id(bucket_start_ms, TARGET_NONCE)
-    target_resolved_at = support.round_end_ms(bucket_start_ms, TARGET_NONCE)
-    node1_rounds = {}
     for feed_id in FEEDS:
-        assert await support.poll_price_recorded(w3, feed_id, timeout=300)
-        latest_nonce = await support.wait_for_latest_nonce(
+        assert await support.poll_oracle_delivered(
+            w3,
+            support.SOURCE_TYPE_PRICE_FEED,
+            feed_id,
+            timeout=300,
+        )
+        await support.wait_for_latest_price(
             native_oracle,
+            resolver,
             feed_id,
             TARGET_NONCE,
             timeout=300,
         )
-        assert latest_nonce >= TARGET_NONCE
-        stored = await support.wait_for_price_round(
-            resolver,
-            feed_id,
-            target_round_id,
-            timeout=180,
-        )
-        assert stored[0] is True
-        assert stored[1] == target_round_id
-        assert stored[2] == target_resolved_at
-        assert stored[3] == support.DECIMALS
-        assert stored[4] == expected_prices[feed_id]
-        node1_rounds[feed_id] = tuple(stored)
 
     await _wait_for_consensus_evidence(cluster, list(FEEDS), timeout=180)
     _assert_independent_relayer_state(cluster, uris)
 
+    snapshot_block = w3.eth.block_number
+    node1_rounds = {}
+    node1_progress = {}
+    expected_prices = {}
+    for feed_id, pair in FEEDS.items():
+        progress = tuple(
+            native_oracle.functions.getSourceProgress(
+                support.SOURCE_TYPE_PRICE_FEED, feed_id
+            ).call(block_identifier=snapshot_block)
+        )
+        stored = tuple(
+            resolver.functions.latestPrice(feed_id).call(
+                block_identifier=snapshot_block
+            )
+        )
+        assert progress[0] >= TARGET_NONCE
+        assert progress[1] == stored[2]
+        expected_bucket_start = support.round_start_ms(
+            bucket_start_ms, progress[0]
+        )
+        assert stored[1] == support.round_id(bucket_start_ms, progress[0])
+        assert stored[2] == support.round_end_ms(bucket_start_ms, progress[0])
+        expected_price = await asyncio.to_thread(
+            _fetch_live_price,
+            base_url,
+            pair,
+            expected_bucket_start,
+        )
+        assert stored[3] == support.DECIMALS
+        assert stored[4] == expected_price
+        node1_progress[feed_id] = progress
+        node1_rounds[feed_id] = stored
+        expected_prices[feed_id] = expected_price
+
     for node_id, node in cluster.nodes.items():
         assert node.w3.is_connected(), f"{node_id} RPC disconnected"
+        await _wait_for_block(node.w3, snapshot_block)
         replica = node.w3.eth.contract(
             address=resolver.address,
             abi=resolver_artifact["abi"],
         )
+        replica_native = node.w3.eth.contract(
+            address=support.NATIVE_ORACLE_ADDRESS,
+            abi=native_artifact["abi"],
+        )
         for feed_id, expected_round in node1_rounds.items():
-            stored = await support.wait_for_price_round(
-                replica,
-                feed_id,
-                target_round_id,
-                timeout=60,
+            progress = tuple(
+                replica_native.functions.getSourceProgress(
+                    support.SOURCE_TYPE_PRICE_FEED, feed_id
+                ).call(block_identifier=snapshot_block)
             )
-            assert tuple(stored) == expected_round
+            stored = tuple(
+                replica.functions.latestPrice(feed_id).call(
+                    block_identifier=snapshot_block
+                )
+            )
+            assert progress == node1_progress[feed_id]
+            assert stored == expected_round
 
+    first_round = node1_rounds[next(iter(FEEDS))]
     _write_demo_config(
         cluster,
         resolver.address,
@@ -388,12 +423,12 @@ async def test_four_validators_certify_live_binance_prices(cluster: Cluster):
         base_url,
         node1_rounds,
         bucket_start_ms,
-        target_round_id,
-        target_resolved_at,
+        first_round[1],
+        first_round[2],
     )
 
     LOG.info(
-        "Four-validator live Binance QC stored roundId=%s prices=%s",
-        target_round_id,
+        "Four-validator live Binance QC stored latest rounds=%s prices=%s",
+        {feed_id: value[1] for feed_id, value in node1_rounds.items()},
         expected_prices,
     )

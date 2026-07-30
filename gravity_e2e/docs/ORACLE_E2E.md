@@ -7,17 +7,19 @@ This is the canonical runbook for the Oracle suites added by PR #758.
 | Suite | Network | Purpose | Default run |
 | --- | --- | --- | --- |
 | `oracle_demo` | Local mocks | Deterministic Binance plus binary Polymarket integration and frontend config | Yes |
-| `polymarket_mock` | Local mock | Three-outcome sports market, random winner, settlement, and payout claim | Yes |
+| `polymarket_mock` | Local mock | Binary market, random winner, settlement, and payout claims | Yes |
+| `polymarket_dynamic_mirror` | Local Polygon fixtures | Successive governance-created mirrors and replay protection | Yes |
 | `binance_price_feed_multivalidator` | Binance public API | Four-validator independent fetch, voting-power QC, execution, and RPC replication | No |
+| `polymarket_live_dynamic_mirror` | Gamma API and Polygon RPC | Four-validator dynamic mirror of a real finalized settlement | No |
 
 The old standalone `binance_price_feed` suite was removed because its
 deterministic assertions are covered by `oracle_demo`, while its live source
 and consensus assertions are covered more strongly by the four-validator
 suite. Live frontend config generation moved to that suite.
 
-`polymarket_mock` remains separate because the combined demo only covers a
-fixed binary outcome. It does not cover a three-outcome match, random outcome
-mapping, winner claim, or loser zero-claim checks.
+`polymarket_mock` remains separate because the combined demo uses a fixed
+binary outcome. The focused suite randomizes the winning slot and checks both
+winner claimability and loser zero-claimability.
 
 ```mermaid
 flowchart LR
@@ -82,10 +84,10 @@ bash cluster/stop.sh \
 kill "$(cat gravity_e2e/cluster_test_cases/oracle_demo/artifacts/mock_binance.pid)"
 ```
 
-## Focused Three-Outcome Polymarket Gate
+## Focused Binary Polymarket Gate
 
 `polymarket_mock` uses a local Polygon JSON-RPC fixture. It verifies a reviewed
-CTF reference, a three-slot match market, randomized winner mapping, market
+CTF reference, a two-slot binary market, randomized winner mapping, market
 lock and settlement, winner payout, and zero claimability for losers.
 
 ```bash
@@ -93,8 +95,38 @@ PATH="$HOME/.foundry/bin:$PWD/target/quick-release:$PATH" \
   ./gravity_e2e/run_test.sh polymarket_mock --force-init
 ```
 
-Set `POLYMARKET_MOCK_WINNING_SLOT` to `0`, `1`, or `2` for a reproducible
+Set `POLYMARKET_MOCK_WINNING_SLOT` to `0` or `1` for a reproducible
 debug run. Without it, the test chooses a random valid slot.
+
+## Dynamic Polymarket Gates
+
+`polymarket_dynamic_mirror` proves that governance can add mirror tasks in
+successive epochs. Each task activates in the next epoch, resolves through the
+same JWK path, and advances only its own `(sourceType, sourceId)` progress.
+Replaying an already delivered settlement emits no second `OracleDelivered`
+event and does not advance the nonce.
+
+```bash
+PATH="$HOME/.foundry/bin:$PWD/target/quick-release:$PATH" \
+  ./gravity_e2e/run_test.sh polymarket_dynamic_mirror --force-init
+```
+
+`polymarket_live_dynamic_mirror` queries the Gamma API for a recently closed
+binary market, verifies a unique finalized Polygon CTF
+`ConditionResolution`, and starts four validators. The test creates the task
+through Gravity governance, waits for next-epoch activation, requires
+voting-power JWK quorum evidence, compares resolver state across all four RPC
+replicas, and settles and claims the Gravity binary market.
+
+```bash
+export POLYGON_RPC_URL="..."
+GRAVITY_E2E_SKIP_GLOBAL_PKILL=1 \
+PATH="$HOME/.foundry/bin:$PWD/target/quick-release:$PATH" \
+  ./gravity_e2e/run_test.sh \
+    polymarket_live_dynamic_mirror \
+    --force-init \
+    --log-cli-level=INFO
+```
 
 ## Live Four-Validator Binance Gate
 
@@ -109,12 +141,16 @@ Four equal-power validators observe the same closed one-minute
 - at least three validators to certify each feed and cross the JWK threshold;
 - a slower validator to safely fast-forward from the committed nonce;
 - onchain prices to equal Binance close values at 8 decimals;
-- all four RPC endpoints to return identical resolver rounds.
+- all four RPC endpoints to return identical source progress and latest price.
+
+`NativeOracle` and `PriceFeedResolver` keep fixed-size latest-only state. The
+test does not depend on historical payload records or per-round price storage.
 
 ```bash
 BINANCE_PRICE_FEED_MODE=live \
 BINANCE_PRICE_FEED_BASE_URL=https://testnet.binancefuture.com \
 BINANCE_PRICE_FEED_LAG_MINUTES=4 \
+GRAVITY_E2E_SKIP_GLOBAL_PKILL=1 \
 PATH="$HOME/.foundry/bin:$PWD/target/quick-release:$PATH" \
   ./gravity_e2e/run_test.sh \
     binance_price_feed_multivalidator \
@@ -159,34 +195,36 @@ The bucket must already be closed and older than `graceMs`.
 
 | Repository | Revision |
 | --- | --- |
-| `gravity_chain_core_contracts` (dynamic Polymarket and four-validator Binance) | `0f769b892387989ae3dad84bf5c8db381d1865f0` |
-| `gravity_chain_core_contracts` (remaining Oracle suites) | `f5bd9a80794c318ea1ccdbd0fb7f15e1e83dbdad` |
-| `gravity-reth` | `20af4ae4a2125f6232d6b2c5e7cc3f40140f2501` |
-| `gravity-aptos` | `10c4553b16aead745e1701db7885a39313607b26` |
-| `gravity-sdk` test branch | `a02cd39a081ddde2a5424692b8973039352afa70` |
+| `gravity_chain_core_contracts` | `631b3bde8e2d6a98377e62a9b9e54ccdf0896e9d` |
+| `gravity-reth` | `a5cf019429d772cd2f4964fc0705676d84464953` |
+| `gravity-aptos` | `d163fa649970c7c8446dbc41a367c2d0b960cca6` |
+| `gravity-sdk` | `codex/sports-score-oracle-poc` (this branch) |
 
 Each suite's genesis file pins the contracts revision it requires.
-Dynamic Polymarket and four-validator Binance use the strict oracle contracts
-revision. Focused suites that do not need those changes remain on their
-existing compatible revision. `Cargo.lock` pins the reth and Aptos revisions.
+`Cargo.lock` pins the reth and Aptos revisions.
 
 ## Last Live Verification
 
-The four-validator suite passed against both Binance Futures testnet and
-production on 2026-07-28. Production used an approved region-eligible egress:
+The following live suites were verified on 2026-07-30:
 
 | Evidence | Value |
 | --- | --- |
 | Active validators | 4 |
 | Total voting power | `8000000000000000000` |
 | JWK quorum power | `5333333333333333334` |
-| Log threshold | 3 votes (`new_total_power=6`, `threshold=6`) |
-| Testnet stored round | `29753731` |
-| Testnet NVDAUSDT / TSLAUSDT | `19654500000` / `30910000000` |
-| Testnet pytest | `1 passed in 39.89s` |
-| Production stored round | `29753765` |
-| Production NVDAUSDT / TSLAUSDT | `19430273456` / `30513157396` |
-| Production pytest | `1 passed in 39.65s` |
+| Binance testnet stored round | `29756744` |
+| Binance testnet NVDAUSDT / TSLAUSDT | `19199999338` / `30046300000` |
+| Binance testnet pytest | `1 passed in 44.81s` |
+| Live Polymarket mirror ID | `3029713` |
+| Live Polymarket source block | `91132830` |
+| Live Polymarket activation epoch | `3` |
+| Live Polymarket pytest | `1 passed in 70.79s` |
+
+The same Binance suite against `https://fapi.binance.com` could not observe a
+round from this environment because the API returned HTTP 451 under Binance's
+regional eligibility policy. All four Gravity validators remained active and
+continued producing blocks; this is an egress limitation, not a consensus or
+contract failure.
 
 ## Scope
 
@@ -203,3 +241,7 @@ create a Gravity-local fallback result for a strict Polymarket mirror.
 
 Use `--force-init` after changing genesis configuration or a pinned contracts
 revision. Otherwise cached artifacts may be reused.
+
+The runner normally performs a global `gravity_node` cleanup. Set
+`GRAVITY_E2E_SKIP_GLOBAL_PKILL=1` when an unrelated local Gravity node must
+remain running; the suite still stops its own configured cluster.

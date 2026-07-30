@@ -1,6 +1,7 @@
 """Combined Binance price-feed and Polymarket mirror dashboard e2e."""
 
 import asyncio
+from decimal import Decimal
 import json
 import logging
 import os
@@ -26,6 +27,7 @@ from gravity_e2e.utils.mock_polymarket_polygon import (
     POLYGON_CHAIN_ID,
     UMA_ORACLE,
 )
+from gravity_e2e.utils.mock_binance_index import mock_close_price
 
 LOG = logging.getLogger(__name__)
 
@@ -84,26 +86,6 @@ def _mock_set_binary_winning_slot(rpc_url: str, winning_slot: int) -> dict:
     return body["result"]
 
 
-async def _poll_polymarket_data_recorded(w3: Web3, timeout: int = 180):
-    deadline = time.monotonic() + timeout
-    filter_params = {
-        "fromBlock": 0,
-        "toBlock": "latest",
-        "address": NATIVE_ORACLE_ADDRESS,
-        "topics": [
-            support.DATA_RECORDED_TOPIC0,
-            support.topic(SOURCE_TYPE_POLYMARKET_SETTLEMENT),
-            support.topic(FED_BINARY_MARKET_ID),
-        ],
-    }
-    while time.monotonic() < deadline:
-        logs = await asyncio.to_thread(w3.eth.get_logs, filter_params)
-        if logs:
-            return logs
-        await asyncio.sleep(2)
-    return []
-
-
 async def _wait_for_resolver_settlement(resolver, timeout: int = 120):
     condition_id = bytes.fromhex(FED_BINARY_CONDITION_ID[2:])
     deadline = time.monotonic() + timeout
@@ -133,6 +115,7 @@ def _write_demo_config(
     market_id: int,
     market_state: tuple,
     release: dict,
+    observed_progress: dict[int, tuple],
     observed_rounds: dict[int, tuple],
     target_round_id: int,
     target_resolved_at: int,
@@ -144,6 +127,7 @@ def _write_demo_config(
 
     def feed_config(feed_id: int, pair: str, label: str):
         observed = observed_rounds[feed_id]
+        progress = observed_progress[feed_id]
         observed_price = int(observed[4])
         return {
             "feedId": feed_id,
@@ -151,9 +135,9 @@ def _write_demo_config(
             "pair": pair,
             "sourceType": SOURCE_TYPE_PRICE_FEED,
             "decimals": support.DECIMALS,
-            "expectedDeliveryNonce": support.TARGET_DELIVERY_NONCE,
-            "expectedRoundId": target_round_id,
-            "expectedResolvedAt": target_resolved_at,
+            "expectedDeliveryNonce": int(progress[0]),
+            "expectedRoundId": int(observed[1]),
+            "expectedResolvedAt": int(observed[2]),
             "expectedPrice": str(observed_price),
             "expectedDisplayPrice": _format_price(observed_price),
         }
@@ -390,26 +374,53 @@ async def test_combined_oracle_demo_resolves_price_and_polymarket(cluster: Clust
         == TOTAL_BINARY_POOL
     )
 
+    observed_progress = {}
     observed_rounds = {}
     target_round_id = support.round_id(support.BUCKET_START_MS, support.TARGET_DELIVERY_NONCE)
     target_resolved_at = support.round_end_ms(support.BUCKET_START_MS, support.TARGET_DELIVERY_NONCE)
-    for feed_id, expected_price in [
-        (support.NVDA_FEED_ID, support.EXPECTED_NVDA_PRICE),
-        (support.TSLA_FEED_ID, support.EXPECTED_TSLA_PRICE),
+    for feed_id, pair in [
+        (support.NVDA_FEED_ID, "NVDAUSDT"),
+        (support.TSLA_FEED_ID, "TSLAUSDT"),
     ]:
-        logs = await support.poll_price_recorded(w3, feed_id, timeout=240)
-        assert logs, f"No sourceType=3 DataRecorded event observed for feedId={feed_id}"
-        latest_nonce = await support.wait_for_latest_nonce(
+        logs = await support.poll_oracle_delivered(
+            w3,
+            SOURCE_TYPE_PRICE_FEED,
+            feed_id,
+            timeout=240,
+        )
+        assert logs, f"No sourceType=3 OracleDelivered event observed for feedId={feed_id}"
+        progress, stored = await support.wait_for_latest_price(
             native_oracle,
+            price_resolver,
             feed_id,
             support.TARGET_DELIVERY_NONCE,
             timeout=240,
         )
-        assert latest_nonce >= support.TARGET_DELIVERY_NONCE
-        stored = await support.wait_for_price_round(price_resolver, feed_id, target_round_id, timeout=120)
-        support.assert_price_round(stored, expected_price, target_round_id, target_resolved_at)
+        assert progress[0] >= support.TARGET_DELIVERY_NONCE
+        assert progress[1] == stored[2]
+        expected_round_id = support.round_id(support.BUCKET_START_MS, progress[0])
+        expected_resolved_at = support.round_end_ms(
+            support.BUCKET_START_MS, progress[0]
+        )
+        expected_price = int(
+            Decimal(mock_close_price(pair, progress[0] - 1))
+            * (10**support.DECIMALS)
+        )
+        support.assert_price_round(
+            stored,
+            expected_price,
+            expected_round_id,
+            expected_resolved_at,
+        )
+        observed_progress[feed_id] = progress
         observed_rounds[feed_id] = stored
-        LOG.info("Price feed resolved: feedId=%s roundId=%s price=%s", feed_id, target_round_id, int(stored[4]))
+        LOG.info(
+            "Price feed resolved: feedId=%s nonce=%s roundId=%s price=%s",
+            feed_id,
+            progress[0],
+            stored[1],
+            int(stored[4]),
+        )
 
     await support.wait_for_chain_time(w3, closes_at)
     _send_contract_tx(w3, binary_market, binary_market.functions.lockMarket(market_id), FAUCET_KEY)
@@ -420,8 +431,21 @@ async def test_combined_oracle_demo_resolves_price_and_polymarket(cluster: Clust
     metadata_path.write_text(json.dumps(metadata, indent=2))
     LOG.info("Released mock binary Polymarket settlement: payout=%s", release["payout_numerators"])
 
-    logs = await _poll_polymarket_data_recorded(w3, timeout=180)
-    assert logs, "No Polymarket sourceType=6 DataRecorded event observed"
+    logs = await support.poll_oracle_delivered(
+        w3,
+        SOURCE_TYPE_POLYMARKET_SETTLEMENT,
+        FED_BINARY_MARKET_ID,
+        timeout=180,
+    )
+    assert logs, "No Polymarket sourceType=6 OracleDelivered event observed"
+    progress = await support.wait_for_source_progress(
+        native_oracle,
+        SOURCE_TYPE_POLYMARKET_SETTLEMENT,
+        FED_BINARY_MARKET_ID,
+        1,
+        timeout=60,
+    )
+    assert progress == (1, FED_BINARY_BLOCK)
     settlement = await _wait_for_resolver_settlement(poly_resolver, timeout=60)
     assert settlement[0] is True
     assert settlement[2] == POLYGON_CHAIN_ID
@@ -465,6 +489,7 @@ async def test_combined_oracle_demo_resolves_price_and_polymarket(cluster: Clust
         market_id,
         market_state,
         release,
+        observed_progress,
         observed_rounds,
         target_round_id,
         target_resolved_at,
