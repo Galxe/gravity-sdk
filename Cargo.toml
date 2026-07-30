@@ -75,7 +75,7 @@ unexpected_cfgs = { level = "allow", check-cfg = ["cfg(mirai)"] }
 aptos-consensus = { path = "./aptos-core/consensus" }
 
 #  from aptos =======================
-gaptos = { git = "https://github.com/Galxe/gravity-aptos.git", rev = "10c4553b16aead745e1701db7885a39313607b26" }
+gaptos = { git = "https://github.com/Galxe/gravity-aptos.git", rev = "d163fa649970c7c8446dbc41a367c2d0b960cca6" }
 aptos-executor-types = { path = "dependencies/aptos-executor-types" }
 aptos-executor = { path = "dependencies/aptos-executor" }
 api = { path = "./crates/api" }
@@ -496,6 +496,7 @@ debug-assertions = true
 debug = true
 
 [patch.crates-io]
+reth-primitives-traits = { git = "https://github.com/Galxe/gravity-reth", rev = "a5cf019429d772cd2f4964fc0705676d84464953" }
 serde-reflection = { git = "https://github.com/aptos-labs/serde-reflection", rev = "73b6bbf748334b71ff6d7d09d06a29e3062ca075" }
 merlin = { git = "https://github.com/aptos-labs/merlin" }
 tonic = { git = "https://github.com/aptos-labs/tonic.git", rev = "0da1ba8b1751d6e19eb55be24cccf9ae933c666e" }

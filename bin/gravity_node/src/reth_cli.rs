@@ -69,17 +69,10 @@ static GCEI_COINBASE_FALLBACK_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
 pub(crate) type RethBlockChainProvider =
     BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>;
 
-pub(crate) type RethTransactionPool = greth::reth_transaction_pool::Pool<
-    greth::reth_transaction_pool::TransactionValidationTaskExecutor<
-        greth::reth_transaction_pool::EthTransactionValidator<
-            RethBlockChainProvider,
-            greth::reth_transaction_pool::EthPooledTransaction,
-        >,
-    >,
-    greth::reth_transaction_pool::CoinbaseTipOrdering<
-        greth::reth_transaction_pool::EthPooledTransaction,
-    >,
+pub(crate) type RethTransactionPool = greth::reth_transaction_pool::EthTransactionPool<
+    RethBlockChainProvider,
     greth::reth_transaction_pool::blobstore::DiskFileBlobStore,
+    greth::reth_node_ethereum::EthEvmConfig,
 >;
 
 pub(crate) trait RethEthCall:
@@ -360,8 +353,8 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         let mut start_ordered_block = self
             .provider
             .recover_block_number()
-            .map_err(|e| format!("Failed to recover block number: {e}"))? +
-            1;
+            .map_err(|e| format!("Failed to recover block number: {e}"))?
+            + 1;
         // Initialize current_epoch from block buffer manager
         let buffer_epoch = get_block_buffer_manager().get_current_epoch().await;
         self.current_epoch.store(buffer_epoch, Ordering::SeqCst);
@@ -381,8 +374,8 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             };
             if let Err(e) = exec_blocks {
                 let from = start_ordered_block;
-                if e.to_string().contains("Buffer is in epoch change") ||
-                    current_epoch != get_block_buffer_manager().get_current_epoch().await
+                if e.to_string().contains("Buffer is in epoch change")
+                    || current_epoch != get_block_buffer_manager().get_current_epoch().await
                 {
                     // consume_epoch_change returns (new_epoch, epoch_change_block_number)
                     // and resets latest_epoch_change_block_number to 0 atomically.
@@ -493,8 +486,8 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
         let mut start_commit_num = self
             .provider
             .recover_block_number()
-            .map_err(|e| format!("Failed to recover block number: {e}"))? +
-            1;
+            .map_err(|e| format!("Failed to recover block number: {e}"))?
+            + 1;
         let mut shutdown = self.shutdown.resubscribe();
         loop {
             let epoch = self.current_epoch.load(Ordering::SeqCst);

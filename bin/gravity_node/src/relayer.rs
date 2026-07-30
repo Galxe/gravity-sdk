@@ -195,6 +195,15 @@ impl RelayerWrapper {
         })
     }
 
+    fn source_position_u64(state: &OracleSourceState) -> Result<u64, ExecError> {
+        u64::try_from(state.latest_position).map_err(|_| {
+            ExecError::Other(format!(
+                "Oracle source position exceeds u64 for {}:{}",
+                state.source_type, state.source_id
+            ))
+        })
+    }
+
     /// Block poll if we returned data and on-chain hasn't caught up
     fn should_block_poll(state: &ProviderState, onchain_nonce: u128) -> bool {
         state.last_had_update && state.fetched_nonce.is_some_and(|fetched| fetched > onchain_nonce)
@@ -237,18 +246,18 @@ impl RelayerWrapper {
         &self,
         uri: &str,
         onchain_nonce: Option<u128>,
-        onchain_block_number: Option<u64>,
+        onchain_position: Option<u64>,
         state: &ProviderState,
     ) -> Result<PollResult, ExecError> {
         info!(
-            "Polling uri: {} (onchain_nonce: {:?}, onchain_block: {:?}, fetched_nonce: {:?}, last_had_update: {})",
-            uri, onchain_nonce, onchain_block_number, state.fetched_nonce, state.last_had_update
+            "Polling uri: {} (onchain_nonce: {:?}, onchain_position: {:?}, fetched_nonce: {:?}, last_had_update: {})",
+            uri, onchain_nonce, onchain_position, state.fetched_nonce, state.last_had_update
         );
 
         // Pass onchain state to poll_uri for reconciliation
         let result = self
             .manager
-            .poll_uri(uri, onchain_nonce, onchain_block_number)
+            .poll_uri(uri, onchain_nonce, onchain_position)
             .await
             .map_err(|e| ExecError::Other(e.to_string()))?;
 
@@ -277,22 +286,21 @@ impl Relayer for RelayerWrapper {
         let oracle_states = Self::get_oracle_source_states().await?;
         let oracle_state = Self::require_oracle_state_for_uri(uri, &oracle_states)?;
 
-        // Extract nonce and block_number from oracle state
+        // Extract fixed-size progress from the authoritative oracle snapshot.
         let onchain_nonce = oracle_state.latest_nonce;
-        let onchain_block_number =
-            oracle_state.latest_record.as_ref().map(|r| r.block_number).unwrap_or(0);
+        let onchain_position = Self::source_position_u64(oracle_state)?;
 
         info!(
-            "Adding URI: {}, RPC URL: {}, onchain_nonce: {}, onchain_block: {}",
+            "Adding URI: {}, RPC URL: {}, onchain_nonce: {}, onchain_position: {}",
             uri,
             sanitize_url(actual_url),
             onchain_nonce,
-            onchain_block_number
+            onchain_position
         );
 
         // Pass onchain state to manager for warm-start
         self.manager
-            .add_uri(uri, actual_url, onchain_nonce, onchain_block_number)
+            .add_uri(uri, actual_url, onchain_nonce, onchain_position)
             .await
             .map_err(|e| ExecError::Other(e.to_string()))
     }
@@ -303,16 +311,15 @@ impl Relayer for RelayerWrapper {
         let oracle_states = Self::get_oracle_source_states().await?;
         let oracle_state = Self::require_oracle_state_for_uri(uri, &oracle_states)?;
 
-        // Extract nonce and block_number from an authoritative OracleState snapshot.
+        // Extract fixed-size progress from an authoritative OracleState snapshot.
         let onchain_nonce = oracle_state.latest_nonce;
-        let onchain_block_number =
-            oracle_state.latest_record.as_ref().map(|record| record.block_number);
+        let onchain_position = Some(Self::source_position_u64(oracle_state)?);
 
         let state = self.tracker.get_state(uri).await;
 
         info!(
-            "get_last_state - uri: {}, onchain_nonce: {:?}, onchain_block: {:?}, fetched_nonce: {:?}, last_had_update: {}",
-            uri, onchain_nonce, onchain_block_number, state.fetched_nonce, state.last_had_update
+            "get_last_state - uri: {}, onchain_nonce: {:?}, onchain_position: {:?}, fetched_nonce: {:?}, last_had_update: {}",
+            uri, onchain_nonce, onchain_position, state.fetched_nonce, state.last_had_update
         );
 
         if Self::should_block_poll(&state, onchain_nonce) {
@@ -329,9 +336,8 @@ impl Relayer for RelayerWrapper {
             )));
         }
 
-        let result = self
-            .poll_and_update_state(uri, Some(onchain_nonce), onchain_block_number, &state)
-            .await?;
+        let result =
+            self.poll_and_update_state(uri, Some(onchain_nonce), onchain_position, &state).await?;
 
         // Subtask 2: never surface an observation whose nonce is already committed on-chain — it
         // would inject a guaranteed-revert oracle `recordBatch`. See `guard_already_committed`.
@@ -371,6 +377,34 @@ mod tests {
             .is_empty());
 
         assert!(RelayerWrapper::decode_oracle_source_states(&[0xff]).is_err());
+    }
+
+    #[test]
+    fn oracle_state_decoder_preserves_fixed_size_progress() {
+        let encoded = bcs::to_bytes(&vec![OracleSourceState {
+            source_type: 3,
+            source_id: 1001,
+            latest_nonce: 7,
+            latest_position: 1_710_000_419_999,
+        }])
+        .unwrap();
+
+        let decoded = RelayerWrapper::decode_oracle_source_states(&encoded).unwrap();
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[0].latest_nonce, 7);
+        assert_eq!(decoded[0].latest_position, 1_710_000_419_999);
+        assert_eq!(RelayerWrapper::source_position_u64(&decoded[0]).unwrap(), 1_710_000_419_999);
+    }
+
+    #[test]
+    fn source_position_overflow_is_rejected() {
+        let state = OracleSourceState {
+            source_type: 0,
+            source_id: 1,
+            latest_nonce: 1,
+            latest_position: u128::from(u64::MAX) + 1,
+        };
+        assert!(RelayerWrapper::source_position_u64(&state).is_err());
     }
 
     #[test]
