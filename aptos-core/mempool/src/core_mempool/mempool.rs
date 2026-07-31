@@ -88,7 +88,10 @@ impl TxnCache {
 /// bucket. Amortises N peer × M bucket × 2 priority `pool.pending_*` calls
 /// down to ≈ one per `max_age` window. See impl-d §5.
 struct Snapshot {
-    shards: HashMap<MempoolSenderBucket, Vec<SnapshotEntry>>,
+    /// `Arc` so `read_timeline` can carry a shard out of the snapshot lock
+    /// with one refcount bump instead of deep-copying every `SignedTransaction`
+    /// in the bucket — the copy is paid only for the txns actually dispatched.
+    shards: HashMap<MempoolSenderBucket, Arc<Vec<SnapshotEntry>>>,
     taken_at: Instant,
     max_age: Duration,
     /// False until the first refresh runs, so `read_timeline` can tell
@@ -188,7 +191,7 @@ impl CoreMempoolTrait for Mempool {
             topo.priority_count_for_bucket(sender_bucket)
         };
 
-        let shard: Vec<SnapshotEntry> = {
+        let shard: Arc<Vec<SnapshotEntry>> = {
             let mut snap = self.snapshot.lock().unwrap();
             if !snap.initialized || snap.taken_at.elapsed() >= snap.max_age {
                 self.refresh_snapshot_locked(&mut snap);
@@ -200,7 +203,7 @@ impl CoreMempoolTrait for Mempool {
         let mut out: Vec<(SignedTransaction, u64)> = Vec::with_capacity(count.min(shard.len()));
         let mut cache = self.txn_cache.lock().unwrap();
 
-        for entry in shard {
+        for entry in shard.iter() {
             if out.len() >= count {
                 break;
             }
@@ -237,7 +240,7 @@ impl CoreMempoolTrait for Mempool {
                 }
                 continue;
             }
-            out.push((entry.txn, 0));
+            out.push((entry.txn.clone(), 0));
             cache.entries.insert(
                 entry.hash,
                 CacheEntry { last_dispatched_at: now, last_target: target_slot, dispatched: true },
@@ -366,7 +369,7 @@ impl Mempool {
             let signed: SignedTransaction = VerifiedTxn::from(txn).into();
             shards.entry(bucket).or_default().push(SnapshotEntry { hash, txn: signed });
         }
-        snap.shards = shards;
+        snap.shards = shards.into_iter().map(|(bucket, txns)| (bucket, Arc::new(txns))).collect();
         snap.taken_at = Instant::now();
         snap.initialized = true;
 
@@ -655,6 +658,47 @@ mod tests {
                 "bucket {k} should see exactly its own txn"
             );
         }
+    }
+
+    #[test]
+    fn count_truncation_leaves_remainder_untouched() {
+        // Locks the `count` cutoff invariant: once `out.len() == count` the loop
+        // breaks, and every entry past the break point must stay *completely*
+        // untouched — not dispatched, and crucially not written into the cache.
+        // A stray cache write there would suppress those txns for a full TTL
+        // even though they were never broadcast.
+        //
+        // The other tests all run with shards[0].len() < count, so this is the
+        // only one that executes the `if out.len() >= count { break; }` branch.
+        let txns = Arc::new(StdMutex::new(vec![
+            mk_txn(0, 0, 50),
+            mk_txn(0, 1, 51),
+            mk_txn(0, 2, 52),
+            mk_txn(0, 3, 53),
+            mk_txn(0, 4, 54),
+        ]));
+        let m = mempool_with(txns, Duration::from_secs(60), Duration::from_millis(20), 1);
+
+        // First read is capped at count=3 even though shards[0].len() == 5.
+        assert_eq!(
+            read(&m, 0, BroadcastPeerPriority::Primary, 3).len(),
+            3,
+            "count must cap the batch"
+        );
+        assert_eq!(
+            m.txn_cache.lock().unwrap().entries.len(),
+            3,
+            "entries skipped by the count cutoff must not enter the cache"
+        );
+
+        // Second read: the first 3 are suppressed in-TTL, so the 2 that the
+        // cutoff skipped are still eligible and come back now.
+        assert_eq!(
+            read(&m, 0, BroadcastPeerPriority::Primary, 3).len(),
+            2,
+            "the truncated remainder must be dispatched on the next call"
+        );
+        assert_eq!(m.txn_cache.lock().unwrap().entries.len(), 5);
     }
 
     #[test]
