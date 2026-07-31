@@ -485,7 +485,7 @@ impl BufferItem {
                         callback: signed_item.callback,
                     }))
                 } else {
-                    warn!(
+                    debug!(
                         commit_info = ?signed_item.partial_commit_proof.commit_info(),
                         block_hash = ?signed_item.partial_commit_proof.ledger_info().block_hash(),
                         block_number = signed_item.partial_commit_proof.ledger_info().block_number(),
@@ -512,7 +512,7 @@ impl BufferItem {
                         callback: executed_item.callback,
                     }))
                 } else {
-                    warn!(
+                    debug!(
                         commit_info = ?executed_item.partial_commit_proof.commit_info(),
                         block_hash = ?executed_item.partial_commit_proof.ledger_info().block_hash(),
                         block_number = executed_item.partial_commit_proof.ledger_info().block_number(),
