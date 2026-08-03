@@ -1,0 +1,73 @@
+[cluster]
+name = "gravity-devnet-polymarket-settlement-multivalidator"
+base_dir = "/tmp/gravity-cluster-polymarket-settlement-multivalidator"
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[relayer]
+relayer_rpc_url = "http://127.0.0.1:18548"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 26280
+vfn_port = 26290
+rpc_port = 26300
+api_port = 26310
+metrics_port = 26320
+inspection_port = 26330
+https_port = 26340
+authrpc_port = 26350
+reth_p2p_port = 26360
+
+[[nodes]]
+id = "node2"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 26281
+vfn_port = 26291
+rpc_port = 26301
+api_port = 26311
+metrics_port = 26321
+inspection_port = 26331
+https_port = 26341
+authrpc_port = 26351
+reth_p2p_port = 26361
+
+[[nodes]]
+id = "node3"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 26282
+vfn_port = 26292
+rpc_port = 26302
+api_port = 26312
+metrics_port = 26322
+inspection_port = 26332
+https_port = 26342
+authrpc_port = 26352
+reth_p2p_port = 26362
+
+[[nodes]]
+id = "node4"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 26283
+vfn_port = 26293
+rpc_port = 26303
+api_port = 26313
+metrics_port = 26323
+inspection_port = 26333
+https_port = 26343
+authrpc_port = 26353
+reth_p2p_port = 26363
+
+[faucet_init]
+num_accounts = 0

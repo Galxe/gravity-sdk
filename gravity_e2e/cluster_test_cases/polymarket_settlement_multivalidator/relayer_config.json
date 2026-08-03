@@ -1,0 +1,5 @@
+{
+  "uri_mappings": {
+    "gravity://6/9001/polymarket_settlement?ctf=0x4D97DCd97eC945f40cF65F87097ACe5EA0476045&condition=0xd874d3b83fa09e192fdda031b6a3b3ec78be60cb82678aa67b23f8fd027c86ae&fromBlock=49999998&chainId=137&maxBlocksPerPoll=20": "http://127.0.0.1:18548"
+  }
+}
