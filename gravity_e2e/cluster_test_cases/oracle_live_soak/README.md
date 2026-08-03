@@ -7,9 +7,16 @@ This manual, non-gating suite runs four equal-power Gravity validators against:
   finalized on Polygon (`sourceType=6`).
 
 The suite discovers the live inputs before deployment, then submits one Gravity
-governance proposal that registers both tasks and their resolver callbacks. It
-proves that observers remain absent in proposal epoch `E`, start in `E+1`, and
-reach a three-of-four JWK quorum before the soak timer begins.
+governance proposal that registers both tasks and their resolver callbacks. The
+same proposal changes the epoch interval from the 60-second bootstrap value to
+two hours for `E+1`. It proves that observers remain absent in proposal epoch
+`E`, start in `E+1`, and reach a three-of-four JWK quorum before the soak timer
+begins.
+
+The short bootstrap epoch keeps dynamic task activation fast. The two-hour soak
+epoch intentionally follows the repository's regular four-validator topology:
+a 24-hour Oracle soak should exercise roughly 12 epoch transitions, rather than
+also acting as a 1,440-transition consensus reconfiguration stress test.
 
 This is operational evidence, not merge-gating CI. The deterministic Binance
 and Polymarket suites remain the reproducible CI coverage.
@@ -24,6 +31,7 @@ and Polymarket suites remain the reproducible CI coverage.
   budget;
 - at least three relayers have checkpointed the committed Binance nonce;
 - the finalized Polymarket settlement remains immutable at nonce `1`.
+- the governance-pending two-hour epoch interval is active before timing starts.
 
 At completion, the suite fetches the exact final Binance bucket again and
 compares its close with the onchain value. It also counts NativeOracle callback
