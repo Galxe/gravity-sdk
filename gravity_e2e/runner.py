@@ -485,6 +485,7 @@ def main():
         "binance_price_feed_multivalidator",
         "polymarket_live_dynamic_mirror",
         "oracle_rolling_activation_live",
+        "oracle_live_soak",
     ]
 
     parser.add_argument(

@@ -11,6 +11,7 @@ This is the canonical runbook for the Oracle suites added by PR #758.
 | `polymarket_dynamic_mirror` | Local Polygon fixtures | Successive governance-created mirrors and replay protection | Yes |
 | `binance_price_feed_multivalidator` | Binance public API | Four-validator independent fetch, voting-power QC, execution, and RPC replication | No |
 | `polymarket_live_dynamic_mirror` | Gamma API and Polygon RPC | Four-validator dynamic mirror of a real finalized settlement | No |
+| `oracle_live_soak` | Binance, Gamma, and Polygon RPC | Governance activation followed by a four-validator 24-hour liveness and consistency soak | No |
 
 The old standalone `binance_price_feed` suite was removed because its
 deterministic assertions are covered by `oracle_demo`, while its live source
@@ -190,6 +191,38 @@ BINANCE_PRICE_FEED_BUCKET_START_MS=<minute-aligned Unix milliseconds>
 ```
 
 The bucket must already be closed and older than `graceMs`.
+
+## Live Oracle Soak
+
+`oracle_live_soak` is the long-running operational gate. Genesis declares the
+`sourceType=3` and `sourceType=6` capabilities but contains neither task. A
+single governance proposal registers the continuous NVDA feed, its resolver,
+and a discovered finalized Polymarket mirror. The
+observers activate only after the next epoch begins.
+
+The default 24-hour monitor requires continuous Gravity block production,
+monotonic NVDA minute delivery, at least three persisted relayer cursors, exact
+four-RPC state replication, immutable one-shot Polymarket settlement, and one
+mid-run validator restart with catch-up. It writes an ignored JSONL heartbeat
+and a final JSON summary.
+
+```bash
+export POLYGON_RPC_URL="..."
+export BINANCE_PRICE_FEED_BASE_URL=https://fapi.binance.com
+export ORACLE_SOAK_DURATION_SECONDS=86400
+export GRAVITY_E2E_SKIP_GLOBAL_PKILL=1
+export PATH="$HOME/.foundry/bin:$PWD/target/quick-release:$PATH"
+
+./gravity_e2e/run_test.sh \
+  oracle_live_soak \
+  --force-init \
+  --log-cli-level=INFO
+```
+
+Use `ORACLE_SOAK_DURATION_SECONDS=180`,
+`ORACLE_SOAK_MIN_ADVANCES=1`, and
+`ORACLE_SOAK_RESTART_AFTER_SECONDS=0` for a short validation. Full controls,
+failure criteria, and evidence files are documented in the suite README.
 
 ## Pinned Revisions
 
