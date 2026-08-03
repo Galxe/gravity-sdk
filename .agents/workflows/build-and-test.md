@@ -131,7 +131,14 @@ Genesis artifacts are cached in `cluster_test_cases/<suite>/artifacts/`. Use `--
 
 ---
 
-## 4. Bridge E2E Test Details
+## 4. Oracle E2E
+
+Use `gravity_e2e/docs/ORACLE_E2E.md` for the canonical suite matrix, commands,
+live-network approval boundary, frontend mode, and pinned revisions.
+
+---
+
+## 5. Bridge E2E Test Details
 
 Suite directory: `gravity_e2e/cluster_test_cases/bridge/`
 
@@ -162,7 +169,7 @@ Suite directory: `gravity_e2e/cluster_test_cases/bridge/`
 
 ---
 
-## 5. Running Contract Unit Tests
+## 6. Running Contract Unit Tests
 
 Working directory: `gravity_chain_core_contracts`
 

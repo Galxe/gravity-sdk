@@ -1,0 +1,27 @@
+# Gravity Cluster Configuration - combined oracle dashboard demo
+
+[cluster]
+name = "gravity-devnet-oracle-demo"
+base_dir = "/tmp/gravity-cluster-oracle-demo"
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 45482
+vfn_port = 45492
+rpc_port = 48855
+api_port = 48380
+metrics_port = 49303
+inspection_port = 40202
+https_port = 41224
+authrpc_port = 48875
+reth_p2p_port = 52326
+
+[faucet_init]
+num_accounts = 0

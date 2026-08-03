@@ -432,9 +432,9 @@ done < <(jq -r '.env_vars | to_entries[] | .key, .value' "$reth_config")
 
 export RUST_BACKTRACE=1
 pid=$(
-    env ${env_vars_array[*]} ${WORKSPACE}/bin/gravity_node node \
+    nohup setsid env ${env_vars_array[*]} ${WORKSPACE}/bin/gravity_node node \
         ${reth_args_array[*]} \
-        > "${WORKSPACE}/logs/debug.log" 2>&1 &
+        > "${WORKSPACE}/logs/debug.log" 2>&1 < /dev/null &
     echo $!
 )
 echo $pid > "${WORKSPACE}/script/node.pid"
@@ -558,9 +558,9 @@ done < <(jq -r '.env_vars | to_entries[] | .key, .value' "$reth_config")
 
 export RUST_BACKTRACE=1
 pid=$(
-    env ${env_vars_array[*]} ${WORKSPACE}/bin/gravity_node node \
+    nohup setsid env ${env_vars_array[*]} ${WORKSPACE}/bin/gravity_node node \
         ${reth_args_array[*]} \
-        > "${WORKSPACE}/logs/debug.log" 2>&1 &
+        > "${WORKSPACE}/logs/debug.log" 2>&1 < /dev/null &
     echo $!
 )
 echo $pid > "${WORKSPACE}/script/node.pid"
@@ -689,9 +689,9 @@ done < <(jq -r '.env_vars | to_entries[] | .key, .value' "$reth_config")
 
 export RUST_BACKTRACE=1
 pid=$(
-    env ${env_vars_array[*]} ${WORKSPACE}/bin/gravity_node node \
+    nohup setsid env ${env_vars_array[*]} ${WORKSPACE}/bin/gravity_node node \
         ${reth_args_array[*]} \
-        > "${WORKSPACE}/logs/debug.log" 2>&1 &
+        > "${WORKSPACE}/logs/debug.log" 2>&1 < /dev/null &
     echo $!
 )
 echo $pid > "${WORKSPACE}/script/node.pid"
@@ -868,6 +868,7 @@ main() {
         export VFN_PORT=$(echo "$node" | jq -r '.vfn_port // "null"')
         export PUBLIC_PORT=$(echo "$node" | jq -r '.public_port // "null"')
         export RPC_PORT=$(echo "$node" | jq -r '.rpc_port')
+        export API_PORT=$(echo "$node" | jq -r '.api_port // 8080')
         export WS_PORT=$(echo "$node" | jq -r '.ws_port // "null"')
         export METRICS_PORT=$(echo "$node" | jq -r '.metrics_port')
         export INSPECTION_PORT=$(echo "$node" | jq -r '.inspection_port')

@@ -1,0 +1,27 @@
+# Gravity Cluster Configuration - Polymarket mirror integration test
+
+[cluster]
+name = "gravity-devnet-polymarket-mock"
+base_dir = "/tmp/gravity-cluster-polymarket-mock"
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 45282
+vfn_port = 45292
+rpc_port = 48655
+api_port = 48180
+metrics_port = 49103
+inspection_port = 40002
+https_port = 41024
+authrpc_port = 48675
+reth_p2p_port = 52126
+
+[faucet_init]
+num_accounts = 0

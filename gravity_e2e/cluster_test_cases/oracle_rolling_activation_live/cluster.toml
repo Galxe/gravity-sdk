@@ -1,0 +1,73 @@
+# Four-validator rolling Oracle activation proof.
+# Fixed listeners stay below Linux's default ephemeral source-port range.
+
+[cluster]
+name = "gravity-devnet-oracle-rolling-activation-live"
+base_dir = "/tmp/gravity-cluster-oracle-rolling-activation-live"
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 26480
+vfn_port = 26490
+rpc_port = 26500
+api_port = 26510
+metrics_port = 26520
+inspection_port = 26530
+https_port = 26540
+authrpc_port = 26550
+reth_p2p_port = 26560
+
+[[nodes]]
+id = "node2"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 26481
+vfn_port = 26491
+rpc_port = 26501
+api_port = 26511
+metrics_port = 26521
+inspection_port = 26531
+https_port = 26541
+authrpc_port = 26551
+reth_p2p_port = 26561
+
+[[nodes]]
+id = "node3"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 26482
+vfn_port = 26492
+rpc_port = 26502
+api_port = 26512
+metrics_port = 26522
+inspection_port = 26532
+https_port = 26542
+authrpc_port = 26552
+reth_p2p_port = 26562
+
+[[nodes]]
+id = "node4"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 26483
+vfn_port = 26493
+rpc_port = 26503
+api_port = 26513
+metrics_port = 26523
+inspection_port = 26533
+https_port = 26543
+authrpc_port = 26553
+reth_p2p_port = 26563
+
+[faucet_init]
+num_accounts = 0
