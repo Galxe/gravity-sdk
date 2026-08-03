@@ -69,17 +69,10 @@ static GCEI_COINBASE_FALLBACK_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
 pub(crate) type RethBlockChainProvider =
     BlockchainProvider<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>;
 
-pub(crate) type RethTransactionPool = greth::reth_transaction_pool::Pool<
-    greth::reth_transaction_pool::TransactionValidationTaskExecutor<
-        greth::reth_transaction_pool::EthTransactionValidator<
-            RethBlockChainProvider,
-            greth::reth_transaction_pool::EthPooledTransaction,
-        >,
-    >,
-    greth::reth_transaction_pool::CoinbaseTipOrdering<
-        greth::reth_transaction_pool::EthPooledTransaction,
-    >,
+pub(crate) type RethTransactionPool = greth::reth_transaction_pool::EthTransactionPool<
+    RethBlockChainProvider,
     greth::reth_transaction_pool::blobstore::DiskFileBlobStore,
+    greth::reth_node_ethereum::EthEvmConfig,
 >;
 
 pub(crate) trait RethEthCall:
