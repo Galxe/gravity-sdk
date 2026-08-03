@@ -274,6 +274,13 @@ class Node:
         """
         Stop this individual node.
         Returns True if node is now STOPPED.
+
+        Important: ``NodeState.STOPPED`` from get_state() only means the PID
+        file is gone or the process is not reachable via that file. The
+        generated stop.sh used to delete the pid file right after SIGTERM
+        while gravity_node was still flushing RocksDB. We capture the PID
+        *before* stop.sh runs and wait until the OS reports it gone so the
+        next start does not race the RocksDB LOCK.
         """
         if not self.stop_script.exists():
             LOG.warning(
@@ -287,6 +294,14 @@ class Node:
         if current_state == NodeState.STOPPED:
             LOG.info(f"Node {self.id} is already stopped.")
             return True
+
+        # Capture PID before stop.sh deletes the pid file.
+        pid: Optional[int] = None
+        if self.pid_file.exists():
+            try:
+                pid = int(self.pid_file.read_text().strip())
+            except ValueError:
+                pid = None
 
         LOG.info(f"Stopping node {self.id}...")
 
@@ -304,9 +319,16 @@ class Node:
                 LOG.error(f"Node {self.id} stop script failed: {stderr.decode()}")
                 return False
 
-            # Verify stopped
-            await asyncio.sleep(1)
-            # Re-check live state
+            # Belt-and-suspenders: wait for the real process to exit even if
+            # stop.sh returned early (older generated scripts, or race).
+            if pid is not None:
+                if not await self._wait_for_pid_exit(pid, timeout=50.0):
+                    LOG.error(
+                        f"Node {self.id}: PID {pid} still alive after stop script; "
+                        f"restart would race RocksDB LOCK"
+                    )
+                    return False
+
             final_state, _ = await self.get_state()
 
             if final_state == NodeState.STOPPED:
@@ -322,11 +344,29 @@ class Node:
             LOG.error(f"Exception stopping node {self.id}: {e}")
             return False
 
+    async def _wait_for_pid_exit(self, pid: int, timeout: float = 50.0) -> bool:
+        """Wait until ``pid`` is no longer alive (ProcessLookupError on kill 0)."""
+        import os
+        import time
+
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return True
+            except PermissionError:
+                # Process exists but not owned by us — treat as still alive.
+                pass
+            await asyncio.sleep(0.25)
+        return False
+
     async def restart(self) -> bool:
         """Bounce the node."""
         if not await self.stop():
             return False
-        await asyncio.sleep(2)  # Grace period
+        # stop() already waits for process exit / RocksDB unlock; short settle only.
+        await asyncio.sleep(0.5)
         return await self.start()
 
     def is_running(self) -> bool:
